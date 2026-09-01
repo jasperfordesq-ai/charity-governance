@@ -3099,7 +3099,7 @@
     "id": "deployment-profile-input-validation-2",
     "group": "deployment-profile",
     "concern": "input-validation",
-    "guarantee": "The deadline-reminders job env validator (validateDeadlineRemindersEnv) accepts a manual-link production configuration without RESEND_API_KEY/EMAIL_FROM, mirroring validateProductionEnv's identical gate; an explicit provider configuration still requires both.",
+    "guarantee": "The deadline-reminders job env validator (validateDeadlineRemindersEnv) accepts a manual-link production configuration without RESEND_API_KEY/EMAIL_FROM.",
     "status": "covered",
     "testFile": "apps/api/src/tests/env.test.ts",
     "testTitle": "validateDeadlineRemindersEnv boots under manual-link without RESEND_API_KEY/EMAIL_FROM",
@@ -3108,13 +3108,37 @@
     "surface": "api"
   },
   {
+    "id": "deployment-profile-input-validation-4",
+    "group": "deployment-profile",
+    "concern": "input-validation",
+    "guarantee": "The deadline-reminders job env validator (validateDeadlineRemindersEnv) still requires RESEND_API_KEY/EMAIL_FROM under an explicit provider email-delivery mode, mirroring validateProductionEnv's identical gate.",
+    "status": "covered",
+    "testFile": "apps/api/src/tests/env.test.ts",
+    "testTitle": "validateDeadlineRemindersEnv still requires RESEND_API_KEY/EMAIL_FROM under explicit provider mode (byte-identical to the unset/default path)",
+    "linkResolved": true,
+    "gapDescription": "",
+    "surface": "api"
+  },
+  {
     "id": "deployment-profile-input-validation-3",
     "group": "deployment-profile",
     "concern": "input-validation",
-    "guarantee": "The auth-delivery job env validator (validateAuthDeliveryEnv) accepts a manual-link production configuration without RESEND_API_KEY/EMAIL_FROM, mirroring validateProductionEnv's identical gate; an explicit provider configuration still requires both.",
+    "guarantee": "The auth-delivery job env validator (validateAuthDeliveryEnv) accepts a manual-link production configuration without RESEND_API_KEY/EMAIL_FROM.",
     "status": "covered",
     "testFile": "apps/api/src/tests/env.test.ts",
     "testTitle": "validateAuthDeliveryEnv boots under manual-link without RESEND_API_KEY/EMAIL_FROM",
+    "linkResolved": true,
+    "gapDescription": "",
+    "surface": "api"
+  },
+  {
+    "id": "deployment-profile-input-validation-5",
+    "group": "deployment-profile",
+    "concern": "input-validation",
+    "guarantee": "The auth-delivery job env validator (validateAuthDeliveryEnv) still requires RESEND_API_KEY/EMAIL_FROM under an explicit provider email-delivery mode, mirroring validateProductionEnv's identical gate.",
+    "status": "covered",
+    "testFile": "apps/api/src/tests/env.test.ts",
+    "testTitle": "validateAuthDeliveryEnv still requires RESEND_API_KEY/EMAIL_FROM under explicit provider mode (byte-identical to the unset/default path)",
     "linkResolved": true,
     "gapDescription": "",
     "surface": "api"
