@@ -198,6 +198,14 @@ services:
       # process.env) via the same NEXT_PUBLIC_* mechanism as NEXT_PUBLIC_API_URL,
       # so it must carry the identical value here, not just at build time.
       NEXT_PUBLIC_CHARITYPILOT_CANONICAL_API_ORIGIN: ${BLUEGREEN_ORIGIN:?Set BLUEGREEN_ORIGIN to the single origin Caddy serves web and api on}
+      # Colour-matched internal hop: the public front-door override above
+      # (NEXT_PUBLIC_CHARITYPILOT_CANONICAL_API_ORIGIN) is unreachable from
+      # inside this container network, so server-to-server calls are pinned
+      # to this colour's own api-blue service instead — see
+      # apps/web/src/lib/api-config.ts's validateServerApiUrl. Colour-matched
+      # (not cross-colour) so a candidate deploy's public smoke also exercises
+      # that candidate's own api, never the other colour's.
+      CHARITYPILOT_INTERNAL_API_URL: http://api-blue:3002
     read_only: true
     tmpfs:
       - /tmp:rw,noexec,nosuid,nodev,size=128m
@@ -249,6 +257,14 @@ services:
       # process.env) via the same NEXT_PUBLIC_* mechanism as NEXT_PUBLIC_API_URL,
       # so it must carry the identical value here, not just at build time.
       NEXT_PUBLIC_CHARITYPILOT_CANONICAL_API_ORIGIN: ${BLUEGREEN_ORIGIN:?Set BLUEGREEN_ORIGIN to the single origin Caddy serves web and api on}
+      # Colour-matched internal hop: the public front-door override above
+      # (NEXT_PUBLIC_CHARITYPILOT_CANONICAL_API_ORIGIN) is unreachable from
+      # inside this container network, so server-to-server calls are pinned
+      # to this colour's own api-green service instead — see
+      # apps/web/src/lib/api-config.ts's validateServerApiUrl. Colour-matched
+      # (not cross-colour) so a candidate deploy's public smoke also exercises
+      # that candidate's own api, never the other colour's.
+      CHARITYPILOT_INTERNAL_API_URL: http://api-green:3002
     read_only: true
     tmpfs:
       - /tmp:rw,noexec,nosuid,nodev,size=128m

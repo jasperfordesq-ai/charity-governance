@@ -120,6 +120,23 @@ test('the canonical-API-origin override also reaches the runner as a real runtim
   }
 });
 
+test("each web colour pins its internal API hop to its OWN colour's api service, not the other colour's", () => {
+  for (const [svc, expectedApiColour] of [
+    ['web-blue', 'blue'],
+    ['web-green', 'green'],
+  ]) {
+    const section = serviceSection(svc);
+    // The front-door override (NEXT_PUBLIC_CHARITYPILOT_CANONICAL_API_ORIGIN)
+    // is unreachable from inside the container network, so server-to-server
+    // calls must be pinned to this colour's own api-<colour> service — see
+    // apps/web/src/lib/api-config.ts's validateServerApiUrl. Colour-matched,
+    // not cross-colour, so a candidate's public smoke exercises its own api.
+    const internalUrl = section.match(/environment:[\s\S]*?CHARITYPILOT_INTERNAL_API_URL: (http:\/\/api-[a-z]+:3002)/);
+    assert.ok(internalUrl, `${svc} must set CHARITYPILOT_INTERNAL_API_URL as a runtime env var`);
+    assert.equal(internalUrl[1], `http://api-${expectedApiColour}:3002`, `${svc} must pin to its OWN colour's api service`);
+  }
+});
+
 test('no api or web service publishes a host port; Caddy proxies by container DNS name', () => {
   for (const service of ['api-blue', 'api-green', 'web-blue', 'web-green']) {
     assert.doesNotMatch(serviceSection(service), /^\s*ports:/m, `${service} must not publish ports`);
