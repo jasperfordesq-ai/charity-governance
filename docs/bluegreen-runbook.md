@@ -26,6 +26,12 @@ own numbering) and is **not** covered by anything in this repo yet.
 
 ## Preconditions
 
+- **Host binaries.** The operator's own machine (not a container) must
+  have `docker`, `git`, and `wget` on `PATH` — the engine spawns all
+  three directly (compose, the release worktree, and the public-facing
+  smoke tests that hit the front door from outside any container). A
+  missing one now fails the phase-1 preflight by name instead of
+  surfacing as an opaque error deep into the run.
 - **One env file, self-consistent.** Every container reads application
   config from a single file via `env_file: ${BLUEGREEN_ENV_FILE:?...}`
   (`compose.bluegreen.yml`'s header comment). That same file must declare
@@ -42,10 +48,22 @@ own numbering) and is **not** covered by anything in this repo yet.
   `NEXT_PUBLIC_CHARITYPILOT_CANONICAL_API_ORIGIN`). **`BLUEGREEN_FRONT_PORT`**
   is optional (defaults to `8080`) but must be a plain positive integer
   when set.
+- **`BLUEGREEN_DOCUMENTS_VOLUME`** is optional (defaults to the compose
+  file's own `charitypilot-bluegreen-documents` volume name) — set it
+  only if this deployment's document storage volume was named
+  differently.
 - **Canonical-origin axis vars**, when the deployment's `FRONTEND_URL` is
   not a `charitypilot.ie` hostname (e.g. a Tailscale Serve origin):
   `CHARITYPILOT_CANONICAL_WEB_ORIGIN` and `CHARITYPILOT_CANONICAL_API_ORIGIN`
-  are both required, or preflight refuses to start. See
+  are both required, or preflight refuses to start. Both must be an
+  **exact `https://` origin** — no path, no trailing slash, no
+  credentials (preflight now validates the shape, not just presence; the
+  same rule `apps/api/src/utils/env.ts` enforces at container boot). Note
+  this is stricter than the web app's OWN build-time override
+  (`NEXT_PUBLIC_CHARITYPILOT_CANONICAL_API_ORIGIN`, baked in from
+  `BLUEGREEN_ORIGIN` above), which additionally accepts an exact loopback
+  `http://` origin for local acceptance testing — the two vars serve
+  different layers and are validated differently on purpose. See
   `docs/superpowers/specs/2026-08-31-deployment-profile-and-bluegreen-design.md`'s
   "Named prerequisite" section for how these two vars (plus
   `CHARITYPILOT_ERROR_ALERTS=none` to drop the public-webhook requirement)
@@ -58,6 +76,15 @@ own numbering) and is **not** covered by anything in this repo yet.
   runbook once the target colour is live.
 - **`NODE_ENV=production` forbids `--skip-backup`.** The engine refuses
   outright — backups are mandatory for a production deploy, no override.
+- **Caddy's admin API must stay a unix socket — never copy personal-
+  server's `admin off` into `caddy/Caddyfile.bluegreen`.** Every `caddy
+  reload` this engine runs (switch, rollback, and their best-effort
+  restore-on-failure paths) talks to that admin API; with it off there is
+  no listener and every deploy/rollback fails deterministically at the
+  cutover. The Caddyfile pins it to
+  `admin unix//tmp/caddy-admin.sock` — a container-local socket on the
+  existing `/tmp` tmpfs, reachable only from inside the container via
+  `docker compose exec`, never over the network.
 
 ## Invocation
 
@@ -109,8 +136,10 @@ unbounded).
 Every phase below writes a status entry before it runs, so `status`'s
 history always shows exactly how far a deploy got.
 
-- **Preflight fails** (bad env, dirty worktree, `HEAD` not at fetched
-  `origin/master`) — nothing was touched; the cutover lock is released.
+- **Preflight fails** (bad env, a malformed canonical-origin override, a
+  missing host binary — `docker`/`git`/`wget` — dirty worktree, `HEAD`
+  not at fetched `origin/master`) — nothing was touched; the cutover
+  lock is released.
 - **Migration gate blocks** — the deploy aborts *before quiesce*; nothing
   was touched at all (no container stopped, no lock left held).
 - **Migration run fails** — the scheduler (stopped at quiesce) is
@@ -174,9 +203,11 @@ history always shows exactly how far a deploy got.
 npm run bluegreen:rollback -- --env-file /path/to/bluegreen.env
 ```
 
-Verifies the previous colour's containers still exist, switches Caddy back
-to them (validate → reload, same restore-on-failure as deploy), starts that
-colour plus the scheduler on the previous commit, and re-verifies the
+Verifies the previous colour's containers still exist, brings them up and
+waits for them to report healthy (mirrors deploy's own up-before-switch
+ordering — traffic must never point at an unconfirmed colour), THEN
+switches Caddy back to them (validate → reload, same restore-on-failure as
+deploy), starts the scheduler on the previous commit, and re-verifies the
 front door reports the previous commit before recording the rollback. A
 verification mismatch or a failed smoke command leaves `state.json`
 **unflipped** and logs a `rollback-uncertain` status entry naming the
