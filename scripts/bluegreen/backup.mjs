@@ -529,17 +529,27 @@ function defaultSleep(ms) {
 // impossible: the temporary server is gone well before two probes a second
 // apart could both land inside its brief window. A single failing probe
 // resets the streak to zero, so one flaky miss can't be "covered" by an
-// earlier pass from the temp server. Same overall attempt budget and
-// timeout error shape as before.
+// earlier pass from the temp server. Same overall attempt budget as before;
+// the timeout error additionally carries the last probe's own error text,
+// so a genuinely dead container reports why it never looked ready instead
+// of only the generic attempt-budget message.
 export async function waitForDrillReadiness(ctx, containerName, env) {
   let consecutivePasses = 0;
+  // Retained so a timeout can report WHY the container never looked ready
+  // (e.g. "no such file or directory" during the postgres restart window)
+  // instead of just the generic attempt-budget message — a container that
+  // is genuinely dead otherwise burns the full ~120s poll and reports
+  // nothing more useful than "timed out".
+  let lastProbeError = null;
 
   for (let attempt = 1; attempt <= READINESS_MAX_ATTEMPTS; attempt += 1) {
     let passed = true;
     try {
       await ctx.runCommand(drillReadinessProbeCommand(containerName), { env });
-    } catch {
+      lastProbeError = null;
+    } catch (error) {
       passed = false;
+      lastProbeError = error;
     }
 
     consecutivePasses = passed ? consecutivePasses + 1 : 0;
@@ -550,8 +560,15 @@ export async function waitForDrillReadiness(ctx, containerName, env) {
     }
   }
 
+  const lastProbeErrorText =
+    lastProbeError instanceof Error
+      ? lastProbeError.message
+      : lastProbeError === null
+        ? "the final probe attempt passed in isolation (never twice in a row)"
+        : String(lastProbeError);
+
   throw new Error(
-    `Restore drill readiness poll timed out after ${READINESS_MAX_ATTEMPTS} attempts (requires ${READINESS_REQUIRED_CONSECUTIVE_PASSES} consecutive successful pg_isready checks)`,
+    `Restore drill readiness poll timed out after ${READINESS_MAX_ATTEMPTS} attempts (requires ${READINESS_REQUIRED_CONSECUTIVE_PASSES} consecutive successful pg_isready checks); last probe error: ${lastProbeErrorText}`,
   );
 }
 

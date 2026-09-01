@@ -502,9 +502,13 @@ function makeSequencedReadinessRunCommand(outcomes) {
   let callIndex = 0;
   const runCommand = async (command) => {
     assert.deepEqual(command, READINESS_PROBE_COMMAND, `unexpected probe command at call ${callIndex}`);
+    const attemptNumber = callIndex + 1;
     const outcome = callIndex < outcomes.length ? outcomes[callIndex] : outcomes[outcomes.length - 1];
     callIndex += 1;
-    if (outcome === 'fail') throw new Error('pg_isready: no response');
+    // Distinct per attempt (not a fixed generic string) so a test can prove
+    // the timeout message really does carry the LAST attempt's own error,
+    // not just some earlier or hardcoded failure text.
+    if (outcome === 'fail') throw new Error(`pg_isready: no response (attempt ${attemptNumber})`);
   };
   return { runCommand, callCount: () => callIndex };
 }
@@ -532,11 +536,31 @@ test('waitForDrillReadiness times out when passes never land consecutively', asy
 
   await assert.rejects(
     () => waitForDrillReadiness(ctx, 'charitypilot-bluegreen-drill-readiness-test', {}),
-    /Restore drill readiness poll timed out after 120 attempts \(requires 2 consecutive successful pg_isready checks\)/,
+    /Restore drill readiness poll timed out after 120 attempts \(requires 2 consecutive successful pg_isready checks\); last probe error: pg_isready: no response \(attempt 120\)/,
   );
 
   assert.equal(callCount(), 120, 'must exhaust the full attempt budget, not give up early');
   assert.equal(sleeps.length, 119, 'sleeps between every attempt except the last (which times out instead)');
+});
+
+test("waitForDrillReadiness timeout carries the LAST probe's error, not an earlier or stale one", async () => {
+  const { waitForDrillReadiness } = await loadBackupModule();
+  // Every attempt fails, each with its own attempt-numbered message (see
+  // makeSequencedReadinessRunCommand) — the timeout must quote attempt 120's
+  // text specifically, proving lastProbeError tracks the most recent
+  // failure rather than e.g. the first one seen.
+  const { runCommand, callCount } = makeSequencedReadinessRunCommand(['fail']);
+  const ctx = { runCommand, sleep: async () => {} };
+
+  await assert.rejects(
+    () => waitForDrillReadiness(ctx, 'charitypilot-bluegreen-drill-readiness-test', {}),
+    (error) => {
+      assert.match(error.message, /last probe error: pg_isready: no response \(attempt 120\)/);
+      assert.doesNotMatch(error.message, /attempt 1\)/, "must not quote the first attempt's stale error");
+      return true;
+    },
+  );
+  assert.equal(callCount(), 120);
 });
 
 test('runRestoreDrill restores into a throwaway container, never the live db, and passes clean', async () => {
