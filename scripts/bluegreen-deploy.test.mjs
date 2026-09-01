@@ -45,8 +45,16 @@ function writeEnvFile(envPath, overrides = {}) {
     BLUEGREEN_FRONT_PORT: '8080',
     READINESS_API_KEY: READINESS_KEY,
     FRONTEND_URL: 'http://127.0.0.1:8080',
-    CHARITYPILOT_CANONICAL_WEB_ORIGIN: 'http://127.0.0.1:8080',
-    CHARITYPILOT_CANONICAL_API_ORIGIN: 'http://127.0.0.1:8080',
+    // M1 fix: these two feed env.ts's own production validation on the API
+    // server (CHARITYPILOT_CANONICAL_WEB_ORIGIN/_API_ORIGIN), which is
+    // https-only with no loopback exception — a DIFFERENT, separate
+    // mechanism from BLUEGREEN_ORIGIN/NEXT_PUBLIC_CHARITYPILOT_CANONICAL_
+    // API_ORIGIN above (the web app's own build-time override, which DOES
+    // accept exact loopback http for local acceptance testing). Must stay
+    // realistic https placeholders now that preflightIssues validates
+    // their shape, not just their presence.
+    CHARITYPILOT_CANONICAL_WEB_ORIGIN: 'https://vm.tailnet.example',
+    CHARITYPILOT_CANONICAL_API_ORIGIN: 'https://vm.tailnet.example',
     ...overrides,
   };
   writeFileSync(
@@ -905,6 +913,134 @@ test('I4: preflightIssues requires READINESS_API_KEY and BLUEGREEN_ORIGIN; BLUEG
   assert.ok(badPort.some((issue) => issue.includes('BLUEGREEN_FRONT_PORT must be a positive integer')));
 });
 
+test('M1: preflightIssues validates the SHAPE of the canonical-origin overrides, not just their presence', async () => {
+  const { preflightIssues } = await loadDeployModule();
+  const envFilePath = join(tmpdir(), 'bluegreen-preflight-canonical-shape.env');
+  const nonApprovedFileEnv = {
+    DATABASE_URL: 'postgresql://u:p@db:5432/charitypilot',
+    BLUEGREEN_ENV_FILE: envFilePath,
+    FRONTEND_URL: 'https://vm.tailnet.example',
+    READINESS_API_KEY: 'a-real-readiness-key',
+    BLUEGREEN_ORIGIN: 'https://vm.tailnet.example',
+  };
+
+  // Accept: both overrides are exact https origins.
+  const clean = preflightIssues({
+    fileEnv: {
+      ...nonApprovedFileEnv,
+      CHARITYPILOT_CANONICAL_WEB_ORIGIN: 'https://vm.tailnet.example',
+      CHARITYPILOT_CANONICAL_API_ORIGIN: 'https://vm.tailnet.example',
+    },
+    resolvedEnvFilePath: envFilePath,
+  });
+  assert.equal(clean.some((issue) => issue.includes('CHARITYPILOT_CANONICAL_WEB_ORIGIN')), false);
+  assert.equal(clean.some((issue) => issue.includes('CHARITYPILOT_CANONICAL_API_ORIGIN')), false);
+
+  // Reject: path, trailing slash, credentials, and non-https, one at a time.
+  for (const badValue of [
+    'https://vm.tailnet.example/path',
+    'https://vm.tailnet.example/',
+    'https://user:pass@vm.tailnet.example',
+    'http://vm.tailnet.example',
+    'not a url',
+  ]) {
+    const badWeb = preflightIssues({
+      fileEnv: {
+        ...nonApprovedFileEnv,
+        CHARITYPILOT_CANONICAL_WEB_ORIGIN: badValue,
+        CHARITYPILOT_CANONICAL_API_ORIGIN: 'https://vm.tailnet.example',
+      },
+      resolvedEnvFilePath: envFilePath,
+    });
+    assert.ok(
+      badWeb.some((issue) => issue.includes('CHARITYPILOT_CANONICAL_WEB_ORIGIN must be an exact https origin')),
+      `expected a shape rejection for CHARITYPILOT_CANONICAL_WEB_ORIGIN=${badValue}`,
+    );
+
+    const badApi = preflightIssues({
+      fileEnv: {
+        ...nonApprovedFileEnv,
+        CHARITYPILOT_CANONICAL_WEB_ORIGIN: 'https://vm.tailnet.example',
+        CHARITYPILOT_CANONICAL_API_ORIGIN: badValue,
+      },
+      resolvedEnvFilePath: envFilePath,
+    });
+    assert.ok(
+      badApi.some((issue) => issue.includes('CHARITYPILOT_CANONICAL_API_ORIGIN must be an exact https origin')),
+      `expected a shape rejection for CHARITYPILOT_CANONICAL_API_ORIGIN=${badValue}`,
+    );
+  }
+});
+
+test('M2: BLUEGREEN_FRONT_PORT="" falls back to the 8080 default, matching compose\'s own ${BLUEGREEN_FRONT_PORT:-8080}', async () => {
+  const runDeploy = await loadDeployRunner();
+  const stateDir = makeFixtureDir('bluegreen-m2-empty-front-port-');
+  const envPath = join(stateDir, 'bluegreen.env');
+  writeEnvFile(envPath, { BLUEGREEN_FRONT_PORT: '' });
+  seedMigrationsDir(stateDir, TARGET_COMMIT, []);
+
+  const { deps, calls } = baseDeps({ stateDir });
+
+  const outcome = await runDeploy(['deploy', '--env-file', envPath, '--state-dir', stateDir], deps);
+
+  assert.equal(outcome.status, 0, outcome.stderr);
+
+  const publicSmoke = calls.find(
+    (call) => call.command[0] === 'wget' && call.command[1] !== '--version',
+  );
+  assert.ok(publicSmoke, 'the public-smoke wget call must have run');
+  const url = publicSmoke.command.at(-1);
+  assert.match(url, /127\.0\.0\.1:8080/, `expected the 8080 default in the smoke URL, got: ${url}`);
+
+  rmSync(stateDir, { recursive: true, force: true });
+});
+
+test('I3: BLUEGREEN_DOCUMENTS_VOLUME threads through to runBackupImpl (deploy path)', async () => {
+  const runDeploy = await loadDeployRunner();
+  const stateDir = makeFixtureDir('bluegreen-i3-docs-volume-deploy-');
+  const envPath = join(stateDir, 'bluegreen.env');
+  writeEnvFile(envPath, { BLUEGREEN_DOCUMENTS_VOLUME: 'custom-charity-documents' });
+  seedMigrationsDir(stateDir, TARGET_COMMIT, []);
+
+  const { deps, backupCalls } = baseDeps({ stateDir });
+
+  const outcome = await runDeploy(['deploy', '--env-file', envPath, '--state-dir', stateDir], deps);
+
+  assert.equal(outcome.status, 0, outcome.stderr);
+  assert.equal(backupCalls.length, 1);
+  assert.equal(backupCalls[0].ctx.documentsVolume, 'custom-charity-documents');
+});
+
+test('I3: BLUEGREEN_DOCUMENTS_VOLUME threads through to runBackupImpl (standalone backup command)', async () => {
+  const runDeploy = await loadDeployRunner();
+  const stateDir = makeFixtureDir('bluegreen-i3-docs-volume-backup-');
+  const envPath = join(stateDir, 'bluegreen.env');
+  writeEnvFile(envPath, { BLUEGREEN_DOCUMENTS_VOLUME: 'custom-charity-documents' });
+
+  const { deps, backupCalls } = baseDeps({ stateDir });
+
+  const outcome = await runDeploy(['backup', '--env-file', envPath, '--state-dir', stateDir], deps);
+
+  assert.equal(outcome.status, 0, outcome.stderr);
+  assert.equal(backupCalls.length, 1);
+  assert.equal(backupCalls[0].ctx.documentsVolume, 'custom-charity-documents');
+});
+
+test('I3: an unset/empty BLUEGREEN_DOCUMENTS_VOLUME leaves ctx.documentsVolume undefined (backup.mjs applies its own default)', async () => {
+  const runDeploy = await loadDeployRunner();
+  const stateDir = makeFixtureDir('bluegreen-i3-docs-volume-default-');
+  const envPath = join(stateDir, 'bluegreen.env');
+  writeEnvFile(envPath, { BLUEGREEN_DOCUMENTS_VOLUME: '' });
+
+  const { deps, backupCalls } = baseDeps({ stateDir });
+
+  const outcome = await runDeploy(['backup', '--env-file', envPath, '--state-dir', stateDir], deps);
+
+  assert.equal(outcome.status, 0, outcome.stderr);
+  assert.equal(backupCalls.length, 1);
+  assert.equal(backupCalls[0].ctx.documentsVolume, undefined, "'' must count as unset, not a literal empty volume name");
+});
+
 test('I4: deploy preflight actually refuses before any command runs when READINESS_API_KEY is missing', async () => {
   const runDeploy = await loadDeployRunner();
   const stateDir = makeFixtureDir('bluegreen-preflight-no-key-');
@@ -1014,6 +1150,107 @@ test('I5: Caddy reload failure at switch restarts jobs on the OLD tag with --wai
 
   const restoredContent = readFileSync(activeUpstreamsPath, 'utf8');
   assert.equal(restoredContent, libModule.renderUpstreams('blue'));
+
+  rmSync(stateDir, { recursive: true, force: true });
+});
+
+test('I1: phase 9 (up) failure restarts jobs on the OLD tag with --wait', async () => {
+  const runDeploy = await loadDeployRunner();
+  const libModule = await import(pathToFileURL(join(scriptsDir, 'bluegreen', 'lib.mjs')).href);
+  const stateDir = makeFixtureDir('bluegreen-i1-phase9-up-');
+  const envPath = join(stateDir, 'bluegreen.env');
+  writeEnvFile(envPath);
+  libModule.writeState(stateDir, {
+    activeColor: 'blue',
+    commit: OLD_COMMIT,
+    previousColor: null,
+    previousCommit: null,
+    deployedAt: new Date().toISOString(),
+    rollbackable: true,
+  });
+  seedMigrationsDir(stateDir, TARGET_COMMIT, []);
+  writeFileSync(join(stateDir, 'active-upstreams.caddy'), libModule.renderUpstreams('blue'));
+
+  const { deps, calls } = baseDeps({
+    stateDir,
+    overrides: (command) => {
+      // The reviewer's own reproduction: web-green never becomes healthy
+      // during phase 9's `up -d --wait`.
+      if (command.includes('--profile') && command.includes('up') && command.includes('web-green')) {
+        return new Error('service "web-green" did not become healthy');
+      }
+      return undefined;
+    },
+  });
+
+  const outcome = await runDeploy(['deploy', '--env-file', envPath, '--state-dir', stateDir], deps);
+
+  assert.equal(outcome.status, 1);
+  assert.match(outcome.stderr, /starting green containers failed/);
+  assert.match(outcome.stderr, /Jobs were restarted on the old tag/);
+
+  const restart = calls.find(
+    (call) =>
+      call.command.includes('up') &&
+      call.command.includes('--wait') &&
+      call.command.includes('scheduler') &&
+      call.env?.BLUEGREEN_ACTIVE_TAG === OLD_COMMIT,
+  );
+  assert.ok(restart, 'scheduler must be restarted with --wait on the OLD tag after a phase-9 up failure');
+
+  rmSync(stateDir, { recursive: true, force: true });
+});
+
+test('I1: phase 11 (up caddy) failure restarts jobs on the OLD tag with --wait', async () => {
+  const runDeploy = await loadDeployRunner();
+  const libModule = await import(pathToFileURL(join(scriptsDir, 'bluegreen', 'lib.mjs')).href);
+  const stateDir = makeFixtureDir('bluegreen-i1-phase11-up-');
+  const envPath = join(stateDir, 'bluegreen.env');
+  writeEnvFile(envPath);
+  libModule.writeState(stateDir, {
+    activeColor: 'blue',
+    commit: OLD_COMMIT,
+    previousColor: null,
+    previousCommit: null,
+    deployedAt: new Date().toISOString(),
+    rollbackable: true,
+  });
+  seedMigrationsDir(stateDir, TARGET_COMMIT, []);
+  const activeUpstreamsPath = join(stateDir, 'active-upstreams.caddy');
+  writeFileSync(activeUpstreamsPath, libModule.renderUpstreams('blue'));
+
+  const { deps, calls } = baseDeps({
+    stateDir,
+    overrides: (command) => {
+      // Only phase 11's `up -d --wait caddy` — must not match phase 9's
+      // up (which also includes 'up'/'-d'/'--wait' but also '--profile')
+      // or the later scheduler-restart up (which never includes 'caddy').
+      if (command.includes('up') && command.includes('--wait') && command.includes('caddy') && !command.includes('--profile')) {
+        return new Error('service "caddy" did not become healthy');
+      }
+      return undefined;
+    },
+  });
+
+  const outcome = await runDeploy(['deploy', '--env-file', envPath, '--state-dir', stateDir], deps);
+
+  assert.equal(outcome.status, 1);
+  assert.match(outcome.stderr, /starting Caddy failed while switching/);
+  assert.match(outcome.stderr, /Jobs were restarted on the old tag/);
+
+  const restart = calls.find(
+    (call) =>
+      call.command.includes('up') &&
+      call.command.includes('--wait') &&
+      call.command.includes('scheduler') &&
+      call.env?.BLUEGREEN_ACTIVE_TAG === OLD_COMMIT,
+  );
+  assert.ok(restart, 'scheduler must be restarted with --wait on the OLD tag after a phase-11 caddy-up failure');
+
+  // No upstream file write was ever attempted at this point, so the
+  // original content must be untouched (nothing to "restore").
+  const content = readFileSync(activeUpstreamsPath, 'utf8');
+  assert.equal(content, libModule.renderUpstreams('blue'));
 
   rmSync(stateDir, { recursive: true, force: true });
 });
@@ -1449,6 +1686,62 @@ test('fix round 5: rollback refuses fast naming the missing host binary, before 
   // ever ran — only the --version probes.
   const realCalls = calls.filter((call) => !(call.command.length === 2 && call.command[1] === '--version'));
   assert.deepEqual(realCalls, [], 'no real command may run once a required host binary is reported missing');
+
+  rmSync(stateDir, { recursive: true, force: true });
+});
+
+test('I2: rollback brings the previous colour up (with --wait) BEFORE reloading Caddy onto it', async () => {
+  const runDeploy = await loadDeployRunner();
+  const libModule = await import(pathToFileURL(join(scriptsDir, 'bluegreen', 'lib.mjs')).href);
+  const stateDir = makeFixtureDir('bluegreen-i2-rollback-order-');
+  const envPath = join(stateDir, 'bluegreen.env');
+  writeEnvFile(envPath);
+  libModule.writeState(stateDir, {
+    activeColor: 'green',
+    commit: TARGET_COMMIT,
+    previousColor: 'blue',
+    previousCommit: OLD_COMMIT,
+    deployedAt: new Date().toISOString(),
+    rollbackable: true,
+  });
+
+  const { deps, calls } = baseDeps({
+    stateDir,
+    overrides: (command) => {
+      if (command.includes('ps') && command.includes('-a')) {
+        return { stdout: 'api-blue   Up\nweb-blue   Up\n' };
+      }
+      if (command[0] === 'wget' && command[1] !== '--version') {
+        return { stdout: readinessBody(OLD_COMMIT) };
+      }
+      return undefined;
+    },
+  });
+
+  const outcome = await runDeploy(['rollback', '--env-file', envPath, '--state-dir', stateDir], deps);
+
+  assert.equal(outcome.status, 0, outcome.stderr);
+
+  const upIndex = calls.findIndex(
+    (call) =>
+      call.command.includes('up') &&
+      call.command.includes('--wait') &&
+      call.command.includes('api-blue') &&
+      call.command.includes('web-blue'),
+  );
+  const reloadIndex = calls.findIndex(
+    (call) => call.command.includes('caddy') && call.command.includes('reload'),
+  );
+
+  assert.notEqual(upIndex, -1, 'the previous colour must be brought up with --wait');
+  assert.notEqual(reloadIndex, -1, 'Caddy must be reloaded');
+  assert.ok(
+    upIndex < reloadIndex,
+    `up --wait (index ${upIndex}) must precede the Caddy reload (index ${reloadIndex}) — traffic must never point at unconfirmed containers`,
+  );
+
+  const upCall = calls[upIndex];
+  assert.ok(!upCall.command.includes('scheduler'), 'the up --wait api/web call must not also start the scheduler');
 
   rmSync(stateDir, { recursive: true, force: true });
 });

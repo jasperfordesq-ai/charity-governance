@@ -261,6 +261,19 @@ function hostnameOf(url) {
   }
 }
 
+// M1 fix: mirrors apps/api/src/utils/env.ts's parseCanonicalOriginOverride
+// shape rule exactly — must parse as a URL, use https://, and its origin
+// must equal the raw string verbatim (which rules out a path, a trailing
+// slash, and userinfo/credentials all in one comparison).
+function isExactHttpsOrigin(value) {
+  try {
+    const url = new URL(value);
+    return url.protocol === 'https:' && url.origin === value;
+  } catch {
+    return false;
+  }
+}
+
 /**
  * Deploy-critical preflight validation over the parsed env file. Pure —
  * takes the already-resolved env file path and its parsed contents.
@@ -289,10 +302,25 @@ export function preflightIssues({ fileEnv, resolvedEnvFilePath }) {
       issues.push(
         'CHARITYPILOT_CANONICAL_WEB_ORIGIN is required when FRONTEND_URL is not a charitypilot.ie hostname',
       );
+    } else if (!isExactHttpsOrigin(fileEnv.CHARITYPILOT_CANONICAL_WEB_ORIGIN)) {
+      // M1 fix: was a bare truthiness check — a malformed value (a path, a
+      // trailing slash, credentials, http://, or an unparseable string)
+      // used to sail through preflight and only fail deep into the run
+      // (e.g. web build/boot). Mirrors env.ts's own
+      // parseCanonicalOriginOverride: must parse as a URL whose origin
+      // equals the raw string exactly (rules out path/trailing-slash/
+      // credentials) and use https://.
+      issues.push(
+        'CHARITYPILOT_CANONICAL_WEB_ORIGIN must be an exact https origin (no path, no trailing slash, no credentials)',
+      );
     }
     if (!fileEnv.CHARITYPILOT_CANONICAL_API_ORIGIN) {
       issues.push(
         'CHARITYPILOT_CANONICAL_API_ORIGIN is required when FRONTEND_URL is not a charitypilot.ie hostname',
+      );
+    } else if (!isExactHttpsOrigin(fileEnv.CHARITYPILOT_CANONICAL_API_ORIGIN)) {
+      issues.push(
+        'CHARITYPILOT_CANONICAL_API_ORIGIN must be an exact https origin (no path, no trailing slash, no credentials)',
       );
     }
   }
@@ -359,7 +387,12 @@ function baseComposeEnv({ processEnv, resolvedEnvFilePath, fileEnv, blueTag, gre
     BLUEGREEN_GREEN_TAG: greenTag,
     BLUEGREEN_ACTIVE_TAG: activeTag,
     BLUEGREEN_ORIGIN: fileEnv.BLUEGREEN_ORIGIN ?? '',
-    BLUEGREEN_FRONT_PORT: fileEnv.BLUEGREEN_FRONT_PORT ?? '8080',
+    // M2 fix: '' counts as unset (project convention — matches preflight's
+    // own frontPortValue check and compose's ${BLUEGREEN_FRONT_PORT:-8080}
+    // shell default, both of which already treat '' as "not set"). `??`
+    // does not: an explicit empty string used to leak through as the
+    // literal port value here instead of falling back to 8080.
+    BLUEGREEN_FRONT_PORT: fileEnv.BLUEGREEN_FRONT_PORT || '8080',
   };
 }
 
@@ -368,7 +401,8 @@ function readinessKey(fileEnv) {
 }
 
 function frontPort(fileEnv) {
-  return fileEnv.BLUEGREEN_FRONT_PORT ?? '8080';
+  // M2 fix: same '' = unset convention as baseComposeEnv above.
+  return fileEnv.BLUEGREEN_FRONT_PORT || '8080';
 }
 
 // ---------------------------------------------------------------------------
@@ -768,6 +802,11 @@ async function executeDeploy(deps) {
         env: deployEnv,
         databaseName: DEFAULT_DATABASE_NAME,
         databaseUser: DEFAULT_DATABASE_USER,
+        // I3 fix: was hardcoded to backup.mjs's own default everywhere —
+        // '' counts as unset too (P1 convention), so an operator overriding
+        // the documents volume name in the env file actually reaches the
+        // backup.
+        documentsVolume: fileEnv.BLUEGREEN_DOCUMENTS_VOLUME || undefined,
         commit: targetCommit,
         activeColor: oldColor,
         now,
@@ -884,10 +923,36 @@ async function executeDeploy(deps) {
 
   // Phase 9: up (named services only — never implicitly touches scheduler)
   writeDeployStatus(resolvedStateDir, 'up', `starting ${target} api/web`);
-  await run(
-    [...composePrefix(), '--profile', target, 'up', '-d', '--wait', `api-${target}`, `web-${target}`],
-    deployEnv,
-  );
+  try {
+    await run(
+      [...composePrefix(), '--profile', target, 'up', '-d', '--wait', `api-${target}`, `web-${target}`],
+      deployEnv,
+    );
+  } catch (error) {
+    // I1 fix: this used to be a bare await with no recovery — a failure
+    // here (e.g. api/web-${target} never becomes healthy) ran AFTER
+    // quiesce (the scheduler was stopped at phase 7) and left it stopped
+    // forever, even though the old colour is what keeps serving. Same
+    // recovery as candidate-smoke/caddy-reload below: restart jobs on the
+    // old tag.
+    let recoveryNote = '';
+    if (oldColor) {
+      try {
+        const oldEnv = envFor(oldCommit ?? UNBUILT_TAG);
+        await run([...composePrefix(), 'up', '-d', '--wait', 'scheduler'], oldEnv);
+        recoveryNote = ` Jobs were restarted on the old tag (${oldCommit}).`;
+      } catch (restartError) {
+        recoveryNote = ` Restarting jobs on the old tag also failed: ${redact(restartError)}.`;
+      }
+    } else {
+      recoveryNote = ' No previous colour to revert to (first deploy).';
+    }
+    return result(
+      1,
+      unknownAppliedWarning,
+      `Blue-green deploy failed: starting ${target} containers failed: ${redact(error)}. Traffic was never switched; the old colour remains live.${recoveryNote}\n`,
+    );
+  }
 
   // Phase 10: candidate-smoke
   writeDeployStatus(resolvedStateDir, 'candidate-smoke', `smoke-testing ${target} directly`);
@@ -943,7 +1008,32 @@ async function executeDeploy(deps) {
 
   // Phase 11: switch
   writeDeployStatus(resolvedStateDir, 'switch', `pointing Caddy at ${target}`);
-  await run([...composePrefix(), 'up', '-d', '--wait', 'caddy'], deployEnv);
+  try {
+    await run([...composePrefix(), 'up', '-d', '--wait', 'caddy'], deployEnv);
+  } catch (error) {
+    // I1 fix: same bare-await-with-no-recovery defect as phase 9 — a
+    // failure starting/waiting on Caddy here runs AFTER quiesce stopped
+    // the scheduler, and nothing else on this path would ever restart it.
+    // No upstream file has been touched yet at this point, so there is
+    // nothing to restore — just the same old-tag jobs recovery.
+    let recoveryNote = '';
+    if (oldColor) {
+      try {
+        const oldEnv = envFor(oldCommit ?? UNBUILT_TAG);
+        await run([...composePrefix(), 'up', '-d', '--wait', 'scheduler'], oldEnv);
+        recoveryNote = ` Jobs were restarted on the old tag (${oldCommit}).`;
+      } catch (restartError) {
+        recoveryNote = ` Restarting jobs on the old tag also failed: ${redact(restartError)}.`;
+      }
+    } else {
+      recoveryNote = ' No previous colour to revert to (first deploy).';
+    }
+    return result(
+      1,
+      unknownAppliedWarning,
+      `Blue-green deploy failed: starting Caddy failed while switching to ${target}: ${redact(error)}. Traffic was never switched; the old colour remains live.${recoveryNote}\n`,
+    );
+  }
   const previousUpstreams = existsSync(deps.activeUpstreamsPath) ? readFileSync(deps.activeUpstreamsPath, 'utf8') : null;
   writeFileSync(deps.activeUpstreamsPath, renderUpstreams(target));
   try {
@@ -1200,6 +1290,18 @@ async function executeRollback(deps) {
     );
   }
 
+  // I2 fix: previously reloaded Caddy onto the previous colour's containers
+  // BEFORE starting them (and without --wait), so a rollback could point
+  // live traffic at a colour that wasn't confirmed healthy yet — mirrors
+  // deploy's own phase 9 (up --wait) -> phase 11 (switch) ordering: bring
+  // the previous colour up and confirmed healthy FIRST, only then reload
+  // Caddy onto it.
+  writeDeployStatus(resolvedStateDir, 'rollback-up', `starting ${previousColor} containers`);
+  await run(
+    [...composePrefix(), 'up', '-d', '--wait', `api-${previousColor}`, `web-${previousColor}`],
+    rollbackEnv,
+  );
+
   writeDeployStatus(resolvedStateDir, 'rollback-switch', `pointing Caddy at ${previousColor}`);
   const previousUpstreams = existsSync(deps.activeUpstreamsPath) ? readFileSync(deps.activeUpstreamsPath, 'utf8') : null;
   writeFileSync(deps.activeUpstreamsPath, renderUpstreams(previousColor));
@@ -1228,8 +1330,7 @@ async function executeRollback(deps) {
       `Blue-green rollback failed: Caddy reload failed: ${redact(error)}. The previous upstream file was restored.\n`,
     );
   }
-  writeDeployStatus(resolvedStateDir, 'rollback-jobs', `starting ${previousColor} containers and scheduler on ${previousCommit}`);
-  await run([...composePrefix(), 'up', '-d', `api-${previousColor}`, `web-${previousColor}`], rollbackEnv);
+  writeDeployStatus(resolvedStateDir, 'rollback-jobs', `starting scheduler on ${previousCommit}`);
   await run([...composePrefix(), 'up', '-d', '--wait', 'scheduler'], rollbackEnv);
 
   // I3 fix: a failed post-rollback smoke check (command failure OR an
@@ -1388,6 +1489,8 @@ async function executeBackupCommand(deps) {
     env,
     databaseName: DEFAULT_DATABASE_NAME,
     databaseUser: DEFAULT_DATABASE_USER,
+    // I3 fix: see the executeDeploy backup call for why.
+    documentsVolume: fileEnv.BLUEGREEN_DOCUMENTS_VOLUME || undefined,
     commit: state?.commit ?? null,
     activeColor: state?.activeColor ?? null,
     now,
