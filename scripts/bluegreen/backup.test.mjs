@@ -819,6 +819,83 @@ test('runRestoreDrill fails when an extra document appears in the restored tar',
   }
 });
 
+test('runRestoreDrill refuses a documents tar with zero files when the restored database reports Document rows > 0', async () => {
+  const { runRestoreDrill } = await loadBackupModule();
+  const stateDir = makeTempDir('charitypilot-bluegreen-drill-test-');
+  try {
+    // The manifest's own recorded census (and the restored db's echoed
+    // census below) both say 2 Document rows exist, but the "restored"
+    // documents tar is completely empty — a silently lost documents
+    // backup that would otherwise verify vacuously (the manifest also
+    // recorded zero document entries, so missing=none/mismatched=none/
+    // extra=none).
+    const { plan } = writeFixtureBackup(stateDir, { rowCensus: { Organisation: 3, User: 5, Document: 2 } });
+
+    const { runCommand, calls } = makeDrillRecordingRunCommand({
+      rowCensusStdout: 'Organisation=3\nUser=5\nDocument=2\n',
+      documentHashStdout: '',
+    });
+
+    const ctx = {
+      runCommand,
+      stateDir,
+      envFile: '/deploy/env/production.env',
+      composeArgs: ['-f', 'compose.bluegreen.yml', '-p', 'charitypilot-bluegreen'],
+      plan,
+      sleep: async () => {},
+    };
+
+    await assert.rejects(
+      () => runRestoreDrill(ctx),
+      /Restore drill found zero files in the restored documents tar, but the restored database reports 2 Document row\(s\)/,
+    );
+
+    assert.equal(teardownCallsOf(calls).length, 1, 'must still tear down the scratch container');
+    assert.equal(logsCallsOf(calls).length, 1, 'must still collect docker logs for diagnostics');
+  } finally {
+    rmSync(stateDir, { recursive: true, force: true });
+  }
+});
+
+test('runRestoreDrill accepts a genuinely empty documents tar when the restored database reports zero Document rows', async () => {
+  const { runRestoreDrill } = await loadBackupModule();
+  const stateDir = makeTempDir('charitypilot-bluegreen-drill-test-');
+  try {
+    // A tenant with no documents at all: zero Document rows AND zero
+    // files in the tar is the genuinely-empty case, not vacuous — must
+    // still pass (mirrors the module's own no-entries/no-census refusals,
+    // which are about an ENTIRELY empty manifest, not this legitimately
+    // document-free one).
+    const { plan, manifest } = writeFixtureBackup(stateDir, { rowCensus: { Organisation: 1, User: 1, Document: 0 } });
+    // writeFixtureBackup's own documentEntries fixture always seeds two
+    // document entries — override the manifest to have none, matching
+    // the zero-documents scenario this test actually exercises.
+    writeFileSync(
+      plan.manifestFile,
+      JSON.stringify({ ...manifest, entries: manifest.entries.filter((e) => e.path === 'database.dump' || e.path === 'documents.tar') }),
+    );
+
+    const { runCommand } = makeDrillRecordingRunCommand({
+      rowCensusStdout: 'Organisation=1\nUser=1\nDocument=0\n',
+      documentHashStdout: '',
+    });
+
+    const ctx = {
+      runCommand,
+      stateDir,
+      envFile: '/deploy/env/production.env',
+      composeArgs: ['-f', 'compose.bluegreen.yml', '-p', 'charitypilot-bluegreen'],
+      plan,
+      sleep: async () => {},
+    };
+
+    const result = await runRestoreDrill(ctx);
+    assert.equal(result.ok, true);
+  } finally {
+    rmSync(stateDir, { recursive: true, force: true });
+  }
+});
+
 test('runRestoreDrill refuses a manifest with no entries before touching docker at all', async () => {
   const { runRestoreDrill } = await loadBackupModule();
   const stateDir = makeTempDir('charitypilot-bluegreen-drill-test-');

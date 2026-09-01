@@ -635,10 +635,15 @@ function drillTeardownCommand(containerName) {
  * and a restore that silently drops or duplicates data. Refuses outright
  * (before touching docker at all) a manifest with no entries or an empty/
  * absent row census — those are exactly the shapes a silently-broken
- * backup produces, and drilling them would always pass vacuously. On any
- * failure once the scratch container exists, `docker logs` is captured for
- * operator diagnostics before the container is force-removed in a
- * `finally` that runs regardless of which step failed.
+ * backup produces, and drilling them would always pass vacuously. Also
+ * refuses mid-drill (once the restored database's own row census is known)
+ * a documents tar containing zero files when that census reports Document
+ * rows > 0 — a manifest recording zero document entries would otherwise
+ * verify vacuously against an equally-empty restored tar, hiding a
+ * genuinely lost documents backup. On any failure once the scratch
+ * container exists, `docker logs` is captured for operator diagnostics
+ * before the container is force-removed in a `finally` that runs
+ * regardless of which step failed.
  */
 export async function runRestoreDrill(ctx) {
   const plan = ctx.plan;
@@ -680,6 +685,21 @@ export async function runRestoreDrill(ctx) {
 
     const hashResult = await ctx.runCommand(drillDocumentsExtractAndHashCommand(containerName, basename(plan.documentsTar)), { env });
     const restoredDocumentEntries = parseHashListing(hashResult?.stdout);
+
+    // I3 fix: a documents tar containing zero files still "verifies"
+    // cleanly against a manifest that also recorded zero document entries
+    // (missing=none, mismatched=none, extra=none) — vacuously green, the
+    // same class of hole the no-entries/no-row-census refusals above close
+    // for the database side. If the restored database itself reports
+    // Document rows, a documents tar with none is a genuine, silent
+    // data-loss bug, not a coincidence, and must fail loudly instead of
+    // passing.
+    const restoredDocumentRowCount = Number(restoredRowCensus.Document ?? 0);
+    if (restoredDocumentRowCount > 0 && restoredDocumentEntries.length === 0) {
+      throw new Error(
+        `Restore drill found zero files in the restored documents tar, but the restored database reports ${restoredDocumentRowCount} Document row(s) — the documents backup is silently empty`,
+      );
+    }
 
     const manifestVerification = verifyManifest(manifest, [dumpEntry, documentsTarEntry, ...restoredDocumentEntries]);
     if (!manifestVerification.ok) {
