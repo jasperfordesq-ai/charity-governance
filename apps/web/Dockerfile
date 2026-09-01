@@ -25,16 +25,21 @@ ARG NEXT_PUBLIC_CHARITYPILOT_EMAIL_DELIVERY
 ARG NEXT_PUBLIC_CHARITYPILOT_BILLING
 # Build-stage override of the canonical hosted API origin the line-32(ish)
 # RUN check pins NEXT_PUBLIC_API_URL to (default https://api.charitypilot.ie).
-# IS re-exposed via ENV below, alongside the other NEXT_PUBLIC_* vars: the
-# runtime web-config check (apps/web/src/lib/api-config.ts's
-# validateProductionApiUrl) reads this same var through the identical
-# NEXT_PUBLIC_* mechanism as NEXT_PUBLIC_API_URL, so it must reach `next
-# build` the same way those do — inlined into both the client bundle and the
-# server chunks that call validateProductionApiUrl at request time. Without
-# this ENV line, a non-hosted deployment (blue-green single-origin topology,
-# a private-VM Tailscale hostname) builds an image whose web server throws
-# "must use the canonical production API origin" on every request and never
-# becomes healthy.
+# Re-exposed via ENV below, alongside the other NEXT_PUBLIC_* vars, for
+# symmetry/documentation only — NOT because it is what makes `next build`
+# see the value: a Docker ARG is already an environment variable for every
+# RUN instruction in this same stage (including the RUN check below and the
+# `next build` step further down), with or without this ENV line. The two
+# hops that actually make this override reach a running container are both
+# in compose.bluegreen.yml: (1) passing this ARG as a build arg at all, so
+# Next inlines it into apps/web/src/lib/api.ts's literal
+# process.env.NEXT_PUBLIC_CHARITYPILOT_CANONICAL_API_ORIGIN reference for the
+# client bundle, and (2) ALSO setting it in web-blue/web-green's runtime
+# `environment:` block, because apps/web/src/proxy.ts calls
+# getApiBaseUrl()/getServerApiBaseUrl() with no arguments (default parameter
+# = the live process.env at request time) — a plain object reference like
+# that is never build-time-inlined, so those call sites need the real
+# container environment, not just a baked-in bundle constant.
 ARG NEXT_PUBLIC_CHARITYPILOT_CANONICAL_API_ORIGIN
 ENV NEXT_PUBLIC_API_URL=$NEXT_PUBLIC_API_URL
 ENV NEXT_PUBLIC_CHARITYPILOT_DEPLOYMENT_MODE=$NEXT_PUBLIC_CHARITYPILOT_DEPLOYMENT_MODE
