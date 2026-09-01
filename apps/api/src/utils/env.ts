@@ -642,8 +642,19 @@ export function validateDeadlineRemindersEnv(): void {
     requireApprovedPublicHost: true,
     canonicalOriginRole: 'web',
   });
-  requirePrefix('RESEND_API_KEY', 're_', 'Resend API key', issues);
-  requireApprovedEmailSender('EMAIL_FROM', issues);
+  // Deadline reminders/auth-delivery emails have no manual-link fallback
+  // at the point of sending (unlike password-recovery/team-invite flows,
+  // which show a link in the UI instead of emailing) — but a manual-link
+  // deployment never even attempts to send through this path (see
+  // DeadlineRemindersService.sendDueReminders and password-recovery
+  // .service.ts's PASSWORD_RESET_COMPLETED_NOTICE enqueue, both keyed on
+  // this same axis), so requiring provider credentials here regardless of
+  // mode would only block a deployment that will never use them. Mirrors
+  // validateProductionEnv's identical gate exactly.
+  if (emailDeliveryMode() === 'provider') {
+    requirePrefix('RESEND_API_KEY', 're_', 'Resend API key', issues);
+    requireApprovedEmailSender('EMAIL_FROM', issues);
+  }
   requireErrorAlertWebhook(issues);
 
   throwIfProductionIssues(
@@ -666,8 +677,19 @@ export function validateAuthDeliveryEnv(): void {
     requireApprovedPublicHost: true,
     canonicalOriginRole: 'web',
   });
-  requirePrefix('RESEND_API_KEY', 're_', 'Resend API key', issues);
-  requireApprovedEmailSender('EMAIL_FROM', issues);
+  // Deadline reminders/auth-delivery emails have no manual-link fallback
+  // at the point of sending (unlike password-recovery/team-invite flows,
+  // which show a link in the UI instead of emailing) — but a manual-link
+  // deployment never even attempts to send through this path (see
+  // DeadlineRemindersService.sendDueReminders and password-recovery
+  // .service.ts's PASSWORD_RESET_COMPLETED_NOTICE enqueue, both keyed on
+  // this same axis), so requiring provider credentials here regardless of
+  // mode would only block a deployment that will never use them. Mirrors
+  // validateProductionEnv's identical gate exactly.
+  if (emailDeliveryMode() === 'provider') {
+    requirePrefix('RESEND_API_KEY', 're_', 'Resend API key', issues);
+    requireApprovedEmailSender('EMAIL_FROM', issues);
+  }
   requireErrorAlertWebhook(issues);
   requireAuthRecoverySecret(issues);
   validateAuthDeliveryNumericEnv(issues);

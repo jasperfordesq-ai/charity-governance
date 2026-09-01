@@ -1,6 +1,7 @@
 import type { Prisma, PrismaClient } from '@prisma/client';
 import { createHash, randomUUID } from 'node:crypto';
 import { EmailService, type DeadlineReminderDeliveryResult } from './email.service.js';
+import { emailDeliveryMode } from '../utils/deployment-profile.js';
 import { hasSubscriptionAccess, pastDueGraceCutoff } from '../utils/subscription-access.js';
 import {
   addCalendarDays,
@@ -239,9 +240,28 @@ export class DeadlineRemindersService {
    * still sends the most urgent not-yet-sent reminder on the next run instead of
    * silently skipping it forever.
    *
+   * Deadline reminders ARE an email — there is no manual-link fallback for
+   * them (unlike password-recovery/team-invite flows, which show a link in
+   * the UI instead of emailing). Under CHARITYPILOT_EMAIL_DELIVERY=manual-link
+   * there is therefore nothing honest for this method to do: EmailService
+   * would gracefully reject every attempt (no crash), but running the loop
+   * anyway would still touch the database every day and write a REJECTED
+   * DeadlineReminderLog row for every due deadline forever — guaranteed
+   * noise that looks like a real, recurring delivery failure. Skip the whole
+   * run with one informative log line instead (mirrors the "enqueue is
+   * delivery behaviour, keyed on the email-delivery axis" reasoning in
+   * password-recovery.service.ts's PASSWORD_RESET_COMPLETED_NOTICE enqueue).
+   *
    * Intended to be called once per day by a scheduler (see utils/cron.ts).
    */
   async sendDueReminders(now = new Date()): Promise<void> {
+    if (emailDeliveryMode() !== 'provider') {
+      this.logger.info(
+        '[DeadlineRemindersService] Skipped: CHARITYPILOT_EMAIL_DELIVERY=manual-link has no email channel for deadline reminders.',
+      );
+      return;
+    }
+
     const today = todayInTimeZone('Europe/Dublin', now);
     const candidateEnd = addCalendarDays(today, 365);
 
