@@ -86,6 +86,12 @@ const DUMP_ARTIFACT_NAME = 'database.dump';
 const DOCUMENTS_ARTIFACT_NAME = 'documents.tar';
 const MANIFEST_ARTIFACT_NAME = 'manifest.json';
 const READINESS_MAX_ATTEMPTS = 120;
+const READINESS_POLL_INTERVAL_MS = 1000;
+// Two, not one: a single passing pg_isready can be the temporary bootstrap
+// server official Postgres images run during a fresh initdb (see
+// waitForDrillReadiness below) rather than the real server the restore
+// actually needs.
+const READINESS_REQUIRED_CONSECUTIVE_PASSES = 2;
 
 // A single SELECT that returns an EXACT (not estimated/n_live_tup) row count
 // for every ordinary table in the public schema, one `table=count` line per
@@ -495,21 +501,58 @@ function drillStartCommand(containerName, dumpDir) {
   ];
 }
 
-// A single recorded command containing its own bounded retry loop — mirrors
-// scripts/personal-server.mjs's waitForRecoveryDatabase (in-container
-// `for ... seq ... pg_isready ... sleep 1`) rather than inventing a new
-// polling mechanism. `docker run -d` returns as soon as the container is
-// CREATED; initdb inside a fresh postgres image still takes real seconds,
-// so a single unlooped pg_isready reliably fails against real docker.
-function drillReadinessCommand(containerName) {
-  return [
-    'docker',
-    'exec',
-    containerName,
-    'sh',
-    '-c',
-    `for i in $(seq 1 ${READINESS_MAX_ATTEMPTS}); do pg_isready -U ${DRILL_DATABASE_USER} -d ${DRILL_DATABASE_NAME} >/dev/null 2>&1 && exit 0; sleep 1; done; exit 1`,
-  ];
+// One single-shot pg_isready probe per attempt (unlike scripts/personal-
+// server.mjs's waitForRecoveryDatabase, which loops entirely inside one
+// recorded shell command) — waitForDrillReadiness below drives the retry
+// loop from JS instead, so it can require several consecutive passes rather
+// than trusting the first one.
+function drillReadinessProbeCommand(containerName) {
+  return ['docker', 'exec', containerName, 'pg_isready', '-U', DRILL_DATABASE_USER, '-d', DRILL_DATABASE_NAME];
+}
+
+function defaultSleep(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+// `docker run -d` returns as soon as the container is CREATED; initdb
+// inside a fresh postgres image still takes real seconds, so a single
+// pg_isready probe reliably fails against real docker at first — that part
+// is unchanged. What a single PASSING probe cannot rule out: official
+// Postgres images perform a two-phase startup on a truly fresh (anonymous-
+// volume) initdb — a temporary server accepts connections just long enough
+// to run init scripts, then shuts down completely before the real server
+// starts listening. `pg_isready` can catch that temporary server's socket,
+// report ready, and hand control back to a restore that then races the
+// shutdown/restart window and fails with "no such file or directory" even
+// though the poll "passed". Requiring READINESS_REQUIRED_CONSECUTIVE_PASSES
+// consecutive passes (across the existing 1-second interval) makes that
+// impossible: the temporary server is gone well before two probes a second
+// apart could both land inside its brief window. A single failing probe
+// resets the streak to zero, so one flaky miss can't be "covered" by an
+// earlier pass from the temp server. Same overall attempt budget and
+// timeout error shape as before.
+export async function waitForDrillReadiness(ctx, containerName, env) {
+  let consecutivePasses = 0;
+
+  for (let attempt = 1; attempt <= READINESS_MAX_ATTEMPTS; attempt += 1) {
+    let passed = true;
+    try {
+      await ctx.runCommand(drillReadinessProbeCommand(containerName), { env });
+    } catch {
+      passed = false;
+    }
+
+    consecutivePasses = passed ? consecutivePasses + 1 : 0;
+    if (consecutivePasses >= READINESS_REQUIRED_CONSECUTIVE_PASSES) return;
+
+    if (attempt < READINESS_MAX_ATTEMPTS) {
+      await (ctx.sleep ? ctx.sleep(READINESS_POLL_INTERVAL_MS) : defaultSleep(READINESS_POLL_INTERVAL_MS));
+    }
+  }
+
+  throw new Error(
+    `Restore drill readiness poll timed out after ${READINESS_MAX_ATTEMPTS} attempts (requires ${READINESS_REQUIRED_CONSECUTIVE_PASSES} consecutive successful pg_isready checks)`,
+  );
 }
 
 function drillRestoreCommand(containerName, dumpFileName) {
@@ -604,7 +647,7 @@ export async function runRestoreDrill(ctx) {
 
   try {
     await ctx.runCommand(drillStartCommand(containerName, dirname(plan.dumpFile)), { env });
-    await ctx.runCommand(drillReadinessCommand(containerName), { env });
+    await waitForDrillReadiness(ctx, containerName, env);
     await ctx.runCommand(drillRestoreCommand(containerName, basename(plan.dumpFile)), { env });
 
     const censusResult = await ctx.runCommand(drillRowCensusCommand(containerName), { env });

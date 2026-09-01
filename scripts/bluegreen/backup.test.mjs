@@ -477,6 +477,68 @@ function logsCallsOf(calls) {
   return calls.filter((c) => c.command[0] === 'docker' && c.command[1] === 'logs');
 }
 
+// -----------------------------------------------------------------------------
+// waitForDrillReadiness — requires 2 CONSECUTIVE passing pg_isready probes,
+// not just one, so a lone pass against Postgres's temporary bootstrap server
+// (which then shuts down before the real server starts on a fresh initdb)
+// can never be mistaken for real readiness.
+// -----------------------------------------------------------------------------
+
+const READINESS_PROBE_COMMAND = [
+  'docker',
+  'exec',
+  'charitypilot-bluegreen-drill-readiness-test',
+  'pg_isready',
+  '-U',
+  'charitypilot_drill',
+  '-d',
+  'charitypilot_drill',
+];
+
+// Honours its inputs: asserts every probe command matches the expected
+// exact shape (container name, user, db) rather than blindly returning
+// canned results regardless of what was asked, per project convention.
+function makeSequencedReadinessRunCommand(outcomes) {
+  let callIndex = 0;
+  const runCommand = async (command) => {
+    assert.deepEqual(command, READINESS_PROBE_COMMAND, `unexpected probe command at call ${callIndex}`);
+    const outcome = callIndex < outcomes.length ? outcomes[callIndex] : outcomes[outcomes.length - 1];
+    callIndex += 1;
+    if (outcome === 'fail') throw new Error('pg_isready: no response');
+  };
+  return { runCommand, callCount: () => callIndex };
+}
+
+test('waitForDrillReadiness only passes once 2 probes succeed BACK TO BACK — an isolated earlier pass does not count', async () => {
+  const { waitForDrillReadiness } = await loadBackupModule();
+  // ok, fail, ok, ok — the only consecutive pair is the 3rd+4th call; the
+  // isolated 1st pass must not be credited toward it.
+  const { runCommand, callCount } = makeSequencedReadinessRunCommand(['ok', 'fail', 'ok', 'ok']);
+  const sleeps = [];
+  const ctx = { runCommand, sleep: async (ms) => { sleeps.push(ms); } };
+
+  await waitForDrillReadiness(ctx, 'charitypilot-bluegreen-drill-readiness-test', { SOME: 'env' });
+
+  assert.equal(callCount(), 4, 'must stop exactly at the consecutive pair, neither early nor late');
+  assert.deepEqual(sleeps, [1000, 1000, 1000], 'sleeps between every attempt except the final passing one');
+});
+
+test('waitForDrillReadiness times out when passes never land consecutively', async () => {
+  const { waitForDrillReadiness } = await loadBackupModule();
+  // ok, then fail forever — one isolated pass, never a second one in a row.
+  const { runCommand, callCount } = makeSequencedReadinessRunCommand(['ok', 'fail']);
+  const sleeps = [];
+  const ctx = { runCommand, sleep: async (ms) => { sleeps.push(ms); } };
+
+  await assert.rejects(
+    () => waitForDrillReadiness(ctx, 'charitypilot-bluegreen-drill-readiness-test', {}),
+    /Restore drill readiness poll timed out after 120 attempts \(requires 2 consecutive successful pg_isready checks\)/,
+  );
+
+  assert.equal(callCount(), 120, 'must exhaust the full attempt budget, not give up early');
+  assert.equal(sleeps.length, 119, 'sleeps between every attempt except the last (which times out instead)');
+});
+
 test('runRestoreDrill restores into a throwaway container, never the live db, and passes clean', async () => {
   const { runRestoreDrill } = await loadBackupModule();
   const stateDir = makeTempDir('charitypilot-bluegreen-drill-test-');
@@ -492,6 +554,7 @@ test('runRestoreDrill restores into a throwaway container, never the live db, an
       envFile: '/deploy/env/production.env',
       composeArgs: ['-f', 'compose.bluegreen.yml', '-p', 'charitypilot-bluegreen'],
       plan,
+      sleep: async () => {}, // instant: no real 1s waits between readiness probes in tests
     };
 
     const result = await runRestoreDrill(ctx);
@@ -518,10 +581,13 @@ test('runRestoreDrill restores into a throwaway container, never the live db, an
     assert.ok(!commandLine(startCall.command).includes('tmpfs'), 'drill container must not use a size-capped tmpfs for the data directory');
     assert.ok(!commandLine(startCall.command).includes('size='), 'drill container must not cap the data directory size');
 
-    const readinessCall = calls.find((c) => commandLine(c.command).includes('pg_isready'));
-    assert.match(commandLine(readinessCall.command), /seq 1 120/);
-    assert.match(commandLine(readinessCall.command), /pg_isready/);
-    assert.match(commandLine(readinessCall.command), /sleep 1/);
+    // Requires 2 consecutive passing probes (see waitForDrillReadiness), so a
+    // clean run records exactly two pg_isready attempts, not one.
+    const readinessCalls = calls.filter((c) => commandLine(c.command).includes('pg_isready'));
+    assert.equal(readinessCalls.length, 2);
+    for (const call of readinessCalls) {
+      assert.deepEqual(call.command, ['docker', 'exec', containerName, 'pg_isready', '-U', 'charitypilot_drill', '-d', 'charitypilot_drill']);
+    }
 
     const restoreCall = calls.find((c) => commandLine(c.command).includes('pg_restore'));
     assert.ok(restoreCall.command.includes('--exit-on-error'), 'pg_restore must use --exit-on-error');
@@ -555,6 +621,7 @@ test('runRestoreDrill tears down the scratch container even when a step throws, 
       envFile: '/deploy/env/production.env',
       composeArgs: ['-f', 'compose.bluegreen.yml', '-p', 'charitypilot-bluegreen'],
       plan,
+      sleep: async () => {}, // instant: no real 1s waits between readiness probes in tests
     };
 
     await assert.rejects(() => runRestoreDrill(ctx), /injected failure for.*pg_restore/);
@@ -592,6 +659,7 @@ test('runRestoreDrill fails on a row census mismatch, reports drift, collects lo
       envFile: '/deploy/env/production.env',
       composeArgs: ['-f', 'compose.bluegreen.yml', '-p', 'charitypilot-bluegreen'],
       plan,
+      sleep: async () => {}, // instant: no real 1s waits between readiness probes in tests
     };
 
     await assert.rejects(() => runRestoreDrill(ctx), /row census mismatch.*Organisation expected=3 actual=2 drift=-1/s);
@@ -623,6 +691,7 @@ test('runRestoreDrill honours BLUEGREEN_DRILL_CENSUS_TOLERANCE from ctx.env', as
           envFile: '/deploy/env/production.env',
           composeArgs: ['-f', 'compose.bluegreen.yml', '-p', 'charitypilot-bluegreen'],
           plan,
+          sleep: async () => {},
         }),
       /row census mismatch/,
     );
@@ -634,6 +703,7 @@ test('runRestoreDrill honours BLUEGREEN_DRILL_CENSUS_TOLERANCE from ctx.env', as
       envFile: '/deploy/env/production.env',
       composeArgs: ['-f', 'compose.bluegreen.yml', '-p', 'charitypilot-bluegreen'],
       plan,
+      sleep: async () => {},
       env: { ...process.env, BLUEGREEN_DRILL_CENSUS_TOLERANCE: '1' },
     });
     assert.equal(result.ok, true);
@@ -659,6 +729,7 @@ test('runRestoreDrill fails when a restored document hash mismatches the manifes
       envFile: '/deploy/env/production.env',
       composeArgs: ['-f', 'compose.bluegreen.yml', '-p', 'charitypilot-bluegreen'],
       plan,
+      sleep: async () => {}, // instant: no real 1s waits between readiness probes in tests
     };
 
     await assert.rejects(() => runRestoreDrill(ctx), /manifest verification failed/);
@@ -686,6 +757,7 @@ test('runRestoreDrill fails when a document is missing from the restored tar', a
       envFile: '/deploy/env/production.env',
       composeArgs: ['-f', 'compose.bluegreen.yml', '-p', 'charitypilot-bluegreen'],
       plan,
+      sleep: async () => {}, // instant: no real 1s waits between readiness probes in tests
     };
 
     await assert.rejects(() => runRestoreDrill(ctx), /manifest verification failed/);
@@ -712,6 +784,7 @@ test('runRestoreDrill fails when an extra document appears in the restored tar',
       envFile: '/deploy/env/production.env',
       composeArgs: ['-f', 'compose.bluegreen.yml', '-p', 'charitypilot-bluegreen'],
       plan,
+      sleep: async () => {}, // instant: no real 1s waits between readiness probes in tests
     };
 
     await assert.rejects(() => runRestoreDrill(ctx), /manifest verification failed/);
@@ -823,6 +896,7 @@ test('runRestoreDrill rejects a restored-db census that parses to zero tables (s
       envFile: '/deploy/env/production.env',
       composeArgs: ['-f', 'compose.bluegreen.yml', '-p', 'charitypilot-bluegreen'],
       plan,
+      sleep: async () => {}, // instant: no real 1s waits between readiness probes in tests
     };
 
     await assert.rejects(() => runRestoreDrill(ctx), /zero tables/);
@@ -852,6 +926,7 @@ test('runRestoreDrill rejects psql noise/error output from the restored db rathe
       envFile: '/deploy/env/production.env',
       composeArgs: ['-f', 'compose.bluegreen.yml', '-p', 'charitypilot-bluegreen'],
       plan,
+      sleep: async () => {}, // instant: no real 1s waits between readiness probes in tests
     };
 
     await assert.rejects(() => runRestoreDrill(ctx), /unparseable line/);
