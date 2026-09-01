@@ -5626,6 +5626,42 @@
     "proposedTitle": ""
   },
   {
+    "id": "bluegreen-graceful-degradation-2",
+    "surface": "api",
+    "group": "bluegreen",
+    "concern": "graceful-degradation",
+    "guarantee": "A failure starting the target colour's containers (phase 9, `up -d --wait`) during a deploy restarts the scheduler on the OLD tag, so jobs are never left stopped even though the old colour is what keeps serving.",
+    "status": "covered",
+    "testFile": "scripts/bluegreen-deploy.test.mjs",
+    "testTitle": "I1: phase 9 (up) failure restarts jobs on the OLD tag with --wait",
+    "gapDescription": "",
+    "proposedTitle": ""
+  },
+  {
+    "id": "bluegreen-state-integrity-4",
+    "surface": "api",
+    "group": "bluegreen",
+    "concern": "state-integrity",
+    "guarantee": "Rollback brings the previous colour's containers up and confirmed healthy (`up -d --wait`) BEFORE reloading Caddy onto them, so traffic can never be pointed at containers that were never confirmed healthy.",
+    "status": "covered",
+    "testFile": "scripts/bluegreen-deploy.test.mjs",
+    "testTitle": "I2: rollback brings the previous colour up (with --wait) BEFORE reloading Caddy onto it",
+    "gapDescription": "",
+    "proposedTitle": ""
+  },
+  {
+    "id": "bluegreen-state-integrity-5",
+    "surface": "api",
+    "group": "bluegreen",
+    "concern": "state-integrity",
+    "guarantee": "runRestoreDrill refuses a documents tar containing zero files when the restored database reports Document rows > 0, rather than passing vacuously against a manifest that also recorded zero document entries.",
+    "status": "covered",
+    "testFile": "scripts/bluegreen/backup.test.mjs",
+    "testTitle": "runRestoreDrill refuses a documents tar with zero files when the restored database reports Document rows > 0",
+    "gapDescription": "",
+    "proposedTitle": ""
+  },
+  {
     "id": "deployment-profile-auth-session-3",
     "surface": "api",
     "group": "deployment-profile",

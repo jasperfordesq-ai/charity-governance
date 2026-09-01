@@ -16,15 +16,15 @@ Generated: 2026-09-01 - Source of truth: [`docs/reliability/guarantees.json`](re
 
 | Surface | covered | partial | gap | n/a | Total |
 |---|---|---|---|---|---|
-| API | 331 | 0 | 0 | 14 | 345 |
+| API | 334 | 0 | 0 | 14 | 348 |
 | Web | 112 | 0 | 0 | 6 | 118 |
-| **Total** | **443** | **0** | **0** | **20** | **463** |
+| **Total** | **446** | **0** | **0** | **20** | **466** |
 
-**API suite:** 1126 passing, 0 failing. **Web suite:** 411 passing, 0 failing. **E2E linkage:** 31 Playwright titles found; not executed by this command.
+**API suite:** 1140 passing, 0 failing. **Web suite:** 411 passing, 0 failing. **E2E linkage:** 31 Playwright titles found; not executed by this command.
 
 **Executed E2E result:** NOT VERIFIED BY THIS COMMAND. Use a successful managed E2E workflow or `npm run test:e2e` result bound to the relevant SHA.
 
-**Linkage:** 443/443 covered guarantees verified against a passing/linked test.
+**Linkage:** 446/446 covered guarantees verified against a passing/linked test.
 
 **Linkage check: COMPLETE**
 
@@ -55,7 +55,7 @@ no data loss / accessibility & resilience.
 
 ---
 
-## API surface - the matrix (345 guarantees)
+## API surface - the matrix (348 guarantees)
 
 ### auth - `/api/v1/auth`
 
@@ -530,6 +530,9 @@ _10 guarantees - covered 10_
 | Graceful degradation | When the post-cutover public smoke test fails, the deploy engine restores the previous active-upstreams file, reloads Caddy, restarts the scheduler on the old commit, and re-verifies the front door reports the OLD commit before returning failure — traffic is never left pointed at a colour that failed its own public smoke test. | covered | `deploy: public smoke failure restores upstreams, reloads, and re-verifies the OLD commit`<br/><sub>scripts/bluegreen-deploy.test.mjs</sub> |
 | At-least-once / idempotency | The cutover lock is released on every tested deploy abort path (preflight failure, a blocked migration, and a migration-run failure), so a failed deploy never leaves a stale lock blocking the next deploy or rollback attempt. | covered | `lock is released on every abort path`<br/><sub>scripts/bluegreen-deploy.test.mjs</sub> |
 | State integrity / no data loss | runRestoreDrill restores the backup into a throwaway scratch container reached only by docker run/exec — it never issues a docker compose command, never targets the compose db service or the charitypilot-bluegreen-db container family, and never carries a DSN whose host is db, so the drill cannot touch the live database. | covered | `runRestoreDrill restores into a throwaway container, never the live db, and passes clean`<br/><sub>scripts/bluegreen/backup.test.mjs</sub> |
+| Graceful degradation | A failure starting the target colour's containers (phase 9, `up -d --wait`) during a deploy restarts the scheduler on the OLD tag, so jobs are never left stopped even though the old colour is what keeps serving. | covered | `I1: phase 9 (up) failure restarts jobs on the OLD tag with --wait`<br/><sub>scripts/bluegreen-deploy.test.mjs</sub> |
+| State integrity / no data loss | Rollback brings the previous colour's containers up and confirmed healthy (`up -d --wait`) BEFORE reloading Caddy onto them, so traffic can never be pointed at containers that were never confirmed healthy. | covered | `I2: rollback brings the previous colour up (with --wait) BEFORE reloading Caddy onto it`<br/><sub>scripts/bluegreen-deploy.test.mjs</sub> |
+| State integrity / no data loss | runRestoreDrill refuses a documents tar containing zero files when the restored database reports Document rows > 0, rather than passing vacuously against a manifest that also recorded zero document entries. | covered | `runRestoreDrill refuses a documents tar with zero files when the restored database reports Document rows > 0`<br/><sub>scripts/bluegreen/backup.test.mjs</sub> |
 
 ---
 
