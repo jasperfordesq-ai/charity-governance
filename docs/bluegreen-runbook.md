@@ -58,16 +58,32 @@ own numbering) and is **not** covered by anything in this repo yet.
   are both required, or preflight refuses to start. Both must be an
   **exact `https://` origin** — no path, no trailing slash, no
   credentials (preflight now validates the shape, not just presence; the
-  same rule `apps/api/src/utils/env.ts` enforces at container boot). Note
-  this is stricter than the web app's OWN build-time override
+  same rule `apps/api/src/utils/env.ts` enforces at container boot) —
+  UNLESS `BLUEGREEN_ORIGIN` itself is an exact loopback origin
+  (`localhost`/`127.0.0.1`/`::1`), which marks the whole deployment as
+  local/scratch: in that case both vars may ALSO independently be an
+  exact loopback `http://` origin (each just has to be loopback itself —
+  preflight does not require it to equal `BLUEGREEN_ORIGIN`'s own
+  hostname/port, though in practice it usually should, for the deployment
+  to actually work end-to-end). This mirrors the web app's OWN build-time
+  override
   (`NEXT_PUBLIC_CHARITYPILOT_CANONICAL_API_ORIGIN`, baked in from
-  `BLUEGREEN_ORIGIN` above), which additionally accepts an exact loopback
-  `http://` origin for local acceptance testing — the two vars serve
-  different layers and are validated differently on purpose. See
+  `BLUEGREEN_ORIGIN` above), which has always accepted exact loopback
+  `http://` for local acceptance testing — the two vars now agree for a
+  loopback `BLUEGREEN_ORIGIN`; for anything else, these two stay
+  https-only. See
   `docs/superpowers/specs/2026-08-31-deployment-profile-and-bluegreen-design.md`'s
   "Named prerequisite" section for how these two vars (plus
   `CHARITYPILOT_ERROR_ALERTS=none` to drop the public-webhook requirement)
   unblock a non-hosted deployment target.
+- **`AUTH_COOKIE_DOMAIN`**, for the same non-hosted deployment: set it to
+  the deployment's own hostname itself (e.g. the Tailscale hostname,
+  `vm.tailnet.example`) — **not** a parent domain, even a real one you
+  don't fully control (e.g. Tailscale's own shared `.ts.net`). Only a
+  split web/api deployment with two DIFFERENT canonical-origin hostnames
+  needs a shared parent instead (one with a dot, covering both, per
+  `apps/api/src/utils/env.ts`'s validation) — the single-hostname case
+  this bullet is about should always use the exact hostname.
 - **Owner-console vars**, if this deployment is meant to run the owner
   console (multi-tenant, not `personal-server` mode): `OWNER_JWT_SECRET`
   (≥32 chars, distinct from `JWT_SECRET`) and `OWNER_CONSOLE_ORIGIN` (or
