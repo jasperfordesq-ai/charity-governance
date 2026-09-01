@@ -580,8 +580,20 @@ function requireAuthCookieDomain(issues: string[]) {
   // exactly isApprovedPublicHostname as before.
   const webOverrideHostname = canonicalOriginHostnameIfValid('web');
   const apiOverrideHostname = canonicalOriginHostnameIfValid('api');
-  const coversOverride = (hostname: string | undefined) =>
-    hostname !== undefined && hostMatchesCookieDomain(hostname, normalizedCookieDomain);
+  // M3 fix: hostMatchesCookieDomain alone accepts ANY suffix relationship,
+  // including a registrable parent as shallow as a bare TLD-like single
+  // label (AUTH_COOKIE_DOMAIN=example would otherwise cover
+  // vm.tailnet.example). Tightened: an exact match to the override
+  // hostname is always fine; a suffix match is only fine when the cookie
+  // domain itself contains at least one dot (so it can never be a bare
+  // top-level label) — the override hostname then necessarily has at
+  // least one additional label beyond it, which is exactly what
+  // `endsWith('.' + cookieDomain)` already proves.
+  const coversOverride = (hostname: string | undefined) => {
+    if (hostname === undefined) return false;
+    if (hostname === normalizedCookieDomain) return true;
+    return normalizedCookieDomain.includes('.') && hostname.endsWith(`.${normalizedCookieDomain}`);
+  };
   if (
     !isApprovedPublicHostname(normalizedCookieDomain) &&
     !coversOverride(webOverrideHostname) &&

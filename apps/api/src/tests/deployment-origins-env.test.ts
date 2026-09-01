@@ -295,6 +295,59 @@ test('auth cookie domain: split-hostname override, domain covering neither is re
   );
 });
 
+test('auth cookie domain: hosted path (no override) validates byte-identically, still pinned to charitypilot.ie', () => {
+  hostedEnv();
+
+  assert.deepEqual(issuesOf(() => validateProductionEnv()), []);
+});
+
+test('M3: a bare-TLD-like cookie domain is rejected even though it IS a real suffix of the override hostnames (registrable-parent hole)', () => {
+  hostedEnv({
+    CHARITYPILOT_CANONICAL_WEB_ORIGIN: 'https://web.tail1234.ts.net',
+    CHARITYPILOT_CANONICAL_API_ORIGIN: 'https://api.tail1234.ts.net',
+    FRONTEND_URL: 'https://web.tail1234.ts.net',
+    NEXT_PUBLIC_API_URL: 'https://api.tail1234.ts.net',
+    // A single label with no dot — every override hostname above
+    // genuinely ends with ".net", so the OLD suffix-only check would have
+    // covered this despite it being a registrable parent shared by every
+    // Tailscale/personal-server deployment on earth, not something scoped
+    // to this one.
+    AUTH_COOKIE_DOMAIN: '.net',
+  });
+
+  const issues = issuesOf(() => validateProductionEnv());
+  assert.ok(
+    issues.includes('AUTH_COOKIE_DOMAIN must use an approved CharityPilot production hostname'),
+    `expected the bare-TLD cookie domain to be rejected, got: ${JSON.stringify(issues)}`,
+  );
+});
+
+test('M3: AUTH_COOKIE_DOMAIN exactly equal to the (single, non-split) override hostname is accepted', () => {
+  hostedEnv({
+    CHARITYPILOT_CANONICAL_WEB_ORIGIN: 'https://single.tailnet.example',
+    CHARITYPILOT_CANONICAL_API_ORIGIN: 'https://single.tailnet.example',
+    FRONTEND_URL: 'https://single.tailnet.example',
+    NEXT_PUBLIC_API_URL: 'https://single.tailnet.example',
+    AUTH_COOKIE_DOMAIN: 'single.tailnet.example',
+  });
+
+  assert.deepEqual(issuesOf(() => validateProductionEnv()), []);
+});
+
+test('M3: a cookie domain exactly one label deeper than the override hostname is still accepted', () => {
+  hostedEnv({
+    CHARITYPILOT_CANONICAL_WEB_ORIGIN: 'https://web.tail1234.ts.net',
+    CHARITYPILOT_CANONICAL_API_ORIGIN: 'https://api.tail1234.ts.net',
+    FRONTEND_URL: 'https://web.tail1234.ts.net',
+    NEXT_PUBLIC_API_URL: 'https://api.tail1234.ts.net',
+    // Has a dot, and both override hostnames have exactly one label
+    // ("web"/"api") beyond it.
+    AUTH_COOKIE_DOMAIN: '.tail1234.ts.net',
+  });
+
+  assert.deepEqual(issuesOf(() => validateProductionEnv()), []);
+});
+
 // Round-1 review finding 2: canonicalOrigin() was resolved once per
 // comma-separated FRONTEND_URL value, so a malformed override duplicated its
 // issue once per entry. Now resolved once per requireUrl call.
