@@ -16,15 +16,15 @@ Generated: 2026-09-02 - Source of truth: [`docs/reliability/guarantees.json`](re
 
 | Surface | covered | partial | gap | n/a | Total |
 |---|---|---|---|---|---|
-| API | 369 | 0 | 0 | 14 | 383 |
+| API | 381 | 0 | 0 | 14 | 395 |
 | Web | 112 | 0 | 0 | 6 | 118 |
-| **Total** | **481** | **0** | **0** | **20** | **501** |
+| **Total** | **493** | **0** | **0** | **20** | **513** |
 
-**API suite:** 1172 passing, 0 failing. **Web suite:** 411 passing, 0 failing. **E2E linkage:** 31 Playwright titles found; not executed by this command.
+**API suite:** 1185 passing, 0 failing. **Web suite:** 411 passing, 0 failing. **E2E linkage:** 31 Playwright titles found; not executed by this command.
 
 **Executed E2E result:** NOT VERIFIED BY THIS COMMAND. Use a successful managed E2E workflow or `npm run test:e2e` result bound to the relevant SHA.
 
-**Linkage:** 481/481 covered guarantees verified against a passing/linked test.
+**Linkage:** 493/493 covered guarantees verified against a passing/linked test.
 
 **Linkage check: COMPLETE**
 
@@ -55,7 +55,7 @@ no data loss / accessibility & resilience.
 
 ---
 
-## API surface - the matrix (383 guarantees)
+## API surface - the matrix (395 guarantees)
 
 ### auth - `/api/v1/auth`
 
@@ -575,6 +575,18 @@ _10 guarantees - covered 10_
 | State integrity / no data loss | When BLUEGREEN_COMPOSE_OVERRIDE is set, every docker compose invocation the engine makes and the composeArgs handed to backup carry it as a second -f after compose.bluegreen.yml. | covered | `P3-2: every docker compose call and the backup composeArgs carry the override -f when set`<br/><sub>scripts/bluegreen-deploy.test.mjs</sub> |
 | Graceful degradation | A deploy brings the db service up (up -d --wait db) before the pre-migration backup and before any exec against db, so a first deploy on a stopped stack does not fail at phase 2. | covered | `P3-3: a deploy brings db up (with --wait) before the backup runs and before any exec against db`<br/><sub>scripts/bluegreen-deploy.test.mjs</sub> |
 | State integrity / no data loss | The committed private-VM env template, with placeholders filled, passes engine preflight with zero issues. | covered | `P3-5: the committed private-VM env template, filled in, passes engine preflight with zero issues`<br/><sub>scripts/bluegreen-deploy.test.mjs</sub> |
+| State integrity / no data loss | Every container the pre-migration backup runs against a documents volume runs as --user 1000:1000 — the uid that owns the documents on both deployment shapes — with every hardening flag (--network none, --read-only, --cap-drop ALL, no-new-privileges, readonly mount) intact. | covered | `runBackup runs EVERY container against the documents volume as --user 1000:1000 (the volume owner)`<br/><sub>scripts/bluegreen/backup.test.mjs</sub> |
+| State integrity / no data loss | The documents tar and the per-file sha256 hash listing run as the same user, so a backup's manifest cannot disagree with its own archive about which files exist. | covered | `runBackup uses the SAME --user for the documents tar and the hash listing (a manifest cannot disagree with its own archive)`<br/><sub>scripts/bluegreen/backup.test.mjs</sub> |
+| State integrity / no data loss | The restore drill extracts the documents tar and re-hashes it in one single command inside the throwaway container, so extraction and hashing cannot disagree on effective user, and it never mounts the live documents volume. | covered | `runRestoreDrill extracts and re-hashes the documents in ONE command as the drill container root, so extraction and hashing cannot disagree on user`<br/><sub>scripts/bluegreen/backup.test.mjs</sub> |
+| State integrity / no data loss | Every deploy failure between ensure-db and the Caddy switch (backup, gate block, migration, up, candidate smoke, Caddy start, Caddy reload, and any unexpected error) stops the db service the deploy itself started and states that in the returned message. | covered | `defect 2a: EVERY failure between ensure-db and the switch stops the db this deploy started, and says so`<br/><sub>scripts/bluegreen-deploy.test.mjs</sub> |
+| State integrity / no data loss | ensure-db determines whether db was already running (docker compose ps --status running -q db) before starting it. | covered | `defect 2a: ensure-db asks whether db is already running BEFORE starting it`<br/><sub>scripts/bluegreen-deploy.test.mjs</sub> |
+| State integrity / no data loss | A db that was already running when the deploy began is never stopped on an aborted deploy, so an aborted redeploy does not take the site down. | covered | `defect 2a: a db that was ALREADY running is never stopped on an abort (a redeploy must not take the site down)`<br/><sub>scripts/bluegreen-deploy.test.mjs</sub> |
+| State integrity / no data loss | When the abort-time db stop itself fails the engine reports the db as STILL RUNNING and tells the operator to stop it by hand before starting any other stack on these volumes — it never implies the db is down. | covered | `defect 2a: a failed abort-time db stop is reported as STILL RUNNING, never as stopped`<br/><sub>scripts/bluegreen-deploy.test.mjs</sub> |
+| State integrity / no data loss | When the engine cannot determine whether db was already running it leaves db alone and says the prior state was undeterminable. | covered | `defect 2a: an undeterminable prior db state leaves db alone and says the state is unknown`<br/><sub>scripts/bluegreen-deploy.test.mjs</sub> |
+| State integrity / no data loss | After a successful cutover the db legitimately stays up: neither a completed deploy nor a post-cutover failure (public smoke, jobs) stops it. | covered | `defect 2a: a successful cutover leaves the db running, and a post-cutover failure still does not stop it`<br/><sub>scripts/bluegreen-deploy.test.mjs</sub> |
+| State integrity / no data loss | Preflight refuses to deploy when a container outside this engine's own compose project is already mounting one of the deployment's volumes, naming the volume and the offending container(s), and no compose command runs after that refusal. | covered | `defect 2b: a deploy refuses at preflight when another stack already holds a deployment volume`<br/><sub>scripts/bluegreen-deploy.test.mjs</sub> |
+| State integrity / no data loss | The volume-in-use check treats a foreign or project-less container as a refusal, this engine's own project as fine, and an unanswerable docker ps as a refusal rather than an assumed-free volume. | covered | `defect 2b: volumesInUseByOtherStacks refuses a foreign container and accepts this engine own project`<br/><sub>scripts/bluegreen-deploy.test.mjs</sub> |
+| State integrity / no data loss | The deployment's db and documents volume names are resolved from compose.bluegreen.yml plus any BLUEGREEN_COMPOSE_OVERRIDE, with BLUEGREEN_DOCUMENTS_VOLUME winning for documents — so the private-VM override's external appliance volumes are the ones checked. | covered | `defect 2b: deploymentVolumeNames resolves both volume names from the compose file, the override, and the env`<br/><sub>scripts/bluegreen-deploy.test.mjs</sub> |
 
 ---
 
