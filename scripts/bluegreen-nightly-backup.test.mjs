@@ -19,6 +19,18 @@ test('nightly wrapper: strict mode, LF line endings, and it calls the engine bac
   assert.doesNotMatch(script, /\|\| echo 0/);
 });
 
+test('nightly wrapper: the free-space probe can never abort the backup', () => {
+  // Under `set -euo pipefail` a failing df would kill the script before any
+  // log line, and an empty capture would make `[ "" -lt 10 ]` a fatal syntax
+  // error — cron discards the output, so the backup would silently stop.
+  assert.match(
+    script,
+    /free_gib=\$\( \{ df -BG --output=avail "\$STATE_DIR" 2>\/dev\/null \|\| true; \} \| tail -1 \| tr -dc '0-9' \)/,
+  );
+  assert.match(script, /^if \[ -n "\$free_gib" \] && \[ "\$free_gib" -lt "\$MIN_FREE_GIB" \]; then$/m);
+  assert.match(script, /free=\$\{free_gib:-unknown\}GiB/);
+});
+
 test('nightly wrapper: --install-cron replaces BOTH the appliance entry and any previous copy of itself', () => {
   assert.match(script, /grep -v 'charitypilot-backup\.sh'/);
   assert.match(script, /grep -v 'bluegreen-nightly-backup\.sh'/);

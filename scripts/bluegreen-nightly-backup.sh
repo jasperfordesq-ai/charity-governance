@@ -46,8 +46,12 @@ if [ ! -f "$ENV_FILE" ]; then
 fi
 
 mkdir -p "$STATE_DIR"
-free_gib=$(df -BG --output=avail "$STATE_DIR" | tail -1 | tr -dc '0-9')
-if [ "$free_gib" -lt "$MIN_FREE_GIB" ]; then
+# A free-space probe must never be able to abort the backup: under
+# `set -e` a failing df would kill the script before any log line, and an
+# empty capture would make `[ "" -lt 10 ]` a fatal syntax error — with cron
+# sending output to /dev/null, the nightly backup would just stop happening.
+free_gib=$( { df -BG --output=avail "$STATE_DIR" 2>/dev/null || true; } | tail -1 | tr -dc '0-9' )
+if [ -n "$free_gib" ] && [ "$free_gib" -lt "$MIN_FREE_GIB" ]; then
     log "WARN: only ${free_gib} GiB free on the state volume (threshold ${MIN_FREE_GIB} GiB)"
 fi
 
@@ -55,7 +59,7 @@ cd "$REPO_DIR"
 if npm run --silent bluegreen:backup -- --env-file "$ENV_FILE" >> "$LOG" 2>&1; then
     newest=$(ls -1dt "$STATE_DIR"/backups/*/ 2>/dev/null | head -1 || true)
     count=$( (ls -1d "$STATE_DIR"/backups/*/ 2>/dev/null || true) | wc -l)
-    log "OK: backup written and manifested. newest=${newest:-none} total_sets=${count} free=${free_gib}GiB"
+    log "OK: backup written and manifested. newest=${newest:-none} total_sets=${count} free=${free_gib:-unknown}GiB"
 else
     log 'FAIL: bluegreen:backup returned non-zero -- see output above'
     exit 1
