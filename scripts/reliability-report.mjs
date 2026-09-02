@@ -56,6 +56,7 @@ const API_GROUP_ORDER = [
   ['export', 'export - `/api/v1/export`'],
   ['dashboard', 'dashboard - `/api/v1/dashboard`'],
   ['governance-registers', 'governance-registers - `/api/v1/governance-registers`'],
+  ['governing-acts', 'governing-acts (minute book) - `/api/v1/governing-acts`'],
   ['team', 'team - `/api/v1/team`'],
   ['health', 'health - `/api/v1/health`'],
   ['owner', 'owner console - `/api/v1/owner`'],

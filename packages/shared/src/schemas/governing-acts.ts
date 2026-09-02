@@ -41,7 +41,7 @@ export const createGoverningActSchema = z.object({
 });
 
 export const updateGoverningActSchema = z.object({
-  expectedUpdatedAt: z.string(),
+  expectedUpdatedAt: z.string().datetime({ offset: true }),
   kind: z.enum(governingActKindValues).optional(),
   status: z.enum(governingActStatusValues).optional(),
   actDate: dateInputSchema.optional(),
@@ -63,7 +63,7 @@ export const createResolutionSchema = z.object({
 });
 
 export const updateResolutionSchema = z.object({
-  expectedUpdatedAt: z.string(),
+  expectedUpdatedAt: z.string().datetime({ offset: true }),
   itemNumber: nullableText(20),
   text: z.string().trim().min(1).max(10000).optional(),
   carried: z.boolean().optional(),
@@ -75,7 +75,7 @@ export const setDocumentApprovalSchema = z
   .object({
     approvedByResolutionId: z.string().nullable().optional(),
     approvalAsserted: z.boolean().optional(),
-    expectedUpdatedAt: z.string(),
+    expectedUpdatedAt: z.string().datetime({ offset: true }),
   })
   .superRefine((value, ctx) => {
     // Enforce rule 1: no approval without a resolution. The only safe path
@@ -107,7 +107,7 @@ export const governingActQuerySchema = z.object({
  * "oops". It is retained in the audit trail alongside a full snapshot.
  */
 export const voidGoverningActSchema = z.object({
-  expectedUpdatedAt: z.string(),
+  expectedUpdatedAt: z.string().datetime({ offset: true }),
   reason: z
     .string()
     .trim()

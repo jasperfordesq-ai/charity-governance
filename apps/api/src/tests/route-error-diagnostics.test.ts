@@ -169,3 +169,58 @@ test('route-caught 5xx retains its sanitized original cause when alert transport
     await app.close();
   }
 });
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Global error handler: a client error keeps its actionable machine code
+// ─────────────────────────────────────────────────────────────────────────────
+
+async function buildGlobalErrorHandlerApp() {
+  const [{ default: Fastify }, { errorHandlerPlugin }] = await Promise.all([
+    import('fastify'),
+    import('../plugins/error-handler.js'),
+  ]);
+  const app = Fastify({ logger: false });
+  await app.register(errorHandlerPlugin);
+  app.post('/echo', async () => ({ ok: true }));
+  app.get('/boom', async () => {
+    throw new Error('database connection lost at /var/secret/path/db.ts:42');
+  });
+  return app;
+}
+
+test('a malformed JSON body is reported with its own code, not INTERNAL_ERROR', async () => {
+  // A caller that sent a bad request must be able to tell that apart from a
+  // server fault; labelling every uncaught 4xx INTERNAL_ERROR hides it.
+  process.env.NODE_ENV = 'production';
+  const app = await buildGlobalErrorHandlerApp();
+  try {
+    const res = await app.inject({
+      method: 'POST',
+      url: '/echo',
+      headers: { 'content-type': 'application/json' },
+      payload: '{"unterminated":',
+    });
+    assert.equal(res.statusCode, 400);
+    const body = res.json() as { code?: string; error?: string };
+    assert.notEqual(body.code, 'INTERNAL_ERROR', 'a client error must not be labelled a server fault');
+    assert.equal(body.code, 'FST_ERR_CTP_INVALID_JSON_BODY');
+  } finally {
+    await app.close();
+  }
+});
+
+test('an uncaught server fault stays opaque in production', async () => {
+  process.env.NODE_ENV = 'production';
+  const app = await buildGlobalErrorHandlerApp();
+  try {
+    const res = await app.inject({ method: 'GET', url: '/boom' });
+    assert.equal(res.statusCode, 500);
+    assert.deepEqual(res.json(), {
+      error: 'Internal server error',
+      code: 'INTERNAL_ERROR',
+    });
+    assert.ok(!res.payload.includes('db.ts:42'), 'the underlying path must not leak');
+  } finally {
+    await app.close();
+  }
+});

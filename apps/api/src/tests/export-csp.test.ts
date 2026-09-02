@@ -242,3 +242,69 @@ test('Essentials exports do not include Complete-only governance registers', asy
     await app.close();
   }
 });
+
+test('the working report escapes every standards-table cell, as the approved snapshot does', () => {
+  // The approved-snapshot renderer escapes the principle title, standard code
+  // and status; the working report must not be the one document that emits raw
+  // markup into the page a trustee opens in a browser.
+  const readiness = {
+    ready: true,
+    missingRecords: [],
+    missingEvidence: [],
+    missingExplanations: [],
+    profileIssues: [],
+    conditionalReviewItems: [],
+    matrixReviewItems: [],
+    matrixLastChecked: '2026-07-10',
+    evidenceHash: 'a'.repeat(64),
+  };
+
+  const html = buildComplianceReportHtml(
+    { name: 'Example Charity', rcnNumber: 'RCN 123' },
+    [
+      {
+        number: 1,
+        title: 'Advancing <script>alert(1)</script> purpose',
+        standards: [
+          {
+            id: 'std-1',
+            code: '1.1<img src=x onerror="boom()">',
+            title: 'Standard title',
+            isCore: true,
+          },
+        ],
+      },
+    ],
+    new Map([
+      [
+        'std-1',
+        {
+          status: 'NOT_STARTED<iframe src="javascript:1">',
+          actionTaken: null,
+          evidence: null,
+          explanationIfNA: null,
+        },
+      ],
+    ]),
+    {
+      status: 'DRAFT',
+      boardMeetingDate: null,
+      minuteReference: null,
+      approvedByName: null,
+      approvedByRole: null,
+      approvalNotes: null,
+      approvedAt: null,
+      approvalCurrent: false,
+    },
+    readiness,
+    null,
+    2026,
+  );
+
+  for (const raw of ['<script>alert(1)</script>', '<img src=x', '<iframe src=']) {
+    assert.equal(html.includes(raw), false, `raw markup must not survive into the report: ${raw}`);
+  }
+  assert.match(html, /&lt;script&gt;alert\(1\)&lt;\/script&gt;/);
+  assert.match(html, /1\.1&lt;img src=x/);
+  assert.match(html, /NOT STARTED&lt;iframe/);
+});

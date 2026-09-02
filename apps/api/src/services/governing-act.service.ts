@@ -6,12 +6,13 @@ import type {
   GoverningActQuery,
   VoidGoverningActRequest,
 } from '@charitypilot/shared';
-import type {
-  GoverningAct,
-  GoverningActStatus,
-  GoverningActVoid,
-  PrismaClient,
-  Resolution,
+import {
+  Prisma,
+  type GoverningAct,
+  type GoverningActStatus,
+  type GoverningActVoid,
+  type PrismaClient,
+  type Resolution,
 } from '@prisma/client';
 import { AppError } from '../utils/errors.js';
 
@@ -26,6 +27,35 @@ function govActNotFound() {
 
 function resolutionNotFound() {
   return new AppError(404, 'RESOLUTION_NOT_FOUND', 'Resolution not found');
+}
+
+const SERIALIZABLE_RETRY_LIMIT = 3;
+
+function removalConflict() {
+  return new AppError(
+    409,
+    'GOVERNING_ACT_UPDATE_CONFLICT',
+    'Another change to the minute book landed while this record was being removed. Reload and try again.',
+  );
+}
+
+function isSerializationConflict(error: unknown): boolean {
+  // An AppError is this service's own deliberate refusal, never a database
+  // conflict. It also interpolates a user-supplied act reference into its
+  // message, so it must never reach the SQLSTATE text match below.
+  if (error instanceof AppError) return false;
+  if (!error || typeof error !== 'object') return false;
+
+  const candidate = error as {
+    code?: unknown;
+    meta?: { code?: unknown };
+    message?: unknown;
+  };
+  return (
+    candidate.code === 'P2034' ||
+    candidate.meta?.code === '40001' ||
+    (typeof candidate.message === 'string' && candidate.message.includes('40001'))
+  );
 }
 
 export type BoardSubmission = {
@@ -327,13 +357,24 @@ export class GoverningActService {
       }
     }
 
-    await this.prisma.document.updateMany({
+    const updated = await this.prisma.document.updateMany({
       where: { id: documentId, organisationId, updatedAt: expectedInstant },
       data: {
         ...(approvedByResolutionId !== undefined ? { approvedByResolutionId } : {}),
         ...(approvalAsserted !== undefined ? { approvalAsserted } : {}),
       },
     });
+
+    // The guarded write is the only authority on whether the caller's version
+    // was still current. Reporting success on a zero-row update would tell an
+    // administrator that approval evidence was recorded when it was not.
+    if (updated.count !== 1) {
+      throw new AppError(
+        409,
+        'DOCUMENT_UPDATE_CONFLICT',
+        'This document changed since it was loaded. Refresh and review the latest values.',
+      );
+    }
   }
 
   /**
@@ -365,52 +406,91 @@ export class GoverningActService {
     });
     if (!actor) throw new AppError(403, 'ACTOR_NOT_FOUND', 'Acting user not found in this organisation');
 
-    const act = await this.prisma.governingAct.findFirst({
-      where: { id, organisationId },
-      include: { resolutions: true },
-    });
-    if (!act) throw govActNotFound();
-    if (act.updatedAt.getTime() !== expectedInstant.getTime()) {
-      throw new AppError(
-        409,
-        'GOVERNING_ACT_UPDATE_CONFLICT',
-        'This record changed since it was loaded. Refresh and review the latest values.',
-      );
-    }
-
-    // Another act's minutes were approved at this one - removing it would leave
-    // that approval pointing at nothing.
-    const dependents = await this.prisma.governingAct.findMany({
-      where: { organisationId, approvedAtActId: id },
-      select: { reference: true },
-    });
-    if (dependents.length > 0) {
-      throw new AppError(
-        422,
-        'GOVERNING_ACT_HAS_DEPENDENTS',
-        `Cannot remove ${act.reference}: it is recorded as the meeting that approved the minutes of ` +
-          `${dependents.map((d) => d.reference).join(', ')}. Clear that link on those acts first.`,
-      );
-    }
-
-    // A document's approval evidence points at one of this act's resolutions.
-    const resolutionIds = act.resolutions.map((r) => r.id);
-    if (resolutionIds.length > 0) {
-      const evidencedDocuments = await this.prisma.document.findMany({
-        where: { organisationId, approvedByResolutionId: { in: resolutionIds } },
-        select: { name: true },
-      });
-      if (evidencedDocuments.length > 0) {
-        throw new AppError(
-          422,
-          'GOVERNING_ACT_EVIDENCES_DOCUMENTS',
-          `Cannot remove ${act.reference}: its resolutions are the recorded approval for ` +
-            `${evidencedDocuments.map((d) => d.name).join(', ')}. Detach that approval first.`,
+    // Both dependency foreign keys are ON DELETE SET NULL, so nothing at the
+    // database level refuses this delete: a link the refusal checks did not see
+    // is silently detached rather than raising. The checks are the only
+    // protection, so they have to be serialized with the delete. Under READ
+    // COMMITTED a concurrent link that commits after these SELECTs stays
+    // invisible to them and the delete proceeds. Serializable turns that
+    // interleaving into a serialization failure instead of lost evidence.
+    //
+    // That failure is an expected outcome, not a fault: retry it a bounded
+    // number of times, then report the conflict the caller can act on rather
+    // than letting Prisma's P2034 escape as an opaque 500. Nothing committed
+    // on an aborted attempt, so a retry re-reads the act and re-checks its
+    // version from scratch.
+    for (let attempt = 0; attempt < SERIALIZABLE_RETRY_LIMIT; attempt += 1) {
+      try {
+        return await this.removeActInSerializableTransaction(
+          organisationId,
+          id,
+          expectedInstant,
+          actor,
+          data,
         );
+      } catch (error) {
+        if (!isSerializationConflict(error)) throw error;
+        if (attempt < SERIALIZABLE_RETRY_LIMIT - 1) continue;
+        throw removalConflict();
       }
     }
 
+    throw removalConflict();
+  }
+
+  private async removeActInSerializableTransaction(
+    organisationId: string,
+    id: string,
+    expectedInstant: Date,
+    actor: { id: string; email: string },
+    data: VoidGoverningActRequest,
+  ): Promise<GoverningActVoid> {
     return this.prisma.$transaction(async (tx) => {
+      const act = await tx.governingAct.findFirst({
+        where: { id, organisationId },
+        include: { resolutions: true },
+      });
+      if (!act) throw govActNotFound();
+      if (act.updatedAt.getTime() !== expectedInstant.getTime()) {
+        throw new AppError(
+          409,
+          'GOVERNING_ACT_UPDATE_CONFLICT',
+          'This record changed since it was loaded. Refresh and review the latest values.',
+        );
+      }
+
+      // Another act's minutes were approved at this one - removing it would leave
+      // that approval pointing at nothing.
+      const dependents = await tx.governingAct.findMany({
+        where: { organisationId, approvedAtActId: id },
+        select: { reference: true },
+      });
+      if (dependents.length > 0) {
+        throw new AppError(
+          422,
+          'GOVERNING_ACT_HAS_DEPENDENTS',
+          `Cannot remove ${act.reference}: it is recorded as the meeting that approved the minutes of ` +
+            `${dependents.map((d) => d.reference).join(', ')}. Clear that link on those acts first.`,
+        );
+      }
+
+      // A document's approval evidence points at one of this act's resolutions.
+      const resolutionIds = act.resolutions.map((r) => r.id);
+      if (resolutionIds.length > 0) {
+        const evidencedDocuments = await tx.document.findMany({
+          where: { organisationId, approvedByResolutionId: { in: resolutionIds } },
+          select: { name: true },
+        });
+        if (evidencedDocuments.length > 0) {
+          throw new AppError(
+            422,
+            'GOVERNING_ACT_EVIDENCES_DOCUMENTS',
+            `Cannot remove ${act.reference}: its resolutions are the recorded approval for ` +
+              `${evidencedDocuments.map((d) => d.name).join(', ')}. Detach that approval first.`,
+          );
+        }
+      }
+
       const record = await tx.governingActVoid.create({
         data: {
           organisationId,
@@ -468,7 +548,7 @@ export class GoverningActService {
       }
 
       return record;
-    });
+    }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
   }
 
   async listVoids(organisationId: string): Promise<GoverningActVoid[]> {
