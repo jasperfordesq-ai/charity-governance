@@ -6320,5 +6320,57 @@
     "testTitle": "round 2: composeDeclaredVolumeNames reports what compose mounts, ignoring the env preference",
     "gapDescription": "",
     "proposedTitle": ""
+  },
+  {
+    "id": "bluegreen-state-integrity-26",
+    "surface": "api",
+    "group": "bluegreen",
+    "concern": "state-integrity",
+    "guarantee": "defaultRunCommand streams an outputFile command's stdout straight to the file descriptor, so a pg_dump or documents tar far larger than Node's 1 MiB spawnSync buffer lands on disk byte-for-byte instead of killing the child with ENOBUFS; the outputFile contract still resolves { stdout: '' }.",
+    "status": "covered",
+    "testType": "unit",
+    "testFile": "scripts/bluegreen-deploy.test.mjs",
+    "testTitle": "runCommand: stdout far larger than the 1 MiB spawn buffer streams to the output file whole",
+    "gapDescription": "",
+    "proposedTitle": ""
+  },
+  {
+    "id": "bluegreen-state-integrity-27",
+    "surface": "api",
+    "group": "bluegreen",
+    "concern": "state-integrity",
+    "guarantee": "defaultRunCommand's captured (non-outputFile) stdout carries an explicit 256 MiB maxBuffer, so the per-document sha256 listing and docker compose config output come back intact past 1 MiB rather than being silently truncated and killed.",
+    "status": "covered",
+    "testType": "unit",
+    "testFile": "scripts/bluegreen-deploy.test.mjs",
+    "testTitle": "runCommand: captured stdout far larger than the 1 MiB spawn buffer comes back intact",
+    "gapDescription": "",
+    "proposedTitle": ""
+  },
+  {
+    "id": "bluegreen-state-integrity-28",
+    "surface": "api",
+    "group": "bluegreen",
+    "concern": "state-integrity",
+    "guarantee": "An outputFile command that fails leaves neither the final artifact nor its streaming temp file behind, so runBackup's sha256File and manifest can never hash a half-written dump or tar; stderr stays piped so the failure still explains itself.",
+    "status": "covered",
+    "testType": "unit",
+    "testFile": "scripts/bluegreen-deploy.test.mjs",
+    "testTitle": "runCommand: a failed outputFile command leaves no artifact behind for the manifest to hash",
+    "gapDescription": "",
+    "proposedTitle": ""
+  },
+  {
+    "id": "bluegreen-graceful-degradation-4",
+    "surface": "api",
+    "group": "bluegreen",
+    "concern": "graceful-degradation",
+    "guarantee": "A spawn-level command failure (ENOENT, EACCES, ENOBUFS, or a signal kill, where spawnSync returns a null status) reports its own error code and message instead of the misleading 'failed with exit code unknown'.",
+    "status": "covered",
+    "testType": "unit",
+    "testFile": "scripts/bluegreen-deploy.test.mjs",
+    "testTitle": "runCommand: a spawn-level failure names its error code instead of \"exit code unknown\"",
+    "gapDescription": "",
+    "proposedTitle": ""
   }
 ]

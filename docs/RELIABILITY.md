@@ -16,15 +16,15 @@ Generated: 2026-09-02 - Source of truth: [`docs/reliability/guarantees.json`](re
 
 | Surface | covered | partial | gap | n/a | Total |
 |---|---|---|---|---|---|
-| API | 383 | 0 | 0 | 14 | 397 |
+| API | 387 | 0 | 0 | 14 | 401 |
 | Web | 112 | 0 | 0 | 6 | 118 |
-| **Total** | **495** | **0** | **0** | **20** | **515** |
+| **Total** | **499** | **0** | **0** | **20** | **519** |
 
-**API suite:** 1189 passing, 0 failing. **Web suite:** 411 passing, 0 failing. **E2E linkage:** 31 Playwright titles found; not executed by this command.
+**API suite:** 1193 passing, 0 failing. **Web suite:** 411 passing, 0 failing. **E2E linkage:** 31 Playwright titles found; not executed by this command.
 
 **Executed E2E result:** NOT VERIFIED BY THIS COMMAND. Use a successful managed E2E workflow or `npm run test:e2e` result bound to the relevant SHA.
 
-**Linkage:** 495/495 covered guarantees verified against a passing/linked test.
+**Linkage:** 499/499 covered guarantees verified against a passing/linked test.
 
 **Linkage check: COMPLETE**
 
@@ -55,7 +55,7 @@ no data loss / accessibility & resilience.
 
 ---
 
-## API surface - the matrix (397 guarantees)
+## API surface - the matrix (401 guarantees)
 
 ### auth - `/api/v1/auth`
 
@@ -589,6 +589,10 @@ _10 guarantees - covered 10_
 | State integrity / no data loss | The deployment's db and documents volume names are resolved from compose.bluegreen.yml plus any BLUEGREEN_COMPOSE_OVERRIDE, with BLUEGREEN_DOCUMENTS_VOLUME winning for documents — so the private-VM override's external appliance volumes are the ones checked. | covered | `defect 2b: deploymentVolumeNames resolves both volume names from the compose file, the override, and the env`<br/><sub>scripts/bluegreen-deploy.test.mjs</sub> |
 | State integrity / no data loss | Preflight refuses a BLUEGREEN_DOCUMENTS_VOLUME that names a different volume from the one the deployment's compose file/override declares, naming both values — a disagreement would otherwise produce a silently empty documents backup (docker auto-creates the missing volume) that the restore drill would still pass. | covered | `round 2: preflight refuses a BLUEGREEN_DOCUMENTS_VOLUME that disagrees with the compose-declared documents volume`<br/><sub>scripts/bluegreen-deploy.test.mjs</sub> |
 | State integrity / no data loss | composeDeclaredVolumeNames reports the volume names compose will actually mount, with no env-level preference leaking in, so the preflight agreement check compares two independent sources. | covered | `round 2: composeDeclaredVolumeNames reports what compose mounts, ignoring the env preference`<br/><sub>scripts/bluegreen-deploy.test.mjs</sub> |
+| State integrity / no data loss | defaultRunCommand streams an outputFile command's stdout straight to the file descriptor, so a pg_dump or documents tar far larger than Node's 1 MiB spawnSync buffer lands on disk byte-for-byte instead of killing the child with ENOBUFS; the outputFile contract still resolves { stdout: '' }. | covered | `runCommand: stdout far larger than the 1 MiB spawn buffer streams to the output file whole`<br/><sub>scripts/bluegreen-deploy.test.mjs</sub> |
+| State integrity / no data loss | defaultRunCommand's captured (non-outputFile) stdout carries an explicit 256 MiB maxBuffer, so the per-document sha256 listing and docker compose config output come back intact past 1 MiB rather than being silently truncated and killed. | covered | `runCommand: captured stdout far larger than the 1 MiB spawn buffer comes back intact`<br/><sub>scripts/bluegreen-deploy.test.mjs</sub> |
+| State integrity / no data loss | An outputFile command that fails leaves neither the final artifact nor its streaming temp file behind, so runBackup's sha256File and manifest can never hash a half-written dump or tar; stderr stays piped so the failure still explains itself. | covered | `runCommand: a failed outputFile command leaves no artifact behind for the manifest to hash`<br/><sub>scripts/bluegreen-deploy.test.mjs</sub> |
+| Graceful degradation | A spawn-level command failure (ENOENT, EACCES, ENOBUFS, or a signal kill, where spawnSync returns a null status) reports its own error code and message instead of the misleading 'failed with exit code unknown'. | covered | `runCommand: a spawn-level failure names its error code instead of "exit code unknown"`<br/><sub>scripts/bluegreen-deploy.test.mjs</sub> |
 
 ---
 

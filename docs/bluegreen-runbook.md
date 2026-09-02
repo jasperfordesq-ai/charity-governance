@@ -216,6 +216,16 @@ history always shows exactly how far a deploy got.
   `-v`) and re-run. If the engine cannot get an answer at all it says
   "Could not determine whether volume … is already in use" and still
   refuses — it never assumes a volume is free.
+- **A command fails before it ever runs, or is killed rather than exiting.**
+  Spawn-level failures now name themselves: `docker … failed: ENOENT: …`,
+  `… failed: ENOBUFS: …`, `… failed: killed by signal SIGKILL` — never the
+  old, actively misleading `failed with exit code unknown`, which hid a real
+  phase-2 backup failure behind an empty message. Relatedly, backup
+  artifacts (`pg_dump -Fc` and the documents tar) now stream straight to
+  disk instead of through this process's memory, so a large documents volume
+  is bounded by DISK on the state directory, not by RAM — and the artifact
+  appears at its final path only once it is complete and fsynced (a failed
+  command leaves no partial dump or tar for the manifest to hash).
 - **Migration gate blocks** — the deploy aborts *before quiesce*; nothing
   was touched at all (no container stopped **except a `db` this deploy itself
   started** — see the next bullet; no lock left held).
