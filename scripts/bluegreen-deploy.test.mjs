@@ -226,10 +226,20 @@ test('deploy: a blocked migration aborts BEFORE quiesce and touches nothing', as
   const status = libModule.deployStatus(stateDir);
   const phases = status.history.map((entry) => entry.phase);
   assert.deepEqual(phases, ['preflight', 'ensure-db', 'backup', 'resolve', 'worktree', 'build', 'gate']);
+  // VM-cutover defect 2a: the ONLY `stop` allowed on this path is the
+  // engine putting back the `db` it started itself at ensure-db (asserted
+  // by its own tests below). Quiesce — `stop scheduler` — must still never
+  // run, and neither may a stop of anything else.
+  const stopCalls = calls.filter((call) => call.command.includes('stop'));
+  assert.deepEqual(
+    stopCalls.map((call) => call.command.slice(call.command.indexOf('stop'))),
+    [['stop', 'db']],
+    'the only stop on a gate-blocked deploy is the engine stopping the db it started',
+  );
   assert.equal(
-    calls.some((call) => call.command.includes('stop')),
+    calls.some((call) => call.command.includes('stop') && call.command.includes('scheduler')),
     false,
-    'quiesce (stop) must never run',
+    'quiesce (stop scheduler) must never run',
   );
   assert.equal(
     calls.some((call) => call.command.includes('run') && call.command.includes('migrate')),
@@ -1075,7 +1085,19 @@ test('I3: BLUEGREEN_DOCUMENTS_VOLUME threads through to runBackupImpl (deploy pa
   const runDeploy = await loadDeployRunner();
   const stateDir = makeFixtureDir('bluegreen-i3-docs-volume-deploy-');
   const envPath = join(stateDir, 'bluegreen.env');
-  writeEnvFile(envPath, { BLUEGREEN_DOCUMENTS_VOLUME: 'custom-charity-documents' });
+  // Review round 2: a custom documents volume is only legitimate when the
+  // compose file(s) declare the same name — preflight now refuses a
+  // disagreement (it would silently back up an auto-created empty volume),
+  // so this fixture supplies the matching override the real VM has.
+  const overridePath = join(stateDir, 'override.yml');
+  writeFileSync(
+    overridePath,
+    'volumes:\n  bluegreen-documents:\n    external: true\n    name: custom-charity-documents\n',
+  );
+  writeEnvFile(envPath, {
+    BLUEGREEN_COMPOSE_OVERRIDE: overridePath,
+    BLUEGREEN_DOCUMENTS_VOLUME: 'custom-charity-documents',
+  });
   seedMigrationsDir(stateDir, TARGET_COMMIT, []);
 
   const { deps, backupCalls } = baseDeps({ stateDir });
@@ -2075,7 +2097,13 @@ test('P3-2: every docker compose call and the backup composeArgs carry the overr
   const runDeploy = await loadDeployRunner();
   const stateDir = makeFixtureDir('bluegreen-override-');
   const overridePath = join(stateDir, 'override.yml');
-  writeFileSync(overridePath, 'volumes:\n  bluegreen-db:\n    external: true\n    name: x\n');
+  // Review round 2: the override must declare the SAME documents volume the
+  // env file names, or preflight refuses the pair.
+  writeFileSync(
+    overridePath,
+    'volumes:\n  bluegreen-db:\n    external: true\n    name: x\n' +
+      '  bluegreen-documents:\n    external: true\n    name: charitypilot-personal-server-documents\n',
+  );
   const envPath = join(stateDir, 'vm.env');
   writeEnvFile(envPath, {
     BLUEGREEN_COMPOSE_OVERRIDE: overridePath,
@@ -2158,7 +2186,10 @@ test('P3-2: preflightIssues names a missing override file and requires BLUEGREEN
 
   const dir = makeFixtureDir('bluegreen-override-preflight-');
   const present = join(dir, 'o.yml');
-  writeFileSync(present, 'volumes: {}\n');
+  // Review round 2: declares the documents volume the pairing below names —
+  // an override whose declared name disagreed with BLUEGREEN_DOCUMENTS_VOLUME
+  // is now itself a preflight issue (tested separately).
+  writeFileSync(present, 'volumes:\n  bluegreen-documents:\n    external: true\n    name: v\n');
   const noVolume = preflightIssues({
     fileEnv: { ...base, BLUEGREEN_COMPOSE_OVERRIDE: present },
     resolvedEnvFilePath: envFilePath,
@@ -2238,4 +2269,544 @@ test('P3-5: the committed private-VM env template, filled in, passes engine pref
   assert.equal(fileEnv.BLUEGREEN_DOCUMENTS_VOLUME, 'charitypilot-personal-server-documents');
   assert.deepEqual(preflightIssues({ fileEnv, resolvedEnvFilePath: envPath }), []);
   rmSync(dir, { recursive: true, force: true });
+});
+
+// -----------------------------------------------------------------------------
+// VM-cutover defect 2a: a failed deploy must not leave behind a `db` service
+// that THIS deploy started. On the real cutover the deploy aborted at phase 2
+// and left a live postmaster attached to the appliance's production PGDATA;
+// restoring appliance service then started a second postmaster on the same
+// data directory (they overlapped ~83s).
+// -----------------------------------------------------------------------------
+
+function dbStopCalls(calls) {
+  return calls.filter(
+    (call) =>
+      call.command[0] === 'docker' &&
+      call.command[1] === 'compose' &&
+      call.command.at(-2) === 'stop' &&
+      call.command.at(-1) === 'db',
+  );
+}
+
+const DESTRUCTIVE_MIGRATION = [
+  { name: '20260101000000_drop_something', sql: 'ALTER TABLE "Foo" DROP COLUMN "bar";' },
+];
+
+// Every failure return between ensure-db and the Caddy switch, in one place:
+// each entry injects exactly one failure and must produce a stopped db plus
+// the sentence that says so.
+const ABORT_CASES = [
+  {
+    label: 'backup failure',
+    expect: /pre-migration backup failed/,
+    deps: () => ({
+      runBackupImpl: async () => {
+        throw new Error('injected backup failure');
+      },
+    }),
+  },
+  {
+    label: 'migration gate block',
+    migrations: DESTRUCTIVE_MIGRATION,
+    expect: /migration gate blocked/,
+  },
+  {
+    label: 'migration run failure',
+    expect: /migration failed/,
+    fail: (joined) => joined.includes('run --rm --no-deps migrate'),
+  },
+  {
+    label: 'starting the target colour failure',
+    expect: /starting (blue|green) containers failed/,
+    fail: (joined) => joined.includes('--profile') && joined.includes(' up '),
+  },
+  {
+    label: 'candidate smoke failure',
+    expect: /candidate smoke test failed/,
+    fail: (joined) => joined.includes('exec') && /api-(blue|green)/.test(joined) && joined.includes('readiness'),
+  },
+  {
+    label: 'starting Caddy failure',
+    expect: /starting Caddy failed/,
+    fail: (joined) => joined.includes('up -d --wait caddy'),
+  },
+  {
+    label: 'Caddy reload failure',
+    expect: /Caddy reload failed/,
+    fail: (joined) => joined.includes('caddy reload'),
+  },
+  {
+    label: 'an unexpected error (a bare-await phase: build)',
+    expect: /Blue-green deploy failed:/,
+    fail: (joined) => joined.includes(' build '),
+  },
+];
+
+test('defect 2a: EVERY failure between ensure-db and the switch stops the db this deploy started, and says so', async () => {
+  const runDeploy = await loadDeployRunner();
+  for (const abortCase of ABORT_CASES) {
+    const stateDir = makeFixtureDir('bluegreen-abort-db-');
+    const envPath = join(stateDir, 'bluegreen.env');
+    writeEnvFile(envPath);
+    seedMigrationsDir(stateDir, TARGET_COMMIT, abortCase.migrations ?? []);
+
+    const { deps, calls } = baseDeps({
+      stateDir,
+      overrides: abortCase.fail
+        ? (command) => (abortCase.fail(` ${command.join(' ')} `) ? new Error(`injected ${abortCase.label}`) : undefined)
+        : undefined,
+    });
+
+    const outcome = await runDeploy(['deploy', '--env-file', envPath, '--state-dir', stateDir], {
+      ...deps,
+      ...(abortCase.deps ? abortCase.deps() : {}),
+    });
+
+    assert.equal(outcome.status, 1, `${abortCase.label}: expected failure`);
+    assert.match(outcome.stderr, abortCase.expect, `${abortCase.label}: unexpected message`);
+    assert.equal(
+      dbStopCalls(calls).length,
+      1,
+      `${abortCase.label}: the db this deploy started must be stopped exactly once (calls: ${calls
+        .map((c) => c.command.join(' '))
+        .join(' | ')})`,
+    );
+    assert.match(
+      outcome.stderr,
+      /The db service this deploy started has been stopped again\./,
+      `${abortCase.label}: the message must state the db was stopped again`,
+    );
+    rmSync(stateDir, { recursive: true, force: true });
+  }
+});
+
+test('defect 2a: ensure-db asks whether db is already running BEFORE starting it', async () => {
+  const runDeploy = await loadDeployRunner();
+  const stateDir = makeFixtureDir('bluegreen-db-probe-');
+  const envPath = join(stateDir, 'bluegreen.env');
+  writeEnvFile(envPath);
+  seedMigrationsDir(stateDir, TARGET_COMMIT, []);
+  const { deps, calls } = baseDeps({ stateDir });
+
+  const outcome = await runDeploy(['deploy', '--env-file', envPath, '--state-dir', stateDir], deps);
+  assert.equal(outcome.status, 0, outcome.stderr);
+
+  const probeIndex = calls.findIndex((call) => call.command.slice(-5).join(' ') === 'ps --status running -q db');
+  const upIndex = calls.findIndex((call) => call.command.join(' ').includes('up -d --wait db'));
+  assert.ok(
+    probeIndex !== -1,
+    `expected a running-state probe for db; calls: ${calls.map((c) => c.command.join(' ')).join(' | ')}`,
+  );
+  assert.ok(upIndex !== -1, 'expected ensure-db to start db');
+  assert.ok(probeIndex < upIndex, 'the probe must run before `up -d --wait db`, or it answers the wrong question');
+
+  rmSync(stateDir, { recursive: true, force: true });
+});
+
+test('defect 2a: a db that was ALREADY running is never stopped on an abort (a redeploy must not take the site down)', async () => {
+  const runDeploy = await loadDeployRunner();
+  const stateDir = makeFixtureDir('bluegreen-db-preexisting-');
+  const envPath = join(stateDir, 'bluegreen.env');
+  writeEnvFile(envPath);
+  seedMigrationsDir(stateDir, TARGET_COMMIT, DESTRUCTIVE_MIGRATION);
+
+  const { deps, calls } = baseDeps({
+    stateDir,
+    overrides: (command) => {
+      // The steady-state case: compose reports a running db container id.
+      if (command.join(' ').includes('ps --status running -q db')) return { stdout: '9f3c1d2e4b5a\n' };
+      return undefined;
+    },
+  });
+
+  const outcome = await runDeploy(['deploy', '--env-file', envPath, '--state-dir', stateDir], deps);
+
+  assert.equal(outcome.status, 1);
+  assert.match(outcome.stderr, /migration gate blocked/);
+  assert.deepEqual(dbStopCalls(calls), [], 'a db the engine did not start must never be stopped');
+  assert.doesNotMatch(outcome.stderr, /db service this deploy started/);
+  assert.doesNotMatch(outcome.stderr, /could not determine whether the db service/);
+
+  rmSync(stateDir, { recursive: true, force: true });
+});
+
+test('defect 2a: a failed abort-time db stop is reported as STILL RUNNING, never as stopped', async () => {
+  const runDeploy = await loadDeployRunner();
+  const stateDir = makeFixtureDir('bluegreen-db-stop-fails-');
+  const envPath = join(stateDir, 'bluegreen.env');
+  writeEnvFile(envPath);
+  seedMigrationsDir(stateDir, TARGET_COMMIT, DESTRUCTIVE_MIGRATION);
+
+  const { deps, calls } = baseDeps({
+    stateDir,
+    overrides: (command) => {
+      if (command.join(' ').endsWith('stop db')) return new Error('injected: docker daemon refused the stop');
+      return undefined;
+    },
+  });
+
+  const outcome = await runDeploy(['deploy', '--env-file', envPath, '--state-dir', stateDir], deps);
+
+  assert.equal(outcome.status, 1);
+  assert.equal(dbStopCalls(calls).length, 1, 'the stop must be attempted');
+  assert.match(outcome.stderr, /could NOT be stopped/);
+  assert.match(outcome.stderr, /STILL RUNNING/);
+  assert.match(outcome.stderr, /before starting any other stack on these volumes/);
+  assert.doesNotMatch(outcome.stderr, /has been stopped again/);
+
+  rmSync(stateDir, { recursive: true, force: true });
+});
+
+test('defect 2a: an undeterminable prior db state leaves db alone and says the state is unknown', async () => {
+  const runDeploy = await loadDeployRunner();
+  const stateDir = makeFixtureDir('bluegreen-db-unknown-');
+  const envPath = join(stateDir, 'bluegreen.env');
+  writeEnvFile(envPath);
+  seedMigrationsDir(stateDir, TARGET_COMMIT, DESTRUCTIVE_MIGRATION);
+
+  const { deps, calls } = baseDeps({
+    stateDir,
+    overrides: (command) => {
+      if (command.join(' ').includes('ps --status running -q db')) return new Error('injected: compose ps unavailable');
+      return undefined;
+    },
+  });
+
+  const outcome = await runDeploy(['deploy', '--env-file', envPath, '--state-dir', stateDir], deps);
+
+  assert.equal(outcome.status, 1);
+  assert.deepEqual(dbStopCalls(calls), [], 'never stop a db that might have been serving before this deploy');
+  assert.match(outcome.stderr, /could not determine whether the db service was already running/);
+  assert.match(outcome.stderr, /check it by hand/);
+
+  rmSync(stateDir, { recursive: true, force: true });
+});
+
+test('defect 2a: a successful cutover leaves the db running, and a post-cutover failure still does not stop it', async () => {
+  const runDeploy = await loadDeployRunner();
+
+  const cleanDir = makeFixtureDir('bluegreen-db-clean-');
+  const cleanEnv = join(cleanDir, 'bluegreen.env');
+  writeEnvFile(cleanEnv);
+  seedMigrationsDir(cleanDir, TARGET_COMMIT, []);
+  const clean = baseDeps({ stateDir: cleanDir });
+  const cleanOutcome = await runDeploy(['deploy', '--env-file', cleanEnv, '--state-dir', cleanDir], clean.deps);
+  assert.equal(cleanOutcome.status, 0, cleanOutcome.stderr);
+  assert.deepEqual(dbStopCalls(clean.calls), [], 'a completed deploy must leave its db up');
+  rmSync(cleanDir, { recursive: true, force: true });
+
+  // Phase 12 (public smoke) and later run AFTER traffic has moved: the new
+  // colour — or, on the revert path, the old one — is serving from this db.
+  for (const failing of ['public smoke', 'jobs']) {
+    const stateDir = makeFixtureDir('bluegreen-db-post-cutover-');
+    const envPath = join(stateDir, 'bluegreen.env');
+    writeEnvFile(envPath);
+    seedMigrationsDir(stateDir, TARGET_COMMIT, []);
+    const { deps, calls } = baseDeps({
+      stateDir,
+      overrides: (command) => {
+        const joined = ` ${command.join(' ')} `;
+        if (failing === 'public smoke' && command[0] === 'wget' && command[1] !== '--version') {
+          return new Error('injected public smoke failure');
+        }
+        if (failing === 'jobs' && joined.includes(' up -d --wait scheduler ')) {
+          return new Error('injected scheduler failure');
+        }
+        return undefined;
+      },
+    });
+    const outcome = await runDeploy(['deploy', '--env-file', envPath, '--state-dir', stateDir], deps);
+    assert.equal(outcome.status, 1, `${failing}: expected failure`);
+    assert.deepEqual(dbStopCalls(calls), [], `${failing}: the db must stay up once traffic has moved`);
+    assert.doesNotMatch(outcome.stderr, /db service this deploy started/);
+    rmSync(stateDir, { recursive: true, force: true });
+  }
+});
+
+// -----------------------------------------------------------------------------
+// VM-cutover defect 2b: refuse to deploy while another stack holds one of this
+// deployment's volumes (two postmasters on one PGDATA is a corruption risk).
+// -----------------------------------------------------------------------------
+
+test('defect 2b: deploymentVolumeNames resolves both volume names from the compose file, the override, and the env', async () => {
+  const { deploymentVolumeNames } = await loadDeployModule();
+
+  assert.deepEqual(deploymentVolumeNames({}), {
+    db: 'charitypilot-bluegreen-db',
+    documents: 'charitypilot-bluegreen-documents',
+  });
+
+  // The committed private-VM override re-points both keys at the appliance's
+  // external volumes — the names the real cutover collided on.
+  assert.deepEqual(
+    deploymentVolumeNames({
+      BLUEGREEN_COMPOSE_OVERRIDE: 'compose.bluegreen.private-vm.yml',
+      BLUEGREEN_DOCUMENTS_VOLUME: 'charitypilot-personal-server-documents',
+    }),
+    { db: 'charitypilot-personal-server-db', documents: 'charitypilot-personal-server-documents' },
+  );
+
+  // BLUEGREEN_DOCUMENTS_VOLUME wins for documents, because it is the name
+  // the backup itself tars.
+  assert.equal(
+    deploymentVolumeNames({ BLUEGREEN_DOCUMENTS_VOLUME: 'custom-charity-documents' }).documents,
+    'custom-charity-documents',
+  );
+});
+
+test('defect 2b: volumesInUseByOtherStacks refuses a foreign container and accepts this engine own project', async () => {
+  const { volumesInUseByOtherStacks } = await loadDeployModule();
+  const volumes = { db: 'charitypilot-personal-server-db', documents: 'charitypilot-personal-server-documents' };
+
+  const seen = [];
+  const foreignIssues = await volumesInUseByOtherStacks(async (command) => {
+    seen.push(command);
+    if (command.includes('volume=charitypilot-personal-server-db')) {
+      return { stdout: 'charitypilot-personal-server-db-1\tcharitypilot-personal-server\n' };
+    }
+    return { stdout: '' };
+  }, volumes);
+
+  assert.equal(foreignIssues.length, 1);
+  assert.equal(
+    foreignIssues[0],
+    'Refusing to deploy: volume charitypilot-personal-server-db is in use by container(s) charitypilot-personal-server-db-1 from another stack; stop that stack first (a second Postgres on one data directory risks corruption).',
+  );
+  assert.deepEqual(seen[0].slice(0, 4), ['docker', 'ps', '--filter', 'volume=charitypilot-personal-server-db']);
+  assert.ok(seen[0].includes('--format'));
+
+  // This engine's own containers on the same volumes are the deployment
+  // being redeployed, not a conflict.
+  const ownIssues = await volumesInUseByOtherStacks(
+    async () => ({
+      stdout:
+        'charitypilot-bluegreen-db-1\tcharitypilot-bluegreen\ncharitypilot-bluegreen-api-blue-1\tcharitypilot-bluegreen\n',
+    }),
+    volumes,
+  );
+  assert.deepEqual(ownIssues, []);
+
+  // A container with no compose project at all counts as another stack.
+  const bareIssues = await volumesInUseByOtherStacks(
+    async (command) =>
+      command.includes('volume=charitypilot-personal-server-documents')
+        ? { stdout: 'some-hand-run-container\t\n' }
+        : { stdout: '' },
+    volumes,
+  );
+  assert.equal(bareIssues.length, 1);
+  assert.match(
+    bareIssues[0],
+    /charitypilot-personal-server-documents is in use by container\(s\) some-hand-run-container/,
+  );
+
+  // And an unanswerable question is a refusal, never an assumed "clear".
+  const blindIssues = await volumesInUseByOtherStacks(async () => {
+    throw new Error('docker ps exploded');
+  }, volumes);
+  assert.equal(blindIssues.length, 2);
+  assert.match(blindIssues[0], /Could not determine whether volume .* is already in use/);
+});
+
+test('defect 2b: a deploy refuses at preflight when another stack already holds a deployment volume', async () => {
+  const runDeploy = await loadDeployRunner();
+  const stateDir = makeFixtureDir('bluegreen-volume-conflict-');
+  const envPath = join(stateDir, 'bluegreen.env');
+  writeEnvFile(envPath);
+  seedMigrationsDir(stateDir, TARGET_COMMIT, []);
+
+  const { deps, calls } = baseDeps({
+    stateDir,
+    overrides: (command) => {
+      if (command[0] === 'docker' && command[1] === 'ps' && command.includes('volume=charitypilot-bluegreen-db')) {
+        return { stdout: 'charitypilot-personal-server-db-1\tcharitypilot-personal-server\n' };
+      }
+      return undefined;
+    },
+  });
+
+  const outcome = await runDeploy(['deploy', '--env-file', envPath, '--state-dir', stateDir], deps);
+
+  assert.equal(outcome.status, 1);
+  assert.match(outcome.stderr, /Blue-green deploy preflight failed:/);
+  assert.match(
+    outcome.stderr,
+    /volume charitypilot-bluegreen-db is in use by container\(s\) charitypilot-personal-server-db-1 from another stack/,
+  );
+  assert.match(outcome.stderr, /a second Postgres on one data directory risks corruption/);
+  // Nothing may have been touched: no compose command at all, so no db was
+  // started on volumes another stack is already using.
+  assert.deepEqual(
+    calls.filter((call) => call.command[0] === 'docker' && call.command[1] === 'compose'),
+    [],
+    'no compose command may run once the volume check refuses',
+  );
+  assert.deepEqual(
+    calls.filter((call) => call.command[0] === 'git' && call.command[1] !== '--version'),
+    [],
+    'the refusal must land before any real git work (only the host-binary probe may have run)',
+  );
+
+  rmSync(stateDir, { recursive: true, force: true });
+});
+
+test('defect 2b: the volume check runs only after the pure env checks pass', async () => {
+  const runDeploy = await loadDeployRunner();
+  const stateDir = makeFixtureDir('bluegreen-volume-check-order-');
+  const envPath = join(stateDir, 'bluegreen.env');
+  // A known-bad env file: no docker command at all may run, not even the
+  // volume probe (the engine's standing "nothing runs while a bad env file
+  // would refuse anyway" invariant).
+  writeEnvFile(envPath, { READINESS_API_KEY: '' });
+  seedMigrationsDir(stateDir, TARGET_COMMIT, []);
+  const { deps, calls } = baseDeps({ stateDir });
+
+  const outcome = await runDeploy(['deploy', '--env-file', envPath, '--state-dir', stateDir], deps);
+
+  assert.equal(outcome.status, 1);
+  assert.match(outcome.stderr, /READINESS_API_KEY is required/);
+  assert.deepEqual(calls, [], 'no command whatsoever may run when the pure env checks already refuse');
+
+  rmSync(stateDir, { recursive: true, force: true });
+});
+
+// -----------------------------------------------------------------------------
+// Review round 2: BLUEGREEN_DOCUMENTS_VOLUME must name the same volume the
+// compose file(s) declare. A mismatch does not fail loudly — docker
+// auto-creates the missing named volume (root:root 0755), the tar exits 0 with
+// an empty tree, and the manifest and the restore drill then agree on zero
+// documents. Silent data loss dressed as a passing drill.
+// -----------------------------------------------------------------------------
+
+const PREFLIGHT_BASE = {
+  BLUEGREEN_ORIGIN: 'http://127.0.0.1:8080',
+  READINESS_API_KEY: READINESS_KEY,
+  FRONTEND_URL: 'http://127.0.0.1:8080',
+  DATABASE_URL: 'postgresql://charitypilot:pw@db:5432/charitypilot',
+  CHARITYPILOT_CANONICAL_WEB_ORIGIN: 'http://127.0.0.1:8080',
+  CHARITYPILOT_CANONICAL_API_ORIGIN: 'http://127.0.0.1:8080',
+};
+
+test('round 2: preflight refuses a BLUEGREEN_DOCUMENTS_VOLUME that disagrees with the compose-declared documents volume', async () => {
+  const { preflightIssues } = await loadDeployModule();
+  const envFilePath = '/tmp/round2.env';
+  const base = { ...PREFLIGHT_BASE, BLUEGREEN_ENV_FILE: envFilePath };
+
+  // Disagreeing, with the real committed private-VM override: the override
+  // declares charitypilot-personal-server-documents, the env names a typo.
+  const mismatch = preflightIssues({
+    fileEnv: {
+      ...base,
+      BLUEGREEN_COMPOSE_OVERRIDE: 'compose.bluegreen.private-vm.yml',
+      BLUEGREEN_DOCUMENTS_VOLUME: 'charitypilot-personal-server-document',
+    },
+    resolvedEnvFilePath: envFilePath,
+  });
+  assert.equal(mismatch.length, 1, mismatch.join(' | '));
+  assert.match(mismatch[0], /BLUEGREEN_DOCUMENTS_VOLUME is "charitypilot-personal-server-document"/);
+  assert.match(mismatch[0], /declare the documents volume as "charitypilot-personal-server-documents"/);
+  assert.match(mismatch[0], /silently EMPTY documents backup/);
+
+  // A typo with NO override at all is the same bug against the base file.
+  const noOverrideMismatch = preflightIssues({
+    fileEnv: { ...base, BLUEGREEN_DOCUMENTS_VOLUME: 'charitypilot-bluegreen-document' },
+    resolvedEnvFilePath: envFilePath,
+  });
+  assert.equal(noOverrideMismatch.length, 1, noOverrideMismatch.join(' | '));
+  assert.match(noOverrideMismatch[0], /declare the documents volume as "charitypilot-bluegreen-documents"/);
+
+  // Agreeing (the committed template's own pairing): no issue at all.
+  assert.deepEqual(
+    preflightIssues({
+      fileEnv: {
+        ...base,
+        BLUEGREEN_COMPOSE_OVERRIDE: 'compose.bluegreen.private-vm.yml',
+        BLUEGREEN_DOCUMENTS_VOLUME: 'charitypilot-personal-server-documents',
+      },
+      resolvedEnvFilePath: envFilePath,
+    }),
+    [],
+  );
+  // Agreeing with the base compose file, and unset (the hosted default), both clean.
+  assert.deepEqual(
+    preflightIssues({
+      fileEnv: { ...base, BLUEGREEN_DOCUMENTS_VOLUME: 'charitypilot-bluegreen-documents' },
+      resolvedEnvFilePath: envFilePath,
+    }),
+    [],
+  );
+  assert.deepEqual(preflightIssues({ fileEnv: base, resolvedEnvFilePath: envFilePath }), []);
+
+  // An unresolvable override reports only the missing file — the compose-
+  // declared name would be the base file's, so a second, misleading mismatch
+  // issue must not pile on.
+  const missingOverride = preflightIssues({
+    fileEnv: {
+      ...base,
+      BLUEGREEN_COMPOSE_OVERRIDE: '/definitely/not/here.yml',
+      BLUEGREEN_DOCUMENTS_VOLUME: 'charitypilot-personal-server-documents',
+    },
+    resolvedEnvFilePath: envFilePath,
+  });
+  assert.equal(missingOverride.length, 1, missingOverride.join(' | '));
+  assert.match(missingOverride[0], /BLUEGREEN_COMPOSE_OVERRIDE file not found/);
+});
+
+test('round 2: composeDeclaredVolumeNames reports what compose mounts, ignoring the env preference', async () => {
+  const { composeDeclaredVolumeNames, deploymentVolumeNames } = await loadDeployModule();
+
+  // The env var must NOT leak into the compose-declared view — that is the
+  // whole basis of the comparison above.
+  assert.deepEqual(composeDeclaredVolumeNames({ BLUEGREEN_DOCUMENTS_VOLUME: 'anything-else' }), {
+    db: 'charitypilot-bluegreen-db',
+    documents: 'charitypilot-bluegreen-documents',
+  });
+  assert.equal(deploymentVolumeNames({ BLUEGREEN_DOCUMENTS_VOLUME: 'anything-else' }).documents, 'anything-else');
+});
+
+test('round 2: a deploy refuses at preflight on a documents-volume disagreement, before any command runs', async () => {
+  const runDeploy = await loadDeployRunner();
+  const stateDir = makeFixtureDir('bluegreen-volume-name-mismatch-');
+  const envPath = join(stateDir, 'bluegreen.env');
+  writeEnvFile(envPath, { BLUEGREEN_DOCUMENTS_VOLUME: 'charitypilot-bluegreen-documnets' });
+  seedMigrationsDir(stateDir, TARGET_COMMIT, []);
+  const { deps, calls } = baseDeps({ stateDir });
+
+  const outcome = await runDeploy(['deploy', '--env-file', envPath, '--state-dir', stateDir], deps);
+
+  assert.equal(outcome.status, 1);
+  assert.match(outcome.stderr, /Blue-green deploy preflight failed:/);
+  assert.match(outcome.stderr, /BLUEGREEN_DOCUMENTS_VOLUME is "charitypilot-bluegreen-documnets"/);
+  assert.deepEqual(calls, [], 'a pure env-file refusal must run no command at all');
+
+  rmSync(stateDir, { recursive: true, force: true });
+});
+
+test('round 2: ensure-db up failure does not claim a container was stopped again', async () => {
+  const runDeploy = await loadDeployRunner();
+  const stateDir = makeFixtureDir('bluegreen-ensure-db-up-fails-');
+  const envPath = join(stateDir, 'bluegreen.env');
+  writeEnvFile(envPath);
+  seedMigrationsDir(stateDir, TARGET_COMMIT, []);
+
+  const { deps, calls } = baseDeps({
+    stateDir,
+    overrides: (command) => {
+      if (command.join(' ').includes('up -d --wait db')) return new Error('injected: db never became healthy');
+      return undefined;
+    },
+  });
+
+  const outcome = await runDeploy(['deploy', '--env-file', envPath, '--state-dir', stateDir], deps);
+
+  assert.equal(outcome.status, 1);
+  assert.match(outcome.stderr, /could not start the db service/);
+  // The stop is still issued — `up --wait` can fail with the container left
+  // running — but the message must not overclaim that one existed.
+  assert.equal(dbStopCalls(calls).length, 1);
+  assert.match(outcome.stderr, /nothing this deploy started is left running on these volumes/);
+  assert.doesNotMatch(outcome.stderr, /has been stopped again/);
+
+  rmSync(stateDir, { recursive: true, force: true });
 });

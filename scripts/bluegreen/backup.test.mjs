@@ -323,6 +323,116 @@ test('runBackup honours a different composeArgs/envFile/databaseName by changing
   }
 });
 
+// -----------------------------------------------------------------------------
+// VM-cutover defect 1: --user 1000:1000 on every container run against a
+// documents volume. Without it the real cutover failed at phase 2 with
+// `tar: can't change directory to '/documents': Permission denied` — the
+// appliance's documents volume root is 0700 owned by uid 1000, and
+// --cap-drop ALL leaves even root subject to ordinary permission checks.
+// -----------------------------------------------------------------------------
+
+function documentsVolumeRunCalls(calls) {
+  return calls.filter(
+    ({ command }) =>
+      command[0] === 'docker' &&
+      command[1] === 'run' &&
+      command.some((token) => /^type=volume,src=.+,dst=\/documents,readonly$/.test(token)),
+  );
+}
+
+test('runBackup runs EVERY container against the documents volume as --user 1000:1000 (the volume owner)', async () => {
+  const { runBackup } = await loadBackupModule();
+  const stateDir = makeTempDir('charitypilot-bluegreen-backup-test-');
+  try {
+    const { runCommand, calls } = makeBackupRecordingRunCommand({
+      dumpBytes: Buffer.from('d'),
+      tarBytes: Buffer.from('t'),
+      censusStdout: 'Organisation=1\n',
+      hashListingStdout: 'aaaa1111\t10\torg/doc.pdf\n',
+    });
+
+    await runBackup({
+      runCommand,
+      stateDir,
+      envFile: '/deploy/env/production.env',
+      composeArgs: ['-f', 'compose.bluegreen.yml', '-p', 'charitypilot-bluegreen'],
+      documentsVolume: 'charitypilot-personal-server-documents',
+      now: () => new Date('2026-08-31T10:00:00.000Z'),
+    });
+
+    const documentsRuns = documentsVolumeRunCalls(calls);
+    assert.equal(documentsRuns.length, 2, 'the tar and the per-file hash listing are the two documents containers');
+
+    for (const { command } of documentsRuns) {
+      const userIndex = command.indexOf('--user');
+      assert.notEqual(userIndex, -1, `missing --user: ${commandLine(command)}`);
+      assert.equal(command[userIndex + 1], '1000:1000', `wrong --user value: ${commandLine(command)}`);
+      const mountIndex = command.findIndex((token) => token.startsWith('type=volume,'));
+      assert.ok(
+        userIndex < mountIndex,
+        `--user must be a docker run flag, before the image and its command: ${commandLine(command)}`,
+      );
+      assert.ok(
+        command.includes(`type=volume,src=charitypilot-personal-server-documents,dst=/documents,readonly`),
+        'the documents mount must stay read-only and point at the requested volume',
+      );
+      // Not one hardening flag may be traded away for the --user fix.
+      assert.deepEqual(
+        [
+          command.includes('--rm'),
+          commandLine(command).includes('--network none'),
+          command.includes('--read-only'),
+          commandLine(command).includes('--cap-drop ALL'),
+          command.includes('no-new-privileges=true'),
+        ],
+        [true, true, true, true, true],
+        `hardening flags must all survive: ${commandLine(command)}`,
+      );
+    }
+
+    const tarRun = documentsRuns.find(({ command }) => command.includes('tar'));
+    const hashRun = documentsRuns.find(({ command }) => commandLine(command).includes('sha256sum'));
+    assert.ok(tarRun, 'the documents tar must run against the documents volume');
+    assert.ok(hashRun, 'the per-file sha256 hash listing must run against the documents volume');
+  } finally {
+    rmSync(stateDir, { recursive: true, force: true });
+  }
+});
+
+test('runBackup uses the SAME --user for the documents tar and the hash listing (a manifest cannot disagree with its own archive)', async () => {
+  const { runBackup } = await loadBackupModule();
+  const stateDir = makeTempDir('charitypilot-bluegreen-backup-test-');
+  try {
+    const { runCommand, calls } = makeBackupRecordingRunCommand({
+      dumpBytes: Buffer.from('d'),
+      tarBytes: Buffer.from('t'),
+      censusStdout: 'Organisation=1\n',
+      hashListingStdout: '',
+    });
+
+    await runBackup({
+      runCommand,
+      stateDir,
+      envFile: '/deploy/env/production.env',
+      composeArgs: ['-f', 'compose.bluegreen.yml', '-p', 'charitypilot-bluegreen'],
+      now: () => new Date('2026-08-31T10:00:00.000Z'),
+    });
+
+    const users = documentsVolumeRunCalls(calls).map(({ command }) => command[command.indexOf('--user') + 1]);
+    assert.deepEqual(users, ['1000:1000', '1000:1000']);
+    // The default (hosted/local) volume: root:root 0755 root, files written
+    // by the api container as uid 1000 — the same uid still reads them.
+    assert.ok(
+      calls.some(({ command }) =>
+        command.includes('type=volume,src=charitypilot-bluegreen-documents,dst=/documents,readonly'),
+      ),
+      'the default documents volume must still be the one mounted when no override is given',
+    );
+  } finally {
+    rmSync(stateDir, { recursive: true, force: true });
+  }
+});
+
 test('runBackup rejects a live census that parses to zero tables', async () => {
   const { runBackup } = await loadBackupModule();
   const stateDir = makeTempDir('charitypilot-bluegreen-backup-test-');
@@ -625,6 +735,51 @@ test('runRestoreDrill restores into a throwaway container, never the live db, an
     const teardownCalls = teardownCallsOf(calls);
     assert.equal(teardownCalls.length, 1, 'teardown must run exactly once');
     assert.ok(teardownCalls[0].command.includes(containerName));
+  } finally {
+    rmSync(stateDir, { recursive: true, force: true });
+  }
+});
+
+test('runRestoreDrill extracts and re-hashes the documents in ONE command as the drill container root, so extraction and hashing cannot disagree on user', async () => {
+  const { runRestoreDrill } = await loadBackupModule();
+  const stateDir = makeTempDir('charitypilot-bluegreen-drill-test-');
+  try {
+    const { plan, documentEntries } = writeFixtureBackup(stateDir);
+    const documentHashStdout = documentEntries.map((e) => `${e.sha256}\t${e.bytes}\t${e.path}`).join('\n') + '\n';
+    const { runCommand, calls } = makeDrillRecordingRunCommand({ documentHashStdout });
+
+    const outcome = await runRestoreDrill({
+      runCommand,
+      stateDir,
+      envFile: '/deploy/env/production.env',
+      composeArgs: ['-f', 'compose.bluegreen.yml', '-p', 'charitypilot-bluegreen'],
+      plan,
+      sleep: async () => {},
+    });
+    assert.equal(outcome.ok, true);
+
+    // Exactly one command does BOTH the extraction and the hashing: there is
+    // no second invocation whose effective user could drift from the first.
+    const extractCalls = calls.filter((c) => commandLine(c.command).includes('tar -xf'));
+    assert.equal(extractCalls.length, 1, 'extraction must not be a separate command from the re-hash');
+    const [extractCall] = extractCalls;
+    assert.match(commandLine(extractCall.command), /xargs -0 -r sha256sum --/, 'the same command must also hash');
+
+    // Deliberately NOT --user 1000:1000 (unlike the two hardened `docker
+    // run`s against the real documents volume): this is a `docker exec`
+    // into the throwaway drill container, whose default user is root and
+    // which keeps DAC override — root can create /drill-documents, restore
+    // the archive's recorded ownership (CAP_CHOWN), and still traverse a
+    // 0700 directory that came out of the appliance's archive.
+    assert.deepEqual(extractCall.command.slice(0, 2), ['docker', 'exec']);
+    assert.equal(extractCall.command.includes('--user'), false, 'the drill exec must run as the container root');
+    // ...and it never touches the real documents volume at all.
+    assert.equal(
+      extractCall.command.some((token) => token.includes('type=volume')),
+      false,
+      'the drill must re-hash the extracted scratch copy, never the live documents volume',
+    );
+    assert.match(commandLine(extractCall.command), /\/drill-documents/);
   } finally {
     rmSync(stateDir, { recursive: true, force: true });
   }

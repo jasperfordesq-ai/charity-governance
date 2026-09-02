@@ -426,14 +426,39 @@ export function preflightIssues({ fileEnv, resolvedEnvFilePath }) {
   }
 
   const overrideValue = fileEnv.BLUEGREEN_COMPOSE_OVERRIDE || '';
+  let overrideResolvable = true;
   if (overrideValue) {
     const overridePath = resolve(repoRoot, overrideValue);
     if (!existsSync(overridePath)) {
       issues.push(`BLUEGREEN_COMPOSE_OVERRIDE file not found: ${overridePath}`);
+      overrideResolvable = false;
     }
     if (!(fileEnv.BLUEGREEN_DOCUMENTS_VOLUME || '')) {
       issues.push(
         'BLUEGREEN_DOCUMENTS_VOLUME is required when BLUEGREEN_COMPOSE_OVERRIDE is set (an override exists to move the volumes; the backup must tar the one the override names)',
+      );
+    }
+  }
+
+  // Round-2 fix: BLUEGREEN_DOCUMENTS_VOLUME is the name the BACKUP tars;
+  // the compose file/override is what the APP actually mounts. A one-
+  // character disagreement between them does not fail — it silently backs
+  // up an EMPTY volume. `docker run --mount type=volume,src=<nonexistent>`
+  // AUTO-CREATES the named volume (root:root 0755, which uid 1000 traverses
+  // happily), so the tar exits 0 with an empty tree, the manifest records
+  // zero documents, and the restore drill compares that empty manifest
+  // against the equally-empty tar and passes. The drill's whole value is
+  // that it cannot pass vacuously, so this must be a refusal.
+  //
+  // Skipped when the override path itself is unresolvable: the missing-file
+  // issue above already says what is wrong, and the compose-declared names
+  // would then be the base file's rather than the override's.
+  const declaredDocumentsVolume = fileEnv.BLUEGREEN_DOCUMENTS_VOLUME || '';
+  if (declaredDocumentsVolume && overrideResolvable) {
+    const composeDocumentsVolume = composeDeclaredVolumeNames(fileEnv).documents;
+    if (composeDocumentsVolume && declaredDocumentsVolume !== composeDocumentsVolume) {
+      issues.push(
+        `BLUEGREEN_DOCUMENTS_VOLUME is ${JSON.stringify(declaredDocumentsVolume)} but the compose file(s) this deployment uses declare the documents volume as ${JSON.stringify(composeDocumentsVolume)}; they must name the same volume (the backup tars the former while the app mounts the latter, and docker would auto-create the missing one, producing a silently EMPTY documents backup that the restore drill would still pass)`,
       );
     }
   }
@@ -464,6 +489,159 @@ export async function missingHostBinaries(runCommand) {
     }
   }
   return missing;
+}
+
+// ---------------------------------------------------------------------------
+// Which volumes this deployment will actually use, and who else is on them
+// (VM-cutover defect 2b)
+// ---------------------------------------------------------------------------
+//
+// The compose VOLUME KEYS are fixed (`bluegreen-db`/`bluegreen-documents`);
+// the real Docker volume NAMES are whatever the compose file — or the
+// deployment's `BLUEGREEN_COMPOSE_OVERRIDE`, which exists precisely to move
+// them — declares under `name:`. Neither name is in the env file (only the
+// documents one is, and only as the value the backup tars), so the names are
+// read from the very files this run passes to `docker compose`, in the same
+// order compose merges them (later file wins). That is deliberately NOT
+// `docker compose config`: at phase 1 the blue/green/active image tags are
+// not resolved yet (they come from state, read at phase 3) and every one of
+// them is a `${...:?}` required interpolation, and `config` additionally
+// prunes `bluegreen-documents` from its own output unless a colour profile
+// is active. Reading the files needs no docker call, no dummy tags, and no
+// new env var that a deployment could forget to set.
+const COMPOSE_DB_VOLUME_KEY = 'bluegreen-db';
+const COMPOSE_DOCUMENTS_VOLUME_KEY = 'bluegreen-documents';
+const DEFAULT_DB_VOLUME = 'charitypilot-bluegreen-db';
+const DEFAULT_DOCUMENTS_VOLUME = 'charitypilot-bluegreen-documents';
+
+function unquoteYamlScalar(value) {
+  const trimmed = value.trim();
+  if (
+    (trimmed.startsWith('"') && trimmed.endsWith('"') && trimmed.length >= 2) ||
+    (trimmed.startsWith("'") && trimmed.endsWith("'") && trimmed.length >= 2)
+  ) {
+    return trimmed.slice(1, -1);
+  }
+  return trimmed;
+}
+
+// Reads `{<volume key>: <name>}` out of one compose file's top-level
+// `volumes:` block. Scoped deliberately narrowly (top-level block only,
+// two-space keys, four-space `name:`) — that is the exact shape both
+// compose.bluegreen.yml and compose.bluegreen.private-vm.yml have, and both
+// shapes are already pinned byte-for-byte by
+// scripts/check-bluegreen-compose.test.mjs and
+// scripts/check-bluegreen-private-vm-compose.test.mjs.
+function composeVolumeNames(composeFilePath) {
+  let text;
+  try {
+    text = readFileSync(composeFilePath, 'utf8');
+  } catch {
+    return {};
+  }
+  const names = {};
+  let inVolumesBlock = false;
+  let currentKey = null;
+  for (const rawLine of text.split(/\r?\n/)) {
+    const line = rawLine.replace(/\s+$/, '');
+    if (!line.trim() || line.trim().startsWith('#')) continue;
+    if (/^\S/.test(line)) {
+      inVolumesBlock = /^volumes:\s*$/.test(line);
+      currentKey = null;
+      continue;
+    }
+    if (!inVolumesBlock) continue;
+    const keyMatch = /^ {2}([A-Za-z0-9_.-]+):\s*$/.exec(line);
+    if (keyMatch) {
+      currentKey = keyMatch[1];
+      continue;
+    }
+    const nameMatch = /^ {4}name:\s*(.+)$/.exec(line);
+    if (nameMatch && currentKey) names[currentKey] = unquoteYamlScalar(nameMatch[1]);
+  }
+  return names;
+}
+
+/**
+ * The volume names the compose file(s) this run passes to `docker compose`
+ * actually DECLARE — i.e. what compose will mount, ignoring any env-level
+ * preference. `deploymentVolumeNames` layers the env over this; preflight
+ * compares the two.
+ */
+export function composeDeclaredVolumeNames(fileEnv) {
+  const merged = {};
+  for (const composeFilePath of composeFileArgs(fileEnv).filter((arg) => arg !== '-f')) {
+    Object.assign(merged, composeVolumeNames(composeFilePath));
+  }
+  return {
+    db: merged[COMPOSE_DB_VOLUME_KEY] || DEFAULT_DB_VOLUME,
+    documents: merged[COMPOSE_DOCUMENTS_VOLUME_KEY] || DEFAULT_DOCUMENTS_VOLUME,
+  };
+}
+
+/**
+ * The Docker volume names this deployment will actually mount. `documents`
+ * prefers BLUEGREEN_DOCUMENTS_VOLUME because that is the name the backup
+ * itself tars (see the backup phase); `db` has no env override at all and
+ * comes from the compose file/override alone.
+ */
+export function deploymentVolumeNames(fileEnv) {
+  const declared = composeDeclaredVolumeNames(fileEnv);
+  return {
+    db: declared.db,
+    documents: fileEnv.BLUEGREEN_DOCUMENTS_VOLUME || declared.documents,
+  };
+}
+
+// A container from ANOTHER compose project (or no project at all) already
+// mounting one of this deployment's volumes is the shape of the real
+// near-miss on the VM cutover: an aborted deploy left this engine's `db`
+// attached to the appliance's PGDATA, and restoring appliance service then
+// started a SECOND postmaster on the same data directory. Two postmasters on
+// one PGDATA is a corruption risk, so this refuses BEFORE anything runs.
+// Containers belonging to this engine's own compose project are fine — they
+// are the deployment being (re-)deployed.
+export async function volumesInUseByOtherStacks(runCommand, volumeNames) {
+  const issues = [];
+  const seen = new Set();
+  for (const volume of [volumeNames.db, volumeNames.documents]) {
+    if (!volume || seen.has(volume)) continue;
+    seen.add(volume);
+    let stdout;
+    try {
+      const listed = await runCommand([
+        'docker',
+        'ps',
+        '--filter',
+        `volume=${volume}`,
+        '--format',
+        // A literal tab, not the string "\t": no shell and no reliance on
+        // docker's own escape handling in the template.
+        '{{.Names}}\t{{.Label "com.docker.compose.project"}}',
+      ]);
+      stdout = listed?.stdout ?? '';
+    } catch (error) {
+      issues.push(
+        `Could not determine whether volume ${volume} is already in use by another stack (docker ps failed: ${redact(error)}); refusing to deploy without that answer — a second Postgres on one data directory risks corruption.`,
+      );
+      continue;
+    }
+    const foreign = [];
+    for (const rawLine of stdout.split(/\r?\n/)) {
+      const line = rawLine.trim();
+      if (!line) continue;
+      const [containerName, project = ''] = line.split('\t');
+      if (!containerName) continue;
+      if (project.trim() === PROJECT_NAME) continue;
+      foreign.push(containerName.trim());
+    }
+    if (foreign.length > 0) {
+      issues.push(
+        `Refusing to deploy: volume ${volume} is in use by container(s) ${foreign.join(', ')} from another stack; stop that stack first (a second Postgres on one data directory risks corruption).`,
+      );
+    }
+  }
+  return issues;
 }
 
 // ---------------------------------------------------------------------------
@@ -792,13 +970,25 @@ export async function runBluegreenDeployFromArgs(
     operationError = error;
   }
 
+  // VM-cutover defect 2a: an UNEXPECTED throw between ensure-db and the
+  // Caddy switch (a bare `await run(...)` in worktree/build/quiesce, a
+  // programming error, anything) reaches here rather than one of
+  // executeDeploy's own failure returns. `dbGuard` (only ever set by
+  // executeDeploy, and a no-op once the cutover is recorded) closes that
+  // path too. Done while this run still holds the cutover lock, before the
+  // release below.
+  let unexpectedDbNote = '';
+  if (operationError && deps.dbGuard) {
+    unexpectedDbNote = await deps.dbGuard.stop();
+  }
+
   try {
     releaseCutoverLock(ownedLock);
   } catch (error) {
     const priorError = deployResult?.stderr
       ? `${deployResult.stderr.trimEnd()}\n`
       : operationError
-        ? `Blue-green ${options.command} failed unexpectedly: ${redact(operationError)}\n`
+        ? `Blue-green ${options.command} failed unexpectedly: ${redact(operationError)}${unexpectedDbNote ? `.${unexpectedDbNote}` : ''}\n`
         : '';
     return result(
       1,
@@ -808,7 +998,11 @@ export async function runBluegreenDeployFromArgs(
   }
 
   if (operationError) {
-    return result(1, deployResult?.stdout ?? '', `Blue-green ${options.command} failed: ${redact(operationError)}\n`);
+    return result(
+      1,
+      deployResult?.stdout ?? '',
+      `Blue-green ${options.command} failed: ${redact(operationError)}${unexpectedDbNote ? `.${unexpectedDbNote}` : ''}\n`,
+    );
   }
   return deployResult;
 }
@@ -838,6 +1032,13 @@ async function executeDeploy(deps) {
     if (missingBinaries.length > 0) {
       issues.push(`Required host binaries not found on PATH: ${missingBinaries.join(', ')}`);
     }
+  }
+  // VM-cutover defect 2b: only once docker is known to exist (the probe
+  // above) — and still before any real deploy command — refuse outright if
+  // another stack is already attached to the volumes this deployment will
+  // mount.
+  if (issues.length === 0) {
+    issues.push(...(await volumesInUseByOtherStacks(runCommand, deploymentVolumeNames(fileEnv))));
   }
   if (issues.length > 0) {
     return result(1, '', `Blue-green deploy preflight failed:\n${issues.map((issue) => `- ${issue}`).join('\n')}\n`);
@@ -896,11 +1097,76 @@ async function executeDeploy(deps) {
   // the stack was `down`) has no running db for phase 2's `exec db pg_dump`
   // or phase 6's `exec db psql` to reach. Idempotent when db is already up.
   writeDeployStatus(resolvedStateDir, 'ensure-db', 'starting db if not already running');
+  // VM-cutover defect 2a: whether the db was ALREADY running decides who
+  // owns its lifetime. `compose ps --status running -q db` prints one
+  // container id per line for a running db and nothing at all otherwise —
+  // one cheap, side-effect-free command, and the whole detection is a
+  // single injected-runCommand call, so a test stubs "already running" or
+  // "not running" just by choosing that call's stdout.
+  let dbWasAlreadyRunning = false;
+  let dbPriorStateUnknown = false;
+  try {
+    const dbPs = await run([...composePrefix(), 'ps', '--status', 'running', '-q', 'db'], deployEnv);
+    dbWasAlreadyRunning = ((dbPs?.stdout ?? '') + '').trim() !== '';
+  } catch {
+    // Could not tell. Never claim to have started (and therefore never
+    // silently stop) a db that might have been serving before this deploy;
+    // the abort note below says so explicitly instead of guessing.
+    dbPriorStateUnknown = true;
+  }
+
+  // The engine may stop the db again ONLY when this deploy is what started
+  // it, and only before traffic has moved. `stop()` is idempotent, returns
+  // the exact sentence to append to a failure message, and never throws:
+  // a stop that itself fails must be reported as "still running", never
+  // swallowed into an implied clean state.
+  const dbGuard = {
+    stoppable: false,
+    handled: false,
+    cutoverDone: false,
+    // Set only on ensure-db's own `up` failure, where a container may never
+    // have been created at all — see that path for why the wording differs.
+    startWording: false,
+    async stop() {
+      if (this.handled || this.cutoverDone) return '';
+      if (!this.stoppable) {
+        return dbPriorStateUnknown
+          ? ' The engine could not determine whether the db service was already running before this deploy, so it was left running: check it by hand and stop it if this deploy started it, before starting any other stack on these volumes.'
+          : '';
+      }
+      this.handled = true;
+      try {
+        await run([...composePrefix(), 'stop', 'db'], deployEnv);
+        return this.startWording
+          ? ' `compose stop db` has been issued for the db this deploy was starting, so nothing this deploy started is left running on these volumes.'
+          : ' The db service this deploy started has been stopped again.';
+      } catch (stopError) {
+        return ` The db service this deploy started could NOT be stopped (${redact(stopError)}) and is STILL RUNNING on this deployment's volumes: stop it by hand (docker compose ${composeArgs.join(' ')} stop db) before starting any other stack on these volumes.`;
+      }
+    },
+  };
+  deps.dbGuard = dbGuard;
+  const stopDbOnAbort = () => dbGuard.stop();
+
   try {
     await run([...composePrefix(), 'up', '-d', '--wait', 'db'], deployEnv);
   } catch (error) {
-    return result(1, '', `Blue-green deploy failed: could not start the db service: ${redact(error)}\n`);
+    // `up --wait` can fail with the container left created/running (an
+    // unhealthy start), so a db this deploy tried to start is still this
+    // deploy's to clean up. Round-2 fix: the failure may equally have left
+    // NO container at all, so this path gets its own wording — "stopped
+    // again" would overclaim — while still actually issuing the stop.
+    if (!dbWasAlreadyRunning && !dbPriorStateUnknown) {
+      dbGuard.stoppable = true;
+      dbGuard.startWording = true;
+    }
+    return result(
+      1,
+      '',
+      `Blue-green deploy failed: could not start the db service: ${redact(error)}.${await stopDbOnAbort()}\n`,
+    );
   }
+  if (!dbWasAlreadyRunning && !dbPriorStateUnknown) dbGuard.stoppable = true;
 
   // Phase 2: backup
   writeDeployStatus(resolvedStateDir, 'backup', options.skipBackup ? 'skipped' : 'starting pre-migration backup');
@@ -923,7 +1189,11 @@ async function executeDeploy(deps) {
         now,
       });
     } catch (error) {
-      return result(1, '', `Blue-green deploy failed: pre-migration backup failed: ${redact(error)}\n`);
+      return result(
+        1,
+        '',
+        `Blue-green deploy failed: pre-migration backup failed: ${redact(error)}.${await stopDbOnAbort()}\n`,
+      );
     }
   }
 
@@ -1005,7 +1275,7 @@ async function executeDeploy(deps) {
     return result(
       1,
       unknownAppliedWarning,
-      `Blue-green deploy aborted: migration gate blocked ${gate.blocked.length} finding(s). Pass --allow-destructive-migration only after confirming the old colour tolerates these changes.\n${findings}\n`,
+      `Blue-green deploy aborted: migration gate blocked ${gate.blocked.length} finding(s). Pass --allow-destructive-migration only after confirming the old colour tolerates these changes.${await stopDbOnAbort()}\n${findings}\n`,
     );
   }
   const destructiveOverrideUsed = gate.overridden.length > 0;
@@ -1028,7 +1298,7 @@ async function executeDeploy(deps) {
     return result(
       1,
       unknownAppliedWarning,
-      `Blue-green deploy failed: migration failed: ${redact(error)}. Jobs were restarted on the old tag (${oldCommit ?? 'none'}); the old colour was never touched and remains serving.\n`,
+      `Blue-green deploy failed: migration failed: ${redact(error)}. Jobs were restarted on the old tag (${oldCommit ?? 'none'}); the old colour was never touched and remains serving.${await stopDbOnAbort()}\n`,
     );
   }
 
@@ -1061,7 +1331,7 @@ async function executeDeploy(deps) {
     return result(
       1,
       unknownAppliedWarning,
-      `Blue-green deploy failed: starting ${target} containers failed: ${redact(error)}. Traffic was never switched; the old colour remains live.${recoveryNote}\n`,
+      `Blue-green deploy failed: starting ${target} containers failed: ${redact(error)}. Traffic was never switched; the old colour remains live.${recoveryNote}${await stopDbOnAbort()}\n`,
     );
   }
 
@@ -1113,7 +1383,7 @@ async function executeDeploy(deps) {
     return result(
       1,
       unknownAppliedWarning,
-      `Blue-green deploy failed: candidate smoke test failed on the ${target} colour: ${redact(error)}. Traffic was never switched; the old colour remains live.${recoveryNote}\n`,
+      `Blue-green deploy failed: candidate smoke test failed on the ${target} colour: ${redact(error)}. Traffic was never switched; the old colour remains live.${recoveryNote}${await stopDbOnAbort()}\n`,
     );
   }
 
@@ -1142,7 +1412,7 @@ async function executeDeploy(deps) {
     return result(
       1,
       unknownAppliedWarning,
-      `Blue-green deploy failed: starting Caddy failed while switching to ${target}: ${redact(error)}. Traffic was never switched; the old colour remains live.${recoveryNote}\n`,
+      `Blue-green deploy failed: starting Caddy failed while switching to ${target}: ${redact(error)}. Traffic was never switched; the old colour remains live.${recoveryNote}${await stopDbOnAbort()}\n`,
     );
   }
   const previousUpstreams = existsSync(deps.activeUpstreamsPath) ? readFileSync(deps.activeUpstreamsPath, 'utf8') : null;
@@ -1183,9 +1453,15 @@ async function executeDeploy(deps) {
     return result(
       1,
       unknownAppliedWarning,
-      `Blue-green deploy failed: Caddy reload failed while switching to ${target}: ${redact(error)}. The previous upstream file was restored and reloaded; traffic was never switched.${recoveryNote}\n`,
+      `Blue-green deploy failed: Caddy reload failed while switching to ${target}: ${redact(error)}. The previous upstream file was restored and reloaded; traffic was never switched.${recoveryNote}${await stopDbOnAbort()}\n`,
     );
   }
+
+  // VM-cutover defect 2a: traffic has now actually moved. From here on the
+  // db legitimately stays up whatever happens — the new colour is serving
+  // from it, and even the public-smoke revert path below puts the OLD
+  // colour back in front of it. Nothing past this line may stop it.
+  dbGuard.cutoverDone = true;
 
   // Phase 12: public-smoke
   writeDeployStatus(resolvedStateDir, 'public-smoke', 'verifying traffic through the front door');
