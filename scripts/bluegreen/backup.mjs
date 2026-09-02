@@ -78,6 +78,33 @@ import { DOCUMENT_ARCHIVE_IMAGE } from '../personal-server.mjs';
 const DEFAULT_DATABASE_NAME = 'charitypilot';
 const DEFAULT_DATABASE_USER = 'charitypilot';
 const DEFAULT_DOCUMENTS_VOLUME = 'charitypilot-bluegreen-documents';
+// VM-cutover defect 1: EVERY container this module runs against a documents
+// volume must run as uid/gid 1000 — the uid that owns the documents on both
+// deployment shapes this engine serves.
+//
+//  - Appliance/private-VM volume (`charitypilot-personal-server-documents`):
+//    compose.personal-server.yml creates the volume root as
+//    `install -d -o 1000 -g 1000 -m 0700 /data/documents`. 0700 owned by
+//    1000 is traversable by uid 1000 and by nothing else — and NOT by the
+//    image's default user (root) either, because `--cap-drop ALL` below
+//    strips CAP_DAC_OVERRIDE/CAP_DAC_READ_SEARCH, so uid 0 is subject to
+//    ordinary permission checks like any other user. That is exactly the
+//    real cutover failure: `tar: can't change directory to '/documents':
+//    Permission denied`. The appliance's own equivalent command
+//    (scripts/personal-server.mjs) has always passed `--user 1000:1000` and
+//    has always worked against this volume; matching it makes the engine's
+//    access to the documents identical to the appliance's.
+//  - Hosted/local volume (`charitypilot-bluegreen-documents`): created by
+//    compose as root:root 0755 — traversable by uid 1000 — and every file
+//    inside it is written by the api container, which runs as the image's
+//    `node` user (uid 1000). So 1000 can traverse the root and read every
+//    file: `--user 1000:1000` keeps working there unchanged.
+//
+// The hardening flags are untouched: `--network none`, `--read-only`,
+// `--cap-drop ALL`, `--security-opt no-new-privileges=true` and the
+// `,readonly` mount all still apply — `--user` only narrows what the
+// process is, it never widens it.
+const DOCUMENTS_CONTAINER_USER = '1000:1000';
 const DRILL_DATABASE_NAME = 'charitypilot_drill';
 const DRILL_DATABASE_USER = 'charitypilot_drill';
 const DRILL_CONTAINER_PREFIX = 'charitypilot-bluegreen-drill-';
@@ -396,6 +423,10 @@ function documentsTarCommand(ctx) {
     'ALL',
     '--security-opt',
     'no-new-privileges=true',
+    // See DOCUMENTS_CONTAINER_USER: without this the tar cannot even
+    // traverse the appliance's 0700 documents root.
+    '--user',
+    DOCUMENTS_CONTAINER_USER,
     '--mount',
     `type=volume,src=${ctx.documentsVolume ?? DEFAULT_DOCUMENTS_VOLUME},dst=/documents,readonly`,
     DOCUMENT_ARCHIVE_IMAGE,
@@ -420,6 +451,12 @@ function documentsHashCommand(ctx) {
     'ALL',
     '--security-opt',
     'no-new-privileges=true',
+    // Same uid as documentsTarCommand, and it MUST be the same: the tar and
+    // this per-file hash listing have to see exactly the same set of files,
+    // so a difference in effective user between them could only produce a
+    // manifest that disagrees with its own archive.
+    '--user',
+    DOCUMENTS_CONTAINER_USER,
     '--mount',
     `type=volume,src=${ctx.documentsVolume ?? DEFAULT_DOCUMENTS_VOLUME},dst=/documents,readonly`,
     DOCUMENT_ARCHIVE_IMAGE,
@@ -601,6 +638,30 @@ function drillRowCensusCommand(containerName) {
   return ['docker', 'exec', containerName, 'psql', '-U', DRILL_DATABASE_USER, '-d', DRILL_DATABASE_NAME, '-tAc', ROW_CENSUS_QUERY];
 }
 
+// VM-cutover defect 1, drill side: this path deliberately does NOT take
+// `--user 1000:1000`, and it cannot disagree with itself about who runs.
+//
+// Unlike documentsTarCommand/documentsHashCommand — two SEPARATE `docker
+// run`s against the real documents volume, which is why both need pinning to
+// the volume's owning uid — the extraction and the re-hash here are ONE
+// `docker exec` running ONE shell command inside the throwaway drill
+// container, against a scratch directory (`/drill-documents`) on that
+// container's own anonymous data volume. Extraction and hashing therefore
+// run as the same user by construction; there is no second command whose
+// user could drift.
+//
+// That user is the drill container's default, root (the postgres image sets
+// no USER; its entrypoint re-execs the server as postgres itself), and root
+// here keeps full DAC override — this exec carries no `--cap-drop ALL`,
+// unlike the two hardened `docker run`s above. That matters twice:
+//   - `mkdir -p /drill-documents` writes at the container root, and
+//   - a 0700 directory inside the archive (exactly what the appliance's
+//     documents root is) is extracted with its recorded mode and, since
+//     root DOES hold CAP_CHOWN here, its recorded ownership too — so the
+//     re-hash still traverses it. Running this as uid 1000 instead would
+//     both lose the ownership restore and risk a 0700 directory owned by
+//     some other uid becoming untraversable mid-listing, turning a healthy
+//     backup into a spurious drill failure.
 function drillDocumentsExtractAndHashCommand(containerName, tarFileName) {
   return [
     'docker',
