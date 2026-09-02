@@ -16,15 +16,15 @@ Generated: 2026-09-02 - Source of truth: [`docs/reliability/guarantees.json`](re
 
 | Surface | covered | partial | gap | n/a | Total |
 |---|---|---|---|---|---|
-| API | 359 | 0 | 0 | 14 | 373 |
+| API | 366 | 0 | 0 | 14 | 380 |
 | Web | 112 | 0 | 0 | 6 | 118 |
-| **Total** | **471** | **0** | **0** | **20** | **491** |
+| **Total** | **478** | **0** | **0** | **20** | **498** |
 
-**API suite:** 1156 passing, 0 failing. **Web suite:** 411 passing, 0 failing. **E2E linkage:** 31 Playwright titles found; not executed by this command.
+**API suite:** 1172 passing, 0 failing. **Web suite:** 411 passing, 0 failing. **E2E linkage:** 31 Playwright titles found; not executed by this command.
 
 **Executed E2E result:** NOT VERIFIED BY THIS COMMAND. Use a successful managed E2E workflow or `npm run test:e2e` result bound to the relevant SHA.
 
-**Linkage:** 471/471 covered guarantees verified against a passing/linked test.
+**Linkage:** 478/478 covered guarantees verified against a passing/linked test.
 
 **Linkage check: COMPLETE**
 
@@ -55,7 +55,7 @@ no data loss / accessibility & resilience.
 
 ---
 
-## API surface - the matrix (373 guarantees)
+## API surface - the matrix (380 guarantees)
 
 ### auth - `/api/v1/auth`
 
@@ -552,6 +552,8 @@ _10 guarantees - covered 10_
 | Authorization boundary | No file under src/routes/ or src/services/, other than the allowlisted appliance-lifecycle files, references CHARITYPILOT_DEPLOYMENT_MODE directly. | covered | `no route or service file outside the allowlist references CHARITYPILOT_DEPLOYMENT_MODE directly`<br/><sub>deployment-profile-structure.test.ts</sub> |
 | Auth & session integrity | Adding the CHARITYPILOT_CANONICAL_WEB_ORIGIN / CHARITYPILOT_CANONICAL_API_ORIGIN override vars did not loosen the default: with neither var set, production env validation still requires FRONTEND_URL to equal the canonical https://app.charitypilot.ie origin. | covered | `defaults unchanged: canonical charitypilot.ie origins still required with no new vars`<br/><sub>deployment-origins-env.test.ts</sub> |
 | Observability | The deadline-reminders job's own env validator honours CHARITYPILOT_ERROR_ALERTS symmetrically: set to none it does not require ERROR_ALERT_WEBHOOK_URL, and set to webhook it still requires ERROR_ALERT_WEBHOOK_URL to be configured. | covered | `job validator (deadline reminders): alerts=none both directions`<br/><sub>deployment-origins-env.test.ts</sub> |
+| env-validation | The filled private-VM env template passes assertDeploymentProfile, validateProductionEnv, and validateDeadlineRemindersEnv. | covered | `private VM template: the filled template passes the deployment profile, production, and job validators`<br/><sub>private-vm-env-profile.test.ts</sub> |
+| env-validation | The private-VM template exercises the multi-tenant validator branch: removing OWNER_JWT_SECRET is fatal. | covered | `private VM template: it runs the multi-tenant validator branch (dropping OWNER_JWT_SECRET is fatal)`<br/><sub>private-vm-env-profile.test.ts</sub> |
 
 ### bluegreen
 
@@ -565,6 +567,11 @@ _10 guarantees - covered 10_
 | Graceful degradation | A failure starting the target colour's containers (phase 9, `up -d --wait`) during a deploy restarts the scheduler on the OLD tag, so jobs are never left stopped even though the old colour is what keeps serving. | covered | `I1: phase 9 (up) failure restarts jobs on the OLD tag with --wait`<br/><sub>scripts/bluegreen-deploy.test.mjs</sub> |
 | State integrity / no data loss | Rollback brings the previous colour's containers up and confirmed healthy (`up -d --wait`) BEFORE reloading Caddy onto them, so traffic can never be pointed at containers that were never confirmed healthy. | covered | `I2: rollback brings the previous colour up (with --wait) BEFORE reloading Caddy onto it`<br/><sub>scripts/bluegreen-deploy.test.mjs</sub> |
 | State integrity / no data loss | runRestoreDrill refuses a documents tar containing zero files when the restored database reports Document rows > 0, rather than passing vacuously against a manifest that also recorded zero document entries. | covered | `runRestoreDrill refuses a documents tar with zero files when the restored database reports Document rows > 0`<br/><sub>scripts/bluegreen/backup.test.mjs</sub> |
+| State integrity / no data loss | The engine's migration-gate psql and its backup/drill use the database identity declared by the env file's POSTGRES_DB/POSTGRES_USER, defaulting to charitypilot/charitypilot when unset. | covered | `P3-1: the gate psql, pg backup, and drill all use the env file database identity`<br/><sub>scripts/bluegreen-deploy.test.mjs</sub> |
+| State integrity / no data loss | Preflight refuses a DATABASE_URL whose database or user differs from the resolved POSTGRES_DB/POSTGRES_USER identity, naming both. | covered | `P3-1: preflightIssues rejects a DATABASE_URL whose database or user disagrees with the resolved identity`<br/><sub>scripts/bluegreen-deploy.test.mjs</sub> |
+| State integrity / no data loss | When BLUEGREEN_COMPOSE_OVERRIDE is set, every docker compose invocation the engine makes and the composeArgs handed to backup carry it as a second -f after compose.bluegreen.yml. | covered | `P3-2: every docker compose call and the backup composeArgs carry the override -f when set`<br/><sub>scripts/bluegreen-deploy.test.mjs</sub> |
+| Graceful degradation | A deploy brings the db service up (up -d --wait db) before the pre-migration backup and before any exec against db, so a first deploy on a stopped stack does not fail at phase 2. | covered | `P3-3: a deploy brings db up (with --wait) before the backup runs and before any exec against db`<br/><sub>scripts/bluegreen-deploy.test.mjs</sub> |
+| State integrity / no data loss | The committed private-VM env template, with placeholders filled, passes engine preflight with zero issues. | covered | `P3-5: the committed private-VM env template, filled in, passes engine preflight with zero issues`<br/><sub>scripts/bluegreen-deploy.test.mjs</sub> |
 
 ---
 

@@ -299,10 +299,14 @@ deploy → switch → second deploy → rollback — run on the development host
 ## Mechanism
 
 `compose.bluegreen.yml` references the appliance's named volumes
-(`personal-server-db`, `personal-server-documents`) as `external: true` and
-pins the same Postgres major (16). Stopping the appliance stack and starting
-the blue-green stack changes processes, never data. The existing charity is
-tenant #1 as-is; its logins are untouched.
+(`charitypilot-personal-server-db`, `charitypilot-personal-server-documents`
+— the Docker names, compose.personal-server.yml:329-333) as `external: true`
+and pins the same Postgres major (16). Stopping the appliance stack and
+starting the blue-green stack changes processes, never data. The existing
+charity is tenant #1 as-is; its logins are untouched. The override is
+`compose.bluegreen.private-vm.yml`, selected by `BLUEGREEN_COMPOSE_OVERRIDE`
+in the VM env file; the engine's psql/pg_dump identity follows
+`POSTGRES_DB`/`POSTGRES_USER` (`charitypilot_personal_server`).
 
 The VM's new env file sets: `CHARITYPILOT_TENANCY=multi`,
 `CHARITYPILOT_REGISTRATION=closed`, `CHARITYPILOT_EMAIL_DELIVERY=manual-link`,
