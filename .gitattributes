@@ -1,2 +1,3 @@
 caddy/*.caddy text eol=lf
 caddy/Caddyfile.* text eol=lf
+scripts/bluegreen-nightly-backup.sh text eol=lf
