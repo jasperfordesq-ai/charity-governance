@@ -2212,3 +2212,30 @@ test('P3-3: a deploy brings db up (with --wait) before the backup runs and befor
   assert.ok(phases.indexOf('ensure-db') < phases.indexOf('backup'), phases.join(' → '));
   rmSync(stateDir, { recursive: true, force: true });
 });
+
+test('P3-5: the committed private-VM env template, filled in, passes engine preflight with zero issues', async () => {
+  const { preflightIssues, parseEnvFile } = await loadDeployModule();
+  const repoRoot = dirname(scriptsDir);
+  let text = readFileSync(join(repoRoot, '.env.bluegreen.private-vm.example'), 'utf8');
+  const dir = makeFixtureDir('bluegreen-vm-template-');
+  const envPath = join(dir, 'private-vm.env');
+  const fill = {
+    REPLACE_ME_TAILSCALE_HOSTNAME: 'charitypilot.tail0000.ts.net',
+    REPLACE_ME_POSTGRES_DB: 'charitypilot_personal_server',
+    REPLACE_ME_POSTGRES_USER: 'charitypilot_personal_server',
+    REPLACE_ME_POSTGRES_PASSWORD: 'a'.repeat(64),
+    REPLACE_ME_JWT_SECRET: 'j'.repeat(48),
+    REPLACE_ME_AUTH_RECOVERY_SECRET: '0123456789abcdef'.repeat(4),
+    REPLACE_ME_READINESS_API_KEY: 'r'.repeat(40),
+    REPLACE_ME_OWNER_JWT_SECRET: 'o'.repeat(48),
+    REPLACE_ME_ENV_FILE_PATH: envPath,
+  };
+  for (const [key, value] of Object.entries(fill)) text = text.split(key).join(value);
+  assert.doesNotMatch(text, /REPLACE_ME_/);
+  writeFileSync(envPath, text);
+  const fileEnv = parseEnvFile(envPath);
+  assert.equal(fileEnv.BLUEGREEN_COMPOSE_OVERRIDE, 'compose.bluegreen.private-vm.yml');
+  assert.equal(fileEnv.BLUEGREEN_DOCUMENTS_VOLUME, 'charitypilot-personal-server-documents');
+  assert.deepEqual(preflightIssues({ fileEnv, resolvedEnvFilePath: envPath }), []);
+  rmSync(dir, { recursive: true, force: true });
+});
