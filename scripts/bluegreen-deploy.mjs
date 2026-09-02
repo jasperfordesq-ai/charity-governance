@@ -65,10 +65,12 @@ import { spawn, spawnSync } from 'node:child_process';
 import {
   closeSync,
   existsSync,
+  fsyncSync,
   mkdirSync,
   openSync,
   readdirSync,
   readFileSync,
+  renameSync,
   rmSync,
   statSync,
   writeFileSync,
@@ -684,28 +686,174 @@ function frontPort(fileEnv) {
 // Default (real) dependency implementations
 // ---------------------------------------------------------------------------
 
-async function defaultRunCommand(command, options = {}) {
+// VM-cutover defect 3: spawnSync's maxBuffer default is 1 MiB, and going
+// over it is not a polite truncation — the child is KILLED and spawnSync
+// returns `status: null` with `error.code === 'ENOBUFS'`. A real cutover
+// died in phase 2 tarring an 8.4 MB documents volume and reported only
+// "failed with exit code unknown" with no stderr, because the message read
+// nothing but `status` and `stderr`.
+//
+// This cap governs only output this function CAPTURES as a string: the row
+// census, the per-document sha256 listing (which grows with the document
+// count — a charity with thousands of files is far over 1 MiB),
+// `docker ps`/`compose ps`/`compose config` probes, `git rev-parse`, and
+// readiness bodies. 256 MiB is far above any of them. Exceeding it is
+// STILL an ENOBUFS kill — raising the cap does not change the mechanism —
+// but the kill now NAMES ITSELF (see commandFailureMessage) instead of
+// surfacing as "exit code unknown". The genuinely unbounded artifacts (pg_dump -Fc, the
+// documents tar) never come through the capture path at all: they stream
+// straight to a file descriptor in runCommandToOutputFile below, so a large
+// documents volume is bounded by DISK, not by this process's RAM.
+const COMMAND_OUTPUT_MAX_BUFFER = 256 * 1024 * 1024;
+
+// One failure message for every way spawnSync can fail, so no class of
+// failure can misreport itself again:
+//   - non-zero exit      -> "... failed with exit code 3: <stderr>"
+//   - spawn-level error   -> "... failed: ENOENT: spawnSync docker ENOENT"
+//                            (ENOBUFS/EACCES/E2BIG all name themselves too)
+//   - killed by a signal  -> "... failed: killed by signal SIGKILL"
+//   - error + signal      -> "... failed: ENOBUFS: <msg> (killed by signal SIGTERM)"
+// `status: null` with neither an error nor a signal is not supposed to be
+// reachable, but it still says so explicitly rather than printing "unknown".
+//
+// Exported so the reliability suite can table-test every shape directly:
+// two of these branches (signal-only, and nothing-reported) cannot be
+// provoked from a real child process on demand, and the ledger row that
+// claims all of them has to be able to prove all of them.
+export function commandFailureMessage(command, spawnResult, stderrText) {
+  const detail = stderrText ? `: ${stderrText.slice(0, 2000)}` : '';
+  const signalSuffix = spawnResult.signal ? ` (killed by signal ${spawnResult.signal})` : '';
+  if (spawnResult.error) {
+    const code = spawnResult.error.code ? `${spawnResult.error.code}: ` : '';
+    return `${commandLine(command)} failed: ${code}${spawnResult.error.message}${signalSuffix}${detail}`;
+  }
+  if (spawnResult.status === null || spawnResult.status === undefined) {
+    const cause = spawnResult.signal
+      ? `killed by signal ${spawnResult.signal}`
+      : 'no exit code, no signal and no spawn error were reported';
+    return `${commandLine(command)} failed: ${cause}${detail}`;
+  }
+  return `${commandLine(command)} failed with exit code ${spawnResult.status}${signalSuffix}${detail}`;
+}
+
+// spawnSync does not only fail by RETURNING a failure — it can also THROW
+// (argument validation) instead of returning a result at all, in which case
+// there is no `spawnResult` to describe. Round-1 review: the outputFile path
+// used to reach for `spawnResult.status` after such a throw and raise a bare
+// TypeError naming no command. Every spawn goes through here so that a throw
+// still identifies the command that could not be started.
+function spawnCommandSync(command, spawnOptions) {
+  try {
+    return spawnSync(command[0], command.slice(1), spawnOptions);
+  } catch (error) {
+    throw new Error(commandFailureMessage(command, { error }, ''));
+  }
+}
+
+// The post-spawn filesystem steps (fsync, size check, rename) can fail on
+// their own — ENOSPC or EIO while flushing a multi-GB documents tar is the
+// realistic one. Those errors must still name the command whose artifact
+// they were publishing, or the operator gets a bare `EIO: fsync` with no
+// idea which phase produced it.
+function artifactStepFailure(command, description, error) {
+  const code = error?.code ? `${error.code}: ` : '';
+  return new Error(`${commandLine(command)} ${description}: ${code}${error?.message ?? String(error)}`);
+}
+
+// Streams the child's stdout DIRECTLY to a file descriptor. stderr stays
+// piped (capped by COMMAND_OUTPUT_MAX_BUFFER) so a failure still explains
+// itself.
+//
+// File-on-failure semantics: the old implementation captured the whole
+// artifact in memory and only `writeFileSync`d it after a zero exit, so on
+// failure `outputFile` did not exist. Streaming would otherwise leave a
+// truncated dump/tar sitting exactly where runBackup's `sha256File` and the
+// manifest expect a complete one. That property is deliberately PRESERVED
+// AND STRENGTHENED: the child writes to `<outputFile>.partial`, which is
+// fsynced and renamed into place only after a zero exit AND a non-empty
+// size check, and is removed on EVERY failure path — a spawn that throws, a
+// spawn-level error, a non-zero exit, a failed fsync, an empty artifact, or
+// a failed rename. (The round-1 review caught the fsync, empty and rename
+// paths escaping the old cleanup, which sat inside the non-zero-exit branch
+// only.) So `outputFile` never exists unless it is complete and durable,
+// and the rename is atomic within the backup directory — strictly better
+// than the previous non-atomic whole-file write, at no cost to the caller.
+//
+// The empty-artifact refusal (round-1 review) mirrors
+// scripts/personal-server.mjs:933. Neither real caller can legitimately
+// produce zero bytes: `pg_dump -Fc` always emits a custom-format header
+// even for an empty database, and `tar -cf -` always emits at least one
+// member plus its zero-block trailer even for an empty directory. So zero
+// bytes means the child wrote nothing — and publishing that would let
+// runBackup hash and manifest an empty dump that stays self-consistent
+// (and so passes a restore drill vacuously, the drill being a separate
+// subcommand) until someone needs a real restore. Same "cannot pass
+// vacuously" rule the previous fix round applied to the documents volume
+// name; there is deliberately no escape hatch.
+function runCommandToOutputFile(command, { env, cwd, outputFile }) {
+  const partialFile = `${outputFile}.partial`;
+  rmSync(partialFile, { force: true });
+  const fd = openSync(partialFile, 'w', 0o600);
+  try {
+    let spawnResult;
+    try {
+      spawnResult = spawnCommandSync(command, {
+        cwd,
+        env: env ?? process.env,
+        stdio: ['ignore', fd, 'pipe'],
+        maxBuffer: COMMAND_OUTPUT_MAX_BUFFER,
+      });
+      if (spawnResult.status === 0) {
+        try {
+          fsyncSync(fd);
+        } catch (error) {
+          throw artifactStepFailure(command, `succeeded but its output could not be flushed to ${partialFile}`, error);
+        }
+      }
+    } finally {
+      closeSync(fd);
+    }
+    if (spawnResult.status !== 0) {
+      const stderrText = spawnResult.stderr ? spawnResult.stderr.toString('utf8') : '';
+      throw new Error(commandFailureMessage(command, spawnResult, stderrText));
+    }
+    const bytesWritten = statSync(partialFile).size;
+    if (bytesWritten <= 0) {
+      throw new Error(
+        `${commandLine(command)} exited 0 but wrote ZERO bytes to ${outputFile}; refusing to publish an empty artifact (an empty dump or tar would still hash and drill consistently, so it would only surface at a real restore)`,
+      );
+    }
+    try {
+      renameSync(partialFile, outputFile);
+    } catch (error) {
+      throw artifactStepFailure(command, `produced ${bytesWritten} bytes that could not be published to ${outputFile}`, error);
+    }
+  } catch (error) {
+    // Every failure path above lands here, so no partial dump or tar is ever
+    // left behind for the manifest, the pruner or a drill to find.
+    rmSync(partialFile, { force: true });
+    throw error;
+  }
+  return { stdout: '' };
+}
+
+// Exported for the reliability tests: the buffering posture of this real
+// implementation (not an injected fake) is exactly what VM-cutover defect 3
+// was, so it has to be testable directly.
+export async function defaultRunCommand(command, options = {}) {
   const { env, cwd = repoRoot, outputFile } = options;
-  const spawnResult = spawnSync(command[0], command.slice(1), {
+  // Contract (see backup.mjs's ctx shape notes): the outputFile case
+  // resolves { stdout: '' } — callers read the FILE, never the resolved
+  // stdout — and both cases throw on a non-zero exit.
+  if (outputFile) return runCommandToOutputFile(command, { env, cwd, outputFile });
+  const spawnResult = spawnCommandSync(command, {
     cwd,
     env: env ?? process.env,
-    encoding: outputFile ? undefined : 'utf8',
+    encoding: 'utf8',
+    maxBuffer: COMMAND_OUTPUT_MAX_BUFFER,
   });
   if (spawnResult.status !== 0) {
-    const stderrText = outputFile
-      ? spawnResult.stderr
-        ? spawnResult.stderr.toString('utf8')
-        : ''
-      : spawnResult.stderr ?? '';
-    throw new Error(
-      `${commandLine(command)} failed with exit code ${spawnResult.status ?? 'unknown'}${
-        stderrText ? `: ${stderrText.slice(0, 2000)}` : ''
-      }`,
-    );
-  }
-  if (outputFile) {
-    writeFileSync(outputFile, spawnResult.stdout);
-    return { stdout: '' };
+    throw new Error(commandFailureMessage(command, spawnResult, spawnResult.stderr ?? ''));
   }
   return { stdout: spawnResult.stdout ?? '', stderr: spawnResult.stderr ?? '' };
 }
