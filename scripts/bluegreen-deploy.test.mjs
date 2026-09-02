@@ -1996,3 +1996,60 @@ test('P3-1: preflightIssues rejects a DATABASE_URL whose database or user disagr
     [],
   );
 });
+
+test('P3-1: the standalone backup subcommand passes the env file database identity to runBackup', async () => {
+  const runDeploy = await loadDeployRunner();
+  const stateDir = makeFixtureDir('bluegreen-db-identity-backup-subcommand-');
+  const envPath = join(stateDir, 'vm.env');
+  writeEnvFile(envPath, {
+    POSTGRES_DB: 'charitypilot_personal_server',
+    POSTGRES_USER: 'charitypilot_personal_server',
+    DATABASE_URL: 'postgresql://charitypilot_personal_server:pw@db:5432/charitypilot_personal_server',
+  });
+  const { runCommand } = makeFakeRunCommand();
+  const backupCtxs = [];
+  const deps = {
+    runCommand,
+    runBackupImpl: async (ctx) => {
+      backupCtxs.push(ctx);
+      return { plan: { dir: join(stateDir, 'backups', 'x') }, manifest: {} };
+    },
+  };
+  const outcome = await runDeploy(['backup', '--env-file', envPath, '--state-dir', stateDir], deps);
+  assert.equal(outcome.status, 0, outcome.stderr);
+  assert.equal(backupCtxs.length, 1);
+  assert.equal(backupCtxs[0].databaseName, 'charitypilot_personal_server');
+  assert.equal(backupCtxs[0].databaseUser, 'charitypilot_personal_server');
+  rmSync(stateDir, { recursive: true, force: true });
+});
+
+test('P3-1: the restore-drill subcommand passes the env file database identity to runRestoreDrill', async () => {
+  const runDeploy = await loadDeployRunner();
+  const stateDir = makeFixtureDir('bluegreen-db-identity-restore-drill-subcommand-');
+  const envPath = join(stateDir, 'vm.env');
+  writeEnvFile(envPath, {
+    POSTGRES_DB: 'charitypilot_personal_server',
+    POSTGRES_USER: 'charitypilot_personal_server',
+    DATABASE_URL: 'postgresql://charitypilot_personal_server:pw@db:5432/charitypilot_personal_server',
+  });
+  // executeRestoreDrillCommand refuses with no backups found under the state
+  // directory (latestBackupDir), so seed a minimal backup dir to reach ctx
+  // construction — its contents are never read here since runRestoreDrillImpl
+  // is faked.
+  mkdirSync(join(stateDir, 'backups', '2026-08-31T00-00-00-000Z'), { recursive: true });
+  const { runCommand } = makeFakeRunCommand();
+  const drillCtxs = [];
+  const deps = {
+    runCommand,
+    runRestoreDrillImpl: async (ctx) => {
+      drillCtxs.push(ctx);
+      return { ok: true, rowCensus: {} };
+    },
+  };
+  const outcome = await runDeploy(['restore-drill', '--env-file', envPath, '--state-dir', stateDir], deps);
+  assert.equal(outcome.status, 0, outcome.stderr);
+  assert.equal(drillCtxs.length, 1);
+  assert.equal(drillCtxs[0].databaseName, 'charitypilot_personal_server');
+  assert.equal(drillCtxs[0].databaseUser, 'charitypilot_personal_server');
+  rmSync(stateDir, { recursive: true, force: true });
+});
