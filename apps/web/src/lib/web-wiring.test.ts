@@ -3361,3 +3361,22 @@ test('remaining public action controls use shared action button styling', () => 
   assert.match(blogClient, /primaryActionButtonClasses/);
   assert.doesNotMatch(blogClient, /className="bg-teal-primary px-6 font-semibold text-white/);
 });
+
+test('bare /owner redirects into the console instead of 404ing', () => {
+  // A bare /owner had no route at all until 2026-09-02, so an operator who typed or
+  // bookmarked the obvious URL got a 404 and had to discover /owner/tenants.
+  const src = app(join('(owner)', 'owner', 'page.tsx'));
+  assert.ok(src.includes('next/navigation'), 'imports redirect from next/navigation');
+  assert.ok(src.includes('redirect('), 'calls redirect()');
+  assert.ok(src.includes('/owner/tenants'), 'targets the console home');
+  // Must NOT send everyone to the login page: an authenticated operator has to land on
+  // the console. Unauthenticated visitors still reach login via owner-api's 401
+  // interceptor (redirectToOwnerLogin), which is what makes /owner/tenants the right
+  // target here.
+  // String.fromCharCode(39) is a single quote: build the exact call text so this
+  // matches redirect('/owner/login') and not the prose in page.tsx's own comment.
+  const Q = String.fromCharCode(39);
+  const loginRedirect = 'redirect(' + Q + '/owner/login' + Q + ')';
+  assert.ok(!src.includes(loginRedirect), 'must not bounce signed-in operators to login');
+  assert.ok(lib('owner-api.ts').includes('redirectToOwnerLogin'), 'owner-api sends unauthenticated callers to login');
+});
