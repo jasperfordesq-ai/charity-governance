@@ -225,7 +225,19 @@ history always shows exactly how far a deploy got.
   disk instead of through this process's memory, so a large documents volume
   is bounded by DISK on the state directory, not by RAM — and the artifact
   appears at its final path only once it is complete and fsynced (a failed
-  command leaves no partial dump or tar for the manifest to hash).
+  command, a failed flush, or a failed publish leaves no partial dump or tar
+  for the manifest to hash).
+- **A backup artifact came out empty.** A command that exits 0 having written
+  ZERO bytes is refused instead of published: `... exited 0 but wrote ZERO
+  bytes to <path>; refusing to publish an empty artifact`. Neither real
+  producer can legitimately be empty (`pg_dump -Fc` always writes a
+  custom-format header; `tar -cf -` always writes at least one member plus
+  its zero-block trailer), so this means the child wrote nothing — check the
+  named command's stderr in the deploy log. Nothing is published, so the
+  manifest is never written and no backup directory is left looking valid.
+  This is the same "a check that cannot fail is worthless" rule as the
+  documents-volume-name refusal above: an empty dump would otherwise hash
+  and drill perfectly consistently and only surface at a real restore.
 - **Migration gate blocks** — the deploy aborts *before quiesce*; nothing
   was touched at all (no container stopped **except a `db` this deploy itself
   started** — see the next bullet; no lock left held).
