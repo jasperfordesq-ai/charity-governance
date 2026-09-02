@@ -757,3 +757,6 @@ scp -i $KEY -r "cpops@charitypilot.local:$NEWEST" D:\CharityPilot-VM\backups\blu
 
 <!-- Cutover acceptance marker (2026-09-02): trivial docs touch used as the step-8 redeploy commit
      for the private VM blue->green cutover proof. Safe to keep or drop. -->
+
+<!-- Zero-downtime measurement deploy (2026-09-02): trivial docs touch used as the target
+     commit for a continuously-polled blue->green switch. Safe to keep or drop. -->
