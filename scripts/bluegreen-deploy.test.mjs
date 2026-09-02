@@ -1,9 +1,10 @@
 import assert from 'node:assert/strict';
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { test } from 'node:test';
+import { createHash } from 'node:crypto';
 
 const scriptsDir = dirname(fileURLToPath(import.meta.url));
 const repoRoot = dirname(scriptsDir);
@@ -2814,7 +2815,7 @@ test('round 2: ensure-db up failure does not claim a container was stopped again
 // -----------------------------------------------------------------------------
 // VM-cutover defect 3: spawnSync output buffering
 //
-// These four drive defaultRunCommand's REAL implementation (never an injected
+// These drive defaultRunCommand's REAL implementation (never an injected
 // fake) because the defect WAS the real implementation's buffering posture.
 // A live cutover died in phase 2 on an 8.4 MB documents tar: spawnSync's
 // default 1 MiB maxBuffer killed the child, returned status:null with
@@ -2822,18 +2823,61 @@ test('round 2: ensure-db up failure does not claim a container was stopped again
 // with no stderr. The P2 acceptance never caught it because its seeded
 // document set was a few KB, so size is exactly what is asserted here.
 //
-// The generator is `node -e` writing N bytes to stdout: portable across this
-// Windows host and the Linux VM, and no /dev/urandom or `head -c`.
+// Payloads are deterministic, non-repeating, and BYTE-EXACT-checked rather
+// than merely counted: the real artifacts are `pg_dump -Fc` and a tar, so a
+// stdio path that translated CRLF or decoded bytes as text would corrupt
+// them silently while the size still matched. The emitter is a generated
+// .cjs script (unambiguously CommonJS regardless of the repo's module type)
+// run by process.execPath — portable across this Windows host and the Linux
+// VM, and no /dev/urandom or `head -c`.
 // -----------------------------------------------------------------------------
 
 const OVER_SPAWN_BUFFER_BYTES = 3 * 1024 * 1024; // comfortably over Node's 1 MiB default
 
-function stdoutGeneratorCommand(byteCount) {
-  return [
-    process.execPath,
-    '-e',
-    `process.stdout.write('x'.repeat(${byteCount}))`,
-  ];
+function sha256Hex(buffer) {
+  return createHash('sha256').update(buffer).digest('hex');
+}
+
+// Non-repeating over the whole 3 MiB (a 32-bit LCG has period 2^32) and
+// seeded with CR, LF, CRLF, NUL and 0xff at regular offsets — precisely the
+// bytes a line-ending-translating or text-decoding path mangles.
+function deterministicBinaryPayload(byteCount) {
+  const buffer = Buffer.alloc(byteCount);
+  let state = 0x2545f491;
+  for (let i = 0; i < byteCount; i += 1) {
+    state = (Math.imul(state, 1664525) + 1013904223) >>> 0;
+    buffer[i] = (state >>> 16) & 0xff;
+  }
+  for (let i = 0; i + 5 < byteCount; i += 4096) {
+    buffer[i] = 0x0d;
+    buffer[i + 1] = 0x0a;
+    buffer[i + 2] = 0x00;
+    buffer[i + 3] = 0xff;
+    buffer[i + 4] = 0x0d;
+    buffer[i + 5] = 0x0d;
+  }
+  return buffer;
+}
+
+// The capture path returns a utf8 STRING, so its payload has to be
+// byte-exact under utf8 — ASCII, but still non-repeating and still full of
+// CR/LF (this is what the sha256 hash listing actually looks like).
+function deterministicTextPayload(byteCount) {
+  let text = '';
+  for (let n = 0; text.length < byteCount; n += 1) {
+    text += `${n} ${(Math.imul(n, 2654435761) >>> 0).toString(36)}\r\n`;
+  }
+  return text.slice(0, byteCount);
+}
+
+// A generated .cjs emitter, so `require` is available whatever the repo's
+// package type is, and the payload reaches stdout as raw bytes.
+function payloadEmitterCommand(dir, payload) {
+  const emitterPath = join(dir, 'emit-payload.cjs');
+  const payloadPath = join(dir, 'payload.bin');
+  writeFileSync(emitterPath, "process.stdout.write(require('node:fs').readFileSync(process.argv[2]));\n");
+  writeFileSync(payloadPath, payload);
+  return [process.execPath, emitterPath, payloadPath];
 }
 
 test('runCommand: stdout far larger than the 1 MiB spawn buffer streams to the output file whole', async () => {
@@ -2841,19 +2885,25 @@ test('runCommand: stdout far larger than the 1 MiB spawn buffer streams to the o
   assert.equal(typeof module.defaultRunCommand, 'function', 'defaultRunCommand must be exported for this test');
   const dir = makeFixtureDir('bluegreen-runcommand-outputfile-');
   const outputFile = join(dir, 'artifact.bin');
+  const payload = deterministicBinaryPayload(OVER_SPAWN_BUFFER_BYTES);
 
-  const result = await module.defaultRunCommand(stdoutGeneratorCommand(OVER_SPAWN_BUFFER_BYTES), {
-    cwd: dir,
-    outputFile,
-  });
+  const result = await module.defaultRunCommand(payloadEmitterCommand(dir, payload), { cwd: dir, outputFile });
 
   // Contract preserved: the outputFile case still resolves { stdout: '' }.
   assert.equal(result.stdout, '');
+  const written = readFileSync(outputFile);
   assert.equal(
-    statSync(outputFile).size,
+    written.length,
     OVER_SPAWN_BUFFER_BYTES,
     'every byte of the child stdout must reach the file — no 1 MiB truncation, no ENOBUFS kill',
   );
+  assert.equal(
+    sha256Hex(written),
+    sha256Hex(payload),
+    'the artifact must be byte-identical: a pg_dump -Fc or tar survives no CRLF translation and no text decoding',
+  );
+  assert.equal(Buffer.compare(written, payload), 0, 'byte-for-byte comparison must match');
+  assert.equal(existsSync(`${outputFile}.partial`), false, 'the streaming temp file must not survive a success');
 
   rmSync(dir, { recursive: true, force: true });
 });
@@ -2861,13 +2911,19 @@ test('runCommand: stdout far larger than the 1 MiB spawn buffer streams to the o
 test('runCommand: captured stdout far larger than the 1 MiB spawn buffer comes back intact', async () => {
   const module = await loadDeployModule();
   const dir = makeFixtureDir('bluegreen-runcommand-capture-');
+  const text = deterministicTextPayload(OVER_SPAWN_BUFFER_BYTES);
 
-  const result = await module.defaultRunCommand(stdoutGeneratorCommand(OVER_SPAWN_BUFFER_BYTES), { cwd: dir });
+  const result = await module.defaultRunCommand(payloadEmitterCommand(dir, Buffer.from(text, 'utf8')), { cwd: dir });
 
   assert.equal(
     result.stdout.length,
     OVER_SPAWN_BUFFER_BYTES,
-    'the sha256 hash listing and compose config output both exceed 1 MiB on a real charity; capture must not truncate',
+    'the sha256 hash listing and docker compose config output both exceed 1 MiB on a real charity; capture must not truncate',
+  );
+  assert.equal(
+    sha256Hex(Buffer.from(result.stdout, 'utf8')),
+    sha256Hex(Buffer.from(text, 'utf8')),
+    'captured stdout must be byte-identical, CRLF included',
   );
 
   rmSync(dir, { recursive: true, force: true });
@@ -2881,6 +2937,7 @@ test('runCommand: a spawn-level failure names its error code instead of "exit co
     () => module.defaultRunCommand(['charitypilot-no-such-binary-a7f3', '--version'], { cwd: dir }),
     (error) => {
       assert.match(error.message, /ENOENT/, 'the spawn-level error code must appear in the message');
+      assert.match(error.message, /charitypilot-no-such-binary-a7f3/, 'the failing command must be named');
       assert.doesNotMatch(
         error.message,
         /exit code unknown/,
@@ -2889,6 +2946,107 @@ test('runCommand: a spawn-level failure names its error code instead of "exit co
       return true;
     },
   );
+
+  rmSync(dir, { recursive: true, force: true });
+});
+
+// Round-1 review, Important 3: ENOENT above exercises exactly one branch of
+// commandFailureMessage. The signal-only and "nothing reported" branches
+// cannot be provoked from a real child on demand, so the shapes are
+// table-tested directly against the exported builder — which is what the
+// graceful-degradation ledger row actually claims.
+test('runCommand: commandFailureMessage names every spawnSync failure shape, never "exit code unknown"', async () => {
+  const module = await loadDeployModule();
+  assert.equal(typeof module.commandFailureMessage, 'function', 'commandFailureMessage must be exported');
+  const command = ['docker', 'run', '--rm', 'image', 'tar', '-cf', '-'];
+
+  const cases = [
+    {
+      label: 'non-zero exit',
+      spawnResult: { status: 2, signal: null },
+      stderr: 'tar: /documents: Cannot open',
+      expect: [/failed with exit code 2/, /tar: \/documents: Cannot open/],
+    },
+    {
+      label: 'non-zero exit killed by a signal',
+      spawnResult: { status: 137, signal: 'SIGKILL' },
+      stderr: '',
+      expect: [/failed with exit code 137/, /killed by signal SIGKILL/],
+    },
+    {
+      label: 'ENOBUFS — the defect that cost the cutover',
+      spawnResult: { status: null, signal: 'SIGTERM', error: Object.assign(new Error('spawnSync docker ENOBUFS'), { code: 'ENOBUFS' }) },
+      stderr: '',
+      expect: [/failed: ENOBUFS: spawnSync docker ENOBUFS/, /killed by signal SIGTERM/],
+    },
+    {
+      label: 'ENOENT',
+      spawnResult: { status: null, signal: null, error: Object.assign(new Error('spawnSync docker ENOENT'), { code: 'ENOENT' }) },
+      stderr: '',
+      expect: [/failed: ENOENT: spawnSync docker ENOENT/],
+    },
+    {
+      label: 'EACCES',
+      spawnResult: { status: null, signal: null, error: Object.assign(new Error('spawnSync docker EACCES'), { code: 'EACCES' }) },
+      stderr: '',
+      expect: [/failed: EACCES: spawnSync docker EACCES/],
+    },
+    {
+      label: 'signal kill with no error object',
+      spawnResult: { status: null, signal: 'SIGKILL' },
+      stderr: '',
+      expect: [/failed: killed by signal SIGKILL/],
+    },
+    {
+      label: 'null status with no signal and no error',
+      spawnResult: { status: null, signal: null },
+      stderr: '',
+      expect: [/failed: no exit code, no signal and no spawn error were reported/],
+    },
+    {
+      label: 'a spawn error carrying no code',
+      spawnResult: { status: null, signal: null, error: new Error('something went wrong') },
+      stderr: '',
+      expect: [/failed: something went wrong/],
+    },
+  ];
+
+  for (const testCase of cases) {
+    const message = module.commandFailureMessage(command, testCase.spawnResult, testCase.stderr);
+    for (const pattern of testCase.expect) {
+      assert.match(message, pattern, `${testCase.label}: message must match ${pattern}`);
+    }
+    assert.match(message, /^docker run --rm image tar -cf -/, `${testCase.label}: the command must be named first`);
+    assert.doesNotMatch(message, /exit code unknown/, `${testCase.label}: must never say "exit code unknown"`);
+    assert.doesNotMatch(message, /undefined|\[object Object\]/, `${testCase.label}: must not leak undefined`);
+  }
+});
+
+// Round-1 review, Important 1: spawnSync can THROW instead of returning a
+// result, in which case there is no spawnResult to read. That used to raise
+// a bare TypeError from the outputFile path, naming no command.
+test('runCommand: a spawnSync that throws instead of returning still names the command', async () => {
+  const module = await loadDeployModule();
+  const dir = makeFixtureDir('bluegreen-runcommand-spawn-throws-');
+  const outputFile = join(dir, 'artifact.bin');
+
+  for (const options of [{ cwd: dir }, { cwd: dir, outputFile }]) {
+    await assert.rejects(
+      // A non-string argv[0] makes spawnSync itself throw ERR_INVALID_ARG_TYPE
+      // rather than return { status: null, error }.
+      () => module.defaultRunCommand([42, '--version'], options),
+      (error) => {
+        assert.equal(error.name, 'Error', 'a raw TypeError must not escape');
+        assert.match(error.message, /^42 --version failed:/, 'the command must be named');
+        assert.match(error.message, /ERR_INVALID_ARG_TYPE/, 'the spawn-level error code must appear');
+        assert.doesNotMatch(error.message, /exit code unknown/);
+        return true;
+      },
+    );
+  }
+
+  assert.equal(existsSync(outputFile), false, 'a spawn that never started must leave no artifact');
+  assert.equal(existsSync(`${outputFile}.partial`), false, 'nor a partial');
 
   rmSync(dir, { recursive: true, force: true });
 });
@@ -2913,6 +3071,61 @@ test('runCommand: a failed outputFile command leaves no artifact behind for the 
 
   assert.equal(existsSync(outputFile), false, 'a half-written dump/tar must never be left where sha256File would hash it');
   assert.equal(existsSync(`${outputFile}.partial`), false, 'the streaming temp file must be cleaned up on failure');
+
+  rmSync(dir, { recursive: true, force: true });
+});
+
+// Round-1 review, Important 2: a command can exit 0 having written nothing.
+// Neither real caller can legitimately do that (pg_dump -Fc always emits a
+// header; tar always emits a member plus its zero-block trailer), and
+// publishing an empty artifact would let runBackup hash and manifest it —
+// self-consistent, and so vacuously passing a restore drill — until a real
+// restore was needed.
+test('runCommand: an outputFile command that exits 0 writing nothing is refused, not published', async () => {
+  const module = await loadDeployModule();
+  const dir = makeFixtureDir('bluegreen-runcommand-empty-artifact-');
+  const outputFile = join(dir, 'artifact.bin');
+
+  await assert.rejects(
+    () => module.defaultRunCommand([process.execPath, '-e', 'process.exit(0)'], { cwd: dir, outputFile }),
+    (error) => {
+      assert.match(error.message, /ZERO bytes/, 'the refusal must say the artifact was empty');
+      assert.match(error.message, /artifact\.bin/, 'the refusal must name the artifact path');
+      assert.match(error.message, /node/i, 'the refusal must name the command');
+      return true;
+    },
+  );
+
+  assert.equal(existsSync(outputFile), false, 'an empty artifact must never be published where the manifest would hash it');
+  assert.equal(existsSync(`${outputFile}.partial`), false, 'the empty partial must be removed too');
+
+  rmSync(dir, { recursive: true, force: true });
+});
+
+// Round-1 review, Important 1: cleanup used to sit inside the non-zero-exit
+// branch only, so a failing fsync/rename left the `.partial` behind and the
+// error named no command. ENOSPC on fsync is not injectable from a test, but
+// the rename branch is: renaming onto an existing non-empty directory fails
+// on every platform, and it shares the single cleanup catch with fsync.
+test('runCommand: a publish that cannot complete names the command, the size, and leaves no partial', async () => {
+  const module = await loadDeployModule();
+  const dir = makeFixtureDir('bluegreen-runcommand-publish-fails-');
+  const outputFile = join(dir, 'artifact.bin');
+  mkdirSync(outputFile, { recursive: true });
+  writeFileSync(join(outputFile, 'occupied.txt'), 'the rename target is not a file');
+
+  await assert.rejects(
+    () => module.defaultRunCommand([process.execPath, '-e', "process.stdout.write('x'.repeat(4096))"], { cwd: dir, outputFile }),
+    (error) => {
+      assert.match(error.message, /^"?.*node.*"? -e/i, 'the command must be named');
+      assert.match(error.message, /produced 4096 bytes that could not be published/, 'the message must say what could not be published');
+      assert.match(error.message, /artifact\.bin/, 'and where');
+      assert.doesNotMatch(error.message, /exit code unknown/);
+      return true;
+    },
+  );
+
+  assert.equal(existsSync(`${outputFile}.partial`), false, 'a failed publish must not leave the streaming temp file behind');
 
   rmSync(dir, { recursive: true, force: true });
 });
