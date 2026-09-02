@@ -1,11 +1,12 @@
 import assert from 'node:assert/strict';
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { dirname, join } from 'node:path';
+import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { test } from 'node:test';
 
 const scriptsDir = dirname(fileURLToPath(import.meta.url));
+const repoRoot = dirname(scriptsDir);
 const deployScriptPath = join(scriptsDir, 'bluegreen-deploy.mjs');
 const TARGET_COMMIT = 'a'.repeat(40);
 const OLD_COMMIT = 'b'.repeat(40);
@@ -2052,4 +2053,128 @@ test('P3-1: the restore-drill subcommand passes the env file database identity t
   assert.equal(drillCtxs[0].databaseName, 'charitypilot_personal_server');
   assert.equal(drillCtxs[0].databaseUser, 'charitypilot_personal_server');
   rmSync(stateDir, { recursive: true, force: true });
+});
+
+test('P3-2: composeFileArgs is a single -f by default and appends the override as a second -f', async () => {
+  const { composeFileArgs } = await loadDeployModule();
+  const defaults = composeFileArgs({});
+  assert.equal(defaults.length, 2);
+  assert.equal(defaults[0], '-f');
+  assert.match(defaults[1], /compose\.bluegreen\.yml$/);
+  assert.deepEqual(composeFileArgs({ BLUEGREEN_COMPOSE_OVERRIDE: '' }), defaults, '"" counts as unset');
+  // Ruling: path.resolve(repoRoot, '/abs/private-vm.yml') is what the engine
+  // actually produces on this Windows host (resolves to C:\abs\private-vm.yml,
+  // portably the same on Linux) — the literal string is not what composeFileArgs
+  // returns for an absolute-looking override.
+  const withOverride = composeFileArgs({ BLUEGREEN_COMPOSE_OVERRIDE: '/abs/private-vm.yml' });
+  assert.deepEqual(withOverride, [...defaults, '-f', resolve(repoRoot, '/abs/private-vm.yml')]);
+});
+
+test('P3-2: every docker compose call and the backup composeArgs carry the override -f when set', async () => {
+  const runDeploy = await loadDeployRunner();
+  const stateDir = makeFixtureDir('bluegreen-override-');
+  const overridePath = join(stateDir, 'override.yml');
+  writeFileSync(overridePath, 'volumes:\n  bluegreen-db:\n    external: true\n    name: x\n');
+  const envPath = join(stateDir, 'vm.env');
+  writeEnvFile(envPath, {
+    BLUEGREEN_COMPOSE_OVERRIDE: overridePath,
+    BLUEGREEN_DOCUMENTS_VOLUME: 'charitypilot-personal-server-documents',
+  });
+  seedMigrationsDir(stateDir, TARGET_COMMIT, []);
+  const { runCommand, calls } = makeFakeRunCommand();
+  const backupCtxs = [];
+  const outcome = await runDeploy(['deploy', '--env-file', envPath, '--state-dir', stateDir], {
+    runCommand,
+    runBackupImpl: async (ctx) => {
+      backupCtxs.push(ctx);
+      return { backupDir: join(stateDir, 'backups', 'x') };
+    },
+    runRestoreDrillImpl: async () => ({}),
+  });
+  assert.equal(outcome.status, 0, outcome.stderr);
+  const composeCalls = calls.filter((call) => call.command[0] === 'docker' && call.command[1] === 'compose');
+  assert.ok(composeCalls.length > 0);
+  for (const call of composeCalls) {
+    const flags = call.command.filter((_, i) => call.command[i - 1] === '-f');
+    assert.equal(flags.length, 2, `expected two -f flags in: ${call.command.join(' ')}`);
+    assert.match(flags[0], /compose\.bluegreen\.yml$/);
+    assert.equal(flags[1], overridePath);
+    assert.ok(call.command.indexOf('-p') > call.command.lastIndexOf('-f'), '-p must follow every -f');
+  }
+  assert.deepEqual(backupCtxs[0].composeArgs.filter((_, i) => backupCtxs[0].composeArgs[i - 1] === '-f')[1], overridePath);
+  rmSync(stateDir, { recursive: true, force: true });
+});
+
+test('P3-2: without an override every docker compose call has exactly one -f (default pinned)', async () => {
+  const runDeploy = await loadDeployRunner();
+  const stateDir = makeFixtureDir('bluegreen-no-override-');
+  const envPath = join(stateDir, 'local.env');
+  writeEnvFile(envPath);
+  seedMigrationsDir(stateDir, TARGET_COMMIT, []);
+  const { runCommand, calls } = makeFakeRunCommand();
+  const outcome = await runDeploy(['deploy', '--env-file', envPath, '--state-dir', stateDir], {
+    runCommand,
+    runBackupImpl: async () => ({ backupDir: join(stateDir, 'backups', 'x') }),
+    runRestoreDrillImpl: async () => ({}),
+  });
+  assert.equal(outcome.status, 0, outcome.stderr);
+  for (const call of calls.filter((c) => c.command[0] === 'docker' && c.command[1] === 'compose')) {
+    assert.equal(call.command.filter((arg) => arg === '-f').length, 1, call.command.join(' '));
+  }
+  rmSync(stateDir, { recursive: true, force: true });
+});
+
+test('P3-2: preflightIssues names a missing override file and requires BLUEGREEN_DOCUMENTS_VOLUME alongside an override', async () => {
+  const { preflightIssues } = await loadDeployModule();
+  const envFilePath = '/tmp/x.env';
+  // Ruling: FRONTEND_URL's loopback hostname is not an approved
+  // charitypilot.ie hostname, so preflightIssues also requires the
+  // canonical-origin overrides here regardless of the override checks under
+  // test — mirrors the P3-1 preflightIssues test's own base fixture, since
+  // BLUEGREEN_ORIGIN is itself exact loopback (loopback-shaped values
+  // accepted).
+  const base = {
+    BLUEGREEN_ENV_FILE: envFilePath,
+    BLUEGREEN_ORIGIN: 'http://127.0.0.1:8080',
+    READINESS_API_KEY: READINESS_KEY,
+    FRONTEND_URL: 'http://127.0.0.1:8080',
+    DATABASE_URL: 'postgresql://charitypilot:pw@db:5432/charitypilot',
+    CHARITYPILOT_CANONICAL_WEB_ORIGIN: 'http://127.0.0.1:8080',
+    CHARITYPILOT_CANONICAL_API_ORIGIN: 'http://127.0.0.1:8080',
+  };
+  const missing = preflightIssues({
+    fileEnv: { ...base, BLUEGREEN_COMPOSE_OVERRIDE: '/definitely/not/here.yml', BLUEGREEN_DOCUMENTS_VOLUME: 'v' },
+    resolvedEnvFilePath: envFilePath,
+  });
+  // Same resolve() bug class as the composeFileArgs test above: the engine
+  // reports the RESOLVED path (resolve(repoRoot, ...)), which on this
+  // Windows host turns '/definitely/not/here.yml' into
+  // 'C:\definitely\not\here.yml' — portably the same fix on Linux.
+  assert.ok(
+    missing.includes(`BLUEGREEN_COMPOSE_OVERRIDE file not found: ${resolve(repoRoot, '/definitely/not/here.yml')}`),
+    missing.join('\n'),
+  );
+
+  const dir = makeFixtureDir('bluegreen-override-preflight-');
+  const present = join(dir, 'o.yml');
+  writeFileSync(present, 'volumes: {}\n');
+  const noVolume = preflightIssues({
+    fileEnv: { ...base, BLUEGREEN_COMPOSE_OVERRIDE: present },
+    resolvedEnvFilePath: envFilePath,
+  });
+  assert.ok(
+    noVolume.includes(
+      'BLUEGREEN_DOCUMENTS_VOLUME is required when BLUEGREEN_COMPOSE_OVERRIDE is set (an override exists to move the volumes; the backup must tar the one the override names)',
+    ),
+    noVolume.join('\n'),
+  );
+  assert.deepEqual(
+    preflightIssues({
+      fileEnv: { ...base, BLUEGREEN_COMPOSE_OVERRIDE: present, BLUEGREEN_DOCUMENTS_VOLUME: 'v' },
+      resolvedEnvFilePath: envFilePath,
+    }),
+    [],
+  );
+  assert.deepEqual(preflightIssues({ fileEnv: base, resolvedEnvFilePath: envFilePath }), [], 'no override: no new issues');
+  rmSync(dir, { recursive: true, force: true });
 });

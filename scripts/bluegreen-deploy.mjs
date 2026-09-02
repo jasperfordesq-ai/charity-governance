@@ -99,6 +99,18 @@ const scriptsDir = dirname(fileURLToPath(import.meta.url));
 const repoRoot = resolve(scriptsDir, '..');
 const COMPOSE_FILE = join(repoRoot, 'compose.bluegreen.yml');
 const PROJECT_NAME = 'charitypilot-bluegreen';
+
+// P3: the engine's compose invocation is `-f compose.bluegreen.yml [-f <override>] -p charitypilot-bluegreen`.
+// The override (env-file key BLUEGREEN_COMPOSE_OVERRIDE, resolved against the repo root like --env-file)
+// is how a deployment target points the volumes somewhere else — the private VM at the appliance's
+// external volumes — without ever editing compose.bluegreen.yml (its header says exactly this).
+let activeComposeFileArgs = ['-f', COMPOSE_FILE];
+
+export function composeFileArgs(fileEnv) {
+  const override = fileEnv.BLUEGREEN_COMPOSE_OVERRIDE || '';
+  return override ? ['-f', COMPOSE_FILE, '-f', resolve(repoRoot, override)] : ['-f', COMPOSE_FILE];
+}
+
 const ACTIVE_UPSTREAMS_PATH = join(repoRoot, 'caddy', 'active-upstreams.caddy');
 const MIGRATIONS_RELATIVE = ['apps', 'api', 'prisma', 'migrations'];
 const READINESS_HEADER = 'x-charitypilot-readiness-key';
@@ -413,6 +425,19 @@ export function preflightIssues({ fileEnv, resolvedEnvFilePath }) {
     );
   }
 
+  const overrideValue = fileEnv.BLUEGREEN_COMPOSE_OVERRIDE || '';
+  if (overrideValue) {
+    const overridePath = resolve(repoRoot, overrideValue);
+    if (!existsSync(overridePath)) {
+      issues.push(`BLUEGREEN_COMPOSE_OVERRIDE file not found: ${overridePath}`);
+    }
+    if (!(fileEnv.BLUEGREEN_DOCUMENTS_VOLUME || '')) {
+      issues.push(
+        'BLUEGREEN_DOCUMENTS_VOLUME is required when BLUEGREEN_COMPOSE_OVERRIDE is set (an override exists to move the volumes; the backup must tar the one the override names)',
+      );
+    }
+  }
+
   return issues;
 }
 
@@ -446,7 +471,7 @@ export async function missingHostBinaries(runCommand) {
 // ---------------------------------------------------------------------------
 
 function composePrefix({ projectDirectory } = {}) {
-  const prefix = ['docker', 'compose', '-f', COMPOSE_FILE, '-p', PROJECT_NAME];
+  const prefix = ['docker', 'compose', ...activeComposeFileArgs, '-p', PROJECT_NAME];
   if (projectDirectory) prefix.push('--project-directory', projectDirectory);
   return prefix;
 }
@@ -682,6 +707,10 @@ export async function runBluegreenDeployFromArgs(
     return result(1, '', `Blue-green ${options.command} failed: ${redact(error)}\n`);
   }
 
+  // Set once per run, from this run's env file — every composePrefix() call
+  // below (32 of them) and the composeArgs handed to backup/drill agree.
+  activeComposeFileArgs = composeFileArgs(fileEnv);
+
   if (options.skipBackup && (fileEnv.NODE_ENV ?? '').trim() === 'production') {
     return result(
       1,
@@ -690,7 +719,7 @@ export async function runBluegreenDeployFromArgs(
     );
   }
 
-  const composeArgs = ['-f', COMPOSE_FILE, '-p', PROJECT_NAME];
+  const composeArgs = [...activeComposeFileArgs, '-p', PROJECT_NAME];
   const cutoverLockPath = join(resolvedStateDir, 'cutover.lock');
 
   if (options.detach) {
