@@ -15,6 +15,8 @@ test('nightly wrapper: strict mode, LF line endings, and it calls the engine bac
   assert.match(script, /npm run --silent bluegreen:backup -- --env-file "\$ENV_FILE"/);
   assert.match(script, /ENV_FILE="\$REPO_DIR\/\.bluegreen\/private-vm\.env"/);
   assert.match(script, /REPO_DIR="\$HOME\/charity-governance"/);
+  assert.match(script, /count=\$\( \(ls -1d "\$STATE_DIR"\/backups\/\*\/ 2>\/dev\/null \|\| true\) \| wc -l\)/);
+  assert.doesNotMatch(script, /\|\| echo 0/);
 });
 
 test('nightly wrapper: --install-cron replaces BOTH the appliance entry and any previous copy of itself', () => {

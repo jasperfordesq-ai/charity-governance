@@ -54,7 +54,7 @@ fi
 cd "$REPO_DIR"
 if npm run --silent bluegreen:backup -- --env-file "$ENV_FILE" >> "$LOG" 2>&1; then
     newest=$(ls -1dt "$STATE_DIR"/backups/*/ 2>/dev/null | head -1 || true)
-    count=$(ls -1d "$STATE_DIR"/backups/*/ 2>/dev/null | wc -l || echo 0)
+    count=$( (ls -1d "$STATE_DIR"/backups/*/ 2>/dev/null || true) | wc -l)
     log "OK: backup written and manifested. newest=${newest:-none} total_sets=${count} free=${free_gib}GiB"
 else
     log 'FAIL: bluegreen:backup returned non-zero -- see output above'
