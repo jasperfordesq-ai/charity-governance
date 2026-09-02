@@ -15,14 +15,14 @@ compose stack.
 [`docs/owner-console-runbook.md`](owner-console-runbook.md): preconditions,
 then the operational sequences an operator actually runs.
 
-**Scope note, stated plainly:** this engine has never been run against a
-real production VM. Everything below is proven against `docker compose`
-and a scratch Postgres locally (`scripts/bluegreen-deploy.test.mjs`,
-`scripts/bluegreen/*.test.mjs`) and, separately, a local acceptance cycle.
-Cutting an actual VM over to it — the Hyper-V checkpoint, the appliance
-comparison, wiring the nightly cron — is a later project (P3 in
-`docs/superpowers/specs/2026-08-31-deployment-profile-and-bluegreen-design.md`'s
-own numbering) and is **not** covered by anything in this repo yet.
+**Scope note, stated plainly:** everything here is proven against
+`docker compose` and a scratch Postgres locally (`scripts/bluegreen-deploy.test.mjs`,
+`scripts/bluegreen/*.test.mjs`) and by a local acceptance cycle. The private
+Hyper-V VM's cutover from the appliance to this engine is the operational
+project in `docs/superpowers/plans/2026-09-02-private-vm-bluegreen-cutover.md`
+(Task 8); its "Cutting the private VM over" section below is the operator
+sequence, and its evidence is recorded in that plan's task report once run.
+Until that report exists, this engine has not run against a real VM.
 
 ## Preconditions
 
@@ -52,6 +52,37 @@ own numbering) and is **not** covered by anything in this repo yet.
   file's own `charitypilot-bluegreen-documents` volume name) — set it
   only if this deployment's document storage volume was named
   differently.
+- **`BLUEGREEN_COMPOSE_OVERRIDE`** (optional; path resolved against the repo
+  root) adds a second `-f` to every compose invocation the engine makes —
+  the only sanctioned way to relocate the engine's volumes. The private VM
+  sets `compose.bluegreen.private-vm.yml`, which re-points `bluegreen-db` /
+  `bluegreen-documents` at the appliance install's external volumes and pins
+  the internal subnet. When set, `BLUEGREEN_DOCUMENTS_VOLUME` is required
+  (preflight refuses otherwise — the backup must tar the volume the override
+  actually names).
+- **`POSTGRES_DB` / `POSTGRES_USER`** name the database and role the engine's
+  own `psql`/`pg_dump` use (default `charitypilot`/`charitypilot`). Set them
+  whenever the volume holds a different identity — the appliance's is
+  `charitypilot_personal_server` for both — and keep `DATABASE_URL`
+  consistent; preflight rejects a mismatch by name.
+- **First deploy on a stopped stack:** the engine now starts `db` itself
+  (`up -d --wait db`, status entry `ensure-db`) before the pre-migration
+  backup and the migration gate. Nothing to do by hand.
+- **`DATABASE_URL`'s `sslmode=verify-full&target_session_attrs=read-write`
+  on the private VM is cosmetic, not encryption.** Both query parameters
+  exist only because `apps/api/src/utils/env.ts`'s `requireDatabaseUrl`
+  demands them for any non-localhost `DATABASE_URL` host — `db` (the
+  compose service name) included, since that check draws no exception for
+  a same-host Docker network hop. `@prisma/client` 6 recognises only
+  `prefer|disable|require` for `sslmode`; it silently downgrades
+  `verify-full` to `prefer` and never upgrades to TLS against a server with
+  `ssl=off` — so the actual connection to the compose `db` service is
+  **plaintext**. That is acceptable only because `db` is reachable solely
+  on the compose-internal network and is never published on the host.
+  **Never** change it to `sslmode=require`: Prisma honours that value, and
+  it fails outright against the plain `db` container. Verified empirically
+  2026-09-02 against `postgres:16.4-alpine` with `@prisma/client` 6.19.3.
+  `.env.bluegreen.private-vm.example` carries this same note.
 - **Canonical-origin axis vars**, when the deployment's `FRONTEND_URL` is
   not a `charitypilot.ie` hostname (e.g. a Tailscale Serve origin):
   `CHARITYPILOT_CANONICAL_WEB_ORIGIN` and `CHARITYPILOT_CANONICAL_API_ORIGIN`
@@ -298,14 +329,259 @@ pre-maintenance backup).
 standalone `backup` call. Best-effort — a pruning failure never aborts a
 completed deploy or backup.
 
-## The nightly cron (not yet wired)
+## Cutting the private VM over from the appliance
 
-The VM's nightly backup, once P3 wires it up, will invoke this same
-`bluegreen:backup` subcommand — not a separate backup mechanism. **This
-repo does not wire that cron yet**; P3 (the actual VM cutover project) owns
-provisioning it, alongside disabling the appliance's own backup cron. Until
-then, run `bluegreen:backup` manually, or via whatever scheduler the
-deployment target already uses, pointed at this same command.
+**Not yet executed.** This is the operator sequence for the cutover; record
+evidence in `docs/superpowers/plans/2026-09-02-private-vm-bluegreen-cutover-report.md`
+as you run it, then date this line. Kept here because it is also the recovery
+sequence if the VM must ever be re-provisioned through the appliance installer
+and then brought back onto the engine.
+
+Variables used below:
+
+```powershell
+$KEY = "D:\CharityPilot-VM\secrets\charitypilot-server_ed25519"
+$VM  = "cpops@charitypilot.local"          # mDNS; never a bare IP (leases change)
+$SSH = "ssh -i $KEY $VM"
+```
+
+- [ ] **Step 0: Pre-checks (read-only; no downtime).** Run each and paste outputs into the report.
+
+```powershell
+ssh -i $KEY $VM "cd ~/charity-governance && git rev-parse HEAD && git remote -v | head -1 && git status --porcelain=v1 --untracked-files=all | wc -l"
+```
+Gate: HEAD is the appliance commit (`8bd3f78…`), remote is `https://github.com/jasperfordesq-ai/charity-governance.git`, porcelain count `0`.
+
+```powershell
+ssh -i $KEY $VM "node --version; docker --version; docker compose version; which wget git; df -BG --output=avail / | tail -1; free -g | head -2"
+```
+Gate: node is `v22.x` or newer (root `package.json` `engines.node` is `>=22.0.0`); `wget` and `git` found; ≥ 20 GiB free (two colours of images plus a worktree).
+
+```powershell
+ssh -i $KEY $VM "sudo tailscale serve status"
+```
+Gate: exactly one `https://charitypilot.<tailnet>.ts.net (tailnet only)` → `http://127.0.0.1:8080`. **Serve is not touched by this cutover** — the engine's Caddy binds the same `127.0.0.1:8080` once the appliance's Caddy is down.
+
+```powershell
+ssh -i $KEY $VM "docker volume ls --format '{{.Name}}' | grep personal-server"
+```
+Gate: `charitypilot-personal-server-db` and `charitypilot-personal-server-documents` both listed.
+
+```powershell
+ssh -i $KEY $VM "docker network inspect -f '{{range .IPAM.Config}}{{.Subnet}} {{end}}' \$(docker network ls -q)"
+```
+Gate: no existing network uses `172.31.250.0/24` (`compose.bluegreen.private-vm.yml` pins the engine's internal network to it, and Docker's default address pool `172.17.0.0/12` can hand out addresses that reach `172.31.x`). If something already holds it, stop and change the pinned subnet in the override plus `TRUSTED_PROXY_ADDRESSES` in the env file together.
+
+```powershell
+ssh -i $KEY $VM "docker compose --project-name charitypilot-personal-server --env-file ~/.local/share/charitypilot/personal-server/.env.personal-server -f ~/charity-governance/compose.personal-server.yml exec -T db psql -U \"\$(grep -E '^POSTGRES_USER=' ~/.local/share/charitypilot/personal-server/.env.personal-server | cut -d= -f2- | tr -d '\"')\" -d \"\$(grep -E '^POSTGRES_DB=' ~/.local/share/charitypilot/personal-server/.env.personal-server | cut -d= -f2- | tr -d '\"')\" -tAc 'select count(*) from \"Organisation\"; select count(*) from \"User\"; select count(*) from \"Document\"; select count(*) from _prisma_migrations;'"
+```
+Gate: four non-zero counts printed; write them down — `_prisma_migrations` should rise by exactly 5 after step 4 (the migrations between `8bd3f78` and master, none destructive: `20260830180000_add_invite_link_reissued_audit`, `20260830201131_add_platform_operator`, `20260831000000/000100/000200_add_owner_provisioned_recovery_*`).
+
+```powershell
+ssh -i $KEY $VM "KEY=\$(grep -E '^READINESS_API_KEY=' ~/.local/share/charitypilot/personal-server/.env.personal-server | cut -d= -f2- | tr -d '\"'); ORIGIN=\$(grep -E '^CHARITYPILOT_PERSONAL_SERVER_ORIGIN=' ~/.local/share/charitypilot/personal-server/.env.personal-server | cut -d= -f2- | tr -d '\"'); wget -qO- --header \"x-charitypilot-readiness-key: \$KEY\" \$ORIGIN/api/v1/health/readiness"
+```
+Gate: JSON with `"status":"ready"`. This proves the VM can reach its own Tailscale origin over HTTPS from the host — exactly what the engine's phase-12 public smoke does.
+
+- [ ] **Step 1: Final appliance backup, plaintext fingerprints, copy off-VM.**
+
+```powershell
+ssh -i $KEY $VM "bash ~/bin/charitypilot-backup.sh && tail -2 ~/charitypilot-backup.log"
+```
+Gate: log line starts `OK: backup verified.`
+
+Plaintext fingerprints (the appliance's recovery set is encrypted; these are what step 6 diffs against):
+```powershell
+ssh -i $KEY $VM "mkdir -p ~/precutover && docker run --rm -v charitypilot-personal-server-documents:/d:ro alpine:3.20 sh -c 'cd /d && find . -type f -print0 | sort -z | xargs -0 sha256sum' > ~/precutover/documents.sha256 && wc -l ~/precutover/documents.sha256"
+```
+```powershell
+ssh -i $KEY $VM "ENVF=~/.local/share/charitypilot/personal-server/.env.personal-server; U=\$(grep -E '^POSTGRES_USER=' \$ENVF | cut -d= -f2- | tr -d '\"'); D=\$(grep -E '^POSTGRES_DB=' \$ENVF | cut -d= -f2- | tr -d '\"'); docker compose --project-name charitypilot-personal-server --env-file \$ENVF -f ~/charity-governance/compose.personal-server.yml exec -T db psql -U \$U -d \$D -tAc \"SELECT c.relname || '=' || (xpath('/row/c/text()', query_to_xml(format('select count(*) as c from %I.%I', n.nspname, c.relname), false, true, '')))[1]::text FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace WHERE n.nspname = 'public' AND c.relkind = 'r' ORDER BY c.relname;\" > ~/precutover/census.txt && wc -l ~/precutover/census.txt"
+```
+Gate: `documents.sha256` line count equals the `Document` count from step 0 (or explain the difference — versions/attachments); `census.txt` has one line per table.
+
+Copy off-VM:
+```powershell
+$NEWEST = ssh -i $KEY $VM "ls -1dt ~/.local/share/charitypilot/personal-server/recovery/*/ | head -1"
+New-Item -ItemType Directory -Force D:\CharityPilot-VM\backups\pre-bluegreen | Out-Null
+scp -i $KEY -r "${VM}:$NEWEST" D:\CharityPilot-VM\backups\pre-bluegreen\
+scp -i $KEY -r "${VM}:~/precutover" D:\CharityPilot-VM\backups\pre-bluegreen\
+```
+Gate: `Get-ChildItem -Recurse D:\CharityPilot-VM\backups\pre-bluegreen | Measure-Object -Sum Length` shows a non-trivial size and both `documents.sha256` and `census.txt` present.
+
+- [ ] **Step 2: Hyper-V checkpoint (operator, ELEVATED PowerShell — Hyper-V cmdlets only; do not run ssh from this shell).**
+
+```powershell
+$SHA = "<paste the short sha of the master commit you deployed from>"
+Stop-VM -Name charitypilot-server                      # clean guest shutdown (~1 min)
+Checkpoint-VM -Name charitypilot-server -SnapshotName "pre-bluegreen-$SHA"
+Start-VM -Name charitypilot-server
+Get-VMSnapshot -VMName charitypilot-server | Select-Object Name, CreationTime
+```
+Gate: the snapshot is listed. Wait for the guest to come back: from a NORMAL shell, `ssh -i $KEY $VM "uptime && docker ps --format '{{.Names}}' | sort"` shows the appliance containers running again. **This checkpoint is the whole-cutover rollback: `Restore-VMSnapshot -Name "pre-bluegreen-$SHA" -VMName charitypilot-server -Confirm:$false` returns the appliance, its cron, its state — everything — as of this moment.**
+
+- [ ] **Step 3: Generate the engine env file ON the VM (operator runs; secrets never leave the VM).** Hand the operator this single command to paste into an interactive `ssh -i $KEY $VM` session:
+
+```bash
+set -euo pipefail
+cd ~/charity-governance && git fetch origin master
+SRC=$HOME/.local/share/charitypilot/personal-server/.env.personal-server
+DST=$HOME/charity-governance/.bluegreen/private-vm.env
+TEMPLATE=$(git show origin/master:.env.bluegreen.private-vm.example)
+get() { grep -E "^$1=" "$SRC" | head -1 | cut -d= -f2- | sed -e 's/^"//' -e 's/"$//' -e "s/^'//" -e "s/'$//"; }
+ORIGIN=$(get CHARITYPILOT_PERSONAL_SERVER_ORIGIN); HOST=${ORIGIN#https://}
+[ -n "$HOST" ] && [ "$HOST" != "$ORIGIN" ] || { echo "appliance origin is not https: $ORIGIN"; exit 1; }
+mkdir -p "$(dirname "$DST")"; umask 077
+printf '%s\n' "$TEMPLATE" \
+  | sed -e "s#REPLACE_ME_ENV_FILE_PATH#$DST#g" \
+        -e "s#REPLACE_ME_TAILSCALE_HOSTNAME#$HOST#g" \
+        -e "s#REPLACE_ME_POSTGRES_DB#$(get POSTGRES_DB)#g" \
+        -e "s#REPLACE_ME_POSTGRES_USER#$(get POSTGRES_USER)#g" \
+        -e "s#REPLACE_ME_POSTGRES_PASSWORD#$(get POSTGRES_PASSWORD)#g" \
+        -e "s#REPLACE_ME_JWT_SECRET#$(get JWT_SECRET)#g" \
+        -e "s#REPLACE_ME_AUTH_RECOVERY_SECRET#$(get AUTH_RECOVERY_SECRET)#g" \
+        -e "s#REPLACE_ME_READINESS_API_KEY#$(get READINESS_API_KEY)#g" \
+        -e "s#REPLACE_ME_OWNER_JWT_SECRET#$(openssl rand -hex 32)#g" \
+  > "$DST"
+chmod 600 "$DST"
+grep -c REPLACE_ME "$DST" || echo "OK: no placeholders left"
+grep -E '^(BLUEGREEN_ORIGIN|FRONTEND_URL|AUTH_COOKIE_DOMAIN|POSTGRES_DB|POSTGRES_USER|BLUEGREEN_COMPOSE_OVERRIDE|BLUEGREEN_DOCUMENTS_VOLUME)=' "$DST"
+```
+Gate: prints `OK: no placeholders left` and the seven non-secret lines show the Tailscale hostname, `charitypilot_personal_server` ×2, the override filename, and the documents volume name. (The appliance's `POSTGRES_PASSWORD` is 64 hex chars, so no URL-encoding is needed in `DATABASE_URL`; if `get POSTGRES_PASSWORD | grep -q '[^0-9a-f]'` prints anything, stop and percent-encode it by hand.)
+
+- [ ] **Step 4: Stop the appliance, move the checkout, run the first deploy (DOWNTIME STARTS).** Order matters: the appliance is stopped with the compose file at ITS commit, then the checkout moves.
+
+```powershell
+ssh -i $KEY $VM "cd ~/charity-governance && docker compose --project-name charitypilot-personal-server --env-file ~/.local/share/charitypilot/personal-server/.env.personal-server -f compose.personal-server.yml down && docker ps --format '{{.Names}}' | wc -l && docker volume ls --format '{{.Name}}' | grep -c personal-server"
+```
+Gate: `0` containers, `2` volumes. (No `-v`. Ever.)
+
+```powershell
+ssh -i $KEY $VM "cd ~/charity-governance && git reset --hard origin/master && git rev-parse HEAD && git status --porcelain=v1 --untracked-files=all | wc -l"
+```
+Gate: HEAD equals the pushed master sha from Task 7; porcelain `0` (`.bluegreen/` is gitignored, so the env file does not dirty the tree).
+
+Engine preflight dry-check (pure, no docker):
+```powershell
+ssh -i $KEY $VM "cd ~/charity-governance && node -e \"import('./scripts/bluegreen-deploy.mjs').then(m=>{const p=process.env.HOME+'/charity-governance/.bluegreen/private-vm.env';const f=m.parseEnvFile(p);const i=m.preflightIssues({fileEnv:f,resolvedEnvFilePath:p});console.log(i.length?i:'preflight clean');process.exit(i.length?1:0)})\""
+```
+Gate: `preflight clean`.
+
+The deploy:
+```powershell
+ssh -i $KEY $VM "cd ~/charity-governance && npm run bluegreen:deploy -- --env-file .bluegreen/private-vm.env --detach"
+```
+It prints the log path. Tail it until it ends:
+```powershell
+ssh -i $KEY $VM "tail -f ~/charity-governance/.bluegreen/state/deploy-*.log"
+```
+Gate: the log ends with the success record (phase 15 `record`), and
+```powershell
+ssh -i $KEY $VM "cd ~/charity-governance && npm run bluegreen:status -- --env-file .bluegreen/private-vm.env"
+```
+shows `activeColor: blue` at the master commit, `docker compose ps -a` with `db`, `caddy`, `api-blue`, `web-blue`, `scheduler` up, and a status history `preflight → ensure-db → backup → resolve → worktree → build → gate → quiesce → migrate → up → candidate-smoke → switch → public-smoke → jobs → retire → record`. If the deploy fails at any phase, read the runbook's "What each failure mode looks like" — nothing before `switch` has touched traffic, and the step-2 checkpoint covers everything.
+
+- [ ] **Step 5: Bootstrap the platform operator (DOWNTIME ENDS at the start of this step — the site is already serving).**
+
+```powershell
+# Sourcing the env file here would background the assignment at the "&" in
+# DATABASE_URL's query string ("?sslmode=verify-full&target_session_attrs=..."),
+# so export exactly the three interpolation vars compose needs instead.
+ssh -i $KEY $VM "cd ~/charity-governance && TAG=\$(git rev-parse HEAD) && export BLUEGREEN_ENV_FILE=\$HOME/charity-governance/.bluegreen/private-vm.env BLUEGREEN_ORIGIN=\$(grep -E '^BLUEGREEN_ORIGIN=' \$HOME/charity-governance/.bluegreen/private-vm.env | cut -d= -f2-) BLUEGREEN_FRONT_PORT=8080 && BLUEGREEN_BLUE_TAG=\$TAG BLUEGREEN_GREEN_TAG=unbuilt BLUEGREEN_ACTIVE_TAG=\$TAG docker compose -f compose.bluegreen.yml -f compose.bluegreen.private-vm.yml -p charitypilot-bluegreen --profile blue run --rm --no-deps api-blue node dist/jobs/create-platform-operator.js --email=jasper@hour-timebank.ie --name='Jasper Ford'"
+```
+Gate: `Created platform operator <id> (jasper@hour-timebank.ie).` and a set-password link of the form `https://<tailscale-host>/owner/set-password#token=…` (fragment, not query). The operator opens it on a tailnet device and sets the owner-console password. Record the operator id (never the token) in the report.
+
+- [ ] **Step 6: Verify (all gates must pass before step 7).**
+
+1. Existing charity signs in at `https://<tailscale-host>/login` with the existing owner account; dashboard, documents list, minute book, and registers render. Gate: pass.
+2. Documents byte-identical:
+   ```powershell
+   ssh -i $KEY $VM "docker run --rm -v charitypilot-personal-server-documents:/d:ro alpine:3.20 sh -c 'cd /d && find . -type f -print0 | sort -z | xargs -0 sha256sum' | diff - ~/precutover/documents.sha256 && echo DOCUMENTS IDENTICAL"
+   ```
+   Gate: `DOCUMENTS IDENTICAL`.
+3. Row census: same query as step 1 against the new stack (`docker compose -f compose.bluegreen.yml -f compose.bluegreen.private-vm.yml -p charitypilot-bluegreen exec -T db psql -U charitypilot_personal_server -d charitypilot_personal_server -tAc "<census SQL>" | diff - ~/precutover/census.txt`). Gate: the ONLY differences are `_prisma_migrations` (+5), new tables that did not exist before (`PlatformOperator`… and the owner-provisioning tables, each at 0 or 1), `PlatformOperator=1`, and session/audit tables touched by the logins. Any other table differing is a stop.
+4. Owner console: `https://<tailscale-host>/owner/login` → the tenants list shows the existing organisation as tenant #1, `ACTIVE`. Gate: pass.
+5. Provision one comped test tenant from the console (`/owner/tenants` → create), copy the printed manual set-password link, open it in a private window, set a password, sign in as the new tenant, confirm it sees an empty workspace and NOT the existing charity's documents. Gate: pass; record the test tenant's organisation id.
+6. Scheduler alive: `ssh … "cd ~/charity-governance && docker compose -f compose.bluegreen.yml -f compose.bluegreen.private-vm.yml -p charitypilot-bluegreen ps scheduler && docker compose -f compose.bluegreen.yml -f compose.bluegreen.private-vm.yml -p charitypilot-bluegreen logs --tail 20 scheduler"`. Gate: `Up`, no crash loop, log shows a tick.
+7. Public readiness through Tailscale from the VM host: the step-0 wget command with the origin from the env file. Gate: `"status":"ready"` and `buildCommit` equal to HEAD.
+
+- [ ] **Step 7: Safety-net acceptance: backup, restore drill, cron switch.**
+
+```powershell
+ssh -i $KEY $VM "cd ~/charity-governance && npm run bluegreen:backup -- --env-file .bluegreen/private-vm.env && ls -1dt .bluegreen/state/backups/*/ | head -1"
+```
+Gate: a new backup directory with `database.dump`, `documents.tar`, `manifest.json`.
+
+```powershell
+ssh -i $KEY $VM "cd ~/charity-governance && npm run bluegreen:restore-drill -- --env-file .bluegreen/private-vm.env"
+```
+Gate: the drill reports the census matched (non-degenerate — the counts from step 6.3, not `{}`) and every manifested file re-hashed clean; `docker ps -a | grep charitypilot-bluegreen-drill-` prints nothing afterwards. The app has been idle since step 6, so `BLUEGREEN_DRILL_CENSUS_TOLERANCE` stays unset (exact).
+
+Switch the nightly cron:
+```powershell
+ssh -i $KEY $VM "cd ~/charity-governance && bash scripts/bluegreen-nightly-backup.sh --install-cron"
+```
+Gate: `crontab -l` output contains exactly one `30 3 * * *` line, pointing at `bluegreen-nightly-backup.sh`, and no `charitypilot-backup.sh` line. Then copy the step-7 backup off-VM with the runbook's scp command. Gate: present under `D:\CharityPilot-VM\backups\bluegreen\`.
+
+- [ ] **Step 8: One real deploy, one real rollback, one re-deploy.** From Windows, make a trivial commit on master (e.g. append a dated line to the acceptance markers at the end of `docs/bluegreen-runbook.md`) and `git push origin master`. Then:
+
+```powershell
+ssh -i $KEY $VM "cd ~/charity-governance && git pull --ff-only && npm run bluegreen:deploy -- --env-file .bluegreen/private-vm.env"
+```
+Gate: exit 0; `bluegreen:status` shows `activeColor: green` at the new commit, `previousColor: blue`; readiness `buildCommit` equals the new commit; sign-in still works.
+
+```powershell
+ssh -i $KEY $VM "cd ~/charity-governance && npm run bluegreen:rollback -- --env-file .bluegreen/private-vm.env"
+```
+Gate: exit 0; status shows `activeColor: blue` at the old commit; readiness `buildCommit` equals the old commit. This is the first rollback ever run on the real host — record its full output.
+
+```powershell
+ssh -i $KEY $VM "cd ~/charity-governance && npm run bluegreen:deploy -- --env-file .bluegreen/private-vm.env"
+```
+Gate: exit 0; green serving the new commit again. Total elapsed for the deploy: record it (expected a few minutes — images for the new commit are already built).
+
+- [ ] **Step 9: Retire the appliance on this host (only after 6–8 all passed).**
+
+Archive, never delete, the appliance state (the old recovery key lives there):
+```powershell
+ssh -i $KEY $VM "mv ~/.local/share/charitypilot/personal-server ~/charitypilot-appliance-archive-$(Get-Date -Format yyyyMMdd) && ls ~/ | grep appliance-archive"
+```
+Copy `~/charitypilot-appliance-archive-*/recovery-key.hex` off-VM to `D:\CharityPilot-VM\secrets\` under a dated name if it is not already there (it should be — check first; do not overwrite).
+
+Delete the checkpoint (operator, ELEVATED PowerShell):
+```powershell
+Remove-VMSnapshot -VMName charitypilot-server -Name "pre-bluegreen-$SHA" -Confirm:$false
+Get-VMSnapshot -VMName charitypilot-server
+```
+Gate: no snapshots listed (a lingering checkpoint grows a differencing disk forever).
+
+Update `D:\CharityPilot-VM\provision\RUNBOOK.md`: §1 row "Installed commit" → "Blue-green engine; active colour/commit via `npm run bluegreen:status -- --env-file .bluegreen/private-vm.env`"; row "Nightly backup" → "`~/bin/bluegreen-nightly-backup.sh`, sets under `~/charity-governance/.bluegreen/state/backups/`"; §3 → a new lead paragraph "**Deploy = `git pull --ff-only && npm run bluegreen:deploy -- --env-file .bluegreen/private-vm.env`. See `docs/bluegreen-runbook.md`.**" with Options A–D retitled "History — appliance era (retired on the cutover date)".
+
+Update the agent memory `charitypilot-deploy-procedure.md`: replace "The deploy decision, in one place" with the blue-green command; keep the access/traps sections; mark Option D as history; note the appliance archive path and that `bluegreen:rollback` and `restore-drill` were proven on the host on the cutover date.
+
+Flip the status banners in `docs/hyperv-private-server-deployment.md` (both sections) and date the "Not yet executed" line + the two "the cutover date" placeholders in `docs/bluegreen-runbook.md`.
+
+Finish the report file with: timestamps per step, every gate's output, the operator id and test-tenant id, the two commits deployed in step 8, and the deploy/rollback wall-clock times. Commit the report and the runbook marker:
+```bash
+git add docs/superpowers/plans/2026-09-02-private-vm-bluegreen-cutover-report.md docs/bluegreen-runbook.md
+git commit -m "docs(deploy): private VM cutover to blue-green — executed <date>, evidence report"
+git push origin master
+```
+
+## The nightly cron (private VM)
+
+`scripts/bluegreen-nightly-backup.sh --install-cron` installs itself to
+`~/bin/`, writes the `30 3 * * *` crontab entry, and removes the appliance-era
+`charitypilot-backup.sh` entry in the same edit (idempotent). It runs
+`bluegreen:backup` against `~/charity-governance/.bluegreen/private-vm.env`
+and logs to `~/charitypilot-bluegreen-backup.log`. Backups stay on the VM
+under `.bluegreen/state/backups/` (14-day retention, pruned by the engine);
+copy the newest set off-host after any deploy and at least weekly:
+
+```powershell
+# from Windows PowerShell
+$KEY = "D:\CharityPilot-VM\secrets\charitypilot-server_ed25519"
+$NEWEST = ssh -i $KEY cpops@charitypilot.local "ls -1dt ~/charity-governance/.bluegreen/state/backups/*/ | head -1"
+scp -i $KEY -r "cpops@charitypilot.local:$NEWEST" D:\CharityPilot-VM\backups\bluegreen\
+```
 
 <!-- Task 10 acceptance-run marker (2026-09-01): trivial docs touch used as
      the Step-2 redeploy commit for the local acceptance cycle's blue->green

@@ -528,8 +528,8 @@ function requireProductionDocumentStorageDriver(issues: string[]) {
 // check (personal-server-env.ts) so a self-contained multi-tenant deployment
 // demands the same local storage path shape as the single-tenant appliance.
 // The driver-equals-local check itself isn't repeated here: this is only
-// reached from validateProductionEnv's own DOCUMENT_STORAGE_DRIVER === local
-// branch, so it's already established.
+// reached from a DOCUMENT_STORAGE_DRIVER === local branch (validateProductionEnv's
+// and validateDocumentStorageCleanupEnv's), so it's already established.
 function requireLocalStoragePath(issues: string[]): void {
   const value = process.env.LOCAL_FILE_STORAGE_DIR;
   if (
@@ -628,10 +628,21 @@ export function validateDocumentStorageCleanupEnv(): void {
   const issues: string[] = [];
 
   requireDatabaseUrl('DATABASE_URL', issues);
-  requireUrl('SUPABASE_URL', issues, { requireHttps: true, requirePublicHost: true });
-  requireConfiguredEnv('SUPABASE_SERVICE_ROLE_KEY', issues);
-  requireConfiguredEnv('SUPABASE_STORAGE_BUCKET', issues);
-  requireProductionDocumentStorageDriver(issues);
+  // Mirrors validateProductionEnv's storage branch exactly (same condition,
+  // same two arms). The cleanup job deletes through StorageService.deleteFile,
+  // which itself branches on DOCUMENT_STORAGE_DRIVER and unlinks from
+  // LOCAL_FILE_STORAGE_DIR under the local driver (storage.service.ts:270-279)
+  // — so demanding Supabase credentials here only blocked a self-contained
+  // deployment (the private VM) from starting the scheduler at all, since
+  // production-scheduler.ts's main() calls this validator at startup.
+  if (process.env.DOCUMENT_STORAGE_DRIVER === LOCAL_STORAGE_DRIVER) {
+    requireLocalStoragePath(issues);
+  } else {
+    requireUrl('SUPABASE_URL', issues, { requireHttps: true, requirePublicHost: true });
+    requireConfiguredEnv('SUPABASE_SERVICE_ROLE_KEY', issues);
+    requireConfiguredEnv('SUPABASE_STORAGE_BUCKET', issues);
+    requireProductionDocumentStorageDriver(issues);
+  }
   requireErrorAlertWebhook(issues);
 
   throwIfProductionIssues(

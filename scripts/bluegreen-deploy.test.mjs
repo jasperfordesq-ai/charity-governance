@@ -1,11 +1,12 @@
 import assert from 'node:assert/strict';
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { dirname, join } from 'node:path';
+import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { test } from 'node:test';
 
 const scriptsDir = dirname(fileURLToPath(import.meta.url));
+const repoRoot = dirname(scriptsDir);
 const deployScriptPath = join(scriptsDir, 'bluegreen-deploy.mjs');
 const TARGET_COMMIT = 'a'.repeat(40);
 const OLD_COMMIT = 'b'.repeat(40);
@@ -184,6 +185,7 @@ test('deploy: phase order is exactly the spec sequence (first deploy, no destruc
   const phases = status.history.map((entry) => entry.phase);
   assert.deepEqual(phases, [
     'preflight',
+    'ensure-db',
     'backup',
     'resolve',
     'worktree',
@@ -223,7 +225,7 @@ test('deploy: a blocked migration aborts BEFORE quiesce and touches nothing', as
 
   const status = libModule.deployStatus(stateDir);
   const phases = status.history.map((entry) => entry.phase);
-  assert.deepEqual(phases, ['preflight', 'backup', 'resolve', 'worktree', 'build', 'gate']);
+  assert.deepEqual(phases, ['preflight', 'ensure-db', 'backup', 'resolve', 'worktree', 'build', 'gate']);
   assert.equal(
     calls.some((call) => call.command.includes('stop')),
     false,
@@ -1863,4 +1865,377 @@ test('micro-round: rollback up-failure message says traffic was never switched, 
   assert.equal(reloadAttempted, false, 'Caddy must never be touched when the up --wait step itself fails');
 
   rmSync(stateDir, { recursive: true, force: true });
+});
+
+test('P3-1: databaseIdentity defaults to charitypilot/charitypilot and honours POSTGRES_DB/POSTGRES_USER ("" counts as unset)', async () => {
+  const { databaseIdentity } = await loadDeployModule();
+  assert.deepEqual(databaseIdentity({}), { databaseName: 'charitypilot', databaseUser: 'charitypilot' });
+  assert.deepEqual(databaseIdentity({ POSTGRES_DB: '', POSTGRES_USER: '' }), {
+    databaseName: 'charitypilot',
+    databaseUser: 'charitypilot',
+  });
+  assert.deepEqual(
+    databaseIdentity({ POSTGRES_DB: 'charitypilot_personal_server', POSTGRES_USER: 'charitypilot_personal_server' }),
+    { databaseName: 'charitypilot_personal_server', databaseUser: 'charitypilot_personal_server' },
+  );
+});
+
+test('P3-1: the gate psql and the deploy-phase backup use the env file database identity', async () => {
+  const runDeploy = await loadDeployRunner();
+  const stateDir = makeFixtureDir('bluegreen-db-identity-');
+  const envPath = join(stateDir, 'vm.env');
+  writeEnvFile(envPath, {
+    POSTGRES_DB: 'charitypilot_personal_server',
+    POSTGRES_USER: 'charitypilot_personal_server',
+    DATABASE_URL: 'postgresql://charitypilot_personal_server:pw@db:5432/charitypilot_personal_server',
+  });
+  seedMigrationsDir(stateDir, TARGET_COMMIT, []);
+  const { runCommand, calls } = makeFakeRunCommand();
+  const backupCtxs = [];
+  const deps = {
+    runCommand,
+    runBackupImpl: async (ctx) => {
+      backupCtxs.push(ctx);
+      return { backupDir: join(stateDir, 'backups', 'x') };
+    },
+    runRestoreDrillImpl: async () => ({}),
+  };
+  const outcome = await runDeploy(['deploy', '--env-file', envPath, '--state-dir', stateDir], deps);
+  assert.equal(outcome.status, 0, outcome.stderr);
+
+  const psqlCalls = calls.filter((call) => call.command.includes('psql'));
+  assert.ok(psqlCalls.length > 0, 'gate must query the database');
+  for (const call of psqlCalls) {
+    const u = call.command.indexOf('-U');
+    const d = call.command.indexOf('-d');
+    assert.equal(call.command[u + 1], 'charitypilot_personal_server');
+    assert.equal(call.command[d + 1], 'charitypilot_personal_server');
+  }
+  assert.equal(backupCtxs.length, 1);
+  assert.equal(backupCtxs[0].databaseName, 'charitypilot_personal_server');
+  assert.equal(backupCtxs[0].databaseUser, 'charitypilot_personal_server');
+  rmSync(stateDir, { recursive: true, force: true });
+});
+
+test('P3-1: with no POSTGRES_* vars the gate and backup still use charitypilot/charitypilot (default pinned)', async () => {
+  const runDeploy = await loadDeployRunner();
+  const stateDir = makeFixtureDir('bluegreen-db-identity-default-');
+  const envPath = join(stateDir, 'local.env');
+  writeEnvFile(envPath);
+  seedMigrationsDir(stateDir, TARGET_COMMIT, []);
+  const { runCommand, calls } = makeFakeRunCommand();
+  const backupCtxs = [];
+  const outcome = await runDeploy(['deploy', '--env-file', envPath, '--state-dir', stateDir], {
+    runCommand,
+    runBackupImpl: async (ctx) => {
+      backupCtxs.push(ctx);
+      return { backupDir: join(stateDir, 'backups', 'x') };
+    },
+    runRestoreDrillImpl: async () => ({}),
+  });
+  assert.equal(outcome.status, 0, outcome.stderr);
+  const psql = calls.find((call) => call.command.includes('psql'));
+  assert.equal(psql.command[psql.command.indexOf('-U') + 1], 'charitypilot');
+  assert.equal(psql.command[psql.command.indexOf('-d') + 1], 'charitypilot');
+  assert.equal(backupCtxs[0].databaseName, 'charitypilot');
+  assert.equal(backupCtxs[0].databaseUser, 'charitypilot');
+  rmSync(stateDir, { recursive: true, force: true });
+});
+
+test('P3-1: preflightIssues rejects a DATABASE_URL whose database or user disagrees with the resolved identity', async () => {
+  const { preflightIssues } = await loadDeployModule();
+  const envFilePath = '/tmp/x.env';
+  const base = {
+    BLUEGREEN_ENV_FILE: envFilePath,
+    BLUEGREEN_ORIGIN: 'http://127.0.0.1:8080',
+    READINESS_API_KEY: READINESS_KEY,
+    FRONTEND_URL: 'http://127.0.0.1:8080',
+    // Fixture fix: FRONTEND_URL's loopback hostname is not an approved
+    // charitypilot.ie hostname, so preflightIssues requires the canonical-
+    // origin overrides regardless of the database-identity checks under
+    // test here. BLUEGREEN_ORIGIN is itself exact loopback, so the
+    // loopback-shaped values are accepted (mirrors the M1/micro-round
+    // preflightIssues tests' own loopback fixtures).
+    CHARITYPILOT_CANONICAL_WEB_ORIGIN: 'http://127.0.0.1:8080',
+    CHARITYPILOT_CANONICAL_API_ORIGIN: 'http://127.0.0.1:8080',
+  };
+  // Consistent, explicit identity: clean.
+  assert.deepEqual(
+    preflightIssues({
+      fileEnv: {
+        ...base,
+        POSTGRES_DB: 'charitypilot_personal_server',
+        POSTGRES_USER: 'charitypilot_personal_server',
+        DATABASE_URL: 'postgresql://charitypilot_personal_server:pw@db:5432/charitypilot_personal_server',
+      },
+      resolvedEnvFilePath: envFilePath,
+    }),
+    [],
+  );
+  // Appliance-shaped URL with the POSTGRES_* vars forgotten: both mismatches named.
+  const forgotten = preflightIssues({
+    fileEnv: { ...base, DATABASE_URL: 'postgresql://charitypilot_personal_server:pw@db:5432/charitypilot_personal_server' },
+    resolvedEnvFilePath: envFilePath,
+  });
+  assert.ok(
+    forgotten.includes(
+      'DATABASE_URL database "charitypilot_personal_server" does not match POSTGRES_DB (resolved "charitypilot"); set POSTGRES_DB in the env file to the database the volume actually holds',
+    ),
+    forgotten.join('\n'),
+  );
+  assert.ok(
+    forgotten.includes(
+      'DATABASE_URL user "charitypilot_personal_server" does not match POSTGRES_USER (resolved "charitypilot"); set POSTGRES_USER in the env file to the role the volume actually holds',
+    ),
+    forgotten.join('\n'),
+  );
+  // Default identity with the default URL (today's local fixture): clean — pins that no new issue appears for existing deployments.
+  assert.deepEqual(
+    preflightIssues({
+      fileEnv: { ...base, DATABASE_URL: 'postgresql://charitypilot:scratch-password@db:5432/charitypilot' },
+      resolvedEnvFilePath: envFilePath,
+    }),
+    [],
+  );
+});
+
+test('P3-1: the standalone backup subcommand passes the env file database identity to runBackup', async () => {
+  const runDeploy = await loadDeployRunner();
+  const stateDir = makeFixtureDir('bluegreen-db-identity-backup-subcommand-');
+  const envPath = join(stateDir, 'vm.env');
+  writeEnvFile(envPath, {
+    POSTGRES_DB: 'charitypilot_personal_server',
+    POSTGRES_USER: 'charitypilot_personal_server',
+    DATABASE_URL: 'postgresql://charitypilot_personal_server:pw@db:5432/charitypilot_personal_server',
+  });
+  const { runCommand } = makeFakeRunCommand();
+  const backupCtxs = [];
+  const deps = {
+    runCommand,
+    runBackupImpl: async (ctx) => {
+      backupCtxs.push(ctx);
+      return { plan: { dir: join(stateDir, 'backups', 'x') }, manifest: {} };
+    },
+  };
+  const outcome = await runDeploy(['backup', '--env-file', envPath, '--state-dir', stateDir], deps);
+  assert.equal(outcome.status, 0, outcome.stderr);
+  assert.equal(backupCtxs.length, 1);
+  assert.equal(backupCtxs[0].databaseName, 'charitypilot_personal_server');
+  assert.equal(backupCtxs[0].databaseUser, 'charitypilot_personal_server');
+  rmSync(stateDir, { recursive: true, force: true });
+});
+
+test('P3-1: the restore-drill subcommand passes the env file database identity to runRestoreDrill', async () => {
+  const runDeploy = await loadDeployRunner();
+  const stateDir = makeFixtureDir('bluegreen-db-identity-restore-drill-subcommand-');
+  const envPath = join(stateDir, 'vm.env');
+  writeEnvFile(envPath, {
+    POSTGRES_DB: 'charitypilot_personal_server',
+    POSTGRES_USER: 'charitypilot_personal_server',
+    DATABASE_URL: 'postgresql://charitypilot_personal_server:pw@db:5432/charitypilot_personal_server',
+  });
+  // executeRestoreDrillCommand refuses with no backups found under the state
+  // directory (latestBackupDir), so seed a minimal backup dir to reach ctx
+  // construction — its contents are never read here since runRestoreDrillImpl
+  // is faked.
+  mkdirSync(join(stateDir, 'backups', '2026-08-31T00-00-00-000Z'), { recursive: true });
+  const { runCommand } = makeFakeRunCommand();
+  const drillCtxs = [];
+  const deps = {
+    runCommand,
+    runRestoreDrillImpl: async (ctx) => {
+      drillCtxs.push(ctx);
+      return { ok: true, rowCensus: {} };
+    },
+  };
+  const outcome = await runDeploy(['restore-drill', '--env-file', envPath, '--state-dir', stateDir], deps);
+  assert.equal(outcome.status, 0, outcome.stderr);
+  assert.equal(drillCtxs.length, 1);
+  assert.equal(drillCtxs[0].databaseName, 'charitypilot_personal_server');
+  assert.equal(drillCtxs[0].databaseUser, 'charitypilot_personal_server');
+  rmSync(stateDir, { recursive: true, force: true });
+});
+
+test('P3-2: composeFileArgs is a single -f by default and appends the override as a second -f', async () => {
+  const { composeFileArgs } = await loadDeployModule();
+  const defaults = composeFileArgs({});
+  assert.equal(defaults.length, 2);
+  assert.equal(defaults[0], '-f');
+  assert.match(defaults[1], /compose\.bluegreen\.yml$/);
+  assert.deepEqual(composeFileArgs({ BLUEGREEN_COMPOSE_OVERRIDE: '' }), defaults, '"" counts as unset');
+  // Ruling: path.resolve(repoRoot, '/abs/private-vm.yml') is what the engine
+  // actually produces on this Windows host (resolves to C:\abs\private-vm.yml,
+  // portably the same on Linux) — the literal string is not what composeFileArgs
+  // returns for an absolute-looking override.
+  const withOverride = composeFileArgs({ BLUEGREEN_COMPOSE_OVERRIDE: '/abs/private-vm.yml' });
+  assert.deepEqual(withOverride, [...defaults, '-f', resolve(repoRoot, '/abs/private-vm.yml')]);
+});
+
+test('P3-2: every docker compose call and the backup composeArgs carry the override -f when set', async () => {
+  const runDeploy = await loadDeployRunner();
+  const stateDir = makeFixtureDir('bluegreen-override-');
+  const overridePath = join(stateDir, 'override.yml');
+  writeFileSync(overridePath, 'volumes:\n  bluegreen-db:\n    external: true\n    name: x\n');
+  const envPath = join(stateDir, 'vm.env');
+  writeEnvFile(envPath, {
+    BLUEGREEN_COMPOSE_OVERRIDE: overridePath,
+    BLUEGREEN_DOCUMENTS_VOLUME: 'charitypilot-personal-server-documents',
+  });
+  seedMigrationsDir(stateDir, TARGET_COMMIT, []);
+  const { runCommand, calls } = makeFakeRunCommand();
+  const backupCtxs = [];
+  const outcome = await runDeploy(['deploy', '--env-file', envPath, '--state-dir', stateDir], {
+    runCommand,
+    runBackupImpl: async (ctx) => {
+      backupCtxs.push(ctx);
+      return { backupDir: join(stateDir, 'backups', 'x') };
+    },
+    runRestoreDrillImpl: async () => ({}),
+  });
+  assert.equal(outcome.status, 0, outcome.stderr);
+  const composeCalls = calls.filter((call) => call.command[0] === 'docker' && call.command[1] === 'compose');
+  assert.ok(composeCalls.length > 0);
+  for (const call of composeCalls) {
+    const flags = call.command.filter((_, i) => call.command[i - 1] === '-f');
+    assert.equal(flags.length, 2, `expected two -f flags in: ${call.command.join(' ')}`);
+    assert.match(flags[0], /compose\.bluegreen\.yml$/);
+    assert.equal(flags[1], overridePath);
+    assert.ok(call.command.indexOf('-p') > call.command.lastIndexOf('-f'), '-p must follow every -f');
+  }
+  assert.deepEqual(backupCtxs[0].composeArgs.filter((_, i) => backupCtxs[0].composeArgs[i - 1] === '-f')[1], overridePath);
+  rmSync(stateDir, { recursive: true, force: true });
+});
+
+test('P3-2: without an override every docker compose call has exactly one -f (default pinned)', async () => {
+  const runDeploy = await loadDeployRunner();
+  const stateDir = makeFixtureDir('bluegreen-no-override-');
+  const envPath = join(stateDir, 'local.env');
+  writeEnvFile(envPath);
+  seedMigrationsDir(stateDir, TARGET_COMMIT, []);
+  const { runCommand, calls } = makeFakeRunCommand();
+  const outcome = await runDeploy(['deploy', '--env-file', envPath, '--state-dir', stateDir], {
+    runCommand,
+    runBackupImpl: async () => ({ backupDir: join(stateDir, 'backups', 'x') }),
+    runRestoreDrillImpl: async () => ({}),
+  });
+  assert.equal(outcome.status, 0, outcome.stderr);
+  for (const call of calls.filter((c) => c.command[0] === 'docker' && c.command[1] === 'compose')) {
+    assert.equal(call.command.filter((arg) => arg === '-f').length, 1, call.command.join(' '));
+  }
+  rmSync(stateDir, { recursive: true, force: true });
+});
+
+test('P3-2: preflightIssues names a missing override file and requires BLUEGREEN_DOCUMENTS_VOLUME alongside an override', async () => {
+  const { preflightIssues } = await loadDeployModule();
+  const envFilePath = '/tmp/x.env';
+  // Ruling: FRONTEND_URL's loopback hostname is not an approved
+  // charitypilot.ie hostname, so preflightIssues also requires the
+  // canonical-origin overrides here regardless of the override checks under
+  // test — mirrors the P3-1 preflightIssues test's own base fixture, since
+  // BLUEGREEN_ORIGIN is itself exact loopback (loopback-shaped values
+  // accepted).
+  const base = {
+    BLUEGREEN_ENV_FILE: envFilePath,
+    BLUEGREEN_ORIGIN: 'http://127.0.0.1:8080',
+    READINESS_API_KEY: READINESS_KEY,
+    FRONTEND_URL: 'http://127.0.0.1:8080',
+    DATABASE_URL: 'postgresql://charitypilot:pw@db:5432/charitypilot',
+    CHARITYPILOT_CANONICAL_WEB_ORIGIN: 'http://127.0.0.1:8080',
+    CHARITYPILOT_CANONICAL_API_ORIGIN: 'http://127.0.0.1:8080',
+  };
+  const missing = preflightIssues({
+    fileEnv: { ...base, BLUEGREEN_COMPOSE_OVERRIDE: '/definitely/not/here.yml', BLUEGREEN_DOCUMENTS_VOLUME: 'v' },
+    resolvedEnvFilePath: envFilePath,
+  });
+  // Same resolve() bug class as the composeFileArgs test above: the engine
+  // reports the RESOLVED path (resolve(repoRoot, ...)), which on this
+  // Windows host turns '/definitely/not/here.yml' into
+  // 'C:\definitely\not\here.yml' — portably the same fix on Linux.
+  assert.ok(
+    missing.includes(`BLUEGREEN_COMPOSE_OVERRIDE file not found: ${resolve(repoRoot, '/definitely/not/here.yml')}`),
+    missing.join('\n'),
+  );
+
+  const dir = makeFixtureDir('bluegreen-override-preflight-');
+  const present = join(dir, 'o.yml');
+  writeFileSync(present, 'volumes: {}\n');
+  const noVolume = preflightIssues({
+    fileEnv: { ...base, BLUEGREEN_COMPOSE_OVERRIDE: present },
+    resolvedEnvFilePath: envFilePath,
+  });
+  assert.ok(
+    noVolume.includes(
+      'BLUEGREEN_DOCUMENTS_VOLUME is required when BLUEGREEN_COMPOSE_OVERRIDE is set (an override exists to move the volumes; the backup must tar the one the override names)',
+    ),
+    noVolume.join('\n'),
+  );
+  assert.deepEqual(
+    preflightIssues({
+      fileEnv: { ...base, BLUEGREEN_COMPOSE_OVERRIDE: present, BLUEGREEN_DOCUMENTS_VOLUME: 'v' },
+      resolvedEnvFilePath: envFilePath,
+    }),
+    [],
+  );
+  assert.deepEqual(preflightIssues({ fileEnv: base, resolvedEnvFilePath: envFilePath }), [], 'no override: no new issues');
+  rmSync(dir, { recursive: true, force: true });
+});
+
+test('P3-3: a deploy brings db up (with --wait) before the backup runs and before any exec against db', async () => {
+  const runDeploy = await loadDeployRunner();
+  const stateDir = makeFixtureDir('bluegreen-ensure-db-');
+  const envPath = join(stateDir, 'local.env');
+  writeEnvFile(envPath);
+  seedMigrationsDir(stateDir, TARGET_COMMIT, []);
+  const { runCommand, calls } = makeFakeRunCommand();
+  let callsAtBackup = -1;
+  const outcome = await runDeploy(['deploy', '--env-file', envPath, '--state-dir', stateDir], {
+    runCommand,
+    runBackupImpl: async () => {
+      callsAtBackup = calls.length;
+      return { backupDir: join(stateDir, 'backups', 'x') };
+    },
+    runRestoreDrillImpl: async () => ({}),
+  });
+  assert.equal(outcome.status, 0, outcome.stderr);
+  const dbUpIndex = calls.findIndex(
+    (call) => call.command.includes('up') && call.command.includes('--wait') && call.command.at(-1) === 'db',
+  );
+  assert.notEqual(dbUpIndex, -1, 'db must be brought up explicitly');
+  assert.ok(dbUpIndex < callsAtBackup, 'db up must precede the backup');
+  const firstExecDb = calls.findIndex((call) => call.command.includes('exec') && call.command.includes('db'));
+  assert.ok(firstExecDb === -1 || dbUpIndex < firstExecDb, 'db up must precede any exec against db');
+  // writeDeployStatus (scripts/bluegreen/lib.mjs:112) writes { history: [{ timestamp, phase, detail }] }
+  // to <stateDir>/deploy-status.json.
+  const { history } = JSON.parse(readFileSync(join(stateDir, 'deploy-status.json'), 'utf8'));
+  const phases = history.map((entry) => entry.phase);
+  assert.ok(phases.includes('ensure-db'), phases.join(' → '));
+  assert.ok(phases.indexOf('ensure-db') < phases.indexOf('backup'), phases.join(' → '));
+  rmSync(stateDir, { recursive: true, force: true });
+});
+
+test('P3-5: the committed private-VM env template, filled in, passes engine preflight with zero issues', async () => {
+  const { preflightIssues, parseEnvFile } = await loadDeployModule();
+  const repoRoot = dirname(scriptsDir);
+  let text = readFileSync(join(repoRoot, '.env.bluegreen.private-vm.example'), 'utf8');
+  const dir = makeFixtureDir('bluegreen-vm-template-');
+  const envPath = join(dir, 'private-vm.env');
+  const fill = {
+    REPLACE_ME_TAILSCALE_HOSTNAME: 'charitypilot.tail0000.ts.net',
+    REPLACE_ME_POSTGRES_DB: 'charitypilot_personal_server',
+    REPLACE_ME_POSTGRES_USER: 'charitypilot_personal_server',
+    REPLACE_ME_POSTGRES_PASSWORD: 'a'.repeat(64),
+    REPLACE_ME_JWT_SECRET: 'j'.repeat(48),
+    REPLACE_ME_AUTH_RECOVERY_SECRET: '0123456789abcdef'.repeat(4),
+    REPLACE_ME_READINESS_API_KEY: 'r'.repeat(40),
+    REPLACE_ME_OWNER_JWT_SECRET: 'o'.repeat(48),
+    REPLACE_ME_ENV_FILE_PATH: envPath,
+  };
+  for (const [key, value] of Object.entries(fill)) text = text.split(key).join(value);
+  assert.doesNotMatch(text, /REPLACE_ME_/);
+  writeFileSync(envPath, text);
+  const fileEnv = parseEnvFile(envPath);
+  assert.equal(fileEnv.BLUEGREEN_COMPOSE_OVERRIDE, 'compose.bluegreen.private-vm.yml');
+  assert.equal(fileEnv.BLUEGREEN_DOCUMENTS_VOLUME, 'charitypilot-personal-server-documents');
+  assert.deepEqual(preflightIssues({ fileEnv, resolvedEnvFilePath: envPath }), []);
+  rmSync(dir, { recursive: true, force: true });
 });

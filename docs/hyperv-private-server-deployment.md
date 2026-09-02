@@ -188,30 +188,52 @@ exist; a fresh install is only appropriate while the database is still empty.
 
 ## Scheduled backups
 
-`personal:server:backup` quiesces writers, proves database identity, reconciles
-document metadata, encrypts with AES-256-GCM and verifies before restarting
-services. It needs no privileges beyond the operator's Docker access, so a plain
-user crontab is sufficient:
+**Status: the blue-green cutover for this host has not been executed yet** (see
+docs/bluegreen-runbook.md → "Cutting the private VM over"). Until it has, the
+appliance rules under "History: the appliance era" still apply — in particular,
+never advance the checkout on the appliance.
 
-```cron
-30 3 * * * $HOME/bin/charitypilot-backup.sh >/dev/null 2>&1
-```
-
-Do not automate pruning of recovery sets. Deleting recovery artifacts is not a
-routine operator action in this profile; monitor free space instead.
+Once the blue-green cutover has been executed, the nightly backup is
+`scripts/bluegreen-nightly-backup.sh`, not the appliance's
+`charitypilot-backup.sh`. See `docs/bluegreen-runbook.md`'s "The nightly cron
+(private VM)" section for the install command, the crontab entry it writes,
+where backups land on the VM, and the off-host copy command (`scp` via the
+Windows host, at least weekly and after any deploy).
 
 ---
 
 ## Deploying a new commit
 
+**Status: the blue-green cutover for this host has not been executed yet** (see
+docs/bluegreen-runbook.md → "Cutting the private VM over"). Until it has, the
+appliance rules under "History: the appliance era" still apply — in particular,
+never advance the checkout on the appliance.
+
+Once the blue-green cutover has been executed, this host deploys like any other
+Docker host:
+
+```bash
+# on the VM, as cpops (never sudo)
+cd ~/charity-governance && git pull --ff-only
+npm run bluegreen:deploy -- --env-file .bluegreen/private-vm.env --detach
+npm run bluegreen:status -- --env-file .bluegreen/private-vm.env
+```
+
+`docs/bluegreen-runbook.md` is the reference: phases, failure modes, one-command
+`bluegreen:rollback`, and the destructive-migration override's cost. There is
+no VM teardown and no installer step. The appliance installer remains this
+host's worst-case rebuild path only (provision fresh → run the cutover
+sequence in the blue-green runbook against a restored backup).
+
+### History: the appliance era
+
+The sections below describe this host's behaviour **before** the blue-green
+cutover, and remain accurate for any host still running the appliance
+(`compose.personal-server.yml`, no blue-green engine installed) — which
+includes this host until the cutover above has been executed.
+
 > **Do not do this.** Advancing the checkout silently destroys your ability to
 > restore. Verified by deliberate test, 2026-08-09 — details below.
-
-There is **no sanctioned update path for this profile yet**.
-`personal:server:update` is version-bound and requires a signed release archive
-and an update receipt; no `personal-v*` release has been published, so it cannot
-run. The Linux documentation is explicit that upgrades are supervised engineering
-work and that improvising one by pulling source is not supported.
 
 ### Why improvising a deploy breaks restore
 
@@ -274,29 +296,6 @@ flag; the option surface is origin, port, set, key and confirmation only.
 disaster recovery. It is not a deploy mechanism, and describing it as one — as
 an earlier revision of this document did — sends you down a path that ends in a
 refusal after you have already built the replacement machine.
-
-### Supported ways to ship a change
-
-1. Wait for the Linux release updater (open work). This is the real fix: the
-   `personal-vX.Y.Z` adoption path in `assertCleanGitReleaseAdoption` already
-   exists and requires the target commit to descend from the installed one, but
-   it needs a published release identity, which the git-install profile has not
-   got.
-2. Blue/green with an explicit data migration: build a second host, fresh-install
-   at the new commit against an empty database (fully sanctioned), then move the
-   data across with `pg_dump`/`pg_restore` plus the documents volume, apply
-   migrations, and verify by row count and file reconciliation before cutting
-   over. The one-time copy is outside the recovery-set attestation, so the
-   verification is what stands in for it. The old host stays untouched and
-   running throughout, which is the property that makes this safe.
-
-Both are heavier than a deploy. That is the current cost of the profile being
-provisional, and it is a smaller cost than unrestorable backups.
-
-Note that a non-loopback origin makes the installer run **full** certification,
-which probes the live private HTTPS endpoint. The tailnet name must therefore
-already resolve to the new host before its install can complete — which forces
-the name swap to happen mid-cutover rather than after it.
 
 ---
 
