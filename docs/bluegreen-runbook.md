@@ -444,11 +444,13 @@ completed deploy or backup.
 
 ## Cutting the private VM over from the appliance
 
-**Not yet executed.** This is the operator sequence for the cutover; record
-evidence in `docs/superpowers/plans/2026-09-02-private-vm-bluegreen-cutover-report.md`
-as you run it, then date this line. Kept here because it is also the recovery
-sequence if the VM must ever be re-provisioned through the appliance installer
-and then brought back onto the engine.
+**Executed on 2026-09-02** — attempt 3, a 31-second outage. Two earlier attempts were
+rolled back the same day after exposing three engine defects (documents container missing
+`--user`; a failed deploy leaving its `db` on the target's data; `spawnSync`'s 1 MiB
+output cap against an 8.4 MB documents tar), all since fixed. Evidence:
+`docs/superpowers/plans/2026-09-02-private-vm-bluegreen-cutover-report.md`. Kept here
+because it is also the recovery sequence if the VM must ever be re-provisioned through
+the appliance installer and then brought back onto the engine.
 
 Variables used below:
 
@@ -715,11 +717,11 @@ Get-VMSnapshot -VMName charitypilot-server
 ```
 Gate: no snapshots listed (a lingering checkpoint grows a differencing disk forever).
 
-Update `D:\CharityPilot-VM\provision\RUNBOOK.md`: §1 row "Installed commit" → "Blue-green engine; active colour/commit via `npm run bluegreen:status -- --env-file .bluegreen/private-vm.env`"; row "Nightly backup" → "`~/bin/bluegreen-nightly-backup.sh`, sets under `~/charity-governance/.bluegreen/state/backups/`"; §3 → a new lead paragraph "**Deploy = `git pull --ff-only && npm run bluegreen:deploy -- --env-file .bluegreen/private-vm.env`. See `docs/bluegreen-runbook.md`.**" with Options A–D retitled "History — appliance era (retired on the cutover date)".
+Update `D:\CharityPilot-VM\provision\RUNBOOK.md`: §1 row "Installed commit" → "Blue-green engine; active colour/commit via `npm run bluegreen:status -- --env-file .bluegreen/private-vm.env`"; row "Nightly backup" → "`~/bin/bluegreen-nightly-backup.sh`, sets under `~/charity-governance/.bluegreen/state/backups/`"; §3 → a new lead paragraph "**Deploy = `git pull --ff-only && npm run bluegreen:deploy -- --env-file .bluegreen/private-vm.env`. See `docs/bluegreen-runbook.md`.**" with Options A–D retitled "History — appliance era (retired on 2026-09-02)".
 
-Update the agent memory `charitypilot-deploy-procedure.md`: replace "The deploy decision, in one place" with the blue-green command; keep the access/traps sections; mark Option D as history; note the appliance archive path and that `bluegreen:rollback` and `restore-drill` were proven on the host on the cutover date.
+Update the agent memory `charitypilot-deploy-procedure.md`: replace "The deploy decision, in one place" with the blue-green command; keep the access/traps sections; mark Option D as history; note the appliance archive path and that `bluegreen:rollback` and `restore-drill` were proven on the host on 2026-09-02.
 
-Flip the status banners in `docs/hyperv-private-server-deployment.md` (both sections) and date the "Not yet executed" line + the two "the cutover date" placeholders in `docs/bluegreen-runbook.md`.
+Flip the status banners in `docs/hyperv-private-server-deployment.md` (both sections) and date this section's lead line in `docs/bluegreen-runbook.md`.
 
 Finish the report file with: timestamps per step, every gate's output, the operator id and test-tenant id, the two commits deployed in step 8, and the deploy/rollback wall-clock times. Commit the report and the runbook marker:
 ```bash

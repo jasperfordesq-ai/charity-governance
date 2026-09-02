@@ -188,12 +188,14 @@ exist; a fresh install is only appropriate while the database is still empty.
 
 ## Scheduled backups
 
-**Status: the blue-green cutover for this host has not been executed yet** (see
-docs/bluegreen-runbook.md → "Cutting the private VM over"). Until it has, the
-appliance rules under "History: the appliance era" still apply — in particular,
-never advance the checkout on the appliance.
+**Status: this host was cut over to blue-green on 2026-09-02** (31-second outage;
+deploy, rollback and re-deploy proven on the host the same day — evidence in
+`docs/superpowers/plans/2026-09-02-private-vm-bluegreen-cutover-report.md`). The
+appliance install is archived at `~/charitypilot-appliance-archive-20260902/` on the
+guest and no longer runs; the sections under "History: the appliance era" apply only
+to a host still on that profile.
 
-Once the blue-green cutover has been executed, the nightly backup is
+The nightly backup is
 `scripts/bluegreen-nightly-backup.sh`, not the appliance's
 `charitypilot-backup.sh`. See `docs/bluegreen-runbook.md`'s "The nightly cron
 (private VM)" section for the install command, the crontab entry it writes,
@@ -204,12 +206,14 @@ Windows host, at least weekly and after any deploy).
 
 ## Deploying a new commit
 
-**Status: the blue-green cutover for this host has not been executed yet** (see
-docs/bluegreen-runbook.md → "Cutting the private VM over"). Until it has, the
-appliance rules under "History: the appliance era" still apply — in particular,
-never advance the checkout on the appliance.
+**Status: this host was cut over to blue-green on 2026-09-02** (31-second outage;
+deploy, rollback and re-deploy proven on the host the same day — evidence in
+`docs/superpowers/plans/2026-09-02-private-vm-bluegreen-cutover-report.md`). The
+appliance install is archived at `~/charitypilot-appliance-archive-20260902/` on the
+guest and no longer runs; the sections under "History: the appliance era" apply only
+to a host still on that profile.
 
-Once the blue-green cutover has been executed, this host deploys like any other
+This host deploys like any other
 Docker host:
 
 ```bash
