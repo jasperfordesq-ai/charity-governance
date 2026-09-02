@@ -331,10 +331,11 @@ completed deploy or backup.
 
 ## Cutting the private VM over from the appliance
 
-Executed once, on <date>, evidence in the plan's task report. Kept here
-because it is also the recovery sequence if the VM must ever be
-re-provisioned through the appliance installer and then brought back onto
-the engine.
+**Not yet executed.** This is the operator sequence for the cutover; record
+evidence in `docs/superpowers/plans/2026-09-02-private-vm-bluegreen-cutover-report.md`
+as you run it, then date this line. Kept here because it is also the recovery
+sequence if the VM must ever be re-provisioned through the appliance installer
+and then brought back onto the engine.
 
 Variables used below:
 
@@ -365,6 +366,11 @@ Gate: exactly one `https://charitypilot.<tailnet>.ts.net (tailnet only)` → `ht
 ssh -i $KEY $VM "docker volume ls --format '{{.Name}}' | grep personal-server"
 ```
 Gate: `charitypilot-personal-server-db` and `charitypilot-personal-server-documents` both listed.
+
+```powershell
+ssh -i $KEY $VM "docker network inspect -f '{{range .IPAM.Config}}{{.Subnet}} {{end}}' \$(docker network ls -q)"
+```
+Gate: no existing network uses `172.31.250.0/24` (`compose.bluegreen.private-vm.yml` pins the engine's internal network to it, and Docker's default address pool `172.17.0.0/12` can hand out addresses that reach `172.31.x`). If something already holds it, stop and change the pinned subnet in the override plus `TRUSTED_PROXY_ADDRESSES` in the env file together.
 
 ```powershell
 ssh -i $KEY $VM "docker compose --project-name charitypilot-personal-server --env-file ~/.local/share/charitypilot/personal-server/.env.personal-server -f ~/charity-governance/compose.personal-server.yml exec -T db psql -U \"\$(grep -E '^POSTGRES_USER=' ~/.local/share/charitypilot/personal-server/.env.personal-server | cut -d= -f2- | tr -d '\"')\" -d \"\$(grep -E '^POSTGRES_DB=' ~/.local/share/charitypilot/personal-server/.env.personal-server | cut -d= -f2- | tr -d '\"')\" -tAc 'select count(*) from \"Organisation\"; select count(*) from \"User\"; select count(*) from \"Document\"; select count(*) from _prisma_migrations;'"
@@ -404,7 +410,7 @@ Gate: `Get-ChildItem -Recurse D:\CharityPilot-VM\backups\pre-bluegreen | Measure
 - [ ] **Step 2: Hyper-V checkpoint (operator, ELEVATED PowerShell — Hyper-V cmdlets only; do not run ssh from this shell).**
 
 ```powershell
-$SHA = "<paste the origin/master short sha from Task 7 step 12>"
+$SHA = "<paste the short sha of the master commit you deployed from>"
 Stop-VM -Name charitypilot-server                      # clean guest shutdown (~1 min)
 Checkpoint-VM -Name charitypilot-server -SnapshotName "pre-bluegreen-$SHA"
 Start-VM -Name charitypilot-server
@@ -476,7 +482,10 @@ shows `activeColor: blue` at the master commit, `docker compose ps -a` with `db`
 - [ ] **Step 5: Bootstrap the platform operator (DOWNTIME ENDS at the start of this step — the site is already serving).**
 
 ```powershell
-ssh -i $KEY $VM "cd ~/charity-governance && TAG=\$(git rev-parse HEAD) && set -a && . .bluegreen/private-vm.env && set +a && BLUEGREEN_BLUE_TAG=\$TAG BLUEGREEN_GREEN_TAG=unbuilt BLUEGREEN_ACTIVE_TAG=\$TAG docker compose -f compose.bluegreen.yml -f compose.bluegreen.private-vm.yml -p charitypilot-bluegreen --profile blue run --rm --no-deps api-blue node dist/jobs/create-platform-operator.js --email=jasper@hour-timebank.ie --name='Jasper Ford'"
+# Sourcing the env file here would background the assignment at the "&" in
+# DATABASE_URL's query string ("?sslmode=verify-full&target_session_attrs=..."),
+# so export exactly the three interpolation vars compose needs instead.
+ssh -i $KEY $VM "cd ~/charity-governance && TAG=\$(git rev-parse HEAD) && export BLUEGREEN_ENV_FILE=\$HOME/charity-governance/.bluegreen/private-vm.env BLUEGREEN_ORIGIN=\$(grep -E '^BLUEGREEN_ORIGIN=' \$HOME/charity-governance/.bluegreen/private-vm.env | cut -d= -f2-) BLUEGREEN_FRONT_PORT=8080 && BLUEGREEN_BLUE_TAG=\$TAG BLUEGREEN_GREEN_TAG=unbuilt BLUEGREEN_ACTIVE_TAG=\$TAG docker compose -f compose.bluegreen.yml -f compose.bluegreen.private-vm.yml -p charitypilot-bluegreen --profile blue run --rm --no-deps api-blue node dist/jobs/create-platform-operator.js --email=jasper@hour-timebank.ie --name='Jasper Ford'"
 ```
 Gate: `Created platform operator <id> (jasper@hour-timebank.ie).` and a set-password link of the form `https://<tailscale-host>/owner/set-password#token=…` (fragment, not query). The operator opens it on a tailnet device and sets the owner-console password. Record the operator id (never the token) in the report.
 
@@ -544,9 +553,11 @@ Get-VMSnapshot -VMName charitypilot-server
 ```
 Gate: no snapshots listed (a lingering checkpoint grows a differencing disk forever).
 
-Update `D:\CharityPilot-VM\provision\RUNBOOK.md`: §1 row "Installed commit" → "Blue-green engine; active colour/commit via `npm run bluegreen:status -- --env-file .bluegreen/private-vm.env`"; row "Nightly backup" → "`~/bin/bluegreen-nightly-backup.sh`, sets under `~/charity-governance/.bluegreen/state/backups/`"; §3 → a new lead paragraph "**Deploy = `git pull --ff-only && npm run bluegreen:deploy -- --env-file .bluegreen/private-vm.env`. See `docs/bluegreen-runbook.md`.**" with Options A–D retitled "History — appliance era (retired <date>)".
+Update `D:\CharityPilot-VM\provision\RUNBOOK.md`: §1 row "Installed commit" → "Blue-green engine; active colour/commit via `npm run bluegreen:status -- --env-file .bluegreen/private-vm.env`"; row "Nightly backup" → "`~/bin/bluegreen-nightly-backup.sh`, sets under `~/charity-governance/.bluegreen/state/backups/`"; §3 → a new lead paragraph "**Deploy = `git pull --ff-only && npm run bluegreen:deploy -- --env-file .bluegreen/private-vm.env`. See `docs/bluegreen-runbook.md`.**" with Options A–D retitled "History — appliance era (retired on the cutover date)".
 
-Update the agent memory `charitypilot-deploy-procedure.md`: replace "The deploy decision, in one place" with the blue-green command; keep the access/traps sections; mark Option D as history; note the appliance archive path and that `bluegreen:rollback` and `restore-drill` were proven on the host on <date>.
+Update the agent memory `charitypilot-deploy-procedure.md`: replace "The deploy decision, in one place" with the blue-green command; keep the access/traps sections; mark Option D as history; note the appliance archive path and that `bluegreen:rollback` and `restore-drill` were proven on the host on the cutover date.
+
+Flip the status banners in `docs/hyperv-private-server-deployment.md` (both sections) and date the "Not yet executed" line + the two "the cutover date" placeholders in `docs/bluegreen-runbook.md`.
 
 Finish the report file with: timestamps per step, every gate's output, the operator id and test-tenant id, the two commits deployed in step 8, and the deploy/rollback wall-clock times. Commit the report and the runbook marker:
 ```bash

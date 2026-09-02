@@ -188,7 +188,12 @@ exist; a fresh install is only appropriate while the database is still empty.
 
 ## Scheduled backups
 
-Since the blue-green cutover, the nightly backup is
+**Status: the blue-green cutover for this host has not been executed yet** (see
+docs/bluegreen-runbook.md → "Cutting the private VM over"). Until it has, the
+appliance rules under "History: the appliance era" still apply — in particular,
+never advance the checkout on the appliance.
+
+Once the blue-green cutover has been executed, the nightly backup is
 `scripts/bluegreen-nightly-backup.sh`, not the appliance's
 `charitypilot-backup.sh`. See `docs/bluegreen-runbook.md`'s "The nightly cron
 (private VM)" section for the install command, the crontab entry it writes,
@@ -199,7 +204,13 @@ Windows host, at least weekly and after any deploy).
 
 ## Deploying a new commit
 
-Since the blue-green cutover this host deploys like any other Docker host:
+**Status: the blue-green cutover for this host has not been executed yet** (see
+docs/bluegreen-runbook.md → "Cutting the private VM over"). Until it has, the
+appliance rules under "History: the appliance era" still apply — in particular,
+never advance the checkout on the appliance.
+
+Once the blue-green cutover has been executed, this host deploys like any other
+Docker host:
 
 ```bash
 # on the VM, as cpops (never sudo)
@@ -218,7 +229,11 @@ sequence in the blue-green runbook against a restored backup).
 
 The sections below describe this host's behaviour **before** the blue-green
 cutover, and remain accurate for any host still running the appliance
-(`compose.personal-server.yml`, no blue-green engine installed).
+(`compose.personal-server.yml`, no blue-green engine installed) — which
+includes this host until the cutover above has been executed.
+
+> **Do not do this.** Advancing the checkout silently destroys your ability to
+> restore. Verified by deliberate test, 2026-08-09 — details below.
 
 ### Why improvising a deploy breaks restore
 
