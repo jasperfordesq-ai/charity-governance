@@ -185,6 +185,7 @@ test('deploy: phase order is exactly the spec sequence (first deploy, no destruc
   const phases = status.history.map((entry) => entry.phase);
   assert.deepEqual(phases, [
     'preflight',
+    'ensure-db',
     'backup',
     'resolve',
     'worktree',
@@ -224,7 +225,7 @@ test('deploy: a blocked migration aborts BEFORE quiesce and touches nothing', as
 
   const status = libModule.deployStatus(stateDir);
   const phases = status.history.map((entry) => entry.phase);
-  assert.deepEqual(phases, ['preflight', 'backup', 'resolve', 'worktree', 'build', 'gate']);
+  assert.deepEqual(phases, ['preflight', 'ensure-db', 'backup', 'resolve', 'worktree', 'build', 'gate']);
   assert.equal(
     calls.some((call) => call.command.includes('stop')),
     false,
@@ -2177,4 +2178,37 @@ test('P3-2: preflightIssues names a missing override file and requires BLUEGREEN
   );
   assert.deepEqual(preflightIssues({ fileEnv: base, resolvedEnvFilePath: envFilePath }), [], 'no override: no new issues');
   rmSync(dir, { recursive: true, force: true });
+});
+
+test('P3-3: a deploy brings db up (with --wait) before the backup runs and before any exec against db', async () => {
+  const runDeploy = await loadDeployRunner();
+  const stateDir = makeFixtureDir('bluegreen-ensure-db-');
+  const envPath = join(stateDir, 'local.env');
+  writeEnvFile(envPath);
+  seedMigrationsDir(stateDir, TARGET_COMMIT, []);
+  const { runCommand, calls } = makeFakeRunCommand();
+  let callsAtBackup = -1;
+  const outcome = await runDeploy(['deploy', '--env-file', envPath, '--state-dir', stateDir], {
+    runCommand,
+    runBackupImpl: async () => {
+      callsAtBackup = calls.length;
+      return { backupDir: join(stateDir, 'backups', 'x') };
+    },
+    runRestoreDrillImpl: async () => ({}),
+  });
+  assert.equal(outcome.status, 0, outcome.stderr);
+  const dbUpIndex = calls.findIndex(
+    (call) => call.command.includes('up') && call.command.includes('--wait') && call.command.at(-1) === 'db',
+  );
+  assert.notEqual(dbUpIndex, -1, 'db must be brought up explicitly');
+  assert.ok(dbUpIndex < callsAtBackup, 'db up must precede the backup');
+  const firstExecDb = calls.findIndex((call) => call.command.includes('exec') && call.command.includes('db'));
+  assert.ok(firstExecDb === -1 || dbUpIndex < firstExecDb, 'db up must precede any exec against db');
+  // writeDeployStatus (scripts/bluegreen/lib.mjs:112) writes { history: [{ timestamp, phase, detail }] }
+  // to <stateDir>/deploy-status.json.
+  const { history } = JSON.parse(readFileSync(join(stateDir, 'deploy-status.json'), 'utf8'));
+  const phases = history.map((entry) => entry.phase);
+  assert.ok(phases.includes('ensure-db'), phases.join(' → '));
+  assert.ok(phases.indexOf('ensure-db') < phases.indexOf('backup'), phases.join(' → '));
+  rmSync(stateDir, { recursive: true, force: true });
 });

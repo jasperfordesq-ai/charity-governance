@@ -891,6 +891,17 @@ async function executeDeploy(deps) {
 
   ensureActiveUpstreamsFileExists(deps.activeUpstreamsPath, target);
 
+  // Phase 1.5: ensure-db
+  // P3: a first deploy on a stopped stack (the VM cutover, or any host where
+  // the stack was `down`) has no running db for phase 2's `exec db pg_dump`
+  // or phase 6's `exec db psql` to reach. Idempotent when db is already up.
+  writeDeployStatus(resolvedStateDir, 'ensure-db', 'starting db if not already running');
+  try {
+    await run([...composePrefix(), 'up', '-d', '--wait', 'db'], deployEnv);
+  } catch (error) {
+    return result(1, '', `Blue-green deploy failed: could not start the db service: ${redact(error)}\n`);
+  }
+
   // Phase 2: backup
   writeDeployStatus(resolvedStateDir, 'backup', options.skipBackup ? 'skipped' : 'starting pre-migration backup');
   if (!options.skipBackup) {
