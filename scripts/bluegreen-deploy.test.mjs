@@ -1880,7 +1880,7 @@ test('P3-1: databaseIdentity defaults to charitypilot/charitypilot and honours P
   );
 });
 
-test('P3-1: the gate psql, pg backup, and drill all use the env file database identity', async () => {
+test('P3-1: the gate psql and the deploy-phase backup use the env file database identity', async () => {
   const runDeploy = await loadDeployRunner();
   const stateDir = makeFixtureDir('bluegreen-db-identity-');
   const envPath = join(stateDir, 'vm.env');
