@@ -1,0 +1,40 @@
+# =============================================================================
+# compose.bluegreen.private-vm.yml — the PRIVATE HYPER-V VM's override for the
+# blue-green engine. Always passed AFTER compose.bluegreen.yml:
+#
+#   docker compose -f compose.bluegreen.yml -f compose.bluegreen.private-vm.yml -p charitypilot-bluegreen ...
+#
+# (the engine does this itself when the env file sets
+# BLUEGREEN_COMPOSE_OVERRIDE=compose.bluegreen.private-vm.yml).
+#
+# It changes WHERE the data lives and nothing else: the engine's two volume
+# keys are re-pointed at the appliance install's existing external volumes, so
+# cutting the VM over changes running processes, never data. `external: true`
+# means compose will NEVER create, remove, or rename them — `down -v` on this
+# project leaves them untouched. Postgres major/minor is byte-identical between
+# compose.bluegreen.yml and compose.personal-server.yml (16.4-alpine, same
+# digest), so the existing cluster directory starts unmodified.
+#
+# The internal network's subnet is pinned so TRUSTED_PROXY_ADDRESSES in the
+# VM env file (172.31.250.0/24) is exact rather than a docker-wide guess. It
+# deliberately differs from the appliance's 172.30.250.0/24 and 172.30.251.0/24
+# because both networks exist on the host during the cutover.
+#
+# No `services:` key on purpose — the engine's topology is owned by
+# compose.bluegreen.yml alone (scripts/check-bluegreen-private-vm-compose.test.mjs
+# pins this).
+# =============================================================================
+
+volumes:
+  bluegreen-db:
+    external: true
+    name: charitypilot-personal-server-db
+  bluegreen-documents:
+    external: true
+    name: charitypilot-personal-server-documents
+
+networks:
+  bluegreen-internal:
+    ipam:
+      config:
+        - subnet: 172.31.250.0/24
