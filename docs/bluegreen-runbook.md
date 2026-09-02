@@ -752,3 +752,6 @@ scp -i $KEY -r "cpops@charitypilot.local:$NEWEST" D:\CharityPilot-VM\backups\blu
 <!-- Task 10 acceptance-run-3 marker (2026-09-01): trivial docs touch used as
      the Step-2 redeploy commit for the local acceptance cycle's blue->green
      cutover proof, run after the Caddy admin-socket fix. Safe to keep or drop. -->
+
+<!-- Cutover acceptance marker (2026-09-02): trivial docs touch used as the step-8 redeploy commit
+     for the private VM blue->green cutover proof. Safe to keep or drop. -->
