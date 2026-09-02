@@ -335,9 +335,55 @@ test('validateProductionEnv requires a local storage path when local storage is 
   );
 });
 
-test('validateDocumentStorageCleanupEnv rejects local document storage in production', () => {
-  setCompleteProductionEnv({ DOCUMENT_STORAGE_DRIVER: 'local' });
+test('validateDocumentStorageCleanupEnv mirrors validateProductionEnv on the local storage driver (both directions)', () => {
+  // Local direction: a self-contained deployment (the private VM) runs the
+  // cleanup job against StorageService's local branch, so the Supabase trio
+  // must NOT be required and the driver must not be rejected — but the local
+  // path must be, exactly as validateProductionEnv demands it.
+  setCompleteProductionEnv({
+    DOCUMENT_STORAGE_DRIVER: 'local',
+    LOCAL_FILE_STORAGE_DIR: '/data/documents',
+    SUPABASE_URL: undefined,
+    SUPABASE_SERVICE_ROLE_KEY: undefined,
+    SUPABASE_STORAGE_BUCKET: undefined,
+  });
+  assert.doesNotThrow(() => validateDocumentStorageCleanupEnv());
 
+  setCompleteProductionEnv({
+    DOCUMENT_STORAGE_DRIVER: 'local',
+    LOCAL_FILE_STORAGE_DIR: undefined,
+    SUPABASE_URL: undefined,
+    SUPABASE_SERVICE_ROLE_KEY: undefined,
+    SUPABASE_STORAGE_BUCKET: undefined,
+  });
+  assert.throws(
+    () => validateDocumentStorageCleanupEnv(),
+    (error: unknown) =>
+      error instanceof AppError &&
+      Array.isArray(error.details) &&
+      error.details.includes('LOCAL_FILE_STORAGE_DIR must be an absolute non-root filesystem path'),
+  );
+
+  // Hosted direction, unchanged and with zero new env vars: with no
+  // DOCUMENT_STORAGE_DRIVER set the Supabase trio is still required, and a
+  // near-miss driver value ("Local ") is still rejected as local.
+  setCompleteProductionEnv({
+    DOCUMENT_STORAGE_DRIVER: undefined,
+    SUPABASE_URL: undefined,
+    SUPABASE_SERVICE_ROLE_KEY: undefined,
+    SUPABASE_STORAGE_BUCKET: undefined,
+  });
+  assert.throws(
+    () => validateDocumentStorageCleanupEnv(),
+    (error: unknown) =>
+      error instanceof AppError &&
+      Array.isArray(error.details) &&
+      error.details.includes('SUPABASE_URL is missing or still contains a placeholder value') &&
+      error.details.includes('SUPABASE_SERVICE_ROLE_KEY is missing or still contains a placeholder value') &&
+      error.details.includes('SUPABASE_STORAGE_BUCKET is missing or still contains a placeholder value'),
+  );
+
+  setCompleteProductionEnv({ DOCUMENT_STORAGE_DRIVER: 'Local ' });
   assert.throws(
     () => validateDocumentStorageCleanupEnv(),
     (error: unknown) =>

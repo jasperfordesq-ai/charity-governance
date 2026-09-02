@@ -5,7 +5,12 @@ import { fileURLToPath } from 'node:url';
 import { afterEach, beforeEach, test } from 'node:test';
 import { AppError } from '../utils/errors.js';
 import { assertDeploymentProfile } from '../utils/deployment-profile.js';
-import { validateDeadlineRemindersEnv, validateProductionEnv } from '../utils/env.js';
+import {
+  validateAuthDeliveryEnv,
+  validateDeadlineRemindersEnv,
+  validateDocumentStorageCleanupEnv,
+  validateProductionEnv,
+} from '../utils/env.js';
 
 // dist/tests/<this>.js → apps/api/dist/tests → repo root is four levels up.
 const REPO_ROOT = join(dirname(fileURLToPath(import.meta.url)), '..', '..', '..', '..');
@@ -62,10 +67,21 @@ afterEach(() => {
   Object.assign(process.env, ORIGINAL_ENV);
 });
 
-test('private VM template: the filled template passes the deployment profile, production, and job validators', () => {
+// Every validator any compose.bluegreen.yml service calls at startup, so a
+// filled template cannot pass here and still crash-loop a real container:
+//   api/web         -> server.ts:50 validateRuntimeEnv() -> assertDeploymentProfile()
+//                      + validateProductionEnv() (personal-server-env.ts:147-165)
+//   scheduler       -> production-scheduler.ts:488-490 validateDeadlineRemindersEnv(),
+//                      validateDocumentStorageCleanupEnv(), validateAuthDeliveryEnv()
+//   deadline-reminders       -> send-deadline-reminders.ts:7 validateDeadlineRemindersEnv()
+//   document-storage-cleanup -> cleanup-document-storage.ts:8 validateDocumentStorageCleanupEnv()
+//   auth-recovery-secret-rotation -> no env validator at startup (checked: rotate-auth-recovery-secret.ts)
+test('private VM template: the filled template passes every validator a compose.bluegreen.yml service calls at startup', () => {
   assert.doesNotThrow(() => assertDeploymentProfile());
   assert.doesNotThrow(() => validateProductionEnv());
   assert.doesNotThrow(() => validateDeadlineRemindersEnv());
+  assert.doesNotThrow(() => validateDocumentStorageCleanupEnv());
+  assert.doesNotThrow(() => validateAuthDeliveryEnv());
 });
 
 test('private VM template: it runs the multi-tenant validator branch (dropping OWNER_JWT_SECRET is fatal)', () => {
