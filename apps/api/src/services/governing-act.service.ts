@@ -29,6 +29,35 @@ function resolutionNotFound() {
   return new AppError(404, 'RESOLUTION_NOT_FOUND', 'Resolution not found');
 }
 
+const SERIALIZABLE_RETRY_LIMIT = 3;
+
+function removalConflict() {
+  return new AppError(
+    409,
+    'GOVERNING_ACT_UPDATE_CONFLICT',
+    'Another change to the minute book landed while this record was being removed. Reload and try again.',
+  );
+}
+
+function isSerializationConflict(error: unknown): boolean {
+  // An AppError is this service's own deliberate refusal, never a database
+  // conflict. It also interpolates a user-supplied act reference into its
+  // message, so it must never reach the SQLSTATE text match below.
+  if (error instanceof AppError) return false;
+  if (!error || typeof error !== 'object') return false;
+
+  const candidate = error as {
+    code?: unknown;
+    meta?: { code?: unknown };
+    message?: unknown;
+  };
+  return (
+    candidate.code === 'P2034' ||
+    candidate.meta?.code === '40001' ||
+    (typeof candidate.message === 'string' && candidate.message.includes('40001'))
+  );
+}
+
 export type BoardSubmission = {
   id: string;
   name: string;
@@ -384,6 +413,38 @@ export class GoverningActService {
     // COMMITTED a concurrent link that commits after these SELECTs stays
     // invisible to them and the delete proceeds. Serializable turns that
     // interleaving into a serialization failure instead of lost evidence.
+    //
+    // That failure is an expected outcome, not a fault: retry it a bounded
+    // number of times, then report the conflict the caller can act on rather
+    // than letting Prisma's P2034 escape as an opaque 500. Nothing committed
+    // on an aborted attempt, so a retry re-reads the act and re-checks its
+    // version from scratch.
+    for (let attempt = 0; attempt < SERIALIZABLE_RETRY_LIMIT; attempt += 1) {
+      try {
+        return await this.removeActInSerializableTransaction(
+          organisationId,
+          id,
+          expectedInstant,
+          actor,
+          data,
+        );
+      } catch (error) {
+        if (!isSerializationConflict(error)) throw error;
+        if (attempt < SERIALIZABLE_RETRY_LIMIT - 1) continue;
+        throw removalConflict();
+      }
+    }
+
+    throw removalConflict();
+  }
+
+  private async removeActInSerializableTransaction(
+    organisationId: string,
+    id: string,
+    expectedInstant: Date,
+    actor: { id: string; email: string },
+    data: VoidGoverningActRequest,
+  ): Promise<GoverningActVoid> {
     return this.prisma.$transaction(async (tx) => {
       const act = await tx.governingAct.findFirst({
         where: { id, organisationId },

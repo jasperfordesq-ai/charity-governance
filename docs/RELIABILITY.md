@@ -16,15 +16,15 @@ Generated: 2026-09-02 - Source of truth: [`docs/reliability/guarantees.json`](re
 
 | Surface | covered | partial | gap | n/a | Total |
 |---|---|---|---|---|---|
-| API | 356 | 0 | 0 | 14 | 370 |
+| API | 359 | 0 | 0 | 14 | 373 |
 | Web | 112 | 0 | 0 | 6 | 118 |
-| **Total** | **468** | **0** | **0** | **20** | **488** |
+| **Total** | **471** | **0** | **0** | **20** | **491** |
 
-**API suite:** 1153 passing, 0 failing. **Web suite:** 411 passing, 0 failing. **E2E linkage:** 31 Playwright titles found; not executed by this command.
+**API suite:** 1156 passing, 0 failing. **Web suite:** 411 passing, 0 failing. **E2E linkage:** 31 Playwright titles found; not executed by this command.
 
 **Executed E2E result:** NOT VERIFIED BY THIS COMMAND. Use a successful managed E2E workflow or `npm run test:e2e` result bound to the relevant SHA.
 
-**Linkage:** 468/468 covered guarantees verified against a passing/linked test.
+**Linkage:** 471/471 covered guarantees verified against a passing/linked test.
 
 **Linkage check: COMPLETE**
 
@@ -55,7 +55,7 @@ no data loss / accessibility & resilience.
 
 ---
 
-## API surface - the matrix (370 guarantees)
+## API surface - the matrix (373 guarantees)
 
 ### auth - `/api/v1/auth`
 
@@ -327,7 +327,7 @@ _32 guarantees - covered 31  n/a 1_
 
 ### governing-acts (minute book) - `/api/v1/governing-acts`
 
-_22 guarantees - covered 22_
+_25 guarantees - covered 25_
 
 | Concern | Guarantee | Status | Proven by |
 |---|---|---|---|
@@ -343,6 +343,9 @@ _22 guarantees - covered 22_
 | Subscription / plan gating | The minute book is a Complete-plan feature: an ESSENTIALS organisation listing governing acts gets 403 PLAN_FEATURE_UNAVAILABLE and no read is issued. | covered | `an ESSENTIALS plan cannot list governing acts (requireCompletePlan)`<br/><sub>governing-acts-reliability.test.ts</sub> |
 | Subscription / plan gating | Plan gating runs before the role guard: an ESSENTIALS ADMIN creating a governing act gets 403 PLAN_FEATURE_UNAVAILABLE and governingAct.create never runs. | covered | `an ESSENTIALS plan cannot create governing acts (requireCompletePlan fires before requireAdmin)`<br/><sub>governing-acts-reliability.test.ts</sub> |
 | State integrity / no data loss | Rule 2: a document cannot cite a resolution whose governing act is still DRAFT or CIRCULATED; the attempt is rejected 422 MINUTES_NOT_YET_APPROVED and no document row is written. | covered | `setDocumentApproval rejects a resolution whose governing act is DRAFT`<br/><sub>governing-acts-reliability.test.ts</sub> |
+| State integrity / no data loss | A serialization failure during removal is retried up to three times rather than surfacing the first conflict, so an ordinary concurrent write does not fail an operator action. | covered | `voidAct retries a serialization failure rather than failing the first conflict`<br/><sub>governing-acts-reliability.test.ts</sub> |
+| State integrity / no data loss | An exhausted serialization conflict is reported as 409 GOVERNING_ACT_UPDATE_CONFLICT with the retry budget bounded at three attempts. Prisma's P2034 never escapes as an opaque 500, and neither the driver code nor the SQLSTATE reaches the caller. | covered | `voidAct reports an exhausted serialization conflict as 409, never an opaque 500`<br/><sub>governing-acts-reliability.test.ts</sub> |
+| State integrity / no data loss | The retry predicate never reclassifies a deliberate refusal. A 422 whose interpolated act reference happens to contain the 40001 SQLSTATE text is returned unchanged and is not retried. | covered | `a refusal whose act reference contains 40001 is not mistaken for a serialization conflict`<br/><sub>governing-acts-reliability.test.ts</sub> |
 | State integrity / no data loss | A resolution belonging to an APPROVED governing act is accepted as document approval evidence and the guarded document write is issued. | covered | `setDocumentApproval accepts a resolution from an APPROVED governing act`<br/><sub>governing-acts-reliability.test.ts</sub> |
 | State integrity / no data loss | Recording document approval is version-guarded: when the guarded write matches no row the call raises 409 DOCUMENT_UPDATE_CONFLICT instead of reporting success for a write that never landed. | covered | `setDocumentApproval reports a conflict when the guarded write matches no row`<br/><sub>governing-acts-reliability.test.ts</sub> |
 | State integrity / no data loss | Removing a governing act is refused 422 GOVERNING_ACT_HAS_DEPENDENTS when another act records it as the meeting that approved its minutes; no resolution, act or audit snapshot is written. | covered | `voidAct refuses an act whose minutes approved another act, without deleting anything`<br/><sub>governing-acts-reliability.test.ts</sub> |

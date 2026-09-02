@@ -2508,6 +2508,42 @@
     "surface": "api"
   },
   {
+    "id": "governing-acts-state-integrity-10",
+    "group": "governing-acts",
+    "concern": "state-integrity",
+    "guarantee": "A serialization failure during removal is retried up to three times rather than surfacing the first conflict, so an ordinary concurrent write does not fail an operator action.",
+    "status": "covered",
+    "testFile": "apps/api/src/tests/governing-acts-reliability.test.ts",
+    "testTitle": "voidAct retries a serialization failure rather than failing the first conflict",
+    "linkResolved": true,
+    "gapDescription": "",
+    "surface": "api"
+  },
+  {
+    "id": "governing-acts-state-integrity-11",
+    "group": "governing-acts",
+    "concern": "state-integrity",
+    "guarantee": "An exhausted serialization conflict is reported as 409 GOVERNING_ACT_UPDATE_CONFLICT with the retry budget bounded at three attempts. Prisma's P2034 never escapes as an opaque 500, and neither the driver code nor the SQLSTATE reaches the caller.",
+    "status": "covered",
+    "testFile": "apps/api/src/tests/governing-acts-reliability.test.ts",
+    "testTitle": "voidAct reports an exhausted serialization conflict as 409, never an opaque 500",
+    "linkResolved": true,
+    "gapDescription": "",
+    "surface": "api"
+  },
+  {
+    "id": "governing-acts-state-integrity-12",
+    "group": "governing-acts",
+    "concern": "state-integrity",
+    "guarantee": "The retry predicate never reclassifies a deliberate refusal. A 422 whose interpolated act reference happens to contain the 40001 SQLSTATE text is returned unchanged and is not retried.",
+    "status": "covered",
+    "testFile": "apps/api/src/tests/governing-acts-reliability.test.ts",
+    "testTitle": "a refusal whose act reference contains 40001 is not mistaken for a serialization conflict",
+    "linkResolved": true,
+    "gapDescription": "",
+    "surface": "api"
+  },
+  {
     "id": "governing-acts-authz-boundary-1",
     "group": "governing-acts",
     "concern": "authz-boundary",

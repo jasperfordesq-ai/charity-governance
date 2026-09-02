@@ -734,3 +734,119 @@ test('voidAct serializes its refusal checks against a competing link write', asy
 
   assert.deepEqual(transactionOptions, [{ isolationLevel: 'Serializable' }]);
 });
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Void: a serialization failure is an expected conflict, not a server fault
+// ─────────────────────────────────────────────────────────────────────────────
+
+function serializationFailure() {
+  return Object.assign(
+    new Error('Transaction failed due to a write conflict or a deadlock. Please retry.'),
+    { code: 'P2034' },
+  );
+}
+
+function buildConflictingVoidService(failures: number, error: () => Error = serializationFailure) {
+  let attempts = 0;
+  const tx = {
+    governingAct: {
+      findFirst: async () => ACT_WITH_RESOLUTIONS,
+      findMany: async () => [],
+      deleteMany: async () => ({ count: 1 }),
+    },
+    document: { findMany: async () => [] },
+    resolution: { deleteMany: async () => ({ count: 1 }) },
+    governingActVoid: {
+      create: async (args: unknown) => ({ id: 'void-1', ...(args as { data: object }).data }),
+    },
+  };
+
+  const prisma = {
+    user: { findFirst: async () => ({ id: 'u1', email: 'owner@example.org' }) },
+    $transaction: async (fn: (client: typeof tx) => Promise<unknown>) => {
+      attempts += 1;
+      if (attempts <= failures) throw error();
+      return fn(tx);
+    },
+  };
+
+  return {
+    service: new GoverningActService(prisma as never),
+    attempts: () => attempts,
+  };
+}
+
+test('voidAct retries a serialization failure rather than failing the first conflict', async () => {
+  const { service, attempts } = buildConflictingVoidService(1);
+
+  const record = await service.voidAct('org-1', 'act-1', 'u1', {
+    expectedUpdatedAt: NOW.toISOString(),
+    reason: VALID_VOID_REASON,
+  });
+
+  assert.equal(attempts(), 2, 'the aborted attempt must be retried');
+  assert.equal((record as unknown as { reference: string }).reference, 'BM-2026-07-03');
+});
+
+test('voidAct reports an exhausted serialization conflict as 409, never an opaque 500', async () => {
+  // Serializable is what protects the approval links, so a conflict is an
+  // expected outcome of that protection. Letting Prisma's P2034 escape would
+  // tell the caller the server broke and give them nothing to act on.
+  const { service, attempts } = buildConflictingVoidService(Number.POSITIVE_INFINITY);
+
+  await assert.rejects(
+    () =>
+      service.voidAct('org-1', 'act-1', 'u1', {
+        expectedUpdatedAt: NOW.toISOString(),
+        reason: VALID_VOID_REASON,
+      }),
+    (err: { statusCode?: number; code?: string; message?: string }) => {
+      assert.equal(err.statusCode, 409);
+      assert.equal(err.code, 'GOVERNING_ACT_UPDATE_CONFLICT');
+      assert.doesNotMatch(String(err.message), /P2034|40001/, 'the driver code must not leak to the caller');
+      return true;
+    },
+  );
+
+  assert.equal(attempts(), 3, 'the retry budget is bounded');
+});
+
+test('a refusal whose act reference contains 40001 is not mistaken for a serialization conflict', async () => {
+  // The 422 refusal messages interpolate a user-supplied act reference. A
+  // reference like BM-40001 must not be pattern-matched into a retryable
+  // SQLSTATE and reported as a concurrency conflict.
+  let attempts = 0;
+  const tx = {
+    governingAct: {
+      findFirst: async () => ({ ...ACT_WITH_RESOLUTIONS, reference: 'BM-40001' }),
+      findMany: async () => [{ reference: 'BM-2026-09-04' }],
+      deleteMany: async () => ({ count: 1 }),
+    },
+    document: { findMany: async () => [] },
+    resolution: { deleteMany: async () => ({ count: 1 }) },
+    governingActVoid: { create: async () => ({ id: 'void-1' }) },
+  };
+  const prisma = {
+    user: { findFirst: async () => ({ id: 'u1', email: 'owner@example.org' }) },
+    $transaction: async (fn: (client: typeof tx) => Promise<unknown>) => {
+      attempts += 1;
+      return fn(tx);
+    },
+  };
+  const service = new GoverningActService(prisma as never);
+
+  await assert.rejects(
+    () =>
+      service.voidAct('org-1', 'act-1', 'u1', {
+        expectedUpdatedAt: NOW.toISOString(),
+        reason: VALID_VOID_REASON,
+      }),
+    (err: { statusCode?: number; code?: string }) => {
+      assert.equal(err.statusCode, 422);
+      assert.equal(err.code, 'GOVERNING_ACT_HAS_DEPENDENTS');
+      return true;
+    },
+  );
+
+  assert.equal(attempts, 1, 'a deliberate refusal must not be retried');
+});
