@@ -206,7 +206,8 @@ history always shows exactly how far a deploy got.
   "Could not determine whether volume … is already in use" and still
   refuses — it never assumes a volume is free.
 - **Migration gate blocks** — the deploy aborts *before quiesce*; nothing
-  was touched at all (no container stopped, no lock left held).
+  was touched at all (no container stopped **except a `db` this deploy itself
+  started** — see the next bullet; no lock left held).
 - **Any failure between `ensure-db` and the Caddy switch leaves no `db`
   running that the deploy itself started.** `ensure-db` first asks
   `docker compose ps --status running -q db` whether the db was ALREADY
@@ -286,6 +287,43 @@ history always shows exactly how far a deploy got.
   this release's checkout doesn't contain) are a loud **warning**, never
   an abort — expected during a rollback-style deploy, where the release
   being deployed is older than the database.
+
+### Known and accepted limits of the above
+
+Reviewed and deliberately left as they are — read these before improvising
+during an incident.
+
+1. **A post-quiesce abort on a host where the whole stack was down leaves the
+   old-tag scheduler running against a stopped `db`.** On the phase 9/10/11
+   failure paths the engine restarts the scheduler on the old tag and then
+   stops the `db` it started itself. If the deploy began with the stack fully
+   `down` but a previous colour existed, that scheduler will crash-loop until
+   you act. It is noise, never data: no postmaster is left on the volumes,
+   which is the property that matters. Impossible on a first deploy (there is
+   no old commit to restart anything on). Clear it with
+   `docker stop <project>-scheduler-1`, or just re-run the deploy once the
+   underlying failure is fixed.
+2. **A deploy killed outright never runs any of its own failure paths.**
+   Ctrl-C, a dropped SSH session, or the VM losing power leaves the `db` this
+   deploy started still running — the engine never gets to stop it. The
+   `docker ps | grep charitypilot-bluegreen` gate in the cutover section is
+   the sole backstop for that case; run it before starting any other stack on
+   these volumes. (Use `--detach`, which survives an SSH drop, for exactly
+   this reason.)
+3. **A leftover restore-drill container is outside the compose project.**
+   `charitypilot-bluegreen-drill-*` is a bare `docker run`, so
+   `compose down` and any `--filter label=com.docker.compose.project=…` sweep
+   both miss it. It never mounts the deployment's volumes (it restores into
+   its own anonymous volume), so it is not a corruption risk — but remove it
+   by name (`docker rm -f -v <name>`) if the drill was interrupted.
+4. **`BLUEGREEN_DOCUMENTS_VOLUME` is not checked against the volume the
+   compose file/override declares.** The env var is the name the BACKUP tars;
+   the compose file is what the APP mounts. A one-character disagreement does
+   not fail — `docker run --mount type=volume,src=<name>` auto-creates a
+   missing named volume, so the tar exits 0 on an empty tree and the manifest
+   and the restore drill then agree on zero documents. Keep the two in step by
+   hand; the committed private-VM template already pairs them correctly and a
+   test pins that.
 
 ## Rollback
 
@@ -523,27 +561,53 @@ ssh -i $KEY $VM "cd ~/charity-governance && npm run bluegreen:status -- --env-fi
 shows `activeColor: blue` at the master commit, `docker compose ps -a` with `db`, `caddy`, `api-blue`, `web-blue`, `scheduler` up, and a status history `preflight → ensure-db → backup → resolve → worktree → build → gate → quiesce → migrate → up → candidate-smoke → switch → public-smoke → jobs → retire → record`. If the deploy fails at any phase, read the runbook's "What each failure mode looks like" — nothing before `switch` has touched traffic, and the step-2 checkpoint covers everything.
 
 **GATE — if the deploy failed, run this BEFORE restoring appliance service.**
-Never start the appliance while a blue-green container still holds the same
-volumes: two postmasters on one `PGDATA` is a corruption risk (it happened on
-the first cutover attempt — they overlapped ~83 seconds, and Postgres logged
+Never start the appliance while a blue-green container is still RUNNING on the
+same volumes: two postmasters on one `PGDATA` is a corruption risk (it happened
+on the first cutover attempt — they overlapped ~83 seconds, and Postgres logged
 `database system was not properly shut down; automatic recovery in progress`
 followed by `performing immediate shutdown because data directory lock file is
 invalid`).
 
 ```powershell
-ssh -i $KEY $VM "docker ps -a --format '{{.Names}}' | grep charitypilot-bluegreen"
+ssh -i $KEY $VM "docker ps --format '{{.Names}}' | grep charitypilot-bluegreen"
 ```
-Gate: **no output.** Anything listed must be stopped and removed before the
-appliance is started:
+Gate: **no output.** `docker ps` without `-a` on purpose — only a running
+container can hold the data directory, and a *stopped* `charitypilot-bluegreen-db-1`
+is the expected, correct end state after the engine's own abort-time
+`stop db` (a `docker ps -a` gate would trip forever on it).
+
+Anything listed must be stopped before the appliance is started. Stop it by
+compose-project label, which needs no compose file and therefore no
+interpolation variables:
+
 ```powershell
-ssh -i $KEY $VM "cd ~/charity-governance && docker compose -f compose.bluegreen.yml -f compose.bluegreen.private-vm.yml -p charitypilot-bluegreen down && docker ps -a --format '{{.Names}}' | grep charitypilot-bluegreen"
+ssh -i $KEY $VM "docker stop \$(docker ps -q --filter label=com.docker.compose.project=charitypilot-bluegreen) && docker ps --format '{{.Names}}' | grep charitypilot-bluegreen"
 ```
-(No `-v`. Ever — the volumes are the appliance's data, and the override marks
-them `external`.) Re-run the `docker ps -a` gate until it prints nothing, and
-only then bring the appliance back up. The engine now stops a `db` it started
-itself on every pre-switch failure and says so in its own failure message, and
-its preflight refuses to deploy onto volumes another stack still holds — this
-gate is the belt-and-braces check that both actually happened on this host.
+
+Do **not** reach for `docker compose -f compose.bluegreen.yml -f compose.bluegreen.private-vm.yml -p charitypilot-bluegreen down` here: every image
+tag/origin/env-file value in `compose.bluegreen.yml` is a `${…:?}` *required*
+interpolation, so a bare `down` dies with
+`error while interpolating services.db.env_file: required variable BLUEGREEN_ENV_FILE is missing a value`
+unless you first export the vars the way step 5 does. Mid-incident is the wrong
+time to debug that. (If you do run a `down` later, with those vars exported:
+never `-v`. Ever — the volumes are the appliance's data, and the override marks
+them `external`.)
+
+One container the label filter cannot catch: a leftover restore-drill scratch
+container, `charitypilot-bluegreen-drill-<stamp>-<suffix>` (relevant to step 7).
+It is a bare `docker run`, not part of the compose project, so neither the label
+filter nor `compose down` will ever clear it — and it never mounts these volumes
+either (it restores into its own anonymous volume). If
+`docker ps --format '{{.Names}}' | grep charitypilot-bluegreen-drill-` prints
+one, remove it by name: `docker rm -f -v <name>`.
+
+Re-run the `docker ps` gate until it prints nothing, and only then bring the
+appliance back up. The engine now stops a `db` it started itself on every
+pre-switch failure and says so in its own failure message, and its preflight
+refuses to deploy onto volumes another stack still holds — but this gate is the
+sole backstop for the one case neither covers: a deploy killed outright
+(Ctrl-C, a dropped SSH session, the VM losing power) never reaches any of its
+own failure paths, so the `db` it started stays up.
 
 - [ ] **Step 5: Bootstrap the platform operator (DOWNTIME ENDS at the start of this step — the site is already serving).**
 

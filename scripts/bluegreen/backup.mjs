@@ -646,9 +646,11 @@ function drillRowCensusCommand(containerName) {
 // the volume's owning uid — the extraction and the re-hash here are ONE
 // `docker exec` running ONE shell command inside the throwaway drill
 // container, against a scratch directory (`/drill-documents`) on that
-// container's own anonymous data volume. Extraction and hashing therefore
-// run as the same user by construction; there is no second command whose
-// user could drift.
+// container's own writable layer — NOT on its anonymous volume, which is
+// mounted at `/var/lib/postgresql/data` only (both are reclaimed by the
+// `docker rm -f -v` teardown). Extraction and hashing therefore run as the
+// same user by construction; there is no second command whose user could
+// drift.
 //
 // That user is the drill container's default, root (the postgres image sets
 // no USER; its entrypoint re-execs the server as postgres itself), and root
