@@ -553,6 +553,7 @@ type VoidStubOverrides = {
 
 function buildVoidService(overrides: VoidStubOverrides = {}) {
   const calls: string[] = [];
+  const transactionOptions: unknown[] = [];
   const tx = {
     governingAct: {
       findFirst: async () => {
@@ -595,13 +596,14 @@ function buildVoidService(overrides: VoidStubOverrides = {}) {
         return { id: 'u1', email: 'owner@example.org' };
       },
     },
-    $transaction: async (fn: (client: typeof tx) => Promise<unknown>) => {
+    $transaction: async (fn: (client: typeof tx) => Promise<unknown>, options?: unknown) => {
       calls.push('$transaction');
+      transactionOptions.push(options);
       return fn(tx);
     },
   };
 
-  return { service: new GoverningActService(prisma as never), calls };
+  return { service: new GoverningActService(prisma as never), calls, transactionOptions };
 }
 
 test('voidAct refuses an act whose minutes approved another act, without deleting anything', async () => {
@@ -715,4 +717,20 @@ test('voidAct rejects a stale expectedUpdatedAt before any write', async () => {
 
   assert.ok(!calls.includes('governingActVoid.create'));
   assert.ok(!calls.includes('governingAct.deleteMany'));
+});
+
+test('voidAct serializes its refusal checks against a competing link write', async () => {
+  // Both dependency foreign keys are ON DELETE SET NULL, so the database
+  // refuses nothing: a link the checks did not see is silently detached, not
+  // raised. Under READ COMMITTED a dependent committed after these SELECTs
+  // stays invisible to them and the delete proceeds, so the checks have to run
+  // at Serializable to turn that interleaving into a serialization failure.
+  const { service, transactionOptions } = buildVoidService();
+
+  await service.voidAct('org-1', 'act-1', 'u1', {
+    expectedUpdatedAt: NOW.toISOString(),
+    reason: VALID_VOID_REASON,
+  });
+
+  assert.deepEqual(transactionOptions, [{ isolationLevel: 'Serializable' }]);
 });

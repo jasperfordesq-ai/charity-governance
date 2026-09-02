@@ -2463,7 +2463,7 @@
     "id": "governing-acts-state-integrity-6",
     "group": "governing-acts",
     "concern": "state-integrity",
-    "guarantee": "Both removal refusal checks read under the same transaction that performs the delete, so a dependent link or approval created concurrently cannot be severed as a side effect.",
+    "guarantee": "Both removal refusal checks read inside the same transaction that performs the delete, so a dependent link or approval that was already committed is always seen before the act is removed.",
     "status": "covered",
     "testFile": "apps/api/src/tests/governing-acts-reliability.test.ts",
     "testTitle": "voidAct runs both refusal checks inside the deleting transaction",
@@ -2491,6 +2491,18 @@
     "status": "covered",
     "testFile": "apps/api/src/tests/governing-acts-reliability.test.ts",
     "testTitle": "voidAct rejects a stale expectedUpdatedAt before any write",
+    "linkResolved": true,
+    "gapDescription": "",
+    "surface": "api"
+  },
+  {
+    "id": "governing-acts-state-integrity-9",
+    "group": "governing-acts",
+    "concern": "state-integrity",
+    "guarantee": "Removal runs at Serializable isolation. Both dependency foreign keys are ON DELETE SET NULL, so the database refuses nothing and the refusal checks are the only protection; under READ COMMITTED a link committed after those checks would stay invisible and be silently detached, so the interleaving must surface as a serialization failure instead.",
+    "status": "covered",
+    "testFile": "apps/api/src/tests/governing-acts-reliability.test.ts",
+    "testTitle": "voidAct serializes its refusal checks against a competing link write",
     "linkResolved": true,
     "gapDescription": "",
     "surface": "api"

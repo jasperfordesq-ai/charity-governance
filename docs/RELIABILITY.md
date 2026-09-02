@@ -12,19 +12,19 @@ Playwright rows require a separate managed E2E result bound to the relevant SHA.
 
 ## At a glance
 
-Generated: 2026-09-01 - Source of truth: [`docs/reliability/guarantees.json`](reliability/guarantees.json)
+Generated: 2026-09-02 - Source of truth: [`docs/reliability/guarantees.json`](reliability/guarantees.json)
 
 | Surface | covered | partial | gap | n/a | Total |
 |---|---|---|---|---|---|
-| API | 355 | 0 | 0 | 14 | 369 |
+| API | 356 | 0 | 0 | 14 | 370 |
 | Web | 112 | 0 | 0 | 6 | 118 |
-| **Total** | **467** | **0** | **0** | **20** | **487** |
+| **Total** | **468** | **0** | **0** | **20** | **488** |
 
-**API suite:** 1152 passing, 0 failing. **Web suite:** 411 passing, 0 failing. **E2E linkage:** 31 Playwright titles found; not executed by this command.
+**API suite:** 1153 passing, 0 failing. **Web suite:** 411 passing, 0 failing. **E2E linkage:** 31 Playwright titles found; not executed by this command.
 
 **Executed E2E result:** NOT VERIFIED BY THIS COMMAND. Use a successful managed E2E workflow or `npm run test:e2e` result bound to the relevant SHA.
 
-**Linkage:** 467/467 covered guarantees verified against a passing/linked test.
+**Linkage:** 468/468 covered guarantees verified against a passing/linked test.
 
 **Linkage check: COMPLETE**
 
@@ -55,7 +55,7 @@ no data loss / accessibility & resilience.
 
 ---
 
-## API surface - the matrix (369 guarantees)
+## API surface - the matrix (370 guarantees)
 
 ### auth - `/api/v1/auth`
 
@@ -327,7 +327,7 @@ _32 guarantees - covered 31  n/a 1_
 
 ### governing-acts (minute book) - `/api/v1/governing-acts`
 
-_21 guarantees - covered 21_
+_22 guarantees - covered 22_
 
 | Concern | Guarantee | Status | Proven by |
 |---|---|---|---|
@@ -347,9 +347,10 @@ _21 guarantees - covered 21_
 | State integrity / no data loss | Recording document approval is version-guarded: when the guarded write matches no row the call raises 409 DOCUMENT_UPDATE_CONFLICT instead of reporting success for a write that never landed. | covered | `setDocumentApproval reports a conflict when the guarded write matches no row`<br/><sub>governing-acts-reliability.test.ts</sub> |
 | State integrity / no data loss | Removing a governing act is refused 422 GOVERNING_ACT_HAS_DEPENDENTS when another act records it as the meeting that approved its minutes; no resolution, act or audit snapshot is written. | covered | `voidAct refuses an act whose minutes approved another act, without deleting anything`<br/><sub>governing-acts-reliability.test.ts</sub> |
 | State integrity / no data loss | Removing a governing act is refused 422 GOVERNING_ACT_EVIDENCES_DOCUMENTS when a document's approval evidence hangs off one of its resolutions; the act is not deleted. | covered | `voidAct refuses an act whose resolutions evidence a document approval`<br/><sub>governing-acts-reliability.test.ts</sub> |
-| State integrity / no data loss | Both removal refusal checks read under the same transaction that performs the delete, so a dependent link or approval created concurrently cannot be severed as a side effect. | covered | `voidAct runs both refusal checks inside the deleting transaction`<br/><sub>governing-acts-reliability.test.ts</sub> |
+| State integrity / no data loss | Both removal refusal checks read inside the same transaction that performs the delete, so a dependent link or approval that was already committed is always seen before the act is removed. | covered | `voidAct runs both refusal checks inside the deleting transaction`<br/><sub>governing-acts-reliability.test.ts</sub> |
 | State integrity / no data loss | A removal writes the full GoverningActVoid snapshot - reference, resolution count, reason and the actor resolved from the user row - before the act is deleted. | covered | `voidAct writes the audit snapshot before removing the act`<br/><sub>governing-acts-reliability.test.ts</sub> |
 | State integrity / no data loss | A removal presenting a stale expectedUpdatedAt raises 409 GOVERNING_ACT_UPDATE_CONFLICT and writes neither the audit snapshot nor the delete. | covered | `voidAct rejects a stale expectedUpdatedAt before any write`<br/><sub>governing-acts-reliability.test.ts</sub> |
+| State integrity / no data loss | Removal runs at Serializable isolation. Both dependency foreign keys are ON DELETE SET NULL, so the database refuses nothing and the refusal checks are the only protection; under READ COMMITTED a link committed after those checks would stay invisible and be silently detached, so the interleaving must surface as a serialization failure instead. | covered | `voidAct serializes its refusal checks against a competing link write`<br/><sub>governing-acts-reliability.test.ts</sub> |
 | Tenant isolation | Listing the minute book scopes governingAct.findMany to the caller organisation, so an act belonging to another tenant is never returned. | covered | `governingAct.findMany is scoped to the caller organisation`<br/><sub>governing-acts-reliability.test.ts</sub> |
 | Tenant isolation | The board-submissions view scopes its document query to the caller organisation, so approval evidence from another tenant is never surfaced. | covered | `board-submissions document query is scoped to the caller organisation`<br/><sub>governing-acts-reliability.test.ts</sub> |
 

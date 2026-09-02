@@ -6,12 +6,13 @@ import type {
   GoverningActQuery,
   VoidGoverningActRequest,
 } from '@charitypilot/shared';
-import type {
-  GoverningAct,
-  GoverningActStatus,
-  GoverningActVoid,
-  PrismaClient,
-  Resolution,
+import {
+  Prisma,
+  type GoverningAct,
+  type GoverningActStatus,
+  type GoverningActVoid,
+  type PrismaClient,
+  type Resolution,
 } from '@prisma/client';
 import { AppError } from '../utils/errors.js';
 
@@ -376,9 +377,13 @@ export class GoverningActService {
     });
     if (!actor) throw new AppError(403, 'ACTOR_NOT_FOUND', 'Acting user not found in this organisation');
 
-    // Load the act and run both refusal checks inside the same transaction as
-    // the delete. Read outside it and a link created in between is severed as a
-    // side effect - exactly what these checks exist to prevent.
+    // Both dependency foreign keys are ON DELETE SET NULL, so nothing at the
+    // database level refuses this delete: a link the refusal checks did not see
+    // is silently detached rather than raising. The checks are the only
+    // protection, so they have to be serialized with the delete. Under READ
+    // COMMITTED a concurrent link that commits after these SELECTs stays
+    // invisible to them and the delete proceeds. Serializable turns that
+    // interleaving into a serialization failure instead of lost evidence.
     return this.prisma.$transaction(async (tx) => {
       const act = await tx.governingAct.findFirst({
         where: { id, organisationId },
@@ -482,7 +487,7 @@ export class GoverningActService {
       }
 
       return record;
-    });
+    }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
   }
 
   async listVoids(organisationId: string): Promise<GoverningActVoid[]> {
