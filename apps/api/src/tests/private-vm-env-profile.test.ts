@@ -96,5 +96,13 @@ test('private VM template: it is NOT the appliance branch (CHARITYPILOT_DEPLOYME
 test('private VM template: the canonical-origin override is what makes the Tailscale origin acceptable (removing it is fatal)', () => {
   delete process.env.CHARITYPILOT_CANONICAL_WEB_ORIGIN;
   delete process.env.CHARITYPILOT_CANONICAL_API_ORIGIN;
-  assert.throws(() => validateProductionEnv(), (error: unknown) => error instanceof AppError);
+  assert.throws(
+    () => validateProductionEnv(),
+    (error: unknown) =>
+      error instanceof AppError &&
+      Array.isArray(error.details) &&
+      error.details.some(
+        (issue) => typeof issue === 'string' && /canonical production (web|API) origin/.test(issue),
+      ),
+  );
 });
