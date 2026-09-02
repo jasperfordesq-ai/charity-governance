@@ -16,15 +16,15 @@ Generated: 2026-09-02 - Source of truth: [`docs/reliability/guarantees.json`](re
 
 | Surface | covered | partial | gap | n/a | Total |
 |---|---|---|---|---|---|
-| API | 381 | 0 | 0 | 14 | 395 |
+| API | 383 | 0 | 0 | 14 | 397 |
 | Web | 112 | 0 | 0 | 6 | 118 |
-| **Total** | **493** | **0** | **0** | **20** | **513** |
+| **Total** | **495** | **0** | **0** | **20** | **515** |
 
-**API suite:** 1185 passing, 0 failing. **Web suite:** 411 passing, 0 failing. **E2E linkage:** 31 Playwright titles found; not executed by this command.
+**API suite:** 1189 passing, 0 failing. **Web suite:** 411 passing, 0 failing. **E2E linkage:** 31 Playwright titles found; not executed by this command.
 
 **Executed E2E result:** NOT VERIFIED BY THIS COMMAND. Use a successful managed E2E workflow or `npm run test:e2e` result bound to the relevant SHA.
 
-**Linkage:** 493/493 covered guarantees verified against a passing/linked test.
+**Linkage:** 495/495 covered guarantees verified against a passing/linked test.
 
 **Linkage check: COMPLETE**
 
@@ -55,7 +55,7 @@ no data loss / accessibility & resilience.
 
 ---
 
-## API surface - the matrix (395 guarantees)
+## API surface - the matrix (397 guarantees)
 
 ### auth - `/api/v1/auth`
 
@@ -587,6 +587,8 @@ _10 guarantees - covered 10_
 | State integrity / no data loss | Preflight refuses to deploy when a container outside this engine's own compose project is already mounting one of the deployment's volumes, naming the volume and the offending container(s), and no compose command runs after that refusal. | covered | `defect 2b: a deploy refuses at preflight when another stack already holds a deployment volume`<br/><sub>scripts/bluegreen-deploy.test.mjs</sub> |
 | State integrity / no data loss | The volume-in-use check treats a foreign or project-less container as a refusal, this engine's own project as fine, and an unanswerable docker ps as a refusal rather than an assumed-free volume. | covered | `defect 2b: volumesInUseByOtherStacks refuses a foreign container and accepts this engine own project`<br/><sub>scripts/bluegreen-deploy.test.mjs</sub> |
 | State integrity / no data loss | The deployment's db and documents volume names are resolved from compose.bluegreen.yml plus any BLUEGREEN_COMPOSE_OVERRIDE, with BLUEGREEN_DOCUMENTS_VOLUME winning for documents — so the private-VM override's external appliance volumes are the ones checked. | covered | `defect 2b: deploymentVolumeNames resolves both volume names from the compose file, the override, and the env`<br/><sub>scripts/bluegreen-deploy.test.mjs</sub> |
+| State integrity / no data loss | Preflight refuses a BLUEGREEN_DOCUMENTS_VOLUME that names a different volume from the one the deployment's compose file/override declares, naming both values — a disagreement would otherwise produce a silently empty documents backup (docker auto-creates the missing volume) that the restore drill would still pass. | covered | `round 2: preflight refuses a BLUEGREEN_DOCUMENTS_VOLUME that disagrees with the compose-declared documents volume`<br/><sub>scripts/bluegreen-deploy.test.mjs</sub> |
+| State integrity / no data loss | composeDeclaredVolumeNames reports the volume names compose will actually mount, with no env-level preference leaking in, so the preflight agreement check compares two independent sources. | covered | `round 2: composeDeclaredVolumeNames reports what compose mounts, ignoring the env preference`<br/><sub>scripts/bluegreen-deploy.test.mjs</sub> |
 
 ---
 

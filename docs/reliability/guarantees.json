@@ -6294,5 +6294,31 @@
     "testTitle": "defect 2b: deploymentVolumeNames resolves both volume names from the compose file, the override, and the env",
     "gapDescription": "",
     "proposedTitle": ""
+  },
+  {
+    "id": "bluegreen-state-integrity-24",
+    "surface": "api",
+    "group": "bluegreen",
+    "concern": "state-integrity",
+    "guarantee": "Preflight refuses a BLUEGREEN_DOCUMENTS_VOLUME that names a different volume from the one the deployment's compose file/override declares, naming both values — a disagreement would otherwise produce a silently empty documents backup (docker auto-creates the missing volume) that the restore drill would still pass.",
+    "status": "covered",
+    "testType": "unit",
+    "testFile": "scripts/bluegreen-deploy.test.mjs",
+    "testTitle": "round 2: preflight refuses a BLUEGREEN_DOCUMENTS_VOLUME that disagrees with the compose-declared documents volume",
+    "gapDescription": "",
+    "proposedTitle": ""
+  },
+  {
+    "id": "bluegreen-state-integrity-25",
+    "surface": "api",
+    "group": "bluegreen",
+    "concern": "state-integrity",
+    "guarantee": "composeDeclaredVolumeNames reports the volume names compose will actually mount, with no env-level preference leaking in, so the preflight agreement check compares two independent sources.",
+    "status": "covered",
+    "testType": "unit",
+    "testFile": "scripts/bluegreen-deploy.test.mjs",
+    "testTitle": "round 2: composeDeclaredVolumeNames reports what compose mounts, ignoring the env preference",
+    "gapDescription": "",
+    "proposedTitle": ""
   }
 ]

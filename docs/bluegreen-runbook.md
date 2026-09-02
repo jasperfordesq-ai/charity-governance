@@ -187,6 +187,17 @@ history always shows exactly how far a deploy got.
   missing host binary — `docker`/`git`/`wget` — dirty worktree, `HEAD`
   not at fetched `origin/master`) — nothing was touched; the cutover
   lock is released.
+- **Preflight refuses a `BLUEGREEN_DOCUMENTS_VOLUME` that disagrees with the
+  volume the compose file/override declares.** The env var is the name the
+  BACKUP tars; the compose file is what the APP mounts. A one-character
+  disagreement used not to fail: `docker run --mount type=volume,src=<name>`
+  auto-creates a missing named volume (root:root 0755, which `--user
+  1000:1000` traverses happily), so the tar exits 0 on an empty tree and the
+  manifest and the restore drill then agree on zero documents — a silently
+  empty documents backup that still passes its drill. Both values are named
+  in the refusal. Nothing was touched; no command runs at all (this is one of
+  the pure env checks, so the step-4 `preflightIssues` dry-check catches it
+  before the deploy).
 - **Preflight refuses because another stack holds one of this deployment's
   volumes.** Before anything runs, the engine lists the containers currently
   mounting each volume it is about to use (the `db` volume and the documents
@@ -316,14 +327,13 @@ during an incident.
    both miss it. It never mounts the deployment's volumes (it restores into
    its own anonymous volume), so it is not a corruption risk — but remove it
    by name (`docker rm -f -v <name>`) if the drill was interrupted.
-4. **`BLUEGREEN_DOCUMENTS_VOLUME` is not checked against the volume the
-   compose file/override declares.** The env var is the name the BACKUP tars;
-   the compose file is what the APP mounts. A one-character disagreement does
-   not fail — `docker run --mount type=volume,src=<name>` auto-creates a
-   missing named volume, so the tar exits 0 on an empty tree and the manifest
-   and the restore drill then agree on zero documents. Keep the two in step by
-   hand; the committed private-VM template already pairs them correctly and a
-   test pins that.
+
+A fourth gap of this family is now closed rather than accepted: a
+`BLUEGREEN_DOCUMENTS_VOLUME` that disagreed with the volume the compose
+file/override declares used to produce a silently EMPTY documents backup
+(docker auto-creates the missing named volume, so the tar, the manifest and
+the restore drill all agreed on zero documents). Preflight now refuses the
+pair, naming both values.
 
 ## Rollback
 

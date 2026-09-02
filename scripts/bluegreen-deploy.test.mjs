@@ -1085,7 +1085,19 @@ test('I3: BLUEGREEN_DOCUMENTS_VOLUME threads through to runBackupImpl (deploy pa
   const runDeploy = await loadDeployRunner();
   const stateDir = makeFixtureDir('bluegreen-i3-docs-volume-deploy-');
   const envPath = join(stateDir, 'bluegreen.env');
-  writeEnvFile(envPath, { BLUEGREEN_DOCUMENTS_VOLUME: 'custom-charity-documents' });
+  // Review round 2: a custom documents volume is only legitimate when the
+  // compose file(s) declare the same name — preflight now refuses a
+  // disagreement (it would silently back up an auto-created empty volume),
+  // so this fixture supplies the matching override the real VM has.
+  const overridePath = join(stateDir, 'override.yml');
+  writeFileSync(
+    overridePath,
+    'volumes:\n  bluegreen-documents:\n    external: true\n    name: custom-charity-documents\n',
+  );
+  writeEnvFile(envPath, {
+    BLUEGREEN_COMPOSE_OVERRIDE: overridePath,
+    BLUEGREEN_DOCUMENTS_VOLUME: 'custom-charity-documents',
+  });
   seedMigrationsDir(stateDir, TARGET_COMMIT, []);
 
   const { deps, backupCalls } = baseDeps({ stateDir });
@@ -2085,7 +2097,13 @@ test('P3-2: every docker compose call and the backup composeArgs carry the overr
   const runDeploy = await loadDeployRunner();
   const stateDir = makeFixtureDir('bluegreen-override-');
   const overridePath = join(stateDir, 'override.yml');
-  writeFileSync(overridePath, 'volumes:\n  bluegreen-db:\n    external: true\n    name: x\n');
+  // Review round 2: the override must declare the SAME documents volume the
+  // env file names, or preflight refuses the pair.
+  writeFileSync(
+    overridePath,
+    'volumes:\n  bluegreen-db:\n    external: true\n    name: x\n' +
+      '  bluegreen-documents:\n    external: true\n    name: charitypilot-personal-server-documents\n',
+  );
   const envPath = join(stateDir, 'vm.env');
   writeEnvFile(envPath, {
     BLUEGREEN_COMPOSE_OVERRIDE: overridePath,
@@ -2168,7 +2186,10 @@ test('P3-2: preflightIssues names a missing override file and requires BLUEGREEN
 
   const dir = makeFixtureDir('bluegreen-override-preflight-');
   const present = join(dir, 'o.yml');
-  writeFileSync(present, 'volumes: {}\n');
+  // Review round 2: declares the documents volume the pairing below names —
+  // an override whose declared name disagreed with BLUEGREEN_DOCUMENTS_VOLUME
+  // is now itself a preflight issue (tested separately).
+  writeFileSync(present, 'volumes:\n  bluegreen-documents:\n    external: true\n    name: v\n');
   const noVolume = preflightIssues({
     fileEnv: { ...base, BLUEGREEN_COMPOSE_OVERRIDE: present },
     resolvedEnvFilePath: envFilePath,
@@ -2646,6 +2667,146 @@ test('defect 2b: the volume check runs only after the pure env checks pass', asy
   assert.equal(outcome.status, 1);
   assert.match(outcome.stderr, /READINESS_API_KEY is required/);
   assert.deepEqual(calls, [], 'no command whatsoever may run when the pure env checks already refuse');
+
+  rmSync(stateDir, { recursive: true, force: true });
+});
+
+// -----------------------------------------------------------------------------
+// Review round 2: BLUEGREEN_DOCUMENTS_VOLUME must name the same volume the
+// compose file(s) declare. A mismatch does not fail loudly — docker
+// auto-creates the missing named volume (root:root 0755), the tar exits 0 with
+// an empty tree, and the manifest and the restore drill then agree on zero
+// documents. Silent data loss dressed as a passing drill.
+// -----------------------------------------------------------------------------
+
+const PREFLIGHT_BASE = {
+  BLUEGREEN_ORIGIN: 'http://127.0.0.1:8080',
+  READINESS_API_KEY: READINESS_KEY,
+  FRONTEND_URL: 'http://127.0.0.1:8080',
+  DATABASE_URL: 'postgresql://charitypilot:pw@db:5432/charitypilot',
+  CHARITYPILOT_CANONICAL_WEB_ORIGIN: 'http://127.0.0.1:8080',
+  CHARITYPILOT_CANONICAL_API_ORIGIN: 'http://127.0.0.1:8080',
+};
+
+test('round 2: preflight refuses a BLUEGREEN_DOCUMENTS_VOLUME that disagrees with the compose-declared documents volume', async () => {
+  const { preflightIssues } = await loadDeployModule();
+  const envFilePath = '/tmp/round2.env';
+  const base = { ...PREFLIGHT_BASE, BLUEGREEN_ENV_FILE: envFilePath };
+
+  // Disagreeing, with the real committed private-VM override: the override
+  // declares charitypilot-personal-server-documents, the env names a typo.
+  const mismatch = preflightIssues({
+    fileEnv: {
+      ...base,
+      BLUEGREEN_COMPOSE_OVERRIDE: 'compose.bluegreen.private-vm.yml',
+      BLUEGREEN_DOCUMENTS_VOLUME: 'charitypilot-personal-server-document',
+    },
+    resolvedEnvFilePath: envFilePath,
+  });
+  assert.equal(mismatch.length, 1, mismatch.join(' | '));
+  assert.match(mismatch[0], /BLUEGREEN_DOCUMENTS_VOLUME is "charitypilot-personal-server-document"/);
+  assert.match(mismatch[0], /declare the documents volume as "charitypilot-personal-server-documents"/);
+  assert.match(mismatch[0], /silently EMPTY documents backup/);
+
+  // A typo with NO override at all is the same bug against the base file.
+  const noOverrideMismatch = preflightIssues({
+    fileEnv: { ...base, BLUEGREEN_DOCUMENTS_VOLUME: 'charitypilot-bluegreen-document' },
+    resolvedEnvFilePath: envFilePath,
+  });
+  assert.equal(noOverrideMismatch.length, 1, noOverrideMismatch.join(' | '));
+  assert.match(noOverrideMismatch[0], /declare the documents volume as "charitypilot-bluegreen-documents"/);
+
+  // Agreeing (the committed template's own pairing): no issue at all.
+  assert.deepEqual(
+    preflightIssues({
+      fileEnv: {
+        ...base,
+        BLUEGREEN_COMPOSE_OVERRIDE: 'compose.bluegreen.private-vm.yml',
+        BLUEGREEN_DOCUMENTS_VOLUME: 'charitypilot-personal-server-documents',
+      },
+      resolvedEnvFilePath: envFilePath,
+    }),
+    [],
+  );
+  // Agreeing with the base compose file, and unset (the hosted default), both clean.
+  assert.deepEqual(
+    preflightIssues({
+      fileEnv: { ...base, BLUEGREEN_DOCUMENTS_VOLUME: 'charitypilot-bluegreen-documents' },
+      resolvedEnvFilePath: envFilePath,
+    }),
+    [],
+  );
+  assert.deepEqual(preflightIssues({ fileEnv: base, resolvedEnvFilePath: envFilePath }), []);
+
+  // An unresolvable override reports only the missing file — the compose-
+  // declared name would be the base file's, so a second, misleading mismatch
+  // issue must not pile on.
+  const missingOverride = preflightIssues({
+    fileEnv: {
+      ...base,
+      BLUEGREEN_COMPOSE_OVERRIDE: '/definitely/not/here.yml',
+      BLUEGREEN_DOCUMENTS_VOLUME: 'charitypilot-personal-server-documents',
+    },
+    resolvedEnvFilePath: envFilePath,
+  });
+  assert.equal(missingOverride.length, 1, missingOverride.join(' | '));
+  assert.match(missingOverride[0], /BLUEGREEN_COMPOSE_OVERRIDE file not found/);
+});
+
+test('round 2: composeDeclaredVolumeNames reports what compose mounts, ignoring the env preference', async () => {
+  const { composeDeclaredVolumeNames, deploymentVolumeNames } = await loadDeployModule();
+
+  // The env var must NOT leak into the compose-declared view — that is the
+  // whole basis of the comparison above.
+  assert.deepEqual(composeDeclaredVolumeNames({ BLUEGREEN_DOCUMENTS_VOLUME: 'anything-else' }), {
+    db: 'charitypilot-bluegreen-db',
+    documents: 'charitypilot-bluegreen-documents',
+  });
+  assert.equal(deploymentVolumeNames({ BLUEGREEN_DOCUMENTS_VOLUME: 'anything-else' }).documents, 'anything-else');
+});
+
+test('round 2: a deploy refuses at preflight on a documents-volume disagreement, before any command runs', async () => {
+  const runDeploy = await loadDeployRunner();
+  const stateDir = makeFixtureDir('bluegreen-volume-name-mismatch-');
+  const envPath = join(stateDir, 'bluegreen.env');
+  writeEnvFile(envPath, { BLUEGREEN_DOCUMENTS_VOLUME: 'charitypilot-bluegreen-documnets' });
+  seedMigrationsDir(stateDir, TARGET_COMMIT, []);
+  const { deps, calls } = baseDeps({ stateDir });
+
+  const outcome = await runDeploy(['deploy', '--env-file', envPath, '--state-dir', stateDir], deps);
+
+  assert.equal(outcome.status, 1);
+  assert.match(outcome.stderr, /Blue-green deploy preflight failed:/);
+  assert.match(outcome.stderr, /BLUEGREEN_DOCUMENTS_VOLUME is "charitypilot-bluegreen-documnets"/);
+  assert.deepEqual(calls, [], 'a pure env-file refusal must run no command at all');
+
+  rmSync(stateDir, { recursive: true, force: true });
+});
+
+test('round 2: ensure-db up failure does not claim a container was stopped again', async () => {
+  const runDeploy = await loadDeployRunner();
+  const stateDir = makeFixtureDir('bluegreen-ensure-db-up-fails-');
+  const envPath = join(stateDir, 'bluegreen.env');
+  writeEnvFile(envPath);
+  seedMigrationsDir(stateDir, TARGET_COMMIT, []);
+
+  const { deps, calls } = baseDeps({
+    stateDir,
+    overrides: (command) => {
+      if (command.join(' ').includes('up -d --wait db')) return new Error('injected: db never became healthy');
+      return undefined;
+    },
+  });
+
+  const outcome = await runDeploy(['deploy', '--env-file', envPath, '--state-dir', stateDir], deps);
+
+  assert.equal(outcome.status, 1);
+  assert.match(outcome.stderr, /could not start the db service/);
+  // The stop is still issued — `up --wait` can fail with the container left
+  // running — but the message must not overclaim that one existed.
+  assert.equal(dbStopCalls(calls).length, 1);
+  assert.match(outcome.stderr, /nothing this deploy started is left running on these volumes/);
+  assert.doesNotMatch(outcome.stderr, /has been stopped again/);
 
   rmSync(stateDir, { recursive: true, force: true });
 });

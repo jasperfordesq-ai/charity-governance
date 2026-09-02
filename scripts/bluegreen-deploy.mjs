@@ -426,14 +426,39 @@ export function preflightIssues({ fileEnv, resolvedEnvFilePath }) {
   }
 
   const overrideValue = fileEnv.BLUEGREEN_COMPOSE_OVERRIDE || '';
+  let overrideResolvable = true;
   if (overrideValue) {
     const overridePath = resolve(repoRoot, overrideValue);
     if (!existsSync(overridePath)) {
       issues.push(`BLUEGREEN_COMPOSE_OVERRIDE file not found: ${overridePath}`);
+      overrideResolvable = false;
     }
     if (!(fileEnv.BLUEGREEN_DOCUMENTS_VOLUME || '')) {
       issues.push(
         'BLUEGREEN_DOCUMENTS_VOLUME is required when BLUEGREEN_COMPOSE_OVERRIDE is set (an override exists to move the volumes; the backup must tar the one the override names)',
+      );
+    }
+  }
+
+  // Round-2 fix: BLUEGREEN_DOCUMENTS_VOLUME is the name the BACKUP tars;
+  // the compose file/override is what the APP actually mounts. A one-
+  // character disagreement between them does not fail — it silently backs
+  // up an EMPTY volume. `docker run --mount type=volume,src=<nonexistent>`
+  // AUTO-CREATES the named volume (root:root 0755, which uid 1000 traverses
+  // happily), so the tar exits 0 with an empty tree, the manifest records
+  // zero documents, and the restore drill compares that empty manifest
+  // against the equally-empty tar and passes. The drill's whole value is
+  // that it cannot pass vacuously, so this must be a refusal.
+  //
+  // Skipped when the override path itself is unresolvable: the missing-file
+  // issue above already says what is wrong, and the compose-declared names
+  // would then be the base file's rather than the override's.
+  const declaredDocumentsVolume = fileEnv.BLUEGREEN_DOCUMENTS_VOLUME || '';
+  if (declaredDocumentsVolume && overrideResolvable) {
+    const composeDocumentsVolume = composeDeclaredVolumeNames(fileEnv).documents;
+    if (composeDocumentsVolume && declaredDocumentsVolume !== composeDocumentsVolume) {
+      issues.push(
+        `BLUEGREEN_DOCUMENTS_VOLUME is ${JSON.stringify(declaredDocumentsVolume)} but the compose file(s) this deployment uses declare the documents volume as ${JSON.stringify(composeDocumentsVolume)}; they must name the same volume (the backup tars the former while the app mounts the latter, and docker would auto-create the missing one, producing a silently EMPTY documents backup that the restore drill would still pass)`,
       );
     }
   }
@@ -538,19 +563,33 @@ function composeVolumeNames(composeFilePath) {
 }
 
 /**
- * The Docker volume names this deployment will actually mount. `documents`
- * prefers BLUEGREEN_DOCUMENTS_VOLUME because that is the name the backup
- * itself tars (see the backup phase); `db` has no env override at all and
- * comes from the compose file/override alone.
+ * The volume names the compose file(s) this run passes to `docker compose`
+ * actually DECLARE — i.e. what compose will mount, ignoring any env-level
+ * preference. `deploymentVolumeNames` layers the env over this; preflight
+ * compares the two.
  */
-export function deploymentVolumeNames(fileEnv) {
+export function composeDeclaredVolumeNames(fileEnv) {
   const merged = {};
   for (const composeFilePath of composeFileArgs(fileEnv).filter((arg) => arg !== '-f')) {
     Object.assign(merged, composeVolumeNames(composeFilePath));
   }
   return {
     db: merged[COMPOSE_DB_VOLUME_KEY] || DEFAULT_DB_VOLUME,
-    documents: fileEnv.BLUEGREEN_DOCUMENTS_VOLUME || merged[COMPOSE_DOCUMENTS_VOLUME_KEY] || DEFAULT_DOCUMENTS_VOLUME,
+    documents: merged[COMPOSE_DOCUMENTS_VOLUME_KEY] || DEFAULT_DOCUMENTS_VOLUME,
+  };
+}
+
+/**
+ * The Docker volume names this deployment will actually mount. `documents`
+ * prefers BLUEGREEN_DOCUMENTS_VOLUME because that is the name the backup
+ * itself tars (see the backup phase); `db` has no env override at all and
+ * comes from the compose file/override alone.
+ */
+export function deploymentVolumeNames(fileEnv) {
+  const declared = composeDeclaredVolumeNames(fileEnv);
+  return {
+    db: declared.db,
+    documents: fileEnv.BLUEGREEN_DOCUMENTS_VOLUME || declared.documents,
   };
 }
 
@@ -1085,6 +1124,9 @@ async function executeDeploy(deps) {
     stoppable: false,
     handled: false,
     cutoverDone: false,
+    // Set only on ensure-db's own `up` failure, where a container may never
+    // have been created at all — see that path for why the wording differs.
+    startWording: false,
     async stop() {
       if (this.handled || this.cutoverDone) return '';
       if (!this.stoppable) {
@@ -1095,7 +1137,9 @@ async function executeDeploy(deps) {
       this.handled = true;
       try {
         await run([...composePrefix(), 'stop', 'db'], deployEnv);
-        return ' The db service this deploy started has been stopped again.';
+        return this.startWording
+          ? ' `compose stop db` has been issued for the db this deploy was starting, so nothing this deploy started is left running on these volumes.'
+          : ' The db service this deploy started has been stopped again.';
       } catch (stopError) {
         return ` The db service this deploy started could NOT be stopped (${redact(stopError)}) and is STILL RUNNING on this deployment's volumes: stop it by hand (docker compose ${composeArgs.join(' ')} stop db) before starting any other stack on these volumes.`;
       }
@@ -1109,8 +1153,13 @@ async function executeDeploy(deps) {
   } catch (error) {
     // `up --wait` can fail with the container left created/running (an
     // unhealthy start), so a db this deploy tried to start is still this
-    // deploy's to clean up.
-    if (!dbWasAlreadyRunning && !dbPriorStateUnknown) dbGuard.stoppable = true;
+    // deploy's to clean up. Round-2 fix: the failure may equally have left
+    // NO container at all, so this path gets its own wording — "stopped
+    // again" would overclaim — while still actually issuing the stop.
+    if (!dbWasAlreadyRunning && !dbPriorStateUnknown) {
+      dbGuard.stoppable = true;
+      dbGuard.startWording = true;
+    }
     return result(
       1,
       '',
