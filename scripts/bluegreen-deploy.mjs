@@ -65,10 +65,12 @@ import { spawn, spawnSync } from 'node:child_process';
 import {
   closeSync,
   existsSync,
+  fsyncSync,
   mkdirSync,
   openSync,
   readdirSync,
   readFileSync,
+  renameSync,
   rmSync,
   statSync,
   writeFileSync,
@@ -684,28 +686,106 @@ function frontPort(fileEnv) {
 // Default (real) dependency implementations
 // ---------------------------------------------------------------------------
 
-async function defaultRunCommand(command, options = {}) {
+// VM-cutover defect 3: spawnSync's maxBuffer default is 1 MiB, and going
+// over it is not a polite truncation — the child is KILLED and spawnSync
+// returns `status: null` with `error.code === 'ENOBUFS'`. A real cutover
+// died in phase 2 tarring an 8.4 MB documents volume and reported only
+// "failed with exit code unknown" with no stderr, because the message read
+// nothing but `status` and `stderr`.
+//
+// This cap governs only output this function CAPTURES as a string: the row
+// census, the per-document sha256 listing (which grows with the document
+// count — a charity with thousands of files is far over 1 MiB),
+// `docker ps`/`compose ps`/`compose config` probes, `git rev-parse`, and
+// readiness bodies. 256 MiB is far above any of them, so a pathological
+// case fails as an honest allocation error that names itself rather than as
+// a silent kill. The genuinely unbounded artifacts (pg_dump -Fc, the
+// documents tar) never come through the capture path at all: they stream
+// straight to a file descriptor in runCommandToOutputFile below, so a large
+// documents volume is bounded by DISK, not by this process's RAM.
+const COMMAND_OUTPUT_MAX_BUFFER = 256 * 1024 * 1024;
+
+// One failure message for every way spawnSync can fail, so no class of
+// failure can misreport itself again:
+//   - non-zero exit      -> "... failed with exit code 3: <stderr>"
+//   - spawn-level error   -> "... failed: ENOENT: spawnSync docker ENOENT"
+//                            (ENOBUFS/EACCES/E2BIG all name themselves too)
+//   - killed by a signal  -> "... failed: killed by signal SIGKILL"
+//   - error + signal      -> "... failed: ENOBUFS: <msg> (killed by signal SIGTERM)"
+// `status: null` with neither an error nor a signal is not supposed to be
+// reachable, but it still says so explicitly rather than printing "unknown".
+function commandFailureMessage(command, spawnResult, stderrText) {
+  const detail = stderrText ? `: ${stderrText.slice(0, 2000)}` : '';
+  const signalSuffix = spawnResult.signal ? ` (killed by signal ${spawnResult.signal})` : '';
+  if (spawnResult.error) {
+    const code = spawnResult.error.code ? `${spawnResult.error.code}: ` : '';
+    return `${commandLine(command)} failed: ${code}${spawnResult.error.message}${signalSuffix}${detail}`;
+  }
+  if (spawnResult.status === null || spawnResult.status === undefined) {
+    const cause = spawnResult.signal
+      ? `killed by signal ${spawnResult.signal}`
+      : 'no exit code, no signal and no spawn error were reported';
+    return `${commandLine(command)} failed: ${cause}${detail}`;
+  }
+  return `${commandLine(command)} failed with exit code ${spawnResult.status}${signalSuffix}${detail}`;
+}
+
+// Streams the child's stdout DIRECTLY to a file descriptor. stderr stays
+// piped (capped by COMMAND_OUTPUT_MAX_BUFFER) so a failure still explains
+// itself.
+//
+// File-on-failure semantics: the old implementation captured the whole
+// artifact in memory and only `writeFileSync`d it after a zero exit, so on
+// failure `outputFile` did not exist. Streaming would otherwise leave a
+// truncated dump/tar sitting exactly where runBackup's `sha256File` and the
+// manifest expect a complete one. That property is deliberately PRESERVED
+// AND STRENGTHENED: the child writes to `<outputFile>.partial`, which is
+// fsynced and renamed into place only on a zero exit and removed on any
+// failure. So `outputFile` never exists unless it is complete and durable,
+// and the rename is atomic within the backup directory — strictly better
+// than the previous non-atomic whole-file write, at no cost to the caller.
+function runCommandToOutputFile(command, { env, cwd, outputFile }) {
+  const partialFile = `${outputFile}.partial`;
+  rmSync(partialFile, { force: true });
+  const fd = openSync(partialFile, 'w', 0o600);
+  let spawnResult;
+  try {
+    spawnResult = spawnSync(command[0], command.slice(1), {
+      cwd,
+      env: env ?? process.env,
+      stdio: ['ignore', fd, 'pipe'],
+      maxBuffer: COMMAND_OUTPUT_MAX_BUFFER,
+    });
+    if (spawnResult.status === 0) fsyncSync(fd);
+  } finally {
+    closeSync(fd);
+  }
+  if (spawnResult.status !== 0) {
+    const stderrText = spawnResult.stderr ? spawnResult.stderr.toString('utf8') : '';
+    rmSync(partialFile, { force: true });
+    throw new Error(commandFailureMessage(command, spawnResult, stderrText));
+  }
+  renameSync(partialFile, outputFile);
+  return { stdout: '' };
+}
+
+// Exported for the reliability tests: the buffering posture of this real
+// implementation (not an injected fake) is exactly what VM-cutover defect 3
+// was, so it has to be testable directly.
+export async function defaultRunCommand(command, options = {}) {
   const { env, cwd = repoRoot, outputFile } = options;
+  // Contract (see backup.mjs's ctx shape notes): the outputFile case
+  // resolves { stdout: '' } — callers read the FILE, never the resolved
+  // stdout — and both cases throw on a non-zero exit.
+  if (outputFile) return runCommandToOutputFile(command, { env, cwd, outputFile });
   const spawnResult = spawnSync(command[0], command.slice(1), {
     cwd,
     env: env ?? process.env,
-    encoding: outputFile ? undefined : 'utf8',
+    encoding: 'utf8',
+    maxBuffer: COMMAND_OUTPUT_MAX_BUFFER,
   });
   if (spawnResult.status !== 0) {
-    const stderrText = outputFile
-      ? spawnResult.stderr
-        ? spawnResult.stderr.toString('utf8')
-        : ''
-      : spawnResult.stderr ?? '';
-    throw new Error(
-      `${commandLine(command)} failed with exit code ${spawnResult.status ?? 'unknown'}${
-        stderrText ? `: ${stderrText.slice(0, 2000)}` : ''
-      }`,
-    );
-  }
-  if (outputFile) {
-    writeFileSync(outputFile, spawnResult.stdout);
-    return { stdout: '' };
+    throw new Error(commandFailureMessage(command, spawnResult, spawnResult.stderr ?? ''));
   }
   return { stdout: spawnResult.stdout ?? '', stderr: spawnResult.stderr ?? '' };
 }

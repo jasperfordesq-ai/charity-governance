@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
@@ -2809,4 +2809,110 @@ test('round 2: ensure-db up failure does not claim a container was stopped again
   assert.doesNotMatch(outcome.stderr, /has been stopped again/);
 
   rmSync(stateDir, { recursive: true, force: true });
+});
+
+// -----------------------------------------------------------------------------
+// VM-cutover defect 3: spawnSync output buffering
+//
+// These four drive defaultRunCommand's REAL implementation (never an injected
+// fake) because the defect WAS the real implementation's buffering posture.
+// A live cutover died in phase 2 on an 8.4 MB documents tar: spawnSync's
+// default 1 MiB maxBuffer killed the child, returned status:null with
+// error.code ENOBUFS, and the engine reported "failed with exit code unknown"
+// with no stderr. The P2 acceptance never caught it because its seeded
+// document set was a few KB, so size is exactly what is asserted here.
+//
+// The generator is `node -e` writing N bytes to stdout: portable across this
+// Windows host and the Linux VM, and no /dev/urandom or `head -c`.
+// -----------------------------------------------------------------------------
+
+const OVER_SPAWN_BUFFER_BYTES = 3 * 1024 * 1024; // comfortably over Node's 1 MiB default
+
+function stdoutGeneratorCommand(byteCount) {
+  return [
+    process.execPath,
+    '-e',
+    `process.stdout.write('x'.repeat(${byteCount}))`,
+  ];
+}
+
+test('runCommand: stdout far larger than the 1 MiB spawn buffer streams to the output file whole', async () => {
+  const module = await loadDeployModule();
+  assert.equal(typeof module.defaultRunCommand, 'function', 'defaultRunCommand must be exported for this test');
+  const dir = makeFixtureDir('bluegreen-runcommand-outputfile-');
+  const outputFile = join(dir, 'artifact.bin');
+
+  const result = await module.defaultRunCommand(stdoutGeneratorCommand(OVER_SPAWN_BUFFER_BYTES), {
+    cwd: dir,
+    outputFile,
+  });
+
+  // Contract preserved: the outputFile case still resolves { stdout: '' }.
+  assert.equal(result.stdout, '');
+  assert.equal(
+    statSync(outputFile).size,
+    OVER_SPAWN_BUFFER_BYTES,
+    'every byte of the child stdout must reach the file — no 1 MiB truncation, no ENOBUFS kill',
+  );
+
+  rmSync(dir, { recursive: true, force: true });
+});
+
+test('runCommand: captured stdout far larger than the 1 MiB spawn buffer comes back intact', async () => {
+  const module = await loadDeployModule();
+  const dir = makeFixtureDir('bluegreen-runcommand-capture-');
+
+  const result = await module.defaultRunCommand(stdoutGeneratorCommand(OVER_SPAWN_BUFFER_BYTES), { cwd: dir });
+
+  assert.equal(
+    result.stdout.length,
+    OVER_SPAWN_BUFFER_BYTES,
+    'the sha256 hash listing and compose config output both exceed 1 MiB on a real charity; capture must not truncate',
+  );
+
+  rmSync(dir, { recursive: true, force: true });
+});
+
+test('runCommand: a spawn-level failure names its error code instead of "exit code unknown"', async () => {
+  const module = await loadDeployModule();
+  const dir = makeFixtureDir('bluegreen-runcommand-spawn-error-');
+
+  await assert.rejects(
+    () => module.defaultRunCommand(['charitypilot-no-such-binary-a7f3', '--version'], { cwd: dir }),
+    (error) => {
+      assert.match(error.message, /ENOENT/, 'the spawn-level error code must appear in the message');
+      assert.doesNotMatch(
+        error.message,
+        /exit code unknown/,
+        'the misleading "exit code unknown" wording is what cost two production outages',
+      );
+      return true;
+    },
+  );
+
+  rmSync(dir, { recursive: true, force: true });
+});
+
+test('runCommand: a failed outputFile command leaves no artifact behind for the manifest to hash', async () => {
+  const module = await loadDeployModule();
+  const dir = makeFixtureDir('bluegreen-runcommand-outputfile-fail-');
+  const outputFile = join(dir, 'artifact.bin');
+
+  await assert.rejects(
+    () =>
+      module.defaultRunCommand(
+        [process.execPath, '-e', "process.stdout.write('x'.repeat(2 * 1024 * 1024)); process.stderr.write('injected failure'); process.exit(3)"],
+        { cwd: dir, outputFile },
+      ),
+    (error) => {
+      assert.match(error.message, /exit code 3/);
+      assert.match(error.message, /injected failure/, 'stderr must still be piped so failures explain themselves');
+      return true;
+    },
+  );
+
+  assert.equal(existsSync(outputFile), false, 'a half-written dump/tar must never be left where sha256File would hash it');
+  assert.equal(existsSync(`${outputFile}.partial`), false, 'the streaming temp file must be cleaned up on failure');
+
+  rmSync(dir, { recursive: true, force: true });
 });
