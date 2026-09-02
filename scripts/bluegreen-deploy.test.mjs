@@ -1864,3 +1864,135 @@ test('micro-round: rollback up-failure message says traffic was never switched, 
 
   rmSync(stateDir, { recursive: true, force: true });
 });
+
+test('P3-1: databaseIdentity defaults to charitypilot/charitypilot and honours POSTGRES_DB/POSTGRES_USER ("" counts as unset)', async () => {
+  const { databaseIdentity } = await loadDeployModule();
+  assert.deepEqual(databaseIdentity({}), { databaseName: 'charitypilot', databaseUser: 'charitypilot' });
+  assert.deepEqual(databaseIdentity({ POSTGRES_DB: '', POSTGRES_USER: '' }), {
+    databaseName: 'charitypilot',
+    databaseUser: 'charitypilot',
+  });
+  assert.deepEqual(
+    databaseIdentity({ POSTGRES_DB: 'charitypilot_personal_server', POSTGRES_USER: 'charitypilot_personal_server' }),
+    { databaseName: 'charitypilot_personal_server', databaseUser: 'charitypilot_personal_server' },
+  );
+});
+
+test('P3-1: the gate psql, pg backup, and drill all use the env file database identity', async () => {
+  const runDeploy = await loadDeployRunner();
+  const stateDir = makeFixtureDir('bluegreen-db-identity-');
+  const envPath = join(stateDir, 'vm.env');
+  writeEnvFile(envPath, {
+    POSTGRES_DB: 'charitypilot_personal_server',
+    POSTGRES_USER: 'charitypilot_personal_server',
+    DATABASE_URL: 'postgresql://charitypilot_personal_server:pw@db:5432/charitypilot_personal_server',
+  });
+  seedMigrationsDir(stateDir, TARGET_COMMIT, []);
+  const { runCommand, calls } = makeFakeRunCommand();
+  const backupCtxs = [];
+  const deps = {
+    runCommand,
+    runBackupImpl: async (ctx) => {
+      backupCtxs.push(ctx);
+      return { backupDir: join(stateDir, 'backups', 'x') };
+    },
+    runRestoreDrillImpl: async () => ({}),
+  };
+  const outcome = await runDeploy(['deploy', '--env-file', envPath, '--state-dir', stateDir], deps);
+  assert.equal(outcome.status, 0, outcome.stderr);
+
+  const psqlCalls = calls.filter((call) => call.command.includes('psql'));
+  assert.ok(psqlCalls.length > 0, 'gate must query the database');
+  for (const call of psqlCalls) {
+    const u = call.command.indexOf('-U');
+    const d = call.command.indexOf('-d');
+    assert.equal(call.command[u + 1], 'charitypilot_personal_server');
+    assert.equal(call.command[d + 1], 'charitypilot_personal_server');
+  }
+  assert.equal(backupCtxs.length, 1);
+  assert.equal(backupCtxs[0].databaseName, 'charitypilot_personal_server');
+  assert.equal(backupCtxs[0].databaseUser, 'charitypilot_personal_server');
+  rmSync(stateDir, { recursive: true, force: true });
+});
+
+test('P3-1: with no POSTGRES_* vars the gate and backup still use charitypilot/charitypilot (default pinned)', async () => {
+  const runDeploy = await loadDeployRunner();
+  const stateDir = makeFixtureDir('bluegreen-db-identity-default-');
+  const envPath = join(stateDir, 'local.env');
+  writeEnvFile(envPath);
+  seedMigrationsDir(stateDir, TARGET_COMMIT, []);
+  const { runCommand, calls } = makeFakeRunCommand();
+  const backupCtxs = [];
+  const outcome = await runDeploy(['deploy', '--env-file', envPath, '--state-dir', stateDir], {
+    runCommand,
+    runBackupImpl: async (ctx) => {
+      backupCtxs.push(ctx);
+      return { backupDir: join(stateDir, 'backups', 'x') };
+    },
+    runRestoreDrillImpl: async () => ({}),
+  });
+  assert.equal(outcome.status, 0, outcome.stderr);
+  const psql = calls.find((call) => call.command.includes('psql'));
+  assert.equal(psql.command[psql.command.indexOf('-U') + 1], 'charitypilot');
+  assert.equal(psql.command[psql.command.indexOf('-d') + 1], 'charitypilot');
+  assert.equal(backupCtxs[0].databaseName, 'charitypilot');
+  assert.equal(backupCtxs[0].databaseUser, 'charitypilot');
+  rmSync(stateDir, { recursive: true, force: true });
+});
+
+test('P3-1: preflightIssues rejects a DATABASE_URL whose database or user disagrees with the resolved identity', async () => {
+  const { preflightIssues } = await loadDeployModule();
+  const envFilePath = '/tmp/x.env';
+  const base = {
+    BLUEGREEN_ENV_FILE: envFilePath,
+    BLUEGREEN_ORIGIN: 'http://127.0.0.1:8080',
+    READINESS_API_KEY: READINESS_KEY,
+    FRONTEND_URL: 'http://127.0.0.1:8080',
+    // Fixture fix: FRONTEND_URL's loopback hostname is not an approved
+    // charitypilot.ie hostname, so preflightIssues requires the canonical-
+    // origin overrides regardless of the database-identity checks under
+    // test here. BLUEGREEN_ORIGIN is itself exact loopback, so the
+    // loopback-shaped values are accepted (mirrors the M1/micro-round
+    // preflightIssues tests' own loopback fixtures).
+    CHARITYPILOT_CANONICAL_WEB_ORIGIN: 'http://127.0.0.1:8080',
+    CHARITYPILOT_CANONICAL_API_ORIGIN: 'http://127.0.0.1:8080',
+  };
+  // Consistent, explicit identity: clean.
+  assert.deepEqual(
+    preflightIssues({
+      fileEnv: {
+        ...base,
+        POSTGRES_DB: 'charitypilot_personal_server',
+        POSTGRES_USER: 'charitypilot_personal_server',
+        DATABASE_URL: 'postgresql://charitypilot_personal_server:pw@db:5432/charitypilot_personal_server',
+      },
+      resolvedEnvFilePath: envFilePath,
+    }),
+    [],
+  );
+  // Appliance-shaped URL with the POSTGRES_* vars forgotten: both mismatches named.
+  const forgotten = preflightIssues({
+    fileEnv: { ...base, DATABASE_URL: 'postgresql://charitypilot_personal_server:pw@db:5432/charitypilot_personal_server' },
+    resolvedEnvFilePath: envFilePath,
+  });
+  assert.ok(
+    forgotten.includes(
+      'DATABASE_URL database "charitypilot_personal_server" does not match POSTGRES_DB (resolved "charitypilot"); set POSTGRES_DB in the env file to the database the volume actually holds',
+    ),
+    forgotten.join('\n'),
+  );
+  assert.ok(
+    forgotten.includes(
+      'DATABASE_URL user "charitypilot_personal_server" does not match POSTGRES_USER (resolved "charitypilot"); set POSTGRES_USER in the env file to the role the volume actually holds',
+    ),
+    forgotten.join('\n'),
+  );
+  // Default identity with the default URL (today's local fixture): clean — pins that no new issue appears for existing deployments.
+  assert.deepEqual(
+    preflightIssues({
+      fileEnv: { ...base, DATABASE_URL: 'postgresql://charitypilot:scratch-password@db:5432/charitypilot' },
+      resolvedEnvFilePath: envFilePath,
+    }),
+    [],
+  );
+});

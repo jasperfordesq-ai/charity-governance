@@ -107,6 +107,18 @@ const WEB_HEALTH_PATH = '/login';
 const UNBUILT_TAG = 'unbuilt';
 const DEFAULT_DATABASE_NAME = 'charitypilot';
 const DEFAULT_DATABASE_USER = 'charitypilot';
+
+// P3: the appliance's volumes hold a role/database both named
+// `charitypilot_personal_server`, not `charitypilot`. Every psql/pg_dump the
+// engine issues must use the identity the volume actually holds, so it is
+// read from the deployment env file (the same POSTGRES_DB/POSTGRES_USER the
+// compose db service itself reads) with today's values as the default.
+export function databaseIdentity(fileEnv) {
+  return {
+    databaseName: fileEnv.POSTGRES_DB || DEFAULT_DATABASE_NAME,
+    databaseUser: fileEnv.POSTGRES_USER || DEFAULT_DATABASE_USER,
+  };
+}
 const DEFAULT_KEEP_RELEASES = 3;
 const DEFAULT_BACKUP_RETENTION_DAYS = 14;
 const DUMP_ARTIFACT_NAME = 'database.dump';
@@ -316,6 +328,29 @@ export function preflightIssues({ fileEnv, resolvedEnvFilePath }) {
     );
   }
 
+  // P3: the URL the app connects with and the identity the engine's own
+  // psql/pg_dump use must name the same database and role — an appliance-
+  // shaped URL with the POSTGRES_* vars forgotten would otherwise pass here
+  // and fail at the migration gate with `role "charitypilot" does not exist`.
+  const identity = databaseIdentity(fileEnv);
+  try {
+    const url = new URL(fileEnv.DATABASE_URL ?? '');
+    const urlDatabase = decodeURIComponent(url.pathname.replace(/^\//, ''));
+    const urlUser = decodeURIComponent(url.username);
+    if (urlDatabase && urlDatabase !== identity.databaseName) {
+      issues.push(
+        `DATABASE_URL database ${JSON.stringify(urlDatabase)} does not match POSTGRES_DB (resolved ${JSON.stringify(identity.databaseName)}); set POSTGRES_DB in the env file to the database the volume actually holds`,
+      );
+    }
+    if (urlUser && urlUser !== identity.databaseUser) {
+      issues.push(
+        `DATABASE_URL user ${JSON.stringify(urlUser)} does not match POSTGRES_USER (resolved ${JSON.stringify(identity.databaseUser)}); set POSTGRES_USER in the env file to the role the volume actually holds`,
+      );
+    }
+  } catch {
+    // An unparseable DATABASE_URL is already reported by the hostname check above.
+  }
+
   const declaredEnvFile = fileEnv.BLUEGREEN_ENV_FILE ?? '';
   if (!declaredEnvFile || resolve(declaredEnvFile) !== resolve(resolvedEnvFilePath)) {
     issues.push(
@@ -492,7 +527,7 @@ function parsePsqlList(stdout) {
 // belt-and-braces in case a relation-missing error surfaces some other
 // way. Returns [] (never throws) when the table does not exist yet —
 // exactly the state of every first-ever deploy's database.
-async function fetchAppliedMigrationNames(run, deployEnv) {
+async function fetchAppliedMigrationNames(run, deployEnv, identity) {
   const probeCommand = [
     ...composePrefix(),
     'exec',
@@ -500,9 +535,9 @@ async function fetchAppliedMigrationNames(run, deployEnv) {
     'db',
     'psql',
     '-U',
-    DEFAULT_DATABASE_USER,
+    identity.databaseUser,
     '-d',
-    DEFAULT_DATABASE_NAME,
+    identity.databaseName,
     '-tA',
     '-c',
     PRISMA_MIGRATIONS_EXISTS_PROBE_SQL,
@@ -529,9 +564,9 @@ async function fetchAppliedMigrationNames(run, deployEnv) {
       'db',
       'psql',
       '-U',
-      DEFAULT_DATABASE_USER,
+      identity.databaseUser,
       '-d',
-      DEFAULT_DATABASE_NAME,
+      identity.databaseName,
       '-tA',
       '-c',
       APPLIED_MIGRATIONS_SQL,
@@ -837,8 +872,7 @@ async function executeDeploy(deps) {
         envFile: resolvedEnvFilePath,
         composeArgs,
         env: deployEnv,
-        databaseName: DEFAULT_DATABASE_NAME,
-        databaseUser: DEFAULT_DATABASE_USER,
+        ...databaseIdentity(fileEnv),
         // I3 fix: was hardcoded to backup.mjs's own default everywhere —
         // '' counts as unset too (P1 convention), so an operator overriding
         // the documents volume name in the env file actually reaches the
@@ -907,7 +941,7 @@ async function executeDeploy(deps) {
   await run([...composePrefix(), 'up', '-d', '--wait', 'db'], deployEnv);
   // C1 fix: fetchAppliedMigrationNames survives a fresh database with no
   // "_prisma_migrations" relation yet (every first-ever deploy).
-  const appliedNames = await fetchAppliedMigrationNames(run, deployEnv);
+  const appliedNames = await fetchAppliedMigrationNames(run, deployEnv, databaseIdentity(fileEnv));
   const migrationsDir = join(releaseDir, ...MIGRATIONS_RELATIVE);
   const { pending, unknownApplied } = pendingMigrations(migrationsDir, appliedNames);
   const migrationBatch = readMigrationBatch(migrationsDir, pending);
@@ -1537,8 +1571,7 @@ async function executeBackupCommand(deps) {
     envFile: resolvedEnvFilePath,
     composeArgs,
     env,
-    databaseName: DEFAULT_DATABASE_NAME,
-    databaseUser: DEFAULT_DATABASE_USER,
+    ...databaseIdentity(fileEnv),
     // I3 fix: see the executeDeploy backup call for why.
     documentsVolume: fileEnv.BLUEGREEN_DOCUMENTS_VOLUME || undefined,
     commit: state?.commit ?? null,
@@ -1582,8 +1615,7 @@ async function executeRestoreDrillCommand(deps) {
     envFile: resolvedEnvFilePath,
     composeArgs,
     env,
-    databaseName: DEFAULT_DATABASE_NAME,
-    databaseUser: DEFAULT_DATABASE_USER,
+    ...databaseIdentity(fileEnv),
     plan,
   });
 
