@@ -16,15 +16,15 @@ Generated: 2026-09-01 - Source of truth: [`docs/reliability/guarantees.json`](re
 
 | Surface | covered | partial | gap | n/a | Total |
 |---|---|---|---|---|---|
-| API | 334 | 0 | 0 | 14 | 348 |
+| API | 355 | 0 | 0 | 14 | 369 |
 | Web | 112 | 0 | 0 | 6 | 118 |
-| **Total** | **446** | **0** | **0** | **20** | **466** |
+| **Total** | **467** | **0** | **0** | **20** | **487** |
 
-**API suite:** 1142 passing, 0 failing. **Web suite:** 411 passing, 0 failing. **E2E linkage:** 31 Playwright titles found; not executed by this command.
+**API suite:** 1152 passing, 0 failing. **Web suite:** 411 passing, 0 failing. **E2E linkage:** 31 Playwright titles found; not executed by this command.
 
 **Executed E2E result:** NOT VERIFIED BY THIS COMMAND. Use a successful managed E2E workflow or `npm run test:e2e` result bound to the relevant SHA.
 
-**Linkage:** 446/446 covered guarantees verified against a passing/linked test.
+**Linkage:** 467/467 covered guarantees verified against a passing/linked test.
 
 **Linkage check: COMPLETE**
 
@@ -55,7 +55,7 @@ no data loss / accessibility & resilience.
 
 ---
 
-## API surface - the matrix (348 guarantees)
+## API surface - the matrix (369 guarantees)
 
 ### auth - `/api/v1/auth`
 
@@ -324,6 +324,34 @@ _32 guarantees - covered 31  n/a 1_
 | Tenant isolation | updateFundraising for a fundraisingRecord owned by org B, called with org A's organisationId, throws AppError 404 FUNDRAISING_NOT_FOUND and never calls fundraisingRecord.update. | covered | `updateFundraising rejects a record from another organisation (no cross-tenant write)`<br/><sub>governance-register-service.test.ts</sub> |
 | Tenant isolation | removeFundraising for a fundraisingRecord owned by org B, called with org A's organisationId, throws AppError 404 FUNDRAISING_NOT_FOUND and never calls fundraisingRecord.delete. | covered | `removeFundraising rejects a record from another organisation (no cross-tenant delete)`<br/><sub>governance-register-service.test.ts</sub> |
 | Tenant isolation | The org-scoped record lookup keys on BOTH id and organisationId (findFirst where {id, organisationId}), so an id alone cannot select another org's record. | covered | `the org-scoped lookup keys on both id and organisationId`<br/><sub>governance-register-service.test.ts</sub> |
+
+### governing-acts (minute book) - `/api/v1/governing-acts`
+
+_21 guarantees - covered 21_
+
+| Concern | Guarantee | Status | Proven by |
+|---|---|---|---|
+| Auth & session integrity | An unauthenticated request to the minute book is rejected 401 UNAUTHORIZED before any route handler runs. | covered | `unauthenticated GET /governing-acts returns 401`<br/><sub>governing-acts-reliability.test.ts</sub> |
+| Authorization boundary | A MEMBER cannot create a governing act: requireAdmin returns 403 FORBIDDEN and governingAct.create never runs. | covered | `a MEMBER cannot create governing acts (requireAdmin)`<br/><sub>governing-acts-reliability.test.ts</sub> |
+| Authorization boundary | A MEMBER cannot update a governing act: requireAdmin returns 403 FORBIDDEN and the guarded update never runs. | covered | `a MEMBER cannot update governing acts (requireAdmin)`<br/><sub>governing-acts-reliability.test.ts</sub> |
+| Authorization boundary | A MEMBER cannot add a resolution to a governing act: requireAdmin returns 403 FORBIDDEN and resolution.create never runs. | covered | `a MEMBER cannot add resolutions (requireAdmin)`<br/><sub>governing-acts-reliability.test.ts</sub> |
+| Authorization boundary | An ADMIN can create a governing act, so the role guard is a boundary rather than a blanket denial. | covered | `an ADMIN can create a governing act`<br/><sub>governing-acts-reliability.test.ts</sub> |
+| Input validation | Creating a governing act without its required fields returns 400 VALIDATION_ERROR and no row is written. | covered | `creating a governing act with a missing required field returns 400`<br/><sub>governing-acts-reliability.test.ts</sub> |
+| Input validation | Creating a resolution with empty text returns 400 VALIDATION_ERROR and no row is written. | covered | `creating a resolution with empty text returns 400`<br/><sub>governing-acts-reliability.test.ts</sub> |
+| Input validation | Updating a governing act without expectedUpdatedAt returns 400 VALIDATION_ERROR, so an unversioned write can never reach the database. | covered | `PATCH /governing-acts/:id without expectedUpdatedAt returns 400`<br/><sub>governing-acts-reliability.test.ts</sub> |
+| Input validation | expectedUpdatedAt is validated as an offset-bearing ISO timestamp like every other optimistic-locking schema, so a malformed value returns 400 VALIDATION_ERROR rather than a phantom 409 that blames a concurrent edit. | covered | `an ISO-less expectedUpdatedAt is a validation error, not a phantom conflict`<br/><sub>governing-acts-reliability.test.ts</sub> |
+| Subscription / plan gating | The minute book is a Complete-plan feature: an ESSENTIALS organisation listing governing acts gets 403 PLAN_FEATURE_UNAVAILABLE and no read is issued. | covered | `an ESSENTIALS plan cannot list governing acts (requireCompletePlan)`<br/><sub>governing-acts-reliability.test.ts</sub> |
+| Subscription / plan gating | Plan gating runs before the role guard: an ESSENTIALS ADMIN creating a governing act gets 403 PLAN_FEATURE_UNAVAILABLE and governingAct.create never runs. | covered | `an ESSENTIALS plan cannot create governing acts (requireCompletePlan fires before requireAdmin)`<br/><sub>governing-acts-reliability.test.ts</sub> |
+| State integrity / no data loss | Rule 2: a document cannot cite a resolution whose governing act is still DRAFT or CIRCULATED; the attempt is rejected 422 MINUTES_NOT_YET_APPROVED and no document row is written. | covered | `setDocumentApproval rejects a resolution whose governing act is DRAFT`<br/><sub>governing-acts-reliability.test.ts</sub> |
+| State integrity / no data loss | A resolution belonging to an APPROVED governing act is accepted as document approval evidence and the guarded document write is issued. | covered | `setDocumentApproval accepts a resolution from an APPROVED governing act`<br/><sub>governing-acts-reliability.test.ts</sub> |
+| State integrity / no data loss | Recording document approval is version-guarded: when the guarded write matches no row the call raises 409 DOCUMENT_UPDATE_CONFLICT instead of reporting success for a write that never landed. | covered | `setDocumentApproval reports a conflict when the guarded write matches no row`<br/><sub>governing-acts-reliability.test.ts</sub> |
+| State integrity / no data loss | Removing a governing act is refused 422 GOVERNING_ACT_HAS_DEPENDENTS when another act records it as the meeting that approved its minutes; no resolution, act or audit snapshot is written. | covered | `voidAct refuses an act whose minutes approved another act, without deleting anything`<br/><sub>governing-acts-reliability.test.ts</sub> |
+| State integrity / no data loss | Removing a governing act is refused 422 GOVERNING_ACT_EVIDENCES_DOCUMENTS when a document's approval evidence hangs off one of its resolutions; the act is not deleted. | covered | `voidAct refuses an act whose resolutions evidence a document approval`<br/><sub>governing-acts-reliability.test.ts</sub> |
+| State integrity / no data loss | Both removal refusal checks read under the same transaction that performs the delete, so a dependent link or approval created concurrently cannot be severed as a side effect. | covered | `voidAct runs both refusal checks inside the deleting transaction`<br/><sub>governing-acts-reliability.test.ts</sub> |
+| State integrity / no data loss | A removal writes the full GoverningActVoid snapshot - reference, resolution count, reason and the actor resolved from the user row - before the act is deleted. | covered | `voidAct writes the audit snapshot before removing the act`<br/><sub>governing-acts-reliability.test.ts</sub> |
+| State integrity / no data loss | A removal presenting a stale expectedUpdatedAt raises 409 GOVERNING_ACT_UPDATE_CONFLICT and writes neither the audit snapshot nor the delete. | covered | `voidAct rejects a stale expectedUpdatedAt before any write`<br/><sub>governing-acts-reliability.test.ts</sub> |
+| Tenant isolation | Listing the minute book scopes governingAct.findMany to the caller organisation, so an act belonging to another tenant is never returned. | covered | `governingAct.findMany is scoped to the caller organisation`<br/><sub>governing-acts-reliability.test.ts</sub> |
+| Tenant isolation | The board-submissions view scopes its document query to the caller organisation, so approval evidence from another tenant is never surfaced. | covered | `board-submissions document query is scoped to the caller organisation`<br/><sub>governing-acts-reliability.test.ts</sub> |
 
 ### team - `/api/v1/team`
 

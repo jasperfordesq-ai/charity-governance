@@ -72,7 +72,7 @@ export function buildComplianceReportHtml(
   const standardRows = principles
     .map(
       (p) => `
-      <h2>Principle ${p.number}: ${p.title}</h2>
+      <h2>Principle ${p.number}: ${escapeHtml(p.title)}</h2>
       <table>
         <thead>
           <tr>
@@ -89,9 +89,9 @@ export function buildComplianceReportHtml(
               const r = recordMap.get(s.id);
               return `
               <tr>
-                <td><strong>${s.code}</strong> ${escapeHtml(s.title)}</td>
+                <td><strong>${escapeHtml(s.code)}</strong> ${escapeHtml(s.title)}</td>
                 <td>${s.isCore ? 'Core' : 'Additional'}</td>
-                <td>${r?.status?.replace(/_/g, ' ') ?? 'NOT STARTED'}</td>
+                <td>${escapeHtml(r?.status?.replace(/_/g, ' ') ?? 'NOT STARTED')}</td>
                 <td>${escapeHtml(r?.actionTaken ?? '')}</td>
                 <td>${escapeHtml(r?.evidence ?? '')}${r?.explanationIfNA ? '<br><em>Explanation: ' + escapeHtml(r.explanationIfNA) + '</em>' : ''}</td>
               </tr>`;

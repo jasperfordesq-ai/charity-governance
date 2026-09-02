@@ -327,13 +327,24 @@ export class GoverningActService {
       }
     }
 
-    await this.prisma.document.updateMany({
+    const updated = await this.prisma.document.updateMany({
       where: { id: documentId, organisationId, updatedAt: expectedInstant },
       data: {
         ...(approvedByResolutionId !== undefined ? { approvedByResolutionId } : {}),
         ...(approvalAsserted !== undefined ? { approvalAsserted } : {}),
       },
     });
+
+    // The guarded write is the only authority on whether the caller's version
+    // was still current. Reporting success on a zero-row update would tell an
+    // administrator that approval evidence was recorded when it was not.
+    if (updated.count !== 1) {
+      throw new AppError(
+        409,
+        'DOCUMENT_UPDATE_CONFLICT',
+        'This document changed since it was loaded. Refresh and review the latest values.',
+      );
+    }
   }
 
   /**
@@ -365,52 +376,55 @@ export class GoverningActService {
     });
     if (!actor) throw new AppError(403, 'ACTOR_NOT_FOUND', 'Acting user not found in this organisation');
 
-    const act = await this.prisma.governingAct.findFirst({
-      where: { id, organisationId },
-      include: { resolutions: true },
-    });
-    if (!act) throw govActNotFound();
-    if (act.updatedAt.getTime() !== expectedInstant.getTime()) {
-      throw new AppError(
-        409,
-        'GOVERNING_ACT_UPDATE_CONFLICT',
-        'This record changed since it was loaded. Refresh and review the latest values.',
-      );
-    }
-
-    // Another act's minutes were approved at this one - removing it would leave
-    // that approval pointing at nothing.
-    const dependents = await this.prisma.governingAct.findMany({
-      where: { organisationId, approvedAtActId: id },
-      select: { reference: true },
-    });
-    if (dependents.length > 0) {
-      throw new AppError(
-        422,
-        'GOVERNING_ACT_HAS_DEPENDENTS',
-        `Cannot remove ${act.reference}: it is recorded as the meeting that approved the minutes of ` +
-          `${dependents.map((d) => d.reference).join(', ')}. Clear that link on those acts first.`,
-      );
-    }
-
-    // A document's approval evidence points at one of this act's resolutions.
-    const resolutionIds = act.resolutions.map((r) => r.id);
-    if (resolutionIds.length > 0) {
-      const evidencedDocuments = await this.prisma.document.findMany({
-        where: { organisationId, approvedByResolutionId: { in: resolutionIds } },
-        select: { name: true },
+    // Load the act and run both refusal checks inside the same transaction as
+    // the delete. Read outside it and a link created in between is severed as a
+    // side effect - exactly what these checks exist to prevent.
+    return this.prisma.$transaction(async (tx) => {
+      const act = await tx.governingAct.findFirst({
+        where: { id, organisationId },
+        include: { resolutions: true },
       });
-      if (evidencedDocuments.length > 0) {
+      if (!act) throw govActNotFound();
+      if (act.updatedAt.getTime() !== expectedInstant.getTime()) {
         throw new AppError(
-          422,
-          'GOVERNING_ACT_EVIDENCES_DOCUMENTS',
-          `Cannot remove ${act.reference}: its resolutions are the recorded approval for ` +
-            `${evidencedDocuments.map((d) => d.name).join(', ')}. Detach that approval first.`,
+          409,
+          'GOVERNING_ACT_UPDATE_CONFLICT',
+          'This record changed since it was loaded. Refresh and review the latest values.',
         );
       }
-    }
 
-    return this.prisma.$transaction(async (tx) => {
+      // Another act's minutes were approved at this one - removing it would leave
+      // that approval pointing at nothing.
+      const dependents = await tx.governingAct.findMany({
+        where: { organisationId, approvedAtActId: id },
+        select: { reference: true },
+      });
+      if (dependents.length > 0) {
+        throw new AppError(
+          422,
+          'GOVERNING_ACT_HAS_DEPENDENTS',
+          `Cannot remove ${act.reference}: it is recorded as the meeting that approved the minutes of ` +
+            `${dependents.map((d) => d.reference).join(', ')}. Clear that link on those acts first.`,
+        );
+      }
+
+      // A document's approval evidence points at one of this act's resolutions.
+      const resolutionIds = act.resolutions.map((r) => r.id);
+      if (resolutionIds.length > 0) {
+        const evidencedDocuments = await tx.document.findMany({
+          where: { organisationId, approvedByResolutionId: { in: resolutionIds } },
+          select: { name: true },
+        });
+        if (evidencedDocuments.length > 0) {
+          throw new AppError(
+            422,
+            'GOVERNING_ACT_EVIDENCES_DOCUMENTS',
+            `Cannot remove ${act.reference}: its resolutions are the recorded approval for ` +
+              `${evidencedDocuments.map((d) => d.name).join(', ')}. Detach that approval first.`,
+          );
+        }
+      }
+
       const record = await tx.governingActVoid.create({
         data: {
           organisationId,

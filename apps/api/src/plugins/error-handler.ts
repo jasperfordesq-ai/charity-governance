@@ -30,6 +30,14 @@ export const errorHandlerPlugin = fp(async (app: FastifyInstance) => {
     }
 
     const exposeMessage = statusCode < 500 || !isProduction;
+    // A client error carries an actionable machine code (for example
+    // FST_ERR_CTP_INVALID_JSON_BODY). Reporting every one of them as
+    // INTERNAL_ERROR tells the caller the server broke when the request did.
+    // Server errors keep the opaque code so no internal detail escapes.
+    const clientErrorCode =
+      statusCode < 500 && typeof error.code === 'string' && error.code.trim()
+        ? error.code
+        : 'INTERNAL_ERROR';
     if (shouldSendErrorAlert(statusCode)) {
       const payload = buildErrorAlertPayload(error, request, statusCode);
       void sendErrorAlert(payload).catch((alertError) => {
@@ -42,7 +50,7 @@ export const errorHandlerPlugin = fp(async (app: FastifyInstance) => {
 
     return reply.status(statusCode).send({
       error: exposeMessage ? error.message : 'Internal server error',
-      code: 'INTERNAL_ERROR',
+      code: clientErrorCode,
     });
   });
 
