@@ -325,6 +325,16 @@ enum DirectorAppointmentKind {
   MEMBERS
 }
 
+enum IntegrationProvider {
+  CONFLUENCE
+}
+
+enum IntegrationStatus {
+  CONNECTED
+  DISCONNECTED
+  ERROR
+}
+
 model Organisation {
   id                                      String                      @id @default(cuid())
   name                                    String
@@ -387,9 +397,58 @@ model Organisation {
   securityAuditEvents         SecurityAuditEvent[]
   passwordRecoveryRequests    PasswordRecoveryRequest[]
   authSecurityEmailOutbox     AuthSecurityEmailOutbox[]
+  integrations                OrganisationIntegration[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
+}
+
+model OrganisationIntegration {
+  id             String              @id @default(cuid())
+  organisationId String
+  organisation   Organisation        @relation(fields: [organisationId], references: [id], onDelete: Cascade)
+  provider       IntegrationProvider
+  status         IntegrationStatus   @default(DISCONNECTED)
+  // Non-secret connection facts only (site id, space key). Never credentials.
+  config         Json?
+  lastError      String?
+  connectedAt    DateTime?
+  connectedById  String?
+  createdAt      DateTime            @default(now())
+  updatedAt      DateTime            @updatedAt
+
+  credentials IntegrationCredential[]
+
+  @@unique([organisationId, provider])
+  @@index([organisationId])
+}
+
+model IntegrationCredential {
+  id            String                  @id @default(cuid())
+  integrationId String
+  integration   OrganisationIntegration @relation(fields: [integrationId], references: [id], onDelete: Cascade)
+  // e.g. "access_token", "refresh_token" — the label, never the value.
+  kind          String
+  // The sealed envelope from integration-crypto.ts: { generation, iv, tag, ciphertext }.
+  sealed        Json
+  // Denormalised from the envelope so a rotation can find rows without opening them.
+  generation    Int
+  expiresAt     DateTime?
+  createdAt     DateTime                @default(now())
+  updatedAt     DateTime                @updatedAt
+
+  @@unique([integrationId, kind])
+  @@index([generation])
+}
+
+model IntegrationSecretControl {
+  id                      Int       @id
+  generation              Int       @default(1)
+  activeKeyFingerprint    String?   @db.Char(64)
+  retiredKeyFingerprint   String?   @db.Char(64)
+  rotatedAt               DateTime?
+  createdAt               DateTime  @default(now())
+  updatedAt               DateTime  @default(now()) @updatedAt
 }
 
 model User {
