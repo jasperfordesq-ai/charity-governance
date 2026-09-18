@@ -298,11 +298,14 @@ The tool rejects future or more-than-30-minute-old attestations, hashes the exac
 
 ## Environment
 
-The API requires configured production values for database, Stripe, Resend, Supabase, and the frontend URL. `JWT_SECRET` must be at least 32 characters. `AUTH_RECOVERY_SECRET` must independently and canonically encode 32-64 random bytes as hex or unpadded base64url, must not be reused as `JWT_SECRET` or `READINESS_API_KEY`, and must be present in every API and scheduler runtime. Refresh tokens are opaque, stored hashed in `AuthSession`, and delivered only through HTTP-only cookies.
+The API requires configured production values for database, Stripe, Resend, Supabase, and the frontend URL. `JWT_SECRET` must be at least 32 characters. `AUTH_RECOVERY_SECRET` must independently and canonically encode 32-64 random bytes as hex or unpadded base64url, must not be reused as `JWT_SECRET` or `READINESS_API_KEY`, and must be present in every API and scheduler runtime. `INTEGRATION_ENCRYPTION_KEY` must canonically encode exactly 32 random bytes as hex or unpadded base64url and must not be reused as `JWT_SECRET`, `OWNER_JWT_SECRET`, `AUTH_RECOVERY_SECRET`, or `READINESS_API_KEY`. It is the key every stored charity integration credential is sealed under, so its loss is not recoverable the way its peers' losses are: losing `JWT_SECRET` only logs everyone out, but losing this key, or rotating it without re-sealing the stored credentials first, makes every stored charity credential permanently unreadable, and the only way back is to re-authorise every connected integration. Treat it as backed-up, carried-forward state, not as a value to regenerate on a whim. Refresh tokens are opaque, stored hashed in `AuthSession`, and delivered only through HTTP-only cookies.
 
 Fresh `npm run setup:production-env` output generates `JWT_SECRET`,
-`READINESS_API_KEY`, and `AUTH_RECOVERY_SECRET` independently and sets the
-current P1-07A compatibility marker. If an operator env file or secret source
+`READINESS_API_KEY`, `AUTH_RECOVERY_SECRET`, and `INTEGRATION_ENCRYPTION_KEY`
+independently and sets the current P1-07A compatibility marker. Never rerun the
+generator against a deployment that already holds sealed integration
+credentials: a freshly generated `INTEGRATION_ENCRYPTION_KEY` cannot open them.
+If an operator env file or secret source
 predates P1-07A, do not rerun the generator with `--force`: it would replace the
 whole file. Add a newly generated independent recovery secret through the
 approved secret-store process, set

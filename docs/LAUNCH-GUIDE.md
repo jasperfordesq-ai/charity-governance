@@ -193,7 +193,8 @@ You need four external services. Create the **production/live** versions
 ### Step 5 - Fill in the real secrets
 - **Start with one command** - it creates `.env.production` for you and
   auto-generates the random secrets you'd otherwise have to craft by hand
-  (`JWT_SECRET`, `READINESS_API_KEY`, `AUTH_RECOVERY_SECRET`), setting the current
+  (`JWT_SECRET`, `READINESS_API_KEY`, `AUTH_RECOVERY_SECRET`,
+  `INTEGRATION_ENCRYPTION_KEY`), setting the current
   `CHARITYPILOT_DATABASE_COMPATIBILITY=p107a-password-recovery-v1`, and leaving clearly-marked placeholders for
   the values only you can provide:
   ```bash
@@ -206,6 +207,16 @@ You need four external services. Create the **production/live** versions
   `AUTH_RECOVERY_SECRET` through the approved secret-store procedure and update
   the non-secret compatibility marker separately; never paste the secret into
   chat, logs, source control, or launch evidence.
+- **`INTEGRATION_ENCRYPTION_KEY` is the one secret you must never lose.** It is
+  32 random bytes (hex or unpadded base64url), it must differ from
+  `JWT_SECRET`, `OWNER_JWT_SECRET`, `AUTH_RECOVERY_SECRET`, and
+  `READINESS_API_KEY`, and every charity's stored integration credentials are
+  sealed under it. If `JWT_SECRET` is lost, everyone is simply logged out. If
+  this key is lost, or rotated without re-sealing the stored credentials first,
+  every stored charity credential becomes permanently unreadable, and the only
+  way back is asking every charity to re-authorise every connected integration.
+  Back it up in the approved secret store before you launch, and carry it
+  forward across every rebuild and restore.
 - **Then** open `.env.production` and resolve every value reported by
   `npm run launch:status`: replace remaining `REPLACE_ME` placeholders, fill
   the real provider values from Steps 1-4, and correct any drifted TLS/cookie

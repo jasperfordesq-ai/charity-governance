@@ -5491,8 +5491,14 @@ function validateProductionEnvBody() {
 function requiredProductionEnvVariables() {
   const body = validateProductionEnvBody();
 
+  // `[,)]` rather than `)`: a guard may take more than `issues`
+  // (requireIntegrationEncryptionKey is already declared
+  // `(issues, env = process.env)`), and matching only the single-argument
+  // form would silently drop such a guard out of BOTH the derived variable
+  // list and the declared-set equality assertion below — leaving the guard
+  // unguarded exactly when it starts taking a second argument.
   const calledGuards = new Set(
-    [...body.matchAll(/\b([A-Za-z][A-Za-z0-9]*)\(issues\)/g)].map((match) => match[1]),
+    [...body.matchAll(/\b([A-Za-z][A-Za-z0-9]*)\(issues[,)]/g)].map((match) => match[1]),
   );
   assert.deepEqual(
     [...calledGuards].sort(),
@@ -5529,6 +5535,93 @@ test('both workflows pass every variable validateProductionEnv requires into the
       missing,
       [],
       `${path}: the -e list of the production configuration validation step is missing ${missing.join(', ')}`,
+    );
+  }
+});
+
+// ---------------------------------------------------------------------------
+// The step above is not the only place a production environment is assembled
+// from a closed list and then validated. Five sites do it, and the guard
+// above covered two of them — so the next required production variable would
+// break the other three while the guard stayed green, which is precisely the
+// failure it exists to prevent.
+//
+//   ci.yml             Validate API Docker production configuration
+//                        -> runs validateProductionEnv() directly
+//   ci.yml             Smoke API Docker image
+//   release-images.yml Validate API Docker production configuration
+//   release-images.yml Smoke API Docker image
+//                        -> boot the API image, and server.ts calls
+//                           validateRuntimeEnv() -> validateProductionEnv()
+//                           at module load
+//   release-images.yml Rehearse production deploy preflight with release
+//                      digests
+//                        -> writes the .env.production.ci that the real
+//                           production deploy preflight, and in a real deploy
+//                           the containers themselves, are handed
+//
+// The first four supply their variables as a `docker run -e` list; the fifth
+// is an env-file heredoc, so it is read as one rather than forced into the
+// `-e` shape.
+// ---------------------------------------------------------------------------
+const PRODUCTION_VALIDATION_SITES = [
+  { path: '.github/workflows/ci.yml', step: 'Validate API Docker production configuration', shape: 'docker-e-list' },
+  { path: '.github/workflows/ci.yml', step: 'Smoke API Docker image', shape: 'docker-e-list' },
+  { path: '.github/workflows/release-images.yml', step: 'Validate API Docker production configuration', shape: 'docker-e-list' },
+  { path: '.github/workflows/release-images.yml', step: 'Smoke API Docker image', shape: 'docker-e-list' },
+  {
+    path: '.github/workflows/release-images.yml',
+    step: 'Rehearse production deploy preflight with release digests',
+    shape: 'env-file-heredoc',
+  },
+];
+
+function workflowStepBody(path, stepName) {
+  const workflow = readRepoFile(path);
+  const start = workflow.indexOf(`name: ${stepName}`);
+  assert.notEqual(start, -1, `${path}: the step "${stepName}" must exist`);
+  const after = workflow.indexOf('\n      - name:', start + 1);
+  return workflow.slice(start, after === -1 ? undefined : after);
+}
+
+function productionValidationSiteEnvNames(site) {
+  const step = workflowStepBody(site.path, site.step);
+
+  if (site.shape === 'docker-e-list') {
+    assert.match(
+      step,
+      /docker run/,
+      `${site.path}: "${site.step}" must still assemble the production environment with docker run`,
+    );
+    return new Set([...step.matchAll(/-e "?([A-Z][A-Z0-9_]*)=/g)].map((match) => match[1]));
+  }
+
+  // The heredoc form: `cat > .env.production.ci <<EOF` ... `EOF`, one
+  // NAME=value per line, then handed to the real preflight.
+  const heredocStart = step.indexOf('<<EOF');
+  assert.notEqual(heredocStart, -1, `${site.path}: "${site.step}" must still write its env file from a heredoc`);
+  const heredocEnd = step.indexOf('\n          EOF', heredocStart);
+  assert.notEqual(heredocEnd, -1, `${site.path}: "${site.step}" heredoc must be terminated`);
+  assert.match(
+    step,
+    /deploy:preflight/,
+    `${site.path}: "${site.step}" must still hand its env file to the production deploy preflight`,
+  );
+  const heredoc = step.slice(heredocStart, heredocEnd);
+  return new Set([...heredoc.matchAll(/^\s*([A-Z][A-Z0-9_]*)=/gm)].map((match) => match[1]));
+}
+
+test('every site that assembles a production environment supplies every variable validateProductionEnv requires', () => {
+  const required = requiredProductionEnvVariables();
+  assert.ok(required.includes('INTEGRATION_ENCRYPTION_KEY'), 'derivation must see the guarded keys');
+
+  for (const site of PRODUCTION_VALIDATION_SITES) {
+    const supplied = productionValidationSiteEnvNames(site);
+    const missing = required.filter((name) => !supplied.has(name));
+    assert.deepEqual(
+      missing,
+      [],
+      `${site.path}: "${site.step}" is missing ${missing.join(', ')}`,
     );
   }
 });

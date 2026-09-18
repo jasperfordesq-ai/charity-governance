@@ -669,6 +669,11 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
+          # JWT_SECRET/OWNER_JWT_SECRET below are high-entropy CI fixtures, not
+          # readable labels: scripts/check-production.mjs's
+          # looksLikeLowEntropyProductionSecret rejects any secret containing
+          # "jwt-secret"/"jwt_secret" as a sample value, and unlike the
+          # -e lists above this file is fed to that real preflight.
           cat > .env.production.ci <<EOF
           NODE_ENV=production
           PORT=3002
@@ -676,8 +681,8 @@ jobs:
           READINESS_API_KEY=ci-readiness-key-with-enough-entropy
           DATABASE_URL=postgresql://charitypilot:charitypilot@db.charitypilot.ie:5432/charitypilot?sslmode=verify-full&target_session_attrs=read-write
           DOCUMENT_STORAGE_RECOVERY_DATABASE_HOST_ALLOWLIST=db.charitypilot.ie
-          JWT_SECRET=ci-production-jwt-secret-with-enough-entropy
-          OWNER_JWT_SECRET=ci-production-owner-jwt-secret-with-entropy
+          JWT_SECRET=d9755f7cb71b6c72d20a329f526422cda3557c7bca786620eed5a0b4ff88dfa6
+          OWNER_JWT_SECRET=5df0b37b4eaa2297e94faf709bb7b08e8a19811ce26fa6dec68b9d8f9ece5955
           AUTH_RECOVERY_SECRET=0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef
           INTEGRATION_ENCRYPTION_KEY=a1b2c3d4e5f60718293a4b5c6d7e8f90a1b2c3d4e5f60718293a4b5c6d7e8f90
           FRONTEND_URL=https://app.charitypilot.ie
