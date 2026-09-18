@@ -3,6 +3,7 @@ import test from 'node:test';
 import {
   CONFLUENCE_MAX_ATTEMPTS,
   CONFLUENCE_REQUEST_TIMEOUT_MS,
+  CONFLUENCE_TOTAL_DEADLINE_MS,
   createConfluenceClient,
   resolveRequestTimeoutMs,
   type ConfluenceClientDeps,
@@ -198,12 +199,81 @@ test('a JSON body is serialised and typed; a FormData body is handed to fetch un
   assert.equal(headerOf(formH.calls[0], 'X-Atlassian-Token'), 'nocheck');
 });
 
-test('a caller-supplied header cannot displace the Authorization header', async () => {
+test('a caller-supplied Authorization header is refused, in any casing, before any fetch', async () => {
+  // Header names are case-insensitive, so writing `Authorization` last into a
+  // plain object does not make it the only one: `authorization` produced a
+  // header set carrying BOTH, and the request went out with two bearer values.
+  // Refusing the spec is the only form of this invariant that actually holds.
+  for (const name of ['Authorization', 'authorization', 'AUTHORIZATION', 'AuThOrIzAtIoN']) {
+    const h = harness([jsonStep(200, {})]);
+    const err = await captureError(h.request({ ...GET_PAGE, headers: { [name]: 'Bearer attacker-supplied' } }));
+    assert.equal(err.code, 'CONFLUENCE_REQUEST_SPEC_INVALID', `expected ${name} to be refused`);
+    assert.equal(h.calls.length, 0);
+  }
+
+  // And the client's own header is still the one that goes out.
+  const ok = harness([jsonStep(200, {})]);
+  await ok.request({ ...GET_PAGE, headers: { 'X-Atlassian-Token': 'nocheck' } });
+  assert.deepEqual(
+    Object.keys((ok.calls[0].init?.headers as Record<string, string>) ?? {}).filter(
+      (key) => key.toLowerCase() === 'authorization',
+    ),
+    ['Authorization'],
+    'exactly one Authorization header, whatever its casing',
+  );
+  assert.equal(headerOf(ok.calls[0], 'Authorization'), `Bearer ${ACCESS_TOKEN}`);
+});
+
+test('a caller-supplied Content-Type is refused when the request carries a body', async () => {
+  for (const name of ['Content-Type', 'content-type']) {
+    const h = harness([jsonStep(200, {})]);
+    const err = await captureError(h.request({ ...CREATE_PAGE, headers: { [name]: 'text/plain' } }));
+    assert.equal(err.code, 'CONFLUENCE_REQUEST_SPEC_INVALID', `expected ${name} to be refused`);
+    assert.equal(h.calls.length, 0);
+  }
+
+  // A FormData upload is the case that matters: a Content-Type written by a
+  // caller would be missing the multipart boundary.
+  const form = new FormData();
+  form.append('file', new Blob([new Uint8Array([1])]), 'minutes.pdf');
+  const upload = harness([jsonStep(200, {})]);
+  const err = await captureError(
+    upload.request({
+      method: 'POST',
+      api: 'v1',
+      path: 'content/42/child/attachment',
+      formData: form,
+      headers: { 'content-type': 'multipart/form-data' },
+      idempotent: false,
+    }),
+  );
+  assert.equal(err.code, 'CONFLUENCE_REQUEST_SPEC_INVALID');
+  assert.equal(upload.calls.length, 0);
+
+  // Without a body it is harmless, and is passed through.
+  const noBody = harness([jsonStep(200, {})]);
+  await noBody.request({ ...GET_PAGE, headers: { 'Content-Type': 'application/json' } });
+  assert.equal(noBody.calls.length, 1);
+});
+
+test('the idempotent flag is trusted only when it is exactly true', async () => {
+  // TypeScript forbids this, but the flag is the whole distance between a
+  // charity and a duplicated policy, and untyped JSON reaches services.
+  const truthy = 'false' as unknown as boolean;
+  const h = harness([jsonStep(429, {}, { 'Retry-After': '1' })]);
+
+  const err = await captureError(h.request({ ...CREATE_PAGE, idempotent: truthy }));
+
+  assert.equal(h.calls.length, 1, 'a truthy non-true flag must not buy a retry');
+  assert.equal(err.code, 'CONFLUENCE_RATE_LIMITED_UNSAFE_RETRY');
+});
+
+test('a redirect is refused rather than silently re-issuing the method and body', async () => {
   const h = harness([jsonStep(200, {})]);
 
-  await h.request({ ...GET_PAGE, headers: { Authorization: 'Bearer attacker-supplied' } });
+  await h.request(CREATE_PAGE);
 
-  assert.equal(headerOf(h.calls[0], 'Authorization'), `Bearer ${ACCESS_TOKEN}`);
+  assert.equal(h.calls[0].init?.redirect, 'error');
 });
 
 test('a 204 yields an undefined body rather than a parse failure', async () => {
@@ -250,6 +320,33 @@ test('a Retry-After given as an HTTP date is resolved against the injected clock
   await h.request(GET_PAGE);
 
   assert.deepEqual(h.sleeps, [7000]);
+});
+
+test('an hour-long Retry-After is clamped, not obeyed', async () => {
+  const h = harness([jsonStep(429, {}, { 'Retry-After': '3600' })]);
+
+  await captureError(h.request(GET_PAGE));
+
+  assert.ok(h.sleeps.length > 0);
+  for (const ms of h.sleeps) {
+    assert.ok(ms <= 60_000, `a proxy's hour-long Retry-After must not pin a publish job: got ${ms}`);
+  }
+});
+
+test('a zero or past Retry-After is floored, not taken as "retry immediately"', async () => {
+  for (const header of ['0', '-5', 'Thu, 17 Sep 2026 00:00:00 GMT']) {
+    const h = harness([jsonStep(429, {}, { 'Retry-After': header }), jsonStep(200, {})], {
+      deps: { now: () => Date.parse('2026-09-18T12:00:00.000Z') },
+    });
+
+    await h.request(GET_PAGE);
+
+    assert.equal(h.sleeps.length, 1, `for ${header}`);
+    assert.ok(
+      h.sleeps[0] >= 500,
+      `a service that just said "slow down" must not be hit again immediately: got ${h.sleeps[0]} for ${header}`,
+    );
+  }
 });
 
 test('an absent Retry-After falls back to bounded exponential backoff', async () => {
@@ -329,6 +426,35 @@ test('attempts are capped at five for a persistent 500', async () => {
   assert.equal(err.statusCode, 502);
 });
 
+test('a whole request is bounded, not just each attempt', async () => {
+  // Five attempts at 30s plus four clamped 60s backoffs is ~390s, which is
+  // worse than the undici default the per-attempt deadline exists to beat. The
+  // budget is checked before sleeping, so an in-flight attempt is never
+  // abandoned part-way.
+  let clock = Date.parse('2026-09-18T12:00:00.000Z');
+  const started = clock;
+  const h = harness([jsonStep(429, {}, { 'Retry-After': '60' })], {
+    deps: {
+      now: () => clock,
+      sleep: async (ms: number) => {
+        clock += ms;
+      },
+    },
+  });
+
+  const err = await captureError(h.request(GET_PAGE));
+
+  assert.ok(h.calls.length < CONFLUENCE_MAX_ATTEMPTS, `expected to stop before the attempt cap, made ${h.calls.length}`);
+  assert.ok(
+    clock - started <= CONFLUENCE_TOTAL_DEADLINE_MS,
+    `the whole call must stay inside the budget: waited ${clock - started}ms`,
+  );
+  assert.equal(err.code, 'CONFLUENCE_RATE_LIMITED');
+
+  // And the budget is generous enough that an ordinary retry is unaffected.
+  assert.ok(CONFLUENCE_TOTAL_DEADLINE_MS >= CONFLUENCE_REQUEST_TIMEOUT_MS * 2);
+});
+
 test('a transport failure on a NON-idempotent request throws CONFLUENCE_REQUEST_INDETERMINATE', async () => {
   const h = harness([throwStep(new TypeError('fetch failed'))]);
 
@@ -387,6 +513,106 @@ test('a malformed success body is reported rather than returned as undefined', a
   const err = await captureError(h.request(GET_PAGE));
 
   assert.equal(err.code, 'CONFLUENCE_RESPONSE_INVALID');
+});
+
+// ── the 2xx whose body was lost: the write DID land ────────────────────────
+
+test('an unreadable 2xx on a write says the change was applied and the identifier was lost', async () => {
+  // The status line was already 2xx when the body failed, so Confluence did
+  // not merely see the request — it committed it. A caller told "the response
+  // could not be read" would create the page again.
+  const cases: Array<{ name: string; step: Step }> = [
+    {
+      name: 'a truncated JSON body',
+      step: async () =>
+        new Response('{"id":"42","tit', { status: 201, headers: { 'Content-Type': 'application/json' } }),
+    },
+    {
+      name: 'an HTML error page behind a 201',
+      step: async () =>
+        new Response('<html>gateway</html>', { status: 201, headers: { 'Content-Type': 'text/html' } }),
+    },
+    {
+      name: 'an empty body',
+      step: async () => new Response('', { status: 201, headers: { 'Content-Type': 'application/json' } }),
+    },
+    {
+      name: 'a body that cannot be read at all',
+      step: async () =>
+        new Response(
+          new ReadableStream({
+            start(controller) {
+              controller.error(new Error('connection reset mid-body'));
+            },
+          }),
+          { status: 201, headers: { 'Content-Type': 'application/json' } },
+        ),
+    },
+  ];
+
+  for (const { name, step } of cases) {
+    const h = harness([step]);
+    const err = await captureError(h.request(CREATE_PAGE));
+
+    assert.equal(err.code, 'CONFLUENCE_WRITE_APPLIED_RESPONSE_UNREADABLE', `for ${name}`);
+    assert.equal((err.details as { status?: number }).status, 201, `for ${name}`);
+    assert.match(err.message, /WAS applied/, `for ${name}`);
+    assert.match(err.message, /Do not reissue/i, `for ${name}`);
+    assert.equal(h.calls.length, 1, `for ${name}`);
+  }
+});
+
+test('the same unreadable 2xx on a read is only a broken response', async () => {
+  const nonJson = harness([async () => new Response('<html/>', { status: 200, headers: { 'Content-Type': 'text/html' } })]);
+  const result = await nonJson.request(GET_PAGE);
+  assert.deepEqual(result, { status: 200, body: undefined });
+
+  const broken = harness([
+    async () => new Response('{"id":', { status: 200, headers: { 'Content-Type': 'application/json' } }),
+  ]);
+  const err = await captureError(broken.request(GET_PAGE));
+  assert.equal(err.code, 'CONFLUENCE_RESPONSE_INVALID');
+});
+
+test('a 204 on a write is a success with nothing to return, not a lost identifier', async () => {
+  const h = harness([emptyStep(204)]);
+
+  const result = await h.request({ method: 'DELETE', api: 'v2', path: 'pages/42', idempotent: false });
+
+  assert.deepEqual(result, { status: 204, body: undefined });
+});
+
+test('the real deadline firing mid-body on a write reports the write as applied', async () => {
+  // Not a harness case: a real AbortSignal, aborting while the body streams.
+  const calls: FetchCall[] = [];
+  const client = createConfluenceClient(
+    { cloudId: CLOUD_ID, getAccessToken: async () => ACCESS_TOKEN },
+    {
+      timeoutMs: 20,
+      sleep: async () => {},
+      fetch: ((input: unknown, init?: RequestInit) => {
+        calls.push({ url: String(input), init });
+        const stream = new ReadableStream({
+          start(controller) {
+            controller.enqueue(new TextEncoder().encode('{"id":"42"'));
+            const keepAlive = setTimeout(() => controller.error(new Error('the deadline never fired')), 1_000);
+            init?.signal?.addEventListener('abort', () => {
+              clearTimeout(keepAlive);
+              controller.error(new Error('aborted mid-body'));
+            });
+          },
+        });
+        return Promise.resolve(
+          new Response(stream, { status: 201, headers: { 'Content-Type': 'application/json' } }),
+        );
+      }) as unknown as typeof globalThis.fetch,
+    },
+  );
+
+  const err = await captureError(client.request(CREATE_PAGE));
+
+  assert.equal(err.code, 'CONFLUENCE_WRITE_APPLIED_RESPONSE_UNREADABLE');
+  assert.equal(calls.length, 1);
 });
 
 // ── secret containment ─────────────────────────────────────────────────────
@@ -473,6 +699,29 @@ test('every request is bound by an abort signal', async () => {
 
   const signal = h.calls[0].init?.signal;
   assert.ok(signal instanceof AbortSignal, 'fetch must be given a deadline signal');
+});
+
+test('a client built with no timeout passes the production constant to the signal it actually uses', async () => {
+  // Pinning `resolveRequestTimeoutMs({})` pins the FUNCTION. It does not pin
+  // the JOIN: a call site hardcoded to 600000 left every other test green
+  // while the resolver kept returning 30s. This observes the number the call
+  // site really passes, from a client given no timeout at all.
+  const observed: number[] = [];
+  const client = createConfluenceClient(
+    { cloudId: CLOUD_ID, getAccessToken: async () => ACCESS_TOKEN },
+    {
+      fetch: (async () => new Response('{}', { status: 200, headers: { 'Content-Type': 'application/json' } })) as
+        unknown as typeof globalThis.fetch,
+      createSignal: (ms: number) => {
+        observed.push(ms);
+        return AbortSignal.timeout(ms);
+      },
+    },
+  );
+
+  await client.request(GET_PAGE);
+
+  assert.deepEqual(observed, [CONFLUENCE_REQUEST_TIMEOUT_MS]);
 });
 
 test('the production deadline default is the constant, not whatever a test injected', () => {

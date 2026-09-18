@@ -43,8 +43,33 @@ import { AppError } from '../utils/errors.js';
  * `CONFLUENCE_REQUEST_INDETERMINATE` — a real cost to the caller, who must then
  * reconcile. Cutting a working-but-slow write off early would manufacture
  * exactly the ambiguity this module exists to keep rare.
+ *
+ * **This bounds one attempt, not one `request()`.** See
+ * `CONFLUENCE_TOTAL_DEADLINE_MS` for what a caller is actually signing up for.
  */
 export const CONFLUENCE_REQUEST_TIMEOUT_MS = 30 * 1000;
+
+/**
+ * The bound on a whole `request()` call, retries and backoffs included.
+ *
+ * Without it the per-attempt deadline is misleading arithmetic: five attempts
+ * at 30s plus four backoffs clamped at 60s is about 390s, which is *worse*
+ * than the ~600s undici default the per-attempt deadline exists to beat, once
+ * retries are counted. A caller reading "30 seconds" would be wrong by an
+ * order of magnitude.
+ *
+ * Two minutes is the number because a retrying request is by definition
+ * waiting on a rate limit or a fault, and no caller — a publish job included —
+ * is better off holding a connection for six minutes to find that out. It is
+ * enough for two honest 60s `Retry-After` waits, or for four exponential
+ * backoffs and five attempts against a merely slow site.
+ *
+ * It is checked *before sleeping*, never mid-attempt: an attempt already in
+ * flight is bounded by its own deadline and is never abandoned part-way,
+ * because abandoning an in-flight write is what manufactures an indeterminate
+ * outcome. So the true worst case is this budget plus one attempt.
+ */
+export const CONFLUENCE_TOTAL_DEADLINE_MS = 120 * 1000;
 
 /** One attempt plus at most four retries, per Atlassian's published guidance. */
 export const CONFLUENCE_MAX_ATTEMPTS = 5;
@@ -93,6 +118,15 @@ export type ConfluenceClientDeps = {
   random?: () => number;
   /** Overrides `CONFLUENCE_REQUEST_TIMEOUT_MS`; exists so a test can use a short deadline. */
   timeoutMs?: number;
+  /**
+   * Builds the per-attempt deadline signal. Defaults to `AbortSignal.timeout`.
+   *
+   * It exists so a test can observe *the number the call site actually passes*.
+   * Pinning `resolveRequestTimeoutMs({})` alone pins the function and not the
+   * join: replacing the call site with a hardcoded 600000 left every test
+   * green, which is the previous phase's mistake in a subtler form.
+   */
+  createSignal?: (ms: number) => AbortSignal;
 };
 
 export type ConfluenceRequestSpec = {
@@ -263,34 +297,83 @@ async function readErrorDetail(response: Response, token: string): Promise<strin
   }
 }
 
-async function parseSuccessBody(response: Response): Promise<unknown> {
-  if (response.status === 204 || response.status === 205) return undefined;
+/**
+ * The write landed and we lost the identifier.
+ *
+ * This is the last case of the same argument the 5xx branch makes, and it is
+ * the more certain one: the status line was already 2xx when the body failed,
+ * so Confluence did not merely *see* the request — it **committed** it. What
+ * was lost is only the id of the thing it created.
+ *
+ * It is reachable outside a harness: a body truncated on a slow connection, a
+ * gateway that answers 201 with an HTML error page, or this module's own
+ * deadline firing part-way through reading the body. A caller told
+ * "the response could not be read" would reasonably conclude nothing landed
+ * and create the page again — two identical governance documents in a
+ * charity's space, through a door the retry policy does not watch.
+ *
+ * Deliberately a distinct code from `CONFLUENCE_REQUEST_INDETERMINATE`,
+ * because the instruction to the caller is stronger and different: do not
+ * reissue this. Search for what was created and adopt it.
+ */
+function writeAppliedResponseUnreadable(status: number, reason: string): AppError {
+  return new AppError(
+    502,
+    'CONFLUENCE_WRITE_APPLIED_RESPONSE_UNREADABLE',
+    `Confluence accepted a request that is not safe to repeat (status ${status}), but ${reason}. ` +
+      'The change WAS applied and only its identifier was lost. Do not reissue it: ' +
+      'find what was created and adopt it.',
+    { status },
+  );
+}
+
+function invalidSuccessResponse(reason: string): AppError {
+  return new AppError(502, 'CONFLUENCE_RESPONSE_INVALID', `Confluence returned ${reason}.`);
+}
+
+/**
+ * `idempotent` is threaded in here for one reason: on a 2xx, an unreadable
+ * body means something different depending on whether repeating the request is
+ * safe. For a GET it is a broken response; for a page create it is a page that
+ * now exists and cannot be found by id.
+ */
+async function parseSuccessBody(response: Response, idempotent: boolean): Promise<unknown> {
+  const status = response.status;
+
+  // An explicit "no content" is not a lost identifier: it is a success that
+  // was never going to carry one.
+  if (status === 204 || status === 205) return undefined;
 
   const contentType = response.headers.get('Content-Type') ?? '';
-  if (!contentType.toLowerCase().includes('json')) return undefined;
+  if (!contentType.toLowerCase().includes('json')) {
+    if (!idempotent) {
+      // A 201 with `Content-Type: text/html` used to return `{ status: 201 }`
+      // silently, which reads to a caller as a clean success with no id.
+      throw writeAppliedResponseUnreadable(status, 'the response was not JSON');
+    }
+    return undefined;
+  }
 
   let text: string;
   try {
     text = await response.text();
   } catch {
-    throw new AppError(
-      502,
-      'CONFLUENCE_RESPONSE_INVALID',
-      'Confluence returned a response body that could not be read.',
-    );
+    // Includes this module's own deadline firing mid-body.
+    if (!idempotent) throw writeAppliedResponseUnreadable(status, 'its response body could not be read');
+    throw invalidSuccessResponse('a response body that could not be read');
   }
 
-  if (text.trim().length === 0) return undefined;
+  if (text.trim().length === 0) {
+    if (!idempotent) throw writeAppliedResponseUnreadable(status, 'its response body was empty');
+    return undefined;
+  }
 
   try {
     return JSON.parse(text) as unknown;
   } catch {
     // A caller that trusted `undefined` here would persist a page with no id.
-    throw new AppError(
-      502,
-      'CONFLUENCE_RESPONSE_INVALID',
-      'Confluence returned a response that claimed to be JSON but was not.',
-    );
+    if (!idempotent) throw writeAppliedResponseUnreadable(status, 'its response body was not valid JSON');
+    throw invalidSuccessResponse('a response that claimed to be JSON but was not');
   }
 }
 
@@ -402,7 +485,10 @@ function retryAfterSecondsOf(retryAfterMs: number | undefined): number | undefin
 }
 
 function backoffMs(attempt: number, retryAfterMs: number | undefined, random: () => number): number {
-  const base = retryAfterMs ?? BASE_BACKOFF_MS * 2 ** (attempt - 1);
+  // Floored as well as clamped. A `Retry-After: 0` (or a date already in the
+  // past) would otherwise buy four zero-delay retries at a service that has
+  // just said "slow down", which is the opposite of honouring the header.
+  const base = Math.max(retryAfterMs ?? BASE_BACKOFF_MS * 2 ** (attempt - 1), BASE_BACKOFF_MS);
   const jittered = base + random() * JITTER_FRACTION * base;
   return Math.min(Math.round(jittered), MAX_BACKOFF_MS);
 }
@@ -413,10 +499,43 @@ function defaultSleep(ms: number): Promise<void> {
   });
 }
 
+function specInvalid(message: string): AppError {
+  return new AppError(500, 'CONFLUENCE_REQUEST_SPEC_INVALID', message);
+}
+
+/**
+ * HTTP header names are case-insensitive, so writing `Authorization` last into
+ * a plain object does **not** make it the only one: a caller passing
+ * `authorization` produced a header set with both, and the request carried two
+ * bearer values. The stated invariant has to be enforced on the *lowercased*
+ * name, and the loudest way to enforce it is to refuse the spec rather than
+ * silently drop a header the caller believed in.
+ */
+function assertHeadersDoNotCollide(spec: ConfluenceRequestSpec): void {
+  const hasBody = spec.body !== undefined || spec.formData !== undefined;
+
+  for (const key of Object.keys(spec.headers ?? {})) {
+    const lower = key.toLowerCase();
+    if (lower === 'authorization') {
+      throw specInvalid(
+        'A Confluence request may not set its own Authorization header; the client builds it from the token provider.',
+      );
+    }
+    if (lower === 'content-type' && hasBody) {
+      // For FormData this would lose the multipart boundary; for a JSON body
+      // it would contradict what is actually being sent.
+      throw specInvalid(
+        'A Confluence request may not set its own Content-Type when it carries a body; the client derives it.',
+      );
+    }
+  }
+}
+
 function buildInit(
   spec: ConfluenceRequestSpec,
   token: string,
   timeoutMs: number,
+  createSignal: (ms: number) => AbortSignal,
 ): RequestInit {
   const headers: Record<string, string> = { Accept: 'application/json', ...spec.headers };
 
@@ -430,12 +549,23 @@ function buildInit(
     headers['Content-Type'] = 'application/json';
   }
 
-  // Last, and never from `spec.headers`: the one header a caller must not be
-  // able to displace. Constructed here, at the moment of the call, and never
+  // Last, and never from `spec.headers` — a colliding key was refused in the
+  // pre-flight above. Constructed here, at the moment of the call, and never
   // stored anywhere.
   headers.Authorization = `Bearer ${token}`;
 
-  return { method: spec.method, headers, body, signal: AbortSignal.timeout(timeoutMs) };
+  return {
+    method: spec.method,
+    headers,
+    body,
+    signal: createSignal(timeoutMs),
+    // A 307/308 re-issues the method and body at the new location. Against a
+    // fixed Atlassian origin that is unlikely, but "unlikely" is not a reason
+    // to let a write be silently re-sent somewhere else: refusing routes it
+    // into the transport branch, which for a non-idempotent request is the
+    // indeterminate path where it belongs.
+    redirect: 'error',
+  };
 }
 
 export function createConfluenceClient(
@@ -448,17 +578,32 @@ export function createConfluenceClient(
   const sleep = deps.sleep ?? defaultSleep;
   const random = deps.random ?? (() => Math.random());
   const timeoutMs = resolveRequestTimeoutMs(deps);
+  const createSignal = deps.createSignal ?? ((ms: number) => AbortSignal.timeout(ms));
 
   async function request(spec: ConfluenceRequestSpec): Promise<ConfluenceResponse> {
     if (spec.body !== undefined && spec.formData !== undefined) {
-      throw new AppError(
-        500,
-        'CONFLUENCE_REQUEST_SPEC_INVALID',
-        'A Confluence request carries either a JSON body or form data, never both.',
-      );
+      throw specInvalid('A Confluence request carries either a JSON body or form data, never both.');
     }
+    assertHeadersDoNotCollide(spec);
+
+    // Compared with `!== true`, not with `!`. TypeScript already forbids
+    // anything but a boolean, but this one flag is the whole distance between
+    // a charity and a duplicated policy, and a truthy value reaching it from
+    // untyped JSON (the string `'false'` retried five times) is not a risk
+    // worth carrying for nothing.
+    const idempotent = spec.idempotent === true;
 
     const url = buildUrl(cloudId, spec);
+    const startedAt = now();
+
+    /**
+     * The overall budget, checked before every sleep. An attempt already in
+     * flight is bounded by its own signal and is never abandoned part-way:
+     * abandoning an in-flight write is precisely how an indeterminate outcome
+     * is manufactured.
+     */
+    const budgetExhausted = (delayMs: number): boolean =>
+      now() - startedAt + delayMs > CONFLUENCE_TOTAL_DEADLINE_MS;
 
     for (let attempt = 1; attempt <= CONFLUENCE_MAX_ATTEMPTS; attempt += 1) {
       // Per attempt, not per client and not per operation: a backoff or a slow
@@ -469,7 +614,7 @@ export function createConfluenceClient(
 
       let response: Response;
       try {
-        response = await fetchImpl(url, buildInit(spec, token, timeoutMs));
+        response = await fetchImpl(url, buildInit(spec, token, timeoutMs, createSignal));
       } catch {
         // A transport failure or the deadline firing. The underlying error is
         // never attached as `cause`: Node's `fetch failed` chain carries
@@ -478,14 +623,16 @@ export function createConfluenceClient(
         // The request may already have reached Confluence and been applied —
         // nothing here can tell. For anything unsafe to repeat that is the
         // indeterminate case, and it is the caller's to reconcile.
-        if (!spec.idempotent) throw indeterminate(undefined);
+        if (!idempotent) throw indeterminate(undefined);
         if (attempt === CONFLUENCE_MAX_ATTEMPTS) throw unreachable();
-        await sleep(backoffMs(attempt, undefined, random));
+        const delayMs = backoffMs(attempt, undefined, random);
+        if (budgetExhausted(delayMs)) throw unreachable();
+        await sleep(delayMs);
         continue;
       }
 
       if (response.ok) {
-        return { status: response.status, body: await parseSuccessBody(response) };
+        return { status: response.status, body: await parseSuccessBody(response, idempotent) };
       }
 
       const status = response.status;
@@ -498,10 +645,12 @@ export function createConfluenceClient(
         // ambiguous — nothing was applied. It is still not retried here: the
         // caller decides when to reissue something that could duplicate
         // content, and it is handed the delay Confluence asked for.
-        if (!spec.idempotent) throw rateLimitedUnsafeRetry(retryAfterSecondsOf(retryAfterMs));
+        if (!idempotent) throw rateLimitedUnsafeRetry(retryAfterSecondsOf(retryAfterMs));
 
         if (attempt === CONFLUENCE_MAX_ATTEMPTS) throw upstreamFailure(status, detail);
-        await sleep(backoffMs(attempt, retryAfterMs, random));
+        const delayMs = backoffMs(attempt, retryAfterMs, random);
+        if (budgetExhausted(delayMs)) throw upstreamFailure(status, detail);
+        await sleep(delayMs);
         continue;
       }
 
@@ -510,10 +659,12 @@ export function createConfluenceClient(
         // failing is exactly what a 5xx does not say, so for a non-idempotent
         // request this is indeterminate rather than a plain failure: a caller
         // told "it failed" would reasonably retry and duplicate the document.
-        if (!spec.idempotent) throw indeterminate(status);
+        if (!idempotent) throw indeterminate(status);
 
         if (attempt === CONFLUENCE_MAX_ATTEMPTS) throw upstreamFailure(status, detail);
-        await sleep(backoffMs(attempt, undefined, random));
+        const delayMs = backoffMs(attempt, undefined, random);
+        if (budgetExhausted(delayMs)) throw upstreamFailure(status, detail);
+        await sleep(delayMs);
         continue;
       }
 
