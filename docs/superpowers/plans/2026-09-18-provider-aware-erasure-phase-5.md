@@ -63,6 +63,23 @@ cd apps/api && npm run build && node --test dist/tests/<name>.test.js
 If you edit a test and re-run without rebuilding, you are running the previous version. This has
 bitten this project before.
 
+**For mutation testing, skip the build entirely.** The Phase 3 whole-branch reviewer worked this
+out and it is now the house method: copy `apps/api/src` into your scratchpad, junction
+`node_modules` rather than copying it, and run
+
+```bash
+node --import tsx --test src/tests/*.test.ts
+```
+
+Mutations take effect immediately, so no result can rest on a `tsc` run that silently ignored your
+edit, and the working tree is never touched.
+
+**Always re-check a green mutation with a canary.** Replace the same line with an unconditional
+`throw` and run again. If that is *also* green, the line is never executed by any test — the guard
+is not weakly tested, it has zero coverage. A green mutation on its own cannot tell those apart.
+This distinction found the two most serious findings in Phase 3, one of which was a security guard
+protecting the single endpoint that carries a charity's signed policy file.
+
 **The unit suites use hand-built fake Prisma delegates, not a database.**
 `document-storage-cleanup.test.ts` builds one with `pendingRecord()` and `buildFallbackPrisma()`.
 Extend those helpers rather than reaching for a live client — and when you add a field to
