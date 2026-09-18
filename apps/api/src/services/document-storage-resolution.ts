@@ -43,3 +43,32 @@ export async function resolveProviderForOrganisation(
 
   return registry.assertSelectable(selection.provider, { alphaOptIn: selection.alphaOptIn });
 }
+
+type OrganisationStorageDelegate = {
+  organisation: {
+    findUnique(args: {
+      where: { id: string };
+      select: Record<string, boolean>;
+    }): Promise<{ documentStorageProvider: string | null; documentStorageAlphaOptIn: boolean } | null>;
+  };
+};
+
+export function createPrismaOrganisationStorageResolver(prisma: unknown): OrganisationStorageResolver {
+  const client = prisma as OrganisationStorageDelegate;
+
+  return async (organisationId: string) => {
+    const organisation = await client.organisation.findUnique({
+      where: { id: organisationId },
+      select: { documentStorageProvider: true, documentStorageAlphaOptIn: true },
+    });
+
+    // A missing organisation means "no preference". Tenancy is enforced by the
+    // route guards; a storage call is the wrong place to re-check it.
+    if (!organisation) return { provider: null, alphaOptIn: false };
+
+    return {
+      provider: organisation.documentStorageProvider,
+      alphaOptIn: organisation.documentStorageAlphaOptIn,
+    };
+  };
+}

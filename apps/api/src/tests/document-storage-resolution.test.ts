@@ -87,3 +87,46 @@ test('an organisation that has opted in may select an alpha provider', async () 
   const resolver: OrganisationStorageResolver = async () => ({ provider: 'confluence', alphaOptIn: true });
   assert.equal(await resolveProviderForOrganisation('org-a', resolver, registry), 'confluence');
 });
+
+import { createPrismaOrganisationStorageResolver } from '../services/document-storage-resolution.js';
+
+type FindUniqueArgs = { where: { id: string }; select: Record<string, boolean> };
+
+function fakePrisma(row: { documentStorageProvider: string | null; documentStorageAlphaOptIn: boolean } | null) {
+  const calls: FindUniqueArgs[] = [];
+  return {
+    calls,
+    client: {
+      organisation: {
+        async findUnique(args: FindUniqueArgs) {
+          calls.push(args);
+          return row;
+        },
+      },
+    },
+  };
+}
+
+test('the prisma resolver reads the organisation preference', async () => {
+  const { client, calls } = fakePrisma({ documentStorageProvider: 'local', documentStorageAlphaOptIn: false });
+  const resolver = createPrismaOrganisationStorageResolver(client);
+
+  assert.deepEqual(await resolver('org-a'), { provider: 'local', alphaOptIn: false });
+  assert.equal(calls.length, 1);
+  assert.deepEqual(calls[0].where, { id: 'org-a' });
+  assert.deepEqual(calls[0].select, { documentStorageProvider: true, documentStorageAlphaOptIn: true });
+});
+
+test('the prisma resolver carries the alpha opt-in through', async () => {
+  const { client } = fakePrisma({ documentStorageProvider: 'confluence', documentStorageAlphaOptIn: true });
+  const resolver = createPrismaOrganisationStorageResolver(client);
+
+  assert.deepEqual(await resolver('org-a'), { provider: 'confluence', alphaOptIn: true });
+});
+
+test('a missing organisation resolves to no preference rather than throwing', async () => {
+  const { client } = fakePrisma(null);
+  const resolver = createPrismaOrganisationStorageResolver(client);
+
+  assert.deepEqual(await resolver('org-missing'), { provider: null, alphaOptIn: false });
+});
