@@ -441,3 +441,86 @@ test('deleteFile re-checks the abort signal after provider resolution and never 
     else process.env.LOCAL_FILE_STORAGE_DIR = originalRoot;
   }
 });
+
+// A4. The plan's acceptance criterion — "an organisation pinned to 'local' in
+// production is refused on upload but can still download and delete what it
+// already has" — was verified only one layer below, at the resolver. These
+// three pin it at the StorageService level, which is where the operation
+// literals are actually chosen: `uploadFile` → 'write', `downloadFile` →
+// 'read', `deleteFile` → 'delete'. Nothing else pins them, and a wrong literal
+// is silent: if `uploadFile` ever passed 'read', a production deployment would
+// write bytes to an unvalidated, ephemeral, un-backed-up local path with the
+// whole gate inert and the suite green.
+//
+// These are the only tests in this file that touch NODE_ENV, hence
+// `{ concurrency: false }` on each.
+async function withProductionLocalPin<T>(
+  run: (service: StorageService, root: string) => Promise<T>,
+): Promise<T> {
+  const previous: Record<string, string | undefined> = {
+    NODE_ENV: process.env.NODE_ENV,
+    DOCUMENT_STORAGE_DRIVER: process.env.DOCUMENT_STORAGE_DRIVER,
+    LOCAL_FILE_STORAGE_DIR: process.env.LOCAL_FILE_STORAGE_DIR,
+  };
+  const root = await mkdtemp(join(tmpdir(), 'charitypilot-prod-local-pin-'));
+
+  // Production, with the deployment default left as supabase (driver unset):
+  // exactly the combination the gate exists for — the organisation is pinned
+  // to local, the deployment itself is not.
+  process.env.NODE_ENV = 'production';
+  delete process.env.DOCUMENT_STORAGE_DRIVER;
+  process.env.LOCAL_FILE_STORAGE_DIR = root;
+
+  const resolver: OrganisationStorageResolver = async () => ({ provider: 'local', alphaOptIn: false });
+
+  try {
+    return await run(new StorageService(resolver), root);
+  } finally {
+    await rm(root, { recursive: true, force: true });
+    for (const [name, value] of Object.entries(previous)) {
+      if (value === undefined) delete process.env[name];
+      else process.env[name] = value;
+    }
+  }
+}
+
+test('uploadFile is refused in production for an organisation pinned to local storage', { concurrency: false }, async () => {
+  await withProductionLocalPin(async (service) => {
+    await assert.rejects(
+      () => service.uploadFile('org-pinned', 'policy.pdf', Buffer.from('new bytes'), 'application/pdf'),
+      (err) => {
+        assert.equal(err instanceof AppError, true);
+        assert.equal((err as AppError).code, 'STORAGE_PROVIDER_NOT_PERMITTED_IN_PRODUCTION');
+        return true;
+      },
+    );
+  });
+});
+
+test('downloadFile still returns an existing local document in production for an organisation pinned to local storage', { concurrency: false }, async () => {
+  await withProductionLocalPin(async (service, root) => {
+    const storagePath = 'org-pinned/existing-policy.pdf';
+    const filePath = join(root, 'org-pinned', 'existing-policy.pdf');
+    await mkdir(dirname(filePath), { recursive: true });
+    await writeFile(filePath, 'bytes written before the gate existed');
+
+    assert.equal(
+      (await service.downloadFile('org-pinned', storagePath)).toString('utf8'),
+      'bytes written before the gate existed',
+    );
+  });
+});
+
+test('deleteFile still erases an existing local document in production for an organisation pinned to local storage', { concurrency: false }, async () => {
+  await withProductionLocalPin(async (service, root) => {
+    const storagePath = 'org-pinned/erasable-policy.pdf';
+    const filePath = join(root, 'org-pinned', 'erasable-policy.pdf');
+    await mkdir(dirname(filePath), { recursive: true });
+    await writeFile(filePath, 'bytes a charity has asked us to erase');
+
+    // Erasure has to stay possible: refusing the delete would strand the bytes
+    // and break the provable-erasure guarantee outright.
+    await service.deleteFile('org-pinned', storagePath);
+    await assert.rejects(() => readFile(filePath));
+  });
+});

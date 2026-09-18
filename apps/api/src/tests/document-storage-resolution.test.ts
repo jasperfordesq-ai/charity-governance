@@ -192,7 +192,7 @@ test('a production deployment whose own driver is local allows a per-organisatio
   );
 });
 
-test('a production deployment refuses a local provider for writes', async () => {
+test('a production deployment refuses a local provider for writes', { concurrency: false }, async () => {
   await withNodeEnv('production', async () => {
     await assert.rejects(
       () => resolveProviderForOrganisation('org-a', localResolver, registry, { operation: 'write' }),
@@ -204,7 +204,7 @@ test('a production deployment refuses a local provider for writes', async () => 
   });
 });
 
-test('a production deployment still allows reading and deleting existing local documents', async () => {
+test('a production deployment still allows reading and deleting existing local documents', { concurrency: false }, async () => {
   await withNodeEnv('production', async () => {
     assert.equal(
       await resolveProviderForOrganisation('org-a', localResolver, registry, { operation: 'read' }),
@@ -217,7 +217,7 @@ test('a production deployment still allows reading and deleting existing local d
   });
 });
 
-test('the operation defaults to write, so an unqualified call stays strict', async () => {
+test('the operation defaults to write, so an unqualified call stays strict', { concurrency: false }, async () => {
   await withNodeEnv('production', async () => {
     await assert.rejects(() => resolveProviderForOrganisation('org-a', localResolver, registry));
   });
