@@ -153,7 +153,12 @@ export class StorageService {
   constructor(private readonly resolver: OrganisationStorageResolver | null = null) {}
 
   private async providerFor(organisationId: string): Promise<string> {
-    return resolveProviderForOrganisation(organisationId, this.resolver);
+    try {
+      return await resolveProviderForOrganisation(organisationId, this.resolver);
+    } catch (error) {
+      if (error instanceof AppError) throw error;
+      throw new AppError(500, 'STORAGE_PROVIDER_RESOLUTION_FAILED', STORAGE_OPERATION_FAILED_MESSAGE);
+    }
   }
 
   assertLocalStorageEnabled(): void {
@@ -287,7 +292,13 @@ export class StorageService {
       throw new AppError(500, 'STORAGE_DELETE_FAILED', STORAGE_OPERATION_FAILED_MESSAGE);
     }
 
-    if ((await this.providerFor(organisationId)) === 'local') {
+    const provider = await this.providerFor(organisationId);
+
+    if (signal?.aborted) {
+      throw new AppError(500, 'STORAGE_DELETE_FAILED', STORAGE_OPERATION_FAILED_MESSAGE);
+    }
+
+    if (provider === 'local') {
       try {
         await withOperationTimeout(unlink(localFilePath(guardedPath)), storageDeleteTimeoutMs());
       } catch (error) {

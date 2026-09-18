@@ -8,6 +8,7 @@ import { uploadDocumentSchema, linkStandardSchema } from '@charitypilot/shared';
 import { AppError, handleError } from '../../utils/errors.js';
 import { sendCreated, sendNoContent } from '../../utils/response.js';
 import { formatProviderError } from '../../utils/provider-errors.js';
+import { createPrismaOrganisationStorageResolver } from '../../services/document-storage-resolution.js';
 import { z, ZodError } from 'zod';
 import {
   DOCUMENT_UPLOAD_MAX_FILE_SIZE,
@@ -59,7 +60,7 @@ function safeDownloadFilename(name: string, storagePath: string): string {
 
 export async function documentRoutes(app: FastifyInstance) {
   const service = new DocumentService(app.prisma);
-  const storageService = new StorageService();
+  const storageService = new StorageService(createPrismaOrganisationStorageResolver(app.prisma));
 
   app.addHook('onRequest', authGuard);
   app.addHook('onRequest', subscriptionGuard);

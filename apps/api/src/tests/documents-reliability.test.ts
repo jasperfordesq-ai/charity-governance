@@ -46,6 +46,7 @@ type PrismaMock = {
   };
   organisation?: {
     findUniqueOrThrow?: (args: unknown) => Promise<unknown>;
+    findUnique?: (args: unknown) => Promise<{ documentStorageProvider: string | null; documentStorageAlphaOptIn: boolean } | null>;
   };
   documentStandardLink?: {
     create?: (args: unknown) => Promise<unknown>;
@@ -88,6 +89,14 @@ async function buildDocumentsApp(prisma: PrismaMock, role: Role = 'ADMIN', limit
   const decoratedPrisma = { ...authModels(role), ...prisma };
   decoratedPrisma.$transaction ??= async (callback: (tx: PrismaMock) => Promise<unknown>) => callback(decoratedPrisma);
   decoratedPrisma.document.aggregate ??= async () => ({ _sum: { fileSize: 0 } });
+  // The storage resolver looks up organisation preference on every storage
+  // call now that documentRoutes wires it in. Default to "no preference
+  // recorded", which keeps every test that does not care about per-tenant
+  // storage on the deployment default — unless a test overrides it above.
+  decoratedPrisma.organisation = {
+    findUnique: async () => ({ documentStorageProvider: null, documentStorageAlphaOptIn: false }),
+    ...decoratedPrisma.organisation,
+  };
   app.decorate('prisma', decoratedPrisma as never);
   await app.register(multipart, { limits });
   await app.register(documentRoutes);

@@ -1,12 +1,14 @@
 import assert from 'node:assert/strict';
-import { mkdtemp, readFile, rm } from 'node:fs/promises';
+import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { dirname, join } from 'node:path';
 import { createServer } from 'node:http';
 import test from 'node:test';
 import { StorageService, withReadinessTimeout } from '../services/storage.service.js';
 import { AppError } from '../utils/errors.js';
 import type { OrganisationStorageResolver } from '../services/document-storage-resolution.js';
+
+const STORAGE_OPERATION_FAILED_MESSAGE = 'Document storage operation failed. Please try again later.';
 
 type GuardedStorageService = {
   downloadFile(organisationId: string, storagePath: string): Promise<Buffer>;
@@ -341,4 +343,101 @@ test('the organisation prefix guard still runs before any resolved provider is u
 
   await assertForbiddenStoragePath(() => service.downloadFile('org-a', 'org-b/policy.pdf'));
   await assertForbiddenStoragePath(() => service.deleteFile('org-a', '../org-a/policy.pdf'));
+});
+
+// ---------------------------------------------------------------------------
+// Extension 1: a failing resolver must not leak a raw error onto document paths.
+// ---------------------------------------------------------------------------
+
+test('a resolver that rejects with a plain Error surfaces as AppError 500 STORAGE_PROVIDER_RESOLUTION_FAILED', async () => {
+  const explodingResolver: OrganisationStorageResolver = async () => {
+    throw new Error('connection to the database was lost');
+  };
+  const service = new StorageService(explodingResolver);
+
+  await assert.rejects(
+    () => service.uploadFile('org-x', 'f.pdf', Buffer.from('x'), 'application/pdf'),
+    (error: unknown) => {
+      assert.equal(error instanceof AppError, true);
+      const appError = error as AppError;
+      assert.equal(appError.statusCode, 500);
+      assert.equal(appError.code, 'STORAGE_PROVIDER_RESOLUTION_FAILED');
+      assert.equal(appError.message, STORAGE_OPERATION_FAILED_MESSAGE);
+      return true;
+    },
+  );
+});
+
+test('a resolver that rejects with an AppError surfaces unchanged (the alpha gate is meaningful, not infrastructure failure)', async () => {
+  // A provider id the registry does not know produces a real, deliberate
+  // AppError (STORAGE_PROVIDER_UNKNOWN) from resolveProviderForOrganisation's
+  // registry check — this must reach the caller untouched, not be rewrapped.
+  const unknownProviderResolver: OrganisationStorageResolver = async () => ({
+    provider: 'a-provider-nobody-registered',
+    alphaOptIn: false,
+  });
+  const service = new StorageService(unknownProviderResolver);
+
+  await assert.rejects(
+    () => service.uploadFile('org-x', 'f.pdf', Buffer.from('x'), 'application/pdf'),
+    (error: unknown) => {
+      assert.equal(error instanceof AppError, true);
+      const appError = error as AppError;
+      assert.equal(appError.statusCode, 400);
+      assert.equal(appError.code, 'STORAGE_PROVIDER_UNKNOWN');
+      assert.notEqual(appError.message, STORAGE_OPERATION_FAILED_MESSAGE);
+      return true;
+    },
+  );
+});
+
+// ---------------------------------------------------------------------------
+// Extension 2: the delete path's cancellation check must not go stale across
+// the (now awaited) provider resolution.
+// ---------------------------------------------------------------------------
+
+test('deleteFile re-checks the abort signal after provider resolution and never touches storage once aborted', async () => {
+  const storageDir = await mkdtemp(join(tmpdir(), 'charitypilot-abort-recheck-'));
+  const storagePath = 'org-abort/file.pdf';
+  const filePath = join(storageDir, 'org-abort', 'file.pdf');
+  await mkdir(dirname(filePath), { recursive: true });
+  await writeFile(filePath, 'still here');
+
+  const controller = new AbortController();
+  let resolverCalled = false;
+  const resolverThatAbortsMidFlight: OrganisationStorageResolver = async () => {
+    resolverCalled = true;
+    controller.abort();
+    return { provider: 'local', alphaOptIn: false };
+  };
+
+  const originalDriver = process.env.DOCUMENT_STORAGE_DRIVER;
+  const originalRoot = process.env.LOCAL_FILE_STORAGE_DIR;
+  process.env.LOCAL_FILE_STORAGE_DIR = storageDir;
+
+  try {
+    const service = new StorageService(resolverThatAbortsMidFlight);
+
+    await assert.rejects(
+      () => service.deleteFile('org-abort', storagePath, controller.signal),
+      (error: unknown) => {
+        assert.equal(error instanceof AppError, true);
+        const appError = error as AppError;
+        assert.equal(appError.statusCode, 500);
+        assert.equal(appError.code, 'STORAGE_DELETE_FAILED');
+        assert.equal(appError.message, STORAGE_OPERATION_FAILED_MESSAGE);
+        return true;
+      },
+    );
+
+    assert.equal(resolverCalled, true, 'the resolver must have run for the abort to happen mid-flight');
+    // The file must still be there: the stale check would have let the delete through.
+    assert.equal((await readFile(filePath)).toString('utf8'), 'still here');
+  } finally {
+    await rm(storageDir, { recursive: true, force: true });
+    if (originalDriver === undefined) delete process.env.DOCUMENT_STORAGE_DRIVER;
+    else process.env.DOCUMENT_STORAGE_DRIVER = originalDriver;
+    if (originalRoot === undefined) delete process.env.LOCAL_FILE_STORAGE_DIR;
+    else process.env.LOCAL_FILE_STORAGE_DIR = originalRoot;
+  }
 });

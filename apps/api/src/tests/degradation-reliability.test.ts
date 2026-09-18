@@ -358,6 +358,12 @@ test('document upload returns 503 STORAGE_NOT_CONFIGURED and persists nothing wh
         return { id: 'doc-1' };
       },
     },
+    // documentRoutes now resolves the storage provider per organisation on
+    // every upload; "no preference recorded" keeps this test on the
+    // deployment default so it still exercises STORAGE_NOT_CONFIGURED.
+    organisation: {
+      findUnique: async () => ({ documentStorageProvider: null, documentStorageAlphaOptIn: false }),
+    },
   } as never);
   await app.register(multipart);
   await app.register(documentRoutes);

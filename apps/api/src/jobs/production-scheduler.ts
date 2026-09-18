@@ -8,6 +8,7 @@ import {
   type ErrorAlertPayload,
 } from '../services/error-alerts.service.js';
 import { StorageService } from '../services/storage.service.js';
+import { createPrismaOrganisationStorageResolver } from '../services/document-storage-resolution.js';
 import {
   validateAuthDeliveryEnv,
   validateDeadlineRemindersEnv,
@@ -494,7 +495,7 @@ async function main(): Promise<void> {
   await requireAuthRecoveryControlForRuntime(prisma);
   const deadlineService = new DeadlineRemindersService(prisma);
   const documentService = new DocumentService(prisma);
-  const storageService = new StorageService();
+  const storageService = new StorageService(createPrismaOrganisationStorageResolver(prisma));
   const authEmailDeliveryService = new AuthEmailDeliveryService(prisma);
   const logger: SchedulerLogger = console;
 

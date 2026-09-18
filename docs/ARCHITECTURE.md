@@ -127,6 +127,33 @@ path — is in [System Overview](architecture/01-system-overview.md)._
 | 9 | [Frontend Architecture](architecture/09-frontend.md) | App-router route groups, the API client and same-origin proxy, auth/session handling and single-flight refresh, and client-side plan gating. |
 | 10 | [Configuration, Environment & the Two-Gate Model](architecture/10-config-and-env.md) | The full env-var surface, what `validateProductionEnv` enforces, and the code-gate vs launch-gate model. |
 
+### Document storage providers
+
+Document storage is chosen per organisation, not per process.
+
+- `apps/api/src/services/document-storage-provider.ts` is the registry: the
+  single source of truth for which providers exist and what stage each is at
+  (`ga` or `alpha`).
+- `apps/api/src/services/document-storage-resolution.ts` turns an organisation
+  id into a provider id, falling back to `DOCUMENT_STORAGE_DRIVER` when the
+  organisation has recorded no preference.
+- `Organisation.documentStorageProvider` (nullable) holds the preference;
+  `Organisation.documentStorageAlphaOptIn` gates alpha-stage providers.
+
+An alpha provider can only be selected by an organisation that has explicitly
+opted in, and can never be the deployment default. This is the mechanism that
+keeps in-progress integrations off tenants who have not asked for them — see
+`docs/superpowers/plans/2026-09-18-document-storage-providers-spec.md`.
+
+The global health probe (`routes/health`) deliberately reports on the
+deployment default only. Per-tenant integration health is a later phase.
+
+If the resolver itself fails — for example a database error while looking up
+an organisation's preference — `StorageService` surfaces that as `AppError`
+500 `STORAGE_PROVIDER_RESOLUTION_FAILED` rather than leaking the raw error;
+the alpha-gate and unknown-provider errors from the registry are deliberate
+`AppError`s and still pass through unchanged.
+
 Security-sensitive operator references:
 
 - [Team Lifecycle and Session Security](team-lifecycle-security.md)

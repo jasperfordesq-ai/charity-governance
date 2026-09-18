@@ -1,6 +1,7 @@
 import { PrismaClient } from '@prisma/client';
 import { DocumentService } from '../services/document.service.js';
 import { StorageService } from '../services/storage.service.js';
+import { createPrismaOrganisationStorageResolver } from '../services/document-storage-resolution.js';
 import { validateDocumentStorageCleanupEnv } from '../utils/env.js';
 import { logSchedulerError, sendJobFailureAlert } from './production-scheduler.js';
 
@@ -17,7 +18,7 @@ function cleanupLimit(): number {
 
 try {
   const documentService = new DocumentService(prisma);
-  const storageService = new StorageService();
+  const storageService = new StorageService(createPrismaOrganisationStorageResolver(prisma));
   const result = await documentService.retryPendingStorageDeletions(
     (organisationId, storagePath, signal) => storageService.deleteFile(organisationId, storagePath, signal),
     cleanupLimit(),
