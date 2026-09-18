@@ -243,10 +243,48 @@ health endpoint.
 
 ## Open questions for the owner
 
-1. **Does Nikita accept that Confluence is a published mirror, not the system of
-   record?** If they expect Confluence to be authoritative, that is a real
-   disagreement and it should be settled before Phase 1, not after. The
-   residency argument is the reason to settle it in favour of Mode C.
+1. ~~**Does Nikita accept that Confluence is a published mirror, not the system of
+   record?**~~ **ANSWERED 2026-09-18 — and answered NO. This needs the owner's decision.**
+
+   This question said it had to be settled before Phase 1. It was settled after
+   Phase 3, and against the assumption the rest of this spec is built on.
+
+   Nikita signed off by email on an architecture where **Confluence is
+   authoritative for the documents deliberately managed there** — policies,
+   notices, guidelines, ordinary evidence — with CharityPilot holding
+   **references to real pages and versions, explicitly not duplicate copies**.
+   CharityPilot stays authoritative for compliance status, workflows, deadlines,
+   audit history, approvals and permissions; anything carrying trustee home
+   addresses, dates of birth or sensitive complaints stays in CharityPilot,
+   decided category by category. He also raised, himself, that Confluence must
+   be an integration option for hOUR Timebank and not a dependency of
+   CharityPilot — which matches the multi-tenant direction.
+
+   That is a coherent DPO position. It is **not** Mode C, and the two cannot
+   both hold:
+
+   | | Mode C (this spec) | Signed off 2026-09-18 |
+   |---|---|---|
+   | Authoritative copy | Always Supabase, `eu-west-1` | Confluence, for chosen categories |
+   | What CharityPilot stores | The bytes | A reference to a page and version |
+   | Residency of a policy document | Guaranteed Ireland | Wherever the tenant's site is |
+   | Erasure guarantee | Provable | Best-effort, bounded by permissions the charity holds |
+
+   **The consequence the owner has to rule on.** The standing constraint on this
+   project is that file storage is Irish, or at minimum EU. A document that is
+   authoritative in Confluence has no Irish copy to fall back on, and a site's
+   region is chosen by the tenant's own admins — not configurable at all on
+   Atlassian's Free plan. So the signed-off architecture and the residency
+   constraint are in tension for exactly the categories Nikita wants in
+   Confluence. Neither he nor this spec can settle that; it is the owner's call.
+
+   **What was done about it in the meantime.** Nothing built so far depends on
+   the answer. Phases 0–3 are credential and transport plumbing that is correct
+   either way, and the Phase 5 plan was written to read its erasure target from
+   `targetRef` alone rather than assuming a Supabase twin. The one place the
+   answer changes what is *true* rather than what is convenient is the residency
+   paragraph in Phase 5's documentation task, which is marked blocked until this
+   is ruled on. **Phase 4 should not be designed until it is.**
 2. **Do we require tenants to be on Confluence Standard or above** before we let
    them enable the integration, given Free has no residency control and no audit
    log? Recommendation: yes, and state it as a precondition.
