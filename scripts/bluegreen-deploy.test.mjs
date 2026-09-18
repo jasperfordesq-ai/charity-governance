@@ -2273,6 +2273,26 @@ test('P3-5: the committed private-VM env template, filled in, passes engine pref
   rmSync(dir, { recursive: true, force: true });
 });
 
+test('the runbook generator substitutes every placeholder the private-VM template contains', () => {
+  // The generator in docs/bluegreen-runbook.md is a hand-maintained sed
+  // pipeline, so adding a placeholder to the template without adding a matching
+  // `-e` leaves the operator with a literal REPLACE_ME_ value in a 0600 env
+  // file — which the API then rejects at boot as a placeholder, one line after
+  // the runbook's own "OK: no placeholders left" gate printed.
+  const repoRoot = dirname(scriptsDir);
+  const template = readFileSync(join(repoRoot, '.env.bluegreen.private-vm.example'), 'utf8');
+  const runbook = readFileSync(join(repoRoot, 'docs', 'bluegreen-runbook.md'), 'utf8');
+  const placeholders = [...new Set(template.match(/REPLACE_ME_[A-Z0-9_]+/g) ?? [])];
+
+  assert.ok(placeholders.length > 0, 'the template must still use REPLACE_ME_ placeholders');
+  for (const placeholder of placeholders) {
+    assert.ok(
+      runbook.includes(`s#${placeholder}#`),
+      `docs/bluegreen-runbook.md must substitute ${placeholder}`,
+    );
+  }
+});
+
 // -----------------------------------------------------------------------------
 // VM-cutover defect 2a: a failed deploy must not leave behind a `db` service
 // that THIS deploy started. On the real cutover the deploy aborted at phase 2

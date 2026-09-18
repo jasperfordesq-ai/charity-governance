@@ -16,6 +16,10 @@ const productionSupabaseUrl = 'https://xjvdkmqbtczrnlqpswfa.supabase.co';
 const productionAuthRecoverySecret = Buffer.from(
   Array.from({ length: 48 }, (_value, index) => index + 1),
 ).toString('base64url');
+// Exactly 32 bytes as canonical hex, distinct from every other fixture secret.
+const productionIntegrationEncryptionKey = Buffer.from(
+  Array.from({ length: 32 }, (_value, index) => (index * 7 + 11) % 256),
+).toString('hex');
 const validRuntimeWebApiUrlEnv = {
   CHARITYPILOT_WEB_NEXT_PUBLIC_API_URL: 'https://api.charitypilot.ie',
 };
@@ -252,6 +256,7 @@ function completeProductionEnv(overrides = {}) {
     JWT_SECRET: 'J9mQ4vRx7tL2pZs6NfB8hDy3WcK1uEa5',
     OWNER_JWT_SECRET: 'Z3wF6vNq9Rx2mLp8Bh5Ty7cKd1Uae0Ss',
     AUTH_RECOVERY_SECRET: productionAuthRecoverySecret,
+    INTEGRATION_ENCRYPTION_KEY: productionIntegrationEncryptionKey,
     SECURITY_EMAIL_PROVIDER_TIMEOUT_MS: '8000',
     AUTH_DELIVERY_INTERVAL_MS: '5000',
     AUTH_DELIVERY_BATCH_SIZE: '25',
@@ -289,6 +294,58 @@ test('production preflight rejects unknown options before reading configuration'
   assert.equal(result.stdout, '');
   assert.match(result.stderr, /Unknown option: --surprise/);
   assert.match(result.stderr, /Usage: node scripts\/check-production\.mjs \[--production-env-file=<path>\]/);
+});
+
+test('production preflight requires a usable INTEGRATION_ENCRYPTION_KEY', () => {
+  // Without this the preflight reports a green environment for a file the API
+  // refuses to boot on (requireIntegrationEncryptionKey in
+  // apps/api/src/utils/env.ts).
+  const missing = validateProductionEnvContent(completeProductionEnv({
+    INTEGRATION_ENCRYPTION_KEY: 'REPLACE_ME_RANDOM_INTEGRATION_ENCRYPTION_KEY_64_HEX_CHARACTERS',
+  }));
+  assert.ok(
+    missing.includes('INTEGRATION_ENCRYPTION_KEY is missing or still contains a placeholder value'),
+    missing.join('\n'),
+  );
+
+  for (const wrongSize of [
+    Buffer.alloc(16, 5).toString('hex'),
+    Buffer.alloc(48, 5).toString('hex'),
+    `${productionIntegrationEncryptionKey}a`,
+  ]) {
+    const issues = validateProductionEnvContent(completeProductionEnv({
+      INTEGRATION_ENCRYPTION_KEY: wrongSize,
+    }));
+    assert.ok(
+      issues.some((issue) => issue.includes('INTEGRATION_ENCRYPTION_KEY must canonically encode exactly 32 bytes')),
+      issues.join('\n'),
+    );
+  }
+
+  const shared = Buffer.alloc(32, 9).toString('hex');
+  const reused = validateProductionEnvContent(completeProductionEnv({
+    INTEGRATION_ENCRYPTION_KEY: shared,
+    JWT_SECRET: shared,
+  }));
+  assert.ok(
+    reused.some((issue) => issue.startsWith('INTEGRATION_ENCRYPTION_KEY must be distinct from')),
+    reused.join('\n'),
+  );
+
+  assert.deepEqual(
+    validateProductionEnvContent(completeProductionEnv(), validRuntimeWebApiUrlEnv).filter((issue) =>
+      issue.includes('INTEGRATION_ENCRYPTION_KEY'),
+    ),
+    [],
+  );
+});
+
+test('the production template carries INTEGRATION_ENCRYPTION_KEY and the generator fills it', () => {
+  const template = readRepoFile('.env.production.example');
+  const generator = readRepoFile('scripts/generate-production-env.mjs');
+
+  assert.match(template, /^INTEGRATION_ENCRYPTION_KEY=REPLACE_ME_/m);
+  assert.match(generator, /'INTEGRATION_ENCRYPTION_KEY',/);
 });
 
 test('production preflight requires canonical recovery-secret bytes and never echoes the secret', () => {
@@ -374,6 +431,7 @@ test('passes when the selected env file contains complete production values', ()
       'JWT_SECRET=J9mQ4vRx7tL2pZs6NfB8hDy3WcK1uEa5',
       'OWNER_JWT_SECRET=Z3wF6vNq9Rx2mLp8Bh5Ty7cKd1Uae0Ss',
       `AUTH_RECOVERY_SECRET=${productionAuthRecoverySecret}`,
+      `INTEGRATION_ENCRYPTION_KEY=${productionIntegrationEncryptionKey}`,
       'FRONTEND_URL=https://app.charitypilot.ie',
       'AUTH_COOKIE_DOMAIN=.charitypilot.ie',
       'STRIPE_SECRET_KEY=sk_live_configuredSecret',
@@ -5384,6 +5442,117 @@ test('CI validates API production env inside the built Docker image', () => {
       workflow.indexOf('name: Smoke API Docker image'),
     'production configuration must be validated before the API smoke run',
   );
+});
+
+// ---------------------------------------------------------------------------
+// Both workflows validate production configuration by running
+// validateProductionEnv() inside the API container with an explicit, CLOSED
+// `-e` list — nothing is inherited from the host. So a variable the validator
+// requires but the list omits breaks the step, and with it the release-image
+// pipeline. INTEGRATION_ENCRYPTION_KEY did exactly that while the only check
+// here was that the workflow mentions `validateProductionEnv` at all.
+//
+// The variables validateProductionEnv names as string literals are derived
+// straight from apps/api/src/utils/env.ts, so they need no maintenance. The
+// guards it calls as `requireX(issues)` name no variable at the call site, so
+// each one is declared below instead — and the declared set is asserted to
+// equal the set actually called, which means adding a new guard to
+// validateProductionEnv fails this test until whoever added it declares what
+// that guard needs.
+// ---------------------------------------------------------------------------
+const PRODUCTION_ENV_GUARD_VARIABLES = new Map([
+  ['requireTrustedProxyAddresses', ['TRUSTED_PROXY_ADDRESSES']],
+  ['requireAuthRecoverySecret', ['AUTH_RECOVERY_SECRET']],
+  ['requireIntegrationEncryptionKey', ['INTEGRATION_ENCRYPTION_KEY']],
+  ['requireAuthCookieDomain', ['AUTH_COOKIE_DOMAIN']],
+  ['requireErrorAlertWebhook', ['ERROR_ALERT_WEBHOOK_URL']],
+  // Optional or defaulted — absence is not an issue.
+  ['requireAccessTokenExpiry', []],
+  ['requireRefreshTokenTtlDays', []],
+  ['validateAuthDeliveryNumericEnv', []],
+  // Driven by DOCUMENT_STORAGE_DRIVER, which both workflows leave unset, so the
+  // Supabase branch runs and its variables arrive as literals above.
+  ['requireLocalStoragePath', []],
+  ['requireProductionDocumentStorageDriver', []],
+  ['requireUsableDocumentStorageDefault', []],
+]);
+
+function validateProductionEnvBody() {
+  const source = readRepoFile('apps/api/src/utils/env.ts');
+  const start = source.indexOf('export function validateProductionEnv(): void {');
+  assert.notEqual(start, -1, 'validateProductionEnv must still exist in apps/api/src/utils/env.ts');
+  const end = source.indexOf('\n}', start);
+  assert.notEqual(end, -1, 'validateProductionEnv must have a closing brace at column 0');
+  // Drop the final throwIfProductionIssues(...) call: its first argument is an
+  // ALL_CAPS error code, not an environment variable.
+  return source.slice(start, end).replace(/throwIfProductionIssues\([\s\S]*$/, '');
+}
+
+function requiredProductionEnvVariables() {
+  const body = validateProductionEnvBody();
+
+  const calledGuards = new Set(
+    [...body.matchAll(/\b([A-Za-z][A-Za-z0-9]*)\(issues\)/g)].map((match) => match[1]),
+  );
+  assert.deepEqual(
+    [...calledGuards].sort(),
+    [...PRODUCTION_ENV_GUARD_VARIABLES.keys()].sort(),
+    'a guard was added to or removed from validateProductionEnv: declare the environment variables it requires in PRODUCTION_ENV_GUARD_VARIABLES',
+  );
+
+  const required = new Set([
+    // Read directly at the top of validateProductionEnv.
+    'NODE_ENV',
+    ...[...body.matchAll(/'([A-Z][A-Z0-9_]{2,})'/g)].map((match) => match[1]),
+    ...[...PRODUCTION_ENV_GUARD_VARIABLES.values()].flat(),
+  ]);
+  return [...required].sort();
+}
+
+function productionValidationStepEnvNames(workflow) {
+  const start = workflow.indexOf('name: Validate API Docker production configuration');
+  assert.notEqual(start, -1, 'the production configuration validation step must exist');
+  const after = workflow.indexOf('\n      - name:', start + 1);
+  const step = workflow.slice(start, after === -1 ? undefined : after);
+  assert.match(step, /validateProductionEnv/, 'the step must run validateProductionEnv');
+  return new Set([...step.matchAll(/-e "?([A-Z][A-Z0-9_]*)=/g)].map((match) => match[1]));
+}
+
+test('both workflows pass every variable validateProductionEnv requires into the container', () => {
+  const required = requiredProductionEnvVariables();
+  assert.ok(required.includes('INTEGRATION_ENCRYPTION_KEY'), 'derivation must see the guarded keys');
+
+  for (const path of ['.github/workflows/ci.yml', '.github/workflows/release-images.yml']) {
+    const supplied = productionValidationStepEnvNames(readRepoFile(path));
+    const missing = required.filter((name) => !supplied.has(name));
+    assert.deepEqual(
+      missing,
+      [],
+      `${path}: the -e list of the production configuration validation step is missing ${missing.join(', ')}`,
+    );
+  }
+});
+
+test('the workflow production validation secrets are distinct, as the validator demands', () => {
+  for (const path of ['.github/workflows/ci.yml', '.github/workflows/release-images.yml']) {
+    const workflow = readRepoFile(path);
+    const start = workflow.indexOf('name: Validate API Docker production configuration');
+    const after = workflow.indexOf('\n      - name:', start + 1);
+    const step = workflow.slice(start, after === -1 ? undefined : after);
+    const secrets = ['JWT_SECRET', 'OWNER_JWT_SECRET', 'AUTH_RECOVERY_SECRET', 'INTEGRATION_ENCRYPTION_KEY']
+      .map((name) => {
+        const match = step.match(new RegExp(`-e ${name}=(\\S+)`));
+        assert.ok(match, `${path}: ${name} must be supplied to the validation step`);
+        return match[1];
+      });
+    assert.equal(new Set(secrets).size, secrets.length, `${path}: validation-step secrets must be distinct`);
+    const integrationKey = secrets[secrets.length - 1];
+    assert.match(
+      integrationKey,
+      /^[0-9a-f]{64}$/,
+      `${path}: INTEGRATION_ENCRYPTION_KEY must decode to exactly 32 bytes`,
+    );
+  }
 });
 
 test('release workflow publishes runtime and migration Docker images to GHCR', () => {

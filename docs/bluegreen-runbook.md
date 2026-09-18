@@ -555,6 +555,7 @@ printf '%s\n' "$TEMPLATE" \
         -e "s#REPLACE_ME_AUTH_RECOVERY_SECRET#$(get AUTH_RECOVERY_SECRET)#g" \
         -e "s#REPLACE_ME_READINESS_API_KEY#$(get READINESS_API_KEY)#g" \
         -e "s#REPLACE_ME_OWNER_JWT_SECRET#$(openssl rand -hex 32)#g" \
+        -e "s#REPLACE_ME_INTEGRATION_ENCRYPTION_KEY#$(openssl rand -hex 32)#g" \
   > "$DST"
 chmod 600 "$DST"
 grep -c REPLACE_ME "$DST" || echo "OK: no placeholders left"
