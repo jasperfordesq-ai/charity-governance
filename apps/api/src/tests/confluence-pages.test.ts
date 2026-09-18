@@ -261,6 +261,44 @@ test('a read or an update with an unusable response stays a plain bad-response e
   assert.equal(updateError.code, 'CONFLUENCE_RESPONSE_INVALID');
 });
 
+test('an update conflict names both causes it could be and denies neither an application nor a rename', async () => {
+  // `updatePage` catches CONFLUENCE_CONFLICT unconditionally, and it sends a
+  // `title` as well as a version. Confluence uses 409 for a duplicate title in
+  // a space — the reason `createPage` deliberately leaves its 409
+  // untranslated — and the HTTP core surfaces no response body, so this module
+  // cannot tell a stale version from a colliding title. It must not pick one.
+  //
+  // And it must not deny an application either: the call is `idempotent: true`,
+  // so a 502 from a gateway that had already passed the write on is retried,
+  // the retry meets a genuine 409, and "your version was not applied by this
+  // call" is then false — it was applied, by this call, on the first attempt.
+  // Recovery is safe either way; the statement was not, and a pipeline can
+  // branch on a statement.
+  const { client } = harness([throwing(upstreamConflict())]);
+
+  const error = await rejectsWith(() =>
+    updatePage(client, { pageId: PAGE_ID, title: 'x', bodyStorage: '<p>x</p>', expectedVersion: 3 }),
+  );
+
+  assert.equal(error.code, 'CONFLUENCE_PAGE_VERSION_CONFLICT');
+  assert.match(error.message, /version 3/, 'the version that was sent is the one fact this module holds');
+  assert.match(error.message, /title/i, 'the duplicate-title cause must be named');
+  assert.match(error.message, /re-read/i);
+
+  for (const claim of [
+    'somebody else changed it first',
+    'was not applied',
+    'no longer at version',
+    'nothing was written',
+  ]) {
+    assert.equal(
+      error.message.toLowerCase().includes(claim.toLowerCase()),
+      false,
+      `"${claim}" asserts something this module cannot know`,
+    );
+  }
+});
+
 test('a 409 on create is NOT relabelled as a version conflict: Confluence also uses it for a duplicate title', async () => {
   const { client } = harness([throwing(upstreamConflict())]);
 

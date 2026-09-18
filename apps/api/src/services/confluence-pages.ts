@@ -332,20 +332,50 @@ export async function getPage(
 }
 
 /**
- * A version mismatch, expressed as what it is: somebody else changed the page.
+ * A refused update, expressed as what is actually known about it — which is
+ * less than this error used to claim.
  *
- * The version Confluence actually found is **not** reported, because the HTTP
- * core surfaces no response body and so never hands it to this module. Naming a
- * number that was never received would be worse than omitting it — a caller
- * would key its recovery on a guess. The caller must re-read.
+ * It said "somebody else changed it first" and "your version was not applied
+ * by this call". Neither is knowable here.
+ *
+ * **The cause is not knowable.** Confluence answers 409 both for a stale
+ * version and for a title already held by another page in the space — the
+ * second is exactly why `createPage` leaves its own 409 untranslated — and
+ * `updatePage` sends a `title` as well as a version. The HTTP core surfaces no
+ * response body, so this module receives nothing that separates the two. A
+ * caller told "somebody edited this, re-read and retry" for what is really a
+ * rename collision re-reads, finds the version unchanged, and reapplies
+ * forever: the loop the `createPage` reasoning exists to prevent, arriving
+ * through the update path instead.
+ *
+ * **Non-application is not knowable either.** `updatePage` is `idempotent`, so
+ * the core retries it on a 5xx. If the first attempt committed and the gateway
+ * then answered 502, the retry sends the same version, meets a genuine 409, and
+ * the change *has* been applied — by this call. Recovery is unaffected (the
+ * caller re-reads and finds its own change), but the statement would be false,
+ * and a pipeline can branch on a statement.
+ *
+ * The version Confluence actually holds is still **not** reported, for the
+ * original reason: it never reaches this module, and naming a number that was
+ * never received would have a caller key its recovery on a guess. The re-read
+ * is what resolves all of it — the page's version and its title together say
+ * which of the two happened, and whether the change is already there.
+ *
+ * The code stays `CONFLUENCE_PAGE_VERSION_CONFLICT`: it is the documented name
+ * for "an update was refused under the version you supplied", and renaming it
+ * would break callers to say the same thing.
  */
 function pageVersionConflict(pageId: string, expectedVersion: number): AppError {
   return new AppError(
     409,
     'CONFLUENCE_PAGE_VERSION_CONFLICT',
-    `Confluence rejected an update to page ${pageId}: it is no longer at version ${expectedVersion}, ` +
-      'so somebody else changed it first. Your version of this page was not applied by this call. ' +
-      'Re-read the page to obtain its current version, then decide whether to reapply the change.',
+    `Confluence refused an update to page ${pageId} sent against version ${expectedVersion}. ` +
+      'It answers 409 both when the page has moved past that version and when the title sent is ' +
+      'already held by another page in the space, and it surfaces no response body to this client, ' +
+      'so which of the two it was is not known here. Nor is it known that the change did not land: ' +
+      'this call is retried on a 5xx, so an earlier attempt of it may already have been committed. ' +
+      'Re-read the page — its version and its title together say what happened — then decide ' +
+      'whether to reapply the change.',
     { pageId, expectedVersion },
   );
 }
@@ -383,9 +413,10 @@ export async function updatePage(
       idempotent: true,
     });
   } catch (error) {
-    // Optimistic concurrency, not a fault. A charity's DPO editing a policy
-    // while a publish runs lands here, and burying it as a generic failure
-    // would lose the one fact the caller can act on.
+    // A refusal to act on rather than a fault to bury. A charity's DPO editing
+    // a policy while a publish runs lands here, and so does a rename onto a
+    // title the space already holds. The error says both, because nothing that
+    // reaches this module tells them apart.
     if (isUpstream(error, 'CONFLUENCE_CONFLICT')) throw pageVersionConflict(id, expectedVersion);
     throw error;
   }
