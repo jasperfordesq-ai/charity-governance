@@ -216,6 +216,25 @@ than inventing a new reliability pattern.
 from both stores, handling Confluence trash-then-purge. **Confluence cannot
 leave alpha before this ships.**
 
+> **A gap already visible, found in Phase 2's whole-branch review.**
+> `disconnectConfluence` deletes CharityPilot's sealed envelopes and resets the
+> integration row, but **never revokes the grant at Atlassian**. A charity that
+> disconnects therefore leaves a live authorization on Atlassian's side which
+> CharityPilot can no longer use but has not withdrawn.
+>
+> The cascade chain (`Organisation` → `OrganisationIntegration` →
+> `IntegrationCredential`) is correct for our own data, and there is no
+> hard-delete purge routine that was missed. But "provable erasure" is the
+> standard this project already holds itself to for document storage, and by
+> that standard a silently orphaned grant does not pass. A charity told
+> "disconnected" reasonably believes the access is gone.
+>
+> Design the revocation into this phase rather than discovering it during an
+> audit. Note that revocation may fail — the grant may already be gone, or
+> Atlassian may be unreachable — so it needs the same honest treatment as the
+> rest of the deletion pipeline: retry, a dead-letter, and a record of what was
+> attempted, rather than a best-effort call whose failure nobody sees.
+
 **Phase 6 — admin UI and health.** Connect/disconnect screens in `apps/web`, and
 per-tenant integration health that does not leak tenant data into the global
 health endpoint.
