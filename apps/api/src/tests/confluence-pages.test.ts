@@ -201,13 +201,39 @@ test('createPage sends parentId when the caller nests the page', async () => {
   assert.equal(bodyOf(spec).parentId, '777');
 });
 
-test('createPage rejects a response with no usable id rather than returning a page that is not one', async () => {
+test('a create whose response has no usable id says the page EXISTS and must not be reissued', async () => {
   const { client } = harness([ok({ title: 'x', spaceId: SPACE_ID, version: { number: 1 } })]);
 
   const error = await rejectsWith(() =>
     createPage(client, { spaceId: SPACE_ID, title: 'x', bodyStorage: '<p>x</p>' }),
   );
-  assert.equal(error.code, 'CONFLUENCE_RESPONSE_INVALID');
+
+  // By this point Confluence has answered 2xx: the page is in the charity's
+  // space. A generic "bad response" would read as "nothing happened", and a
+  // publish pipeline acting on that creates the page a second time. Same code
+  // the HTTP core uses for the same class of loss one layer down.
+  assert.equal(error.code, 'CONFLUENCE_WRITE_APPLIED_RESPONSE_UNREADABLE');
+  assert.match(error.message, /WAS created/);
+  assert.match(error.message, /do not reissue/i);
+});
+
+test('a read or an update with an unusable response stays a plain bad-response error', async () => {
+  // Nothing was written on either path, so there is nothing to reconcile: a
+  // get changes nothing, and a rejected update is caught by its own version.
+  const unusable = { title: 'x', spaceId: SPACE_ID, version: { number: 1 } };
+
+  const readError = await rejectsWith(() => getPage(harness([ok(unusable)]).client, PAGE_ID));
+  assert.equal(readError.code, 'CONFLUENCE_RESPONSE_INVALID');
+
+  const updateError = await rejectsWith(() =>
+    updatePage(harness([ok(unusable)]).client, {
+      pageId: PAGE_ID,
+      title: 'x',
+      bodyStorage: '<p>x</p>',
+      expectedVersion: 1,
+    }),
+  );
+  assert.equal(updateError.code, 'CONFLUENCE_RESPONSE_INVALID');
 });
 
 test('a 409 on create is NOT relabelled as a version conflict: Confluence also uses it for a duplicate title', async () => {
@@ -295,6 +321,14 @@ test('a rejected identifier is the caller error it is, never a 5xx that pages th
     rejectsWith(() => getContentProperty(client, 'a/b', 'k')),
     rejectsWith(() => setContentProperty(client, PAGE_ID, 'has spaces', { a: 1 })),
     rejectsWith(() => setContentProperty(client, PAGE_ID, 'k', { a: 1 }, 0)),
+    // These two are the likeliest of all to fire on real charity data — an
+    // oversized governance-metadata blob is a data condition, not a
+    // programming error — so they are the best placed to page the on-call
+    // repeatedly if they were ever 5xx.
+    rejectsWith(() =>
+      setContentProperty(client, PAGE_ID, 'k', { note: 'x'.repeat(CONFLUENCE_CONTENT_PROPERTY_MAX_BYTES) }),
+    ),
+    rejectsWith(() => setContentProperty(client, PAGE_ID, 'k', () => undefined)),
   ]);
 
   for (const error of rejected) {
@@ -354,6 +388,56 @@ test('a version mismatch surfaces as CONFLUENCE_PAGE_VERSION_CONFLICT and tells 
   // Task 1 surfaces no response body, so the version Confluence actually holds
   // never reaches this module. Inventing one would be worse than omitting it.
   assert.ok(!('foundVersion' in details), 'must not report a version it never received');
+});
+
+test('updatePage translates a genuine conflict only, not everything that arrives with status 409', async () => {
+  // The core maps an expired grant to statusCode 409 as well, deliberately, so
+  // that apps/web does not mistake it for a dead CharityPilot session. A
+  // translation that discriminated on status rather than code would tell a
+  // charity whose Confluence grant has died to "re-read the page and retry" —
+  // forever, because re-reading will never fix a revoked authorization.
+  const { client } = harness([throwing(upstreamReconnectRequired())]);
+  assert.equal(upstreamReconnectRequired().statusCode, 409, 'the premise of this test');
+
+  const error = await rejectsWith(() =>
+    updatePage(client, { pageId: PAGE_ID, title: 'x', bodyStorage: '<p>x</p>', expectedVersion: 3 }),
+  );
+  assert.equal(error.code, 'CONFLUENCE_RECONNECT_REQUIRED');
+});
+
+test('a content property update translates a genuine conflict only, not every status 409', async () => {
+  const { client } = harness([
+    ok({ results: [{ id: 'prop-1', key: 'k', value: { a: 1 }, version: { number: 1 } }] }),
+    throwing(upstreamReconnectRequired()),
+  ]);
+
+  const error = await rejectsWith(() => setContentProperty(client, PAGE_ID, 'k', { a: 2 }));
+  assert.equal(error.code, 'CONFLUENCE_RECONNECT_REQUIRED');
+});
+
+test('a property conflict raised by Confluence reports no version, because none was received', async () => {
+  const { client } = harness([
+    ok({ results: [{ id: 'prop-1', key: 'k', value: { a: 1 }, version: { number: 1 } }] }),
+    throwing(upstreamConflict()),
+  ]);
+
+  const error = await rejectsWith(() => setContentProperty(client, PAGE_ID, 'k', { a: 2 }));
+
+  assert.equal(error.code, 'CONFLUENCE_CONTENT_PROPERTY_VERSION_CONFLICT');
+  const details = error.details as Record<string, unknown>;
+  // The number from the lookup is precisely the one Confluence has just
+  // declared stale. Reporting it would be inventing a found version.
+  assert.ok(!('foundVersion' in details), 'must not report a version it never received');
+});
+
+test('a lookup that answers with a different property is refused, not written over', async () => {
+  const { client, specs } = harness([
+    ok({ results: [{ id: 'prop-9', key: 'somebody.elses.key', value: {}, version: { number: 4 } }] }),
+  ]);
+
+  const error = await rejectsWith(() => setContentProperty(client, PAGE_ID, 'k', { a: 1 }));
+  assert.equal(error.code, 'CONFLUENCE_RESPONSE_INVALID');
+  assert.equal(specs.length, 1, 'the unrelated property must not be PUT over');
 });
 
 test('updatePage refuses a version that is not a whole number it can increment', async () => {
@@ -465,10 +549,14 @@ test('getContentProperty returns null when the property has never been set', asy
   assert.equal(await getContentPropertyRecord(client, PAGE_ID, 'charitypilot.governance'), null);
 });
 
-test('getContentProperty returns null when the page itself is gone', async () => {
+test('a missing page is not reported as an unset property: they are different answers', async () => {
   const { client } = harness([throwing(upstreamNotFound())]);
 
-  assert.equal(await getContentProperty(client, PAGE_ID, 'charitypilot.governance'), null);
+  // `null` means "not set on a page that exists". A pipeline told `null` for a
+  // page that has been deleted would conclude the metadata merely needs
+  // writing, and discover the truth much further downstream.
+  const error = await rejectsWith(() => getContentProperty(client, PAGE_ID, 'charitypilot.governance'));
+  assert.equal(error.code, 'CONFLUENCE_NOT_FOUND');
 });
 
 test('a stale expected version is refused before anything is written', async () => {

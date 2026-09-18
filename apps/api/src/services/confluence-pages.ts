@@ -153,6 +153,36 @@ function invalidResponse(what: string): AppError {
   );
 }
 
+/**
+ * The same error, told from the other side of a write that already landed.
+ *
+ * A create answers 2xx and then fails to parse: the page **exists**, and all
+ * that was lost is the identifier. `CONFLUENCE_RESPONSE_INVALID` would say
+ * "Confluence returned something unusable", which a publish pipeline reads as
+ * "nothing happened" — and it would create the page again. That is the
+ * duplicate this whole phase exists to prevent, arriving through a door the
+ * retry policy does not watch.
+ *
+ * This is the `webUrl` argument applied one field over: the fix is not to relax
+ * the parse, which would persist a page with no id, but to label the failure
+ * truthfully.
+ *
+ * The code is deliberately the core's own `CONFLUENCE_WRITE_APPLIED_RESPONSE_UNREADABLE`
+ * rather than a third vocabulary for the same situation. The core raises it
+ * when a non-idempotent 2xx body cannot be *read*; this raises it when the body
+ * read fine but was not a page. The instruction to the caller is identical, and
+ * it is the instruction that matters: do not reissue, search and adopt.
+ */
+function writeAppliedIdentifierLost(what: string): AppError {
+  return new AppError(
+    502,
+    'CONFLUENCE_WRITE_APPLIED_RESPONSE_UNREADABLE',
+    `Confluence accepted a page create but answered without a usable ${what}. ` +
+      'The page WAS created and only its identifier was lost. Do not reissue it: ' +
+      'search the space for the title that was sent and adopt the page.',
+  );
+}
+
 function asObject(value: unknown): Record<string, unknown> | undefined {
   return value !== null && typeof value === 'object' ? (value as Record<string, unknown>) : undefined;
 }
@@ -189,20 +219,28 @@ function readWebUrl(links: Record<string, unknown> | undefined): string {
  * Strict on everything the caller cannot proceed without — the id and the
  * version are what a later publish, update or audit record is keyed on, and a
  * page object missing either is not one.
+ *
+ * `writeApplied` says whether a write has already landed by the time the parse
+ * runs, and it changes only the *label* on the failure, never the strictness.
+ * It mirrors `idempotent` on the request: the caller states the fact, because
+ * the caller is the only one that knows it.
  */
-function parsePage(body: unknown): ConfluencePage {
+function parsePage(body: unknown, writeApplied = false): ConfluencePage {
+  const unusable = (what: string): AppError =>
+    writeApplied ? writeAppliedIdentifierLost(what) : invalidResponse(what);
+
   const page = asObject(body);
-  if (page === undefined) throw invalidResponse('page');
+  if (page === undefined) throw unusable('page');
 
   const id = readId(page.id);
-  if (id === undefined) throw invalidResponse('page id');
+  if (id === undefined) throw unusable('page id');
 
   const spaceId = readId(page.spaceId);
-  if (spaceId === undefined) throw invalidResponse('space id');
+  if (spaceId === undefined) throw unusable('space id');
 
   const versionNumber = asObject(page.version)?.number;
   if (typeof versionNumber !== 'number' || !Number.isFinite(versionNumber)) {
-    throw invalidResponse('page version');
+    throw unusable('page version');
   }
 
   return {
@@ -257,7 +295,9 @@ export async function createPage(
     idempotent: false,
   });
 
-  return parsePage(response.body);
+  // The write has landed. A parse failure past this line is a lost identifier,
+  // not a request that did nothing.
+  return parsePage(response.body, true);
 }
 
 /**
@@ -304,8 +344,8 @@ function pageVersionConflict(pageId: string, expectedVersion: number): AppError 
     409,
     'CONFLUENCE_PAGE_VERSION_CONFLICT',
     `Confluence rejected an update to page ${pageId}: it is no longer at version ${expectedVersion}, ` +
-      'so somebody else changed it first. Nothing was written. Re-read the page to obtain its ' +
-      'current version, then decide whether to reapply the change.',
+      'so somebody else changed it first. Your version of this page was not applied by this call. ' +
+      'Re-read the page to obtain its current version, then decide whether to reapply the change.',
     { pageId, expectedVersion },
   );
 }
@@ -402,7 +442,7 @@ function serialiseContentProperty(key: string, value: unknown): string {
   return serialised;
 }
 
-function parseContentProperty(body: unknown): ConfluenceContentProperty | null {
+function parseContentProperty(body: unknown, expectedKey: string): ConfluenceContentProperty | null {
   const results = asObject(body)?.results;
   if (!Array.isArray(results) || results.length === 0) return null;
 
@@ -412,6 +452,12 @@ function parseContentProperty(body: unknown): ConfluenceContentProperty | null {
   const id = readId(record.id);
   if (id === undefined) throw invalidResponse('content property id');
 
+  // The `?key=` filter is load-bearing: this id is what `setContentProperty`
+  // then PUTs to. If Confluence ever answered with a property that is not the
+  // one asked for, taking `results[0]` on trust would overwrite an unrelated
+  // property. One comparison closes that, and it is cheap.
+  if (record.key !== expectedKey) throw invalidResponse('content property for the requested key');
+
   const versionNumber = asObject(record.version)?.number;
   if (typeof versionNumber !== 'number' || !Number.isFinite(versionNumber)) {
     throw invalidResponse('content property version');
@@ -419,7 +465,7 @@ function parseContentProperty(body: unknown): ConfluenceContentProperty | null {
 
   return {
     id,
-    key: typeof record.key === 'string' ? record.key : '',
+    key: expectedKey,
     value: record.value,
     version: versionNumber,
   };
@@ -428,7 +474,14 @@ function parseContentProperty(body: unknown): ConfluenceContentProperty | null {
 /**
  * Reads a content property whole, including its id and version — which is what
  * a caller needs in order to pass `expectedVersion` to `setContentProperty`.
- * `null` when the property, or the page, is absent.
+ *
+ * `null` means **the property is not set on a page that exists**, and nothing
+ * else. A missing *page* is not the same answer and is not flattened into it:
+ * Confluence answers an unset property on a live page with an empty result
+ * list and a missing page with a 404, and the 404 propagates as
+ * `CONFLUENCE_NOT_FOUND`. A publish pipeline told `null` for a deleted page
+ * would conclude the metadata simply needs writing, try to write it, and fail
+ * at the far end with something much harder to read.
  */
 export async function getContentPropertyRecord(
   client: ConfluenceClient,
@@ -438,24 +491,18 @@ export async function getContentPropertyRecord(
   const id = assertPageId(pageId);
   const propertyKey = assertPropertyKey(key);
 
-  let response;
-  try {
-    response = await client.request({
-      method: 'GET',
-      api: 'v2',
-      path: `pages/${id}/properties`,
-      query: { key: propertyKey },
-      idempotent: true,
-    });
-  } catch (error) {
-    if (isUpstream(error, 'CONFLUENCE_NOT_FOUND')) return null;
-    throw error;
-  }
+  const response = await client.request({
+    method: 'GET',
+    api: 'v2',
+    path: `pages/${id}/properties`,
+    query: { key: propertyKey },
+    idempotent: true,
+  });
 
-  return parseContentProperty(response.body);
+  return parseContentProperty(response.body, propertyKey);
 }
 
-/** The property's value alone, or `null` when it is not set. */
+/** The property's value alone, or `null` when it is not set on an existing page. */
 export async function getContentProperty(
   client: ConfluenceClient,
   pageId: string,
@@ -490,8 +537,8 @@ function contentPropertyVersionConflict(
     409,
     'CONFLUENCE_CONTENT_PROPERTY_VERSION_CONFLICT',
     `The Confluence content property "${key}" on page ${pageId} ${found}, so somebody else ` +
-      'changed it first. Nothing was written. Re-read the property and decide whether to ' +
-      'reapply the change.',
+      'changed it first. Your value was not applied by this call. Re-read the property and ' +
+      'decide whether to reapply the change.',
     foundVersion === undefined
       ? { pageId, key, expectedVersion }
       : { pageId, key, expectedVersion, foundVersion },
