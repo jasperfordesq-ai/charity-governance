@@ -175,13 +175,26 @@ npm run build && node --test dist/tests/confluence-client.test.js
 > version the server has not finished incrementing. A publish pipeline that retries immediately on
 > 409 will loop. Re-read before retrying, and back off.
 
-**Surface the version conflict distinctly.** A mismatch means someone else changed the page — a charity's DPO editing a policy while a publish runs is a *normal* event, not an error to bury. Throw `CONFLUENCE_PAGE_VERSION_CONFLICT` carrying the version actually found, so Phase 4 can re-read and decide.
+**Surface the refused update distinctly.** A 409 on update is a *normal* event — a charity's DPO editing a policy while a publish runs — not an error to bury. Throw `CONFLUENCE_PAGE_VERSION_CONFLICT` so Phase 4 can re-read and decide.
+
+> **Correction, made in the Phase 3 fix round.** This line said to carry "the version actually found".
+> The implementation deliberately does not, and both `confluence-pages.ts` and `ARCHITECTURE.md` say
+> why: the HTTP core surfaces no response body, so the version Confluence holds never reaches the
+> operation layer, and naming a number that was never received would have a caller key its recovery
+> on a guess. The plan was the stale document.
+>
+> The same review removed a second claim from that error's text. `updatePage` sends a `title` as well
+> as a version, and Confluence answers 409 for a duplicate title too — the very reason `createPage`
+> leaves its own 409 untranslated. With no response body there is nothing to tell the two apart, so
+> the error now names both causes and asserts neither. It also no longer says the change "was not
+> applied by this call": the call is idempotent and retried on a 5xx, so an attempt that committed
+> before a gateway failed produces this same 409 on the retry.
 
 **Content properties hold at most 32 KB of JSON.** That is where governance metadata will live — approving resolution, approval date, next review date, linked standard. **Check the serialised size before sending** and throw a clear error rather than letting Confluence reject it, because the caller can do something about it and a 400 from Atlassian will not say which property was too large.
 
 - [ ] **Step 1: Write the failing tests**
 
-Cover: create parses the returned id and version; get returns `null` on 404 and a parsed page otherwise; update sends the expected version and returns the new one; a version mismatch throws `CONFLUENCE_PAGE_VERSION_CONFLICT` with the found version; an oversized content property throws before any request is made; a property round-trips.
+Cover: create parses the returned id and version; get returns `null` on 404 and a parsed page otherwise; update sends the expected version and returns the new one; a 409 on update throws `CONFLUENCE_PAGE_VERSION_CONFLICT` (without a found version — see the correction above); an oversized content property throws before any request is made; a property round-trips.
 
 Assert that `createPage` is issued as **non-idempotent** and `getPage` as idempotent — that flag is what Task 1's retry policy keys on, and getting it backwards is how duplicate pages happen.
 
