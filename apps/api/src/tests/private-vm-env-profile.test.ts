@@ -26,6 +26,7 @@ const FILL: Record<string, string> = {
   REPLACE_ME_AUTH_RECOVERY_SECRET: '0123456789abcdef'.repeat(4),
   REPLACE_ME_READINESS_API_KEY: 'r'.repeat(40),
   REPLACE_ME_OWNER_JWT_SECRET: 'o'.repeat(48),
+  REPLACE_ME_INTEGRATION_ENCRYPTION_KEY: 'f'.repeat(64),
   REPLACE_ME_ENV_FILE_PATH: '/home/cpops/charity-governance/.bluegreen/private-vm.env',
 };
 

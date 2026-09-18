@@ -5,6 +5,7 @@ import { parsePort } from './port.js';
 import { isConfiguredSecret } from './secrets.js';
 import { billingMode, emailDeliveryMode, isMultiTenant } from './deployment-profile.js';
 import { envDefaultProviderId } from '../services/document-storage-resolution.js';
+import { decodeIntegrationKey } from '../services/integration-crypto.js';
 
 export { isConfiguredSecret } from './secrets.js';
 export { isProductionEnv } from './deployment-profile.js';
@@ -20,6 +21,12 @@ const DEFAULT_CANONICAL_API_ORIGIN = 'https://api.charitypilot.ie';
 const MAX_ACCESS_TOKEN_EXPIRY_SECONDS = 60 * 60;
 const MAX_REFRESH_TOKEN_TTL_DAYS = 30;
 const MIN_AUTH_RECOVERY_SECRET_LENGTH = 43;
+const INTEGRATION_KEY_PEER_SECRETS = [
+  'JWT_SECRET',
+  'AUTH_RECOVERY_SECRET',
+  'OWNER_JWT_SECRET',
+  'READINESS_API_KEY',
+] as const;
 const LOCAL_STORAGE_DRIVER = 'local';
 // Mirrors personal-server-env.ts's CONTROL_CHARACTERS exactly, so both
 // validators demand the same shape from a local storage path. Duplicated
@@ -427,6 +434,27 @@ function requireAuthRecoverySecret(issues: string[]): void {
   }
 }
 
+export function requireIntegrationEncryptionKey(
+  issues: string[],
+  env: NodeJS.ProcessEnv = process.env,
+): void {
+  const configured = env.INTEGRATION_ENCRYPTION_KEY;
+  if (!isConfiguredSecret(configured)) {
+    issues.push('INTEGRATION_ENCRYPTION_KEY is missing or still contains a placeholder value');
+    return;
+  }
+  if (INTEGRATION_KEY_PEER_SECRETS.some((name) => env[name] === configured)) {
+    issues.push(
+      `INTEGRATION_ENCRYPTION_KEY must be distinct from ${INTEGRATION_KEY_PEER_SECRETS.join(', ')}`,
+    );
+  }
+  try {
+    decodeIntegrationKey(configured);
+  } catch {
+    issues.push('INTEGRATION_ENCRYPTION_KEY must canonically encode exactly 32 bytes as hex or base64url');
+  }
+}
+
 function validateAuthDeliveryNumericEnv(issues: string[]): void {
   const providerTimeout = requireOptionalCanonicalIntegerRange(
     'SECURITY_EMAIL_PROVIDER_TIMEOUT_MS',
@@ -779,6 +807,7 @@ export function validateProductionEnv(): void {
     }
   }
   requireAuthRecoverySecret(issues);
+  requireIntegrationEncryptionKey(issues);
   requireAccessTokenExpiry(issues);
   requireRefreshTokenTtlDays(issues);
   requireUrl('FRONTEND_URL', issues, {

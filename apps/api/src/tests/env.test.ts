@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import { afterEach, beforeEach, test } from 'node:test';
 import { AppError } from '../utils/errors.js';
 import {
+  requireIntegrationEncryptionKey,
   requireUsableDocumentStorageDefault,
   validateAuthDeliveryEnv,
   validateDeadlineRemindersEnv,
@@ -11,6 +12,7 @@ import {
 
 const ORIGINAL_ENV = { ...process.env };
 const AUTH_RECOVERY_TEST_SECRET = '0123456789abcdef'.repeat(4);
+const INTEGRATION_ENCRYPTION_TEST_KEY = 'c'.repeat(64);
 
 beforeEach(() => {
   process.env.AUTH_RECOVERY_SECRET = AUTH_RECOVERY_TEST_SECRET;
@@ -54,6 +56,7 @@ function setCompleteProductionEnv(overrides: Record<string, string | undefined> 
     SUPABASE_SERVICE_ROLE_KEY: 'configured-service-role-key',
     SUPABASE_STORAGE_BUCKET: 'documents',
     ERROR_ALERT_WEBHOOK_URL: 'https://alerts.charitypilot.ie/hooks/charitypilot',
+    INTEGRATION_ENCRYPTION_KEY: INTEGRATION_ENCRYPTION_TEST_KEY,
     ...overrides,
   };
 
@@ -118,6 +121,7 @@ test('validateProductionEnv accepts complete production configuration', () => {
   process.env.SUPABASE_SERVICE_ROLE_KEY = 'configured-service-role-key';
   process.env.SUPABASE_STORAGE_BUCKET = 'documents';
   process.env.ERROR_ALERT_WEBHOOK_URL = 'https://alerts.charitypilot.ie/hooks/charitypilot';
+  process.env.INTEGRATION_ENCRYPTION_KEY = INTEGRATION_ENCRYPTION_TEST_KEY;
 
   assert.doesNotThrow(() => validateProductionEnv());
 });
@@ -1318,6 +1322,7 @@ test('validateProductionEnv allows local database URLs only for GitHub Actions p
   process.env.SUPABASE_SERVICE_ROLE_KEY = 'configured-service-role-key';
   process.env.SUPABASE_STORAGE_BUCKET = 'documents';
   process.env.ERROR_ALERT_WEBHOOK_URL = 'https://alerts.charitypilot.ie/hooks/charitypilot';
+  process.env.INTEGRATION_ENCRYPTION_KEY = INTEGRATION_ENCRYPTION_TEST_KEY;
   process.env.CHARITYPILOT_ALLOW_LOCAL_DATABASE_FOR_CI_SMOKE = 'true';
   process.env.CI = 'true';
   process.env.GITHUB_ACTIONS = 'true';
@@ -1388,4 +1393,40 @@ test('validateProductionEnv rejects bracketed IPv6 localhost URLs in production'
       error.details.includes('FRONTEND_URL must not point at localhost in production') &&
       error.details.includes('NEXT_PUBLIC_API_URL must not point at localhost in production'),
   );
+});
+
+test('production requires a distinct, correctly sized INTEGRATION_ENCRYPTION_KEY', () => {
+  const issues: string[] = [];
+  requireIntegrationEncryptionKey(issues, {
+    INTEGRATION_ENCRYPTION_KEY: undefined,
+  } as NodeJS.ProcessEnv);
+  assert.equal(issues.some((issue) => issue.includes('INTEGRATION_ENCRYPTION_KEY')), true);
+});
+
+test('an INTEGRATION_ENCRYPTION_KEY of the wrong size is rejected', () => {
+  const issues: string[] = [];
+  requireIntegrationEncryptionKey(issues, {
+    INTEGRATION_ENCRYPTION_KEY: '00'.repeat(16),
+  } as NodeJS.ProcessEnv);
+  assert.equal(issues.some((issue) => issue.includes('32 bytes')), true);
+});
+
+test('an INTEGRATION_ENCRYPTION_KEY equal to another secret is rejected', () => {
+  const shared = '11'.repeat(32);
+  const issues: string[] = [];
+  requireIntegrationEncryptionKey(issues, {
+    INTEGRATION_ENCRYPTION_KEY: shared,
+    JWT_SECRET: shared,
+  } as NodeJS.ProcessEnv);
+  assert.equal(issues.some((issue) => issue.includes('distinct')), true);
+});
+
+test('a valid, distinct INTEGRATION_ENCRYPTION_KEY raises no issue', () => {
+  const issues: string[] = [];
+  requireIntegrationEncryptionKey(issues, {
+    INTEGRATION_ENCRYPTION_KEY: 'ab'.repeat(32),
+    JWT_SECRET: 'cd'.repeat(32),
+    AUTH_RECOVERY_SECRET: 'ef'.repeat(32),
+  } as NodeJS.ProcessEnv);
+  assert.deepEqual(issues, []);
 });
