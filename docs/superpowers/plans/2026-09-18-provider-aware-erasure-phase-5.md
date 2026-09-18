@@ -208,9 +208,11 @@ changing Supabase behaviour at all.
 **Design notes:**
 
 An **unknown provider must not retry forever.** A row whose provider has no registered eraser is
-unerasable by this deployment, and burning five attempts before dead-lettering just delays the
-alert by hours while telling the operator nothing useful. It dead-letters immediately with a new
-terminal reason, `PROVIDER_NOT_ERASABLE`.
+unerasable by this deployment, and burning the full attempt budget before dead-lettering just
+delays the alert by hours while telling the operator nothing useful. It dead-letters on the
+**first** attempt with a new terminal reason, `PROVIDER_NOT_ERASABLE`. The attempt counter still
+moves to 1 — an attempt was genuinely made and the audit trail should say so; what changes is that
+it does not wait for five.
 
 `runBoundedStorageDeletion` keeps its abort/timeout wrapper exactly as it is. Only the thing it
 calls changes.
@@ -252,8 +254,24 @@ Add `PROVIDER_NOT_ERASABLE` to the `DocumentStorageDeletionTerminalReason` enum 
 enum change needs a migration:
 
 ```sql
-ALTER TYPE "DocumentStorageDeletionTerminalReason" ADD VALUE 'PROVIDER_NOT_ERASABLE';
+ALTER TYPE "DocumentStorageDeletionTerminalReason"
+    ADD VALUE IF NOT EXISTS 'PROVIDER_NOT_ERASABLE';
 ```
+
+**`IF NOT EXISTS` is not optional here, and the pattern choice is not free.** This repository has
+already been bitten by the underlying PostgreSQL rule, and
+`prisma/migrations/20260710190000_add_deadline_calendar_lifecycle/migration.sql` records it
+verbatim: PostgreSQL rejects *use* of a newly-added enum value before commit when a multi-statement
+migration runs as one simple query. So the house has two patterns, and they are not interchangeable:
+
+| Situation | Pattern |
+|---|---|
+| The new value is **used** later in the same migration (a backfill, a `WHERE`, a default) | Rebuild the enum: `ALTER TYPE … RENAME TO …_legacy`, `CREATE TYPE` with the full value list, repoint the columns, `DROP TYPE …_legacy`. See the deadline-calendar migration. |
+| The new value is **only declared**, and first used later by application code | `ADD VALUE IF NOT EXISTS`. See `20260831000000_add_owner_provisioned_recovery_source`. |
+
+This task is the second case — nothing in the migration itself writes the new value — so
+`ADD VALUE IF NOT EXISTS` is correct. Do not reach for the rebuild. Without `IF NOT EXISTS`, a
+re-run against an already-migrated database fails.
 
 Apply as in Task 1, Step 5.
 
@@ -540,17 +558,11 @@ it('fails the attempt when the page still reads back after purge', async () => {
   await expect(eraser(target())).rejects.toMatchObject({ code: 'CONFLUENCE_ERASURE_UNVERIFIED' });
 });
 
-it('is permanent when purge is forbidden, and says which permission is missing', async () => {
+it('names the missing permission when purge is forbidden', async () => {
   const eraser = createConfluenceEraser(depsWherePurgeIs403());
   const error = await eraser(target()).catch((e) => e);
-  expect(isPermanentStorageDeletionFailure(error)).toBe(true);
+  expect(error.code).toBe('CONFLUENCE_PURGE_FORBIDDEN');
   expect(String(error.message)).toMatch(/administer space|manage.content/i);
-});
-
-it('is permanent when the organisation has no live connection', async () => {
-  const eraser = createConfluenceEraser(depsWithNoConnection());
-  const error = await eraser(target()).catch((e) => e);
-  expect(isPermanentStorageDeletionFailure(error)).toBe(true);
 });
 
 it('restarts cleanly after a crash midway, because every step is idempotent', async () => {
@@ -571,12 +583,37 @@ Honour the `AbortSignal` the bounded runner passes — thread it into every call
 ignores the abort keeps running after the attempt has been recorded as timed out, and can purge
 content while the row says the attempt failed.
 
-- [ ] **Step 4: Extend the permanent-failure predicate**
+- [ ] **Step 4: Extend the permanent-failure predicate, and test it through the real path**
 
-`isPermanentStorageDeletionFailure` must return `true` for `CONFLUENCE_PURGE_FORBIDDEN`,
-`ERASURE_TARGET_MALFORMED`, and the no-connection code. Add a test that each is permanent **and**
-that `CONFLUENCE_ERASURE_UNVERIFIED` and a 503 are **not** — a predicate that returns `true` for
-everything would pass a one-sided test.
+`isPermanentStorageDeletionFailure` (in `document.service.ts`, ~line 233) must return `true` for
+`CONFLUENCE_PURGE_FORBIDDEN`, `ERASURE_TARGET_MALFORMED`, and the no-connection code.
+
+**It is module-private, and it must stay that way.** Do not export it to make it testable —
+widening a sensitive module's surface for test convenience is how that surface stops meaning
+anything. Test the behaviour through `retryPendingStorageDeletions` with a stub eraser that throws
+each error kind, and assert the row's observable outcome. This is also how Task 2 already tests the
+same engine, so the two sets of tests read alike:
+
+```ts
+it.each([
+  ['a forbidden purge', appError(403, 'CONFLUENCE_PURGE_FORBIDDEN'), 'DEAD_LETTER', 1],
+  ['a malformed target', appError(500, 'ERASURE_TARGET_MALFORMED'), 'DEAD_LETTER', 1],
+  ['no live connection', appError(409, 'CONFLUENCE_NOT_CONNECTED'), 'DEAD_LETTER', 1],
+  ['an unverified erasure', appError(502, 'CONFLUENCE_ERASURE_UNVERIFIED'), 'PENDING', 1],
+  ['an upstream outage', appError(503, 'CONFLUENCE_UPSTREAM'), 'PENDING', 1],
+])('treats %s correctly', async (_label, thrown, expectedState, expectedAttempts) => {
+  const { service, prisma } = makeServiceWithPending({ provider: 'confluence' });
+  await service.retryPendingStorageDeletions(() => async () => { throw thrown; }, 10);
+  const row = await prisma.documentStorageDeletion.findFirstOrThrow({});
+  expect(row.state).toBe(expectedState);
+  expect(row.attempts).toBe(expectedAttempts);
+});
+```
+
+The last two rows are the ones that give the first three their meaning. A predicate that returned
+`true` for everything would satisfy a one-sided test and would silently stop retrying a transient
+Atlassian outage — turning a five-minute blip into a permanent dead-letter that a human has to
+clear by hand.
 
 - [ ] **Step 5: Register it in the job**
 
