@@ -53,6 +53,25 @@ export type IntegrationCredentialClient = Pick<
   'organisationIntegration' | 'integrationCredential' | 'integrationSecretControl'
 >;
 
+/**
+ * What the *store* path needs on top of the delegates: the ability to start a
+ * transaction.
+ *
+ * `IntegrationCredentialClient` deliberately admits a `$transaction` client,
+ * which is right for reads and counts but leaves the store path unable to make
+ * its two writes atomic — and a sealed envelope committed without the
+ * fingerprint that describes it is the one state this module must never leave
+ * behind (see `storeIntegrationCredential`). So the store path asks for the
+ * root client, and says so in its type instead of hoping.
+ *
+ * The callback is typed against `IntegrationCredentialClient`, so everything
+ * inside the transaction is still restricted to the three delegates and cannot
+ * open a nested one.
+ */
+export type IntegrationCredentialWriteClient = IntegrationCredentialClient & {
+  $transaction<T>(run: (tx: IntegrationCredentialClient) => Promise<T>): Promise<T>;
+};
+
 export type StoreIntegrationCredentialInput = {
   integrationId: string;
   kind: string;
@@ -166,11 +185,21 @@ async function activeIntegrationKey(
  * sealed the only envelope that exists, so it is by construction the key
  * those envelopes open under.
  *
- * Only ever written when the column is absent; an existing fingerprint is
- * never overwritten from here, so rotation tooling remains the sole owner of
- * *changing* it. Two concurrent first stores under the same key write the
- * same value; under two different keys the deployment is already broken in a
- * way no write order could rescue.
+ * **What actually stops this overwriting an existing fingerprint is the
+ * caller, not this function.** The `update` branch below sets the column
+ * unconditionally; the only reason it is never reached with a fingerprint
+ * already present is that `storeIntegrationCredential` calls this at all only
+ * when `activeIntegrationKey` read the column as null earlier in the same
+ * call. That is a time-of-check/time-of-use gap, and it is deliberately left
+ * as one: closing it properly needs a conditional update plus a create whose
+ * unique violation would abort the surrounding transaction — and so roll back
+ * the credential write — to defend against a race whose only losing case is
+ * already lost. Two concurrent first stores under the *same* key write the
+ * same value and the gap is invisible; under two *different* keys the
+ * deployment is already broken in a way no write order could rescue, and the
+ * mismatch check in `activeIntegrationKey` is what names it. Rotation tooling
+ * remains the sole intended owner of *changing* a recorded fingerprint, but
+ * that is a convention here, not an invariant this statement enforces.
  *
  * The fingerprint is a domain-separated hash and is safe to persist and log.
  * The key material itself never reaches this function.
@@ -261,9 +290,27 @@ async function secretContextForIntegration(
  * Seal `plaintext` and persist it against the integration. The plaintext
  * never leaves this function: it goes straight into the envelope and the
  * envelope is what is written.
+ *
+ * **The credential write and the bootstrap fingerprint write are one
+ * transaction.** They describe each other: the fingerprint's claim is "the key
+ * that sealed the envelopes this installation holds", and the envelope's
+ * safety net is the fingerprint. Written separately, a process that died — or
+ * a control write that failed — between them would leave the installation
+ * holding a sealed envelope with no recorded fingerprint, which makes the
+ * mismatch check in `activeIntegrationKey` permanently inert for exactly the
+ * installation that has just acquired something to lose. A later store under a
+ * wrong key would then record the *wrong* fingerprint and upsert over the
+ * recoverable envelope: the irreversible loss the check exists to prevent,
+ * narrowed to a crash window but not eliminated. So the window is closed
+ * rather than narrowed.
+ *
+ * The fingerprint is still recorded *after* the credential write within that
+ * transaction, because "first successful store" means the envelope this
+ * fingerprint describes actually exists — and inside one transaction the
+ * ordering is now a readability choice rather than a durability one.
  */
 export async function storeIntegrationCredential(
-  prisma: IntegrationCredentialClient,
+  prisma: IntegrationCredentialWriteClient,
   { integrationId, kind, plaintext, expiresAt }: StoreIntegrationCredentialInput,
 ): Promise<void> {
   const context = await secretContextForIntegration(prisma, integrationId, kind);
@@ -272,33 +319,33 @@ export async function storeIntegrationCredential(
   const sealed = sealIntegrationSecret(plaintext, key, generation, context);
   const sealedJson = sealed as unknown as Prisma.InputJsonObject;
 
-  await prisma.integrationCredential.upsert({
-    where: { integrationId_kind: { integrationId, kind } },
-    create: {
-      integrationId,
-      kind,
-      sealed: sealedJson,
-      // Read back off the envelope rather than from the local `generation`, so
-      // the column is definitionally a mirror of what was sealed and not a
-      // second derivation that could drift from it. Rotation scans the column
-      // to find stale rows without opening a single one.
-      generation: sealed.generation,
-      expiresAt: expiresAt ?? null,
-    },
-    update: {
-      sealed: sealedJson,
-      generation: sealed.generation,
-      // Clears a previously stored expiry when the caller supplies none; see
-      // StoreIntegrationCredentialInput.
-      expiresAt: expiresAt ?? null,
-    },
-  });
+  await prisma.$transaction(async (tx) => {
+    await tx.integrationCredential.upsert({
+      where: { integrationId_kind: { integrationId, kind } },
+      create: {
+        integrationId,
+        kind,
+        sealed: sealedJson,
+        // Read back off the envelope rather than from the local `generation`, so
+        // the column is definitionally a mirror of what was sealed and not a
+        // second derivation that could drift from it. Rotation scans the column
+        // to find stale rows without opening a single one.
+        generation: sealed.generation,
+        expiresAt: expiresAt ?? null,
+      },
+      update: {
+        sealed: sealedJson,
+        generation: sealed.generation,
+        // Clears a previously stored expiry when the caller supplies none; see
+        // StoreIntegrationCredentialInput.
+        expiresAt: expiresAt ?? null,
+      },
+    });
 
-  // After the write, not before: "first successful store" means the envelope
-  // this fingerprint describes actually exists.
-  if (fingerprintUnrecorded) {
-    await recordActiveKeyFingerprint(prisma, fingerprint, sealed.generation);
-  }
+    if (fingerprintUnrecorded) {
+      await recordActiveKeyFingerprint(tx, fingerprint, sealed.generation);
+    }
+  });
 }
 
 /**

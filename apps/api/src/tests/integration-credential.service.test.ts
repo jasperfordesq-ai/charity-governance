@@ -1,10 +1,13 @@
 import assert from 'node:assert/strict';
 import { randomBytes } from 'node:crypto';
 import test from 'node:test';
+import type { Prisma, PrismaClient } from '@prisma/client';
 import {
   countCredentialsAwaitingRotation,
   loadIntegrationCredential,
   storeIntegrationCredential,
+  type IntegrationCredentialClient,
+  type IntegrationCredentialWriteClient,
 } from '../services/integration-credential.service.js';
 import { integrationKeyFingerprint, sealIntegrationSecret } from '../services/integration-crypto.js';
 import { AppError } from '../utils/errors.js';
@@ -37,6 +40,12 @@ type FakeOptions = {
   integration?: { organisationId: string; provider: string } | null;
   generation?: number | null;
   activeKeyFingerprint?: string | null;
+  /**
+   * Make the rotation-control write fail. Stands in for the process dying —
+   * or the statement erroring — between the credential write and the
+   * fingerprint write that describes it.
+   */
+  controlWriteFails?: boolean;
 };
 
 function fakePrisma(options: FakeOptions = {}) {
@@ -46,38 +55,58 @@ function fakePrisma(options: FakeOptions = {}) {
     generation = 3,
     // The normal starting state: an installation that has never recorded one.
     activeKeyFingerprint = null,
+    controlWriteFails = false,
   } = options;
 
   const upserts: unknown[] = [];
   const counts: unknown[] = [];
   const controlWrites: unknown[] = [];
 
+  // Delegates that write into whichever sinks they are given, so `$transaction`
+  // below can hand the callback a *staging* set and discard it when the
+  // callback rejects. That is as close to a real rollback as a hand-written
+  // fake gets, and it is what makes the atomicity assertion mean something:
+  // a write only becomes visible in `upserts`/`controlWrites` once the whole
+  // callback has succeeded.
+  const delegates = (upsertSink: unknown[], controlSink: unknown[]) => ({
+    organisationIntegration: {
+      findUnique: async () => integration,
+    },
+    integrationSecretControl: {
+      findUnique: async () =>
+        generation === null ? null : { id: 1, generation, activeKeyFingerprint },
+      upsert: async (args: unknown) => {
+        if (controlWriteFails) throw new Error('rotation-control write failed');
+        controlSink.push(args);
+        return {};
+      },
+    },
+    integrationCredential: {
+      upsert: async (args: unknown) => {
+        upsertSink.push(args);
+        return {};
+      },
+      findUnique: async () => credential,
+      count: async (args: unknown) => {
+        counts.push(args);
+        return 2;
+      },
+    },
+  });
+
   return {
     upserts,
     counts,
     controlWrites,
     client: {
-      organisationIntegration: {
-        findUnique: async () => integration,
-      },
-      integrationSecretControl: {
-        findUnique: async () =>
-          generation === null ? null : { id: 1, generation, activeKeyFingerprint },
-        upsert: async (args: unknown) => {
-          controlWrites.push(args);
-          return {};
-        },
-      },
-      integrationCredential: {
-        upsert: async (args: unknown) => {
-          upserts.push(args);
-          return {};
-        },
-        findUnique: async () => credential,
-        count: async (args: unknown) => {
-          counts.push(args);
-          return 2;
-        },
+      ...delegates(upserts, controlWrites),
+      $transaction: async <T>(run: (tx: unknown) => Promise<T>): Promise<T> => {
+        const stagedUpserts: unknown[] = [];
+        const stagedControlWrites: unknown[] = [];
+        const result = await run(delegates(stagedUpserts, stagedControlWrites));
+        upserts.push(...stagedUpserts);
+        controlWrites.push(...stagedControlWrites);
+        return result;
       },
     },
   };
@@ -457,6 +486,49 @@ test('an installation with no recorded fingerprint still works, and the first su
   assert.equal(args.create.activeKeyFingerprint, integrationKeyFingerprint(key));
   assert.equal(args.update.activeKeyFingerprint, integrationKeyFingerprint(key));
   assert.equal(JSON.stringify(controlWrites[0]).includes(key.toString('hex')), false);
+});
+
+// A1. The two writes have to land together or not at all. An installation left
+// holding a sealed envelope with *no* recorded fingerprint has a permanently
+// inert mismatch check — for precisely the installation that has just acquired
+// something to lose. The next store under a wrong key would then record the
+// *wrong* fingerprint and upsert straight over the recoverable envelope, which
+// is the irreversible loss the fingerprint check exists to prevent.
+test('a failing control write leaves no committed credential behind', async () => {
+  const { client, upserts, controlWrites } = fakePrisma({
+    activeKeyFingerprint: null,
+    controlWriteFails: true,
+  });
+
+  await assert.rejects(() =>
+    withKey(() =>
+      storeIntegrationCredential(client as never, {
+        integrationId: 'int-1',
+        kind: 'refresh_token',
+        plaintext: 'atlassian-refresh-token',
+      }),
+    ),
+  );
+
+  // Not "the fingerprint is absent" — the *credential* must be absent too.
+  // A committed envelope with no fingerprint is the loss case.
+  assert.equal(upserts.length, 0);
+  assert.equal(controlWrites.length, 0);
+});
+
+// The type widening A1 needed, pinned at compile time rather than in prose:
+// the store path must be able to *start* a transaction on the real client,
+// and everything else must still accept a transaction client (which cannot).
+// If either relation stops holding, the annotated type becomes `false` and
+// this file no longer compiles.
+test('the real Prisma client can start a transaction, and a transaction client is still accepted', () => {
+  const rootClientCanStore: PrismaClient extends IntegrationCredentialWriteClient ? true : false = true;
+  const transactionClientAccepted: Prisma.TransactionClient extends IntegrationCredentialClient
+    ? true
+    : false = true;
+
+  assert.equal(rootClientCanStore, true);
+  assert.equal(transactionClientAccepted, true);
 });
 
 test('loading against an unrecorded fingerprint neither fails nor records anything', async () => {
