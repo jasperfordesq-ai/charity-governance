@@ -354,6 +354,15 @@ model Organisation {
 
   stripeCustomerId String? @unique
 
+  // Document storage backend for this organisation.
+  // null  = use the deployment default (DOCUMENT_STORAGE_DRIVER).
+  // Values are validated against the provider registry in
+  // apps/api/src/services/document-storage-provider.ts, which is the single
+  // source of truth for which providers exist and which stage they are at.
+  documentStorageProvider   String?
+  // Alpha-stage providers are refused unless this is explicitly true.
+  documentStorageAlphaOptIn Boolean @default(false)
+
   users                       User[]
   boardMembers                BoardMember[]
   complianceRecords           ComplianceRecord[]
