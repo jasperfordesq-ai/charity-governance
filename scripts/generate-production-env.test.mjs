@@ -69,6 +69,18 @@ test('the real secret generator yields distinct, high-entropy, non-placeholder v
   }
 });
 
+test('INTEGRATION_ENCRYPTION_KEY is generated as exactly 32 bytes of canonical hex', () => {
+  // The shared generator emits 48 bytes of base64url, which decodeIntegrationKey
+  // (apps/api/src/services/integration-crypto.ts) rejects outright, so this key
+  // needs its own generator and a regression guard that says so.
+  const example = readFileSync(join(repoRoot, '.env.production.example'), 'utf8');
+  const generated = parseEnv(buildProductionEnv(example, () => 'x'.repeat(64)));
+
+  assert.match(generated.INTEGRATION_ENCRYPTION_KEY, /^[0-9a-f]{64}$/);
+  assert.notEqual(generated.INTEGRATION_ENCRYPTION_KEY, 'x'.repeat(64));
+  assert.notEqual(generated.INTEGRATION_ENCRYPTION_KEY, generated.JWT_SECRET);
+});
+
 test('works against the real .env.production.example, changing only the auto-keys', () => {
   const example = readFileSync(join(repoRoot, '.env.production.example'), 'utf8');
   const before = parseEnv(example);

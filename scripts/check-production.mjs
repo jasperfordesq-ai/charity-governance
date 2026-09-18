@@ -38,6 +38,7 @@ const REQUIRED = [
   'JWT_SECRET',
   'OWNER_JWT_SECRET',
   'AUTH_RECOVERY_SECRET',
+  'INTEGRATION_ENCRYPTION_KEY',
   'FRONTEND_URL',
   'STRIPE_SECRET_KEY',
   'STRIPE_WEBHOOK_SECRET',
@@ -582,6 +583,30 @@ function requireCanonicalAuthRecoverySecret(env, issues) {
   }
 }
 
+// Mirrors requireIntegrationEncryptionKey in apps/api/src/utils/env.ts (and the
+// decoder in apps/api/src/services/integration-crypto.ts) so this preflight
+// cannot report a green production environment for a file the API will refuse
+// to boot on.
+const INTEGRATION_KEY_PEER_SECRETS = ['JWT_SECRET', 'AUTH_RECOVERY_SECRET', 'OWNER_JWT_SECRET', 'READINESS_API_KEY'];
+
+function requireIntegrationEncryptionKey(env, issues) {
+  const value = envValue(env, 'INTEGRATION_ENCRYPTION_KEY');
+  if (!isConfigured(value)) return;
+
+  if (INTEGRATION_KEY_PEER_SECRETS.some((name) => envValue(env, name) === value)) {
+    issues.push(`INTEGRATION_ENCRYPTION_KEY must be distinct from ${INTEGRATION_KEY_PEER_SECRETS.join(', ')}`);
+  }
+
+  const isHex = /^[0-9a-f]+$/i.test(value);
+  const decoded = isHex && value.length === 64 ? Buffer.from(value, 'hex') : Buffer.from(value, 'base64url');
+  const canonical = isHex
+    ? value.length === 64 && decoded.toString('hex') === value.toLowerCase()
+    : decoded.toString('base64url') === value;
+  if (decoded.length !== 32 || !canonical) {
+    issues.push('INTEGRATION_ENCRYPTION_KEY must canonically encode exactly 32 bytes as hex or base64url');
+  }
+}
+
 function hostMatchesCookieDomain(hostname, cookieDomain) {
   const normalizedHost = normaliseHostname(hostname);
   const normalizedDomain = cookieDomain.toLowerCase().replace(/^\./, '');
@@ -654,7 +679,7 @@ function redactPreflightTranscript(value) {
   return String(value)
     .replace(/postgres(?:ql)?:\/\/[^\s'")]+/gi, '[redacted-database-url]')
     .replace(
-      /\b((?:DATABASE_URL|OWNER_JWT_SECRET|JWT_SECRET|AUTH_RECOVERY_SECRET|READINESS_API_KEY|STRIPE_SECRET_KEY|STRIPE_WEBHOOK_SECRET|STRIPE_BILLING_PORTAL_CONFIGURATION_ID|RESEND_API_KEY|SUPABASE_SERVICE_ROLE_KEY|ERROR_ALERT_WEBHOOK_URL|NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY)=)[^\s'")]+/gi,
+      /\b((?:DATABASE_URL|OWNER_JWT_SECRET|JWT_SECRET|AUTH_RECOVERY_SECRET|INTEGRATION_ENCRYPTION_KEY|READINESS_API_KEY|STRIPE_SECRET_KEY|STRIPE_WEBHOOK_SECRET|STRIPE_BILLING_PORTAL_CONFIGURATION_ID|RESEND_API_KEY|SUPABASE_SERVICE_ROLE_KEY|ERROR_ALERT_WEBHOOK_URL|NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY)=)[^\s'")]+/gi,
       '$1[redacted]',
     )
     .replace(/\b(?:sk|pk)_(?:live|test)_[A-Za-z0-9_=-]+/g, '[redacted-stripe-key]')
@@ -753,6 +778,8 @@ export function validateProductionEnvironment(env, processEnv = process.env) {
   requireProductionSecretStrength(env, 'READINESS_API_KEY', issues);
   requireProductionSecretStrength(env, 'AUTH_RECOVERY_SECRET', issues, 43);
   requireCanonicalAuthRecoverySecret(env, issues);
+  requireProductionSecretStrength(env, 'INTEGRATION_ENCRYPTION_KEY', issues);
+  requireIntegrationEncryptionKey(env, issues);
   const authRecoverySecret = envValue(env, 'AUTH_RECOVERY_SECRET');
   if (
     authRecoverySecret &&

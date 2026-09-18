@@ -22,7 +22,15 @@ export const AUTO_GENERATED_KEYS = [
   'OWNER_JWT_SECRET',
   'READINESS_API_KEY',
   'AUTH_RECOVERY_SECRET',
+  'INTEGRATION_ENCRYPTION_KEY',
 ];
+// Keys whose value must have a specific shape, so the shared generator below
+// would produce something the API rejects at boot. INTEGRATION_ENCRYPTION_KEY
+// is an AES-256 key: it must decode to EXACTLY 32 bytes, where generateSecret()
+// yields 48.
+const KEY_SPECIFIC_GENERATORS = {
+  INTEGRATION_ENCRYPTION_KEY: generateIntegrationEncryptionKey,
+};
 // Keys forced to a fixed correct production value.
 const FIXED_VALUES = {
   NODE_ENV: 'production',
@@ -66,6 +74,13 @@ export function generateSecret() {
   return crypto.randomBytes(48).toString('base64url');
 }
 
+export function generateIntegrationEncryptionKey() {
+  // Exactly 32 bytes as canonical lowercase hex - the only shape
+  // decodeIntegrationKey (apps/api/src/services/integration-crypto.ts) accepts
+  // for an AES-256 key.
+  return crypto.randomBytes(32).toString('hex');
+}
+
 /**
  * Build the .env.production content from the example, filling auto-generatable
  * secrets and fixed values, preserving comments, blank lines, and every other
@@ -78,7 +93,10 @@ export function buildProductionEnv(exampleContent, makeSecret = generateSecret) 
     if (!match) return line; // comment, blank, or non-assignment line
     const key = match[1];
     const lineEnding = match[3];
-    if (AUTO_GENERATED_KEYS.includes(key)) return `${key}=${makeSecret()}${lineEnding}`;
+    if (AUTO_GENERATED_KEYS.includes(key)) {
+      const generate = KEY_SPECIFIC_GENERATORS[key] ?? makeSecret;
+      return `${key}=${generate()}${lineEnding}`;
+    }
     if (Object.prototype.hasOwnProperty.call(FIXED_VALUES, key)) return `${key}=${FIXED_VALUES[key]}${lineEnding}`;
     return line; // leave everything else (incl. REPLACE_ME placeholders) untouched
   });

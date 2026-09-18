@@ -70,6 +70,7 @@ function completeDeployEnv(overrides = {}) {
     JWT_SECRET: "J9mQ4vRx7tL2pZs6NfB8hDy3WcK1uEa5",
     OWNER_JWT_SECRET: "Z3wF6vNq9Rx2mLp8Bh5Ty7cKd1Uae0Ss",
     AUTH_RECOVERY_SECRET: "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+    INTEGRATION_ENCRYPTION_KEY: "fedcba9876543210fedcba9876543210fedcba9876543210fedcba9876543210",
     FRONTEND_URL: "https://app.charitypilot.ie",
     AUTH_COOKIE_DOMAIN: ".charitypilot.ie",
     STRIPE_SECRET_KEY: "sk_live_configuredSecret",
