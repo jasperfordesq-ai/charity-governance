@@ -20,6 +20,7 @@ import { governingActRoutes } from './routes/governing-acts/index.js';
 import { memberRoutes } from './routes/members/index.js';
 import { teamRoutes } from './routes/team/index.js';
 import { healthRoutes } from './routes/health/index.js';
+import { integrationRoutes, INTEGRATION_ROUTES_PREFIX } from './routes/integrations/index.js';
 import { ownerRoutes } from './routes/owner/index.js';
 import { assertOwnerJwtSecretConfigured } from './utils/owner-jwt.js';
 import { isMultiTenant } from './utils/deployment-profile.js';
@@ -95,6 +96,7 @@ await app.register(governingActRoutes, { prefix: '/api/v1/governing-acts' });
 await app.register(memberRoutes, { prefix: '/api/v1/members' });
 await app.register(teamRoutes, { prefix: '/api/v1/team' });
 await app.register(healthRoutes, { prefix: '/api/v1/health' });
+await app.register(integrationRoutes, { prefix: INTEGRATION_ROUTES_PREFIX });
 await app.register(ownerRoutes, { prefix: '/api/v1/owner' });
 
 // Short-path alias: tell callers the right prefix rather than 404ing silently

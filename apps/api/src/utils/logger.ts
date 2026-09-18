@@ -86,6 +86,88 @@ export function serializeErrorForLog(error: unknown): Record<string, unknown> & 
   };
 }
 
+/**
+ * Query parameters whose VALUE is a credential.
+ *
+ * Fastify's request logger writes `req.url` verbatim on every request, query
+ * string included, and pino's `redact` can only censor a whole field — so
+ * without this the OAuth callback's single-use `code` (and the signed `state`
+ * that authorises it) would be written to the application log on every
+ * Confluence connection. `buildErrorAlertPayload` already strips the query
+ * string for the same reason; this closes the same hole on the request log.
+ *
+ * Matched case-insensitively against the decoded parameter name.
+ */
+const LOG_SENSITIVE_QUERY_PARAMS = new Set([
+  'code',
+  'state',
+  'token',
+  'access_token',
+  'refresh_token',
+  'id_token',
+  'client_secret',
+  'assertion',
+]);
+
+/**
+ * Censor the values of sensitive query parameters in a URL, leaving every
+ * other byte of it exactly as it was.
+ *
+ * Deliberately string surgery rather than a `URL`/`URLSearchParams`
+ * round-trip: a round-trip re-encodes the whole query string, which would
+ * silently change how every *existing* logged URL appears. Only the value of
+ * a matching key is replaced.
+ */
+export function redactSensitiveQueryParams(url: string): string {
+  const queryStart = url.indexOf('?');
+  if (queryStart === -1) return url;
+
+  const prefix = url.slice(0, queryStart);
+  const [query, ...fragment] = url.slice(queryStart + 1).split('#');
+
+  const censored = (query ?? '')
+    .split('&')
+    .map((pair) => {
+      const separator = pair.indexOf('=');
+      if (separator === -1) return pair;
+      const rawKey = pair.slice(0, separator);
+      let key: string;
+      try {
+        key = decodeURIComponent(rawKey.replace(/\+/g, ' '));
+      } catch {
+        key = rawKey;
+      }
+      return LOG_SENSITIVE_QUERY_PARAMS.has(key.toLowerCase())
+        ? `${rawKey}=${LOG_REDACT_CENSOR}`
+        : pair;
+    })
+    .join('&');
+
+  return `${prefix}?${censored}${fragment.length > 0 ? `#${fragment.join('#')}` : ''}`;
+}
+
+/**
+ * Mirrors Fastify's own `req` serializer field for field (see
+ * `fastify/lib/logger-pino.js`), changing only the URL.
+ */
+function serializeRequestForLog(request: {
+  method?: string;
+  url?: string;
+  host?: string;
+  ip?: string;
+  headers?: Record<string, unknown>;
+  socket?: { remotePort?: number };
+}): Record<string, unknown> {
+  return {
+    method: request.method,
+    url: typeof request.url === 'string' ? redactSensitiveQueryParams(request.url) : request.url,
+    version: request.headers?.['accept-version'],
+    host: request.host,
+    remoteAddress: request.ip,
+    remotePort: request.socket ? request.socket.remotePort : undefined,
+  };
+}
+
 function baseLoggerOptions() {
   return {
     redact: {
@@ -95,6 +177,7 @@ function baseLoggerOptions() {
     serializers: {
       err: serializeErrorForLog,
       error: serializeErrorForLog,
+      req: serializeRequestForLog,
     },
   };
 }
