@@ -573,6 +573,221 @@ Security-sensitive operator references:
 > production dependencies per workspace and the rationale behind each `overrides`
 > security pin.
 
+### The Confluence API client — read this before building the publish pipeline
+
+Three modules are the whole client, and the publish pipeline sits directly on
+them:
+
+- `apps/api/src/services/confluence-client.ts` — the HTTP core: base URL, auth,
+  retry policy, error taxonomy. Nothing above it decides *what* to publish;
+  everything above it depends on it never turning one write into two.
+- `apps/api/src/services/confluence-pages.ts` — pages and content properties.
+- `apps/api/src/services/confluence-attachments.ts` — attachments.
+
+Their module headers carry the reasoning in full. What follows is what a caller
+has to know before it writes a line, and every item below is something this
+phase learned the hard way.
+
+#### Why the client speaks two API versions
+
+Requests go to `https://api.atlassian.com/ex/confluence/{cloudId}/` under one of
+two prefixes, chosen per request by `spec.api`: `wiki/api/v2` or
+`wiki/rest/api`. v2 is used for everything — pages, content properties, and
+listing a page's attachments.
+
+**v1 is used for exactly one call, and it is not tidiable away.**
+`uploadAttachment` posts multipart to
+`wiki/rest/api/content/{id}/child/attachment` because **Confluence v2 has no
+attachment upload**: its attachment endpoints are GET and DELETE only, and
+Atlassian has never shipped a v2 upload. Moving that call onto v2 does not
+simplify the client — it removes a charity's ability to publish a signed policy,
+and it fails at the far end, in the charity's own site, rather than here.
+
+That request also carries `X-Atlassian-Token: nocheck`, which is equally
+load-bearing: **without the header Atlassian rejects the upload as a suspected
+CSRF attempt.** It is not a legacy relic and not an inconsistency somebody
+forgot to finish. Anything between CharityPilot and Atlassian that strips
+unknown headers — a corporate proxy, a misconfigured egress gateway — produces a
+403 indistinguishable from an expired grant, which is why the upload path adds
+`details.possibleCsrfHeaderStripped` to that one case (see the taxonomy below).
+
+#### The retry policy is asymmetric, and `idempotent` is what decides it
+
+Confluence rate-limits on a points model and answers 429 with `Retry-After`.
+Atlassian's guidance is to retry up to four times — but only requests that are
+safe to repeat. **Creating a page is not one of them.** A 429, a timeout or a
+dropped connection *after* Confluence has committed the write turns a naive
+retry into two identical governance documents in a charity's space, and for a
+product whose purpose is an auditable record a silent duplicate is worse than a
+failed publish.
+
+So the core retries **only** requests whose spec says `idempotent: true` — one
+attempt plus at most four retries, exponential backoff from 500 ms with added
+jitter, clamped at 60 s, honouring `Retry-After` where Confluence sends one. A
+non-idempotent request is never retried automatically: its ambiguity is
+surfaced to the caller, who knows what it tried to create and can reconcile.
+This module cannot.
+
+> **`idempotent` is the caller's assertion, not something inferred from the HTTP
+> method — and setting it wrong is the failure mode to watch for.** Marking a
+> create idempotent is how a charity ends up with two copies of a policy. The
+> flag is required rather than defaulted, so a new call site has to state it.
+
+What is safe, and precisely why:
+
+| Call | Flag | Why |
+|---|---|---|
+| `getPage`, `getContentPropertyRecord`, `listAttachments` | `true` | A read changes nothing. |
+| `updatePage`, the content-property `PUT` | `true` | **Only because they carry the version they expect.** Confluence accepts the write only while the resource is still at that version, so a repeat of an applied update fails the version check instead of applying twice. A future edit that drops the version from the body would leave the flag true and silently make the request unsafe: the flag and the version travel together or not at all. |
+| `createPage`, the content-property `POST`, `uploadAttachment` | `false` | A create cannot be repeated safely. Re-uploading the same filename does not duplicate an attachment — Confluence makes a new *version* of it — which is milder than the duplicate-page hazard but is still an unintended change to a charity's auditable record. |
+
+A 307/308 is refused rather than followed (`redirect: 'error'`), so a write is
+never silently re-sent somewhere else; that lands in the transport branch, which
+for a non-idempotent request is the indeterminate path where it belongs.
+
+#### Error taxonomy — what each code tells a caller
+
+**Outcomes a publish pipeline must branch on.** The status in brackets is the
+`AppError.statusCode`, not Atlassian's; `details.status` carries Atlassian's
+where there was one.
+
+| Code | What happened | What to do |
+|---|---|---|
+| `CONFLUENCE_WRITE_APPLIED_RESPONSE_UNREADABLE` (502) | A request that is **not** safe to repeat answered 2xx — so Confluence *committed* it — and then the response could not be read, was not JSON, was empty, or carried no usable id. | **The change WAS applied and only its identifier was lost. Never reissue.** Find what was created and adopt it: search the space for the title that was sent, or `listAttachments` for the filename. Reissuing here is the duplicate this phase exists to prevent, arriving through a door the retry policy does not watch. |
+| `CONFLUENCE_REQUEST_INDETERMINATE` (502) | A request that is not safe to repeat hit a 5xx, a transport failure, a refused redirect, or the per-attempt deadline. Confluence saw it; whether it committed is exactly what the failure does not say. | **Reconcile, do not retry.** Look for what you tried to create, and only then decide. It was deliberately not retried. |
+| `CONFLUENCE_RATE_LIMITED_UNSAFE_RETRY` (429) | Confluence rate-limited a request that is not safe to repeat, so it was not retried. A 429 is refused *before* it is processed, so **nothing was applied**. | Safe to reissue later — this is the one unsafe-request failure that is not ambiguous. `details.retryAfterSeconds` carries Confluence's own delay when it sent one. |
+| `CONFLUENCE_PAGE_VERSION_CONFLICT` (409) | `updatePage` sent a version Confluence no longer holds: somebody else changed the page first. **Your change was not applied by that call.** | Re-read the page for its current version, then decide whether to reapply. The version Confluence actually holds is deliberately **not** reported — the core surfaces no response body, and naming a number that was never received would have a caller key its recovery on a guess. Read the version-lag hazard below before retrying immediately. |
+| `CONFLUENCE_CONTENT_PROPERTY_VERSION_CONFLICT` (409) | The same for a content property, including the case where the property has been deleted since it was read. Nothing was written. | Re-read the property and decide whether to reapply. `details.foundVersion` is present **only** when this client actually read that version; its absence is not "version 0". |
+| `CONFLUENCE_RECONNECT_REQUIRED` (409) | Atlassian answered 401 or 403: the stored grant is unusable. The 409 is deliberate — `apps/web`'s interceptors treat any 401 from our API as an expired CharityPilot session and bounce the user to login. | Prompt the charity to reconnect. **On an attachment upload, check `details.possibleCsrfHeaderStripped` first**: when it is set the 403 may be a proxy stripping `X-Atlassian-Token`, and reconnecting will meet the identical 403 forever. |
+| `CONFLUENCE_REFRESH_SUPERSEDED` (409) | Raised by `confluence-connection.service.ts` and reaching you *through the token provider*: the connection was re-authorised or disconnected while a refresh was in flight. **Nothing was written**, and the credentials on file belong to the newer authorisation. | **Retry. This is retryable and is not a revoked grant — it must never be presented to a charity as "reconnect".** The next attempt reads the token the newer authorisation stored. |
+| `CONFLUENCE_CONFLICT` (409) | A 409 the operation layer chose not to translate — notably on `createPage`, where Confluence also uses 409 for a **duplicate title in a space**. | Do **not** treat it as a version conflict. `createPage` leaves it untranslated on purpose: a caller told "somebody edited this, re-read and retry" would re-read, find nothing in conflict, and try forever. Treat it as "this page could not be created as asked". |
+| `CONFLUENCE_NOT_FOUND` (404) | Atlassian answered 404. | `getPage` already converts this to `null` — "does this page still exist" is a routine question with a routine answer. Everywhere else it means the id you hold is stale. Note that `null` from `getContentPropertyRecord` means **the property is unset on a page that exists**, and nothing else; a missing page is this 404. |
+| `CONFLUENCE_RATE_LIMITED` (429) | An **idempotent** request was still rate-limited after five attempts, or the total budget ran out mid-backoff. Nothing was changed. | Back off well past `Retry-After` and try again later. Do not tighten the loop. |
+| `CONFLUENCE_UNREACHABLE` (502) | An **idempotent** request could not reach Confluence at all after five attempts, or the budget ran out on a transport failure. | Retry later. Only ever raised for requests that are safe to repeat. |
+| `CONFLUENCE_REQUEST_FAILED` (Atlassian's status for a 4xx, else 502) | Any other upstream failure. `details.status` carries Atlassian's status; a truncated, token-redacted fragment of the upstream message is in the text. | Read `details.status`. A 4xx is this request being wrong and will fail identically forever — fix the request, do not retry. Anything else is Atlassian failing. |
+| `CONFLUENCE_RESPONSE_INVALID` (502) | An **idempotent** request's response was unusable: unreadable, not-really-JSON, or a page/property/attachment record missing a field the caller cannot proceed without (id, space id, version). | Safe to retry — nothing was written. This code is never raised where a write has landed; that case is `CONFLUENCE_WRITE_APPLIED_RESPONSE_UNREADABLE`, and the distinction is the point. |
+| `CONFLUENCE_ATTACHMENT_LIST_UNBOUNDED` (502) | `listAttachments` followed 40 cursor pages — 10,000 attachments on one page — and Confluence still offered another. **The list was not read to the end.** | Never treat the partial list as complete: a caller asking "is this document already attached" would get "no" and upload a second copy. See the operator note below — this one is a 5xx on charity-controllable data. |
+
+**Refusals raised before anything is sent.** None of these reached Confluence.
+
+| Code | What happened | What to do |
+|---|---|---|
+| `CONFLUENCE_PAGE_ID_INVALID`, `CONFLUENCE_PROPERTY_ID_INVALID`, `CONFLUENCE_PROPERTY_KEY_INVALID`, `CONFLUENCE_PAGE_VERSION_INVALID`, `CONFLUENCE_CONTENT_PROPERTY_VERSION_INVALID` (400) | An identifier or version failed the operation layer's own shape check. | Caller bug or unvalidated input. **Deliberately 400, not 500**: these values arrive from request parameters and database rows, and a 500 in this codebase fires the production alert webhook — so a 500 here would let anyone page the on-call by sending a malformed id. Validate at your own boundary as well. |
+| `CONFLUENCE_CONTENT_PROPERTY_TOO_LARGE` (400) | The serialised property value exceeds 32 KB. `details` carry `key`, `bytes` and `limitBytes`; the value itself is never echoed, because governance metadata can name people. | Store less in the property, or put the bulk on the page. See the ceiling below. |
+| `CONFLUENCE_CONTENT_PROPERTY_INVALID` (400) | The value would not `JSON.stringify` — a cycle, a `BigInt`. | Caller bug. |
+| `CONFLUENCE_ATTACHMENT_TOO_LARGE`, `CONFLUENCE_ATTACHMENT_EMPTY`, `CONFLUENCE_ATTACHMENT_INVALID`, `CONFLUENCE_ATTACHMENT_FILENAME_INVALID` (400) | Size, emptiness, type or filename failed before a byte was sent. The ceiling is `DOCUMENT_UPLOAD_MAX_FILE_SIZE` — the same 10 MB the portal upload path applies, imported rather than copied, so a document CharityPilot accepted cannot then fail only at the Confluence step. | Surface to the user. Atlassian's own rejection names neither the file nor the limit, and arrives *after* the bytes have been sent. |
+| `CONFLUENCE_CLOUD_ID_INVALID` (500) | The stored Confluence site identifier is not a usable cloud id. The value is not echoed — it is untrusted upstream data. | A data or configuration problem on the integration row, not a caller bug. Nothing was sent. |
+| `CONFLUENCE_REQUEST_PATH_INVALID`, `CONFLUENCE_REQUEST_SPEC_INVALID` (500) | The core refused the spec: a path with traversal, a query string, `%` or control characters; a request carrying both a JSON body and form data; or a caller-supplied `Authorization` (or a `Content-Type` alongside a body). | **Programming errors, and 500 on purpose** — nothing outside these modules should be able to reach them. A spec is refused rather than silently repaired, because dropping a header a caller believed in is worse than failing. The core writes `Authorization` from the token provider at the moment of the call and will not let a spec displace it, matched case-insensitively. |
+
+#### Three of those are worth reading twice
+
+They are the ones whose correct response is the opposite of the obvious one:
+
+- **`CONFLUENCE_WRITE_APPLIED_RESPONSE_UNREADABLE` does not mean the write
+  failed.** The status line was already 2xx, so Confluence *committed* the
+  change; only its identifier was lost. The right action is to **find what was
+  created and adopt it** — never to reissue. A pipeline that reads this as
+  "nothing happened" publishes the document twice.
+- **`CONFLUENCE_REQUEST_INDETERMINATE` does not mean the write failed either.**
+  It means nobody can tell. **Reconcile, do not retry.**
+- **`CONFLUENCE_REFRESH_SUPERSEDED` is retryable and is not a revoked grant.**
+  A reconnect (or a disconnect) overtook an in-flight refresh, and the
+  credentials on file are the newer ones. **It must never surface to a charity
+  as "reconnect Confluence".** Doing so asks an administrator to re-authorise a
+  working integration over a race that resolves itself on the next attempt.
+
+#### Content properties cap at 32 KB, and that is where the metadata goes
+
+`CONFLUENCE_CONTENT_PROPERTY_MAX_BYTES` is `32 * 1024` — Confluence's own
+ceiling on a content property's JSON value. Governance metadata (the approving
+resolution, the approval date, the next review date, the linked standard) is
+what content properties are for here, so this is a limit the publish pipeline
+will meet in normal use rather than an edge case.
+
+The size is measured in **UTF-8 bytes, not characters** — one accented
+character in a charity's name is two bytes — and it is checked *before* the
+lookup and before anything is sent, so an oversized value costs no request at
+all. Atlassian's own answer is a bare 400 that does not say which property was
+too large; this one names the key and the byte count.
+
+`setContentProperty` takes an optional `expectedVersion`, which is the
+**property's** version, not the page's. Supplying it asserts that nothing has
+changed the property since it was read. Whether or not it is supplied, the write
+itself is still version-pinned, so a concurrent writer that slips in between the
+read and the write is caught by Confluence rather than overwritten.
+
+#### The client takes a token *provider*, not a token
+
+`createConfluenceClient({ cloudId, getAccessToken })` takes
+`() => Promise<string>`, and **`getAccessToken` is called once per attempt** —
+not once per client and not once per operation.
+
+Two reasons, and both matter to a publish pipeline:
+
+- **Rotation stays in one place.** `confluence-connection.service.ts` owns the
+  fenced claim, the serialised refresh and the rotating-refresh-token rules
+  above. The HTTP core never learns what rotation is; it asks for a token when
+  it needs one. A client handed a bare string would push that onto every caller,
+  and getting it wrong permanently disconnects a charity.
+- **A long publish cannot fail halfway on an expired token.** A backoff, a rate
+  limit or a slow site can easily outlive an access token. Because the token is
+  fetched per attempt, the provider refreshes underneath and the retry proceeds;
+  a token captured once at construction would strand a multi-step publish
+  part-finished.
+
+The token never leaves that boundary: it is written into the `Authorization`
+header at the moment of the call, stored nowhere, and replaced with
+`[redacted]` in any upstream error text before it is surfaced.
+
+#### Hazards a later phase will meet
+
+**Atlassian's page-version counter can lag, so a version conflict can be
+spurious.** Two updates in quick succession can have the second read a version
+the server has not finished incrementing, producing a
+`CONFLUENCE_PAGE_VERSION_CONFLICT` that describes no real concurrent edit. **A
+pipeline that retries immediately on a version conflict will loop.** Re-read the
+page and back off before reapplying; never treat a conflict as a signal to retry
+straight away. This is observed Atlassian behaviour rather than something the
+client can detect — the core surfaces no response body, so a spurious conflict
+cannot be told from a genuine one at this layer.
+
+**The total deadline is longer than the per-request timeout suggests.**
+`CONFLUENCE_REQUEST_TIMEOUT_MS` is **30 s**, but it bounds *one attempt*, not
+one `request()`. `CONFLUENCE_TOTAL_DEADLINE_MS` is **120 s** and bounds the
+whole call, retries and backoffs included — and it is checked *before sleeping*,
+never mid-attempt, because abandoning an in-flight write is precisely how an
+indeterminate outcome is manufactured. **So the true worst case is the 120 s
+budget plus one more attempt: about 150 s.** Budget for that, not for 30.
+
+There is **no per-call override** for it today: `deps.timeoutMs` overrides the
+per-attempt deadline only, and `CONFLUENCE_TOTAL_DEADLINE_MS` is read straight
+from the module. That is fine for a background publish job and wrong for a
+request-scoped caller, which cannot hold a browser connection open for two and a
+half minutes. **The override should land with the first such caller rather than
+after it** — retrofitting it means auditing every call site already written
+against the implicit 120 s.
+
+**`CONFLUENCE_ATTACHMENT_LIST_UNBOUNDED` is a 5xx (502) raised on a condition
+that is in principle charity-controlled data.** In this codebase anything at or
+above 500 fires the production alert webhook (in production, with
+`ERROR_ALERT_WEBHOOK_URL` configured), so a page that somehow accumulated more
+than 10,000 attachments would page the on-call rather than fail quietly. The
+choice is deliberate — a silently truncated attachment list causes duplicate
+uploads, which is worse — but an operator meeting this alert should know it is
+far more likely to be a looping cursor upstream than an incident, and the
+publish pipeline should avoid creating pages whose attachments grow without
+bound.
+
+**One known coupling to fix in the next phase.** `confluence-attachments.ts`
+imports `DOCUMENT_UPLOAD_MAX_FILE_SIZE` from
+`routes/documents/document-upload-validation.js` — a **service depending on the
+route layer**, which is the wrong direction. It is safe today only because that
+module has no imports of its own, so nothing is dragged along with it. The next
+phase should invert it: move the constant somewhere both layers may depend on
+and have the route import it from there. **Do that with a test asserting that
+the service layer imports nothing from `routes/`, not merely a note in a file** —
+a note is what let this survive review in the first place.
+
 ## Running the stack and the tests
 
 - **Local stack (one command):** `docker compose -f compose.yml -f compose.local.yml up`
