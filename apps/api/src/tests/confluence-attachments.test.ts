@@ -226,6 +226,13 @@ test('listAttachments reads the v2 endpoint and parses its flat fields', async (
   assert.equal(spec.method, 'GET');
   assert.equal(spec.api, 'v2', 'listing has a v2 endpoint and must use it');
   assert.equal(spec.path, `pages/${PAGE_ID}/attachments`);
+  assert.equal(
+    spec.query?.limit,
+    '250',
+    "v2's maximum page size, and load-bearing: at the default 25 the bounded " +
+      'cursor loop reaches ~1,000 attachments instead of ~10,000, which is the ' +
+      'truncation the cursor following exists to prevent',
+  );
 
   assert.deepEqual(attachments, [
     {
@@ -291,18 +298,27 @@ test('listAttachments returns an empty list for a page with no attachments', asy
   assert.deepEqual(await listAttachments(client, PAGE_ID), []);
 });
 
-test('listAttachments refuses a response with no results list rather than reporting none', async () => {
-  const { client } = harness([ok({ _links: { base: WEB_BASE } })]);
+for (const [what, body] of [
+  ['no results key at all', { _links: { base: WEB_BASE } }],
+  // Not a duplicate of the case above: `results` is present and truthy, so a
+  // guard that merely checked for its presence would hand an object to
+  // `for...of` and throw a raw TypeError straight out of the error taxonomy.
+  ['a results object rather than a list', { results: {}, _links: { base: WEB_BASE } }],
+  ['a results string', { results: 'att1', _links: { base: WEB_BASE } }],
+] as const) {
+  test(`listAttachments refuses a response with ${what} rather than reporting none`, async () => {
+    const { client } = harness([ok(body)]);
 
-  const error = await rejectsWith(() => listAttachments(client, PAGE_ID));
+    const error = await rejectsWith(() => listAttachments(client, PAGE_ID));
 
-  assert.equal(error.code, 'CONFLUENCE_RESPONSE_INVALID');
-  assert.equal(
-    error.statusCode,
-    502,
-    'an unreadable list must not be flattened into "this page has no attachments"',
-  );
-});
+    assert.equal(error.code, 'CONFLUENCE_RESPONSE_INVALID');
+    assert.equal(
+      error.statusCode,
+      502,
+      'an unreadable list must not be flattened into "this page has no attachments"',
+    );
+  });
+}
 
 test('listAttachments stops rather than following a cursor forever', async () => {
   const endless = v2ListBody(
@@ -344,6 +360,61 @@ test('an absolute download link is left alone and a link with no base is returne
     fileSize: 0,
     downloadUrl: '',
   });
+});
+
+test('a base with a trailing slash does not produce a doubled slash in the download URL', async () => {
+  const { client } = harness([
+    ok(
+      v2ListBody(
+        [{ id: 'att1', title: 'a.pdf', mediaType: PDF, fileSize: 1, downloadLink: '/download/a.pdf' }],
+        { base: `${WEB_BASE}/` },
+      ),
+    ),
+  ]);
+
+  const attachments = await listAttachments(client, PAGE_ID);
+
+  assert.equal(attachments[0]?.downloadUrl, `${WEB_BASE}/download/a.pdf`);
+});
+
+test('a relative link without a leading slash is joined onto the base with one', async () => {
+  const { client } = harness([
+    ok(
+      v2ListBody([
+        { id: 'att1', title: 'a.pdf', mediaType: PDF, fileSize: 1, downloadLink: 'download/a.pdf' },
+      ]),
+    ),
+  ]);
+
+  const attachments = await listAttachments(client, PAGE_ID);
+
+  assert.equal(attachments[0]?.downloadUrl, `${WEB_BASE}/download/a.pdf`);
+});
+
+// v1 states the media type in two places and is not consistent about which.
+// The fixtures below each supply exactly one, so neither fallback can be
+// shadowed by the other.
+
+test('a v1 upload takes the media type from extensions when metadata carries none', async () => {
+  const { client } = harness([
+    ok(v1UploadBody({ metadata: undefined, extensions: { mediaType: PDF, fileSize: 2048 } })),
+  ]);
+
+  const attachment = await uploadAttachment(client, uploadInput());
+
+  assert.equal(attachment.mediaType, PDF);
+  assert.equal(attachment.fileSize, 2048);
+});
+
+test('a v1 upload falls back to metadata when extensions carries no media type', async () => {
+  const { client } = harness([
+    ok(v1UploadBody({ metadata: { mediaType: PDF }, extensions: { fileSize: 2048 } })),
+  ]);
+
+  const attachment = await uploadAttachment(client, uploadInput());
+
+  assert.equal(attachment.mediaType, PDF);
+  assert.equal(attachment.fileSize, 2048);
 });
 
 // ---------------------------------------------------------------------------
@@ -394,6 +465,19 @@ test('an empty file is rejected before any request rather than failing at Atlass
   assert.equal(error.code, 'CONFLUENCE_ATTACHMENT_EMPTY');
 });
 
+test('a filename that is not a string is refused before any request', async () => {
+  const { client, specs } = harness([ok(v1UploadBody())]);
+
+  // Not merely defensive typing: a number survives every other clause in the
+  // guard — `.length` is undefined, `/[/\\]/.test(42)` is false, and
+  // `Array.from(42)` is `[]` — and would reach FormData as the string "42".
+  const error = await rejectsWith(() => uploadAttachment(client, uploadInput({ filename: 42 })));
+
+  assert.equal(specs.length, 0);
+  assert.equal(error.statusCode, 400);
+  assert.equal(error.code, 'CONFLUENCE_ATTACHMENT_FILENAME_INVALID');
+});
+
 test('something that is not bytes is refused before any request', async () => {
   const { client, specs } = harness([ok(v1UploadBody())]);
 
@@ -440,7 +524,24 @@ for (const pageId of ['', '../../admin', '123/child', '123?x=1', 'a'.repeat(200)
   });
 }
 
-for (const filename of ['', '../escape.pdf', 'dir/file.pdf', 'back\\slash.pdf', 'a'.repeat(300)]) {
+for (const filename of [
+  '',
+  '../escape.pdf',
+  'dir/file.pdf',
+  'back\\slash.pdf',
+  'a'.repeat(300),
+  // A bare `.` or `..` is not caught by the path-separator clause, and would
+  // become the attachment's title in a charity's audit record.
+  '.',
+  '..',
+  // The one the platform does NOT defend. `Blob` normalises an injected `type`
+  // to `''`, but `FormData` preserves a filename verbatim into the multipart
+  // part — CRLF included — so this guard is the only thing standing between a
+  // caller-supplied name and whatever parses that part downstream.
+  'notes\r\nX-Injected: yes.pdf',
+  'tab\there.pdf',
+  'nul byte.pdf',
+]) {
   test(`uploadAttachment rejects the filename ${JSON.stringify(filename.slice(0, 20))} before sending`, async () => {
     const { client, specs } = harness([ok(v1UploadBody())]);
 
@@ -505,7 +606,13 @@ test('a 403 on upload names the stripped CSRF header as a likely cause alongside
   assert.equal(error.statusCode, 409);
   assert.match(error.message, /X-Atlassian-Token/);
   assert.match(error.message, /reconnect/i);
-  assert.deepEqual(error.details, { status: 403 });
+  assert.deepEqual(
+    error.details,
+    { status: 403, possibleCsrfHeaderStripped: true },
+    'a message is the one part of an error a caller cannot branch on: without a ' +
+      'discriminator in details, a charity behind a header-stripping proxy reconnects ' +
+      'and meets the identical 403',
+  );
 });
 
 test('a 401 on upload is not dressed up as a CSRF problem', async () => {
@@ -518,7 +625,38 @@ test('a 401 on upload is not dressed up as a CSRF problem', async () => {
     !error.message.includes('X-Atlassian-Token'),
     'a 401 is an expired grant and nothing to do with the CSRF header',
   );
+  assert.deepEqual(error.details, { status: 401 }, 'and it gains no CSRF discriminator either');
 });
+
+// The two codes a caller must receive intact. Each says "reconcile by listing
+// the page's attachments"; anything that reshaped them into a generic failure
+// would be read as "nothing happened", and the charity's file would go up twice.
+for (const raised of [
+  new AppError(
+    502,
+    'CONFLUENCE_REQUEST_INDETERMINATE',
+    'A Confluence request that is not safe to repeat did not complete.',
+    { status: 503 },
+  ),
+  new AppError(
+    429,
+    'CONFLUENCE_RATE_LIMITED_UNSAFE_RETRY',
+    'Confluence rate limited a request that is not safe to repeat.',
+    { status: 429, retryAfterSeconds: 30 },
+  ),
+]) {
+  test(`an upload passes ${raised.code} through its catch untouched`, async () => {
+    const { client } = harness([throwing(raised)]);
+
+    const error = await rejectsWith(() => uploadAttachment(client, uploadInput()));
+
+    assert.equal(
+      error,
+      raised,
+      'the upload catch exists only to explain a 403; it must not reshape a code the caller reconciles on',
+    );
+  });
+}
 
 test('a 403 on listing is left exactly as the core raised it', async () => {
   const raised = upstreamReconnectRequired(403);

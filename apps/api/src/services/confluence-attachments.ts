@@ -402,12 +402,19 @@ export async function listAttachments(
  * as an expired grant, and a charity that reconnects will get the identical
  * 403 again, forever, with nothing anywhere saying why.
  *
- * The **code is kept** rather than replaced: reconnecting is still the action
- * the charity can take, and a caller switching on
- * `CONFLUENCE_RECONNECT_REQUIRED` must not miss this one. Only the message
- * gains the second cause, for whoever reads the log. This is the same judgement
- * `confluence-pages.ts` made in reusing the core's write-applied code: one
- * vocabulary where the instruction to the caller is the same.
+ * The **code is kept** rather than replaced. A new code would not merely add a
+ * fifth branch — it is one a Phase 4 handler written against the existing four
+ * would *miss*, dropping a genuine expired grant into a generic failure path
+ * and losing the reconnect prompt entirely. Reconnecting remains the action the
+ * charity can take, so the code that means "reconnect" is the right one.
+ *
+ * The extra cause therefore goes in **`details`, not only the message**. A
+ * message is the one part of an error a caller cannot branch on, and a
+ * message-only mitigation leaves a charity behind a header-stripping proxy
+ * being told to reconnect, reconnecting, and meeting the identical 403.
+ * `possibleCsrfHeaderStripped` is something Phase 4 can act on — show the
+ * operator-facing cause, or stop prompting for a reconnect that cannot help —
+ * without any new vocabulary.
  *
  * 401 is left untouched. It is an expired or revoked token and has nothing to
  * do with CSRF; adding the hint there would send an operator hunting a proxy
@@ -416,8 +423,8 @@ export async function listAttachments(
 function explainUploadForbidden(error: unknown): unknown {
   if (!(error instanceof AppError) || error.code !== 'CONFLUENCE_RECONNECT_REQUIRED') return error;
 
-  const status = asObject(error.details)?.status;
-  if (status !== 403) return error;
+  const details = asObject(error.details);
+  if (details?.status !== 403) return error;
 
   return new AppError(
     error.statusCode,
@@ -425,7 +432,7 @@ function explainUploadForbidden(error: unknown): unknown {
     `${error.message} A 403 on an attachment upload has one other likely cause: the required ` +
       'X-Atlassian-Token: nocheck header did not reach Atlassian, which then refuses the upload ' +
       'as a suspected CSRF attempt. Check for a proxy stripping it before assuming the grant is stale.',
-    error.details,
+    { ...details, possibleCsrfHeaderStripped: true },
   );
 }
 
