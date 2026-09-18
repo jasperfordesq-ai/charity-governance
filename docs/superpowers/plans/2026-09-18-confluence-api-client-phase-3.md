@@ -156,7 +156,24 @@ npm run build && node --test dist/tests/confluence-client.test.js
   - `setContentProperty(client, pageId, key, value, expectedVersion?): Promise<void>`
   - `type ConfluencePage = { id: string; title: string; spaceId: string; version: number; webUrl: string }`
 
-**Endpoints:** `POST /pages`, `GET /pages/{id}`, `PUT /pages/{id}`, and `/pages/{id}/properties` for content properties. Create requires `spaceId`, `title`, `status`, and `body` with a representation. **Update requires a `version.number` equal to the page's current version**, and Confluence rejects a mismatch.
+**Endpoints:** `POST /pages`, `GET /pages/{id}`, `PUT /pages/{id}`, and `/pages/{id}/properties` for content properties. Create requires `spaceId`, `title`, `status`, and `body` with a representation.
+
+> **Correction, made after Task 2 queried it and I verified against Atlassian.** An earlier draft
+> of this line said update requires a `version.number` **equal to** the page's current version.
+> That is wrong. Confluence v2 requires the **successor** — the current version plus one — and
+> rejects anything else with a 409 whose message is literally *"Version must be incremented when
+> updating a page. Current Version: [X]. Provided version: [Y]"*.
+>
+> The safety property is identical either way: the caller must know the current version, so a
+> concurrent edit still fails the check rather than silently overwriting. Only the wire format
+> differs. Task 2 implemented `expectedVersion + 1`, documented it, and flagged the discrepancy
+> rather than quietly following the plan — which is the right instinct and the reason this was
+> caught before a live call.
+>
+> **One operational hazard to carry into Phase 4:** Atlassian's own version counter can lag, so two
+> updates issued in quick succession can produce a *spurious* 409 — the second request reads a
+> version the server has not finished incrementing. A publish pipeline that retries immediately on
+> 409 will loop. Re-read before retrying, and back off.
 
 **Surface the version conflict distinctly.** A mismatch means someone else changed the page — a charity's DPO editing a policy while a publish runs is a *normal* event, not an error to bury. Throw `CONFLUENCE_PAGE_VERSION_CONFLICT` carrying the version actually found, so Phase 4 can re-read and decide.
 
