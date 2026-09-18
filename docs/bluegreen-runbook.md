@@ -744,10 +744,11 @@ git commit -m "docs(deploy): private VM cutover to blue-green — executed <date
 git push origin master
 ```
 
-## The Caddy access log redacts the OAuth callback query string
+## The Caddy logs redact the OAuth callback query string
 
-`caddy/Caddyfile.bluegreen` and `caddy/Caddyfile.personal-server` both use
-Caddy's `filter` log encoder rather than plain `format json`:
+All three Caddy profiles — `caddy/Caddyfile.bluegreen`,
+`caddy/Caddyfile.personal-server` and `caddy/Caddyfile` — use Caddy's `filter`
+log encoder rather than plain `format json`:
 
 ```
 	format filter {
@@ -774,16 +775,73 @@ already censors both parameters out of the API's own log; the filter closes the
 same leak one layer further out, in the log an operator is most likely to read
 with `docker logs` and paste into a ticket or a support thread.
 
-The residual risk if it were removed is bounded rather than nil — the `code` is
-single-use and already spent by the time the line is written, and replaying the
-`state` needs an authenticated session in the same organisation — but "no
-authorization code reaches a log" should be true of the deployment, not only of
-the application. `scripts/check-bluegreen-compose.test.mjs` fails if either file
-loses the filter. The adapted config can be checked directly:
+### It is applied twice per file, and the second one is the important one
+
+A site-level `log` block creates and filters only the **access** logger. Caddy
+also has an **error** logger, which fires whenever a handler returns an error —
+upstream unreachable, upstream timeout, client disconnect mid-proxy — and it is
+*not* covered by the site block. It falls through to the **default** logger and
+goes to **stderr**, which `docker logs` merges into the same output this runbook
+tells you to read. So each file also filters the default logger, in its global
+options block:
+
+```
+{
+	…
+	log default {
+		output stderr
+		format filter {
+			wrap json
+			fields {
+				request>uri query {
+					delete code
+					delete state
+				}
+			}
+		}
+	}
+}
+```
+
+That is the more valuable of the two, and it is why `caddy/Caddyfile` carries
+the block despite declaring no access log at all. The error logger writes when
+the request **failed**: on a 502 the authorization code never reached the API,
+so unlike the access-log case it is *unspent and still live at Atlassian*, and
+the `state` has its full ten minutes left. Verified against the pinned
+`caddy:2-alpine@sha256:5f5c8640…` (v2.11.4): before these blocks existed, a 502
+on the callback printed both values in full on stderr.
+
+### The proxy filter is not equivalent to the application redactor
+
+`apps/api/src/utils/logger.ts` matches parameter names case-insensitively and
+sees through percent-encoding, so it catches `CoDe` and `%63ode`. Caddy's
+`query` filter does neither: it matches `code` and `state` **literally and
+case-sensitively**. Atlassian only ever sends the lowercase forms, so nothing
+here is exploitable — but read "the same leak, one layer further out" as *the
+same parameters*, not as parity. The proxy is the weaker of the two layers.
+
+### Checking it
+
+`scripts/check-bluegreen-compose.test.mjs` fails if any of the three files loses
+either filter. The adapted config can also be checked directly — note that
+`caddy adapt` emits **minified** JSON, so the key is `"filter":"query"` with no
+space, and a grep written with one silently matches nothing:
 
 ```bash
-docker run --rm -v "$PWD/caddy:/etc/caddy:ro" caddy:2-alpine   caddy adapt --config /etc/caddy/Caddyfile.personal-server --adapter caddyfile   | grep -A6 '"filter": "query"'
+docker run --rm -v "$PWD/caddy:/etc/caddy:ro"   caddy:2-alpine@sha256:5f5c8640aae01df9654968d946d8f1a56c497f1dd5c5cda4cf95ab7c14d58648   caddy adapt --config /etc/caddy/Caddyfile.personal-server --adapter caddyfile 2>/dev/null   | grep -o '"filter":"query"' | wc -l
+# expect 2 — one for the default logger (the error log), one for the access log.
+# caddy/Caddyfile has no access log, so it expects 1.
 ```
+
+`grep -o … | wc -l` is deliberate: it prints a number every time, so a missing
+filter shows up as `0` rather than as no output at all.
+
+The residual risk if the filters were removed is bounded rather than nil — an
+access-logged `code` is single-use and already spent by the time the line is
+written, and replaying the `state` needs an authenticated session in the same
+organisation — but "no authorization code reaches a log" should be true of the
+deployment, not only of the application, and the error-log case is not covered
+by that reassurance at all.
 
 ## The nightly cron (private VM)
 

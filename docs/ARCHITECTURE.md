@@ -458,10 +458,27 @@ Two further rules fall out of the same behaviour:
 
 - **Absent means unchanged.** Atlassian may omit `refresh_token` from a refresh
   response when it has *not* rotated the token, in which case the one already
-  held is still valid. `refreshToken: null` from `atlassian-oauth.ts` therefore
-  means "no replacement was issued", never "there is no refresh token". Writing
-  it straight through would null out a working token and break that charity
-  silently. Only overwrite when a replacement actually came back.
+  held is still valid. Writing an absent value straight through would null out a
+  working token and break that charity silently, so only a replacement that
+  actually came back is ever written.
+
+  That is why `atlassian-oauth.ts` does **not** return `refreshToken: string |
+  null`. A `null` cannot say *why* it is null, and the two reasons demand
+  opposite responses. It returns a discriminated union instead:
+
+  ```ts
+  export type RefreshTokenOutcome =
+    | { kind: 'issued'; token: string }   // a replacement — write it, now
+    | { kind: 'not_rotated' }             // keep the one already stored
+    | { kind: 'unavailable' };            // no refresh token exists at all
+  ```
+
+  `AtlassianTokens.refreshToken` is that union, so every caller has to name the
+  case it is handling and the compiler refuses one that forgets. `not_rotated`
+  is the refresh path's benign outcome; `unavailable` is what
+  `connectConfluence` turns into `CONFLUENCE_OFFLINE_ACCESS_NOT_GRANTED` at
+  connect time. Collapsing them back to `null` is the bug this shape exists to
+  make unwritable.
 - **`offline_access` is not optional.** Without that scope on the OAuth app,
   Atlassian issues no refresh token at all, the access token dies within the
   hour, and every connected charity is disconnected before lunchtime with
@@ -499,13 +516,28 @@ Three lifetimes meet at the callback:
 - the administrator spends an unbounded amount of time on Atlassian's consent
   screen — reading it, picking a site, possibly logging in to Atlassian first
 
-So an administrator who lingers returns to a callback whose cookie has already
+**Read the first two carefully: they are not two clocks started together.** The
+15 minutes runs from login or the last token refresh, *not* from the moment the
+administrator clicks "Connect Confluence". By the time the flow starts, most of
+it is usually already spent. The budget that actually matters is the
+**remaining** cookie life at the instant the flow begins, and for an
+administrator who has been working in the app for a few minutes — which is the
+normal way to arrive at an integrations settings page — that is frequently well
+under a minute. The 10-minute `state` window does not help: it only bounds how
+long the state stays valid, it does not extend the session.
+
+So this is not the edge case of an administrator who wanders off. **It is the
+ordinary path.** Anyone who pauses to read Atlassian's consent screen, or who
+has to log in to Atlassian first, will routinely exceed whatever is left.
+
+The administrator who does returns to a callback whose cookie has already
 expired. `authGuard` answers a raw JSON **401**, in a browser tab, to a person
 who has just granted access — and the authorization code in that URL is
 **single-use and now spent**. There is no way forward but to start the entire
-flow again, and nothing on the page explains why.
+flow again, and nothing on the page explains why. Retrying hits the same wall,
+because the session is no fresher the second time.
 
-This is a live failure mode, not a theoretical one, and it argues for a specific
+This is a live failure mode and a common one, and it argues for a specific
 shape: **register the callback against a page in the web app, which refreshes
 the session and then posts `code` and `state` to the API**, rather than a bare
 302 with the parameters in a fragment. Only the page-mediated form gets a chance

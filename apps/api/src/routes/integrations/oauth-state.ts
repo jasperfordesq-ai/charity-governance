@@ -25,9 +25,24 @@
  *    as a state, and a state can never be replayed as an access token. Sharing
  *    a secret between two token types is only safe when the two are told
  *    apart by something the signature covers.
- * 2. **The algorithm is pinned on verify.** `algorithms: ['HS256']` is what
- *    refuses an `alg: none` token; without it a forged, unsigned state is
- *    accepted.
+ * 2. **The algorithm is pinned on verify.** `algorithms: ['HS256']` narrows
+ *    verification to the one algorithm these states are ever signed with.
+ *
+ *    It is *not* what refuses an `alg: none` token, and an earlier version of
+ *    this comment claimed it was. Probed directly against `jsonwebtoken@9.0.3`:
+ *    an `alg: none` token is rejected **with or without** the option — with an
+ *    empty signature as `jwt signature is required`, with a junk signature as
+ *    `invalid algorithm` — because for a string secret the library already
+ *    defaults to the HMAC set, which excludes `none`. Believing the option is
+ *    the only thing standing between here and a forged unsigned state
+ *    overstates it, and a reader who checks will stop trusting the rest.
+ *
+ *    What the option does buy, probed the same way: a token signed with the
+ *    *same* `JWT_SECRET` under HS384 or HS512 verifies fine without it and is
+ *    refused with it. That is narrower than "refuses `alg: none`" but real, it
+ *    costs nothing, and pinning the algorithm is correct practice whether or
+ *    not the library's default happens to cover the worst case today — a
+ *    default is not a guarantee across upgrades. **Keep it.**
  *
  * `JWT_SECRET` is read at call time rather than at module load: the route
  * module is imported by tests that set the environment themselves, and a
