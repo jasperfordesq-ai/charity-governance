@@ -899,6 +899,8 @@ model DocumentStorageDeletion {
   id                      String                                      @id @default(cuid())
   organisationId          String
   storagePath             String
+  provider                String                                      @default("supabase")
+  targetRef               Json?
   state                   DocumentStorageDeletionState                @default(PENDING)
   attempts                Int                                         @default(0)
   lastError               String?
@@ -925,6 +927,7 @@ model DocumentStorageDeletion {
   @@index([state, nextAttemptAt, claimedAt, createdAt])
   @@index([state, alertedAt, alertClaimedAt, deadLetteredAt])
   @@index([organisationId, state, deadLetteredAt])
+  @@index([provider, state, nextAttemptAt])
 }
 
 model DocumentStorageDeletionRecovery {

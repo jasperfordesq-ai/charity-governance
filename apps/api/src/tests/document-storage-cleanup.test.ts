@@ -17,6 +17,8 @@ function pendingRecord(overrides: Record<string, unknown> = {}) {
     id: 'deletion-1',
     organisationId: 'org-1',
     storagePath: 'org-1/policy.pdf',
+    provider: 'supabase',
+    targetRef: null,
     state: 'PENDING',
     attempts: 0,
     claimedAt: null,
@@ -32,6 +34,24 @@ function pendingRecord(overrides: Record<string, unknown> = {}) {
     createdAt: new Date('2026-07-11T10:00:00.000Z'),
     ...overrides,
   };
+}
+
+function buildEnqueueCapturingPrisma(created: Array<Record<string, unknown>>) {
+  const client = {
+    document: {
+      findFirst: async () => ({ id: 'doc-1', organisationId: 'org-1', fileUrl: 'org-1/policy.pdf' }),
+      delete: async () => ({ id: 'doc-1' }),
+    },
+    documentStorageDeletion: {
+      create: async (args: { data: Record<string, unknown> }) => {
+        created.push(args.data);
+        return { id: 'deletion-1' };
+      },
+    },
+    documentStorageDeletionRecovery: { create: async () => ({ id: 'recovery-1' }) },
+    $transaction: async <T>(callback: (tx: unknown) => Promise<T>) => callback(client),
+  };
+  return client;
 }
 
 function buildFallbackPrisma(initial: ReturnType<typeof pendingRecord>) {
@@ -332,4 +352,16 @@ test('maximum sequential claim batch is derived below the stale lease boundary',
   const service = new DocumentService(prisma as never, () => NOW);
   await service.retryPendingStorageDeletions(async () => undefined, 1000);
   assert.equal(take, DOCUMENT_STORAGE_DELETION_MAX_CLAIM_BATCH);
+});
+
+test('an enqueued deletion defaults to the supabase provider with no target reference', async () => {
+  const created: Array<Record<string, unknown>> = [];
+  const prisma = buildEnqueueCapturingPrisma(created);
+  const service = new DocumentService(prisma as never, () => NOW);
+
+  await service.remove('org-1', 'doc-1');
+
+  assert.equal(created.length, 1);
+  assert.equal(created[0].provider, 'supabase');
+  assert.equal(created[0].targetRef ?? null, null);
 });

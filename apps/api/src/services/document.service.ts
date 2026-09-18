@@ -20,7 +20,12 @@ export type DocumentStorageDeletionRecoveryActor =
 type DocumentStorageDeletionRecord = {
   id: string;
   organisationId: string;
+  // The Supabase object path. It is meaningful only for rows whose provider
+  // addresses its objects that way; a provider that does not must read
+  // `targetRef` instead and must never fall back to this field.
   storagePath: string;
+  provider: string;
+  targetRef: unknown | null;
   state: DocumentStorageDeletionState;
   attempts: number;
   claimedAt: Date | null;
@@ -52,6 +57,12 @@ export const DOCUMENT_STORAGE_DELETION_MAX_CLAIM_BATCH = Math.floor(
     DOCUMENT_STORAGE_DELETION_ATTEMPT_TIMEOUT_MS,
 );
 const GIBIBYTE = 1024 * 1024 * 1024;
+
+// Documents enqueued by the portal upload path live in Supabase. Providers are
+// plain strings validated against the Phase 0 registry in
+// `document-storage-provider.ts`, never a Prisma enum, so adding a provider
+// never needs a migration.
+const SUPABASE_DOCUMENT_STORAGE_PROVIDER = 'supabase';
 
 export function documentStorageDeletionRetryDelayMs(attempt: number): number {
   if (!Number.isInteger(attempt) || attempt < 1) {
@@ -88,6 +99,8 @@ type DocumentStorageDeletionDelegate = {
     data: {
       organisationId: string;
       storagePath: string;
+      provider: string;
+      targetRef?: unknown;
     };
   }): Promise<{ id: string }>;
   updateMany(args: { where: Record<string, unknown>; data: Record<string, unknown> }): Promise<{ count: number }>;
@@ -367,6 +380,8 @@ export class DocumentService {
             "id",
             "organisationId",
             "storagePath",
+            "provider",
+            "targetRef",
             "state",
             "attempts",
             "claimedAt",
@@ -613,6 +628,7 @@ export class DocumentService {
         data: {
           organisationId,
           storagePath: doc.fileUrl,
+          provider: SUPABASE_DOCUMENT_STORAGE_PROVIDER,
         },
       });
 
@@ -892,6 +908,8 @@ export class DocumentService {
           "id",
           "organisationId",
           "storagePath",
+          "provider",
+          "targetRef",
           "state",
           "attempts",
           "lastAttemptAt",
