@@ -199,6 +199,179 @@ the same deployment had just written. Gating only the write path removes the
 inconsistency instead of requiring the two processes to agree on
 `NODE_ENV`.
 
+### Integration credentials: the envelope, the boundary, and rotation
+
+Third-party credentials — today an Atlassian OAuth refresh token for a charity's
+own Confluence site, later an accounting integration's — are held encrypted at
+rest. Three pieces:
+
+- `apps/api/src/services/integration-crypto.ts` — the crypto boundary: seal,
+  open, key decode, key fingerprint. Pure; no Prisma, no environment reads.
+- `apps/api/src/services/integration-credential.service.ts` — stores and loads a
+  tenant's credentials through that boundary.
+- `OrganisationIntegration`, `IntegrationCredential` and the single-row
+  `IntegrationSecretControl` in `apps/api/prisma/schema.prisma`.
+
+**A plaintext secret never leaves the crypto boundary.** It is not logged, not
+interpolated into an error message, not attached as an error `cause`, and never
+stored unsealed. Errors about sealed material carry a key *fingerprint* — a
+domain-separated SHA-256 of the key — never the material.
+
+#### The envelope
+
+`sealIntegrationSecret` produces AES-256-GCM:
+
+```
+{ generation: number, iv: string, tag: string, ciphertext: string }
+```
+
+written to the `sealed` JSON column, with `generation` also denormalised into
+its own column so a rotation can find stale rows without opening a single one.
+`iv` is 12 fresh random bytes per seal, so the same plaintext sealed twice
+yields different ciphertext. `tag` is the 16-byte GCM authentication tag, so a
+tampered row fails loudly instead of decrypting to garbage.
+
+#### Why the AAD binding exists
+
+GCM's tag authenticates *modification*. It says nothing about *where a
+ciphertext is allowed to live*. With one process-wide key and no additional
+authenticated data, every envelope is portable: a ciphertext copied from one
+charity's row into another's — by a bug, a bad backfill, or direct database
+write access — decrypts cleanly under the thief's identity. For a table whose
+rows are Irish charities' OAuth refresh tokens for their own Atlassian sites,
+that is the whole risk.
+
+So every seal and every open is bound to a `SecretContext` of
+`{ organisationId, provider, kind }` plus the envelope's `generation`, passed to
+GCM as AAD. Change any one of them and the open fails closed. The fields are
+netstring-framed (`<byte length>:<value>`) so the encoding is injective: a naive
+join on a separator character would let `("a:b", "c")` collide with
+`("a", "b:c")`.
+
+**The context is derived from the database row, never from the caller.**
+`organisationId` and `provider` are read off the `OrganisationIntegration` row
+the credential hangs off; only `kind` comes from the caller, and it is the same
+value that addresses the credential row, so it cannot disagree with where the
+envelope is stored. There is deliberately no override parameter — accepting a
+caller-supplied organisation would re-create exactly the vulnerability the
+binding exists to prevent.
+
+#### The authorization boundary — read this before adding a route
+
+**This layer binds. It does not authorize.**
+
+The context lookup is by `integrationId` alone and is *not* scoped to a
+requesting organisation. So when a caller passes another charity's
+`integrationId`, the context is derived from *that charity's own row*, the
+decrypt succeeds, and their refresh token is handed back. That is not a defect
+in the binding; it is the consequence of deriving the context honestly rather
+than from an argument.
+
+> **A route must independently prove that the requesting organisation owns the
+> `integrationId` it passes. Nothing in the credential service checks that.**
+
+Concretely: scope the query that produced the `integrationId` to the
+authenticated organisation (`where: { id, organisationId }`), or verify
+ownership explicitly, before calling `storeIntegrationCredential` or
+`loadIntegrationCredential`. The binding's job is to make a *stolen row*
+useless. Keeping a *legitimate request* inside its own tenant is the route's
+job, exactly as it is for every other `organisationId`-scoped query here.
+
+#### Error taxonomy — what each code tells an operator
+
+| Code | What happened | What to do |
+|---|---|---|
+| `INTEGRATION_NOT_FOUND` (404) | No `OrganisationIntegration` row for that id. | Caller bug, or the integration was deleted. Nothing was sealed or opened. |
+| `INTEGRATION_KEY_MISSING` (500) | `INTEGRATION_ENCRYPTION_KEY` is unset. | Configuration, not data. Set it. Nothing is damaged. |
+| `INTEGRATION_KEY_INVALID` (500) | The configured value does not canonically decode to exactly 32 bytes. | Configuration. Fix the value. Nothing is damaged. |
+| `INTEGRATION_KEY_MISMATCH` (500) | The configured key's fingerprint disagrees with the one this installation recorded. | **The stored credentials are intact.** Restore the correct key. **Do not ask charities to reconnect** — a re-store upserts, and would overwrite recoverable envelopes irreversibly. |
+| `INTEGRATION_SECRET_UNREADABLE` (500) | GCM authentication failed. | Three causes today: a wrong key on an installation that has not recorded a fingerprint yet; a context that does not match what was sealed (a row in the wrong tenant, provider or kind); or genuine corruption or tampering. Rule out a wrong key *first* — do not treat this as corruption by default. A rotation adds a fourth cause; see the trap below. |
+| `INTEGRATION_SECRET_MALFORMED` (500) | The stored `sealed` column is not an envelope at all — null, a string, a half-written object. | Deliberately distinct from `UNREADABLE`: "not an envelope" rather than "an envelope that would not authenticate", and the two call for different investigations. Look at the backfill or direct write that produced the row. |
+| `INTEGRATION_SECRET_CONTEXT_INVALID`, `INTEGRATION_SECRET_GENERATION_INVALID`, `INTEGRATION_SECRET_PLAINTEXT_REQUIRED` (500) | A caller passed something the boundary refuses. | Programming errors, never data problems. They exist so a bad argument cannot be misreported as a corrupt credential. |
+
+#### Rotation, and the bootstrap fingerprint
+
+`IntegrationSecretControl` is a single row (`id: 1`) carrying `generation`,
+`activeKeyFingerprint`, `retiredKeyFingerprint` and `rotatedAt`. New envelopes
+seal under the active generation; an installation that has never rotated has no
+row and is generation 1 by definition. `countCredentialsAwaitingRotation` counts
+rows below the active generation off the denormalised column, decrypting
+nothing.
+
+The first successful store on an installation with no recorded fingerprint
+records the fingerprint of the key that just sealed — the moment that claim is
+definitionally true. **That write and the credential write are one
+transaction.** They describe each other, and an installation left holding a
+sealed envelope with no recorded fingerprint has a permanently inert mismatch
+check for precisely the installation that has just acquired something to lose:
+a later store under a wrong key would record the *wrong* fingerprint and upsert
+straight over the recoverable envelope.
+
+#### The rotation trap — read this before writing the rotation job
+
+**The moment a rotation flips `IntegrationSecretControl.generation` and records
+the new key's fingerprint, every credential that has not yet been re-sealed
+fails as `INTEGRATION_SECRET_UNREADABLE`.**
+
+The fingerprint check passes — the configured key matches the newly recorded
+fingerprint, so nothing objects — and *then* AES-GCM fails on every
+generation-N row, because `generation` is part of the AAD and no longer matches
+what those rows were sealed with. The operator sees "every credential is
+corrupt", for every charity at once. That is verbatim the failure mode the
+fingerprint check was added to prevent, resurfacing one phase later, carrying
+the same destructive temptation: asking charities to reconnect, which upserts
+over envelopes that were perfectly recoverable.
+
+Two defences. A rotation job must carry at least the first, and should be built
+on the second:
+
+- **Cheap, and strictly a diagnostic.** Before opening, compare
+  `sealed.generation` with the active generation and raise a distinct code —
+  `INTEGRATION_SECRET_GENERATION_STALE` — instead of letting authentication
+  fail. It does not make the credential readable. It does stop the failure
+  masquerading as corruption, and it tells the operator to finish the rotation
+  rather than to wipe the table.
+- **Correct, and what the schema is already shaped for.** Resolve the key *by
+  the envelope's own generation* rather than by "whichever one is active". Keep
+  the retired key available alongside the active one (`retiredKeyFingerprint`
+  exists for this), open a generation-N row with the generation-N key, and
+  re-seal it under the active one. Rotation then becomes an online operation
+  with no window at all, instead of a flag-flip that breaks every un-re-sealed
+  row until a background job catches up.
+
+**Documented, not implemented.** There is nothing to rotate yet and the rotation
+job is a later phase. Build one of these *before* that job runs, not after.
+
+#### `INTEGRATION_ENCRYPTION_KEY` is required on the standard production path only — deliberately
+
+`validateProductionEnv` (`apps/api/src/utils/env.ts`) requires it: present,
+canonically exactly 32 bytes as hex or unpadded base64url, and distinct from
+`JWT_SECRET`, `OWNER_JWT_SECRET`, `AUTH_RECOVERY_SECRET` and
+`READINESS_API_KEY`.
+
+`validatePersonalServerEnv` (`apps/api/src/utils/personal-server-env.ts`) does
+**not** require it, and `validateRuntimeEnv` returns after calling it for a
+personal-server/appliance deployment, so the standard validator never runs
+there. An appliance runs with `NODE_ENV=production`, so the constraint
+"required in production" is enforced on one of the two production branches.
+
+**The asymmetry is deliberate.** Adding the requirement to the appliance branch
+would fail the boot of every existing appliance install on upgrade — for a key
+that nothing reads yet, since no integration can be connected until the connect
+flow ships. Breaking running installs of a charity's own governance server, to
+enforce a constraint with no current consumer, is the worse trade.
+
+**The obligation this creates, owed by the phase that ships the connect flow:**
+the connect route must refuse to begin an OAuth flow — on *every* deployment,
+appliance included — when `INTEGRATION_ENCRYPTION_KEY` is absent or does not
+decode, and must say so plainly enough for an operator to act. Gating the
+*feature* on the key rather than the *boot* breaks no appliance on upgrade,
+while making it impossible to reach a state where a credential is about to be
+sealed under a missing key. Until then, an appliance operator who wants to be
+ready can set the key now (`openssl rand -hex 32`, distinct from every other
+secret); nothing on the appliance consumes it yet, and once something does it
+must never be regenerated — see `docs/production-runbook.md`.
+
 Security-sensitive operator references:
 
 - [Team Lifecycle and Session Security](team-lifecycle-security.md)
