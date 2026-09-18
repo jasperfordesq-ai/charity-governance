@@ -128,13 +128,19 @@ const APPLICATION_DOCUMENT_INVENTORY_SCRIPT = `
 import { createHash } from 'node:crypto';
 import { PrismaClient } from '@prisma/client';
 import { StorageService } from './dist/services/storage.service.js';
+import { createPrismaOrganisationStorageResolver } from './dist/services/document-storage-resolution.js';
 const prisma = new PrismaClient();
 try {
   const rows = await prisma.document.findMany({
     orderBy: { id: 'asc' },
     select: { id: true, organisationId: true, fileUrl: true, fileSize: true },
   });
-  const storage = new StorageService();
+  // Per-organisation storage resolution, exactly as the documents route and
+  // the two jobs do it. The inventory reads bytes for every document row on
+  // the box, and this machine is meant to become a normal multi-tenant deploy
+  // target — assuming one storage backend for every row would silently
+  // mis-reconcile any organisation pinned to a different provider.
+  const storage = new StorageService(createPrismaOrganisationStorageResolver(prisma));
   const documents = [];
   for (const row of rows) {
     const bytes = await storage.downloadFile(row.organisationId, row.fileUrl);

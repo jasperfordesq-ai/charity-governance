@@ -75,6 +75,15 @@ async function buildApp(role: Role, overrides: Record<string, unknown> = {}) {
       }),
     },
     document: { aggregate: async () => ({ _sum: { fileSize: 0 } }) },
+    // documentRoutes builds its StorageService with the Prisma-backed storage
+    // resolver, which reads this delegate on every storage operation. No test
+    // in this file touches one today; without the delegate the first that does
+    // would fail with "Cannot read properties of undefined" instead of
+    // something legible. Matches the sibling route tests' default: no recorded
+    // preference, so the deployment default applies.
+    organisation: {
+      findUnique: async () => ({ documentStorageProvider: null, documentStorageAlphaOptIn: false }),
+    },
     ...overrides,
   };
   if (!('$transaction' in prisma)) {

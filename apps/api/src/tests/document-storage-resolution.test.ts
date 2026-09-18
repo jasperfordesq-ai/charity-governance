@@ -130,3 +130,64 @@ test('a missing organisation resolves to no preference rather than throwing', as
 
   assert.deepEqual(await resolver('org-missing'), { provider: null, alphaOptIn: false });
 });
+
+// Production deployments forbid DOCUMENT_STORAGE_DRIVER=local
+// (requireProductionDocumentStorageDriver in utils/env.ts) and validate
+// LOCAL_FILE_STORAGE_DIR only inside that same branch. A per-organisation
+// 'local' preference on a Supabase-default production deployment would have
+// reached StorageService's local branch with none of that validation having
+// run, writing to the unvalidated relative default root. The resolution layer
+// refuses it instead.
+async function withNodeEnv<T>(value: string | undefined, run: () => T | Promise<T>): Promise<T> {
+  const previous = process.env.NODE_ENV;
+  if (value === undefined) delete process.env.NODE_ENV;
+  else process.env.NODE_ENV = value;
+  try {
+    return await run();
+  } finally {
+    if (previous === undefined) delete process.env.NODE_ENV;
+    else process.env.NODE_ENV = previous;
+  }
+}
+
+const localResolver: OrganisationStorageResolver = async () => ({ provider: 'local', alphaOptIn: false });
+const supabaseResolver: OrganisationStorageResolver = async () => ({ provider: 'supabase', alphaOptIn: false });
+
+test('a production deployment refuses a per-organisation local provider', { concurrency: false }, async () => {
+  await withNodeEnv('production', () =>
+    withDriver(undefined, () =>
+      assert.rejects(
+        () => resolveProviderForOrganisation('org-a', localResolver, registry),
+        (err) => {
+          assert.equal(err instanceof AppError, true);
+          assert.equal((err as AppError).code, 'STORAGE_PROVIDER_NOT_PERMITTED_IN_PRODUCTION');
+          return true;
+        },
+      ),
+    ),
+  );
+});
+
+test('a production deployment still allows a per-organisation supabase provider', { concurrency: false }, async () => {
+  await withNodeEnv('production', () =>
+    withDriver(undefined, async () => {
+      assert.equal(await resolveProviderForOrganisation('org-a', supabaseResolver, registry), 'supabase');
+    }),
+  );
+});
+
+test('a non-production deployment allows a per-organisation local provider', { concurrency: false }, async () => {
+  await withNodeEnv('test', () =>
+    withDriver(undefined, async () => {
+      assert.equal(await resolveProviderForOrganisation('org-a', localResolver, registry), 'local');
+    }),
+  );
+});
+
+test('a production deployment whose own driver is local allows a per-organisation local provider', { concurrency: false }, async () => {
+  await withNodeEnv('production', () =>
+    withDriver('local', async () => {
+      assert.equal(await resolveProviderForOrganisation('org-a', localResolver, registry), 'local');
+    }),
+  );
+});

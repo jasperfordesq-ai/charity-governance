@@ -4,8 +4,10 @@ import { AppError } from './errors.js';
 import { parsePort } from './port.js';
 import { isConfiguredSecret } from './secrets.js';
 import { billingMode, emailDeliveryMode, isMultiTenant } from './deployment-profile.js';
+import { envDefaultProviderId } from '../services/document-storage-resolution.js';
 
 export { isConfiguredSecret } from './secrets.js';
+export { isProductionEnv } from './deployment-profile.js';
 
 const APPROVED_PUBLIC_HOST_ROOT = 'charitypilot.ie';
 // Defaults only. CHARITYPILOT_CANONICAL_WEB_ORIGIN / CHARITYPILOT_CANONICAL_API_ORIGIN
@@ -518,6 +520,32 @@ function requireTrustedProxyAddresses(issues: string[]) {
   }
 }
 
+// A DOCUMENT_STORAGE_DRIVER naming a provider that cannot be the deployment
+// default (today: any alpha-stage provider) was previously only discovered per
+// request, as a 500 on every document path, on a process that had already
+// reported itself healthy. Resolve it once at boot so such a deployment
+// refuses to start instead.
+//
+// `resolveDefault` is injectable only so this mapping can be tested: the
+// shipped registry contains ga providers only in Phase 0, so
+// envDefaultProviderId() cannot yet throw in practice. It will the moment an
+// alpha provider ships, which is precisely when this gate has to already exist.
+// Unrecognised values are NOT an issue here — they fall back to Supabase
+// exactly as they always have, and must keep doing so.
+export function requireUsableDocumentStorageDefault(
+  issues: string[],
+  resolveDefault: () => string = envDefaultProviderId,
+): void {
+  try {
+    resolveDefault();
+  } catch (error) {
+    issues.push(
+      'DOCUMENT_STORAGE_DRIVER names a document storage provider that cannot be the deployment default: ' +
+        (error instanceof AppError ? error.message : 'provider resolution failed'),
+    );
+  }
+}
+
 function requireProductionDocumentStorageDriver(issues: string[]) {
   if (process.env.DOCUMENT_STORAGE_DRIVER?.trim().toLowerCase() === 'local') {
     issues.push('DOCUMENT_STORAGE_DRIVER must not be local in production; use Supabase document storage');
@@ -807,6 +835,7 @@ export function validateProductionEnv(): void {
     requireConfiguredEnv('SUPABASE_STORAGE_BUCKET', issues);
     requireProductionDocumentStorageDriver(issues);
   }
+  requireUsableDocumentStorageDefault(issues);
   requireErrorAlertWebhook(issues);
 
   throwIfProductionIssues('PRODUCTION_ENV_INVALID', 'Production environment is not ready', issues);

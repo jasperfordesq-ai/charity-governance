@@ -1,7 +1,5 @@
 import { AppError } from '../utils/errors.js';
 
-export type DocumentStorageProviderId = 'supabase' | 'local';
-
 export type DocumentStorageProviderStage = 'ga' | 'alpha';
 
 export type DocumentStorageProviderDescriptor = {
@@ -12,7 +10,6 @@ export type DocumentStorageProviderDescriptor = {
 export type DocumentStorageProviderRegistry = {
   list(): DocumentStorageProviderDescriptor[];
   isKnown(id: string): boolean;
-  describe(id: string): DocumentStorageProviderDescriptor | null;
   assertSelectable(id: string, options: { alphaOptIn: boolean }): string;
   assertDefaultable(id: string): string;
 };
@@ -29,10 +26,6 @@ export function createDocumentStorageProviderRegistry(
 
     isKnown(id: string) {
       return byId.has(id);
-    },
-
-    describe(id: string) {
-      return byId.get(id) ?? null;
     },
 
     assertSelectable(id: string, options: { alphaOptIn: boolean }) {

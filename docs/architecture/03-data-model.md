@@ -131,6 +131,8 @@ The tenant root in `apps/api/prisma/schema.prisma`.
 | `memberCount` | `Int?` | Database check permits null or an integer of at least 1 |
 | `registeredAddress`, `contactEmail`, `contactPhone`, `website` | `String?` | |
 | `stripeCustomerId` | `String? @unique` | links to the organisation's metadata-verified Stripe customer |
+| `documentStorageProvider` | `String?` | Document storage backend for this organisation; `null` means use the deployment default (`DOCUMENT_STORAGE_DRIVER`). Deliberately not a Prisma enum: the provider registry in `apps/api/src/services/document-storage-provider.ts` is the single source of truth for which providers exist and what stage each is at |
+| `documentStorageAlphaOptIn` | `Boolean` | `@default(false)`; an alpha-stage storage provider is refused unless this is explicitly true |
 | `lifecycleStatus` | `OrganisationLifecycleStatus` | active by default; suspended/closed organisations cannot authenticate or accept invitations |
 | `lifecycleChangedAt`, `lifecycleVersion` | `DateTime`, `Int` | database-managed optimistic lifecycle evidence |
 | `createdAt` / `updatedAt` | `DateTime` | |

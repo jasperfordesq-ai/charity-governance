@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import { afterEach, beforeEach, test } from 'node:test';
 import { AppError } from '../utils/errors.js';
 import {
+  requireUsableDocumentStorageDefault,
   validateAuthDeliveryEnv,
   validateDeadlineRemindersEnv,
   validateDocumentStorageCleanupEnv,
@@ -333,6 +334,35 @@ test('validateProductionEnv requires a local storage path when local storage is 
       Array.isArray(error.details) &&
       error.details.includes('LOCAL_FILE_STORAGE_DIR must be an absolute non-root filesystem path'),
   );
+});
+
+test('validateProductionEnv refuses to boot when the deployment default storage provider is unusable', () => {
+  // Every real DOCUMENT_STORAGE_DRIVER value resolves to a usable default in
+  // Phase 0 (the shipped registry is ga-only, and an unrecognised value still
+  // falls back to Supabase), so the boot gate must stay silent for all of them.
+  for (const driver of [undefined, 'supabase', 'nonsense', '']) {
+    const issues: string[] = [];
+    setCompleteProductionEnv({ DOCUMENT_STORAGE_DRIVER: driver });
+    requireUsableDocumentStorageDefault(issues);
+    assert.deepEqual(issues, [], `expected no boot issue for DOCUMENT_STORAGE_DRIVER=${String(driver)}`);
+  }
+
+  setCompleteProductionEnv({ DOCUMENT_STORAGE_DRIVER: 'local', LOCAL_FILE_STORAGE_DIR: '/data/documents' });
+  assert.doesNotThrow(() => validateProductionEnv());
+
+  // The failure this gate exists for: a default the registry refuses. It is
+  // unreachable with the shipped ga-only registry, so the resolver is injected.
+  const issues: string[] = [];
+  requireUsableDocumentStorageDefault(issues, () => {
+    throw new AppError(
+      500,
+      'STORAGE_PROVIDER_ALPHA_NOT_DEFAULTABLE',
+      'An alpha document storage provider cannot be the deployment default.',
+    );
+  });
+  assert.equal(issues.length, 1);
+  assert.match(issues[0], /^DOCUMENT_STORAGE_DRIVER names a document storage provider that cannot be the deployment default: /);
+  assert.match(issues[0], /alpha document storage provider cannot be the deployment default/);
 });
 
 test('validateDocumentStorageCleanupEnv mirrors validateProductionEnv on the local storage driver (both directions)', () => {

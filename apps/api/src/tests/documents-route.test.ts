@@ -1,4 +1,7 @@
 import assert from 'node:assert/strict';
+import { mkdtemp, readFile, rm } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import test from 'node:test';
 
 process.env.JWT_SECRET = process.env.JWT_SECRET ?? 'documents-route-test-secret';
@@ -749,6 +752,68 @@ test('document delete reports success when post-delete storage cleanup fails', {
     assert.ok((outboxUpdates[0] as { data: { nextAttemptAt: Date } }).data.nextAttemptAt instanceof Date);
   } finally {
     StorageService.prototype.deleteFile = originalDeleteFile;
+    await app.close();
+  }
+});
+
+// The regression test for the per-organisation wiring itself. Every other
+// fixture in this file resolves to `documentStorageProvider: null`, which is
+// behaviourally identical to passing no resolver at all — so deleting
+// `createPrismaOrganisationStorageResolver(app.prisma)` from
+// routes/documents/index.ts leaves them all green. This one does not: the
+// deployment default is Supabase (DOCUMENT_STORAGE_DRIVER unset) and only the
+// organisation row says `local`, so the bytes can only land on disk if the
+// resolver is wired, its answer reaches StorageService's storage branch, and
+// the provider it names is the one that writes.
+test('an organisation pinned to local storage has its uploaded bytes written to the local root', { concurrency: false }, async () => {
+  const previousDriver = process.env.DOCUMENT_STORAGE_DRIVER;
+  const previousRoot = process.env.LOCAL_FILE_STORAGE_DIR;
+  const root = await mkdtemp(join(tmpdir(), 'charitypilot-documents-route-'));
+
+  delete process.env.DOCUMENT_STORAGE_DRIVER;
+  process.env.LOCAL_FILE_STORAGE_DIR = root;
+
+  let createdFileUrl: string | null = null;
+
+  const app = await buildDocumentsApp({
+    subscription: subscription(),
+    organisation: {
+      findUnique: async () => ({ documentStorageProvider: 'local', documentStorageAlphaOptIn: false }),
+    },
+    document: {
+      create: async (args: unknown) => {
+        createdFileUrl = (args as { data: { fileUrl: string } }).data.fileUrl;
+        return publicDocument({ fileUrl: createdFileUrl, mimeType: 'text/plain' });
+      },
+    },
+  });
+
+  try {
+    const request = multipartRequest(baseFields, {
+      filename: 'policy.txt',
+      mimetype: 'text/plain',
+      content: Buffer.from('pinned to local storage'),
+    });
+
+    const response = await app.inject({
+      method: 'POST',
+      url: '/',
+      headers: { ...request.headers, authorization: authHeader },
+      payload: request.payload,
+    });
+
+    assert.equal(response.statusCode, 201);
+    assert.equal(typeof createdFileUrl, 'string');
+    assert.equal((createdFileUrl as unknown as string).startsWith('org-1/'), true);
+
+    const written = await readFile(join(root, createdFileUrl as unknown as string));
+    assert.equal(written.toString(), 'pinned to local storage');
+  } finally {
+    await rm(root, { recursive: true, force: true });
+    if (previousDriver === undefined) delete process.env.DOCUMENT_STORAGE_DRIVER;
+    else process.env.DOCUMENT_STORAGE_DRIVER = previousDriver;
+    if (previousRoot === undefined) delete process.env.LOCAL_FILE_STORAGE_DIR;
+    else process.env.LOCAL_FILE_STORAGE_DIR = previousRoot;
     await app.close();
   }
 });

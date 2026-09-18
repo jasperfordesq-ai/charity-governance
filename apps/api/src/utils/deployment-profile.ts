@@ -46,6 +46,18 @@ function axis<T extends string>(
   return raw as T;
 }
 
+// Not a CHARITYPILOT_* axis — NODE_ENV is set by the runtime, not by us — but
+// it is the same kind of deployment fact, and the codebase had no single place
+// to ask it: env.ts repeats `process.env.NODE_ENV !== 'production'` at the top
+// of each validator and errors.ts keeps a private copy. Anything outside
+// env.ts that needs the answer (the document-storage resolution layer does)
+// should call this rather than growing a third copy. env.ts re-exports it, the
+// way it already re-exports isConfiguredSecret; callers that env.ts itself
+// imports from must take it from here to avoid an import cycle.
+export function isProductionEnv(env: DeploymentEnv = process.env): boolean {
+  return env.NODE_ENV === 'production';
+}
+
 export function isMultiTenant(env: DeploymentEnv = process.env): boolean {
   return axis(env, 'CHARITYPILOT_TENANCY', ['multi', 'single'] as const, 'single', 'multi') === 'multi';
 }

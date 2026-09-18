@@ -145,8 +145,26 @@ opted in, and can never be the deployment default. This is the mechanism that
 keeps in-progress integrations off tenants who have not asked for them — see
 `docs/superpowers/plans/2026-09-18-document-storage-providers-spec.md`.
 
+**Changing an organisation's provider strands its existing documents.** Nothing
+writes `documentStorageProvider` yet, but once something does, flipping it on an
+organisation that already holds documents points every later download and delete
+at the new provider while the bytes still sit in the old one — silent 404s, and
+worse, deletions that report success against a store that never held the object,
+in a product whose deletion pipeline exists precisely because erasure has to be
+provable. The real fix is a per-document provider stamp so each object is read
+and erased from wherever it was actually written; that lands in Phase 3 of
+`docs/superpowers/plans/2026-09-18-document-storage-providers-spec.md`, and until
+it does, a provider change on an organisation with documents is not a supported
+operation.
+
 The global health probe (`routes/health`) deliberately reports on the
-deployment default only. Per-tenant integration health is a later phase.
+deployment default only. Per-tenant integration health is a later phase. That
+leaves a known gap: the probe builds `new StorageService()` with no resolver, so
+it never touches the `Organisation` storage columns — a deployment that shipped
+this code but skipped the migration would pass its own readiness gate while
+every document path failed on the missing columns. Deciding which organisation a
+readiness probe should resolve for is a Phase 6 question, so the mitigation for
+now is the migration gate in the deploy pipeline, not the health endpoint.
 
 If the resolver itself fails — for example a database error while looking up
 an organisation's preference — `StorageService` surfaces that as `AppError`

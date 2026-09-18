@@ -209,7 +209,7 @@ export class StorageService {
     const sanitised = sanitiseFilename(filename);
     const storagePath = `${organisationId}/${Date.now()}-${randomUUID()}-${sanitised}`;
 
-    if ((await this.providerFor(organisationId)) === 'local') {
+    if ((await this.providerFor(organisationId)) === LOCAL_STORAGE_DRIVER) {
       const filePath = localFilePath(storagePath);
       await mkdir(dirname(filePath), { recursive: true });
       await writeFile(filePath, buffer);
@@ -246,6 +246,18 @@ export class StorageService {
     }
   }
 
+  /**
+   * DEPLOYMENT-SCOPED, like `isConfigured()` and `verifyBucket()`. It opens
+   * with `assertLocalStorageEnabled()`, which asks whether the *deployment*
+   * driver is local — the wrong question in a per-tenant world: for an
+   * organisation pinned to local storage on a Supabase-default deployment this
+   * throws 503 even though that organisation's bytes are on local disk.
+   *
+   * Do not call it from any per-tenant path. Those go through `downloadFile`,
+   * which resolves the provider for the organisation and then uses
+   * `readLocalResolved`. No production code calls this; it is retained because
+   * the tenant-isolation tests exercise the guard through it.
+   */
   async readLocalFile(organisationId: string, storagePath: string): Promise<Buffer> {
     this.assertLocalStorageEnabled();
     const guardedPath = assertOrganisationStoragePath(organisationId, storagePath);
@@ -255,7 +267,7 @@ export class StorageService {
   async downloadFile(organisationId: string, storagePath: string): Promise<Buffer> {
     const guardedPath = assertOrganisationStoragePath(organisationId, storagePath);
 
-    if ((await this.providerFor(organisationId)) === 'local') {
+    if ((await this.providerFor(organisationId)) === LOCAL_STORAGE_DRIVER) {
       return this.readLocalResolved(guardedPath);
     }
 
@@ -298,7 +310,7 @@ export class StorageService {
       throw new AppError(500, 'STORAGE_DELETE_FAILED', STORAGE_OPERATION_FAILED_MESSAGE);
     }
 
-    if (provider === 'local') {
+    if (provider === LOCAL_STORAGE_DRIVER) {
       try {
         await withOperationTimeout(unlink(localFilePath(guardedPath)), storageDeleteTimeoutMs());
       } catch (error) {
