@@ -290,6 +290,7 @@ jobs:
             -e JWT_SECRET=ci-production-jwt-secret-with-enough-entropy \
             -e OWNER_JWT_SECRET=ci-production-owner-jwt-secret-with-entropy \
             -e AUTH_RECOVERY_SECRET=0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef \
+            -e INTEGRATION_ENCRYPTION_KEY=fedcba9876543210fedcba9876543210fedcba9876543210fedcba9876543210 \
             -e FRONTEND_URL=https://app.charitypilot.ie \
             -e AUTH_COOKIE_DOMAIN=.charitypilot.ie \
             -e NEXT_PUBLIC_API_URL="${NEXT_PUBLIC_API_URL}" \
@@ -331,6 +332,7 @@ jobs:
             -e JWT_SECRET=ci-smoke-jwt-secret-with-enough-entropy \
             -e OWNER_JWT_SECRET=ci-smoke-owner-jwt-secret-with-enough-entropy \
             -e AUTH_RECOVERY_SECRET=0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef \
+            -e INTEGRATION_ENCRYPTION_KEY=a1b2c3d4e5f60718293a4b5c6d7e8f90a1b2c3d4e5f60718293a4b5c6d7e8f90 \
             -e FRONTEND_URL=https://app.charitypilot.ie \
             -e AUTH_COOKIE_DOMAIN=.charitypilot.ie \
             -e NEXT_PUBLIC_API_URL="${NEXT_PUBLIC_API_URL}" \
@@ -677,6 +679,7 @@ jobs:
           JWT_SECRET=ci-production-jwt-secret-with-enough-entropy
           OWNER_JWT_SECRET=ci-production-owner-jwt-secret-with-entropy
           AUTH_RECOVERY_SECRET=0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef
+          INTEGRATION_ENCRYPTION_KEY=a1b2c3d4e5f60718293a4b5c6d7e8f90a1b2c3d4e5f60718293a4b5c6d7e8f90
           FRONTEND_URL=https://app.charitypilot.ie
           AUTH_COOKIE_DOMAIN=.charitypilot.ie
           STRIPE_SECRET_KEY=sk_live_ci_configured_secret
