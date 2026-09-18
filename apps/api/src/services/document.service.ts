@@ -4,6 +4,10 @@ import { SubscriptionPlan } from '@charitypilot/shared';
 import { AppError } from '../utils/errors.js';
 import { formatProviderError } from '../utils/provider-errors.js';
 import { assertOrganisationStoragePath } from './storage.service.js';
+import {
+  createPrismaOrganisationStorageResolver,
+  resolveProviderForOrganisation,
+} from './document-storage-resolution.js';
 
 type DocumentStorageDeletionState = 'PENDING' | 'DEAD_LETTER' | 'PROCESSED';
 type DocumentStorageDeletionTerminalReason =
@@ -57,12 +61,6 @@ export const DOCUMENT_STORAGE_DELETION_MAX_CLAIM_BATCH = Math.floor(
     DOCUMENT_STORAGE_DELETION_ATTEMPT_TIMEOUT_MS,
 );
 const GIBIBYTE = 1024 * 1024 * 1024;
-
-// Documents enqueued by the portal upload path live in Supabase. Providers are
-// plain strings validated against the Phase 0 registry in
-// `document-storage-provider.ts`, never a Prisma enum, so adding a provider
-// never needs a migration.
-const SUPABASE_DOCUMENT_STORAGE_PROVIDER = 'supabase';
 
 export function documentStorageDeletionRetryDelayMs(attempt: number): number {
   if (!Number.isInteger(attempt) || attempt < 1) {
@@ -624,11 +622,38 @@ export class DocumentService {
         throw new AppError(404, 'DOCUMENT_NOT_FOUND', 'Document not found');
       }
 
+      // Stamp the provider the organisation resolves to *now*, reusing the same
+      // resolution StorageService uses so the row cannot disagree with the
+      // deleter. Providers are plain registry strings, never a Prisma enum, so
+      // a new provider never needs a migration.
+      //
+      // Why resolving at delete time is correct here, and not merely
+      // convenient: the spec asks for the provider a document was *actually
+      // written to*, and `Document` carries no such column yet. The spec's own
+      // standing mitigation is that changing an organisation's provider while
+      // it holds documents is unsupported, which is exactly what makes the
+      // organisation's current provider equal to the one it was written to.
+      // If `Document` ever gains a written-to provider column, read it here
+      // instead — this call is the placeholder for it, not the answer the spec
+      // asks for.
+      //
+      // `operation: 'delete'` deliberately: the production local-provider veto
+      // exists to stop a deployment *writing* bytes to an unvalidated local
+      // path. Refusing to enqueue an erasure for bytes that already exist would
+      // strand them and break the provable-erasure guarantee this pipeline is
+      // for.
+      const provider = await resolveProviderForOrganisation(
+        organisationId,
+        createPrismaOrganisationStorageResolver(tx),
+        undefined,
+        { operation: 'delete' },
+      );
+
       const deletion = await deletionDelegate(tx).create({
         data: {
           organisationId,
           storagePath: doc.fileUrl,
-          provider: SUPABASE_DOCUMENT_STORAGE_PROVIDER,
+          provider,
         },
       });
 

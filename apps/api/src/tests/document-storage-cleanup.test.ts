@@ -36,8 +36,15 @@ function pendingRecord(overrides: Record<string, unknown> = {}) {
   };
 }
 
-function buildEnqueueCapturingPrisma(created: Array<Record<string, unknown>>) {
+function buildEnqueueCapturingPrisma(
+  created: Array<Record<string, unknown>>,
+  organisation: { documentStorageProvider: string | null; documentStorageAlphaOptIn: boolean } | null =
+    { documentStorageProvider: 'supabase', documentStorageAlphaOptIn: false },
+) {
   const client = {
+    organisation: {
+      findUnique: async () => (organisation ? { ...organisation } : null),
+    },
     document: {
       findFirst: async () => ({ id: 'doc-1', organisationId: 'org-1', fileUrl: 'org-1/policy.pdf' }),
       delete: async () => ({ id: 'doc-1' }),
@@ -52,6 +59,19 @@ function buildEnqueueCapturingPrisma(created: Array<Record<string, unknown>>) {
     $transaction: async <T>(callback: (tx: unknown) => Promise<T>) => callback(client),
   };
   return client;
+}
+
+async function enqueuedDeletionData(
+  organisation: { documentStorageProvider: string | null; documentStorageAlphaOptIn: boolean } | null,
+): Promise<Record<string, unknown>> {
+  const created: Array<Record<string, unknown>> = [];
+  const prisma = buildEnqueueCapturingPrisma(created, organisation);
+  const service = new DocumentService(prisma as never, () => NOW);
+
+  await service.remove('org-1', 'doc-1');
+
+  assert.equal(created.length, 1);
+  return created[0];
 }
 
 function buildFallbackPrisma(initial: ReturnType<typeof pendingRecord>) {
@@ -354,14 +374,50 @@ test('maximum sequential claim batch is derived below the stale lease boundary',
   assert.equal(take, DOCUMENT_STORAGE_DELETION_MAX_CLAIM_BATCH);
 });
 
-test('an enqueued deletion defaults to the supabase provider with no target reference', async () => {
-  const created: Array<Record<string, unknown>> = [];
-  const prisma = buildEnqueueCapturingPrisma(created);
-  const service = new DocumentService(prisma as never, () => NOW);
+test('an enqueued deletion names the supabase provider with no target reference', async () => {
+  const data = await enqueuedDeletionData({
+    documentStorageProvider: 'supabase',
+    documentStorageAlphaOptIn: false,
+  });
 
-  await service.remove('org-1', 'doc-1');
+  assert.equal(data.provider, 'supabase');
+  assert.equal(data.targetRef ?? null, null);
+});
 
-  assert.equal(created.length, 1);
-  assert.equal(created[0].provider, 'supabase');
-  assert.equal(created[0].targetRef ?? null, null);
+test('an enqueued deletion for a local organisation names the local provider, not supabase', async () => {
+  const data = await enqueuedDeletionData({
+    documentStorageProvider: 'local',
+    documentStorageAlphaOptIn: false,
+  });
+
+  assert.equal(
+    data.provider,
+    'local',
+    'a local organisation must not enqueue a row labelled supabase; Task 2 dispatches on this value',
+  );
+  assert.equal(data.targetRef ?? null, null);
+});
+
+test('an organisation with no recorded provider falls back to the deployment default', async () => {
+  // Both halves pin DOCUMENT_STORAGE_DRIVER rather than reading whatever the
+  // suite happens to leave in the environment, so this asserts the fallback and
+  // not an ambient coincidence.
+  const previous = process.env.DOCUMENT_STORAGE_DRIVER;
+  const withDriver = async (driver: string | undefined) => {
+    if (driver === undefined) delete process.env.DOCUMENT_STORAGE_DRIVER;
+    else process.env.DOCUMENT_STORAGE_DRIVER = driver;
+    const data = await enqueuedDeletionData({
+      documentStorageProvider: null,
+      documentStorageAlphaOptIn: false,
+    });
+    return data.provider;
+  };
+
+  try {
+    assert.equal(await withDriver('local'), 'local');
+    assert.equal(await withDriver(undefined), 'supabase');
+  } finally {
+    if (previous === undefined) delete process.env.DOCUMENT_STORAGE_DRIVER;
+    else process.env.DOCUMENT_STORAGE_DRIVER = previous;
+  }
 });
