@@ -1577,6 +1577,47 @@ test('a reconnect landing between the token load and the generation re-read is c
   assert.equal(await storedCredential(fake, 'access_token'), RECONNECT_ACCESS_TOKEN);
 });
 
+test('a disconnect landing between the token load and the generation re-read is refused', async () => {
+  // The other half of the same fence, and the half the reconnect tests above
+  // leave unexecuted. `disconnectConfluence` deletes every credential and nulls
+  // `connectedAt`, so the generation re-read hands back `null` where the
+  // snapshot taken before the load held a Date — and it is `sameAuthorisation`'s
+  // null branch, not its timestamp comparison, that has to catch that.
+  //
+  // Nothing downstream would. `authorisationFencedClient` matches on
+  // `connectedAt: null`, which is exactly what the disconnected row now holds,
+  // so the fence on the writes *passes*: the refresher would spend the previous
+  // grant's refresh token and seal both envelopes back into the vault behind a
+  // DISCONNECTED row. That is the credential a charity believes it has revoked,
+  // which is the whole reason disconnectConfluence exists.
+  const fake = fakePrisma({
+    storedAccessToken: { plaintext: STORED_ACCESS_TOKEN, expiresAt: new Date(NOW.getTime() - 1_000) },
+  });
+  const refresh = recordingRefresh();
+
+  // Read 3 is the stored refresh token itself, as in the reconnect case above:
+  // the hook fires after that read returned, which is precisely "the
+  // administrator disconnected the instant after the token was loaded".
+  fake.hooks.onCredentialRead = async (call) => {
+    if (call === 3) await disconnectConfluence(fake.client, { integrationId: INTEGRATION_ID });
+  };
+
+  await assert.rejects(
+    withKey(() =>
+      currentAccessToken(fake.client, { integrationId: INTEGRATION_ID }, {
+        now: clock,
+        refreshAccessToken: refresh.fn,
+      }),
+    ),
+    (error: unknown) => error instanceof AppError && error.code === 'CONFLUENCE_REFRESH_SUPERSEDED',
+  );
+
+  assert.equal(refresh.calls.length, 0, 'the disagreement must be caught before a token is spent');
+  assert.deepEqual(fake.credentials, [], 'a disconnected charity must hold no credential afterwards');
+  assert.equal(fake.row().connectedAt, null);
+  assert.equal(fake.row().status, 'DISCONNECTED');
+});
+
 test('connectConfluence stamps the new authorisation before it writes either credential', async () => {
   // Not a stylistic ordering: it is the precondition the refresh fence stands
   // on. `authorisationFencedClient` excludes an in-flight refresher by matching
