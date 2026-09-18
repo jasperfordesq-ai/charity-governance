@@ -27,6 +27,14 @@ const INTEGRATION_KEY_PEER_SECRETS = [
   'OWNER_JWT_SECRET',
   'READINESS_API_KEY',
 ] as const;
+// `ATLASSIAN_CLIENT_SECRET`'s peers: the list above, spread rather than
+// retyped so the two cannot drift, plus INTEGRATION_ENCRYPTION_KEY — which is
+// itself a root secret, and is the one an Atlassian secret is most likely to be
+// pasted over by an operator filling in the integration section of an env file.
+const ATLASSIAN_CLIENT_SECRET_PEER_SECRETS = [
+  ...INTEGRATION_KEY_PEER_SECRETS,
+  'INTEGRATION_ENCRYPTION_KEY',
+] as const;
 const LOCAL_STORAGE_DRIVER = 'local';
 // Mirrors personal-server-env.ts's CONTROL_CHARACTERS exactly, so both
 // validators demand the same shape from a local storage path. Duplicated
@@ -455,6 +463,82 @@ export function requireIntegrationEncryptionKey(
   }
 }
 
+/**
+ * The Atlassian OAuth client — validated **when configured, never required**.
+ *
+ * ── The decision, recorded where it is enforced ──────────────────────────────
+ *
+ * `ATLASSIAN_CLIENT_ID` and `ATLASSIAN_CLIENT_SECRET` are NOT required in
+ * production. A CharityPilot deployment whose charities do not use Confluence
+ * has no business being forced to register an Atlassian app and hold a secret
+ * it will never present, and making that a boot requirement would fail the
+ * boot of every currently-running production deployment on upgrade for a
+ * credential nothing reads.
+ *
+ * This follows the precedent `INTEGRATION_ENCRYPTION_KEY` set one phase ago and
+ * that `docs/ARCHITECTURE.md` records: **gate the feature, not the boot.** The
+ * gate exists and is enforced — `routes/integrations/index.ts` refuses to begin
+ * an OAuth round trip with a 503 `ATLASSIAN_OAUTH_CLIENT_NOT_CONFIGURED` that
+ * names both variables, on every deployment profile — so an operator who has
+ * not configured Atlassian is told exactly that at the moment it matters,
+ * rather than being unable to start the server at all.
+ *
+ * Note the reach of this guard, which is the standard production path only:
+ * `validateRuntimeEnv` returns after `validatePersonalServerEnv` on the
+ * appliance branch, so an appliance never runs it — the same asymmetry
+ * INTEGRATION_ENCRYPTION_KEY already has, and it is the route gate above that
+ * covers the appliance.
+ *
+ * What IS enforced here is that a *partial* configuration cannot boot. Half a
+ * client is worse than none: the route's gate only tests presence, so a
+ * deployment holding an id and a placeholder secret would sail past it and
+ * fail against `auth.atlassian.com` at the last step of a real connection —
+ * after a charity administrator has already granted access. So:
+ *
+ * - neither set  -> Confluence is simply not enabled here. No issue.
+ * - one set      -> an issue. This is a configuration slip, not a choice.
+ * - both set     -> neither may be a placeholder, and the secret must be
+ *                   distinct from the id and from every other secret.
+ *
+ * Presence is tested on the raw value rather than through `isConfiguredSecret`
+ * deliberately: a placeholder must count as *set* here, or a half-filled env
+ * file would be read as "Confluence not enabled" and pass silently — which is
+ * the exact failure this guard exists to catch.
+ */
+export function requireAtlassianOAuthClient(
+  issues: string[],
+  env: NodeJS.ProcessEnv = process.env,
+): void {
+  const clientId = env.ATLASSIAN_CLIENT_ID?.trim() ?? '';
+  const clientSecret = env.ATLASSIAN_CLIENT_SECRET?.trim() ?? '';
+
+  if (clientId.length === 0 && clientSecret.length === 0) return;
+
+  if (clientId.length === 0 || clientSecret.length === 0) {
+    issues.push(
+      'ATLASSIAN_CLIENT_ID and ATLASSIAN_CLIENT_SECRET must both be set to enable the Confluence ' +
+        'integration, or both be left unset',
+    );
+    return;
+  }
+
+  if (!isConfiguredSecret(clientId)) {
+    issues.push('ATLASSIAN_CLIENT_ID still contains a placeholder value');
+  }
+  if (!isConfiguredSecret(clientSecret)) {
+    issues.push('ATLASSIAN_CLIENT_SECRET still contains a placeholder value');
+  }
+
+  if (clientSecret === clientId) {
+    issues.push('ATLASSIAN_CLIENT_SECRET must be distinct from ATLASSIAN_CLIENT_ID');
+  }
+  if (ATLASSIAN_CLIENT_SECRET_PEER_SECRETS.some((name) => env[name]?.trim() === clientSecret)) {
+    issues.push(
+      `ATLASSIAN_CLIENT_SECRET must be distinct from ${ATLASSIAN_CLIENT_SECRET_PEER_SECRETS.join(', ')}`,
+    );
+  }
+}
+
 function validateAuthDeliveryNumericEnv(issues: string[]): void {
   const providerTimeout = requireOptionalCanonicalIntegerRange(
     'SECURITY_EMAIL_PROVIDER_TIMEOUT_MS',
@@ -808,6 +892,7 @@ export function validateProductionEnv(): void {
   }
   requireAuthRecoverySecret(issues);
   requireIntegrationEncryptionKey(issues);
+  requireAtlassianOAuthClient(issues);
   requireAccessTokenExpiry(issues);
   requireRefreshTokenTtlDays(issues);
   requireUrl('FRONTEND_URL', issues, {

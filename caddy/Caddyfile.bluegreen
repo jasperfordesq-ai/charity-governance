@@ -22,7 +22,28 @@
 	import /etc/caddy/active-upstreams.caddy
 
 	log {
+		# Redact the OAuth callback's query parameters before they are written.
+		#
+		# Caddy's JSON access log records `request.uri` INCLUDING the query
+		# string, and this proxy carries
+		#   GET /api/v1/integrations/confluence/callback?code=...&state=...
+		# on every Confluence connection. `apps/api/src/utils/logger.ts` already
+		# censors both parameters out of the API's own log; without the filter
+		# below they would still land here, one layer further out, which is the
+		# log an operator is most likely to `docker logs` and paste into a
+		# ticket. `code` is a single-use authorization code and `state` is the
+		# CSRF token the whole flow rests on.
+		#
+		# DO NOT remove this as noise. See docs/bluegreen-runbook.md.
 		output stdout
-		format json
+		format filter {
+			wrap json
+			fields {
+				request>uri query {
+					delete code
+					delete state
+				}
+			}
+		}
 	}
 }

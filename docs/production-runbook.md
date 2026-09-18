@@ -322,6 +322,20 @@ The web app requires only `NEXT_PUBLIC_API_URL=https://api.charitypilot.ie`; Doc
 
 Configure the API `FRONTEND_URL=https://app.charitypilot.ie` and `AUTH_COOKIE_DOMAIN=.charitypilot.ie` so auth cookies cover the canonical web and API subdomains. Do not use a single-host or apex-host production deployment unless the validators and launch evidence model are deliberately changed first.
 
+### Confluence integration (optional)
+
+`ATLASSIAN_CLIENT_ID` and `ATLASSIAN_CLIENT_SECRET` are **optional and are not required to boot**, on any deployment profile. A deployment whose charities do not use Confluence holds neither, and the connect route refuses the feature with a 503 `ATLASSIAN_OAUTH_CLIENT_NOT_CONFIGURED` naming both variables — the feature is gated, not the boot, exactly as for `INTEGRATION_ENCRYPTION_KEY` on the appliance. `npm run setup:production-env` does not generate them and `scripts/check-production.mjs` does not require them. What *is* enforced, at boot on this standard production path (`validateProductionEnv`, which the private-VM blue-green profile also runs) and by deploy preflight, is that they are set **both or neither**: exactly one set, or a `REPLACE_ME_` value left in either, fails validation, because the route-level gate tests presence alone and a half-configured client would otherwise fail against `auth.atlassian.com` only at the last step of a real connection, after a charity administrator had already granted access. The personal-server/appliance branch (`validatePersonalServerEnv`) does not run this check, the same asymmetry `INTEGRATION_ENCRYPTION_KEY` already has; on an appliance the route-level 503 is the whole of the protection. When you do enable Confluence: register an OAuth 2.0 (3LO) app at <https://developer.atlassian.com/console/myapps/>, set its callback URL to exactly `{NEXT_PUBLIC_API_URL}/api/v1/integrations/confluence/callback`, include the scope **`offline_access`** (without it Atlassian issues no refresh token at all and every connected charity is disconnected within the hour), and keep `ATLASSIAN_CLIENT_SECRET` distinct from every other secret in the env file.
+
+### Connected Confluence integrations go stale after 90 days idle
+
+**An Atlassian refresh token expires after 90 days without use, and the clock resets on every use.** A charity that connects Confluence and then publishes nothing for a quarter is silently disconnected by Atlassian: nothing fails, nothing is logged, and the first symptom is a failed refresh whenever they next try to use it. Unlike an access-token expiry, this is **not** self-healing — the grant is gone and an administrator must re-authorise through the connect flow.
+
+Nobody deduces this from the code, so treat it as an operational fact:
+
+- It is a product-visible condition, not only a technical one. The charity should be told before it happens, not discover it when they need the integration.
+- An `invalid_grant` on a refresh that CharityPilot genuinely issued (that is, one where the refreshing worker held the claim — see [`docs/ARCHITECTURE.md`](ARCHITECTURE.md#confluence-oauth-rotating-refresh-tokens-and-why-refreshes-are-serialised)) sets the integration to `ERROR` with a `lastError`. On an integration that has been idle for roughly a quarter, expiry is the likeliest cause; the remedy is the same either way — re-authorise. Do **not** treat it as a credential-vault fault, and do **not** touch `INTEGRATION_ENCRYPTION_KEY` in response to it.
+- Nothing here can be fixed by rotating or regenerating a secret. Re-authorisation is the only route back, and it is cheap.
+
 ## Hosting, DNS, And TLS
 
 Run `npm run check:production:hosting -- --production-env-file=.env.production` before launch. The checker verifies the configured production web and API origins are exactly `https://app.charitypilot.ie` and `https://api.charitypilot.ie`, resolve through public DNS, present authorized TLS certificates with enough remaining lifetime, respond over HTTPS, and include baseline security headers. Record the redacted output in the launch evidence ledger.

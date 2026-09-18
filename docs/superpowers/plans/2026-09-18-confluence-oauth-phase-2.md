@@ -35,7 +35,12 @@ Someone must create an OAuth 2.0 (3LO) app in the [Atlassian developer console](
 - `read:content-details:confluence`
 - **`offline_access`** — without it no refresh token is issued at all, and every charity is disconnected within an hour
 
-The callback URL must be registered as `{API_URL}/integrations/confluence/callback`.
+The callback URL must be registered as `{NEXT_PUBLIC_API_URL}/api/v1/integrations/confluence/callback`.
+(Corrected in Task 5. An earlier draft of this line said `{API_URL}/integrations/confluence/callback`,
+which is not what the API serves: `server.ts` registers the plugin under
+`INTEGRATION_ROUTES_PREFIX = /api/v1/integrations` and the route is `/confluence/callback`.
+Atlassian matches the registered URL exactly, so the wrong value fails at the last step of a
+real connection, after the charity has already granted access.)
 
 That yields a client ID and client secret, supplied as `ATLASSIAN_CLIENT_ID` and `ATLASSIAN_CLIENT_SECRET`. **Tasks 1-3 can be built and tested without them**; only a live connection needs them.
 
@@ -47,10 +52,16 @@ That yields a client ID and client secret, supplied as `ATLASSIAN_CLIENT_ID` and
 - **A plaintext token never leaves the credential boundary.** Tokens are sealed by the Phase 1 vault before storage and never logged, never returned in a response, never put in an error message or an error `cause`. This includes the authorization `code` and the `client_secret`.
 - **Callers must prove ownership.** The credential service binds a credential to its owner but does **not** authorize — its own module header says so. Every route added here must verify the requesting user's organisation owns the integration it names.
 - **Refreshes are serialised per integration.** See the hazard below. A concurrent refresh must wait, not race.
-- **`ATLASSIAN_CLIENT_SECRET` is required in production** when the Confluence integration is enabled, must be distinct from every other secret, and is validated at boot in the same way `INTEGRATION_ENCRYPTION_KEY` is.
+- **`ATLASSIAN_CLIENT_ID` / `ATLASSIAN_CLIENT_SECRET` are NOT required in production** (decided in Task 5).
+  A deployment whose charities do not use Confluence holds neither and boots clean; the connect route
+  refuses the feature with a 503. What is validated at boot is that they are set **both or neither**,
+  that neither is a placeholder, and that the secret is distinct from every other secret. See
+  `requireAtlassianOAuthClient` in `apps/api/src/utils/env.ts` and `docs/ARCHITECTURE.md`.
 - Migrations are additive only.
 - ESM only; every relative import ends in `.js`.
-- Current suite state: `apps/api` main **1102 pass / 0 fail**, real-PostgreSQL migration suite **4 pass / 0 fail**. Every task reports against this.
+- Suite state: `apps/api` main **1188 pass / 0 fail**, real-PostgreSQL migration suite **4 pass / 0 fail**,
+  at the end of Task 5. It was 1102 when this plan was written, 1178 after Task 4; the migration suite has
+  not moved. Each task reports against the count current when it starts, not against the 1102 above.
 
 ---
 

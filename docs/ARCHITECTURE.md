@@ -372,6 +372,165 @@ ready can set the key now (`openssl rand -hex 32`, distinct from every other
 secret); nothing on the appliance consumes it yet, and once something does it
 must never be regenerated — see `docs/production-runbook.md`.
 
+**That obligation is now discharged.** `connectRefusal()` in
+`apps/api/src/routes/integrations/index.ts` refuses `authorize` and `callback`
+with a 503 `INTEGRATION_ENCRYPTION_KEY_MISSING` / `_INVALID` naming the variable
+and the command to generate it, on every deployment profile, and decodes the key
+rather than merely testing presence. `DELETE /confluence` is deliberately *not*
+gated: revoking access must keep working on a server that has lost the key, and
+`disconnectConfluence` deletes sealed envelopes without opening any.
+
+#### The Atlassian OAuth client is validated when configured, never required
+
+`ATLASSIAN_CLIENT_ID` and `ATLASSIAN_CLIENT_SECRET` are **not** required
+production variables, on any deployment profile. This follows the same trade as
+above, in the same direction: a CharityPilot deployment whose charities do not
+use Confluence has no reason to register an Atlassian app, and making the
+credentials a boot requirement would fail the boot of every running production
+deployment on upgrade for a value nothing reads. **The feature is gated, not the
+boot** — `connectRefusal()` returns a 503
+`ATLASSIAN_OAUTH_CLIENT_NOT_CONFIGURED` naming both variables.
+
+What `requireAtlassianOAuthClient` (`apps/api/src/utils/env.ts`) does enforce is
+that a *partial* client cannot boot, because half a client is worse than none.
+Its reach is the standard production path — `validateRuntimeEnv` returns after
+`validatePersonalServerEnv` on the appliance branch, so an appliance never runs
+it, exactly as for `INTEGRATION_ENCRYPTION_KEY` above; on an appliance the 503
+is the whole of the protection. The rules:
+
+- neither set — Confluence is not enabled here. No issue.
+- exactly one set — an issue. Nobody chooses this; it is a slip.
+- both set — neither may be a placeholder, and the secret must be distinct from
+  the client id and from `JWT_SECRET`, `OWNER_JWT_SECRET`,
+  `AUTH_RECOVERY_SECRET`, `READINESS_API_KEY` and `INTEGRATION_ENCRYPTION_KEY`.
+
+Presence is tested on the raw value, *not* through `isConfiguredSecret`, so a
+`REPLACE_ME_` value counts as **set**. If it counted as unset, a half-filled env
+file would read as "Confluence is not enabled", pass the boot guard, pass the
+route's presence-only gate, and fail against `auth.atlassian.com` at the last
+step of a real connection — after a charity administrator had already granted
+access. The same rule is mirrored in `scripts/check-production.mjs`, whose
+`REQUIRED` list deliberately does **not** name either variable.
+
+### Confluence OAuth: rotating refresh tokens, and why refreshes are serialised
+
+[Atlassian issues rotating, single-use refresh
+tokens.](https://developer.atlassian.com/cloud/confluence/oauth-2-3lo-apps/)
+Every successful refresh invalidates the token it was called with and returns a
+replacement. The entire shape of `confluence-connection.service.ts` follows from
+that one fact, and each consequence can permanently disconnect a charity.
+
+**1. Concurrent refreshes destroy each other, so refreshes hold a claim.**
+CharityPilot has web routes *and* background jobs. If two of them refresh the
+same integration at once, one wins and the other is holding a token Atlassian
+already killed; its call comes back `invalid_grant`. So `currentAccessToken`
+does not refresh on demand. It first takes a **fenced claim** on the
+`OrganisationIntegration` row — a conditional update of `refreshClaimedAt` and a
+fresh `refreshClaimToken`, the same idiom the storage-deletion pipeline uses over
+its rows — and **never calls Atlassian without holding it**. A caller that loses
+the claim waits and re-reads instead of racing: by the time it looks again, the
+winner has stored a new access token and that is what it returns. The claim ages
+out through a staleness window, so one leaked by a crash blocks nobody forever.
+
+**2. A lost race must never be read as a revoked grant.** `invalid_grant` has two
+completely different meanings — "the charity revoked us or the grant expired",
+which should set `status: ERROR` with a `lastError` an administrator can act on,
+and "you refreshed with a token another worker had already spent", which should
+set nothing at all. Collapsing them marks a perfectly healthy integration broken
+and tells a charity to re-authorise for no reason. **The claim is what makes the
+two distinguishable:** if you did not hold the claim you never called refresh, so
+an `invalid_grant` you actually saw is a real one.
+
+**3. The replacement is written durably BEFORE the new access token is used.**
+This is the sharpest edge here. The old refresh token is dead the instant
+Atlassian's response leaves their side — not when we finish handling it. A crash
+in the window between receiving the response and committing the replacement
+leaves that charity holding a refresh token that no longer works and no record of
+the one that does. Nothing can recover it: the integration is permanently
+disconnected and an administrator must re-authorise by hand. So the replacement
+is committed in its own write, immediately, before the new access token is
+returned or used for anything, and before the claim is released. The window is
+not eliminated — it cannot be, since Atlassian's state changes before ours can —
+but it is reduced to the smallest thing that can go wrong, and everything on
+either side of it is recoverable.
+
+Two further rules fall out of the same behaviour:
+
+- **Absent means unchanged.** Atlassian may omit `refresh_token` from a refresh
+  response when it has *not* rotated the token, in which case the one already
+  held is still valid. `refreshToken: null` from `atlassian-oauth.ts` therefore
+  means "no replacement was issued", never "there is no refresh token". Writing
+  it straight through would null out a working token and break that charity
+  silently. Only overwrite when a replacement actually came back.
+- **`offline_access` is not optional.** Without that scope on the OAuth app,
+  Atlassian issues no refresh token at all, the access token dies within the
+  hour, and every connected charity is disconnected before lunchtime with
+  nothing able to renew it. It is in `CONFLUENCE_OAUTH_SCOPES`, and
+  `connectConfluence` refuses a connection whose exchange produced no refresh
+  token so the failure is loud at connect time rather than quiet an hour later.
+
+The third consequence — that **ninety days of inactivity silently expires the
+grant**, with the clock reset on each use — is operational rather than
+structural, and is recorded in
+[`docs/production-runbook.md`](production-runbook.md#connected-confluence-integrations-go-stale-after-90-days-idle).
+
+The callback URL registered with Atlassian must be, exactly:
+
+```
+{NEXT_PUBLIC_API_URL}/api/v1/integrations/confluence/callback
+```
+
+`/api/v1/integrations` is `INTEGRATION_ROUTES_PREFIX`, the prefix `server.ts`
+registers the plugin under, and the route itself is `/confluence/callback`. The
+API builds its own `redirect_uri` from the same two constants, so the value it
+sends and the path that answers cannot drift — but Atlassian matches the
+registered URL exactly, and a mismatch fails at the final step of a real
+connection, after the charity has granted access.
+
+#### The callback is cookie-authenticated, and the session can expire mid-flow
+
+**Read this before building the web side of the connect flow. The decision is
+not made yet, and it should be made knowingly rather than discovered.**
+
+Three lifetimes meet at the callback:
+
+- the access-token cookie lives **15 minutes** (`apps/api/src/utils/auth-cookies.ts`)
+- the signed OAuth `state` lives **10 minutes** (`OAUTH_STATE_TTL_SECONDS`)
+- the administrator spends an unbounded amount of time on Atlassian's consent
+  screen — reading it, picking a site, possibly logging in to Atlassian first
+
+So an administrator who lingers returns to a callback whose cookie has already
+expired. `authGuard` answers a raw JSON **401**, in a browser tab, to a person
+who has just granted access — and the authorization code in that URL is
+**single-use and now spent**. There is no way forward but to start the entire
+flow again, and nothing on the page explains why.
+
+This is a live failure mode, not a theoretical one, and it argues for a specific
+shape: **register the callback against a page in the web app, which refreshes
+the session and then posts `code` and `state` to the API**, rather than a bare
+302 with the parameters in a fragment. Only the page-mediated form gets a chance
+to renew an expired session *before* the code is spent; the fragment form
+inherits exactly the failure above. Whatever is chosen, the registered callback
+URL must remain byte-identical to the `redirect_uri` the API sends, so a change
+of shape is a change to both.
+
+The routes themselves deliberately do not redirect — the web app decides when
+and how to send the administrator to Atlassian — so this is genuinely the web
+work's call to make, and this note exists so it is made on purpose.
+
+#### Why the integration routes carry no `subscriptionGuard`
+
+`authGuard` and `requireAdmin` are applied as plugin-level hooks; `subscriptionGuard`
+is deliberately **not**. That is not an oversight, and the reason is stronger
+than "connecting is not a paid feature": `subscriptionGuard` returns 403 when no
+`Subscription` row exists, and *no row* is the normal, permanent state on the
+personal-server appliance. Adding it here would break that profile outright.
+
+A subscription gate, if one is wanted, belongs on the **publish pipeline** in a
+later phase — the point at which the integration does billable work — not on
+connecting. `documents` is already gated that way, and it is the precedent to
+follow.
+
 Security-sensitive operator references:
 
 - [Team Lifecycle and Session Security](team-lifecycle-security.md)

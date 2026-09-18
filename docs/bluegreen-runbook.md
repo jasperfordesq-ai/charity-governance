@@ -561,6 +561,19 @@ chmod 600 "$DST"
 grep -c REPLACE_ME "$DST" || echo "OK: no placeholders left"
 grep -E '^(BLUEGREEN_ORIGIN|FRONTEND_URL|AUTH_COOKIE_DOMAIN|POSTGRES_DB|POSTGRES_USER|BLUEGREEN_COMPOSE_OVERRIDE|BLUEGREEN_DOCUMENTS_VOLUME)=' "$DST"
 ```
+**Why there is no `-e` line for the Atlassian client.** `ATLASSIAN_CLIENT_ID`
+and `ATLASSIAN_CLIENT_SECRET` ship in the template **commented out and without a
+`REPLACE_ME_` placeholder**, on purpose. They are not required to boot — a host
+whose charities do not use Confluence holds neither, and the connect route
+refuses the feature with an actionable 503 rather than the server refusing to
+start. They are also not generatable: only Atlassian can issue them, so there is
+nothing for `openssl rand` to mint and a placeholder left behind would be
+rejected at boot. To enable Confluence on this host later, register an OAuth 2.0
+(3LO) app whose callback URL is exactly
+`https://<this host>/api/v1/integrations/confluence/callback` and whose scopes
+include `offline_access`, then uncomment **both** lines in `$DST` and redeploy.
+Uncommenting only one is refused at boot, deliberately.
+
 Gate: prints `OK: no placeholders left` and the seven non-secret lines show the Tailscale hostname, `charitypilot_personal_server` ×2, the override filename, and the documents volume name. (The appliance's `POSTGRES_PASSWORD` is 64 hex chars, so no URL-encoding is needed in `DATABASE_URL`; if `get POSTGRES_PASSWORD | grep -q '[^0-9a-f]'` prints anything, stop and percent-encode it by hand.)
 
 - [ ] **Step 4: Stop the appliance, move the checkout, run the first deploy (DOWNTIME STARTS).** Order matters: the appliance is stopped with the compose file at ITS commit, then the checkout moves.
@@ -729,6 +742,47 @@ Finish the report file with: timestamps per step, every gate's output, the opera
 git add docs/superpowers/plans/2026-09-02-private-vm-bluegreen-cutover-report.md docs/bluegreen-runbook.md
 git commit -m "docs(deploy): private VM cutover to blue-green — executed <date>, evidence report"
 git push origin master
+```
+
+## The Caddy access log redacts the OAuth callback query string
+
+`caddy/Caddyfile.bluegreen` and `caddy/Caddyfile.personal-server` both use
+Caddy's `filter` log encoder rather than plain `format json`:
+
+```
+	format filter {
+		wrap json
+		fields {
+			request>uri query {
+				delete code
+				delete state
+			}
+		}
+	}
+```
+
+**Do not remove this, and do not "simplify" it back to `format json`.** Caddy's
+JSON access log records `request>uri` *including the query string*, and both of
+these proxies carry
+
+```
+GET /api/v1/integrations/confluence/callback?code=<authorization code>&state=<signed CSRF state>
+```
+
+on every Confluence connection a charity makes. `apps/api/src/utils/logger.ts`
+already censors both parameters out of the API's own log; the filter closes the
+same leak one layer further out, in the log an operator is most likely to read
+with `docker logs` and paste into a ticket or a support thread.
+
+The residual risk if it were removed is bounded rather than nil — the `code` is
+single-use and already spent by the time the line is written, and replaying the
+`state` needs an authenticated session in the same organisation — but "no
+authorization code reaches a log" should be true of the deployment, not only of
+the application. `scripts/check-bluegreen-compose.test.mjs` fails if either file
+loses the filter. The adapted config can be checked directly:
+
+```bash
+docker run --rm -v "$PWD/caddy:/etc/caddy:ro" caddy:2-alpine   caddy adapt --config /etc/caddy/Caddyfile.personal-server --adapter caddyfile   | grep -A6 '"filter": "query"'
 ```
 
 ## The nightly cron (private VM)

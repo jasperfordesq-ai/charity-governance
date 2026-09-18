@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import { afterEach, beforeEach, test } from 'node:test';
 import { AppError } from '../utils/errors.js';
 import {
+  requireAtlassianOAuthClient,
   requireIntegrationEncryptionKey,
   requireUsableDocumentStorageDefault,
   validateAuthDeliveryEnv,
@@ -212,6 +213,51 @@ test('validateProductionEnv requires a distinct, correctly sized INTEGRATION_ENC
       error.details.some((issue: string) =>
         issue.startsWith('INTEGRATION_ENCRYPTION_KEY must be distinct from'),
       ),
+  );
+});
+
+// Pins the *decision*, not just the guard. If a later change makes the
+// Atlassian client a required production variable, this test fails and whoever
+// made it has to come here, read why it is not required, and change the
+// documentation that says so — instead of silently breaking the boot of every
+// production deployment whose charities do not use Confluence.
+test('validateProductionEnv boots without any Atlassian client configured', () => {
+  setCompleteProductionEnv({
+    ATLASSIAN_CLIENT_ID: undefined,
+    ATLASSIAN_CLIENT_SECRET: undefined,
+  });
+  assert.doesNotThrow(() => validateProductionEnv());
+});
+
+// Pins the wiring: every other test of requireAtlassianOAuthClient calls it
+// directly, so deleting its call site inside validateProductionEnv would leave
+// them all green.
+test('validateProductionEnv rejects a half-configured Atlassian client', () => {
+  setCompleteProductionEnv({
+    ATLASSIAN_CLIENT_ID: 'configured-atlassian-client-id',
+    ATLASSIAN_CLIENT_SECRET: undefined,
+  });
+  assert.throws(
+    () => validateProductionEnv(),
+    (error: unknown) =>
+      error instanceof AppError &&
+      Array.isArray(error.details) &&
+      error.details.includes(
+        'ATLASSIAN_CLIENT_ID and ATLASSIAN_CLIENT_SECRET must both be set to enable the Confluence ' +
+          'integration, or both be left unset',
+      ),
+  );
+
+  setCompleteProductionEnv({
+    ATLASSIAN_CLIENT_ID: undefined,
+    ATLASSIAN_CLIENT_SECRET: 'configured-atlassian-client-secret',
+  });
+  assert.throws(
+    () => validateProductionEnv(),
+    (error: unknown) =>
+      error instanceof AppError &&
+      Array.isArray(error.details) &&
+      error.details.some((issue: string) => issue.startsWith('ATLASSIAN_CLIENT_ID and ATLASSIAN_CLIENT_SECRET')),
   );
 });
 
@@ -1469,4 +1515,118 @@ test('a valid, distinct INTEGRATION_ENCRYPTION_KEY raises no issue', () => {
     AUTH_RECOVERY_SECRET: 'ef'.repeat(32),
   } as NodeJS.ProcessEnv);
   assert.deepEqual(issues, []);
+});
+
+// --- the Atlassian OAuth client: validated when configured, never required ---
+
+test('an absent Atlassian client raises no issue — Confluence is simply not enabled', () => {
+  const issues: string[] = [];
+  requireAtlassianOAuthClient(issues, {} as NodeJS.ProcessEnv);
+  assert.deepEqual(issues, []);
+
+  const blank: string[] = [];
+  requireAtlassianOAuthClient(blank, {
+    ATLASSIAN_CLIENT_ID: '   ',
+    ATLASSIAN_CLIENT_SECRET: '',
+  } as NodeJS.ProcessEnv);
+  assert.deepEqual(blank, []);
+});
+
+test('an Atlassian client id without its secret is rejected', () => {
+  const issues: string[] = [];
+  requireAtlassianOAuthClient(issues, {
+    ATLASSIAN_CLIENT_ID: 'configured-atlassian-client-id',
+  } as NodeJS.ProcessEnv);
+  assert.deepEqual(issues, [
+    'ATLASSIAN_CLIENT_ID and ATLASSIAN_CLIENT_SECRET must both be set to enable the Confluence ' +
+      'integration, or both be left unset',
+  ]);
+});
+
+test('an Atlassian client secret without its id is rejected', () => {
+  const issues: string[] = [];
+  requireAtlassianOAuthClient(issues, {
+    ATLASSIAN_CLIENT_SECRET: 'configured-atlassian-client-secret',
+  } as NodeJS.ProcessEnv);
+  assert.equal(issues.length, 1);
+  assert.match(issues[0], /^ATLASSIAN_CLIENT_ID and ATLASSIAN_CLIENT_SECRET must both be set/);
+});
+
+// Presence is tested on the raw value, so a placeholder counts as *set*. If it
+// counted as unset, a half-filled env file would read as "Confluence not
+// enabled" and sail past both this guard and the route's presence-only gate,
+// failing against auth.atlassian.com only after a charity had granted access.
+test('a placeholder Atlassian client is rejected rather than read as absent', () => {
+  const issues: string[] = [];
+  requireAtlassianOAuthClient(issues, {
+    ATLASSIAN_CLIENT_ID: 'REPLACE_ME_ATLASSIAN_CLIENT_ID',
+    ATLASSIAN_CLIENT_SECRET: 'REPLACE_ME_ATLASSIAN_CLIENT_SECRET',
+  } as NodeJS.ProcessEnv);
+  assert.deepEqual(issues, [
+    'ATLASSIAN_CLIENT_ID still contains a placeholder value',
+    'ATLASSIAN_CLIENT_SECRET still contains a placeholder value',
+  ]);
+});
+
+test('an ATLASSIAN_CLIENT_SECRET equal to another secret is rejected', () => {
+  const shared = 'ff'.repeat(32);
+  for (const peer of [
+    'JWT_SECRET',
+    'AUTH_RECOVERY_SECRET',
+    'OWNER_JWT_SECRET',
+    'READINESS_API_KEY',
+    'INTEGRATION_ENCRYPTION_KEY',
+  ]) {
+    const issues: string[] = [];
+    requireAtlassianOAuthClient(issues, {
+      ATLASSIAN_CLIENT_ID: 'configured-atlassian-client-id',
+      ATLASSIAN_CLIENT_SECRET: shared,
+      [peer]: shared,
+    } as NodeJS.ProcessEnv);
+    assert.equal(
+      issues.some((issue) => issue.startsWith('ATLASSIAN_CLIENT_SECRET must be distinct from')),
+      true,
+      `${peer} reuse must be rejected`,
+    );
+  }
+});
+
+test('an ATLASSIAN_CLIENT_SECRET equal to the client id is rejected', () => {
+  const issues: string[] = [];
+  requireAtlassianOAuthClient(issues, {
+    ATLASSIAN_CLIENT_ID: 'same-value-for-both',
+    ATLASSIAN_CLIENT_SECRET: 'same-value-for-both',
+  } as NodeJS.ProcessEnv);
+  assert.equal(
+    issues.includes('ATLASSIAN_CLIENT_SECRET must be distinct from ATLASSIAN_CLIENT_ID'),
+    true,
+  );
+});
+
+test('a fully configured, distinct Atlassian client raises no issue', () => {
+  const issues: string[] = [];
+  requireAtlassianOAuthClient(issues, {
+    ATLASSIAN_CLIENT_ID: 'configured-atlassian-client-id',
+    ATLASSIAN_CLIENT_SECRET: 'configured-atlassian-client-secret',
+    JWT_SECRET: 'cd'.repeat(32),
+    AUTH_RECOVERY_SECRET: 'ef'.repeat(32),
+    INTEGRATION_ENCRYPTION_KEY: 'ab'.repeat(32),
+  } as NodeJS.ProcessEnv);
+  assert.deepEqual(issues, []);
+});
+
+// No issue message may echo the value it is complaining about: these strings
+// reach logs and the deploy preflight transcript.
+test('no Atlassian client issue contains the secret it rejects', () => {
+  const secret = 'super-secret-atlassian-value';
+  const issues: string[] = [];
+  requireAtlassianOAuthClient(issues, {
+    ATLASSIAN_CLIENT_ID: secret,
+    ATLASSIAN_CLIENT_SECRET: secret,
+    JWT_SECRET: secret,
+  } as NodeJS.ProcessEnv);
+  assert.ok(issues.length > 0);
+  for (const issue of issues) {
+    assert.equal(issue.includes(secret), false, issue);
+  }
 });

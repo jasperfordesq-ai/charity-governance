@@ -340,6 +340,86 @@ test('production preflight requires a usable INTEGRATION_ENCRYPTION_KEY', () => 
   );
 });
 
+// The Atlassian OAuth client is NOT required in production, by decision. These
+// tests pin that decision on the preflight side, where REQUIRED lives and could
+// silently acquire an entry.
+test('production preflight is green with no Atlassian client configured', () => {
+  assert.deepEqual(
+    validateProductionEnvContent(completeProductionEnv(), validRuntimeWebApiUrlEnv).filter((issue) =>
+      issue.includes('ATLASSIAN'),
+    ),
+    [],
+  );
+});
+
+test('production preflight rejects a half-configured or placeholder Atlassian client', () => {
+  for (const overrides of [
+    { ATLASSIAN_CLIENT_ID: 'configured-atlassian-client-id' },
+    { ATLASSIAN_CLIENT_SECRET: 'configured-atlassian-client-secret' },
+  ]) {
+    const issues = validateProductionEnvContent(
+      completeProductionEnv(overrides),
+      validRuntimeWebApiUrlEnv,
+    );
+    assert.ok(
+      issues.some((issue) => issue.startsWith('ATLASSIAN_CLIENT_ID and ATLASSIAN_CLIENT_SECRET must both be set')),
+      issues.join('\n'),
+    );
+  }
+
+  // A placeholder must count as SET, not as absent: otherwise a half-filled env
+  // file reads as "Confluence is not enabled" and the failure surfaces only
+  // against auth.atlassian.com, after a charity has granted access.
+  const placeholder = validateProductionEnvContent(
+    completeProductionEnv({
+      ATLASSIAN_CLIENT_ID: 'REPLACE_ME_ATLASSIAN_CLIENT_ID',
+      ATLASSIAN_CLIENT_SECRET: 'REPLACE_ME_ATLASSIAN_CLIENT_SECRET',
+    }),
+    validRuntimeWebApiUrlEnv,
+  );
+  assert.ok(
+    placeholder.includes('ATLASSIAN_CLIENT_ID still contains a placeholder value') &&
+      placeholder.includes('ATLASSIAN_CLIENT_SECRET still contains a placeholder value'),
+    placeholder.join('\n'),
+  );
+
+  // Reused as another secret.
+  const reused = validateProductionEnvContent(
+    completeProductionEnv({
+      ATLASSIAN_CLIENT_ID: 'configured-atlassian-client-id',
+      ATLASSIAN_CLIENT_SECRET: productionIntegrationEncryptionKey,
+    }),
+    validRuntimeWebApiUrlEnv,
+  );
+  assert.ok(
+    reused.some((issue) => issue.startsWith('ATLASSIAN_CLIENT_SECRET must be distinct from')),
+    reused.join('\n'),
+  );
+
+  // Fully configured and distinct: clean.
+  assert.deepEqual(
+    validateProductionEnvContent(
+      completeProductionEnv({
+        ATLASSIAN_CLIENT_ID: 'configured-atlassian-client-id',
+        ATLASSIAN_CLIENT_SECRET: 'configured-atlassian-client-secret',
+      }),
+      validRuntimeWebApiUrlEnv,
+    ).filter((issue) => issue.includes('ATLASSIAN')),
+    [],
+  );
+});
+
+// The two validators are maintained separately and have drifted before. This
+// keeps the decision itself from drifting: neither list may start requiring the
+// Atlassian client without this failing.
+test('neither production validator requires the Atlassian client', () => {
+  assert.doesNotMatch(readRepoFile('scripts/check-production.mjs'), /^\s*'ATLASSIAN_CLIENT_(?:ID|SECRET)',$/m);
+  assert.ok(
+    !requiredProductionEnvVariables().some((name) => name.startsWith('ATLASSIAN_')),
+    'validateProductionEnv must not require ATLASSIAN_CLIENT_ID/ATLASSIAN_CLIENT_SECRET',
+  );
+});
+
 test('the production template carries INTEGRATION_ENCRYPTION_KEY and the generator fills it', () => {
   const template = readRepoFile('.env.production.example');
   const generator = readRepoFile('scripts/generate-production-env.mjs');
@@ -5467,6 +5547,13 @@ const PRODUCTION_ENV_GUARD_VARIABLES = new Map([
   ['requireAuthCookieDomain', ['AUTH_COOKIE_DOMAIN']],
   ['requireErrorAlertWebhook', ['ERROR_ALERT_WEBHOOK_URL']],
   // Optional or defaulted — absence is not an issue.
+  // Deliberately empty: ATLASSIAN_CLIENT_ID/ATLASSIAN_CLIENT_SECRET are NOT
+  // required in production. The guard only refuses a *partial* Atlassian
+  // client (one of the two set, or a placeholder in either). A deployment
+  // whose charities do not use Confluence holds neither and boots clean, and
+  // routes/integrations/index.ts refuses the feature with an actionable 503
+  // instead. See requireAtlassianOAuthClient's header in env.ts.
+  ['requireAtlassianOAuthClient', []],
   ['requireAccessTokenExpiry', []],
   ['requireRefreshTokenTtlDays', []],
   ['validateAuthDeliveryNumericEnv', []],

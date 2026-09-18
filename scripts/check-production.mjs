@@ -607,6 +607,54 @@ function requireIntegrationEncryptionKey(env, issues) {
   }
 }
 
+// Mirrors requireAtlassianOAuthClient in apps/api/src/utils/env.ts, including
+// its decision: ATLASSIAN_CLIENT_ID / ATLASSIAN_CLIENT_SECRET are NOT in
+// REQUIRED above and are not required in production. A deployment whose
+// charities do not use Confluence holds neither and passes preflight; only a
+// half-configured client is refused, because the route-level gate tests
+// presence alone and would let one through to fail against auth.atlassian.com
+// after a charity had already granted access.
+const ATLASSIAN_CLIENT_SECRET_PEER_SECRETS = [
+  'JWT_SECRET',
+  'AUTH_RECOVERY_SECRET',
+  'OWNER_JWT_SECRET',
+  'READINESS_API_KEY',
+  'INTEGRATION_ENCRYPTION_KEY',
+];
+
+function requireAtlassianOAuthClient(env, issues) {
+  // Raw presence, not isConfigured: a placeholder must count as *set*, or a
+  // half-filled env file would read as "Confluence not enabled" and pass.
+  const clientId = envValue(env, 'ATLASSIAN_CLIENT_ID').trim();
+  const clientSecret = envValue(env, 'ATLASSIAN_CLIENT_SECRET').trim();
+
+  if (clientId.length === 0 && clientSecret.length === 0) return;
+
+  if (clientId.length === 0 || clientSecret.length === 0) {
+    issues.push(
+      'ATLASSIAN_CLIENT_ID and ATLASSIAN_CLIENT_SECRET must both be set to enable the Confluence ' +
+        'integration, or both be left unset',
+    );
+    return;
+  }
+
+  if (!isConfigured(clientId)) {
+    issues.push('ATLASSIAN_CLIENT_ID still contains a placeholder value');
+  }
+  if (!isConfigured(clientSecret)) {
+    issues.push('ATLASSIAN_CLIENT_SECRET still contains a placeholder value');
+  }
+
+  if (clientSecret === clientId) {
+    issues.push('ATLASSIAN_CLIENT_SECRET must be distinct from ATLASSIAN_CLIENT_ID');
+  }
+  if (ATLASSIAN_CLIENT_SECRET_PEER_SECRETS.some((name) => envValue(env, name).trim() === clientSecret)) {
+    issues.push(
+      `ATLASSIAN_CLIENT_SECRET must be distinct from ${ATLASSIAN_CLIENT_SECRET_PEER_SECRETS.join(', ')}`,
+    );
+  }
+}
+
 function hostMatchesCookieDomain(hostname, cookieDomain) {
   const normalizedHost = normaliseHostname(hostname);
   const normalizedDomain = cookieDomain.toLowerCase().replace(/^\./, '');
@@ -780,6 +828,7 @@ export function validateProductionEnvironment(env, processEnv = process.env) {
   requireCanonicalAuthRecoverySecret(env, issues);
   requireProductionSecretStrength(env, 'INTEGRATION_ENCRYPTION_KEY', issues);
   requireIntegrationEncryptionKey(env, issues);
+  requireAtlassianOAuthClient(env, issues);
   const authRecoverySecret = envValue(env, 'AUTH_RECOVERY_SECRET');
   if (
     authRecoverySecret &&

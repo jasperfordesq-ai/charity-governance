@@ -265,6 +265,39 @@ test('Caddyfile.bluegreen shares auto_https/persist_config with personal-server 
   assert.doesNotMatch(caddy, /:2019\b/);
 });
 
+// ---------------------------------------------------------------------------
+// The OAuth callback's query string must not reach the proxy access log.
+//
+// apps/api/src/utils/logger.ts censors `code` and `state` out of the API's own
+// log, but Caddy's JSON access log records `request.uri` INCLUDING the query
+// string and both Caddyfiles proxy /api/*. Without the `filter` encoder below,
+// the single-use authorization code and the CSRF state land in the container
+// log — the same leak, one layer further out, and in the log an operator is
+// most likely to `docker logs` and paste into a ticket.
+//
+// This test exists so the filter cannot be removed as noise by someone tidying
+// a Caddyfile, which is exactly how it would go.
+// ---------------------------------------------------------------------------
+test('both Caddyfiles strip the OAuth code and state from the access log', () => {
+  for (const [name, config] of [
+    ['Caddyfile.bluegreen', caddy],
+    ['Caddyfile.personal-server', personalServerCaddy],
+  ]) {
+    assert.doesNotMatch(
+      config,
+      /^\s*format json\s*$/m,
+      `${name}: the plain json encoder logs request.uri with its query string`,
+    );
+    assert.match(config, /format filter \{/, `${name}: must use the filter log encoder`);
+    assert.match(config, /wrap json/, `${name}: the filter must still wrap the json encoder`);
+    assert.match(
+      config,
+      /request>uri query \{\s*\n\s*delete code\s*\n\s*delete state\s*\n\s*\}/,
+      `${name}: the query filter must delete both code and state`,
+    );
+  }
+});
+
 test('active-upstreams.example.caddy is the tracked example of the generated live file', () => {
   assert.equal(
     activeUpstreamsExample,
