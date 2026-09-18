@@ -169,22 +169,50 @@ schema inconsistent with itself.
 In `document-storage-cleanup.test.ts`:
 
 ```ts
-test('an enqueued deletion defaults to the supabase provider with no target reference', async () => {
+test('an enqueued deletion is stamped with the organisation resolved provider', async () => {
+  for (const provider of ['supabase', 'local'] as const) {
+    const created: Array<Record<string, unknown>> = [];
+    const prisma = buildEnqueueCapturingPrisma(created, { documentStorageProvider: provider });
+    const service = new DocumentService(prisma as never, () => NOW);
+
+    await service.remove('org-1', 'doc-1');
+
+    assert.equal(created.length, 1);
+    assert.equal(created[0].provider, provider);
+    assert.equal(created[0].targetRef ?? null, null);
+  }
+});
+
+test('an organisation with no explicit provider falls back to the deployment default', async () => {
   const created: Array<Record<string, unknown>> = [];
-  const prisma = buildEnqueueCapturingPrisma(created);
+  const prisma = buildEnqueueCapturingPrisma(created, { documentStorageProvider: null });
   const service = new DocumentService(prisma as never, () => NOW);
 
   await service.remove('org-1', 'doc-1');
 
-  assert.equal(created.length, 1);
-  assert.equal(created[0].provider, 'supabase');
-  assert.equal(created[0].targetRef ?? null, null);
+  assert.equal(created[0].provider, envDefaultProviderId(process.env));
 });
 ```
 
 `buildEnqueueCapturingPrisma` does not exist yet — write it beside `buildFallbackPrisma`, capturing
 the `data` passed to `documentStorageDeletion.create`. Keep it in the same style as the existing
 fakes in that file rather than introducing a mocking library.
+
+**Do not hardcode `'supabase'` here.** `local` is also a GA provider in
+`document-storage-provider.ts`, so a hardcoded literal silently mislabels every deletion on a
+local-storage deployment — harmless while both share one deleter, and a real defect the moment
+Task 2's dispatcher starts taking `provider` at its word. Stamp what the organisation actually
+resolves to, reusing the existing resolution in `document-storage-resolution.ts` rather than
+reimplementing it. Prefer not to change `DocumentService`'s constructor signature if the
+organisation's setting can be read inside the transaction `remove()` already opens; if a
+constructor change is genuinely the only clean route, say so in your report rather than working
+around it.
+
+The spec's Phase 0 note says a document should carry *the provider it was actually written to*.
+`Document` has no such column yet, and the spec states the standing mitigation: changing an
+organisation's provider while it holds documents is not a supported operation. Resolving at delete
+time is therefore the best available answer and is correct under that precondition — but say so in
+a comment, so the next reader does not mistake it for the stamp the spec asks for.
 
 - [ ] **Step 2: Run it and watch it fail**
 
@@ -753,7 +781,23 @@ The last two rows are the ones that give the first three their meaning. A predic
 Atlassian outage — turning a five-minute blip into a permanent dead-letter that a human has to
 clear by hand.
 
-- [ ] **Step 5: Register it in the job**
+- [ ] **Step 5: Refuse a non-Supabase row at the operator recovery route**
+
+`recoverDeadLetterStorageDeletion` is a **Supabase-only** operator route: its whole vocabulary is
+`correctedStoragePath`, and it has no notion of a Confluence page. Until this task, no non-Supabase
+row could reach `DEAD_LETTER`, so the route was safe by absence. This task is what breaks that —
+`CONFLUENCE_PURGE_FORBIDDEN` dead-letters a Confluence row by design.
+
+Refuse it explicitly rather than letting an operator "correct the storage path" of a Confluence
+erasure and requeue something meaningless. A clear refusal naming the provider is the right
+outcome; the recovery flow for a Confluence row is a human with space-admin rights emptying the
+trash, which the existing `COMPLETE_EXTERNALLY_REMEDIATED` disposition already expresses.
+
+Pin it with a test that a `provider: 'confluence'` dead-letter is refused by the route, and one
+that a `supabase` row is still accepted — the second is what stops the guard being written too
+broadly.
+
+- [ ] **Step 6: Register it in the job**
 
 ```ts
 const dispatch = createErasureDispatcher({
@@ -762,11 +806,11 @@ const dispatch = createErasureDispatcher({
 });
 ```
 
-- [ ] **Step 6: Run the whole suite**
+- [ ] **Step 7: Run the whole suite**
 
 Run: `cd apps/api && npm test`
 
-- [ ] **Step 7: Commit**
+- [ ] **Step 8: Commit**
 
 ```bash
 git add apps/api && git commit -m "feat(erasure): erase the Confluence mirror, and prove it by reading back"
