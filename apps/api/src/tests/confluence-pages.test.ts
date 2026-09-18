@@ -217,6 +217,31 @@ test('a create whose response has no usable id says the page EXISTS and must not
   assert.match(error.message, /do not reissue/i);
 });
 
+test('a page response with no usable space id is refused, on a read and on a create alike', async () => {
+  // The module header claims strictness "on everything the caller cannot
+  // proceed without"; `spaceId` is in the returned type and in the same strict
+  // block as `id` and `version`, and only those two were defended. A page
+  // object whose space cannot be read is not one a publish pipeline can file,
+  // search or audit against.
+  const withoutSpace = { id: PAGE_ID, title: 'x', version: { number: 1 } };
+
+  const readError = await rejectsWith(() => getPage(harness([ok(withoutSpace)]).client, PAGE_ID));
+  assert.equal(readError.code, 'CONFLUENCE_RESPONSE_INVALID');
+  assert.match(readError.message, /space id/i);
+
+  // And on a create the strictness holds while the label changes: the page
+  // exists by then, so the caller must not be told nothing happened.
+  const createError = await rejectsWith(() =>
+    createPage(harness([ok(withoutSpace)]).client, {
+      spaceId: SPACE_ID,
+      title: 'x',
+      bodyStorage: '<p>x</p>',
+    }),
+  );
+  assert.equal(createError.code, 'CONFLUENCE_WRITE_APPLIED_RESPONSE_UNREADABLE');
+  assert.match(createError.message, /space id/i);
+});
+
 test('a read or an update with an unusable response stays a plain bad-response error', async () => {
   // Nothing was written on either path, so there is nothing to reconcile: a
   // get changes nothing, and a rejected update is caught by its own version.
@@ -576,6 +601,34 @@ test('a stale expected version is refused before anything is written', async () 
     afterCreate + 1,
     'only the read that discovered the conflict should have been issued',
   );
+});
+
+test('a version precondition on a property that has been deleted is refused, and nothing is created', async () => {
+  // The neighbouring test covers a version that MISMATCHES. This is the case
+  // where the property is gone: a publish job read `charitypilot.governance`
+  // at version 3, and before it wrote, another worker or a Confluence admin
+  // deleted it.
+  //
+  // The refusal is what keeps the precondition meaningful. Without it the
+  // lookup finds nothing, the create path runs, and the value is written as a
+  // brand-new property at version 1 — silently undoing somebody's deletion
+  // while the caller believes it wrote under a version precondition. The
+  // assertion that no POST was issued is therefore the one that matters here;
+  // the 409 alone would stay green with the damage done.
+  const { client, specs } = propertyStore();
+
+  const error = await rejectsWith(() =>
+    setContentProperty(client, PAGE_ID, 'charitypilot.governance', { nextReview: '2028-03-11' }, 3),
+  );
+
+  assert.equal(error.code, 'CONFLUENCE_CONTENT_PROPERTY_VERSION_CONFLICT');
+  assert.equal(error.statusCode, 409);
+  assert.equal(
+    specs.some((spec) => spec.method === 'POST'),
+    false,
+    'a stale precondition must never fall through to a create',
+  );
+  assert.equal(specs.length, 1, 'only the read that discovered the deletion should have been issued');
 });
 
 test('an oversized content property is refused before any request is made', async () => {
