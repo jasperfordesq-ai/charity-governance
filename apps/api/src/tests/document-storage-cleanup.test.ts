@@ -36,14 +36,21 @@ function pendingRecord(overrides: Record<string, unknown> = {}) {
   };
 }
 
+type OrganisationStorageRow = {
+  documentStorageProvider: string | null;
+  documentStorageAlphaOptIn?: boolean;
+};
+
 function buildEnqueueCapturingPrisma(
   created: Array<Record<string, unknown>>,
-  organisation: { documentStorageProvider: string | null; documentStorageAlphaOptIn: boolean } | null =
-    { documentStorageProvider: 'supabase', documentStorageAlphaOptIn: false },
+  organisation: OrganisationStorageRow | null = { documentStorageProvider: 'supabase' },
 ) {
   const client = {
     organisation: {
-      findUnique: async () => (organisation ? { ...organisation } : null),
+      findUnique: async () =>
+        organisation
+          ? { documentStorageAlphaOptIn: false, ...organisation }
+          : null,
     },
     document: {
       findFirst: async () => ({ id: 'doc-1', organisationId: 'org-1', fileUrl: 'org-1/policy.pdf' }),
@@ -62,7 +69,7 @@ function buildEnqueueCapturingPrisma(
 }
 
 async function enqueuedDeletionData(
-  organisation: { documentStorageProvider: string | null; documentStorageAlphaOptIn: boolean } | null,
+  organisation: OrganisationStorageRow | null,
 ): Promise<Record<string, unknown>> {
   const created: Array<Record<string, unknown>> = [];
   const prisma = buildEnqueueCapturingPrisma(created, organisation);
@@ -375,20 +382,14 @@ test('maximum sequential claim batch is derived below the stale lease boundary',
 });
 
 test('an enqueued deletion names the supabase provider with no target reference', async () => {
-  const data = await enqueuedDeletionData({
-    documentStorageProvider: 'supabase',
-    documentStorageAlphaOptIn: false,
-  });
+  const data = await enqueuedDeletionData({ documentStorageProvider: 'supabase' });
 
   assert.equal(data.provider, 'supabase');
   assert.equal(data.targetRef ?? null, null);
 });
 
 test('an enqueued deletion for a local organisation names the local provider, not supabase', async () => {
-  const data = await enqueuedDeletionData({
-    documentStorageProvider: 'local',
-    documentStorageAlphaOptIn: false,
-  });
+  const data = await enqueuedDeletionData({ documentStorageProvider: 'local' });
 
   assert.equal(
     data.provider,
@@ -406,10 +407,7 @@ test('an organisation with no recorded provider falls back to the deployment def
   const withDriver = async (driver: string | undefined) => {
     if (driver === undefined) delete process.env.DOCUMENT_STORAGE_DRIVER;
     else process.env.DOCUMENT_STORAGE_DRIVER = driver;
-    const data = await enqueuedDeletionData({
-      documentStorageProvider: null,
-      documentStorageAlphaOptIn: false,
-    });
+    const data = await enqueuedDeletionData({ documentStorageProvider: null });
     return data.provider;
   };
 
