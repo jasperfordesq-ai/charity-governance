@@ -9,6 +9,47 @@
 
 {
 	email {$CADDY_ACME_EMAIL}
+
+	# ── The OAuth callback's query string must not reach this proxy's log. ──
+	#
+	# This profile declares no site-level `log`, so there is no access log —
+	# but that is NOT the same as "nothing is logged". Caddy's ERROR logger
+	# (`http.log.error`) exists regardless and records `request.uri` INCLUDING
+	# the query string whenever a handler returns an error: upstream
+	# unreachable, upstream timeout, client disconnect mid-proxy. It writes
+	# through the default logger, to stderr, which `docker logs` shows.
+	#
+	# Verified against the pinned caddy:2-alpine@sha256:5f5c8640… (v2.11.4):
+	# a 502 on
+	#   GET /api/v1/integrations/confluence/callback?code=…&state=…
+	# printed the code and state to stderr in full before this block existed.
+	# On a 502 the code was never delivered to the API, so it is unspent and
+	# still live at Atlassian, and the `state` has its full ten minutes left.
+	#
+	# Filtering the DEFAULT logger — rather than a site `log` — is therefore
+	# what closes it here, and it also covers any access log added later: a
+	# site-level `log` inherits nothing from this, so if one is ever added it
+	# must repeat the `format filter` block, exactly as
+	# Caddyfile.bluegreen and Caddyfile.personal-server do.
+	#
+	# Caddy's `query` filter is case-sensitive and does not percent-decode,
+	# unlike `apps/api/src/utils/logger.ts`. Atlassian sends lowercase, so
+	# this is not exploitable — but the two layers are not equivalent.
+	#
+	# DO NOT remove this as noise. Pinned by
+	# scripts/check-bluegreen-compose.test.mjs.
+	log default {
+		output stderr
+		format filter {
+			wrap json
+			fields {
+				request>uri query {
+					delete code
+					delete state
+				}
+			}
+		}
+	}
 }
 
 # Public web app (e.g. app.charitypilot.ie)

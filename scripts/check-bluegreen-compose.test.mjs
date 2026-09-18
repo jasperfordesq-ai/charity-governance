@@ -14,6 +14,7 @@ const caddy = readFixture('caddy', 'Caddyfile.bluegreen');
 const activeUpstreamsExample = readFixture('caddy', 'active-upstreams.example.caddy');
 const personalServerCompose = readFixture('compose.personal-server.yml');
 const personalServerCaddy = readFixture('caddy', 'Caddyfile.personal-server');
+const productionCaddy = readFixture('caddy', 'Caddyfile');
 const productionCompose = readFixture('compose.production.yml');
 const gitignore = readFixture('.gitignore');
 const DOCKER_COMPOSE_CONFIG_TIMEOUT_MS = 120_000;
@@ -247,8 +248,19 @@ test('Caddy listens on :8080 inside the network, published on the configurable f
 
 test('Caddyfile.bluegreen shares auto_https/persist_config with personal-server but deliberately diverges on admin', () => {
   // Both still turn off automatic HTTPS and config persistence identically.
-  assert.match(caddy, /^\{\s*\n[\s\S]*?\n\s+auto_https off\s*\n\s+persist_config off\s*\n\}/m);
-  assert.match(personalServerCaddy, /^\{\s*\n\s+admin off\s*\n\s+auto_https off\s*\n\s+persist_config off\s*\n\}/m);
+  // Both assertions used to end at the global block's closing brace. The
+  // global block now also carries the `log default` filter (the F1 fix, pinned
+  // by 'every Caddyfile filters the default logger' below), so they end at
+  // that block instead: the three switches stay pinned in the same order, and
+  // the default logger is additionally required to exist.
+  assert.match(
+    caddy,
+    /^\{\s*\n[\s\S]*?\n\s+auto_https off\s*\n\s+persist_config off\s*\n[\s\S]*?\n\tlog default \{/m,
+  );
+  assert.match(
+    personalServerCaddy,
+    /^\{\s*\n\s+admin off\s*\n\s+auto_https off\s*\n\s+persist_config off\s*\n[\s\S]*?\n\tlog default \{/m,
+  );
   assert.match(caddy, /encode zstd gzip/);
 
   // Deliberate divergence (fix round 3): personal-server keeps `admin off`
@@ -294,6 +306,61 @@ test('both Caddyfiles strip the OAuth code and state from the access log', () =>
       config,
       /request>uri query \{\s*\n\s*delete code\s*\n\s*delete state\s*\n\s*\}/,
       `${name}: the query filter must delete both code and state`,
+    );
+  }
+});
+
+// ---------------------------------------------------------------------------
+// ...and neither may the ERROR log, which the site `log` directive above does
+// NOT cover.
+//
+// A site-level `log` creates and filters only the ACCESS logger
+// (`http.log.access.log0`), and that one name is all Caddy excludes from the
+// default logger. `http.log.error.log0` therefore falls through to the default
+// logger — no encoder, no filter, straight to stderr — and `docker logs`
+// merges both streams. Reproduced against the pinned
+// caddy:2-alpine@sha256:5f5c8640... (v2.11.4): before the `log default` block,
+// a 502 on the callback printed `code` and `state` in full on stderr.
+//
+// It is the worse of the two leaks. The error logger fires when a handler
+// FAILS — upstream unreachable, upstream timeout, client disconnect — so the
+// authorization code was never delivered to the API: it is unspent, still live
+// at Atlassian, and the `state` has its full ten minutes remaining.
+//
+// caddy/Caddyfile is included even though it declares no access log at all.
+// That is exactly why it needs this: the error logger exists regardless, and
+// that file leaked on a 502 with no `log` directive anywhere in it.
+//
+// This test exists because the block looks like duplication of the site `log`
+// and reads like something to tidy away.
+// ---------------------------------------------------------------------------
+test('every Caddyfile filters the default logger, which is what carries the error log', () => {
+  for (const [name, config] of [
+    ['Caddyfile.bluegreen', caddy],
+    ['Caddyfile.personal-server', personalServerCaddy],
+    ['Caddyfile', productionCaddy],
+  ]) {
+    const globalBlock = /^\{\n([\s\S]*?)\n\}$/m.exec(config)?.[1];
+    assert.ok(globalBlock, `${name}: no global options block to configure the default logger in`);
+
+    const defaultLogger = /\n\tlog default \{\n([\s\S]*?)\n\t\}/.exec(globalBlock)?.[1];
+    assert.ok(
+      defaultLogger,
+      `${name}: the global options block must carry a 'log default' block — without it Caddy's ` +
+        'error logger writes the OAuth callback query string to stderr unfiltered',
+    );
+
+    assert.doesNotMatch(
+      defaultLogger,
+      /^\s*format json\s*$/m,
+      `${name}: the plain json encoder logs request.uri with its query string`,
+    );
+    assert.match(defaultLogger, /format filter \{/, `${name}: the default logger must use the filter encoder`);
+    assert.match(defaultLogger, /wrap json/, `${name}: the filter must still wrap the json encoder`);
+    assert.match(
+      defaultLogger,
+      /request>uri query \{\s*\n\s*delete code\s*\n\s*delete state\s*\n\s*\}/,
+      `${name}: the default logger's query filter must delete both code and state`,
     );
   }
 });

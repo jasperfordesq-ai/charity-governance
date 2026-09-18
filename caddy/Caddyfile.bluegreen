@@ -10,6 +10,51 @@
 	admin unix//tmp/caddy-admin.sock
 	auto_https off
 	persist_config off
+
+	# ── The default logger carries Caddy's ERROR log, and it is not filtered
+	# by the site `log` directive below. ───────────────────────────────────
+	#
+	# A site-level `log` only creates and filters the ACCESS logger
+	# (`http.log.access.log0`), and adapting this file shows Caddy excluding
+	# exactly that one name from the default logger. Caddy's ERROR logger
+	# (`http.log.error.log0`) is NOT excluded, so it falls through to the
+	# default logger — no encoder, no filter, straight to stderr. `docker
+	# logs` merges stdout and stderr, which is precisely the command
+	# docs/bluegreen-runbook.md tells an operator to run.
+	#
+	# The error logger fires whenever a handler returns an error: upstream
+	# unreachable, upstream timeout, client disconnect mid-proxy. That makes
+	# the leak WORSE than the access-log one it sits beside — on a 502 the
+	# authorization code was never delivered to the API, so it is unspent and
+	# still live at Atlassian, and the `state` has its full ten minutes left.
+	#
+	# Filtering the default logger itself is what closes it. Reproduced and
+	# verified against the pinned caddy:2-alpine@sha256:5f5c8640… (v2.11.4):
+	# before, `SECRETCODE123` appeared twice on stderr; after, zero times on
+	# either stream.
+	#
+	# Note the asymmetry with the application redactor, which the runbook's
+	# "the same leak, one layer further out" does not imply parity for:
+	# Caddy's `query` filter matches parameter names CASE-SENSITIVELY and
+	# does not percent-decode them, while `apps/api/src/utils/logger.ts`
+	# catches `CoDe` and `%63ode` as well. Atlassian only ever sends
+	# lowercase `code` and `state`, so nothing here is exploitable — but the
+	# two layers are not equivalent, and the proxy is the weaker of them.
+	#
+	# DO NOT delete this as a duplicate of the site `log` below; it covers a
+	# different logger. Pinned by scripts/check-bluegreen-compose.test.mjs.
+	log default {
+		output stderr
+		format filter {
+			wrap json
+			fields {
+				request>uri query {
+					delete code
+					delete state
+				}
+			}
+		}
+	}
 }
 
 :8080 {
