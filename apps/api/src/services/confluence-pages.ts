@@ -94,10 +94,22 @@ const STORAGE_REPRESENTATION = 'storage';
 /** The only page status this module writes. Drafts are Phase 4's business, if ever. */
 const CURRENT = 'current';
 
+/**
+ * A rejected identifier, and the reason it is a 4xx rather than a 500.
+ *
+ * The HTTP core's own path guard throws `CONFLUENCE_REQUEST_PATH_INVALID` at
+ * 500, which is right for it: a malformed path that reaches the core is a
+ * programming error. But 500 in this codebase logs at error level and fires
+ * the production alert webhook, and the ids these functions take will arrive
+ * from a request parameter or a database row. If an unvalidated id could reach
+ * `spec.path`, a caller sending a malformed one could page the on-call at
+ * will. So the shape is checked *here*, at this module's boundary, and refused
+ * as the caller's error. The core's guard is a backstop, not the boundary.
+ */
 function invalidId(code: string, what: string): AppError {
   // The value is not echoed: it is caller-supplied and a diagnostic is not a
   // place to replay untrusted input into a log line.
-  return new AppError(500, code, `A Confluence ${what} must be a plain identifier.`);
+  return new AppError(400, code, `A Confluence ${what} must be a plain identifier.`);
 }
 
 function assertPageId(pageId: string): string {
@@ -121,10 +133,11 @@ function assertPropertyKey(key: string): string {
   return key;
 }
 
+/** 4xx for the same reason as `invalidId`: a version can arrive from a request. */
 function assertVersion(version: number, code: string): number {
   if (!Number.isSafeInteger(version) || version < 1) {
     throw new AppError(
-      500,
+      400,
       code,
       'A Confluence version must be a positive whole number obtained by reading the resource first.',
     );
@@ -214,6 +227,13 @@ function isUpstream(error: unknown, code: string): boolean {
  * `CONFLUENCE_REQUEST_INDETERMINATE` or `CONFLUENCE_RATE_LIMITED_UNSAFE_RETRY`
  * must reconcile by searching for the page rather than calling this again
  * blindly.
+ *
+ * A 409 here is deliberately **not** translated into a version conflict. The
+ * core maps every 409 to `CONFLUENCE_CONFLICT`, but a 409 on a create is not a
+ * version conflict — Confluence also uses it for a duplicate title in a space.
+ * Relabelling it would tell a caller "someone else edited this page, re-read
+ * and retry", and a caller that obeyed would re-read, find nothing in
+ * conflict, and try again forever. Only the update paths translate it.
  */
 export async function createPage(
   client: ConfluenceClient,
@@ -367,7 +387,7 @@ function serialiseContentProperty(key: string, value: unknown): string {
 
   if (typeof serialised !== 'string') {
     throw new AppError(
-      500,
+      400,
       'CONFLUENCE_CONTENT_PROPERTY_INVALID',
       `The Confluence content property "${key}" could not be serialised to JSON.`,
       { key },

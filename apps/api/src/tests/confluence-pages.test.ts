@@ -210,6 +210,26 @@ test('createPage rejects a response with no usable id rather than returning a pa
   assert.equal(error.code, 'CONFLUENCE_RESPONSE_INVALID');
 });
 
+test('a 409 on create is NOT relabelled as a version conflict: Confluence also uses it for a duplicate title', async () => {
+  const { client } = harness([throwing(upstreamConflict())]);
+
+  const error = await rejectsWith(() =>
+    createPage(client, { spaceId: SPACE_ID, title: 'POL - Data Protection Policy', bodyStorage: '<p>x</p>' }),
+  );
+
+  // Telling the caller "someone else edited this page, re-read and retry"
+  // would send it round a loop that can never resolve: there is no page to
+  // re-read and nothing in conflict to find.
+  assert.equal(error.code, 'CONFLUENCE_CONFLICT');
+});
+
+test('a 409 when creating a content property is not relabelled either', async () => {
+  const { client } = harness([ok({ results: [] }), throwing(upstreamConflict())]);
+
+  const error = await rejectsWith(() => setContentProperty(client, PAGE_ID, 'k', { a: 1 }));
+  assert.equal(error.code, 'CONFLUENCE_CONFLICT');
+});
+
 test('a page with no web link still parses: the page already exists, and failing here would push the caller to retry a create', async () => {
   const { client } = harness([ok(pageBody({ _links: undefined }))]);
 
@@ -257,6 +277,33 @@ test('getPage rejects a page id that could address something other than a page',
   const error = await rejectsWith(() => getPage(client, '123/../../spaces'));
   assert.equal(error.code, 'CONFLUENCE_PAGE_ID_INVALID');
   assert.equal(specs.length, 0, 'nothing should be sent for an unusable id');
+});
+
+test('a rejected identifier is the caller error it is, never a 5xx that pages the on-call', async () => {
+  const { client, specs } = propertyStore();
+
+  // A 5xx in this codebase logs at error level and fires the production alert
+  // webhook. These ids arrive from requests and database rows, so a 500 here
+  // would let anyone page the on-call by sending a malformed one. The core's
+  // own path guard is a backstop behind this, not the boundary.
+  const rejected = await Promise.all([
+    rejectsWith(() => getPage(client, 'not a page id')),
+    rejectsWith(() => updatePage(client, { pageId: 'a/b', title: 'x', bodyStorage: '', expectedVersion: 1 })),
+    rejectsWith(() =>
+      updatePage(client, { pageId: PAGE_ID, title: 'x', bodyStorage: '', expectedVersion: 0 }),
+    ),
+    rejectsWith(() => getContentProperty(client, 'a/b', 'k')),
+    rejectsWith(() => setContentProperty(client, PAGE_ID, 'has spaces', { a: 1 })),
+    rejectsWith(() => setContentProperty(client, PAGE_ID, 'k', { a: 1 }, 0)),
+  ]);
+
+  for (const error of rejected) {
+    assert.ok(
+      error.statusCode >= 400 && error.statusCode < 500,
+      `expected a client error, got ${error.statusCode} for ${error.code}`,
+    );
+  }
+  assert.equal(specs.length, 0, 'none of these may reach Confluence');
 });
 
 // ---------------------------------------------------------------------------
