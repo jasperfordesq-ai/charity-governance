@@ -6,7 +6,7 @@
 
 **Architecture:** The existing deletion pipeline is already a provable-erasure state machine with a claim/backoff/dead-letter engine and a recovery audit trail, and its worker already injects the deleter as a callback. Phase 5 widens the *payload* and the *dispatch*, and leaves the engine alone. A deletion row gains a `provider` and an optional `targetRef`; the worker dispatches to a per-provider eraser; Confluence gets a two-stage delete-then-purge eraser that treats absence as success and permission refusal as terminal.
 
-**Tech Stack:** TypeScript, Fastify, Prisma/PostgreSQL, Vitest, Confluence Cloud REST API v2.
+**Tech Stack:** TypeScript, Fastify, Prisma/PostgreSQL, `node:test`, Confluence Cloud REST API v2.
 
 **Spec:** `docs/superpowers/plans/2026-09-18-document-storage-providers-spec.md`
 
@@ -33,6 +33,41 @@ which is precisely the situation the deletion pipeline exists to prevent.
 - Any new Prisma model must be added to `DISPOSABLE_DATABASE_RESET_TABLES` in
   `e2e/helpers/db.ts`. This phase adds no new models, but Task 1 adds columns — check the guard
   anyway, because `npm run test:production-check` enforces it and the default `npm test` does not.
+
+## Testing conventions in this repository — read before writing a single test
+
+**There is no Vitest here.** It is not a dependency and `npx vitest` will not run. All 111 test
+files use the Node built-in runner:
+
+```ts
+import assert from 'node:assert/strict';
+import test from 'node:test';
+
+test('a sentence describing the behaviour, not the function name', async () => {
+  assert.equal(actual, expected);
+  assert.ok(condition, 'message shown when it fails');
+  await assert.rejects(() => thing(), (e: unknown) => (e as AppError).code === 'SOME_CODE');
+});
+```
+
+There is no `describe`, no `it`, no `expect`, and no `it.each`. For table-driven cases, loop over
+an array and call `test()` inside the loop, or use `t.test()` subtests.
+
+**Tests run from `dist/`, not from source.** `npm test` compiles with `tsc` first and then runs
+`node --test dist/tests/*.test.js`. A single file is therefore:
+
+```bash
+cd apps/api && npm run build && node --test dist/tests/<name>.test.js
+```
+
+If you edit a test and re-run without rebuilding, you are running the previous version. This has
+bitten this project before.
+
+**The unit suites use hand-built fake Prisma delegates, not a database.**
+`document-storage-cleanup.test.ts` builds one with `pendingRecord()` and `buildFallbackPrisma()`.
+Extend those helpers rather than reaching for a live client — and when you add a field to
+`DocumentStorageDeletionRecord`, add it to `pendingRecord()` too, or every existing test in that
+file silently exercises a row shape the production code no longer sees.
 
 ## Facts verified against Atlassian (do not re-derive; do not assume)
 
@@ -101,20 +136,26 @@ schema inconsistent with itself.
 In `document-storage-cleanup.test.ts`:
 
 ```ts
-it('defaults an enqueued deletion to the supabase provider with no target reference', async () => {
-  const { service, prisma } = makeService();
-  const { storageDeletionId } = await service.remove('org-1', 'doc-1');
-  const row = await prisma.documentStorageDeletion.findUniqueOrThrow({
-    where: { id: storageDeletionId },
-  });
-  expect(row.provider).toBe('supabase');
-  expect(row.targetRef).toBeNull();
+test('an enqueued deletion defaults to the supabase provider with no target reference', async () => {
+  const created: Array<Record<string, unknown>> = [];
+  const prisma = buildEnqueueCapturingPrisma(created);
+  const service = new DocumentService(prisma as never, () => NOW);
+
+  await service.remove('org-1', 'doc-1');
+
+  assert.equal(created.length, 1);
+  assert.equal(created[0].provider, 'supabase');
+  assert.equal(created[0].targetRef ?? null, null);
 });
 ```
 
+`buildEnqueueCapturingPrisma` does not exist yet — write it beside `buildFallbackPrisma`, capturing
+the `data` passed to `documentStorageDeletion.create`. Keep it in the same style as the existing
+fakes in that file rather than introducing a mocking library.
+
 - [ ] **Step 2: Run it and watch it fail**
 
-Run: `cd apps/api && npx vitest run src/tests/document-storage-cleanup.test.ts`
+Run: `cd apps/api && npm run build && node --test dist/tests/document-storage-cleanup.test.js`
 Expected: FAIL — `provider` does not exist on the row.
 
 - [ ] **Step 3: Add the columns to the schema**
@@ -167,7 +208,7 @@ select arrives as `undefined` and TypeScript will not catch it through a Prisma 
 - [ ] **Step 7: Run the tests and the migration suite**
 
 ```bash
-cd apps/api && npx vitest run && npm run test:migrations
+cd apps/api && npm test
 ```
 Expected: PASS, with the new test green and no regression.
 
@@ -220,31 +261,51 @@ calls changes.
 - [ ] **Step 1: Write the failing tests**
 
 ```ts
-it('routes a supabase row to the supabase eraser with its storage path', async () => {
+test('a supabase row is routed to the supabase eraser with its storage path', async () => {
   const seen: ErasureTarget[] = [];
-  const dispatch: ErasureDispatcher = (p) =>
-    p === 'supabase' ? async (t) => { seen.push(t); } : undefined;
-  const { service } = makeServiceWithPending({ provider: 'supabase', storagePath: 'org-1/a.pdf' });
+  const dispatch: ErasureDispatcher = (provider) =>
+    provider === 'supabase' ? async (target) => { seen.push(target); } : undefined;
+  const prisma = buildFallbackPrisma(
+    pendingRecord({ provider: 'supabase', storagePath: 'org-1/a.pdf', targetRef: null }),
+  );
+  const service = new DocumentService(prisma as never, () => NOW);
+
   const result = await service.retryPendingStorageDeletions(dispatch, 10);
-  expect(result.processed).toBe(1);
-  expect(seen).toEqual([{ organisationId: 'org-1', storagePath: 'org-1/a.pdf', targetRef: null }]);
+
+  assert.equal(result.processed, 1);
+  assert.deepEqual(seen, [
+    { organisationId: 'org-1', storagePath: 'org-1/a.pdf', targetRef: null },
+  ]);
 });
 
-it('dead-letters a row whose provider has no eraser, without burning attempts', async () => {
+test('a row whose provider has no eraser dead-letters on the first attempt', async () => {
   const dispatch: ErasureDispatcher = () => undefined;
-  const { service, prisma } = makeServiceWithPending({ provider: 'nonesuch' });
+  const prisma = buildFallbackPrisma(pendingRecord({ provider: 'nonesuch' }));
+  const service = new DocumentService(prisma as never, () => NOW);
+
   const result = await service.retryPendingStorageDeletions(dispatch, 10);
-  expect(result.newlyDeadLettered).toBe(1);
-  const row = await prisma.documentStorageDeletion.findFirstOrThrow({});
-  expect(row.state).toBe('DEAD_LETTER');
-  expect(row.terminalReason).toBe('PROVIDER_NOT_ERASABLE');
-  expect(row.attempts).toBe(1);
+
+  assert.equal(result.newlyDeadLettered, 1);
+  assert.equal(prisma.row().state, 'DEAD_LETTER');
+  assert.equal(prisma.row().terminalReason, 'PROVIDER_NOT_ERASABLE');
+  assert.equal(prisma.row().attempts, 1);
+});
+
+test('the dispatcher does not mistake an inherited property for an eraser', () => {
+  const dispatch = createErasureDispatcher({});
+  assert.equal(dispatch('constructor'), undefined);
+  assert.equal(dispatch('toString'), undefined);
+  assert.equal(dispatch('__proto__'), undefined);
 });
 ```
 
+`buildFallbackPrisma` already exists in `document-storage-cleanup.test.ts`; expose the current row
+from it (or read it however that file already does) rather than inventing a new fake. Add
+`provider` and `targetRef` to `pendingRecord()`'s defaults in the same commit.
+
 - [ ] **Step 2: Run them and watch them fail**
 
-Run: `cd apps/api && npx vitest run src/tests/document-erasure.test.ts`
+Run: `cd apps/api && npm run build && node --test dist/tests/document-erasure.test.js`
 Expected: FAIL — `retryPendingStorageDeletions` still takes a `deleteFile`.
 
 - [ ] **Step 3: Add the terminal reason**
@@ -318,7 +379,7 @@ const result = await documentService.retryPendingStorageDeletions(dispatch, clea
 
 - [ ] **Step 7: Run the whole suite**
 
-Run: `cd apps/api && npx vitest run`
+Run: `cd apps/api && npm test`
 Expected: PASS. The Supabase path must be behaviourally unchanged — if any existing cleanup test
 needed editing beyond the callback's shape, stop and say so in your report, because that means
 behaviour moved when it should not have.
@@ -367,41 +428,53 @@ Add delete and purge to the Phase 3 client. These files are **not** in the close
 
 - [ ] **Step 1: Write the failing tests**
 
+Follow the existing structure of `confluence-pages.test.ts`, which drives a fake `ConfluenceClient`
+and inspects the captured `ConfluenceRequestSpec`:
+
 ```ts
-it('treats a 404 from delete as an accomplished erasure', async () => {
-  const fetch = fakeFetch({ status: 404 });
-  await expect(deletePage(ctx(fetch), '123')).resolves.toBeUndefined();
+test('a 404 from delete is an accomplished erasure, not a failure', async () => {
+  const client = clientReturning({ status: 404 });
+  await deletePage(client, '123');   // resolves; the absence is the point
 });
 
-it('sends purge=true only on the purge call', async () => {
-  const fetch = recordingFetch({ status: 204 });
-  await deletePage(ctx(fetch), '123');
-  await purgePage(ctx(fetch), '123');
-  expect(fetch.calls[0].url).not.toContain('purge');
-  expect(fetch.calls[1].url).toContain('purge=true');
+test('purge=true is sent on the purge call and on no other', async () => {
+  const specs: ConfluenceRequestSpec[] = [];
+  const client = capturingClient(specs, { status: 204 });
+  await deletePage(client, '123');
+  await purgePage(client, '123');
+  assert.equal(specs.length, 2);
+  assert.ok(!specs[0].path.includes('purge'), 'delete must not purge');
+  assert.ok(specs[1].path.includes('purge=true'), 'purge must ask for it explicitly');
 });
 
-it('raises a terminal, actionable error when purge is forbidden', async () => {
-  const fetch = fakeFetch({ status: 403 });
-  await expect(purgePage(ctx(fetch), '123')).rejects.toMatchObject({
-    code: 'CONFLUENCE_PURGE_FORBIDDEN',
-  });
+test('a forbidden purge names the permission the grant is missing', async () => {
+  const client = clientReturning({ status: 403 });
+  await assert.rejects(
+    () => purgePage(client, '123'),
+    (error: unknown) => (error as AppError).code === 'CONFLUENCE_PURGE_FORBIDDEN',
+  );
 });
 
-it('does not retry a forbidden purge', async () => {
-  const fetch = recordingFetch({ status: 403 });
-  await purgePage(ctx(fetch), '123').catch(() => {});
-  expect(fetch.calls).toHaveLength(1);
+test('delete and purge are issued as idempotent, unlike createPage', async () => {
+  const specs: ConfluenceRequestSpec[] = [];
+  const client = capturingClient(specs, { status: 204 });
+  await deletePage(client, '123');
+  await purgePage(client, '123');
+  assert.equal(specs[0].idempotent, true);
+  assert.equal(specs[1].idempotent, true);
 });
 ```
 
-The last test is the one that matters most — it pins that a permission refusal does not consume
-the retry budget. **Verify it by mutation:** make the purge path retryable and confirm this test,
-and only this test, goes red.
+Phase 3 expresses its asymmetric retry policy through `spec.idempotent` — see
+`createPage is issued as non-idempotent so a 429 or a dropped connection cannot duplicate a page`
+in the existing test file. The last test above is the mirror of that one and is the one that
+matters most here: erasure is safe to retry precisely because absence is idempotent.
+**Verify it by mutation:** set `idempotent: false` on the delete path and confirm that test, and
+only that test, goes red.
 
 - [ ] **Step 2: Run them and watch them fail**
 
-Run: `cd apps/api && npx vitest run src/tests/confluence-pages.test.ts`
+Run: `cd apps/api && npm run build && node --test dist/tests/confluence-pages.test.js`
 Expected: FAIL — the functions do not exist.
 
 - [ ] **Step 3: Implement the four functions**
@@ -411,7 +484,7 @@ core with the idempotent retry policy, map the status. Both purge variants appen
 
 - [ ] **Step 4: Run the tests**
 
-Run: `cd apps/api && npx vitest run src/tests/confluence-pages.test.ts src/tests/confluence-attachments.test.ts`
+Run: `cd apps/api && npm run build && node --test dist/tests/confluence-pages.test.js dist/tests/confluence-attachments.test.js`
 Expected: PASS.
 
 - [ ] **Step 5: Commit**
@@ -460,34 +533,44 @@ maps it to an immediate dead-letter.
 - [ ] **Step 1: Write the failing tests**
 
 ```ts
-it('accepts a well-formed target', () => {
-  expect(parseConfluenceErasureTarget({
-    kind: 'confluence', cloudId: 'c1', pageId: 'p1', attachmentIds: ['a1'],
-  })).toEqual({ kind: 'confluence', cloudId: 'c1', pageId: 'p1', attachmentIds: ['a1'] });
+test('a well-formed target survives the round trip', () => {
+  const value = { kind: 'confluence', cloudId: 'c1', pageId: 'p1', attachmentIds: ['a1'] };
+  assert.deepEqual(parseConfluenceErasureTarget(value), value);
 });
 
-it('accepts a page with no attachments', () => {
-  expect(parseConfluenceErasureTarget({
-    kind: 'confluence', cloudId: 'c1', pageId: 'p1', attachmentIds: [],
-  }).attachmentIds).toEqual([]);
-});
-
-it.each([
-  ['null', null],
-  ['a missing cloudId', { kind: 'confluence', pageId: 'p1', attachmentIds: [] }],
-  ['a non-array attachmentIds', { kind: 'confluence', cloudId: 'c1', pageId: 'p1', attachmentIds: 'a1' }],
-  ['a non-string attachment id', { kind: 'confluence', cloudId: 'c1', pageId: 'p1', attachmentIds: [1] }],
-  ['the wrong kind', { kind: 'supabase', cloudId: 'c1', pageId: 'p1', attachmentIds: [] }],
-])('refuses %s', (_label, value) => {
-  expect(() => parseConfluenceErasureTarget(value)).toThrow(
-    expect.objectContaining({ code: 'ERASURE_TARGET_MALFORMED' }),
+test('a page with no attachments is well-formed', () => {
+  assert.deepEqual(
+    parseConfluenceErasureTarget(
+      { kind: 'confluence', cloudId: 'c1', pageId: 'p1', attachmentIds: [] },
+    ).attachmentIds,
+    [],
   );
 });
+
+for (const [label, value] of [
+  ['null', null],
+  ['a missing cloudId', { kind: 'confluence', pageId: 'p1', attachmentIds: [] }],
+  ['a string attachmentIds', { kind: 'confluence', cloudId: 'c1', pageId: 'p1', attachmentIds: 'a1' }],
+  ['a non-string attachment id', { kind: 'confluence', cloudId: 'c1', pageId: 'p1', attachmentIds: [1] }],
+  ['the wrong kind', { kind: 'supabase', cloudId: 'c1', pageId: 'p1', attachmentIds: [] }],
+  ['an empty pageId', { kind: 'confluence', cloudId: 'c1', pageId: '', attachmentIds: [] }],
+] as const) {
+  test(`${label} is refused`, () => {
+    assert.throws(
+      () => parseConfluenceErasureTarget(value),
+      (error: unknown) => (error as AppError).code === 'ERASURE_TARGET_MALFORMED',
+    );
+  });
+}
 ```
+
+Note the loop rather than `it.each` — see the testing conventions above. The empty-`pageId` case is
+there because a `targetRef` that parses but names nothing would make the eraser call
+`DELETE /pages/` and report success against whatever that resolves to.
 
 - [ ] **Step 2: Run and watch fail; Step 3: implement; Step 4: run and watch pass**
 
-Run: `cd apps/api && npx vitest run src/tests/confluence-erasure-target.test.ts`
+Run: `cd apps/api && npm run build && node --test dist/tests/confluence-erasure-target.test.js`
 
 - [ ] **Step 5: Commit**
 
@@ -536,11 +619,13 @@ Delete before purge on each object, because purge only works on already-trashed 
 - [ ] **Step 1: Write the failing tests**
 
 ```ts
-it('erases attachments before the page, and trashes before purging each', async () => {
+test('attachments are erased before the page, and each is trashed before it is purged', async () => {
   const calls: string[] = [];
   const eraser = createConfluenceEraser(spyDeps(calls));
+
   await eraser(targetWith(['a1', 'a2']));
-  expect(calls).toEqual([
+
+  assert.deepEqual(calls, [
     'deleteAttachment:a1', 'purgeAttachment:a1',
     'deleteAttachment:a2', 'purgeAttachment:a2',
     'deletePage:p1', 'purgePage:p1',
@@ -548,27 +633,43 @@ it('erases attachments before the page, and trashes before purging each', async 
   ]);
 });
 
-it('treats a 404 verification read as proof of erasure', async () => {
+test('a 404 on the verification read is the proof of erasure', async () => {
   const eraser = createConfluenceEraser(depsWhereGetPageIs404());
-  await expect(eraser(target())).resolves.toBeUndefined();
+  await eraser(target());
 });
 
-it('fails the attempt when the page still reads back after purge', async () => {
+test('an attempt fails when the page still reads back after the purge', async () => {
   const eraser = createConfluenceEraser(depsWhereGetPageStillReturnsThePage());
-  await expect(eraser(target())).rejects.toMatchObject({ code: 'CONFLUENCE_ERASURE_UNVERIFIED' });
+  await assert.rejects(
+    () => eraser(target()),
+    (error: unknown) => (error as AppError).code === 'CONFLUENCE_ERASURE_UNVERIFIED',
+  );
 });
 
-it('names the missing permission when purge is forbidden', async () => {
+test('a forbidden purge names the permission the grant is missing', async () => {
   const eraser = createConfluenceEraser(depsWherePurgeIs403());
-  const error = await eraser(target()).catch((e) => e);
-  expect(error.code).toBe('CONFLUENCE_PURGE_FORBIDDEN');
-  expect(String(error.message)).toMatch(/administer space|manage.content/i);
+  await assert.rejects(
+    () => eraser(target()),
+    (error: unknown) => {
+      const e = error as AppError;
+      assert.equal(e.code, 'CONFLUENCE_PURGE_FORBIDDEN');
+      assert.match(e.message, /administer space|manage.content/i);
+      return true;
+    },
+  );
 });
 
-it('restarts cleanly after a crash midway, because every step is idempotent', async () => {
-  const deps = depsWhereEverythingIsAlready404();
-  const eraser = createConfluenceEraser(deps);
-  await expect(eraser(targetWith(['a1']))).resolves.toBeUndefined();
+test('the sequence restarts cleanly after a crash, because every step is idempotent', async () => {
+  const eraser = createConfluenceEraser(depsWhereEverythingIsAlready404());
+  await eraser(targetWith(['a1']));
+});
+
+test('an aborted attempt stops issuing calls', async () => {
+  const calls: string[] = [];
+  const controller = new AbortController();
+  const eraser = createConfluenceEraser(spyDepsAbortingAfter(calls, controller, 1));
+  await assert.rejects(() => eraser(targetWith(['a1', 'a2']), controller.signal));
+  assert.ok(calls.length < 7, `expected the abort to stop the sequence, got ${calls.join(', ')}`);
 });
 ```
 
@@ -595,19 +696,23 @@ each error kind, and assert the row's observable outcome. This is also how Task 
 same engine, so the two sets of tests read alike:
 
 ```ts
-it.each([
-  ['a forbidden purge', appError(403, 'CONFLUENCE_PURGE_FORBIDDEN'), 'DEAD_LETTER', 1],
-  ['a malformed target', appError(500, 'ERASURE_TARGET_MALFORMED'), 'DEAD_LETTER', 1],
-  ['no live connection', appError(409, 'CONFLUENCE_NOT_CONNECTED'), 'DEAD_LETTER', 1],
-  ['an unverified erasure', appError(502, 'CONFLUENCE_ERASURE_UNVERIFIED'), 'PENDING', 1],
-  ['an upstream outage', appError(503, 'CONFLUENCE_UPSTREAM'), 'PENDING', 1],
-])('treats %s correctly', async (_label, thrown, expectedState, expectedAttempts) => {
-  const { service, prisma } = makeServiceWithPending({ provider: 'confluence' });
-  await service.retryPendingStorageDeletions(() => async () => { throw thrown; }, 10);
-  const row = await prisma.documentStorageDeletion.findFirstOrThrow({});
-  expect(row.state).toBe(expectedState);
-  expect(row.attempts).toBe(expectedAttempts);
-});
+for (const [label, thrown, expectedState] of [
+  ['a forbidden purge', new AppError(403, 'CONFLUENCE_PURGE_FORBIDDEN', 'x'), 'DEAD_LETTER'],
+  ['a malformed target', new AppError(500, 'ERASURE_TARGET_MALFORMED', 'x'), 'DEAD_LETTER'],
+  ['no live connection', new AppError(409, 'CONFLUENCE_NOT_CONNECTED', 'x'), 'DEAD_LETTER'],
+  ['an unverified erasure', new AppError(502, 'CONFLUENCE_ERASURE_UNVERIFIED', 'x'), 'PENDING'],
+  ['an upstream outage', new AppError(503, 'CONFLUENCE_UPSTREAM', 'x'), 'PENDING'],
+] as const) {
+  test(`${label} leaves the row ${expectedState}`, async () => {
+    const prisma = buildFallbackPrisma(pendingRecord({ provider: 'confluence' }));
+    const service = new DocumentService(prisma as never, () => NOW);
+
+    await service.retryPendingStorageDeletions(() => async () => { throw thrown; }, 10);
+
+    assert.equal(prisma.row().state, expectedState);
+    assert.equal(prisma.row().attempts, 1);
+  });
+}
 ```
 
 The last two rows are the ones that give the first three their meaning. A predicate that returned
@@ -626,7 +731,7 @@ const dispatch = createErasureDispatcher({
 
 - [ ] **Step 6: Run the whole suite**
 
-Run: `cd apps/api && npx vitest run`
+Run: `cd apps/api && npm test`
 
 - [ ] **Step 7: Commit**
 
@@ -663,23 +768,28 @@ is waiting on a browser tab here too.
 - [ ] **Step 1: Write the failing tests**
 
 ```ts
-it('revokes the grant at Atlassian before forgetting it locally', async () => {
-  const { revokes, prisma } = await disconnectWith({ revokeSucceeds: true });
-  expect(revokes).toHaveLength(1);
-  expect(await prisma.integrationCredential.count()).toBe(0);
+test('the grant is revoked at Atlassian before the credentials are forgotten locally', async () => {
+  const { revokes, credentialsRemaining } = await disconnectWith({ revokeSucceeds: true });
+  assert.equal(revokes.length, 1);
+  assert.equal(credentialsRemaining, 0);
 });
 
-it('still forgets the credentials locally when revocation fails', async () => {
-  const { prisma, result } = await disconnectWith({ revokeSucceeds: false });
-  expect(await prisma.integrationCredential.count()).toBe(0);
-  expect(result.revoked).toBe(false);
+test('the credentials are forgotten locally even when revocation fails', async () => {
+  const { credentialsRemaining, result } = await disconnectWith({ revokeSucceeds: false });
+  assert.equal(credentialsRemaining, 0);
+  assert.equal(result.revoked, false);
 });
 
-it('does not let a hanging revoke hold the disconnect open', async () => {
-  const result = await disconnectWith({ revokeHangs: true });
-  expect(result.revoked).toBe(false);
+test('a hanging revoke does not hold the disconnect open', async () => {
+  const { credentialsRemaining, result } = await disconnectWith({ revokeHangs: true });
+  assert.equal(credentialsRemaining, 0);
+  assert.equal(result.revoked, false);
 });
 ```
+
+Build these on the existing fakes in `confluence-connection.service.test.ts` — that file already
+has a credential store fake with an ordered `writeLog`, added when Task 5 of Phase 3 pinned the
+connect-ordering precondition. Reuse it; do not build a second one.
 
 - [ ] **Step 2: Run and watch fail; Step 3: implement; Step 4: run and watch pass**
 
