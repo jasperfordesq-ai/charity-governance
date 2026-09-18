@@ -237,6 +237,32 @@ Write a section covering:
 
 ---
 
+### Task 5: Settle the two preconditions
+
+**Added after Task 1 reported it could not settle them** — both live in `confluence-connection.service.ts`, which every other task in this phase is forbidden to touch. That was my scoping error. **This task is explicitly authorised to reopen that file**, and only that file plus its test.
+
+**Files:**
+- Modify: `apps/api/src/services/confluence-connection.service.ts`
+- Modify: `apps/api/src/tests/confluence-connection.service.test.ts`
+
+Read **"Two preconditions carried from Phase 2's whole-branch review"** at the top of this plan for the full statement of each. In short:
+
+**Precondition A — a reconnect concurrent with an in-flight refresh silently swaps the credentials.** `connectConfluence`'s `connectingState` clears the refresh claim unconditionally, stealing it from a live refresher. The refresher's *row* writes are fenced and match nothing, correctly — but `storeIntegrationCredential` is not fenced; it upserts on `integrationId_kind`. So a refresher that received its rotation before the reconnect and persists after it overwrites the freshly connected tokens with the **previous grant's**, leaving the row reading `CONNECTED` while the credentials behind it belong to an authorization the charity has already replaced.
+
+Pick one and say why:
+- Fence the credential write on the claim, so a superseded refresher's persist matches nothing.
+- Have `connectConfluence` refuse while a live claim is held, rather than clearing it.
+
+**Precondition B — `currentAccessToken` takes a bare `integrationId`.** The credential layer beneath it binds but does not authorize: an id belonging to another charity yields a context derived from *that* charity's row and decrypts successfully. Every route is safe because none accepts an `integrationId` from a request — but this phase's client is the first **non-route** caller, and it will be handed an id no route derived.
+
+Either add `currentAccessTokenForOrganisation(prisma, { organisationId })` and make it the only entry point a caller outside a route may use, or require every call site to derive the id from `organisationId_provider` — and then enforce that with a test, not a comment.
+
+**Both need a test that fails when the protection is removed.** Precondition A in particular needs an interleaving test: a refresh in flight, a reconnect landing mid-flight, and an assertion that the refresher's persist does **not** overwrite the new credentials.
+
+**Do not change the three refresh failure modes** the file already guarantees — exactly one refresh across concurrent callers, the replacement stored durably before the new access token is used, and a lost race never marked as a revoked grant. All three are pinned by mutation; your changes must leave those tests untouched and passing.
+
+---
+
 ## Done when
 
 - A page can be created, read and updated against an injected `fetch`, with the version conflict surfacing distinctly.
