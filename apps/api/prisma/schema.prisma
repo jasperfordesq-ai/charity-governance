@@ -414,6 +414,14 @@ model OrganisationIntegration {
   lastError      String?
   connectedAt    DateTime?
   connectedById  String?
+  // Serialises token refresh across the web process and the background jobs.
+  // Atlassian's refresh tokens are single-use: a concurrent refresh invalidates
+  // the loser's token and disconnects the charity. Follow the claim idiom used
+  // by DocumentStorageDeletion rather than inventing a lock.
+  refreshClaimedAt    DateTime?
+  refreshClaimToken   String?
+  refreshFailureCount Int                 @default(0)
+  lastRefreshedAt     DateTime?
   createdAt      DateTime            @default(now())
   updatedAt      DateTime            @updatedAt
 
