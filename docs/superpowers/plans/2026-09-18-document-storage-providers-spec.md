@@ -212,6 +212,39 @@ two cannot drift.
 idiom. Copy the `DocumentStorageDeletion` dead-letter and recovery shape rather
 than inventing a new reliability pattern.
 
+> **Blocked, and do not design it blind.** Two things gate it. It needs the
+> Atlassian MCP app installed on the site before anything can be verified
+> against a real space, and it needs Open Question 1 above ruled on, because
+> that decides whether it is publishing a *mirror* or moving the authoritative
+> copy. Those are different pipelines, not the same pipeline with a flag.
+>
+> **Four things Phases 3 and 5 learned that this phase must not rediscover:**
+>
+> 1. **A retried page create duplicates a governance document.** Phase 3's retry
+>    policy is deliberately asymmetric and `createPage` is marked
+>    non-idempotent. Preserve that. A charity's board resolution appearing twice,
+>    with nothing saying which is real, is the worst outcome available here.
+> 2. **Erasure dictates the target shape, not publish.** Phase 5 defines
+>    `ConfluenceErasureTarget` — `{ kind, cloudId, pageId, attachmentIds }` — and
+>    this phase must write a `targetRef` matching it. `cloudId` is stored rather
+>    than resolved from the live connection, because a charity may disconnect,
+>    reconnect to a *different* site, and still be owed erasure from the first.
+>    Letting publish define the record and making erasure chase it is how
+>    unerasable data gets created.
+> 3. **`updatePage` cannot tell a stale version from a duplicate title.** Both
+>    surface as 409 and the client deliberately surfaces no response body, so the
+>    error names both causes without asserting either. If this pipeline needs to
+>    distinguish them — it will, if it ever renames a page — the honest route is
+>    a caller-side re-read comparing the title. The other route is a narrow
+>    carve-out in the containment rule that stops raw upstream bodies reaching
+>    logs, and that rule exists because a proxy once put a live authorization
+>    code in an error body. Do not conflate the two: one costs a round trip, the
+>    other costs a security guard.
+> 4. **Approval metadata stays in CharityPilot.** Per the DPO's sign-off,
+>    Confluence content properties are indexing and integration metadata only.
+>    The definitive record of what a Board approved does not live in a page
+>    property.
+
 **Phase 5 — provider-aware erasure.** Extend the deletion lifecycle to purge
 from both stores, handling Confluence trash-then-purge. **Confluence cannot
 leave alpha before this ships.**
