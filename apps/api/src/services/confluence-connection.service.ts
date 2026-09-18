@@ -93,6 +93,26 @@ const PROVIDER = 'CONFLUENCE' as const;
  */
 export const REFRESH_CLAIM_STALE_AFTER_MS = 10 * 60 * 1000;
 
+/**
+ * The deadline on the one HTTP call made while holding the claim.
+ *
+ * The staleness window above is only safe while it **dominates** the worst
+ * case duration of a refresh, and "fetch has no timeout" is not the same as
+ * "fetch cannot take forever quietly". Node's undici defaults are
+ * `headersTimeout` 300s and `bodyTimeout` 300s, which sum to ~600s — the
+ * window itself. The margin in the pathological case is therefore about zero,
+ * not comfortable, and a refresh that outlives its lease lets a second worker
+ * legitimately steal the claim and refresh with the *same* stored token:
+ * concurrent destruction through the back door.
+ *
+ * 30s against a 600s window restores a 20x margin, and is generous for a
+ * single token exchange. Exceeding it surfaces through
+ * `atlassian-oauth.ts`'s transport branch as `ATLASSIAN_OAUTH_UNREACHABLE` —
+ * a transient failure, which is exactly right: a timed-out refresh is not a
+ * revoked grant and must not mark the charity broken.
+ */
+export const REFRESH_REQUEST_TIMEOUT_MS = 30 * 1000;
+
 /** How long a caller that lost the claim waits before re-reading. */
 const REFRESH_CLAIM_WAIT_MS = 250;
 
@@ -109,7 +129,28 @@ export type ConfluenceConnectionDeps = {
   listAccessibleResources?: typeof listAccessibleResourcesDefault;
   now?: () => Date;
   sleep?: (ms: number) => Promise<void>;
+  /** Overrides `REFRESH_REQUEST_TIMEOUT_MS`; exists so a test can use a short deadline. */
+  refreshTimeoutMs?: number;
 };
+
+/**
+ * Wrap a `fetch` so the request it makes cannot outlive `timeoutMs`.
+ *
+ * Built here rather than in `atlassian-oauth.ts` because the deadline belongs
+ * to the *lease*, not to the HTTP client: it is this module's claim window
+ * that the bound has to dominate. `OAuthDeps.fetch` is the seam that makes
+ * that possible without reopening a closed module.
+ *
+ * An inbound signal is composed rather than replaced, so a future caller's own
+ * cancellation still works alongside the deadline.
+ */
+function boundedFetch(base: typeof globalThis.fetch, timeoutMs: number): typeof globalThis.fetch {
+  return (input, init) => {
+    const deadline = AbortSignal.timeout(timeoutMs);
+    const signal = init?.signal ? AbortSignal.any([init.signal, deadline]) : deadline;
+    return base(input, { ...init, signal });
+  };
+}
 
 export type ConnectConfluenceInput = {
   organisationId: string;
@@ -151,6 +192,15 @@ function resolveSleep(deps: ConfluenceConnectionDeps): (ms: number) => Promise<v
  * decides who won. `refreshClaimToken` and `refreshClaimedAt` are always
  * written together; a CHECK constraint on the table rejects any write that
  * sets one without the other.
+ *
+ * Note the staleness comparison is made against **application process time**,
+ * not database time — `staleBefore` is computed here and sent as a literal.
+ * A process whose clock runs far ahead therefore considers every claim stale
+ * and steals them all. This is inherited from the sibling claims in
+ * `document.service.ts`, which compute `staleBefore` the same way, so it is
+ * recorded rather than fixed: diverging from the idiom for one of the four
+ * claim sites in the codebase would be worse than the shared property. Moving
+ * all of them to `NOW()` is a separate, deliberate change.
  */
 async function acquireRefreshClaim(
   prisma: ConfluenceConnectionClient,
@@ -304,6 +354,8 @@ async function readValidAccessToken(
  * That is the single most expensive mistake available in this file, so the
  * decision is made in exactly one place and no caller derives it.
  */
+const REFRESH_OUTCOME_UNHANDLED_CODE = 'ATLASSIAN_REFRESH_OUTCOME_UNHANDLED';
+
 async function persistRotatedRefreshToken(
   prisma: ConfluenceConnectionClient,
   integrationId: string,
@@ -332,7 +384,7 @@ async function persistRotatedRefreshToken(
       // union could carry a token, and this string could reach a log.
       throw new AppError(
         500,
-        'ATLASSIAN_REFRESH_OUTCOME_UNHANDLED',
+        REFRESH_OUTCOME_UNHANDLED_CODE,
         'Atlassian returned a refresh-token outcome this deployment does not understand.',
       );
     }
@@ -409,14 +461,25 @@ export async function connectConfluence(
   }
   // Choosing the first site is deliberate and temporary: letting a charity
   // pick among several belongs with the UI that shows them, and is out of
-  // scope here. Only non-secret connection facts go into `config`.
-  const config = { siteId: site.id, siteUrl: site.url, siteName: site.name } satisfies Prisma.InputJsonObject;
+  // scope here. `siteCount` is recorded so that choice stays *visible* — a
+  // status route can say "site 1 of N" rather than leaving a decision made on
+  // a charity's behalf undiscoverable after the fact. Only non-secret
+  // connection facts go into `config`.
+  const config = {
+    siteId: site.id,
+    siteUrl: site.url,
+    siteName: site.name,
+    siteCount: sites.length,
+  } satisfies Prisma.InputJsonObject;
 
   const at = now();
-  const connectedState = {
-    status: 'CONNECTED',
+  // Deliberately does NOT set `status` or clear `lastError`. Until both sealed
+  // credentials exist there is nothing behind this row, and a status route
+  // that read `CONNECTED` in the gap would advertise a connection that cannot
+  // serve a single request. An existing row keeps whatever status it had —
+  // including `ERROR` — until the connection is genuinely usable.
+  const connectingState = {
     config,
-    lastError: null,
     connectedAt: at,
     connectedById: userId,
     // A reconnect supersedes whatever the old credential was doing, including
@@ -429,8 +492,9 @@ export async function connectConfluence(
 
   const integration = await prisma.organisationIntegration.upsert({
     where: { organisationId_provider: { organisationId, provider: PROVIDER } },
-    create: { organisationId, provider: PROVIDER, ...connectedState },
-    update: connectedState,
+    // A created row takes the schema default, DISCONNECTED, for the same reason.
+    create: { organisationId, provider: PROVIDER, ...connectingState },
+    update: connectingState,
     select: { id: true },
   });
 
@@ -446,6 +510,12 @@ export async function connectConfluence(
     kind: ACCESS_TOKEN_KIND,
     plaintext: tokens.accessToken,
     expiresAt: tokens.expiresAt,
+  });
+
+  // Now, and only now, is there a connection to advertise.
+  await prisma.organisationIntegration.updateMany({
+    where: { id: integration.id },
+    data: { status: 'CONNECTED', lastError: null },
   });
 
   return { integrationId: integration.id, siteUrl: site.url };
@@ -534,9 +604,17 @@ async function refreshUnderClaim(
       throw new AppError(409, 'CONFLUENCE_RECONNECT_REQUIRED', NO_REFRESH_TOKEN_REASON);
     }
 
+    // The one call made while holding the lease, and the only one that has to
+    // finish inside the staleness window. See REFRESH_REQUEST_TIMEOUT_MS.
+    const base = deps.oauth?.fetch ?? globalThis.fetch;
+    const bounded: OAuthDeps = {
+      ...deps.oauth,
+      fetch: boundedFetch(base, deps.refreshTimeoutMs ?? REFRESH_REQUEST_TIMEOUT_MS),
+    };
+
     let tokens;
     try {
-      tokens = await refresh(storedRefreshToken, deps.oauth);
+      tokens = await refresh(storedRefreshToken, bounded);
     } catch (error) {
       if (isGrantRejected(error)) {
         await markReconnectRequired(prisma, integrationId, claim, GRANT_REJECTED_REASON);
@@ -554,7 +632,14 @@ async function refreshUnderClaim(
     try {
       await persistRotatedRefreshToken(prisma, integrationId, tokens.refreshToken);
     } catch (error) {
-      if (error instanceof AppError) throw error;
+      // Only this module's own sentinel passes through. Everything else is
+      // rewritten, INCLUDING an `AppError` — `storeIntegrationCredential` can
+      // answer with a 404 (`INTEGRATION_NOT_FOUND`) or a 500
+      // (`INTEGRATION_KEY_MISMATCH`), and surfacing either verbatim reports a
+      // routine client error while the charity's only refresh token has in
+      // fact just been destroyed. This is the single outcome that must page,
+      // so the status must not be inherited from whatever failed.
+      if (error instanceof AppError && error.code === REFRESH_OUTCOME_UNHANDLED_CODE) throw error;
       // The replacement exists only at Atlassian and in this stack frame, and
       // the old one is gone. Loud, 500-level (so it pages), and carrying
       // neither the token nor the underlying error as `cause`, which could

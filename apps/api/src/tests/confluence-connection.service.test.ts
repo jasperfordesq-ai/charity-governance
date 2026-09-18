@@ -1,9 +1,10 @@
 import assert from 'node:assert/strict';
 import { randomBytes } from 'node:crypto';
 import test from 'node:test';
-import type { AtlassianTokens } from '../services/atlassian-oauth.js';
+import type { AtlassianTokens, OAuthDeps } from '../services/atlassian-oauth.js';
 import {
   REFRESH_CLAIM_STALE_AFTER_MS,
+  REFRESH_REQUEST_TIMEOUT_MS,
   connectConfluence,
   currentAccessToken,
   disconnectConfluence,
@@ -144,6 +145,8 @@ type FakeOptions = {
   storedAccessToken?: { plaintext: string; expiresAt: Date | null } | null;
   /** Make the sealed-credential write for this kind throw, standing in for a failed write. */
   failCredentialWriteFor?: string;
+  /** What that write throws. Defaults to a plain Error; an AppError exercises a different branch. */
+  credentialWriteError?: unknown;
 };
 
 function fakePrisma(options: FakeOptions = {}) {
@@ -152,7 +155,14 @@ function fakePrisma(options: FakeOptions = {}) {
     storedRefreshToken = STORED_REFRESH_TOKEN,
     storedAccessToken = null,
     failCredentialWriteFor,
+    credentialWriteError,
   } = options;
+
+  // Lets a test act at a chosen point in the service's read sequence — the
+  // only way to simulate another worker finishing between two of this
+  // caller's reads without depending on timing.
+  const hooks: { onCredentialRead?: (call: number) => void } = {};
+  let credentialReads = 0;
 
   const integrations: IntegrationRow[] = [];
   if (integration !== null) {
@@ -261,7 +271,12 @@ function fakePrisma(options: FakeOptions = {}) {
       }) => {
         const { integrationId, kind } = args.where.integrationId_kind;
         const row = findCredential(integrationId, kind);
-        return row === null ? null : { ...row };
+        // Snapshot first, then run the hook: the hook stands for another
+        // worker's write landing *after* this read returned.
+        const result = row === null ? null : { ...row };
+        credentialReads += 1;
+        hooks.onCredentialRead?.(credentialReads);
+        return result;
       },
       upsert: async (args: {
         where: { integrationId_kind: { integrationId: string; kind: string } };
@@ -270,7 +285,7 @@ function fakePrisma(options: FakeOptions = {}) {
       }) => {
         const { integrationId, kind } = args.where.integrationId_kind;
         if (failCredentialWriteFor === kind) {
-          throw new Error(`fake prisma: credential write for "${kind}" failed`);
+          throw credentialWriteError ?? new Error(`fake prisma: credential write for "${kind}" failed`);
         }
         credentialWrites.push(args);
         const existing = findCredential(integrationId, kind);
@@ -308,6 +323,21 @@ function fakePrisma(options: FakeOptions = {}) {
     credentials,
     integrationWrites,
     credentialWrites,
+    hooks,
+    /** Stand in for another worker having stored a fresh access token. */
+    setAccessToken: (plaintext: string, expiresAt: Date | null) => {
+      const sealed = sealFor('access_token', plaintext);
+      const existing = findCredential(INTEGRATION_ID, 'access_token');
+      if (existing) Object.assign(existing, { sealed, expiresAt });
+      else
+        credentials.push({
+          integrationId: INTEGRATION_ID,
+          kind: 'access_token',
+          sealed,
+          generation: 1,
+          expiresAt,
+        });
+    },
     row: () => {
       const found = findIntegration(INTEGRATION_ID);
       assert.ok(found, 'expected the integration row to exist');
@@ -362,14 +392,16 @@ const neverCalled = async (): Promise<never> => {
   throw new Error('Atlassian must not be called');
 };
 
-type Deferred<T> = { promise: Promise<T>; resolve: (value: T) => void };
+type Deferred<T> = { promise: Promise<T>; resolve: (value: T) => void; reject: (reason: unknown) => void };
 
 function defer<T>(): Deferred<T> {
   let resolve!: (value: T) => void;
-  const promise = new Promise<T>((r) => {
-    resolve = r;
+  let reject!: (reason: unknown) => void;
+  const promise = new Promise<T>((res, rej) => {
+    resolve = res;
+    reject = rej;
   });
-  return { promise, resolve };
+  return { promise, resolve, reject };
 }
 
 /**
@@ -537,6 +569,36 @@ test('a failed write of the replacement refresh token surfaces and releases the 
   assert.equal(fake.row().refreshClaimedAt, null);
 });
 
+test('a persist failure that is itself an AppError still pages rather than inheriting its status', async () => {
+  // storeIntegrationCredential can answer with 404 INTEGRATION_NOT_FOUND or
+  // 500 INTEGRATION_KEY_MISMATCH. Surfacing either verbatim reports a routine
+  // failure while the charity's only refresh token has just been destroyed —
+  // this is the one outcome that must page.
+  const fake = fakePrisma({
+    storedAccessToken: { plaintext: STORED_ACCESS_TOKEN, expiresAt: new Date(NOW.getTime() - 1_000) },
+    failCredentialWriteFor: 'refresh_token',
+    credentialWriteError: new AppError(404, 'INTEGRATION_NOT_FOUND', 'Integration not found'),
+  });
+  const refresh = recordingRefresh();
+
+  await assert.rejects(
+    withKey(() =>
+      currentAccessToken(fake.client, { integrationId: INTEGRATION_ID }, {
+        now: clock,
+        refreshAccessToken: refresh.fn,
+      }),
+    ),
+    (error: unknown) => {
+      assert.ok(error instanceof AppError);
+      assert.equal(error.code, 'CONFLUENCE_REFRESH_TOKEN_PERSIST_FAILED');
+      assert.equal(error.statusCode, 500, 'must page, not report a 404');
+      return true;
+    },
+  );
+
+  assert.equal(fake.row().refreshClaimToken, null);
+});
+
 test('a claim leaked by a crash ages out and the next call reaches an actionable state', async () => {
   // The state a crash between Atlassian's response and the store leaves
   // behind: the claim still held, the stored refresh token still the old one
@@ -626,6 +688,217 @@ test('a slow holder never clears the newer claim that superseded it', async () =
     assert.equal(await stealer, `${FRESH_ACCESS_TOKEN}-stealer`);
     assert.equal(fake.row().refreshClaimToken, null);
   });
+});
+
+test('a slow holder whose grant is rejected never marks the newer holder errored', async () => {
+  // The other half of the fence, and the one that guards a *wrong* diagnosis.
+  // A's claim goes stale and B steals it; A's refresh then comes back
+  // `invalid_grant` — which is true of the token A was given, and says nothing
+  // about the connection B is at that moment refreshing successfully. Unfenced,
+  // A marks a healthy integration ERROR with "Reconnect Confluence" and rips
+  // away B's claim on the way out.
+  const fake = fakePrisma({
+    storedAccessToken: { plaintext: STORED_ACCESS_TOKEN, expiresAt: new Date(NOW.getTime() - 1_000) },
+  });
+
+  const deferred = [defer<AtlassianTokens>(), defer<AtlassianTokens>()];
+  const calls: string[] = [];
+  const refreshFn = async (refreshToken: string) => {
+    calls.push(refreshToken);
+    return deferred[calls.length - 1]!.promise;
+  };
+
+  const later = new Date(NOW.getTime() + REFRESH_CLAIM_STALE_AFTER_MS + 1);
+
+  return withKey(async () => {
+    const slowHolder = currentAccessToken(fake.client, { integrationId: INTEGRATION_ID }, {
+      now: clock,
+      refreshAccessToken: refreshFn,
+    });
+    await flush();
+    const stealer = currentAccessToken(fake.client, { integrationId: INTEGRATION_ID }, {
+      now: () => later,
+      refreshAccessToken: refreshFn,
+    });
+    await flush();
+    assert.equal(calls.length, 2);
+    const stealerClaim = fake.row().refreshClaimToken;
+    assert.ok(stealerClaim);
+
+    deferred[0]!.reject(invalidGrant());
+    await assert.rejects(slowHolder, (error: unknown) => error instanceof AppError);
+
+    const row = fake.row();
+    assert.equal(row.status, 'CONNECTED', 'a superseded holder must not mark the integration errored');
+    assert.equal(row.lastError, null);
+    assert.equal(row.refreshFailureCount, 0);
+    assert.equal(row.refreshClaimToken, stealerClaim, "and must not clear the newer holder's claim");
+
+    deferred[1]!.resolve(tokens({ accessToken: `${FRESH_ACCESS_TOKEN}-stealer` }));
+    assert.equal(await stealer, `${FRESH_ACCESS_TOKEN}-stealer`);
+    assert.equal(fake.row().status, 'CONNECTED');
+  });
+});
+
+test('a superseded holder does not even count a transient failure against the newer holder', async () => {
+  const fake = fakePrisma({
+    storedAccessToken: { plaintext: STORED_ACCESS_TOKEN, expiresAt: new Date(NOW.getTime() - 1_000) },
+  });
+
+  const deferred = [defer<AtlassianTokens>(), defer<AtlassianTokens>()];
+  const calls: string[] = [];
+  const refreshFn = async (refreshToken: string) => {
+    calls.push(refreshToken);
+    return deferred[calls.length - 1]!.promise;
+  };
+  const later = new Date(NOW.getTime() + REFRESH_CLAIM_STALE_AFTER_MS + 1);
+
+  return withKey(async () => {
+    const slowHolder = currentAccessToken(fake.client, { integrationId: INTEGRATION_ID }, {
+      now: clock,
+      refreshAccessToken: refreshFn,
+    });
+    await flush();
+    const stealer = currentAccessToken(fake.client, { integrationId: INTEGRATION_ID }, {
+      now: () => later,
+      refreshAccessToken: refreshFn,
+    });
+    await flush();
+    const stealerClaim = fake.row().refreshClaimToken;
+
+    deferred[0]!.reject(
+      new AppError(502, 'ATLASSIAN_OAUTH_UNREACHABLE', 'Could not reach Atlassian to exchange the OAuth token.'),
+    );
+    await assert.rejects(slowHolder, (error: unknown) => error instanceof AppError);
+
+    assert.equal(fake.row().refreshFailureCount, 0);
+    assert.equal(fake.row().refreshClaimToken, stealerClaim);
+
+    deferred[1]!.resolve(tokens());
+    await stealer;
+  });
+});
+
+test('an invalid_client failure is our misconfiguration, not a revoked grant', async () => {
+  // Atlassian answers a bad CLIENT credential with 401/invalid_client. Widening
+  // the grant-rejection test to cover it would tell every charity on the
+  // deployment to reconnect because ATLASSIAN_CLIENT_SECRET is wrong.
+  const fake = fakePrisma({
+    storedAccessToken: { plaintext: STORED_ACCESS_TOKEN, expiresAt: new Date(NOW.getTime() - 1_000) },
+  });
+  const refresh = recordingRefresh(async () => {
+    throw new AppError(
+      409,
+      'ATLASSIAN_OAUTH_RECONNECT_REQUIRED',
+      'Atlassian OAuth token request failed: invalid_client (client authentication failed)',
+      { status: 401, error: 'invalid_client', error_description: 'client authentication failed' },
+    );
+  });
+
+  await assert.rejects(
+    withKey(() =>
+      currentAccessToken(fake.client, { integrationId: INTEGRATION_ID }, {
+        now: clock,
+        refreshAccessToken: refresh.fn,
+      }),
+    ),
+    (error: unknown) => error instanceof AppError && error.code === 'ATLASSIAN_OAUTH_RECONNECT_REQUIRED',
+  );
+
+  const row = fake.row();
+  assert.equal(row.status, 'CONNECTED', 'our own misconfiguration must not mark the charity broken');
+  assert.equal(row.lastError, null);
+  assert.equal(row.refreshFailureCount, 1);
+  assert.equal(row.refreshClaimToken, null);
+});
+
+test('the refresh request carries a deadline the claim window dominates', async () => {
+  // The staleness window is only safe while it dominates the worst case
+  // duration of one refresh. undici's own defaults (headersTimeout 300s +
+  // bodyTimeout 300s) sum to roughly the window, so the bound has to be ours.
+  assert.ok(
+    REFRESH_REQUEST_TIMEOUT_MS * 10 <= REFRESH_CLAIM_STALE_AFTER_MS,
+    'the claim window must dominate the request deadline by at least 10x',
+  );
+
+  const fake = fakePrisma({
+    storedAccessToken: { plaintext: STORED_ACCESS_TOKEN, expiresAt: new Date(NOW.getTime() - 1_000) },
+  });
+
+  // A request that would otherwise hang forever, exactly as undici can.
+  // `AbortSignal.timeout`'s own timer is unref'd, so the test needs a ref'd
+  // one to hold the event loop open — and it doubles as the assertion that the
+  // deadline fires at all.
+  const hangingFetch = ((_input: unknown, init?: { signal?: AbortSignal }) =>
+    new Promise((_resolve, reject) => {
+      const keepAlive = setTimeout(() => reject(new Error('the deadline never fired')), 1_000);
+      init?.signal?.addEventListener('abort', () => {
+        clearTimeout(keepAlive);
+        reject(new Error('request aborted by deadline'));
+      });
+    })) as unknown as typeof globalThis.fetch;
+
+  const refreshFn = async (_refreshToken: string, oauth?: OAuthDeps) => {
+    assert.ok(oauth?.fetch, 'the refresh must be handed a bounded fetch');
+    await oauth.fetch('https://auth.atlassian.com/oauth/token', { method: 'POST' });
+    throw new Error('the request should not have completed');
+  };
+
+  await assert.rejects(
+    withKey(() =>
+      currentAccessToken(fake.client, { integrationId: INTEGRATION_ID }, {
+        now: clock,
+        refreshTimeoutMs: 5,
+        refreshAccessToken: refreshFn as never,
+        oauth: { fetch: hangingFetch },
+      }),
+    ),
+    /request aborted by deadline/,
+  );
+
+  // A timed-out refresh is not a revoked grant.
+  assert.equal(fake.row().status, 'CONNECTED');
+  assert.equal(fake.row().refreshClaimToken, null, 'and the claim is released, not leaked');
+});
+
+test('a stored access token with no recorded expiry is treated as expired', async () => {
+  const fake = fakePrisma({
+    storedAccessToken: { plaintext: STORED_ACCESS_TOKEN, expiresAt: null },
+  });
+  const refresh = recordingRefresh();
+
+  const token = await withKey(() =>
+    currentAccessToken(fake.client, { integrationId: INTEGRATION_ID }, {
+      now: clock,
+      refreshAccessToken: refresh.fn,
+    }),
+  );
+
+  assert.equal(token, FRESH_ACCESS_TOKEN);
+  assert.equal(refresh.calls.length, 1, 'a credential with no known lifetime must be renewed, not presented');
+});
+
+test('a rotation is not spent on a token another worker stored between the read and the claim', async () => {
+  const fake = fakePrisma({
+    storedAccessToken: { plaintext: STORED_ACCESS_TOKEN, expiresAt: new Date(NOW.getTime() - 1_000) },
+  });
+  const refresh = recordingRefresh();
+  fake.hooks.onCredentialRead = (call) => {
+    // Right after this caller's pre-claim read came back expired, another
+    // worker finishes its own refresh and stores the result.
+    if (call === 1) fake.setAccessToken(FRESH_ACCESS_TOKEN, new Date(NOW.getTime() + 60_000));
+  };
+
+  const token = await withKey(() =>
+    currentAccessToken(fake.client, { integrationId: INTEGRATION_ID }, {
+      now: clock,
+      refreshAccessToken: refresh.fn,
+    }),
+  );
+
+  assert.equal(token, FRESH_ACCESS_TOKEN);
+  assert.equal(refresh.calls.length, 0, 'the post-claim re-check must not spend a rotation');
+  assert.equal(fake.row().refreshClaimToken, null, 'and must still release the claim it took');
 });
 
 test('a stale claim is reclaimable and the refresh then succeeds', async () => {
@@ -802,8 +1075,11 @@ test('connectConfluence records the site, stores both tokens, and clears any sta
       {
         now: clock,
         exchangeAuthorizationCode: async () => tokens(),
+        // Two sites: the first is chosen, and `siteCount` records that a
+        // choice was made on the charity's behalf.
         listAccessibleResources: async () => [
           { id: 'site-9', url: 'https://charity.atlassian.net', name: 'Charity Wiki' },
+          { id: 'site-10', url: 'https://charity-two.atlassian.net', name: 'Second Site' },
         ],
       },
     ),
@@ -824,9 +1100,44 @@ test('connectConfluence records the site, stores both tokens, and clears any sta
   assert.equal(row.refreshClaimToken, null);
   assert.equal(row.refreshClaimedAt, null);
   assert.equal(row.connectedById, 'user-9');
-  assert.deepEqual(row.config, { siteId: 'site-9', siteUrl: 'https://charity.atlassian.net', siteName: 'Charity Wiki' });
+  assert.deepEqual(row.config, {
+    siteId: 'site-9',
+    siteUrl: 'https://charity.atlassian.net',
+    siteName: 'Charity Wiki',
+    siteCount: 2,
+  });
+
+  // The status flip is the LAST write, after both credentials exist.
+  const last = fake.integrationWrites.at(-1) as { data: { status?: string } };
+  assert.equal(last.data.status, 'CONNECTED');
 
   assert.equal(JSON.stringify(fake.integrationWrites).includes('auth-code-EEEE'), false);
+});
+
+test('connectConfluence does not advertise a connection before the credentials exist', async () => {
+  const fake = fakePrisma({
+    integration: { status: 'DISCONNECTED' },
+    storedRefreshToken: null,
+    failCredentialWriteFor: 'access_token',
+  });
+
+  await assert.rejects(
+    withKey(() =>
+      connectConfluence(
+        fake.client,
+        { organisationId: ORG_ID, userId: 'user-9', code: 'auth-code', redirectUri: 'https://api.example/cb' },
+        {
+          now: clock,
+          exchangeAuthorizationCode: async () => tokens(),
+          listAccessibleResources: async () => [
+            { id: 'site-9', url: 'https://charity.atlassian.net', name: 'Charity Wiki' },
+          ],
+        },
+      ),
+    ),
+  );
+
+  assert.notEqual(fake.row().status, 'CONNECTED', 'a row with no usable credential must not read CONNECTED');
 });
 
 test('connectConfluence refuses an authorization that issued no refresh token', async () => {
