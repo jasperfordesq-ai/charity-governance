@@ -129,7 +129,10 @@ function parseTokenSuccessBody(body: unknown): { accessToken: string; expiresInS
   if (typeof parsed.access_token !== 'string' || parsed.access_token.length === 0) {
     throw invalidTokenResponse('a token response with a missing or invalid access_token');
   }
-  if (typeof parsed.expires_in !== 'number' || !Number.isFinite(parsed.expires_in)) {
+  if (typeof parsed.expires_in !== 'number' || !Number.isFinite(parsed.expires_in) || parsed.expires_in <= 0) {
+    // A non-positive lifetime is not a plausible honest response (it would
+    // yield an already-expired expiresAt, which fails safe on its own, but
+    // is still not a shape Atlassian would ever legitimately send).
     throw invalidTokenResponse('a token response with a missing or invalid expires_in');
   }
   if (parsed.scope !== undefined && typeof parsed.scope !== 'string') {
@@ -147,20 +150,53 @@ function parseTokenSuccessBody(body: unknown): { accessToken: string; expiresInS
   };
 }
 
+// Atlassian's 401/403 mean "this credential is unauthorized/forbidden" —
+// but apps/web's global axios interceptors (apps/web/src/lib/api.ts and
+// apps/web/src/lib/owner-api.ts) treat ANY 401 response from OUR API as
+// "the CharityPilot session expired": they call refreshSession()/retry,
+// and on a second 401 force the user back to the login screen. Once a
+// route wires this module in, letting an Atlassian 401 (an expired access
+// token, or the token endpoint rejecting a bad grant with 401) pass
+// through unchanged would bounce the charity's user out of CharityPilot
+// entirely — even though their CharityPilot session was never the
+// problem. 403 gets the same treatment on the same reasoning: a revoked or
+// insufficiently-scoped Atlassian grant is not a CharityPilot permission
+// problem either, and nothing should be free to build 403-specific
+// "access denied" handling around what is actually a stale integration
+// credential.
+//
+// 409 is used instead of inventing a 5xx or reusing another 4xx: the
+// request itself is well-formed and the caller's own CharityPilot session/
+// permissions are fine — what conflicts is the *stored* Atlassian
+// credential's state (unauthorized/forbidden) with the assumption that it
+// is still usable. It is deliberately not >=500 (this is not our server
+// failing) and deliberately not 401/403 (see above). The exact number
+// matters less than the code: `reconnectRequired` on the thrown AppError
+// is what a route should actually branch on.
+const RECONNECT_REQUIRED_STATUS_CODE = 409;
+
+function isReconnectRequiredStatus(status: number): boolean {
+  return status === 401 || status === 403;
+}
+
 /**
  * Maps an upstream HTTP status to the status this module throws with.
  *
  * A 4xx from Atlassian (invalid_grant, invalid_request, ...) is the charity
  * rejecting/expiring its own credential — a client error, not our server
- * failing — and is passed through unchanged. Anything else (5xx, or a
- * status this module doesn't specifically recognise) becomes 502, since it
- * reflects Atlassian being unreachable/broken rather than the caller's
- * input. This matters operationally: statusCode >= 500 logs at error level
- * and fires the production alert webhook (see utils/errors.ts), so a user
- * pasting a stale authorization code must not page anyone, and Atlassian's
+ * failing — and is passed through unchanged, EXCEPT for 401/403 (see
+ * `isReconnectRequiredStatus`), which are remapped to
+ * `RECONNECT_REQUIRED_STATUS_CODE` so the web client's global session
+ * interceptors never see them. Anything else (5xx, or a status this module
+ * doesn't specifically recognise) becomes 502, since it reflects Atlassian
+ * being unreachable/broken rather than the caller's input. This matters
+ * operationally: statusCode >= 500 logs at error level and fires the
+ * production alert webhook (see utils/errors.ts), so a user pasting a
+ * stale authorization code must not page anyone, and Atlassian's
  * error_description must not egress to the alert webhook host.
  */
 function mapUpstreamStatusCode(status: number): number {
+  if (isReconnectRequiredStatus(status)) return RECONNECT_REQUIRED_STATUS_CODE;
   return status >= 400 && status < 500 ? status : 502;
 }
 
@@ -177,14 +213,22 @@ function mapUpstreamStatusCode(status: number): number {
  * because it can echo back request fields (an authorization code, a
  * refresh token, a client secret, or — for the accessible-resources
  * endpoint — the Authorization header) verbatim.
+ *
+ * Every `throw` below is written as a statement inside this
+ * `Promise<never>`-returning function, which is fine on its own — but a
+ * caller must write `return await throwUpstreamFailure(...)`, not bare
+ * `await throwUpstreamFailure(...)`, for TypeScript to treat the code after
+ * the call as unreachable and catch a future edit that adds fallthrough
+ * logic after it.
  */
 async function throwUpstreamFailure(
   response: Response,
   label: string,
-  codes: { unreadableBody: string; failed: string },
+  codes: { unreadableBody: string; failed: string; reconnectRequired: string },
 ): Promise<never> {
   const status = response.status;
   const statusCode = mapUpstreamStatusCode(status);
+  const reconnectRequired = isReconnectRequiredStatus(status);
 
   let body: unknown;
   try {
@@ -192,7 +236,7 @@ async function throwUpstreamFailure(
   } catch {
     throw new AppError(
       statusCode,
-      codes.unreadableBody,
+      reconnectRequired ? codes.reconnectRequired : codes.unreadableBody,
       `${label} failed with status ${status} and a response body that was not valid JSON.`,
       { status },
     );
@@ -205,7 +249,7 @@ async function throwUpstreamFailure(
   if (!error) {
     throw new AppError(
       statusCode,
-      codes.unreadableBody,
+      reconnectRequired ? codes.reconnectRequired : codes.unreadableBody,
       `${label} failed with status ${status} and no error field in the response body.`,
       { status },
     );
@@ -215,7 +259,12 @@ async function throwUpstreamFailure(
     ? `${label} failed: ${error} (${description})`
     : `${label} failed: ${error}`;
 
-  throw new AppError(statusCode, codes.failed, message, { status, error, error_description: description });
+  throw new AppError(
+    statusCode,
+    reconnectRequired ? codes.reconnectRequired : codes.failed,
+    message,
+    { status, error, error_description: description },
+  );
 }
 
 type AbsentRefreshTokenMeaning = Exclude<RefreshTokenOutcome['kind'], 'issued'>;
@@ -246,9 +295,10 @@ async function requestTokens(
   }
 
   if (!response.ok) {
-    await throwUpstreamFailure(response, 'Atlassian OAuth token request', {
+    return await throwUpstreamFailure(response, 'Atlassian OAuth token request', {
       unreadableBody: 'ATLASSIAN_OAUTH_ERROR_BODY_UNREADABLE',
       failed: 'ATLASSIAN_OAUTH_TOKEN_FAILED',
+      reconnectRequired: 'ATLASSIAN_OAUTH_RECONNECT_REQUIRED',
     });
   }
 
@@ -343,9 +393,10 @@ export async function listAccessibleResources(
   }
 
   if (!response.ok) {
-    await throwUpstreamFailure(response, 'Atlassian accessible-resources request', {
+    return await throwUpstreamFailure(response, 'Atlassian accessible-resources request', {
       unreadableBody: 'ATLASSIAN_OAUTH_RESOURCES_ERROR_BODY_UNREADABLE',
       failed: 'ATLASSIAN_OAUTH_RESOURCES_FAILED',
+      reconnectRequired: 'ATLASSIAN_OAUTH_RESOURCES_RECONNECT_REQUIRED',
     });
   }
 

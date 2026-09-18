@@ -244,12 +244,92 @@ test('a 502 with an HTML error body and a 400 with a JSON body lacking `error` a
   assert.equal(jsonNoErrorError.statusCode, 400);
 });
 
+test('a 401 from the token endpoint is remapped away from 401, with a reconnect-required code, so the web client global session interceptor cannot misread it', async () => {
+  const fetchImpl = (async () =>
+    jsonResponse(401, {
+      error: 'invalid_grant',
+      error_description: 'The access token is expired',
+      code: SECRET_CODE,
+      refresh_token: SECRET_REFRESH_TOKEN,
+      client_secret: SECRET_CLIENT_SECRET,
+    })) as typeof globalThis.fetch;
+
+  await assert.rejects(
+    () => exchangeAuthorizationCode(SECRET_CODE, REDIRECT_URI, buildDeps(fetchImpl)),
+    (err: unknown) => {
+      const appError = assertNoSecretLeak(err, [SECRET_CODE, SECRET_REFRESH_TOKEN, SECRET_CLIENT_SECRET]);
+      // The pin that matters: this must NOT be 401. apps/web/src/lib/api.ts
+      // and apps/web/src/lib/owner-api.ts both treat any 401 from our API
+      // as an expired CharityPilot session and force a re-login — which
+      // would be wrong here, since the CharityPilot session is fine and
+      // only the stored Atlassian credential is stale.
+      assert.notEqual(appError.statusCode, 401);
+      assert.equal(appError.code, 'ATLASSIAN_OAUTH_RECONNECT_REQUIRED');
+      return true;
+    },
+  );
+});
+
+test('a 403 from the accessible-resources endpoint is remapped away from 403, with a reconnect-required code', async () => {
+  const accessToken = 'access-token-forbidden';
+  const fetchImpl = (async () =>
+    jsonResponse(403, {
+      error: 'invalid_token',
+      error_description: 'The token does not have the required scope',
+      authorization: `Bearer ${accessToken}`,
+    })) as typeof globalThis.fetch;
+
+  await assert.rejects(
+    () => listAccessibleResources(accessToken, { fetch: fetchImpl }),
+    (err: unknown) => {
+      const appError = assertNoSecretLeak(err, [accessToken]);
+      assert.notEqual(appError.statusCode, 403);
+      assert.equal(appError.code, 'ATLASSIAN_OAUTH_RESOURCES_RECONNECT_REQUIRED');
+      return true;
+    },
+  );
+});
+
+test('a 401 with an unreadable body still gets the reconnect-required code, not the generic unreadable-body code', async () => {
+  const fetchImpl = (async () => textResponse(401, '<html>unauthorized</html>')) as typeof globalThis.fetch;
+
+  await assert.rejects(
+    () => exchangeAuthorizationCode(SECRET_CODE, REDIRECT_URI, buildDeps(fetchImpl)),
+    (err: unknown) => {
+      assert.ok(err instanceof AppError);
+      const appError = err as AppError;
+      assert.notEqual(appError.statusCode, 401);
+      assert.equal(appError.code, 'ATLASSIAN_OAUTH_RECONNECT_REQUIRED');
+      return true;
+    },
+  );
+});
+
 test('a success body missing expires_in throws ATLASSIAN_OAUTH_RESPONSE_INVALID instead of yielding an Invalid Date', async () => {
   const fetchImpl = (async () =>
     jsonResponse(200, {
       access_token: 'access-token-4',
       refresh_token: 'refresh-token-4',
       // expires_in omitted
+      scope: 'read:confluence',
+    })) as typeof globalThis.fetch;
+
+  await assert.rejects(
+    () => exchangeAuthorizationCode(SECRET_CODE, REDIRECT_URI, buildDeps(fetchImpl)),
+    (err: unknown) => {
+      assert.ok(err instanceof AppError);
+      assert.equal((err as AppError).code, 'ATLASSIAN_OAUTH_RESPONSE_INVALID');
+      return true;
+    },
+  );
+});
+
+test('a success body with a non-positive expires_in throws ATLASSIAN_OAUTH_RESPONSE_INVALID rather than yielding an already-expired token', async () => {
+  const fetchImpl = (async () =>
+    jsonResponse(200, {
+      access_token: 'access-token-4b',
+      refresh_token: 'refresh-token-4b',
+      expires_in: 0,
       scope: 'read:confluence',
     })) as typeof globalThis.fetch;
 
