@@ -23,6 +23,13 @@ function jsonResponse(status: number, body: unknown): Response {
   });
 }
 
+function textResponse(status: number, body: string, contentType = 'text/html'): Response {
+  return new Response(body, {
+    status,
+    headers: { 'Content-Type': contentType },
+  });
+}
+
 function buildDeps(fetchImpl: typeof globalThis.fetch): OAuthDeps {
   return {
     fetch: fetchImpl,
@@ -51,7 +58,7 @@ function assertNoSecretLeak(err: unknown, secrets: string[]): AppError {
   return appError;
 }
 
-test('exchangeAuthorizationCode parses accessToken, refreshToken, expiresAt (with margin) and scopes', async () => {
+test('exchangeAuthorizationCode parses accessToken, an issued refreshToken, expiresAt (with margin) and scopes', async () => {
   const calls: FakeCall[] = [];
   const fetchImpl = (async (url: string | URL | Request, init?: RequestInit) => {
     calls.push({ url: String(url), init });
@@ -68,7 +75,7 @@ test('exchangeAuthorizationCode parses accessToken, refreshToken, expiresAt (wit
   const after = Date.now();
 
   assert.equal(tokens.accessToken, 'access-token-1');
-  assert.equal(tokens.refreshToken, 'refresh-token-1');
+  assert.deepEqual(tokens.refreshToken, { kind: 'issued', token: 'refresh-token-1' });
   assert.deepEqual(tokens.scopes, ['read:confluence', 'write:confluence']);
 
   const expectedMin = before + (3600 - 60) * 1000;
@@ -89,7 +96,21 @@ test('exchangeAuthorizationCode parses accessToken, refreshToken, expiresAt (wit
   assert.equal(sentBody.redirect_uri, REDIRECT_URI);
 });
 
-test('refreshAccessToken parses accessToken, refreshToken, expiresAt (with margin) and scopes', async () => {
+test('exchangeAuthorizationCode yields refreshToken: { kind: "unavailable" } when offline_access was not granted', async () => {
+  const fetchImpl = (async () =>
+    jsonResponse(200, {
+      access_token: 'access-token-1b',
+      expires_in: 3600,
+      scope: 'read:confluence',
+      // no refresh_token field: offline_access was not granted
+    })) as typeof globalThis.fetch;
+
+  const tokens = await exchangeAuthorizationCode(SECRET_CODE, REDIRECT_URI, buildDeps(fetchImpl));
+
+  assert.deepEqual(tokens.refreshToken, { kind: 'unavailable' });
+});
+
+test('refreshAccessToken parses accessToken, an issued refreshToken, expiresAt (with margin) and scopes', async () => {
   const calls: FakeCall[] = [];
   const fetchImpl = (async (url: string | URL | Request, init?: RequestInit) => {
     calls.push({ url: String(url), init });
@@ -104,7 +125,7 @@ test('refreshAccessToken parses accessToken, refreshToken, expiresAt (with margi
   const tokens = await refreshAccessToken(SECRET_REFRESH_TOKEN, buildDeps(fetchImpl));
 
   assert.equal(tokens.accessToken, 'access-token-2');
-  assert.equal(tokens.refreshToken, 'refresh-token-2');
+  assert.deepEqual(tokens.refreshToken, { kind: 'issued', token: 'refresh-token-2' });
   assert.deepEqual(tokens.scopes, ['read:confluence']);
   assert.ok(tokens.expiresAt instanceof Date);
 
@@ -115,19 +136,20 @@ test('refreshAccessToken parses accessToken, refreshToken, expiresAt (with margi
   assert.equal(sentBody.client_secret, SECRET_CLIENT_SECRET);
 });
 
-test('refreshAccessToken yields refreshToken: null when Atlassian omits refresh_token (no offline_access)', async () => {
+test('refreshAccessToken yields refreshToken: { kind: "not_rotated" } when Atlassian omits refresh_token — the existing stored token is still valid', async () => {
   const fetchImpl = (async () =>
     jsonResponse(200, {
       access_token: 'access-token-3',
       expires_in: 3600,
       scope: 'read:confluence',
-      // no refresh_token field at all
+      // no refresh_token field at all: NOT the same meaning as exchange's
+      // "unavailable" — Atlassian simply did not rotate it this time.
     })) as typeof globalThis.fetch;
 
   const tokens = await refreshAccessToken(SECRET_REFRESH_TOKEN, buildDeps(fetchImpl));
 
   assert.equal(tokens.accessToken, 'access-token-3');
-  assert.equal(tokens.refreshToken, null);
+  assert.deepEqual(tokens.refreshToken, { kind: 'not_rotated' });
 });
 
 test('a non-2xx token response throws an AppError that leaks none of the secret inputs', async () => {
@@ -150,6 +172,16 @@ test('a non-2xx token response throws an AppError that leaks none of the secret 
       const appError = assertNoSecretLeak(err, [SECRET_CODE, SECRET_REFRESH_TOKEN, SECRET_CLIENT_SECRET]);
       assert.match(appError.message, /invalid_grant/);
       assert.match(appError.message, /Invalid authorization code/);
+      assert.equal(appError.code, 'ATLASSIAN_OAUTH_TOKEN_FAILED');
+      // A rejected grant is the charity's own stale/invalid input, not our
+      // server failing — it must not be a >=500 that pages the operator or
+      // sends error_description to the alert webhook.
+      assert.equal(appError.statusCode, 400);
+      assert.deepEqual(appError.details, {
+        status: 400,
+        error: 'invalid_grant',
+        error_description: 'Invalid authorization code',
+      });
       return true;
     },
   );
@@ -168,6 +200,101 @@ test('a non-2xx refresh response throws an AppError that leaks none of the secre
     () => refreshAccessToken(SECRET_REFRESH_TOKEN, buildDeps(fetchImpl)),
     (err: unknown) => {
       assertNoSecretLeak(err, [SECRET_REFRESH_TOKEN, SECRET_CLIENT_SECRET]);
+      return true;
+    },
+  );
+});
+
+test('a 502 with an HTML error body and a 400 with a JSON body lacking `error` are distinguishable, not byte-identical', async () => {
+  const htmlFetch = (async () =>
+    textResponse(502, '<html><body>Bad Gateway</body></html>')) as typeof globalThis.fetch;
+  const jsonNoErrorFetch = (async () => jsonResponse(400, { message: 'nope' })) as typeof globalThis.fetch;
+
+  let htmlError: AppError | undefined;
+  try {
+    await exchangeAuthorizationCode(SECRET_CODE, REDIRECT_URI, buildDeps(htmlFetch));
+  } catch (err) {
+    htmlError = err as AppError;
+  }
+
+  let jsonNoErrorError: AppError | undefined;
+  try {
+    await exchangeAuthorizationCode(SECRET_CODE, REDIRECT_URI, buildDeps(jsonNoErrorFetch));
+  } catch (err) {
+    jsonNoErrorError = err as AppError;
+  }
+
+  assert.ok(htmlError instanceof AppError);
+  assert.ok(jsonNoErrorError instanceof AppError);
+  assert.equal(htmlError.code, 'ATLASSIAN_OAUTH_ERROR_BODY_UNREADABLE');
+  assert.equal(jsonNoErrorError.code, 'ATLASSIAN_OAUTH_ERROR_BODY_UNREADABLE');
+  // Same code is fine (both are "we don't know what went wrong"), but they
+  // must not be byte-identical: the status — the one discriminator that
+  // can never echo the request back — must appear in both message and
+  // details, and differ between the two.
+  assert.deepEqual(htmlError.details, { status: 502 });
+  assert.deepEqual(jsonNoErrorError.details, { status: 400 });
+  assert.notEqual(htmlError.message, jsonNoErrorError.message);
+  assert.match(htmlError.message, /502/);
+  assert.match(jsonNoErrorError.message, /400/);
+  // A genuinely unreachable/malformed upstream still maps to 502...
+  assert.equal(htmlError.statusCode, 502);
+  // ...but a 4xx with an unreadable body is still the caller's own client
+  // error, and must not escalate to a >=500 that pages the operator.
+  assert.equal(jsonNoErrorError.statusCode, 400);
+});
+
+test('a success body missing expires_in throws ATLASSIAN_OAUTH_RESPONSE_INVALID instead of yielding an Invalid Date', async () => {
+  const fetchImpl = (async () =>
+    jsonResponse(200, {
+      access_token: 'access-token-4',
+      refresh_token: 'refresh-token-4',
+      // expires_in omitted
+      scope: 'read:confluence',
+    })) as typeof globalThis.fetch;
+
+  await assert.rejects(
+    () => exchangeAuthorizationCode(SECRET_CODE, REDIRECT_URI, buildDeps(fetchImpl)),
+    (err: unknown) => {
+      assert.ok(err instanceof AppError);
+      assert.equal((err as AppError).code, 'ATLASSIAN_OAUTH_RESPONSE_INVALID');
+      return true;
+    },
+  );
+});
+
+test('a success body missing access_token throws ATLASSIAN_OAUTH_RESPONSE_INVALID instead of yielding accessToken: undefined', async () => {
+  const fetchImpl = (async () =>
+    jsonResponse(200, {
+      // access_token omitted
+      refresh_token: 'refresh-token-5',
+      expires_in: 3600,
+    })) as typeof globalThis.fetch;
+
+  await assert.rejects(
+    () => exchangeAuthorizationCode(SECRET_CODE, REDIRECT_URI, buildDeps(fetchImpl)),
+    (err: unknown) => {
+      assert.ok(err instanceof AppError);
+      assert.equal((err as AppError).code, 'ATLASSIAN_OAUTH_RESPONSE_INVALID');
+      return true;
+    },
+  );
+});
+
+test('a success body with a non-string scope throws ATLASSIAN_OAUTH_RESPONSE_INVALID instead of a raw TypeError', async () => {
+  const fetchImpl = (async () =>
+    jsonResponse(200, {
+      access_token: 'access-token-6',
+      refresh_token: 'refresh-token-6',
+      expires_in: 3600,
+      scope: ['read:confluence', 'write:confluence'], // not a string
+    })) as typeof globalThis.fetch;
+
+  await assert.rejects(
+    () => exchangeAuthorizationCode(SECRET_CODE, REDIRECT_URI, buildDeps(fetchImpl)),
+    (err: unknown) => {
+      assert.ok(err instanceof AppError, `expected an AppError, got ${String(err)}`);
+      assert.equal((err as AppError).code, 'ATLASSIAN_OAUTH_RESPONSE_INVALID');
       return true;
     },
   );
@@ -207,6 +334,23 @@ test('listAccessibleResources parses the accessible site list from a bearer-auth
   assert.equal(headers.get('authorization'), `Bearer ${accessToken}`);
 });
 
+test('listAccessibleResources throws ATLASSIAN_OAUTH_RESPONSE_INVALID instead of a raw TypeError on a null entry', async () => {
+  const fetchImpl = (async () =>
+    jsonResponse(200, [
+      { id: 'cloud-id-1', url: 'https://example1.atlassian.net', name: 'Example One' },
+      null,
+    ])) as typeof globalThis.fetch;
+
+  await assert.rejects(
+    () => listAccessibleResources('access-token-for-sites', { fetch: fetchImpl }),
+    (err: unknown) => {
+      assert.ok(err instanceof AppError, `expected an AppError, got ${String(err)}`);
+      assert.equal((err as AppError).code, 'ATLASSIAN_OAUTH_RESPONSE_INVALID');
+      return true;
+    },
+  );
+});
+
 test('a non-2xx accessible-resources response throws an AppError that leaks none of the access token', async () => {
   const accessToken = 'access-token-that-must-not-leak';
   const fetchImpl = (async () =>
@@ -220,6 +364,47 @@ test('a non-2xx accessible-resources response throws an AppError that leaks none
     () => listAccessibleResources(accessToken, { fetch: fetchImpl }),
     (err: unknown) => {
       assertNoSecretLeak(err, [accessToken]);
+      return true;
+    },
+  );
+});
+
+test('a rejected fetch (transport failure) throws ATLASSIAN_OAUTH_UNREACHABLE with no cause attached, even though the underlying error carries a secret', async () => {
+  const fetchImpl = (async () => {
+    // Mirrors Node's real `fetch failed` shape, where `cause` can carry the
+    // request URL/body. Plants a secret directly in the message to prove
+    // the module truly never attaches it, rather than merely not logging
+    // it today.
+    throw new Error(`fetch failed: could not reach auth.atlassian.com with code=${SECRET_CODE}`);
+  }) as typeof globalThis.fetch;
+
+  await assert.rejects(
+    () => exchangeAuthorizationCode(SECRET_CODE, REDIRECT_URI, buildDeps(fetchImpl)),
+    (err: unknown) => {
+      assert.ok(err instanceof AppError);
+      const appError = err as AppError;
+      assert.equal(appError.code, 'ATLASSIAN_OAUTH_UNREACHABLE');
+      assert.equal(appError.cause, undefined);
+      assertNoSecretLeak(appError, [SECRET_CODE]);
+      return true;
+    },
+  );
+});
+
+test('a rejected fetch (transport failure) on listAccessibleResources throws ATLASSIAN_OAUTH_UNREACHABLE with no cause attached', async () => {
+  const accessToken = 'access-token-that-must-not-leak-2';
+  const fetchImpl = (async () => {
+    throw new Error(`fetch failed: could not reach api.atlassian.com, Authorization: Bearer ${accessToken}`);
+  }) as typeof globalThis.fetch;
+
+  await assert.rejects(
+    () => listAccessibleResources(accessToken, { fetch: fetchImpl }),
+    (err: unknown) => {
+      assert.ok(err instanceof AppError);
+      const appError = err as AppError;
+      assert.equal(appError.code, 'ATLASSIAN_OAUTH_UNREACHABLE');
+      assert.equal(appError.cause, undefined);
+      assertNoSecretLeak(appError, [accessToken]);
       return true;
     },
   );
