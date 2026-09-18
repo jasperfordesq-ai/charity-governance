@@ -113,6 +113,42 @@ export const REFRESH_CLAIM_STALE_AFTER_MS = 10 * 60 * 1000;
  */
 export const REFRESH_REQUEST_TIMEOUT_MS = 30 * 1000;
 
+/**
+ * The deadline on each of the two HTTP calls `connectConfluence` makes.
+ *
+ * Deliberately far shorter than the refresh deadline above, because the thing
+ * waiting is different. A refresh runs behind a background job or an
+ * already-rendered page and its bound exists to protect the *claim lease*. A
+ * connect runs on a live user-facing route with **a charity administrator
+ * sitting in front of a browser tab**, and its bound exists to protect *them*.
+ *
+ * Unbounded, undici's defaults apply — `headersTimeout` 300s plus
+ * `bodyTimeout` 300s, twice over for the two calls — so a stalled Atlassian
+ * can hold that tab for up to twenty minutes. The single-use authorization
+ * code expires inside that window (it shares the ten minutes of
+ * `OAUTH_STATE_TTL_SECONDS`), so the administrator is left with a spinner
+ * that resolves into an unrecoverable failure and no way forward but to start
+ * the whole flow again.
+ *
+ * Ten seconds is the number because it has to satisfy both ends:
+ *
+ * - **Short enough for a person.** Twenty seconds worst case for the pair is
+ *   about the longest a browser tab can hang before it reads as broken, and
+ *   it leaves over 96% of the code's ten-minute life for a retry that can
+ *   still succeed. That is the whole point — a bounded failure here is
+ *   *recoverable*, an unbounded one is not.
+ * - **Long enough for a working Atlassian.** Atlassian's token and
+ *   accessible-resources endpoints answer in well under a second; ten seconds
+ *   is more than an order of magnitude of headroom, so a merely slow response
+ *   is not cut off. Anything past it is a stall, not slowness.
+ *
+ * Exceeding it surfaces through `atlassian-oauth.ts`'s transport branch as
+ * `ATLASSIAN_OAUTH_UNREACHABLE` — a transient 502, which is correct: a
+ * timed-out connect attempt is not a refused authorisation and must not tell
+ * the charity their grant was rejected.
+ */
+export const CONNECT_REQUEST_TIMEOUT_MS = 10 * 1000;
+
 /** How long a caller that lost the claim waits before re-reading. */
 const REFRESH_CLAIM_WAIT_MS = 250;
 
@@ -131,6 +167,8 @@ export type ConfluenceConnectionDeps = {
   sleep?: (ms: number) => Promise<void>;
   /** Overrides `REFRESH_REQUEST_TIMEOUT_MS`; exists so a test can use a short deadline. */
   refreshTimeoutMs?: number;
+  /** Overrides `CONNECT_REQUEST_TIMEOUT_MS`; exists so a test can use a short deadline. */
+  connectTimeoutMs?: number;
 };
 
 /**
@@ -180,6 +218,40 @@ function resolveSleep(deps: ConfluenceConnectionDeps): (ms: number) => Promise<v
         setTimeout(resolve, ms);
       }))
   );
+}
+
+/**
+ * The production deadlines, resolved in one place each.
+ *
+ * These exist to be *asserted on*. Every test that exercises a deadline
+ * injects its own short value, so the fallback — the number that actually runs
+ * in production — is reached by nothing in the suite. Written inline at the
+ * call site, replacing either constant with a hardcoded ten minutes left every
+ * test green while quietly removing the margin the claim lease depends on.
+ *
+ * The constants themselves are pinned (a 10x floor against
+ * `REFRESH_CLAIM_STALE_AFTER_MS`, and against the code/state window for the
+ * connect path). These functions pin the *join* between those constants and
+ * the code that uses them, which is the part that was unpinned.
+ */
+export function resolveRefreshTimeoutMs(deps: ConfluenceConnectionDeps): number {
+  return deps.refreshTimeoutMs ?? REFRESH_REQUEST_TIMEOUT_MS;
+}
+
+export function resolveConnectTimeoutMs(deps: ConfluenceConnectionDeps): number {
+  return deps.connectTimeoutMs ?? CONNECT_REQUEST_TIMEOUT_MS;
+}
+
+/**
+ * `deps.oauth` with its `fetch` bounded, leaving every other field alone.
+ *
+ * `atlassian-oauth.ts` is closed, and it has no business owning a deadline
+ * that belongs to a caller's context anyway: the refresh path's bound answers
+ * to the claim lease, the connect path's to a waiting human. `OAuthDeps.fetch`
+ * is the seam that lets each caller state its own.
+ */
+function boundedOAuth(oauth: OAuthDeps | undefined, timeoutMs: number): OAuthDeps {
+  return { ...oauth, fetch: boundedFetch(oauth?.fetch ?? globalThis.fetch, timeoutMs) };
 }
 
 // ── the claim ──────────────────────────────────────────────────────────────
@@ -435,7 +507,14 @@ export async function connectConfluence(
   const listSites = deps.listAccessibleResources ?? listAccessibleResourcesDefault;
   const now = resolveNow(deps);
 
-  const tokens = await exchange(code, redirectUri, deps.oauth);
+  // Both calls below are made on a live route with an administrator waiting on
+  // a browser tab, and both are unbounded without this. See
+  // CONNECT_REQUEST_TIMEOUT_MS: a stall does not merely delay the connection,
+  // it burns the single-use authorization code's whole life while the person
+  // watches a spinner.
+  const bounded = boundedOAuth(deps.oauth, resolveConnectTimeoutMs(deps));
+
+  const tokens = await exchange(code, redirectUri, bounded);
 
   if (tokens.refreshToken.kind !== 'issued') {
     // Without `offline_access` the access token dies within the hour and
@@ -450,7 +529,7 @@ export async function connectConfluence(
   }
   const refreshToken = tokens.refreshToken.token;
 
-  const sites = await listSites(tokens.accessToken, deps.oauth);
+  const sites = await listSites(tokens.accessToken, bounded);
   const site = sites[0];
   if (!site) {
     throw new AppError(
@@ -606,11 +685,7 @@ async function refreshUnderClaim(
 
     // The one call made while holding the lease, and the only one that has to
     // finish inside the staleness window. See REFRESH_REQUEST_TIMEOUT_MS.
-    const base = deps.oauth?.fetch ?? globalThis.fetch;
-    const bounded: OAuthDeps = {
-      ...deps.oauth,
-      fetch: boundedFetch(base, deps.refreshTimeoutMs ?? REFRESH_REQUEST_TIMEOUT_MS),
-    };
+    const bounded = boundedOAuth(deps.oauth, resolveRefreshTimeoutMs(deps));
 
     let tokens;
     try {

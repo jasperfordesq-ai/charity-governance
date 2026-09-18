@@ -3,13 +3,17 @@ import { randomBytes } from 'node:crypto';
 import test from 'node:test';
 import type { AtlassianTokens, OAuthDeps } from '../services/atlassian-oauth.js';
 import {
+  CONNECT_REQUEST_TIMEOUT_MS,
   REFRESH_CLAIM_STALE_AFTER_MS,
   REFRESH_REQUEST_TIMEOUT_MS,
   connectConfluence,
   currentAccessToken,
   disconnectConfluence,
+  resolveConnectTimeoutMs,
+  resolveRefreshTimeoutMs,
   type ConfluenceConnectionClient,
 } from '../services/confluence-connection.service.js';
+import { OAUTH_STATE_TTL_SECONDS } from '../routes/integrations/oauth-state.js';
 import { integrationKeyFingerprint, sealIntegrationSecret } from '../services/integration-crypto.js';
 import { AppError } from '../utils/errors.js';
 
@@ -1162,6 +1166,121 @@ test('connectConfluence refuses an authorization that issued no refresh token', 
   // half-created.
   assert.equal(fake.integrationWrites.length, 0);
   assert.equal(fake.credentialWrites.length, 0);
+});
+
+/**
+ * A `fetch` that never settles, exactly as undici can when a peer accepts the
+ * connection and then says nothing. `AbortSignal.timeout`'s own timer is
+ * unref'd, so the ref'd `setTimeout` here is what holds the event loop open —
+ * and it doubles as the assertion that the deadline fires at all.
+ */
+function hangingFetch(): typeof globalThis.fetch {
+  return ((_input: unknown, init?: { signal?: AbortSignal }) =>
+    new Promise((_resolve, reject) => {
+      const keepAlive = setTimeout(() => reject(new Error('the deadline never fired')), 1_000);
+      init?.signal?.addEventListener('abort', () => {
+        clearTimeout(keepAlive);
+        reject(new Error('request aborted by deadline'));
+      });
+    })) as unknown as typeof globalThis.fetch;
+}
+
+test('the authorization-code exchange carries a deadline', async () => {
+  // A human is standing in front of a browser tab for this one. Unbounded, a
+  // stalled Atlassian holds them for undici's ~600s while the single-use code
+  // expires underneath them, and the flow becomes unrecoverable.
+  const fake = fakePrisma({ integration: null, storedRefreshToken: null });
+
+  const exchange = async (_code: string, _redirectUri: string, oauth?: OAuthDeps) => {
+    assert.ok(oauth?.fetch, 'the exchange must be handed a bounded fetch');
+    await oauth.fetch('https://auth.atlassian.com/oauth/token', { method: 'POST' });
+    throw new Error('the request should not have completed');
+  };
+
+  await assert.rejects(
+    withKey(() =>
+      connectConfluence(
+        fake.client,
+        { organisationId: ORG_ID, userId: 'user-9', code: 'auth-code', redirectUri: 'https://api.example/cb' },
+        {
+          now: clock,
+          connectTimeoutMs: 5,
+          exchangeAuthorizationCode: exchange as never,
+          listAccessibleResources: neverCalled,
+          oauth: { fetch: hangingFetch() },
+        },
+      ),
+    ),
+    /request aborted by deadline/,
+  );
+
+  // Nothing half-created on the way out.
+  assert.equal(fake.integrationWrites.length, 0);
+  assert.equal(fake.credentialWrites.length, 0);
+});
+
+test('the accessible-resources lookup carries the same deadline', async () => {
+  // The second call is on the same live route, holds the same person, and is
+  // made with an access token whose code has already been spent — so a stall
+  // here is the more expensive of the two.
+  const fake = fakePrisma({ integration: null, storedRefreshToken: null });
+
+  const listSites = async (_accessToken: string, oauth?: OAuthDeps) => {
+    assert.ok(oauth?.fetch, 'the site lookup must be handed a bounded fetch');
+    await oauth.fetch('https://api.atlassian.com/oauth/token/accessible-resources');
+    throw new Error('the request should not have completed');
+  };
+
+  await assert.rejects(
+    withKey(() =>
+      connectConfluence(
+        fake.client,
+        { organisationId: ORG_ID, userId: 'user-9', code: 'auth-code', redirectUri: 'https://api.example/cb' },
+        {
+          now: clock,
+          connectTimeoutMs: 5,
+          exchangeAuthorizationCode: async () => tokens(),
+          listAccessibleResources: listSites as never,
+          oauth: { fetch: hangingFetch() },
+        },
+      ),
+    ),
+    /request aborted by deadline/,
+  );
+
+  assert.equal(fake.integrationWrites.length, 0);
+  assert.equal(fake.credentialWrites.length, 0);
+});
+
+test('the production deadline defaults are the constants, not whatever a test injected', () => {
+  // Both deadline tests above and the refresh one below inject their own
+  // value, so hardcoding a ten-minute default in either call site would leave
+  // every test green. The resolvers are the join between the constants — which
+  // ARE pinned, by the assertions that follow — and the code that runs in
+  // production, and this is the only thing that pins the join itself.
+  assert.equal(resolveRefreshTimeoutMs({}), REFRESH_REQUEST_TIMEOUT_MS);
+  assert.equal(resolveConnectTimeoutMs({}), CONNECT_REQUEST_TIMEOUT_MS);
+
+  // An injected value still wins; that is what the deadline tests rely on.
+  assert.equal(resolveRefreshTimeoutMs({ refreshTimeoutMs: 5 }), 5);
+  assert.equal(resolveConnectTimeoutMs({ connectTimeoutMs: 5 }), 5);
+
+  // The connect deadline is deliberately far shorter than the refresh one: a
+  // refresh happens behind a background job or an already-rendered page, while
+  // a connect holds a person in front of a browser tab.
+  assert.ok(
+    CONNECT_REQUEST_TIMEOUT_MS < REFRESH_REQUEST_TIMEOUT_MS,
+    'a human waiting on a browser must not wait as long as a background refresh',
+  );
+
+  // And the whole connect path — both calls, worst case — has to leave most of
+  // the authorization code's life intact for the administrator to retry inside.
+  // `OAUTH_STATE_TTL_SECONDS` is that window: the state and the code expire
+  // together, which is why the state TTL was chosen to match it.
+  assert.ok(
+    CONNECT_REQUEST_TIMEOUT_MS * 2 * 10 <= OAUTH_STATE_TTL_SECONDS * 1_000,
+    'the code/state window must dominate the connect path by at least 10x',
+  );
 });
 
 test('disconnectConfluence deletes every stored credential and marks the row disconnected', async () => {
