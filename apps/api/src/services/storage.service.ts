@@ -4,6 +4,10 @@ import { randomUUID } from 'node:crypto';
 import { createClient } from '@supabase/supabase-js';
 import { AppError } from '../utils/errors.js';
 import { isConfiguredSecret } from '../utils/env.js';
+import {
+  resolveProviderForOrganisation,
+  type OrganisationStorageResolver,
+} from './document-storage-resolution.js';
 
 const STORAGE_UNAVAILABLE_MESSAGE = 'Document storage is temporarily unavailable. Please contact support.';
 const STORAGE_OPERATION_FAILED_MESSAGE = 'Document storage operation failed. Please try again later.';
@@ -140,6 +144,18 @@ function isMissingFileError(error: unknown): boolean {
 }
 
 export class StorageService {
+  /**
+   * `resolver` is optional and defaults to null, which means "use the
+   * deployment default for every organisation" — exactly the behaviour every
+   * call site had before per-tenant storage existed. Do not make it required:
+   * the health probe and the existing tests rely on the zero-argument form.
+   */
+  constructor(private readonly resolver: OrganisationStorageResolver | null = null) {}
+
+  private async providerFor(organisationId: string): Promise<string> {
+    return resolveProviderForOrganisation(organisationId, this.resolver);
+  }
+
   assertLocalStorageEnabled(): void {
     if (!isLocalStorageDriver()) {
       throw new AppError(503, 'STORAGE_NOT_CONFIGURED', STORAGE_UNAVAILABLE_MESSAGE);
@@ -188,7 +204,7 @@ export class StorageService {
     const sanitised = sanitiseFilename(filename);
     const storagePath = `${organisationId}/${Date.now()}-${randomUUID()}-${sanitised}`;
 
-    if (isLocalStorageDriver()) {
+    if ((await this.providerFor(organisationId)) === 'local') {
       const filePath = localFilePath(storagePath);
       await mkdir(dirname(filePath), { recursive: true });
       await writeFile(filePath, buffer);
@@ -208,9 +224,7 @@ export class StorageService {
     return { storagePath };
   }
 
-  async readLocalFile(organisationId: string, storagePath: string): Promise<Buffer> {
-    this.assertLocalStorageEnabled();
-    const guardedPath = assertOrganisationStoragePath(organisationId, storagePath);
+  private async readLocalResolved(guardedPath: string): Promise<Buffer> {
     try {
       const filePath = localFilePath(guardedPath);
       const file = await stat(filePath);
@@ -227,11 +241,17 @@ export class StorageService {
     }
   }
 
+  async readLocalFile(organisationId: string, storagePath: string): Promise<Buffer> {
+    this.assertLocalStorageEnabled();
+    const guardedPath = assertOrganisationStoragePath(organisationId, storagePath);
+    return this.readLocalResolved(guardedPath);
+  }
+
   async downloadFile(organisationId: string, storagePath: string): Promise<Buffer> {
     const guardedPath = assertOrganisationStoragePath(organisationId, storagePath);
 
-    if (isLocalStorageDriver()) {
-      return this.readLocalFile(organisationId, guardedPath);
+    if ((await this.providerFor(organisationId)) === 'local') {
+      return this.readLocalResolved(guardedPath);
     }
 
     const timeoutMs = downloadTimeoutMs();
@@ -267,7 +287,7 @@ export class StorageService {
       throw new AppError(500, 'STORAGE_DELETE_FAILED', STORAGE_OPERATION_FAILED_MESSAGE);
     }
 
-    if (isLocalStorageDriver()) {
+    if ((await this.providerFor(organisationId)) === 'local') {
       try {
         await withOperationTimeout(unlink(localFilePath(guardedPath)), storageDeleteTimeoutMs());
       } catch (error) {

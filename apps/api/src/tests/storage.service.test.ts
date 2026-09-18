@@ -6,6 +6,7 @@ import { createServer } from 'node:http';
 import test from 'node:test';
 import { StorageService, withReadinessTimeout } from '../services/storage.service.js';
 import { AppError } from '../utils/errors.js';
+import type { OrganisationStorageResolver } from '../services/document-storage-resolution.js';
 
 type GuardedStorageService = {
   downloadFile(organisationId: string, storagePath: string): Promise<Buffer>;
@@ -303,4 +304,41 @@ test('uploadFile generates unique storage paths for same-name uploads', async ()
       }
     }
   }
+});
+
+test('an organisation pinned to local storage uses local storage even when the deployment default is supabase', async () => {
+  const previousDriver = process.env.DOCUMENT_STORAGE_DRIVER;
+  const previousRoot = process.env.LOCAL_FILE_STORAGE_DIR;
+  const root = await mkdtemp(join(tmpdir(), 'charitypilot-per-tenant-'));
+
+  // Deployment default is supabase (driver unset); the organisation overrides it.
+  delete process.env.DOCUMENT_STORAGE_DRIVER;
+  process.env.LOCAL_FILE_STORAGE_DIR = root;
+
+  const resolver: OrganisationStorageResolver = async () => ({ provider: 'local', alphaOptIn: false });
+
+  try {
+    const service = new StorageService(resolver);
+    const uploaded = await service.uploadFile('org-pinned', 'policy.pdf', Buffer.from('pinned'), 'application/pdf');
+
+    assert.equal(uploaded.storagePath.startsWith('org-pinned/'), true);
+    const roundTripped = await service.downloadFile('org-pinned', uploaded.storagePath);
+    assert.equal(roundTripped.toString(), 'pinned');
+
+    await service.deleteFile('org-pinned', uploaded.storagePath);
+  } finally {
+    await rm(root, { recursive: true, force: true });
+    if (previousDriver === undefined) delete process.env.DOCUMENT_STORAGE_DRIVER;
+    else process.env.DOCUMENT_STORAGE_DRIVER = previousDriver;
+    if (previousRoot === undefined) delete process.env.LOCAL_FILE_STORAGE_DIR;
+    else process.env.LOCAL_FILE_STORAGE_DIR = previousRoot;
+  }
+});
+
+test('the organisation prefix guard still runs before any resolved provider is used', async () => {
+  const resolver: OrganisationStorageResolver = async () => ({ provider: 'local', alphaOptIn: false });
+  const service = new StorageService(resolver) as unknown as GuardedStorageService;
+
+  await assertForbiddenStoragePath(() => service.downloadFile('org-a', 'org-b/policy.pdf'));
+  await assertForbiddenStoragePath(() => service.deleteFile('org-a', '../org-a/policy.pdf'));
 });
