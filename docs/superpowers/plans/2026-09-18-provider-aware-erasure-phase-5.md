@@ -184,15 +184,29 @@ test('an enqueued deletion is stamped with the organisation resolved provider', 
 });
 
 test('an organisation with no explicit provider falls back to the deployment default', async () => {
-  const created: Array<Record<string, unknown>> = [];
-  const prisma = buildEnqueueCapturingPrisma(created, { documentStorageProvider: null });
-  const service = new DocumentService(prisma as never, () => NOW);
+  const previous = process.env.DOCUMENT_STORAGE_DRIVER;
+  try {
+    for (const [driver, expected] of [['local', 'local'], [undefined, 'supabase']] as const) {
+      if (driver === undefined) delete process.env.DOCUMENT_STORAGE_DRIVER;
+      else process.env.DOCUMENT_STORAGE_DRIVER = driver;
 
-  await service.remove('org-1', 'doc-1');
+      const created: Array<Record<string, unknown>> = [];
+      const prisma = buildEnqueueCapturingPrisma(created, { documentStorageProvider: null });
+      await new DocumentService(prisma as never, () => NOW).remove('org-1', 'doc-1');
 
-  assert.equal(created[0].provider, envDefaultProviderId(process.env));
+      assert.equal(created[0].provider, expected);
+    }
+  } finally {
+    if (previous === undefined) delete process.env.DOCUMENT_STORAGE_DRIVER;
+    else process.env.DOCUMENT_STORAGE_DRIVER = previous;
+  }
 });
 ```
+
+Pin `DOCUMENT_STORAGE_DRIVER` on both halves and restore it in a `finally` rather than asserting
+against whatever the ambient environment happens to hold — an assertion that reads the same
+variable the code reads passes no matter what either of them says. Note `envDefaultProviderId`
+takes an optional **registry**, not an env object, and reads `process.env` itself.
 
 `buildEnqueueCapturingPrisma` does not exist yet — write it beside `buildFallbackPrisma`, capturing
 the `data` passed to `documentStorageDeletion.create`. Keep it in the same style as the existing
