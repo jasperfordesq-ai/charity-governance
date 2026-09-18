@@ -7,6 +7,7 @@ import { isConfiguredSecret } from '../utils/env.js';
 import {
   resolveProviderForOrganisation,
   type OrganisationStorageResolver,
+  type ResolveProviderOptions,
 } from './document-storage-resolution.js';
 
 const STORAGE_UNAVAILABLE_MESSAGE = 'Document storage is temporarily unavailable. Please contact support.';
@@ -152,9 +153,12 @@ export class StorageService {
    */
   constructor(private readonly resolver: OrganisationStorageResolver | null = null) {}
 
-  private async providerFor(organisationId: string): Promise<string> {
+  private async providerFor(
+    organisationId: string,
+    operation: NonNullable<ResolveProviderOptions['operation']>,
+  ): Promise<string> {
     try {
-      return await resolveProviderForOrganisation(organisationId, this.resolver);
+      return await resolveProviderForOrganisation(organisationId, this.resolver, undefined, { operation });
     } catch (error) {
       if (error instanceof AppError) throw error;
       throw new AppError(500, 'STORAGE_PROVIDER_RESOLUTION_FAILED', STORAGE_OPERATION_FAILED_MESSAGE);
@@ -209,7 +213,7 @@ export class StorageService {
     const sanitised = sanitiseFilename(filename);
     const storagePath = `${organisationId}/${Date.now()}-${randomUUID()}-${sanitised}`;
 
-    if ((await this.providerFor(organisationId)) === LOCAL_STORAGE_DRIVER) {
+    if ((await this.providerFor(organisationId, 'write')) === LOCAL_STORAGE_DRIVER) {
       const filePath = localFilePath(storagePath);
       await mkdir(dirname(filePath), { recursive: true });
       await writeFile(filePath, buffer);
@@ -267,7 +271,7 @@ export class StorageService {
   async downloadFile(organisationId: string, storagePath: string): Promise<Buffer> {
     const guardedPath = assertOrganisationStoragePath(organisationId, storagePath);
 
-    if ((await this.providerFor(organisationId)) === LOCAL_STORAGE_DRIVER) {
+    if ((await this.providerFor(organisationId, 'read')) === LOCAL_STORAGE_DRIVER) {
       return this.readLocalResolved(guardedPath);
     }
 
@@ -304,7 +308,7 @@ export class StorageService {
       throw new AppError(500, 'STORAGE_DELETE_FAILED', STORAGE_OPERATION_FAILED_MESSAGE);
     }
 
-    const provider = await this.providerFor(organisationId);
+    const provider = await this.providerFor(organisationId, 'delete');
 
     if (signal?.aborted) {
       throw new AppError(500, 'STORAGE_DELETE_FAILED', STORAGE_OPERATION_FAILED_MESSAGE);

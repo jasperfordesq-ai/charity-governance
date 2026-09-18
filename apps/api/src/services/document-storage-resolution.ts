@@ -74,20 +74,40 @@ function assertProviderPermittedByDeployment(
   );
 }
 
+export type ResolveProviderOptions = {
+  /**
+   * Which kind of storage access this resolution is for. Defaults to
+   * `'write'` so any unqualified call keeps the strict, pre-existing
+   * behaviour.
+   *
+   * The production local-provider gate
+   * (`assertProviderPermittedByDeployment`) only applies to `'write'`: it
+   * exists to stop a production deployment writing bytes to an unvalidated,
+   * ephemeral, un-backed-up local path. Once bytes exist, refusing to read
+   * or delete them strands them — strictly worse than allowing the access —
+   * and for delete it breaks the provable-erasure guarantee the
+   * document-deletion pipeline (retry, dead-letter, recovery ledger) exists
+   * to uphold. So `'read'` and `'delete'` skip the gate.
+   */
+  operation?: 'read' | 'write' | 'delete';
+};
+
 export async function resolveProviderForOrganisation(
   organisationId: string,
   resolver: OrganisationStorageResolver | null,
   registry: DocumentStorageProviderRegistry = documentStorageProviders,
+  options: ResolveProviderOptions = {},
 ): Promise<string> {
+  const { operation = 'write' } = options;
+
   if (!resolver) return envDefaultProviderId(registry);
 
   const selection = await resolver(organisationId);
   if (!selection.provider) return envDefaultProviderId(registry);
 
-  return assertProviderPermittedByDeployment(
-    registry.assertSelectable(selection.provider, { alphaOptIn: selection.alphaOptIn }),
-    registry,
-  );
+  const provider = registry.assertSelectable(selection.provider, { alphaOptIn: selection.alphaOptIn });
+
+  return operation === 'write' ? assertProviderPermittedByDeployment(provider, registry) : provider;
 }
 
 type OrganisationStorageDelegate = {

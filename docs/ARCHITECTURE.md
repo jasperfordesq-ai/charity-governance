@@ -172,6 +172,33 @@ an organisation's preference — `StorageService` surfaces that as `AppError`
 the alpha-gate and unknown-provider errors from the registry are deliberate
 `AppError`s and still pass through unchanged.
 
+**The production local-provider gate applies to writes only.**
+`assertProviderPermittedByDeployment` (in `document-storage-resolution.ts`)
+refuses a per-organisation `'local'` provider on a production deployment
+whose own default is not `'local'` — but only when
+`resolveProviderForOrganisation` is called with `{ operation: 'write' }`
+(the default when no options are passed, so every unqualified call site stays
+strict). `'read'` and `'delete'` skip the gate. The gate exists to stop a
+production deployment writing bytes to an unvalidated, ephemeral,
+un-backed-up local path; once bytes exist there, refusing to read or delete
+them strands them, which is strictly worse, and for delete it breaks the
+provable-erasure guarantee the document-deletion pipeline (retry,
+dead-letter, recovery ledger) exists to uphold. `StorageService.providerFor`
+passes the operation through: `uploadFile` → `'write'`, `downloadFile` →
+`'read'`, `deleteFile` → `'delete'`.
+
+This split matters because "production" is not decided consistently across
+the codebase: `apps/api/src/jobs/cleanup-document-storage.ts` and
+`apps/api/src/jobs/production-scheduler.ts` both default
+`process.env.NODE_ENV ??= 'production'` at module load, while the web
+process never sets `NODE_ENV` at all. On a dev or staging deployment with a
+Supabase default, that mismatch used to mean an organisation pinned to
+`'local'` could upload successfully through the web route and then have its
+deletion refused by the cleanup job, stalling reconciliation on a document
+the same deployment had just written. Gating only the write path removes the
+inconsistency instead of requiring the two processes to agree on
+`NODE_ENV`.
+
 Security-sensitive operator references:
 
 - [Team Lifecycle and Session Security](team-lifecycle-security.md)

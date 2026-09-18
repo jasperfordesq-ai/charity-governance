@@ -191,3 +191,34 @@ test('a production deployment whose own driver is local allows a per-organisatio
     }),
   );
 });
+
+test('a production deployment refuses a local provider for writes', async () => {
+  await withNodeEnv('production', async () => {
+    await assert.rejects(
+      () => resolveProviderForOrganisation('org-a', localResolver, registry, { operation: 'write' }),
+      (err) => {
+        assert.equal((err as AppError).code, 'STORAGE_PROVIDER_NOT_PERMITTED_IN_PRODUCTION');
+        return true;
+      },
+    );
+  });
+});
+
+test('a production deployment still allows reading and deleting existing local documents', async () => {
+  await withNodeEnv('production', async () => {
+    assert.equal(
+      await resolveProviderForOrganisation('org-a', localResolver, registry, { operation: 'read' }),
+      'local',
+    );
+    assert.equal(
+      await resolveProviderForOrganisation('org-a', localResolver, registry, { operation: 'delete' }),
+      'local',
+    );
+  });
+});
+
+test('the operation defaults to write, so an unqualified call stays strict', async () => {
+  await withNodeEnv('production', async () => {
+    await assert.rejects(() => resolveProviderForOrganisation('org-a', localResolver, registry));
+  });
+});
