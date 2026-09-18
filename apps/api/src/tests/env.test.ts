@@ -175,6 +175,46 @@ test('validateProductionEnv requires a distinct high-entropy recovery secret', (
   );
 });
 
+// Pins the *wiring*, not the guard: every other test of
+// requireIntegrationEncryptionKey calls it directly, so deleting its call site
+// inside validateProductionEnv leaves them all green. This test goes through
+// validateProductionEnv, so the boot guard cannot be silently unhooked.
+test('validateProductionEnv requires a distinct, correctly sized INTEGRATION_ENCRYPTION_KEY', () => {
+  setCompleteProductionEnv({ INTEGRATION_ENCRYPTION_KEY: undefined });
+  assert.throws(
+    () => validateProductionEnv(),
+    (error: unknown) =>
+      error instanceof AppError &&
+      Array.isArray(error.details) &&
+      error.details.includes(
+        'INTEGRATION_ENCRYPTION_KEY is missing or still contains a placeholder value',
+      ),
+  );
+
+  setCompleteProductionEnv({ INTEGRATION_ENCRYPTION_KEY: '00'.repeat(16) });
+  assert.throws(
+    () => validateProductionEnv(),
+    (error: unknown) =>
+      error instanceof AppError &&
+      Array.isArray(error.details) &&
+      error.details.includes(
+        'INTEGRATION_ENCRYPTION_KEY must canonically encode exactly 32 bytes as hex or base64url',
+      ),
+  );
+
+  const shared = '11'.repeat(32);
+  setCompleteProductionEnv({ INTEGRATION_ENCRYPTION_KEY: shared, JWT_SECRET: shared });
+  assert.throws(
+    () => validateProductionEnv(),
+    (error: unknown) =>
+      error instanceof AppError &&
+      Array.isArray(error.details) &&
+      error.details.some((issue: string) =>
+        issue.startsWith('INTEGRATION_ENCRYPTION_KEY must be distinct from'),
+      ),
+  );
+});
+
 test('validateAuthDeliveryEnv accepts bounded scheduler configuration and rejects unsafe timing', () => {
   setCompleteProductionEnv({
     SECURITY_EMAIL_PROVIDER_TIMEOUT_MS: '8000',

@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { randomBytes } from 'node:crypto';
+import { createCipheriv, createDecipheriv, randomBytes } from 'node:crypto';
 import test from 'node:test';
 import {
   decodeIntegrationKey,
@@ -23,6 +23,22 @@ const otherContext: SecretContext = {
   organisationId: 'org_2',
   provider: 'atlassian',
   kind: 'oauth_refresh_token',
+};
+
+// Each of these differs from `context` in exactly ONE field, so each one
+// proves that field is actually framed into the AAD. `otherContext` alone
+// only exercises organisationId: drop the provider and kind frames from
+// buildAad entirely and every other test in this file still passes.
+const otherProviderContext: SecretContext = {
+  organisationId: 'org_1',
+  provider: 'xero',
+  kind: 'oauth_refresh_token',
+};
+
+const otherKindContext: SecretContext = {
+  organisationId: 'org_1',
+  provider: 'atlassian',
+  kind: 'oauth_access_token',
 };
 
 function assertUnreadable(err: unknown): true {
@@ -71,6 +87,16 @@ test('opening with a mismatched AAD context fails closed', () => {
   assert.throws(() => openIntegrationSecret(sealed, key, otherContext), assertUnreadable);
 });
 
+test('opening under a different provider fails closed', () => {
+  const sealed = sealIntegrationSecret('atlassian-refresh-token', key, 1, context);
+  assert.throws(() => openIntegrationSecret(sealed, key, otherProviderContext), assertUnreadable);
+});
+
+test('opening under a different credential kind fails closed', () => {
+  const sealed = sealIntegrationSecret('atlassian-refresh-token', key, 1, context);
+  assert.throws(() => openIntegrationSecret(sealed, key, otherKindContext), assertUnreadable);
+});
+
 test('a tampered ciphertext is rejected rather than decrypted', () => {
   const sealed = sealIntegrationSecret('atlassian-refresh-token', key, 1, context);
   const flipped = Buffer.from(sealed.ciphertext, 'base64');
@@ -95,6 +121,19 @@ test('a tampered iv is rejected', () => {
   assert.throws(() => openIntegrationSecret(tampered, key, context), assertUnreadable);
 });
 
+test('an iv of the wrong length is rejected', () => {
+  const sealed = sealIntegrationSecret('atlassian-refresh-token', key, 1, context);
+  // The tampered-iv test above flips a byte but keeps the length at 12, so it
+  // never reaches the `iv.length !== IV_BYTES` branch. These do.
+  const iv = Buffer.from(sealed.iv, 'base64');
+  assert.equal(iv.length, 12);
+  for (const resized of [iv.subarray(0, 11), Buffer.concat([iv, Buffer.alloc(1)]), Buffer.alloc(0)]) {
+    assert.notEqual(resized.length, 12);
+    const tampered = { ...sealed, iv: resized.toString('base64') };
+    assert.throws(() => openIntegrationSecret(tampered, key, context), assertUnreadable);
+  }
+});
+
 test('a tampered generation is rejected because it is bound into the AAD', () => {
   const sealed = sealIntegrationSecret('atlassian-refresh-token', key, 1, context);
   const tampered = { ...sealed, generation: 2 };
@@ -106,6 +145,43 @@ test('a truncated auth tag is rejected rather than silently authenticating', () 
   const truncated = Buffer.from(sealed.tag, 'base64').subarray(0, 4);
   const tampered = { ...sealed, tag: truncated.toString('base64') };
   assert.throws(() => openIntegrationSecret(tampered, key, context), assertUnreadable);
+});
+
+// The `authTagLength: 16` option passed to createDecipheriv in
+// openIntegrationSecret is NOT reachable through the public API: the explicit
+// `tag.length !== TAG_BYTES` check strictly dominates it. Every tag that is not
+// 16 bytes is rejected before createDecipheriv is ever called, and every tag
+// that is 16 bytes satisfies `authTagLength: 16`, so no input can make that
+// option the layer that decides. The test above therefore proves only that
+// *something* rejected the short tag. This test pins the premise that makes the
+// option worth keeping anyway — that without it, this Node/OpenSSL build really
+// does authenticate against a truncated tag — so a future refactor that removes
+// the explicit check cannot quietly also remove the option.
+test('the authTagLength option is what stops a truncated tag once the explicit check is gone', () => {
+  const iv = randomBytes(12);
+  const aad = Buffer.from('aad');
+  const cipher = createCipheriv('aes-256-gcm', key, iv, { authTagLength: 16 });
+  cipher.setAAD(aad);
+  const ciphertext = Buffer.concat([cipher.update('atlassian-refresh-token', 'utf8'), cipher.final()]);
+  const truncatedTag = cipher.getAuthTag().subarray(0, 4);
+
+  // Without the option: the 4-byte tag is accepted and the plaintext recovered,
+  // collapsing forgery resistance from 2^128 to roughly 2^32.
+  const permissive = createDecipheriv('aes-256-gcm', key, iv);
+  permissive.setAAD(aad);
+  permissive.setAuthTag(truncatedTag);
+  assert.equal(
+    Buffer.concat([permissive.update(ciphertext), permissive.final()]).toString('utf8'),
+    'atlassian-refresh-token',
+  );
+
+  // With the option — exactly how openIntegrationSecret builds its decipher —
+  // the short tag is refused outright.
+  assert.throws(() => {
+    const strict = createDecipheriv('aes-256-gcm', key, iv, { authTagLength: 16 });
+    strict.setAAD(aad);
+    strict.setAuthTag(truncatedTag);
+  }, /authentication tag length/i);
 });
 
 test('sealing and opening with a key of the wrong length fail distinctly from a corrupted envelope', () => {
@@ -129,6 +205,49 @@ test('sealing and opening with a key of the wrong length fail distinctly from a 
       return true;
     },
   );
+});
+
+test('an invalid context fails the same, loud way in both seal and open', () => {
+  const invalidContexts = [
+    { organisationId: '', provider: 'atlassian', kind: 'oauth_refresh_token' },
+    { organisationId: 'org_1', provider: undefined, kind: 'oauth_refresh_token' },
+    { organisationId: 'org_1', provider: 'atlassian', kind: 42 },
+  ] as unknown as SecretContext[];
+
+  const sealed = sealIntegrationSecret('atlassian-refresh-token', key, 1, context);
+
+  for (const invalid of invalidContexts) {
+    for (const call of [
+      () => sealIntegrationSecret('atlassian-refresh-token', key, 1, invalid),
+      () => openIntegrationSecret(sealed, key, invalid),
+    ]) {
+      assert.throws(call, (err) => {
+        // A programming error, never a raw TypeError from seal and never
+        // misreported as a charity's credential being corrupt from open.
+        assert.equal(err instanceof AppError, true);
+        assert.equal((err as AppError).code, 'INTEGRATION_SECRET_CONTEXT_INVALID');
+        assert.notEqual((err as AppError).code, 'INTEGRATION_SECRET_UNREADABLE');
+        return true;
+      });
+    }
+  }
+});
+
+test('openIntegrationSecret rejects a generation that is not a non-negative integer', () => {
+  const sealed = sealIntegrationSecret('atlassian-refresh-token', key, 1, context);
+
+  // Includes the string-vs-number case, which the AAD's String(generation)
+  // would otherwise let through unnoticed.
+  for (const badGeneration of [-1, 1.5, NaN, '1']) {
+    assert.throws(
+      () => openIntegrationSecret({ ...sealed, generation: badGeneration } as never, key, context),
+      (err) => {
+        assert.equal((err as AppError).code, 'INTEGRATION_SECRET_GENERATION_INVALID');
+        assert.notEqual((err as AppError).code, 'INTEGRATION_SECRET_UNREADABLE');
+        return true;
+      },
+    );
+  }
 });
 
 test('sealIntegrationSecret rejects an empty plaintext', () => {

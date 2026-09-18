@@ -46,6 +46,27 @@ function requireValidKeyLength(key: Buffer): void {
   }
 }
 
+function requireValidContext(context: SecretContext): void {
+  // Deliberately alongside requireValidKeyLength, outside any try/catch that
+  // swallows errors, and called from BOTH seal and open. `buildAad` is invoked
+  // inside open's try but outside seal's, so without this guard a caller who
+  // passes a context with a missing or non-string field gets a raw TypeError
+  // from seal and a swallowed INTEGRATION_SECRET_UNREADABLE from open — the
+  // same programming error reported two different ways, the second of them
+  // indistinguishable from a charity's credential actually being corrupt.
+  const fields: Array<keyof SecretContext> = ['organisationId', 'provider', 'kind'];
+  for (const field of fields) {
+    const value = context?.[field];
+    if (typeof value !== 'string' || value.length === 0) {
+      throw new AppError(
+        500,
+        'INTEGRATION_SECRET_CONTEXT_INVALID',
+        `Integration secret context field ${field} must be a non-empty string`,
+      );
+    }
+  }
+}
+
 function requireValidGeneration(generation: number): void {
   if (!Number.isInteger(generation) || generation < 0) {
     throw new AppError(
@@ -155,6 +176,7 @@ export function sealIntegrationSecret(
   context: SecretContext,
 ): SealedSecret {
   requireValidKeyLength(key);
+  requireValidContext(context);
   requireValidGeneration(generation);
   requireNonEmptyPlaintext(plaintext);
 
@@ -180,6 +202,14 @@ export function openIntegrationSecret(sealed: SealedSecret, key: Buffer, context
   // would surface as two different failure shapes, which is the worst
   // possible signal during an incident.
   requireValidKeyLength(key);
+  requireValidContext(context);
+  // Seal validates `generation` and open did not, so the two ends disagreed
+  // about what a well-formed envelope is. Every unvalidated shape happens to
+  // fail closed inside the try except a string-vs-number confusion
+  // (`String(generation)` makes '1' and 1 build the same AAD, so a stored
+  // string generation would quietly decrypt) — benign, but validating here
+  // keeps the asymmetry from misleading a later reader.
+  requireValidGeneration(sealed.generation);
 
   try {
     const iv = Buffer.from(sealed.iv, 'base64');
