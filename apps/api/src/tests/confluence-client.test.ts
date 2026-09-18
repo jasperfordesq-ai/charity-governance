@@ -655,6 +655,77 @@ test('an upstream error surfaces only the documented fields, never the raw body'
   assert.equal(err.message.includes('internalDiagnostics'), false);
 });
 
+test('an upstream body with neither errors[] nor message surfaces none of it', async () => {
+  // The fall-through the v2 test above never reaches: its fixture carries
+  // `errors[0].title`, so the v2 branch fires and the rest is never read.
+  //
+  // This is the shape a proxy in front of Confluence produces, and it is the
+  // recurrence guard for the Caddy leak an earlier phase found — a gateway
+  // that reflected the request, authorization code and all, into an error
+  // body. Nothing off a body we do not recognise is ours to surface.
+  const h = harness([
+    jsonStep(403, {
+      statusCode: 403,
+      reason: 'Forbidden by upstream policy',
+      echoedRequest: {
+        authorizationCode: 'atl-authz-code-HHHH',
+        body: '<p>Trustee: Maire Ni Bhriain, PPSN on file</p>',
+      },
+    }),
+  ]);
+
+  const err = await captureError(h.request(GET_PAGE));
+
+  const surfaced = `${err.message} ${JSON.stringify(err.details ?? null)} ${JSON.stringify(err.cause ?? null)}`;
+  for (const undocumented of [
+    'Forbidden by upstream policy',
+    'echoedRequest',
+    'atl-authz-code-HHHH',
+    'Maire Ni Bhriain',
+    'reason',
+  ]) {
+    assert.equal(surfaced.includes(undocumented), false, `"${undocumented}" must not be surfaced`);
+  }
+  // And with nothing documented to say, the message carries no detail at all
+  // rather than a best effort at one.
+  assert.equal(
+    err.message,
+    'Confluence request failed with status 403. The charity must reconnect its Confluence site.',
+  );
+});
+
+test('a v1 error body is read through its own documented field, and only that field', async () => {
+  // v1 is not a legacy corner: `uploadAttachment` is the only v1 caller, and
+  // it is the call that carries a charity's signed policy file. Its error
+  // shape is `{ statusCode, message }` — nothing else on the body may travel.
+  const h = harness([jsonStep(404, { statusCode: 404, message: 'No attachment container found' })]);
+
+  const err = await captureError(
+    h.request({ method: 'POST', api: 'v1', path: 'content/42/child/attachment', idempotent: false }),
+  );
+
+  assert.equal(err.code, 'CONFLUENCE_NOT_FOUND');
+  assert.match(err.message, /No attachment container found/);
+  assert.equal(err.message.includes('statusCode'), false, 'the envelope around the message is not the message');
+  assert.equal(err.message.includes('{'), false, 'no part of the raw body may be serialised into the message');
+});
+
+test('upstream error text reaching a message is bounded at 200 characters', async () => {
+  // The bound is the second half of the containment rule the two tests above
+  // pin: what may be surfaced, and how much of it. An upstream body is
+  // untrusted and unbounded, and the message it lands in reaches both an
+  // AppError and the request logger.
+  const tail = 'THE-TAIL-THAT-MUST-NOT-TRAVEL';
+  const title = `${'x'.repeat(400)}${tail}`;
+  const h = harness([jsonStep(400, { errors: [{ status: 400, code: 'BAD', title }] })]);
+
+  const err = await captureError(h.request(GET_PAGE));
+
+  assert.equal(err.message.includes(tail), false, 'the far end of an oversized body must be dropped');
+  assert.match(err.message, /x{200}\.\.\./);
+  assert.equal(err.message.includes('x'.repeat(201)), false, 'at most 200 characters of upstream text');
+});
+
 // ── the cloudId and the path are data ──────────────────────────────────────
 
 test('a cloudId that could escape the path is rejected when the client is built', async () => {
@@ -678,6 +749,27 @@ test('a request path that could escape the API prefix is rejected before any fet
     const err = await captureError(h.request({ ...GET_PAGE, path }));
     assert.equal(err.code, 'CONFLUENCE_REQUEST_PATH_INVALID', `expected ${JSON.stringify(path)} to be rejected`);
     assert.equal(h.calls.length, 0);
+  }
+});
+
+test('a request path carrying a control character is rejected before any fetch', async () => {
+  // The sibling guards (`..`, `%`, `?#\`, the cloud-id pattern) are each
+  // pinned by a named test; this one was not. It matters for the same reason
+  // they do: a path here is built from ids that arrived from Atlassian or from
+  // a caller, and a control character in one is not something we will send and
+  // find out what happens to. Written as code points so no literal control
+  // character appears in this file's source, matching the guard itself.
+  const controls = [0x00, 0x09, 0x0a, 0x0d, 0x1b, 0x7f];
+  for (const code of controls) {
+    const h = harness([jsonStep(200, {})]);
+    const path = `pages/4${String.fromCharCode(code)}2`;
+    const err = await captureError(h.request({ ...GET_PAGE, path }));
+    assert.equal(
+      err.code,
+      'CONFLUENCE_REQUEST_PATH_INVALID',
+      `expected U+${code.toString(16).padStart(4, '0').toUpperCase()} to be rejected`,
+    );
+    assert.equal(h.calls.length, 0, 'a rejected path must not reach the network');
   }
 });
 
