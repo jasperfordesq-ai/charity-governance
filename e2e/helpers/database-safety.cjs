@@ -118,6 +118,21 @@ const DISPOSABLE_DATABASE_RESET_TABLES = Object.freeze([
   "DocumentStandardLink",
   "DocumentStorageDeletion",
   "DocumentStorageDeletionRecovery",
+  // Integration wiring is tenant-owned, so it resets with the tenant.
+  // OrganisationIntegration is listed before IntegrationCredential to match the
+  // parent-before-child convention used above; the reset emits ONE multi-table
+  // TRUNCATE ... RESTRICT, so the pair is cleared atomically and the order is a
+  // reading aid, not a dependency.
+  //
+  // IntegrationSecretControl is a singleton control row (id 1), but unlike
+  // AuthRecoveryControl it is NOT migration-owned: 20260919090000 creates the
+  // table without inserting a row, and recordActiveKeyFingerprint() upserts it
+  // back on demand (a missing row reads as "nothing to disagree with yet").
+  // Preserving it would instead carry one suite's key fingerprint into the next
+  // and trip INTEGRATION_KEY_MISMATCH, so it truncates.
+  "OrganisationIntegration",
+  "IntegrationCredential",
+  "IntegrationSecretControl",
   "ConflictRecord",
   "RiskRecord",
   "ComplaintRecord",
