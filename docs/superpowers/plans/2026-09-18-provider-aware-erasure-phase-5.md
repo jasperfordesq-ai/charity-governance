@@ -140,8 +140,24 @@ disturbing the Supabase rows already in the database.
 `storagePath` keeps its exact current meaning. Do **not** repurpose it. It appears in raw SQL in
 three places in `document.service.ts` and carries the recovery route's `correctedStoragePath`
 semantics; repointing it would put a live operator-facing recovery path at risk for no gain.
-Confluence rows set `storagePath` to the Supabase path they mirror (they always have one, because
-Supabase is authoritative) and carry the Confluence identifiers in `targetRef`.
+Confluence rows carry the Confluence identifiers in `targetRef`.
+
+> **Unresolved above this plan — do not design around either answer.**
+> The spec assumes Mode C: Supabase authoritative, Confluence a published *mirror*, so every
+> Confluence row has a Supabase twin and `storagePath` is always meaningful. The spec itself lists
+> "does Nikita accept that Confluence is a published mirror, not the system of record?" as an open
+> question. It has since been answered, and **not** in Mode C's favour: the DPO signed off on
+> 2026-09-18 on Confluence being authoritative for the documents deliberately managed there, with
+> CharityPilot holding *references, explicitly not duplicate copies*.
+>
+> Those two cannot both be true, and the difference is not cosmetic — it decides whether a
+> charity's policy document is guaranteed to sit in Ireland.
+>
+> **What this task must therefore do:** treat `storagePath` as meaningful *only* for rows whose
+> provider actually uses it. Do not add code, tests, or comments anywhere in this phase that assume
+> a Confluence row has a usable Supabase path. The Confluence eraser in Task 5 reads `targetRef`
+> and nothing else, which keeps this phase correct under either answer. Flag any place you are
+> tempted to reach for `storagePath` on a Confluence row — that temptation is the bug.
 
 `provider` is a **String**, not a Prisma enum, validated against the Phase 0 registry in
 `document-storage-provider.ts`. `Organisation.documentStorageProvider` is already a String for
@@ -843,11 +859,20 @@ not optional polish.
 - Purge requires a higher permission than delete (space *manage/content* for pages, *administer
   space* for attachments). A connected site may be unable to purge at all, and the platform will
   report that as a dead-lettered erasure requiring a human with those rights.
-- Supabase `eu-west-1` remains authoritative. A Confluence mirror is a copy, and the erasure
-  guarantee for the **record** is the Supabase one; the Confluence guarantee is best-effort and
-  bounded by permissions the charity controls.
+- Where a document has an authoritative Supabase copy in `eu-west-1`, the erasure guarantee for
+  the **record** is the Supabase one, and the Confluence guarantee is best-effort and bounded by
+  permissions the charity controls.
+- **Where a document is authoritative in Confluence, there is no Irish copy to fall back on**, and
+  the erasure guarantee for that document is only ever the best-effort one. Say so explicitly
+  rather than letting the reader carry the Supabase guarantee across.
 - For a data subject erasure request under GDPR, this distinction is the material one: state it in
   terms a DPO can act on.
+
+**Do not write this section until the authority question in Task 1 is settled.** It is the one
+place in the phase where the answer changes what is true rather than only what is convenient —
+writing it now would mean publishing a residency claim that may be wrong. If the question is still
+open when you reach this task, write everything else, leave this subsection marked as blocked, and
+say so in your report.
 
 - [ ] **Step 1: Write the ARCHITECTURE.md section**
 - [ ] **Step 2: Resolve the spec's Phase 5 note**, pointing at Task 6's commit
