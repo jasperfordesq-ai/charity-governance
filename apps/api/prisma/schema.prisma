@@ -418,6 +418,10 @@ model OrganisationIntegration {
   // Atlassian's refresh tokens are single-use: a concurrent refresh invalidates
   // the loser's token and disconnects the charity. Follow the claim idiom used
   // by DocumentStorageDeletion rather than inventing a lock.
+  // A CHECK constraint keeps refreshClaimToken/refreshClaimedAt in lockstep
+  // (sibling to DocumentStorageDeletion_alert_claim_consistent); Prisma's
+  // schema language cannot express it, so it lives only in the migration
+  // 20260919110000_add_integration_refresh_claim_consistency.
   refreshClaimedAt    DateTime?
   refreshClaimToken   String?
   refreshFailureCount Int                 @default(0)
