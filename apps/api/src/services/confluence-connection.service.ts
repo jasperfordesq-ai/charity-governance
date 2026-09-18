@@ -448,6 +448,17 @@ function sameAuthorisation(a: AuthorisationGeneration, b: AuthorisationGeneratio
   return a.connectedAt.getTime() === b.connectedAt.getTime();
 }
 
+/**
+ * A refresh whose result belongs to an authorisation that is no longer the one
+ * on file.
+ *
+ * Re-entering `currentAccessToken` resolves it, because the reconnect that
+ * superseded this refresh stored a usable access token on its way past. That
+ * is a statement about *this* function and nothing else: `confluence-client.ts`
+ * has no entry for this code in its retry taxonomy yet, and nothing here
+ * asserts how that client should classify it. Adding the entry belongs with the
+ * Phase 3 documentation of the error taxonomy.
+ */
 const REFRESH_SUPERSEDED_CODE = 'CONFLUENCE_REFRESH_SUPERSEDED';
 
 const REFRESH_SUPERSEDED_REASON =
@@ -690,6 +701,28 @@ export async function connectConfluence(
   // that read `CONNECTED` in the gap would advertise a connection that cannot
   // serve a single request. An existing row keeps whatever status it had —
   // including `ERROR` — until the connection is genuinely usable.
+  //
+  // ── `connectedAt` IS DIFFERENT, AND DELIBERATELY SO ──────────────────────
+  // Do not extend the reasoning above to it. `connectedAt` is stamped *here*,
+  // in the write that precedes both credential writes, and that ordering is a
+  // precondition of the refresh fence rather than a preference:
+  // `authorisationFencedClient` excludes an in-flight refresher by matching on
+  // the OLD value, so the new one has to be committed before the credentials it
+  // is protecting. Written afterwards instead — the natural next edit, since
+  // the status route exposes `connectedAt` too — the credential writes would
+  // land inside the window where the old fence still matches, and a refresher
+  // carrying the previous grant's rotation would overwrite them. Pinned by
+  // "connectConfluence stamps the new authorisation before it writes either
+  // credential".
+  //
+  // Stamping early has a cost, and it is the smaller one. If this function
+  // fails between the upsert below and the refresh-token store, the row carries
+  // the new `connectedAt` while the previous grant's credentials are still on
+  // file, so a refresher fenced out in that moment discards a rotation whose
+  // predecessor Atlassian has already invalidated. The way out of that is to
+  // reconnect — the action that has just failed and that the administrator is
+  // already retrying — so it is bounded and recoverable, unlike the silent
+  // credential swap the ordering prevents.
   const connectingState = {
     config,
     connectedAt: at,

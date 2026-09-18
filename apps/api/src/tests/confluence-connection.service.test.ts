@@ -197,8 +197,10 @@ function fakePrisma(options: FakeOptions = {}) {
 
   // Lets a test act at a chosen point in the service's read sequence — the
   // only way to simulate another worker finishing between two of this
-  // caller's reads without depending on timing.
-  const hooks: { onCredentialRead?: (call: number) => void } = {};
+  // caller's reads without depending on timing. Awaited, so the hook can run a
+  // whole `connectConfluence` to completion at that point rather than merely
+  // starting one.
+  const hooks: { onCredentialRead?: (call: number) => void | Promise<void> } = {};
   let credentialReads = 0;
 
   const integrations: IntegrationRow[] = [];
@@ -271,6 +273,15 @@ function fakePrisma(options: FakeOptions = {}) {
   const integrationWrites: unknown[] = [];
   const credentialWrites: unknown[] = [];
 
+  // The same writes in one ordered list. The two arrays above are separate, so
+  // the *relative* order of a row write and a credential write is invisible to
+  // them — and that order is exactly what the refresh fence depends on in
+  // `connectConfluence`.
+  type WriteLogEntry =
+    | { table: 'integration'; data: Record<string, unknown> }
+    | { table: 'credential'; kind: string };
+  const writeLog: WriteLogEntry[] = [];
+
   const findIntegration = (id: string) => integrations.find((row) => row.id === id) ?? null;
   const findCredential = (integrationId: string, kind: string) =>
     credentials.find((row) => row.integrationId === integrationId && row.kind === kind) ?? null;
@@ -305,6 +316,7 @@ function fakePrisma(options: FakeOptions = {}) {
         const matched = integrations.filter((row) => matchesIntegration(row, args.where));
         for (const row of matched) applyIntegrationData(row, args.data);
         integrationWrites.push(args);
+        writeLog.push({ table: 'integration', data: args.data });
         return { count: matched.length };
       },
       upsert: async (args: {
@@ -319,6 +331,7 @@ function fakePrisma(options: FakeOptions = {}) {
         );
         if (existing) {
           applyIntegrationData(existing, args.update);
+          writeLog.push({ table: 'integration', data: args.update });
           return { ...existing };
         }
         const created: IntegrationRow = {
@@ -336,6 +349,7 @@ function fakePrisma(options: FakeOptions = {}) {
           lastRefreshedAt: null,
         };
         applyIntegrationData(created, args.create);
+        writeLog.push({ table: 'integration', data: args.create });
         integrations.push(created);
         return { ...created };
       },
@@ -350,7 +364,7 @@ function fakePrisma(options: FakeOptions = {}) {
         // worker's write landing *after* this read returned.
         const result = row === null ? null : { ...row };
         credentialReads += 1;
-        hooks.onCredentialRead?.(credentialReads);
+        await hooks.onCredentialRead?.(credentialReads);
         return result;
       },
       upsert: async (args: {
@@ -363,6 +377,7 @@ function fakePrisma(options: FakeOptions = {}) {
           throw credentialWriteError ?? new Error(`fake prisma: credential write for "${kind}" failed`);
         }
         credentialWrites.push(args);
+        writeLog.push({ table: 'credential', kind });
         const existing = findCredential(integrationId, kind);
         if (existing) {
           Object.assign(existing, args.update);
@@ -398,6 +413,7 @@ function fakePrisma(options: FakeOptions = {}) {
     credentials,
     integrationWrites,
     credentialWrites,
+    writeLog,
     hooks,
     /** Stand in for another worker having stored a fresh access token. */
     setAccessToken: (plaintext: string, expiresAt: Date | null) => {
@@ -1522,6 +1538,71 @@ test('the superseded outcome does not page and carries no token', async () => {
   });
 });
 
+test('a reconnect landing between the token load and the generation re-read is caught', async () => {
+  // The narrow half of the fence, and the half a reading review slides past.
+  // The fence value and the token being spent have to describe the SAME
+  // authorisation. Here the refresher loads the previous grant's refresh token
+  // and the administrator reconnects the instant after that read returns — so a
+  // generation read taken only afterwards hands back the NEW value, the fence
+  // matches, and the refresher overwrites the freshly connected credentials.
+  // That is precondition A reopened through a narrower window.
+  //
+  // Reading the generation either side of the load and requiring the two to
+  // agree is what closes it, and it closes it before anything has been spent.
+  const fake = fakePrisma({
+    storedAccessToken: { plaintext: STORED_ACCESS_TOKEN, expiresAt: new Date(NOW.getTime() - 1_000) },
+  });
+  const refresh = recordingRefresh();
+
+  // Credential reads 1 and 2 are the pre-claim and post-claim access-token
+  // expiry checks; read 3 is the stored refresh token itself. The hook fires
+  // after the row has been snapshotted, which is precisely "another worker's
+  // write landed after this read returned".
+  fake.hooks.onCredentialRead = async (call) => {
+    if (call === 3) await reconnect(fake);
+  };
+
+  await assert.rejects(
+    withKey(() =>
+      currentAccessToken(fake.client, { integrationId: INTEGRATION_ID }, {
+        now: clock,
+        refreshAccessToken: refresh.fn,
+      }),
+    ),
+    (error: unknown) => error instanceof AppError && error.code === 'CONFLUENCE_REFRESH_SUPERSEDED',
+  );
+
+  assert.equal(refresh.calls.length, 0, 'the disagreement must be caught before a token is spent');
+  assert.equal(await storedCredential(fake, 'refresh_token'), RECONNECT_REFRESH_TOKEN);
+  assert.equal(await storedCredential(fake, 'access_token'), RECONNECT_ACCESS_TOKEN);
+});
+
+test('connectConfluence stamps the new authorisation before it writes either credential', async () => {
+  // Not a stylistic ordering: it is the precondition the refresh fence stands
+  // on. `authorisationFencedClient` excludes an in-flight refresher by matching
+  // the OLD `connectedAt`, so the new value has to be committed *before* the
+  // credentials it is protecting. Move it into the final status write — the
+  // natural next edit, since the comment there already argues that `status`
+  // must not be advertised early and the status route exposes `connectedAt`
+  // too — and the reconnect's credential writes land inside the window where
+  // the old fence still matches.
+  const fake = fakePrisma({ integration: { status: 'ERROR' }, storedRefreshToken: null });
+
+  await withKey(() => reconnect(fake));
+
+  const stamped = fake.writeLog.findIndex(
+    (entry) => entry.table === 'integration' && entry.data.connectedAt instanceof Date,
+  );
+  const firstCredential = fake.writeLog.findIndex((entry) => entry.table === 'credential');
+
+  assert.notEqual(stamped, -1, 'the reconnect must record when it connected');
+  assert.notEqual(firstCredential, -1, 'the reconnect must write credentials');
+  assert.ok(
+    stamped < firstCredential,
+    'connectedAt must be committed before the credential writes it fences an in-flight refresher away from',
+  );
+});
+
 test('a charity whose refresh is stuck can still reconnect while the claim is held', async () => {
   // The other half of the choice. Refusing a reconnect while a claim is live
   // would leave a charity whose refresh is wedged unable to fix it from the
@@ -1609,6 +1690,17 @@ test('nothing outside a route may take a Confluence access token by bare integra
   // route accepts an id from a request. This phase introduces the first
   // non-route caller, and a comment would not have stopped it — so the rule is
   // this assertion.
+  //
+  // Be honest about its reach. It is a source scan, and it catches what a
+  // person would actually write: a direct call, and an import of the bare
+  // identifier. It does not catch a renaming import used indirectly, a dynamic
+  // `ns['currentAccessToken']`, or anything reached through a variable. It
+  // stops the accident, not an author who has decided to get around it.
+  //
+  // The `routes/` exemption is a path prefix, so it also exempts a helper
+  // placed under `routes/` that takes an `integrationId` from a request body.
+  // "No route accepts an id from a request" therefore remains a convention of
+  // that directory, defended by review, not by this test.
   const sourceRoot = join(process.cwd(), 'src');
   const offenders: string[] = [];
 
@@ -1627,8 +1719,20 @@ test('nothing outside a route may take a Confluence access token by bare integra
       if (name === 'services/confluence-connection.service.ts') continue;
       if (name.startsWith('routes/') || name.startsWith('tests/')) continue;
 
+      const source = readFileSync(path, 'utf8');
+
       // `currentAccessTokenForOrganisation(` does not contain this literal.
-      if (readFileSync(path, 'utf8').includes('currentAccessToken(')) offenders.push(name);
+      const calls = source.includes('currentAccessToken(');
+
+      // And an import of the bare identifier, whatever is done with it after.
+      // `\bcurrentAccessToken\b` cannot match inside
+      // `currentAccessTokenForOrganisation`, because the character after
+      // "Token" is a word character and the boundary fails.
+      const importsBareForm = (
+        source.match(/import\s*\{[^}]*\}\s*from\s*'[^']*confluence-connection\.service\.js'/g) ?? []
+      ).some((clause) => /\bcurrentAccessToken\b/.test(clause));
+
+      if (calls || importsBareForm) offenders.push(name);
     }
   };
   visit(sourceRoot);
@@ -1644,13 +1748,19 @@ test('nothing outside a route may take a Confluence access token by bare integra
   // unique pair rather than from anything it was handed. Read out of its own
   // body, not the whole file: `connectConfluence` keys on the same pair, so a
   // file-wide match would stay green with this function gutted.
+  // Normalised, because the slice below keys on a line break and this repo is
+  // developed on Windows: a CRLF working copy would otherwise find no end to
+  // the function, silently widen the slice to the rest of the file, and fail
+  // on a `where: { id:` belonging to something else entirely.
   const service = readFileSync(
     join(process.cwd(), 'src', 'services', 'confluence-connection.service.ts'),
     'utf8',
-  );
+  ).replace(/\r\n/g, '\n');
   const start = service.indexOf('export async function currentAccessTokenForOrganisation');
   assert.notEqual(start, -1, 'the organisation-scoped entry point must exist');
-  const body = service.slice(start, service.indexOf('\n}\n', start));
+  const end = service.indexOf('\n}\n', start);
+  assert.notEqual(end, -1, 'the entry point must be a top-level function this slice can end at');
+  const body = service.slice(start, end);
   assert.match(body, /organisationId_provider: \{ organisationId, provider: PROVIDER \}/);
   assert.doesNotMatch(body, /where: \{ id:/, 'it must not look an integration up by id');
 });
