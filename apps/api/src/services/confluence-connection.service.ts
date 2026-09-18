@@ -32,6 +32,17 @@
  *    Atlassian; `invalid_grant` is how that surfaces, and `lastError` is
  *    where it is made visible.
  *
+ * 4. **A reconnect can land while a refresh is in flight.** The claim protects
+ *    the *row*, and every row write here is fenced on it. It does not protect
+ *    the *vault*: `storeIntegrationCredential` upserts on `integrationId_kind`
+ *    and takes no precondition, so a refresher that got its rotation before an
+ *    administrator re-authorised and persists after would put the previous
+ *    grant's tokens behind a freshly connected row, silently. So the
+ *    refresher's sealed writes are fenced too — on `connectedAt`, the row's
+ *    record of *which* authorisation the credentials belong to, not on the
+ *    claim. See `authorisationFencedClient` for why that distinction is the
+ *    whole of it.
+ *
  * The claim idiom is not invented here: it mirrors
  * `markDeadLetterAlertSent` / `releaseDeadLetterAlertClaim` in
  * `document.service.ts`, down to **fencing the release on the claim token in
@@ -47,6 +58,13 @@
  * row up by `organisationId_provider` so an id never has to be accepted from
  * a request at all. See the banner at the top of
  * `integration-credential.service.ts`.
+ *
+ * **Outside a route, `currentAccessTokenForOrganisation` is the only permitted
+ * way to obtain an access token.** A route derives its `integrationId` from
+ * the authenticated user and may use the by-id form; anything else — a job, a
+ * client, a pipeline — holds a tenant rather than an id and must say so. That
+ * is a test, not a convention: see "nothing outside a route may take a
+ * Confluence access token by bare integration id".
  * ──────────────────────────────────────────────────────────────────────────
  *
  * No plaintext token, authorization code or client secret is ever logged,
@@ -65,6 +83,7 @@ import {
 import {
   loadIntegrationCredential,
   storeIntegrationCredential,
+  type IntegrationCredentialClient,
   type IntegrationCredentialWriteClient,
 } from './integration-credential.service.js';
 import { AppError } from '../utils/errors.js';
@@ -199,6 +218,19 @@ export type ConnectConfluenceInput = {
 
 export type ConfluenceIntegrationRef = {
   integrationId: string;
+};
+
+/**
+ * The reference a caller outside a route must use.
+ *
+ * An `organisationId` comes from an authenticated principal or from a job's
+ * own tenant iteration; an `integrationId` comes from wherever the caller got
+ * it, and the credential layer beneath will happily derive a context from
+ * *that* charity's row and open the envelope. See
+ * `currentAccessTokenForOrganisation`.
+ */
+export type ConfluenceOrganisationRef = {
+  organisationId: string;
 };
 
 type RefreshClaim = {
@@ -384,6 +416,107 @@ async function recordTransientRefreshFailure(
       refreshClaimedAt: null,
     },
   });
+}
+
+// ── the authorisation a refresh is performed against ───────────────────────
+
+/**
+ * Which authorisation the credentials on file belong to.
+ *
+ * `connectedAt` is written by `connectConfluence` and nulled by
+ * `disconnectConfluence`, and by nothing else in the codebase — the status
+ * route only reads it. That makes it the row's record of *which grant* the
+ * sealed envelopes came from, which is the question a refresher has to be able
+ * to answer before it writes.
+ */
+type AuthorisationGeneration = { connectedAt: Date | null };
+
+async function readAuthorisationGeneration(
+  prisma: ConfluenceConnectionClient,
+  integrationId: string,
+): Promise<AuthorisationGeneration> {
+  const row = await prisma.organisationIntegration.findUnique({
+    where: { id: integrationId },
+    select: { connectedAt: true },
+  });
+  if (!row) throw new AppError(404, 'INTEGRATION_NOT_FOUND', 'Integration not found');
+  return { connectedAt: row.connectedAt };
+}
+
+function sameAuthorisation(a: AuthorisationGeneration, b: AuthorisationGeneration): boolean {
+  if (a.connectedAt === null || b.connectedAt === null) return a.connectedAt === b.connectedAt;
+  return a.connectedAt.getTime() === b.connectedAt.getTime();
+}
+
+const REFRESH_SUPERSEDED_CODE = 'CONFLUENCE_REFRESH_SUPERSEDED';
+
+const REFRESH_SUPERSEDED_REASON =
+  'This Confluence refresh was superseded before its result could be stored: the ' +
+  'connection was re-authorised or disconnected while the refresh was in flight. ' +
+  'Nothing was written — the credentials on file belong to the newer authorisation. ' +
+  'Try again.';
+
+/**
+ * A view of the client whose sealed-credential writes land **only while the
+ * authorisation they belong to is still the one on the row**.
+ *
+ * This is the fix for the reconnect race, and it needs the shape it has.
+ * `storeIntegrationCredential` upserts on `integrationId_kind`; it is in a
+ * closed module and it takes no precondition. So the precondition is supplied
+ * where it can be: inside the transaction that module already opens around its
+ * write. `$transaction` is the seam.
+ *
+ * The statement is a conditional no-op update. Its value is not the write —
+ * it writes back what it matched — but the two things a conditional update
+ * gives you:
+ *
+ *  - **the match count**, which decides whether this refresher's result still
+ *    describes the credentials on file, and
+ *  - **the row lock**, held until this transaction commits, which is what makes
+ *    the decision hold rather than merely having been true a moment ago. A
+ *    reconnect's `upsert` of the same row blocks on it, so the two orderings
+ *    are the only two possible: either the reconnect lands first and this
+ *    matches nothing, or this commits first and the reconnect's credential
+ *    writes follow it and win.
+ *
+ * **Why `connectedAt` and not the refresh claim.** Fencing on the claim looks
+ * more natural — the claim is already the file's concurrency primitive — and
+ * it is wrong. A claim can be lost two ways: a reconnect replaced the
+ * authorisation, or the claim simply aged out and another worker took it. In
+ * the second case the refresher's rotation is a perfectly good replacement for
+ * a refresh token Atlassian has already invalidated, and refusing to store it
+ * destroys the charity's only means of renewal — the exact unrecoverable state
+ * the "store the replacement durably first" rule exists to prevent. The test
+ * "a slow holder never clears the newer claim that superseded it" catches it.
+ * `connectedAt` separates the two cases precisely, because it changes for a
+ * reconnect and does not change for a stolen claim.
+ *
+ * Note this deliberately does **not** fence the claim columns, so it cannot
+ * half-write the CHECK-constrained pair.
+ */
+function authorisationFencedClient(
+  prisma: ConfluenceConnectionClient,
+  integrationId: string,
+  authorisation: AuthorisationGeneration,
+): ConfluenceConnectionClient {
+  return {
+    organisationIntegration: prisma.organisationIntegration,
+    integrationCredential: prisma.integrationCredential,
+    integrationSecretControl: prisma.integrationSecretControl,
+    $transaction: <T>(run: (tx: IntegrationCredentialClient) => Promise<T>): Promise<T> =>
+      prisma.$transaction(async (tx) => {
+        const stillCurrent = await tx.organisationIntegration.updateMany({
+          where: { id: integrationId, connectedAt: authorisation.connectedAt },
+          data: { connectedAt: authorisation.connectedAt },
+        });
+
+        if (stillCurrent.count !== 1) {
+          throw new AppError(409, REFRESH_SUPERSEDED_CODE, REFRESH_SUPERSEDED_REASON);
+        }
+
+        return run(tx);
+      }),
+  };
 }
 
 // ── reading the stored access token ────────────────────────────────────────
@@ -654,6 +787,51 @@ export async function currentAccessToken(
 }
 
 /**
+ * A usable Confluence access token for a charity, addressed by the charity.
+ *
+ * **This is the entry point for every caller outside a route**, and the rule
+ * is enforced by a test rather than by this paragraph: see "nothing outside a
+ * route may take a Confluence access token by bare integration id" in
+ * `confluence-connection.service.test.ts`.
+ *
+ * `currentAccessToken` takes an `integrationId` and cannot check that the
+ * caller is entitled to it — nothing below it can either. The credential vault
+ * *binds* an envelope to its owner (a row copied between charities will not
+ * open) but it does not *authorize*: the AAD context is derived from the
+ * `OrganisationIntegration` row the id points at, so another charity's id
+ * yields another charity's context and decrypts perfectly. Read the banner at
+ * the top of `integration-credential.service.ts`.
+ *
+ * The route layer discharges that obligation by never accepting an id at all —
+ * every lookup is keyed on `organisationId_provider` from the authenticated
+ * user. This function is the same discipline made available to the callers
+ * that have no request to derive an organisation from: a background publish
+ * job holds a tenant, not an integration id, and handing it the weak form
+ * would make "which charity's token is this?" a question about whatever value
+ * happened to be in scope.
+ */
+export async function currentAccessTokenForOrganisation(
+  prisma: ConfluenceConnectionClient,
+  { organisationId }: ConfluenceOrganisationRef,
+  deps: ConfluenceConnectionDeps = {},
+): Promise<string> {
+  const integration = await prisma.organisationIntegration.findUnique({
+    where: { organisationId_provider: { organisationId, provider: PROVIDER } },
+    select: { id: true },
+  });
+
+  if (!integration) {
+    throw new AppError(
+      404,
+      'INTEGRATION_NOT_FOUND',
+      'This organisation has no Confluence integration.',
+    );
+  }
+
+  return currentAccessToken(prisma, { integrationId: integration.id }, deps);
+}
+
+/**
  * The refresh itself. Only ever entered holding `claim`, which is what makes
  * every `invalid_grant` seen in here genuine.
  */
@@ -674,6 +852,16 @@ async function refreshUnderClaim(
     const alreadyFresh = await readValidAccessToken(prisma, integrationId, now());
     if (alreadyFresh) return alreadyFresh;
 
+    // Which authorisation the token about to be spent belongs to, read either
+    // side of the load. A single read could straddle a reconnect and pair one
+    // grant's token with the other grant's fence value: read first, and a token
+    // loaded afterwards may be the *new* one, which would then be spent and its
+    // replacement refused — a disconnection. Read after, and the token may be
+    // the *old* one carrying the new fence value, which is the overwrite this
+    // whole mechanism exists to stop. Two reads that agree admit neither, and
+    // a disagreement costs nothing because nothing has been spent yet.
+    const authorisationBefore = await readAuthorisationGeneration(prisma, integrationId);
+
     const storedRefreshToken = await loadIntegrationCredential(prisma, {
       integrationId,
       kind: REFRESH_TOKEN_KIND,
@@ -682,6 +870,20 @@ async function refreshUnderClaim(
       await markReconnectRequired(prisma, integrationId, claim, NO_REFRESH_TOKEN_REASON);
       throw new AppError(409, 'CONFLUENCE_RECONNECT_REQUIRED', NO_REFRESH_TOKEN_REASON);
     }
+
+    const authorisation = await readAuthorisationGeneration(prisma, integrationId);
+    if (!sameAuthorisation(authorisationBefore, authorisation)) {
+      // Nothing has been sent to Atlassian, so nothing has been spent and no
+      // failure has occurred: the caller retries and reads the access token
+      // the reconnect has just stored.
+      throw new AppError(409, REFRESH_SUPERSEDED_CODE, REFRESH_SUPERSEDED_REASON);
+    }
+
+    // Every sealed write below goes through the fence. Both of them: a
+    // `not_rotated` outcome writes no refresh token at all, so the access-token
+    // store is the only write left, and it would otherwise hand the charity the
+    // previous grant's access token under the new grant's row.
+    const fenced = authorisationFencedClient(prisma, integrationId, authorisation);
 
     // The one call made while holding the lease, and the only one that has to
     // finish inside the staleness window. See REFRESH_REQUEST_TIMEOUT_MS.
@@ -705,7 +907,7 @@ async function refreshUnderClaim(
     // return. Its own committed write, batched with nothing.
     // ────────────────────────────────────────────────────────────────────
     try {
-      await persistRotatedRefreshToken(prisma, integrationId, tokens.refreshToken);
+      await persistRotatedRefreshToken(fenced, integrationId, tokens.refreshToken);
     } catch (error) {
       // Only this module's own sentinel passes through. Everything else is
       // rewritten, INCLUDING an `AppError` — `storeIntegrationCredential` can
@@ -715,6 +917,12 @@ async function refreshUnderClaim(
       // fact just been destroyed. This is the single outcome that must page,
       // so the status must not be inherited from whatever failed.
       if (error instanceof AppError && error.code === REFRESH_OUTCOME_UNHANDLED_CODE) throw error;
+      // The fence, likewise, is not a persist failure. A charity re-authorising
+      // while a publish job happens to be refreshing is routine, and the
+      // replacement this refresher could not store belongs to an authorisation
+      // that has already been superseded — there is nothing to lose and nothing
+      // to page anybody about.
+      if (error instanceof AppError && error.code === REFRESH_SUPERSEDED_CODE) throw error;
       // The replacement exists only at Atlassian and in this stack frame, and
       // the old one is gone. Loud, 500-level (so it pages), and carrying
       // neither the token nor the underlying error as `cause`, which could
@@ -728,7 +936,7 @@ async function refreshUnderClaim(
       );
     }
 
-    await storeIntegrationCredential(prisma, {
+    await storeIntegrationCredential(fenced, {
       integrationId,
       kind: ACCESS_TOKEN_KIND,
       plaintext: tokens.accessToken,

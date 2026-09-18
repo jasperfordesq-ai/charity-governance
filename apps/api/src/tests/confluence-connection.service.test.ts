@@ -1,5 +1,7 @@
 import assert from 'node:assert/strict';
 import { randomBytes } from 'node:crypto';
+import { readdirSync, readFileSync } from 'node:fs';
+import { join, relative as relativePath, sep } from 'node:path';
 import test from 'node:test';
 import type { AtlassianTokens, OAuthDeps } from '../services/atlassian-oauth.js';
 import {
@@ -8,12 +10,14 @@ import {
   REFRESH_REQUEST_TIMEOUT_MS,
   connectConfluence,
   currentAccessToken,
+  currentAccessTokenForOrganisation,
   disconnectConfluence,
   resolveConnectTimeoutMs,
   resolveRefreshTimeoutMs,
   type ConfluenceConnectionClient,
 } from '../services/confluence-connection.service.js';
 import { OAUTH_STATE_TTL_SECONDS } from '../routes/integrations/oauth-state.js';
+import { loadIntegrationCredential } from '../services/integration-credential.service.js';
 import { integrationKeyFingerprint, sealIntegrationSecret } from '../services/integration-crypto.js';
 import { AppError } from '../utils/errors.js';
 
@@ -24,6 +28,12 @@ const ORG_ID = 'org-a';
 const INTEGRATION_ID = 'int-1';
 const PROVIDER = 'CONFLUENCE';
 
+// A second charity on the same deployment, used by the organisation-scoping
+// tests. Its integration id is exactly the kind of value a non-route caller
+// could be handed by mistake.
+const OTHER_ORG_ID = 'org-b';
+const OTHER_INTEGRATION_ID = 'int-2';
+
 // Every token literal the tests plant. Nothing in this list may ever appear in
 // an OrganisationIntegration write, an IntegrationCredential write, or an
 // error surfaced out of the service.
@@ -31,6 +41,14 @@ const STORED_REFRESH_TOKEN = 'stored-refresh-token-AAAA';
 const ROTATED_REFRESH_TOKEN = 'rotated-refresh-token-BBBB';
 const STORED_ACCESS_TOKEN = 'stored-access-token-CCCC';
 const FRESH_ACCESS_TOKEN = 'fresh-access-token-DDDD';
+
+// What a reconnect landing mid-refresh puts on file, and what the other
+// charity holds. Both belong to the list above in spirit; they are separate
+// only because the containment test that enumerates it is a pinned test and is
+// left untouched.
+const RECONNECT_REFRESH_TOKEN = 'reconnect-refresh-token-EEEE';
+const RECONNECT_ACCESS_TOKEN = 'reconnect-access-token-FFFF';
+const OTHER_ORG_ACCESS_TOKEN = 'other-org-access-token-GGGG';
 
 /**
  * Always awaits `run()` before restoring the environment — the suite runs
@@ -143,6 +161,18 @@ function applyIntegrationData(row: IntegrationRow, data: Record<string, unknown>
   assertClaimPairConsistent(row);
 }
 
+/**
+ * Another charity's live Confluence integration, sitting in the same tables.
+ * It exists so a lookup that is not scoped to the asking organisation has
+ * something to reach — an unscoped lookup with only one row in the database
+ * proves nothing.
+ */
+type OtherOrganisation = {
+  organisationId: string;
+  integrationId: string;
+  accessToken: { plaintext: string; expiresAt: Date | null };
+};
+
 type FakeOptions = {
   integration?: Partial<IntegrationRow> | null;
   storedRefreshToken?: string | null;
@@ -151,6 +181,8 @@ type FakeOptions = {
   failCredentialWriteFor?: string;
   /** What that write throws. Defaults to a plain Error; an AppError exercises a different branch. */
   credentialWriteError?: unknown;
+  /** Further charities on the same deployment. */
+  others?: OtherOrganisation[];
 };
 
 function fakePrisma(options: FakeOptions = {}) {
@@ -160,6 +192,7 @@ function fakePrisma(options: FakeOptions = {}) {
     storedAccessToken = null,
     failCredentialWriteFor,
     credentialWriteError,
+    others = [],
   } = options;
 
   // Lets a test act at a chosen point in the service's read sequence — the
@@ -188,8 +221,32 @@ function fakePrisma(options: FakeOptions = {}) {
   }
 
   const credentials: CredentialRow[] = [];
-  const sealFor = (kind: string, plaintext: string) =>
-    sealIntegrationSecret(plaintext, KEY, 1, { organisationId: ORG_ID, provider: PROVIDER, kind });
+  const sealFor = (kind: string, plaintext: string, organisationId: string = ORG_ID) =>
+    sealIntegrationSecret(plaintext, KEY, 1, { organisationId, provider: PROVIDER, kind });
+
+  for (const other of others) {
+    integrations.push({
+      id: other.integrationId,
+      organisationId: other.organisationId,
+      provider: PROVIDER,
+      status: 'CONNECTED',
+      config: null,
+      lastError: null,
+      connectedAt: new Date('2026-01-01T00:00:00.000Z'),
+      connectedById: 'user-other',
+      refreshClaimedAt: null,
+      refreshClaimToken: null,
+      refreshFailureCount: 0,
+      lastRefreshedAt: null,
+    });
+    credentials.push({
+      integrationId: other.integrationId,
+      kind: 'access_token',
+      sealed: sealFor('access_token', other.accessToken.plaintext, other.organisationId),
+      generation: 1,
+      expiresAt: other.accessToken.expiresAt,
+    });
+  }
 
   if (storedRefreshToken !== null) {
     credentials.push({
@@ -220,7 +277,21 @@ function fakePrisma(options: FakeOptions = {}) {
 
   const delegates = {
     organisationIntegration: {
-      findUnique: async (args: { where: { id?: string } }) => {
+      findUnique: async (args: {
+        where: {
+          id?: string;
+          organisationId_provider?: { organisationId: string; provider: string };
+        };
+      }) => {
+        // The organisation-scoped form the route layer uses, and the only form
+        // a caller outside a route may reach an integration through.
+        const scoped = args.where.organisationId_provider;
+        if (scoped) {
+          const found = integrations.find(
+            (row) => row.organisationId === scoped.organisationId && row.provider === scoped.provider,
+          );
+          return found === undefined ? null : { ...found };
+        }
         if (typeof args.where.id !== 'string') {
           throw new Error('fake prisma: organisationIntegration.findUnique needs an id');
         }
@@ -1281,6 +1352,307 @@ test('the production deadline defaults are the constants, not whatever a test in
     CONNECT_REQUEST_TIMEOUT_MS * 2 * 10 <= OAUTH_STATE_TTL_SECONDS * 1_000,
     'the code/state window must dominate the connect path by at least 10x',
   );
+});
+
+// ── precondition A: a reconnect landing mid-refresh ────────────────────────
+
+const RECONNECTED_AT = new Date('2026-09-18T12:00:05.000Z');
+
+/**
+ * The charity administrator reconnecting Confluence, run to completion. The
+ * tokens it puts on file are deliberately distinct from everything the
+ * in-flight refresher is carrying, so "whose credentials survived?" has an
+ * unambiguous answer.
+ */
+function reconnect(fake: ReturnType<typeof fakePrisma>): Promise<{ integrationId: string }> {
+  return connectConfluence(
+    fake.client,
+    {
+      organisationId: ORG_ID,
+      userId: 'user-reconnecting',
+      code: 'auth-code-reconnect',
+      redirectUri: 'https://api.example/cb',
+    },
+    {
+      now: () => RECONNECTED_AT,
+      exchangeAuthorizationCode: async () =>
+        tokens({
+          accessToken: RECONNECT_ACCESS_TOKEN,
+          refreshToken: { kind: 'issued', token: RECONNECT_REFRESH_TOKEN },
+          expiresAt: new Date(RECONNECTED_AT.getTime() + 3_540_000),
+        }),
+      listAccessibleResources: async () => [
+        { id: 'site-9', url: 'https://charity.atlassian.net', name: 'Charity Wiki' },
+      ],
+    },
+  );
+}
+
+async function storedCredential(fake: ReturnType<typeof fakePrisma>, kind: string) {
+  return withKey(() => loadIntegrationCredential(fake.client, { integrationId: INTEGRATION_ID, kind }));
+}
+
+test('a reconnect landing mid-refresh is not overwritten by the superseded refresher', async () => {
+  // The interleave, in order: a refresher takes the claim and calls Atlassian;
+  // the administrator reconnects while that call is still in flight, which
+  // replaces both credentials and clears the claim; only then does Atlassian
+  // answer the older refresh, with the PREVIOUS grant's rotation.
+  //
+  // Unfenced, that answer is persisted by `integrationId_kind` upsert and the
+  // charity is left with a row reading CONNECTED against an authorisation it
+  // has already replaced — no error anywhere.
+  const fake = fakePrisma({
+    storedAccessToken: { plaintext: STORED_ACCESS_TOKEN, expiresAt: new Date(NOW.getTime() - 1_000) },
+  });
+
+  const inFlight = defer<AtlassianTokens>();
+  const refresh = recordingRefresh(async () => inFlight.promise);
+
+  return withKey(async () => {
+    const refresher = currentAccessToken(fake.client, { integrationId: INTEGRATION_ID }, {
+      now: clock,
+      refreshAccessToken: refresh.fn,
+    });
+    await flush();
+    assert.deepEqual(refresh.calls, [STORED_REFRESH_TOKEN], 'the refresher must be in flight');
+    assert.ok(fake.row().refreshClaimToken, 'and holding the claim');
+
+    await reconnect(fake);
+    assert.equal(await storedCredential(fake, 'refresh_token'), RECONNECT_REFRESH_TOKEN);
+    assert.equal(await storedCredential(fake, 'access_token'), RECONNECT_ACCESS_TOKEN);
+
+    inFlight.resolve(tokens());
+    await assert.rejects(
+      refresher,
+      (error: unknown) => error instanceof AppError && error.code === 'CONFLUENCE_REFRESH_SUPERSEDED',
+      'a refresher whose authorisation was replaced must fail rather than persist',
+    );
+
+    // The credentials behind the row are still the ones the charity just
+    // authorised — not the previous grant's rotation.
+    assert.equal(await storedCredential(fake, 'refresh_token'), RECONNECT_REFRESH_TOKEN);
+    assert.equal(await storedCredential(fake, 'access_token'), RECONNECT_ACCESS_TOKEN);
+
+    const row = fake.row();
+    assert.equal(row.status, 'CONNECTED');
+    assert.deepEqual(row.connectedAt, RECONNECTED_AT);
+    assert.equal(row.connectedById, 'user-reconnecting');
+    // And the superseded refresher diagnosed nothing on the way out: it never
+    // held the fresh connection's claim, so none of its row writes matched.
+    assert.equal(row.lastError, null);
+    assert.equal(row.refreshFailureCount, 0);
+    assert.equal(row.refreshClaimToken, null);
+    assert.equal(row.refreshClaimedAt, null);
+  });
+});
+
+test('a superseded refresher does not overwrite the new access token when Atlassian did not rotate', async () => {
+  // `not_rotated` writes no refresh token at all, so the access-token store is
+  // the only write left to fence. Fencing just the refresh-token persist would
+  // still hand the charity the previous grant's access token.
+  const fake = fakePrisma({
+    storedAccessToken: { plaintext: STORED_ACCESS_TOKEN, expiresAt: new Date(NOW.getTime() - 1_000) },
+  });
+
+  const inFlight = defer<AtlassianTokens>();
+  const refresh = recordingRefresh(async () => inFlight.promise);
+
+  return withKey(async () => {
+    const refresher = currentAccessToken(fake.client, { integrationId: INTEGRATION_ID }, {
+      now: clock,
+      refreshAccessToken: refresh.fn,
+    });
+    await flush();
+    assert.equal(refresh.calls.length, 1);
+
+    await reconnect(fake);
+
+    inFlight.resolve(tokens({ refreshToken: { kind: 'not_rotated' } }));
+    await assert.rejects(
+      refresher,
+      (error: unknown) => error instanceof AppError && error.code === 'CONFLUENCE_REFRESH_SUPERSEDED',
+    );
+
+    assert.equal(await storedCredential(fake, 'access_token'), RECONNECT_ACCESS_TOKEN);
+    assert.equal(await storedCredential(fake, 'refresh_token'), RECONNECT_REFRESH_TOKEN);
+  });
+});
+
+test('the superseded outcome does not page and carries no token', async () => {
+  // It is a routine consequence of an administrator reconnecting, not the
+  // unrecoverable persist failure that shares the same code path. Reporting it
+  // as CONFLUENCE_REFRESH_TOKEN_PERSIST_FAILED would page an operator every
+  // time a charity re-authorises while a publish job happens to be refreshing.
+  const fake = fakePrisma({
+    storedAccessToken: { plaintext: STORED_ACCESS_TOKEN, expiresAt: new Date(NOW.getTime() - 1_000) },
+  });
+
+  const inFlight = defer<AtlassianTokens>();
+  const refresh = recordingRefresh(async () => inFlight.promise);
+
+  return withKey(async () => {
+    const refresher = currentAccessToken(fake.client, { integrationId: INTEGRATION_ID }, {
+      now: clock,
+      refreshAccessToken: refresh.fn,
+    });
+    await flush();
+    await reconnect(fake);
+    inFlight.resolve(tokens());
+
+    await assert.rejects(refresher, (error: unknown) => {
+      assert.ok(error instanceof AppError);
+      assert.equal(error.code, 'CONFLUENCE_REFRESH_SUPERSEDED');
+      assert.equal(error.statusCode, 409, 'a reconnect racing a refresh must not page');
+      const surfaced = JSON.stringify({
+        message: error.message,
+        details: error.details,
+        cause: error.cause,
+      });
+      for (const secret of [
+        STORED_REFRESH_TOKEN,
+        ROTATED_REFRESH_TOKEN,
+        FRESH_ACCESS_TOKEN,
+        RECONNECT_REFRESH_TOKEN,
+        RECONNECT_ACCESS_TOKEN,
+      ]) {
+        assert.equal(surfaced.includes(secret), false, `"${secret}" must never reach an error`);
+      }
+      return true;
+    });
+  });
+});
+
+test('a charity whose refresh is stuck can still reconnect while the claim is held', async () => {
+  // The other half of the choice. Refusing a reconnect while a claim is live
+  // would leave a charity whose refresh is wedged unable to fix it from the
+  // one screen that exists for fixing it. Fencing the credential write instead
+  // means the reconnect always wins, immediately.
+  const fake = fakePrisma({
+    storedAccessToken: { plaintext: STORED_ACCESS_TOKEN, expiresAt: new Date(NOW.getTime() - 1_000) },
+    integration: {
+      status: 'ERROR',
+      lastError: 'previously broken',
+      refreshFailureCount: 7,
+      refreshClaimToken: 'held-by-a-wedged-worker',
+      refreshClaimedAt: new Date(NOW.getTime() - 1_000),
+    },
+  });
+
+  await withKey(() => reconnect(fake));
+
+  const row = fake.row();
+  assert.equal(row.status, 'CONNECTED');
+  assert.equal(row.lastError, null);
+  assert.equal(row.refreshFailureCount, 0);
+  assert.equal(row.refreshClaimToken, null, 'a live claim must not block recovery');
+  assert.equal(row.refreshClaimedAt, null);
+  assert.equal(await storedCredential(fake, 'refresh_token'), RECONNECT_REFRESH_TOKEN);
+  assert.equal(await storedCredential(fake, 'access_token'), RECONNECT_ACCESS_TOKEN);
+});
+
+// ── precondition B: no access token by bare integration id ─────────────────
+
+test("currentAccessTokenForOrganisation reaches only the asking organisation's integration", async () => {
+  const fake = fakePrisma({
+    storedAccessToken: { plaintext: STORED_ACCESS_TOKEN, expiresAt: new Date(NOW.getTime() + 60_000) },
+    others: [
+      {
+        organisationId: OTHER_ORG_ID,
+        integrationId: OTHER_INTEGRATION_ID,
+        accessToken: { plaintext: OTHER_ORG_ACCESS_TOKEN, expiresAt: new Date(NOW.getTime() + 60_000) },
+      },
+    ],
+  });
+
+  const mine = await withKey(() =>
+    currentAccessTokenForOrganisation(fake.client, { organisationId: ORG_ID }, {
+      now: clock,
+      refreshAccessToken: neverCalled,
+    }),
+  );
+  assert.equal(mine, STORED_ACCESS_TOKEN);
+
+  const theirs = await withKey(() =>
+    currentAccessTokenForOrganisation(fake.client, { organisationId: OTHER_ORG_ID }, {
+      now: clock,
+      refreshAccessToken: neverCalled,
+    }),
+  );
+  assert.equal(theirs, OTHER_ORG_ACCESS_TOKEN);
+  assert.notEqual(theirs, STORED_ACCESS_TOKEN);
+});
+
+test('currentAccessTokenForOrganisation refuses an organisation with no Confluence integration', async () => {
+  const fake = fakePrisma({
+    storedAccessToken: { plaintext: STORED_ACCESS_TOKEN, expiresAt: new Date(NOW.getTime() + 60_000) },
+  });
+
+  await assert.rejects(
+    withKey(() =>
+      currentAccessTokenForOrganisation(fake.client, { organisationId: 'org-with-no-integration' }, {
+        now: clock,
+        refreshAccessToken: neverCalled,
+      }),
+    ),
+    (error: unknown) => error instanceof AppError && error.code === 'INTEGRATION_NOT_FOUND',
+  );
+
+  assert.equal(fake.integrationWrites.length, 0);
+  assert.equal(fake.credentialWrites.length, 0);
+});
+
+test('nothing outside a route may take a Confluence access token by bare integration id', () => {
+  // The credential layer binds but does not authorize: an `integrationId`
+  // belonging to another charity yields a context derived from THAT charity's
+  // row and decrypts successfully (see the banner in
+  // integration-credential.service.ts). The route layer is safe because no
+  // route accepts an id from a request. This phase introduces the first
+  // non-route caller, and a comment would not have stopped it — so the rule is
+  // this assertion.
+  const sourceRoot = join(process.cwd(), 'src');
+  const offenders: string[] = [];
+
+  const visit = (directory: string) => {
+    for (const entry of readdirSync(directory, { withFileTypes: true })) {
+      const path = join(directory, entry.name);
+      if (entry.isDirectory()) {
+        visit(path);
+        continue;
+      }
+      if (!entry.isFile() || !entry.name.endsWith('.ts')) continue;
+
+      const name = relativePath(sourceRoot, path).split(sep).join('/');
+      // The definition itself; the route layer, which derives every id from
+      // `organisationId_provider` on the authenticated user; and the tests.
+      if (name === 'services/confluence-connection.service.ts') continue;
+      if (name.startsWith('routes/') || name.startsWith('tests/')) continue;
+
+      // `currentAccessTokenForOrganisation(` does not contain this literal.
+      if (readFileSync(path, 'utf8').includes('currentAccessToken(')) offenders.push(name);
+    }
+  };
+  visit(sourceRoot);
+
+  assert.deepEqual(
+    offenders,
+    [],
+    'these files take a Confluence access token by bare integrationId; outside a route the ' +
+      'only permitted entry point is currentAccessTokenForOrganisation',
+  );
+
+  // And the strong entry point exists and resolves the integration from the
+  // unique pair rather than from anything it was handed. Read out of its own
+  // body, not the whole file: `connectConfluence` keys on the same pair, so a
+  // file-wide match would stay green with this function gutted.
+  const service = readFileSync(
+    join(process.cwd(), 'src', 'services', 'confluence-connection.service.ts'),
+    'utf8',
+  );
+  const start = service.indexOf('export async function currentAccessTokenForOrganisation');
+  assert.notEqual(start, -1, 'the organisation-scoped entry point must exist');
+  const body = service.slice(start, service.indexOf('\n}\n', start));
+  assert.match(body, /organisationId_provider: \{ organisationId, provider: PROVIDER \}/);
+  assert.doesNotMatch(body, /where: \{ id:/, 'it must not look an integration up by id');
 });
 
 test('disconnectConfluence deletes every stored credential and marks the row disconnected', async () => {
