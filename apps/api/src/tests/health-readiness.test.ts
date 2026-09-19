@@ -54,6 +54,33 @@ test('unauthenticated readiness does not expose detailed dependency checks', { c
   }
 });
 
+test('the global health payload carries no tenant or integration identifiers', { concurrency: false }, async () => {
+  process.env.READINESS_API_KEY = 'readiness-test-secret';
+  const app = await buildHealthApp();
+
+  try {
+    const basic = await app.inject({ method: 'GET', url: '/api/v1/health' });
+    const readiness = await app.inject({
+      method: 'GET',
+      url: '/api/v1/health/readiness',
+      headers: { 'x-charitypilot-readiness-key': 'readiness-test-secret' },
+    });
+
+    // Per-tenant integration state is already served by the authenticated,
+    // org-scoped GET /confluence/status. Nothing tenant- or
+    // integration-specific may reach this global, unscoped endpoint.
+    for (const response of [basic, readiness]) {
+      const rendered = JSON.stringify(response.json()).toLowerCase();
+      for (const forbidden of ['organisation', 'confluence', 'integration', 'cloudid', 'tenant']) {
+        assert.equal(rendered.includes(forbidden), false, `global health leaked "${forbidden}": ${rendered}`);
+      }
+    }
+  } finally {
+    process.env.READINESS_API_KEY = originalReadinessKey;
+    await app.close();
+  }
+});
+
 test('readiness key comparison uses timing-safe equality', () => {
   const routeSource = readFileSync(join(process.cwd(), 'src', 'routes', 'health', 'index.ts'), 'utf8');
 

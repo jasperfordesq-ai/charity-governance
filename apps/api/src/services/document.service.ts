@@ -888,6 +888,7 @@ export class DocumentService {
       take: boundedLimit,
       select: {
         id: true,
+        provider: true,
         attempts: true,
         lastError: true,
         lastAttemptAt: true,
@@ -900,6 +901,11 @@ export class DocumentService {
     return {
       data: rows.map((row) => ({
         id: row.id,
+        // A Supabase dead-letter and a Confluence one need entirely different
+        // remedies (fix our storage vs. a human with space-admin rights in
+        // the charity's own Atlassian site), so the administrator has to be
+        // able to tell them apart from the list, not just from a detail view.
+        provider: row.provider,
         attempts: row.attempts,
         lastError: row.lastError ?? null,
         lastAttemptAt: row.lastAttemptAt ?? null,

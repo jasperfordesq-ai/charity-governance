@@ -129,6 +129,37 @@ test('admin dead-letter listing is tenant-scoped and never exposes storage paths
     assert.equal(response.body.includes('private-policy.pdf'), false);
     assert.equal(response.json().data[0].id, 'deletion-1');
     assert.equal(response.json().data[0].attempts, 5);
+    assert.equal(response.json().data[0].provider, 'supabase');
+  } finally {
+    await app.close();
+  }
+});
+
+test('a dead-letter listing says which provider each row belongs to', async () => {
+  const confluenceRow = {
+    ...DEAD_LETTER,
+    id: 'deletion-2',
+    provider: 'confluence',
+    storagePath: 'org-1/other-policy.pdf',
+    terminalReason: 'PROVIDER_NOT_ERASABLE',
+  };
+  const app = await buildApp('ADMIN', {
+    documentStorageDeletion: {
+      findMany: async () => [DEAD_LETTER, confluenceRow],
+    },
+  });
+  try {
+    const response = await app.inject({
+      method: 'GET',
+      url: '/storage-deletions/dead-letter',
+      headers: { authorization: authorization('ADMIN') },
+    });
+    assert.equal(response.statusCode, 200);
+    const { data } = response.json();
+    assert.equal(data[0].id, 'deletion-1');
+    assert.equal(data[0].provider, 'supabase');
+    assert.equal(data[1].id, 'deletion-2');
+    assert.equal(data[1].provider, 'confluence');
   } finally {
     await app.close();
   }

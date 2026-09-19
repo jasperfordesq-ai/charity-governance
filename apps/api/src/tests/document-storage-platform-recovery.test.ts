@@ -80,6 +80,7 @@ function database(row = DEAD_LETTER) {
     documentStorageDeletion: {
       findFirst: async () => ({
         id: row.id,
+        provider: row.provider,
         attempts: row.attempts,
         terminalReason: row.terminalReason,
         deadLetteredAt: row.deadLetteredAt,
@@ -232,6 +233,52 @@ test('platform dry-run can inspect a dead letter without tenant subscription or 
   assert.equal(serialized.includes('foreign-org/rejected.pdf'), false);
   assert.equal(serialized.includes('corrected.pdf'), false);
   assert.equal(serialized.includes('Jane Recovery Operator'), false);
+});
+
+test('the operator dry-run refuses a corrected path for a Confluence row at preview, not at execute', async () => {
+  const confluenceDeadLetter = {
+    ...DEAD_LETTER,
+    provider: 'confluence',
+    terminalReason: 'PROVIDER_NOT_ERASABLE',
+  } as const;
+
+  const refusedMock = database(confluenceDeadLetter);
+  await assert.rejects(
+    runPlatformDocumentStorageRecovery(
+      {
+        ...command({ expectedTerminalReason: 'PROVIDER_NOT_ERASABLE' }),
+        mode: 'dry-run',
+        executionConfirmation: undefined,
+      },
+      refusedMock.prisma as never,
+      productionEnv(),
+    ),
+    /storage-path correction is not supported for provider "confluence"/u,
+  );
+
+  // Scoped to the corrected-path vocabulary, not to the provider wholesale:
+  // REQUEUE_UNCHANGED and COMPLETE_EXTERNALLY_REMEDIATED (the actual
+  // Confluence recovery flow) must stay open for a Confluence row, at
+  // dry-run just as at execute. Pinning both directions here.
+  for (const disposition of ['REQUEUE_UNCHANGED', 'COMPLETE_EXTERNALLY_REMEDIATED'] as const) {
+    const openMock = database(confluenceDeadLetter);
+    const result = await runPlatformDocumentStorageRecovery(
+      {
+        ...command({
+          disposition,
+          correctedStoragePath: undefined,
+          expectedTerminalReason: 'PROVIDER_NOT_ERASABLE',
+          expectedCorrectedStoragePathSha256: undefined,
+        }),
+        mode: 'dry-run',
+        executionConfirmation: undefined,
+      },
+      openMock.prisma as never,
+      productionEnv(),
+    );
+    assert.equal(result.mode, 'DRY_RUN');
+    assert.equal(result.mutationApplied, false);
+  }
 });
 
 test('platform corrected-path execution records immutable operator evidence and returns no object key', async () => {

@@ -427,6 +427,7 @@ export async function runPlatformDocumentStorageRecovery(
     },
     select: {
       id: true,
+      provider: true,
       attempts: true,
       terminalReason: true,
       deadLetteredAt: true,
@@ -435,6 +436,19 @@ export async function runPlatformDocumentStorageRecovery(
   });
   if (!deletion || !deletion.terminalReason) {
     throw new Error('Document storage recovery refused: tenant-scoped dead letter was not found');
+  }
+
+  // Mirrors the guard in DocumentService#recoverDeadLetterStorageDeletion, but
+  // evaluated here — before a dry-run mints an execution confirmation — so a
+  // corrected-path preview against a Confluence row is refused at preview,
+  // not only when the operator comes back to execute it. Scoped to the
+  // corrected-path vocabulary only: REQUEUE_UNCHANGED and
+  // COMPLETE_EXTERNALLY_REMEDIATED stay open for a Confluence row (the latter
+  // is the Confluence recovery flow) both at dry-run and at execute.
+  if (command.disposition === 'REQUEUE_CORRECTED_PATH' && deletion.provider !== 'supabase') {
+    throw new Error(
+      `Document storage recovery refused: storage-path correction is not supported for provider "${deletion.provider}"`,
+    );
   }
 
   const preview = {
