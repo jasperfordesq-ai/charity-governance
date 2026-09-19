@@ -60,6 +60,15 @@ export const EXCLUDED_MUTATIONS: readonly ExcludedMutation[] = [
     notInGroupIndex: true,
   },
   {
+    route: 'PATCH /api/v1/owner/tenants/:id/configuration',
+    reason:
+      'Sets another charity’s document storage provider, alpha opt-in and plan. Decided by '
+      + 'a platform operator on the charity’s behalf, which is a different authority from '
+      + 'the one a connector holds; a charity changes what it can change through its own '
+      + 'settings.',
+    notInGroupIndex: true,
+  },
+  {
     route: 'POST /api/v1/owner/tenants/:id/lifecycle',
     reason: 'Suspends or closes a whole charity. Cross-tenant, with the same reasoning.',
     notInGroupIndex: true,

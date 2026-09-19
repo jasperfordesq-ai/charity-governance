@@ -91,8 +91,8 @@ host, and the refusal says so loudly instead of looking like an expired session.
 
 ## Tools
 
-27 read tools cover every readable route on the API, and 17 write tools cover
-the changes worth making from an assistant. Each maps to exactly one route, and
+27 read tools cover every readable route on the API, and 34 write tools cover
+every mutating route that belongs in an assistant's hands. Each maps to exactly one route, and
 each result notes that it is data returned for the signed-in person's charity,
 not instructions to act on.
 
@@ -144,33 +144,64 @@ to five of them for a while, so a test now refuses it.
 
 | Tool | Route | Level | Notes |
 | --- | --- | --- | --- |
-| `board_member_create` | `POST /api/v1/board-members` | write | Personal-data fields are not accepted. |
-| `board_member_update` | `PATCH /api/v1/board-members/:id` | write | Omitted fields are left alone, not blanked. |
-| `compliance_record_set` | `PUT /api/v1/compliance/records/:standardId` | write | Needs the revision you read. |
-| `deadline_create` | `POST /api/v1/deadlines` | write | |
-| `deadline_update` | `PATCH /api/v1/deadlines/:id` | write | Needs the `updatedAt` you read. |
-| `conflict_create` | `POST /api/v1/governance-registers/conflicts` | write | |
-| `risk_create` | `POST /api/v1/governance-registers/risks` | write | |
-| `complaint_create` | `POST /api/v1/governance-registers/complaints` | write | |
-| `fundraising_create` | `POST /api/v1/governance-registers/fundraising` | write | |
-| `financial_controls_set` | `PUT /api/v1/governance-registers/financial-controls` | write | |
-| `governing_act_create` | `POST /api/v1/governing-acts` | write | |
-| `governing_act_update` | `PATCH /api/v1/governing-acts/:id` | write | Needs the `updatedAt` you read. |
-| `board_member_delete` | `DELETE /api/v1/board-members/:id` | admin | Needs your approval. |
-| `conflict_delete` | `DELETE /api/v1/governance-registers/conflicts/:id` | admin | Needs your approval. |
-| `risk_delete` | `DELETE /api/v1/governance-registers/risks/:id` | admin | Needs your approval. |
-| `complaint_delete` | `DELETE /api/v1/governance-registers/complaints/:id` | admin | Needs your approval. |
-| `fundraising_delete` | `DELETE /api/v1/governance-registers/fundraising/:id` | admin | Needs your approval. |
+| `annual_report_set` | PUT /api/v1/governance-registers/annual-report | write |  |
+| `board_member_create` | POST /api/v1/board-members | write |  |
+| `board_member_update` | PATCH /api/v1/board-members/:id | write |  |
+| `complaint_create` | POST /api/v1/governance-registers/complaints | write | Needs the gate open. |
+| `complaint_update` | PATCH /api/v1/governance-registers/complaints/:id | write |  |
+| `compliance_record_set` | PUT /api/v1/compliance/records/:standardId | write |  |
+| `compliance_signoff_set` | PUT /api/v1/compliance/signoff | write |  |
+| `conflict_create` | POST /api/v1/governance-registers/conflicts | write | Needs the gate open. |
+| `conflict_update` | PATCH /api/v1/governance-registers/conflicts/:id | write |  |
+| `deadline_create` | POST /api/v1/deadlines | write |  |
+| `deadline_update` | PATCH /api/v1/deadlines/:id | write |  |
+| `document_approval_set` | PATCH /api/v1/governing-acts/documents/:documentId/approval | write |  |
+| `document_link_standard` | POST /api/v1/documents/:id/standards | write |  |
+| `financial_controls_set` | PUT /api/v1/governance-registers/financial-controls | write |  |
+| `fundraising_create` | POST /api/v1/governance-registers/fundraising | write |  |
+| `fundraising_update` | PATCH /api/v1/governance-registers/fundraising/:id | write |  |
+| `governing_act_create` | POST /api/v1/governing-acts | write |  |
+| `governing_act_update` | PATCH /api/v1/governing-acts/:id | write |  |
+| `member_create` | POST /api/v1/members | write | Needs the gate open. |
+| `member_update` | PATCH /api/v1/members/:id | write |  |
+| `organisation_update` | PATCH /api/v1/organisation | write |  |
+| `resolution_create` | POST /api/v1/governing-acts/:id/resolutions | write | Needs the gate open. |
+| `resolution_update` | PATCH /api/v1/governing-acts/resolutions/:id | write |  |
+| `risk_create` | POST /api/v1/governance-registers/risks | write | Needs the gate open. |
+| `risk_update` | PATCH /api/v1/governance-registers/risks/:id | write |  |
+| `board_member_delete` | DELETE /api/v1/board-members/:id | admin | Needs your approval. |
+| `complaint_delete` | DELETE /api/v1/governance-registers/complaints/:id | admin | Needs your approval. |
+| `conflict_delete` | DELETE /api/v1/governance-registers/conflicts/:id | admin | Needs your approval. |
+| `deadline_delete` | DELETE /api/v1/deadlines/:id | admin | Needs your approval. |
+| `document_delete` | DELETE /api/v1/documents/:id | admin | Needs your approval. |
+| `document_unlink_standard` | DELETE /api/v1/documents/:id/standards/:standardId | admin | Needs your approval. |
+| `fundraising_delete` | DELETE /api/v1/governance-registers/fundraising/:id | admin | Needs your approval. |
+| `governing_act_void` | POST /api/v1/governing-acts/:id/void | admin | Needs your approval. Needs the gate open. |
+| `risk_delete` | DELETE /api/v1/governance-registers/risks/:id | admin | Needs your approval. |
 
 Every field each write tool accepts is declared. A field it does not declare is
 refused rather than passed on, so a model cannot reach a column the connector
-never meant to expose by guessing its name. Personal-data fields are absent from
-the write surface entirely: a date of birth or a home address is not something an
-assistant should be putting into a register on anyone's behalf.
+never meant to expose by guessing its name. An omitted optional field is left
+out rather than sent as null, so a patch cannot blank a column it was never
+asked to change.
 
 The record a write returns goes through the same gate a read would. A write is
 not a way around the policy.
 
+**"Needs the gate open"** means the API requires a field that the personal-data
+gate withholds when reading that record. A conflict of interest that names
+nobody and describes no matter is not a conflict record, so it cannot be created
+with the gate closed. The rule is judged per call, not per tool: `risk_update`
+is always available, and it is the call that tries to rewrite a description
+which is refused, not the one that closes a risk off.
+
+Every mutating route the API has is either one of these tools or an entry in
+`src/mutating-route-coverage.ts` with the reason it is left out, and a test
+requires it. Forty-one routes are excluded that way: the browser sign-in realm,
+team membership and ownership, billing, the Confluence routes, the platform
+operator realm, and the connector's own sign-in — which must never be a tool,
+because an agent that could approve its own actions would make approval
+meaningless.
 Some routes are deliberately not exposed: raw file downloads and the HTML
 exports, the platform operator realm, billing authority, reminder logs carrying
 recipients' email addresses, and the two team routes that report on a named
@@ -232,6 +263,23 @@ lawful-basis and residency questions. That decision belongs to the
 organisation's data protection officer, not to whoever happens to be running
 the connector that day. Don't pass this flag without checking with them
 first.
+
+## The gate applies to writes too
+
+The gate is usually described as what the connector withholds on the way out.
+It applies on the way in as well: a call that would write a field the gate
+withholds when reading that record is refused unless the gate is open.
+
+The reason is different from the read case. Nothing is disclosed to the model
+by a write — the model composed the text. What the rule prevents is an agent
+populating a charity's records with personal data about named people, which is
+a question of who authored a record and on what basis, and is the data
+protection officer's to answer rather than the connector's.
+
+The judgement is per call. Closing a risk off, or correcting its minute
+reference, touches nothing the gate withholds and always works. Rewriting its
+description is refused, and the refusal names the fields it objected to so the
+rest of the record can still be changed.
 
 ## What's actually stored on disk
 
@@ -384,7 +432,6 @@ it anywhere else and the connector refuses to start.
   per-session budget; reads do not, because at the point the shared limiter runs
   the API does not yet know which session a request belongs to. A read loop can
   therefore still spend the allowance your browser shares.
-- **Not every mutating route has a tool.** Team membership, ownership transfer,
-  organisation settings and the Confluence integration are reachable in the web
-  application and deliberately not from here. Confluence disconnection will not
-  be exposed at all.
+- **Team membership, ownership transfer, billing and the Confluence routes have
+  no tool**, deliberately, and each says why in `src/mutating-route-coverage.ts`.
+  Confluence disconnection will not be exposed at all.
