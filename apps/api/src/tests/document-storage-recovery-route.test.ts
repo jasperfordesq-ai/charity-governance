@@ -21,6 +21,11 @@ const DEAD_LETTER = {
   id: 'deletion-1',
   organisationId: 'org-1',
   storagePath: 'org-1/private-policy.pdf',
+  // The row shape the production code reads. A fabricated row that omits
+  // `provider` would exercise a shape no `select` in the pipeline returns, and
+  // would silently miss the provider guard on storage-path recovery.
+  provider: 'supabase',
+  targetRef: null,
   state: 'DEAD_LETTER',
   attempts: 5,
   lastError: 'name=StorageApiError status=503 message=temporarily unavailable',

@@ -3,6 +3,7 @@ import { DocumentService } from '../services/document.service.js';
 import { StorageService } from '../services/storage.service.js';
 import { createPrismaOrganisationStorageResolver } from '../services/document-storage-resolution.js';
 import { createErasureDispatcher, createSupabaseEraser } from '../services/document-erasure.js';
+import { createConfluenceEraser } from '../services/confluence-erasure.js';
 import { validateDocumentStorageCleanupEnv } from '../utils/env.js';
 import { logSchedulerError, sendJobFailureAlert } from './production-scheduler.js';
 
@@ -23,6 +24,12 @@ try {
   const dispatch = createErasureDispatcher({
     supabase: createSupabaseEraser((organisationId, storagePath, signal) =>
       storageService.deleteFile(organisationId, storagePath, signal)),
+    // Registered unconditionally. A Confluence row is enqueued by the same
+    // `remove()` that enqueues a Supabase one, so leaving this unregistered on
+    // any deployment would dead-letter every Confluence erasure as
+    // PROVIDER_NOT_ERASABLE — a charity's published copy left in place while
+    // an operator is told the deployment cannot erase it.
+    confluence: createConfluenceEraser({ prisma }),
   });
   const result = await documentService.retryPendingStorageDeletions(dispatch, cleanupLimit());
 

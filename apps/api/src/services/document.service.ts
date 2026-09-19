@@ -244,16 +244,38 @@ function deletionRecoveryDelegate(prisma: unknown): DocumentStorageDeletionRecov
 }
 
 // Failures that no number of retries can clear, and the terminal reason each
-// one dead-letters with. `PROVIDER_NOT_ERASABLE` covers three spellings of one
-// condition — this deployment has no way to erase these bytes: the dispatcher
-// finding no eraser for the row's provider, and StorageService refusing a
-// provider it has no backend for on either the delete or the download path.
-// Retrying cannot acquire a backend any more than it can acquire a permission.
+// one dead-letters with. `PROVIDER_NOT_ERASABLE` covers several spellings of
+// one condition — this deployment has no way to erase these bytes: the
+// dispatcher finding no eraser for the row's provider, StorageService refusing
+// a provider it has no backend for on either the delete or the download path,
+// and the three Confluence refusals below. Retrying cannot acquire a backend
+// any more than it can acquire a permission.
+//
+// The Confluence three, and why each is permanent rather than transient:
+//
+// - `CONFLUENCE_PURGE_FORBIDDEN` — the connected grant lacks the permission
+//   purge requires. Retrying does not acquire a permission; a human must
+//   reconnect with it or empty the site's trash themselves.
+// - `ERASURE_TARGET_MALFORMED` — the row does not name anything erasable.
+//   Retrying does not repair a record the publish pipeline wrote incorrectly.
+// - `CONFLUENCE_NOT_CONNECTED` — the charity's Confluence connection is gone
+//   or dead. Retrying does not reconnect it.
+//
+// **What is deliberately absent matters as much as what is here.**
+// `CONFLUENCE_ERASURE_UNVERIFIED` (the page still read back) and every
+// transport, 5xx, rate-limit, refresh-in-flight and timeout code are transient
+// and must stay transient. A predicate that dead-lettered those would turn a
+// five-minute Atlassian blip into a permanent failure that a human has to
+// clear by hand — and would stop the pipeline ever proving the erasure it
+// could have proved on the next attempt.
 const PERMANENT_STORAGE_DELETION_TERMINAL_REASONS: Record<string, DocumentStorageDeletionTerminalReason> = {
   STORAGE_PATH_FORBIDDEN: 'PERMANENT_STORAGE_PATH_REJECTED',
   PROVIDER_NOT_ERASABLE: 'PROVIDER_NOT_ERASABLE',
   STORAGE_DELETE_PROVIDER_UNSUPPORTED: 'PROVIDER_NOT_ERASABLE',
   STORAGE_DOWNLOAD_PROVIDER_UNSUPPORTED: 'PROVIDER_NOT_ERASABLE',
+  CONFLUENCE_PURGE_FORBIDDEN: 'PROVIDER_NOT_ERASABLE',
+  ERASURE_TARGET_MALFORMED: 'PROVIDER_NOT_ERASABLE',
+  CONFLUENCE_NOT_CONNECTED: 'PROVIDER_NOT_ERASABLE',
 };
 
 function permanentStorageDeletionTerminalReason(
@@ -1009,6 +1031,38 @@ export class DocumentService {
         (input.expectedTerminalReason !== undefined && input.expectedTerminalReason !== deletion.terminalReason)
       ) {
         throw new AppError(409, 'STORAGE_DELETION_RECOVERY_CONFLICT', 'The reviewed recovery item changed. Refresh and try again.');
+      }
+
+      // `REQUEUE_CORRECTED_PATH` is Supabase vocabulary end to end: it
+      // validates a `correctedStoragePath` against the organisation's object
+      // prefix and writes it into `storagePath`, the field a Supabase eraser
+      // addresses its object by. A provider that addresses its content some
+      // other way reads `targetRef` and never looks at `storagePath` at all,
+      // so "correcting the path" of such a row corrects nothing and requeues
+      // an erasure that will fail exactly as before — while the audit trail
+      // records an operator having fixed it.
+      //
+      // Until Confluence rows could dead-letter this was safe by absence: no
+      // non-Supabase row ever reached DEAD_LETTER. A forbidden purge now
+      // dead-letters one by design, so the refusal has to be explicit.
+      //
+      // The refusal is scoped to the path vocabulary, not to the provider:
+      // `REQUEUE_UNCHANGED` (re-run the real eraser, which re-proves erasure
+      // with its own verification read) and `COMPLETE_EXTERNALLY_REMEDIATED`
+      // (a human with space-admin rights emptied the site's trash) are both
+      // meaningful for a Confluence row and stay open. Closing them would push
+      // an operator towards attesting to an erasure the platform could have
+      // proved.
+      if (input.disposition === 'REQUEUE_CORRECTED_PATH' && deletion.provider !== 'supabase') {
+        throw new AppError(
+          409,
+          'CORRECTED_STORAGE_PATH_PROVIDER_UNSUPPORTED',
+          'Storage-path recovery is only meaningful for Supabase-backed deletions, and this one ' +
+            `is stored with provider "${deletion.provider}". Reconnect or repair the provider and ` +
+            'requeue it unchanged, or record that it was erased in the provider directly with the ' +
+            'externally remediated disposition.',
+          { provider: deletion.provider },
+        );
       }
 
       if (
