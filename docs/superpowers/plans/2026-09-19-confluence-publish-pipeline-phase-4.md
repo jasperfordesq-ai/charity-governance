@@ -467,6 +467,16 @@ keeps uploading after the row has recorded the attempt as timed out.
 
 **Design notes:**
 
+**Cancel a pending publication when its document is deleted — Task 6 found this.** A document
+removed while its publication is still queued currently burns all five attempts and dead-letters as
+`MAX_ATTEMPTS_EXHAUSTED`: noise that trains an operator to ignore alerts.
+
+**But do not simply delete a publication row that already carries a `pageId`.** That page exists in
+the charity's Confluence, and Task 8's dual erasure needs the id to erase it. Cancel the *pending
+work*, keep the *record of where the bytes went*. Losing that id means a page nobody can find and
+nobody can erase — the exact orphan this phase exists to avoid. Pin both: a publication with no
+`pageId` is cancelled outright; one with a `pageId` stops being retried but keeps its identifiers.
+
 Enqueue a publication when, and only when, the organisation has a **`CONNECTED`** Confluence
 integration **and a chosen space** (Task 3). Connecting is the opt-in; the space is the
 destination, and without one there is nowhere to publish. There is still no separate alpha flag.
@@ -526,9 +536,19 @@ no further change. That is the payoff for having built the erasure side first.
 published has nothing in Confluence to erase, and a Confluence erasure row for it would dead-letter
 on a page that never existed — noise that trains an operator to ignore alerts.
 
+**Also fix, while you are in this file — Task 6 found it and it can take the job down.** The bounded
+runner in `document.service.ts` has no guard against a **late rejection from an attempt that lost
+the timeout race**. When the deadline fires, the runner rejects and moves on, but the original
+promise is still in flight; when it later rejects too, nothing is waiting for it. In Node an
+unhandled rejection can terminate the process — so a single slow erasure that eventually fails can
+take down the scheduler that was about to process everything else. Task 6's own runner guards
+against this; this one does not. Attach a handler to the losing promise so its rejection is observed
+and discarded. Pin it with a test that a late rejection does not surface as an unhandled rejection.
+
 - [ ] **Step 1: Write the failing tests** — a published document produces two rows with the right
       providers and a well-formed `targetRef`; an unpublished one produces only the Supabase row; a
-      dead-lettered publication produces only the Supabase row
+      dead-lettered publication produces only the Supabase row; a late rejection from a timed-out
+      attempt is observed rather than left unhandled
 - [ ] **Step 2: Run and watch fail; Step 3: implement; Step 4: run and watch pass**
 - [ ] **Step 5: Correct `docs/ARCHITECTURE.md`** — the erasure section may now say both copies are
       erased, because it is finally true. Say exactly what is true and no more: the Supabase erasure
