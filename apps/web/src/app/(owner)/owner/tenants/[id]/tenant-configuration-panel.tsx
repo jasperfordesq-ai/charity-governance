@@ -99,6 +99,7 @@ export function TenantConfigurationPanel({ tenantId }: { tenantId: string }) {
         </p>
       </div>
 
+      <div data-testid="storage-provider">
       <Select
         label="Document storage"
         description={
@@ -123,6 +124,7 @@ export function TenantConfigurationPanel({ tenantId }: { tenantId: string }) {
           )),
         ]}
       </Select>
+      </div>
 
       {selectedProvider && !selectedProvider.selectable ? (
         <p className="text-sm text-danger">{selectedProvider.unavailableBecause}</p>
@@ -138,6 +140,7 @@ export function TenantConfigurationPanel({ tenantId }: { tenantId: string }) {
         </span>
       </Switch>
 
+      <div data-testid="tenant-plan">
       <Select
         label="Plan"
         selectedKeys={[plan]}
@@ -149,6 +152,7 @@ export function TenantConfigurationPanel({ tenantId }: { tenantId: string }) {
         <SelectItem key="ESSENTIALS">Essentials</SelectItem>
         <SelectItem key="COMPLETE">Complete</SelectItem>
       </Select>
+      </div>
 
       <div className="rounded bg-gray-100 p-3 text-sm dark:bg-gray-800">
         <p className="font-medium">Confluence</p>
@@ -172,16 +176,19 @@ export function TenantConfigurationPanel({ tenantId }: { tenantId: string }) {
         </p>
       </div>
 
+      <div data-testid="configuration-reason">
       <Textarea
         label="Reason (recorded in the audit trail)"
         value={reason}
         onValueChange={setReason}
       />
+      </div>
 
       {error ? <p className="text-danger">{error}</p> : null}
       {saved ? <p className="text-success text-sm">Configuration saved.</p> : null}
 
       <div>
+        <div data-testid="save-configuration">
         <Button
           color="primary"
           isDisabled={nothingToSave || !reason.trim() || saving}
@@ -190,6 +197,7 @@ export function TenantConfigurationPanel({ tenantId }: { tenantId: string }) {
         >
           {nothingToSave ? 'No changes to save' : 'Save configuration'}
         </Button>
+        </div>
       </div>
     </section>
   );

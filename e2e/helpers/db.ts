@@ -887,3 +887,76 @@ export async function countRows(
     return res.rows[0]?.n ?? 0;
   });
 }
+
+/**
+ * Create an active platform operator directly.
+ *
+ * The console's only supported way to create one is a production-only
+ * command-line job, which cannot run against the isolated stack. Seeding the
+ * row is the narrow seam that lets the console be exercised at all; the job
+ * has its own unit tests for the parts this skips.
+ */
+export async function createPlatformOperator(data: {
+  email: string;
+  name: string;
+  password: string;
+}): Promise<{ operatorId: string }> {
+  const normalizedEmail = data.email.trim().toLowerCase();
+  const passwordHash = await bcrypt.hash(data.password, 12);
+  const now = new Date();
+
+  return withDb(async (client) => {
+    const operatorId = testId("opr");
+    const result = await client.query<{ id: string }>(
+      `INSERT INTO "PlatformOperator"
+         ("id", "email", "name", "passwordHash", "lifecycleStatus", "createdAt", "updatedAt")
+       VALUES ($1, $2, $3, $4, 'ACTIVE', $5, $5)
+       RETURNING "id"`,
+      [operatorId, normalizedEmail, data.name, passwordHash, now],
+    );
+    if (result.rows[0]?.id !== operatorId) {
+      throw new Error("createPlatformOperator: insert returned no id");
+    }
+    return { operatorId };
+  });
+}
+
+/** The configuration columns an operator may change, read straight from the row. */
+export async function readTenantConfigurationRow(organisationId: string): Promise<{
+  documentStorageProvider: string | null;
+  documentStorageAlphaOptIn: boolean;
+  plan: string | null;
+}> {
+  return withDb(async (client) => {
+    const result = await client.query<{
+      documentStorageProvider: string | null;
+      documentStorageAlphaOptIn: boolean;
+      plan: string | null;
+    }>(
+      `SELECT o."documentStorageProvider", o."documentStorageAlphaOptIn", s."plan"
+         FROM "Organisation" o
+         LEFT JOIN "Subscription" s ON s."organisationId" = o."id"
+        WHERE o."id" = $1`,
+      [organisationId],
+    );
+    const row = result.rows[0];
+    if (!row) throw new Error(`readTenantConfigurationRow: no organisation ${organisationId}`);
+    return row;
+  });
+}
+
+/** Configuration-change audit rows for one charity, newest first. */
+export async function readConfigurationAudit(organisationId: string): Promise<
+  Array<{ actorLabel: string; reason: string; context: unknown }>
+> {
+  return withDb(async (client) => {
+    const result = await client.query<{ actorLabel: string; reason: string; context: unknown }>(
+      `SELECT "actorLabel", "reason", "context"
+         FROM "SecurityAuditEvent"
+        WHERE "organisationId" = $1 AND "type" = 'ORGANISATION_CONFIGURATION_CHANGED'
+        ORDER BY "occurredAt" DESC, "id" DESC`,
+      [organisationId],
+    );
+    return result.rows;
+  });
+}

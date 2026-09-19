@@ -100,6 +100,7 @@ export default function OwnerTenantsPage() {
           value={q}
           onValueChange={setQ}
         />
+        <div className="sm:max-w-[220px]" data-testid="status-filter">
         <Select
           aria-label="Filter by status"
           className="sm:max-w-[220px]"
@@ -113,6 +114,7 @@ export default function OwnerTenantsPage() {
             <SelectItem key={option.key}>{option.label}</SelectItem>
           ))}
         </Select>
+        </div>
       </div>
 
       {error ? <p className="text-danger">{error}</p> : null}
