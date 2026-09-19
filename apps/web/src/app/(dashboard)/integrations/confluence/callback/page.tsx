@@ -5,25 +5,23 @@ import { useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import { Button } from '@heroui/react';
 import { useDocumentTitle } from '@/lib/use-title';
-import { removeSensitiveSearchParams } from '@/lib/url-security';
-import { completeConfluenceCallback, type CallbackOutcome } from '@/lib/confluence-callback';
+import { type CallbackOutcome } from '@/lib/confluence-callback';
+import {
+  confluenceCallbackPageDeps,
+  runConfluenceCallbackOnce,
+} from '@/lib/confluence-callback-page';
 import { AppPage } from '@/components/ui/app-page';
 import { ErrorState, LoadingState } from '@/components/ui/states';
 import { AuthStatusIcon } from '@/components/ui/auth-status-icon';
 import { Check } from 'lucide-react';
 
-// The two secrets Atlassian hands back on the query string. Never logged,
-// never put in a message, and — once the exchange has run, success or
-// failure — never left sitting in the URL: see `confluence-callback.ts` for
-// why they cannot be treated as anything but single-use secrets.
-const CODE_PARAM = 'code';
-const STATE_PARAM = 'state';
-
-function scrubCallbackUrlSecrets() {
-  if (typeof window === 'undefined') return;
-  const scrubbed = removeSensitiveSearchParams(window.location.href, [CODE_PARAM, STATE_PARAM, 'error']);
-  window.history.replaceState(window.history.state, '', scrubbed);
-}
+// The secrets Atlassian hands back on the query string — and the scrub, the
+// double-mount guard and the denial branch that act on them — live in
+// `@/lib/confluence-callback-page`, where a test can drive them. This project
+// has no React renderer in its test suite, so anything left inline in this
+// effect is unpinned code, and `docs/ARCHITECTURE.md` states all three as
+// fact. See `confluence-callback.ts` for why they can only ever be treated as
+// single-use secrets.
 
 function ConfluenceCallbackContent() {
   useDocumentTitle('Connecting Confluence');
@@ -32,27 +30,10 @@ function ConfluenceCallbackContent() {
   const [outcome, setOutcome] = useState<CallbackOutcome | null>(null);
 
   useEffect(() => {
-    if (ranRef.current) return;
-    ranRef.current = true;
-
-    const code = searchParams.get(CODE_PARAM);
-    const state = searchParams.get(STATE_PARAM);
-    const deniedByAtlassian = searchParams.get('error');
-
-    // The code and state have now been read out of the URL for good — they
-    // are never re-derived from `window.location` again on this page, and
-    // the URL itself is scrubbed immediately, whatever happens next.
-    scrubCallbackUrlSecrets();
-
-    if (deniedByAtlassian || !code || !state) {
-      setOutcome({
-        kind: 'failed',
-        message: 'Atlassian did not return an authorisation. Start the connection again from CharityPilot.',
-      });
-      return;
-    }
-
-    completeConfluenceCallback({ code, state }).then(setOutcome);
+    runConfluenceCallbackOnce(
+      ranRef,
+      confluenceCallbackPageDeps((name) => searchParams.get(name), setOutcome),
+    );
   }, [searchParams]);
 
   if (!outcome) {

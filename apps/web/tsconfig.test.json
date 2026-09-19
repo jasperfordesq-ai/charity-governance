@@ -17,6 +17,8 @@
     "src/lib/api.test.ts",
     "src/lib/confluence-callback.ts",
     "src/lib/confluence-callback.test.ts",
+    "src/lib/confluence-callback-page.ts",
+    "src/lib/confluence-callback-page.test.ts",
     "src/lib/integration-status.ts",
     "src/lib/integration-status.test.ts",
     "src/lib/api-config.ts",
