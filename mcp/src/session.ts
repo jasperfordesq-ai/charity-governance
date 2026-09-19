@@ -92,8 +92,15 @@ export class Session {
 
     const response = await this.#post('/api/v1/auth/refresh', { refreshToken });
     if (!response.ok) {
-      this.#accessToken = null;
-      this.#identity = null;
+      // Only a rejected credential means the stored token is dead. A 5xx or a gateway
+      // error means the server had a problem, and clearing here would turn a transient
+      // blip into a permanent logout.
+      if (response.status !== 401 && response.status !== 403) {
+        throw new Error(
+          `Could not refresh the session: CharityPilot returned ${response.status}. `
+            + 'The stored credential has been kept — try again.',
+        );
+      }
       try {
         this.#store.clear();
       } catch (cause) {
@@ -101,6 +108,8 @@ export class Session {
           `Session ended, and the stored credential could not be removed: ${(cause as Error).message}`,
         );
       }
+      this.#accessToken = null;
+      this.#identity = null;
       throw new NotConnectedError('Session ended. Run: charitypilot-mcp connect');
     }
     this.#absorbCookies(response);

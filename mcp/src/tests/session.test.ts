@@ -90,6 +90,21 @@ test('a rejected refresh clears the store and reports NOT_CONNECTED', async () =
   assert.equal(store.read(), null, 'a dead refresh token must not be left behind');
 });
 
+test('a 500 on refresh keeps the credential instead of logging the user out', async () => {
+  const store = createMemoryStore('refresh1');
+  const session = new Session({
+    baseUrl: 'https://example.test',
+    store,
+    fetchImpl: async () => new Response('{}', { status: 500 }),
+  });
+
+  await assert.rejects(() => session.accessToken(), (err: unknown) => {
+    assert.ok(!(err instanceof NotConnectedError), 'a server error is not a dead session');
+    return true;
+  });
+  assert.equal(store.read(), 'refresh1', 'a transient server error must not destroy the credential');
+});
+
 test('accessToken with no stored token reports NOT_CONNECTED without any request', async () => {
   const session = new Session({
     baseUrl: 'https://example.test',

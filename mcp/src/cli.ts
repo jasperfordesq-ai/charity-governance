@@ -5,6 +5,8 @@ import { parseArgs } from './config.js';
 import { createKeyringStore } from './credentials.js';
 import { Session } from './session.js';
 import { startServer } from './server.js';
+import { ApiClient } from './client.js';
+import { redactSecrets } from './redact.js';
 
 async function prompt(question: string, hidden: boolean): Promise<string> {
   const rl = createInterface({ input: stdin, output: stdout, terminal: true });
@@ -16,18 +18,30 @@ async function prompt(question: string, hidden: boolean): Promise<string> {
   stdout.write(question);
   const previouslyRaw = stdin.isRaw ?? false;
   stdin.setRawMode?.(true);
-  let value = '';
-  for await (const chunk of stdin) {
-    const char = chunk.toString('utf8');
-    if (char === '\r' || char === '\n') break;
-    if (char === '\x03') { stdin.setRawMode?.(previouslyRaw); rl.close(); exit(130); }
-    if (char === '\x7f') { value = value.slice(0, -1); continue; }
-    value += char;
+  // Bytes are accumulated raw, not decoded chunk-by-chunk: a multi-byte UTF-8
+  // character (e.g. an accented letter in "Siobhán") can arrive split across
+  // separate read events, and decoding each chunk on its own would turn the
+  // split sequence into a replacement character. Decoding happens once, from
+  // the full accumulated buffer, after input is complete.
+  let bytes = Buffer.alloc(0);
+  try {
+    outer: for await (const chunk of stdin as AsyncIterable<Buffer>) {
+      for (const byte of chunk) {
+        if (byte === 0x0d || byte === 0x0a) break outer;
+        if (byte === 0x03) { stdin.setRawMode?.(previouslyRaw); rl.close(); exit(130); }
+        if (byte === 0x7f) {
+          bytes = Buffer.from(bytes.toString('utf8').slice(0, -1), 'utf8');
+          continue;
+        }
+        bytes = Buffer.concat([bytes, Buffer.from([byte])]);
+      }
+    }
+  } finally {
+    stdin.setRawMode?.(previouslyRaw);
   }
-  stdin.setRawMode?.(previouslyRaw);
   stdout.write('\n');
   rl.close();
-  return value;
+  return bytes.toString('utf8');
 }
 
 async function main(): Promise<void> {
@@ -58,13 +72,22 @@ async function main(): Promise<void> {
       stdout.write('Not connected. Run: charitypilot-mcp connect\n');
       return;
     }
-    await session.accessToken();
-    const identity = session.identity();
-    stdout.write(
-      identity
-        ? `Connected as ${identity.email} — organisation: ${identity.organisationName}\n`
-        : 'Connected (run a tool to confirm the organisation).\n',
-    );
+    const client = new ApiClient({ session, baseUrl: config.baseUrl });
+    try {
+      const me = await client.get<{
+        email: string; name: string; role: string;
+        organisation?: { name?: string } | null;
+      }>('/api/v1/auth/me');
+      stdout.write(
+        `Connected as ${me.name} <${me.email}> (${me.role})\n` +
+        `Organisation: ${me.organisation?.name ?? '(unnamed organisation)'}\n` +
+        `Personal data: ${config.allowPersonalData ? 'ALLOWED' : 'withheld (default)'}\n`,
+      );
+    } catch (error) {
+      stdout.write(
+        `Stored credential found, but it could not be verified: ${redactSecrets((error as Error).message)}\n`,
+      );
+    }
     return;
   }
 
@@ -72,6 +95,6 @@ async function main(): Promise<void> {
 }
 
 main().catch((error: unknown) => {
-  stdout.write(`${(error as Error).message}\n`);
+  stdout.write(`${redactSecrets((error as Error).message)}\n`);
   exit(1);
 });
