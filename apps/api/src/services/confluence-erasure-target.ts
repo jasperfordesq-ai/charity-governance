@@ -49,13 +49,23 @@ function asPlainObject(value: unknown): Record<string, unknown> | undefined {
 }
 
 /**
- * A non-empty string. Both `cloudId` and `pageId` address something: a
- * present-but-empty value parses without error yet names nothing, and an
- * eraser that trusted it would issue a delete against a path naming nothing
- * and report success. Treated as malformed, the same as an absent field.
+ * A non-empty string with no leading or trailing whitespace. Applies to
+ * `cloudId`, `pageId`, and every entry of `attachmentIds` — all three address
+ * something, and a present-but-empty or whitespace-only value parses without
+ * error yet names nothing. An eraser that trusted `'   '` as a page id would
+ * issue a delete against a path built from whitespace and report success: a
+ * false proof of erasure, which is the worst outcome this pipeline can
+ * produce. Treated as malformed, the same as an absent field.
+ *
+ * Surrounding whitespace on an otherwise-real value (`' p1'`, `'p1 '`) is
+ * **refused, not trimmed.** A trimmed value would silently differ from the
+ * byte string the publish pipeline actually wrote into the row — this
+ * module's job is to validate the contract exactly, not to repair it, and a
+ * quiet repair here would hide a bug in the writer behind a success that
+ * addresses something subtly different from what was recorded.
  */
 function isNonEmptyString(value: unknown): value is string {
-  return typeof value === 'string' && value.length > 0;
+  return typeof value === 'string' && value.length > 0 && value === value.trim();
 }
 
 /**
@@ -86,11 +96,11 @@ export function parseConfluenceErasureTarget(value: unknown): ConfluenceErasureT
   }
 
   // A fresh array, built element by element: it neither aliases the caller's
-  // array (see the doc comment above) nor accepts a non-string element by
-  // passing it through uninspected.
+  // array (see the doc comment above) nor accepts a non-string, empty, or
+  // whitespace-only element by passing it through uninspected.
   const attachmentIds: string[] = [];
   for (const [index, id] of target.attachmentIds.entries()) {
-    if (typeof id !== 'string') throw malformed(`attachmentIds[${index}] is not a string`);
+    if (!isNonEmptyString(id)) throw malformed(`attachmentIds[${index}] is not a non-empty string`);
     attachmentIds.push(id);
   }
 
