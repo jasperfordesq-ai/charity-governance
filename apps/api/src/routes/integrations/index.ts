@@ -1,6 +1,7 @@
 /**
  * The HTTP surface of the Confluence integration: authorize, callback,
- * status, disconnect.
+ * status, disconnect, and the publish destination — the spaces a charity
+ * could publish into, and the one it chose.
  *
  * ──────────────────────────────────────────────────────────────────────────
  * THE LAYER BELOW BINDS BUT DOES NOT AUTHORIZE. THIS IS WHERE IT IS DONE.
@@ -33,6 +34,11 @@ import {
 } from '../../services/confluence-connection.service.js';
 import { createConfluenceClient, type ConfluenceClientDeps } from '../../services/confluence-client.js';
 import { listSpaces } from '../../services/confluence-spaces.js';
+import {
+  chooseConfluencePublishSpace,
+  confluenceSiteIdFromConfig,
+  readConfluencePublishTarget,
+} from '../../services/confluence-publish-target.service.js';
 import { decodeIntegrationKey } from '../../services/integration-crypto.js';
 import { AppError, handleError } from '../../utils/errors.js';
 import { getPrimaryFrontendOrigin } from '../../utils/frontend-origin.js';
@@ -397,6 +403,15 @@ type OwnIntegration = {
   config: unknown;
   lastError: string | null;
   connectedAt: Date | null;
+  /**
+   * The chosen publish destination. Dedicated columns rather than `config`,
+   * because a reconnect overwrites `config` wholesale — see
+   * `confluence-publish-target.service.ts`, which owns them.
+   */
+  publishSpaceId: string | null;
+  publishSpaceKey: string | null;
+  publishSpaceName: string | null;
+  publishSpaceSiteId: string | null;
 };
 
 /**
@@ -418,7 +433,17 @@ async function findOwnConfluenceIntegration(
     // Deliberately narrow. `refreshClaimToken`, `refreshClaimedAt`,
     // `refreshFailureCount` and `connectedById` are internal machinery and
     // never leave the server; nothing here is credential material.
-    select: { id: true, status: true, config: true, lastError: true, connectedAt: true },
+    select: {
+      id: true,
+      status: true,
+      config: true,
+      lastError: true,
+      connectedAt: true,
+      publishSpaceId: true,
+      publishSpaceKey: true,
+      publishSpaceName: true,
+      publishSpaceSiteId: true,
+    },
   });
   return (found as OwnIntegration | null) ?? null;
 }
@@ -445,12 +470,13 @@ function siteFacts(config: unknown): SiteFacts {
  * writes it there as `siteId` — rather than a dedicated column, so there is
  * one place a reconnect to a different site updates and one place this route
  * reads it from.
+ *
+ * Imported rather than written here a second time: the publish-target service
+ * compares a *stored* site id against this same value to decide whether a
+ * chosen space still names anything, and two readings of one fact are two
+ * readings that can disagree.
  */
-function cloudIdFromConfig(config: unknown): string | null {
-  if (!config || typeof config !== 'object' || Array.isArray(config)) return null;
-  const value = (config as Record<string, unknown>).siteId;
-  return typeof value === 'string' && value.length > 0 ? value : null;
-}
+const cloudIdFromConfig = confluenceSiteIdFromConfig;
 
 /**
  * A non-empty string field of a JSON request body.
@@ -483,6 +509,59 @@ export async function integrationRoutes(
 ): Promise<void> {
   const deps = options.confluenceDeps ?? {};
   const prisma = app.prisma as ConfluenceConnectionClient;
+
+  /**
+   * The organisation's own Confluence connection, refused *before* anything is
+   * opened at Atlassian.
+   *
+   * An organisation with no row, or a row that is not `CONNECTED`, gets a
+   * clean 404 rather than reaching a client built from a cloud id or a token
+   * that is not there. That refusal costs nothing to give — no client, no
+   * request, no reconnect race — and it is what keeps "no live connection"
+   * from ever reaching `handleError` as a 500.
+   */
+  async function liveConnection(
+    organisationId: string,
+    whatFor: string,
+  ): Promise<{ integration: OwnIntegration; cloudId: string }> {
+    const integration = await findOwnConfluenceIntegration(app.prisma, organisationId);
+    if (!integration || integration.status !== 'CONNECTED') {
+      throw new AppError(
+        404,
+        'CONFLUENCE_NOT_CONNECTED',
+        `This organisation has no live Confluence connection to ${whatFor}.`,
+      );
+    }
+
+    const cloudId = cloudIdFromConfig(integration.config);
+    if (cloudId === null) {
+      // Reachable only if a row was ever marked CONNECTED without the site id
+      // `connectConfluence` always writes alongside it — a data integrity
+      // fault, not an absent connection, so it is not folded into the 404
+      // above.
+      throw new AppError(
+        502,
+        'CONFLUENCE_SITE_ID_MISSING',
+        "This organisation's Confluence connection has no recorded site id, so Confluence cannot " +
+          'be addressed. Reconnect Confluence.',
+      );
+    }
+
+    return { integration, cloudId };
+  }
+
+  function confluenceClientFor(organisationId: string, cloudId: string) {
+    return createConfluenceClient(
+      {
+        cloudId,
+        // A thunk, not a resolved value: the client re-derives the token per
+        // attempt, and a stale grant surfaces as CONFLUENCE_RECONNECT_REQUIRED
+        // rather than as a 500.
+        getAccessToken: () => currentAccessTokenForOrganisation(prisma, { organisationId }, deps),
+      },
+      options.confluenceClientDeps ?? {},
+    );
+  }
 
   // Hooks rather than per-route `preHandler`, for the same reason the lookup
   // above is structural: a route added to this file later inherits both
@@ -646,6 +725,19 @@ export async function integrationRoutes(
    * no fingerprint of a key — a fingerprint is safe to log but is still a
    * derived property of secret material and has no business on a tenant-facing
    * response.
+   *
+   * It also answers the question a connected charity most needs answered:
+   * **is anything actually being published?** `publishSpace` is the chosen
+   * destination and `publishing` is `CONNECTED` *and* a destination that still
+   * resolves. A charity that believes it is mirroring and is not is worse off
+   * than one that knows it has a step left, so this response never lets the
+   * two be confused — and a reconnect to a different Atlassian site reports
+   * `publishSpace: null` rather than a space id that names nothing there.
+   *
+   * Widening this response does not loosen its guard: it stays a
+   * keys-allow-listed connection report, and the three added values are a
+   * space id, a space key and a space name read from this organisation's own
+   * row. No token material, and nothing derived from any.
    */
   app.get('/confluence/status', async (request, reply) => {
     try {
@@ -660,10 +752,16 @@ export async function integrationRoutes(
           siteCount: null,
           connectedAt: null,
           lastError: null,
+          publishSpace: null,
+          publishing: false,
         });
       }
 
       const facts = siteFacts(integration.config);
+      // Null unless a space was chosen AND it belongs to the site now
+      // connected — the whole per-site rule lives in one place, and this route
+      // asks it rather than re-deciding it.
+      const target = readConfluencePublishTarget(integration);
       return sendSuccess(reply, {
         provider: PROVIDER,
         status: integration.status,
@@ -675,6 +773,11 @@ export async function integrationRoutes(
         // confluence-connection.service.ts; Atlassian's own error text is
         // deliberately never stored there.
         lastError: integration.lastError,
+        publishSpace: target === null ? null : { id: target.spaceId, key: target.spaceKey, name: target.spaceName },
+        // Connecting is the opt-in; choosing a space is the destination.
+        // Neither substitutes for the other, and this is the only field that
+        // says whether both are true.
+        publishing: integration.status === 'CONNECTED' && target !== null,
       });
     } catch (error) {
       handleError(reply, error);
@@ -699,40 +802,9 @@ export async function integrationRoutes(
    */
   app.get('/confluence/spaces', async (request, reply) => {
     try {
-      const integration = await findOwnConfluenceIntegration(app.prisma, request.user.organisationId);
-      if (!integration || integration.status !== 'CONNECTED') {
-        throw new AppError(
-          404,
-          'CONFLUENCE_NOT_CONNECTED',
-          'This organisation has no live Confluence connection to list spaces from.',
-        );
-      }
+      const { cloudId } = await liveConnection(request.user.organisationId, 'list spaces from');
 
-      const cloudId = cloudIdFromConfig(integration.config);
-      if (cloudId === null) {
-        // Reachable only if a row was ever marked CONNECTED without the site
-        // id `connectConfluence` always writes alongside it — a data
-        // integrity fault, not an absent connection, so it is not folded into
-        // the 404 above.
-        throw new AppError(
-          502,
-          'CONFLUENCE_SITE_ID_MISSING',
-          "This organisation's Confluence connection has no recorded site id, so its spaces " +
-            'cannot be listed. Reconnect Confluence.',
-        );
-      }
-
-      const client = createConfluenceClient(
-        {
-          cloudId,
-          // A thunk, not a resolved value: the client re-derives the token per
-          // attempt, and a stale grant surfaces as CONFLUENCE_RECONNECT_REQUIRED
-          // rather than as a 500.
-          getAccessToken: () =>
-            currentAccessTokenForOrganisation(prisma, { organisationId: request.user.organisationId }, deps),
-        },
-        options.confluenceClientDeps ?? {},
-      );
+      const client = confluenceClientFor(request.user.organisationId, cloudId);
 
       const { cursor } = request.query as { cursor?: string };
       const { spaces, nextCursor } = await listSpaces(
@@ -741,6 +813,66 @@ export async function integrationRoutes(
       );
 
       return sendSuccess(reply, { spaces, nextCursor: nextCursor ?? null });
+    } catch (error) {
+      handleError(reply, error);
+    }
+  });
+
+  /**
+   * Chooses the space this charity's documents are published into — the
+   * destination the pipeline has otherwise had none of.
+   *
+   * **The chosen id is validated against the spaces `/confluence/spaces`
+   * actually lists**, by `chooseConfluencePublishSpace`, and that validation
+   * is the point of the route. An arbitrary id accepted from a browser aims
+   * publication at a space the charity never intended, and that id is then
+   * baked into every page this pipeline creates and into the erasure target
+   * recorded beside it. Only the id is accepted; the key and name come from
+   * the listing.
+   *
+   * A PUT because it is idempotent: choosing the same space twice is the same
+   * organisation with the same destination.
+   *
+   * No `integrationId` is accepted here either — it is derived from the
+   * authenticated organisation's own row, exactly like every other route in
+   * this file.
+   */
+  app.put('/confluence/publish-space', async (request, reply) => {
+    try {
+      const { integration, cloudId } = await liveConnection(
+        request.user.organisationId,
+        'choose a publish space for',
+      );
+
+      const spaceId = bodyParam(request.body, 'spaceId');
+      if (spaceId === undefined) {
+        throw new AppError(
+          400,
+          'CONFLUENCE_SPACE_ID_REQUIRED',
+          'Choose a Confluence space to publish into. No space id was supplied.',
+        );
+      }
+
+      const client = confluenceClientFor(request.user.organisationId, cloudId);
+
+      const target = await chooseConfluencePublishSpace(
+        app.prisma,
+        {
+          integrationId: integration.id,
+          organisationId: request.user.organisationId,
+          cloudId,
+          spaceId,
+        },
+        (cursor) => listSpaces(client, cursor),
+      );
+
+      // The same shape `status` reports, so a client that re-reads and a
+      // client that trusts this response agree about where publication goes.
+      return sendSuccess(reply, {
+        provider: PROVIDER,
+        publishSpace: { id: target.spaceId, key: target.spaceKey, name: target.spaceName },
+        publishing: true,
+      });
     } catch (error) {
       handleError(reply, error);
     }

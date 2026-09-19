@@ -4,9 +4,13 @@ import { existsSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import {
   buildConnectView,
+  describeConfluencePublishing,
   describeConfluenceStatus,
+  parseConfluenceSpaces,
+  spaceLabel,
   CONFLUENCE_ALPHA_BADGE_LABEL,
   CONFLUENCE_DISCONNECT_COPY,
+  CONFLUENCE_PUBLISH_SPACE_CHANGE_NOTE,
   type ConfluenceConnectionStatus,
   type ConfluenceStatusResponse,
 } from './integration-status';
@@ -131,6 +135,8 @@ function status(overrides: Partial<ConfluenceStatusResponse>): ConfluenceStatusR
     siteCount: null,
     connectedAt: null,
     lastError: null,
+    publishSpace: null,
+    publishing: false,
     ...overrides,
   };
 }
@@ -222,4 +228,122 @@ test('the dashboard navigation lists Integrations and marks it alpha', () => {
 test('/integrations is a protected app route requiring an auth cookie', () => {
   const src = lib('protected-routes.ts');
   assert.match(src, /'\/integrations'/);
+});
+
+// ── connected is not publishing ─────────────────────────────────────────────
+
+const GOVERNANCE = { id: 'space-gov', key: 'GOV', name: 'Governance' };
+
+test('a connected organisation with no chosen space is told plainly that nothing is being published', () => {
+  const view = describeConfluencePublishing(status({ status: 'CONNECTED' }));
+
+  assert.equal(view.publishing, false);
+  assert.equal(view.tone, 'warning', 'connected-without-a-space is a warning, not the green of a live connection');
+  assert.match(view.headline, /not being published|nothing is being published/i);
+  assert.ok(view.showSpacePicker, 'the screen must offer the step that is left');
+  // The detail has to say what the charity should conclude: their documents
+  // are NOT mirrored. A charity that believes it is mirroring and is not is
+  // worse off than one that knows it has a step left.
+  assert.match(String(view.detail), /choose|chosen/i);
+  assert.match(String(view.detail), /only|not published/i);
+});
+
+test('publishing is only claimed when the connection, the flag and the space all agree', () => {
+  const live = describeConfluencePublishing(
+    status({ status: 'CONNECTED', publishSpace: GOVERNANCE, publishing: true }),
+  );
+  assert.equal(live.publishing, true);
+  assert.equal(live.tone, 'success');
+  assert.match(live.headline, /Governance \(GOV\)/);
+
+  // Each ANDed condition dropped on its own. Any one of them missing means
+  // the screen must not tell a charity its documents are being mirrored.
+  const notClaimed = [
+    { why: 'no space', value: status({ status: 'CONNECTED', publishSpace: null, publishing: true }) },
+    { why: 'the API does not say publishing', value: status({ status: 'CONNECTED', publishSpace: GOVERNANCE }) },
+    { why: 'the connection is not live', value: status({ status: 'ERROR', publishSpace: GOVERNANCE, publishing: true }) },
+    {
+      why: 'the connection was never made',
+      value: status({ status: 'NOT_CONNECTED', publishSpace: GOVERNANCE, publishing: true }),
+    },
+    {
+      why: 'the connection was disconnected',
+      value: status({ status: 'DISCONNECTED', publishSpace: GOVERNANCE, publishing: true }),
+    },
+  ];
+  for (const { why, value } of notClaimed) {
+    const view = describeConfluencePublishing(value);
+    assert.equal(view.publishing, false, `${why}: must not be reported as publishing`);
+    assert.notEqual(view.tone, 'success', `${why}: must not wear the live-connection tone`);
+  }
+});
+
+test('an organisation that never connected is not asked to choose a space', () => {
+  const view = describeConfluencePublishing(status({ status: 'NOT_CONNECTED' }));
+  assert.equal(view.showSpacePicker, false, 'there is nothing to list spaces from yet');
+  assert.match(String(view.detail), /connect/i);
+});
+
+test('changing the space is stated never to move what was already published', () => {
+  const view = describeConfluencePublishing(
+    status({ status: 'CONNECTED', publishSpace: GOVERNANCE, publishing: true }),
+  );
+  assert.equal(view.detail, CONFLUENCE_PUBLISH_SPACE_CHANGE_NOTE);
+
+  // The three things this note must keep saying. Each is a separate promise a
+  // reassuring edit could quietly drop.
+  assert.match(CONFLUENCE_PUBLISH_SPACE_CHANGE_NOTE, /from now on|future/i);
+  assert.match(CONFLUENCE_PUBLISH_SPACE_CHANGE_NOTE, /already published/i);
+  assert.match(CONFLUENCE_PUBLISH_SPACE_CHANGE_NOTE, /not moved|nothing is moved/i);
+  // And it must never promise the opposite.
+  assert.doesNotMatch(CONFLUENCE_PUBLISH_SPACE_CHANGE_NOTE, /will be moved|re-?published automatically/i);
+});
+
+test('a space reads as its name with its key, and as its key alone when unnamed', () => {
+  assert.equal(spaceLabel(GOVERNANCE), 'Governance (GOV)');
+  assert.equal(spaceLabel({ id: 'space-x', key: 'GOV', name: '' }), 'GOV');
+  assert.equal(spaceLabel({ id: 'space-x', key: 'GOV', name: '   ' }), 'GOV');
+});
+
+test('parseConfluenceSpaces keeps only choosable spaces, and only three fields of them', () => {
+  const parsed = parseConfluenceSpaces({
+    spaces: [
+      { id: 'space-gov', key: 'GOV', name: 'Governance', description: 'not ours to carry' },
+      { id: 'space-noname', key: 'FIN' },
+      { id: '', key: 'BAD' },
+      { key: 'NOID' },
+      { id: 'space-nokey' },
+      null,
+      'not a space',
+    ],
+  });
+
+  assert.deepEqual(parsed, [
+    { id: 'space-gov', key: 'GOV', name: 'Governance' },
+    { id: 'space-noname', key: 'FIN', name: '' },
+  ]);
+
+  for (const payload of [null, undefined, {}, [], 'spaces', { spaces: 'not a list' }]) {
+    assert.deepEqual(parseConfluenceSpaces(payload), [], `${JSON.stringify(payload) ?? 'undefined'} yields no spaces`);
+  }
+});
+
+test('the integrations page shows the publishing state and the space picker from this module', () => {
+  const src = readDash('integrations/page.tsx');
+  assert.ok(
+    src.includes('describeConfluencePublishing'),
+    'the page must take its publishing state from this module, not decide it inline',
+  );
+  assert.ok(
+    src.includes('CONFLUENCE_PUBLISH_SPACE_CHANGE_NOTE') || src.includes('publishing.detail'),
+    'the page must render the note about what changing the space does not do',
+  );
+  assert.ok(
+    src.includes('/integrations/confluence/publish-space'),
+    'the page must be able to save the chosen space',
+  );
+  assert.ok(
+    src.includes('/integrations/confluence/spaces'),
+    'the chosen space must be picked from the spaces the API lists, never typed in',
+  );
 });

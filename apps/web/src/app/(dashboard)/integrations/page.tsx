@@ -17,9 +17,14 @@
  * - The disconnect confirmation renders `CONFLUENCE_DISCONNECT_COPY`
  *   verbatim, and nothing on this page may claim CharityPilot revoked
  *   anything at Atlassian.
+ * - **Connected is not publishing.** Whether documents are actually being
+ *   published comes from `describeConfluencePublishing`, never from the
+ *   connection status: an organisation that connected but has not chosen a
+ *   space is publishing nothing, and this page says so rather than leaving a
+ *   charity to infer from a green "Connected" chip that it is mirroring.
  */
 import { useCallback, useEffect, useState } from 'react';
-import { Button } from '@heroui/react';
+import { Button, Select, SelectItem } from '@heroui/react';
 import { api } from '@/lib/api';
 import { apiErrorMessage } from '@/lib/errors';
 import { logClientError } from '@/lib/client-logger';
@@ -30,9 +35,13 @@ import { ErrorState, InlineStatus, LoadingState } from '@/components/ui/states';
 import { StatusChip, statusPanelClassName } from '@/components/ui/status';
 import {
   buildConnectView,
+  describeConfluencePublishing,
   describeConfluenceStatus,
+  parseConfluenceSpaces,
+  spaceLabel,
   CONFLUENCE_ALPHA_BADGE_LABEL,
   CONFLUENCE_DISCONNECT_COPY,
+  type ConfluenceSpace,
   type ConfluenceStatusResponse,
   type ConnectView,
 } from '@/lib/integration-status';
@@ -46,6 +55,8 @@ const EMPTY_STATUS: ConfluenceStatusResponse = {
   siteCount: null,
   connectedAt: null,
   lastError: null,
+  publishSpace: null,
+  publishing: false,
 };
 
 function formatConnectedAt(value: string | null): string | null {
@@ -70,6 +81,16 @@ export default function IntegrationsPage() {
   const [connectView, setConnectView] = useState<ConnectView | null>(null);
   const [connectLoading, setConnectLoading] = useState(false);
   const [connectError, setConnectError] = useState<string | null>(null);
+
+  // The spaces this charity could publish into, loaded on demand from the API
+  // rather than typed in: an id that was never listed is refused by the API
+  // anyway, and offering a free-text box would invite exactly that.
+  const [spaces, setSpaces] = useState<ConfluenceSpace[]>([]);
+  const [spacesLoading, setSpacesLoading] = useState(false);
+  const [spacesError, setSpacesError] = useState<string | null>(null);
+  const [selectedSpaceId, setSelectedSpaceId] = useState<string | null>(null);
+  const [savingSpace, setSavingSpace] = useState(false);
+  const [spaceError, setSpaceError] = useState<string | null>(null);
 
   const [disconnectOpen, setDisconnectOpen] = useState(false);
   const [disconnecting, setDisconnecting] = useState(false);
@@ -112,6 +133,37 @@ export default function IntegrationsPage() {
     }
   }, []);
 
+  const loadSpaces = useCallback(async () => {
+    setSpacesLoading(true);
+    setSpacesError(null);
+    try {
+      const res = await api.get('/integrations/confluence/spaces');
+      setSpaces(parseConfluenceSpaces(res.data));
+    } catch (err) {
+      logClientError('Failed to load the Confluence spaces', err);
+      setSpacesError(apiErrorMessage(err, 'The list of Confluence spaces could not be loaded.'));
+    } finally {
+      setSpacesLoading(false);
+    }
+  }, []);
+
+  const savePublishSpace = useCallback(async () => {
+    if (!selectedSpaceId) return;
+    setSavingSpace(true);
+    setSpaceError(null);
+    try {
+      await api.put('/integrations/confluence/publish-space', { spaceId: selectedSpaceId });
+      // Re-read rather than trusting the local guess: the status response is
+      // the one place that decides whether this organisation is publishing.
+      await fetchStatus();
+    } catch (err) {
+      logClientError('Failed to choose the Confluence publish space', err);
+      setSpaceError(apiErrorMessage(err, 'That space could not be saved. Please try again.'));
+    } finally {
+      setSavingSpace(false);
+    }
+  }, [fetchStatus, selectedSpaceId]);
+
   const cancelConnect = useCallback(() => {
     setConnectView(null);
     setConnectError(null);
@@ -133,6 +185,7 @@ export default function IntegrationsPage() {
   }, [fetchStatus]);
 
   const display = describeConfluenceStatus(status);
+  const publishing = describeConfluencePublishing(status);
   const connectedAt = formatConnectedAt(status.connectedAt);
 
   return (
@@ -205,6 +258,67 @@ export default function IntegrationsPage() {
                 </Button>
               ) : null}
             </div>
+          </div>
+        </AppSection>
+      )}
+
+      {loading ? null : (
+        <AppSection title="Where documents are published">
+          <div className={statusPanelClassName(publishing.tone, 'p-5 shadow-sm')}>
+            <div className="flex flex-wrap items-center gap-2">
+              <StatusChip tone={publishing.tone}>{publishing.label}</StatusChip>
+            </div>
+
+            <p className="mt-2 max-w-2xl text-sm font-medium text-gray-900 dark:text-gray-100">
+              {publishing.headline}
+            </p>
+            {publishing.detail ? (
+              <p className="mt-2 max-w-2xl text-sm leading-6 text-gray-700 dark:text-gray-300">{publishing.detail}</p>
+            ) : null}
+
+            {publishing.showSpacePicker ? (
+              <div className="mt-4 space-y-3">
+                {spaces.length === 0 ? (
+                  <Button
+                    color={publishing.publishing ? 'default' : 'primary'}
+                    variant={publishing.publishing ? 'flat' : 'solid'}
+                    radius="lg"
+                    onPress={loadSpaces}
+                    isLoading={spacesLoading}
+                  >
+                    {publishing.publishing ? 'Change the space' : 'Choose a space'}
+                  </Button>
+                ) : (
+                  <div className="flex flex-wrap items-end gap-2">
+                    <Select
+                      className="max-w-sm"
+                      label="Confluence space"
+                      selectedKeys={selectedSpaceId ? new Set([selectedSpaceId]) : new Set<string>()}
+                      onSelectionChange={(keys) => {
+                        const value = Array.from(keys)[0] as string | undefined;
+                        setSelectedSpaceId(value ?? null);
+                      }}
+                    >
+                      {spaces.map((space) => (
+                        <SelectItem key={space.id}>{spaceLabel(space)}</SelectItem>
+                      ))}
+                    </Select>
+                    <Button
+                      color="primary"
+                      radius="lg"
+                      isDisabled={!selectedSpaceId}
+                      isLoading={savingSpace}
+                      onPress={savePublishSpace}
+                    >
+                      Publish into this space
+                    </Button>
+                  </div>
+                )}
+
+                {spacesError ? <InlineStatus tone="danger">{spacesError}</InlineStatus> : null}
+                {spaceError ? <InlineStatus tone="danger">{spaceError}</InlineStatus> : null}
+              </div>
+            ) : null}
           </div>
         </AppSection>
       )}

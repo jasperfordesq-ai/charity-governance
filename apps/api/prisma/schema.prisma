@@ -447,6 +447,31 @@ model OrganisationIntegration {
   refreshClaimToken   String?
   refreshFailureCount Int                 @default(0)
   lastRefreshedAt     DateTime?
+  // ── where this charity's documents are published ────────────────────────
+  // Dedicated columns, NOT `config`, and that is a correctness requirement
+  // rather than a style choice. `connectConfluence` builds a `connectingState`
+  // that INCLUDES `config` and spreads it into the upsert's `update`, so a
+  // reconnect — the recovery action CharityPilot's own error messages
+  // recommend — overwrites `config` wholesale. A chosen space living there
+  // would be silently wiped, publication would stop, and the row would still
+  // read CONNECTED with nothing explaining why. These columns are not part of
+  // `connectingState`, so they survive a reconnect by construction.
+  //
+  // `publishSpaceSiteId` records WHICH SITE the space belongs to. Space ids
+  // are per-site: a charity that reconnects to a different Atlassian site must
+  // not keep an id that names nothing there. A mismatch against `config.siteId`
+  // reads as "no space chosen" so the screen asks again — the same reasoning
+  // that puts `cloudId` on the erasure row rather than resolving it live.
+  //
+  // A CHECK constraint keeps all four in lockstep and refuses untrimmed ids at
+  // write time (sibling to DocumentPublication's publication_target_consistent,
+  // and for the same reason: Phase 5's parseConfluenceErasureTarget refuses an
+  // untrimmed id PERMANENTLY). Prisma's schema language cannot express it, so
+  // it lives only in the migration 20260919150000_add_confluence_publish_space.
+  publishSpaceId     String?
+  publishSpaceKey    String?
+  publishSpaceName   String?
+  publishSpaceSiteId String?
   createdAt      DateTime            @default(now())
   updatedAt      DateTime            @updatedAt
 

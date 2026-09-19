@@ -58,6 +58,15 @@ type IntegrationRow = {
   lastError: string | null;
   connectedAt: Date | null;
   connectedById: string | null;
+  // The chosen publish destination. Dedicated columns, deliberately NOT part
+  // of `config` — `connectConfluence`'s `connectingState` spreads `config`
+  // into the upsert's `update`, so a reconnect would wipe a choice stored
+  // there. This store reproduces that faithfully: `upsert` assigns only the
+  // keys it is handed, exactly as Prisma does.
+  publishSpaceId: string | null;
+  publishSpaceKey: string | null;
+  publishSpaceName: string | null;
+  publishSpaceSiteId: string | null;
 };
 
 type CredentialRow = { integrationId: string; kind: string; sealed: unknown; generation: number; expiresAt: Date | null };
@@ -120,6 +129,10 @@ function makeStore(rows: IntegrationRow[]) {
           lastError: null,
           connectedAt: null,
           connectedById: null,
+          publishSpaceId: null,
+          publishSpaceKey: null,
+          publishSpaceName: null,
+          publishSpaceSiteId: null,
           ...(args.create as Partial<IntegrationRow>),
         };
         integrations.set(created.id, created);
@@ -246,6 +259,10 @@ function connectedRow(overrides: Partial<IntegrationRow> = {}): IntegrationRow {
     lastError: null,
     connectedAt: new Date('2026-09-01T10:00:00.000Z'),
     connectedById: 'user-a',
+    publishSpaceId: null,
+    publishSpaceKey: null,
+    publishSpaceName: null,
+    publishSpaceSiteId: null,
     ...overrides,
   };
 }
@@ -506,6 +523,8 @@ test('a member may not reach any integration route', async () => {
   for (const [method, url] of [
     ['GET', '/confluence/authorize'],
     ['GET', '/confluence/status'],
+    ['GET', '/confluence/spaces'],
+    ['PUT', '/confluence/publish-space'],
     ['DELETE', '/confluence'],
   ] as const) {
     const response = await app.inject({ method, url, headers: { authorization: bearer(ORG_A_MEMBER) } });
@@ -520,6 +539,8 @@ test('every integration route refuses an unauthenticated request', async () => {
     ['GET', '/confluence/authorize'],
     ['POST', '/confluence/callback'],
     ['GET', '/confluence/status'],
+    ['GET', '/confluence/spaces'],
+    ['PUT', '/confluence/publish-space'],
     ['DELETE', '/confluence'],
   ] as const) {
     const response = await app.inject({ method, url });
@@ -898,10 +919,17 @@ test('status reports the connection without any token material', async () => {
 
   assert.equal(response.statusCode, 200);
   const { data } = JSON.parse(response.body);
+  // Still an exact allow-list, now carrying the destination as well as the
+  // connection: `publishSpace` is a space id, key and display name read from
+  // this organisation's own row, and `publishing` is a boolean. No token
+  // material, and nothing derived from any — the substring guard below is
+  // unchanged and still applies to every one of them.
   assert.deepEqual(Object.keys(data).sort(), [
     'connectedAt',
     'lastError',
     'provider',
+    'publishSpace',
+    'publishing',
     'siteCount',
     'siteName',
     'siteUrl',
@@ -1066,6 +1094,264 @@ test('spaces returns only id, key and name for a connected organisation, and fol
   for (const forbidden of ['token', 'fingerprint', 'sealed', 'ciphertext', 'secret', 'refresh']) {
     assert.ok(!serialised.includes(forbidden), `spaces leaked ${forbidden}`);
   }
+});
+
+// ────────────────────────────────────────────────────────────────────────────
+// Choosing a space — the destination. Connected is NOT publishing.
+// ────────────────────────────────────────────────────────────────────────────
+
+/** A fake Confluence that lists exactly these spaces, on one page. */
+function fetchListing(...spaces: Array<{ id: string; key: string; name: string }>) {
+  return async () =>
+    new Response(JSON.stringify({ results: spaces, _links: {} }), {
+      status: 200,
+      headers: { 'Content-Type': 'application/json' },
+    });
+}
+
+const LISTED_GOVERNANCE = { id: 'space-gov', key: 'GOV', name: 'Governance' };
+
+function putPublishSpace(
+  app: Awaited<ReturnType<typeof buildApp>>['app'],
+  actor: Actor,
+  payload: Record<string, unknown>,
+) {
+  return app.inject({
+    method: 'PUT',
+    url: '/confluence/publish-space',
+    headers: { authorization: bearer(actor) },
+    payload,
+  });
+}
+
+/** A row that has already chosen Governance on the site it is connected to. */
+function rowWithChosenSpace(overrides: Partial<IntegrationRow> = {}): IntegrationRow {
+  return connectedRow({
+    publishSpaceId: 'space-gov',
+    publishSpaceKey: 'GOV',
+    publishSpaceName: 'Governance',
+    publishSpaceSiteId: 'site-1',
+    ...overrides,
+  });
+}
+
+test('a connected organisation with no chosen space is reported as not publishing', async () => {
+  restoreKey();
+  const { app } = await buildApp({ rows: [connectedRow()] });
+  const response = await app.inject({
+    method: 'GET',
+    url: '/confluence/status',
+    headers: { authorization: bearer(ORG_A_ADMIN) },
+  });
+
+  const { data } = JSON.parse(response.body);
+  assert.equal(data.status, 'CONNECTED');
+  assert.equal(data.publishSpace, null);
+  assert.equal(
+    data.publishing,
+    false,
+    'connected-but-not-chosen must never be reported as publishing: a charity that believes it is ' +
+      'mirroring and is not is worse off than one that knows it has a step left',
+  );
+});
+
+test('choosing a listed space stores it on its own columns, and the organisation then publishes', async () => {
+  restoreKey();
+  const { app, store } = await buildApp({
+    rows: [connectedRow()],
+    confluenceFetch: fetchListing(LISTED_GOVERNANCE, { id: 'space-fin', key: 'FIN', name: 'Finance' }),
+  });
+  store.credentials.push(sealedAccessTokenRow('integration-a', 'org-a'));
+
+  const chosen = await putPublishSpace(app, ORG_A_ADMIN, { spaceId: 'space-gov' });
+  assert.equal(chosen.statusCode, 200, chosen.body);
+  assert.deepEqual(JSON.parse(chosen.body).data.publishSpace, { id: 'space-gov', key: 'GOV', name: 'Governance' });
+
+  const saved = store.integrations.get('integration-a')!;
+  assert.equal(saved.publishSpaceId, 'space-gov');
+  assert.equal(saved.publishSpaceKey, 'GOV');
+  assert.equal(saved.publishSpaceSiteId, 'site-1', 'the site the space belongs to is recorded with it');
+  // The choice must not be in `config`: that is the field a reconnect
+  // overwrites wholesale.
+  assert.deepEqual(saved.config, {
+    siteId: 'site-1',
+    siteUrl: 'https://charity-a.atlassian.net',
+    siteName: 'Charity A',
+    siteCount: 2,
+  });
+
+  const status = await app.inject({
+    method: 'GET',
+    url: '/confluence/status',
+    headers: { authorization: bearer(ORG_A_ADMIN) },
+  });
+  const { data } = JSON.parse(status.body);
+  assert.equal(data.publishing, true);
+  assert.deepEqual(data.publishSpace, { id: 'space-gov', key: 'GOV', name: 'Governance' });
+});
+
+test('a space id the listing never returned is refused, and no destination is stored', async () => {
+  restoreKey();
+  const { app, store } = await buildApp({
+    rows: [connectedRow()],
+    confluenceFetch: fetchListing(LISTED_GOVERNANCE),
+  });
+  store.credentials.push(sealedAccessTokenRow('integration-a', 'org-a'));
+
+  // An id a browser could put in the body but this charity's connection never
+  // listed. Accepting it would aim publication at a space the charity never
+  // intended, and bake that id into every page this pipeline creates.
+  const refused = await putPublishSpace(app, ORG_A_ADMIN, { spaceId: 'space-somebody-elses' });
+
+  assert.equal(refused.statusCode, 400, refused.body);
+  assert.equal(JSON.parse(refused.body).code, 'CONFLUENCE_SPACE_NOT_LISTED');
+  assert.equal(store.integrations.get('integration-a')!.publishSpaceId, null);
+});
+
+test('publish-space refuses a missing space id before Confluence is asked anything', async () => {
+  restoreKey();
+  const { app, store } = await buildApp({
+    rows: [connectedRow()],
+    confluenceFetch: fetchThatMustNotRun(),
+  });
+
+  for (const payload of [{}, { spaceId: '' }, { spaceId: 42 }]) {
+    const response = await putPublishSpace(app, ORG_A_ADMIN, payload);
+    assert.equal(response.statusCode, 400, JSON.stringify(payload));
+    assert.equal(JSON.parse(response.body).code, 'CONFLUENCE_SPACE_ID_REQUIRED');
+  }
+  assert.equal(store.integrations.get('integration-a')!.publishSpaceId, null);
+});
+
+test('publish-space refuses with a clean 404 rather than a 500 when there is no live connection', async () => {
+  restoreKey();
+  for (const rows of [[], [connectedRow({ status: 'DISCONNECTED' })], [connectedRow({ status: 'ERROR' })]]) {
+    const { app } = await buildApp({ rows, confluenceFetch: fetchThatMustNotRun() });
+    const response = await putPublishSpace(app, ORG_A_ADMIN, { spaceId: 'space-gov' });
+    assert.equal(response.statusCode, 404, response.body);
+    assert.equal(JSON.parse(response.body).code, 'CONFLUENCE_NOT_CONNECTED');
+  }
+});
+
+test('publish-space never reaches another organisation connection', async () => {
+  restoreKey();
+  const { app, store } = await buildApp({
+    rows: [connectedRow()],
+    actor: ORG_B_ADMIN,
+    confluenceFetch: fetchThatMustNotRun(),
+  });
+
+  const response = await putPublishSpace(app, ORG_B_ADMIN, { spaceId: 'space-gov' });
+
+  assert.equal(response.statusCode, 404);
+  assert.equal(JSON.parse(response.body).code, 'CONFLUENCE_NOT_CONNECTED');
+  assert.equal(store.integrations.get('integration-a')!.publishSpaceId, null, "org-a's row must be untouched");
+  assert.ok(
+    store.calls.integrationFindUnique.every(
+      (where) =>
+        (where as { organisationId_provider?: { organisationId: string } }).organisationId_provider
+          ?.organisationId === 'org-b',
+    ),
+    'the lookup must be scoped to the requesting organisation, never org-a',
+  );
+});
+
+test('the publish-space response carries no token material', async () => {
+  restoreKey();
+  const { app, store } = await buildApp({
+    rows: [connectedRow()],
+    confluenceFetch: fetchListing(LISTED_GOVERNANCE),
+  });
+  store.credentials.push(sealedAccessTokenRow('integration-a', 'org-a'));
+
+  const response = await putPublishSpace(app, ORG_A_ADMIN, { spaceId: 'space-gov' });
+  assert.equal(response.statusCode, 200, response.body);
+
+  const serialised = response.body.toLowerCase();
+  for (const forbidden of ['token', 'fingerprint', 'sealed', 'ciphertext', 'secret', 'refresh']) {
+    assert.ok(!serialised.includes(forbidden), `publish-space leaked ${forbidden}`);
+  }
+});
+
+test('a space chosen earlier is not publishing while the connection is not live', async () => {
+  restoreKey();
+  for (const status of ['DISCONNECTED', 'ERROR'] as const) {
+    const { app } = await buildApp({ rows: [rowWithChosenSpace({ status })] });
+    const response = await app.inject({
+      method: 'GET',
+      url: '/confluence/status',
+      headers: { authorization: bearer(ORG_A_ADMIN) },
+    });
+
+    const { data } = JSON.parse(response.body);
+    // The choice is remembered — it is not the charity's fault the grant went
+    // stale, and reconnecting to the same site keeps it. But a destination
+    // with nothing able to reach it is not publication, and saying otherwise
+    // would tell a charity its documents are being mirrored while nothing is.
+    assert.deepEqual(data.publishSpace, { id: 'space-gov', key: 'GOV', name: 'Governance' }, status);
+    assert.equal(data.publishing, false, `a ${status} connection must never report publishing`);
+  }
+});
+
+// ── the reconnect, end to end through the REAL connection service ───────────
+//
+// Not a simulation: these two go through `POST /confluence/callback`, which
+// calls `connectConfluence`, whose `connectingState` includes `config` and is
+// spread into the upsert's `update`. That is the exact write that would have
+// wiped a choice stored in `config`.
+
+async function reconnectTo(site: { id: string; url: string; name: string }, rows: IntegrationRow[]) {
+  const built = await buildApp({
+    rows,
+    exchangeAuthorizationCode: async () => ({
+      accessToken: 'plaintext-access-token',
+      refreshToken: { kind: 'issued' as const, token: 'plaintext-refresh-token' },
+      expiresAt: new Date(Date.now() + 3_600_000),
+      scopes: [...CONFLUENCE_OAUTH_SCOPES],
+    }),
+    listAccessibleResources: async () => [site],
+  });
+
+  const state = await authorizeState(built.app, ORG_A_ADMIN);
+  const reconnected = await postCallback(built.app, ORG_A_ADMIN, { code: 'c', state });
+  assert.equal(reconnected.statusCode, 200, reconnected.body);
+
+  const status = await built.app.inject({
+    method: 'GET',
+    url: '/confluence/status',
+    headers: { authorization: bearer(ORG_A_ADMIN) },
+  });
+  assert.equal(status.statusCode, 200, status.body);
+  return { data: JSON.parse(status.body).data as Record<string, unknown>, store: built.store };
+}
+
+test('a reconnect to the same Atlassian site keeps the chosen space', async () => {
+  restoreKey();
+  const { data, store } = await reconnectTo(
+    { id: 'site-1', url: 'https://charity-a.atlassian.net', name: 'Charity A' },
+    [rowWithChosenSpace()],
+  );
+
+  // Reconnecting is the recovery action CharityPilot's own error messages
+  // recommend. A charity that takes it must not silently stop publishing.
+  assert.deepEqual(data.publishSpace, { id: 'space-gov', key: 'GOV', name: 'Governance' });
+  assert.equal(data.publishing, true);
+  assert.equal(store.integrations.get('integration-a')!.publishSpaceId, 'space-gov');
+});
+
+test('a reconnect to a DIFFERENT Atlassian site reports no space chosen', async () => {
+  restoreKey();
+  const { data } = await reconnectTo(
+    { id: 'site-2', url: 'https://charity-b.atlassian.net', name: 'Charity B' },
+    [rowWithChosenSpace()],
+  );
+
+  // Space ids are per-site: the old id names nothing on the new site, so the
+  // screen asks again rather than aiming publication at a space that is not
+  // there.
+  assert.equal(data.publishSpace, null);
+  assert.equal(data.publishing, false);
+  assert.equal(data.status, 'CONNECTED');
 });
 
 // ────────────────────────────────────────────────────────────────────────────

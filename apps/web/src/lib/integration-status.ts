@@ -167,6 +167,12 @@ export const CONFLUENCE_ALPHA_BADGE_LABEL = 'Alpha';
  */
 export type ConfluenceConnectionStatus = 'CONNECTED' | 'DISCONNECTED' | 'NOT_CONNECTED' | 'ERROR';
 
+export type ConfluenceSpace = {
+  id: string;
+  key: string;
+  name: string;
+};
+
 export type ConfluenceStatusResponse = {
   provider: 'CONFLUENCE';
   status: ConfluenceConnectionStatus;
@@ -175,6 +181,10 @@ export type ConfluenceStatusResponse = {
   siteCount: number | null;
   connectedAt: string | null;
   lastError: string | null;
+  /** The chosen publish destination, or null when there is none to use. */
+  publishSpace: ConfluenceSpace | null;
+  /** CONNECTED *and* a destination that still resolves. Never one without the other. */
+  publishing: boolean;
 };
 
 export type StatusDisplay = {
@@ -203,4 +213,140 @@ export function describeConfluenceStatus(status: ConfluenceStatusResponse): Stat
     default:
       return { tone: 'neutral', label: 'Not connected', showConnect: true, showDisconnect: false };
   }
+}
+
+// ── connected is not publishing ──────────────────────────────────────────────
+
+/**
+ * What an administrator is told when they change the space, every time they
+ * are offered the choice.
+ *
+ * It exists because the obvious assumption is wrong and expensive: changing
+ * the destination does **not** move, copy or re-publish anything. Every page
+ * CharityPilot has already published keeps the location recorded against it,
+ * which is precisely what keeps it erasable — Phase 5's eraser works from the
+ * recorded `cloudId` and `pageId` rather than recomputing where a document
+ * "should" be. A charity that changed the space believing its published
+ * documents would follow would be wrong about where its records are, and
+ * wrong in the direction that matters when somebody asks for erasure.
+ */
+export const CONFLUENCE_PUBLISH_SPACE_CHANGE_NOTE =
+  'Changing the space changes where documents published from now on will go. Documents already published stay ' +
+  'exactly where they were published: CharityPilot keeps the recorded location of each one, which is what makes ' +
+  'it erasable later, and nothing is moved, copied or deleted in Confluence when you change this.';
+
+export type PublishingDisplay = {
+  publishing: boolean;
+  tone: 'success' | 'warning' | 'neutral';
+  label: string;
+  /** The plain statement of what is and is not happening. Never hedged. */
+  headline: string;
+  /** What it means or what is left to do; null when there is nothing to add. */
+  detail: string | null;
+  /** Whether the space picker is worth showing at all. */
+  showSpacePicker: boolean;
+};
+
+/**
+ * Whether this organisation's documents are actually being published, and how
+ * the screen says so.
+ *
+ * ──────────────────────────────────────────────────────────────────────────
+ * CONNECTED IS NOT PUBLISHING, AND THE SCREEN MUST NOT LET THE TWO BLUR.
+ * ──────────────────────────────────────────────────────────────────────────
+ *
+ * Connecting Confluence is the opt-in; choosing a space is the destination.
+ * An organisation with the first and not the second is connected and
+ * publishing nothing — and a charity that believes it is mirroring its
+ * governance documents and is not is worse off than one that knows it has a
+ * step left. So the connected-without-a-space case gets its own warning tone
+ * and says so in as many words, rather than being folded into the green
+ * "Connected" the connection card already shows.
+ *
+ * `publishing` is asserted three ways — the API's own flag, a live connection
+ * and a resolved space — and all three must agree. They are three readings of
+ * one fact, and if they ever disagree the safe answer is the one that does not
+ * tell a charity its documents are being mirrored.
+ */
+export function describeConfluencePublishing(status: ConfluenceStatusResponse): PublishingDisplay {
+  if (status.status !== 'CONNECTED') {
+    return {
+      publishing: false,
+      tone: 'neutral',
+      label: 'Not publishing',
+      headline: 'Governance documents are not being published to Confluence.',
+      detail: 'Connect this organisation’s Confluence site first, then choose the space to publish into.',
+      showSpacePicker: false,
+    };
+  }
+
+  const space = status.publishSpace;
+
+  if (space === null || space === undefined) {
+    return {
+      publishing: false,
+      tone: 'warning',
+      label: 'Connected — not publishing yet',
+      headline: 'Confluence is connected, but nothing is being published yet.',
+      detail:
+        'CharityPilot publishes a governance document only once you have chosen the Confluence space it should ' +
+        'go into. Until you choose one, nothing is published and your documents stay in CharityPilot only.',
+      showSpacePicker: true,
+    };
+  }
+
+  if (status.publishing !== true) {
+    // The API says there is a space but not that publication is live. Two
+    // readings of one fact disagreeing is not a moment to reassure anybody.
+    return {
+      publishing: false,
+      tone: 'warning',
+      label: 'Connected — not publishing yet',
+      headline: 'Confluence is connected, but nothing is being published yet.',
+      detail: 'Choose the Confluence space to publish into.',
+      showSpacePicker: true,
+    };
+  }
+
+  return {
+    publishing: true,
+    tone: 'success',
+    label: 'Publishing',
+    headline: `Governance documents are published to ${spaceLabel(space)}.`,
+    detail: CONFLUENCE_PUBLISH_SPACE_CHANGE_NOTE,
+    showSpacePicker: true,
+  };
+}
+
+/** A space as an administrator should read it: its name, with its key to disambiguate. */
+export function spaceLabel(space: ConfluenceSpace): string {
+  const name = typeof space.name === 'string' ? space.name.trim() : '';
+  return name.length > 0 ? `${name} (${space.key})` : space.key;
+}
+
+/**
+ * The spaces from `GET /confluence/spaces`, or an empty list.
+ *
+ * Narrow on purpose, exactly as the API is: a space needs an id and a key to
+ * be choosable, and nothing else about a space object is carried onto this
+ * screen. A malformed entry is dropped rather than throwing — a picker that
+ * shows the spaces it understood is more use than an error page.
+ */
+export function parseConfluenceSpaces(payload: unknown): ConfluenceSpace[] {
+  if (!payload || typeof payload !== 'object' || Array.isArray(payload)) return [];
+  const raw = (payload as { spaces?: unknown }).spaces;
+  if (!Array.isArray(raw)) return [];
+
+  const spaces: ConfluenceSpace[] = [];
+  for (const entry of raw) {
+    if (!entry || typeof entry !== 'object' || Array.isArray(entry)) continue;
+    const record = entry as Record<string, unknown>;
+    if (!isNonEmptyString(record.id) || !isNonEmptyString(record.key)) continue;
+    spaces.push({
+      id: record.id,
+      key: record.key,
+      name: typeof record.name === 'string' ? record.name : '',
+    });
+  }
+  return spaces;
 }
