@@ -28,13 +28,37 @@ export const PD_SENTINELS = [
 
 export const TENANT_B_SENTINEL = 'TENANT-B-CANARY';
 
-const CHAIR_PERSONAL_DATA: Record<string, string> = {
-  email: 'pd-canary-chair@example.org',
-  dateOfBirth: '1968-03-14',
-  residentialAddress: 'PD-CANARY-ADDRESS, 12 Harbour Road, Dublin',
-  formerNames: 'PD-CANARY-FORMER',
-  otherDirectorships: 'PD-CANARY-DIRECTORSHIPS',
-};
+/**
+ * What to PATCH onto the chair, and the prefix each value must still have when
+ * read back.
+ *
+ * `dateOfBirth` is sent as a full ISO datetime rather than the date-only form
+ * the sentinel asserts. BoardMemberService.update spreads the request body and
+ * converts only appointedDate, termEndDate, conductSignedDate and
+ * inductionDate to Date objects, so a date-only dateOfBirth reaches Prisma as a
+ * bare string and the request fails with a 500. The create path does not carry
+ * the column at all. Until that is fixed there is no date-only route to this
+ * field, and this is the form that works.
+ */
+const CHAIR_PERSONAL_DATA: Array<{ field: string; send: string; expectPrefix: string }> = [
+  {
+    field: 'email',
+    send: 'pd-canary-chair@example.org',
+    expectPrefix: 'pd-canary-chair@example.org',
+  },
+  { field: 'dateOfBirth', send: '1968-03-14T00:00:00.000Z', expectPrefix: '1968-03-14' },
+  {
+    field: 'residentialAddress',
+    send: 'PD-CANARY-ADDRESS, 12 Harbour Road, Dublin',
+    expectPrefix: 'PD-CANARY-ADDRESS',
+  },
+  { field: 'formerNames', send: 'PD-CANARY-FORMER', expectPrefix: 'PD-CANARY-FORMER' },
+  {
+    field: 'otherDirectorships',
+    send: 'PD-CANARY-DIRECTORSHIPS',
+    expectPrefix: 'PD-CANARY-DIRECTORSHIPS',
+  },
+];
 
 // The signature check in document-upload-validation.ts requires the bytes to
 // begin "%PDF-", so a plain-text stand-in is rejected.
@@ -158,23 +182,31 @@ export async function seedMcpFixture(options: { apiUrl: string }): Promise<McpFi
   // dateOfBirth, residentialAddress, formerNames and otherDirectorships. Only
   // the update path spreads them. Without this PATCH the personal-data
   // assertions would pass against fields that were never populated.
+  const patchBody: Record<string, string> = {};
+  for (const entry of CHAIR_PERSONAL_DATA) patchBody[entry.field] = entry.send;
   await api(apiUrl, token, `/api/v1/board-members/${chair.data.id}`, {
     method: 'PATCH',
-    body: CHAIR_PERSONAL_DATA,
+    body: patchBody,
   });
 
-  const chairAfterPatch = await api<{ data: Record<string, unknown> }>(
+  // There is no GET /board-members/:id route; the list is the only read path.
+  // The chair is the only board member at this point, the other two are
+  // created below.
+  const afterPatch = await api<{ data: Array<Record<string, unknown>> }>(
     apiUrl,
     token,
-    `/api/v1/board-members/${chair.data.id}`,
+    '/api/v1/board-members',
     { method: 'GET' },
   );
-  for (const field of Object.keys(CHAIR_PERSONAL_DATA)) {
-    const expected = CHAIR_PERSONAL_DATA[field] as string;
-    const actual = chairAfterPatch.data[field];
-    if (typeof actual !== 'string' || !actual.startsWith(expected.slice(0, 10))) {
+  const chairAfterPatch = afterPatch.data.find((record) => record['id'] === chair.data.id);
+  if (!chairAfterPatch) {
+    throw new Error('seedMcpFixture: the chair was not returned by the board-member list');
+  }
+  for (const entry of CHAIR_PERSONAL_DATA) {
+    const actual = chairAfterPatch[entry.field];
+    if (typeof actual !== 'string' || !actual.startsWith(entry.expectPrefix)) {
       throw new Error(
-        `seedMcpFixture: ${field} did not persist (got ${JSON.stringify(actual)}). `
+        `seedMcpFixture: ${entry.field} did not persist (got ${JSON.stringify(actual)}). `
           + 'Every gate assertion would pass vacuously, so seeding fails here instead.',
       );
     }
