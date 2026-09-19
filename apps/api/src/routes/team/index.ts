@@ -4,6 +4,7 @@ import { TeamService } from '../../services/team.service.js';
 import { TeamLifecycleService } from '../../services/team-lifecycle.service.js';
 import { authGuard } from '../../middleware/auth.js';
 import { requireSessionLevel } from '../../middleware/session-level.js';
+import { requireActionApproval } from '../../middleware/action-approval.js';
 import { subscriptionGuard } from '../../middleware/subscription.js';
 import { clearAuthCookies, setAuthCookies } from '../../utils/auth-cookies.js';
 import {
@@ -101,7 +102,7 @@ export async function teamRoutes(app: FastifyInstance) {
       }
     });
 
-    authedApp.delete('/invites/:id', { preHandler: [requireSessionLevel('ADMIN')] }, async (request, reply) => {
+    authedApp.delete('/invites/:id', { preHandler: [requireSessionLevel('ADMIN'), requireActionApproval()] }, async (request, reply) => {
       try {
         const { id } = request.params as { id: string };
         const body = revokeTeamInviteSchema.parse(request.body);
@@ -122,7 +123,7 @@ export async function teamRoutes(app: FastifyInstance) {
       }
     });
 
-    authedApp.patch('/members/:id/role', { preHandler: [requireSessionLevel('ADMIN')] }, async (request, reply) => {
+    authedApp.patch('/members/:id/role', { preHandler: [requireSessionLevel('ADMIN'), requireActionApproval()] }, async (request, reply) => {
       try {
         const { id } = request.params as { id: string };
         const body = updateTeamMemberRoleSchema.parse(request.body);
@@ -144,7 +145,7 @@ export async function teamRoutes(app: FastifyInstance) {
       }
     });
 
-    authedApp.post('/members/:id/suspend', { preHandler: [requireSessionLevel('ADMIN')] }, async (request, reply) => {
+    authedApp.post('/members/:id/suspend', { preHandler: [requireSessionLevel('ADMIN'), requireActionApproval()] }, async (request, reply) => {
       try {
         const { id } = request.params as { id: string };
         const body = teamMemberLifecycleActionSchema.parse(request.body);
@@ -186,7 +187,7 @@ export async function teamRoutes(app: FastifyInstance) {
       }
     });
 
-    authedApp.post('/members/:id/remove', { preHandler: [requireSessionLevel('ADMIN')] }, async (request, reply) => {
+    authedApp.post('/members/:id/remove', { preHandler: [requireSessionLevel('ADMIN'), requireActionApproval()] }, async (request, reply) => {
       try {
         const { id } = request.params as { id: string };
         const body = teamMemberLifecycleActionSchema.parse(request.body);
@@ -207,7 +208,7 @@ export async function teamRoutes(app: FastifyInstance) {
       }
     });
 
-    authedApp.post('/ownership/transfer', { preHandler: [requireSessionLevel('ADMIN')] }, async (request, reply) => {
+    authedApp.post('/ownership/transfer', { preHandler: [requireSessionLevel('ADMIN'), requireActionApproval()] }, async (request, reply) => {
       try {
         const body = transferTeamOwnershipSchema.parse(request.body);
         const result = await lifecycleService.transferOwnership({
@@ -244,7 +245,7 @@ export async function teamRoutes(app: FastifyInstance) {
       }
     });
 
-    authedApp.post('/members/:id/sessions/:familyId/revoke', { preHandler: [requireSessionLevel('ADMIN')] }, async (request, reply) => {
+    authedApp.post('/members/:id/sessions/:familyId/revoke', { preHandler: [requireSessionLevel('ADMIN'), requireActionApproval()] }, async (request, reply) => {
       try {
         const { id, familyId } = request.params as { id: string; familyId: string };
         const body = revokeTeamSessionSchema.parse(request.body);
@@ -269,7 +270,7 @@ export async function teamRoutes(app: FastifyInstance) {
       }
     });
 
-    authedApp.post('/members/:id/sessions/revoke-all', { preHandler: [requireSessionLevel('ADMIN')] }, async (request, reply) => {
+    authedApp.post('/members/:id/sessions/revoke-all', { preHandler: [requireSessionLevel('ADMIN'), requireActionApproval()] }, async (request, reply) => {
       try {
         const { id } = request.params as { id: string };
         const body = revokeTeamSessionSchema.parse(request.body);

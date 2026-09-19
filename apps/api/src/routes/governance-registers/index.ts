@@ -25,6 +25,7 @@ import {
 } from '@charitypilot/shared';
 import { authGuard } from '../../middleware/auth.js';
 import { requireSessionLevel } from '../../middleware/session-level.js';
+import { requireActionApproval } from '../../middleware/action-approval.js';
 import { subscriptionGuard } from '../../middleware/subscription.js';
 import { requireCompletePlan } from '../../middleware/plan.js';
 import { requireAdmin } from '../../middleware/roles.js';
@@ -86,7 +87,7 @@ export async function governanceRegisterRoutes(app: FastifyInstance) {
     }
   });
 
-  app.delete<{ Params: { id: string } }>('/conflicts/:id', { preHandler: [requireSessionLevel('ADMIN'), requireAdmin] }, async (request, reply) => {
+  app.delete<{ Params: { id: string } }>('/conflicts/:id', { preHandler: [requireSessionLevel('ADMIN'), requireAdmin, requireActionApproval()] }, async (request, reply) => {
     try {
       await service.removeConflict(request.user.organisationId, request.params.id);
       return sendNoContent(reply);
@@ -123,7 +124,7 @@ export async function governanceRegisterRoutes(app: FastifyInstance) {
     }
   });
 
-  app.delete<{ Params: { id: string } }>('/risks/:id', { preHandler: [requireSessionLevel('ADMIN'), requireAdmin] }, async (request, reply) => {
+  app.delete<{ Params: { id: string } }>('/risks/:id', { preHandler: [requireSessionLevel('ADMIN'), requireAdmin, requireActionApproval()] }, async (request, reply) => {
     try {
       await service.removeRisk(request.user.organisationId, request.params.id);
       return sendNoContent(reply);
@@ -160,7 +161,7 @@ export async function governanceRegisterRoutes(app: FastifyInstance) {
     }
   });
 
-  app.delete<{ Params: { id: string } }>('/complaints/:id', { preHandler: [requireSessionLevel('ADMIN'), requireAdmin] }, async (request, reply) => {
+  app.delete<{ Params: { id: string } }>('/complaints/:id', { preHandler: [requireSessionLevel('ADMIN'), requireAdmin, requireActionApproval()] }, async (request, reply) => {
     try {
       await service.removeComplaint(request.user.organisationId, request.params.id);
       return sendNoContent(reply);
@@ -197,7 +198,7 @@ export async function governanceRegisterRoutes(app: FastifyInstance) {
     }
   });
 
-  app.delete<{ Params: { id: string } }>('/fundraising/:id', { preHandler: [requireSessionLevel('ADMIN'), requireAdmin] }, async (request, reply) => {
+  app.delete<{ Params: { id: string } }>('/fundraising/:id', { preHandler: [requireSessionLevel('ADMIN'), requireAdmin, requireActionApproval()] }, async (request, reply) => {
     try {
       await service.removeFundraising(request.user.organisationId, request.params.id);
       return sendNoContent(reply);

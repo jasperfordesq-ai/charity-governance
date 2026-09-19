@@ -16,6 +16,7 @@ import {
 } from '@charitypilot/shared';
 import { authGuard } from '../../middleware/auth.js';
 import { requireSessionLevel } from '../../middleware/session-level.js';
+import { requireActionApproval } from '../../middleware/action-approval.js';
 import { subscriptionGuard } from '../../middleware/subscription.js';
 import { requireCompletePlan } from '../../middleware/plan.js';
 import { requireAdmin } from '../../middleware/roles.js';
@@ -117,7 +118,7 @@ export async function governingActRoutes(app: FastifyInstance) {
     }
   });
 
-  app.post<{ Params: { id: string } }>('/:id/void', { preHandler: [requireSessionLevel('ADMIN'), requireAdmin] }, async (request, reply) => {
+  app.post<{ Params: { id: string } }>('/:id/void', { preHandler: [requireSessionLevel('ADMIN'), requireAdmin, requireActionApproval()] }, async (request, reply) => {
     try {
       const data = voidGoverningActSchema.parse(request.body) as VoidGoverningActRequest;
       return sendSuccess(
