@@ -97,7 +97,7 @@ So a create is never simply retried. The sequence is **create-or-adopt**:
 4. Only if the re-read finds nothing is the 409 a genuine conflict; dead-letter it.
 
 This is the "caller-side re-read comparing the title" the spec's Phase 4 note prescribes, and it is
-the reason Task 2 exists. **Do not close the ambiguity by reading the upstream error body** — that
+the reason Task 4 exists. **Do not close the ambiguity by reading the upstream error body** — that
 would mean carving a hole in the containment rule which exists because a proxy once put a live
 authorization code in an error body.
 
@@ -113,7 +113,7 @@ authorization code in an error body.
 
 **Interfaces:**
 - Produces: `DocumentPublication`, and the `DocumentPublicationState` /
-  `DocumentPublicationTerminalReason` enums Task 4 dispatches on.
+  `DocumentPublicationTerminalReason` enums Task 6 dispatches on.
 
 **Design notes:**
 
@@ -167,7 +167,76 @@ first. The row must remember where the bytes went.
 
 ---
 
-### Task 2: Find a page by title
+### Task 2: List the spaces a charity can publish into
+
+**Files:**
+- Create: `apps/api/src/services/confluence-spaces.ts`
+- Create: `apps/api/src/tests/confluence-spaces.test.ts`
+- Modify: `apps/api/src/routes/integrations/index.ts`
+
+**Interfaces:**
+- Produces: `listSpaces(client, cursor?): Promise<{ spaces: ConfluenceSpace[]; nextCursor?: string }>`
+  where `ConfluenceSpace` is `{ id: string; key: string; name: string }`, and
+  `GET {prefix}/confluence/spaces` returning that list for the calling organisation.
+
+**Design notes:**
+
+`GET /wiki/api/v2/spaces`, envelope `{ results, _links: { next } }` like every other v2 collection.
+Follow `confluence-attachments.ts`'s cursor handling — it already follows `_links.next` and bounds
+the walk, and **that bound is not optional**: an unbounded cursor walk against a large site is a way
+to hang a request thread. Reuse the bound rather than inventing a second one.
+
+**Return only what the screen needs — id, key, name.** A space object carries far more, including
+descriptions and permission hints, and this response crosses the tenant boundary into a browser.
+The `status` route's output guard exists for exactly this reason; do not hand back an upstream
+object wholesale.
+
+This is a read, so `idempotent: true`.
+
+- [ ] **Step 1: Write the failing tests** — a page of spaces is returned with only the three fields;
+      a cursor is followed; the walk is bounded; the request is idempotent; an organisation with no
+      live connection gets a clean refusal rather than a 500
+- [ ] **Step 2: Run and watch fail; Step 3: implement; Step 4: run and watch pass**
+- [ ] **Step 5: Verify by mutation** — remove the field projection and confirm the "only three
+      fields" test fails alone; remove the cursor bound and confirm the bound test fails alone
+- [ ] **Step 6: Commit** — `feat(confluence): list the spaces a charity could publish into`
+
+---
+
+### Task 3: Choose the space, and store the choice
+
+**Files:**
+- Modify: `apps/api/src/routes/integrations/index.ts` (a route to set the chosen space)
+- Modify: `apps/api/src/services/confluence-connection.service.ts` — **CLOSED FILE.** Do not modify
+  it. Store the choice on the integration row's `config` through whatever non-closed path already
+  writes it; if there is genuinely no such path, **stop and report** rather than opening the file.
+- Modify: `apps/web/src/app/(dashboard)/integrations/page.tsx` and its logic module
+- Tests in both apps
+
+**Design notes:**
+
+**Publication cannot begin until a space is chosen.** An organisation that has connected but not
+chosen is connected-but-not-publishing, and the screen must say so plainly — a charity that thinks
+it is mirroring and is not is worse than one that knows it has a step left.
+
+**Validate the chosen space against the ones actually listed.** Accepting an arbitrary id from the
+browser lets a caller aim publication at a space the charity may not intend, and the id is later
+baked into every page this pipeline creates.
+
+**Changing the space later does not move what was already published.** Say so in the interface.
+Previously published pages keep their `targetRef` and remain erasable exactly as recorded — which is
+precisely why `cloudId` and `pageId` live on the row rather than being recomputed.
+
+- [ ] **Step 1: Write the failing tests** — a valid space is stored; an id not in the listed set is
+      refused; publication does not enqueue for an organisation with no chosen space; the screen
+      states that connected-without-a-space is not yet publishing
+- [ ] **Step 2: Run and watch fail; Step 3: implement; Step 4: run and watch pass**
+- [ ] **Step 5: Verify by mutation** — accept an unlisted id and confirm the refusal test fails alone
+- [ ] **Step 6: Commit** — `feat(publish): a charity chooses where its documents are published`
+
+---
+
+### Task 4: Find a page by title
 
 **Files:**
 - Modify: `apps/api/src/services/confluence-pages.ts`
@@ -220,7 +289,7 @@ told `null` can adopt nothing and must create.
 
 ---
 
-### Task 3: The document-to-page mapping
+### Task 5: The document-to-page mapping
 
 **Files:**
 - Create: `apps/api/src/services/confluence-document-mapping.ts`
@@ -268,7 +337,7 @@ document name is user input and this is XHTML.
 
 ---
 
-### Task 4: The publish worker
+### Task 6: The publish worker
 
 **Files:**
 - Create: `apps/api/src/services/document-publication.service.ts`
@@ -277,7 +346,7 @@ document name is user input and this is XHTML.
 - Modify: `apps/api/src/jobs/production-scheduler.ts` **and** `apps/api/src/jobs/cleanup-document-storage.ts`'s sibling registration pattern
 
 **Interfaces:**
-- Consumes: Task 2's `findPageByTitle`, Task 3's mapping, Phase 3's `createPage` / `uploadAttachment`
+- Consumes: Task 4's `findPageByTitle`, Task 5's mapping, Phase 3's `createPage` / `uploadAttachment`
   / `setContentProperty`, Phase 2's `currentAccessTokenForOrganisation`, and
   `StorageService.downloadFile` to fetch the bytes.
 - Produces: `retryPendingPublications(publish, limit)` mirroring
@@ -342,7 +411,7 @@ keeps uploading after the row has recorded the attempt as timed out.
 
 ---
 
-### Task 5: Enqueue on upload
+### Task 7: Enqueue on upload
 
 **Files:**
 - Modify: `apps/api/src/services/document.service.ts` (the create path)
@@ -351,7 +420,8 @@ keeps uploading after the row has recorded the attempt as timed out.
 **Design notes:**
 
 Enqueue a publication when, and only when, the organisation has a **`CONNECTED`** Confluence
-integration. Connecting is the opt-in — there is no second flag.
+integration **and a chosen space** (Task 3). Connecting is the opt-in; the space is the
+destination, and without one there is nowhere to publish. There is still no separate alpha flag.
 
 **Enqueueing must never fail an upload.** Portal upload is a guaranteed path and this integration is
 alpha. If the publication row cannot be written, the document upload still succeeds; log it and move
@@ -371,7 +441,7 @@ do not join it.
 
 ---
 
-### Task 6: Dual erasure — close the gap Phase 5 left open
+### Task 8: Dual erasure — close the gap Phase 5 left open
 
 **Files:**
 - Modify: `apps/api/src/services/document.service.ts` (`remove()`)
