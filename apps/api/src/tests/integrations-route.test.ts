@@ -21,6 +21,7 @@ const [
   { AppError },
   { signAccessToken },
   { apiLoggerOptionsForEnvironment },
+  { sealIntegrationSecret },
 ] = await Promise.all([
   import('fastify'),
   import('jsonwebtoken'),
@@ -28,6 +29,7 @@ const [
   import('../utils/errors.js'),
   import('../utils/jwt.js'),
   import('../utils/logger.js'),
+  import('../services/integration-crypto.js'),
 ]);
 
 // ── the fake datastore ──────────────────────────────────────────────────────
@@ -130,6 +132,15 @@ function makeStore(rows: IntegrationRow[]) {
         else credentials.push(next);
         return next;
       },
+      // Added when disconnect began reading the sealed refresh token so it
+      // could attempt to withdraw the grant. Without it the load throws, which
+      // this service swallows — so every revocation test would silently
+      // exercise the same "could not open the vault" branch.
+      findUnique: async (args: { where: { integrationId_kind: { integrationId: string; kind: string } } }) => {
+        const { integrationId, kind } = args.where.integrationId_kind;
+        const row = credentials.find((c) => c.integrationId === integrationId && c.kind === kind);
+        return row === undefined ? null : { ...row };
+      },
       deleteMany: async (args: { where: { integrationId: string } }) => {
         calls.credentialDeleteMany.push(args.where);
         const before = credentials.length;
@@ -181,6 +192,8 @@ type BuildOptions = {
   exchangeAuthorizationCode?: unknown;
   listAccessibleResources?: unknown;
   logStream?: { write(chunk: string): void };
+  /** Injected `OAuthDeps`, which is how the disconnect route's revoke attempt is driven. */
+  confluenceOAuth?: unknown;
 };
 
 async function buildApp(options: BuildOptions = {}) {
@@ -204,6 +217,7 @@ async function buildApp(options: BuildOptions = {}) {
     confluenceDeps: {
       ...(options.exchangeAuthorizationCode ? { exchangeAuthorizationCode: options.exchangeAuthorizationCode } : {}),
       ...(options.listAccessibleResources ? { listAccessibleResources: options.listAccessibleResources } : {}),
+      ...(options.confluenceOAuth ? { oauth: options.confluenceOAuth } : {}),
     },
   } as never);
   return { app, store, actor };
@@ -808,4 +822,104 @@ test('the callback surfaces an Atlassian error returned in place of a code', asy
   });
   assert.equal(response.statusCode, 400);
   assert.equal(JSON.parse(response.body).code, 'CONFLUENCE_OAUTH_DENIED');
+});
+
+// ── the revocation attempt an operator has to be able to see ───────────────
+//
+// Atlassian documents no revocation endpoint for a 3LO app, so `revoked:
+// false` is the case to plan for rather than the exception. A discarded
+// return value would make a grant that is still standing at Atlassian
+// invisible to everybody; the DELETE route logs it instead. 204 either way —
+// the charity's disconnect succeeded.
+
+const REVOKE_REFRESH_TOKEN = 'SUPERSECRET-STORED-REFRESH-TOKEN';
+
+/** A credential row the service can actually open, so the revoke is really attempted. */
+function sealedRefreshTokenRow(integrationId: string, organisationId: string): CredentialRow {
+  return {
+    integrationId,
+    kind: 'refresh_token',
+    sealed: sealIntegrationSecret(REVOKE_REFRESH_TOKEN, Buffer.from(VALID_KEY, 'hex'), 1, {
+      organisationId,
+      provider: 'CONFLUENCE',
+      kind: 'refresh_token',
+    }),
+    generation: 1,
+    expiresAt: null,
+  };
+}
+
+async function disconnectAndCaptureLog(revokeStatus: number) {
+  restoreKey();
+  const captured: string[] = [];
+  const revokes: string[] = [];
+  const { app, store } = await buildApp({
+    rows: [connectedRow()],
+    logStream: { write: (chunk: string) => void captured.push(chunk) },
+    confluenceOAuth: {
+      fetch: async (input: unknown) => {
+        revokes.push(String(input));
+        return new Response(null, { status: revokeStatus });
+      },
+      clientId: process.env.ATLASSIAN_CLIENT_ID,
+      clientSecret: process.env.ATLASSIAN_CLIENT_SECRET,
+    },
+  });
+  store.credentials.push(sealedRefreshTokenRow('integration-a', 'org-a'));
+
+  const response = await app.inject({
+    method: 'DELETE',
+    url: '/confluence',
+    headers: { authorization: bearer(ORG_A_ADMIN) },
+  });
+
+  const lines = captured
+    .join('')
+    .split('\n')
+    .filter((line) => line.length > 0)
+    .map((line) => JSON.parse(line) as Record<string, unknown>);
+
+  return { response, store, revokes, lines, raw: captured.join('') };
+}
+
+test('a revocation Atlassian will not confirm is logged where an operator can see it', async () => {
+  const { response, store, revokes, lines, raw } = await disconnectAndCaptureLog(404);
+
+  // The charity's disconnect succeeded and their credentials are gone. The
+  // status code does not depend on Atlassian in any way.
+  assert.equal(response.statusCode, 204);
+  assert.equal(store.credentials.length, 0);
+  assert.equal(store.integrations.get('integration-a')!.status, 'DISCONNECTED');
+
+  // 404 is the shape of the failure that matters most: an endpoint Atlassian
+  // may simply not offer.
+  assert.equal(revokes.length, 1);
+
+  const warning = lines.find(
+    (line) => line.level === 40 && String(line.msg).includes('could not be confirmed as withdrawn'),
+  );
+  assert.ok(warning, `expected a warning about the unwithdrawn grant, got:\n${raw}`);
+  assert.equal(warning.integrationId, 'integration-a');
+  assert.equal(warning.provider, 'CONFLUENCE');
+  // The two things the administrator can actually act on.
+  assert.match(String(warning.msg), /90 days/);
+  assert.match(String(warning.msg), /connected-apps settings/);
+
+  // And the line is safe to ship to a log aggregator.
+  for (const secret of [REVOKE_REFRESH_TOKEN, process.env.ATLASSIAN_CLIENT_SECRET!]) {
+    assert.ok(!raw.includes(secret), `the logs leaked ${secret}`);
+  }
+});
+
+test('a revocation Atlassian accepts is not logged as a problem', async () => {
+  const { response, store, revokes, lines } = await disconnectAndCaptureLog(200);
+
+  assert.equal(response.statusCode, 204);
+  assert.equal(store.credentials.length, 0);
+  assert.equal(revokes.length, 1);
+  assert.equal(
+    lines.find((line) => String(line.msg).includes('could not be confirmed as withdrawn')),
+    undefined,
+    'a revocation that succeeded must not warn — an operator who is warned every time stops reading',
+  );
 });

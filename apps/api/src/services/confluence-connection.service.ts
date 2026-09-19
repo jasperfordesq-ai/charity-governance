@@ -993,12 +993,17 @@ async function refreshUnderClaim(
 }
 
 /**
- * Drop the connection: withdraw the grant at Atlassian, delete every sealed
- * credential, and return the row to a disconnected state.
+ * Drop the connection: delete every sealed credential, return the row to a
+ * disconnected state, and *attempt* to withdraw the grant at Atlassian on the
+ * way — an attempt whose success this platform cannot verify.
  *
- * The revocation comes first and is best effort — see the body. It is the
- * difference between a charity that has been told "disconnected" and a
- * charity whose authorisation is actually gone from the identity provider.
+ * **Read the body before telling anybody the authorisation has been
+ * withdrawn.** Atlassian documents no programmatic revocation for a 3LO app:
+ * their OAuth 2.0 (3LO) documentation describes revocation as something the
+ * *user* does, and documents no revoke endpoint. The call made below is to a
+ * conventional OAuth endpoint that may or may not exist, and `revoked` reports
+ * only what that call answered — never that Atlassian has actually forgotten
+ * us. `false` may equally mean "the endpoint is not there".
  *
  * Both halves are one transaction. Deleting the credentials while leaving the
  * row `CONNECTED` would advertise a connection with nothing behind it, and
@@ -1015,24 +1020,43 @@ export async function disconnectConfluence(
   { integrationId }: ConfluenceIntegrationRef,
   deps: ConfluenceConnectionDeps = {},
 ): Promise<{ revoked: boolean }> {
-  // Atlassian's OAuth 2.0 (3LO) revocation endpoint, declared here rather than
-  // beside `TOKEN_URL` in `atlassian-oauth.ts` because that module is closed
-  // and the authorisation to open this one covers this function alone.
+  // The conventional OAuth revocation path on Atlassian's identity host.
+  // **Atlassian does not document it.** Their 3LO documentation offers no
+  // revoke endpoint and describes revocation as user-initiated; a developer
+  // community thread separately reports that a site-scoped app cannot delete
+  // an access token to revoke its own access. This URL is a convention other
+  // providers honour and Atlassian's host may or may not, so the call is made
+  // in hope and its failure is designed for rather than handled.
   //
-  // The *refresh* token is what is presented. Access tokens are short-lived
-  // and cannot be withdrawn; revoking the refresh token is what ends the
-  // grant, which is the thing the charity believes they are cancelling.
+  // Declared here rather than beside `TOKEN_URL` in `atlassian-oauth.ts`
+  // because that module is closed and the authorisation to open this one
+  // covers this function alone.
+  //
+  // The *refresh* token is what is presented: an access token is short-lived
+  // and not revocable, so the refresh token is the only thing that could end
+  // the grant.
+  //
+  // ── WHAT HAPPENS WHEN THIS DOES NOT WORK ────────────────────────────────
+  // The grant stays alive at Atlassian until one of two things the platform
+  // does not control: it expires after **90 days of inactivity** (the window
+  // resets on each refresh, and after a disconnect nothing refreshes it), or
+  // the administrator removes CharityPilot themselves in their Atlassian
+  // account's connected-apps settings. That second sentence is the one the
+  // charity has to be told, and Task 7 is where it gets said out loud.
   const REVOKE_URL = 'https://auth.atlassian.com/oauth/revoke';
 
   // ── best effort, bounded, and never a precondition of forgetting ─────────
   //
   // A charity that presses Disconnect has withdrawn their consent, and that
-  // is true whether or not Atlassian is reachable to be told. So the whole
-  // attempt is wrapped: a transport failure, a rejection, a missing
-  // encryption key, an envelope that will not open — none of them may leave
-  // sealed credentials on disk for a connection the user believes is gone.
-  // Making the deletion conditional on this succeeding would turn a third
-  // party's outage into CharityPilot keeping secrets it was told to destroy.
+  // is true whether or not Atlassian is reachable — or willing — to be told.
+  // So the whole attempt is wrapped: a transport failure, a 404 from an
+  // endpoint that does not exist, a rejection, a missing encryption key, an
+  // envelope that will not open — none of them may leave sealed credentials
+  // on disk for a connection the user believes is gone. Making the deletion
+  // conditional on this succeeding would turn a third party's outage, or
+  // simply an unsupported endpoint, into CharityPilot keeping secrets it was
+  // told to destroy. It is precisely because the failure is designed for that
+  // attempting an undocumented endpoint is safe at all.
   //
   // Bounded on `CONNECT_REQUEST_TIMEOUT_MS` for the same reason the connect
   // path is: an administrator is sitting in front of a browser tab, `fetch`
@@ -1093,7 +1117,8 @@ export async function disconnectConfluence(
   });
 
   // The outcome is reported rather than thrown: the disconnect succeeded
-  // either way, and a caller that wants to say "we could not reach Atlassian
-  // to withdraw the authorisation" needs to be able to tell.
+  // either way, and the caller needs to be able to tell the difference so it
+  // can say so. `revoked: false` is the ordinary case to plan for, not an
+  // anomaly — see the endpoint comment above. The DELETE route logs it.
   return { revoked };
 }

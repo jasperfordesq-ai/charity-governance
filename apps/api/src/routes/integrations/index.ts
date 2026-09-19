@@ -432,14 +432,32 @@ export async function integrationRoutes(
         );
       }
 
-      // Not gated on the encryption key: revoking access must keep working on
-      // a server that has lost or never had it. `disconnectConfluence` tries to
-      // open the sealed refresh token so it can withdraw the grant at
-      // Atlassian, but that attempt is best-effort — a missing key, like an
-      // unreachable Atlassian, still leaves the credentials deleted and the
-      // row disconnected. `deps` is passed so the revoke is made with the same
-      // Atlassian client the connection was made with.
-      await disconnectConfluence(prisma, { integrationId: integration.id }, deps);
+      // Not gated on the encryption key: disconnecting must keep working on a
+      // server that has lost or never had it. `disconnectConfluence` tries to
+      // open the sealed refresh token so it can attempt to withdraw the grant
+      // at Atlassian, but that attempt is best-effort — a missing key, like an
+      // unreachable Atlassian or an endpoint Atlassian does not offer, still
+      // leaves the credentials deleted and the row disconnected. `deps` is
+      // passed so the attempt is made with the same Atlassian client the
+      // connection was made with.
+      const { revoked } = await disconnectConfluence(prisma, { integrationId: integration.id }, deps);
+
+      // 204 either way: the charity's disconnect succeeded, and it is not
+      // their problem that Atlassian offers us no documented way to hand the
+      // authorisation back. But an unconfirmed withdrawal must not be a
+      // discarded return value — this is the only place an operator can learn
+      // that a grant may still be standing. Expected to be the common case:
+      // see the endpoint comment in `disconnectConfluence`. No token, no
+      // secret and no Atlassian error text goes into this line.
+      if (!revoked) {
+        request.log.warn(
+          { integrationId: integration.id, provider: PROVIDER },
+          'Confluence disconnected and its stored credentials deleted, but the authorisation ' +
+            'could not be confirmed as withdrawn at Atlassian (which documents no revocation ' +
+            'endpoint for an app). The grant expires after 90 days without use, or the ' +
+            'administrator can remove CharityPilot in their Atlassian connected-apps settings.',
+        );
+      }
       return sendNoContent(reply);
     } catch (error) {
       handleError(reply, error);
