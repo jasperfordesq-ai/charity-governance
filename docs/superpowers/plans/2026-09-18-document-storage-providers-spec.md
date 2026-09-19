@@ -244,6 +244,24 @@ than inventing a new reliability pattern.
 >    Confluence content properties are indexing and integration metadata only.
 >    The definitive record of what a Board approved does not live in a page
 >    property.
+> 5. **The erasure proof currently covers the page only — close this here.**
+>    Phase 5's eraser deletes and purges exactly the attachments named on the
+>    deletion row, then proves erasure by reading the page back and requiring a
+>    404. An attachment the row does not name is never enumerated
+>    (`listAttachments` is deliberately unused) and the row still records
+>    `PROCESSED`. So the proof is only as complete as the list this phase writes.
+>
+>    Phase 5 left this open on purpose, because closing it means enumerating
+>    attachments from Confluence rather than trusting the row — and whether that
+>    is right depends on a question only Phase 4 can answer: **is the page
+>    exclusively CharityPilot's?** If it is, enumerate and erase everything on it,
+>    since purging the page destroys them regardless. If a charity's staff may
+>    attach their own files to it, enumerating and purging would destroy data
+>    CharityPilot never put there — a different and worse harm than the gap it
+>    closes.
+>
+>    Decide it when the authority question in Open Question 1 is ruled on, and
+>    write the answer here.
 
 **Phase 5 — provider-aware erasure.** Extend the deletion lifecycle to purge
 from both stores, handling Confluence trash-then-purge. **Confluence cannot
