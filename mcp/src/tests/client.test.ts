@@ -124,3 +124,56 @@ test('error messages never contain a token value', async () => {
     return true;
   });
 });
+
+test('a non-JSON body is not echoed back in the error', async () => {
+  const session = sessionReturning('access1');
+  const client = new ApiClient({
+    session,
+    baseUrl: 'https://example.test',
+    fetchImpl: async () => new Response('<html><body>Captive portal sign-in</body></html>', {
+      status: 200, headers: { 'content-type': 'text/html' },
+    }),
+  });
+
+  await assert.rejects(() => client.get('/x'), (err: unknown) => {
+    assert.ok(err instanceof ApiError, 'must be an ApiError, not a raw SyntaxError');
+    assert.ok(!err.message.includes('<html>'), 'the body must not be echoed');
+    assert.ok(!err.message.includes('Captive portal sign-in'), 'the body must not be echoed');
+    return true;
+  });
+});
+
+test('the retry uses a NEW token, not the expired one', async () => {
+  let refreshes = 0;
+  const session = new Session({
+    baseUrl: 'https://example.test',
+    store: createMemoryStore('r1'),
+    fetchImpl: async () => {
+      refreshes += 1;
+      const headers = new Headers({ 'content-type': 'application/json' });
+      headers.append('set-cookie', `charitypilot_access=access${refreshes}; Path=/`);
+      headers.append('set-cookie', `charitypilot_refresh=r${refreshes + 1}; Path=/`);
+      return new Response(JSON.stringify({ ok: true }), { status: 200, headers });
+    },
+  });
+
+  const seen: (string | null)[] = [];
+  const client = new ApiClient({
+    session,
+    baseUrl: 'https://example.test',
+    fetchImpl: async (_input, init) => {
+      seen.push(new Headers(init?.headers).get('authorization'));
+      if (seen.length === 1) return new Response('{}', { status: 401 });
+      return new Response(JSON.stringify({ ok: true }), {
+        status: 200, headers: { 'content-type': 'application/json' },
+      });
+    },
+  });
+
+  await client.get('/x');
+
+  assert.equal(seen.length, 2, 'one original attempt plus one retry');
+  assert.notEqual(seen[0], seen[1], 'the retry must carry a freshly refreshed token');
+  assert.equal(seen[0], 'Bearer access1');
+  assert.equal(seen[1], 'Bearer access2');
+});
