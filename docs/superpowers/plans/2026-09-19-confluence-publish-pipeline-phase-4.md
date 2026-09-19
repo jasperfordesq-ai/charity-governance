@@ -224,9 +224,10 @@ This is a read, so `idempotent: true`.
 
 **Files:**
 - Modify: `apps/api/src/routes/integrations/index.ts` (a route to set the chosen space)
-- Modify: `apps/api/src/services/confluence-connection.service.ts` — **CLOSED FILE.** Do not modify
-  it. Store the choice on the integration row's `config` through whatever non-closed path already
-  writes it; if there is genuinely no such path, **stop and report** rather than opening the file.
+- Modify: `apps/api/prisma/schema.prisma` + a hand-written migration (new columns, see below)
+- Create: `apps/api/src/services/confluence-publish-target.service.ts` — a small non-closed module
+  owning **only** the chosen-space columns
+- `confluence-connection.service.ts` stays **CLOSED**. Do not open it.
 - Modify: `apps/web/src/app/(dashboard)/integrations/page.tsx` and its logic module
 - Tests in both apps
 
@@ -235,6 +236,26 @@ This is a read, so `idempotent: true`.
 **Publication cannot begin until a space is chosen.** An organisation that has connected but not
 chosen is connected-but-not-publishing, and the screen must say so plainly — a charity that thinks
 it is mirroring and is not is worse than one that knows it has a step left.
+
+**Do NOT store the choice in `config`, and this is not a style preference.** I checked: every write
+to `OrganisationIntegration` lives inside the closed connection service, and `connectConfluence`
+builds a `connectingState` that **includes `config`** and spreads it into the upsert's `update`. So
+a reconnect overwrites `config` wholesale.
+
+Trace what that would mean. An administrator connects, chooses a space, documents publish. Something
+goes wrong and they **reconnect — which is the recovery action our own error messages recommend**.
+The chosen space is silently wiped, publication stops, and the integration still reads `CONNECTED`
+with nothing explaining why. The schema comment on `config` does say "site id, space key", so this
+trap is genuinely inviting.
+
+**Use dedicated columns instead**, which `connectingState` does not touch and therefore survive a
+reconnect by construction: `publishSpaceId`, `publishSpaceKey`, `publishSpaceName`.
+
+**And record which site the space belongs to.** Space ids are per-site. A charity that reconnects to
+a *different* Atlassian site must not keep a space id from the old one — it would aim publication at
+a space that does not exist there. Store the site identity alongside (whatever identifies the site
+in `config` today) and treat a mismatch as **no space chosen**, so the screen asks again. This is the
+same reasoning that puts `cloudId` on the erasure row rather than resolving it live.
 
 **Validate the chosen space against the ones actually listed.** Accepting an arbitrary id from the
 browser lets a caller aim publication at a space the charity may not intend, and the id is later
@@ -246,7 +267,8 @@ precisely why `cloudId` and `pageId` live on the row rather than being recompute
 
 - [ ] **Step 1: Write the failing tests** — a valid space is stored; an id not in the listed set is
       refused; publication does not enqueue for an organisation with no chosen space; the screen
-      states that connected-without-a-space is not yet publishing
+      states that connected-without-a-space is not yet publishing; **a reconnect to the same site
+      keeps the chosen space**; **a reconnect to a different site reports no space chosen**
 - [ ] **Step 2: Run and watch fail; Step 3: implement; Step 4: run and watch pass**
 - [ ] **Step 5: Verify by mutation** — accept an unlisted id and confirm the refusal test fails alone
 - [ ] **Step 6: Commit** — `feat(publish): a charity chooses where its documents are published`
