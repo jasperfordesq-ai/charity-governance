@@ -665,9 +665,14 @@ export class Session {
         // Revocation is best-effort; the local credential is cleared regardless.
       }
     }
-    this.#store.clear();
+    // Drop the in-memory session BEFORE clearing the store. `clear()` throws when the
+    // OS credential store refuses to release the entry (locked keychain, permission
+    // denied) — that throw must reach the user, because a disconnect that silently
+    // leaves the credential on disk is worse than one that fails loudly. Clearing
+    // memory first means the throw still leaves this process with no usable session.
     this.#accessToken = null;
     this.#identity = null;
+    this.#store.clear();
   }
 
   #absorbCookies(response: Response): void {
