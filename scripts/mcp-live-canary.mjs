@@ -31,6 +31,15 @@ const MUTATIONS = {
     replace: '$1true$2',
     expect: 'governing_acts must withhold notes and resolutions from the closed gate.',
   },
+  // The dashboard shipped for a while returning its payload unfiltered. This
+  // reproduces that exact state: a shape that hands the value straight back.
+  'dashboard-passthrough': {
+    file: 'mcp/src/field-policy.ts',
+    find: /( {2}dashboard: )filterDashboard(,)/g,
+    replace: '$1((value) => value)$2',
+    expect:
+      'dashboard_overview must withhold activity free text and staff names from the closed gate.',
+  },
 };
 
 const name = process.argv[2];

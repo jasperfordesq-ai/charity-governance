@@ -24,6 +24,18 @@ export const PD_SENTINELS = [
   'PD-CANARY-RESOLUTION',
   'pd-canary-chair@example.org',
   '1968-03-14',
+  // The register free-text and named-person fields.
+  'PD-CANARY-MATTER',
+  'PD-CANARY-NATURE',
+  'PD-CANARY-CONFLICT-ACTION',
+  'PD-CANARY-RISK-OWNER',
+  'PD-CANARY-RISK-DESCRIPTION',
+  'PD-CANARY-RISK-MITIGATION',
+  'PD-CANARY-COMPLAINT-SUMMARY',
+  'PD-CANARY-COMPLAINT-SOURCE',
+  'PD-CANARY-FUNDRAISER',
+  'PD-CANARY-FUNDRAISING-CONTROLS',
+  'PD-CANARY-DEADLINE-DESCRIPTION',
 ] as const;
 
 export const TENANT_B_SENTINEL = 'TENANT-B-CANARY';
@@ -33,12 +45,11 @@ export const TENANT_B_SENTINEL = 'TENANT-B-CANARY';
  * read back.
  *
  * `dateOfBirth` is sent as a full ISO datetime rather than the date-only form
- * the sentinel asserts. BoardMemberService.update spreads the request body and
- * converts only appointedDate, termEndDate, conductSignedDate and
- * inductionDate to Date objects, so a date-only dateOfBirth reaches Prisma as a
- * bare string and the request fails with a 500. The create path does not carry
- * the column at all. Until that is fixed there is no date-only route to this
- * field, and this is the form that works.
+ * the sentinel asserts. When this harness first ran, a date-only value reached
+ * Prisma as a bare string and the request failed with a 500, while the create
+ * path did not carry the column at all. Both were fixed in the API afterwards,
+ * so a date-only value would work now; the datetime form is kept because it is
+ * accepted either way and exercises the wider of the two inputs.
  */
 const CHAIR_PERSONAL_DATA: Array<{ field: string; send: string; expectPrefix: string }> = [
   {
@@ -248,16 +259,57 @@ export async function seedMcpFixture(options: { apiUrl: string }): Promise<McpFi
       boardMemberId: chair.data.id,
       trusteeName: 'Aoife Chairperson',
       matter: 'PD-CANARY-MATTER',
-      nature: 'Supplier relationship with a firm under consideration.',
+      nature: 'PD-CANARY-NATURE supplier relationship',
       dateDeclared: '2026-03-02',
-      actionTaken: 'Declared at the outset and recused from the vote.',
+      actionTaken: 'PD-CANARY-CONFLICT-ACTION recused from the vote',
+    },
+  });
+
+  await api(apiUrl, token, '/api/v1/governance-registers/risks', {
+    method: 'POST',
+    body: {
+      title: 'Reliance on a single funder',
+      category: 'FINANCIAL',
+      description: 'PD-CANARY-RISK-DESCRIPTION concentration of income',
+      likelihood: 3,
+      impact: 4,
+      mitigation: 'PD-CANARY-RISK-MITIGATION diversify the funding base',
+      owner: 'PD-CANARY-RISK-OWNER',
+      boardMinuteReference: 'M-12',
+    },
+  });
+
+  await api(apiUrl, token, '/api/v1/governance-registers/complaints', {
+    method: 'POST',
+    body: {
+      receivedDate: '2026-02-10',
+      source: 'PD-CANARY-COMPLAINT-SOURCE',
+      summary: 'PD-CANARY-COMPLAINT-SUMMARY allegation about a named individual',
+      reviewedByBoard: true,
+      boardMinuteReference: 'M-12',
+    },
+  });
+
+  await api(apiUrl, token, '/api/v1/governance-registers/fundraising', {
+    method: 'POST',
+    body: {
+      name: 'Spring street collection',
+      activityType: 'Street collection',
+      publicFacing: true,
+      thirdPartyFundraiser: 'PD-CANARY-FUNDRAISER',
+      controls: 'PD-CANARY-FUNDRAISING-CONTROLS two-person counting',
+      complaintsReceived: false,
     },
   });
 
   await api(apiUrl, token, '/api/v1/deadlines', {
     method: 'POST',
     // dueDate is civilDateSchema: date-only, never a datetime string.
-    body: { title: 'MCP harness deadline', dueDate: '2026-12-31' },
+    body: {
+      title: 'MCP harness deadline',
+      dueDate: '2026-12-31',
+      description: 'PD-CANARY-DEADLINE-DESCRIPTION follow up with the chair',
+    },
   });
 
   const form = new FormData();

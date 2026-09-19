@@ -94,7 +94,7 @@ test.describe('MCP connector lifecycle', () => {
     expect(result.stdout).toContain('MCP Harness Charity');
   });
 
-  test('the advertised tools are exactly the ten read tools and none takes an organisationId', async () => {
+  test('the advertised tools are exactly the read surface, and none takes an organisationId', async () => {
     const connector = await openConnector({
       apiUrl: API_BASE_URL,
       credentialFile: credentialFileFor('lifecycle'),
@@ -103,18 +103,36 @@ test.describe('MCP connector lifecycle', () => {
       const listed = await connector.client.listTools();
       const names = listed.tools.map((tool) => tool.name).sort();
       // Hardcoded on purpose: a list read from the artifact under test would
-      // agree with it however wrong it became.
+      // agree with it however wrong it became. Adding a tool means adding it
+      // here, which is the moment to ask whether it should exist.
       expect(names).toEqual([
+        'annual_report_readiness',
         'approval_readiness',
         'board_register',
+        'board_submissions',
+        'complaints_list',
+        'compliance_principle',
         'compliance_principles',
+        'compliance_record',
         'compliance_records',
+        'compliance_signoff',
         'compliance_summary',
+        'conflicts_list',
+        'confluence_status',
         'dashboard_overview',
         'deadlines_history',
         'deadlines_list',
+        'document',
         'documents_list',
+        'financial_controls',
+        'fundraising_list',
         'governing_acts',
+        'governing_acts_voids',
+        'members_list',
+        'organisation',
+        'registers_summary',
+        'risks_list',
+        'team_list',
       ]);
       expect(JSON.stringify(listed.tools)).not.toContain('organisationId');
     } finally {
@@ -406,6 +424,215 @@ test.describe('Roles', () => {
       // officer: reads are not role-gated by the API, so the client-side flag
       // alone decides whether a trustee's home address reaches a model.
       expect(board.text).toContain('PD-CANARY-ADDRESS');
+    } finally {
+      await connector.close();
+    }
+  });
+});
+
+/* --- phase 1: every readable route, gated ------------------------------- */
+
+/**
+ * The tools that answer without arguments. Driven off what the connector
+ * actually advertises rather than a list written here, so a tool added later
+ * is covered without anyone remembering to add it — which is the failure this
+ * suite exists to prevent.
+ */
+async function listedToolNames(credentialFile: string): Promise<string[]> {
+  const connector = await openConnector({ apiUrl: API_BASE_URL, credentialFile });
+  try {
+    const listed = await connector.client.listTools();
+    return listed.tools
+      .filter((tool) => {
+        const schema = tool.inputSchema as { required?: string[] } | undefined;
+        return !schema?.required || schema.required.length === 0;
+      })
+      .map((tool) => tool.name);
+  } finally {
+    await connector.close();
+  }
+}
+
+test.describe('Phase 1: the whole readable surface', () => {
+  test('every tool that needs no arguments answers, and none leaks a sentinel', async () => {
+    const credentialFile = await connectAs('phase1', fixture.owner);
+    const names = await listedToolNames(credentialFile);
+    expect(names.length, 'the connector should advertise the full read surface').toBeGreaterThan(20);
+
+    const connector = await openConnector({ apiUrl: API_BASE_URL, credentialFile });
+    try {
+      for (const name of names) {
+        const result = await callTool(connector.client, name);
+        expect(result.isError, `${name} failed: ${result.text}`).toBe(false);
+
+        for (const sentinel of PD_SENTINELS) {
+          expect(
+            result.text.includes(sentinel),
+            `${name} leaked ${sentinel} through the closed gate`,
+          ).toBe(false);
+        }
+        expect(result.text, `${name} reached the other charity`).not.toContain(TENANT_B_SENTINEL);
+      }
+    } finally {
+      await connector.close();
+    }
+  });
+
+  test('the register tools return their records with the identifying fields withheld', async () => {
+    const connector = await openConnector({
+      apiUrl: API_BASE_URL,
+      credentialFile: credentialFileFor('phase1'),
+    });
+    try {
+      const risks = await callTool(connector.client, 'risks_list');
+      expect(risks.isError, risks.text).toBe(false);
+      expect(risks.text).toContain('Reliance on a single funder');
+      expect(risks.text).toContain('FINANCIAL');
+
+      const complaints = await callTool(connector.client, 'complaints_list');
+      expect(complaints.isError, complaints.text).toBe(false);
+      expect(complaints.text).toContain('OPEN');
+
+      const fundraising = await callTool(connector.client, 'fundraising_list');
+      expect(fundraising.isError, fundraising.text).toBe(false);
+      expect(fundraising.text).toContain('Spring street collection');
+
+      const members = await callTool(connector.client, 'members_list');
+      expect(members.isError, members.text).toBe(false);
+    } finally {
+      await connector.close();
+    }
+  });
+
+  test('the dashboard no longer carries activity free text or staff names', async () => {
+    // The regression test for the gap this phase closed: the dashboard shipped
+    // declaring no model at all, so its records went straight past the gate.
+    const connector = await openConnector({
+      apiUrl: API_BASE_URL,
+      credentialFile: credentialFileFor('phase1'),
+    });
+    try {
+      const closed = await callTool(connector.client, 'dashboard_overview');
+      expect(closed.isError, closed.text).toBe(false);
+      expect(closed.text, 'activity descriptions are free text naming people').not.toContain(
+        'Updated board member',
+      );
+      expect(closed.text).not.toContain('PD-CANARY-DEADLINE-DESCRIPTION');
+    } finally {
+      await connector.close();
+    }
+
+    const open = await openConnector({
+      apiUrl: API_BASE_URL,
+      credentialFile: credentialFileFor('phase1'),
+      allowPersonalData: true,
+    });
+    try {
+      const result = await callTool(open.client, 'dashboard_overview');
+      expect(result.isError, result.text).toBe(false);
+      // Proves the closed-gate absence above was a filter doing its job rather
+      // than a dashboard that had nothing to show.
+      expect(result.text).toContain('PD-CANARY-DEADLINE-DESCRIPTION');
+    } finally {
+      await open.close();
+    }
+  });
+
+  test('the gate opens for every tool, proving the closed-gate absences were filtering', async () => {
+    const credentialFile = credentialFileFor('phase1');
+    const connector = await openConnector({
+      apiUrl: API_BASE_URL,
+      credentialFile,
+      allowPersonalData: true,
+    });
+    try {
+      const seen = new Set<string>();
+      for (const name of await listedToolNames(credentialFile)) {
+        const result = await callTool(connector.client, name);
+        expect(result.isError, `${name} failed with the gate open: ${result.text}`).toBe(false);
+        for (const sentinel of PD_SENTINELS) {
+          if (result.text.includes(sentinel)) seen.add(sentinel);
+        }
+      }
+      // Not every sentinel is reachable without arguments, but a closed gate
+      // that hid data nobody ever planted would prove nothing, so require most
+      // of them to be visible once it is open.
+      expect(seen.size, `only ${seen.size} sentinels were reachable with the gate open`)
+        .toBeGreaterThan(10);
+    } finally {
+      await connector.close();
+    }
+  });
+
+  test('pagination reaches the API rather than being quietly ignored', async () => {
+    const connector = await openConnector({
+      apiUrl: API_BASE_URL,
+      credentialFile: credentialFileFor('phase1'),
+    });
+    try {
+      const first = await callTool(connector.client, 'board_register', { page: 1, pageSize: 2 });
+      expect(first.isError, first.text).toBe(false);
+      const firstPage = first.json as { data: unknown[]; hasMore: boolean; total: number };
+      expect(firstPage.data).toHaveLength(2);
+      expect(firstPage.hasMore).toBe(true);
+      expect(firstPage.total).toBe(3);
+
+      const second = await callTool(connector.client, 'board_register', { page: 2, pageSize: 2 });
+      const secondPage = second.json as { data: unknown[]; hasMore: boolean };
+      expect(secondPage.data).toHaveLength(1);
+      expect(secondPage.hasMore).toBe(false);
+      expect(JSON.stringify(secondPage.data)).not.toEqual(JSON.stringify(firstPage.data));
+    } finally {
+      await connector.close();
+    }
+  });
+
+  test('an argument the tool does not declare is refused, not ignored', async () => {
+    const connector = await openConnector({
+      apiUrl: API_BASE_URL,
+      credentialFile: credentialFileFor('phase1'),
+    });
+    try {
+      const result = await callTool(connector.client, 'board_register', { organisationId: 'other' });
+      expect(result.isError).toBe(true);
+      expect(result.text).toMatch(/unknown argument/i);
+      expect(result.text).not.toMatch(/\n\s+at /);
+
+      const outOfRange = await callTool(connector.client, 'board_register', { pageSize: 5000 });
+      expect(outOfRange.isError).toBe(true);
+      expect(outOfRange.text).toMatch(/pageSize/);
+    } finally {
+      await connector.close();
+    }
+  });
+
+  test('a tool taking an identifier fetches exactly that record', async () => {
+    const connector = await openConnector({
+      apiUrl: API_BASE_URL,
+      credentialFile: credentialFileFor('phase1'),
+    });
+    try {
+      const missing = await callTool(connector.client, 'document');
+      expect(missing.isError, 'the identifier is required').toBe(true);
+      expect(missing.text).toMatch(/id/);
+
+      const found = await callTool(connector.client, 'document', { id: fixture.ids.documentId });
+      expect(found.isError, found.text).toBe(false);
+      expect(found.text).toContain('MCP harness constitution');
+      expect(found.text, 'file bytes are never returned').not.toContain('%PDF');
+    } finally {
+      await connector.close();
+    }
+  });
+
+  test('a member is refused an administrator-only tool, with a clean message', async () => {
+    const credentialFile = await connectAs('phase1-member', fixture.member);
+    const connector = await openConnector({ apiUrl: API_BASE_URL, credentialFile });
+    try {
+      const result = await callTool(connector.client, 'confluence_status');
+      expect(result.isError, 'a member must not read integration status').toBe(true);
+      expect(result.text).toMatch(/403/);
+      expect(result.text, 'an authorisation refusal is not a crash').not.toMatch(/\n\s+at /);
     } finally {
       await connector.close();
     }
