@@ -6,6 +6,100 @@ Paste everything below the line into a fresh session. It is written to stand alo
 
 ---
 
+---
+
+## START HERE — do not just carry on building
+
+Every phase in the original plan is built. **That does not mean the next step is more building.**
+Two things happened after the code was written, and both change what should happen next.
+
+### 1. The DPO asked us to pause at the publish pipeline, and we built it anyway
+
+Nikita Serkevich (DPO) wrote on **2026-09-19 09:26**:
+
+> *"continue with option (a) as far as completing the Confluence API client, but **pause before
+> building the publish pipeline**. After the API client is working, I would put the effort into the
+> administration panel and getting the existing application into a state where I can review it
+> properly."*
+>
+> *"I do not want you designing the document mapping around assumptions about our Governance Hub
+> before we have looked at the actual spaces, permissions, document lifecycle and approval
+> structure together."*
+
+Phase 4 **is** that publish pipeline, and it was built after that email, on the owner's explicit
+instruction. The owner is the director and that is their call to make — **do not re-litigate it.**
+But know the position you are inheriting:
+
+- The admin panel he asked for next (Phase 6) **is** done.
+- The mapping deliberately does **not** guess his `POL -` / `NOS -` convention. There is a single
+  documented function, `conventionalDocumentName`, to change once the Hub has been seen.
+- Nothing publishes without a connected site **and** a chosen space. Neither exists for him.
+- Nothing has ever touched a real Confluence site.
+
+What is *not* mitigated: the title scheme, page body, metadata contents and erasure semantics were
+all chosen without seeing the Hub. Those are the decisions he wanted to make together.
+
+### 2. The erasure model is being reworked — do not build on the current one
+
+Nikita: *"An ordinary CharityPilot deletion should not silently destroy the Confluence source."*
+
+Phase 4 Task 8 does exactly that. **It is wrong and it is being changed.** The owner's direction,
+agreed 2026-09-19:
+
+> **CharityPilot must not delete anything from Confluence.** If a document exists in Confluence on a
+> Confluence-enabled tenant, deleting it in CharityPilot is **refused**, with a message telling the
+> user to go to Confluence. If it is deleted in Confluence, CharityPilot shows a note that it is no
+> longer visible there.
+
+**An open question blocks the start of this work.** "CharityPilot mirrors everything in Confluence"
+admits two readings, and they are materially different jobs:
+
+- **(a)** Keep the flow as built — documents originate in CharityPilot and publish to Confluence —
+  but refuse deletion once published. *Small.*
+- **(b)** Invert it — Confluence is where documents live; CharityPilot reads and references them.
+  *Large: the publish pipeline becomes a read/reconcile pipeline.*
+
+**(a) was recommended**, because Nikita's own steer is *"agree the publishing model before building
+it"* — after he has walked the Hub with the owner. Inverting now would make exactly the decision he
+asked to make together, and (a) does not foreclose (b). **The owner had not answered when this
+session ended. Ask before building.**
+
+Four details that decide whether the refusal is any good:
+
+1. **Do not create undeletable records.** If Confluence is disconnected, or the page is confirmed
+   gone, deletion must become possible again.
+2. **Do not say "deleted" when you mean "not visible".** A vanished page may be in Confluence's
+   trash and restorable — and whether a trashed page reads as missing is still unverified.
+3. **Detecting a Confluence-side deletion is new work** — a job re-reading each referenced page.
+4. **Refusing deletion must not freeze everything else.** Approval status, review dates and evidence
+   links stay authoritative in CharityPilot; they must remain editable on a document that cannot be
+   deleted.
+
+**Good news on cost:** the provable-erasure machinery Nikita describes — recording the instruction,
+the action taken, the verified final state, and an administrator action where automatic deletion is
+impossible — **already exists** from Phase 5. `COMPLETE_EXTERNALLY_REMEDIATED` is literally "a human
+did this outside the system", recorded with actor, reason and transaction id. It is wired to the
+wrong trigger, not missing.
+
+### 3. What else his 2026-09-19 email changed
+
+- **The Atlassian OAuth app is the owner's to create, not his.** One controlled integration, narrowest
+  scopes including `offline_access`, owned organisationally rather than by a personal account.
+- **Do not ask him to install anything yet.** He wants the OAuth app and consent flow configured
+  first; that may resolve the 403 without anything more invasive.
+- **Residency: he would NOT make EU residency a universal prerequisite** for other tenants. Record
+  each tenant's *declared* configuration and be explicit that CharityPilot does not control it. This
+  conflicts with the owner's standing "Irish or EU" rule — **the owner's to settle, not yours.**
+- **Two loose ends not yet done:** development logs holding the leaked OAuth codes must be *cleared
+  or allowed to expire*; and he wants least-privilege Tailscale access (CharityPilot only, filing
+  bridge separately, no access to the personal machine).
+- **He still cannot connect at all.** Device connected, DNS resolving, ping and port 443 both time
+  out — points at the access policy, the firewall, or the service not listening on the Tailscale
+  interface. **He has been unable to review since 2026-08-31.** This blocks his step 1, which
+  everything else in his ordering sits behind.
+
+---
+
 ## The goal
 
 Finish the Confluence integration for CharityPilot, so that an Irish charity can connect its own
