@@ -51,36 +51,62 @@ export const WITHHELD_FIELDS: Record<ModelName, readonly string[]> = {
 
 export function applyFieldPolicy<T>(model: ModelName, value: T, allowPersonalData: boolean): T {
   if (allowPersonalData) return value;
-  return filter(model, value) as T;
+  if (isEnvelope(value)) return filterEnvelope(model, value) as T;
+  return filterRecord(model, value) as T;
 }
 
 /**
- * The API wraps list responses in an envelope — either just `{ data }` (see
- * apps/api/src/utils/response.ts's sendSuccess) or a paginated
- * `{ data, total, page, pageSize, hasMore }` (see
+ * The API wraps responses in an envelope — either just `{ data }` for a single
+ * record or a list with no pagination (see apps/api/src/utils/response.ts's
+ * sendSuccess), or a paginated `{ data, total, page, pageSize, hasMore }` (see
  * apps/api/src/services/board-member.service.ts). Neither shape is the model
- * itself, so filtering it as one drops every key that isn't a model field —
- * which includes `data`, emptying the response. Detected generically by an
- * array-valued `data` property, not by route, so any current or future
- * envelope-shaped response is handled the same way.
+ * itself; `data` may be a single record (a detail route) or an array (a list
+ * route).
+ *
+ * This is checked exactly ONCE, at the top of applyFieldPolicy — never during
+ * recursion. The envelope is something the API wraps around a result set; it
+ * is never a record. A record can legitimately have its own field named
+ * `data` (nothing stops a future migration adding one), and if this check
+ * were re-applied while recursing into a record's own fields, such a record
+ * would be misread as a nested envelope: its other fields would be spread
+ * through untouched instead of going through the allowlist, and the
+ * personal-data gate would be defeated for that record. Checking only at the
+ * top means every value below it — including anything inside `data`, however
+ * deep — goes through the plain allowlist filter in filterRecord, with no
+ * further envelope detection.
  */
-function isEnvelope(value: unknown): value is Record<string, unknown> & { data: unknown[] } {
-  return (
-    value !== null &&
-    typeof value === 'object' &&
-    !Array.isArray(value) &&
-    Array.isArray((value as Record<string, unknown>).data)
-  );
+function isEnvelope(value: unknown): value is Record<string, unknown> & { data: unknown } {
+  if (value === null || typeof value !== 'object' || Array.isArray(value)) return false;
+  const data = (value as Record<string, unknown>).data;
+  return Array.isArray(data) || (data !== null && typeof data === 'object');
 }
 
-function filter(model: ModelName, value: unknown): unknown {
-  if (Array.isArray(value)) return value.map((item) => filter(model, item));
-  if (value === null || typeof value !== 'object') return value;
+/** The only envelope keys other than `data` that are ever allowed through the gate. */
+const ENVELOPE_META_FIELDS = ['total', 'page', 'pageSize', 'hasMore'] as const;
 
-  if (isEnvelope(value)) {
-    const { data, ...meta } = value;
-    return { ...meta, data: filter(model, data) };
+/**
+ * Filters an envelope's `data` (record or array of records) through the plain
+ * allowlist, and allowlists the envelope's own keys too: only the known
+ * pagination fields survive alongside the filtered `data`. Any other sibling
+ * key on the envelope (e.g. a route that additionally returns
+ * `pendingInvites` or a `summary` object) is dropped when the gate is closed,
+ * the same way an unclassified field on a record is dropped — an envelope
+ * sibling nobody allowlisted is exactly as capable of carrying personal data
+ * as a record field nobody allowlisted.
+ */
+function filterEnvelope(model: ModelName, value: Record<string, unknown> & { data: unknown }): unknown {
+  const out: Record<string, unknown> = {};
+  for (const key of ENVELOPE_META_FIELDS) {
+    if (key in value) out[key] = value[key];
   }
+  out.data = filterRecord(model, value.data);
+  return out;
+}
+
+/** Plain allowlist filter for a record or array of records. No envelope detection at any depth. */
+function filterRecord(model: ModelName, value: unknown): unknown {
+  if (Array.isArray(value)) return value.map((item) => filterRecord(model, item));
+  if (value === null || typeof value !== 'object') return value;
 
   const allowed = SAFE_FIELDS[model];
   const out: Record<string, unknown> = {};

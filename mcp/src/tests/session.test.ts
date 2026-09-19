@@ -117,6 +117,37 @@ test('a 403 on refresh keeps the credential instead of logging the user out', as
   assert.equal(store.read(), 'refresh1', 'a 403 must not destroy the credential');
 });
 
+test('login reports a 403 as an origin rejection, not bad credentials, and does not retry-lock the account', async () => {
+  const store = createMemoryStore();
+  const session = new Session({
+    baseUrl: 'https://charitypilot.example.ts.net',
+    store,
+    fetchImpl: async () => new Response('{}', { status: 403 }),
+  });
+
+  await assert.rejects(() => session.login('a@b.ie', 'correct-password'), (err: unknown) => {
+    assert.ok(err instanceof Error);
+    assert.doesNotMatch((err as Error).message, /check the email address and password/i,
+      'a 403 must not be reported as a credential problem — that sends a correct password back for a retry');
+    assert.match((err as Error).message, /origin/i);
+    assert.match((err as Error).message, /charitypilot\.example\.ts\.net/,
+      'the message should name the host being used so a baseUrl mismatch is visible');
+    return true;
+  });
+  assert.equal(store.read(), null, 'a 403 on login never stored anything to begin with');
+});
+
+test('login still reports a generic message for a 401, so it does not leak whether the email exists', async () => {
+  const store = createMemoryStore();
+  const session = new Session({
+    baseUrl: 'https://example.test',
+    store,
+    fetchImpl: async () => new Response('{}', { status: 401 }),
+  });
+
+  await assert.rejects(() => session.login('a@b.ie', 'wrong-password'), /check the email address and password/i);
+});
+
 test('login throws if no refresh token cookie was captured, instead of reporting success', async () => {
   const store = createMemoryStore();
   const session = new Session({

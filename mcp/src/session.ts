@@ -65,6 +65,22 @@ export class Session {
   async login(email: string, password: string): Promise<SessionIdentity> {
     const response = await this.#post('/api/v1/auth/login', { email, password });
     if (!response.ok) {
+      // A 403 here is the same request-origin hook that #refreshAccessToken already
+      // has to discriminate (see the comment there): it says nothing about whether
+      // the credentials are correct. Reporting it as "check the email address and
+      // password" sends someone back to retype an already-correct password against
+      // /auth/login, which rate-limits per email address — repeated retries can lock
+      // out the real account. A 403 is instead reported as an origin rejection, and
+      // names the host so a baseUrl mismatch is visible. Every other status,
+      // including 401, keeps the generic message: it must not leak whether the email
+      // exists.
+      if (response.status === 403) {
+        throw new Error(
+          `CharityPilot rejected this request's origin rather than the credentials `
+            + `(using ${this.#origin}). Check that CHARITYPILOT_BASE_URL points at the `
+            + 'right host.',
+        );
+      }
       throw new Error('Sign-in failed. Check the email address and password.');
     }
     const capturedRefreshToken = this.#absorbCookies(response);

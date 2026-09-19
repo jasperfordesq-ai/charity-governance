@@ -122,6 +122,62 @@ test('an envelope is returned whole when the gate is open', () => {
   assert.deepEqual(applyFieldPolicy('BoardMember', envelope, true), envelope);
 });
 
+test('a record that itself carries an array-valued data field is still fully filtered, not mistaken for a nested envelope', () => {
+  // A future `data Json[]` column on BoardMember would put a `data` key on every
+  // record the API returns nested inside the real envelope's own `data` array.
+  // Envelope detection must not re-fire on that inner record: if it did, the
+  // record's other fields (including dateOfBirth and residentialAddress) would be
+  // spread through untouched instead of going through the allowlist.
+  const poisoned = {
+    id: 'bm1', name: 'A Trustee', dateOfBirth: '1970-01-01',
+    residentialAddress: '1 Main St', email: 'a@b.ie', data: [],
+  };
+  const envelope = { data: [poisoned], total: 1, page: 1, pageSize: 50, hasMore: false };
+  const out = applyFieldPolicy('BoardMember', envelope, false) as typeof envelope;
+
+  assert.equal(out.data.length, 1);
+  const record = out.data[0] as unknown as Record<string, unknown>;
+  assert.equal(record.id, 'bm1');
+  assert.equal(record.name, 'A Trustee');
+  for (const field of ['dateOfBirth', 'residentialAddress', 'email', 'data']) {
+    assert.ok(!(field in record), `${field} must be withheld — the record must not be treated as an envelope`);
+  }
+});
+
+test('an unexpected envelope sibling key carrying personal data does not survive the gate', () => {
+  const envelope = {
+    data: [TRUSTEE],
+    total: 1, page: 1, pageSize: 50, hasMore: false,
+    pendingInvites: [{ name: 'Invitee', email: 'invitee@example.ie', dateOfBirth: '1990-01-01' }],
+    summary: { chairDateOfBirth: '1960-01-01' },
+  };
+  const out = applyFieldPolicy('BoardMember', envelope, false) as Record<string, unknown>;
+
+  assert.ok(!('pendingInvites' in out), 'an unallowlisted envelope sibling must not survive');
+  assert.ok(!('summary' in out), 'an unallowlisted envelope sibling must not survive');
+  assert.equal(out.total, 1);
+  assert.equal(out.page, 1);
+  assert.equal(out.pageSize, 50);
+  assert.equal(out.hasMore, false);
+  assert.equal((out.data as unknown[]).length, 1);
+});
+
+test('a single-record envelope { data: {...} } is filtered as one record, not emptied', () => {
+  const envelope = { data: TRUSTEE };
+  const out = applyFieldPolicy('BoardMember', envelope, false) as { data: Record<string, unknown> };
+
+  assert.equal(out.data.id, 'bm1');
+  assert.equal(out.data.name, 'A Trustee');
+  for (const field of ['dateOfBirth', 'residentialAddress', 'email', 'formerNames', 'otherDirectorships']) {
+    assert.ok(!(field in out.data), `${field} must be withheld`);
+  }
+});
+
+test('a single-record envelope is returned whole when the gate is open', () => {
+  const envelope = { data: TRUSTEE };
+  assert.deepEqual(applyFieldPolicy('BoardMember', envelope, true), envelope);
+});
+
 test('GoverningAct: notes and the resolutions relation are withheld, the act itself survives', () => {
   const act = {
     id: 'ga1', organisationId: 'o1', kind: 'BOARD_MEETING', status: 'APPROVED',
