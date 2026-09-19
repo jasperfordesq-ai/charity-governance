@@ -86,6 +86,13 @@ Extend those helpers rather than reaching for a live client — and when you add
 `DocumentStorageDeletionRecord`, add it to `pendingRecord()` too, or every existing test in that
 file silently exercises a row shape the production code no longer sees.
 
+**When you widen a row type, audit everything that *fabricates* that shape — not just every
+`select`.** These are not the same instruction, and the difference has already cost this phase a
+defect. Task 1 correctly audited every Prisma `select` and its review confirmed the audit complete;
+both missed a hand-written `$queryRaw` fake row in `idempotency-reliability.test.ts`, which would
+have dispatched on `undefined`. Search for raw-query fakes, fixture factories, and any literal that
+is cast to the record type — a cast is a promise the compiler will not check for you.
+
 ## Facts verified against Atlassian (do not re-derive; do not assume)
 
 | Operation | Endpoint | Effect |
@@ -306,6 +313,15 @@ changing Supabase behaviour at all.
 - Modify: `apps/api/src/services/document.service.ts` (`retryPendingStorageDeletions`,
   `runBoundedStorageDeletion`, and `isPermanentStorageDeletionFailure`)
 - Modify: `apps/api/src/jobs/cleanup-document-storage.ts`
+- Modify: `apps/api/src/jobs/production-scheduler.ts` — **the other caller of
+  `retryPendingStorageDeletions`, and the one that actually runs in production.** It needs the same
+  wiring. It will not compile without it, so this is self-correcting, but do not assume the
+  standalone cleanup job is the only entry point.
+- Modify: `apps/api/src/jobs/recover-document-storage-deletion.ts` — it holds a **closed**
+  `TerminalReason` union and a `TERMINAL_REASONS` validation set. Add the new value to both. Without
+  it `tsc` fails, and — the part that matters — the operator recovery CLI refuses
+  `--expected-terminal-reason PROVIDER_NOT_ERASABLE`, leaving such a row unrecoverable by the only
+  tool permitted to touch it. A dead-letter nobody can clear is worse than no dead-letter state.
 
 **Interfaces:**
 - Consumes: `DocumentStorageDeletionRecord` from Task 1.
