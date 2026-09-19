@@ -145,6 +145,40 @@ test('a row stamped with an inherited property name dead-letters instead of repo
   assert.equal(mock.row().terminalReason, 'PROVIDER_NOT_ERASABLE');
 });
 
+/**
+ * The sibling of the dispatcher's own-property guard, and pinned the same way.
+ *
+ * `permanentStorageDeletionTerminalReason` in document.service.ts looks an
+ * `AppError.code` up in a permanence map. A bare `MAP[error.code]` lookup
+ * resolves Object.prototype members, so an error coded `toString` or
+ * `constructor` would resolve to a *function* — truthy — and the row would be
+ * dead-lettered on its first attempt with a terminal reason that is not a
+ * terminal reason at all. A charity's erasure would stop being retried because
+ * of a name collision with a built-in.
+ *
+ * No AppError in the codebase carries such a code today, so this is defensive
+ * depth rather than a live path. Depth with nothing pinning it is depth that
+ * quietly disappears in the next refactor, which is why it is pinned here.
+ */
+for (const inheritedCode of ['toString', 'constructor', 'hasOwnProperty', 'valueOf'] as const) {
+  test(`an error coded "${inheritedCode}" stays transient instead of resolving an inherited permanence entry`, async () => {
+    const mock = buildFallbackPrisma(pendingRecord());
+    const service = new DocumentService(mock.prisma as never, () => NOW);
+
+    const result = await service.retryPendingStorageDeletions(
+      supabaseDispatcher(async () => {
+        throw new AppError(502, inheritedCode, 'upstream refused the delete');
+      }),
+      10,
+    );
+
+    assert.equal(result.newlyDeadLettered, 0, 'Object.prototype members are not permanence entries');
+    assert.equal(result.retryScheduled, 1);
+    assert.equal(mock.row().state, 'PENDING');
+    assert.equal(mock.row().terminalReason, null);
+  });
+}
+
 test('the dispatcher returns the eraser registered under a provider it does own', () => {
   const erase: Eraser = async () => undefined;
   const dispatch = createErasureDispatcher({ supabase: erase });
