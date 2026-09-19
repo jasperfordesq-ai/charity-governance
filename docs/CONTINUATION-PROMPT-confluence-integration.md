@@ -200,6 +200,52 @@ distinction is what proved two Phase 3 guards had zero coverage rather than weak
 - **An implementer's self-reported mutation table is a claim, not evidence.** One reported full
   coverage and "no concerns" and was wrong on both counts. Re-run the table.
 
+### Traps in this repository that cost real time
+
+**Two ways a test can silently never run.** Both report a smaller total and no error.
+- `apps/api`'s `npm test` runs **two passes**: pass one runs everything *except* tests named
+  `real PostgreSQL 16 migration`; pass two re-runs that phrase against **one named file only**. A
+  test in a *new* file using that phrase is skipped by the first and never reached by the second.
+- `apps/web` compiles from an **explicit include list** in `tsconfig.test.json`. A file not listed
+  never compiles and never runs.
+
+**Always confirm tests by name in TAP output.** Never infer from a total. A test that never runs is
+worse than no test, because it reads as coverage.
+
+**Do not write backslash-u escape literals into source content.** The file-writing path decodes them
+into raw bytes — including U+0000 — leaving files that read as *binary* to `grep`, `file` and `sed`.
+This happened three times: in a source file, in the report documenting it, and in the script writing
+this very section. Use numeric code points or `String.fromCharCode`, and in Python use a raw string.
+If `grep` reports "binary file matches" on a plain `.ts` file, that is the signal, not a tool bug.
+
+**The checkout is shared and moves under you.** Another session committed to `master` throughout
+this work (all inside `mcp/`). Re-read `git status` and `git log -1` immediately before committing,
+and treat any file you did not just edit as possibly someone else's in-flight work.
+
+**Mutation-testing setup:** copy the source to a scratchpad, junction the **repository root's**
+`node_modules` (hoisted monorepo — the inner ones lack `tsx`/`typescript`; `apps/web` also needs its
+own for `axios`), and build the baseline from a pristine `git archive HEAD` into a **new** directory.
+A reused scratchpad has produced a wrong failure count. A scratchpad synced with `git ls-files`
+omits untracked files and under-reports.
+
+### What this session actually did
+
+| Phase | Built |
+|---|---|
+| 3 | Confluence API client — closed with a whole-branch review, fix round and clean re-review |
+| 5 | Provider-aware erasure — 7 tasks. **Its delete-both-copies behaviour is the part now being reworked** |
+| 6 | Admin UI, the OAuth callback moved to a web page so a stale session cannot burn an authorization code, per-tenant health. **Three separate routes leaked live authorization codes; all three closed, and a build check now fails if a fourth appears** |
+| 4 | Publish pipeline — 8 tasks, create-or-adopt so a retry cannot duplicate a board resolution |
+
+Suites at session end: `apps/api` **1646/0**, `apps/web` **476/0**, migrations **4/0**,
+`packages/shared` **57/0**, `test:production-check` **1062 pass / 2 pre-existing environmental fails
+/ 2 skipped** (they reproduce identically on a pristine baseline and differ by host — not a
+regression).
+
+**The recurring defect class, for the ninth time:** code that is correct, where deleting the
+protection leaves every test green. It was finally retired at the root in Phase 6 by making the test
+double honour `args.select`, rather than patching call sites. Expect it anyway.
+
 ## Standing constraints
 
 **Branch:** commit directly to `master`. No worktrees, no feature branches unless the owner asks in
