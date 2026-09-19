@@ -1075,11 +1075,18 @@ export const SAFE_FIELDS: Record<ModelName, readonly string[]> = {
     'inductionDate', 'appointmentKind', 'createdAt', 'updatedAt',
   ],
   Member: [
-    'id', 'organisationId', 'name', 'dateEntered', 'dateCeased',
+    // name is withheld: unlike trustees, ordinary charity members appear on no public
+    // register, so the public-record argument that makes BoardMember.name safe does
+    // not carry here.
+    'id', 'organisationId', 'dateEntered', 'dateCeased',
     'retentionDeleteAt', 'createdAt', 'updatedAt',
   ],
   ConflictRecord: [
-    'id', 'organisationId', 'boardMemberId', 'status', 'dateDeclared',
+    // boardMemberId is deliberately NOT here. It is a foreign key into BoardMember,
+    // whose id and name are both safe, so leaving it in would let any caller join the
+    // two registers and reconstruct who declared a conflict — defeating the point of
+    // withholding trusteeName.
+    'id', 'organisationId', 'status', 'dateDeclared',
     'meetingDate', 'nextReviewDate', 'minuteReference', 'createdAt', 'updatedAt',
   ],
   ComplaintRecord: [
@@ -1090,8 +1097,8 @@ export const SAFE_FIELDS: Record<ModelName, readonly string[]> = {
 
 export const WITHHELD_FIELDS: Record<ModelName, readonly string[]> = {
   BoardMember: ['email', 'dateOfBirth', 'residentialAddress', 'formerNames', 'otherDirectorships'],
-  Member: ['address'],
-  ConflictRecord: ['trusteeName', 'matter', 'nature', 'actionTaken', 'decision'],
+  Member: ['name', 'address'],
+  ConflictRecord: ['boardMemberId', 'trusteeName', 'matter', 'nature', 'actionTaken', 'decision'],
   ComplaintRecord: ['summary', 'source', 'actionTaken', 'outcome'],
 };
 

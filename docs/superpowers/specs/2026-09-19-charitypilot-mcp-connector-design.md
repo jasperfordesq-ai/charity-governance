@@ -243,8 +243,8 @@ including the "sensitive complaints" called out by name:
 | Model | Withheld with the gate off | Still returned |
 | --- | --- | --- |
 | `BoardMember` | `dateOfBirth`, `residentialAddress`, `formerNames`, `otherDirectorships`, `email` | `name`, `role`, appointment/term dates, conduct and induction status |
-| `Member` | `address` | `name`, `dateEntered`, `dateCeased`, `retentionDeleteAt` |
-| `ConflictRecord` | `trusteeName`, `matter`, `nature`, `actionTaken`, `decision` | `id`, `status`, `dateDeclared`, `meetingDate`, `nextReviewDate`, `minuteReference` |
+| `Member` | `name`, `address` | `dateEntered`, `dateCeased`, `retentionDeleteAt` |
+| `ConflictRecord` | `boardMemberId`, `trusteeName`, `matter`, `nature`, `actionTaken`, `decision` | `id`, `status`, `dateDeclared`, `meetingDate`, `nextReviewDate`, `minuteReference` |
 | `ComplaintRecord` | `summary`, `source`, `actionTaken`, `outcome` | `id`, `status`, `receivedDate`, `reviewedByBoard`, `boardMinuteReference` |
 
 What survives is deliberately the compliance-shaped half: how many conflicts are
@@ -253,6 +253,24 @@ board, whether trustee terms have expired. Those are the governance questions
 worth asking, and none of them requires the content.
 
 `--allow-personal-data` returns every withheld field. Default off.
+
+### Why the foreign key is withheld too
+
+Withholding `ConflictRecord.trusteeName` on its own achieves nothing. `boardMemberId` is a
+stable foreign key into `BoardMember`, whose `id` and `name` are both safe, so any caller
+holding both registers — which a governance assistant answering "who has declared
+conflicts" certainly will — can join them and reconstruct the withheld fact exactly.
+Redaction that a single join undoes is theatre, so the key is withheld with the name.
+
+The cost is accepted and stated plainly: with the gate closed nobody can ask how many
+conflicts a *particular* trustee declared, only how many exist, their status, dates and
+minute references. Per-trustee conflict history is precisely the personal data the gate
+exists to withhold, and `--allow-personal-data` returns it deliberately.
+
+`Member.name` is withheld for a related reason. `BoardMember.name` is safe because Irish
+charity trustees appear on the public Charities Regulator and CRO registers — it is already
+public record. Ordinary charity members appear on no such register, so that justification
+does not carry, and governance questions need membership counts and dates rather than names.
 
 ### Allowlist, not denylist
 
