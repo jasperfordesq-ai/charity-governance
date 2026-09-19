@@ -280,6 +280,21 @@ document name is user input and this is XHTML.
 between create and attach, the next attempt must adopt rather than create. A page id learned and
 then lost is the one way this pipeline produces a duplicate.
 
+**Validate the `targetRef` at write time with the same parser that reads it.** Phase 5's
+`parseConfluenceErasureTarget` is the arbiter, and its `isNonEmptyString` requires
+`value === value.trim()` — an id carrying stray whitespace is **refused**, and refused
+*permanently*, because a malformed target cannot be repaired by retrying.
+
+Consider where that lands if it is not checked here: the publish succeeds, the row reads
+`PROCESSED`, and nothing is wrong until a charity asks for the document to be erased — at which
+point the erasure dead-letters on a target this pipeline wrote badly, **after the Supabase copy is
+already gone**. The failure would surface at the worst possible moment and blame the wrong phase.
+
+So call `parseConfluenceErasureTarget` on what you are about to store. A publish that cannot produce
+a valid target should fail *as a publish*, which is recoverable — the charity simply is not mirrored
+yet — rather than silently arming a permanent erasure failure. Trim the ids you record. Pin this
+with a test that an id with surrounding whitespace is rejected at publish time.
+
 **Failure mapping** (mirror Phase 5's discipline, and pin both directions):
 
 | Condition | Outcome |
@@ -357,7 +372,16 @@ so deleting it must enqueue **two** erasure rows —
 
 - the existing `supabase` row, unchanged, and
 - a `confluence` row carrying `targetRef` built from the publication record, in Phase 5's exact
-  `ConfluenceErasureTarget` shape.
+  `ConfluenceErasureTarget` shape:
+
+```ts
+{ kind: 'confluence', cloudId: string, pageId: string, attachmentIds: string[] }
+```
+
+**Build it through `parseConfluenceErasureTarget` rather than by hand.** That function is the
+arbiter — it refuses an empty or untrimmed id and its refusal is *permanent*. Passing your
+constructed object through it here means a bad target fails while the document still exists and the
+operator can act, instead of dead-lettering later when the Supabase copy is already gone.
 
 Phase 5's dispatcher, permanence mapping, dead-lettering and operator recovery then handle it with
 no further change. That is the payoff for having built the erasure side first.
