@@ -720,7 +720,7 @@ git commit -m "feat(mcp): sign in once, then rotate the refresh token on every u
 - Consumes: `Session` (Task 4), `redactSecrets` (Task 2)
 - Produces:
   - `class ApiError extends Error` with `.status: number`
-  - `class ApiClient` — `new ApiClient({ session, baseUrl, fetchImpl? })`, `get<T>(path: string): Promise<T>`
+  - `class ApiClient` — `new ApiClient({ session, baseUrl, fetchImpl? })`, `get<T>(path: string, isRetry?: boolean): Promise<T>`
 
 - [ ] **Step 1: Write the failing test**
 
@@ -783,6 +783,47 @@ test('a 403 surfaces as ApiError with the status and no response body echoed', a
     assert.ok(!err.message.includes('row 42'), 'internal detail must not be echoed');
     return true;
   });
+});
+
+test('an expired access token is retried once, transparently', async () => {
+  const session = sessionReturning('access1');
+  let calls = 0;
+  const client = new ApiClient({
+    session,
+    baseUrl: 'https://example.test',
+    fetchImpl: async () => {
+      calls += 1;
+      if (calls === 1) return new Response('{}', { status: 401 });
+      return new Response(JSON.stringify({ total: 7 }), {
+        status: 200, headers: { 'content-type': 'application/json' },
+      });
+    },
+  });
+
+  const result = await client.get<{ total: number }>('/api/v1/compliance/summary');
+
+  assert.deepEqual(result, { total: 7 }, 'the retry result must be returned');
+  assert.equal(calls, 2, 'exactly one retry, no more');
+});
+
+test('a second consecutive 401 gives up rather than looping', async () => {
+  const session = sessionReturning('access1');
+  let calls = 0;
+  const client = new ApiClient({
+    session,
+    baseUrl: 'https://example.test',
+    fetchImpl: async () => {
+      calls += 1;
+      return new Response('{}', { status: 401 });
+    },
+  });
+
+  await assert.rejects(() => client.get('/x'), (err: unknown) => {
+    assert.ok(err instanceof ApiError);
+    assert.equal((err as ApiError).status, 401);
+    return true;
+  });
+  assert.equal(calls, 2, 'one original attempt plus one retry, then stop');
 });
 
 test('a network failure is reported as a Tailscale hint', async () => {
@@ -852,7 +893,7 @@ export class ApiClient {
     this.#fetch = options.fetchImpl ?? fetch;
   }
 
-  async get<T>(path: string): Promise<T> {
+  async get<T>(path: string, isRetry = false): Promise<T> {
     const token = await this.#session.accessToken();
 
     let response: Response;
@@ -870,8 +911,17 @@ export class ApiClient {
       );
     }
 
-    if (response.status === 401) {
+    // A 401 means the ~15-minute access token expired mid-session. The stored refresh
+    // token is very likely still good, so drop the cached access token and retry ONCE.
+    // Without this, every access-token expiry surfaces a spurious "reconnect" prompt
+    // even though the next call would have succeeded — which defeats the whole point
+    // of implementing refresh rotation. Bounded to one attempt so a genuinely dead
+    // session still fails fast instead of looping.
+    if (response.status === 401 && !isRetry) {
       this.#session.invalidateAccessToken();
+      return this.get<T>(path, true);
+    }
+    if (response.status === 401) {
       throw new ApiError(401, 'Session expired. Run: charitypilot-mcp connect');
     }
     if (!response.ok) {
