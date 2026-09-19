@@ -4,8 +4,8 @@ import {
   CallToolRequestSchema,
   ListToolsRequestSchema,
 } from '@modelcontextprotocol/sdk/types.js';
-import { TOOLS, runTool } from './tools.js';
-import { inputSchemaFor } from './tool-input.js';
+import { TOOLS, runTool, toolInputSchema } from './tools.js';
+
 import { ApiClient } from './client.js';
 import type { Session } from './session.js';
 import type { ConnectorConfig } from './config.js';
@@ -13,10 +13,10 @@ import { CONNECTOR_VERSION } from './version.js';
 import { redactSecrets } from './redact.js';
 
 export function buildToolList() {
-  return TOOLS.map(({ name, description, params }) => ({
-    name,
-    description,
-    inputSchema: inputSchemaFor(params ?? []),
+  return TOOLS.map((tool) => ({
+    name: tool.name,
+    description: tool.description,
+    inputSchema: toolInputSchema(tool),
   }));
 }
 
