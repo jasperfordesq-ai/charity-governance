@@ -11,11 +11,24 @@ export const LOOPBACK_HOSTS: ReadonlySet<string> = new Set(['localhost', '127.0.
 
 export type ConnectorProfile = 'default' | 'local';
 
+/**
+ * How much authority the session asks for at sign-in.
+ *
+ * Chosen by the person typing the password, and immutable afterwards. The
+ * default off the local profile is `write`, not `admin`: the destructive
+ * actions are the ones worth having to ask for deliberately, and a session
+ * that cannot take them is a smaller thing to lose.
+ */
+export type AccessLevel = 'read' | 'write' | 'admin';
+
+const ACCESS_LEVELS: readonly AccessLevel[] = ['read', 'write', 'admin'];
+
 export interface ConnectorConfig {
   command: string;
   baseUrl: string;
   allowPersonalData: boolean;
   profile: ConnectorProfile;
+  accessLevel: AccessLevel;
   email?: string | undefined;
   passwordStdin: boolean;
 }
@@ -35,6 +48,7 @@ export function parseArgs(argv: string[]): ConnectorConfig {
   let profile: ConnectorProfile = 'default';
   let email: string | undefined;
   let passwordStdin = false;
+  let accessLevel: AccessLevel | undefined;
 
   for (let i = 0; i < argv.length; i += 1) {
     const arg = argv[i]!;
@@ -60,6 +74,16 @@ export function parseArgs(argv: string[]): ConnectorConfig {
       const value = argv[i];
       if (!value) throw new Error('--email requires a value');
       email = value;
+    } else if (arg === '--access-level') {
+      i += 1;
+      const value = argv[i];
+      if (!value) throw new Error('--access-level requires a value');
+      if (!ACCESS_LEVELS.includes(value as AccessLevel)) {
+        throw new Error(
+          `Unknown access level: ${value}. Use one of: ${ACCESS_LEVELS.join(', ')}.`,
+        );
+      }
+      accessLevel = value as AccessLevel;
     } else if (arg === '--password-stdin') {
       passwordStdin = true;
     } else {
@@ -85,5 +109,16 @@ export function parseArgs(argv: string[]): ConnectorConfig {
     throw new Error('The base URL must use https. TLS verification is not optional.');
   }
 
-  return { command, baseUrl, allowPersonalData, profile, email, passwordStdin };
+  return {
+    command,
+    baseUrl,
+    allowPersonalData,
+    profile,
+    // A local test stack holds nothing real, so the convenient default
+    // there is full authority. Anywhere else the default withholds the
+    // destructive actions until someone asks for them by name.
+    accessLevel: accessLevel ?? (profile === 'local' ? 'admin' : 'write'),
+    email,
+    passwordStdin,
+  };
 }

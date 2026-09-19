@@ -10,12 +10,11 @@ function clientReturning(payload: unknown): ApiClient {
   const session = new Session({
     baseUrl: 'https://example.test',
     store: createMemoryStore('r1'),
-    fetchImpl: async () => {
-      const headers = new Headers({ 'content-type': 'application/json' });
-      headers.append('set-cookie', 'charitypilot_access=a1; Path=/');
-      headers.append('set-cookie', 'charitypilot_refresh=r2; Path=/');
-      return new Response(JSON.stringify({ ok: true }), { status: 200, headers });
-    },
+    // Connector sign-in returns its tokens in the body, never as cookies.
+    fetchImpl: async () => new Response(
+      JSON.stringify({ accessToken: 'a1', refreshToken: 'r2' }),
+      { status: 200, headers: { 'content-type': 'application/json' } },
+    ),
   });
   return new ApiClient({
     session,

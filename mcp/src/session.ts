@@ -1,8 +1,17 @@
 import type { CredentialStore } from './credentials.js';
+import type { AccessLevel } from './config.js';
 import { registerSecret } from './redact.js';
+import { CONNECTOR_VERSION } from './version.js';
 
-const ACCESS_COOKIE = 'charitypilot_access';
-const REFRESH_COOKIE = 'charitypilot_refresh';
+/**
+ * Identifies this as the connector rather than a browser.
+ *
+ * The API's connector routes require it, and it is not a header a web page
+ * can send: it is not CORS-safelisted, so a browser must preflight it, and
+ * the preflight is refused. That is what lets those routes hand back tokens
+ * in the response body.
+ */
+const CLIENT_HEADER = 'x-charitypilot-client';
 
 export class NotConnectedError extends Error {
   readonly code = 'NOT_CONNECTED';
@@ -23,23 +32,18 @@ export interface SessionIdentity {
 interface SessionOptions {
   baseUrl: string;
   store: CredentialStore;
+  accessLevel?: AccessLevel;
   fetchImpl?: typeof fetch;
 }
 
-function readCookie(response: Response, name: string): string | null {
-  for (const raw of response.headers.getSetCookie()) {
-    const [pair] = raw.split(';');
-    if (!pair) continue;
-    const index = pair.indexOf('=');
-    if (index === -1) continue;
-    if (pair.slice(0, index).trim() === name) return pair.slice(index + 1).trim();
-  }
-  return null;
+interface ConnectorTokens {
+  accessToken?: string;
+  refreshToken?: string;
 }
 
 export class Session {
   readonly #baseUrl: string;
-  readonly #origin: string;
+  readonly #accessLevel: AccessLevel;
   readonly #store: CredentialStore;
   readonly #fetch: typeof fetch;
   #accessToken: string | null = null;
@@ -48,12 +52,12 @@ export class Session {
 
   constructor(options: SessionOptions) {
     this.#baseUrl = options.baseUrl.replace(/\/+$/, '');
-    // The API's origin-validation hook (apps/api/src/utils/request-origin.ts)
-    // treats /auth/login, /auth/refresh and /auth/logout as origin-sensitive
-    // and 403s any request that arrives with no Origin header at all. This is
-    // not a CORS nicety here — without it, every POST this class makes is
-    // rejected before credentials are even checked.
-    this.#origin = new URL(this.#baseUrl).origin;
+    // Deliberately NO Origin header anywhere in this class. The connector auth
+    // routes refuse any request carrying one, because an origin is evidence a
+    // browser sent it and those routes return tokens in the response body.
+    // Sending one would get every call rejected; not sending one is also what
+    // makes a split-host deployment work, where the app and the API differ.
+    this.#accessLevel = options.accessLevel ?? 'write';
     this.#store = options.store;
     this.#fetch = options.fetchImpl ?? fetch;
   }
@@ -63,27 +67,41 @@ export class Session {
   }
 
   async login(email: string, password: string): Promise<SessionIdentity> {
-    const response = await this.#post('/api/v1/auth/login', { email, password });
+    const response = await this.#post('/api/v1/auth/connector/login', {
+      email,
+      password,
+      accessLevel: this.#accessLevel.toUpperCase(),
+    });
     if (!response.ok) {
-      // A 403 here is the same request-origin hook that #refreshAccessToken already
-      // has to discriminate (see the comment there): it says nothing about whether
-      // the credentials are correct. Reporting it as "check the email address and
-      // password" sends someone back to retype an already-correct password against
-      // /auth/login, which rate-limits per email address — repeated retries can lock
-      // out the real account. A 403 is instead reported as an origin rejection, and
-      // names the host so a baseUrl mismatch is visible. Every other status,
-      // including 401, keeps the generic message: it must not leak whether the email
-      // exists.
+      // A 403 here says nothing about whether the credentials are correct: it
+      // is the API's non-browser guard refusing the request before any
+      // credential is read. Reporting it as "check the email address and
+      // password" would send someone back to retype an already-correct
+      // password against a route that rate-limits per email address, and
+      // repeated retries can lock out the real account. Every other status,
+      // including 401, keeps the generic message: it must not leak whether the
+      // email exists.
       if (response.status === 403) {
         throw new Error(
-          `CharityPilot rejected this request's origin rather than the credentials `
-            + `(using ${this.#origin}). Check that CHARITYPILOT_BASE_URL points at the `
-            + 'right host.',
+          'CharityPilot refused this request before checking the credentials. The '
+            + 'connector sign-in route is reachable only by the connector, so this '
+            + `usually means ${this.#baseUrl} is not a CharityPilot API, or it is `
+            + 'running a build older than these routes.',
+        );
+      }
+      if (response.status === 404) {
+        throw new Error(
+          `${this.#baseUrl} has no connector sign-in route. It is running a build `
+            + 'older than this connector; deploy the API before connecting.',
         );
       }
       throw new Error('Sign-in failed. Check the email address and password.');
     }
-    const capturedRefreshToken = this.#absorbCookies(response);
+    const payload = (await response.json()) as ConnectorTokens & {
+      user: { email: string; name: string; role: string; organisationId: string;
+              organisation?: { name?: string } | null };
+    };
+    const capturedRefreshToken = this.#absorbTokens(payload);
     if (!capturedRefreshToken) {
       throw new Error(
         'Sign-in succeeded but CharityPilot did not return a refresh token, so nothing '
@@ -92,16 +110,12 @@ export class Session {
       );
     }
 
-    const body = (await response.json()) as {
-      user: { email: string; name: string; role: string; organisationId: string;
-              organisation?: { name?: string } | null };
-    };
     this.#identity = {
-      email: body.user.email,
-      name: body.user.name,
-      role: body.user.role,
-      organisationId: body.user.organisationId,
-      organisationName: body.user.organisation?.name ?? '(unnamed organisation)',
+      email: payload.user.email,
+      name: payload.user.name,
+      role: payload.user.role,
+      organisationId: payload.user.organisationId,
+      organisationName: payload.user.organisation?.name ?? '(unnamed organisation)',
     };
     return this.#identity;
   }
@@ -120,16 +134,15 @@ export class Session {
     const refreshToken = this.#store.read();
     if (!refreshToken) throw new NotConnectedError();
 
-    const response = await this.#post('/api/v1/auth/refresh', { refreshToken });
+    const response = await this.#post('/api/v1/auth/connector/refresh', { refreshToken });
     if (!response.ok) {
       // Only a 401 means the stored credential was actually rejected. A 403 here
-      // says nothing about the credential's validity — the only reachable 403 on
-      // this route is the request-origin hook's MISSING_ORIGIN rejection (see
-      // request-origin.ts), which fires before the refresh token is even looked
-      // at. Treating that the same as a dead credential would clear a perfectly
-      // good refresh token because of a header problem. A 5xx or gateway error is
-      // the same story: the server had a problem, and clearing here would turn a
-      // transient blip into a permanent logout.
+      // says nothing about the credential's validity — it is the non-browser
+      // guard refusing before the token is even looked at. Treating that the
+      // same as a dead credential would clear a perfectly good refresh token
+      // because of a header problem. A 5xx or gateway error is the same story:
+      // the server had a problem, and clearing here would turn a transient blip
+      // into a permanent logout.
       if (response.status !== 401) {
         throw new Error(
           `Could not refresh the session: CharityPilot returned ${response.status}. `
@@ -147,7 +160,7 @@ export class Session {
       this.#identity = null;
       throw new NotConnectedError('Session ended. Run: charitypilot-mcp connect');
     }
-    this.#absorbCookies(response);
+    this.#absorbTokens((await response.json()) as ConnectorTokens);
 
     if (!this.#accessToken) {
       try {
@@ -171,7 +184,7 @@ export class Session {
     const refreshToken = this.#store.read();
     if (refreshToken) {
       try {
-        await this.#post('/api/v1/auth/logout', { refreshToken });
+        await this.#post('/api/v1/auth/connector/logout', { refreshToken });
       } catch {
         // Revocation is best-effort; the local credential is cleared regardless.
       }
@@ -186,10 +199,18 @@ export class Session {
     this.#store.clear();
   }
 
-  /** Returns whether a refresh token cookie was found and stored. */
-  #absorbCookies(response: Response): boolean {
-    const access = readCookie(response, ACCESS_COOKIE);
-    const refresh = readCookie(response, REFRESH_COOKIE);
+  /**
+   * Takes the tokens out of a connector-route response body and stores them.
+   *
+   * The browser routes set cookies; these do not, because the connector has no
+   * cookie jar and a response that sets no cookie cannot be the target of
+   * login cross-site request forgery. Returns whether a refresh token was
+   * present, so a sign-in that stored nothing can be reported rather than
+   * appearing to succeed.
+   */
+  #absorbTokens(payload: ConnectorTokens): boolean {
+    const access = payload.accessToken;
+    const refresh = payload.refreshToken;
     if (access) {
       this.#accessToken = access;
       registerSecret(access);
@@ -205,7 +226,10 @@ export class Session {
   #post(path: string, body: unknown): Promise<Response> {
     return this.#fetch(`${this.#baseUrl}${path}`, {
       method: 'POST',
-      headers: { 'content-type': 'application/json', origin: this.#origin },
+      headers: {
+        'content-type': 'application/json',
+        [CLIENT_HEADER]: `mcp-connector/${CONNECTOR_VERSION}`,
+      },
       body: JSON.stringify(body),
     });
   }

@@ -8,12 +8,11 @@ function sessionReturning(token: string): Session {
   return new Session({
     baseUrl: 'https://example.test',
     store: createMemoryStore('r1'),
-    fetchImpl: async () => {
-      const headers = new Headers({ 'content-type': 'application/json' });
-      headers.append('set-cookie', `charitypilot_access=${token}; Path=/`);
-      headers.append('set-cookie', 'charitypilot_refresh=r2; Path=/');
-      return new Response(JSON.stringify({ ok: true }), { status: 200, headers });
-    },
+    // The connector routes return tokens in the body and set no cookie.
+    fetchImpl: async () => new Response(
+      JSON.stringify({ accessToken: token, refreshToken: 'r2' }),
+      { status: 200, headers: { 'content-type': 'application/json' } },
+    ),
   });
 }
 
@@ -150,10 +149,10 @@ test('the retry uses a NEW token, not the expired one', async () => {
     store: createMemoryStore('r1'),
     fetchImpl: async () => {
       refreshes += 1;
-      const headers = new Headers({ 'content-type': 'application/json' });
-      headers.append('set-cookie', `charitypilot_access=access${refreshes}; Path=/`);
-      headers.append('set-cookie', `charitypilot_refresh=r${refreshes + 1}; Path=/`);
-      return new Response(JSON.stringify({ ok: true }), { status: 200, headers });
+      return new Response(
+        JSON.stringify({ accessToken: `access${refreshes}`, refreshToken: `r${refreshes + 1}` }),
+        { status: 200, headers: { 'content-type': 'application/json' } },
+      );
     },
   });
 

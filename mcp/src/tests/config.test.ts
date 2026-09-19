@@ -86,3 +86,19 @@ test('there is no flag or environment variable that carries a password value', (
   }
   assert.equal(parseArgs([]).passwordStdin, false);
 });
+
+test('the access level defaults to write, and to admin only on the local profile', () => {
+  assert.equal(parseArgs([]).accessLevel, 'write');
+  assert.equal(
+    parseArgs(['--profile', 'local', '--base-url', 'http://127.0.0.1:3302']).accessLevel,
+    'admin',
+  );
+});
+
+test('the access level can be chosen, and an unknown one is refused', () => {
+  for (const level of ['read', 'write', 'admin']) {
+    assert.equal(parseArgs(['--access-level', level]).accessLevel, level);
+  }
+  assert.throws(() => parseArgs(['--access-level', 'superuser']), /access level/i);
+  assert.throws(() => parseArgs(['--access-level']), /requires a value/i);
+});

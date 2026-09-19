@@ -52,7 +52,11 @@ async function main(): Promise<void> {
     profile: config.profile,
     credentialFile: process.env.CHARITYPILOT_CREDENTIAL_FILE,
   });
-  const session = new Session({ baseUrl: config.baseUrl, store });
+  const session = new Session({
+    baseUrl: config.baseUrl,
+    store,
+    accessLevel: config.accessLevel,
+  });
 
   if (config.command === 'connect') {
     const email = config.email ?? (await prompt('CharityPilot email: ', false));
@@ -67,6 +71,7 @@ async function main(): Promise<void> {
     stdout.write(
       `Connected as ${identity.name} <${identity.email}> (${identity.role})\n` +
       `Organisation: ${identity.organisationName}\n` +
+      `Access level: ${config.accessLevel.toUpperCase()}\n` +
       `Personal data: ${config.allowPersonalData ? 'ALLOWED' : 'withheld (default)'}\n`,
     );
     return;
@@ -92,6 +97,7 @@ async function main(): Promise<void> {
       stdout.write(
         `Connected as ${me.name} <${me.email}> (${me.role})\n` +
         `Organisation: ${me.organisation?.name ?? '(unnamed organisation)'}\n` +
+        `Access level: ${config.accessLevel.toUpperCase()}\n` +
         `Personal data: ${config.allowPersonalData ? 'ALLOWED' : 'withheld (default)'}\n`,
       );
     } catch (error) {
