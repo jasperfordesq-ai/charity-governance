@@ -134,7 +134,10 @@ In order:
 1. **Decide whether to deploy the API to the VM.** Everything from session posture
    onwards exists only in the repository and on the disposable test stack. Until the
    VM is deployed, the connector cannot sign in against it at all. This is the owner's
-   call: it carries five migrations, all additive, all past the blue-green gate.
+   call: it carries seven migrations from this work, all additive and all past the
+   blue-green gate, plus whatever other sessions have left unapplied (the invite-link
+   reissue fix, at least). The deploy reports the pending set before applying it;
+   read that list rather than trusting this one.
 2. **Reconnect and verify against the VM afterwards.** `connect --access-level write`,
    confirm `status` reports the level, then confirm a read-level session is refused a
    change, and that the refusal comes from the API rather than from the connector.
