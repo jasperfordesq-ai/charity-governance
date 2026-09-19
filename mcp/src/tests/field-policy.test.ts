@@ -24,8 +24,7 @@ test('safe board-member fields survive', () => {
 });
 
 test('the gate returns everything when allowed', () => {
-  const out = applyFieldPolicy('BoardMember', TRUSTEE, true) as Record<string, unknown>;
-  assert.equal(out.residentialAddress, '1 Main St');
+  assert.deepEqual(applyFieldPolicy('BoardMember', TRUSTEE, true), TRUSTEE);
 });
 
 test('it is an allowlist: an unknown field is dropped, not passed through', () => {
@@ -67,6 +66,31 @@ test('conflict content is withheld but its compliance shape survives', () => {
   for (const field of ['trusteeName', 'matter', 'nature', 'actionTaken', 'decision']) {
     assert.ok(!(field in out), `${field} must be withheld`);
   }
+});
+
+test('the conflicts register cannot be joined back to a named trustee', () => {
+  const conflict = {
+    id: 'cr1', organisationId: 'o1', boardMemberId: 'bm1', status: 'DECLARED',
+    dateDeclared: '2026-01-01', minuteReference: 'M-9',
+    trusteeName: 'A Trustee', matter: 'supplier', nature: 'family interest',
+    actionTaken: 'recused', decision: 'noted',
+  };
+  const out = applyFieldPolicy('ConflictRecord', conflict, false) as Record<string, unknown>;
+  assert.ok(!('trusteeName' in out), 'the name must be withheld');
+  assert.ok(!('boardMemberId' in out),
+    'the join key must be withheld too, or the name can be recovered from the board register');
+  assert.equal(out.status, 'DECLARED', 'the compliance shape must survive');
+  assert.equal(out.minuteReference, 'M-9');
+});
+
+test('a nested relation array is dropped, not passed through unfiltered', () => {
+  const trustee = {
+    id: 'bm1', name: 'A Trustee', role: 'Chair',
+    conflictRecords: [{ trusteeName: 'A Trustee', nature: 'family interest' }],
+  };
+  const out = applyFieldPolicy('BoardMember', trustee, false) as Record<string, unknown>;
+  assert.ok(!('conflictRecords' in out),
+    'an unknown key carrying nested personal data must not survive');
 });
 
 test('safe and withheld lists never overlap', () => {
