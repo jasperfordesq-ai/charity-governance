@@ -109,6 +109,10 @@ const DISPOSABLE_DATABASE_RESET_TABLES = Object.freeze([
   "ComplianceApprovalSnapshot",
   "ComplianceAuditEvent",
   "SecurityAuditEvent",
+  // What a non-browser client did. It has no foreign key to "AuthSession" —
+  // the record must outlive the session that made it — so the AuthSession
+  // truncate above does not clear it and it has to be listed in its own right.
+  "ClientActivityEvent",
   "BoardMember",
   "Member",
   "GoverningAct",

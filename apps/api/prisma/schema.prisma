@@ -434,6 +434,7 @@ model Organisation {
   billingCheckoutAttempt      BillingCheckoutAttempt?
   billingAuthorityGrants      BillingAuthorityGrant[]
   securityAuditEvents         SecurityAuditEvent[]
+  clientActivityEvents        ClientActivityEvent[]
   passwordRecoveryRequests    PasswordRecoveryRequest[]
   authSecurityEmailOutbox     AuthSecurityEmailOutbox[]
   integrations                OrganisationIntegration[]
@@ -443,16 +444,16 @@ model Organisation {
 }
 
 model OrganisationIntegration {
-  id             String              @id @default(cuid())
-  organisationId String
-  organisation   Organisation        @relation(fields: [organisationId], references: [id], onDelete: Cascade)
-  provider       IntegrationProvider
-  status         IntegrationStatus   @default(DISCONNECTED)
+  id                  String              @id @default(cuid())
+  organisationId      String
+  organisation        Organisation        @relation(fields: [organisationId], references: [id], onDelete: Cascade)
+  provider            IntegrationProvider
+  status              IntegrationStatus   @default(DISCONNECTED)
   // Non-secret connection facts only (site id, space key). Never credentials.
-  config         Json?
-  lastError      String?
-  connectedAt    DateTime?
-  connectedById  String?
+  config              Json?
+  lastError           String?
+  connectedAt         DateTime?
+  connectedById       String?
   // Serialises token refresh across the web process and the background jobs.
   // Atlassian's refresh tokens are single-use: a concurrent refresh invalidates
   // the loser's token and disconnects the charity. Follow the claim idiom used
@@ -486,12 +487,12 @@ model OrganisationIntegration {
   // and for the same reason: Phase 5's parseConfluenceErasureTarget refuses an
   // untrimmed id PERMANENTLY). Prisma's schema language cannot express it, so
   // it lives only in the migration 20260919150000_add_confluence_publish_space.
-  publishSpaceId     String?
-  publishSpaceKey    String?
-  publishSpaceName   String?
-  publishSpaceSiteId String?
-  createdAt      DateTime            @default(now())
-  updatedAt      DateTime            @updatedAt
+  publishSpaceId      String?
+  publishSpaceKey     String?
+  publishSpaceName    String?
+  publishSpaceSiteId  String?
+  createdAt           DateTime            @default(now())
+  updatedAt           DateTime            @updatedAt
 
   credentials IntegrationCredential[]
 
@@ -518,13 +519,13 @@ model IntegrationCredential {
 }
 
 model IntegrationSecretControl {
-  id                      Int       @id
-  generation              Int       @default(1)
-  activeKeyFingerprint    String?   @db.Char(64)
-  retiredKeyFingerprint   String?   @db.Char(64)
-  rotatedAt               DateTime?
-  createdAt               DateTime  @default(now())
-  updatedAt               DateTime  @default(now()) @updatedAt
+  id                    Int       @id
+  generation            Int       @default(1)
+  activeKeyFingerprint  String?   @db.Char(64)
+  retiredKeyFingerprint String?   @db.Char(64)
+  rotatedAt             DateTime?
+  createdAt             DateTime  @default(now())
+  updatedAt             DateTime  @default(now()) @updatedAt
 }
 
 model User {
@@ -554,6 +555,7 @@ model User {
   billingAuthorityGrants       BillingAuthorityGrant[]   @relation("BillingAuthorityActor")
   securityAuditEventsAsActor   SecurityAuditEvent[]      @relation("SecurityAuditActor")
   securityAuditEventsAsSubject SecurityAuditEvent[]      @relation("SecurityAuditSubject")
+  clientActivityEvents         ClientActivityEvent[]
   passwordRecoveryRequests     PasswordRecoveryRequest[]
   authSecurityEmailOutbox      AuthSecurityEmailOutbox[]
 
@@ -646,6 +648,33 @@ model SecurityAuditEvent {
   @@index([organisationId, occurredAt, id])
   @@index([organisationId, subjectUserId, occurredAt, id])
   @@index([organisationId, actorUserId, occurredAt, id])
+}
+
+/// What a non-browser client did, recorded by a hook rather than by each
+/// route. Append-only in the database: a record the acting party can edit
+/// afterwards is not a record.
+model ClientActivityEvent {
+  id             String                 @id @default(cuid())
+  organisationId String
+  organisation   Organisation           @relation(fields: [organisationId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  userId         String
+  user           User                   @relation(fields: [userId, organisationId], references: [id, organisationId], onDelete: Restrict, onUpdate: Restrict)
+  /// Deliberately not a relation: sessions rotate on every refresh and are
+  /// deleted when they expire. The record must outlive the session.
+  sessionId      String
+  clientKind     AuthSessionClientKind
+  accessLevel    AuthSessionAccessLevel
+  method         String
+  routePattern   String
+  resourceId     String?
+  statusCode     Int
+  requestId      String?
+  reason         String?
+  occurredAt     DateTime               @default(now())
+
+  @@unique([id, organisationId])
+  @@index([organisationId, occurredAt, id])
+  @@index([organisationId, sessionId, occurredAt])
 }
 
 model PasswordRecoveryRequest {
@@ -897,20 +926,20 @@ model ComplianceAuditEvent {
 }
 
 model BoardMember {
-  id                 String           @id @default(cuid())
+  id                 String                   @id @default(cuid())
   organisationId     String
-  organisation       Organisation     @relation(fields: [organisationId], references: [id])
+  organisation       Organisation             @relation(fields: [organisationId], references: [id])
   name               String
   role               String
   email              String?
   appointedDate      DateTime
   termEndDate        DateTime?
-  isActive           Boolean          @default(true)
-  conductSigned      Boolean          @default(false)
+  isActive           Boolean                  @default(true)
+  conductSigned      Boolean                  @default(false)
   conductSignedDate  DateTime?
-  inductionCompleted Boolean          @default(false)
+  inductionCompleted Boolean                  @default(false)
   inductionDate      DateTime?
-  dateOfBirth        DateTime?        @db.Date
+  dateOfBirth        DateTime?                @db.Date
   residentialAddress String?
   otherDirectorships String?
   formerNames        String?
@@ -925,23 +954,23 @@ model BoardMember {
 }
 
 model Document {
-  id                   String           @id @default(cuid())
-  organisationId       String
-  organisation         Organisation     @relation(fields: [organisationId], references: [id])
-  name                 String
-  description          String?
-  category             DocumentCategory
-  fileUrl              String
-  fileSize             Int
-  mimeType             String
-  version              Int              @default(1)
+  id                     String           @id @default(cuid())
+  organisationId         String
+  organisation           Organisation     @relation(fields: [organisationId], references: [id])
+  name                   String
+  description            String?
+  category               DocumentCategory
+  fileUrl                String
+  fileSize               Int
+  mimeType               String
+  version                Int              @default(1)
   owner                  String?
   approvedDate           DateTime?
   nextReviewDate         DateTime?
   boardMinuteReference   String?
-  approvalAsserted       Boolean    @default(false)
+  approvalAsserted       Boolean          @default(false)
   approvedByResolutionId String?
-  approvedByResolution   Resolution? @relation(fields: [approvedByResolutionId], references: [id])
+  approvedByResolution   Resolution?      @relation(fields: [approvedByResolutionId], references: [id])
 
   uploadedById String?
   uploadedBy   User?   @relation("UploadedBy", fields: [uploadedById], references: [id])
@@ -1359,21 +1388,21 @@ model StripeWebhookEvent {
 }
 
 model GoverningAct {
-  id              String             @id @default(cuid())
-  organisationId  String
-  organisation    Organisation       @relation(fields: [organisationId], references: [id])
-  kind            GoverningActKind
-  status          GoverningActStatus @default(SCHEDULED)
-  actDate         DateTime           @db.Date
-  reference       String
-  title           String
-  statutoryBasis  String?
-  approvedAtActId String?
-  approvedAtAct   GoverningAct?      @relation("MinuteApproval", fields: [approvedAtActId], references: [id])
-  approvedByThisAct GoverningAct[]   @relation("MinuteApproval")
-  approvedAt      DateTime?
-  documentId      String?
-  notes           String?
+  id                String             @id @default(cuid())
+  organisationId    String
+  organisation      Organisation       @relation(fields: [organisationId], references: [id])
+  kind              GoverningActKind
+  status            GoverningActStatus @default(SCHEDULED)
+  actDate           DateTime           @db.Date
+  reference         String
+  title             String
+  statutoryBasis    String?
+  approvedAtActId   String?
+  approvedAtAct     GoverningAct?      @relation("MinuteApproval", fields: [approvedAtActId], references: [id])
+  approvedByThisAct GoverningAct[]     @relation("MinuteApproval")
+  approvedAt        DateTime?
+  documentId        String?
+  notes             String?
 
   resolutions Resolution[]
 
