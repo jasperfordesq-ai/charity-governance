@@ -4587,6 +4587,12 @@ test('web proxy preserves protected-route redirect and no-cache behavior', () =>
     /export function safeNextValue\([\s\S]*?removeSensitiveSearchParams\(`\$\{pathname\}\$\{search\}`, SENSITIVE_NEXT_PARAMS\)/,
   );
 
+  // Scan code, not prose. These files explain the leak they close by quoting
+  // the old construction verbatim, and a source assertion that matches a
+  // comment is worse than no assertion — it passes or fails on the wording.
+  const codeOnly = (source) =>
+    source.replace(/\/\*[\s\S]*?\*\//g, '').replace(/^[ \t]*\/\/.*$/gm, '');
+
   // The dashboard layout reaches /login the same way, client-side, on a dead
   // session the middleware has already let through. It must use the same
   // scrubber and must not build `next` by hand.
@@ -4603,6 +4609,41 @@ test('web proxy preserves protected-route redirect and no-cache behavior', () =>
     /router\.replace\(\s*`/,
     'no interpolated redirect target in the layout — that is how the raw search string used to get in',
   );
+  assert.doesNotMatch(
+    codeOnly(layout),
+    /\/login\?next=/,
+    'the layout must not name a login redirect target in code at all',
+  );
+
+  // The third door: the shared axios 401 interceptor. It answers the same two
+  // questions from the same two helpers, so a call added without
+  // `skipAuthRedirect` cannot reopen the leak. Every place in apps/web that
+  // builds a `next` value must go through safeNextValue — a fourth variant is
+  // what defeated the fix twice.
+  const apiClient = readRepoFile('apps/web/src/lib/api.ts');
+  assert.match(apiClient, /renewsItsOwnSession\(window\.location\.pathname\)\) return;/);
+  assert.match(
+    apiClient,
+    /searchParams\.set\(\s*['"]next['"],\s*safeNextValue\(window\.location\.pathname, window\.location\.search\),?\s*\)/,
+  );
+  for (const [name, source] of [
+    ['apps/web/src/proxy.ts', codeOnly(proxy)],
+    ['apps/web/src/lib/dashboard-session-gate.ts', codeOnly(sessionGate)],
+    ['apps/web/src/lib/api.ts', codeOnly(apiClient)],
+  ]) {
+    // Both shapes a `next` value is built in: `searchParams.set('next', …)`
+    // in the two that have a URL object, and `next=${…}` in the one that
+    // returns a string.
+    const nextBuilders = [
+      ...source.matchAll(/(?:set\(\s*["']next["'],|next=\$\{)[\s\S]{0,160}?\)/g),
+    ].map((match) => match[0]);
+    assert.equal(nextBuilders.length, 1, `${name}: exactly one place builds a next value`);
+    assert.match(
+      nextBuilders[0],
+      /safeNextValue\(/,
+      `${name}: a next value must be built by the shared scrubber, never by hand`,
+    );
+  }
   assert.match(layout, /from '@\/lib\/dashboard-session-gate'/);
   assert.match(redirectToLogin, /NextResponse\.redirect\(loginUrl\)/);
   assert.match(redirectToLogin, /addProtectedNoCacheHeaders\(response\)/);

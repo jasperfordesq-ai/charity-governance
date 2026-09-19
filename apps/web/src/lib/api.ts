@@ -1,6 +1,7 @@
 import axios from 'axios';
 import { getApiBaseUrl } from './api-config';
-import { isProtectedAppPath } from './protected-routes';
+import { isProtectedAppPath, renewsItsOwnSession } from './protected-routes';
+import { safeNextValue } from './url-security';
 
 declare module 'axios' {
   export interface AxiosRequestConfig {
@@ -40,13 +41,38 @@ export const configuredApiOrigin: string | undefined = (() => {
   }
 })();
 
+/**
+ * The third and last place that sends a signed-out visitor to `/login?next=…`,
+ * after `proxy.ts` (server-side) and `dashboard-session-gate.ts`
+ * (the dashboard layout). All three answer the same two questions the same
+ * way, from the same two helpers, because the alternative is what happened
+ * twice already: a leak fixed at one door and left open at the next.
+ *
+ * `renewsItsOwnSession` — the Confluence callback page renews the session
+ * itself, so redirecting it away abandons the connection AND carries
+ * Atlassian's live `?code=…&state=…` into the `next` value.
+ *
+ * `safeNextValue` — for every other protected path, `next` is built with the
+ * single-use secrets removed, because the reverse proxy's log filter deletes
+ * only TOP-LEVEL `code`/`state` and cannot see one nested inside `next`.
+ *
+ * Both calls the Confluence flow makes today set `skipAuthRedirect`, so this
+ * function does not fire on that path at all. That is a per-call-site
+ * convention, not a guarantee: one future call added without the flag would
+ * reopen the leak silently. The checks below are what makes it structural.
+ */
 function redirectToLoginOnProtectedRoute() {
   if (typeof window === 'undefined' || !isProtectedAppPath(window.location.pathname)) {
     return;
   }
 
+  if (renewsItsOwnSession(window.location.pathname)) return;
+
   const loginUrl = new URL('/login', window.location.origin);
-  loginUrl.searchParams.set('next', `${window.location.pathname}${window.location.search}`);
+  loginUrl.searchParams.set(
+    'next',
+    safeNextValue(window.location.pathname, window.location.search),
+  );
   window.location.href = `${loginUrl.pathname}${loginUrl.search}`;
 }
 

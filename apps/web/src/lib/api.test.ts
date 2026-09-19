@@ -122,3 +122,143 @@ test('leaves a paginated { data, total, page } envelope intact', async () => {
   assert.equal(res.data.page, 1);
   assert.deepEqual(res.data.data, [{ id: 1 }, { id: 2 }]);
 });
+
+// ── the 401 interceptor's own login redirect ────────────────────────────────
+//
+// `redirectToLoginOnProtectedRoute` is the THIRD place that builds
+// `/login?next=…`, after the middleware and the dashboard layout. It had no
+// test in either direction, and it built `next` from the raw
+// `window.location.search` — so on the Confluence callback path it would carry
+// Atlassian's live `?code=…&state=…` into the Location, the address bar, the
+// history entry and the proxy access log (whose filter deletes only TOP-LEVEL
+// `code`/`state`, never one nested inside `next`).
+//
+// It does not fire on that path today, because both calls the flow makes set
+// `skipAuthRedirect`. That is a per-call-site convention, not a guarantee —
+// one future call added without the flag reopens it. These drive the real
+// interceptor, through the real axios instance, rather than the function.
+
+const LIVE_CODE = 'LIVE-AUTHORIZATION-CODE';
+const LIVE_STATE = 'LIVE-OAUTH-STATE';
+
+type FakeWindow = { location: { origin: string; pathname: string; search: string; href: string } };
+
+/**
+ * Install a fake `window` for the duration of one call and collect every
+ * `location.href` the interceptor assigns. Returns whatever it navigated to,
+ * or null if it deliberately stayed put.
+ */
+async function navigationFrom(pathname: string, search: string): Promise<string | null> {
+  const assigned: string[] = [];
+  const globals = globalThis as unknown as { window?: FakeWindow };
+  const originalWindow = globals.window;
+
+  globals.window = {
+    location: {
+      origin: 'https://app.charitypilot.ie',
+      pathname,
+      search,
+      get href() {
+        return `https://app.charitypilot.ie${pathname}${search}`;
+      },
+      set href(value: string) {
+        assigned.push(value);
+      },
+    },
+  };
+
+  try {
+    // `_retry: true` takes the interceptor straight to its second 401 branch,
+    // the one that redirects, without needing the refresh to be stubbed.
+    await assert.rejects(api.get('/anything', { _retry: true }));
+  } finally {
+    if (originalWindow === undefined) delete globals.window;
+    else globals.window = originalWindow;
+  }
+
+  assert.ok(assigned.length <= 1, `at most one navigation, got ${assigned.length}`);
+  return assigned[0] ?? null;
+}
+
+test('a 401 on a protected route still redirects to login with a usable next', async () => {
+  api.defaults.adapter = async (config) => fail401(config);
+
+  const destination = await navigationFrom('/documents', '?view=board');
+
+  assert.equal(
+    destination,
+    `/login?next=${encodeURIComponent('/documents?view=board')}`,
+    'the redirect must survive, and must still carry where the visitor was going',
+  );
+});
+
+test('a 401 on the Confluence callback never redirects, and never leaks the code', async () => {
+  api.defaults.adapter = async (config) => fail401(config);
+
+  const destination = await navigationFrom(
+    '/integrations/confluence/callback',
+    `?code=${LIVE_CODE}&state=${LIVE_STATE}`,
+  );
+
+  assert.equal(
+    destination,
+    null,
+    'the callback page renews the session itself — the interceptor must not redirect it away',
+  );
+});
+
+test('a 401 on any protected route strips code and state out of next', async () => {
+  api.defaults.adapter = async (config) => fail401(config);
+
+  const destination = await navigationFrom(
+    '/documents',
+    `?view=board&code=${LIVE_CODE}&state=${LIVE_STATE}`,
+  );
+
+  assert.ok(destination, 'a protected route must still reach /login');
+  assert.equal(
+    destination.includes(LIVE_CODE),
+    false,
+    `no single-use secret may be nested inside next: ${destination}`,
+  );
+  assert.equal(destination.includes(LIVE_STATE), false, destination);
+  assert.equal(destination, `/login?next=${encodeURIComponent('/documents?view=board')}`);
+});
+
+test('a 401 on a public route redirects nowhere at all', async () => {
+  api.defaults.adapter = async (config) => fail401(config);
+
+  assert.equal(await navigationFrom('/login', ''), null);
+  assert.equal(await navigationFrom('/', ''), null);
+});
+
+test('skipAuthRedirect still suppresses the redirect entirely', async () => {
+  api.defaults.adapter = async (config) => fail401(config);
+
+  const assigned: string[] = [];
+  const globals = globalThis as unknown as { window?: FakeWindow };
+  const originalWindow = globals.window;
+  globals.window = {
+    location: {
+      origin: 'https://app.charitypilot.ie',
+      pathname: '/documents',
+      search: '?view=board',
+      get href() {
+        return 'https://app.charitypilot.ie/documents?view=board';
+      },
+      set href(value: string) {
+        assigned.push(value);
+      },
+    },
+  };
+
+  try {
+    await assert.rejects(api.get('/anything', { _retry: true, skipAuthRedirect: true }));
+  } finally {
+    if (originalWindow === undefined) delete globals.window;
+    else globals.window = originalWindow;
+  }
+
+  assert.deepEqual(assigned, [], 'skipAuthRedirect must keep working as the opt-out it is');
+});
+
