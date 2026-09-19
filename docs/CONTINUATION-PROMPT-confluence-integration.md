@@ -156,8 +156,13 @@ State these plainly if they are in the way; do not work around them.
 3. **Create an Atlassian OAuth 2.0 (3LO) app** at developer.atlassian.com/console/myapps, supplying
    `ATLASSIAN_CLIENT_ID` and `ATLASSIAN_CLIENT_SECRET`. The scope that is easy to forget is
    **`offline_access`** — without it no refresh token is ever issued and every charity disconnects
-   within the hour. The callback URL must be registered as exactly
-   `{NEXT_PUBLIC_API_URL}/api/v1/integrations/confluence/callback`. Neither variable is required to
+   within the hour. **The callback URL changed in Phase 6.** Register it as exactly
+   `{FRONTEND_URL}/integrations/confluence/callback` — a **web** URL, not an API one. Atlassian
+   matches it byte-for-byte. The old API address still answers, deliberately, with a `410` naming
+   the change and carrying the exact URL to paste in — so a stale registration fails loudly rather
+   than silently. Note `FRONTEND_URL` may hold a comma-separated list; only the **first** origin
+   becomes the `redirect_uri`, so a two-origin deployment can complete the connect flow from that
+   one only. Neither variable is required to
    boot: a deployment without them starts normally and the connect route refuses with an actionable
    503. Set **both or neither** — exactly one, or a placeholder in either, is refused at boot.
 
