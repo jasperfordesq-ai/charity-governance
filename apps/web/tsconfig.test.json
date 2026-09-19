@@ -85,6 +85,7 @@
     "src/lib/team-permissions.ts",
     "src/lib/team-permissions.test.ts",
     "src/lib/team-lifecycle-ui.test.ts",
+    "src/lib/owner-console-ui.test.ts",
     "src/lib/tenant-isolation.test.ts",
     "src/lib/form-schema-parity.test.ts",
     "src/lib/password-recovery-ui.test.ts",

@@ -5,6 +5,7 @@ import { useParams } from 'next/navigation';
 import { Button, Card, CardBody, Input, Textarea } from '@heroui/react';
 import { ownerApi, type TenantSummary } from '@/lib/owner-api';
 import { apiErrorMessage } from '@/lib/errors';
+import { TenantConfigurationPanel } from './tenant-configuration-panel';
 
 type Action = 'SUSPEND' | 'REACTIVATE' | 'CLOSE';
 
@@ -85,6 +86,14 @@ export default function OwnerTenantDetailPage() {
             </Button>
           ) : null}
         </div>
+
+        {/* Configuration sits above the lifecycle controls on purpose: it is
+            the routine reason to be on this page, and the destructive actions
+            should not be the first thing under the operator's cursor. A closed
+            charity has nothing left to configure. */}
+        {tenant.lifecycleStatus !== 'CLOSED' ? (
+          <TenantConfigurationPanel tenantId={tenant.id} />
+        ) : null}
 
         {tenant.lifecycleStatus !== 'CLOSED' ? (
           <div className="flex flex-col gap-2 rounded border border-danger p-4">

@@ -85,6 +85,33 @@ export type TenantSummary = {
   createdAt: string;
 };
 
+/** Per-charity settings a platform operator may change, and what they need to judge them. */
+export type TenantConfiguration = {
+  tenantId: string;
+  name: string;
+  /** null means "follow the deployment default". */
+  documentStorageProvider: string | null;
+  documentStorageAlphaOptIn: boolean;
+  /** What null resolves to on this deployment right now. */
+  deploymentDefaultProvider: string;
+  availableProviders: Array<{
+    id: string;
+    stage: string;
+    selectable: boolean;
+    unavailableBecause?: string;
+  }>;
+  plan: string | null;
+  subscriptionStatus: string | null;
+  /** Read-only: connecting needs the charity's own Atlassian sign-in. */
+  confluence: {
+    status: string;
+    connectedAt: string | null;
+    spaceKey: string | null;
+    lastError: string | null;
+  } | null;
+  updatedAt: string;
+};
+
 export const ownerApi = {
   async login(email: string, password: string) {
     // A bad-credentials 401 here is not a stale session — never try to refresh or
@@ -113,6 +140,24 @@ export const ownerApi = {
   async getTenant(id: string) {
     const { data } = await client.get(`/tenants/${id}`);
     return data.tenant as TenantSummary;
+  },
+  async getTenantConfiguration(id: string) {
+    const { data } = await client.get(`/tenants/${id}/configuration`);
+    return data.configuration as TenantConfiguration;
+  },
+  async updateTenantConfiguration(
+    id: string,
+    body: {
+      // Absent means leave it alone. null on the provider is a value meaning
+      // "follow the deployment default", which is not the same as absent.
+      documentStorageProvider?: string | null;
+      documentStorageAlphaOptIn?: boolean;
+      plan?: 'ESSENTIALS' | 'COMPLETE';
+      reason: string;
+    },
+  ) {
+    const { data } = await client.patch(`/tenants/${id}/configuration`, body);
+    return data.configuration as TenantConfiguration;
   },
   async transitionLifecycle(
     id: string,

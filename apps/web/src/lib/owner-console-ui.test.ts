@@ -1,0 +1,105 @@
+import assert from 'node:assert/strict';
+import test from 'node:test';
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
+
+// Concern: the platform operator console. The API proves the authorisation and
+// the validation independently; these source checks keep the console's own
+// wiring honest — that every change carries a reason, that a setting the
+// deployment forbids cannot be chosen, and that the whole tenant list is
+// actually reachable.
+
+const WEB = process.cwd();
+const owner = (...parts: string[]) =>
+  readFileSync(join(WEB, 'src', 'app', '(owner)', 'owner', ...parts), 'utf8');
+
+test('the tenant list can reach past its first page', () => {
+  // The API has returned a cursor since the console shipped and nothing spent
+  // it, so every tenant past the first page was unreachable from the interface.
+  const page = owner('tenants', 'page.tsx');
+
+  assert.match(page, /nextCursor/);
+  assert.match(page, /cursor: nextCursor/);
+  assert.match(page, /Load more/);
+});
+
+test('the tenant list can be filtered by lifecycle status', () => {
+  const page = owner('tenants', 'page.tsx');
+
+  assert.match(page, /status === 'ALL' \? \{\} : \{ status \}/);
+  assert.match(page, /SUSPENDED/);
+  assert.match(page, /CLOSED/);
+});
+
+test('changing the search resets to the first page rather than appending', () => {
+  // Appending would leave earlier pages on screen showing results that no
+  // longer match what was typed.
+  const page = owner('tenants', 'page.tsx');
+
+  assert.match(page, /setTenants\(result\.tenants\)/);
+  assert.match(page, /setTenants\(\(current\) => \[\.\.\.current, \.\.\.result\.tenants\]\)/);
+});
+
+test('a configuration change cannot be saved without a reason', () => {
+  const panel = owner('tenants', '[id]', 'tenant-configuration-panel.tsx');
+
+  assert.match(panel, /reason: reason\.trim\(\)/);
+  assert.match(panel, /isDisabled=\{nothingToSave \|\| !reason\.trim\(\) \|\| saving\}/);
+});
+
+test('only the settings that actually changed are sent', () => {
+  // A save that posted every field would reset a setting the operator never
+  // looked at, using whatever the form happened to render.
+  const panel = owner('tenants', '[id]', 'tenant-configuration-panel.tsx');
+
+  assert.match(panel, /const nothingToSave = Object\.keys\(change\)\.length === 0/);
+  assert.match(panel, /=== configuration\.documentStorageAlphaOptIn/);
+});
+
+test('"follow the deployment default" is a real choice, distinct from omitting one', () => {
+  const panel = owner('tenants', '[id]', 'tenant-configuration-panel.tsx');
+
+  assert.match(panel, /DEFAULT_PROVIDER_KEY/);
+  assert.match(panel, /documentStorageProvider: null/);
+  assert.match(panel, /deploymentDefaultProvider/);
+});
+
+test('a provider the deployment forbids cannot be chosen, and says why', () => {
+  const panel = owner('tenants', '[id]', 'tenant-configuration-panel.tsx');
+
+  assert.match(panel, /isDisabled=\{!option\.selectable\}/);
+  assert.match(panel, /unavailableBecause/);
+});
+
+test('an alpha provider is labelled as alpha rather than looking ordinary', () => {
+  const panel = owner('tenants', '[id]', 'tenant-configuration-panel.tsx');
+
+  assert.match(panel, /option\.stage === 'ga' \? option\.id : `\$\{option\.id\} \(\$\{option\.stage\}\)`/);
+});
+
+test('Confluence is shown as read-only, and explained', () => {
+  // Connecting needs the charity to sign in to Atlassian themselves, so a
+  // control here would be a button that could never work.
+  const panel = owner('tenants', '[id]', 'tenant-configuration-panel.tsx');
+
+  assert.match(panel, /Connecting Confluence needs the charity to sign in to Atlassian/);
+  assert.doesNotMatch(panel, /updateConfluence|connectConfluence|disconnectConfluence/);
+});
+
+test('the configuration panel is not offered for a closed charity', () => {
+  const page = owner('tenants', '[id]', 'page.tsx');
+
+  assert.match(page, /lifecycleStatus !== 'CLOSED' \? \(\s*<TenantConfigurationPanel/);
+});
+
+test('the console never offers to delete a tenant outright', () => {
+  // Closing is terminal and deliberate; there is no hard delete, and the
+  // console must not imply there is one.
+  for (const file of [
+    owner('tenants', 'page.tsx'),
+    owner('tenants', '[id]', 'page.tsx'),
+    owner('tenants', '[id]', 'tenant-configuration-panel.tsx'),
+  ]) {
+    assert.doesNotMatch(file, /client\.delete\(/);
+  }
+});
