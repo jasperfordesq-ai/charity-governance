@@ -2,6 +2,7 @@ import type { FastifyInstance } from 'fastify';
 import { DocumentService } from '../../services/document.service.js';
 import { StorageService } from '../../services/storage.service.js';
 import { authGuard } from '../../middleware/auth.js';
+import { requireSessionLevel } from '../../middleware/session-level.js';
 import { subscriptionGuard } from '../../middleware/subscription.js';
 import { requireAdmin } from '../../middleware/roles.js';
 import { uploadDocumentSchema, linkStandardSchema } from '@charitypilot/shared';
@@ -322,7 +323,7 @@ export async function documentRoutes(app: FastifyInstance) {
     }
   });
 
-  app.delete<{ Params: { id: string } }>('/:id', { preHandler: [requireAdmin] }, async (request, reply) => {
+  app.delete<{ Params: { id: string } }>('/:id', { preHandler: [requireSessionLevel('ADMIN'), requireAdmin] }, async (request, reply) => {
     try {
       const deleted = await service.remove(request.user.organisationId, request.params.id);
       try {
@@ -377,7 +378,7 @@ export async function documentRoutes(app: FastifyInstance) {
   });
 
   // Unlink document from governance standard
-  app.delete<{ Params: { id: string } }>('/:id/unlink-standard', { preHandler: [requireAdmin] }, async (request, reply) => {
+  app.delete<{ Params: { id: string } }>('/:id/unlink-standard', { preHandler: [requireSessionLevel('ADMIN'), requireAdmin] }, async (request, reply) => {
     try {
       const { standardId } = linkStandardSchema.parse(request.body);
       await service.unlinkStandard(request.user.organisationId, request.params.id, standardId);
@@ -391,7 +392,7 @@ export async function documentRoutes(app: FastifyInstance) {
   });
 
   // Alias used by the web app: DELETE /documents/:id/standards/:standardId
-  app.delete<{ Params: { id: string; standardId: string } }>('/:id/standards/:standardId', { preHandler: [requireAdmin] }, async (request, reply) => {
+  app.delete<{ Params: { id: string; standardId: string } }>('/:id/standards/:standardId', { preHandler: [requireSessionLevel('ADMIN'), requireAdmin] }, async (request, reply) => {
     try {
       await service.unlinkStandard(
         request.user.organisationId,

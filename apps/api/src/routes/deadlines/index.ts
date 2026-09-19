@@ -1,6 +1,7 @@
 import type { FastifyInstance } from 'fastify';
 import { DeadlineService } from '../../services/deadline.service.js';
 import { authGuard } from '../../middleware/auth.js';
+import { requireSessionLevel } from '../../middleware/session-level.js';
 import { subscriptionGuard } from '../../middleware/subscription.js';
 import { requireAdmin } from '../../middleware/roles.js';
 import { createDeadlineSchema, deleteDeadlineSchema, updateDeadlineSchema } from '@charitypilot/shared';
@@ -91,7 +92,7 @@ export async function deadlineRoutes(app: FastifyInstance) {
     }
   });
 
-  app.delete<{ Params: { id: string } }>('/:id', { preHandler: [requireAdmin] }, async (request, reply) => {
+  app.delete<{ Params: { id: string } }>('/:id', { preHandler: [requireSessionLevel('ADMIN'), requireAdmin] }, async (request, reply) => {
     try {
       const data = deleteDeadlineSchema.parse(request.body);
       await service.remove(request.user.organisationId, request.params.id, data.expectedUpdatedAt);

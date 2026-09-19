@@ -1,6 +1,7 @@
 import type { FastifyInstance } from 'fastify';
 import { BoardMemberService } from '../../services/board-member.service.js';
 import { authGuard } from '../../middleware/auth.js';
+import { requireSessionLevel } from '../../middleware/session-level.js';
 import { subscriptionGuard } from '../../middleware/subscription.js';
 import { requireAdmin } from '../../middleware/roles.js';
 import { createBoardMemberSchema, updateBoardMemberSchema } from '@charitypilot/shared';
@@ -52,7 +53,7 @@ export async function boardMemberRoutes(app: FastifyInstance) {
     }
   });
 
-  app.delete<{ Params: { id: string } }>('/:id', { preHandler: [requireAdmin] }, async (request, reply) => {
+  app.delete<{ Params: { id: string } }>('/:id', { preHandler: [requireSessionLevel('ADMIN'), requireAdmin] }, async (request, reply) => {
     try {
       await service.remove(request.user.organisationId, request.params.id);
       return sendNoContent(reply);
