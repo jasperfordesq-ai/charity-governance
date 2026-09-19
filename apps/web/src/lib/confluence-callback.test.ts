@@ -123,14 +123,16 @@ test('a successful post reports the connected site', async () => {
   assert.deepEqual(outcome, { kind: 'connected', siteUrl: 'https://charity.atlassian.net/wiki' });
 });
 
-// The default wiring is what actually runs in the browser. `lib/api.ts`'s
-// axios instance already defaults `withCredentials: true`, but this call is
-// pinned explicitly (see confluence-callback.ts) because it must survive on
-// its own even if that default ever changes — a cookie-authenticated request
-// that silently drops its cookies fails in exactly the way this page exists
-// to prevent. This is asserted directly against the request config, the way
-// `api.test.ts` already asserts other `api` instance behaviour, via a
-// captured adapter rather than a real network call.
+// The default wiring is what actually runs in the browser. Asserted through a
+// captured adapter rather than a real network call, the way `api.test.ts`
+// already asserts other `api` instance behaviour.
+//
+// NOTE what this test can and cannot see. The adapter receives the config
+// axios has already MERGED with the instance defaults, and `lib/api.ts`
+// defaults `withCredentials: true` — so this test catches a wrong explicit
+// value but NOT a deleted line. The test below it asserts the config as it is
+// PASSED to `api.post`, which is the case the comment in
+// `confluence-callback.ts` actually claims to defend.
 test('the default post sends credentials and never triggers a second, unordered refresh', async () => {
   type CapturedConfig = {
     withCredentials?: boolean;
@@ -165,4 +167,50 @@ test('the default post sends credentials and never triggers a second, unordered 
   assert.equal(config.skipAuthRedirect, true);
   assert.equal(config.url, '/integrations/confluence/callback');
   assert.deepEqual(config.data && JSON.parse(config.data as string), { code: 'SECRET-CODE', state: 'SECRET-STATE' });
+});
+
+// `withCredentials` is pinned explicitly (see confluence-callback.ts) because
+// it must survive on its own even if `lib/api.ts`'s own default ever changes:
+// FRONTEND_URL and NEXT_PUBLIC_API_URL can be different hosts on the hosted
+// profile, so this call is cross-origin, and a cookie-authenticated request
+// that silently drops its cookies fails in exactly the way this page exists
+// to prevent.
+//
+// So it is asserted against the config as PASSED, not as merged. Deleting any
+// one of the three lines from the request config must fail here — a merged
+// config cannot show that, because the instance default supplies the value
+// again on its way through.
+test('the post pins its own request config rather than inheriting the instance defaults', async () => {
+  const originalPost = api.post;
+  const passed: Array<{ url: unknown; data: unknown; config: unknown }> = [];
+
+  (api as unknown as { post: unknown }).post = async (
+    url: unknown,
+    data: unknown,
+    config: unknown,
+  ) => {
+    passed.push({ url, data, config });
+    return { data: { siteUrl: 'https://x.atlassian.net/wiki' } };
+  };
+
+  try {
+    const outcome = await completeConfluenceCallback(
+      { code: 'SECRET-CODE', state: 'SECRET-STATE' },
+      { refresh: async () => {} },
+    );
+    assert.equal(outcome.kind, 'connected');
+  } finally {
+    (api as unknown as { post: unknown }).post = originalPost;
+  }
+
+  assert.equal(passed.length, 1, 'the post must have been called exactly once');
+  assert.equal(passed[0].url, '/integrations/confluence/callback');
+  assert.deepEqual(passed[0].data, { code: 'SECRET-CODE', state: 'SECRET-STATE' });
+  // An exact shape: a missing key fails, a wrong value fails, and an extra
+  // key that quietly re-enables the interceptor's own refresh fails too.
+  assert.deepEqual(passed[0].config, {
+    withCredentials: true,
+    skipAuthRefresh: true,
+    skipAuthRedirect: true,
+  });
 });

@@ -38,10 +38,21 @@ test('buildConnectView returns a view carrying the disclosure alongside the auth
   assert.ok(view.headline.length > 0, 'the connect screen has no authorize link without a disclosure to show first');
 });
 
+// Asserted against the object-shape guard's OWN message, not merely that
+// something threw. `''`, `null` and `[]` are all caught a second time
+// downstream by the completeness check (and `null` by a bare TypeError), so a
+// bare `assert.throws` reads as coverage of a guard it never actually
+// reaches: removing the guard entirely used to leave this test green.
+const MISSING_DISCLOSURE = /buildConnectView requires a disclosure\./;
+
 test('the connect screen cannot show the authorize link without the disclosure', () => {
-  assert.throws(() => buildConnectView({ authorizationUrl: AUTHORIZATION_URL, disclosure: '' }));
-  assert.throws(() => buildConnectView({ authorizationUrl: AUTHORIZATION_URL, disclosure: null }));
-  assert.throws(() => buildConnectView({ authorizationUrl: AUTHORIZATION_URL, disclosure: undefined }));
+  for (const disclosure of ['', null, undefined, [], ['not', 'an', 'object'], 'a plain string', 0]) {
+    assert.throws(
+      () => buildConnectView({ authorizationUrl: AUTHORIZATION_URL, disclosure }),
+      MISSING_DISCLOSURE,
+      `a disclosure of ${JSON.stringify(disclosure) ?? 'undefined'} must be refused by the shape guard itself`,
+    );
+  }
 });
 
 // Every ANDed sub-condition of the disclosure-completeness check, mutated
@@ -160,6 +171,26 @@ test('the integrations page exists and is wired to this module, not to its own c
   const src = readDash('integrations/page.tsx');
   assert.match(src, /from '@\/lib\/integration-status'/);
   assert.ok(src.includes('buildConnectView'), 'the page must gate the authorize link through buildConnectView');
+
+  // `includes('buildConnectView')` alone would be satisfied by a page that
+  // calls it AND ALSO renders `res.data.authorizationUrl` somewhere else. So
+  // every live reference to an authorize URL in the page has to come off the
+  // gated view object — a second, ungated render path fails here.
+  const authorizeRefs = src
+    .split(/\r?\n/)
+    .filter((line) => line.includes('authorizationUrl'))
+    .filter((line) => {
+      const trimmed = line.trimStart();
+      return !trimmed.startsWith('*') && !trimmed.startsWith('//') && !trimmed.startsWith('/*');
+    });
+  assert.ok(authorizeRefs.length > 0, 'the page should render an authorize link at all');
+  for (const line of authorizeRefs) {
+    assert.match(
+      line,
+      /connectView\.authorizationUrl/,
+      `every authorize URL must come from the gated view, but found: ${line.trim()}`,
+    );
+  }
   assert.ok(
     src.includes('CONFLUENCE_DISCONNECT_COPY'),
     'the page must render the shared disconnect copy, not text of its own',
