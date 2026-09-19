@@ -67,6 +67,9 @@ bitten this project before.
 out and it is now the house method: copy `apps/api/src` into your scratchpad, junction
 `node_modules` rather than copying it, and run
 
+> Junction the **repository root's** `node_modules`, not `apps/api/node_modules`. This is a hoisted
+> monorepo and the inner one has neither `tsx` nor `typescript`.
+
 ```bash
 node --import tsx --test src/tests/*.test.ts
 ```
