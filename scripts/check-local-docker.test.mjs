@@ -949,9 +949,9 @@ test('platform audit JSON command is read-only and machine-readable', () => {
 
   assert.equal(payload.auditCommands.json, 'node scripts/platform-completion-audit.mjs --json');
   assert.match(payload.legalPosture, /not legal advice/);
-  // 33 since 2026-09-02: /owner gained an index route that redirects to /owner/tenants
-  // (a bare /owner used to 404). P2, so p0Routes below is unchanged.
-  assert.equal(payload.counts.routes, 33);
+  // 35 since 2026-09-19: the Confluence work added /integrations and
+  // /integrations/confluence/callback. Both P2, so p0Routes below is unchanged.
+  assert.equal(payload.counts.routes, 35);
   assert.equal(payload.counts.p0Routes, 16);
   assert.equal(payload.counts.oversizedRouteFiles, 0);
   assert.ok(payload.routeAudit.some((route) => route.route === '/dashboard' && route.priority === 'P0'));
