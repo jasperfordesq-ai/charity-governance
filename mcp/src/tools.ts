@@ -388,9 +388,8 @@ function partition(
  * field the gate drops from a read — while a test that only knew about dates
  * of birth and home addresses stayed green.
  *
- * A tool with any of these can only be offered when the gate is open, because
- * the fields are what the record IS: a conflict of interest that does not name
- * the person or the matter is not a conflict record.
+ * Control fields are excluded: a concurrency stamp and a confirmation flag
+ * describe the request, not the charity or anyone in it.
  */
 export function gatedFieldsOf(tool: ToolDefinition): readonly string[] {
   if (!tool.model || !tool.body) return [];
@@ -400,9 +399,37 @@ export function gatedFieldsOf(tool: ToolDefinition): readonly string[] {
     .map((field) => field.name);
 }
 
-/** True when this tool cannot be used without opening the personal-data gate. */
+/**
+ * The gated fields a particular CALL actually supplies.
+ *
+ * Judged per call rather than per tool, because most updates do not touch the
+ * withheld half of a record. Changing a risk's status or its minute reference
+ * says nothing about a person; rewriting its description might. Gating the
+ * whole tool would have refused the first to prevent the second, and would
+ * have made most of the write surface unusable by default for no gain.
+ */
+export function gatedFieldsInCall(
+  tool: ToolDefinition,
+  args: Record<string, unknown>,
+): readonly string[] {
+  const gated = new Set(gatedFieldsOf(tool));
+  return Object.keys(args).filter((key) => gated.has(key));
+}
+
+/**
+ * True when this tool cannot be used at all without opening the gate: one of
+ * the fields the API requires is one the gate withholds.
+ *
+ * A conflict of interest that names nobody and describes no matter is not a
+ * conflict record, so `conflict_create` is in this position. `risk_update` is
+ * not: it can perfectly well change a status alone.
+ */
 export function needsPersonalData(tool: ToolDefinition): boolean {
-  return gatedFieldsOf(tool).length > 0;
+  if (!tool.model || !tool.body) return false;
+  const safe = new Set(SAFE_FIELDS[tool.model]);
+  return tool.body.some(
+    (field) => field.required && !field.control && !safe.has(field.name),
+  );
 }
 
 /**
@@ -475,13 +502,14 @@ export async function runTool(
   // Checked here as well as in the listing, because a client may call a tool
   // it was never shown. The fields are the record: refusing them individually
   // would leave a tool that cannot produce a valid request.
-  const gated = gatedFieldsOf(tool);
+  const gated = gatedFieldsInCall(tool, bodyArgs);
   if (gated.length > 0 && !allowPersonalData) {
     throw new Error(
-      `${tool.name} writes fields the personal-data gate withholds (${gated.join(', ')}), `
-        + 'and those fields are what the record is. It is available only when the connector '
-        + 'is started with --allow-personal-data, which is a data-protection decision rather '
-        + 'than a convenience. Nothing was sent.',
+      `This call would write ${gated.join(', ')}, which the personal-data gate withholds `
+        + `when reading a ${tool.model}. Writing them needs the connector started with `
+        + '--allow-personal-data, which is a data-protection decision rather than a '
+        + 'convenience. Nothing was sent. Fields the gate does not withhold can be changed '
+        + 'without it.',
     );
   }
 

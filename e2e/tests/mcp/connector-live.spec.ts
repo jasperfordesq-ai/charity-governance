@@ -94,7 +94,7 @@ test.describe('MCP connector lifecycle', () => {
     expect(result.stdout).toContain('MCP Harness Charity');
   });
 
-  test('the advertised tools are exactly the declared surface, and none takes an organisationId', async () => {
+  test('the advertised tools are exactly the surface this session may use, and none takes an organisationId', async () => {
     const connector = await openConnector({
       apiUrl: API_BASE_URL,
       credentialFile: credentialFileFor('lifecycle'),
@@ -107,14 +107,15 @@ test.describe('MCP connector lifecycle', () => {
       // here, which is the moment to ask whether it should exist.
       expect(names).toEqual([
         'annual_report_readiness',
+        'annual_report_set',
         'approval_readiness',
         'board_member_create',
         'board_member_delete',
         'board_member_update',
         'board_register',
         'board_submissions',
-        'complaint_create',
         'complaint_delete',
+        'complaint_update',
         'complaints_list',
         'compliance_principle',
         'compliance_principles',
@@ -122,32 +123,42 @@ test.describe('MCP connector lifecycle', () => {
         'compliance_record_set',
         'compliance_records',
         'compliance_signoff',
+        'compliance_signoff_set',
         'compliance_summary',
-        'conflict_create',
         'conflict_delete',
+        'conflict_update',
         'conflicts_list',
         'confluence_status',
         'dashboard_overview',
         'deadline_create',
+        'deadline_delete',
         'deadline_update',
         'deadlines_history',
         'deadlines_list',
         'document',
+        'document_approval_set',
+        'document_delete',
+        'document_link_standard',
+        'document_unlink_standard',
         'documents_list',
         'financial_controls',
         'financial_controls_set',
         'fundraising_create',
         'fundraising_delete',
         'fundraising_list',
+        'fundraising_update',
         'governing_act_create',
         'governing_act_update',
         'governing_acts',
         'governing_acts_voids',
+        'member_update',
         'members_list',
         'organisation',
+        'organisation_update',
         'registers_summary',
-        'risk_create',
+        'resolution_update',
         'risk_delete',
+        'risk_update',
         'risks_list',
         'team_list',
       ]);
@@ -1157,6 +1168,52 @@ test.describe('Connector writes and approval', () => {
     }
   });
 
+  test('creating a record that needs withheld fields is refused while the gate is closed', async () => {
+    const connector = await openConnector({
+      apiUrl: API_BASE_URL,
+      credentialFile: writeCredentialFile,
+    });
+    try {
+      const names = (await connector.client.listTools()).tools.map((tool) => tool.name);
+      expect(
+        names,
+        'a tool that could only ever be refused should not be advertised',
+      ).not.toContain('risk_create');
+
+      const refused = await callTool(connector.client, 'risk_create', {
+        title: 'Should never be created',
+        category: 'GOVERNANCE',
+        description: 'Names a member of staff',
+        likelihood: 1,
+        impact: 1,
+        mitigation: 'None',
+        reason: 'Proving the write gate',
+      });
+
+      expect(refused.isError, 'hiding a tool is not refusing it').toBe(true);
+      expect(refused.text).toMatch(/personal-data gate withholds/);
+      expect(refused.text).toMatch(/Nothing was sent/);
+    } finally {
+      await connector.close();
+    }
+  });
+
+  test('an update that touches only safe fields is allowed with the gate closed', async () => {
+    const connector = await openConnector({
+      apiUrl: API_BASE_URL,
+      credentialFile: writeCredentialFile,
+    });
+    try {
+      const names = (await connector.client.listTools()).tools.map((tool) => tool.name);
+      expect(
+        names,
+        'an update that can change a status alone must stay available',
+      ).toContain('risk_update');
+    } finally {
+      await connector.close();
+    }
+  });
+
   test('a removal is refused, with something for a person to run', async () => {
     adminCredentialFile = credentialFileFor('writes-admin');
     const connected = await connectConnector({
@@ -1171,6 +1228,9 @@ test.describe('Connector writes and approval', () => {
     const connector = await openConnector({
       apiUrl: API_BASE_URL,
       credentialFile: adminCredentialFile,
+      // A risk record cannot be created without its description and
+      // mitigation, both of which the gate withholds when reading one.
+      allowPersonalData: true,
     });
     try {
       const made = await callTool(connector.client, 'risk_create', {
@@ -1206,6 +1266,9 @@ test.describe('Connector writes and approval', () => {
     const connector = await openConnector({
       apiUrl: API_BASE_URL,
       credentialFile: adminCredentialFile,
+      // A risk record cannot be created without its description and
+      // mitigation, both of which the gate withholds when reading one.
+      allowPersonalData: true,
     });
     try {
       const risks = await callTool(connector.client, 'risks_list');
@@ -1241,6 +1304,9 @@ test.describe('Connector writes and approval', () => {
     const connector = await openConnector({
       apiUrl: API_BASE_URL,
       credentialFile: adminCredentialFile,
+      // A risk record cannot be created without its description and
+      // mitigation, both of which the gate withholds when reading one.
+      allowPersonalData: true,
     });
     try {
       const removed = await callTool(connector.client, 'risk_delete', {
@@ -1287,6 +1353,9 @@ test.describe('Connector writes and approval', () => {
     const connector = await openConnector({
       apiUrl: API_BASE_URL,
       credentialFile: adminCredentialFile,
+      // A risk record cannot be created without its description and
+      // mitigation, both of which the gate withholds when reading one.
+      allowPersonalData: true,
     });
     try {
       const made = await callTool(connector.client, 'risk_create', {

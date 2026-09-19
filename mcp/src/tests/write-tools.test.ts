@@ -36,22 +36,54 @@ function jsonOk(body: unknown = { data: { id: 'x' } }): Response {
   });
 }
 
-test('a write tool that touches withheld fields is gated on the same policy', () => {
-  // This replaced a hand-written list of five field names. That list was what
-  // let conflict_create ship accepting a trustee's name, the matter and its
-  // nature — every one of them dropped from a read — while staying green,
-  // because none of those five appeared in it. The rule now comes from the
-  // policy itself, so it cannot fall behind it.
+test('a tool is hidden only when it cannot be used without a withheld field', () => {
+  // Judged on the REQUIRED fields. A conflict record that names nobody is not
+  // a conflict record, so conflict_create cannot exist with the gate closed.
+  // risk_update can: changing a status alone says nothing about a person.
   for (const tool of WRITE_TOOLS) {
-    const gated = gatedFieldsOf(tool);
+    const requiredAndWithheld = (tool.body ?? []).filter(
+      (field) => field.required && !field.control && gatedFieldsOf(tool).includes(field.name),
+    );
     assert.equal(
       needsPersonalData(tool),
-      gated.length > 0,
-      `${tool.name} disagrees with its own gated fields`,
+      requiredAndWithheld.length > 0,
+      `${tool.name} disagrees with its own required fields`,
     );
   }
+
+  const create = WRITE_TOOLS.find((t) => t.name === 'conflict_create')!;
+  const update = WRITE_TOOLS.find((t) => t.name === 'conflict_update')!;
+  assert.equal(needsPersonalData(create), true);
+  assert.equal(
+    needsPersonalData(update),
+    false,
+    'an update that can touch only safe fields must stay available',
+  );
 });
 
+test('an update is refused only for the withheld fields it actually sends', async () => {
+  const api = client(async () => jsonOk({ data: { id: 'r1' } }));
+  const tool = WRITE_TOOLS.find((t) => t.name === 'risk_update')!;
+
+  // Status and minute reference are both on the safe side of the policy.
+  await runTool(tool, api, false, {
+    id: 'r1',
+    status: 'CLOSED',
+    boardMinuteReference: 'M-14',
+    reason: 'The board closed it',
+  });
+
+  // The description is not.
+  await assert.rejects(
+    () =>
+      runTool(tool, api, false, {
+        id: 'r1',
+        description: 'Names a specific member of staff',
+        reason: 'Rewriting the description',
+      }),
+    /would write description/,
+  );
+});
 test('the board register cannot be written with personal data at all', () => {
   // Unlike a conflict record, a board member is a useful record without any of
   // the withheld fields, so these tools stay usable with the gate closed and
