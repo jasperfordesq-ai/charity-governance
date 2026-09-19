@@ -30,3 +30,42 @@ test('the command defaults to serve', () => {
   assert.equal(parseArgs([]).command, 'serve');
   assert.equal(parseArgs(['connect']).command, 'connect');
 });
+
+test('the profile defaults to default and can be set to local', () => {
+  assert.equal(parseArgs([]).profile, 'default');
+  assert.equal(parseArgs(['--profile', 'local', '--base-url', 'http://127.0.0.1:3302']).profile, 'local');
+});
+
+test('an unknown profile is refused', () => {
+  assert.throws(
+    () => parseArgs(['--profile', 'production', '--base-url', 'http://127.0.0.1:3302']),
+    /profile/i,
+  );
+});
+
+test('--profile local accepts http only for loopback hosts', () => {
+  for (const url of ['http://127.0.0.1:3302', 'http://localhost:3002', 'http://[::1]:3002']) {
+    assert.equal(parseArgs(['--profile', 'local', '--base-url', url]).baseUrl, url);
+  }
+});
+
+test('--profile local refuses a host that merely looks like loopback', () => {
+  for (const url of [
+    'http://127.0.0.1.evil.example',
+    'http://localhost.example.com',
+    'http://10.0.0.5:3002',
+  ]) {
+    assert.throws(() => parseArgs(['--profile', 'local', '--base-url', url]), /loopback/i, url);
+  }
+});
+
+test('--profile local cannot be pointed at the VM', () => {
+  assert.throws(
+    () => parseArgs(['--profile', 'local', '--base-url', DEFAULT_BASE_URL]),
+    /loopback/i,
+  );
+});
+
+test('without the local profile a loopback http URL is still refused', () => {
+  assert.throws(() => parseArgs(['--base-url', 'http://127.0.0.1:3302']), /https/i);
+});
