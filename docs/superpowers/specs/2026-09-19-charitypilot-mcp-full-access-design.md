@@ -93,7 +93,7 @@ no field allowlist can protect.
 
 ### Phase 2: API foundations for writes (additive, hand-written migration)
 
-**Split into three, and 2a is DONE (2026-09-19).** The original block covered the
+**Split into three; 2a and 2b are DONE (2026-09-19).** The original block covered the
 session columns, four auth routes, an activity log, level enforcement, the
 sessions UI and a connector rewrite — too much for one reviewable change against
 the auth core. Delivered as 2a (posture columns, migration, guards, enforcement),
@@ -104,6 +104,18 @@ gating, sessions UI). Plan for 2a:
 Found while doing 2a: rotation was already losing `deviceLabel` on every
 refresh, which is the exact failure mode the posture had to be protected from,
 and a replayed refresh token quarantined a whole session family in silence.
+
+Found while doing 2b: the browser refresh route accepted a connector token, so
+the cross-channel rule was only half enforced; it now passes `WEB`. And the
+browser-evidence guard refused the connector itself, because Node's own fetch
+sends `sec-fetch-mode` on every request. That header is no longer treated as
+evidence; `sec-fetch-site` and `sec-fetch-dest`, which no non-browser sends,
+still are. Plan for 2b:
+`docs/superpowers/plans/2026-09-19-charitypilot-mcp-connector-auth.md`. Plan for
+2c: `docs/superpowers/plans/2026-09-19-charitypilot-mcp-connector-accountability.md`.
+
+2b Task 7, deploying the API to the Hyper-V VM so the connector routes exist
+there, is outstanding and is the owner's decision, not an engineering one.
 
 Goal: the API knows what a connector session is, what it may do, and records what it did.
 
