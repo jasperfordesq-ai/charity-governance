@@ -47,8 +47,10 @@ test('the length floor rejects exactly 8 characters', () => {
 });
 
 test('an overlapping secret cannot leave a fragment of a longer one behind', () => {
-  registerSecret('abcdef1234567890');
+  // Shorter FIRST: this is the only registration order under which unsorted
+  // iteration replaces the short secret first and leaves the longer one's tail behind.
   registerSecret('abcdef1234');
+  registerSecret('abcdef1234567890');
   const out = redactSecrets('token abcdef1234567890 here');
   assert.ok(!out.includes('567890'), 'no fragment of the longer secret may survive');
   assert.equal(out, 'token [redacted] here');
