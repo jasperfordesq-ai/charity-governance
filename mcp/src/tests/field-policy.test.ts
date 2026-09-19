@@ -1,6 +1,11 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { applyFieldPolicy, SAFE_FIELDS, WITHHELD_FIELDS } from '../field-policy.js';
+import {
+  applyFieldPolicy,
+  applyShapePolicy,
+  SAFE_FIELDS,
+  WITHHELD_FIELDS,
+} from '../field-policy.js';
 
 const TRUSTEE = {
   id: 'bm1', name: 'A Trustee', role: 'Chair', appointedDate: '2024-01-01',
@@ -210,4 +215,185 @@ test('safe and withheld lists never overlap', () => {
     const overlap = SAFE_FIELDS[model].filter((f) => WITHHELD_FIELDS[model].includes(f));
     assert.deepEqual(overlap, [], `${model} classifies a field both ways`);
   }
+});
+
+/* --- shapes: the payloads that mix models ------------------------------- */
+
+test('the dashboard withholds interpolated free text and unlisted deadline columns', () => {
+  const raw = {
+    data: {
+      compliance: { overallPercent: 42 },
+      upcomingDeadlines: [
+        {
+          id: 'd1', title: 'File the B1', dueDate: '2026-09-30',
+          description: 'ask Aoife about this', generationInputs: { profile: 'x' },
+          isComplete: false,
+        },
+      ],
+      boardAlerts: [
+        { memberId: 'b1', memberName: 'Aoife Chairperson', alertType: 'conduct_unsigned' },
+      ],
+      recentActivity: [
+        {
+          id: 'board-member-b1', type: 'board_member',
+          timestamp: '2026-03-02T00:00:00.000Z',
+          description: "Updated board member 'Aoife Chairperson'",
+          userId: 'u1', userName: 'Staff Person',
+        },
+      ],
+    },
+  };
+
+  const filtered = applyShapePolicy('dashboard', raw, false) as {
+    data: {
+      compliance: { overallPercent: number };
+      upcomingDeadlines: Record<string, unknown>[];
+      recentActivity: Record<string, unknown>[];
+    };
+  };
+
+  assert.equal(filtered.data.compliance.overallPercent, 42, 'aggregate figures survive');
+  assert.equal(filtered.data.upcomingDeadlines[0]!.title, 'File the B1');
+  assert.ok(
+    !('generationInputs' in filtered.data.upcomingDeadlines[0]!),
+    'an unlisted deadline column must be dropped',
+  );
+  assert.ok(
+    !('description' in filtered.data.upcomingDeadlines[0]!),
+    'deadline free text is withheld',
+  );
+
+  const serialised = JSON.stringify(filtered);
+  assert.ok(!serialised.includes('Staff Person'), 'a staff name must not survive the closed gate');
+  assert.ok(
+    !serialised.includes('Updated board member'),
+    'free text assembled by interpolation must not survive',
+  );
+  assert.ok(serialised.includes('conduct_unsigned'), 'the alert type is the useful part and survives');
+  assert.ok(
+    serialised.includes('Aoife Chairperson'),
+    'a trustee name survives, because BoardMember.name is classified safe',
+  );
+});
+
+test('the dashboard returns everything when the gate is open', () => {
+  const raw = {
+    data: {
+      compliance: {}, upcomingDeadlines: [], boardAlerts: [],
+      recentActivity: [{ description: 'Updated a board member', userName: 'Staff Person' }],
+    },
+  };
+  const filtered = applyShapePolicy('dashboard', raw, true) as {
+    data: { recentActivity: { userName: string }[] };
+  };
+  assert.equal(filtered.data.recentActivity[0]!.userName, 'Staff Person');
+});
+
+test('the team payload filters members and invites by their own models', () => {
+  const raw = {
+    members: [
+      { id: 'u1', email: 'a@b.test', name: 'Staff Person', role: 'ADMIN', activeSessionCount: 2 },
+    ],
+    invites: [
+      {
+        id: 'i1', email: 'new@b.test', role: 'MEMBER',
+        invitedByName: 'Staff Person', token: 'invite-secret',
+      },
+    ],
+  };
+  const filtered = applyShapePolicy('team', raw, false);
+  const closed = JSON.stringify(filtered);
+
+  assert.ok(!closed.includes('Staff Person'), 'staff names are withheld');
+  assert.ok(!closed.includes('a@b.test'), 'account emails are withheld');
+  assert.ok(!closed.includes('invite-secret'), 'an invite token is a credential and must never pass');
+  assert.ok(closed.includes('ADMIN'), 'the role is the governance-relevant part and survives');
+  assert.equal(
+    (filtered as { members: { activeSessionCount?: number }[] }).members[0]!.activeSessionCount,
+    2,
+    'a session count is an aggregate, not personal data',
+  );
+});
+
+test('a void withholds the snapshot blob, which an allowlist cannot see inside', () => {
+  const raw = {
+    data: [{
+      id: 'v1', organisationId: 'o1', reference: 'BM-1', kind: 'BOARD_MEETING',
+      status: 'SUPERSEDED', actDate: '2026-01-01', voidedAt: '2026-03-02',
+      title: 'Removal of a named trustee',
+      voidedByEmail: 'owner@example.org', reason: 'duplicate of BM-2',
+      snapshot: { title: 'Removal of a named trustee', resolutions: [{ text: 'Jane Doe removed' }] },
+    }],
+  };
+  const closed = JSON.stringify(applyFieldPolicy('GoverningActVoid', raw, false));
+
+  assert.ok(!closed.includes('Jane Doe'), 'the opaque blob must not pass the closed gate');
+  assert.ok(!closed.includes('owner@example.org'), 'the voiding operator is withheld');
+  assert.ok(!closed.includes('duplicate of BM-2'), 'the free-text reason is withheld');
+  assert.ok(closed.includes('BM-1'), 'the reference survives so the void is still traceable');
+});
+
+test('board submissions filter three nested models at three depths', () => {
+  const raw = {
+    data: {
+      evidenced: [{
+        id: 'doc1', name: 'Minutes March 2026', category: 'BOARD_MINUTES',
+        owner: 'Aoife Chairperson', description: 'signed copy', evidenced: true,
+        resolution: {
+          id: 'r1', itemNumber: '4.2', text: 'RESOLVED that Jane Doe be removed',
+          abstentions: 'Jane Doe', carried: true,
+          governingAct: { id: 'ga1', reference: 'BM-1', title: 'Board meeting', notes: 'private note' },
+        },
+      }],
+      outstanding: { notEvidenced: [], notSubmitted: [] },
+    },
+  };
+  const filtered = applyShapePolicy('boardSubmissions', raw, false);
+  const closed = JSON.stringify(filtered);
+
+  assert.ok(closed.includes('Minutes March 2026'), 'the document name survives');
+  assert.ok(closed.includes('4.2'), 'the resolution item number survives');
+  assert.ok(closed.includes('BM-1'), 'the act reference survives at the third level');
+  assert.ok(!closed.includes('Jane Doe'), 'resolution text and abstentions are withheld');
+  assert.ok(!closed.includes('signed copy'), 'document free text is withheld');
+  assert.ok(!closed.includes('Aoife Chairperson'), 'the document owner is withheld');
+  assert.ok(!closed.includes('private note'), 'the act notes are withheld even when nested');
+});
+
+test('the signoff keeps its approval summaries, which carry only hashes and dates', () => {
+  const raw = {
+    data: {
+      id: 's1', organisationId: 'o1', reportingYear: 2026, status: 'APPROVED',
+      approvedByName: 'Aoife Chairperson', approvalNotes: 'agreed at the March meeting',
+      currentApproval: {
+        id: 'a1', approvalSequence: 3, evidenceHash: 'abc', snapshotHash: 'def',
+        approvedAt: '2026-03-02', createdByName: 'Aoife Chairperson',
+      },
+      latestApproval: null,
+    },
+  };
+  const filtered = applyShapePolicy('complianceSignoff', raw, false) as {
+    data: { currentApproval: Record<string, unknown>; latestApproval: unknown };
+  };
+  const closed = JSON.stringify(filtered);
+
+  assert.ok(
+    !closed.includes('Aoife Chairperson'),
+    'the approver is withheld, including inside the summary',
+  );
+  assert.ok(!closed.includes('agreed at the March meeting'), 'approval notes are withheld');
+  assert.equal(filtered.data.currentApproval.evidenceHash, 'abc', 'the evidence hash survives');
+  assert.equal(filtered.data.currentApproval.approvalSequence, 3);
+  assert.equal(
+    filtered.data.latestApproval,
+    null,
+    'an absent approval stays null rather than becoming an empty object',
+  );
+});
+
+test('an unknown shape fails closed rather than returning the payload raw', () => {
+  assert.throws(
+    () => applyShapePolicy('nope' as never, { data: { secret: 1 } }, false),
+    /unknown response shape/i,
+  );
 });

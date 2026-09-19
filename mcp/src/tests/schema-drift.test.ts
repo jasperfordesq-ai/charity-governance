@@ -49,7 +49,13 @@ function dataFieldsOf(model: string, schema: string): string[] {
  * still passes, and that model's columns are never checked again. Adding a fifth gated
  * model means adding it here too — and the test below says so if you forget.
  */
-const MUST_BE_GATED = ['BoardMember', 'Member', 'ConflictRecord', 'ComplaintRecord', 'GoverningAct'] as const;
+const MUST_BE_GATED = [
+  'BoardMember', 'Member', 'ConflictRecord', 'ComplaintRecord', 'GoverningAct',
+  'RiskRecord', 'FundraisingRecord', 'FinancialControlReview', 'AnnualReportReadiness',
+  'ComplianceRecord', 'ComplianceSignoff', 'Deadline', 'Document', 'Resolution',
+  'GovernancePrinciple', 'GovernanceStandard', 'Organisation', 'User', 'TeamInvite',
+  'GoverningActVoid', 'Subscription',
+] as const;
 
 test('no gated model has been quietly dropped from the policy', () => {
   for (const model of MUST_BE_GATED) {
