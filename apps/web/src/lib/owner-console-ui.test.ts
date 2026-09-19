@@ -124,3 +124,16 @@ test('the identity is not requested on the pages that have no session', () => {
   assert.match(identity, /pathname === '\/owner\/login'/);
   assert.match(identity, /pathname === '\/owner\/set-password'/);
 });
+
+test('the console does not exist on a single-tenant deployment', () => {
+  // The API has always been the authority: ownerRoutes registers nothing when
+  // the deployment is single-tenant, so every /api/v1/owner path answers 404.
+  // The pages did not know that and rendered a console that could only fail.
+  const gate = readFileSync(
+    join(WEB, 'src', 'app', '(owner)', 'owner', 'layout.tsx'),
+    'utf8',
+  );
+
+  assert.match(gate, /webTenancyIsMulti/);
+  assert.match(gate, /notFound\(\)/);
+});
