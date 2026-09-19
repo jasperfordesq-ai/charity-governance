@@ -30,6 +30,7 @@ import {
   UserRoundCog,
   UsersRound,
   X,
+  type LucideProps,
 } from 'lucide-react';
 
 /* ------------------------------------------------------------------ */
@@ -49,7 +50,7 @@ const sidebarFocusableSelector = [
 type NavItem = {
   href: string;
   label: string;
-  icon: React.ReactElement;
+  icon: React.ReactElement<LucideProps>;
   /**
    * A short marker shown next to the label — used only for Confluence, which
    * `docs/superpowers/plans/2026-09-19-integration-admin-ui-phase-6.md`
