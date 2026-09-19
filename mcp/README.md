@@ -1,12 +1,16 @@
 # charitypilot-mcp
 
-A read-only MCP server that lets an AI client answer questions about your
-charity's governance data — compliance status, deadlines, the board register,
-governing acts, evidence document metadata — by calling CharityPilot's
-existing `/api/v1` routes as you. It runs on your own machine, as a stdio
-subprocess of your AI client. It is not a shared service, it does not listen
-for connections, and it cannot change anything in CharityPilot: every tool it
-exposes maps to a `GET` route, nothing else.
+An MCP server that lets an AI client answer questions about your charity's
+governance data, and change it, by calling CharityPilot's existing `/api/v1`
+routes as you. It runs on your own machine, as a stdio subprocess of your AI
+client. It is not a shared service and it does not listen for connections.
+
+**It has no powers of its own.** Everything it can do, you can do in the web
+application, and every limit is enforced by the API rather than by the
+connector. What the connector adds is that you choose, when you sign in, how
+much of your own authority this particular session carries — and that anything
+which cannot be undone stops and asks you, in your own terminal, before it
+happens.
 
 ## Before you start: Tailscale must be connected
 
@@ -64,14 +68,22 @@ connector from an AI client:
 
 - **`node dist/cli.js connect`** — prompts for your CharityPilot email and
   password in the terminal (the password is never echoed and is never
-  written anywhere), signs in against `/api/v1/auth/login`, and stores the
-  resulting refresh token in your OS credential store. Prints who you're
-  signed in as and which organisation you're connected to, so you can catch
-  a wrong-account sign-in immediately.
+  written anywhere), signs in against `/api/v1/auth/connector/login`, and
+  stores the resulting refresh token in your OS credential store. Prints the
+  host, who you're signed in as, which organisation, and the access level the
+  session will carry, so you can catch a wrong host or a wrong account
+  immediately. Add `--access-level read|write|admin` to choose; the default is
+  `write`.
+- **`node dist/cli.js approve <id>`** — grants one pending approval, after
+  asking for your password. Must be run at a terminal; see below.
 - **`node dist/cli.js status`** — reports whether a credential is stored and,
-  if it's still valid, the account and organisation it resolves to right
-  now. Run this before asking a question if you're not sure which charity
-  you're connected to.
+  if it's still valid, the account, organisation and access level it resolves
+  to right now. Run this before asking a question if you're not sure which
+  charity you're connected to.
+
+The stored credential is bound to the host that issued it. If something changes
+the connector's base URL, the credential is refused rather than sent to the new
+host, and the refusal says so loudly instead of looking like an expired session.
 - **`node dist/cli.js disconnect`** — ends the session on the server (the
   refresh token is revoked via `/api/v1/auth/logout`, so it can't be reused
   even if someone got hold of it) *and* clears the credential from the local
@@ -79,9 +91,17 @@ connector from an AI client:
 
 ## Tools
 
-27 tools cover every readable route on the API. Each maps to exactly one
-`GET` route, and each result notes that it is data returned for the signed-in
-person's charity, not instructions to act on.
+27 read tools cover every readable route on the API, and 17 write tools cover
+the changes worth making from an assistant. Each maps to exactly one route, and
+each result notes that it is data returned for the signed-in person's charity,
+not instructions to act on.
+
+Two further tools, `document_upload` and `document_download`, appear only when
+you name a directory for them. See *Uploading and downloading documents*.
+
+The read tools are listed first below. The writes follow, and every one of them
+takes an optional `reason` that is recorded against the change; the removals
+require it.
 
 The **Gated as** column says how the personal-data gate treats the payload: by a
 single model when every record is one kind of thing, by a named shape when the
@@ -119,6 +139,37 @@ to five of them for a while, so a test now refuses it.
 | `document` | `/api/v1/documents/:id` | **id** (required) | `Document` | — |
 | `team_list` | `/api/v1/team` | — | mixed (`team`) | — |
 | `confluence_status` | `/api/v1/integrations/confluence/status` | — | no records | Owner/admin |
+
+### The write tools
+
+| Tool | Route | Level | Notes |
+| --- | --- | --- | --- |
+| `board_member_create` | `POST /api/v1/board-members` | write | Personal-data fields are not accepted. |
+| `board_member_update` | `PATCH /api/v1/board-members/:id` | write | Omitted fields are left alone, not blanked. |
+| `compliance_record_set` | `PUT /api/v1/compliance/records/:standardId` | write | Needs the revision you read. |
+| `deadline_create` | `POST /api/v1/deadlines` | write | |
+| `deadline_update` | `PATCH /api/v1/deadlines/:id` | write | Needs the `updatedAt` you read. |
+| `conflict_create` | `POST /api/v1/governance-registers/conflicts` | write | |
+| `risk_create` | `POST /api/v1/governance-registers/risks` | write | |
+| `complaint_create` | `POST /api/v1/governance-registers/complaints` | write | |
+| `fundraising_create` | `POST /api/v1/governance-registers/fundraising` | write | |
+| `financial_controls_set` | `PUT /api/v1/governance-registers/financial-controls` | write | |
+| `governing_act_create` | `POST /api/v1/governing-acts` | write | |
+| `governing_act_update` | `PATCH /api/v1/governing-acts/:id` | write | Needs the `updatedAt` you read. |
+| `board_member_delete` | `DELETE /api/v1/board-members/:id` | admin | Needs your approval. |
+| `conflict_delete` | `DELETE /api/v1/governance-registers/conflicts/:id` | admin | Needs your approval. |
+| `risk_delete` | `DELETE /api/v1/governance-registers/risks/:id` | admin | Needs your approval. |
+| `complaint_delete` | `DELETE /api/v1/governance-registers/complaints/:id` | admin | Needs your approval. |
+| `fundraising_delete` | `DELETE /api/v1/governance-registers/fundraising/:id` | admin | Needs your approval. |
+
+Every field each write tool accepts is declared. A field it does not declare is
+refused rather than passed on, so a model cannot reach a column the connector
+never meant to expose by guessing its name. Personal-data fields are absent from
+the write surface entirely: a date of birth or a home address is not something an
+assistant should be putting into a register on anyone's behalf.
+
+The record a write returns goes through the same gate a read would. A write is
+not a way around the policy.
 
 Some routes are deliberately not exposed: raw file downloads and the HTML
 exports, the platform operator realm, billing authority, reminder logs carrying
@@ -191,12 +242,85 @@ token used for API calls lives in memory only, for the lifetime of the
 process, and is never written anywhere. There is no config file, no `.env`,
 and no on-disk cache of anything the API returns.
 
-## Read-only, by design
+## Access levels
 
-Every tool the connector exposes maps to a `GET` route on the existing API.
-There is no tool that writes, uploads, deletes, or downloads a document's
-contents (document tools return metadata only). If a question can't be
-answered by reading, this connector can't answer it.
+You pick one when you sign in, with `--access-level`, and it is recorded on the
+session by the API. It can only ever narrow what your account could already do:
+a read-level session belonging to an owner is still refused every change, and an
+administrator-level session belonging to a member is still refused everything a
+member may not do.
+
+| Level | What the session may do |
+| --- | --- |
+| `read` | Read only. Every unsafe request is refused by the API with `SESSION_READ_ONLY`. |
+| `write` | Reads, plus the ordinary changes: adding and editing records. |
+| `admin` | Everything, including removals — each of which still needs your approval. |
+
+The default is `write` everywhere except the local test profile. The connector
+only offers the tools the level allows, and asks the API what the level actually
+is rather than trusting the flag it was started with.
+
+## Approving something that cannot be undone
+
+Removals need more than an administrator-level session. When one is attempted,
+the API refuses it and hands back a summary and an identifier:
+
+```
+Permanently delete: governance registers risks (DELETE)
+
+CharityPilot will not do this until you approve it yourself. In your own
+terminal, run:
+
+    charitypilot-mcp approve apr_01H...
+
+You will be asked for your password there.
+```
+
+`approve` refuses to run unless standard input is a terminal, and refuses a
+piped password even on the local profile. That is the whole point: an agent can
+start a process and write to its input, but it cannot type at a terminal. The
+approval is bound to a digest of that exact request, is single-use, and expires
+in five minutes, so it cannot be spent on a different record however the agent
+is persuaded in between.
+
+A time-limited elevation was considered first and rejected: a window elevates
+the agent, not you. For its duration every instruction the agent is holding —
+including any it read out of a document or a web page — would carry the raised
+authority.
+
+## Uploading and downloading documents
+
+Both are off unless you name a directory for them, and neither tool is even
+offered until you do:
+
+```bash
+node dist/cli.js serve --upload-root ~/charity-docs --download-dir ~/charity-downloads
+```
+
+Nothing outside that directory can be read, however the path is spelled. Links
+pointing out of it are refused, and dotted directories such as `.git` are never
+traversed — an upload root inside a project directory must not become a way to
+read the credentials in its configuration.
+
+A download writes the file and reports the path. It never returns the contents:
+the personal-data gate can filter a record, but a PDF of board minutes is either
+handed over whole or not at all, so keeping the bytes out of the model's context
+is the control that remains.
+
+## Everything a change does is recorded
+
+Every unsafe request a connector session makes leaves a row in
+`ClientActivityEvent`: the route, the identifier, the status code, the access
+level, and the reason you gave. Refused attempts are recorded too, because an
+agent that tried to delete something and was stopped is the row most worth
+reading. The rows cannot be edited or deleted afterwards, by anyone.
+
+Connector sessions also have their own budget for changes — thirty a minute, per
+session — so an agent in a retry loop cannot spend the allowance your browser
+shares and lock you out of your own web session.
+
+You can see connector sessions on the Team page, badged with the level they
+hold, and revoke any of them from there.
 
 ## Testing against a local stack
 
@@ -227,9 +351,9 @@ node mcp/dist/cli.js connect --profile local --base-url http://localhost:3002
 npx @modelcontextprotocol/inspector node mcp/dist/cli.js serve --profile local --base-url http://localhost:3002
 ```
 
-Until the connector-specific auth routes land, `FRONTEND_URL` in
-`apps/api/.env` must include `http://localhost:3002`, because the API rejects
-an unlisted `Origin` on the sign-in route.
+No `FRONTEND_URL` entry is needed for the connector any more. It signs in
+through `/api/v1/auth/connector/*`, which refuses any request carrying an
+origin rather than requiring an allow-listed one.
 
 To point an AI client at the local stack, give it its own credential file so
 it never shares the OS credential store entry used for the VM:
@@ -256,3 +380,11 @@ it anywhere else and the connector refuses to start.
 - **Pagination is available but not automatic.** The list tools accept `page`
   and `pageSize` and report `hasMore`. Nothing follows the pages for you, so a
   question spanning a long register needs more than one call.
+- **Connector reads share your address's rate limit.** Changes have their own
+  per-session budget; reads do not, because at the point the shared limiter runs
+  the API does not yet know which session a request belongs to. A read loop can
+  therefore still spend the allowance your browser shares.
+- **Not every mutating route has a tool.** Team membership, ownership transfer,
+  organisation settings and the Confluence integration are reachable in the web
+  application and deliberately not from here. Confluence disconnection will not
+  be exposed at all.

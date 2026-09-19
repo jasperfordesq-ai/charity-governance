@@ -9,35 +9,50 @@ which decisions were made unilaterally and are yours to reverse.
 
 ## Status in one paragraph
 
-The connector reads the whole API. Twenty-seven tools cover every readable route; the
-unit suite is 127 tests (126 passing, one skipped because it asserts a POSIX file mode)
-and the live suite is 26. Typecheck is clean and the package
-lives at `mcp/` — deliberately OUTSIDE the npm workspace globs, so nothing about it can
-reach the API's Docker build or the blue-green deploy.
+**Updated 2026-09-19, after the full-access build.** The connector is no longer
+read-only. It reads the whole API through 27 tools, changes records through 17
+more, and moves documents in and out through 2 that appear only when the operator
+names a directory for them. The unit suite is 199 passing (two skipped, both
+POSIX-only file modes) and the live suite is 53. Typecheck is clean, and the
+package still lives OUTSIDE the npm workspace globs, so nothing about it can reach
+the API's Docker build or the blue-green deploy.
 
-**It now runs against a real API, but not yet against the VM.** As of 2026-09-19 a live
-harness drives the built connector over stdio against the runner-owned disposable stack:
-`npm run test:e2e:mcp`, source in `e2e/tests/mcp/connector-live.spec.ts`. Eighteen
-assertions cover sign-in, refresh rotation, server-side revocation on disconnect, the
-personal-data gate open and closed, tenant isolation in both directions, and the three
-roles. Two canaries in `scripts/mcp-live-canary.mjs` have been run and confirmed the
-suite goes red when the gate is broken.
+Everything that limits it lives in the API, not here:
 
-**The VM is verified too, as of 2026-09-19.** The owner ran `connect` against
-`charitypilot.tailae0b07.ts.net` over Tailscale and the connector answered as the owner of
-hOUR Timebank CLG. Against that live charity: 23 of the 24 argument-free tools returned real
-data, pagination reached the API (page two of the board register returns different trustees
-from page one), an undeclared argument was refused by name, and no withheld field reached
-the model through the closed gate. Opening the gate showed the five withheld board-member
-field names are genuinely present, so the closed-gate result was filtering rather than an
-empty column; no value from those fields was read.
+- Sessions carry a posture. `clientKind` says whether a session belongs to a
+  browser or the connector; `accessLevel` says how much it may do. Both are
+  chosen once, by whoever typed the password, and are pinned per session family
+  by database triggers so a rotation cannot silently widen a session.
+- The connector signs in through `/api/v1/auth/connector/*`, which return tokens
+  in the body, set no cookie, and refuse anything carrying evidence of a browser.
+- Every unsafe request from a connector session leaves an append-only
+  `ClientActivityEvent` row, refused attempts included.
+- Seventeen destructive routes need an administrator-level session AND a
+  single-use approval bound to a digest of the exact request, granted by a person
+  typing their password at a terminal.
+- Connector sessions have their own budget of thirty changes a minute.
 
-The one failure was `confluence_status`, a 404 because the deployed build predates the
-integrations routes. A deployment gap rather than a connector fault, and irrelevant while
-there is no Confluence tenant.
+**The live suite is the evidence.** `npm run test:e2e:mcp` drives the built
+connector over stdio against a disposable stack: sign-in, rotation, revocation,
+the personal-data gate open and closed, tenant isolation both ways, every role,
+read-only refusal, the write path, the 428 approval flow end to end including a
+wrong password approving nothing, and a document round trip that compares bytes.
+Eight canaries in `scripts/mcp-live-canary.mjs` have each been run and each turns
+the suite red.
 
-The OS keychain path and the raw-mode password prompt are therefore both exercised for real.
+**The VM still runs a build that predates all of this.** The connector auth routes
+do not exist there, so `connect` against it will report that the API is older than
+the connector and name the host. Deploying is the owner's decision, not an
+engineering one; see the deploy procedure note in memory. Until then, everything
+above is proved against the disposable stack and the API suite, not against the VM.
 
+**The VM was verified on the read-only build, 2026-09-19.** The owner connected
+over Tailscale and the connector answered as the owner of hOUR Timebank CLG: 23 of
+24 argument-free tools returned real data, pagination reached the API, an
+undeclared argument was refused by name, and nothing withheld reached the model.
+The one failure was `confluence_status`, a 404 because the deployed build predates
+the integrations routes. The OS keychain path and the raw-mode password prompt are
+therefore both exercised for real.
 ## The first thing to do
 
 Run it. In order, on a machine with Tailscale connected:
@@ -69,9 +84,12 @@ unexpected modified files, check whether another session is mid-flight before re
 
 ## What is deliberately not built
 
-- **No write tools, no document downloads, no response caching, no generic "call any
-  endpoint" tool.** Each was excluded on purpose. Writes and downloads are planned for
-  later phases; the other two stay excluded.
+- **No response caching and no generic "call any endpoint" tool.** Both stay excluded.
+  A generic tool would void every guarantee the declared surface provides, and a cache
+  would mean the connector holding charity data on disk, which it deliberately does not.
+- **No tools for team membership, ownership transfer, organisation settings or the
+  Confluence integration.** All are reachable in the web application. Confluence
+  disconnection will not be exposed at all, per the owner's standing ruling.
 - Nineteen readable routes are deliberately not exposed, each with its reason in
   `mcp/src/route-coverage.ts`. A test requires every readable route to be either a tool
   or an entry there, so the list cannot quietly fall behind the API.
@@ -109,9 +127,30 @@ for every real user, which is why they were landed on their own.
 A replayed refresh token now also writes a `SESSION_REPLAY_DETECTED` audit row
 in the same transaction as the quarantine. It used to be silent.
 
+## What the next session should pick up
+
+In order:
+
+1. **Decide whether to deploy the API to the VM.** Everything from session posture
+   onwards exists only in the repository and on the disposable test stack. Until the
+   VM is deployed, the connector cannot sign in against it at all. This is the owner's
+   call: it carries five migrations, all additive, all past the blue-green gate.
+2. **Reconnect and verify against the VM afterwards.** `connect --access-level write`,
+   confirm `status` reports the level, then confirm a read-level session is refused a
+   change, and that the refusal comes from the API rather than from the connector.
+3. **Distribute to trustees at read level**, if the owner wants that. Nothing further
+   is needed in the code; it is a matter of giving people the install steps and
+   `--access-level read`.
+
 ## Open problems, in priority order
 
-### 1. Split-host deployments cannot authenticate (unfixed, needs a decision)
+### 1. Split-host deployments cannot authenticate — RESOLVED 2026-09-19
+
+The connector no longer sends an `Origin` at all: its auth routes refuse any request
+carrying one, so there is nothing to allow-list and the hosting move is not blocked by
+this. What follows is kept because it explains why those routes are shaped that way.
+
+#### The problem as it stood
 
 `apps/api` builds its allowed origins solely from `FRONTEND_URL`, and rejects a request
 whose `Origin` is present but unlisted. The connector derives its `Origin` from its own
@@ -222,6 +261,22 @@ of all 34 decisions made during the build with the reasoning and the stated cost
 wrong. `task-11-report.md` has the owner-verification checklist. If that directory is gone,
 this document and the git log are what remain.
 
-Design and plan, both committed:
-- `docs/superpowers/specs/2026-09-19-charitypilot-mcp-connector-design.md`
-- `docs/superpowers/plans/2026-09-19-charitypilot-mcp-connector.md`
+Design and plans, all committed:
+- `docs/superpowers/specs/2026-09-19-charitypilot-mcp-connector-design.md` — the
+  original read-only design. Its exclusions of writes and downloads are superseded.
+- `docs/superpowers/specs/2026-09-19-charitypilot-mcp-full-access-design.md` — the
+  design this connector actually follows, phase by phase, with what each phase found.
+- `docs/superpowers/plans/2026-09-19-charitypilot-mcp-connector.md` (read-only build)
+- `docs/superpowers/plans/2026-09-19-charitypilot-mcp-live-harness.md` (phase 0)
+- `docs/superpowers/plans/2026-09-19-charitypilot-mcp-read-everything.md` (phase 1)
+- `docs/superpowers/plans/2026-09-19-charitypilot-mcp-session-posture.md` (phase 2a)
+- `docs/superpowers/plans/2026-09-19-charitypilot-mcp-connector-auth.md` (phase 2b)
+- `docs/superpowers/plans/2026-09-19-charitypilot-mcp-connector-accountability.md` (2c)
+- `docs/superpowers/plans/2026-09-19-charitypilot-mcp-writes-and-approval.md` (phase 3)
+
+The canaries are the other half of the evidence. Each one in
+`scripts/mcp-live-canary.mjs` names the property it defeats and has been run:
+the personal-data gate, the dashboard shape, the browser-evidence guard, the
+read-only gate, the activity log, approval reuse, approval being needed at all,
+and upload containment. A canary whose mutation does not compile reports zero
+failures and looks like a pass, so check the run produced a `# tests` line.
