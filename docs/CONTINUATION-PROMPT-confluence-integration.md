@@ -2,7 +2,7 @@
 
 Paste everything below the line into a fresh session. It is written to stand alone.
 
-*Last updated 2026-09-19, after Phase 6 closed. Every unblocked phase is done.*
+*Last updated 2026-09-19, after Phase 4 closed. **Every phase is done.** What remains is verification against a real site, one deferred job, and decisions that are the owner's.*
 
 ---
 
@@ -38,18 +38,26 @@ directory is gitignored scratch — if it is missing, recover from `git log`, wh
 | 1 | Credential vault (envelope crypto, key validation, tables, store/load) | **Complete** |
 | 2 | OAuth connection lifecycle | **Complete**, reviewed, fix round applied |
 | 3 | Confluence API client (v1/v2 hybrid) | **Complete.** Five tasks, whole-branch review passed with nothing Critical, fix round applied, scoped re-review clean |
-| 4 | Publish pipeline | **Blocked twice over** — see Blockers |
+| 4 | Publish pipeline | **Complete.** Eight tasks, whole-phase review, two fix rounds, independent verification. Built on the reversible reading of Open Question 1 — see below |
 | 5 | Provider-aware erasure | **Complete.** Seven tasks, whole-phase review, fix round, clean re-review |
 | 6 | Admin UI and per-tenant integration health | **Complete.** Five tasks, whole-phase review, three fix rounds, independent verification |
 
-Suite at last measurement: `apps/api` **1464 pass / 0 fail**, `apps/web` **469 pass / 0 fail**,
-real-PostgreSQL migration suite **4 pass / 0 fail**, `test:production-check` **1064 pass / 0 fail /
-2 skipped**. Always report against the current figure, not this one.
+Suite at last measurement: `apps/api` **1646 pass / 0 fail**, `apps/web` **476 pass / 0 fail**,
+real-PostgreSQL migration suite **4 pass / 0 fail**, `packages/shared` **57 pass / 0 fail**,
+`test:production-check` **1062 pass / 2 pre-existing environmental fails / 2 skipped** (the two
+reproduce identically on a pristine baseline and differ by host — do not read them as a regression).
+Always report against the current figure, not these.
 
-**Everything unblocked is built.** What remains is Phase 4 and the deferred rotation job, and Phase
-4 is blocked on two things the owner owns (below). Do not start Phase 4 before Blocker 1 is ruled
-on — publishing a mirror and moving the authoritative copy are different pipelines, not one
-pipeline with a flag.
+**Every phase is built.** Phase 4 was completed on the *reversible* reading of Open Question 1 —
+**Confluence is a mirror; Supabase in Ireland keeps the authoritative copy.** If the DPO's reading
+wins instead, the cost is a spare Irish copy nobody needed. Had it been built the other way and the
+mirror reading won, charity documents would sit outside Ireland with no Irish copy, breaking a
+standing owner constraint. Only one direction is reversible. **The question is still the owner's and
+still unanswered** — see Blocker 1.
+
+**Nothing here has ever touched a real Confluence site.** Four assumptions hold against every fake
+written for this work and have never met the real thing; they are listed under "Confirm these
+against a real site" in the Phase 4 plan. **Read that list before trusting anything Confluence-side.**
 
 **Everything Confluence-side is proven against fakes.** No call has ever been made to a real site.
 A fake cannot tell you Atlassian changed a status code, and every fake in this suite was written to
