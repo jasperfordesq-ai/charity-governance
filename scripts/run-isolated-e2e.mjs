@@ -817,7 +817,11 @@ export function expectedLocalServiceEnvironments(identity) {
       DOCUMENT_STORAGE_DRIVER: "local",
       E2E_DATABASE_IDENTITY_PROBE_ENABLED: "true",
       E2E_DATABASE_INSTANCE_ID: composeEnv.E2E_DATABASE_INSTANCE_ID,
-      FRONTEND_URL: LOCAL_CONTRACT.webUrl,
+      // The web origin stays first: getPrimaryFrontendOrigin() builds manual
+      // links from the first entry. The API origin is allow-listed because the
+      // MCP connector signs in from its own base URL and the API's origin hook
+      // rejects an unlisted Origin on the auth routes.
+      FRONTEND_URL: `${LOCAL_CONTRACT.webUrl},${LOCAL_CONTRACT.apiUrl}`,
       HOST: "0.0.0.0",
       JWT_EXPIRY: "15m",
       JWT_SECRET: composeEnv.E2E_JWT_SECRET,
