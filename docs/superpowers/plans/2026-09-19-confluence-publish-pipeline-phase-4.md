@@ -181,16 +181,34 @@ first. The row must remember where the bytes went.
 This is what makes adoption possible, and adoption is what makes a non-idempotent create safe to
 put behind a retrying outbox.
 
-Use the v2 pages endpoint filtered by title within the space. Follow `confluence-pages.ts`'s
-existing structure exactly — the same client parameter shape, the same validation helpers, the same
-`idempotent: true` retry policy a read deserves. **Do not invent a new parameter shape.**
+**Verified against Atlassian's v2 documentation — use these, do not re-derive:**
+
+| Fact | Value |
+|---|---|
+| Endpoint | `GET /wiki/api/v2/pages` |
+| Title filter | `title` (string) |
+| Space filter | `space-id` (**array of integer**) — note the hyphen and the array |
+| Response envelope | `{ "results": [ … ], "_links": { "next": …, "base": … } }` |
+
+The `space-id` parameter is documented as an array of **integers**, while this codebase carries ids
+as strings. Check what the client actually serialises and what the API returns rather than assuming
+they agree — and say in your report which form you found.
+
+Follow `confluence-pages.ts`'s existing structure exactly: the same client parameter shape, the same
+validation helpers, the same `idempotent: true` retry policy a read deserves. Put `title` and
+`space-id` in the request spec's **`query`**, never the path — `assertValidPath` forbids `?`.
 
 Return `null` for "no such page", exactly as `getPage` does for `CONFLUENCE_NOT_FOUND` — a caller
 told `null` can adopt nothing and must create.
 
-**More than one match must be an error, not a guess.** Titles are unique per space in Confluence, so
-two matches means an assumption has broken; picking one silently would attach a charity's document
-to an arbitrary page. Raise a distinct code.
+**More than one match must be an error, not a guess.** Raise a distinct code.
+
+> **An assumption worth naming.** The adopt-on-409 design rests on titles being unique within a
+> space. Confluence's own use of 409 for a duplicate title strongly implies it, but **it is not
+> stated on the v2 pages documentation and we have not verified it against a real site.** That is
+> precisely why more than one match must raise rather than pick: if the assumption is wrong, we find
+> out through a loud error instead of by silently attaching a charity's document to an arbitrary
+> page. Add it to the phase's list of things to confirm when the Atlassian app install lands.
 
 - [ ] **Step 1: Write the failing tests** — a match returns the page; no match returns `null`; two
       matches raise; the request is marked `idempotent: true`; the title is sent as a query
