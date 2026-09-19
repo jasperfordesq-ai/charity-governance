@@ -142,7 +142,7 @@ charitypilot-mcp connect
   2. POST /api/v1/auth/login
   3. discard the password from memory immediately
   4. refresh token → OS credential store
-  5. access token  → memory only (≤1h; JWT_EXPIRY is capped at 1h in production)
+  5. access token  → memory only (15 minutes by default (`JWT_EXPIRY`, capped at 1h in production))
 
 per call
   access token valid   → use it
