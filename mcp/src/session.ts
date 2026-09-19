@@ -181,7 +181,16 @@ export class Session {
   }
 
   async logout(): Promise<void> {
-    const refreshToken = this.#store.read();
+    // A store bound to another origin throws rather than answering, and the
+    // advice it gives is to disconnect. If disconnect were the one command that
+    // could not run, the person would be stuck with a credential they cannot
+    // remove. Revocation is skipped in that case; clearing is not.
+    let refreshToken: string | null = null;
+    try {
+      refreshToken = this.#store.read();
+    } catch {
+      refreshToken = null;
+    }
     if (refreshToken) {
       try {
         await this.#post('/api/v1/auth/connector/logout', { refreshToken });

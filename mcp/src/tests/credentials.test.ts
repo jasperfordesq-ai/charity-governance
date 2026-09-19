@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { Entry } from '@napi-rs/keyring';
-import { createMemoryStore } from '../credentials.js';
+import { createMemoryStore, bindCredentialToOrigin } from '../credentials.js';
 
 test('a fresh store holds nothing', () => {
   assert.equal(createMemoryStore().read(), null);
@@ -137,5 +137,76 @@ test('a credential file is refused outside the local profile', () => {
   assert.throws(
     () => chooseCredentialStore({ profile: 'default', credentialFile: '/tmp/x.json' }),
     /--profile local/,
+  );
+});
+
+test('a credential is refused to a host other than the one that issued it', () => {
+  const backing = createMemoryStore();
+  const issued = bindCredentialToOrigin(backing, 'https://charitypilot.example.ts.net');
+  issued.write('refresh_live');
+
+  const elsewhere = bindCredentialToOrigin(backing, 'https://evil.example');
+
+  assert.throws(() => elsewhere.read(), (err: unknown) => {
+    assert.match((err as Error).message, /charitypilot\.example\.ts\.net/);
+    assert.match((err as Error).message, /evil\.example/);
+    return true;
+  }, 'a redirected base URL must be loud, not silently unauthenticated');
+});
+
+test('a credential is returned to the host that issued it, however the URL is spelled', () => {
+  const backing = createMemoryStore();
+  bindCredentialToOrigin(backing, 'https://CharityPilot.Example.ts.net/').write('refresh_live');
+
+  assert.equal(
+    bindCredentialToOrigin(backing, 'https://charitypilot.example.ts.net').read(),
+    'refresh_live',
+    'case and a trailing slash are the same host, not a different one',
+  );
+});
+
+test('a port is part of the identity, so two local stacks cannot share a credential', () => {
+  const backing = createMemoryStore();
+  bindCredentialToOrigin(backing, 'http://localhost:3002').write('refresh_dev');
+
+  assert.throws(() => bindCredentialToOrigin(backing, 'http://localhost:3302').read());
+});
+
+test('a plain-string entry from an older connector still reads, so nobody is logged out by an upgrade', () => {
+  const backing = createMemoryStore('refresh_from_before_the_upgrade');
+
+  assert.equal(
+    bindCredentialToOrigin(backing, 'https://charitypilot.example.ts.net').read(),
+    'refresh_from_before_the_upgrade',
+  );
+});
+
+test('the next write after an upgrade binds the entry, so the gap closes on its own', () => {
+  const backing = createMemoryStore('legacy');
+  const bound = bindCredentialToOrigin(backing, 'https://a.example');
+  bound.write('rotated');
+
+  assert.throws(() => bindCredentialToOrigin(backing, 'https://b.example').read());
+  assert.equal(bindCredentialToOrigin(backing, 'https://a.example').read(), 'rotated');
+});
+
+test('clearing a bound store clears the entry itself, not a rewritten copy of it', () => {
+  const backing = createMemoryStore();
+  const bound = bindCredentialToOrigin(backing, 'https://a.example');
+  bound.write('r1');
+  bound.clear();
+
+  assert.equal(backing.read(), null);
+  assert.equal(bound.read(), null);
+});
+
+test('a bound store with nothing in it reads as not connected, not as a mismatch', () => {
+  assert.equal(bindCredentialToOrigin(createMemoryStore(), 'https://a.example').read(), null);
+});
+
+test('a base URL that is not a URL is refused before anything is stored', () => {
+  assert.throws(
+    () => bindCredentialToOrigin(createMemoryStore(), 'not a url'),
+    /not a valid URL/i,
   );
 });

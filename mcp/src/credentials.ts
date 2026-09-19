@@ -119,3 +119,92 @@ export function chooseCredentialStore(options: {
   }
   return file(options.credentialFile);
 }
+
+/**
+ * The shape a bound credential is stored as. Version 1 carries only the origin
+ * that issued the token.
+ *
+ * The access level is deliberately absent. The session's real authority lives
+ * on the server's session row, so a copy here could only ever be advisory, and
+ * an advisory copy that drifted would be worse than none: it would report a
+ * level the session does not actually hold.
+ */
+interface BoundCredential {
+  v: 1;
+  origin: string;
+  refreshToken: string;
+}
+
+/** Scheme, host and port, lower-cased. Anything else is not part of identity. */
+function originOf(baseUrl: string): string {
+  let url: URL;
+  try {
+    url = new URL(baseUrl);
+  } catch {
+    throw new Error(`The base URL is not a valid URL: ${baseUrl}`);
+  }
+  return url.origin.toLowerCase();
+}
+
+function parseBound(raw: string): BoundCredential | null {
+  try {
+    const parsed = JSON.parse(raw) as Partial<BoundCredential>;
+    if (parsed && parsed.v === 1
+      && typeof parsed.origin === 'string'
+      && typeof parsed.refreshToken === 'string') {
+      return parsed as BoundCredential;
+    }
+  } catch {
+    // Not JSON at all: an entry written by a connector that predates binding.
+  }
+  return null;
+}
+
+/**
+ * Binds a stored refresh token to the host that issued it.
+ *
+ * Without this the credential is presented to whatever base URL is configured,
+ * and the base URL is not a secret: an AI client configuration file, an
+ * environment variable or an agent with write access to either can point the
+ * connector at another host, and the owner's live credential would be sent
+ * there on the first refresh. Binding makes that attempt fail before anything
+ * is transmitted.
+ *
+ * A mismatch throws rather than reporting "not connected". Silence would look
+ * like an ordinary expired session and invite the human to sign in again —
+ * against the redirected host, which is exactly the outcome to avoid.
+ *
+ * A plain-string entry written by an earlier connector is still honoured, so
+ * upgrading does not log anyone out; the next rotation writes a bound record
+ * and the gap closes without anyone doing anything.
+ */
+export function bindCredentialToOrigin(
+  store: CredentialStore,
+  baseUrl: string,
+): CredentialStore {
+  const origin = originOf(baseUrl);
+  return {
+    read() {
+      const raw = store.read();
+      if (raw === null) return null;
+      const bound = parseBound(raw);
+      if (!bound) return raw;
+      if (bound.origin !== origin) {
+        throw new Error(
+          `The stored credential was issued by ${bound.origin} and will not be sent to `
+            + `${origin}. If the change of host is intended, run `
+            + '`charitypilot-mcp disconnect` and connect again; if it is not, something '
+            + 'has changed the connector\'s base URL.',
+        );
+      }
+      return bound.refreshToken;
+    },
+    write(token: string) {
+      const record: BoundCredential = { v: 1, origin, refreshToken: token };
+      store.write(JSON.stringify(record));
+    },
+    clear() {
+      store.clear();
+    },
+  };
+}

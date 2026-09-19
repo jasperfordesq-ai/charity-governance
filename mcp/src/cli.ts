@@ -2,7 +2,7 @@
 import { createInterface } from 'node:readline/promises';
 import { stdin, stdout, stderr, argv, exit } from 'node:process';
 import { parseArgs } from './config.js';
-import { chooseCredentialStore } from './credentials.js';
+import { chooseCredentialStore, bindCredentialToOrigin } from './credentials.js';
 import { readPasswordFromStdin, assertNonInteractiveConnectAllowed } from './connect-input.js';
 import { Session } from './session.js';
 import { startServer } from './server.js';
@@ -48,10 +48,15 @@ async function prompt(question: string, hidden: boolean): Promise<string> {
 async function main(): Promise<void> {
   const config = parseArgs(argv.slice(2));
   assertNonInteractiveConnectAllowed(config, stdin.isTTY === true);
-  const store = chooseCredentialStore({
-    profile: config.profile,
-    credentialFile: process.env.CHARITYPILOT_CREDENTIAL_FILE,
-  });
+  // Bound to the base URL in use: a credential minted against one host is never
+  // presented to another, whatever changed the configuration.
+  const store = bindCredentialToOrigin(
+    chooseCredentialStore({
+      profile: config.profile,
+      credentialFile: process.env.CHARITYPILOT_CREDENTIAL_FILE,
+    }),
+    config.baseUrl,
+  );
   const session = new Session({
     baseUrl: config.baseUrl,
     store,

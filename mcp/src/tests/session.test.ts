@@ -373,3 +373,21 @@ test('logout revokes server-side and clears the store', async () => {
   );
   assert.equal(store.read(), null);
 });
+
+test('disconnect still works when the store refuses to answer, since that is the advice it gives', async () => {
+  let cleared = false;
+  const refusing = {
+    read(): string | null { throw new Error('issued by another host'); },
+    write() { /* unused */ },
+    clear() { cleared = true; },
+  };
+  const session = new Session({
+    baseUrl: 'https://example.test',
+    store: refusing,
+    fetchImpl: async () => assert.fail('nothing may be revoked without a token'),
+  });
+
+  await session.logout();
+
+  assert.ok(cleared, 'the credential must still be removed');
+});
