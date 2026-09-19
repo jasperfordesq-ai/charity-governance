@@ -1,4 +1,6 @@
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
 import test from 'node:test';
 import { AppError } from '../utils/errors.js';
 import { DocumentService } from '../services/document.service.js';
@@ -232,26 +234,74 @@ function spyDepsAbortingAfter(
   };
 }
 
-test('an aborted attempt stops issuing calls', async () => {
+/** The full sequence a two-attachment row issues, in order. */
+const SEQUENCE = [
+  'deleteAttachment:a1',
+  'purgeAttachment:a1',
+  'deleteAttachment:a2',
+  'purgeAttachment:a2',
+  'deletePage:p1',
+  'purgePage:p1',
+  'getPage:p1',
+];
+
+/**
+ * Every abort position, asserted as an **exact prefix** rather than as a count.
+ *
+ * A single `calls.length < 7` cannot tell "every call site is guarded" from "at
+ * least one is": drop the four checks after the first attachment delete and
+ * that assertion still passes, while an aborted attempt goes on to issue a
+ * permanent purge — after the bounded runner has already rejected the attempt
+ * as timed out and the row has recorded it as failed. The row would say the
+ * erasure failed while the erasure was still happening.
+ *
+ * One case per position is what pins each check individually: the abort fires
+ * after call `n`, so the check guarding call `n + 1` is the only thing that can
+ * stop the sequence there.
+ */
+for (let after = 1; after < SEQUENCE.length; after += 1) {
+  test(`an attempt aborted after ${SEQUENCE[after - 1]} stops issuing calls`, async () => {
+    const calls: string[] = [];
+    const controller = new AbortController();
+    const eraser = createConfluenceEraser(spyDepsAbortingAfter(calls, controller, after));
+
+    await assert.rejects(
+      () => eraser(targetWith(['a1', 'a2']), controller.signal),
+      (error: unknown) => (error as AppError).code === 'CONFLUENCE_ERASURE_ABORTED',
+    );
+
+    assert.deepEqual(
+      calls,
+      SEQUENCE.slice(0, after),
+      `the abort must stop the sequence at ${SEQUENCE[after - 1]}, got ${calls.join(', ')}`,
+    );
+  });
+}
+
+test('an attempt aborted before it starts opens no connection and issues nothing at all', async () => {
   const calls: string[] = [];
-  const controller = new AbortController();
-  const eraser = createConfluenceEraser(spyDepsAbortingAfter(calls, controller, 1));
-
-  await assert.rejects(() => eraser(targetWith(['a1', 'a2']), controller.signal));
-
-  assert.ok(calls.length < 7, `expected the abort to stop the sequence, got ${calls.join(', ')}`);
-});
-
-test('an attempt aborted before it starts issues nothing at all', async () => {
-  const calls: string[] = [];
+  let connected = false;
   const controller = new AbortController();
   controller.abort();
+  const eraser = createConfluenceEraser({
+    ...spyDeps(calls),
+    connect: async () => {
+      connected = true;
+      return CLIENT;
+    },
+  });
 
   await assert.rejects(
-    () => createConfluenceEraser(spyDeps(calls))(targetWith(['a1']), controller.signal),
+    () => eraser(targetWith(['a1']), controller.signal),
     (error: unknown) => (error as AppError).code === 'CONFLUENCE_ERASURE_ABORTED',
   );
 
+  // Not just "issued no deletes". Opening the connection is itself a side
+  // effect — it can spend a refresh-token rotation against the charity's
+  // Atlassian grant — and an attempt the runner has already given up on must
+  // not spend one. This is what the first check guards and the later ones
+  // cannot: by the time the loop's check runs, the connection is already open.
+  assert.equal(connected, false, 'an already-aborted attempt must not open a connection');
   assert.deepEqual(calls, []);
 });
 
@@ -302,6 +352,70 @@ for (const [label, thrown, expectedCode] of [
     assert.deepEqual(calls, []);
   });
 }
+
+/**
+ * The same code, from a different place, means a different thing.
+ *
+ * `CONFLUENCE_RECONNECT_REQUIRED` out of the *connection* means the stored
+ * grant is dead and no retry will revive it. Out of an *operation* it is the
+ * HTTP core's translation of one 401 or 403 response, which says nothing about
+ * the stored connection — and a row that dead-lettered on one unlucky response
+ * would strand a charity's document behind a permission blip.
+ *
+ * Widening the translation to wrap the whole sequence is the tempting
+ * simplification, and this is the test that refuses it.
+ */
+for (const status of [401, 403]) {
+  test(`a ${status} from an operation stays transient rather than dead-lettering the row`, async () => {
+    const mock = buildFallbackPrisma(pendingRecord({ provider: 'confluence', targetRef: target().targetRef }));
+    const service = new DocumentService(mock.prisma as never, () => NOW);
+    const eraser = createConfluenceEraser({
+      connect: async () => CLIENT,
+      operations: {
+        deletePage: async () => {
+          throw new AppError(
+            409,
+            'CONFLUENCE_RECONNECT_REQUIRED',
+            `Confluence request failed with status ${status}.`,
+            { status },
+          );
+        },
+      },
+    });
+
+    await service.retryPendingStorageDeletions(createErasureDispatcher({ confluence: eraser }), 10);
+
+    assert.equal(mock.row().state, 'PENDING');
+    assert.equal(mock.row().terminalReason, null);
+    assert.equal(mock.row().attempts, 1);
+  });
+}
+
+/**
+ * The line that makes every other line in this file reachable.
+ *
+ * `cleanup-document-storage.ts` is a top-level script — importing it would
+ * open a Prisma connection and run the job — so the registration is pinned by
+ * reading it, the way `production-scheduler.test.ts` already pins the job
+ * entrypoints' logging contract. Without the `confluence` entry the dispatcher
+ * finds no eraser, and every Confluence deletion dead-letters as
+ * PROVIDER_NOT_ERASABLE: a charity's published copy left in place while an
+ * operator is told the deployment cannot erase it.
+ */
+test('the cleanup job registers the Confluence eraser alongside the Supabase one', () => {
+  const source = readFileSync(join(process.cwd(), 'src', 'jobs', 'cleanup-document-storage.ts'), 'utf8');
+
+  assert.match(
+    source,
+    /createErasureDispatcher\(\{[\s\S]*?\bconfluence:\s*createConfluenceEraser\(/,
+    'cleanup-document-storage.ts must register createConfluenceEraser under the confluence provider',
+  );
+  assert.match(
+    source,
+    /createErasureDispatcher\(\{[\s\S]*?\bsupabase:\s*createSupabaseEraser\(/,
+    'registering Confluence must not have displaced the Supabase eraser',
+  );
+});
 
 // ---------------------------------------------------------------------------
 // The permanent-failure predicate, exercised through the engine that uses it.
