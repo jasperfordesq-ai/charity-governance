@@ -17,6 +17,24 @@ type LoginSessionUser = SessionUser & {
   passwordHash: string;
 };
 
+/**
+ * What kind of client a session belongs to, and how much it may do.
+ *
+ * Chosen once, by whoever typed the password, and immutable thereafter: the
+ * database refuses an UPDATE that changes either field, and pins both per
+ * session family so a successor cannot differ from the row it replaces.
+ *
+ * The default is what every session is today — the web application, with the
+ * full authority of the account's role — so a caller that says nothing keeps
+ * exactly the behaviour it had.
+ */
+export type SessionPosture = {
+  clientKind: 'WEB' | 'MCP_CONNECTOR';
+  accessLevel: 'READ' | 'WRITE' | 'ADMIN';
+};
+
+const WEB_SESSION_POSTURE: SessionPosture = { clientKind: 'WEB', accessLevel: 'ADMIN' };
+
 type SessionLocatorRow = {
   id: string;
   userId: string;
@@ -42,6 +60,9 @@ type LockedFamilyRow = LockedPrincipalRow & {
   familyCreatedAt: Date;
   expiresAt: Date;
   revokedAt: Date | null;
+  deviceLabel: string | null;
+  clientKind: SessionPosture['clientKind'];
+  accessLevel: SessionPosture['accessLevel'];
 };
 
 type SessionClient = PrismaClient | Prisma.TransactionClient;
@@ -185,7 +206,10 @@ async function lockPrincipalAndFamily(
         session."familyId",
         session."familyCreatedAt",
         session."expiresAt",
-        session."revokedAt"
+        session."revokedAt",
+        session."deviceLabel",
+        session."clientKind",
+        session."accessLevel"
       FROM "AuthSession" AS session
       JOIN locked_user ON locked_user."id" = session."userId"
       WHERE session."familyId" = ${locator.familyId}::uuid
@@ -203,7 +227,10 @@ async function lockPrincipalAndFamily(
       locked_family."familyId",
       locked_family."familyCreatedAt",
       locked_family."expiresAt",
-      locked_family."revokedAt"
+      locked_family."revokedAt",
+      locked_family."deviceLabel",
+      locked_family."clientKind",
+      locked_family."accessLevel"
     FROM locked_family
     JOIN locked_user ON true
     JOIN locked_organisation
@@ -215,6 +242,7 @@ async function issueSessionTokensWithClient(
   client: SessionClient,
   expectedUser: SessionUser,
   expectedPasswordHash?: string,
+  posture: SessionPosture = WEB_SESSION_POSTURE,
 ) {
   const refreshToken = crypto.randomBytes(REFRESH_TOKEN_BYTES).toString('base64url');
   const refreshTokenHash = hashOpaqueToken(refreshToken);
@@ -236,6 +264,8 @@ async function issueSessionTokensWithClient(
       // CURRENT_TIMESTAMP. Supplying an application-host timestamp here can
       // put the family start fractionally after the database-created row.
       expiresAt: refreshTokenExpiresAt(issuedAt),
+      clientKind: posture.clientKind,
+      accessLevel: posture.accessLevel,
     },
     select: { id: true },
   });
@@ -249,12 +279,22 @@ async function issueSessionTokensWithClient(
 export async function issueSessionTokensInTransaction(
   tx: Prisma.TransactionClient,
   expectedUser: SessionUser,
+  posture: SessionPosture = WEB_SESSION_POSTURE,
 ) {
-  return issueSessionTokensWithClient(tx, expectedUser);
+  return issueSessionTokensWithClient(tx, expectedUser, undefined, posture);
 }
 
-export async function issueSessionTokens(prisma: PrismaClient, expectedUser: SessionUser) {
-  return prisma.$transaction((tx) => issueSessionTokensWithClient(tx, expectedUser));
+export async function issueSessionTokens(
+  prisma: PrismaClient,
+  expectedUser: SessionUser,
+  posture: SessionPosture = WEB_SESSION_POSTURE,
+) {
+  return prisma.$transaction((tx) => issueSessionTokensWithClient(
+    tx,
+    expectedUser,
+    undefined,
+    posture,
+  ));
 }
 
 /**
@@ -266,15 +306,21 @@ export async function issueSessionTokens(prisma: PrismaClient, expectedUser: Ses
 export async function issueLoginSessionTokens(
   prisma: PrismaClient,
   expectedUser: LoginSessionUser,
+  posture: SessionPosture = WEB_SESSION_POSTURE,
 ) {
   return prisma.$transaction((tx) => issueSessionTokensWithClient(
     tx,
     expectedUser,
     expectedUser.passwordHash,
+    posture,
   ));
 }
 
-export async function rotateSessionTokens(prisma: PrismaClient, refreshToken: string) {
+export async function rotateSessionTokens(
+  prisma: PrismaClient,
+  refreshToken: string,
+  expectedClientKind?: SessionPosture['clientKind'],
+) {
   const refreshTokenHash = hashOpaqueToken(refreshToken);
   const locators = await prisma.$queryRaw<SessionLocatorRow[]>`
     SELECT "id", "userId", "familyId"
@@ -305,6 +351,15 @@ export async function rotateSessionTokens(prisma: PrismaClient, refreshToken: st
       return { kind: 'invalid' as const };
     }
 
+    // A refresh token minted for one channel may not be spent on another. A
+    // connector credential lifted off a machine is then worthless in a browser,
+    // and a browser cookie is worthless through the connector routes. The
+    // rejection is the same opaque one an unknown token gets, so the channel a
+    // token belongs to cannot be probed by trying both.
+    if (expectedClientKind && session.clientKind !== expectedClientKind) {
+      return { kind: 'invalid' as const };
+    }
+
     const now = new Date();
     if (session.revokedAt) {
       await tx.authSession.updateMany({
@@ -331,6 +386,11 @@ export async function rotateSessionTokens(prisma: PrismaClient, refreshToken: st
       },
     });
 
+    // Everything that identifies the family must be carried forward. The
+    // posture is also pinned per family by guard_auth_session_principal, so
+    // dropping either field here fails the insert rather than quietly
+    // restoring a narrowed session to full authority. deviceLabel joins them
+    // because it was being lost on every refresh since the column was added.
     const nextSession = await tx.authSession.create({
       data: {
         userId: session.id,
@@ -338,6 +398,9 @@ export async function rotateSessionTokens(prisma: PrismaClient, refreshToken: st
         familyId: session.familyId,
         familyCreatedAt: session.familyCreatedAt,
         expiresAt: refreshTokenExpiresAt(now),
+        deviceLabel: session.deviceLabel,
+        clientKind: session.clientKind,
+        accessLevel: session.accessLevel,
       },
       select: { id: true },
     });
