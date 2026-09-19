@@ -39,6 +39,7 @@ function readCookie(response: Response, name: string): string | null {
 
 export class Session {
   readonly #baseUrl: string;
+  readonly #origin: string;
   readonly #store: CredentialStore;
   readonly #fetch: typeof fetch;
   #accessToken: string | null = null;
@@ -47,6 +48,12 @@ export class Session {
 
   constructor(options: SessionOptions) {
     this.#baseUrl = options.baseUrl.replace(/\/+$/, '');
+    // The API's origin-validation hook (apps/api/src/utils/request-origin.ts)
+    // treats /auth/login, /auth/refresh and /auth/logout as origin-sensitive
+    // and 403s any request that arrives with no Origin header at all. This is
+    // not a CORS nicety here — without it, every POST this class makes is
+    // rejected before credentials are even checked.
+    this.#origin = new URL(this.#baseUrl).origin;
     this.#store = options.store;
     this.#fetch = options.fetchImpl ?? fetch;
   }
@@ -60,7 +67,14 @@ export class Session {
     if (!response.ok) {
       throw new Error('Sign-in failed. Check the email address and password.');
     }
-    this.#absorbCookies(response);
+    const capturedRefreshToken = this.#absorbCookies(response);
+    if (!capturedRefreshToken) {
+      throw new Error(
+        'Sign-in succeeded but CharityPilot did not return a refresh token, so nothing '
+          + 'was stored. Run connect again — if this keeps happening, the connector is '
+          + 'not talking to CharityPilot the way it expects to.',
+      );
+    }
 
     const body = (await response.json()) as {
       user: { email: string; name: string; role: string; organisationId: string;
@@ -92,10 +106,15 @@ export class Session {
 
     const response = await this.#post('/api/v1/auth/refresh', { refreshToken });
     if (!response.ok) {
-      // Only a rejected credential means the stored token is dead. A 5xx or a gateway
-      // error means the server had a problem, and clearing here would turn a transient
-      // blip into a permanent logout.
-      if (response.status !== 401 && response.status !== 403) {
+      // Only a 401 means the stored credential was actually rejected. A 403 here
+      // says nothing about the credential's validity — the only reachable 403 on
+      // this route is the request-origin hook's MISSING_ORIGIN rejection (see
+      // request-origin.ts), which fires before the refresh token is even looked
+      // at. Treating that the same as a dead credential would clear a perfectly
+      // good refresh token because of a header problem. A 5xx or gateway error is
+      // the same story: the server had a problem, and clearing here would turn a
+      // transient blip into a permanent logout.
+      if (response.status !== 401) {
         throw new Error(
           `Could not refresh the session: CharityPilot returned ${response.status}. `
             + 'The stored credential has been kept — try again.',
@@ -151,7 +170,8 @@ export class Session {
     this.#store.clear();
   }
 
-  #absorbCookies(response: Response): void {
+  /** Returns whether a refresh token cookie was found and stored. */
+  #absorbCookies(response: Response): boolean {
     const access = readCookie(response, ACCESS_COOKIE);
     const refresh = readCookie(response, REFRESH_COOKIE);
     if (access) {
@@ -161,13 +181,15 @@ export class Session {
     if (refresh) {
       this.#store.write(refresh);
       registerSecret(refresh);
+      return true;
     }
+    return false;
   }
 
   #post(path: string, body: unknown): Promise<Response> {
     return this.#fetch(`${this.#baseUrl}${path}`, {
       method: 'POST',
-      headers: { 'content-type': 'application/json' },
+      headers: { 'content-type': 'application/json', origin: this.#origin },
       body: JSON.stringify(body),
     });
   }

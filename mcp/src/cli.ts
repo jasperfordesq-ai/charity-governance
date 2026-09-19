@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 import { createInterface } from 'node:readline/promises';
-import { stdin, stdout, argv, exit } from 'node:process';
+import { stdin, stdout, stderr, argv, exit } from 'node:process';
 import { parseArgs } from './config.js';
 import { createKeyringStore } from './credentials.js';
 import { Session } from './session.js';
@@ -51,6 +51,10 @@ async function main(): Promise<void> {
 
   if (config.command === 'connect') {
     const email = await prompt('CharityPilot email: ', false);
+    // CHARITYPILOT_BASE_URL can silently point this at a different host. Show it
+    // before the password is typed, not after, so a wrong host is caught before
+    // anything sensitive is sent to it.
+    stdout.write(`Target: ${config.baseUrl}\n`);
     const password = await prompt('Password (not shown): ', true);
     const identity = await session.login(email, password);
     stdout.write(
@@ -95,6 +99,13 @@ async function main(): Promise<void> {
 }
 
 main().catch((error: unknown) => {
-  stdout.write(`${redactSecrets((error as Error).message)}\n`);
+  // In `serve` mode, stdout IS the MCP JSON-RPC transport — the AI client reads it
+  // as protocol frames. Writing anything else there, including a startup failure,
+  // injects non-JSON into that stream and breaks the client's parser. Everything
+  // that reaches this handler (parseArgs failures, a broken startServer, etc.) is
+  // therefore reported on stderr, never stdout. connect/status/disconnect print
+  // their own output on stdout directly, before this handler ever runs, because a
+  // human is meant to read it there.
+  stderr.write(`${redactSecrets((error as Error).message)}\n`);
   exit(1);
 });

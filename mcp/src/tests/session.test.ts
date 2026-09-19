@@ -75,6 +75,61 @@ test('with only a stored refresh token, accessToken refreshes and stores the rot
   assert.equal(store.read(), 'refresh2', 'the rotated refresh token must replace the old one');
 });
 
+test('login, refresh and logout all send an Origin header derived from baseUrl', async () => {
+  const store = createMemoryStore();
+  const seenOrigins: (string | null)[] = [];
+  const session = new Session({
+    baseUrl: 'https://charitypilot.example.ts.net/',
+    store,
+    fetchImpl: async (_input, init) => {
+      seenOrigins.push(new Headers(init?.headers).get('origin'));
+      return jsonWithCookies(LOGIN_BODY, [
+        'charitypilot_access=access1; Path=/',
+        'charitypilot_refresh=refresh1; Path=/',
+      ]);
+    },
+  });
+
+  await session.login('a@b.ie', 'pw'); // POST /auth/login
+  session.invalidateAccessToken();
+  await session.accessToken(); // POST /auth/refresh
+  await session.logout(); // POST /auth/logout
+
+  assert.equal(seenOrigins.length, 3, 'login, refresh and logout must each have posted');
+  for (const origin of seenOrigins) {
+    assert.equal(origin, 'https://charitypilot.example.ts.net', 'the Origin header must be scheme+host only, no path');
+  }
+});
+
+test('a 403 on refresh keeps the credential instead of logging the user out', async () => {
+  const store = createMemoryStore('refresh1');
+  const session = new Session({
+    baseUrl: 'https://example.test',
+    store,
+    fetchImpl: async () => new Response('{}', { status: 403 }),
+  });
+
+  await assert.rejects(() => session.accessToken(), (err: unknown) => {
+    assert.ok(!(err instanceof NotConnectedError),
+      'a 403 says nothing about credential validity — it is the origin hook rejecting a missing Origin header, not a dead refresh token');
+    return true;
+  });
+  assert.equal(store.read(), 'refresh1', 'a 403 must not destroy the credential');
+});
+
+test('login throws if no refresh token cookie was captured, instead of reporting success', async () => {
+  const store = createMemoryStore();
+  const session = new Session({
+    baseUrl: 'https://example.test',
+    store,
+    // Access cookie only — no refresh cookie in the response.
+    fetchImpl: async () => jsonWithCookies(LOGIN_BODY, ['charitypilot_access=access1; Path=/']),
+  });
+
+  await assert.rejects(() => session.login('a@b.ie', 'pw'), /refresh token/i);
+  assert.equal(store.read(), null, 'nothing should have been stored');
+});
+
 test('a rejected refresh clears the store and reports NOT_CONNECTED', async () => {
   const store = createMemoryStore('stale');
   const session = new Session({

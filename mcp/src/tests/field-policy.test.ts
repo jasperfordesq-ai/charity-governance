@@ -93,6 +93,62 @@ test('a nested relation array is dropped, not passed through unfiltered', () => 
     'an unknown key carrying nested personal data must not survive');
 });
 
+test('a paginated envelope keeps its pagination fields and filters the records inside data', () => {
+  const envelope = {
+    data: [TRUSTEE, { ...TRUSTEE, id: 'bm2', name: 'B Trustee' }],
+    total: 2, page: 1, pageSize: 50, hasMore: false,
+  };
+  const out = applyFieldPolicy('BoardMember', envelope, false) as typeof envelope;
+
+  assert.equal(out.total, 2);
+  assert.equal(out.page, 1);
+  assert.equal(out.pageSize, 50);
+  assert.equal(out.hasMore, false);
+  assert.equal(out.data.length, 2);
+  for (const record of out.data as unknown as Record<string, unknown>[]) {
+    assert.ok(!('dateOfBirth' in record), 'records inside the envelope must still be filtered');
+  }
+});
+
+test('a bare { data: [...] } envelope (no pagination fields) is handled the same way', () => {
+  const envelope = { data: [TRUSTEE] };
+  const out = applyFieldPolicy('BoardMember', envelope, false) as typeof envelope;
+  assert.equal(out.data.length, 1);
+  assert.ok(!('dateOfBirth' in (out.data[0] as unknown as Record<string, unknown>)));
+});
+
+test('an envelope is returned whole when the gate is open', () => {
+  const envelope = { data: [TRUSTEE], total: 1, page: 1, pageSize: 50, hasMore: false };
+  assert.deepEqual(applyFieldPolicy('BoardMember', envelope, true), envelope);
+});
+
+test('GoverningAct: notes and the resolutions relation are withheld, the act itself survives', () => {
+  const act = {
+    id: 'ga1', organisationId: 'o1', kind: 'BOARD_MEETING', status: 'APPROVED',
+    actDate: '2026-01-01', reference: 'M-1', title: 'January board meeting',
+    statutoryBasis: 'Companies Act 2014 s.225', notes: 'sensitive narrative',
+    resolutions: [{ id: 'r1', text: 'text', abstentions: 'A B', conflictRecordId: 'cr1' }],
+  };
+  const out = applyFieldPolicy('GoverningAct', act, false) as Record<string, unknown>;
+
+  assert.equal(out.id, 'ga1');
+  assert.equal(out.reference, 'M-1');
+  assert.equal(out.statutoryBasis, 'Companies Act 2014 s.225');
+  assert.ok(!('notes' in out), 'free-text notes must be withheld');
+  assert.ok(!('resolutions' in out), 'the resolutions relation must be dropped by the allowlist');
+});
+
+test('GoverningAct inside a { data: [...] } envelope is filtered per-record', () => {
+  const act = {
+    id: 'ga1', reference: 'M-1', notes: 'sensitive',
+    resolutions: [{ id: 'r1', text: 'text', conflictRecordId: 'cr1' }],
+  };
+  const out = applyFieldPolicy('GoverningAct', { data: [act] }, false) as { data: Record<string, unknown>[] };
+  assert.equal(out.data[0]!.reference, 'M-1');
+  assert.ok(!('notes' in out.data[0]!));
+  assert.ok(!('resolutions' in out.data[0]!));
+});
+
 test('safe and withheld lists never overlap', () => {
   for (const model of Object.keys(SAFE_FIELDS) as (keyof typeof SAFE_FIELDS)[]) {
     const overlap = SAFE_FIELDS[model].filter((f) => WITHHELD_FIELDS[model].includes(f));

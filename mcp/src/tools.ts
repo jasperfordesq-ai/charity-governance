@@ -33,8 +33,11 @@ export const TOOLS: readonly ToolDefinition[] = [
       + 'former names, other directorships and email addresses are withheld unless the connector was '
       + 'started with --allow-personal-data.' + DATA_NOTE,
     inputSchema: NO_INPUT, path: '/api/v1/board-members', model: 'BoardMember' },
-  { name: 'governing_acts', description: 'Governing documents and resolutions.' + DATA_NOTE,
-    inputSchema: NO_INPUT, path: '/api/v1/governing-acts' },
+  { name: 'governing_acts', description:
+      'Governing documents: kind, status, dates, references and titles. Resolution text, '
+      + 'who abstained, and any link back to a conflict record are not returned unless '
+      + 'the connector was started with --allow-personal-data.' + DATA_NOTE,
+    inputSchema: NO_INPUT, path: '/api/v1/governing-acts', model: 'GoverningAct' },
   { name: 'documents_list', description: 'Evidence document metadata only. File contents are never returned.' + DATA_NOTE,
     inputSchema: NO_INPUT, path: '/api/v1/documents' },
 ];

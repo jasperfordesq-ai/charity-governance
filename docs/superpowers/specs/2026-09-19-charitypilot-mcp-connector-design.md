@@ -39,8 +39,11 @@ Three questions were put to the owner during brainstorming; these are the answer
   VM. The connector is a client, never a listener.
 - **Personal and sensitive fields are gated off by default**
   (`--allow-personal-data`), decided after the risk was raised in design review.
-  This covers the board register, the member register, the conflicts register and
-  the complaints register. See *The personal-data gate* below.
+  As shipped this covers the board register and the minute book (governing
+  acts), the two registers a tool actually exposes; the member, conflicts and
+  complaints registers are classified in the same gate as defence-in-depth
+  but are not reachable by any tool yet — see *Tools* and *The personal-data
+  gate* below.
 - **Read-only.** No writes, no file downloads, no arbitrary-request escape hatch.
 
 ## Architecture
@@ -123,12 +126,28 @@ an endpoint, and the endpoint should be added there instead.
 
 ## Tools
 
-All read-only, each mapping to a route that already exists:
+**As shipped, these ten exist — all read-only, each mapping to a route that
+already exists:**
 
 `compliance_summary`, `compliance_principles`, `compliance_records`,
-`approval_readiness`, `compliance_history`, `deadlines_list`,
-`dashboard_overview`, `board_register`, `governance_registers`,
-`governing_acts`, `documents_list` (metadata only — never file contents).
+`approval_readiness`, `deadlines_history`, `deadlines_list`,
+`dashboard_overview`, `board_register`, `governing_acts`, `documents_list`
+(metadata only — never file contents).
+
+An earlier version of this design listed an eleventh tool,
+`governance_registers`, meant to expose the member, conflicts and complaints
+registers. **It was not built, and there is no plan to build it as originally
+scoped.** The route it would have called returns a mixed payload spanning
+several register types in one response, and the per-model field filter
+(`applyFieldPolicy`, one `ModelName` per call — see *The personal-data gate*)
+cannot classify a mixed payload as it stands. Shipping that tool without a
+filter that can handle the mixed shape would mean either leaking personal
+data through the gap or hand-rolling one-off filtering outside the gate, and
+neither was acceptable at review. See `mcp/README.md`'s *Known limitations*
+section for what a correct version would need. The `Member`, `ConflictRecord`
+and `ComplaintRecord` models stay classified in the gate regardless, as
+defence-in-depth for whenever that tool is actually added — not because they
+are reachable today.
 
 Tool descriptions state plainly that their output is charity data, not
 instructions. Nothing a tool returns is ever treated as a directive by the
@@ -231,26 +250,39 @@ reintroduces a boundary the API has already closed.
 ## The personal-data gate
 
 **Whatever a tool returns is sent to an AI model.** Answering a broad question
-about the board register or the conflicts register would transmit trustee dates
-of birth, home addresses, declared conflicts and complaint summaries to a model
-provider — a new processing activity, with a lawful basis and residency
-implications that belong to the DPO, not to a tool default.
+about the board register or the minute book would transmit trustee dates of
+birth, home addresses, and free-text resolution narrative (including who
+abstained and any link to a conflict declaration) to a model provider — a new
+processing activity, with a lawful basis and residency implications that
+belong to the DPO, not to a tool default.
 
-Four models carry data in the category the agreed architecture keeps in
+Five models are classified in the gate. Two of them — `BoardMember` and
+`GoverningAct` — are reachable today, through `board_register` and
+`governing_acts` respectively. The other three — `Member`, `ConflictRecord`
+and `ComplaintRecord` — are classified as defence-in-depth but are **not
+reachable by any tool as shipped**: no tool calls the routes that would
+return them (see *Tools* above and `mcp/README.md`'s *Known limitations*
+section). They stay classified so that adding a tool for them later cannot
+ship unfiltered by accident; that is not the same as them being answerable
+today.
+
+These carry data in the category the agreed architecture keeps in
 CharityPilot "where per-record permissions are finer than page restrictions",
 including the "sensitive complaints" called out by name:
 
-| Model | Withheld with the gate off | Still returned |
-| --- | --- | --- |
-| `BoardMember` | `dateOfBirth`, `residentialAddress`, `formerNames`, `otherDirectorships`, `email` | `name`, `role`, appointment/term dates, conduct and induction status |
-| `Member` | `name`, `address` | `dateEntered`, `dateCeased`, `retentionDeleteAt` |
-| `ConflictRecord` | `boardMemberId`, `trusteeName`, `matter`, `nature`, `actionTaken`, `decision` | `id`, `status`, `dateDeclared`, `meetingDate`, `nextReviewDate`, `minuteReference` |
-| `ComplaintRecord` | `summary`, `source`, `actionTaken`, `outcome` | `id`, `status`, `receivedDate`, `reviewedByBoard`, `boardMinuteReference` |
+| Model | Reachable by a tool today | Withheld with the gate off | Still returned |
+| --- | --- | --- | --- |
+| `BoardMember` | yes — `board_register` | `dateOfBirth`, `residentialAddress`, `formerNames`, `otherDirectorships`, `email` | `name`, `role`, appointment/term dates, conduct and induction status |
+| `GoverningAct` | yes — `governing_acts` | `notes`; the whole `resolutions` relation (resolution text, `abstentions`, `conflictRecordId`) | `id`, `kind`, `status`, `actDate`, `reference`, `title`, `statutoryBasis`, dates, `documentId` |
+| `Member` | no — no tool exists | `name`, `address` | `dateEntered`, `dateCeased`, `retentionDeleteAt` |
+| `ConflictRecord` | no — no tool exists | `boardMemberId`, `trusteeName`, `matter`, `nature`, `actionTaken`, `decision` | `id`, `status`, `dateDeclared`, `meetingDate`, `nextReviewDate`, `minuteReference` |
+| `ComplaintRecord` | no — no tool exists | `summary`, `source`, `actionTaken`, `outcome` | `id`, `status`, `receivedDate`, `reviewedByBoard`, `boardMinuteReference` |
 
 What survives is deliberately the compliance-shaped half: how many conflicts are
 open, whether each was reviewed and minuted, whether complaints reached the
-board, whether trustee terms have expired. Those are the governance questions
-worth asking, and none of them requires the content.
+board, whether trustee terms have expired, whether a governing act was
+properly recorded and approved. Those are the governance questions worth
+asking, and none of them requires the content.
 
 `--allow-personal-data` returns every withheld field. Default off.
 
@@ -274,7 +306,7 @@ does not carry, and governance questions need membership counts and dates rather
 
 ### Allowlist, not denylist
 
-The filter is an **allowlist**: for these four models only the named safe fields
+The filter is an **allowlist**: for these five models only the named safe fields
 pass, and anything else is dropped. A denylist would leak a newly added sensitive
 column by default — which is exactly how this kind of gate fails six months
 later. With an allowlist, a new column is withheld until someone deliberately
@@ -308,11 +340,15 @@ Coverage:
 - token refresh, rotation, and the reconnect path on a rejected refresh
 - keychain read / write / clear, including absent-entry handling
 - redaction: assert no token value appears in any emitted log line
-- the personal-data gate: for each of the four models, assert every withheld
-  field is absent with the flag off and present with it on — across every tool
-  that can reach them, not just the obvious one
+- the personal-data gate: for each of the five classified models, assert every
+  withheld field is absent with the flag off and present with it on — across
+  every tool that can reach them, not just the obvious one. This includes
+  proving that a paginated list envelope (`{ data, total, page, pageSize,
+  hasMore }`, which is what `board_register`'s route actually returns — not a
+  bare array) still gets filtered record-by-record while its pagination
+  fields survive
 - **schema drift**: a test that reads the Prisma models and fails if any field
-  on those four models is neither in the allowlist nor in the withheld list.
+  on those five models is neither in the allowlist nor in the withheld list.
   Adding a column to `BoardMember` or `ComplaintRecord` then breaks the build
   until someone classifies it, rather than silently exposing it
 - each tool's request shape against a stubbed API

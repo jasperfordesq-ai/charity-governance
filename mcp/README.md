@@ -77,27 +77,71 @@ connector from an AI client:
   even if someone got hold of it) *and* clears the credential from the local
   OS credential store. Both happen; this is not just a local logout.
 
+## Tools
+
+These ten tools exist. Each maps to exactly one `GET` route, and each result
+notes that it is data returned for the signed-in person's charity, not
+instructions to act on:
+
+| Tool | Route | Gated model |
+| --- | --- | --- |
+| `compliance_summary` | `/api/v1/compliance/summary` | — |
+| `compliance_principles` | `/api/v1/compliance/principles` | — |
+| `compliance_records` | `/api/v1/compliance/records` | — |
+| `approval_readiness` | `/api/v1/compliance/approval-readiness` | — |
+| `deadlines_history` | `/api/v1/deadlines/history` | — |
+| `deadlines_list` | `/api/v1/deadlines` | — |
+| `dashboard_overview` | `/api/v1/dashboard` | — |
+| `board_register` | `/api/v1/board-members` | `BoardMember` |
+| `governing_acts` | `/api/v1/governing-acts` | `GoverningAct` |
+| `documents_list` | `/api/v1/documents` (metadata only) | — |
+
+**There is no tool for the member register, the conflicts register, or the
+complaints register.** An earlier draft of this connector's design discussed
+exposing them, and the personal-data gate below still classifies their
+underlying models (`Member`, `ConflictRecord`, `ComplaintRecord`) as
+defence-in-depth for the day a tool is added — but as of this writing no tool
+calls `/api/v1/members`, `/api/v1/conflicts` or `/api/v1/complaints`, and
+nothing in this connector reads or returns member, conflict, or complaint
+data. If a client asks the connector something only those registers could
+answer, the honest response is that the connector has no tool for it.
+
 ## The personal-data gate
 
 By default, the connector answers governance questions without sending
-personal data to your AI model provider. Concretely, with no flag:
+personal data to your AI model provider. Concretely, with no flag, on the
+tools that currently exist:
 
-- **Board register**: trustee names and roles, appointment and term dates,
+- **`board_register`**: trustee names and roles, appointment and term dates,
   and conduct/induction status come back. Dates of birth, home addresses,
   former names, other directorships, and email addresses do not.
-- **Member register**: only counts and dates (when someone joined or left,
-  retention deadlines) come back. Member names and addresses do not.
-- **Conflicts register**: status, dates, meeting/review dates and minute
-  references come back. The matter, its nature, the action taken, the
-  decision, the trustee's name, and — deliberately — the board-member id
-  itself do not. The id is withheld along with the name because it's a
-  foreign key into the board register: anyone holding both the (safe) board
-  register and a conflicts register that kept the id could join the two and
-  work out exactly who declared which conflict. Redacting the name while
-  leaving the id in place wouldn't actually redact anything.
-- **Complaints register**: status, received date, and whether/where it was
-  reviewed and minuted by the board come back. The summary, source, action
-  taken and outcome do not.
+- **`governing_acts`**: the act's kind, status, dates, reference and title
+  come back. Resolution text, who abstained, and the `conflictRecordId` a
+  resolution may carry do not — the whole `resolutions` relation is dropped,
+  because the minute book is exactly the kind of free-text record the gate
+  exists to keep out of a model's context. (The `conflictRecordId` matters
+  for the same reason `ConflictRecord.boardMemberId` is withheld below: it
+  is a foreign key that would let a resolution be joined back to a specific
+  conflict declaration.)
+
+The gate also classifies three models for which no tool exists yet — kept
+gated now so that adding a tool later doesn't ship it unfiltered by accident
+(see *Known limitations* below):
+
+- **Member register** (`Member`): would return only counts and dates (when
+  someone joined or left, retention deadlines). Member names and addresses
+  would not.
+- **Conflicts register** (`ConflictRecord`): would return status, dates,
+  meeting/review dates and minute references. The matter, its nature, the
+  action taken, the decision, the trustee's name, and — deliberately — the
+  board-member id itself would not. The id is withheld along with the name
+  because it's a foreign key into the board register: anyone holding both
+  the (safe) board register and a conflicts register that kept the id could
+  join the two and work out exactly who declared which conflict. Redacting
+  the name while leaving the id in place wouldn't actually redact anything.
+- **Complaints register** (`ComplaintRecord`): would return status, received
+  date, and whether/where it was reviewed and minuted by the board. The
+  summary, source, action taken and outcome would not.
 
 What's left in every case is the compliance-shaped half of the data: counts,
 statuses, dates, minute references, whether something was reviewed and
@@ -106,10 +150,11 @@ exists for — what's outstanding, what needs board attention, whether
 something was properly recorded — without the content of anyone's personal
 or sensitive record leaving the building.
 
-Pass `--allow-personal-data` and all of it comes back: dates of birth, home
-addresses, conflict details, complaint summaries, the lot. Doing so isn't a
-convenience toggle — it means that data is being sent to whichever AI model
-provider your client uses, which is a data-processing decision with its own
+Pass `--allow-personal-data` and all of it comes back on the tools that exist
+today: dates of birth, home addresses, and full resolution text including
+who abstained and any conflict-record link. Doing so isn't a convenience
+toggle — it means that data is being sent to whichever AI model provider
+your client uses, which is a data-processing decision with its own
 lawful-basis and residency questions. That decision belongs to the
 organisation's data protection officer, not to whoever happens to be running
 the connector that day. Don't pass this flag without checking with them
@@ -130,3 +175,16 @@ Every tool the connector exposes maps to a `GET` route on the existing API.
 There is no tool that writes, uploads, deletes, or downloads a document's
 contents (document tools return metadata only). If a question can't be
 answered by reading, this connector can't answer it.
+
+## Known limitations / follow-up
+
+- **No `governance_registers` tool.** The member, conflicts and complaints
+  registers are not exposed by any tool (see *Tools* above). Adding one is
+  not a small extension of the existing per-model filter: the underlying
+  route returns a mixed payload spanning several register types in one
+  response, and `applyFieldPolicy` filters by a single `ModelName` per call.
+  A `governance_registers` tool needs a filter that can look at each record
+  in that mixed payload, work out which register it belongs to, and apply
+  that register's own allowlist — not a single model classification for the
+  whole response. Building that filter, and proving it against the mixed
+  shape, is follow-up work, not something to bolt on without it.
