@@ -1531,9 +1531,36 @@ model PlatformOperator {
   resetToken       String?   @unique
   resetTokenExpiry DateTime?
 
-  sessions  PlatformOperatorSession[]
-  createdAt DateTime                  @default(now())
-  updatedAt DateTime                  @updatedAt
+  /// The sealed TOTP shared secret. Verification needs the plaintext, so it
+  /// cannot be hashed the way a password is.
+  totpSecret     Json?
+  /// Null until a code has been verified once. Scanning a QR code is not
+  /// enrolment: without this a mistyped setup would lock an operator out.
+  totpEnrolledAt DateTime?
+  /// When the current unverified secret was issued, so an abandoned enrolment
+  /// can be told from a live one.
+  totpPendingAt  DateTime?
+
+  recoveryCodes PlatformOperatorRecoveryCode[]
+  sessions      PlatformOperatorSession[]
+  createdAt     DateTime                       @default(now())
+  updatedAt     DateTime                       @updatedAt
+}
+
+/// A single-use way back in when the authenticator is gone. Each is its own
+/// row because each has to be individually markable as spent.
+model PlatformOperatorRecoveryCode {
+  id         String           @id @default(cuid())
+  operatorId String
+  operator   PlatformOperator @relation(fields: [operatorId], references: [id], onDelete: Cascade)
+  /// SHA-256 of the code. Unlike the TOTP secret these are never needed in
+  /// the clear: a code is checked by hashing what was typed.
+  codeHash   String
+  createdAt  DateTime         @default(now())
+  usedAt     DateTime?
+
+  @@unique([operatorId, codeHash])
+  @@index([operatorId, usedAt])
 }
 
 model PlatformOperatorSession {

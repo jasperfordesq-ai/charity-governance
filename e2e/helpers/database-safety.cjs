@@ -157,6 +157,7 @@ const DISPOSABLE_DATABASE_RESET_TABLES = Object.freeze([
   "Subscription",
   "BillingCheckoutAttempt",
   "StripeWebhookEvent",
+  "PlatformOperatorRecoveryCode",
   "PlatformOperator",
   "PlatformOperatorSession",
 ]);
