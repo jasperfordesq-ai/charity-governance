@@ -9,12 +9,22 @@ which decisions were made unilaterally and are yours to reverse.
 
 ## Status in one paragraph
 
-Eleven planned tasks are complete. 78 tests pass, typecheck is clean, and the package
+Eleven planned tasks are complete. The unit suite is 100 tests (99 passing, one skipped
+because it asserts a POSIX file mode), typecheck is clean, and the package
 lives at `mcp/` — deliberately OUTSIDE the npm workspace globs, so nothing about it can
-reach the API's Docker build or the blue-green deploy. **It has never been run against
-the real API.** Every test stubs `fetch`. A live `connect` needs the owner's CharityPilot
-password, which no agent in the build was permitted to handle, so the end-to-end path is
-unverified. That is the single most important thing to know.
+reach the API's Docker build or the blue-green deploy.
+
+**It now runs against a real API, but not yet against the VM.** As of 2026-09-19 a live
+harness drives the built connector over stdio against the runner-owned disposable stack:
+`npm run test:e2e:mcp`, source in `e2e/tests/mcp/connector-live.spec.ts`. Eighteen
+assertions cover sign-in, refresh rotation, server-side revocation on disconnect, the
+personal-data gate open and closed, tenant isolation in both directions, and the three
+roles. Two canaries in `scripts/mcp-live-canary.mjs` have been run and confirmed the
+suite goes red when the gate is broken.
+
+What remains unverified is the VM itself: nobody has yet run `connect` against
+`charitypilot.tailae0b07.ts.net` with the owner's own password over Tailscale, so the
+keychain path and the tailnet path are still unproven. The checklist for that is below.
 
 ## The first thing to do
 
@@ -29,19 +39,18 @@ node mcp/dist/cli.js status      # must name the right account AND organisation
 Then from an AI client, call `compliance_summary` and `board_register`. `board_register`
 must return names and roles and **no** `dateOfBirth` or `residentialAddress`. Also try a
 password containing an accented character (e.g. `Siobhán`) — the prompt accumulates bytes
-and decodes once precisely so that works, but it has never been typed for real.
+and decodes once precisely so that works. The live harness now proves the decoding against
+a real sign-in, but only through a pipe; it has still never been typed at a terminal, which
+is the path that uses raw mode.
 
 If `connect` fails with "Sign-in failed. Check the email address and password." on a
 password you know is right, read the Origin section below before assuming anything.
 
 ## Repository state
 
-All work is committed to `master`. At time of writing, **20 of the commits are already on
-`origin/master`** (another session pushed them mid-build) and **4 are not**. The unpushed
-four are the two fix waves from the final review. This matters: what is on the remote right
-now is the version where `connect` cannot succeed and `board_register` returns `{}`. Pushing
-was left to the owner and had not happened when this was written — check `git log
-origin/master..HEAD -- mcp/` before assuming either way.
+All work is committed to `master`. The build's own commits, including the two final fix
+waves, were pushed by the owner on 2026-09-19; the live-harness commits that followed may
+not be. Check `git log origin/master..HEAD` before assuming either way.
 
 Several agents were committing to this same working tree during the build. If you find
 unexpected modified files, check whether another session is mid-flight before reverting.
@@ -75,14 +84,17 @@ deployment (`app.charitypilot.ie` vs `api.charitypilot.ie`) the connector would 
 the hosting move that is step 4 of the DPO's agreed order. It needs an allowed-origin
 decision on the API side, which is an owner/DPO call.
 
-### 2. The spec claims a test that does not exist
+### 2. The spec claimed a test that did not exist — now resolved
 
 `docs/superpowers/specs/2026-09-19-charitypilot-mcp-connector-design.md`, Tenant isolation →
-Tests, promises an assertion that a response for organisation B is rejected when the session
-belongs to A. There is no such test and no such check. It was deferred during planning
-because no response carries an `organisationId` to compare against, and the spec was never
-corrected to match. Either implement it or correct the spec — do not leave it claiming
-protection that is not there.
+Tests, promised an assertion about a response belonging to another organisation. No such
+test existed, because no response carries an `organisationId` to compare against.
+
+It is now covered for real rather than by stub. The live harness seeds two charities and
+asserts the boundary in both directions: the first charity's session never returns the
+second's trustee, and the second charity's own session does return it. The second half is
+what makes the first meaningful, since an absence proves nothing if the record was never
+reachable. The spec has been corrected to describe this.
 
 ### 3. A record carrying a `data` field is misread as an envelope
 

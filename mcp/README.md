@@ -176,6 +176,53 @@ There is no tool that writes, uploads, deletes, or downloads a document's
 contents (document tools return metadata only). If a question can't be
 answered by reading, this connector can't answer it.
 
+## Testing against a local stack
+
+Everything above describes the connector pointed at the VM over Tailscale.
+There is also a `local` profile, used only for testing against a stack on
+this machine. It accepts a base URL whose host is exactly `localhost`,
+`127.0.0.1` or `[::1]` and nothing else, so it can never be aimed at the VM
+or at any other host without TLS.
+
+The full matrix runs against a disposable Docker stack that the test runner
+owns from boot to teardown:
+
+```bash
+cd mcp && npm ci && npm run build && cd ..
+npm run test:e2e:mcp
+```
+
+It seeds a charity with trustees, a minute, a document and a second charity,
+then drives the built connector over stdio and asserts what the gate
+withholds, what it releases when opened, and that one charity never sees the
+other's records.
+
+For a faster loop against `npm run dev` (API on port 3002), sign in once and
+then drive the connector by hand with the MCP Inspector:
+
+```bash
+node mcp/dist/cli.js connect --profile local --base-url http://localhost:3002
+npx @modelcontextprotocol/inspector node mcp/dist/cli.js serve --profile local --base-url http://localhost:3002
+```
+
+Until the connector-specific auth routes land, `FRONTEND_URL` in
+`apps/api/.env` must include `http://localhost:3002`, because the API rejects
+an unlisted `Origin` on the sign-in route.
+
+To point an AI client at the local stack, give it its own credential file so
+it never shares the OS credential store entry used for the VM:
+
+```json
+{ "mcpServers": { "charitypilot-local": {
+    "command": "node",
+    "args": ["C:\platforms\htdocs\charity-governence\mcp\dist\cli.js",
+             "serve", "--profile", "local", "--base-url", "http://localhost:3002"],
+    "env": { "CHARITYPILOT_CREDENTIAL_FILE": "C:\Users\jaspe\.charitypilot-mcp-local.json" } } } }
+```
+
+`CHARITYPILOT_CREDENTIAL_FILE` is accepted only with `--profile local`; set
+it anywhere else and the connector refuses to start.
+
 ## Known limitations / follow-up
 
 - **No `governance_registers` tool.** The member, conflicts and complaints

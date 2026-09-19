@@ -12,6 +12,7 @@ on:
       - 'packages/**'
       - 'compose.e2e.yml'
       - 'e2e/**'
+      - 'mcp/**'
       - 'scripts/run-isolated-e2e.mjs'
       - 'scripts/run-isolated-e2e.test.mjs'
       - 'scripts/isolated-e2e-runtime-attestation.mjs'
@@ -53,7 +54,9 @@ jobs:
         with:
           node-version: ${{ env.E2E_NODE_VERSION }}
           cache: npm
-          cache-dependency-path: e2e/package-lock.json
+          cache-dependency-path: |
+            e2e/package-lock.json
+            mcp/package-lock.json
 
       - name: Install and verify exact npm runtime
         run: |
@@ -78,6 +81,10 @@ jobs:
 
       - name: Validate standalone disposable Compose model
         run: npm run test:e2e:isolated:validate
+
+      - name: Build the MCP connector
+        run: npm ci && npm run build
+        working-directory: mcp
 
       - name: Run managed isolated E2E tests
         run: npm run test:e2e

@@ -14,7 +14,7 @@
 
 - **`mcp/` stays outside the npm workspace globs.** Never run `npm install --prefix mcp` from the repo root; it injects `"charitypilot": "file:.."` into `mcp/package.json`. Use `cd mcp && npm install`. `npm ci --prefix mcp` is safe.
 - **No task may change the root `package-lock.json`.** Check `git status` before every commit.
-- **TLS verification must never be disabled.** No flag, no env var. `scripts/security-scan.mjs` fails the build on `rejectUnauthorized: false` or `NODE_TLS_REJECT_UNAUTHORIZED`. The only relaxation in this plan is plain `http://` for loopback hosts under `--profile local`, which is not a TLS-verification bypass.
+- **TLS verification must never be disabled.** No flag, no env var. The SAST rule `tls-verification-disabled` in `scripts/security-scan.mjs` fails the build on the two usual ways of switching it off, so do not write either of them, in code or in prose: the scanner reads every tracked file, documentation included. The only relaxation in this plan is plain `http://` for loopback hosts under `--profile local`, which is not a TLS-verification bypass.
 - **No token value is ever written to disk outside the credential store, or to any log line.** `mcp/src/redact.ts` is the mechanism.
 - **No tool input schema may contain the string `organisationId`.** Existing test enforces this.
 - **Never run `prisma migrate reset`, `migrate dev`, `db push`, `DROP` or `TRUNCATE`** against any database other than the runner-owned disposable one. The development database holds real records.

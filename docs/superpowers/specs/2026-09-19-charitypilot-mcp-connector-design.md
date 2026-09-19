@@ -242,9 +242,12 @@ reintroduces a boundary the API has already closed.
 
 - every tool's input schema is free of `organisationId` (walks the registry, so a
   tool added later is covered without anyone remembering)
-- a stubbed API returning data for organisation B while the session belongs to
-  organisation A is surfaced as an error, not returned — a defence-in-depth
-  assertion against an API regression, not against the current API
+- two charities are seeded against a real API and the boundary is asserted in
+  both directions: the first charity's session never returns the second's
+  trustee, and the second charity's own session does. The second half is what
+  makes the first meaningful, because an absence proves nothing if the record
+  was never reachable. Lives in `e2e/tests/mcp/connector-live.spec.ts`; an
+  earlier draft of this spec promised a stub-based version that was never built
 - reconnecting as a different account leaves nothing readable from the first
 
 ## The personal-data gate
@@ -354,7 +357,10 @@ Coverage:
 - each tool's request shape against a stubbed API
 - error mapping: assert no stack trace or token reaches an MCP error response
 
-No test makes a live call to the VM.
+No test in `mcp/` makes a live call: the unit suite injects `fetchImpl` and stubs
+every response. Live coverage lives outside this package, in
+`e2e/tests/mcp/connector-live.spec.ts`, which drives the built connector against a
+disposable stack the test runner owns. Nothing automated ever calls the VM.
 
 ## Deliberately excluded
 
