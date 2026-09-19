@@ -132,6 +132,26 @@ enum DocumentStorageDeletionRecoveryDisposition {
   COMPLETE_EXTERNALLY_REMEDIATED
 }
 
+// The publish outbox reuses DocumentStorageDeletion's state machine verbatim
+// rather than inventing a second reliability pattern.
+enum DocumentPublicationState {
+  PENDING
+  DEAD_LETTER
+  PROCESSED
+}
+
+// One reason per permanent publish failure, plus the exhausted-retries reason
+// the backoff engine produces on its own. A permanent reason dead-letters on
+// the first attempt because retrying cannot change the answer.
+enum DocumentPublicationTerminalReason {
+  MAX_ATTEMPTS_EXHAUSTED
+  PERMANENT_CONNECTION_UNAVAILABLE
+  PERMANENT_PERMISSION_DENIED
+  PERMANENT_CONFLICT_UNRESOLVED
+  PERMANENT_CONTENT_PROPERTY_REJECTED
+  PERMANENT_TARGET_REF_REJECTED
+}
+
 enum RegisterStatus {
   OPEN
   MONITORING
@@ -951,6 +971,62 @@ model DocumentStorageDeletionRecovery {
 
   @@index([deletionId, createdAt])
   @@index([organisationId, createdAt])
+}
+
+// A record that a document was (or is queued to be) mirrored into a charity's
+// own Confluence site. Confluence is a publish target, never the authoritative
+// copy: the Irish Supabase copy remains the original.
+//
+// createPage is deliberately non-idempotent, so a retried create after a
+// dropped connection would produce two pages for one board resolution with
+// nothing saying which is real. @@unique([documentId, provider]) is what stops
+// two enqueues becoming two pages, and it is the reason this row exists.
+//
+// organisationId and documentId are deliberately bare strings with no relation:
+// a cascading delete from Document would destroy the pageId at the exact moment
+// the dual-erasure path needs it to erase the Confluence copy. cloudId is stored
+// on the row for the same reason Phase 5 stores it — a charity may disconnect,
+// reconnect to a DIFFERENT site, and still be owed erasure from the first.
+model DocumentPublication {
+  id             String @id @default(cuid())
+  organisationId String
+  documentId     String
+  provider       String @default("confluence")
+
+  cloudId      String?
+  spaceId      String?
+  pageId       String?
+  attachmentId String?
+  pageTitle    String?
+  publishedAt  DateTime?
+
+  // Copied field for field from DocumentStorageDeletion. Invariants Prisma's
+  // schema language cannot express (bounded evidence, alert-claim lockstep and
+  // the three-state machine) live as CHECK constraints in the migration
+  // 20260919140000_add_document_publication.
+  state           DocumentPublicationState           @default(PENDING)
+  attempts        Int                                @default(0)
+  lastError       String?
+  lastAttemptAt   DateTime?
+  nextAttemptAt   DateTime?                          @default(now())
+  claimedAt       DateTime?
+  deadLetteredAt  DateTime?
+  terminalReason  DocumentPublicationTerminalReason?
+  alertClaimToken String?
+  alertClaimedAt  DateTime?
+  alertedAt       DateTime?
+  processedAt     DateTime?
+  createdAt       DateTime                           @default(now())
+  updatedAt       DateTime                           @updatedAt
+
+  @@unique([documentId, provider])
+  @@index([organisationId])
+  @@index([state, nextAttemptAt, claimedAt, createdAt])
+  // Prisma would derive a 69-byte name here and PostgreSQL would truncate it to
+  // 63; naming it explicitly keeps schema and migration textually identical.
+  @@index([state, alertedAt, alertClaimedAt, deadLetteredAt], map: "DocumentPublication_state_alert_deadLetteredAt_idx")
+  @@index([organisationId, state, deadLetteredAt])
+  @@index([provider, state, nextAttemptAt])
 }
 
 model ConflictRecord {

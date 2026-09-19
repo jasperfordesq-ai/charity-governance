@@ -118,6 +118,11 @@ const DISPOSABLE_DATABASE_RESET_TABLES = Object.freeze([
   "DocumentStandardLink",
   "DocumentStorageDeletion",
   "DocumentStorageDeletionRecovery",
+  // The publish outbox row. It deliberately has no foreign key to Document, so
+  // it is not cleared by the Document truncate above and has to be listed in
+  // its own right; the reset emits ONE multi-table TRUNCATE ... RESTRICT, so a
+  // publication left behind would leak a previous suite's pageId into the next.
+  "DocumentPublication",
   // Integration wiring is tenant-owned, so it resets with the tenant.
   // OrganisationIntegration is listed before IntegrationCredential to match the
   // parent-before-child convention used above; the reset emits ONE multi-table
