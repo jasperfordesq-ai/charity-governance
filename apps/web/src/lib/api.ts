@@ -58,7 +58,11 @@ function redirectToLoginOnProtectedRoute() {
 // then cleared so a later expiry starts a fresh one.
 let refreshPromise: Promise<void> | null = null;
 
-function refreshSession(): Promise<void> {
+// Exported so a caller that must control the ordering against its own request
+// (see `confluence-callback.ts`) can renew the session *before* making that
+// request, rather than relying on this module's own reactive 401 handling —
+// which only refreshes after the first attempt has already been sent.
+export function refreshSession(): Promise<void> {
   if (!refreshPromise) {
     refreshPromise = axios
       .post(`${API_URL}/api/v1/auth/refresh`, {}, { withCredentials: true })
