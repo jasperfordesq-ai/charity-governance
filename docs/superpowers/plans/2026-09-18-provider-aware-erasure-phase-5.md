@@ -965,6 +965,17 @@ not optional polish.
   rather than letting the reader carry the Supabase guarantee across.
 - For a data subject erasure request under GDPR, this distinction is the material one: state it in
   terms a DPO can act on.
+- **Disconnecting does not provably revoke anything at Atlassian.** Say all three parts: our copy
+  of the credentials is deleted and that *is* provable; we attempt withdrawal at an endpoint
+  Atlassian does not document, so we must never write "we revoked your access"; and the two
+  remedies that actually work are the 90-day inactivity expiry and the administrator removing
+  CharityPilot in their own Atlassian connected-apps settings. The charity holds the only
+  guaranteed action — a DPO needs to know that, because it is theirs to take.
+- **The erasure proof covers the page, not every attachment.** An attachment the deletion row does
+  not name is never enumerated. See the spec's Phase 4 note; do not overstate this.
+- Mark the 90-day figure as **Atlassian's behaviour, not our guarantee.** It is quoted from their
+  documentation and nothing in this repository would notice if they changed it. A disclosure that
+  silently goes stale is worse than one that names its source.
 
 **Do not write this section until the authority question in Task 1 is settled.** It is the one
 place in the phase where the answer changes what is true rather than only what is convenient —
@@ -992,7 +1003,13 @@ Confluence may be promoted from alpha to GA when, and only when:
 2. An erasure of a published document removes the attachment and the page, and a read-back 404s.
 3. A purge refused for permissions dead-letters with a message an operator can act on, rather than
    silently leaving content in trash.
-4. Disconnecting revokes the grant at Atlassian.
+4. ~~Disconnecting revokes the grant at Atlassian.~~ **Restated — the original is not satisfiable
+   by any code we can write.** Atlassian documents no revoke endpoint for a 3LO app; revocation is
+   user-initiated. The criterion is therefore: disconnecting deletes our copy of the credentials
+   (provable), *attempts* withdrawal at an endpoint whose success we cannot verify, logs a warning
+   when that attempt does not succeed, and tells the administrator the two remedies that do work —
+   the grant dies after 90 days without use, or immediately if they remove CharityPilot in their
+   Atlassian connected-apps settings.
 5. The limits in Task 7 are documented and shown to the administrator before they connect.
 
 Item 2 cannot be verified against a real site until the Atlassian app install unblocks Phase 4.
