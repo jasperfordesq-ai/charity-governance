@@ -2,6 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { Session, NotConnectedError } from '../session.js';
 import { createMemoryStore } from '../credentials.js';
+import { redactSecrets } from '../redact.js';
 
 function jsonWithCookies(body: unknown, cookies: string[]): Response {
   const headers = new Headers({ 'content-type': 'application/json' });
@@ -96,6 +97,51 @@ test('accessToken with no stored token reports NOT_CONNECTED without any request
     fetchImpl: async () => assert.fail('must not make a request'),
   });
   await assert.rejects(() => session.accessToken(), NotConnectedError);
+});
+
+test('concurrent callers share one refresh instead of racing to spend the token', async () => {
+  const store = createMemoryStore('refresh1');
+  let refreshCalls = 0;
+  const session = new Session({
+    baseUrl: 'https://example.test',
+    store,
+    fetchImpl: async () => {
+      refreshCalls += 1;
+      await new Promise((r) => setTimeout(r, 10));
+      const headers = new Headers({ 'content-type': 'application/json' });
+      headers.append('set-cookie', `charitypilot_access=access${refreshCalls}; Path=/`);
+      headers.append('set-cookie', `charitypilot_refresh=refresh${refreshCalls + 1}; Path=/`);
+      return new Response(JSON.stringify({ ok: true }), { status: 200, headers });
+    },
+  });
+
+  const [a, b, c] = await Promise.all([
+    session.accessToken(), session.accessToken(), session.accessToken(),
+  ]);
+
+  assert.equal(refreshCalls, 1, 'a single-use refresh token must be spent exactly once');
+  assert.equal(a, 'access1');
+  assert.equal(b, 'access1');
+  assert.equal(c, 'access1');
+  assert.equal(store.read(), 'refresh2');
+});
+
+test('tokens are registered for redaction so later errors cannot leak them', async () => {
+  const session = new Session({
+    baseUrl: 'https://example.test',
+    store: createMemoryStore(),
+    fetchImpl: async () => {
+      const headers = new Headers({ 'content-type': 'application/json' });
+      headers.append('set-cookie', 'charitypilot_access=averylongaccesstokenvalue; Path=/');
+      headers.append('set-cookie', 'charitypilot_refresh=averylongrefreshtokenvalue; Path=/');
+      return new Response(JSON.stringify(LOGIN_BODY), { status: 200, headers });
+    },
+  });
+
+  await session.login('a@b.ie', 'pw');
+
+  assert.ok(!redactSecrets('leaked averylongaccesstokenvalue').includes('averylongaccesstokenvalue'));
+  assert.ok(!redactSecrets('leaked averylongrefreshtokenvalue').includes('averylongrefreshtokenvalue'));
 });
 
 test('logout revokes server-side and clears the store', async () => {

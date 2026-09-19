@@ -43,6 +43,7 @@ export class Session {
   readonly #fetch: typeof fetch;
   #accessToken: string | null = null;
   #identity: SessionIdentity | null = null;
+  #refreshInFlight: Promise<string> | null = null;
 
   constructor(options: SessionOptions) {
     this.#baseUrl = options.baseUrl.replace(/\/+$/, '');
@@ -77,21 +78,41 @@ export class Session {
 
   async accessToken(): Promise<string> {
     if (this.#accessToken) return this.#accessToken;
+    if (this.#refreshInFlight) return this.#refreshInFlight;
 
+    this.#refreshInFlight = this.#refreshAccessToken().finally(() => {
+      this.#refreshInFlight = null;
+    });
+    return this.#refreshInFlight;
+  }
+
+  async #refreshAccessToken(): Promise<string> {
     const refreshToken = this.#store.read();
     if (!refreshToken) throw new NotConnectedError();
 
     const response = await this.#post('/api/v1/auth/refresh', { refreshToken });
     if (!response.ok) {
-      this.#store.clear();
       this.#accessToken = null;
       this.#identity = null;
+      try {
+        this.#store.clear();
+      } catch (cause) {
+        throw new NotConnectedError(
+          `Session ended, and the stored credential could not be removed: ${(cause as Error).message}`,
+        );
+      }
       throw new NotConnectedError('Session ended. Run: charitypilot-mcp connect');
     }
     this.#absorbCookies(response);
 
     if (!this.#accessToken) {
-      this.#store.clear();
+      try {
+        this.#store.clear();
+      } catch (cause) {
+        throw new NotConnectedError(
+          `Session ended, and the stored credential could not be removed: ${(cause as Error).message}`,
+        );
+      }
       throw new NotConnectedError('Session ended. Run: charitypilot-mcp connect');
     }
     return this.#accessToken;
