@@ -2,11 +2,30 @@ import type { FastifyRequest, FastifyReply } from "fastify";
 import { verifyAccessToken, type TokenPayload } from "../utils/jwt.js";
 import { getAccessTokenFromRequest } from "../utils/auth-request-credential.js";
 
+/**
+ * The posture of the session behind this request: which client it belongs to
+ * and how much it may do.
+ *
+ * It is read from the session row on every request rather than carried in the
+ * access token, for the same reason the role is: a token says what was true
+ * when it was signed, and a session that has been narrowed or revoked since
+ * must stop working immediately. The token payload is also reconstructed from
+ * a four-claim allowlist on verify, so anything added to it would be dropped.
+ */
+export type RequestAuthSession = {
+  id: string;
+  clientKind: "WEB" | "MCP_CONNECTOR";
+  accessLevel: "READ" | "WRITE" | "ADMIN";
+};
+
 declare module "fastify" {
   interface FastifyRequest {
     user: TokenPayload;
+    authSession: RequestAuthSession;
   }
 }
+
+const SAFE_METHODS = new Set(["GET", "HEAD", "OPTIONS"]);
 
 async function authenticateRequest(
   request: FastifyRequest,
@@ -51,7 +70,7 @@ async function authenticateRequest(
           },
         },
       },
-      select: { id: true },
+      select: { id: true, clientKind: true, accessLevel: true },
     }),
     request.server.prisma.user.findUnique({
       where: { id: payload.userId },
@@ -93,6 +112,27 @@ async function authenticateRequest(
     role: user.role,
     sessionId: session.id,
   };
+  request.authSession = {
+    id: session.id,
+    // A session issued before this column existed reads as a full-authority
+    // web session, which is what it was.
+    clientKind: session.clientKind ?? "WEB",
+    accessLevel: session.accessLevel ?? "ADMIN",
+  };
+
+  // A read-only session may not change anything, whatever the account behind
+  // it is allowed to do. This is checked here rather than per route so a
+  // route added later is covered without anyone remembering.
+  if (
+    request.authSession.accessLevel === "READ" &&
+    !SAFE_METHODS.has(request.method)
+  ) {
+    reply.status(403).send({
+      error: "This session is read-only",
+      code: "SESSION_READ_ONLY",
+    });
+    return;
+  }
 }
 
 export async function authGuard(

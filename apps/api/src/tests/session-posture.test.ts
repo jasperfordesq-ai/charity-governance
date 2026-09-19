@@ -160,3 +160,70 @@ test('rotation without an expected channel is unchanged, so the web path still w
   assert.equal(tx.created[0]!.clientKind, 'WEB');
   assert.equal(tx.created[0]!.accessLevel, 'ADMIN');
 });
+
+/* --- enforcement: what a narrowed session may actually do ---------------- */
+
+const { requireSessionLevel } = await import('../middleware/session-level.js');
+
+function fakeReply() {
+  const sent: { status?: number; body?: Record<string, unknown> } = {};
+  const reply = {
+    status(code: number) {
+      sent.status = code;
+      return reply;
+    },
+    send(body: Record<string, unknown>) {
+      sent.body = body;
+      return reply;
+    },
+  };
+  return { reply, sent };
+}
+
+function requestAt(accessLevel: 'READ' | 'WRITE' | 'ADMIN') {
+  return { authSession: { id: 's1', clientKind: 'MCP_CONNECTOR' as const, accessLevel } };
+}
+
+test('an admin-level action refuses a write-level session, naming the level', async () => {
+  const guard = requireSessionLevel('ADMIN');
+  const { reply, sent } = fakeReply();
+
+  await guard(requestAt('WRITE') as never, reply as never);
+
+  assert.equal(sent.status, 403);
+  assert.equal(sent.body?.code, 'SESSION_LEVEL_TOO_LOW');
+  assert.match(String(sent.body?.error), /administrator access/i);
+  assert.doesNotMatch(String(sent.body?.error), /\n\s+at /, 'no stack trace');
+});
+
+test('an admin-level action allows an admin-level session', async () => {
+  const guard = requireSessionLevel('ADMIN');
+  const { reply, sent } = fakeReply();
+
+  await guard(requestAt('ADMIN') as never, reply as never);
+
+  assert.equal(sent.status, undefined, 'nothing is sent, so the route runs');
+});
+
+test('a write-level action refuses a read-only session but allows write and admin', async () => {
+  const guard = requireSessionLevel('WRITE');
+
+  const readOnly = fakeReply();
+  await guard(requestAt('READ') as never, readOnly.reply as never);
+  assert.equal(readOnly.sent.status, 403);
+
+  for (const level of ['WRITE', 'ADMIN'] as const) {
+    const allowed = fakeReply();
+    await guard(requestAt(level) as never, allowed.reply as never);
+    assert.equal(allowed.sent.status, undefined, `${level} must be allowed`);
+  }
+});
+
+test('a request with no posture is treated as full authority, so the web is unaffected', async () => {
+  const guard = requireSessionLevel('ADMIN');
+  const { reply, sent } = fakeReply();
+
+  await guard({} as never, reply as never);
+
+  assert.equal(sent.status, undefined);
+});
