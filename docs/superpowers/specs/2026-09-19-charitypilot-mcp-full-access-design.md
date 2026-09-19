@@ -93,7 +93,7 @@ no field allowlist can protect.
 
 ### Phase 2: API foundations for writes (additive, hand-written migration)
 
-**Split into three; 2a and 2b are DONE (2026-09-19).** The original block covered the
+**Split into three; 2a, 2b and 2c are all DONE (2026-09-19).** The original block covered the
 session columns, four auth routes, an activity log, level enforcement, the
 sessions UI and a connector rewrite — too much for one reviewable change against
 the auth core. Delivered as 2a (posture columns, migration, guards, enforcement),
@@ -113,6 +113,21 @@ evidence; `sec-fetch-site` and `sec-fetch-dest`, which no non-browser sends,
 still are. Plan for 2b:
 `docs/superpowers/plans/2026-09-19-charitypilot-mcp-connector-auth.md`. Plan for
 2c: `docs/superpowers/plans/2026-09-19-charitypilot-mcp-connector-accountability.md`.
+
+Found while doing 2c: the per-email sign-in limit made `connect` report
+"check the email address and password", which is the worst possible advice —
+the credentials were never read, and retyping a correct password spends what
+little budget remains. A 429 now says what actually happened.
+
+2c delivered: an append-only `ClientActivityEvent` table written by one
+`onResponse` hook; `requireSessionLevel('ADMIN')` on seventeen destructive
+routes, with a source test that catches a route added later without it; a
+per-session write budget of thirty a minute so an agent loop cannot spend the
+address allowance the owner's browser shares; and a connector badge on the
+Team page so a session the owner cannot see is not a session they cannot
+revoke. Known limitation recorded in the code: connector *reads* still share
+the address bucket, because at the point the shared limiter runs the session
+is not yet known.
 
 2b Task 7, deploying the API to the Hyper-V VM so the connector routes exist
 there, is outstanding and is the owner's decision, not an engineering one.
