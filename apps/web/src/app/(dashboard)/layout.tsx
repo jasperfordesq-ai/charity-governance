@@ -2,6 +2,7 @@
 
 import { cloneElement, useCallback, useEffect, useRef, useState } from 'react';
 import { useRouter, usePathname } from 'next/navigation';
+import { dashboardBody, dashboardRedirect } from '@/lib/dashboard-session-gate';
 import { Button } from '@heroui/react';
 import { useAuth } from '@/lib/auth-context';
 import { webBillingMode } from '@/lib/deployment-profile';
@@ -237,23 +238,23 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
     return () => document.removeEventListener('keydown', handleKeyDown);
   }, [closeSidebar, sidebarOpen]);
 
-  // Redirect unauthenticated users
+  // Redirect unauthenticated users. Both the destination and the decision to
+  // redirect at all live in `dashboard-session-gate`, because on the
+  // Confluence callback path neither is obvious: the URL carries a live
+  // authorization code that must not reach `/login?next=…`, and that page is
+  // the one thing here that can renew a dead session for itself.
   useEffect(() => {
-    if (!isLoading && !user) {
-      // Preserve the intended destination so login can return the user here
-      // (safeNextPath validates it). Without this, deep links land on /dashboard.
-      const next = `${window.location.pathname}${window.location.search}`;
-      router.replace(`/login?next=${encodeURIComponent(next)}`);
-      return;
-    }
-
-    if (!isLoading && user && !user.emailVerified) {
-      router.replace('/verify-email');
-    }
+    const destination = dashboardRedirect(
+      { isLoading, user },
+      { pathname: window.location.pathname, search: window.location.search },
+    );
+    if (destination) router.replace(destination);
   }, [isLoading, user, router]);
 
+  const body = dashboardBody({ isLoading, user }, pathname);
+
   // Loading state
-  if (isLoading) {
+  if (body === 'loading') {
     return (
       <div className="flex min-h-screen items-center justify-center bg-gray-50 p-4 dark:bg-gray-950">
         <LoadingState
@@ -265,7 +266,13 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
     );
   }
 
-  if (!user || !user.emailVerified) return null;
+  // A page that renews its own session has to be allowed to mount and do it —
+  // returning null here is what used to stop the Confluence callback running
+  // at all (and so stop it scrubbing its own URL) on a dead session. It gets
+  // the page alone: no chrome, no navigation, no tenant data.
+  if (body === 'renew-in-place') return <>{children}</>;
+
+  if (body === 'blank') return null;
 
   const isActive = (href: string) => {
     if (href === '/dashboard') return pathname === '/dashboard';

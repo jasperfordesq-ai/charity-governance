@@ -10,8 +10,11 @@ import {
   webEmailDelivery,
   webRegistrationIsOpen,
 } from "./lib/deployment-profile";
-import { isProtectedAppPath } from "./lib/protected-routes";
-import { removeSensitiveSearchParams } from "./lib/url-security";
+import {
+  isProtectedAppPath,
+  renewsItsOwnSession,
+} from "./lib/protected-routes";
+import { safeNextValue } from "./lib/url-security";
 
 const AUTH_COOKIE_NAMES = [
   "charitypilot_access",
@@ -29,52 +32,6 @@ const SENSITIVE_AUTH_PATHS = new Set([
   "/owner/set-password",
 ]);
 const ISOLATED_E2E_MODE = "local-disposable";
-
-/**
- * Protected paths that renew the session themselves and must therefore never
- * be bounced to `/login`.
- *
- * The Confluence callback page is the only one. Atlassian appends
- * `?code=<single-use authorization code>&state=<CSRF state>` to it, and
- * renewing the session before spending that code is the page's entire purpose
- * (`lib/confluence-callback.ts`). Redirecting it to `/login` would defeat that
- * — and would leak the code doing it: `next` carries the whole
- * `pathname + search`, so the live code would land in the `Location` header,
- * the address bar, the history entry for `/login`, the `Referer` of `/login`'s
- * subresources, and the proxy access log (Caddy's filter deletes only
- * TOP-LEVEL `code`/`state`; one nested inside `next` sails through it).
- *
- * So the request is let through instead. The server-side refresh above has
- * still been attempted and its `Set-Cookie` headers are still applied, the
- * response still gets the protected no-store headers, and the page's own
- * refresh stays authoritative — reporting `session-expired` if it fails,
- * which is an outcome an administrator can act on, rather than a login screen
- * with a spent connection behind it.
- */
-const SELF_RENEWING_PROTECTED_PATHS = new Set([
-  "/integrations/confluence/callback",
-]);
-
-/**
- * The parameters that must never be carried into a `next` value. `code` and
- * `state` are the OAuth callback's single-use secrets; `token` is already
- * handled by `redirectSensitiveQueryToken` for the sensitive auth paths, and
- * is listed here so that a protected path which ever grows one cannot leak it
- * through this door instead.
- */
-const SENSITIVE_NEXT_PARAMS = ["code", "state", "token"];
-
-function selfRenewsItsOwnSession(pathname: string): boolean {
-  let normalisedPathname = pathname;
-  try {
-    normalisedPathname = decodeURIComponent(pathname);
-  } catch {
-    normalisedPathname = pathname;
-  }
-  normalisedPathname = normalisedPathname.replace(/\\/g, "/");
-
-  return SELF_RENEWING_PROTECTED_PATHS.has(normalisedPathname);
-}
 
 type ProtectedAuthSession =
   | { state: "authenticated"; setCookieHeaders: string[] }
@@ -535,15 +492,14 @@ function redirectToLogin(
   const loginUrl = externalRequestUrl(request);
   loginUrl.pathname = "/login";
   loginUrl.search = "";
-  // Depth behind SELF_RENEWING_PROTECTED_PATHS, for every other protected
-  // path: whatever the caller arrived with, no single-use secret is carried
-  // into `next`. A query string nested inside a parameter is invisible to the
+  // Depth behind SELF_RENEWING_PROTECTED_PATHS (lib/protected-routes.ts), for
+  // every other protected path: whatever the caller arrived with, no
+  // single-use secret is carried into `next`.
+  // A query string nested inside a parameter is invisible to the
   // proxy's own `delete code` / `delete state` log filter, so it has to be
-  // removed here, at the point the URL is built.
-  loginUrl.searchParams.set(
-    "next",
-    removeSensitiveSearchParams(`${pathname}${search}`, SENSITIVE_NEXT_PARAMS),
-  );
+  // removed here, at the point the URL is built. `safeNextValue` is shared
+  // with the dashboard layout, which builds the same redirect client-side.
+  loginUrl.searchParams.set("next", safeNextValue(pathname, search));
 
   const response = addSetCookieHeaders(
     NextResponse.redirect(loginUrl),
@@ -557,8 +513,9 @@ function redirectToLogin(
  * headers, and whatever `Set-Cookie` the server-side refresh produced.
  *
  * Reached on the ordinary authenticated path and — see
- * SELF_RENEWING_PROTECTED_PATHS — instead of a login redirect for a path that
- * renews its own session.
+ * SELF_RENEWING_PROTECTED_PATHS in lib/protected-routes.ts — instead of a
+ * login redirect for a path that renews its own session. The dashboard layout
+ * makes the same exclusion client-side, from the same list.
  */
 function protectedPassThrough(
   request: NextRequest,
@@ -649,10 +606,10 @@ export async function proxy(request: NextRequest) {
   }
 
   if (!hasAuthSessionCookie(request)) {
-    // See SELF_RENEWING_PROTECTED_PATHS: this page renews the session itself,
-    // and its URL carries a live authorization code that must not be put into
-    // a `Location` header.
-    if (selfRenewsItsOwnSession(pathname)) {
+    // See SELF_RENEWING_PROTECTED_PATHS (lib/protected-routes.ts): this page
+    // renews the session itself, and its URL carries a live authorization code
+    // that must not be put into a `Location` header.
+    if (renewsItsOwnSession(pathname)) {
       return protectedPassThrough(request, nonce, csp);
     }
     return redirectToLogin(request, csp);
@@ -666,7 +623,7 @@ export async function proxy(request: NextRequest) {
     // Same reason, one step later: the refresh was attempted and definitively
     // rejected, and its cookie deletions are still forwarded — but the page,
     // not `/login`, is the one that gets to report that.
-    if (selfRenewsItsOwnSession(pathname)) {
+    if (renewsItsOwnSession(pathname)) {
       return protectedPassThrough(request, nonce, csp, authSession.setCookieHeaders);
     }
     return redirectToLogin(request, csp, authSession.setCookieHeaders);

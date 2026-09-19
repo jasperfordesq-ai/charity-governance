@@ -4332,7 +4332,19 @@ test('web email verification flow supports generic registration and unverified s
   assert.match(loginPage, /router\.push\(loginDestination\(user\)\)/);
   assert.match(registerPage, /await register\(\{ name, email, password, organisationName \}\)/);
   assert.match(registerPage, /router\.push\('\/verify-email'\)/);
-  assert.match(dashboardLayout, /!user\.emailVerified[\s\S]*router\.replace\('\/verify-email'\)/);
+  // The unverified-session redirect moved out of the layout into
+  // dashboard-session-gate, so that the Confluence callback — which renews its
+  // own session and whose URL carries a live authorization code — can be
+  // excluded from it by the same rule that excludes it from /login.
+  const dashboardGate = readRepoFile('apps/web/src/lib/dashboard-session-gate.ts');
+  assert.match(dashboardGate, /!session\.user\.emailVerified\) return '\/verify-email'/);
+  assert.match(dashboardLayout, /dashboardRedirect\(/);
+  assert.match(dashboardLayout, /if \(destination\) router\.replace\(destination\)/);
+  assert.match(
+    dashboardGate,
+    /renewsItsOwnSession\(location\.pathname\)\) return null;[\s\S]*?!session\.user\.emailVerified/,
+    'a self-renewing path must be excluded before either redirect is decided',
+  );
   assert.match(verifyEmailPage, /type Status = 'loading' \| 'pending' \| 'success' \| 'error'/);
   assert.match(verifyEmailPage, /status === 'pending'/);
   assert.match(verifyEmailPage, /api\.post\('\/auth\/resend-verification'/);
@@ -4557,14 +4569,41 @@ test('web proxy preserves protected-route redirect and no-cache behavior', () =>
   // built. (Before Phase 6's review this assertion pinned the unscrubbed form.)
   assert.match(
     redirectToLogin,
-    /loginUrl\.searchParams\.set\(\s*["']next["'],\s*removeSensitiveSearchParams\(`\$\{pathname\}\$\{search\}`,\s*SENSITIVE_NEXT_PARAMS,?\s*\),?\s*\)/,
+    /loginUrl\.searchParams\.set\(["']next["'], safeNextValue\(pathname, search\)\)/,
     'the login redirect must strip single-use secrets out of `next` rather than forwarding the raw search string',
   );
+
+  // One scrubber, shared with the client-side redirect in the dashboard
+  // layout. Two copies beside their call sites is how this leak came back
+  // after the middleware was fixed.
+  const urlSecurity = readRepoFile('apps/web/src/lib/url-security.ts');
   assert.match(
-    proxy,
+    urlSecurity,
     /const SENSITIVE_NEXT_PARAMS = \[\s*["']code["'],\s*["']state["'],\s*["']token["'],?\s*\]/,
     '`next` must be stripped of the OAuth callback secrets and of `token`',
   );
+  assert.match(
+    urlSecurity,
+    /export function safeNextValue\([\s\S]*?removeSensitiveSearchParams\(`\$\{pathname\}\$\{search\}`, SENSITIVE_NEXT_PARAMS\)/,
+  );
+
+  // The dashboard layout reaches /login the same way, client-side, on a dead
+  // session the middleware has already let through. It must use the same
+  // scrubber and must not build `next` by hand.
+  const sessionGate = readRepoFile('apps/web/src/lib/dashboard-session-gate.ts');
+  const layout = readRepoFile('apps/web/src/app/(dashboard)/layout.tsx');
+  assert.match(sessionGate, /safeNextValue\(location\.pathname, location\.search\)/);
+  assert.doesNotMatch(
+    layout,
+    /encodeURIComponent/,
+    'the layout must not build a login redirect of its own — dashboard-session-gate owns it',
+  );
+  assert.doesNotMatch(
+    layout,
+    /router\.replace\(\s*`/,
+    'no interpolated redirect target in the layout — that is how the raw search string used to get in',
+  );
+  assert.match(layout, /from '@\/lib\/dashboard-session-gate'/);
   assert.match(redirectToLogin, /NextResponse\.redirect\(loginUrl\)/);
   assert.match(redirectToLogin, /addProtectedNoCacheHeaders\(response\)/);
   assert.match(proxy, /const PROTECTED_RESPONSE_CACHE_CONTROL = ["']no-store, no-cache, must-revalidate["']/);
@@ -4591,12 +4630,18 @@ test('web proxy preserves protected-route redirect and no-cache behavior', () =>
   // The Confluence callback renews the session itself, so it is let through
   // rather than redirected — a `/login?next=…` for that path would carry a
   // live, unspent authorization code in the Location header.
+  // The path list lives beside PROTECTED_APP_PREFIXES so the middleware and
+  // the client-side layout cannot disagree about it.
+  const protectedRoutes = readRepoFile('apps/web/src/lib/protected-routes.ts');
   assert.match(
-    proxy,
-    /const SELF_RENEWING_PROTECTED_PATHS = new Set\(\[\s*["']\/integrations\/confluence\/callback["'],?\s*\]\)/,
+    protectedRoutes,
+    /const SELF_RENEWING_PROTECTED_PATHS = \[\s*['"]\/integrations\/confluence\/callback['"],?\s*\] as const/,
   );
+  assert.match(protectedRoutes, /export function renewsItsOwnSession\(/);
+  assert.match(sessionGate, /renewsItsOwnSession\(location\.pathname\)/);
+  assert.match(sessionGate, /renewsItsOwnSession\(pathname\)/);
   assert.equal(
-    (protectedBranch.match(/if \(selfRenewsItsOwnSession\(pathname\)\) \{\s+return protectedPassThrough\(/g) ?? []).length,
+    (protectedBranch.match(/if \(renewsItsOwnSession\(pathname\)\) \{\s+return protectedPassThrough\(/g) ?? []).length,
     2,
     'both login-redirect call sites must exclude a path that renews its own session',
   );

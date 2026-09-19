@@ -124,6 +124,34 @@ export function removeSensitiveSearchParams(rawUrl: string, paramNames: string[]
   return url.toString();
 }
 
+/**
+ * The parameters that must never be carried inside a `next` value.
+ *
+ * `code` and `state` are the OAuth callback's single-use secrets. `token` is
+ * already handled by the middleware's `redirectSensitiveQueryToken` for the
+ * sensitive auth paths, and is listed here so that a protected path which ever
+ * grows one cannot leak it through this door instead.
+ */
+export const SENSITIVE_NEXT_PARAMS = ['code', 'state', 'token'];
+
+/**
+ * Build the `next` value for a login redirect, with every single-use secret
+ * removed first.
+ *
+ * There are two places that send a signed-out visitor to `/login?next=…`: the
+ * middleware (`proxy.ts`, server-side) and the dashboard layout (client-side,
+ * after the auth context resolves to no user). Both call this, so neither can
+ * drift from the other — a second scrubber written beside one of them is how
+ * this leak came back the first time.
+ *
+ * It matters because a query string nested inside a parameter is invisible to
+ * the reverse proxy's own log filter, which deletes only TOP-LEVEL `code` and
+ * `state` (see `caddy/Caddyfile*` and `docs/bluegreen-runbook.md`).
+ */
+export function safeNextValue(pathname: string, search: string): string {
+  return removeSensitiveSearchParams(`${pathname}${search}`, SENSITIVE_NEXT_PARAMS);
+}
+
 export function getSensitiveUrlToken(rawUrl: string, paramName: string): string {
   const url = new URL(rawUrl, 'https://charitypilot.local');
   const fragmentToken = hashSearchParams(url)?.get(paramName);
