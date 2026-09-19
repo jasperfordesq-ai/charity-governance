@@ -11,6 +11,7 @@ export const PROTECTED_APP_PREFIXES = [
   '/team',
   '/billing',
   '/export',
+  '/integrations',
 ] as const;
 
 function normalisePathname(pathnameOrUrl: string): string {

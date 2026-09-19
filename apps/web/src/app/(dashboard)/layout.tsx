@@ -12,6 +12,7 @@ import { ThemeToggle } from '@/components/theme-toggle';
 import { KeyboardShortcuts } from '@/components/keyboard-shortcuts';
 import { SessionTimeout } from '@/components/session-timeout';
 import { LoadingState } from '@/components/ui/states';
+import { CONFLUENCE_ALPHA_BADGE_LABEL } from '@/lib/integration-status';
 import {
   BookOpenCheck,
   Building2,
@@ -24,6 +25,7 @@ import {
   LogOut,
   Menu,
   NotebookPen,
+  Plug,
   ShieldCheck,
   UserRoundCog,
   UsersRound,
@@ -44,7 +46,22 @@ const sidebarFocusableSelector = [
   '[tabindex]:not([tabindex="-1"])',
 ].join(',');
 
-const NAV_ITEMS = [
+type NavItem = {
+  href: string;
+  label: string;
+  icon: React.ReactElement;
+  /**
+   * A short marker shown next to the label — used only for Confluence, which
+   * `docs/superpowers/plans/2026-09-19-integration-admin-ui-phase-6.md`
+   * requires to be marked alpha in the interface itself, not only in
+   * documentation, so it cannot be reached by accident. Sourced from
+   * `integration-status.ts` rather than a literal here, so the page and the
+   * navigation entry cannot drift apart on the word used.
+   */
+  badge?: string;
+};
+
+const NAV_ITEMS: NavItem[] = [
   {
     href: '/dashboard',
     label: 'Dashboard',
@@ -104,6 +121,12 @@ const NAV_ITEMS = [
     href: '/export',
     label: 'Export',
     icon: <Download className={navIconClassName} strokeWidth={1.5} aria-hidden="true" />,
+  },
+  {
+    href: '/integrations',
+    label: 'Integrations',
+    icon: <Plug className={navIconClassName} strokeWidth={1.5} aria-hidden="true" />,
+    badge: CONFLUENCE_ALPHA_BADGE_LABEL,
   },
 ];
 
@@ -304,7 +327,15 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
                 <span className="flex-shrink-0" aria-hidden="true">
                   {cloneElement(item.icon, { focusable: false })}
                 </span>
-                {item.label}
+                <span className="flex-1 truncate">{item.label}</span>
+                {item.badge ? (
+                  <span
+                    className="flex-shrink-0 rounded-md border border-amber-300 bg-amber-50 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-amber-800 dark:border-amber-700 dark:bg-amber-950/60 dark:text-amber-200"
+                    aria-label={`${item.label} is a ${item.badge.toLowerCase()} feature`}
+                  >
+                    {item.badge}
+                  </span>
+                ) : null}
               </Link>
             );
           })}

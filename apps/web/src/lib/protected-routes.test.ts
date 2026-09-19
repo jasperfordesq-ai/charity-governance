@@ -8,6 +8,8 @@ test('matches dashboard application routes that require an auth cookie', () => {
   assert.equal(isProtectedAppPath('/compliance/standard-1'), true);
   assert.equal(isProtectedAppPath('/documents'), true);
   assert.equal(isProtectedAppPath('/export?year=2026'), true);
+  assert.equal(isProtectedAppPath('/integrations'), true);
+  assert.equal(isProtectedAppPath('/integrations/confluence/callback'), true);
 });
 
 test('matches encoded dashboard application routes before Next normalisation', () => {
