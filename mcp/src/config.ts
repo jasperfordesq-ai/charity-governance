@@ -16,6 +16,8 @@ export interface ConnectorConfig {
   baseUrl: string;
   allowPersonalData: boolean;
   profile: ConnectorProfile;
+  email?: string | undefined;
+  passwordStdin: boolean;
 }
 
 function hostnameOf(baseUrl: string): string | null {
@@ -31,6 +33,8 @@ export function parseArgs(argv: string[]): ConnectorConfig {
   let baseUrl = process.env.CHARITYPILOT_BASE_URL ?? DEFAULT_BASE_URL;
   let allowPersonalData = false;
   let profile: ConnectorProfile = 'default';
+  let email: string | undefined;
+  let passwordStdin = false;
 
   for (let i = 0; i < argv.length; i += 1) {
     const arg = argv[i]!;
@@ -51,6 +55,13 @@ export function parseArgs(argv: string[]): ConnectorConfig {
         throw new Error(`Unknown profile: ${value}. The only profile is "local".`);
       }
       profile = value;
+    } else if (arg === '--email') {
+      i += 1;
+      const value = argv[i];
+      if (!value) throw new Error('--email requires a value');
+      email = value;
+    } else if (arg === '--password-stdin') {
+      passwordStdin = true;
     } else {
       throw new Error(`Unknown option: ${arg}`);
     }
@@ -74,5 +85,5 @@ export function parseArgs(argv: string[]): ConnectorConfig {
     throw new Error('The base URL must use https. TLS verification is not optional.');
   }
 
-  return { command, baseUrl, allowPersonalData, profile };
+  return { command, baseUrl, allowPersonalData, profile, email, passwordStdin };
 }

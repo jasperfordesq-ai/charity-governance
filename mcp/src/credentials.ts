@@ -104,7 +104,7 @@ export function createFileStore(path: string): CredentialStore {
 
 export function chooseCredentialStore(options: {
   profile: ConnectorProfile;
-  credentialFile?: string;
+  credentialFile?: string | undefined;
   keyring?: () => CredentialStore;
   file?: (path: string) => CredentialStore;
 }): CredentialStore {

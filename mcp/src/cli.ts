@@ -2,7 +2,8 @@
 import { createInterface } from 'node:readline/promises';
 import { stdin, stdout, stderr, argv, exit } from 'node:process';
 import { parseArgs } from './config.js';
-import { createKeyringStore } from './credentials.js';
+import { chooseCredentialStore } from './credentials.js';
+import { readPasswordFromStdin, assertNonInteractiveConnectAllowed } from './connect-input.js';
 import { Session } from './session.js';
 import { startServer } from './server.js';
 import { ApiClient } from './client.js';
@@ -46,16 +47,22 @@ async function prompt(question: string, hidden: boolean): Promise<string> {
 
 async function main(): Promise<void> {
   const config = parseArgs(argv.slice(2));
-  const store = createKeyringStore();
+  assertNonInteractiveConnectAllowed(config, stdin.isTTY === true);
+  const store = chooseCredentialStore({
+    profile: config.profile,
+    credentialFile: process.env.CHARITYPILOT_CREDENTIAL_FILE,
+  });
   const session = new Session({ baseUrl: config.baseUrl, store });
 
   if (config.command === 'connect') {
-    const email = await prompt('CharityPilot email: ', false);
+    const email = config.email ?? (await prompt('CharityPilot email: ', false));
     // CHARITYPILOT_BASE_URL can silently point this at a different host. Show it
     // before the password is typed, not after, so a wrong host is caught before
     // anything sensitive is sent to it.
     stdout.write(`Target: ${config.baseUrl}\n`);
-    const password = await prompt('Password (not shown): ', true);
+    const password = config.passwordStdin
+      ? await readPasswordFromStdin(stdin as AsyncIterable<Buffer>)
+      : await prompt('Password (not shown): ', true);
     const identity = await session.login(email, password);
     stdout.write(
       `Connected as ${identity.name} <${identity.email}> (${identity.role})\n` +

@@ -69,3 +69,20 @@ test('--profile local cannot be pointed at the VM', () => {
 test('without the local profile a loopback http URL is still refused', () => {
   assert.throws(() => parseArgs(['--base-url', 'http://127.0.0.1:3302']), /https/i);
 });
+
+test('the email and password-stdin flags parse', () => {
+  const config = parseArgs([
+    'connect', '--profile', 'local', '--base-url', 'http://127.0.0.1:3302',
+    '--email', 'owner@example.org', '--password-stdin',
+  ]);
+  assert.equal(config.command, 'connect');
+  assert.equal(config.email, 'owner@example.org');
+  assert.equal(config.passwordStdin, true);
+});
+
+test('there is no flag or environment variable that carries a password value', () => {
+  for (const flag of ['--password', '--pass', '--secret']) {
+    assert.throws(() => parseArgs([flag, 'hunter2']), /Unknown option/i, `${flag} must not be accepted`);
+  }
+  assert.equal(parseArgs([]).passwordStdin, false);
+});
