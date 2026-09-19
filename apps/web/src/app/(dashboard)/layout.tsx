@@ -274,6 +274,13 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
 
   if (body === 'blank') return null;
 
+  // Past the three answers above, `body` is `dashboard`, which `dashboardBody`
+  // returns only for a non-null, verified user. That is a fact about the gate
+  // the type checker cannot see through the call, so narrow here rather than
+  // assert: unreachable at runtime, and if the gate ever did answer `dashboard`
+  // without a user, rendering nothing is the same safe answer as `blank`.
+  if (!user) return null;
+
   const isActive = (href: string) => {
     if (href === '/dashboard') return pathname === '/dashboard';
     return pathname.startsWith(href);
