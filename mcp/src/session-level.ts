@@ -1,0 +1,69 @@
+import type { ApiClient } from './client.js';
+import type { AccessLevel } from './config.js';
+import type { ToolDefinition } from './tools.js';
+
+/**
+ * What the session is actually allowed to do, as the API sees it.
+ *
+ * Read from the server rather than taken from the flag the connector was
+ * started with. The two can disagree: `serve --access-level admin` against a
+ * credential minted at read level would otherwise advertise every write tool
+ * and then fail on each one, which reads to a model as a broken tool rather
+ * than as a session that was never allowed to write.
+ *
+ * This is convenience, not security. The API refuses what the level does not
+ * permit whatever the connector chooses to offer, and an MCP client can call a
+ * tool it was never shown — which is why the check is repeated at call time.
+ */
+const RANK: Record<AccessLevel, number> = { read: 0, write: 1, admin: 2 };
+
+export interface SessionPosture {
+  accessLevel: AccessLevel;
+  role: string;
+}
+
+interface SessionResponse {
+  accessLevel?: string;
+  role?: string;
+}
+
+export async function fetchSessionPosture(
+  client: ApiClient,
+): Promise<SessionPosture | null> {
+  try {
+    const body = await client.get<SessionResponse>('/api/v1/auth/connector/session');
+    const level = String(body.accessLevel ?? '').toLowerCase();
+    if (level !== 'read' && level !== 'write' && level !== 'admin') return null;
+    return { accessLevel: level, role: String(body.role ?? 'unknown') };
+  } catch {
+    // An API that predates this route, or one that cannot be reached right
+    // now. Returning null means "unknown", and the caller falls back to the
+    // level the operator asked for rather than refusing to start.
+    return null;
+  }
+}
+
+export function permits(held: AccessLevel, tool: ToolDefinition): boolean {
+  return RANK[held] >= RANK[tool.level ?? 'read'];
+}
+
+export function toolsFor(
+  held: AccessLevel,
+  tools: readonly ToolDefinition[],
+): readonly ToolDefinition[] {
+  return tools.filter((tool) => permits(held, tool));
+}
+
+/**
+ * The message a caller gets for a tool its session may not use.
+ *
+ * Says what would have to change and who can change it, because the agent
+ * cannot: re-connecting means a password, typed by a person.
+ */
+export function refusalFor(held: AccessLevel, tool: ToolDefinition): string {
+  return (
+    `${tool.name} needs a session with ${tool.level ?? 'read'} access, and this one has `
+    + `${held} access. Nothing was sent. To change that, run `
+    + `"charitypilot-mcp connect --access-level ${tool.level ?? 'read'}" yourself and sign in again.`
+  );
+}
