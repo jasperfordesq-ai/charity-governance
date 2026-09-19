@@ -53,6 +53,28 @@ export const EXCLUDED_MUTATIONS: readonly ExcludedMutation[] = [
     notInGroupIndex: true,
   },
   {
+    route: 'POST /api/v1/owner/auth/second-factor/begin',
+    reason:
+      'Starts enrolling a second factor on a platform operator account, and hands back the '
+      + 'shared secret. A connector that could call it would be a connector that could clone '
+      + 'the factor protecting the console.',
+    notInGroupIndex: true,
+  },
+  {
+    route: 'POST /api/v1/owner/auth/second-factor/complete',
+    reason:
+      'Turns a second factor on and returns the recovery codes. Operator credentials are not '
+      + 'a charity connector’s business in either direction.',
+    notInGroupIndex: true,
+  },
+  {
+    route: 'POST /api/v1/owner/auth/second-factor/remove',
+    reason:
+      'Takes a second factor off a platform operator account. Removing the protection on the '
+      + 'console is the last thing that should ever be reachable from a tool.',
+    notInGroupIndex: true,
+  },
+  {
     route: 'POST /api/v1/owner/tenants',
     reason:
       'Creates a charity on the platform. Cross-tenant by definition; a connector that can '

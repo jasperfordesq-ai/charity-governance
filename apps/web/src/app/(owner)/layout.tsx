@@ -1,5 +1,6 @@
 import type { ReactNode } from 'react';
 import { OwnerSignOutButton } from './owner-sign-out-button';
+import Link from 'next/link';
 import { OwnerIdentity } from './owner-identity';
 
 // Deliberately NOT the tenant dashboard shell: no compliance nav, no
@@ -13,6 +14,12 @@ export default function OwnerLayout({ children }: { children: ReactNode }) {
           CharityPilot platform console
         </span>
         <div className="flex items-center gap-4">
+          <Link
+            className="text-xs text-slate-400 underline-offset-4 hover:underline"
+            href="/owner/security"
+          >
+            Sign-in security
+          </Link>
           <OwnerIdentity />
           <OwnerSignOutButton />
         </div>

@@ -113,15 +113,41 @@ export type TenantConfiguration = {
 };
 
 export const ownerApi = {
-  async login(email: string, password: string) {
+  async login(
+    email: string,
+    password: string,
+    secondFactor: { code?: string; recoveryCode?: string } = {},
+  ) {
     // A bad-credentials 401 here is not a stale session — never try to refresh or
     // redirect off the login page itself.
     const { data } = await client.post(
       '/auth/login',
-      { email, password },
+      { email, password, ...secondFactor },
       { skipAuthRefresh: true, skipAuthRedirect: true },
     );
-    return data.operator as { id: string; email: string; name: string };
+    return data as {
+      operator: { id: string; email: string; name: string };
+      usedRecoveryCode?: boolean;
+    };
+  },
+  async secondFactorState() {
+    const { data } = await client.get('/auth/second-factor');
+    return data as {
+      enrolled: boolean;
+      enrolmentPending: boolean;
+      recoveryCodesRemaining: number;
+    };
+  },
+  async beginSecondFactor() {
+    const { data } = await client.post('/auth/second-factor/begin', {});
+    return data as { secret: string; uri: string };
+  },
+  async completeSecondFactor(code: string) {
+    const { data } = await client.post('/auth/second-factor/complete', { code });
+    return data as { recoveryCodes: string[] };
+  },
+  async removeSecondFactor(body: { code?: string; recoveryCode?: string }) {
+    await client.post('/auth/second-factor/remove', body);
   },
   async logout() {
     await client.post('/auth/logout', {}, { skipAuthRefresh: true, skipAuthRedirect: true });

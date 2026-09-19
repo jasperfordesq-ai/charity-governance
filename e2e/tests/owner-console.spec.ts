@@ -3,6 +3,7 @@
 
 import { test, expect, type Page } from '@playwright/test';
 import { uniqueEmail } from '../fixtures';
+import { fromBase32, totp } from '../../apps/api/src/utils/totp';
 import {
   createPlatformOperator,
   createVerifiedOwner,
@@ -206,4 +207,167 @@ test('a tenant session is not an operator session', async ({ page }) => {
 
   await page.goto('/owner/tenants');
   await expect(page).toHaveURL(/\/owner\/login/);
+});
+
+/**
+ * Concern: the second factor, from enrolment to a sign-in that needs it.
+ *
+ * The unit tests prove each piece against a stub. This proves the loop closes:
+ * a code generated from the secret the console handed out actually signs the
+ * operator in, against a real database and a real session.
+ */
+test.describe('Operator second factor', () => {
+  let factorEmail = '';
+  let factorCookies: Awaited<ReturnType<import('@playwright/test').BrowserContext['cookies']>> = [];
+  let enrolmentSecret = '';
+  let savedRecoveryCodes: string[] = [];
+
+  test.beforeAll(async ({ browser }) => {
+    // Its own operator: enrolling changes how that account signs in, and the
+    // tests above expect theirs to keep working on a password alone.
+    factorEmail = uniqueEmail('factor-operator');
+    await createPlatformOperator({
+      email: factorEmail,
+      name: 'Second Factor Operator',
+      password: OPERATOR_PASSWORD,
+    });
+
+    const context = await browser.newContext();
+    const page = await context.newPage();
+    await page.goto('/owner/login');
+    await page.getByLabel(/email/i).fill(factorEmail);
+    await page.getByRole('textbox', { name: /password/i }).fill(OPERATOR_PASSWORD);
+    await page.getByRole('button', { name: /sign in/i }).click();
+    await page.waitForURL('**/owner/tenants');
+    factorCookies = (await context.cookies()).filter((cookie) =>
+      cookie.name.startsWith('charitypilot_owner'),
+    );
+    await context.close();
+  });
+
+  async function useFactorConsole(page: Page): Promise<void> {
+    await page.context().addCookies(factorCookies);
+    await page.goto('/owner/security');
+  }
+
+  test('an account starts on a password alone', async ({ page }) => {
+    await useFactorConsole(page);
+
+    await expect(page.getByTestId('second-factor-status')).toContainText('Password only');
+  });
+
+  test('starting enrolment offers a secret that does not turn it on yet', async ({ page }) => {
+    await useFactorConsole(page);
+    await page.getByTestId('begin-second-factor').click();
+
+    await expect(page.getByTestId('enrolment')).toBeVisible();
+    const secret = await page.locator('span.font-mono').first().innerText();
+    enrolmentSecret = secret.trim();
+    expect(enrolmentSecret).toMatch(/^[A-Z2-7]{32}$/);
+
+    // Scanning is not enrolling: a setup scanned into the wrong application
+    // must not lock anybody out.
+    await expect(page.getByTestId('second-factor-status')).toContainText('Password only');
+  });
+
+  test('proving a code turns it on and hands back recovery codes', async ({ page }) => {
+    await useFactorConsole(page);
+    await page.getByTestId('begin-second-factor').click();
+    await expect(page.getByTestId('enrolment')).toBeVisible();
+    enrolmentSecret = (await page.locator('span.font-mono').first().innerText()).trim();
+
+    // HeroUI's Input does not forward data attributes to the element it
+    // renders, unlike its Chip and Button, so this one is found by its label.
+    await page
+      .getByRole('textbox', { name: /code from the application/i })
+      .fill(totp(fromBase32(enrolmentSecret)));
+    await page.getByTestId('confirm-second-factor').click();
+
+    await expect(page.getByTestId('recovery-codes')).toBeVisible();
+    savedRecoveryCodes = (await page.getByTestId('recovery-codes').locator('li').allInnerTexts())
+      .map((code) => code.trim());
+    expect(savedRecoveryCodes.length).toBe(10);
+
+    await expect(page.getByTestId('second-factor-status')).toContainText('Second factor on');
+  });
+
+  test('the password alone no longer signs that account in', async ({ page }) => {
+    await page.goto('/owner/login');
+    await page.getByLabel(/email/i).fill(factorEmail);
+    await page.getByRole('textbox', { name: /password/i }).fill(OPERATOR_PASSWORD);
+    await page.getByRole('button', { name: /sign in/i }).click();
+
+    await expect(page.getByTestId('second-factor')).toBeVisible();
+    await expect(page).toHaveURL(/\/owner\/login/);
+  });
+
+  test('a code generated from that secret signs in', async ({ page }) => {
+    await page.goto('/owner/login');
+    await page.getByLabel(/email/i).fill(factorEmail);
+    await page.getByRole('textbox', { name: /password/i }).fill(OPERATOR_PASSWORD);
+    await page.getByRole('button', { name: /sign in/i }).click();
+    await expect(page.getByTestId('second-factor')).toBeVisible();
+
+    await page
+      .getByRole('textbox', { name: /authentication code/i })
+      .fill(totp(fromBase32(enrolmentSecret)));
+    await page.getByRole('button', { name: /^sign in$/i }).click();
+
+    await page.waitForURL('**/owner/tenants');
+  });
+
+  test('a recovery code signs in once, and not twice', async ({ page }) => {
+    // Its own operator, enrolled in its own right. The sign-in route limits
+    // attempts per email address, and this test makes four on its own; sharing
+    // an account with the tests above spent that budget and left this one
+    // waiting on a redirect that was never coming.
+    const email = uniqueEmail('recovery-operator');
+    await createPlatformOperator({
+      email,
+      name: 'Recovery Operator',
+      password: OPERATOR_PASSWORD,
+    });
+
+    await page.goto('/owner/login');
+    await page.getByLabel(/email/i).fill(email);
+    await page.getByRole('textbox', { name: /password/i }).fill(OPERATOR_PASSWORD);
+    await page.getByRole('button', { name: /sign in/i }).click();
+    await page.waitForURL('**/owner/tenants');
+
+    await page.goto('/owner/security');
+    await page.getByTestId('begin-second-factor').click();
+    await expect(page.getByTestId('enrolment')).toBeVisible();
+    const secret = (await page.locator('span.font-mono').first().innerText()).trim();
+    await page
+      .getByRole('textbox', { name: /code from the application/i })
+      .fill(totp(fromBase32(secret)));
+    await page.getByTestId('confirm-second-factor').click();
+    await expect(page.getByTestId('recovery-codes')).toBeVisible();
+    const codes = (await page.getByTestId('recovery-codes').locator('li').allInnerTexts()).map(
+      (code) => code.trim(),
+    );
+    const code = codes[0]!;
+
+    async function attemptWithRecoveryCode(): Promise<void> {
+      await page.goto('/owner/login');
+      await page.getByLabel(/email/i).fill(email);
+      await page.getByRole('textbox', { name: /password/i }).fill(OPERATOR_PASSWORD);
+      await page.getByRole('button', { name: /sign in/i }).click();
+      await expect(page.getByTestId('second-factor')).toBeVisible();
+      await page.getByRole('button', { name: /lost my authenticator/i }).click();
+      await page.getByRole('textbox', { name: /recovery code/i }).fill(code);
+      await page.getByRole('button', { name: /^sign in$/i }).click();
+    }
+
+    await attemptWithRecoveryCode();
+    await page.waitForURL('**/owner/tenants');
+
+    // Signed out through the console rather than by clearing cookies, which
+    // aborts the navigation that follows it.
+    await page.getByRole('button', { name: /sign out/i }).click();
+    await page.waitForURL('**/owner/login');
+
+    await attemptWithRecoveryCode();
+    await expect(page, 'a spent recovery code buys nothing').toHaveURL(/\/owner\/login/);
+  });
 });

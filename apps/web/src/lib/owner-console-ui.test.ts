@@ -139,3 +139,49 @@ test('the console does not exist on a single-tenant deployment', () => {
   // console with no gate at all.
   assert.match(gate, /if \(!webTenancyIsMulti\(\)\) notFound\(\);/);
 });
+
+test('the second factor field appears only once the server asks for it', () => {
+  // Showing it to everybody asks most operators for something they do not
+  // have, and an empty box beside a password makes people think they have
+  // forgotten something.
+  const page = owner('login', 'page.tsx');
+
+  assert.match(page, /SECOND_FACTOR_REQUIRED/);
+  assert.match(page, /needsSecondFactor \? \(/);
+});
+
+test('an operator who lost their authenticator is offered the way back in', () => {
+  const page = owner('login', 'page.tsx');
+
+  assert.match(page, /I have lost my authenticator/);
+  assert.match(page, /recoveryCode/);
+});
+
+test('recovery codes are presented as shown once and never again', () => {
+  const page = owner('security', 'page.tsx');
+
+  assert.match(page, /Save these now\. They are not shown again\./);
+  assert.match(page, /Keep them somewhere other than the device generating your codes/);
+});
+
+test('enrolment requires proving a code, and says why', () => {
+  const page = owner('security', 'page.tsx');
+
+  assert.match(page, /scanning alone would leave you\s*\n?\s*locked out if the setup were wrong/);
+  assert.match(page, /completeSecondFactor/);
+});
+
+test('turning the second factor off requires a current code', () => {
+  const page = owner('security', 'page.tsx');
+
+  assert.match(page, /isDisabled=\{code\.trim\(\)\.length === 0\}/);
+  assert.match(page, /removeSecondFactor\(\{ code: code\.trim\(\) \}\)/);
+});
+
+test('the console never offers to remove another operator’s second factor', () => {
+  // That would be a way around the factor, not a way to support somebody who
+  // lost their phone.
+  const security = owner('security', 'page.tsx');
+
+  assert.doesNotMatch(security, /operatorId/);
+});
