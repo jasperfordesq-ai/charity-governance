@@ -1180,6 +1180,7 @@ test('refresh token replay revokes active sessions for the affected user', async
   let transactionCommitted = false;
   let revokedWhere: Record<string, unknown> | undefined;
   let revokedData: Record<string, unknown> | undefined;
+  let auditedReplay: Record<string, unknown> | undefined;
   const future = new Date(Date.now() + 60_000);
   const familyId = '00000000-0000-4000-8000-000000000021';
   const tx = {
@@ -1206,6 +1207,12 @@ test('refresh token replay revokes active sessions for the affected user', async
         throw new Error('replacement session should not be created for replayed refresh tokens');
       },
     },
+    securityAuditEvent: {
+      create: async ({ data }: { data: Record<string, unknown> }) => {
+        auditedReplay = data;
+        return { id: 'audit-1' };
+      },
+    },
   };
   const prisma = {
     $queryRaw: async () => [{
@@ -1229,6 +1236,13 @@ test('refresh token replay revokes active sessions for the affected user', async
   assert.equal(revokedWhere?.familyId, familyId);
   assert.equal(revokedWhere?.revokedAt, null);
   assert.equal(revokedData?.revocationReason, 'REFRESH_REUSE');
+
+  // The quarantine used to be silent, which made the one event most worth
+  // hearing about the one event nobody heard.
+  assert.equal(auditedReplay?.type, 'SESSION_REPLAY_DETECTED');
+  assert.equal(auditedReplay?.actorKind, 'SYSTEM', 'no human did this');
+  assert.equal(auditedReplay?.subjectUserId, 'user-1');
+  assert.equal(auditedReplay?.organisationId, 'org-1');
 });
 
 test('resetPassword consumes the reset token atomically before revoking sessions', async () => {

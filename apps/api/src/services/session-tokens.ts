@@ -373,6 +373,29 @@ export async function rotateSessionTokens(
           revocationReason: 'REFRESH_REUSE',
         },
       });
+
+      // A refresh token is single-use, so a second presentation means either a
+      // replay or a copy in somebody else's hands. Quarantining the family is
+      // the right response, but doing it silently meant the one event most
+      // worth hearing about was the one event nobody heard. The row goes in
+      // the same transaction as the quarantine, so there is no state where the
+      // family is dead and the reason is unrecorded.
+      await tx.securityAuditEvent.create({
+        data: {
+          organisationId: session.organisationId,
+          type: 'SESSION_REPLAY_DETECTED',
+          actorKind: 'SYSTEM',
+          // No human did this. The actor is the API noticing a token it had
+          // already retired being presented again.
+          actorLabel: 'CharityPilot session security',
+          subjectUserId: session.id,
+          subjectLabel: 'Session family quarantined after a replayed refresh token',
+          subjectSessionId: session.familyId,
+          reason: 'A refresh token was presented after it had already been used.',
+          context: { clientKind: session.clientKind, accessLevel: session.accessLevel },
+        },
+      });
+
       return { kind: 'replay' as const };
     }
 

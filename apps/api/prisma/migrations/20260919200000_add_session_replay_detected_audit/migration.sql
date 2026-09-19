@@ -1,0 +1,13 @@
+-- Presenting an already-used refresh token quarantines the whole session
+-- family, which is the right response: the token was single-use, so a second
+-- presentation means either a replay or a copy in someone else's hands.
+--
+-- Until now that quarantine was silent. No audit row, no email, nothing in the
+-- security timeline the owner can read. The one event most worth hearing about
+-- was the one event that said nothing.
+--
+-- ALTER TYPE ... ADD VALUE is permitted inside a transaction on PostgreSQL 12+
+-- provided the new value is not used in the same transaction; this migration
+-- only declares it. The CHECK constraint that admits it is widened by the
+-- migration that follows, which is why they are separate.
+ALTER TYPE "SecurityAuditEventType" ADD VALUE IF NOT EXISTS 'SESSION_REPLAY_DETECTED';
