@@ -23,9 +23,20 @@ personal-data gate open and closed, tenant isolation in both directions, and the
 roles. Two canaries in `scripts/mcp-live-canary.mjs` have been run and confirmed the
 suite goes red when the gate is broken.
 
-What remains unverified is the VM itself: nobody has yet run `connect` against
-`charitypilot.tailae0b07.ts.net` with the owner's own password over Tailscale, so the
-keychain path and the tailnet path are still unproven. The checklist for that is below.
+**The VM is verified too, as of 2026-09-19.** The owner ran `connect` against
+`charitypilot.tailae0b07.ts.net` over Tailscale and the connector answered as the owner of
+hOUR Timebank CLG. Against that live charity: 23 of the 24 argument-free tools returned real
+data, pagination reached the API (page two of the board register returns different trustees
+from page one), an undeclared argument was refused by name, and no withheld field reached
+the model through the closed gate. Opening the gate showed the five withheld board-member
+field names are genuinely present, so the closed-gate result was filtering rather than an
+empty column; no value from those fields was read.
+
+The one failure was `confluence_status`, a 404 because the deployed build predates the
+integrations routes. A deployment gap rather than a connector fault, and irrelevant while
+there is no Confluence tenant.
+
+The OS keychain path and the raw-mode password prompt are therefore both exercised for real.
 
 ## The first thing to do
 
