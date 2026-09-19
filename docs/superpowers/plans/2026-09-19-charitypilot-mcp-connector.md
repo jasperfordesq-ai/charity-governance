@@ -198,8 +198,17 @@ test('a registered secret is replaced wherever it appears', () => {
 });
 
 test('every occurrence is replaced, not just the first', () => {
-  registerSecret('tok_123');
-  assert.equal(redactSecrets('tok_123 and tok_123'), '[redacted] and [redacted]');
+  // Must be longer than the 8-character floor in registerSecret, or it is ignored.
+  registerSecret('tok_1234567890');
+  assert.equal(
+    redactSecrets('tok_1234567890 and tok_1234567890'),
+    '[redacted] and [redacted]',
+  );
+});
+
+test('the length floor is exactly 8: a 9-character secret registers', () => {
+  registerSecret('123456789');
+  assert.equal(redactSecrets('123456789'), '[redacted]');
 });
 
 test('bearer-looking values are redacted even when never registered', () => {
@@ -399,7 +408,7 @@ git commit -m "feat(mcp): keep the refresh token in the OS credential store"
 - Produces:
   - `class NotConnectedError extends Error` (`.code = 'NOT_CONNECTED'`)
   - `interface SessionIdentity { email: string; name: string; role: string; organisationId: string; organisationName: string }`
-  - `class Session` with `login(email, password): Promise<SessionIdentity>`, `accessToken(): Promise<string>`, `logout(): Promise<void>`, `identity(): SessionIdentity | null`
+  - `class Session` with `login(email, password): Promise<SessionIdentity>`, `accessToken(): Promise<string>`, `invalidateAccessToken(): void`, `logout(): Promise<void>`, `identity(): SessionIdentity | null`
   - `Session` constructor: `new Session(opts: { baseUrl: string; store: CredentialStore; fetchImpl?: typeof fetch })`
 
 - [ ] **Step 1: Write the failing test**
@@ -711,8 +720,8 @@ import { ApiClient, ApiError } from '../client.js';
 import { Session } from '../session.js';
 import { createMemoryStore } from '../credentials.js';
 
-function sessionReturning(token: string, fetchImpl: typeof fetch): Session {
-  const session = new Session({
+function sessionReturning(token: string): Session {
+  return new Session({
     baseUrl: 'https://example.test',
     store: createMemoryStore('r1'),
     fetchImpl: async () => {
@@ -722,13 +731,11 @@ function sessionReturning(token: string, fetchImpl: typeof fetch): Session {
       return new Response(JSON.stringify({ ok: true }), { status: 200, headers });
     },
   });
-  void fetchImpl;
-  return session;
 }
 
 test('get attaches the bearer token', async () => {
   let seenAuth: string | null = null;
-  const session = sessionReturning('access1', fetch);
+  const session = sessionReturning('access1');
   const client = new ApiClient({
     session,
     baseUrl: 'https://example.test',
@@ -747,7 +754,7 @@ test('get attaches the bearer token', async () => {
 });
 
 test('a 403 surfaces as ApiError with the status and no response body echoed', async () => {
-  const session = sessionReturning('access1', fetch);
+  const session = sessionReturning('access1');
   const client = new ApiClient({
     session,
     baseUrl: 'https://example.test',
@@ -766,7 +773,7 @@ test('a 403 surfaces as ApiError with the status and no response body echoed', a
 });
 
 test('a network failure is reported as a Tailscale hint', async () => {
-  const session = sessionReturning('access1', fetch);
+  const session = sessionReturning('access1');
   const client = new ApiClient({
     session,
     baseUrl: 'https://example.test',
@@ -780,7 +787,7 @@ test('a network failure is reported as a Tailscale hint', async () => {
 });
 
 test('error messages never contain a token value', async () => {
-  const session = sessionReturning('supersecrettoken123', fetch);
+  const session = sessionReturning('supersecrettoken123');
   const client = new ApiClient({
     session,
     baseUrl: 'https://example.test',
@@ -1068,24 +1075,55 @@ import { SAFE_FIELDS, WITHHELD_FIELDS, type ModelName } from '../field-policy.js
 const here = dirname(fileURLToPath(import.meta.url));
 const SCHEMA = resolve(here, '../../../apps/api/prisma/schema.prisma');
 
-function scalarFieldsOf(model: string, schema: string): string[] {
+function modelNames(schema: string): Set<string> {
+  return new Set([...schema.matchAll(/^model (\w+) \{$/gm)].map((m) => m[1]!));
+}
+
+/**
+ * Field names on a model that carry data: scalars and enums, excluding relations.
+ * Relations are excluded by name (the type is another model) and by `@relation`.
+ * Do NOT filter on a capitalised type — every Prisma scalar is capitalised
+ * (String, DateTime, Boolean, Int), so that filter matches everything and
+ * silently empties the list.
+ */
+function dataFieldsOf(model: string, schema: string): string[] {
+  const models = modelNames(schema);
   const match = new RegExp(`^model ${model} \\{$([\\s\\S]*?)^\\}$`, 'm').exec(schema);
   assert.ok(match, `model ${model} not found in schema.prisma`);
-  return match[1]!
+
+  const fields = match[1]!
     .split('\n')
     .map((line) => line.trim())
     .filter((line) => line && !line.startsWith('//') && !line.startsWith('@@'))
+    .filter((line) => !line.includes('@relation'))
     .map((line) => line.split(/\s+/))
-    .filter(([name, type]) => Boolean(name) && Boolean(type) && !/^[A-Z]/.test(type!))
-    .map(([name]) => name!);
+    .filter((parts) => parts.length >= 2)
+    .filter((parts) => !models.has(parts[1]!.replace(/[[\]?]/g, '')))
+    .map((parts) => parts[0]!);
+
+  assert.ok(
+    fields.length > 0,
+    `Parsed zero data fields from model ${model}. The parser is broken, not the schema — ` +
+      'a drift guard that extracts nothing passes unconditionally and protects nothing.',
+  );
+  return fields;
 }
 
-test('every scalar field on the gated models is classified as safe or withheld', () => {
+test('the parser really does see the fields it is meant to guard', () => {
+  const schema = readFileSync(SCHEMA, 'utf8');
+  const boardMember = dataFieldsOf('BoardMember', schema);
+  assert.ok(boardMember.includes('dateOfBirth'), 'must see the field it exists to catch');
+  assert.ok(boardMember.includes('residentialAddress'));
+  assert.ok(!boardMember.includes('organisation'), 'relations are not data fields');
+  assert.ok(!boardMember.includes('conflictRecords'), 'relation lists are not data fields');
+});
+
+test('every data field on the gated models is classified as safe or withheld', () => {
   const schema = readFileSync(SCHEMA, 'utf8');
   const unclassified: string[] = [];
 
   for (const model of Object.keys(SAFE_FIELDS) as ModelName[]) {
-    for (const field of scalarFieldsOf(model, schema)) {
+    for (const field of dataFieldsOf(model, schema)) {
       if (!SAFE_FIELDS[model].includes(field) && !WITHHELD_FIELDS[model].includes(field)) {
         unclassified.push(`${model}.${field}`);
       }
@@ -1286,14 +1324,19 @@ git commit -m "feat(mcp): define read-only tools that cannot be pointed at anoth
 
 ---
 
-### Task 9: CLI — connect, disconnect, status
+### Task 9: Configuration and argument parsing
+
+> **Note:** `cli.ts` deliberately lives in Task 10, not here. It imports `startServer`
+> from `./server.js`, which Task 10 creates, while `server.ts` imports `ConnectorConfig`
+> from this task's `config.ts`. Building `cli.ts` here would make the pair circular and
+> this task could not typecheck. Do not create `cli.ts` in this task.
 
 **Files:**
-- Create: `mcp/src/config.ts`, `mcp/src/cli.ts`, `mcp/src/tests/config.test.ts`
+- Create: `mcp/src/config.ts`, `mcp/src/tests/config.test.ts`
 
 **Interfaces:**
-- Consumes: `Session` (Task 4), `createKeyringStore` (Task 3)
-- Produces: `parseArgs(argv: string[]): { command: string; baseUrl: string; allowPersonalData: boolean }`
+- Consumes: nothing
+- Produces: `DEFAULT_BASE_URL: string`, `interface ConnectorConfig { command: string; baseUrl: string; allowPersonalData: boolean }`, `parseArgs(argv: string[]): ConnectorConfig`
 
 - [ ] **Step 1: Write the failing test**
 
@@ -1379,6 +1422,115 @@ export function parseArgs(argv: string[]): ConnectorConfig {
   }
 
   return { command, baseUrl, allowPersonalData };
+}
+```
+
+- [ ] **Step 4: Run the tests**
+
+```bash
+npm run test --prefix mcp
+```
+
+Expected: PASS, 6 config tests (plus all earlier tasks' tests).
+
+- [ ] **Step 5: Commit**
+
+```bash
+git add mcp/src/config.ts mcp/src/tests/config.test.ts
+git commit -m "feat(mcp): parse arguments with no way to turn TLS off"
+```
+
+---
+
+### Task 10: MCP server and CLI
+
+**Files:**
+- Create: `mcp/src/server.ts`, `mcp/src/cli.ts`, `mcp/src/tests/server.test.ts`
+
+**Interfaces:**
+- Consumes: `TOOLS`/`runTool` (Task 8), `ApiClient` (Task 5), `Session`/`SessionIdentity` (Task 4), `createKeyringStore` (Task 3), `ConnectorConfig`/`parseArgs` (Task 9), `CONNECTOR_VERSION` (Task 1), `redactSecrets` (Task 2)
+- Produces: `startServer(config: ConnectorConfig, session: Session): Promise<void>`, `buildToolList(): { name: string; description: string; inputSchema: object }[]`, the `charitypilot-mcp` executable at `dist/cli.js`
+
+- [ ] **Step 1: Write the failing test**
+
+`mcp/src/tests/server.test.ts`:
+
+```ts
+import { test } from 'node:test';
+import assert from 'node:assert/strict';
+import { buildToolList } from '../server.js';
+import { TOOLS } from '../tools.js';
+
+test('every defined tool is advertised', () => {
+  assert.equal(buildToolList().length, TOOLS.length);
+});
+
+test('advertised tools carry a name, description and input schema', () => {
+  for (const tool of buildToolList()) {
+    assert.ok(tool.name.length > 0);
+    assert.ok(tool.description.length > 0);
+    assert.ok(tool.inputSchema);
+  }
+});
+
+test('the board register description warns that personal data is withheld', () => {
+  const tool = buildToolList().find((t) => t.name === 'board_register');
+  assert.match(tool!.description, /--allow-personal-data/);
+});
+```
+
+- [ ] **Step 2: Run it to make sure it fails**
+
+Expected: FAIL — `Cannot find module '../server.js'`.
+
+- [ ] **Step 3: Implement the server**
+
+`mcp/src/server.ts`:
+
+```ts
+import { Server } from '@modelcontextprotocol/sdk/server/index.js';
+import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
+import {
+  CallToolRequestSchema,
+  ListToolsRequestSchema,
+} from '@modelcontextprotocol/sdk/types.js';
+import { TOOLS, runTool } from './tools.js';
+import { ApiClient } from './client.js';
+import type { Session } from './session.js';
+import type { ConnectorConfig } from './config.js';
+import { CONNECTOR_VERSION } from './version.js';
+import { redactSecrets } from './redact.js';
+
+export function buildToolList() {
+  return TOOLS.map(({ name, description, inputSchema }) => ({ name, description, inputSchema }));
+}
+
+export async function startServer(config: ConnectorConfig, session: Session): Promise<void> {
+  const client = new ApiClient({ session, baseUrl: config.baseUrl });
+  const server = new Server(
+    { name: 'charitypilot', version: CONNECTOR_VERSION },
+    { capabilities: { tools: {} } },
+  );
+
+  server.setRequestHandler(ListToolsRequestSchema, async () => ({ tools: buildToolList() }));
+
+  server.setRequestHandler(CallToolRequestSchema, async (request) => {
+    const tool = TOOLS.find((t) => t.name === request.params.name);
+    if (!tool) {
+      return { isError: true, content: [{ type: 'text', text: `Unknown tool: ${request.params.name}` }] };
+    }
+    try {
+      const result = await runTool(tool, client, config.allowPersonalData);
+      return { content: [{ type: 'text', text: JSON.stringify(result, null, 2) }] };
+    } catch (error) {
+      return {
+        isError: true,
+        content: [{ type: 'text', text: redactSecrets((error as Error).message) }],
+      };
+    }
+  });
+
+  await server.connect(new StdioServerTransport());
 }
 ```
 
@@ -1468,118 +1620,18 @@ main().catch((error: unknown) => {
 
 - [ ] **Step 5: Run the tests**
 
-Expected: PASS, 6 config tests. (`cli.ts` is exercised manually in Task 11.)
+```bash
+npm run test --prefix mcp
+```
+
+Expected: PASS, 3 server tests plus every earlier task's tests. `cli.ts` has no unit
+tests; it is exercised live in Task 11.
 
 - [ ] **Step 6: Commit**
 
 ```bash
-git add mcp/src/config.ts mcp/src/cli.ts mcp/src/tests/config.test.ts
-git commit -m "feat(mcp): connect, disconnect and status, with no way to turn TLS off"
-```
-
----
-
-### Task 10: MCP server wiring
-
-**Files:**
-- Create: `mcp/src/server.ts`, `mcp/src/tests/server.test.ts`
-
-**Interfaces:**
-- Consumes: `TOOLS`/`runTool` (Task 8), `ApiClient` (Task 5), `Session` (Task 4), `ConnectorConfig` (Task 9)
-- Produces: `startServer(config: ConnectorConfig, session: Session): Promise<void>`, `buildToolList(): { name: string; description: string; inputSchema: object }[]`
-
-- [ ] **Step 1: Write the failing test**
-
-`mcp/src/tests/server.test.ts`:
-
-```ts
-import { test } from 'node:test';
-import assert from 'node:assert/strict';
-import { buildToolList } from '../server.js';
-import { TOOLS } from '../tools.js';
-
-test('every defined tool is advertised', () => {
-  assert.equal(buildToolList().length, TOOLS.length);
-});
-
-test('advertised tools carry a name, description and input schema', () => {
-  for (const tool of buildToolList()) {
-    assert.ok(tool.name.length > 0);
-    assert.ok(tool.description.length > 0);
-    assert.ok(tool.inputSchema);
-  }
-});
-
-test('the board register description warns that personal data is withheld', () => {
-  const tool = buildToolList().find((t) => t.name === 'board_register');
-  assert.match(tool!.description, /--allow-personal-data/);
-});
-```
-
-- [ ] **Step 2: Run it to make sure it fails**
-
-Expected: FAIL — `Cannot find module '../server.js'`.
-
-- [ ] **Step 3: Implement**
-
-`mcp/src/server.ts`:
-
-```ts
-import { Server } from '@modelcontextprotocol/sdk/server/index.js';
-import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
-import {
-  CallToolRequestSchema,
-  ListToolsRequestSchema,
-} from '@modelcontextprotocol/sdk/types.js';
-import { TOOLS, runTool } from './tools.js';
-import { ApiClient } from './client.js';
-import type { Session } from './session.js';
-import type { ConnectorConfig } from './config.js';
-import { CONNECTOR_VERSION } from './version.js';
-import { redactSecrets } from './redact.js';
-
-export function buildToolList() {
-  return TOOLS.map(({ name, description, inputSchema }) => ({ name, description, inputSchema }));
-}
-
-export async function startServer(config: ConnectorConfig, session: Session): Promise<void> {
-  const client = new ApiClient({ session, baseUrl: config.baseUrl });
-  const server = new Server(
-    { name: 'charitypilot', version: CONNECTOR_VERSION },
-    { capabilities: { tools: {} } },
-  );
-
-  server.setRequestHandler(ListToolsRequestSchema, async () => ({ tools: buildToolList() }));
-
-  server.setRequestHandler(CallToolRequestSchema, async (request) => {
-    const tool = TOOLS.find((t) => t.name === request.params.name);
-    if (!tool) {
-      return { isError: true, content: [{ type: 'text', text: `Unknown tool: ${request.params.name}` }] };
-    }
-    try {
-      const result = await runTool(tool, client, config.allowPersonalData);
-      return { content: [{ type: 'text', text: JSON.stringify(result, null, 2) }] };
-    } catch (error) {
-      return {
-        isError: true,
-        content: [{ type: 'text', text: redactSecrets((error as Error).message) }],
-      };
-    }
-  });
-
-  await server.connect(new StdioServerTransport());
-}
-```
-
-- [ ] **Step 4: Run the tests**
-
-Expected: PASS, 3 tests.
-
-- [ ] **Step 5: Commit**
-
-```bash
-git add mcp/src/server.ts mcp/src/tests/server.test.ts
-git commit -m "feat(mcp): serve the read-only tools over stdio"
+git add mcp/src/server.ts mcp/src/cli.ts mcp/src/tests/server.test.ts
+git commit -m "feat(mcp): serve the read-only tools over stdio, with connect and disconnect"
 ```
 
 ---
