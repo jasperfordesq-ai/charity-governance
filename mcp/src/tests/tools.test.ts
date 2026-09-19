@@ -1,6 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { TOOLS, runTool } from '../tools.js';
+import { buildToolList } from '../server.js';
 import { ApiClient } from '../client.js';
 import { Session } from '../session.js';
 import { createMemoryStore } from '../credentials.js';
@@ -25,8 +26,10 @@ function clientReturning(payload: unknown): ApiClient {
   });
 }
 
-test('no tool input schema mentions organisationId', () => {
-  for (const tool of TOOLS) {
+test('no advertised input schema mentions organisationId', () => {
+  // Walks what clients are actually told they may send, which is generated,
+  // rather than a field on the registry literal that no longer exists.
+  for (const tool of buildToolList()) {
     const serialised = JSON.stringify(tool.inputSchema);
     assert.ok(
       !serialised.includes('organisationId'),

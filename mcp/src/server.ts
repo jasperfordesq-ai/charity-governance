@@ -5,6 +5,7 @@ import {
   ListToolsRequestSchema,
 } from '@modelcontextprotocol/sdk/types.js';
 import { TOOLS, runTool } from './tools.js';
+import { inputSchemaFor } from './tool-input.js';
 import { ApiClient } from './client.js';
 import type { Session } from './session.js';
 import type { ConnectorConfig } from './config.js';
@@ -12,7 +13,11 @@ import { CONNECTOR_VERSION } from './version.js';
 import { redactSecrets } from './redact.js';
 
 export function buildToolList() {
-  return TOOLS.map(({ name, description, inputSchema }) => ({ name, description, inputSchema }));
+  return TOOLS.map(({ name, description, params }) => ({
+    name,
+    description,
+    inputSchema: inputSchemaFor(params ?? []),
+  }));
 }
 
 export async function startServer(config: ConnectorConfig, session: Session): Promise<void> {
@@ -30,7 +35,8 @@ export async function startServer(config: ConnectorConfig, session: Session): Pr
       return { isError: true, content: [{ type: 'text', text: `Unknown tool: ${request.params.name}` }] };
     }
     try {
-      const result = await runTool(tool, client, config.allowPersonalData);
+      const args = (request.params.arguments ?? {}) as Record<string, unknown>;
+      const result = await runTool(tool, client, config.allowPersonalData, args);
       return { content: [{ type: 'text', text: JSON.stringify(result, null, 2) }] };
     } catch (error) {
       return {
