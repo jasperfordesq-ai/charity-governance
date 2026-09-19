@@ -2,7 +2,7 @@
 
 Paste everything below the line into a fresh session. It is written to stand alone.
 
-*Last updated 2026-09-19, after Phase 3 closed.*
+*Last updated 2026-09-19, after Phase 5 closed.*
 
 ---
 
@@ -21,7 +21,7 @@ can unblock. Do not stop to ask whether to continue.
 1. `docs/superpowers/plans/2026-09-18-document-storage-providers-spec.md` — the spec. **Read its
    "Open questions for the owner" section before anything else: Question 1 has been answered, and
    answered against the architecture the rest of the spec argues from.** See Blockers below.
-2. `docs/superpowers/plans/2026-09-18-provider-aware-erasure-phase-5.md` — the phase in flight.
+2. `docs/superpowers/plans/2026-09-18-provider-aware-erasure-phase-5.md` — the phase just completed; its **Facts verified against Atlassian** table and the **explicit unknown** beneath it both matter.
 3. `docs/ARCHITECTURE.md`, section "Integration credentials: the envelope, the boundary, and
    rotation" — the security model, the error taxonomy, and a documented trap in the not-yet-written
    rotation job.
@@ -39,11 +39,16 @@ directory is gitignored scratch — if it is missing, recover from `git log`, wh
 | 2 | OAuth connection lifecycle | **Complete**, reviewed, fix round applied |
 | 3 | Confluence API client (v1/v2 hybrid) | **Complete.** Five tasks, whole-branch review passed with nothing Critical, fix round applied, scoped re-review clean |
 | 4 | Publish pipeline | **Blocked twice over** — see Blockers |
-| 5 | Provider-aware erasure | **Planned in detail; execution started** |
-| 6 | Admin UI and per-tenant integration health | Not planned |
+| 5 | Provider-aware erasure | **Complete.** Seven tasks, whole-phase review, fix round, clean re-review |
+| 6 | Admin UI and per-tenant integration health | **Next.** Not planned |
 
-Suite at last measurement: `apps/api` **1337 pass / 0 fail**, real-PostgreSQL migration suite
-**4 pass / 0 fail**. Always report against the current figure, not this one.
+Suite at last measurement: `apps/api` **1453 pass / 0 fail**, real-PostgreSQL migration suite
+**4 pass / 0 fail**, `test:production-check` **1064 pass / 0 fail / 2 skipped**. Always report
+against the current figure, not this one.
+
+**Everything Confluence-side is proven against fakes.** No call has ever been made to a real site.
+A fake cannot tell you Atlassian changed a status code, and every fake in this suite was written to
+the behaviour we assumed.
 
 ## How to work
 
@@ -79,6 +84,14 @@ distinction is what proved two Phase 3 guards had zero coverage rather than weak
   defects reading could not.
 - **Watch for correct-but-unpinned code.** It has appeared **eight** times in this project: work
   that is right, but where deleting the protection leaves every test green.
+- **Mutate each ANDed sub-condition independently, never the enclosing statement.** A compound
+  mutation can go red *for the wrong reason*, which is indistinguishable from coverage. Likewise
+  mutate each call site separately — removing six guards at once cannot tell "every site guarded"
+  from "at least one guarded". Both produced real false-coverage claims in Phase 5.
+- **Build every mutation baseline from a pristine source** (`git archive HEAD` into a new
+  directory). A reused scratchpad has already produced a wrong failure count.
+- **An implementer's self-reported mutation table is a claim, not evidence.** One reported full
+  coverage and "no concerns" and was wrong on both counts. Re-run the table.
 
 ## Standing constraints
 
