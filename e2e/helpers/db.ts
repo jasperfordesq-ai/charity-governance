@@ -378,13 +378,14 @@ export async function createVerifiedMember(data: {
   email: string;
   name: string;
   organisationId: string;
+  password?: string;
 }): Promise<{
   userId: string;
   organisationId: string;
   role: "MEMBER";
 }> {
   const normalizedEmail = data.email.trim().toLowerCase();
-  const passwordHash = await bcrypt.hash(randomToken(32), 12);
+  const passwordHash = await bcrypt.hash(data.password ?? randomToken(32), 12);
   const userId = testId("usr");
   const now = new Date();
 
@@ -437,13 +438,14 @@ export async function createVerifiedAdmin(data: {
   email: string;
   name: string;
   organisationId: string;
+  password?: string;
 }): Promise<{
   userId: string;
   organisationId: string;
   role: "ADMIN";
 }> {
   const normalizedEmail = data.email.trim().toLowerCase();
-  const passwordHash = await bcrypt.hash(randomToken(32), 12);
+  const passwordHash = await bcrypt.hash(data.password ?? randomToken(32), 12);
   const userId = testId("usr");
   const now = new Date();
 
