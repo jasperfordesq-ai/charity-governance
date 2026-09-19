@@ -190,6 +190,58 @@ export class Session {
     this.#accessToken = null;
   }
 
+  /**
+   * Grants one pending approval, with the password of the person at the
+   * keyboard.
+   *
+   * Uses the session's own access token rather than signing in again: the
+   * person approving is the person already connected, and minting a second
+   * session to approve an action in the first would be a new credential for no
+   * reason.
+   */
+  async approve(
+    approvalId: string,
+    password: string,
+  ): Promise<{ summary: string | null; expiresAt: string | null }> {
+    const accessToken = await this.accessToken();
+    const response = await this.#fetch(
+      `${this.#baseUrl}/api/v1/auth/connector/approve`,
+      {
+        method: 'POST',
+        headers: {
+          'content-type': 'application/json',
+          authorization: `Bearer ${accessToken}`,
+          [CLIENT_HEADER]: `mcp-connector/${CONNECTOR_VERSION}`,
+        },
+        body: JSON.stringify({ approvalId, password }),
+      },
+    );
+
+    if (!response.ok) {
+      if (response.status === 429) {
+        throw new Error(
+          'Too many approval attempts. Wait a minute and try again; the password was '
+            + 'not checked, so nothing is wrong with it.',
+        );
+      }
+      // The API answers every failure identically on purpose, so that a caller
+      // cannot learn which of the conditions was the one that failed.
+      throw new Error(
+        'That approval could not be granted. Check the password, and that the '
+          + 'identifier is the one just printed and has not expired.',
+      );
+    }
+
+    const payload = (await response.json()) as {
+      summary?: string | null;
+      expiresAt?: string | null;
+    };
+    return {
+      summary: payload.summary ?? null,
+      expiresAt: payload.expiresAt ?? null,
+    };
+  }
+
   async logout(): Promise<void> {
     // A store bound to another origin throws rather than answering, and the
     // advice it gives is to disconnect. If disconnect were the one command that

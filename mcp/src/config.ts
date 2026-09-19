@@ -1,6 +1,6 @@
 export const DEFAULT_BASE_URL = 'https://charitypilot.tailae0b07.ts.net';
 
-const COMMANDS = new Set(['serve', 'connect', 'disconnect', 'status']);
+const COMMANDS = new Set(['serve', 'connect', 'disconnect', 'status', 'approve']);
 
 /**
  * Hosts that cannot leave this machine. The check is on the parsed URL's
@@ -31,6 +31,8 @@ export interface ConnectorConfig {
   accessLevel: AccessLevel;
   email?: string | undefined;
   passwordStdin: boolean;
+  /** The approval to grant. Only meaningful for the approve command. */
+  approvalId?: string | undefined;
 }
 
 function hostnameOf(baseUrl: string): string | null {
@@ -49,6 +51,7 @@ export function parseArgs(argv: string[]): ConnectorConfig {
   let email: string | undefined;
   let passwordStdin = false;
   let accessLevel: AccessLevel | undefined;
+  let approvalId: string | undefined;
 
   for (let i = 0; i < argv.length; i += 1) {
     const arg = argv[i]!;
@@ -86,6 +89,9 @@ export function parseArgs(argv: string[]): ConnectorConfig {
       accessLevel = value as AccessLevel;
     } else if (arg === '--password-stdin') {
       passwordStdin = true;
+    } else if (command === 'approve' && !arg.startsWith('-') && approvalId === undefined) {
+      // `approve <id>`: a bare value, the way the refusal message prints it.
+      approvalId = arg;
     } else {
       throw new Error(`Unknown option: ${arg}`);
     }
@@ -118,6 +124,7 @@ export function parseArgs(argv: string[]): ConnectorConfig {
     // there is full authority. Anywhere else the default withholds the
     // destructive actions until someone asks for them by name.
     accessLevel: accessLevel ?? (profile === 'local' ? 'admin' : 'write'),
+    approvalId,
     email,
     passwordStdin,
   };

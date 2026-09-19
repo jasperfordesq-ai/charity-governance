@@ -3,7 +3,11 @@ import { createInterface } from 'node:readline/promises';
 import { stdin, stdout, stderr, argv, exit } from 'node:process';
 import { parseArgs } from './config.js';
 import { chooseCredentialStore, bindCredentialToOrigin } from './credentials.js';
-import { readPasswordFromStdin, assertNonInteractiveConnectAllowed } from './connect-input.js';
+import {
+  readPasswordFromStdin,
+  assertNonInteractiveConnectAllowed,
+  assertApproveAllowed,
+} from './connect-input.js';
 import { Session } from './session.js';
 import { startServer } from './server.js';
 import { ApiClient } from './client.js';
@@ -78,6 +82,22 @@ async function main(): Promise<void> {
       `Organisation: ${identity.organisationName}\n` +
       `Access level: ${config.accessLevel.toUpperCase()}\n` +
       `Personal data: ${config.allowPersonalData ? 'ALLOWED' : 'withheld (default)'}\n`,
+    );
+    return;
+  }
+
+  if (config.command === 'approve') {
+    assertApproveAllowed(config, stdin.isTTY === true);
+    // The target is printed before the password, as connect does: an approval
+    // sent to the wrong host is a password sent to the wrong host.
+    stdout.write(`Target: ${config.baseUrl}\n`);
+    stdout.write(`Approving: ${config.approvalId}\n`);
+    const password = await prompt('Password (not shown): ', true);
+    const outcome = await session.approve(config.approvalId!, password);
+    stdout.write(
+      `Approved: ${outcome.summary ?? config.approvalId}\n`
+        + 'Ask the assistant to try the action again. The approval covers that one '
+        + 'action and nothing else.\n',
     );
     return;
   }

@@ -45,3 +45,37 @@ export function assertNonInteractiveConnectAllowed(
     );
   }
 }
+
+/**
+ * Approving is the one thing in this connector that only a person can do.
+ *
+ * The whole value of per-action approval is that the agent which asked for the
+ * action cannot also grant it. An agent can spawn a process and write to its
+ * standard input; it cannot type at a terminal. Requiring one is what keeps the
+ * two apart, so this refuses a pipe even on the local profile, where the
+ * password prompt itself is otherwise relaxed.
+ */
+export function assertApproveAllowed(
+  config: { approvalId?: string | undefined; passwordStdin: boolean },
+  isTty: boolean,
+): void {
+  if (!config.approvalId) {
+    throw new Error(
+      'approve needs the identifier CharityPilot printed when it refused the action. '
+        + 'Run: charitypilot-mcp approve <id>',
+    );
+  }
+  if (config.passwordStdin) {
+    throw new Error(
+      'approve does not accept a piped password. The point of approving is that a '
+        + 'person does it, so the password is typed at a terminal.',
+    );
+  }
+  if (!isTty) {
+    throw new Error(
+      'approve must be run at a terminal, by the person whose account this is. '
+        + 'It refuses to run from a script or an agent, because an agent that could '
+        + 'approve its own actions would make the approval meaningless.',
+    );
+  }
+}
