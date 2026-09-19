@@ -48,6 +48,15 @@ jobs:
       - name: Install isolated E2E harness dependencies
         run: npm ci --prefix e2e
 
+      - name: Install MCP connector dependencies
+        run: npm ci --prefix mcp
+
+      - name: Typecheck MCP connector
+        run: npm run typecheck --prefix mcp
+
+      - name: Test MCP connector
+        run: npm run test --prefix mcp
+
       - name: Verify isolated E2E orchestration contract
         run: npm run test:e2e:contract
 
