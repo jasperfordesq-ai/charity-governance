@@ -1,5 +1,6 @@
 import type { ReactNode } from 'react';
 import { OwnerSignOutButton } from './owner-sign-out-button';
+import { OwnerIdentity } from './owner-identity';
 
 // Deliberately NOT the tenant dashboard shell: no compliance nav, no
 // organisation context, and a distinct bar so the operating context is
@@ -11,7 +12,10 @@ export default function OwnerLayout({ children }: { children: ReactNode }) {
         <span className="text-sm font-semibold uppercase tracking-wide text-amber-400">
           CharityPilot platform console
         </span>
-        <OwnerSignOutButton />
+        <div className="flex items-center gap-4">
+          <OwnerIdentity />
+          <OwnerSignOutButton />
+        </div>
       </header>
       <main className="mx-auto w-full max-w-6xl px-6 py-8">{children}</main>
     </div>

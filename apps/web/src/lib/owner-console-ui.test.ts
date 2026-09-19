@@ -103,3 +103,24 @@ test('the console never offers to delete a tenant outright', () => {
     assert.doesNotMatch(file, /client\.delete\(/);
   }
 });
+
+test('the console says whose account is acting', () => {
+  // Every action here is recorded against a name in somebody else's audit
+  // trail, so the operator should be able to see which name that is. The
+  // endpoint has existed since the console shipped with nothing calling it.
+  const layout = readFileSync(join(WEB, 'src', 'app', '(owner)', 'layout.tsx'), 'utf8');
+  const identity = readFileSync(join(WEB, 'src', 'app', '(owner)', 'owner-identity.tsx'), 'utf8');
+
+  assert.match(layout, /<OwnerIdentity \/>/);
+  assert.match(identity, /ownerApi\s*\n?\s*\.me\(\)/);
+  assert.match(identity, /Signed in as/);
+});
+
+test('the identity is not requested on the pages that have no session', () => {
+  // Asking there produces a 401 the client would try to refresh and then
+  // redirect on, throwing somebody off the page they are signing in from.
+  const identity = readFileSync(join(WEB, 'src', 'app', '(owner)', 'owner-identity.tsx'), 'utf8');
+
+  assert.match(identity, /pathname === '\/owner\/login'/);
+  assert.match(identity, /pathname === '\/owner\/set-password'/);
+});
