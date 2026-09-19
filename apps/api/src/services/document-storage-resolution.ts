@@ -80,14 +80,34 @@ export type ResolveProviderOptions = {
    * `'write'` so any unqualified call keeps the strict, pre-existing
    * behaviour.
    *
-   * The production local-provider gate
-   * (`assertProviderPermittedByDeployment`) only applies to `'write'`: it
-   * exists to stop a production deployment writing bytes to an unvalidated,
-   * ephemeral, un-backed-up local path. Once bytes exist, refusing to read
-   * or delete them strands them — strictly worse than allowing the access —
-   * and for delete it breaks the provable-erasure guarantee the
-   * document-deletion pipeline (retry, dead-letter, recovery ledger) exists
-   * to uphold. So `'read'` and `'delete'` skip the gate.
+   * **Every write-side guard is skipped for `'read'` and `'delete'`** — the
+   * production local-provider gate (`assertProviderPermittedByDeployment`)
+   * *and* the registry's unknown/alpha checks (`assertSelectable`). They all
+   * answer the same question — "may this deployment *choose* this provider
+   * today?" — which is the wrong question to ask of bytes that already exist.
+   *
+   * Refusing to read or delete existing bytes strands them, and for delete it
+   * breaks the provable-erasure guarantee the document-deletion pipeline
+   * (retry, dead-letter, recovery ledger) exists to uphold. Concretely: an
+   * organisation recorded as an alpha provider it has not opted into, or as a
+   * provider id the registry no longer knows, would otherwise throw before a
+   * deletion row could even be enqueued — the document could not be deleted at
+   * all. A recorded, alerted erasure failure is strictly better than a document
+   * that silently cannot be erased.
+   *
+   * An unrecognised id is therefore returned verbatim, so the erasure pipeline
+   * can stamp it, fail on it visibly and surface it to an operator.
+   *
+   * **This must never become "fall back to the deployment default".** That
+   * would stamp `supabase` on a row whose bytes live elsewhere; the Supabase
+   * eraser would run against a path that was never there, find nothing, report
+   * success, and the pipeline would record a *successful erasure of something
+   * never erased*. A false erasure proof is worse than a failed erasure, and
+   * this pipeline exists to make erasure provable.
+   *
+   * The byte-level backstop lives in `StorageService`: `downloadFile` and
+   * `deleteFile` dispatch explicitly and refuse a provider they cannot serve,
+   * rather than treating "not local" as "Supabase".
    */
   operation?: 'read' | 'write' | 'delete';
 };
@@ -105,9 +125,15 @@ export async function resolveProviderForOrganisation(
   const selection = await resolver(organisationId);
   if (!selection.provider) return envDefaultProviderId(registry);
 
+  // Reading and erasing existing bytes ask "where are they?", not "may this be
+  // chosen?" — so neither the registry checks nor the deployment veto apply.
+  // See ResolveProviderOptions.operation for why, and for why this must never
+  // become a fallback to the deployment default.
+  if (operation !== 'write') return selection.provider;
+
   const provider = registry.assertSelectable(selection.provider, { alphaOptIn: selection.alphaOptIn });
 
-  return operation === 'write' ? assertProviderPermittedByDeployment(provider, registry) : provider;
+  return assertProviderPermittedByDeployment(provider, registry);
 }
 
 type OrganisationStorageDelegate = {

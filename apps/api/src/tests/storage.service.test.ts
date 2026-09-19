@@ -524,3 +524,77 @@ test('deleteFile still erases an existing local document in production for an or
     await assert.rejects(() => readFile(filePath));
   });
 });
+
+// ---------------------------------------------------------------------------
+// The byte-level backstop for the widened read/delete exemption.
+//
+// `read` and `delete` now resolve a provider without the registry's unknown and
+// alpha checks, so that bytes which already exist stay readable and erasable.
+// That is only safe while this service refuses to guess: treating "not local"
+// as "Supabase" would send a Confluence-backed erasure to the Supabase bucket,
+// where removing an object that was never there reports success — recording a
+// successful erasure of something never erased.
+// ---------------------------------------------------------------------------
+
+const unservableProviderResolvers: Array<[string, OrganisationStorageResolver]> = [
+  ['an alpha provider this service has no backend for', async () => ({ provider: 'confluence', alphaOptIn: true })],
+  ['a provider id nobody registered', async () => ({ provider: 'legacy-s3', alphaOptIn: false })],
+];
+
+for (const [label, resolver] of unservableProviderResolvers) {
+  test(`deleteFile refuses ${label} instead of silently erasing nothing in Supabase`, async () => {
+    const service = new StorageService(resolver);
+
+    await assert.rejects(
+      () => service.deleteFile('org-x', 'org-x/policy.pdf'),
+      (error: unknown) => {
+        assert.equal(error instanceof AppError, true);
+        const appError = error as AppError;
+        assert.equal(appError.statusCode, 500);
+        assert.equal(
+          appError.code,
+          'STORAGE_DELETE_PROVIDER_UNSUPPORTED',
+          'a delete this service cannot perform must fail loudly; reporting success would be a false erasure proof',
+        );
+        assert.equal(appError.message, STORAGE_OPERATION_FAILED_MESSAGE);
+        return true;
+      },
+    );
+  });
+
+  test(`downloadFile refuses ${label} rather than reading from the wrong backend`, async () => {
+    const service = new StorageService(resolver);
+
+    await assert.rejects(
+      () => service.downloadFile('org-x', 'org-x/policy.pdf'),
+      (error: unknown) => {
+        assert.equal(error instanceof AppError, true);
+        const appError = error as AppError;
+        assert.equal(
+          appError.code,
+          'STORAGE_DOWNLOAD_PROVIDER_UNSUPPORTED',
+          'the catch-all must not disguise this as a generic download failure',
+        );
+        return true;
+      },
+    );
+  });
+
+  test(`uploadFile still refuses ${label} at selection time, unchanged by the erasure exemption`, async () => {
+    const service = new StorageService(resolver);
+
+    await assert.rejects(
+      () => service.uploadFile('org-x', 'f.pdf', Buffer.from('x'), 'application/pdf'),
+      (error: unknown) => {
+        assert.equal(error instanceof AppError, true);
+        const appError = error as AppError;
+        assert.ok(
+          ['STORAGE_PROVIDER_UNKNOWN', 'STORAGE_PROVIDER_ALPHA_NOT_ENABLED'].includes(appError.code),
+          `writes must keep refusing a provider they cannot serve; got ${appError.code}`,
+        );
+        return true;
+      },
+    );
+  });
+}
+

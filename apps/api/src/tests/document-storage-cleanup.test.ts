@@ -419,3 +419,20 @@ test('an organisation with no recorded provider falls back to the deployment def
     else process.env.DOCUMENT_STORAGE_DRIVER = previous;
   }
 });
+
+test('a document whose organisation names an unerasable provider can still be deleted', async () => {
+  // The reviewer's reproduction. An organisation recorded as a provider the
+  // registry does not know, or as an alpha provider it never opted into, must
+  // not make its documents undeletable: the enqueue has to succeed and stamp
+  // the provider verbatim, so the erasure pipeline fails visibly on it and an
+  // operator sees it. Throwing here instead would strand the bytes with nothing
+  // recorded anywhere.
+  for (const provider of ['legacy-s3', 'confluence']) {
+    const data = await enqueuedDeletionData({
+      documentStorageProvider: provider,
+      documentStorageAlphaOptIn: false,
+    });
+    assert.equal(data.provider, provider);
+  }
+});
+

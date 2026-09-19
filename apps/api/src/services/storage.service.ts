@@ -13,6 +13,7 @@ import {
 const STORAGE_UNAVAILABLE_MESSAGE = 'Document storage is temporarily unavailable. Please contact support.';
 const STORAGE_OPERATION_FAILED_MESSAGE = 'Document storage operation failed. Please try again later.';
 const LOCAL_STORAGE_DRIVER = 'local';
+const SUPABASE_STORAGE_DRIVER = 'supabase';
 const DEFAULT_LOCAL_STORAGE_DIR = '.charitypilot-local-storage/documents';
 const MAX_DOCUMENT_DOWNLOAD_BYTES = 10 * 1024 * 1024;
 const DEFAULT_STORAGE_DOWNLOAD_TIMEOUT_MS = 10_000;
@@ -165,6 +166,29 @@ export class StorageService {
     }
   }
 
+  /**
+   * The bytes this service can actually act on.
+   *
+   * `read` and `delete` resolve a provider without the registry's unknown and
+   * alpha checks, deliberately: bytes that already exist must stay readable and
+   * erasable even if the deployment would refuse to *choose* that provider
+   * today (see `ResolveProviderOptions.operation`). That exemption is only safe
+   * while this service refuses to guess. Treating "not local" as "Supabase"
+   * would send a Confluence-backed organisation's erasure to the Supabase
+   * bucket, where removing an object that was never there reports success — and
+   * the deletion pipeline would record a *successful erasure of something never
+   * erased*. A false erasure proof is worse than a failed erasure.
+   *
+   * So anything this service has no backend for fails loudly. The deletion
+   * pipeline records the failure, retries it, dead-letters it and alerts an
+   * operator; a provider-aware dispatcher routes such rows away from here
+   * before they ever reach this guard.
+   */
+  private assertProviderServable(provider: string, code: string): void {
+    if (provider === LOCAL_STORAGE_DRIVER || provider === SUPABASE_STORAGE_DRIVER) return;
+    throw new AppError(500, code, STORAGE_OPERATION_FAILED_MESSAGE);
+  }
+
   assertLocalStorageEnabled(): void {
     if (!isLocalStorageDriver()) {
       throw new AppError(503, 'STORAGE_NOT_CONFIGURED', STORAGE_UNAVAILABLE_MESSAGE);
@@ -271,9 +295,13 @@ export class StorageService {
   async downloadFile(organisationId: string, storagePath: string): Promise<Buffer> {
     const guardedPath = assertOrganisationStoragePath(organisationId, storagePath);
 
-    if ((await this.providerFor(organisationId, 'read')) === LOCAL_STORAGE_DRIVER) {
+    const readProvider = await this.providerFor(organisationId, 'read');
+    if (readProvider === LOCAL_STORAGE_DRIVER) {
       return this.readLocalResolved(guardedPath);
     }
+    // Before the try: the catch below rewrites everything it does not
+    // recognise into STORAGE_DOWNLOAD_FAILED, which would disguise this.
+    this.assertProviderServable(readProvider, 'STORAGE_DOWNLOAD_PROVIDER_UNSUPPORTED');
 
     const timeoutMs = downloadTimeoutMs();
     try {
@@ -324,6 +352,8 @@ export class StorageService {
       }
       return;
     }
+
+    this.assertProviderServable(provider, 'STORAGE_DELETE_PROVIDER_UNSUPPORTED');
 
     const timeoutMs = storageDeleteTimeoutMs();
     const { error } = await withOperationTimeout(

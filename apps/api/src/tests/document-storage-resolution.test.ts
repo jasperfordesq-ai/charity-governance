@@ -88,6 +88,76 @@ test('an organisation that has opted in may select an alpha provider', async () 
   assert.equal(await resolveProviderForOrganisation('org-a', resolver, registry), 'confluence');
 });
 
+// ---------------------------------------------------------------------------
+// Bytes that already exist must stay erasable and readable, whatever the
+// deployment would permit an organisation to *choose* today. Both directions
+// are pinned: the exemption must cover erasure and read, and must not leak into
+// selection or upload.
+// ---------------------------------------------------------------------------
+
+const notOptedInAlphaResolver: OrganisationStorageResolver = async () => ({
+  provider: 'confluence',
+  alphaOptIn: false,
+});
+const unknownProviderResolver: OrganisationStorageResolver = async () => ({
+  provider: 'legacy-s3',
+  alphaOptIn: false,
+});
+
+test('an alpha provider the organisation never opted into still resolves for erasure and read', async () => {
+  for (const operation of ['delete', 'read'] as const) {
+    assert.equal(
+      await resolveProviderForOrganisation('org-a', notOptedInAlphaResolver, registry, { operation }),
+      'confluence',
+      `a document stored in an alpha provider must remain ${operation}-able; refusing strands the bytes`,
+    );
+  }
+});
+
+test('an unknown provider id still resolves for erasure and read, verbatim', async () => {
+  for (const operation of ['delete', 'read'] as const) {
+    assert.equal(
+      await resolveProviderForOrganisation('org-a', unknownProviderResolver, registry, { operation }),
+      'legacy-s3',
+      'an unrecognised id must be returned as-is so erasure can stamp it and fail on it visibly',
+    );
+  }
+});
+
+test('the erasure exemption never substitutes the deployment default for an unresolvable provider', async () => {
+  // The dangerous near-miss: falling back to 'supabase' here would stamp a row
+  // whose bytes are elsewhere, the Supabase eraser would find nothing, report
+  // success, and the pipeline would record an erasure that never happened.
+  await withDriver('local', async () => {
+    assert.notEqual(
+      await resolveProviderForOrganisation('org-a', unknownProviderResolver, registry, { operation: 'delete' }),
+      'local',
+    );
+    assert.notEqual(
+      await resolveProviderForOrganisation('org-a', notOptedInAlphaResolver, registry, { operation: 'delete' }),
+      'local',
+    );
+  });
+});
+
+test('selecting or writing still refuses an alpha-not-enabled provider and an unknown provider', async () => {
+  for (const resolver of [notOptedInAlphaResolver, unknownProviderResolver]) {
+    for (const options of [undefined, { operation: 'write' } as const]) {
+      await assert.rejects(
+        () => resolveProviderForOrganisation('org-a', resolver, registry, options),
+        (err) => {
+          assert.equal(err instanceof AppError, true);
+          assert.ok(
+            ['STORAGE_PROVIDER_ALPHA_NOT_ENABLED', 'STORAGE_PROVIDER_UNKNOWN'].includes((err as AppError).code),
+            `the write path must keep refusing; got ${(err as AppError).code}`,
+          );
+          return true;
+        },
+      );
+    }
+  }
+});
+
 import { createPrismaOrganisationStorageResolver } from '../services/document-storage-resolution.js';
 
 type FindUniqueArgs = { where: { id: string }; select: Record<string, boolean> };
