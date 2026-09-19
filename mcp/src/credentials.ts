@@ -20,13 +20,28 @@ export function createKeyringStore(): CredentialStore {
       }
     },
     write(token: string) {
+      // A failed write means the session did not persist. Swallowing the error
+      // would report a sign-in that silently will not survive, masking the problem.
       entry.setPassword(token);
     },
     clear() {
       try {
         entry.deletePassword();
       } catch {
-        // Already absent. Clearing is idempotent by contract.
+        // No portable way to distinguish "already absent" from a real failure,
+        // so the read-back below decides rather than the error type.
+      }
+      let remaining: string | null = null;
+      try {
+        remaining = entry.getPassword() ?? null;
+      } catch {
+        // If the entry cannot be read back it cannot be served to anyone either.
+        return;
+      }
+      if (remaining !== null) {
+        throw new Error(
+          'Failed to clear the stored credential: it is still present in the OS credential store.',
+        );
       }
     },
   };
