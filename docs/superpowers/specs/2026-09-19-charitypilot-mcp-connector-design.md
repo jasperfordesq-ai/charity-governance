@@ -8,7 +8,7 @@ questions of it directly — "what is outstanding before the next board review",
 "which standards have no evidence", "when is the annual return due" — without
 learning where each screen lives.
 
-This design adds **`apps/mcp`**: a stdio MCP server that each person runs on
+This design adds **`mcp/`**: a stdio MCP server that each person runs on
 their own machine, which answers those questions by calling the existing
 `/api/v1` routes as that person.
 
@@ -45,9 +45,24 @@ Three questions were put to the owner during brainstorming; these are the answer
 
 ## Architecture
 
-A new npm workspace `apps/mcp` (workspaces are already `packages/*` and
-`apps/*`), ESM, matching the repo's existing TypeScript + `tsc` + `node --test`
+A new package at **`mcp/` in the repository root** — deliberately *outside* the
+npm workspace globs — ESM, matching the repo's TypeScript + `tsc` + `node --test`
 conventions.
+
+### Why not `apps/mcp`
+
+`apps/api/Dockerfile` copies the root `package-lock.json` together with exactly
+three workspace manifests (`apps/api`, `apps/web`, `packages/shared`) and then
+runs `npm ci`. Workspaces are `["packages/*","apps/*"]`, so a package at
+`apps/mcp` would enter the root lockfile while the Docker build never copied its
+`package.json` — `npm ci` would fail, and **blue-green deploys on the VM would
+break because of a component that never runs there.** It would also pull a
+native keychain dependency into the API image for no reason.
+
+`e2e/` already solves this: a repo-resident package outside the workspace globs,
+installed separately (`npm ci --prefix e2e`, `.github/workflows/ci.yml:49`).
+`mcp/` follows that precedent exactly. The root lockfile, both Dockerfiles and
+the entire deploy path stay untouched.
 
 ```
 Each person's machine                        The Hyper-V VM
@@ -72,6 +87,20 @@ add a listening service to the host holding real governance records, require its
 own authentication layer distinct from the API's, and blur attribution unless
 every call carried the caller's identity anyway. The convenience does not pay for
 that. Rejected.
+
+### Release path
+
+There is no deploy step. The connector never reaches the VM, so it is not
+carried by `bluegreen:deploy` and requires no migration, restart or outage.
+Shipping it means: merge to `master`, then each person runs `npm ci --prefix mcp`
+and `npm run build --prefix mcp` in their own checkout and points their AI client
+at the built entry point. A person can run it from an unpushed local checkout;
+pushing matters only for giving it to someone else.
+
+CI gains three steps modelled on the `e2e` ones: `npm ci --prefix mcp`,
+`npm run typecheck --prefix mcp`, `npm run test --prefix mcp`. Because `mcp/` is
+outside the workspace globs, turbo will not pick it up and these must be
+explicit.
 
 ## Components
 
