@@ -480,9 +480,37 @@ as a defect that has been fixed.
 
 #### What to tell a data subject
 
-For a document whose authoritative copy is the Supabase object, the erasure
-guarantee for the **record** is the Supabase one, and the Confluence side is a
-published copy erased best-effort on top of it.
+**One document, one provider, one erasure. There is no second erasure running
+alongside it.** `remove()` in `document.service.ts` is the only thing in the
+codebase that enqueues a `DocumentStorageDeletion`, and it creates exactly one
+row stamped with exactly one provider — the one the organisation is configured
+for. `retryPendingStorageDeletions` resolves exactly one eraser from that one
+provider. There is no fan-out and no second row. So a document's erasure
+guarantee is the guarantee of **the provider its row names**, and nothing else.
+
+Do not tell a data subject that a Supabase erasure also sweeps up a Confluence
+copy. It does not. A row stamped `supabase` deletes the Supabase object, reaches
+`PROCESSED`, and never calls the Confluence eraser — whatever else the document
+may have on a Confluence site.
+
+**Why this is not a bug that needs fixing, and what would make it one.** Erasing
+both sides of one document is what the *mirror* model requires: a Supabase
+object that is authoritative with a published Confluence copy on top of it. That
+model is Open Question 1 in
+`docs/superpowers/plans/2026-09-18-document-storage-providers-spec.md`, it is
+**unresolved, and it is the owner's to rule on** — not this document's, and not
+the erasure pipeline's. Under the DPO's signed-off reading (2026-09-18,
+reference-not-duplicate: one document, one store), a Confluence-authoritative
+document has one provider and today's one-row behaviour is already correct.
+Under the spec's own Mode C it is not, and **Phase 4 must then enqueue erasure
+for both sides** — a design change to the publish pipeline, recorded as item 6
+of the Phase 4 note in that spec. Building dual erasure now would be picking the
+answer to a question the owner has not been asked.
+
+Today this is a documentation statement rather than a live exposure:
+`documentStorageProviders` registers only `supabase` and `local`, so no
+organisation can hold a Confluence storage provider, nothing publishes to
+Confluence yet, and no code outside tests ever writes `targetRef`.
 
 **Where a document is authoritative in Confluence, there is no Irish copy to
 fall back on, and the guarantee for that document is only ever the best-effort

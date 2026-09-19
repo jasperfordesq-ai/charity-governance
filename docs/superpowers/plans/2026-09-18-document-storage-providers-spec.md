@@ -262,6 +262,34 @@ than inventing a new reliability pattern.
 >
 >    Decide it when the authority question in Open Question 1 is ruled on, and
 >    write the answer here.
+> 6. **If Open Question 1 resolves to the mirror model, this phase must enqueue
+>    erasure for *both* sides — the erasure pipeline will not do it for you.**
+>    `remove()` in `document.service.ts` is the only creator of a
+>    `DocumentStorageDeletion` row in the codebase. It creates **one** row with
+>    **one** provider, and `retryPendingStorageDeletions` dispatches to **one**
+>    eraser. There is no fan-out. A Supabase-authoritative document that also
+>    has a Confluence page therefore produces a row stamped `supabase`, deletes
+>    the Supabase object, reaches `PROCESSED`, and never touches the page — a
+>    false proof arriving by design rather than by bug.
+>
+>    Phase 5 deliberately did **not** build dual erasure, and this is the
+>    reason: erasing both sides is what the *mirror* model requires, and whether
+>    the mirror model is what we are building is Open Question 1 above —
+>    unresolved, and the owner's to rule on. Under the DPO's signed-off
+>    reference-not-duplicate reading, a Confluence-authoritative document has
+>    one provider and one-row-one-erasure is already correct. Under Mode C it is
+>    not, and closing it means a design change *here*: either `remove()`
+>    enqueues one row per copy the document has, or the row grows a list of
+>    targets and the dispatcher fans out over it. Pick one, and pin whichever
+>    you pick with a test that a Supabase-authoritative document with a
+>    Confluence page leaves nothing behind on either side.
+>
+>    Until it is ruled on, `docs/ARCHITECTURE.md` states the one-provider
+>    behaviour plainly rather than promising a best-effort second erasure the
+>    code does not perform. Do not re-introduce that promise without the
+>    pipeline to back it. Related: **`targetRef` is written by no code outside
+>    tests today** — this phase is the first writer, and item 2 above is the
+>    shape it must write.
 
 **Phase 5 — provider-aware erasure.** Extend the deletion lifecycle to purge
 from both stores, handling Confluence trash-then-purge. **Confluence cannot
