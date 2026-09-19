@@ -289,7 +289,12 @@ function filterRecord(model: ModelName, value: unknown): unknown {
  * model's allowlist is stated in exactly one place and a shape cannot quietly
  * disagree with it.
  */
-export type ShapeName = 'dashboard' | 'team' | 'boardSubmissions' | 'complianceSignoff';
+export type ShapeName =
+  | 'dashboard'
+  | 'team'
+  | 'boardSubmissions'
+  | 'complianceSignoff'
+  | 'complianceRecords';
 
 function asRecord(value: unknown): Record<string, unknown> | null {
   if (value === null || typeof value !== 'object' || Array.isArray(value)) return null;
@@ -434,11 +439,54 @@ function filterComplianceSignoff(value: unknown): unknown {
   return { data: out };
 }
 
+/**
+ * A compliance record, the Governance Code standard it answers, and the person
+ * who last edited it.
+ *
+ * The standard and its principle are the Code itself: identical for every
+ * charity in the country and carrying nothing about anyone, so they are kept
+ * and make the record legible. `updatedBy` is a staff account — a name and an
+ * id — and is dropped entirely, because User.name is withheld and an id that
+ * only resolves to a withheld name is of no use to a reader.
+ */
+function filterComplianceRecord(value: unknown): unknown {
+  const raw = asRecord(value);
+  if (!raw) return value;
+  const out = asRecord(filterRecord('ComplianceRecord', raw)) ?? {};
+
+  if ('standard' in raw) {
+    const standard = asRecord(raw.standard);
+    if (standard) {
+      const filteredStandard = asRecord(filterRecord('GovernanceStandard', standard)) ?? {};
+      if ('principle' in standard) {
+        filteredStandard.principle = filterRecord('GovernancePrinciple', standard.principle);
+      }
+      out.standard = filteredStandard;
+    } else {
+      out.standard = raw.standard;
+    }
+  }
+  return out;
+}
+
+function filterComplianceRecords(value: unknown): unknown {
+  const envelope = asRecord(value);
+  if (!envelope) return mapArray(value, filterComplianceRecord);
+  if (!('data' in envelope)) return filterComplianceRecord(envelope);
+
+  return {
+    data: Array.isArray(envelope.data)
+      ? envelope.data.map(filterComplianceRecord)
+      : filterComplianceRecord(envelope.data),
+  };
+}
+
 const SHAPES: Record<ShapeName, (value: unknown) => unknown> = {
   dashboard: filterDashboard,
   team: filterTeam,
   boardSubmissions: filterBoardSubmissions,
   complianceSignoff: filterComplianceSignoff,
+  complianceRecords: filterComplianceRecords,
 };
 
 export function applyShapePolicy<T>(shape: ShapeName, value: T, allowPersonalData: boolean): T {
