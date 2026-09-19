@@ -435,6 +435,7 @@ model Organisation {
   billingAuthorityGrants      BillingAuthorityGrant[]
   securityAuditEvents         SecurityAuditEvent[]
   clientActivityEvents        ClientActivityEvent[]
+  authActionApprovals         AuthActionApproval[]
   passwordRecoveryRequests    PasswordRecoveryRequest[]
   authSecurityEmailOutbox     AuthSecurityEmailOutbox[]
   integrations                OrganisationIntegration[]
@@ -556,6 +557,7 @@ model User {
   securityAuditEventsAsActor   SecurityAuditEvent[]      @relation("SecurityAuditActor")
   securityAuditEventsAsSubject SecurityAuditEvent[]      @relation("SecurityAuditSubject")
   clientActivityEvents         ClientActivityEvent[]
+  authActionApprovals          AuthActionApproval[]
   passwordRecoveryRequests     PasswordRecoveryRequest[]
   authSecurityEmailOutbox      AuthSecurityEmailOutbox[]
 
@@ -675,6 +677,32 @@ model ClientActivityEvent {
   @@unique([id, organisationId])
   @@index([organisationId, occurredAt, id])
   @@index([organisationId, sessionId, occurredAt])
+}
+
+/// One human approval for one destructive action, bound to a digest of the
+/// exact request. Single-use and short-lived, so it cannot be spent on a
+/// different action however the agent holding it is persuaded in between.
+model AuthActionApproval {
+  id             String       @id @default(cuid())
+  organisationId String
+  organisation   Organisation @relation(fields: [organisationId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  userId         String
+  user           User         @relation(fields: [userId, organisationId], references: [id, organisationId], onDelete: Restrict, onUpdate: Restrict)
+  sessionId      String
+  requestDigest  String
+  /// Built by the API from the route it matched, never from the request body:
+  /// a summary the caller can write is a summary the caller can lie in.
+  summary        String
+  method         String
+  routePattern   String
+  createdAt      DateTime     @default(now())
+  expiresAt      DateTime
+  approvedAt     DateTime?
+  consumedAt     DateTime?
+
+  @@unique([id, organisationId])
+  @@index([sessionId, requestDigest])
+  @@index([expiresAt])
 }
 
 model PasswordRecoveryRequest {

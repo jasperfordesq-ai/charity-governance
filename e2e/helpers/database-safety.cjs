@@ -113,6 +113,9 @@ const DISPOSABLE_DATABASE_RESET_TABLES = Object.freeze([
   // the record must outlive the session that made it — so the AuthSession
   // truncate above does not clear it and it has to be listed in its own right.
   "ClientActivityEvent",
+  // Approvals for destructive actions. Like the activity record, it has no
+  // foreign key to "AuthSession", so the AuthSession truncate does not clear it.
+  "AuthActionApproval",
   "BoardMember",
   "Member",
   "GoverningAct",
