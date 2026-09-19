@@ -2,7 +2,7 @@
 
 Paste everything below the line into a fresh session. It is written to stand alone.
 
-*Last updated 2026-09-19, after Phase 5 closed.*
+*Last updated 2026-09-19, after Phase 6 closed. Every unblocked phase is done.*
 
 ---
 
@@ -40,11 +40,16 @@ directory is gitignored scratch — if it is missing, recover from `git log`, wh
 | 3 | Confluence API client (v1/v2 hybrid) | **Complete.** Five tasks, whole-branch review passed with nothing Critical, fix round applied, scoped re-review clean |
 | 4 | Publish pipeline | **Blocked twice over** — see Blockers |
 | 5 | Provider-aware erasure | **Complete.** Seven tasks, whole-phase review, fix round, clean re-review |
-| 6 | Admin UI and per-tenant integration health | **Next.** Not planned |
+| 6 | Admin UI and per-tenant integration health | **Complete.** Five tasks, whole-phase review, three fix rounds, independent verification |
 
-Suite at last measurement: `apps/api` **1453 pass / 0 fail**, real-PostgreSQL migration suite
-**4 pass / 0 fail**, `test:production-check` **1064 pass / 0 fail / 2 skipped**. Always report
-against the current figure, not this one.
+Suite at last measurement: `apps/api` **1464 pass / 0 fail**, `apps/web` **469 pass / 0 fail**,
+real-PostgreSQL migration suite **4 pass / 0 fail**, `test:production-check` **1064 pass / 0 fail /
+2 skipped**. Always report against the current figure, not this one.
+
+**Everything unblocked is built.** What remains is Phase 4 and the deferred rotation job, and Phase
+4 is blocked on two things the owner owns (below). Do not start Phase 4 before Blocker 1 is ruled
+on — publishing a mirror and moving the authoritative copy are different pipelines, not one
+pipeline with a flag.
 
 **Everything Confluence-side is proven against fakes.** No call has ever been made to a real site.
 A fake cannot tell you Atlassian changed a status code, and every fake in this suite was written to
