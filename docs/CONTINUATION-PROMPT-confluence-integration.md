@@ -115,8 +115,15 @@ can unblock. Do not stop to ask whether to continue.
 1. `docs/superpowers/plans/2026-09-18-document-storage-providers-spec.md` — the spec. **Read its
    "Open questions for the owner" section before anything else: Question 1 has been answered, and
    answered against the architecture the rest of the spec argues from.** See Blockers below.
-2. `docs/superpowers/plans/2026-09-18-provider-aware-erasure-phase-5.md` — the phase just completed; its **Facts verified against Atlassian** table and the **explicit unknown** beneath it both matter.
-3. `docs/ARCHITECTURE.md`, section "Integration credentials: the envelope, the boundary, and
+2. `docs/superpowers/plans/2026-09-19-confluence-publish-pipeline-phase-4.md` — the phase completed
+   last, and the one whose erasure behaviour is being reworked. Its **Facts verified against
+   Atlassian** table and the **"Confirm these against a real site"** checklist under the exit
+   criteria both matter.
+3. `docs/superpowers/plans/2026-09-18-provider-aware-erasure-phase-5.md` — the erasure engine. Its
+   **explicit unknown** (does a trashed page read back as 404?) bears on what erasure can prove.
+4. `docs/superpowers/plans/2026-09-19-integration-admin-ui-phase-6.md` — the integration admin
+   screens. **Read its scope before assuming "the admin panel" is finished** — see below.
+5. `docs/ARCHITECTURE.md`, section "Integration credentials: the envelope, the boundary, and
    rotation" — the security model, the error taxonomy, and a documented trap in the not-yet-written
    rotation job.
 
@@ -199,6 +206,24 @@ distinction is what proved two Phase 3 guards had zero coverage rather than weak
   directory). A reused scratchpad has already produced a wrong failure count.
 - **An implementer's self-reported mutation table is a claim, not evidence.** One reported full
   coverage and "no concerns" and was wrong on both counts. Re-run the table.
+
+### "The admin panel" means two different things — only one of them is built
+
+Nikita asked for *"the administration panel and getting the existing application into a state where
+I can review it properly."* The owner's own description to him was *"an administration panel for
+configuring tenants and viewing each charity's integration health."* Those are three separate
+things, and they are in three different states:
+
+| Piece | State |
+|---|---|
+| **Configuring tenants** — `apps/web/src/app/(owner)/owner/tenants/…` | **Already existed**, built 2026-09-02, before any of this work |
+| **The charity-facing Confluence screens** — connect, disconnect, choose a space, the disclosure | **Built this session** as Phase 6 + Phase 4 Task 3 |
+| **Viewing each charity's integration health from the owner console** | **NOT BUILT.** The data exists — Phase 6 Task 4 put `provider` on dead-letter listings and the operator preview — but nothing in `(owner)/owner/tenants/[id]` surfaces any of it. Grep it and see. |
+| **"A state where I can review it properly"** | **Not planned anywhere.** Vague, and arguably the real ask |
+
+So do not read "Phase 6 is done" as "the admin panel is done". The third row is a genuine gap that
+matches the owner's own words to the DPO, and it is small — the API already returns what it needs.
+The fourth is worth asking the owner to make concrete before anyone builds to it.
 
 ### Traps in this repository that cost real time
 
