@@ -4551,7 +4551,20 @@ test('web proxy preserves protected-route redirect and no-cache behavior', () =>
   assert.ok(redirectToLogin, 'proxy must keep a dedicated login redirect helper');
   assert.match(redirectToLogin, /loginUrl\.pathname = ["']\/login["']/);
   assert.match(redirectToLogin, /loginUrl\.search = ["']["']/);
-  assert.match(redirectToLogin, /loginUrl\.searchParams\.set\(["']next["'], `\$\{pathname\}\$\{search\}`\)/);
+  // `next` carries `pathname + search`, and the reverse proxy's own log filter
+  // deletes only TOP-LEVEL `code`/`state` — a secret nested inside `next` sails
+  // straight through it. So the scrub has to happen here, where the URL is
+  // built. (Before Phase 6's review this assertion pinned the unscrubbed form.)
+  assert.match(
+    redirectToLogin,
+    /loginUrl\.searchParams\.set\(\s*["']next["'],\s*removeSensitiveSearchParams\(`\$\{pathname\}\$\{search\}`,\s*SENSITIVE_NEXT_PARAMS,?\s*\),?\s*\)/,
+    'the login redirect must strip single-use secrets out of `next` rather than forwarding the raw search string',
+  );
+  assert.match(
+    proxy,
+    /const SENSITIVE_NEXT_PARAMS = \[\s*["']code["'],\s*["']state["'],\s*["']token["'],?\s*\]/,
+    '`next` must be stripped of the OAuth callback secrets and of `token`',
+  );
   assert.match(redirectToLogin, /NextResponse\.redirect\(loginUrl\)/);
   assert.match(redirectToLogin, /addProtectedNoCacheHeaders\(response\)/);
   assert.match(proxy, /const PROTECTED_RESPONSE_CACHE_CONTROL = ["']no-store, no-cache, must-revalidate["']/);
@@ -4561,7 +4574,32 @@ test('web proxy preserves protected-route redirect and no-cache behavior', () =>
   assert.ok(protectedBranch, 'protected branch must exist');
   assert.match(protectedBranch, /return redirectToLogin\(request, csp\)/);
   assert.match(protectedBranch, /await validateProtectedAuthSession\(request\)/);
-  assert.match(protectedBranch, /addProtectedNoCacheHeaders\(\s*NextResponse\.next/);
+  // Every rendering path out of the protected branch goes through the one
+  // helper that applies them, so this is asserted on the helper plus the
+  // absence of any other `NextResponse.next` inside the protected branch.
+  assert.match(
+    proxy,
+    /function protectedPassThrough\([\s\S]*?addProtectedNoCacheHeaders\(\s*NextResponse\.next/,
+  );
+  assert.doesNotMatch(
+    protectedBranch,
+    /NextResponse\.next/,
+    'a protected route must never render through a bare NextResponse.next that skips the no-store headers',
+  );
+  assert.match(protectedBranch, /return protectedPassThrough\(request, nonce, csp, authSession\.setCookieHeaders\)/);
+
+  // The Confluence callback renews the session itself, so it is let through
+  // rather than redirected — a `/login?next=…` for that path would carry a
+  // live, unspent authorization code in the Location header.
+  assert.match(
+    proxy,
+    /const SELF_RENEWING_PROTECTED_PATHS = new Set\(\[\s*["']\/integrations\/confluence\/callback["'],?\s*\]\)/,
+  );
+  assert.equal(
+    (protectedBranch.match(/if \(selfRenewsItsOwnSession\(pathname\)\) \{\s+return protectedPassThrough\(/g) ?? []).length,
+    2,
+    'both login-redirect call sites must exclude a path that renews its own session',
+  );
 
   assert.ok(publicBranch, 'public branch must exist');
   assert.match(publicBranch, /NextResponse\.next/);
@@ -4574,9 +4612,14 @@ test('web proxy preserves protected-route redirect and no-cache behavior', () =>
 
 test('web proxy validates protected sessions with API auth authority before rendering', () => {
   const proxy = readRepoFile('apps/web/src/proxy.ts');
+  // The whole protected tail of `proxy()`, not a non-greedy slice: the
+  // callback exclusion returns `protectedPassThrough(…)` before the ordinary
+  // authenticated return does, so a lazy match would stop short of the login
+  // redirect it has to inspect.
+  const protectedStart = proxy.indexOf('if (!hasAuthSessionCookie(request))');
+  const protectedEnd = proxy.indexOf('\nexport const config', protectedStart);
   const protectedBranch =
-    proxy.match(/if \(!hasAuthSessionCookie\(request\)\)[\s\S]*?const requestHeaders = createCspRequestHeaders/)?.[0] ??
-    '';
+    protectedStart >= 0 && protectedEnd > protectedStart ? proxy.slice(protectedStart, protectedEnd) : '';
 
   assert.match(proxy, /export async function proxy\(request: NextRequest\)/);
   assert.match(
@@ -4629,12 +4672,13 @@ test('web proxy validates protected sessions with API auth authority before rend
   );
   assert.match(proxy, /protectedAuthCookieHeader\(request\)/);
   assert.match(proxy, /Cookie:\s*cookieHeader/);
-  assert.match(proxy, /addSetCookieHeaders\(response,\s*authSession\.setCookieHeaders\)/);
+  assert.match(proxy, /return addSetCookieHeaders\(response, setCookieHeaders\)/);
+  assert.match(proxy, /return protectedPassThrough\(request, nonce, csp, authSession\.setCookieHeaders\)/);
   assert.ok(protectedBranch, 'protected proxy branch must still check missing auth cookies first');
   assert.match(protectedBranch, /await validateProtectedAuthSession\(request\)/);
   assert.ok(
     protectedBranch.indexOf('await validateProtectedAuthSession(request)') <
-      protectedBranch.indexOf('const requestHeaders = createCspRequestHeaders'),
+      protectedBranch.indexOf('return protectedPassThrough(request, nonce, csp, authSession.setCookieHeaders)'),
     'protected content must not render until the API auth session check succeeds',
   );
 });

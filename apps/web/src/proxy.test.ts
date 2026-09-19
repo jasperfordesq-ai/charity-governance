@@ -795,3 +795,134 @@ test("server-side protected route validation fails closed for unapproved product
   assert.equal(response.status, 503);
   assert.equal(response.headers.get("location"), null);
 });
+
+// ── The OAuth callback's live authorization code must not reach a redirect ──
+//
+// `/integrations` is a protected prefix, so before these tests the callback
+// page sat behind this middleware and a dead session answered
+//   307 Location: /login?next=%2F…%3Fcode%3D<live code>%26state%3D<state>
+// putting an UNSPENT, single-use authorization code into the Location header,
+// the address bar, the history entry for /login, the Referer of /login's
+// subresources, and the proxy access log — Caddy's `delete code` filter only
+// deletes TOP-LEVEL parameters, and this one is nested inside `next`.
+//
+// It is also self-defeating: renewing the session is precisely what that page
+// does for itself.
+
+const LIVE_CODE = "LIVE-AUTHORIZATION-CODE";
+const LIVE_STATE = "LIVE-OAUTH-STATE";
+
+/**
+ * Everything a client or a proxy could read off the response — the status and
+ * every header, `Set-Cookie` included. A leak into any one of them is the
+ * failure these tests exist to catch, so they assert against this rather than
+ * against `location` alone.
+ */
+function everythingOnTheWire(response: Response): string {
+  const parts: string[] = [`STATUS ${response.status}`];
+  response.headers.forEach((value, key) => parts.push(`${key}: ${value}`));
+  for (const cookie of response.headers.getSetCookie?.() ?? []) {
+    parts.push(`set-cookie: ${cookie}`);
+  }
+  return parts.join("\n");
+}
+
+function callbackRequest(cookie?: string): NextRequest {
+  return new NextRequest(
+    `https://app.charitypilot.ie/integrations/confluence/callback?code=${LIVE_CODE}&state=${LIVE_STATE}`,
+    cookie ? { headers: { cookie } } : undefined,
+  );
+}
+
+test("the Confluence callback is never bounced to /login when no session cookie is present", async () => {
+  process.env.NODE_ENV = "production";
+  process.env.NEXT_PUBLIC_API_URL = "https://api.charitypilot.ie";
+
+  const fetchCalls: string[] = [];
+  globalThis.fetch = (async (input: RequestInfo | URL) => {
+    fetchCalls.push(input.toString());
+    return new Response(null, { status: 401 });
+  }) as typeof fetch;
+
+  const response = await proxy(callbackRequest());
+
+  assert.equal(response.headers.get("location"), null);
+  assert.notEqual(response.status, 307);
+  // The page renews the session itself, so it has to actually be reached.
+  assert.equal(response.status, 200);
+  assert.equal(
+    response.headers.get("cache-control"),
+    "no-store, no-cache, must-revalidate",
+  );
+  assert.deepEqual(fetchCalls, []);
+
+  const wire = everythingOnTheWire(response);
+  assert.equal(
+    wire.includes(LIVE_CODE),
+    false,
+    `the live authorization code must appear nowhere in the response:\n${wire}`,
+  );
+  assert.equal(wire.includes(LIVE_STATE), false, wire);
+  assert.equal(wire.includes("/login"), false, wire);
+});
+
+test("the Confluence callback is never bounced to /login when the refresh is definitively rejected", async () => {
+  process.env.NODE_ENV = "production";
+  process.env.NEXT_PUBLIC_API_URL = "https://api.charitypilot.ie";
+
+  globalThis.fetch = (async (input: RequestInfo | URL) =>
+    new Response(null, {
+      status: 401,
+      headers: input.toString().endsWith("/api/v1/auth/refresh")
+        ? deletedAuthCookieHeaders()
+        : undefined,
+    })) as typeof fetch;
+
+  const response = await proxy(
+    callbackRequest(
+      "charitypilot_access=expired-access; charitypilot_refresh=revoked-refresh",
+    ),
+  );
+
+  assert.equal(response.headers.get("location"), null);
+  assert.notEqual(response.status, 307);
+  assert.equal(response.status, 200);
+  // The middleware still attempted the refresh and still forwards what it
+  // learned; only the redirect is withheld.
+  assert.equal(response.headers.getSetCookie().length, 2);
+
+  const wire = everythingOnTheWire(response);
+  assert.equal(
+    wire.includes(LIVE_CODE),
+    false,
+    `the live authorization code must appear nowhere in the response:\n${wire}`,
+  );
+  assert.equal(wire.includes(LIVE_STATE), false, wire);
+  assert.equal(wire.includes("/login"), false, wire);
+});
+
+test("a login redirect for any other protected path strips code and state out of next", async () => {
+  process.env.NODE_ENV = "production";
+  process.env.NEXT_PUBLIC_API_URL = "https://api.charitypilot.ie";
+
+  globalThis.fetch = (async () => new Response(null, { status: 401 })) as typeof fetch;
+
+  const response = await proxy(
+    new NextRequest(
+      `https://app.charitypilot.ie/documents?view=board&code=${LIVE_CODE}&state=${LIVE_STATE}`,
+    ),
+  );
+
+  assert.equal(response.status, 307);
+  const location = new URL(response.headers.get("location") ?? "");
+  assert.equal(location.pathname, "/login");
+  assert.equal(location.searchParams.get("next"), "/documents?view=board");
+
+  const wire = everythingOnTheWire(response);
+  assert.equal(
+    wire.includes(LIVE_CODE),
+    false,
+    `no single-use secret may be nested inside next:\n${wire}`,
+  );
+  assert.equal(wire.includes(LIVE_STATE), false, wire);
+});
