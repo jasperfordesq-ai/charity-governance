@@ -286,22 +286,62 @@ leave alpha before this ships.**
 > rest of the deletion pipeline: retry, a dead-letter, and a record of what was
 > attempted, rather than a best-effort call whose failure nobody sees.
 >
-> **Closed in part, 2026-09-19 (Phase 5, Task 6).** `disconnectConfluence` now
-> presents the sealed refresh token to Atlassian's revocation endpoint before it
-> deletes anything, bounded by `CONNECT_REQUEST_TIMEOUT_MS`, and returns
-> `{ revoked }`. The local deletion is deliberately **not** conditional on that
-> call: a charity that presses Disconnect has withdrawn consent whether or not a
-> third party is reachable to be told, and refusing to forget their credentials
-> because Atlassian is down would be the worse failure.
+> **Answered in part, 2026-09-19 (Phase 5, Task 6) — and the answer is not the
+> one this note assumed.**
 >
-> What this does **not** yet give the paragraph above: there is no retry, no
-> dead-letter row, and no persisted record of the attempt — `{ revoked }` is
-> returned to the caller and the DELETE route currently discards it, so a
-> revocation that failed is invisible to an operator. A grant left standing
-> because Atlassian was down for the ten seconds the charity pressed the button
-> is therefore still possible and still unrecorded. Closing that needs the
-> deletion pipeline's machinery (a row, a job, a dead-letter) pointed at
-> revocation, which is a larger piece of work than this task carried.
+> The note above takes for granted that CharityPilot *can* revoke the grant and
+> only has to do it reliably. It cannot. **Atlassian documents no programmatic
+> revocation for a 3LO app**: their OAuth 2.0 (3LO) documentation describes
+> revocation as user-initiated — the user revokes the grant, after which the app
+> cannot work anywhere — and documents no revoke endpoint. A developer-community
+> thread separately reports that with site-scoped grants an app cannot delete an
+> access token to revoke its own access.
+>
+> What shipped: `disconnectConfluence` deletes the sealed credentials and resets
+> the row as before, and on the way makes **one best-effort, bounded attempt** at
+> `https://auth.atlassian.com/oauth/revoke` — the conventional OAuth revocation
+> path, which Atlassian's identity host may or may not honour — returning
+> `{ revoked }`. The local deletion is deliberately **not** conditional on it: a
+> charity that presses Disconnect has withdrawn consent whether or not a third
+> party is reachable or willing to be told, and it is exactly because the failure
+> is designed for that attempting an undocumented endpoint is safe at all. The
+> DELETE route logs a warning when `revoked` is false, so an operator can see a
+> grant that may still be standing instead of it being a discarded return value.
+>
+> **No retry, no dead-letter, no persisted record — ruled against on 2026-09-19,
+> and for a stronger reason than proportionality.** Building retry machinery for
+> a call whose success cannot be verified would be engineering reliability into
+> something that may not be a supported operation at all: every retry would be a
+> guess repeated, and a dead-letter row would record a failure nobody can act on
+> differently. If revocation is later shown to be genuinely supported — a real
+> 200 from a real connected site, not a fake — the retry question reopens on that
+> evidence. Until then the honest position is one attempt and an honest log.
+>
+> **What the administrator must be told, for Task 7 to carry into
+> `docs/ARCHITECTURE.md` and the connect-boundary disclosure.** State all three,
+> plainly, and do not soften them:
+>
+> 1. CharityPilot has deleted its own copy of the charity's Confluence
+>    credentials. That part is complete and verifiable.
+> 2. CharityPilot **attempts** to withdraw the authorisation at Atlassian, but
+>    Atlassian offers no documented way for an app to do this, so the attempt may
+>    silently do nothing. Do not phrase this as "we revoked your access".
+> 3. If the authorisation is not withdrawn, it does not last forever: a rotating
+>    refresh token **expires after 90 days without use**, and after a disconnect
+>    nothing uses it. For certainty sooner, **the administrator should remove
+>    CharityPilot in their Atlassian account's connected-apps settings** — the
+>    route Atlassian actually documents, and the only one that is guaranteed to
+>    work.
+>
+> For a DPO this is the material distinction: the erasure of CharityPilot's copy
+> is provable, the withdrawal of the grant at Atlassian is not, and the charity
+> holds the action that makes it so.
+>
+> The phase's exit criterion 4 ("Disconnecting revokes the grant at Atlassian")
+> is therefore not literally satisfiable as written, and should be read as
+> "disconnecting attempts revocation, records the outcome, and tells the
+> administrator what only they can do." Whoever closes the phase should restate
+> it rather than tick it.
 
 **Phase 6 — admin UI and health.** Connect/disconnect screens in `apps/web`, and
 per-tenant integration health that does not leak tenant data into the global
