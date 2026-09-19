@@ -42,8 +42,22 @@ test('a write-level session is offered the writes but not the removals', () => {
   assert.ok(!names.includes('board_member_delete'), 'deleting needs administrator access');
 });
 
-test('an administrator-level session is offered everything', () => {
-  assert.equal(toolsFor('admin', TOOLS).length, TOOLS.length);
+test('an administrator-level session is offered everything the gate allows', () => {
+  // The level and the gate are independent: the level says how much authority
+  // the session carries, the gate says whether personal data may travel.
+  assert.equal(toolsFor('admin', TOOLS, true).length, TOOLS.length);
+  assert.ok(toolsFor('admin', TOOLS, false).length < TOOLS.length);
+});
+
+test('a write whose fields the gate withholds is not offered while it is closed', () => {
+  const closed = toolsFor('admin', TOOLS, false).map((tool) => tool.name);
+  const open = toolsFor('admin', TOOLS, true).map((tool) => tool.name);
+
+  assert.ok(
+    open.includes('conflict_create'),
+    'a conflict record names a person and a matter; those fields are the record',
+  );
+  assert.ok(!closed.includes('conflict_create'));
 });
 
 test('the advertised list narrows with the level', () => {

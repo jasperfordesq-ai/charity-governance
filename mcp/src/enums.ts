@@ -58,3 +58,16 @@ export const DOCUMENT_CATEGORIES = [
   'STRATEGIC_PLAN',
   'OTHER',
 ] as const;
+
+export const COMPLIANCE_SIGNOFF_STATUSES = ['DRAFT', 'BOARD_REVIEW', 'APPROVED'] as const;
+
+export const ANNUAL_REPORT_FILING_STATUSES = [
+  'NOT_STARTED',
+  'IN_PROGRESS',
+  'BOARD_APPROVED',
+  'FILED',
+] as const;
+
+export const LEGAL_FORMS = ['CLG', 'TRUST', 'UNINCORPORATED_ASSOCIATION', 'OTHER'] as const;
+
+export const ORGANISATION_COMPLEXITIES = ['SIMPLE', 'COMPLEX'] as const;

@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, resolve } from 'node:path';
-import { TOOLS, runTool, toolInputSchema } from '../tools.js';
+import { TOOLS, runTool, toolInputSchema, gatedFieldsOf, needsPersonalData } from '../tools.js';
 import { WRITE_TOOLS } from '../write-tools.js';
 import { buildBody } from '../tool-body.js';
 import { ApiClient } from '../client.js';
@@ -36,54 +36,34 @@ function jsonOk(body: unknown = { data: { id: 'x' } }): Response {
   });
 }
 
-test('every write tool names a route the API actually registers', () => {
-  const missing: string[] = [];
-
+test('a write tool that touches withheld fields is gated on the same policy', () => {
+  // This replaced a hand-written list of five field names. That list was what
+  // let conflict_create ship accepting a trustee's name, the matter and its
+  // nature — every one of them dropped from a read — while staying green,
+  // because none of those five appeared in it. The rule now comes from the
+  // policy itself, so it cannot fall behind it.
   for (const tool of WRITE_TOOLS) {
-    const withoutPrefix = tool.path.replace('/api/v1/', '');
-    const group = withoutPrefix.split('/')[0]!;
-    const subPath = `/${withoutPrefix.slice(group.length + 1)}`.replace(/\/$/, '') || '/';
-
-    const source = readFileSync(
-      resolve(REPO, 'apps/api/src/routes', group, 'index.ts'),
-      'utf8',
+    const gated = gatedFieldsOf(tool);
+    assert.equal(
+      needsPersonalData(tool),
+      gated.length > 0,
+      `${tool.name} disagrees with its own gated fields`,
     );
-
-    const method = tool.method!.toLowerCase();
-    const registered = new RegExp(
-      `[A-Za-z]*[Aa]pp\\.${method}(?:<[^(]*>)?\\(\\s*'${subPath.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}'`,
-    ).test(source);
-
-    if (!registered) missing.push(`${tool.name}: ${tool.method} ${tool.path}`);
   }
-
-  assert.deepEqual(
-    missing,
-    [],
-    'a write tool pointing at a route that does not exist fails only when somebody tries it',
-  );
 });
 
-test('no write tool can set a personal-data field', () => {
-  // The gate holds these back on the way out. Accepting them on the way in
-  // would let an agent put a date of birth or a home address into a register,
-  // which is not a thing an agent should be doing on anyone's behalf.
-  const withheld = [
-    'dateOfBirth',
-    'residentialAddress',
-    'formerNames',
-    'otherDirectorships',
-    'email',
-  ];
-
-  const offences: string[] = [];
-  for (const tool of WRITE_TOOLS) {
-    for (const field of tool.body ?? []) {
-      if (withheld.includes(field.name)) offences.push(`${tool.name}.${field.name}`);
-    }
+test('the board register cannot be written with personal data at all', () => {
+  // Unlike a conflict record, a board member is a useful record without any of
+  // the withheld fields, so these tools stay usable with the gate closed and
+  // must never accept one.
+  for (const name of ['board_member_create', 'board_member_update']) {
+    const tool = WRITE_TOOLS.find((t) => t.name === name)!;
+    assert.deepEqual(
+      gatedFieldsOf(tool),
+      [],
+      `${name} must not offer to write a date of birth or a home address`,
+    );
   }
-
-  assert.deepEqual(offences, []);
 });
 
 test('the fields each tool declares exist in the API schema it posts to', () => {
@@ -96,6 +76,9 @@ test('the fields each tool declares exist in the API schema it posts to', () => 
     'deadline',
     'governance-registers',
     'governing-acts',
+    'members',
+    'organisation',
+    'document',
   ]
     .map((name) =>
       readFileSync(resolve(REPO, 'packages/shared/src/schemas', `${name}.ts`), 'utf8'),
@@ -310,6 +293,112 @@ test('every destructive tool is administrator level, and every write at least wr
       assert.equal(tool.level, 'admin', `${tool.name} destroys something`);
     } else {
       assert.notEqual(tool.level, 'read', `${tool.name} changes something`);
+    }
+  }
+});
+
+test('a gated write is refused at call time, not only hidden from the listing', async () => {
+  // The listing is a convenience; this is the control. A client may call a tool
+  // it was never shown, so hiding conflict_create while the gate is closed
+  // would mean nothing on its own.
+  const api = client(async () => {
+    throw new Error('nothing should reach the API');
+  });
+  const tool = WRITE_TOOLS.find((t) => t.name === 'conflict_create')!;
+
+  await assert.rejects(
+    () =>
+      runTool(tool, api, false, {
+        trusteeName: 'Aoife Chairperson',
+        matter: 'A supplier relationship',
+        nature: 'Her brother owns the supplier',
+        dateDeclared: '2026-03-02',
+        actionTaken: 'Recused from the vote',
+        reason: 'Recording a declaration',
+      }),
+    (error: unknown) => {
+      assert.match((error as Error).message, /personal-data gate withholds/);
+      assert.match((error as Error).message, /trusteeName/);
+      assert.match((error as Error).message, /Nothing was sent/);
+      return true;
+    },
+  );
+});
+
+test('the same write goes through once the gate is open', async () => {
+  let sent = '';
+  const api = client(async (_input, init) => {
+    sent = String(init?.body);
+    return jsonOk({ data: { id: 'cr-1' } });
+  });
+  const tool = WRITE_TOOLS.find((t) => t.name === 'conflict_create')!;
+
+  await runTool(tool, api, true, {
+    trusteeName: 'Aoife Chairperson',
+    matter: 'A supplier relationship',
+    nature: 'Her brother owns the supplier',
+    dateDeclared: '2026-03-02',
+    actionTaken: 'Recused from the vote',
+    reason: 'Recording a declaration',
+  });
+
+  assert.equal(JSON.parse(sent).trusteeName, 'Aoife Chairperson');
+});
+
+test('voiding a minute-book entry sends the reason in the body as well as the header', async () => {
+  // The void route records why beside the entry, because the entry is kept
+  // rather than removed. Without the special case the field would be peeled off
+  // as the activity reason and the request refused for missing it.
+  let body: Record<string, unknown> = {};
+  let header: string | null = null;
+  const api = client(async (_input, init) => {
+    body = JSON.parse(String(init?.body));
+    header = new Headers(init?.headers).get('x-charitypilot-reason');
+    return jsonOk({ data: { id: 'void-1' } });
+  });
+
+  // The gate is open because the policy withholds a void reason on reads, so
+  // writing one is gated too. What is being checked here is where the reason
+  // lands, not whether it is allowed.
+  const tool = WRITE_TOOLS.find((t) => t.name === 'governing_act_void')!;
+  await runTool(tool, api, true, {
+    id: 'act-1',
+    expectedUpdatedAt: '2026-04-01T10:00:00.000Z',
+    reason: 'Superseded by a corrected minute',
+  });
+
+  assert.equal(body['reason'], 'Superseded by a corrected minute');
+  assert.equal(header, 'Superseded by a corrected minute');
+});
+
+test('a control field is never mistaken for personal data', () => {
+  // A concurrency stamp and a confirmation flag say something about the
+  // request, not about the charity, so no tool may be judged to write personal
+  // data merely for carrying one.
+  let controlFields = 0;
+  for (const tool of WRITE_TOOLS) {
+    const gated = new Set(gatedFieldsOf(tool));
+    for (const field of tool.body ?? []) {
+      if (!field.control) continue;
+      controlFields += 1;
+      assert.ok(
+        !gated.has(field.name),
+        `${tool.name} treats the control field ${field.name} as personal data`,
+      );
+    }
+  }
+
+  assert.ok(controlFields > 5, 'the scan found almost no control fields, so it is broken');
+});
+
+test('every concurrency stamp the API requires is declared as a control field', () => {
+  for (const tool of WRITE_TOOLS) {
+    for (const field of tool.body ?? []) {
+      if (field.kind !== 'timestamp') continue;
+      assert.ok(
+        field.control,
+        `${tool.name}.${field.name} is a concurrency stamp and must be marked control`,
+      );
     }
   }
 });

@@ -1,6 +1,6 @@
 import type { ApiClient } from './client.js';
 import type { AccessLevel } from './config.js';
-import type { ToolDefinition } from './tools.js';
+import { needsPersonalData, type ToolDefinition } from './tools.js';
 
 /**
  * What the session is actually allowed to do, as the API sees it.
@@ -50,8 +50,15 @@ export function permits(held: AccessLevel, tool: ToolDefinition): boolean {
 export function toolsFor(
   held: AccessLevel,
   tools: readonly ToolDefinition[],
+  allowPersonalData = false,
 ): readonly ToolDefinition[] {
-  return tools.filter((tool) => permits(held, tool));
+  return tools.filter((tool) => {
+    if (!permits(held, tool)) return false;
+    // A write whose fields the gate withholds is not offered while the gate is
+    // closed. Offering it would mean advertising a tool that refuses every
+    // valid call, which reads as a fault rather than as a setting.
+    return allowPersonalData || !needsPersonalData(tool);
+  });
 }
 
 /**

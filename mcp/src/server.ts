@@ -34,7 +34,7 @@ const FILE_RANK: Record<AccessLevel, number> = { read: 0, write: 1, admin: 2 };
  */
 function availableFileTools(
   level: AccessLevel,
-  config: Pick<ConnectorConfig, 'uploadRoot' | 'downloadDir'>,
+  config: Partial<Pick<ConnectorConfig, 'uploadRoot' | 'downloadDir'>>,
 ): readonly FileToolDefinition[] {
   return FILE_TOOLS.filter((tool) => {
     if (FILE_RANK[level] < FILE_RANK[tool.level]) return false;
@@ -44,10 +44,10 @@ function availableFileTools(
 
 export function buildToolList(
   level: AccessLevel = 'admin',
-  config: Pick<ConnectorConfig, 'uploadRoot' | 'downloadDir'> = {},
+  config: Partial<Pick<ConnectorConfig, 'uploadRoot' | 'downloadDir' | 'allowPersonalData'>> = {},
 ) {
   return [
-    ...toolsFor(level, TOOLS).map((tool) => ({
+    ...toolsFor(level, TOOLS, config.allowPersonalData ?? false).map((tool) => ({
       name: tool.name,
       description: tool.description,
       inputSchema: toolInputSchema(tool),

@@ -2,6 +2,7 @@ import type { ApiClient } from './client.js';
 import {
   applyFieldPolicy,
   applyShapePolicy,
+  SAFE_FIELDS,
   type ModelName,
   type ShapeName,
 } from './field-policy.js';
@@ -378,6 +379,33 @@ function partition(
 }
 
 /**
+ * The body fields a tool declares that the personal-data gate would withhold
+ * on the way out.
+ *
+ * Derived from the same allowlist the gate uses, rather than from a list
+ * written out by hand. A hand-written list was what let `conflict_create` ship
+ * accepting a trustee's name, the matter and its nature — every one of them a
+ * field the gate drops from a read — while a test that only knew about dates
+ * of birth and home addresses stayed green.
+ *
+ * A tool with any of these can only be offered when the gate is open, because
+ * the fields are what the record IS: a conflict of interest that does not name
+ * the person or the matter is not a conflict record.
+ */
+export function gatedFieldsOf(tool: ToolDefinition): readonly string[] {
+  if (!tool.model || !tool.body) return [];
+  const safe = new Set(SAFE_FIELDS[tool.model]);
+  return tool.body
+    .filter((field) => !field.control && !safe.has(field.name))
+    .map((field) => field.name);
+}
+
+/** True when this tool cannot be used without opening the personal-data gate. */
+export function needsPersonalData(tool: ToolDefinition): boolean {
+  return gatedFieldsOf(tool).length > 0;
+}
+
+/**
  * What a client is told it may send.
  *
  * Generated from the same declarations the validator enforces, so the advertised
@@ -444,6 +472,19 @@ export async function runTool(
 
   const { pathArgs, bodyArgs, reason, approvalId } = partition(tool, args);
 
+  // Checked here as well as in the listing, because a client may call a tool
+  // it was never shown. The fields are the record: refusing them individually
+  // would leave a tool that cannot produce a valid request.
+  const gated = gatedFieldsOf(tool);
+  if (gated.length > 0 && !allowPersonalData) {
+    throw new Error(
+      `${tool.name} writes fields the personal-data gate withholds (${gated.join(', ')}), `
+        + 'and those fields are what the record is. It is available only when the connector '
+        + 'is started with --allow-personal-data, which is a data-protection decision rather '
+        + 'than a convenience. Nothing was sent.',
+    );
+  }
+
   // A reason is required for the actions that cannot be undone, and only for
   // those. Demanding one everywhere would train a caller to write filler.
   if (tool.destructive && !reason) {
@@ -451,6 +492,14 @@ export async function runTool(
       `${tool.name} removes something permanently. Pass a reason saying why, which is `
         + 'recorded against the action.',
     );
+  }
+
+  // One route wants the reason in its body as well as in the header: voiding a
+  // minute-book entry records why beside the entry, because the entry is kept
+  // rather than removed. Without this the field would be peeled off as the
+  // activity reason and the request would be refused for missing it.
+  if (reason && tool.body?.some((field) => field.name === 'reason')) {
+    bodyArgs['reason'] = reason;
   }
 
   const path = buildPath(tool.path, tool.params ?? [], pathArgs);

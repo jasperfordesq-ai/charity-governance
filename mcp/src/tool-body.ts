@@ -11,7 +11,17 @@
  * omits is simply absent, so a patch never blanks something it was not asked
  * to change.
  */
-export type FieldSpec =
+/**
+ * Fields that carry no record content at all.
+ *
+ * A concurrency stamp and a "yes I mean it" confirmation say something about
+ * the request, not about the charity or anyone in it, so the personal-data
+ * rules have nothing to say about them. Without this, a tool would be judged
+ * to write personal data because it asks which version of a row it is changing.
+ */
+export type ControlField = { control?: true };
+
+export type FieldSpec = ControlField & (
   | { kind: 'string'; name: string; max: number; required?: boolean; describe?: string }
   | { kind: 'date'; name: string; required?: boolean; describe?: string }
   | { kind: 'timestamp'; name: string; required?: boolean; describe?: string }
@@ -19,7 +29,8 @@ export type FieldSpec =
   | { kind: 'boolean'; name: string; required?: boolean; describe?: string }
   | { kind: 'enum'; name: string; values: readonly string[]; required?: boolean; describe?: string }
   | { kind: 'id'; name: string; required?: boolean; describe?: string }
-  | { kind: 'dayList'; name: string; required?: boolean; describe?: string };
+  | { kind: 'dayList'; name: string; required?: boolean; describe?: string }
+);
 
 /** A calendar date with no time and no zone, which is what the API accepts. */
 const DATE_PATTERN = /^\d{4}-\d{2}-\d{2}$/;
