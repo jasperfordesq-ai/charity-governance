@@ -391,3 +391,21 @@ test('disconnect still works when the store refuses to answer, since that is the
 
   assert.ok(cleared, 'the credential must still be removed');
 });
+
+test('a 429 says the attempts ran out, not that the password is wrong', async () => {
+  const store = createMemoryStore();
+  const session = new Session({
+    baseUrl: 'https://example.test',
+    store,
+    fetchImpl: async () => new Response('{}', { status: 429 }),
+  });
+
+  await assert.rejects(() => session.login('a@b.ie', 'correct-password'), (err: unknown) => {
+    assert.match((err as Error).message, /too many sign-in attempts/i);
+    assert.doesNotMatch((err as Error).message, /check the email address and password/i,
+      'the credentials were never looked at; sending someone back to retype a correct '
+        + 'password spends the little attempt budget that remains');
+    return true;
+  });
+  assert.equal(store.read(), null);
+});

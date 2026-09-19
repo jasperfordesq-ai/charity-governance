@@ -95,6 +95,16 @@ export class Session {
             + 'older than this connector; deploy the API before connecting.',
         );
       }
+      if (response.status === 429) {
+        // Saying "check the email address and password" here is actively
+        // harmful: the credentials were never looked at, the route limits
+        // attempts per email address, and a person who retypes a correct
+        // password in response spends the little budget that remains.
+        throw new Error(
+          'Too many sign-in attempts for this email address. Wait a minute and run '
+            + 'connect again. The password was not checked, so nothing is wrong with it.',
+        );
+      }
       throw new Error('Sign-in failed. Check the email address and password.');
     }
     const payload = (await response.json()) as ConnectorTokens & {

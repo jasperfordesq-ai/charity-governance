@@ -45,6 +45,17 @@ const MUTATIONS = {
     expect:
       'a connector route must refuse a request carrying an origin or a Sec-Fetch header.',
   },
+  // The activity record is the reason writes are allowed at all. A hook that
+  // silently stops firing is indistinguishable from a client that never wrote,
+  // which is precisely the state this must never quietly reach.
+  'activity-never-recorded': {
+    file: 'apps/api/src/plugins/client-activity-log.ts',
+    // Narrows the hook to a client kind that cannot exist, rather than deleting
+    // the write, so the file still compiles and still calls Prisma.
+    find: /(if \(!session \|\| session\.clientKind !== )"MCP_CONNECTOR"(\) return;)/g,
+    replace: '$1(("WEB") as typeof session.clientKind)$2',
+    expect: 'a connector write must leave exactly one client activity row.',
+  },
   'read-only-session-may-write': {
     file: 'apps/api/src/middleware/auth.ts',
     // Inverted rather than deleted: comparing the access level against an

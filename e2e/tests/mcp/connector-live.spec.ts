@@ -3,6 +3,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { test, expect } from '@playwright/test';
 import { API_BASE_URL } from '../../playwright.config';
+import { withDb } from '../../helpers/db';
 import {
   assertConnectorBuilt,
   connectConnector,
@@ -807,5 +808,197 @@ test.describe('Connector session posture', () => {
       `${result.stdout}${result.stderr}`,
       'the refusal must not carry the credential it refused to send',
     ).not.toContain(storedRefreshToken(credentialFile) ?? 'unreachable');
+  });
+});
+
+/**
+ * Concern: the accountability that has to exist before the connector is given
+ * authority. A record of what a client did, an administrator level for the
+ * routes that destroy things, and a session the owner can see on the Team page.
+ */
+test.describe('Connector accountability', () => {
+  // Signed in as the administrator rather than the owner. The connector sign-in
+  // route limits attempts per email address, and by the time this block runs
+  // the owner's address has been used for more sign-ins than that budget
+  // allows; the failure looked like a wrong password, which is exactly the
+  // confusion the connector's 429 message now avoids.
+  const account = () => fixture.admin;
+
+  // Created by the first test and deleted by the last. Deleting a seeded
+  // record instead would quietly remove something the gate tests above read.
+  let probeBoardMemberId = '';
+
+  async function activityRows(sessionPattern: string) {
+    return withDb(async (client) => {
+      const result = await client.query(
+        `SELECT "method", "routePattern", "statusCode", "accessLevel", "reason", "resourceId"
+           FROM "ClientActivityEvent"
+          WHERE "routePattern" LIKE $1
+          ORDER BY "occurredAt" DESC, "id" DESC`,
+        [sessionPattern],
+      );
+      return result.rows as Array<Record<string, unknown>>;
+    });
+  }
+
+  test('a connector write leaves one row naming the route pattern and the reason', async () => {
+    const credentialFile = credentialFileFor('accountability-write');
+    const connected = await connectConnector({
+      apiUrl: API_BASE_URL,
+      email: account().email,
+      password: account().password,
+      credentialFile,
+      accessLevel: 'write',
+    });
+    expect(connected.code, connected.stderr).toBe(0);
+
+    const accessToken = await accessTokenFromStoredCredential({
+      apiUrl: API_BASE_URL,
+      credentialFile,
+    });
+
+    const before = (await activityRows('%/board-members%')).length;
+
+    const response = await fetch(`${API_BASE_URL}/api/v1/board-members`, {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/json',
+        authorization: `Bearer ${accessToken}`,
+        [CONNECTOR_CLIENT_HEADER]: 'mcp-connector/0.1.0',
+        'x-charitypilot-reason': 'Adding the trustee the owner named',
+      },
+      body: JSON.stringify({ name: 'Activity Probe', role: 'Trustee', appointedDate: '2026-02-01' }),
+    });
+    // Read once: the body is a stream, and consuming it for the failure message
+    // would leave nothing to parse the identifier out of.
+    const created = (await response.json()) as { data?: { id?: string } };
+    expect(response.status, JSON.stringify(created)).toBe(201);
+    probeBoardMemberId = created.data?.id ?? '';
+    expect(probeBoardMemberId).not.toBe('');
+
+    const rows = await activityRows('%/board-members%');
+    expect(rows.length, 'exactly one row per write').toBe(before + 1);
+
+    const row = rows[0]!;
+    expect(row['method']).toBe('POST');
+    expect(row['routePattern'], 'the pattern, never the requested path').toBe('/api/v1/board-members');
+    expect(row['statusCode']).toBe(201);
+    expect(row['accessLevel']).toBe('WRITE');
+    expect(row['reason']).toBe('Adding the trustee the owner named');
+  });
+
+  test('a read leaves no row, so the writes are not buried', async () => {
+    const before = (await activityRows('%')).length;
+
+    const connector = await openConnector({
+      apiUrl: API_BASE_URL,
+      credentialFile: credentialFileFor('accountability-write'),
+    });
+    try {
+      const result = await callTool(connector.client, 'board_register');
+      expect(result.isError, result.text).toBe(false);
+    } finally {
+      await connector.close();
+    }
+
+    expect((await activityRows('%')).length).toBe(before);
+  });
+
+  test('a write-level session is refused a destructive route, and the refusal is recorded', async () => {
+    const credentialFile = credentialFileFor('accountability-write');
+    const accessToken = await accessTokenFromStoredCredential({
+      apiUrl: API_BASE_URL,
+      credentialFile,
+    });
+
+    const response = await fetch(
+      `${API_BASE_URL}/api/v1/board-members/${probeBoardMemberId}`,
+      {
+        method: 'DELETE',
+        headers: {
+          authorization: `Bearer ${accessToken}`,
+          [CONNECTOR_CLIENT_HEADER]: 'mcp-connector/0.1.0',
+        },
+      },
+    );
+
+    expect(response.status, 'deleting needs an administrator-level session').toBe(403);
+    expect((await response.json()).code).toBe('SESSION_LEVEL_TOO_LOW');
+
+    const rows = await activityRows('%/board-members%');
+    const refusal = rows.find((row) => row['method'] === 'DELETE');
+    expect(refusal, 'a refused attempt is the row most worth reading').toBeTruthy();
+    expect(refusal!['statusCode']).toBe(403);
+    expect(refusal!['resourceId']).toBe(probeBoardMemberId);
+  });
+
+  test('an administrator-level session is allowed the same route, so the refusal was the level', async () => {
+    const credentialFile = credentialFileFor('accountability-admin');
+    const connected = await connectConnector({
+      apiUrl: API_BASE_URL,
+      email: account().email,
+      password: account().password,
+      credentialFile,
+      accessLevel: 'admin',
+    });
+    expect(connected.code, connected.stderr).toBe(0);
+    expect(connected.stdout).toContain('Access level: ADMIN');
+
+    const accessToken = await accessTokenFromStoredCredential({
+      apiUrl: API_BASE_URL,
+      credentialFile,
+    });
+
+    const response = await fetch(
+      `${API_BASE_URL}/api/v1/board-members/${probeBoardMemberId}`,
+      {
+        method: 'DELETE',
+        headers: {
+          authorization: `Bearer ${accessToken}`,
+          [CONNECTOR_CLIENT_HEADER]: 'mcp-connector/0.1.0',
+        },
+      },
+    );
+
+    expect(
+      response.status,
+      'an administrator-level session must get past the level check',
+    ).not.toBe(403);
+  });
+
+  test('the owner can see the connector session on the Team page, and what it may do', async () => {
+    const credentialFile = credentialFileFor('accountability-admin');
+    const accessToken = await accessTokenFromStoredCredential({
+      apiUrl: API_BASE_URL,
+      credentialFile,
+    });
+
+    const response = await fetch(
+      `${API_BASE_URL}/api/v1/team/members/${account().userId}/sessions`,
+      {
+        headers: {
+          authorization: `Bearer ${accessToken}`,
+          [CONNECTOR_CLIENT_HEADER]: 'mcp-connector/0.1.0',
+        },
+      },
+    );
+    const sessions = (await response.json()) as Array<Record<string, unknown>>;
+    expect(response.status, JSON.stringify(sessions)).toBe(200);
+    const connectorSessions = sessions.filter(
+      (session) => session['clientKind'] === 'MCP_CONNECTOR',
+    );
+
+    expect(
+      connectorSessions.length,
+      'a connector session the owner cannot see is one they cannot revoke',
+    ).toBeGreaterThan(0);
+    expect(
+      connectorSessions.some((session) => session['accessLevel'] === 'ADMIN'),
+      'the level must be shown, not just the kind',
+    ).toBe(true);
+    expect(
+      sessions.every((session) => typeof session['accessLevel'] === 'string'),
+      'every session reports a level',
+    ).toBe(true);
   });
 });
