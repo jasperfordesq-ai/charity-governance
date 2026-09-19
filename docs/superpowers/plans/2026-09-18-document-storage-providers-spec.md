@@ -285,6 +285,23 @@ leave alpha before this ships.**
 > Atlassian may be unreachable — so it needs the same honest treatment as the
 > rest of the deletion pipeline: retry, a dead-letter, and a record of what was
 > attempted, rather than a best-effort call whose failure nobody sees.
+>
+> **Closed in part, 2026-09-19 (Phase 5, Task 6).** `disconnectConfluence` now
+> presents the sealed refresh token to Atlassian's revocation endpoint before it
+> deletes anything, bounded by `CONNECT_REQUEST_TIMEOUT_MS`, and returns
+> `{ revoked }`. The local deletion is deliberately **not** conditional on that
+> call: a charity that presses Disconnect has withdrawn consent whether or not a
+> third party is reachable to be told, and refusing to forget their credentials
+> because Atlassian is down would be the worse failure.
+>
+> What this does **not** yet give the paragraph above: there is no retry, no
+> dead-letter row, and no persisted record of the attempt — `{ revoked }` is
+> returned to the caller and the DELETE route currently discards it, so a
+> revocation that failed is invisible to an operator. A grant left standing
+> because Atlassian was down for the ten seconds the charity pressed the button
+> is therefore still possible and still unrecorded. Closing that needs the
+> deletion pipeline's machinery (a row, a job, a dead-letter) pointed at
+> revocation, which is a larger piece of work than this task carried.
 
 **Phase 6 — admin UI and health.** Connect/disconnect screens in `apps/web`, and
 per-tenant integration health that does not leak tenant data into the global
