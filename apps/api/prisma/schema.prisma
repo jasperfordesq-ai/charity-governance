@@ -217,6 +217,23 @@ enum AuthSessionRevocationReason {
   LEGACY_UNSPECIFIED
 }
 
+/// What kind of client a session belongs to. Derived from the route that
+/// created it, never from anything the caller sends.
+enum AuthSessionClientKind {
+  WEB
+  MCP_CONNECTOR
+}
+
+/// How much a session may do, chosen once by whoever typed the password.
+/// Ordinal: READ allows safe methods only, WRITE adds ordinary changes,
+/// ADMIN adds the destructive ones. A role ceiling still applies on top, so
+/// a level can only narrow what the account could already do.
+enum AuthSessionAccessLevel {
+  READ
+  WRITE
+  ADMIN
+}
+
 enum SecurityAuditActorKind {
   USER
   SUPPORT
@@ -559,6 +576,11 @@ model AuthSession {
   expiresAt              DateTime
   revokedAt              DateTime?
   revocationReason       AuthSessionRevocationReason?
+  // Immutable once issued, and pinned per family by guard_auth_session_principal,
+  // so a rotation that forgets to copy them fails the insert rather than
+  // restoring a narrowed session to full authority.
+  clientKind             AuthSessionClientKind        @default(WEB)
+  accessLevel            AuthSessionAccessLevel       @default(ADMIN)
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
