@@ -6,6 +6,7 @@ import { prismaPlugin } from './plugins/prisma.js';
 import { errorHandlerPlugin } from './plugins/error-handler.js';
 import { securityHeadersPlugin } from './plugins/security-headers.js';
 import { registerBrowserOriginProtection } from './plugins/browser-origin-protection.js';
+import { clientActivityLogPlugin } from './plugins/client-activity-log.js';
 import { authRoutes } from './routes/auth/index.js';
 import { connectorAuthRoutes } from './routes/auth/connector.js';
 import { organisationRoutes } from './routes/organisations/index.js';
@@ -74,6 +75,11 @@ await app.register(multipart, {
 });
 
 await app.register(prismaPlugin);
+
+// Registered before the routes so its onResponse hook is in place for all of
+// them. It records only unsafe requests from connector sessions, and it can
+// never fail a request: the response has already been sent by the time it runs.
+await app.register(clientActivityLogPlugin);
 
 // A deployment that serves the owner console must have a distinct owner secret.
 // Collapsing the two secrets would silently remove the isolation the console relies on.
