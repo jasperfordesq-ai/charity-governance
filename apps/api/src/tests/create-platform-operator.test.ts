@@ -6,6 +6,8 @@ import { dirname, join } from 'node:path';
 
 process.env.JWT_SECRET = process.env.JWT_SECRET ?? 'tenant-secret-bootstrap-test';
 
+const { isMultiTenant } = await import('../utils/deployment-profile.js');
+
 const [{ createPlatformOperator, reissuePlatformOperatorResetToken, assertOperatorBootstrapRuntime, buildOperatorSetPasswordLink }] = await Promise.all([
   import('../jobs/create-platform-operator.js'),
 ]);
@@ -45,15 +47,66 @@ test('the runtime guard requires production', () => {
   );
 });
 
-test('the runtime guard refuses personal-server mode', () => {
+test('the runtime guard refuses a single-tenant deployment', () => {
+  // Keyed on the tenancy axis, not on the deployment mode. The mode still
+  // feeds that axis by default, so an untouched personal-server host is still
+  // refused; what changes is that a host which has explicitly asked for
+  // multi-tenancy is not.
   assert.throws(
     () =>
       assertOperatorBootstrapRuntime({
         NODE_ENV: 'production',
         CHARITYPILOT_DEPLOYMENT_MODE: 'personal-server',
       } as NodeJS.ProcessEnv),
-    /personal-server/,
+    /single-tenant/,
   );
+
+  assert.throws(
+    () =>
+      assertOperatorBootstrapRuntime({
+        NODE_ENV: 'production',
+        CHARITYPILOT_TENANCY: 'single',
+      } as NodeJS.ProcessEnv),
+    /single-tenant/,
+  );
+});
+
+test('the runtime guard allows an appliance host that asked for multi-tenancy', () => {
+  // This is the case the old guard got wrong. The owner console is gated on
+  // the tenancy axis, so such a host has a console; refusing to create its
+  // first operator left the console live with no way to sign in to it.
+  assert.doesNotThrow(() =>
+    assertOperatorBootstrapRuntime({
+      NODE_ENV: 'production',
+      CHARITYPILOT_DEPLOYMENT_MODE: 'personal-server',
+      CHARITYPILOT_TENANCY: 'multi',
+    } as NodeJS.ProcessEnv),
+  );
+});
+
+test('the guard and the console agree on when they are enabled', () => {
+  // The two must never disagree: a console with no way to create an operator
+  // is as broken as an operator with no console.
+  for (const env of [
+    { CHARITYPILOT_TENANCY: 'multi' },
+    { CHARITYPILOT_TENANCY: 'single' },
+    { CHARITYPILOT_DEPLOYMENT_MODE: 'personal-server' },
+    { CHARITYPILOT_DEPLOYMENT_MODE: 'personal-server', CHARITYPILOT_TENANCY: 'multi' },
+    {},
+  ] as Array<Record<string, string>>) {
+    const consoleEnabled = isMultiTenant(env as NodeJS.ProcessEnv);
+    let bootstrapAllowed = true;
+    try {
+      assertOperatorBootstrapRuntime({ NODE_ENV: 'production', ...env } as NodeJS.ProcessEnv);
+    } catch {
+      bootstrapAllowed = false;
+    }
+    assert.equal(
+      bootstrapAllowed,
+      consoleEnabled,
+      `disagreement for ${JSON.stringify(env)}`,
+    );
+  }
 });
 
 test('a non-canonical email is rejected', async () => {

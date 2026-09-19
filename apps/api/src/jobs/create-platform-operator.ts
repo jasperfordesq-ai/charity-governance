@@ -1,7 +1,7 @@
 import crypto from 'node:crypto';
 import bcrypt from 'bcryptjs';
 import type { PrismaClient } from '@prisma/client';
-import { PERSONAL_SERVER_DEPLOYMENT_MODE } from '../utils/personal-server.js';
+import { isMultiTenant } from '../utils/deployment-profile.js';
 
 const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const RESET_TOKEN_HOURS = 24;
@@ -10,8 +10,18 @@ export function assertOperatorBootstrapRuntime(env: NodeJS.ProcessEnv = process.
   if (env.NODE_ENV !== 'production') {
     throw new Error('Platform operator bootstrap requires NODE_ENV=production');
   }
-  if (env.CHARITYPILOT_DEPLOYMENT_MODE === PERSONAL_SERVER_DEPLOYMENT_MODE) {
-    throw new Error('Platform operator bootstrap is not available on a personal-server deployment');
+  // Keyed on the tenancy axis, which is what the owner console itself is gated
+  // on, rather than on the deployment mode. The mode still feeds that axis by
+  // default, so an untouched personal-server host is refused exactly as before.
+  //
+  // What this fixes: a host provisioned as an appliance but explicitly set to
+  // CHARITYPILOT_TENANCY=multi got a working console and a bootstrap command
+  // that refused to run, leaving the console live with no way to sign in to it.
+  if (!isMultiTenant(env)) {
+    throw new Error(
+      'Platform operator bootstrap is not available on a single-tenant deployment. '
+        + 'Set CHARITYPILOT_TENANCY=multi if this deployment is meant to host several charities.',
+    );
   }
 }
 
