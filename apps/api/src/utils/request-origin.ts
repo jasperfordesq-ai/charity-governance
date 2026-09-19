@@ -17,6 +17,21 @@ type OriginValidationResult =
     };
 
 const SAFE_METHODS = new Set(["GET", "HEAD", "OPTIONS"]);
+
+/**
+ * The connector sign-in routes invert the usual rule.
+ *
+ * Everywhere else, an unsafe request either carries an allow-listed origin or
+ * is treated as suspicious. Here the requirement is the opposite: no origin at
+ * all. These routes return tokens in the response body and set no cookie, and
+ * that is only safe if no browser reaches them — so an origin, even one the
+ * API otherwise trusts, is evidence that one has, and the request is refused.
+ *
+ * Checked as a path segment rather than a suffix, because unlike the
+ * cookie-sensitive paths below these are a whole family of routes.
+ */
+const CONNECTOR_AUTH_PATH_MARKER = "/auth/connector/";
+
 const AUTH_COOKIE_SENSITIVE_PATH_SUFFIXES = [
   "/auth/login",
   "/auth/refresh",
@@ -78,6 +93,21 @@ export function validateUnsafeRequestOrigin(
   }
 
   const origin = headerValue(request.headers.origin);
+
+  if (requestPath(request).includes(CONNECTOR_AUTH_PATH_MARKER)) {
+    if (origin) {
+      return {
+        ok: false,
+        statusCode: 403,
+        payload: {
+          error: "Invalid request origin",
+          code: "INVALID_ORIGIN",
+        },
+      };
+    }
+    return { ok: true };
+  }
+
   if (origin) {
     if (allowedOrigins.has(normaliseOrigin(origin))) {
       return { ok: true };

@@ -302,3 +302,86 @@ test("disallowed CORS origins do not become server errors before the origin guar
     await app.close();
   }
 });
+
+test("connector auth routes refuse any Origin, including an allow-listed one", () => {
+  // These routes hand back tokens in the response body, which is only safe if
+  // no browser reaches them. An origin is evidence that one has.
+  for (const origin of [
+    "https://app.charitypilot.ie",
+    "https://evil.example",
+    "http://localhost:3003",
+  ]) {
+    const result = validateUnsafeRequestOrigin(
+      request("POST", { url: "/api/v1/auth/connector/login", origin }),
+      allowedOrigins,
+    );
+    assert.equal(result.ok, false, `${origin} must be refused`);
+    if (result.ok) continue;
+    assert.equal(result.payload.code, "INVALID_ORIGIN");
+  }
+});
+
+test("connector auth routes pass when no Origin is present", () => {
+  for (const url of [
+    "/api/v1/auth/connector/login",
+    "/api/v1/auth/connector/refresh",
+    "/api/v1/auth/connector/logout",
+  ]) {
+    const result = validateUnsafeRequestOrigin(
+      request("POST", { url }),
+      allowedOrigins,
+    );
+    assert.equal(result.ok, true, `${url} must pass without an origin`);
+  }
+});
+
+test("the browser auth routes are unchanged by the connector carve-out", () => {
+  // Still demand an allow-listed origin, and still refuse a missing one.
+  const missing = validateUnsafeRequestOrigin(
+    request("POST", { url: "/api/v1/auth/login" }),
+    allowedOrigins,
+  );
+  assert.equal(missing.ok, false);
+  if (!missing.ok) assert.equal(missing.payload.code, "MISSING_ORIGIN");
+
+  const allowed = validateUnsafeRequestOrigin(
+    request("POST", {
+      url: "/api/v1/auth/login",
+      origin: "https://app.charitypilot.ie",
+    }),
+    allowedOrigins,
+  );
+  assert.equal(allowed.ok, true);
+
+  const foreign = validateUnsafeRequestOrigin(
+    request("POST", {
+      url: "/api/v1/auth/login",
+      origin: "https://evil.example",
+    }),
+    allowedOrigins,
+  );
+  assert.equal(foreign.ok, false);
+});
+
+test("a path merely mentioning connector elsewhere does not get the carve-out", () => {
+  const result = validateUnsafeRequestOrigin(
+    request("POST", { url: "/api/v1/documents/auth-connector-notes" }),
+    allowedOrigins,
+  );
+  // No origin, no auth cookie, not a cookie-sensitive path: passes for the
+  // ordinary reason, not because it was mistaken for a connector route.
+  assert.equal(result.ok, true);
+
+  const withCookie = validateUnsafeRequestOrigin(
+    request("POST", {
+      url: "/api/v1/documents/auth-connector-notes",
+      accessCookie: "a-session",
+    }),
+    allowedOrigins,
+  );
+  assert.equal(
+    withCookie.ok,
+    false,
+    "a cookie-authenticated request must still need an origin",
+  );
+});
