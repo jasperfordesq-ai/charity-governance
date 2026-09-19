@@ -122,6 +122,10 @@ export interface TeamSessionResponse {
   latestCreatedAt: string;
   expiresAt: string;
   deviceLabel: string | null;
+  /** Which client the session belongs to. Web sessions are always ADMIN. */
+  clientKind: 'WEB' | 'MCP_CONNECTOR';
+  /** How much the session may do, chosen when the password was typed. */
+  accessLevel: 'READ' | 'WRITE' | 'ADMIN';
   active: boolean;
   current: boolean;
   revokedAt: string | null;

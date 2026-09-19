@@ -60,6 +60,12 @@ test('session inventory and revocation controls cover one family, all families, 
   assert.match(modal, /formatDateTime/);
   assert.match(modal, /aria-label=\{`Revoke session/);
 
+  // A connector session the owner cannot see is a connector session the owner
+  // cannot revoke. The badge names the client and the level it holds.
+  assert.match(modal, /session\.clientKind === 'MCP_CONNECTOR'/);
+  assert.match(modal, /MCP connector/);
+  assert.match(modal, /session\.accessLevel/);
+
   // Internal identifiers may route a revocation but are never rendered as device secrets.
   assert.doesNotMatch(modal, /\{session\.latestSessionId\}/);
   assert.doesNotMatch(modal, />\s*\{session\.familyId\}/);

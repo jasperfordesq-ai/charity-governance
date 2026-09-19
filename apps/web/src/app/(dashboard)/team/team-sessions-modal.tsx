@@ -75,6 +75,11 @@ export function TeamSessionsModal({
                             {session.active ? 'Active' : 'Revoked or expired'}
                           </StatusChip>
                           {session.current ? <StatusChip tone="brand">Current session</StatusChip> : null}
+                          {session.clientKind === 'MCP_CONNECTOR' ? (
+                            <StatusChip tone="warning">
+                              {`MCP connector · ${session.accessLevel.toLowerCase()} access`}
+                            </StatusChip>
+                          ) : null}
                         </div>
                         <p className="mt-2 text-sm font-medium text-gray-700 dark:text-gray-200">
                           Session {session.displaySuffix} · {session.deviceLabel ?? 'Unlabelled device'}

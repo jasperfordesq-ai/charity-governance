@@ -137,3 +137,29 @@ test("the ungated list names a real route, so a stale entry cannot hide a new on
     assert.ok(known.has(key), `UNGATED_DELETES names ${key}, which no longer exists`);
   }
 });
+
+test("the session list reports the posture it read, not a constant", () => {
+  // Proved end to end in the live suite, where a real connector session shows
+  // up on the Team page. This is the fast-suite half: it catches the posture
+  // being hardcoded, which no stubbed test would notice because no stubbed
+  // test reaches the query.
+  const service = readFileSync(
+    fileURLToPath(
+      new URL("../../src/services/team-lifecycle.service.ts", import.meta.url),
+    ),
+    "utf8",
+  );
+
+  assert.match(
+    service,
+    /latest\."clientKind",/,
+    "the query must select the posture of the latest session in the family",
+  );
+  assert.match(service, /latest\."accessLevel",/);
+  assert.match(
+    service,
+    /clientKind: family\.clientKind,/,
+    "the response must carry the value the query returned",
+  );
+  assert.match(service, /accessLevel: family\.accessLevel,/);
+});

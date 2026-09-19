@@ -72,6 +72,8 @@ type SessionFamilySummaryRow = {
   latestCreatedAt: Date;
   expiresAt: Date;
   deviceLabel: string | null;
+  clientKind: 'WEB' | 'MCP_CONNECTOR';
+  accessLevel: 'READ' | 'WRITE' | 'ADMIN';
   active: boolean;
   current: boolean;
   revokedAt: Date | null;
@@ -668,6 +670,8 @@ export class TeamLifecycleService {
           latest."createdAt" AS "latestCreatedAt",
           COALESCE(active."expiresAt", latest."expiresAt") AS "expiresAt",
           latest."deviceLabel",
+          latest."clientKind",
+          latest."accessLevel",
           active."expiresAt" IS NOT NULL AS "active",
           selected_families."current",
           CASE WHEN active."expiresAt" IS NULL THEN latest."revokedAt" ELSE NULL END AS "revokedAt",
@@ -679,6 +683,8 @@ export class TeamLifecycleService {
         CROSS JOIN LATERAL (
           SELECT
             session."deviceLabel",
+            session."clientKind",
+            session."accessLevel",
             session."expiresAt",
             session."revokedAt",
             session."revocationReason",
@@ -711,6 +717,10 @@ export class TeamLifecycleService {
           latestCreatedAt: family.latestCreatedAt.toISOString(),
           expiresAt: family.expiresAt.toISOString(),
           deviceLabel: family.deviceLabel,
+          // Which client this session belongs to, and how much it may do. The
+          // owner cannot revoke a connector session they cannot see.
+          clientKind: family.clientKind,
+          accessLevel: family.accessLevel,
           active: family.active,
           current: family.current,
           revokedAt: family.revokedAt?.toISOString() ?? null,
