@@ -496,45 +496,81 @@ as a defect that has been fixed.
 
 #### What to tell a data subject
 
-**One document, one provider, one erasure. There is no second erasure running
-alongside it.** `remove()` in `document.service.ts` is the only thing in the
-codebase that enqueues a `DocumentStorageDeletion`, and it creates exactly one
-row stamped with exactly one provider — the one the organisation is configured
-for. `retryPendingStorageDeletions` resolves exactly one eraser from that one
-provider. There is no fan-out and no second row. So a document's erasure
-guarantee is the guarantee of **the provider its row names**, and nothing else.
+**A mirrored document has two copies, and deleting it now erases both.** Under
+the mirror model this phase is built on — Supabase in Ireland authoritative,
+Confluence a published copy on top of it — one erasure row could only ever have
+proved one of the two gone. `remove()` in `document.service.ts` therefore
+enqueues **two** `DocumentStorageDeletion` rows for a document that was
+published:
 
-Do not tell a data subject that a Supabase erasure also sweeps up a Confluence
-copy. It does not. A row stamped `supabase` deletes the Supabase object, reaches
-`PROCESSED`, and never calls the Confluence eraser — whatever else the document
-may have on a Confluence site.
+- the `supabase` row, stamped with the provider the organisation resolves to,
+  exactly as before; and
+- a `confluence` row whose `targetRef` names the cloud, the page and the
+  attachments recorded on the document's `DocumentPublication`.
 
-**Why this is not a bug that needs fixing, and what would make it one.** Erasing
-both sides of one document is what the *mirror* model requires: a Supabase
-object that is authoritative with a published Confluence copy on top of it. That
-model is Open Question 1 in
-`docs/superpowers/plans/2026-09-18-document-storage-providers-spec.md`, it is
-**unresolved, and it is the owner's to rule on** — not this document's, and not
-the erasure pipeline's. Under the DPO's signed-off reading (2026-09-18,
-reference-not-duplicate: one document, one store), a Confluence-authoritative
-document has one provider and today's one-row behaviour is already correct.
-Under the spec's own Mode C it is not, and **Phase 4 must then enqueue erasure
-for both sides** — a design change to the publish pipeline, recorded as item 6
-of the Phase 4 note in that spec. Building dual erasure now would be picking the
-answer to a question the owner has not been asked.
+Phase 5's dispatcher then drives each row through its own eraser, its own
+retries and its own dead-letter. **The two guarantees stay different, and the
+difference is what a DPO has to state.**
 
-Today this is a documentation statement rather than a live exposure:
-`documentStorageProviders` registers only `supabase` and `local`, so no
-organisation can hold a Confluence storage provider, nothing publishes to
-Confluence yet, and no code outside tests ever writes `targetRef`.
+**The second row is enqueued when the publication recorded a `pageId` — not
+when it reached `PROCESSED`.** A publication that was cancelled because its
+document was deleted mid-flight, or that dead-lettered after its page was
+created, is not `PROCESSED`, but it names a real page in the charity's site. A
+`PROCESSED` gate would skip exactly those and leave a page nobody can find and
+nobody can erase. A document that was never published records no `pageId` and
+gets only the Supabase row, because a Confluence row for it would dead-letter
+against a page that never existed.
+
+The `targetRef` is built through `parseConfluenceErasureTarget`, the same
+arbiter the eraser reads it with, so a target the eraser would refuse fails the
+deletion **while the document still exists** rather than dead-lettering later,
+after the Supabase copy is already gone.
+
+**What may now be said, and what may not.**
+
+- The Supabase copy is erased, and that is **provable**: a delete against a
+  store CharityPilot controls, through a pipeline built to prove it — claim,
+  bounded retry, dead-letter, recovery ledger.
+- The Confluence copy is **asked to be erased, best-effort**, bounded by
+  permissions the charity holds. Everything in *"Confluence: erasure is
+  best-effort"* above applies unchanged: purge needs a higher permission than
+  delete and the charity grants it; between delete and purge — and after a
+  purge the site refuses — the content sits in **the charity's own trash**,
+  restorable by **their** administrators, from **their** site; and the read-back
+  proof does not yet distinguish trashed from purged.
+- **The Confluence side has not been exercised against a real Atlassian site.**
+  The Atlassian app install has not landed, so every claim above the Supabase
+  line is proven against fakes only. A fake cannot report that Atlassian changed
+  a status code, and the open question of whether a trashed page reads back as
+  404 bears directly on what the Confluence erasure proves.
+
+So: do **not** tell a data subject that both copies are provably gone. Tell them
+that the Irish copy is provably gone, that erasure of the charity's Confluence
+copy was issued and verified only as far as a 404 read-back allows, and that the
+content may sit in the charity's own trash until someone with the right
+permissions purges it there.
+
+**On the model this rests on.** Erasing both sides is what the *mirror* model
+requires, and the mirror model is the reversible choice this phase took while
+Open Question 1 in
+`docs/superpowers/plans/2026-09-18-document-storage-providers-spec.md` remains
+**unresolved and the owner's to rule on**. Under the DPO's signed-off reading
+(2026-09-18, reference-not-duplicate: one document, one store) a document has
+one store and the second row is simply never enqueued, because nothing
+published means no `pageId`. If the owner rules the other way — Confluence
+authoritative for chosen categories — the second row is not the thing to
+change; the residency question below is.
+
+`documentStorageProviders` still registers only `supabase` and `local`.
+**Confluence is a publish target, never a storage provider**, so no
+organisation can hold a Confluence storage provider and no document's
+authoritative bytes can live there. Publication happens only for an
+organisation that has deliberately connected Confluence, which is still alpha.
 
 **Where a document is authoritative in Confluence, there is no Irish copy to
 fall back on, and the guarantee for that document is only ever the best-effort
-one.** Do not carry the Supabase guarantee across. For a GDPR erasure request
-this is the material distinction, and it is the one a DPO has to state: either
-the platform can prove the bytes are gone, or it can prove only that it issued
-delete and purge and read back a 404 from a site whose trash and whose
-permissions belong to the charity.
+one.** Do not carry the Supabase guarantee across. Today no such document can
+exist, by the paragraph above; this stands as the rule if that ever changes.
 
 #### Residency of a Confluence-authoritative document — BLOCKED
 

@@ -13,7 +13,10 @@ import {
   confluencePublishTargetForOrganisation,
   type PublishTargetClient,
 } from './confluence-publish-target.service.js';
-import { DOCUMENT_PUBLICATION_MAX_ATTEMPTS } from './document-publication.service.js';
+import {
+  DOCUMENT_PUBLICATION_MAX_ATTEMPTS,
+  publicationErasureTarget,
+} from './document-publication.service.js';
 
 type DocumentStorageDeletionState = 'PENDING' | 'DEAD_LETTER' | 'PROCESSED';
 type DocumentStorageDeletionTerminalReason =
@@ -253,11 +256,15 @@ function deletionRecoveryDelegate(prisma: unknown): DocumentStorageDeletionRecov
 // ---------------------------------------------------------------------------
 
 /**
- * The narrow slice of `DocumentPublication` this file writes. It never reads
- * or writes `cloudId`, `spaceId`, `attachmentId` or `publishedAt` — those
- * belong to the publish worker (Task 6) alone, and this file's two jobs
- * (enqueue a row, cancel one) never need to know where a page is, only
- * whether one was ever recorded.
+ * The narrow slice of `DocumentPublication` this file touches. It never writes
+ * any of the location columns and never reads `spaceId`, `pageTitle` or
+ * `publishedAt` — those belong to the publish worker (Task 6) alone.
+ *
+ * It does *read* `cloudId`, `pageId` and `attachmentId`, because Task 8's dual
+ * erasure has to name the Confluence copy it is enqueueing an erasure for, and
+ * those three columns are the only record of where that copy is. They are read
+ * and passed straight to `publicationErasureTarget`; nothing here interprets
+ * them.
  */
 type DocumentPublicationCreateClient = {
   documentPublication: {
@@ -267,7 +274,14 @@ type DocumentPublicationCreateClient = {
     findFirst(args: {
       where: Record<string, unknown>;
       select?: Record<string, boolean>;
-    }): Promise<{ id: string; pageId: string | null; attempts: number; state: string } | null>;
+    }): Promise<{
+      id: string;
+      cloudId: string | null;
+      pageId: string | null;
+      attachmentId: string | null;
+      attempts: number;
+      state: string;
+    } | null>;
     updateMany(args: { where: Record<string, unknown>; data: Record<string, unknown> }): Promise<{ count: number }>;
     deleteMany(args: { where: Record<string, unknown> }): Promise<{ count: number }>;
   };
@@ -384,6 +398,23 @@ export class DocumentService {
       }, this.deletionAttemptTimeoutMs);
     });
 
+    // An eraser is asked to stop through `controller.signal`, but nothing
+    // forces it to: the attempt that loses this race is still in flight and may
+    // reject long afterwards, when the caller has already moved on. In Node an
+    // unhandled rejection terminates the process by default, so one slow
+    // erasure that eventually fails could take down the scheduler that was
+    // about to process every other row.
+    //
+    // **`Promise.race` is what prevents that, and it has to stay the thing that
+    // does.** `race` attaches a rejection handler to *every* entrant, so the
+    // loser's late rejection is observed and discarded by `race` itself; a
+    // separate `.catch()` on the attempt would be dead code, which is why there
+    // is none here. What is not safe is a refactor that stops handing the
+    // attempt to `race` — observing only its fulfilment (`attempt.then(() =>
+    // …)`) leaves a derived promise whose rejection nothing handles, and the
+    // process dies. That was measured, not assumed, and it is pinned by
+    // 'a late rejection from a timed-out storage deletion attempt is observed
+    // rather than left unhandled' in document-storage-cleanup.test.ts.
     try {
       await Promise.race([
         Promise.resolve().then(() =>
@@ -801,6 +832,14 @@ export class DocumentService {
         },
       });
 
+      // Confluence is a mirror, so a mirrored document has bytes in two
+      // places and one erasure row can only ever prove one of them gone.
+      // Deliberately *inside* this transaction and deliberately not
+      // best-effort: if the Confluence copy cannot be enqueued, the document
+      // must not be deleted, because a deleted document with no row naming its
+      // page is an orphan nobody can find and nobody can erase.
+      await this.enqueueConfluenceErasure(tx, organisationId, id, doc.fileUrl);
+
       await tx.document.delete({ where: { id } });
 
       return { storagePath: doc.fileUrl, storageDeletionId: deletion.id };
@@ -814,6 +853,66 @@ export class DocumentService {
     await this.cancelConfluencePublication(id);
 
     return result;
+  }
+
+  /**
+   * Enqueues the **second** erasure row — the one for the Confluence copy.
+   *
+   * Under the mirror model a published document has two copies, so deleting it
+   * has to erase two. The `supabase` row above is unchanged; this adds a
+   * `confluence` row whose `targetRef` names the page. Phase 5's dispatcher,
+   * permanence mapping, dead-lettering and operator recovery then handle it
+   * with no further change: this method's whole job is to write a row the
+   * existing pipeline already knows how to drive.
+   *
+   * **The gate is `pageId !== null`, not `state === 'PROCESSED'`.** A
+   * publication cancelled because its document was deleted mid-flight keeps its
+   * identifiers deliberately (see {@link DocumentService.cancelConfluencePublication})
+   * and its state stays `PENDING` — but it names a real page in the charity's
+   * site. So does a row that dead-lettered after the page was created. Gating
+   * on `PROCESSED` would skip exactly those, leaving behind the orphan this
+   * pipeline exists to prevent. A gate is still needed, because a document that
+   * was never published has nothing out there and a row for it would
+   * dead-letter against a page that never existed — noise that trains an
+   * operator to ignore alerts. `pageId !== null` is the honest test of "is
+   * there something out there?"; `PROCESSED` is only a proxy for it, and it
+   * breaks in the one case that matters.
+   *
+   * **The target is built through `publicationErasureTarget`**, which is
+   * `parseConfluenceErasureTarget` — the arbiter that refuses an empty or
+   * untrimmed id, permanently. Passing the constructed object through it here
+   * means a malformed target aborts this transaction while the document still
+   * exists and an operator can act, rather than dead-lettering later, after the
+   * Supabase copy is already gone.
+   *
+   * `storagePath` is copied from the document for one reason only: the column
+   * is `NOT NULL` and an operator reading a dead-letter list needs to know
+   * which document a row is for. It is **not** how this row is addressed. The
+   * Confluence eraser reads `targetRef` and must never fall back to this field.
+   */
+  private async enqueueConfluenceErasure(
+    tx: unknown,
+    organisationId: string,
+    documentId: string,
+    storagePath: string,
+  ): Promise<void> {
+    const publication = await publicationDelegate(tx).findFirst({
+      where: { documentId, provider: 'confluence' },
+      select: { cloudId: true, pageId: true, attachmentId: true },
+    });
+
+    if (publication === null || publication.pageId === null) return;
+
+    const targetRef = publicationErasureTarget(publication);
+
+    await deletionDelegate(tx).create({
+      data: {
+        organisationId,
+        storagePath,
+        provider: 'confluence',
+        targetRef,
+      },
+    });
   }
 
   /**

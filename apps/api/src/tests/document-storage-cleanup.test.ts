@@ -389,7 +389,14 @@ type PublicationFixture = {
 } & Record<string, unknown>;
 
 function buildPublicationCancelPrisma(publication: PublicationFixture | null) {
-  let row: PublicationFixture | null = publication ? { ...publication } : null;
+  // `remove()` now reads `cloudId` and `attachmentId` as well, to build the
+  // Confluence erasure target (Task 8). They are defaulted here rather than at
+  // every call site because these tests are about cancellation, not erasure —
+  // but they must be *present*, since `applyPrismaSelect` refuses to invent a
+  // field the production `select` asks for.
+  let row: PublicationFixture | null = publication
+    ? { cloudId: 'cloud-1', attachmentId: null, ...publication }
+    : null;
   const finds: Array<Record<string, unknown>> = [];
   const updates: Array<Record<string, unknown>> = [];
   const deletes: Array<Record<string, unknown>> = [];
@@ -512,8 +519,19 @@ test('deleting a document does not disturb a publication that is already dead-le
 
 test('a Confluence publication cancellation failure never fails the document deletion', async () => {
   const mock = buildPublicationCancelPrisma(null);
-  mock.prisma.documentPublication.findFirst = async () => {
-    throw new Error('documentPublication lookup exploded');
+  const readPublication = mock.prisma.documentPublication.findFirst;
+  // `remove()` reads `DocumentPublication` twice now, for two different jobs
+  // with two different failure policies, so this double fails exactly one of
+  // them: the cancellation read, identified by the `state` it selects. Task 8's
+  // erasure read is deliberately *not* best-effort — see the test below.
+  mock.prisma.documentPublication.findFirst = async (args: {
+    where: Record<string, unknown>;
+    select?: Record<string, unknown>;
+  }) => {
+    if (args.select && Object.hasOwn(args.select, 'state')) {
+      throw new Error('documentPublication lookup exploded');
+    }
+    return readPublication(args);
   };
   const originalConsoleError = console.error;
   console.error = () => {};
@@ -527,3 +545,240 @@ test('a Confluence publication cancellation failure never fails the document del
   }
 });
 
+
+// ---------------------------------------------------------------------------
+// Task 8: dual erasure. Confluence is a mirror, so a mirrored document has two
+// copies and deleting it must enqueue two erasure rows — the Supabase one
+// unchanged, and a `confluence` one naming the page.
+// ---------------------------------------------------------------------------
+
+type PublishedPublicationFixture = {
+  id: string;
+  cloudId: string | null;
+  pageId: string | null;
+  attachmentId: string | null;
+  attempts: number;
+  state: string;
+} & Record<string, unknown>;
+
+function publishedPublication(
+  overrides: Partial<PublishedPublicationFixture> = {},
+): PublishedPublicationFixture {
+  return {
+    id: 'publication-1',
+    cloudId: 'cloud-1',
+    pageId: 'page-1',
+    attachmentId: 'attachment-1',
+    attempts: 1,
+    state: 'PROCESSED',
+    ...overrides,
+  };
+}
+
+function buildDualErasurePrisma(publication: PublishedPublicationFixture | null) {
+  const created: Array<Record<string, unknown>> = [];
+  let documentDeleted = false;
+
+  const client = {
+    organisation: {
+      findUnique: async () => ({ documentStorageProvider: 'supabase', documentStorageAlphaOptIn: false }),
+    },
+    document: {
+      findFirst: async () => ({ id: 'doc-1', organisationId: 'org-1', fileUrl: 'org-1/policy.pdf' }),
+      delete: async () => {
+        documentDeleted = true;
+        return { id: 'doc-1' };
+      },
+    },
+    documentStorageDeletion: {
+      create: async (args: { data: Record<string, unknown> }) => {
+        created.push(args.data);
+        return { id: `deletion-${created.length}` };
+      },
+    },
+    documentPublication: {
+      // `applyPrismaSelect` is what stops this double inventing a row shape: a
+      // field the production `select` asks for and the fixture does not define
+      // throws here rather than arriving as `undefined`.
+      findFirst: async (args: { where: Record<string, unknown>; select?: Record<string, unknown> }) =>
+        publication === null ? null : applyPrismaSelect(publication, args),
+      updateMany: async () => ({ count: 1 }),
+      deleteMany: async () => ({ count: 1 }),
+    },
+    $transaction: async <T>(callback: (tx: unknown) => Promise<T>) => callback(client),
+  };
+
+  return { prisma: client, created, documentDeleted: () => documentDeleted };
+}
+
+test('deleting a mirrored document enqueues an erasure row for each copy', async () => {
+  const mock = buildDualErasurePrisma(publishedPublication());
+  const service = new DocumentService(mock.prisma as never, () => NOW);
+
+  await service.remove('org-1', 'doc-1');
+
+  assert.equal(mock.created.length, 2, 'two copies exist, so two erasure rows must exist');
+  assert.equal(mock.created[0].provider, 'supabase');
+  assert.equal(mock.created[0].targetRef, undefined, 'the Supabase row is unchanged');
+  assert.equal(mock.created[1].provider, 'confluence');
+  assert.equal(mock.created[1].organisationId, 'org-1');
+  // Carried so an operator reading a dead-letter list can tell which document
+  // the row is for. It is not how the row is addressed — `targetRef` is.
+  assert.equal(mock.created[1].storagePath, 'org-1/policy.pdf');
+  assert.deepEqual(mock.created[1].targetRef, {
+    kind: 'confluence',
+    cloudId: 'cloud-1',
+    pageId: 'page-1',
+    attachmentIds: ['attachment-1'],
+  });
+});
+
+test('a published page with nothing attached to it yet still names an empty attachment list', async () => {
+  // The create-then-attach window. The page exists in the charity's site, so it
+  // is owed erasure; fabricating an attachment id for it would make the eraser
+  // issue a delete against something that never existed.
+  const mock = buildDualErasurePrisma(publishedPublication({ attachmentId: null, state: 'PENDING' }));
+  const service = new DocumentService(mock.prisma as never, () => NOW);
+
+  await service.remove('org-1', 'doc-1');
+
+  assert.equal(mock.created.length, 2);
+  assert.deepEqual(mock.created[1].targetRef, {
+    kind: 'confluence',
+    cloudId: 'cloud-1',
+    pageId: 'page-1',
+    attachmentIds: [],
+  });
+});
+
+test('a document that was never published to Confluence enqueues only the Supabase row', async () => {
+  const mock = buildDualErasurePrisma(null);
+  const service = new DocumentService(mock.prisma as never, () => NOW);
+
+  await service.remove('org-1', 'doc-1');
+
+  assert.equal(mock.created.length, 1);
+  assert.equal(mock.created[0].provider, 'supabase');
+});
+
+test('a publication that never recorded a pageId enqueues only the Supabase row', async () => {
+  // Nothing was ever created in the charity's site. A Confluence row here would
+  // dead-letter against a page that never existed: noise that trains an
+  // operator to ignore alerts.
+  const mock = buildDualErasurePrisma(
+    publishedPublication({ cloudId: null, pageId: null, attachmentId: null, state: 'PENDING', attempts: 0 }),
+  );
+  const service = new DocumentService(mock.prisma as never, () => NOW);
+
+  await service.remove('org-1', 'doc-1');
+
+  assert.equal(mock.created.length, 1);
+  assert.equal(mock.created[0].provider, 'supabase');
+});
+
+// The gate is `pageId !== null`, never `state === 'PROCESSED'`. Each of these
+// rows names a real page in the charity's Confluence and none of them is
+// `PROCESSED`; a `PROCESSED` gate would skip every one of them and leave a page
+// nobody can find and nobody can erase.
+const unprocessedButPaged: Array<[string, Partial<PublishedPublicationFixture>]> = [
+  ['dead-lettered after its page was created', { state: 'DEAD_LETTER', attempts: 5, attachmentId: null }],
+  [
+    'cancelled mid-flight because its document was deleted',
+    { state: 'PENDING', attempts: DOCUMENT_PUBLICATION_MAX_ATTEMPTS, attachmentId: null },
+  ],
+  ['still pending its first attempt after the page was recorded', { state: 'PENDING', attempts: 0 }],
+];
+
+for (const [situation, overrides] of unprocessedButPaged) {
+  test(`a publication ${situation} still has its Confluence copy erased`, async () => {
+    const mock = buildDualErasurePrisma(publishedPublication(overrides));
+    const service = new DocumentService(mock.prisma as never, () => NOW);
+
+    await service.remove('org-1', 'doc-1');
+
+    assert.equal(mock.created.length, 2);
+    assert.equal(mock.created[1].provider, 'confluence');
+    assert.equal(
+      (mock.created[1].targetRef as { pageId: string }).pageId,
+      'page-1',
+      'the page exists in the charity site whatever this row state says',
+    );
+  });
+}
+
+test('a malformed Confluence erasure target fails the deletion while the document still exists', async () => {
+  // `parseConfluenceErasureTarget` is the arbiter and its refusal is permanent,
+  // so the target is built through it rather than beside it. A bad target has to
+  // fail now, while the document and both its copies are still there and an
+  // operator can act — not later, after the Supabase copy is already gone and
+  // the row dead-letters blaming the wrong phase.
+  const mock = buildDualErasurePrisma(publishedPublication({ pageId: ' page-1' }));
+  const service = new DocumentService(mock.prisma as never, () => NOW);
+
+  await assert.rejects(
+    () => service.remove('org-1', 'doc-1'),
+    (error: unknown) => {
+      assert.equal((error as AppError).code, 'ERASURE_TARGET_MALFORMED');
+      return true;
+    },
+  );
+
+  assert.equal(mock.documentDeleted(), false, 'the document must survive a target the eraser would refuse');
+});
+
+test('a failed read of the publication row fails the deletion rather than orphaning the page', async () => {
+  // The counterpart to the cancellation test above, and the reason the two
+  // reads cannot share one failure policy. Cancelling a queued publication is
+  // best-effort: the worst a failure costs is some retry noise. Deciding
+  // whether a Confluence copy exists is not — if that read fails and the
+  // document is deleted anyway, the only record of where the page is goes with
+  // it, and the page can never be found or erased.
+  const mock = buildDualErasurePrisma(publishedPublication());
+  mock.prisma.documentPublication.findFirst = async () => {
+    throw new Error('documentPublication lookup exploded');
+  };
+  const service = new DocumentService(mock.prisma as never, () => NOW);
+
+  await assert.rejects(() => service.remove('org-1', 'doc-1'), /documentPublication lookup exploded/);
+  assert.equal(mock.documentDeleted(), false);
+});
+
+test('a late rejection from a timed-out storage deletion attempt is observed rather than left unhandled', async () => {
+  // An eraser that ignores its abort signal keeps running past the deadline and
+  // may reject when nothing is awaiting it. In Node that terminates the process,
+  // so one slow erasure that eventually fails would take down the scheduler that
+  // was about to process every other row. `Promise.race` attaches a rejection
+  // handler to every entrant, which is what makes this safe today; this test is
+  // what stops a refactor removing that property silently.
+  const mock = buildFallbackPrisma(pendingRecord());
+  const service = new DocumentService(mock.prisma as never, () => NOW, 20);
+
+  const unhandled: unknown[] = [];
+  const observe = (reason: unknown) => {
+    unhandled.push(reason);
+  };
+  process.on('unhandledRejection', observe);
+
+  try {
+    const result = await service.retryPendingStorageDeletions(
+      supabaseDispatcher(
+        () =>
+          new Promise<void>((_resolve, reject) => {
+            setTimeout(() => reject(new Error('the provider failed, long after the deadline')), 60);
+          }),
+      ),
+    );
+
+    assert.equal(result.retryScheduled, 1);
+    assert.equal(mock.row().state, 'PENDING');
+
+    // Past the late rejection, then a full turn of the loop: Node only reports a
+    // rejection as unhandled once the microtask queue has drained.
+    await new Promise((resolve) => setTimeout(resolve, 120));
+    await new Promise((resolve) => setImmediate(resolve));
+
+    assert.deepEqual(unhandled, [], 'the losing attempt rejection must be observed and discarded');
+  } finally {
+    process.off('unhandledRejection', observe);
+  }
+});
