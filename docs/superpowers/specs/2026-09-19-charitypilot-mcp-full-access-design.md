@@ -208,12 +208,28 @@ wrong reason — the record was already gone — which a canary caught.
 **Explicit exclusions (with reason, tested):** `/owner/*` (separate operator realm, impersonation deferral), billing checkout/portal (Stripe redirects), auth register/forgot/reset/verify-email, team accept-invite, Stripe webhook, health probes, storage-deletion requeue (human typed-confirmation flow), `DELETE /integrations/confluence` and Confluence OAuth callback (browser flow; owner ruling).
 
 ### Phase 4: documents
+**DONE (2026-09-19).** Both tools are off unless the operator names a directory,
+and neither is advertised until then. Containment is decided after resolving
+links on both sides, because a link inside the root pointing out of it passes a
+check made on the spelling alone. A download returns the path it wrote and never
+the bytes: the field policy cannot filter a stored file. The accepted types and
+the size ceiling mirror the API's, with a test that reads the API's own list.
+Proved live by a round trip that compares bytes.
+
 
 - `document_upload {path, name, category, ...}`: path must resolve under `--upload-root` (realpath containment; deny dotfiles, `node_modules`, `.git`, symlinks escaping the root); mirror the API's MIME/extension/size allowlist from `document-upload-validation.ts` with a drift test; multipart via `client.ts`. Upload is an exfiltration channel *into* the tenant (and onward to Confluence), which is why the root matters.
 - `document_download {id}`: only when `--download-dir` is set (default on for local, off elsewhere); writes 0600; returns the path, never bytes. The PD gate cannot filter a PDF.
 - Harness: upload → list → download round trip, SHA-256 equal; MEMBER cannot upload; READ session cannot upload.
 
 ### Phase 5: trustee distribution and docs
+**Docs DONE (2026-09-19).** `mcp/README.md` and `mcp/HANDOVER.md` are rewritten:
+the README no longer claims the connector is read-only, and the handover leads
+with the fact that the VM runs a build predating all of this. Distribution to
+trustees needs no further code — it is `connect --access-level read` plus the
+install steps — so it is the owner's to do when they want it. The optional
+`Organisation.connectorPolicy` was NOT built: an org-wide rule is worth adding
+only once somebody other than the owner is actually using the connector.
+
 
 - `connect --access-level read` for trustees; README install guide for Claude Desktop and Claude Code per profile; optional `Organisation.connectorPolicy` (connector access for non-owners: none/read/full) if the owner wants an org-wide rule.
 - Docs: new spec `docs/superpowers/specs/2026-09-XX-charitypilot-mcp-full-access-design.md` reversing the two exclusions with reasoning; update `mcp/README.md`, `mcp/HANDOVER.md`; correct the old spec's tenant-test claim.
