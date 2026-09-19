@@ -9,8 +9,9 @@ which decisions were made unilaterally and are yours to reverse.
 
 ## Status in one paragraph
 
-Eleven planned tasks are complete. The unit suite is 100 tests (99 passing, one skipped
-because it asserts a POSIX file mode), typecheck is clean, and the package
+The connector reads the whole API. Twenty-seven tools cover every readable route; the
+unit suite is 127 tests (126 passing, one skipped because it asserts a POSIX file mode)
+and the live suite is 26. Typecheck is clean and the package
 lives at `mcp/` — deliberately OUTSIDE the npm workspace globs, so nothing about it can
 reach the API's Docker build or the blue-green deploy.
 
@@ -57,15 +58,12 @@ unexpected modified files, check whether another session is mid-flight before re
 
 ## What is deliberately not built
 
-- **No `governance_registers` tool.** That route returns a mixed payload of several
-  register types, and the per-model field filter cannot classify a mixed object. As a
-  result **members, conflicts and complaints are unreachable by any tool today** — the gate
-  covers them as defence-in-depth for when a tool is added. Adding one means first designing
-  a filter that can dispatch per record type. The README says this plainly; keep it honest.
-- **No pagination.** Tools take no input, so `board_register` is fixed at page 1, pageSize
-  50. `hasMore` reaches the model but there is no way to fetch page 2.
-- **No writes, no document downloads, no response caching, no generic "call any endpoint"
-  tool.** Each was excluded on purpose; see the spec's "Deliberately excluded".
+- **No write tools, no document downloads, no response caching, no generic "call any
+  endpoint" tool.** Each was excluded on purpose. Writes and downloads are planned for
+  later phases; the other two stay excluded.
+- Nineteen readable routes are deliberately not exposed, each with its reason in
+  `mcp/src/route-coverage.ts`. A test requires every readable route to be either a tool
+  or an entry there, so the list cannot quietly fall behind the API.
 
 ## Open problems, in priority order
 
@@ -96,7 +94,26 @@ second's trustee, and the second charity's own session does return it. The secon
 what makes the first meaningful, since an absence proves nothing if the record was never
 reachable. The spec has been corrected to describe this.
 
-### 3. A record carrying a `data` field is misread as an envelope
+### 3. Five tools once shipped with no gate at all (found and fixed)
+
+Worth knowing because the mistake is easy to repeat. A tool that named no model was
+passed through untouched, and five did: the dashboard, the compliance records, the
+document list and both deadline tools. Between them they returned whole deadline rows,
+document owners, the staff member who last edited each compliance record, and activity
+lines built by interpolating trustee and staff names into a sentence.
+
+The last of those is the instructive part. Free text assembled by interpolation cannot
+be protected by a field allowlist, because there is no field to withhold — the name is
+inside the string. The dashboard shape therefore drops the whole description rather
+than trying to filter it.
+
+Two tests now hold the line: every tool must declare a model, a shape, or a sentence
+saying why it carries no records; and the live suite iterates the advertised tool list
+rather than a list written by hand, so a tool added later is covered without anyone
+remembering. `scripts/mcp-live-canary.mjs dashboard-passthrough` reproduces the
+original bug on demand.
+
+### 4. A record carrying a `data` field is misread as an envelope
 
 `applyFieldPolicy` detects the API's pagination envelope by looking for a `data` key. A
 top-level record that happened to have its own `data` column would be misread and returned

@@ -71,9 +71,18 @@ Goal: the existing 10-tool connector runs against a real API with real data, fro
 
 **Owner checklist against the VM** (stock CLI, keyring, no profile): status → connect → status names account and org → in Claude Desktop `compliance_summary`, `board_register` (no DOB/address), `governing_acts` (no notes) → ask Claude for the chair's home address and get a refusal → restart Claude, tool still works (live rotation) → disconnect → tool says not connected. Then update `mcp/HANDOVER.md` and the spec's "no live call" line.
 
-### Phase 1: read everything (connector only)
+### Phase 1: read everything (connector only) — DONE 2026-09-19
 
 Goal: any read question about the charity is answerable, subject to the gate.
+
+Delivered: 27 tools covering every readable route, validated inputs with pagination and
+filters and no new dependency, the gate extended to 21 models with shape filters for the
+five payloads that mix models, and a coverage test requiring every readable route to be
+a tool or a listed exclusion. Three canaries confirm the suite goes red.
+
+Found while doing it: five tools already shipped with no gate at all, including the
+dashboard, whose activity lines interpolate trustee and staff names into free text that
+no field allowlist can protect.
 
 - Tools for every remaining GET route: `compliance_principle` (by id), `compliance_record` (by standard), `compliance_signoff`, `board_member` (by id), `document` (by id), `deadlines_reminder_history`, `governance_registers_summary`, `conflicts_list`, `risks_list`, `complaints_list`, `fundraising_list`, `annual_report_readiness`, `financial_controls`, `governing_acts_voids`, `board_submissions`, `members_list`, `organisation`, `team_list`, `team_member_sessions`, `security_audit`, `billing_status`, `confluence_status`, `export_compliance_report`, `document_storage_dead_letter` (admin).
 - Per-type register tools replace the impossible mixed-payload `governance_registers` tool; the gate dispatches per model.

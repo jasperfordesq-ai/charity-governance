@@ -79,32 +79,54 @@ connector from an AI client:
 
 ## Tools
 
-These ten tools exist. Each maps to exactly one `GET` route, and each result
-notes that it is data returned for the signed-in person's charity, not
-instructions to act on:
+27 tools cover every readable route on the API. Each maps to exactly one
+`GET` route, and each result notes that it is data returned for the signed-in
+person's charity, not instructions to act on.
 
-| Tool | Route | Gated model |
-| --- | --- | --- |
-| `compliance_summary` | `/api/v1/compliance/summary` | — |
-| `compliance_principles` | `/api/v1/compliance/principles` | — |
-| `compliance_records` | `/api/v1/compliance/records` | — |
-| `approval_readiness` | `/api/v1/compliance/approval-readiness` | — |
-| `deadlines_history` | `/api/v1/deadlines/history` | — |
-| `deadlines_list` | `/api/v1/deadlines` | — |
-| `dashboard_overview` | `/api/v1/dashboard` | — |
-| `board_register` | `/api/v1/board-members` | `BoardMember` |
-| `governing_acts` | `/api/v1/governing-acts` | `GoverningAct` |
-| `documents_list` | `/api/v1/documents` (metadata only) | — |
+The **Gated as** column says how the personal-data gate treats the payload: by a
+single model when every record is one kind of thing, by a named shape when the
+payload mixes models, or "no records" for payloads that are only counts,
+statuses or the Governance Code itself. Every tool is one of the three. A tool
+declaring none of them would slip past the gate entirely, which is what happened
+to five of them for a while, so a test now refuses it.
 
-**There is no tool for the member register, the conflicts register, or the
-complaints register.** An earlier draft of this connector's design discussed
-exposing them, and the personal-data gate below still classifies their
-underlying models (`Member`, `ConflictRecord`, `ComplaintRecord`) as
-defence-in-depth for the day a tool is added — but as of this writing no tool
-calls `/api/v1/members`, `/api/v1/conflicts` or `/api/v1/complaints`, and
-nothing in this connector reads or returns member, conflict, or complaint
-data. If a client asks the connector something only those registers could
-answer, the honest response is that the connector has no tool for it.
+| Tool | Route | Inputs | Gated as | Needs |
+| --- | --- | --- | --- | --- |
+| `compliance_summary` | `/api/v1/compliance/summary` | — | no records | — |
+| `compliance_principles` | `/api/v1/compliance/principles` | — | no records | — |
+| `compliance_principle` | `/api/v1/compliance/principles/:principleId` | **principleId** (required) | no records | — |
+| `compliance_records` | `/api/v1/compliance/records` | — | mixed (`complianceRecords`) | — |
+| `compliance_record` | `/api/v1/compliance/records/:standardId` | **standardId** (required) | mixed (`complianceRecords`) | — |
+| `compliance_signoff` | `/api/v1/compliance/signoff` | — | mixed (`complianceSignoff`) | — |
+| `approval_readiness` | `/api/v1/compliance/approval-readiness` | — | no records | — |
+| `organisation` | `/api/v1/organisation` | — | `Organisation` | — |
+| `dashboard_overview` | `/api/v1/dashboard` | — | mixed (`dashboard`) | — |
+| `deadlines_list` | `/api/v1/deadlines` | page, pageSize | `Deadline` | — |
+| `deadlines_history` | `/api/v1/deadlines/history` | page, pageSize | `Deadline` | — |
+| `board_register` | `/api/v1/board-members` | page, pageSize | `BoardMember` | — |
+| `governing_acts` | `/api/v1/governing-acts` | year, kind, status | `GoverningAct` | Complete plan |
+| `governing_acts_voids` | `/api/v1/governing-acts/voids` | — | `GoverningActVoid` | Complete plan |
+| `board_submissions` | `/api/v1/governing-acts/board-submissions` | — | mixed (`boardSubmissions`) | Complete plan |
+| `registers_summary` | `/api/v1/governance-registers/summary` | — | no records | Complete plan |
+| `conflicts_list` | `/api/v1/governance-registers/conflicts` | — | `ConflictRecord` | Complete plan |
+| `risks_list` | `/api/v1/governance-registers/risks` | — | `RiskRecord` | Complete plan |
+| `complaints_list` | `/api/v1/governance-registers/complaints` | — | `ComplaintRecord` | Complete plan |
+| `fundraising_list` | `/api/v1/governance-registers/fundraising` | — | `FundraisingRecord` | Complete plan |
+| `annual_report_readiness` | `/api/v1/governance-registers/annual-report` | year | `AnnualReportReadiness` | Complete plan |
+| `financial_controls` | `/api/v1/governance-registers/financial-controls` | year | `FinancialControlReview` | Complete plan |
+| `members_list` | `/api/v1/members` | includeFormer | `Member` | Complete plan |
+| `documents_list` | `/api/v1/documents` | page, pageSize | `Document` | — |
+| `document` | `/api/v1/documents/:id` | **id** (required) | `Document` | — |
+| `team_list` | `/api/v1/team` | — | mixed (`team`) | — |
+| `confluence_status` | `/api/v1/integrations/confluence/status` | — | no records | Owner/admin |
+
+Some routes are deliberately not exposed: raw file downloads and the HTML
+exports, the platform operator realm, billing authority, reminder logs carrying
+recipients' email addresses, and the two team routes that report on a named
+colleague's sessions and suspensions. Each is listed with its reason in
+`src/route-coverage.ts`, and a test requires every readable route the API
+registers to be either a tool or an entry there — so a route added later forces
+the choice rather than being quietly missed.
 
 ## The personal-data gate
 
@@ -225,13 +247,12 @@ it anywhere else and the connector refuses to start.
 
 ## Known limitations / follow-up
 
-- **No `governance_registers` tool.** The member, conflicts and complaints
-  registers are not exposed by any tool (see *Tools* above). Adding one is
-  not a small extension of the existing per-model filter: the underlying
-  route returns a mixed payload spanning several register types in one
-  response, and `applyFieldPolicy` filters by a single `ModelName` per call.
-  A `governance_registers` tool needs a filter that can look at each record
-  in that mixed payload, work out which register it belongs to, and apply
-  that register's own allowlist — not a single model classification for the
-  whole response. Building that filter, and proving it against the mixed
-  shape, is follow-up work, not something to bolt on without it.
+- **The registers are exposed per type, not as one tool.** An earlier version of
+  this connector had no tool for the member, conflicts or complaints registers,
+  because the mixed-payload route it would have called cannot be filtered by a
+  single model. They are now reached through `conflicts_list`, `risks_list`,
+  `complaints_list`, `fundraising_list` and `members_list`, each calling its own
+  route and gated by its own model, which sidesteps the mixed payload entirely.
+- **Pagination is available but not automatic.** The list tools accept `page`
+  and `pageSize` and report `hasMore`. Nothing follows the pages for you, so a
+  question spanning a long register needs more than one call.
