@@ -52,6 +52,15 @@ type PrismaMock = {
     create?: (args: unknown) => Promise<unknown>;
     deleteMany?: (args: unknown) => Promise<unknown>;
   };
+  organisationIntegration?: {
+    findUnique?: (args: unknown) => Promise<Record<string, unknown> | null>;
+  };
+  documentPublication?: {
+    create?: (args: unknown) => Promise<{ id: string }>;
+    findFirst?: (args: unknown) => Promise<unknown>;
+    updateMany?: (args: unknown) => Promise<{ count: number }>;
+    deleteMany?: (args: unknown) => Promise<{ count: number }>;
+  };
 };
 
 type MultipartFile = {
@@ -96,6 +105,23 @@ async function buildDocumentsApp(prisma: PrismaMock, role: Role = 'ADMIN', limit
   decoratedPrisma.organisation = {
     findUnique: async () => ({ documentStorageProvider: null, documentStorageAlphaOptIn: false }),
     ...decoratedPrisma.organisation,
+  };
+  // Confluence publication is opt-in and best-effort. Default to "no
+  // integration at all", which keeps every test that does not care about
+  // Confluence from ever reaching `documentPublication.create` — unless a
+  // test overrides these above.
+  decoratedPrisma.organisationIntegration = {
+    findUnique: async () => null,
+    ...decoratedPrisma.organisationIntegration,
+  };
+  decoratedPrisma.documentPublication = {
+    create: async () => {
+      throw new Error('documentPublication.create must not run without a chosen Confluence publish target');
+    },
+    findFirst: async () => null,
+    updateMany: async () => ({ count: 0 }),
+    deleteMany: async () => ({ count: 0 }),
+    ...decoratedPrisma.documentPublication,
   };
   app.decorate('prisma', decoratedPrisma as never);
   await app.register(multipart, { limits });
@@ -447,6 +473,153 @@ test('document upload stores the object under the caller\'s organisation prefix'
     assert.equal(capturedOrganisationId, 'org-1');
   } finally {
     StorageService.prototype.uploadFile = originalUpload;
+    await app.close();
+  }
+});
+
+// ---------------------------------------------------------------------------
+// Task 7: enqueueing a Confluence publication on upload — gated on Task 3's
+// `confluencePublishTargetForOrganisation`, and never allowed to fail the
+// upload itself.
+// ---------------------------------------------------------------------------
+
+function connectedIntegrationRow(overrides: Record<string, unknown> = {}) {
+  return {
+    status: 'CONNECTED',
+    config: { siteId: 'site-abc' },
+    publishSpaceId: 'space-1',
+    publishSpaceKey: 'SPACE1',
+    publishSpaceName: 'Governance',
+    publishSpaceSiteId: 'site-abc',
+    ...overrides,
+  };
+}
+
+async function uploadOnce(app: Awaited<ReturnType<typeof buildDocumentsApp>>) {
+  const request = multipartRequest(baseFields, validPdfFile());
+  return app.inject({
+    method: 'POST',
+    url: '/',
+    headers: { ...request.headers, authorization: authHeader },
+    payload: request.payload,
+  });
+}
+
+test('a connected organisation with a chosen Confluence space enqueues a publication on upload', { concurrency: false }, async () => {
+  const originalUpload = StorageService.prototype.uploadFile;
+  StorageService.prototype.uploadFile = async () => ({ storagePath: 'org-1/policy.pdf' });
+
+  const created: unknown[] = [];
+  const app = await buildDocumentsApp({
+    subscription: activeSubscription(),
+    document: { create: async () => createdDocumentRow() },
+    organisationIntegration: { findUnique: async () => connectedIntegrationRow() },
+    documentPublication: {
+      create: async (args: unknown) => {
+        created.push(args);
+        return { id: 'publication-1' };
+      },
+    },
+  });
+
+  try {
+    const response = await uploadOnce(app);
+
+    assert.equal(response.statusCode, 201);
+    assert.deepEqual(created, [
+      { data: { organisationId: 'org-1', documentId: 'doc-1', provider: 'confluence' } },
+    ]);
+  } finally {
+    StorageService.prototype.uploadFile = originalUpload;
+    await app.close();
+  }
+});
+
+test('an organisation with no Confluence integration enqueues no publication on upload', { concurrency: false }, async () => {
+  const originalUpload = StorageService.prototype.uploadFile;
+  StorageService.prototype.uploadFile = async () => ({ storagePath: 'org-1/policy.pdf' });
+
+  let createCalled = false;
+  const app = await buildDocumentsApp({
+    subscription: activeSubscription(),
+    document: { create: async () => createdDocumentRow() },
+    organisationIntegration: { findUnique: async () => null },
+    documentPublication: {
+      create: async () => {
+        createCalled = true;
+        return { id: 'publication-1' };
+      },
+    },
+  });
+
+  try {
+    const response = await uploadOnce(app);
+
+    assert.equal(response.statusCode, 201);
+    assert.equal(createCalled, false);
+  } finally {
+    StorageService.prototype.uploadFile = originalUpload;
+    await app.close();
+  }
+});
+
+test('a DISCONNECTED Confluence integration enqueues no publication on upload', { concurrency: false }, async () => {
+  const originalUpload = StorageService.prototype.uploadFile;
+  StorageService.prototype.uploadFile = async () => ({ storagePath: 'org-1/policy.pdf' });
+
+  let createCalled = false;
+  const app = await buildDocumentsApp({
+    subscription: activeSubscription(),
+    document: { create: async () => createdDocumentRow() },
+    organisationIntegration: {
+      findUnique: async () => connectedIntegrationRow({ status: 'DISCONNECTED' }),
+    },
+    documentPublication: {
+      create: async () => {
+        createCalled = true;
+        return { id: 'publication-1' };
+      },
+    },
+  });
+
+  try {
+    const response = await uploadOnce(app);
+
+    assert.equal(response.statusCode, 201);
+    assert.equal(createCalled, false);
+  } finally {
+    StorageService.prototype.uploadFile = originalUpload;
+    await app.close();
+  }
+});
+
+// The rule that outranks everything else in this task: portal upload is a
+// guaranteed path for every charity, and this integration is alpha. If the
+// publication row cannot be written, the document upload still succeeds.
+test('a Confluence publication enqueue failure never fails the upload', { concurrency: false }, async () => {
+  const originalUpload = StorageService.prototype.uploadFile;
+  const originalConsoleError = console.error;
+  StorageService.prototype.uploadFile = async () => ({ storagePath: 'org-1/policy.pdf' });
+  console.error = () => {}; // the failure is expected to be logged, not surfaced to the caller
+
+  const app = await buildDocumentsApp({
+    subscription: activeSubscription(),
+    document: { create: async () => createdDocumentRow() },
+    organisationIntegration: { findUnique: async () => connectedIntegrationRow() },
+    documentPublication: {
+      create: async () => {
+        throw new Error('Confluence publication insert exploded');
+      },
+    },
+  });
+
+  try {
+    const response = await uploadOnce(app);
+
+    assert.equal(response.statusCode, 201);
+  } finally {
+    StorageService.prototype.uploadFile = originalUpload;
+    console.error = originalConsoleError;
     await app.close();
   }
 });

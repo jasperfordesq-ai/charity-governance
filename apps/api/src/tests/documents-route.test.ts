@@ -51,6 +51,15 @@ type PrismaMock = {
   documentStandardLink?: {
     create?: (args: unknown) => Promise<unknown>;
   };
+  organisationIntegration?: {
+    findUnique?: (args: unknown) => Promise<Record<string, unknown> | null>;
+  };
+  documentPublication?: {
+    create?: (args: unknown) => Promise<{ id: string }>;
+    findFirst?: (args: unknown) => Promise<unknown>;
+    updateMany?: (args: unknown) => Promise<{ count: number }>;
+    deleteMany?: (args: unknown) => Promise<{ count: number }>;
+  };
 };
 
 type MultipartFile = {
@@ -100,6 +109,23 @@ async function buildDocumentsApp(prisma: PrismaMock, limits = DOCUMENT_UPLOAD_MU
   decoratedPrisma.organisation = {
     findUnique: async () => ({ documentStorageProvider: null, documentStorageAlphaOptIn: false }),
     ...decoratedPrisma.organisation,
+  };
+  // Confluence publication is opt-in and best-effort; see documents-reliability.test.ts
+  // for the tests that exercise it directly. Default to "no integration at
+  // all" here so every test in this file that does not care about Confluence
+  // never reaches `documentPublication.create`.
+  decoratedPrisma.organisationIntegration = {
+    findUnique: async () => null,
+    ...decoratedPrisma.organisationIntegration,
+  };
+  decoratedPrisma.documentPublication = {
+    create: async () => {
+      throw new Error('documentPublication.create must not run without a chosen Confluence publish target');
+    },
+    findFirst: async () => null,
+    updateMany: async () => ({ count: 0 }),
+    deleteMany: async () => ({ count: 0 }),
+    ...decoratedPrisma.documentPublication,
   };
   app.decorate('prisma', decoratedPrisma as never);
   await app.register(multipart, { limits });

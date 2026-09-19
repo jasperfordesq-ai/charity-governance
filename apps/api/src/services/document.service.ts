@@ -9,6 +9,11 @@ import {
   resolveProviderForOrganisation,
 } from './document-storage-resolution.js';
 import type { Eraser, ErasureDispatcher } from './document-erasure.js';
+import {
+  confluencePublishTargetForOrganisation,
+  type PublishTargetClient,
+} from './confluence-publish-target.service.js';
+import { DOCUMENT_PUBLICATION_MAX_ATTEMPTS } from './document-publication.service.js';
 
 type DocumentStorageDeletionState = 'PENDING' | 'DEAD_LETTER' | 'PROCESSED';
 type DocumentStorageDeletionTerminalReason =
@@ -242,6 +247,47 @@ function deletionDelegate(prisma: unknown): DocumentStorageDeletionDelegate {
 function deletionRecoveryDelegate(prisma: unknown): DocumentStorageDeletionRecoveryDelegate {
   return (prisma as DocumentStorageDeletionClient).documentStorageDeletionRecovery;
 }
+
+// ---------------------------------------------------------------------------
+// Confluence publication: enqueue on upload, cancel on delete
+// ---------------------------------------------------------------------------
+
+/**
+ * The narrow slice of `DocumentPublication` this file writes. It never reads
+ * or writes `cloudId`, `spaceId`, `attachmentId` or `publishedAt` — those
+ * belong to the publish worker (Task 6) alone, and this file's two jobs
+ * (enqueue a row, cancel one) never need to know where a page is, only
+ * whether one was ever recorded.
+ */
+type DocumentPublicationCreateClient = {
+  documentPublication: {
+    create(args: {
+      data: { organisationId: string; documentId: string; provider: string };
+    }): Promise<{ id: string }>;
+    findFirst(args: {
+      where: Record<string, unknown>;
+      select?: Record<string, boolean>;
+    }): Promise<{ id: string; pageId: string | null; attempts: number; state: string } | null>;
+    updateMany(args: { where: Record<string, unknown>; data: Record<string, unknown> }): Promise<{ count: number }>;
+    deleteMany(args: { where: Record<string, unknown> }): Promise<{ count: number }>;
+  };
+};
+
+function publicationDelegate(prisma: unknown) {
+  return (prisma as DocumentPublicationCreateClient).documentPublication;
+}
+
+/**
+ * Far enough in the future that no plausible change to
+ * `DOCUMENT_PUBLICATION_MAX_ATTEMPTS` could ever make a cancelled row due for
+ * another attempt. Belt-and-suspenders alongside pushing `attempts` past the
+ * current ceiling — see {@link DocumentService.cancelConfluencePublication}.
+ */
+const CANCELLED_PUBLICATION_NEXT_ATTEMPT_AT = new Date('9999-12-31T00:00:00.000Z');
+
+const CANCELLED_PUBLICATION_MESSAGE =
+  'Cancelled: the governance document was deleted while this publication was still pending. ' +
+  'Any Confluence page already created is left in place and this row is kept so it can still be erased.';
 
 // Failures that no number of retries can clear, and the terminal reason each
 // one dead-letters with. `PROVIDER_NOT_ERASABLE` covers several spellings of
@@ -660,11 +706,58 @@ export class DocumentService {
 
     const doc = client.$transaction ? await client.$transaction(createDocument) : await createDocument(client);
 
+    // Deliberately *outside* the transaction above, and never allowed to
+    // throw past this call — see `enqueueConfluencePublication`. A genuine
+    // database error raised inside a Postgres transaction poisons every later
+    // statement in it, including the COMMIT, so catching the JS exception
+    // from *inside* that transaction would not have protected the upload.
+    // Only running this after the document already exists can satisfy the
+    // rule it exists for: portal upload is a guaranteed path for every
+    // charity, and this integration is alpha, so an enqueue failure is never
+    // allowed to fail the upload.
+    await this.enqueueConfluencePublication(organisationId, doc.id);
+
     return publicDocument(doc);
   }
 
+  /**
+   * Queues a Confluence publication for a document just written to the
+   * authoritative Irish copy — when, and only when, the organisation has
+   * chosen somewhere to publish it. `confluencePublishTargetForOrganisation`
+   * is Task 3's gate: a `CONNECTED` integration alone is not enough, because
+   * connecting is the opt-in and choosing a space is the destination, and
+   * neither substitutes for the other. There is no separate alpha flag.
+   *
+   * Best-effort, by design: any failure here — a missing gate, a database
+   * error, a thrown exception of any shape — is logged and swallowed. Never
+   * rethrown. See the comment at the call site for why this cannot even run
+   * inside the document's own creation transaction.
+   */
+  private async enqueueConfluencePublication(organisationId: string, documentId: string): Promise<void> {
+    try {
+      const target = await confluencePublishTargetForOrganisation(
+        this.prisma as unknown as PublishTargetClient,
+        organisationId,
+      );
+      if (target === null) return;
+
+      await publicationDelegate(this.prisma).create({
+        data: { organisationId, documentId, provider: 'confluence' },
+      });
+    } catch (error) {
+      // Log and move on. The document is already safely in Supabase; a
+      // charity that cannot be mirrored on this upload is simply not
+      // mirrored yet, which is recoverable, unlike a failed upload.
+      console.error(
+        `[document-publication] Could not enqueue a Confluence publication for document ${documentId} ` +
+          `(organisation ${organisationId}); the upload itself already succeeded.`,
+        error,
+      );
+    }
+  }
+
   async remove(organisationId: string, id: string): Promise<{ storagePath: string; storageDeletionId: string }> {
-    return this.prisma.$transaction(async (tx) => {
+    const result = await this.prisma.$transaction(async (tx) => {
       const doc = await tx.document.findFirst({
         where: { id, organisationId },
       });
@@ -712,6 +805,82 @@ export class DocumentService {
 
       return { storagePath: doc.fileUrl, storageDeletionId: deletion.id };
     });
+
+    // Deliberately *outside* the transaction above, for the same reason the
+    // publish enqueue on create is: a database error inside a Postgres
+    // transaction poisons every later statement in it including the COMMIT,
+    // so this could not have run inside that transaction without risking the
+    // document deletion itself. Portal delete must always work.
+    await this.cancelConfluencePublication(id);
+
+    return result;
+  }
+
+  /**
+   * Stops a queued Confluence publication from being retried once its
+   * document is gone — Task 6 found that, left alone, a publish worker keeps
+   * trying to publish a document that `readDocument` can no longer find,
+   * burning all five attempts and dead-lettering as `MAX_ATTEMPTS_EXHAUSTED`:
+   * noise that trains an operator to ignore alerts, for an entirely ordinary
+   * user action.
+   *
+   * **Never deletes a row that already carries a `pageId`.** That page exists
+   * in the charity's Confluence site, and Task 8's dual erasure needs the id
+   * to erase it — losing it leaves a page nobody can find and nobody can
+   * erase, which is the exact orphan this phase exists to prevent. So:
+   *
+   * - no `pageId` recorded yet → nothing exists in Confluence to protect;
+   *   the row is cancelled outright (deleted).
+   * - a `pageId` is recorded → the row survives with its identifiers intact,
+   *   and only the retry loop stops.
+   *
+   * Deliberately does **not** invent a seventh
+   * `DocumentPublicationTerminalReason` to describe this. Task 1 pinned the
+   * six that exist to the publish failures the worker's own mapping produces,
+   * and "the document was deleted" is not one of them — it is a cancellation,
+   * not a publish failure, and reusing one of the six dishonestly would
+   * mislead an operator reading `terminalReason` later. Instead a `PENDING`
+   * row is pushed past the retry ceiling the same way a naturally exhausted
+   * one is (`attempts` at or above `DOCUMENT_PUBLICATION_MAX_ATTEMPTS`), so
+   * `state`, `terminalReason` and the whole dead-letter alert path are left
+   * untouched — this row will never join an operator alert. `nextAttemptAt`
+   * is additionally pushed far into the future, so that a later increase to
+   * the attempt ceiling cannot resurrect it.
+   *
+   * Best-effort, like the enqueue on create: any failure here is logged and
+   * swallowed, never allowed to fail the deletion.
+   */
+  private async cancelConfluencePublication(documentId: string): Promise<void> {
+    try {
+      const publication = await publicationDelegate(this.prisma).findFirst({
+        where: { documentId },
+        select: { id: true, pageId: true, attempts: true, state: true },
+      });
+      if (publication === null) return;
+
+      if (publication.pageId === null) {
+        await publicationDelegate(this.prisma).deleteMany({
+          where: { id: publication.id, pageId: null },
+        });
+        return;
+      }
+
+      if (publication.state === 'PENDING') {
+        await publicationDelegate(this.prisma).updateMany({
+          where: { id: publication.id, state: 'PENDING' },
+          data: {
+            attempts: Math.max(publication.attempts, DOCUMENT_PUBLICATION_MAX_ATTEMPTS),
+            nextAttemptAt: CANCELLED_PUBLICATION_NEXT_ATTEMPT_AT,
+            lastError: CANCELLED_PUBLICATION_MESSAGE,
+          },
+        });
+      }
+    } catch (error) {
+      console.error(
+        `[document-publication] Could not cancel the Confluence publication for deleted document ${documentId}.`,
+        error,
+      );
+    }
   }
 
   async markStorageDeletionProcessed(id: string, claimedAt: Date | null = null): Promise<boolean> {

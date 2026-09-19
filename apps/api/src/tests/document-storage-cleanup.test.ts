@@ -10,10 +10,12 @@ import {
   documentStorageDeletionRetryDelayMs,
 } from '../services/document.service.js';
 import {
+  applyPrismaSelect,
   buildFallbackPrisma,
   pendingRecord,
   supabaseDispatcher,
 } from './document-storage-deletion-fixtures.js';
+import { DOCUMENT_PUBLICATION_MAX_ATTEMPTS } from '../services/document-publication.service.js';
 
 const NOW = new Date('2026-07-11T12:00:00.000Z');
 
@@ -44,6 +46,10 @@ function buildEnqueueCapturingPrisma(
       },
     },
     documentStorageDeletionRecovery: { create: async () => ({ id: 'recovery-1' }) },
+    // `remove()` also cancels a queued Confluence publication now (Task 7).
+    // These tests are about the Supabase enqueue only, so there is never one
+    // to find.
+    documentPublication: { findFirst: async () => null },
     $transaction: async <T>(callback: (tx: unknown) => Promise<T>) => callback(client),
   };
   return client;
@@ -366,6 +372,158 @@ test('a document whose organisation names an unerasable provider can still be de
       documentStorageAlphaOptIn: false,
     });
     assert.equal(data.provider, provider);
+  }
+});
+
+// ---------------------------------------------------------------------------
+// Task 7: cancelling a queued Confluence publication when its document is
+// deleted, instead of letting it burn all five attempts against a document
+// `readDocument` can no longer find and dead-letter as MAX_ATTEMPTS_EXHAUSTED.
+// ---------------------------------------------------------------------------
+
+type PublicationFixture = {
+  id: string;
+  pageId: string | null;
+  attempts: number;
+  state: string;
+} & Record<string, unknown>;
+
+function buildPublicationCancelPrisma(publication: PublicationFixture | null) {
+  let row: PublicationFixture | null = publication ? { ...publication } : null;
+  const finds: Array<Record<string, unknown>> = [];
+  const updates: Array<Record<string, unknown>> = [];
+  const deletes: Array<Record<string, unknown>> = [];
+
+  const documentPublication = {
+    findFirst: async (args: { where: Record<string, unknown>; select?: Record<string, unknown> }) => {
+      finds.push(args);
+      if (row === null) return null;
+      if (Object.hasOwn(args.where, 'documentId') && args.where.documentId !== 'doc-1') return null;
+      return applyPrismaSelect(row, args);
+    },
+    updateMany: async (args: { where: Record<string, unknown>; data: Record<string, unknown> }) => {
+      updates.push(args);
+      if (row === null || args.where.id !== row.id) return { count: 0 };
+      if (Object.hasOwn(args.where, 'state') && args.where.state !== row.state) return { count: 0 };
+      row = { ...row, ...args.data } as PublicationFixture;
+      return { count: 1 };
+    },
+    deleteMany: async (args: { where: Record<string, unknown> }) => {
+      deletes.push(args);
+      if (row === null || args.where.id !== row.id) return { count: 0 };
+      if (Object.hasOwn(args.where, 'pageId') && args.where.pageId !== row.pageId) return { count: 0 };
+      row = null;
+      return { count: 1 };
+    },
+  };
+
+  const client = {
+    organisation: {
+      findUnique: async () => ({ documentStorageProvider: 'supabase', documentStorageAlphaOptIn: false }),
+    },
+    document: {
+      findFirst: async () => ({ id: 'doc-1', organisationId: 'org-1', fileUrl: 'org-1/policy.pdf' }),
+      delete: async () => ({ id: 'doc-1' }),
+    },
+    documentStorageDeletion: { create: async () => ({ id: 'deletion-1' }) },
+    documentPublication,
+    $transaction: async <T>(callback: (tx: unknown) => Promise<T>) => callback(client),
+  };
+
+  return { prisma: client, finds, updates, deletes, row: () => row };
+}
+
+test('deleting a document with no queued Confluence publication leaves nothing to clean up', async () => {
+  const mock = buildPublicationCancelPrisma(null);
+  const service = new DocumentService(mock.prisma as never, () => NOW);
+
+  await service.remove('org-1', 'doc-1');
+
+  assert.equal(mock.updates.length, 0);
+  assert.equal(mock.deletes.length, 0);
+});
+
+test('a publication with no pageId is cancelled outright when its document is deleted', async () => {
+  const mock = buildPublicationCancelPrisma({
+    id: 'publication-1',
+    pageId: null,
+    attempts: 0,
+    state: 'PENDING',
+  });
+  const service = new DocumentService(mock.prisma as never, () => NOW);
+
+  await service.remove('org-1', 'doc-1');
+
+  assert.equal(mock.row(), null, 'nothing was ever created in Confluence, so the row is deleted outright');
+  assert.equal(mock.deletes.length, 1);
+  assert.equal(mock.updates.length, 0);
+});
+
+test('a publication that already has a pageId keeps its identifiers and stops being retried', async () => {
+  const mock = buildPublicationCancelPrisma({
+    id: 'publication-1',
+    pageId: 'page-99',
+    attempts: 1,
+    state: 'PENDING',
+  });
+  const service = new DocumentService(mock.prisma as never, () => NOW);
+
+  await service.remove('org-1', 'doc-1');
+
+  const row = mock.row();
+  assert.notEqual(row, null, 'a publication that already named a Confluence page must never be deleted');
+  // Task 8's dual erasure reads this id later; losing it orphans the page.
+  assert.equal(row!.pageId, 'page-99');
+  assert.equal(mock.deletes.length, 0);
+  // No seventh DocumentPublicationTerminalReason is invented for a
+  // cancellation: state and terminalReason are left exactly as they were.
+  assert.equal(row!.state, 'PENDING');
+  assert.equal(row!.terminalReason, undefined);
+  // But it must never be picked up by the retry loop again.
+  assert.ok(
+    (row!.attempts as number) >= DOCUMENT_PUBLICATION_MAX_ATTEMPTS,
+    'attempts must be pushed to or past the retry ceiling',
+  );
+  assert.ok(row!.nextAttemptAt instanceof Date);
+  assert.ok(
+    (row!.nextAttemptAt as Date).getUTCFullYear() >= 9999,
+    'nextAttemptAt must be pushed far enough away to survive a future rise in the attempt ceiling',
+  );
+  assert.match(String(row!.lastError), /[Cc]ancelled/);
+});
+
+test('deleting a document does not disturb a publication that is already dead-lettered for a real failure', async () => {
+  const mock = buildPublicationCancelPrisma({
+    id: 'publication-1',
+    pageId: 'page-1',
+    attempts: 5,
+    state: 'DEAD_LETTER',
+    terminalReason: 'PERMANENT_PERMISSION_DENIED',
+  });
+  const service = new DocumentService(mock.prisma as never, () => NOW);
+
+  await service.remove('org-1', 'doc-1');
+
+  assert.equal(mock.updates.length, 0, 'an already-terminal row is left alone; there is nothing left to cancel');
+  assert.equal(mock.deletes.length, 0);
+  const row = mock.row();
+  assert.equal(row!.terminalReason, 'PERMANENT_PERMISSION_DENIED');
+});
+
+test('a Confluence publication cancellation failure never fails the document deletion', async () => {
+  const mock = buildPublicationCancelPrisma(null);
+  mock.prisma.documentPublication.findFirst = async () => {
+    throw new Error('documentPublication lookup exploded');
+  };
+  const originalConsoleError = console.error;
+  console.error = () => {};
+
+  try {
+    const service = new DocumentService(mock.prisma as never, () => NOW);
+    const result = await service.remove('org-1', 'doc-1');
+    assert.equal(result.storageDeletionId, 'deletion-1');
+  } finally {
+    console.error = originalConsoleError;
   }
 });
 
