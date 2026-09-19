@@ -11,6 +11,30 @@ const { connectorAuthRoutes } = await import("../routes/auth/connector.js");
 const { CONNECTOR_CLIENT_HEADER } = await import(
   "../utils/non-browser-client.js"
 );
+const { signAccessToken } = await import("../utils/jwt.js");
+const { default: bcrypt } = await import("bcryptjs");
+
+/** Records what the approve route tried to grant, and under what conditions. */
+const approvalStore = {
+  granted: [] as Array<Record<string, unknown>>,
+  reset() {
+    this.granted.length = 0;
+  },
+};
+
+const REAL_PASSWORD = "a-real-password";
+const PASSWORD_HASH = bcrypt.hashSync(REAL_PASSWORD, 4);
+
+function connectorToken(): string {
+  return signAccessToken({
+    userId: "usr-1",
+    organisationId: "org-1",
+    email: "owner@example.org",
+    role: "OWNER",
+    sessionId: "sess-1",
+  } as never);
+}
+
 const { registerBrowserOriginProtection } = await import(
   "../plugins/browser-origin-protection.js"
 );
@@ -27,6 +51,36 @@ function fakePrisma(recorded: Recorded) {
   // what reaches it and what comes back, so the boundary is stubbed here.
   return {
     __recorded: recorded,
+    // Enough of the client for authGuard and the approve route. The service
+    // layer has its own tests; these routes are about what reaches it.
+    authSession: {
+      findFirst: async () => ({
+        id: "sess-1",
+        clientKind: "MCP_CONNECTOR",
+        accessLevel: "ADMIN",
+      }),
+    },
+    user: {
+      findUnique: async () => ({
+        id: "usr-1",
+        organisationId: "org-1",
+        role: "OWNER",
+        emailVerified: true,
+        lifecycleStatus: "ACTIVE",
+        organisation: { lifecycleStatus: "ACTIVE" },
+        passwordHash: PASSWORD_HASH,
+      }),
+    },
+    authActionApproval: {
+      updateMany: async ({ where }: { where: Record<string, unknown> }) => {
+        approvalStore.granted.push(where);
+        return { count: 1 };
+      },
+      findFirst: async () => ({
+        summary: "Permanently delete: board members (DELETE)",
+        expiresAt: new Date("2026-01-01T00:05:00.000Z"),
+      }),
+    },
   };
 }
 
@@ -36,6 +90,7 @@ async function buildApp(recorded: Recorded, behaviour: {
 } = {}) {
   const app = Fastify({ logger: false });
   await app.register(cookie);
+  approvalStore.reset();
   app.decorate("prisma", fakePrisma(recorded) as never);
 
   // Replace the service the routes construct, by intercepting at the module
@@ -373,6 +428,131 @@ test("each browser-only header is refused on its own, and Node's own fetch is no
       200,
       "the connector's own request shape must be allowed through",
     );
+  } finally {
+    restore();
+    await app.close();
+  }
+});
+
+test("approving needs the right password, and says nothing more on failure", async () => {
+  const recorded: Recorded = {};
+  const { app, restore } = await buildApp(recorded);
+  try {
+    const wrong = await app.inject({
+      method: "POST",
+      url: "/api/v1/auth/connector/approve",
+      headers: {
+        [CONNECTOR_CLIENT_HEADER]: CLIENT,
+        authorization: `Bearer ${connectorToken()}`,
+      },
+      payload: { approvalId: "apr-1", password: "not-the-password" },
+    });
+
+    assert.equal(wrong.statusCode, 401);
+    assert.equal(wrong.json().code, "APPROVAL_REFUSED");
+    assert.equal(
+      approvalStore.granted.length,
+      0,
+      "a wrong password must grant nothing",
+    );
+  } finally {
+    restore();
+    await app.close();
+  }
+});
+
+test("a browser cannot reach the approve route either", async () => {
+  const recorded: Recorded = {};
+  const { app, restore } = await buildApp(recorded);
+  try {
+    const response = await app.inject({
+      method: "POST",
+      url: "/api/v1/auth/connector/approve",
+      headers: {
+        [CONNECTOR_CLIENT_HEADER]: CLIENT,
+        authorization: `Bearer ${connectorToken()}`,
+        origin: "https://app.charitypilot.ie",
+      },
+      payload: { approvalId: "apr-1", password: "a-real-password" },
+    });
+
+    assert.equal(response.statusCode, 403);
+    assert.equal(response.json().code, "BROWSER_CLIENT_REJECTED");
+  } finally {
+    restore();
+    await app.close();
+  }
+});
+
+test("approving returns no token of any kind: it is not a sign-in", async () => {
+  const recorded: Recorded = {};
+  const { app, restore } = await buildApp(recorded);
+  try {
+    const response = await app.inject({
+      method: "POST",
+      url: "/api/v1/auth/connector/approve",
+      headers: {
+        [CONNECTOR_CLIENT_HEADER]: CLIENT,
+        authorization: `Bearer ${connectorToken()}`,
+      },
+      payload: { approvalId: "apr-1", password: "a-real-password" },
+    });
+
+    assert.equal(response.statusCode, 200);
+    const body = response.json();
+    assert.equal(body.ok, true);
+    assert.equal(body.accessToken, undefined);
+    assert.equal(body.refreshToken, undefined);
+    assert.equal(response.headers["set-cookie"], undefined);
+  } finally {
+    restore();
+    await app.close();
+  }
+});
+
+test("the grant narrows on every condition at once, so there is no window", async () => {
+  const recorded: Recorded = {};
+  const { app, restore } = await buildApp(recorded);
+  try {
+    await app.inject({
+      method: "POST",
+      url: "/api/v1/auth/connector/approve",
+      headers: {
+        [CONNECTOR_CLIENT_HEADER]: CLIENT,
+        authorization: `Bearer ${connectorToken()}`,
+      },
+      payload: { approvalId: "apr-1", password: "a-real-password" },
+    });
+
+    const where = approvalStore.granted[0]!;
+    assert.equal(where["id"], "apr-1");
+    assert.equal(where["approvedAt"], null, "an already-granted approval is not re-granted");
+    assert.equal(where["consumedAt"], null, "a spent approval cannot be revived");
+    assert.ok(where["expiresAt"], "an expired approval cannot be granted");
+    assert.ok(where["userId"], "someone else's approval is not grantable");
+    assert.ok(where["organisationId"], "and not another charity's");
+  } finally {
+    restore();
+    await app.close();
+  }
+});
+
+test("a malformed body is refused before any password is compared", async () => {
+  const recorded: Recorded = {};
+  const { app, restore } = await buildApp(recorded);
+  try {
+    const response = await app.inject({
+      method: "POST",
+      url: "/api/v1/auth/connector/approve",
+      headers: {
+        [CONNECTOR_CLIENT_HEADER]: CLIENT,
+        authorization: `Bearer ${connectorToken()}`,
+      },
+      payload: { approvalId: "" },
+    });
+
+    assert.equal(response.statusCode, 400);
+    assert.equal(response.json().code, "VALIDATION_ERROR");
   } finally {
     restore();
     await app.close();

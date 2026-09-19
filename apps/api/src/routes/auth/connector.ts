@@ -1,4 +1,5 @@
 import type { FastifyInstance } from "fastify";
+import bcrypt from "bcryptjs";
 import { z, ZodError } from "zod";
 import { AuthService } from "../../services/auth.service.js";
 import { authGuard } from "../../middleware/auth.js";
@@ -32,6 +33,10 @@ import {
  * choosing how much authority the session carries is the person who just
  * proved they hold the account.
  */
+/** Same cost as a real hash, so a missing account does not answer faster. */
+const DUMMY_PASSWORD_HASH =
+  '$2b$12$5x1wZg/1s7XL/AUM6hR6OeX6zHNP.H0FgxiRa5EDVKtm6RFwhiVdK';
+
 const ACCESS_LEVELS = ["READ", "WRITE", "ADMIN"] as const;
 
 const connectorLoginSchema = z.object({
@@ -39,6 +44,11 @@ const connectorLoginSchema = z.object({
   password: z.string().min(1),
   accessLevel: z.enum(ACCESS_LEVELS),
   deviceLabel: z.string().trim().min(1).max(120).optional(),
+});
+
+const connectorApproveSchema = z.object({
+  approvalId: z.string().min(1).max(64),
+  password: z.string().min(1),
 });
 
 const connectorRefreshSchema = z.object({
@@ -143,6 +153,85 @@ export async function connectorAuthRoutes(app: FastifyInstance) {
           await authService.logout(body.refreshToken);
         }
         reply.send({ ok: true });
+      } catch (err) {
+        if (err instanceof ZodError) {
+          reply.status(400).send(formatZodError(err));
+          return;
+        }
+        handleError(reply, err);
+      }
+    },
+  );
+
+  /**
+   * Grants one pending approval, after checking the password.
+   *
+   * The password is typed by a human in their own terminal, by
+   * `charitypilot-mcp approve <id>`, which refuses to run when standard input
+   * is not a terminal. The agent that provoked the approval never sees it and
+   * cannot call this route usefully without it.
+   *
+   * Nothing here says whether the identifier existed, belonged to someone
+   * else, or had already been granted. The refusals are identical, and a
+   * wrong password spends the same bcrypt cost as a right one, so neither the
+   * body nor the timing maps the approval space.
+   */
+  app.post(
+    "/approve",
+    { preHandler: [authGuard], config: { rateLimit: refreshTokenRateLimit(10) } },
+    async (request, reply) => {
+      try {
+        const body = connectorApproveSchema.parse(request.body);
+        const now = new Date();
+
+        const account = await app.prisma.user.findUnique({
+          where: { id: request.user.userId },
+          select: { passwordHash: true },
+        });
+
+        const correct = await bcrypt.compare(
+          body.password,
+          account?.passwordHash ?? DUMMY_PASSWORD_HASH,
+        );
+
+        // The update is the check. Narrowing on every condition at once means
+        // there is no window between deciding an approval is grantable and
+        // granting it, and no branch that reveals which condition failed.
+        const granted = correct
+          ? await app.prisma.authActionApproval.updateMany({
+              where: {
+                id: body.approvalId,
+                userId: request.user.userId,
+                organisationId: request.user.organisationId,
+                approvedAt: null,
+                consumedAt: null,
+                expiresAt: { gt: now },
+              },
+              data: { approvedAt: now },
+            })
+          : { count: 0 };
+
+        if (granted.count !== 1) {
+          throw new AppError(
+            401,
+            "APPROVAL_REFUSED",
+            "That approval could not be granted. Check the password, and that the "
+              + "identifier is the one just printed and has not expired.",
+          );
+        }
+
+        const approval = await app.prisma.authActionApproval.findFirst({
+          where: { id: body.approvalId },
+          select: { summary: true, expiresAt: true },
+        });
+
+        // Deliberately no token of any kind: approving an action is not
+        // signing in, and the caller already holds a session.
+        reply.send({
+          ok: true,
+          summary: approval?.summary ?? null,
+          expiresAt: approval?.expiresAt.toISOString() ?? null,
+        });
       } catch (err) {
         if (err instanceof ZodError) {
           reply.status(400).send(formatZodError(err));
