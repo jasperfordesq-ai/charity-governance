@@ -51,9 +51,17 @@ Only one of those is reversible. The spec is also the binding authority and it s
 - **Adding an enum value has two house patterns.** Value *used* in the same migration → rebuild the
   enum. Value only *declared* → `ADD VALUE IF NOT EXISTS`. `20260710190000_add_deadline_calendar_lifecycle/migration.sql`
   records why.
-- **A new Prisma model must be added to `DISPOSABLE_DATABASE_RESET_TABLES`** in `e2e/helpers/db.ts`.
-  That guard lives in `npm run test:production-check`, **not** the default `npm test`. This phase
-  adds a model — do not forget it.
+- **A new Prisma model must be added to `DISPOSABLE_DATABASE_RESET_TABLES`**, which lives in
+  **`e2e/helpers/database-safety.cjs` at the repository root** — *not* in `apps/api/e2e/helpers/db.ts`,
+  which merely imports it. That guard lives in `npm run test:production-check`, **not** the default
+  `npm test`. Task 1 did this; a later task adding a model must too.
+- ⚠️ **`apps/api`'s `npm test` runs in two passes, and a new test file can fall between them.**
+  Pass one runs every `dist/tests/*.test.js` while *skipping* anything whose name contains
+  `real PostgreSQL 16 migration`; pass two re-runs that phrase against **one named file only**. So a
+  test in a *new* file carrying that phrase is skipped in pass one and never reached in pass two —
+  it silently never runs. Avoid the phrase, or widen pass two knowing that
+  `scripts/check-production.test.mjs` asserts the test script's exact text. This is the second
+  silent-skip trap in this repository; the other is `apps/web`'s `tsconfig.test.json` include list.
 - **Closed files** — do not modify: `integration-crypto.ts`, `integration-credential.service.ts`,
   `atlassian-oauth.ts`, `confluence-connection.service.ts`.
 
@@ -113,7 +121,16 @@ authorization code in an error body.
 
 **Interfaces:**
 - Produces: `DocumentPublication`, and the `DocumentPublicationState` /
-  `DocumentPublicationTerminalReason` enums Task 6 dispatches on.
+  `DocumentPublicationTerminalReason` enums Task 6 dispatches on. **Task 1 shipped these terminal
+  reasons** — Task 6 must map to them and add none without saying why:
+  `MAX_ATTEMPTS_EXHAUSTED`, `PERMANENT_CONNECTION_UNAVAILABLE`, `PERMANENT_PERMISSION_DENIED`,
+  `PERMANENT_CONFLICT_UNRESOLVED`, `PERMANENT_CONTENT_PROPERTY_REJECTED`,
+  `PERMANENT_TARGET_REF_REJECTED`.
+- **A database CHECK constraint, `publication_target_consistent`, ties `publishedAt`, `cloudId` and
+  `pageId` together and rejects untrimmed ids at write time.** Task 6 must therefore write
+  `cloudId`/`pageId` with `publishedAt` still **null** during the create-then-attach window, and set
+  `publishedAt` only on completion. That is not a workaround — it is the constraint enforcing the
+  very ordering the adopt design depends on.
 
 **Design notes:**
 
