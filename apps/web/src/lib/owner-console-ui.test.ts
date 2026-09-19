@@ -134,6 +134,8 @@ test('the console does not exist on a single-tenant deployment', () => {
     'utf8',
   );
 
-  assert.match(gate, /webTenancyIsMulti/);
-  assert.match(gate, /notFound\(\)/);
+  // Matched as one expression on purpose. Asserting the two names appear
+  // somewhere in the file passes against `if (false) notFound()`, which is a
+  // console with no gate at all.
+  assert.match(gate, /if \(!webTenancyIsMulti\(\)\) notFound\(\);/);
 });
