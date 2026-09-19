@@ -165,10 +165,15 @@ export async function openConnector(options: {
   apiUrl: string;
   credentialFile: string;
   allowPersonalData?: boolean;
+  /** Passed only when a test means to enable it; absent is the shipped default. */
+  uploadRoot?: string;
+  downloadDir?: string;
 }): Promise<OpenConnector> {
   assertConnectorBuilt();
   const args = [CONNECTOR_CLI, 'serve', '--profile', 'local', '--base-url', options.apiUrl];
   if (options.allowPersonalData) args.push('--allow-personal-data');
+  if (options.uploadRoot) args.push('--upload-root', options.uploadRoot);
+  if (options.downloadDir) args.push('--download-dir', options.downloadDir);
 
   const transport = new StdioClientTransport({
     command: process.execPath,

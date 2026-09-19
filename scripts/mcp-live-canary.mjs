@@ -91,6 +91,14 @@ const MUTATIONS = {
     replace: '$1(("WEB") as typeof session.clientKind)$2',
     expect: 'a removal from a connector session must be refused until a person approves it.',
   },
+  // An upload reads from the operator's own machine. Containment decided on
+  // the spelling alone looks identical until somebody uses a link.
+  'upload-escapes-its-directory': {
+    file: 'mcp/src/files.ts',
+    find: /(  const within = relative\(realRoot, real\);\r?\n  if \(within === '' \|\| )within\.startsWith\('\.\.'\) \|\| isAbsolute\(within\)(\) \{)/g,
+    replace: "$1false$2",
+    expect: 'a file outside the named directory must not be uploadable.',
+  },
   // The dashboard shipped for a while returning its payload unfiltered. This
   // reproduces that exact state: a shape that hands the value straight back.
   'dashboard-passthrough': {

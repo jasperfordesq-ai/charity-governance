@@ -25,7 +25,9 @@ export const EXCLUDED_ROUTES: readonly ExcludedRoute[] = [
     reason:
       'Returns the raw bytes of a stored document. No field filter is meaningful against a '
       + 'file, and the contents are exactly what the personal-data gate exists to hold back. '
-      + 'Downloads are a later phase, behind an explicit directory the operator names.',
+      + 'Served by the document_download file tool rather than an ordinary read tool: it '
+      + 'writes the bytes to a directory the operator named and returns the path, never the '
+      + 'contents. It is absent entirely unless that directory was given.',
   },
   {
     path: '/api/v1/export/compliance-record',

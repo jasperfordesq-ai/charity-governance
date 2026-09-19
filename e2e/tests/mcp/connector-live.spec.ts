@@ -1,4 +1,5 @@
-import { mkdtempSync, readFileSync, existsSync } from 'node:fs';
+import { mkdtempSync, readFileSync, writeFileSync, existsSync } from 'node:fs';
+import { createHash } from 'node:crypto';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { test, expect } from '@playwright/test';
@@ -1338,5 +1339,204 @@ test.describe('Connector writes and approval', () => {
       return result.rows as Array<Record<string, unknown>>;
     });
     expect(rows[0]!['approvedAt'], 'a wrong password must grant nothing').toBeNull();
+  });
+});
+
+/**
+ * Concern: moving files between this machine and the charity's documents.
+ *
+ * The round trip is what proves it: a file uploaded and then downloaded must
+ * come back byte for byte, or something in the path mangled it.
+ */
+test.describe('Connector documents', () => {
+  let fileCredentialFile = '';
+  let uploadRoot = '';
+  let downloadDir = '';
+  let uploadedId = '';
+
+  const UPLOAD_BYTES = Buffer.from(
+    '%PDF-1.4\n1 0 obj<</Type/Catalog>>endobj\ntrailer<</Root 1 0 R>>\n%%EOF\n',
+    'utf8',
+  );
+
+  test.beforeAll(async () => {
+    uploadRoot = mkdtempSync(join(tmpdir(), 'charitypilot-upload-'));
+    downloadDir = mkdtempSync(join(tmpdir(), 'charitypilot-download-'));
+    writeFileSync(join(uploadRoot, 'policy.pdf'), UPLOAD_BYTES);
+    // Outside the root, to prove the containment is real rather than assumed.
+    writeFileSync(join(uploadRoot, '..', 'outside-the-root.pdf'), UPLOAD_BYTES);
+
+    fileCredentialFile = credentialFileFor('documents');
+    const connected = await connectConnector({
+      apiUrl: API_BASE_URL,
+      email: fixture.writer.email,
+      password: fixture.writer.password,
+      credentialFile: fileCredentialFile,
+      accessLevel: 'write',
+    });
+    expect(connected.code, connected.stderr).toBe(0);
+  });
+
+  test('neither file tool is offered until the operator enables it', async () => {
+    const connector = await openConnector({
+      apiUrl: API_BASE_URL,
+      credentialFile: fileCredentialFile,
+    });
+    try {
+      const names = (await connector.client.listTools()).tools.map((tool) => tool.name);
+
+      expect(names).not.toContain('document_upload');
+      expect(names).not.toContain('document_download');
+    } finally {
+      await connector.close();
+    }
+  });
+
+  test('calling a file tool that is off says so, rather than failing obscurely', async () => {
+    const connector = await openConnector({
+      apiUrl: API_BASE_URL,
+      credentialFile: fileCredentialFile,
+    });
+    try {
+      const result = await callTool(connector.client, 'document_upload', {
+        path: 'policy.pdf',
+        name: 'Should not upload',
+        category: 'POLICY',
+      });
+
+      expect(result.isError).toBe(true);
+      expect(result.text).toMatch(/--upload-root/);
+    } finally {
+      await connector.close();
+    }
+  });
+
+  test('with a directory named, a file is uploaded and appears in the documents list', async () => {
+    const connector = await openConnector({
+      apiUrl: API_BASE_URL,
+      credentialFile: fileCredentialFile,
+      uploadRoot,
+    });
+    try {
+      const names = (await connector.client.listTools()).tools.map((tool) => tool.name);
+      expect(names).toContain('document_upload');
+      expect(names, 'only the tool that was enabled').not.toContain('document_download');
+
+      const result = await callTool(connector.client, 'document_upload', {
+        path: 'policy.pdf',
+        name: 'Uploaded by the connector',
+        category: 'POLICY',
+        reason: 'Proving the upload path end to end',
+      });
+      expect(result.isError, result.text).toBe(false);
+
+      const uploaded = (result.json as { uploaded: { id: string; bytes: number } }).uploaded;
+      uploadedId = uploaded.id;
+      expect(uploadedId).toBeTruthy();
+      expect(uploaded.bytes).toBe(UPLOAD_BYTES.length);
+
+      const listed = await callTool(connector.client, 'documents_list');
+      expect(listed.text).toContain('Uploaded by the connector');
+      expect(listed.text, 'a list of documents is not a list of their contents')
+        .not.toContain('%PDF');
+    } finally {
+      await connector.close();
+    }
+  });
+
+  test('a file outside the named directory cannot be uploaded', async () => {
+    const connector = await openConnector({
+      apiUrl: API_BASE_URL,
+      credentialFile: fileCredentialFile,
+      uploadRoot,
+    });
+    try {
+      const result = await callTool(connector.client, 'document_upload', {
+        path: join('..', 'outside-the-root.pdf'),
+        name: 'Should never upload',
+        category: 'POLICY',
+      });
+
+      expect(result.isError).toBe(true);
+      expect(result.text).toMatch(/outside the directory this connector may use/);
+    } finally {
+      await connector.close();
+    }
+  });
+
+  test('the upload left an activity row, like every other change', async () => {
+    const rows = await withDb(async (client) => {
+      const result = await client.query(
+        `SELECT "method", "routePattern", "statusCode", "reason"
+           FROM "ClientActivityEvent"
+          WHERE "routePattern" LIKE '%/documents'
+          ORDER BY "occurredAt" DESC LIMIT 1`,
+      );
+      return result.rows as Array<Record<string, unknown>>;
+    });
+
+    expect(rows.length).toBe(1);
+    expect(rows[0]!['method']).toBe('POST');
+    expect(rows[0]!['reason']).toBe('Proving the upload path end to end');
+  });
+
+  test('the document comes back byte for byte, and its contents stay off the wire', async () => {
+    const connector = await openConnector({
+      apiUrl: API_BASE_URL,
+      credentialFile: fileCredentialFile,
+      downloadDir,
+    });
+    try {
+      const result = await callTool(connector.client, 'document_download', {
+        id: uploadedId,
+        reason: 'Proving the download path end to end',
+      });
+      expect(result.isError, result.text).toBe(false);
+
+      const saved = (result.json as { saved: { path: string; sha256: string } }).saved;
+      expect(readFileSync(saved.path)).toEqual(UPLOAD_BYTES);
+      expect(saved.sha256).toBe(createHash('sha256').update(UPLOAD_BYTES).digest('hex'));
+
+      expect(
+        result.text,
+        'the point of returning a path is that the contents never reach the model',
+      ).not.toContain('%PDF');
+      expect(saved.path.startsWith(downloadDir)).toBe(true);
+    } finally {
+      await connector.close();
+    }
+  });
+
+  test('a read-level session is offered no file tool, even with directories named', async () => {
+    const readOnly = credentialFileFor('documents-read');
+    const connected = await connectConnector({
+      apiUrl: API_BASE_URL,
+      email: fixture.writer.email,
+      password: fixture.writer.password,
+      credentialFile: readOnly,
+      accessLevel: 'read',
+    });
+    expect(connected.code, connected.stderr).toBe(0);
+
+    const connector = await openConnector({
+      apiUrl: API_BASE_URL,
+      credentialFile: readOnly,
+      uploadRoot,
+      downloadDir,
+    });
+    try {
+      const names = (await connector.client.listTools()).tools.map((tool) => tool.name);
+      expect(names).not.toContain('document_upload');
+      expect(names).not.toContain('document_download');
+
+      const refused = await callTool(connector.client, 'document_upload', {
+        path: 'policy.pdf',
+        name: 'Should never upload',
+        category: 'POLICY',
+      });
+      expect(refused.isError, 'hiding a tool is not refusing it').toBe(true);
+    } finally {
+      await connector.close();
+    }
   });
 });
