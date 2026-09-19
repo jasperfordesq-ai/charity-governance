@@ -419,6 +419,37 @@ test('a conflict whose re-read finds nothing is the one unresolved conflict', as
   assert.equal(calls.filter((call) => call.startsWith('createPage:')).length, 1);
 });
 
+test('a 5xx on create is not mistaken for a conflict, and provokes no re-read', async () => {
+  const calls: string[] = [];
+  let lookups = 0;
+  await assert.rejects(
+    () =>
+      runPublisher(
+        spyDeps(calls, {
+          operations: {
+            findPageByTitle: async () => {
+              lookups += 1;
+              return lookups === 1 ? null : PAGE;
+            },
+            createPage: async () => {
+              throw new AppError(502, 'CONFLUENCE_REQUEST_FAILED', 'Confluence request failed with status 502.');
+            },
+          },
+        }),
+      ),
+    (error: unknown) => {
+      assert.equal(appError(error).code, 'CONFLUENCE_REQUEST_FAILED');
+      return true;
+    },
+  );
+  assert.equal(
+    lookups,
+    1,
+    'only a 409 earns the one re-read; every other create failure is transient and the whole ' +
+      'attempt is retried, which the adopt-from-the-row path then makes safe',
+  );
+});
+
 test('the create-or-adopt decision never reads the upstream error body', () => {
   const source = readFileSync(
     join(process.cwd(), 'src', 'services', 'document-publication.service.ts'),
