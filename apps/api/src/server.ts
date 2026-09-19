@@ -7,6 +7,7 @@ import { errorHandlerPlugin } from './plugins/error-handler.js';
 import { securityHeadersPlugin } from './plugins/security-headers.js';
 import { registerBrowserOriginProtection } from './plugins/browser-origin-protection.js';
 import { clientActivityLogPlugin } from './plugins/client-activity-log.js';
+import { connectorWriteBudgetPlugin } from './plugins/connector-write-budget.js';
 import { authRoutes } from './routes/auth/index.js';
 import { connectorAuthRoutes } from './routes/auth/connector.js';
 import { organisationRoutes } from './routes/organisations/index.js';
@@ -80,6 +81,11 @@ await app.register(prismaPlugin);
 // them. It records only unsafe requests from connector sessions, and it can
 // never fail a request: the response has already been sent by the time it runs.
 await app.register(clientActivityLogPlugin);
+
+// A connector session's own budget for changing things, so an agent in a retry
+// loop cannot spend the shared address allowance and lock the owner out of the
+// web application running on the same machine.
+await app.register(connectorWriteBudgetPlugin);
 
 // A deployment that serves the owner console must have a distinct owner secret.
 // Collapsing the two secrets would silently remove the isolation the console relies on.
