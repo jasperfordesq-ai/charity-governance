@@ -93,6 +93,18 @@ no field allowlist can protect.
 
 ### Phase 2: API foundations for writes (additive, hand-written migration)
 
+**Split into three, and 2a is DONE (2026-09-19).** The original block covered the
+session columns, four auth routes, an activity log, level enforcement, the
+sessions UI and a connector rewrite — too much for one reviewable change against
+the auth core. Delivered as 2a (posture columns, migration, guards, enforcement),
+2b (connector auth routes and the connector rewrite) and 2c (activity log, admin
+gating, sessions UI). Plan for 2a:
+`docs/superpowers/plans/2026-09-19-charitypilot-mcp-session-posture.md`.
+
+Found while doing 2a: rotation was already losing `deviceLabel` on every
+refresh, which is the exact failure mode the posture had to be protected from,
+and a replayed refresh token quarantined a whole session family in silence.
+
 Goal: the API knows what a connector session is, what it may do, and records what it did.
 
 **Schema (`apps/api/prisma/schema.prisma`) + migration:**

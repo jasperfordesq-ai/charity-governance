@@ -65,6 +65,39 @@ unexpected modified files, check whether another session is mid-flight before re
   `mcp/src/route-coverage.ts`. A test requires every readable route to be either a tool
   or an entry there, so the list cannot quietly fall behind the API.
 
+## Session posture (added 2026-09-19, phase 2a)
+
+Every `AuthSession` row now carries two columns. `clientKind` is `WEB` or
+`MCP_CONNECTOR`; `accessLevel` is `READ`, `WRITE` or `ADMIN`. Both default to a
+full-authority web session, which is what every session was before, so nothing
+about the web application changed.
+
+Three things are worth knowing before touching them:
+
+- **They are immutable.** The update guard refuses any change, so a live
+  session can never be promoted. A session is narrowed at sign-in or not at all.
+- **They are pinned per session family by the database.** Rotation mints a new
+  row on every refresh; if it fails to copy the posture, the insert raises
+  23514 and the refresh fails. That guard exists because rotation was already
+  losing `deviceLabel` the same way, silently, since the column was added — and
+  a lost posture would not blank a label, it would restore full authority.
+  Rotation now copies the device label too.
+- **A refresh token cannot cross channels.** `rotateSessionTokens` takes an
+  optional expected client kind and refuses a mismatch with the same opaque
+  error an unknown token gets.
+
+`authGuard` reads the posture per request and refuses every unsafe method on a
+`READ` session with 403 `SESSION_READ_ONLY`. `requireSessionLevel` exists for
+the destructive routes but is not yet applied to any of them.
+
+**Nothing creates a non-default posture yet.** There is no route that accepts
+one, and the connector still signs in through the browser path. That arrives
+with the connector auth routes in phase 2b. Until then these columns are inert
+for every real user, which is why they were landed on their own.
+
+A replayed refresh token now also writes a `SESSION_REPLAY_DETECTED` audit row
+in the same transaction as the quarantine. It used to be silent.
+
 ## Open problems, in priority order
 
 ### 1. Split-host deployments cannot authenticate (unfixed, needs a decision)
