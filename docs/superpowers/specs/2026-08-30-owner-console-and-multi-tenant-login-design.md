@@ -320,10 +320,28 @@ design eroding as the codebase grows.
 
 ## Accepted Risks
 
-- **No TOTP on the operator account in v1.** A password alone gates the ability to
-  suspend every charity on the platform. Mitigated by CLI-only operator creation, a
-  30-minute access token and rate-limited login. TOTP should be the next piece of
-  work after this lands, not a backlog item.
+**Reviewed 2026-09-19.** What follows is the list as written when the console
+shipped, with the items since closed marked. Three were closed in one pass: the
+missing second factor, a tenant list that could not be paged past its first page,
+and a console that never said whose account was acting. The console also gained
+per-charity configuration and a view of what the platform has done to each
+charity, and is now driven end to end by `npm run test:e2e:owner`.
+
+- ~~**No TOTP on the operator account in v1.**~~ **CLOSED 2026-09-19.** A second
+  factor is built: RFC 6238 time-based codes, checked against the published test
+  vectors, with ten single-use recovery codes. Enrolment is opt-in per operator and
+  completes only when a generated code is proved, so a setup scanned into the wrong
+  application cannot lock anybody out. The secret is sealed with a key derived from
+  `OWNER_JWT_SECRET` rather than a new environment variable, because a second factor
+  that cannot be rolled out without adding a secret is one that does not get rolled
+  out. Removing a factor needs the factor, not just a session. See
+  `apps/api/src/utils/totp.ts` and
+  `apps/api/src/services/operator-second-factor.service.ts`.
+
+  **Still open within it:** enrolment is not yet REQUIRED. Making it so is a
+  deliberate later decision with its own migration, because turning it on for
+  everybody in a single deployment locks out whoever has not enrolled — quite
+  possibly the only person who could fix it.
 - **Impersonation deferred.** Reproducing a tenant-reported bug still requires
   asking the tenant for detail; there is no supported way to see their screen.
 - **Logical rather than physical isolation.** The owner routes are reachable from

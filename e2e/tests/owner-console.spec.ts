@@ -1,7 +1,11 @@
 
 
 
-import { test, expect, type Page } from '@playwright/test';
+import type { Page } from '@playwright/test';
+// test and expect come from the fixtures, not from Playwright: the fixture
+// installs an origin fence that fails a test whose page talks to an
+// unexpected origin, and importing around it opts out of that silently.
+import { test, expect } from '../fixtures';
 import { uniqueEmail } from '../fixtures';
 import { fromBase32, totp } from '../../apps/api/src/utils/totp';
 import {
@@ -26,19 +30,12 @@ test.describe.configure({ mode: 'serial' });
 const OPERATOR_PASSWORD = 'OperatorConsole!2026';
 const TENANT_PASSWORD = 'TenantOwner!2026';
 
-let operatorEmail = '';
 let tenantName = '';
 let tenantOrganisationId = '';
-let consoleCookies: Awaited<ReturnType<import('@playwright/test').BrowserContext['cookies']>> = [];
+/** The operator who made the configuration change the history test asserts. */
+let configuringOperator = '';
 
 test.beforeAll(async () => {
-  operatorEmail = uniqueEmail('operator');
-  await createPlatformOperator({
-    email: operatorEmail,
-    name: 'Console Operator',
-    password: OPERATOR_PASSWORD,
-  });
-
   tenantName = `Console Probe Charity ${Date.now()}`;
   const owner = await createVerifiedOwner({
     email: uniqueEmail('console-tenant'),
@@ -49,16 +46,29 @@ test.beforeAll(async () => {
   tenantOrganisationId = owner.organisationId;
 });
 
-test.beforeAll(async ({ browser }) => {
-  const context = await browser.newContext();
-  const page = await context.newPage();
-  await signInOn(page);
-  consoleCookies = (await context.cookies()).filter((cookie) =>
-    cookie.name.startsWith('charitypilot_owner'),
-  );
-  expect(consoleCookies.length, 'the console must set its own cookies').toBeGreaterThan(0);
-  await context.close();
-});
+/**
+ * A fresh operator per test, signed in on the fixture's own page.
+ *
+ * Two constraints meet here. The sign-in route limits attempts per email
+ * address, so a suite that signed in eight times as one operator spent that
+ * budget and hung on a redirect that was never coming. And a spec may not
+ * create its own browser context: the fixture installs an origin fence that
+ * fails the test if the page talks to an unexpected origin, and a raw context
+ * would quietly opt out of it.
+ *
+ * Seeding an operator is one insert, so one each is cheaper than sharing.
+ */
+async function signInAsNewOperator(page: Page): Promise<string> {
+  const email = uniqueEmail('operator');
+  await createPlatformOperator({ email, name: 'Console Operator', password: OPERATOR_PASSWORD });
+
+  await page.goto('/owner/login');
+  await page.getByLabel(/email/i).fill(email);
+  await page.getByRole('textbox', { name: /password/i }).fill(OPERATOR_PASSWORD);
+  await page.getByRole('button', { name: /sign in/i }).click();
+  await page.waitForURL('**/owner/tenants');
+  return email;
+}
 
 /**
  * Picks an option from a HeroUI select.
@@ -82,29 +92,14 @@ async function choose(page: Page, testId: string, option: string): Promise<void>
     await expect(trigger).toContainText(option, { timeout: 2000 });
   }).toPass({ timeout: 30_000 });
 }
-async function signInOn(page: Page): Promise<void> {
-  await page.goto('/owner/login');
-  await page.getByLabel(/email/i).fill(operatorEmail);
-  await page.getByLabel(/password/i).fill(OPERATOR_PASSWORD);
-  await page.getByRole('button', { name: /sign in/i }).click();
-  await page.waitForURL('**/owner/tenants');
-}
-
-/**
- * Restores the one signed-in session rather than signing in again.
- *
- * The operator sign-in route limits attempts per email address, as the tenant
- * one does. A suite that signed in for every test exhausted that budget part
- * way through and then hung on a redirect that was never coming — which is a
- * confusing way to be told the rate limiter works.
- */
-async function useConsole(page: Page): Promise<void> {
-  await page.context().addCookies(consoleCookies);
-  await page.goto('/owner/tenants');
-  await page.waitForURL('**/owner/tenants');
-}
-
 test('a wrong password does not sign anybody in', async ({ page }) => {
+  const operatorEmail = uniqueEmail('operator');
+  await createPlatformOperator({
+    email: operatorEmail,
+    name: 'Console Operator',
+    password: OPERATOR_PASSWORD,
+  });
+
   await page.goto('/owner/login');
   await page.getByLabel(/email/i).fill(operatorEmail);
   await page.getByLabel(/password/i).fill('not-the-password');
@@ -115,7 +110,7 @@ test('a wrong password does not sign anybody in', async ({ page }) => {
 });
 
 test('an operator signs in and sees the charity, with their own name in the bar', async ({ page }) => {
-  await signInOn(page);
+  const operatorEmail = await signInAsNewOperator(page);
 
   await expect(page.getByRole('link', { name: tenantName })).toBeVisible();
   // Until this shipped the console said nothing about whose account was acting,
@@ -124,7 +119,7 @@ test('an operator signs in and sees the charity, with their own name in the bar'
 });
 
 test('the tenant list can be filtered by status', async ({ page }) => {
-  await useConsole(page);
+  const operatorEmail = await signInAsNewOperator(page);
 
   await choose(page, 'status-filter', 'Closed');
 
@@ -132,7 +127,7 @@ test('the tenant list can be filtered by status', async ({ page }) => {
 });
 
 test('a configuration change is saved, and recorded against the operator', async ({ page }) => {
-  await useConsole(page);
+  const operatorEmail = await signInAsNewOperator(page);
   await page.getByRole('link', { name: tenantName }).click();
   await page.waitForURL(`**/owner/tenants/${tenantOrganisationId}`);
 
@@ -151,17 +146,18 @@ test('a configuration change is saved, and recorded against the operator', async
   const audit = await readConfigurationAudit(tenantOrganisationId);
   expect(audit.length).toBe(1);
   expect(audit[0]!.actorLabel).toBe(operatorEmail);
+  configuringOperator = operatorEmail;
   expect(audit[0]!.reason).toBe(reason);
   expect(audit[0]!.context).toMatchObject({ newDocumentStorageProvider: 'local' });
 });
 
 test('the history shows the change that was just made, and who made it', async ({ page }) => {
-  await useConsole(page);
+  const operatorEmail = await signInAsNewOperator(page);
   await page.goto(`/owner/tenants/${tenantOrganisationId}`);
 
   const history = page.getByTestId('tenant-history');
   await expect(history).toContainText('Configuration changed');
-  await expect(history).toContainText(operatorEmail);
+  await expect(history).toContainText(configuringOperator);
   await expect(history).toContainText('storage set to local');
   await expect(history, 'the reason is the point of asking for one').toContainText(
     'keep their files on their own server',
@@ -169,7 +165,7 @@ test('the history shows the change that was just made, and who made it', async (
 });
 
 test('a change cannot be saved without a reason', async ({ page }) => {
-  await useConsole(page);
+  const operatorEmail = await signInAsNewOperator(page);
   await page.goto(`/owner/tenants/${tenantOrganisationId}`);
 
   await choose(page, 'tenant-plan', 'Complete');
@@ -181,7 +177,7 @@ test('a change cannot be saved without a reason', async ({ page }) => {
 });
 
 test('the plan can be changed, and the charity keeps the storage it was given', async ({ page }) => {
-  await useConsole(page);
+  const operatorEmail = await signInAsNewOperator(page);
   await page.goto(`/owner/tenants/${tenantOrganisationId}`);
 
   await choose(page, 'tenant-plan', 'Complete');
@@ -199,7 +195,7 @@ test('the plan can be changed, and the charity keeps the storage it was given', 
 });
 
 test('signing out ends the session, and the console is closed again', async ({ page }) => {
-  await useConsole(page);
+  const operatorEmail = await signInAsNewOperator(page);
   await page.getByRole('button', { name: /sign out/i }).click();
   await page.waitForURL('**/owner/login');
 
@@ -211,6 +207,13 @@ test('a tenant session is not an operator session', async ({ page }) => {
   // The two realms use different credentials and different cookie paths. A
   // charity's owner signing in to the application must not find the platform
   // console open to them.
+  const operatorEmail = uniqueEmail('operator');
+  await createPlatformOperator({
+    email: operatorEmail,
+    name: 'Console Operator',
+    password: OPERATOR_PASSWORD,
+  });
+
   await page.goto('/login');
   await page.getByLabel(/email/i).fill(operatorEmail);
   // The tenant form has a "show password" button that also answers to the
@@ -231,11 +234,24 @@ test('a tenant session is not an operator session', async ({ page }) => {
  */
 test.describe('Operator second factor', () => {
   let factorEmail = '';
-  let factorCookies: Awaited<ReturnType<import('@playwright/test').BrowserContext['cookies']>> = [];
   let enrolmentSecret = '';
-  let savedRecoveryCodes: string[] = [];
 
-  test.beforeAll(async ({ browser }) => {
+  /**
+   * Signs in as the factor account on the fixture's own page.
+   *
+   * Counted carefully: the route allows five attempts a minute per address, and
+   * these tests make four between them. A spec may not open its own browser
+   * context to keep a session alive, because the fixture installs an origin
+   * fence that a raw context would quietly opt out of.
+   */
+  async function signInAsFactorOperator(page: Page): Promise<void> {
+    await page.goto('/owner/login');
+    await page.getByLabel(/email/i).fill(factorEmail);
+    await page.getByRole('textbox', { name: /password/i }).fill(OPERATOR_PASSWORD);
+    await page.getByRole('button', { name: /sign in/i }).click();
+  }
+
+  test.beforeAll(async () => {
     // Its own operator: enrolling changes how that account signs in, and the
     // tests above expect theirs to keep working on a password alone.
     factorEmail = uniqueEmail('factor-operator');
@@ -244,50 +260,23 @@ test.describe('Operator second factor', () => {
       name: 'Second Factor Operator',
       password: OPERATOR_PASSWORD,
     });
-
-    const context = await browser.newContext();
-    const page = await context.newPage();
-    await page.goto('/owner/login');
-    await page.getByLabel(/email/i).fill(factorEmail);
-    await page.getByRole('textbox', { name: /password/i }).fill(OPERATOR_PASSWORD);
-    await page.getByRole('button', { name: /sign in/i }).click();
-    await page.waitForURL('**/owner/tenants');
-    factorCookies = (await context.cookies()).filter((cookie) =>
-      cookie.name.startsWith('charitypilot_owner'),
-    );
-    await context.close();
   });
 
-  async function useFactorConsole(page: Page): Promise<void> {
-    await page.context().addCookies(factorCookies);
+  test('enrolment needs a proved code, and then hands back recovery codes', async ({ page }) => {
+    await signInAsFactorOperator(page);
+    await page.waitForURL('**/owner/tenants');
     await page.goto('/owner/security');
-  }
-
-  test('an account starts on a password alone', async ({ page }) => {
-    await useFactorConsole(page);
 
     await expect(page.getByTestId('second-factor-status')).toContainText('Password only');
-  });
 
-  test('starting enrolment offers a secret that does not turn it on yet', async ({ page }) => {
-    await useFactorConsole(page);
     await page.getByTestId('begin-second-factor').click();
-
     await expect(page.getByTestId('enrolment')).toBeVisible();
-    const secret = await page.locator('span.font-mono').first().innerText();
-    enrolmentSecret = secret.trim();
+    enrolmentSecret = (await page.locator('span.font-mono').first().innerText()).trim();
     expect(enrolmentSecret).toMatch(/^[A-Z2-7]{32}$/);
 
     // Scanning is not enrolling: a setup scanned into the wrong application
     // must not lock anybody out.
     await expect(page.getByTestId('second-factor-status')).toContainText('Password only');
-  });
-
-  test('proving a code turns it on and hands back recovery codes', async ({ page }) => {
-    await useFactorConsole(page);
-    await page.getByTestId('begin-second-factor').click();
-    await expect(page.getByTestId('enrolment')).toBeVisible();
-    enrolmentSecret = (await page.locator('span.font-mono').first().innerText()).trim();
 
     // HeroUI's Input does not forward data attributes to the element it
     // renders, unlike its Chip and Button, so this one is found by its label.
@@ -297,28 +286,24 @@ test.describe('Operator second factor', () => {
     await page.getByTestId('confirm-second-factor').click();
 
     await expect(page.getByTestId('recovery-codes')).toBeVisible();
-    savedRecoveryCodes = (await page.getByTestId('recovery-codes').locator('li').allInnerTexts())
-      .map((code) => code.trim());
-    expect(savedRecoveryCodes.length).toBe(10);
+    const codes = (await page.getByTestId('recovery-codes').locator('li').allInnerTexts()).map(
+      (code) => code.trim(),
+    );
+    expect(codes.length).toBe(10);
+    expect(new Set(codes).size, 'every code must be distinct').toBe(10);
 
     await expect(page.getByTestId('second-factor-status')).toContainText('Second factor on');
   });
 
   test('the password alone no longer signs that account in', async ({ page }) => {
-    await page.goto('/owner/login');
-    await page.getByLabel(/email/i).fill(factorEmail);
-    await page.getByRole('textbox', { name: /password/i }).fill(OPERATOR_PASSWORD);
-    await page.getByRole('button', { name: /sign in/i }).click();
+    await signInAsFactorOperator(page);
 
     await expect(page.getByTestId('second-factor')).toBeVisible();
     await expect(page).toHaveURL(/\/owner\/login/);
   });
 
   test('a code generated from that secret signs in', async ({ page }) => {
-    await page.goto('/owner/login');
-    await page.getByLabel(/email/i).fill(factorEmail);
-    await page.getByRole('textbox', { name: /password/i }).fill(OPERATOR_PASSWORD);
-    await page.getByRole('button', { name: /sign in/i }).click();
+    await signInAsFactorOperator(page);
     await expect(page.getByTestId('second-factor')).toBeVisible();
 
     await page
@@ -328,7 +313,6 @@ test.describe('Operator second factor', () => {
 
     await page.waitForURL('**/owner/tenants');
   });
-
   test('a recovery code signs in once, and not twice', async ({ page }) => {
     // Its own operator, enrolled in its own right. The sign-in route limits
     // attempts per email address, and this test makes four on its own; sharing
