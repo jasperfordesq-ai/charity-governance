@@ -424,6 +424,91 @@ export async function updatePage(
   return parsePage(response.body);
 }
 
+/**
+ * More than one page answered the same title in the same space.
+ *
+ * This is not a parse failure (`CONFLUENCE_RESPONSE_INVALID`) and is
+ * deliberately a distinct, pinned code: the whole create-or-adopt design in
+ * the module header rests on an assumption that is **not stated** in
+ * Atlassian's v2 pages documentation and has **never been verified** against a
+ * real site — that a title is unique within a space. Confluence's own use of
+ * 409 for a duplicate title strongly implies it, but implication is not
+ * verification. If the assumption is ever wrong, a caller must find out
+ * through a loud, distinct error, not by silently adopting `results[0]` and
+ * attaching a charity's governance document to whichever page Confluence
+ * happened to list first.
+ */
+function titleAmbiguous(spaceId: string, title: string, matchCount: number): AppError {
+  return new AppError(
+    409,
+    'CONFLUENCE_PAGE_TITLE_AMBIGUOUS',
+    `Confluence answered ${matchCount} pages titled "${title}" in space ${spaceId}, not one. ` +
+      'The create-or-adopt design assumes a title is unique within a space, which Atlassian\'s ' +
+      "v2 documentation does not state and this client has not verified. Nothing was adopted: " +
+      'a human must resolve which page (if any) is the real one before a publish can proceed.',
+    { spaceId, title, matchCount },
+  );
+}
+
+function readResults(body: unknown): unknown[] | undefined {
+  const results = asObject(body)?.results;
+  return Array.isArray(results) ? results : undefined;
+}
+
+/**
+ * Finds a page by its exact title within a space — the caller-side re-read
+ * that turns `createPage`'s non-idempotence into something a retrying outbox
+ * can live with.
+ *
+ * `GET /wiki/api/v2/pages?title=…&space-id=…`. **Idempotent**: a read changes
+ * nothing, so the core may retry it on a 429 or a 5xx.
+ *
+ * `title` and `space-id` travel in `query`, never the path — `assertValidPath`
+ * forbids `?`, and a title is free text a charity chose, not a path segment.
+ *
+ * `space-id` is documented by Atlassian as an **array of integer**. In
+ * practice, neither side of this actually carries that shape: this client's
+ * `ConfluenceRequestSpec.query` is `Record<string, string>` built with
+ * `URLSearchParams.set`, which can hold exactly one value per key, and this
+ * codebase already carries every Confluence id — including `ConfluencePage
+ * .spaceId` a few lines above — as a plain `string`. So this sends the one
+ * space id being searched as a single string under the key `space-id`
+ * (`?space-id=98765`), not `space-id[]=` and not a comma-joined list: there is
+ * exactly one id to filter on per call, and nothing here reconstructs
+ * Atlassian's array-of-integer form for it.
+ *
+ * Three outcomes, deliberately not flattened into two:
+ *
+ * - **Zero matches** → `null`. A caller told `null` can adopt nothing and
+ *   must create — exactly the meaning `getPage` gives `null` for
+ *   `CONFLUENCE_NOT_FOUND`.
+ * - **Exactly one match** → the parsed page, adoptable.
+ * - **More than one match** → throws `CONFLUENCE_PAGE_TITLE_AMBIGUOUS`. See
+ *   {@link titleAmbiguous} for why this must be loud rather than a guess.
+ */
+export async function findPageByTitle(
+  client: ConfluenceClient,
+  spaceId: string,
+  title: string,
+): Promise<ConfluencePage | null> {
+  const response = await client.request({
+    method: 'GET',
+    api: 'v2',
+    path: 'pages',
+    query: { title, 'space-id': spaceId },
+    // A read changes nothing, so the core may retry it on a 429 or a 5xx.
+    idempotent: true,
+  });
+
+  const results = readResults(response.body);
+  if (results === undefined) throw invalidResponse('page list');
+
+  if (results.length === 0) return null;
+  if (results.length > 1) throw titleAmbiguous(spaceId, title, results.length);
+
+  return parsePage(results[0]);
+}
+
 // ---------------------------------------------------------------------------
 // Erasure
 // ---------------------------------------------------------------------------

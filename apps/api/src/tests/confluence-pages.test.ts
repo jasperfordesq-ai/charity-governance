@@ -5,6 +5,7 @@ import {
   CONFLUENCE_CONTENT_PROPERTY_MAX_BYTES,
   createPage,
   deletePage,
+  findPageByTitle,
   getContentProperty,
   getContentPropertyRecord,
   getPage,
@@ -823,4 +824,72 @@ test('a property key that could address another resource is refused before any r
   );
   assert.equal(error.code, 'CONFLUENCE_PROPERTY_KEY_INVALID');
   assert.equal(specs.length, 0);
+});
+
+// ---------------------------------------------------------------------------
+// findPageByTitle — the caller-side re-read that makes create-or-adopt safe
+// ---------------------------------------------------------------------------
+
+test('findPageByTitle returns the page when exactly one match is found', async () => {
+  const { client, specs } = harness([ok({ results: [pageBody()] })]);
+
+  const page = await findPageByTitle(client, SPACE_ID, 'POL - Data Protection Policy');
+
+  assert.deepEqual(page, {
+    id: PAGE_ID,
+    title: 'POL - Data Protection Policy',
+    spaceId: SPACE_ID,
+    version: 3,
+    webUrl: `${WEB_BASE}${WEB_UI}`,
+  });
+  assert.equal(specs[0]?.method, 'GET');
+  assert.equal(specs[0]?.path, 'pages');
+});
+
+test('findPageByTitle returns null when no page matches: a caller told null can adopt nothing and must create', async () => {
+  const { client } = harness([ok({ results: [] })]);
+
+  assert.equal(await findPageByTitle(client, SPACE_ID, 'POL - Data Protection Policy'), null);
+});
+
+test('findPageByTitle raises rather than guesses when more than one page matches the title', async () => {
+  const { client } = harness([
+    ok({ results: [pageBody({ id: '1' }), pageBody({ id: '2' })] }),
+  ]);
+
+  const error = await rejectsWith(() =>
+    findPageByTitle(client, SPACE_ID, 'POL - Data Protection Policy'),
+  );
+  assert.equal(error.code, 'CONFLUENCE_PAGE_TITLE_AMBIGUOUS');
+  assert.notEqual(
+    error.code,
+    'CONFLUENCE_RESPONSE_INVALID',
+    'this must be its own distinct, pinned code — not folded into a generic parse failure',
+  );
+});
+
+test('findPageByTitle is issued as idempotent: a read is safe to retry', async () => {
+  const { client, specs } = harness([ok({ results: [pageBody()] })]);
+
+  await findPageByTitle(client, SPACE_ID, 'POL - Data Protection Policy');
+
+  assert.equal(specs[0]?.idempotent, true, 'findPageByTitle MUST be idempotent: a read changes nothing');
+});
+
+test('findPageByTitle sends the title as a query parameter, never interpolated into the path', async () => {
+  const { client, specs } = harness([ok({ results: [pageBody()] })]);
+
+  await findPageByTitle(client, SPACE_ID, 'POL - Data Protection Policy?');
+
+  assert.equal(specs[0]?.path, 'pages', 'the path must stay a bare collection name');
+  assert.doesNotMatch(specs[0]?.path ?? '', /\?/, 'assertValidPath forbids a ? in the path');
+  assert.equal(specs[0]?.query?.title, 'POL - Data Protection Policy?');
+});
+
+test('findPageByTitle sends space-id as a query parameter keyed by the hyphenated name', async () => {
+  const { client, specs } = harness([ok({ results: [pageBody()] })]);
+
+  await findPageByTitle(client, SPACE_ID, 'POL - Data Protection Policy');
+
+  assert.equal(specs[0]?.query?.['space-id'], SPACE_ID);
 });
