@@ -4,6 +4,26 @@ import { handleError } from '../../utils/errors.js';
 import { requirePlatformOperator } from '../../middleware/owner-auth.js';
 import { listTenants, getTenant, transitionTenantLifecycle } from '../../services/owner-tenants.service.js';
 import { provisionTenant } from '../../services/owner-provisioning.service.js';
+import {
+  getTenantConfiguration,
+  updateTenantConfiguration,
+} from '../../services/owner-tenant-configuration.service.js';
+
+/**
+ * What a platform operator may change about a charity they do not belong to.
+ *
+ * Every field is optional and absent means "leave it alone", so a request that
+ * only wants to change the plan cannot accidentally reset the storage provider
+ * to whatever the form happened to render. `documentStorageProvider` is
+ * nullable on purpose: null is a meaningful value meaning "follow the
+ * deployment default", and is not the same as omitting it.
+ */
+const configurationSchema = z.object({
+  documentStorageProvider: z.string().trim().min(1).max(64).nullable().optional(),
+  documentStorageAlphaOptIn: z.boolean().optional(),
+  plan: z.enum(['ESSENTIALS', 'COMPLETE']).optional(),
+  reason: z.string().trim().min(1).max(500),
+});
 
 const listQuerySchema = z.object({
   q: z.string().trim().min(1).max(200).optional(),
@@ -18,6 +38,41 @@ export async function ownerTenantRoutes(app: FastifyInstance): Promise<void> {
   app.get('/tenants', async (request, reply) => {
     try {
       reply.send(await listTenants(app.prisma, listQuerySchema.parse(request.query ?? {})));
+    } catch (err) {
+      if (err instanceof ZodError) {
+        reply.status(400).send({ error: 'Validation failed', code: 'VALIDATION_ERROR' });
+        return;
+      }
+      handleError(reply, err);
+    }
+  });
+
+  app.get('/tenants/:id/configuration', async (request, reply) => {
+    try {
+      const { id } = z.object({ id: z.string().min(1).max(64) }).parse(request.params);
+      reply.send({ configuration: await getTenantConfiguration(app.prisma, id) });
+    } catch (err) {
+      if (err instanceof ZodError) {
+        reply.status(400).send({ error: 'Validation failed', code: 'VALIDATION_ERROR' });
+        return;
+      }
+      handleError(reply, err);
+    }
+  });
+
+  app.patch('/tenants/:id/configuration', async (request, reply) => {
+    try {
+      const { id } = z.object({ id: z.string().min(1).max(64) }).parse(request.params);
+      const { reason, ...change } = configurationSchema.parse(request.body ?? {});
+
+      reply.send({
+        configuration: await updateTenantConfiguration(app.prisma, {
+          tenantId: id,
+          change,
+          reason,
+          operator: { id: request.operator.id, email: request.operator.email },
+        }),
+      });
     } catch (err) {
       if (err instanceof ZodError) {
         reply.status(400).send({ error: 'Validation failed', code: 'VALIDATION_ERROR' });
