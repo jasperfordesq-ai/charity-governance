@@ -530,7 +530,13 @@ Add delete and purge to the Phase 3 client. These files are **not** in the close
   idempotent operations. If you find yourself copying the create path's policy, you have the wrong
   one — check `confluence-client.ts`'s asymmetric policy and pick the idempotent branch.
 - Reuse Phase 3's `assertPageId` and the attachment module's id validation. Do not write new
-  validators.
+  validators — but **do give an attachment id its own error code**. Reusing `assertPageId`
+  wholesale makes a malformed *attachment* id surface as `CONFLUENCE_PAGE_ID_INVALID`: the right
+  shape check wearing the wrong label, read later by an operator diagnosing a failed erasure of a
+  charity's document. A thin wrapper around the same check is not a new validator.
+- Both purge variants carry `purge=true` in the request spec's **`query`**, not in its `path`.
+  `assertValidPath` forbids `?` outright, so a query string in the path cannot work; `query` is the
+  mechanism `listAttachments` already uses.
 
 - [ ] **Step 1: Write the failing tests**
 
@@ -549,8 +555,8 @@ test('purge=true is sent on the purge call and on no other', async () => {
   await deletePage(client, '123');
   await purgePage(client, '123');
   assert.equal(specs.length, 2);
-  assert.ok(!specs[0].path.includes('purge'), 'delete must not purge');
-  assert.ok(specs[1].path.includes('purge=true'), 'purge must ask for it explicitly');
+  assert.equal(specs[0].query?.purge, undefined, 'delete must not purge');
+  assert.equal(specs[1].query?.purge, 'true', 'purge must ask for it explicitly');
 });
 
 test('a forbidden purge names the permission the grant is missing', async () => {
