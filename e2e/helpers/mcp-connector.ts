@@ -1,5 +1,5 @@
 import { spawn } from 'node:child_process';
-import { existsSync } from 'node:fs';
+import { existsSync, readFileSync, writeFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import {
@@ -59,22 +59,100 @@ export function runConnector(
   });
 }
 
+export type ConnectorAccessLevel = 'read' | 'write' | 'admin';
+
 export async function connectConnector(options: {
   apiUrl: string;
   email: string;
   password: string;
   credentialFile: string;
+  accessLevel?: ConnectorAccessLevel;
 }): Promise<ConnectorRunResult> {
-  return runConnector(
-    [
-      'connect',
-      '--profile', 'local',
-      '--base-url', options.apiUrl,
-      '--email', options.email,
-      '--password-stdin',
-    ],
-    { credentialFile: options.credentialFile, stdinText: `${options.password}\n` },
-  );
+  const args = [
+    'connect',
+    '--profile', 'local',
+    '--base-url', options.apiUrl,
+    '--email', options.email,
+    '--password-stdin',
+  ];
+  // Omitted rather than defaulted: a test that never passes one is then
+  // exercising the connector's own default, which is the case worth covering.
+  if (options.accessLevel) args.push('--access-level', options.accessLevel);
+  return runConnector(args, {
+    credentialFile: options.credentialFile,
+    stdinText: `${options.password}\n`,
+  });
+}
+
+/**
+ * The refresh token as the connector actually stored it.
+ *
+ * The file holds the credential store's opaque value, which since origin
+ * binding is itself a small JSON record. A test that posted the record
+ * verbatim would be rejected for the wrong reason, and would keep passing
+ * after the thing it guards had broken.
+ */
+export function storedRefreshToken(path: string): string | null {
+  if (!existsSync(path)) return null;
+  const outer = JSON.parse(readFileSync(path, 'utf8')) as { refreshToken?: unknown };
+  if (typeof outer.refreshToken !== 'string') return null;
+  try {
+    const bound = JSON.parse(outer.refreshToken) as { refreshToken?: unknown };
+    if (typeof bound.refreshToken === 'string') return bound.refreshToken;
+  } catch {
+    // A plain string: an entry written before binding existed.
+  }
+  return outer.refreshToken;
+}
+
+export const CONNECTOR_CLIENT_HEADER = 'x-charitypilot-client';
+const CONNECTOR_CLIENT_VALUE = 'mcp-connector/0.1.0';
+
+/**
+ * Spends the stored refresh token for an access token, the way the connector
+ * would, and writes the rotated credential back so the connector keeps working.
+ *
+ * This exists so a test can make a request the connector has no tool for. A
+ * refusal seen that way is unambiguously the API's, not the connector quietly
+ * declining to offer something.
+ */
+export async function accessTokenFromStoredCredential(options: {
+  apiUrl: string;
+  credentialFile: string;
+}): Promise<string> {
+  const refreshToken = storedRefreshToken(options.credentialFile);
+  if (!refreshToken) throw new Error(`No stored credential at ${options.credentialFile}`);
+
+  const response = await fetch(`${options.apiUrl}/api/v1/auth/connector/refresh`, {
+    method: 'POST',
+    headers: {
+      'content-type': 'application/json',
+      [CONNECTOR_CLIENT_HEADER]: CONNECTOR_CLIENT_VALUE,
+    },
+    body: JSON.stringify({ refreshToken }),
+  });
+  if (!response.ok) {
+    throw new Error(`Could not mint an access token: ${response.status} ${await response.text()}`);
+  }
+  const body = (await response.json()) as { accessToken: string; refreshToken: string };
+
+  // The token just spent is dead. Leaving it on disk would quarantine the whole
+  // session family the next time the connector refreshed.
+  const outer = JSON.parse(readFileSync(options.credentialFile, 'utf8')) as { refreshToken: string };
+  let stored: string = body.refreshToken;
+  try {
+    const bound = JSON.parse(outer.refreshToken) as Record<string, unknown>;
+    if (bound && bound['v'] === 1) {
+      stored = JSON.stringify({ ...bound, refreshToken: body.refreshToken });
+    }
+  } catch {
+    // Plain string entry: store the rotated token the same way.
+  }
+  writeFileSync(options.credentialFile, `${JSON.stringify({ refreshToken: stored })}\n`, {
+    mode: 0o600,
+  });
+
+  return body.accessToken;
 }
 
 export interface OpenConnector {

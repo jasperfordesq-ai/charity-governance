@@ -32,11 +32,21 @@ export const CONNECTOR_CLIENT_HEADER = "x-charitypilot-client";
 /** Only the connector, and only with a version, so a bare truthy value fails. */
 const CLIENT_HEADER_PATTERN = /^mcp-connector\/\d+\.\d+\.\d+(?:[-+][0-9A-Za-z.-]+)?$/;
 
+/**
+ * Headers a browser attaches itself and page script cannot remove or forge.
+ *
+ * `sec-fetch-mode` is deliberately NOT here, although a browser does send it.
+ * Node's own fetch sets `sec-fetch-mode: cors` on every request, so treating
+ * it as browser evidence refuses the connector along with the browser. The
+ * remaining Sec-Fetch headers are sent by browsers and by nothing else: a
+ * page's fetch or XHR always carries `sec-fetch-site` and `sec-fetch-dest`
+ * beside the mode, so dropping the one header undetectable clients also send
+ * costs no coverage.
+ */
 const BROWSER_EVIDENCE_HEADERS = [
   "origin",
   "referer",
   "sec-fetch-site",
-  "sec-fetch-mode",
   "sec-fetch-dest",
 ] as const;
 

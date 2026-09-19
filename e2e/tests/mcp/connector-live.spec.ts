@@ -9,6 +9,10 @@ import {
   runConnector,
   openConnector,
   callTool,
+  storedRefreshToken,
+  accessTokenFromStoredCredential,
+  CONNECTOR_CLIENT_HEADER,
+  type ConnectorAccessLevel,
 } from '../../helpers/mcp-connector';
 import {
   seedMcpFixture,
@@ -32,12 +36,6 @@ let credentialDir: string;
 
 function credentialFileFor(label: string): string {
   return join(credentialDir, `${label}.json`);
-}
-
-function storedRefreshToken(path: string): string | null {
-  if (!existsSync(path)) return null;
-  const parsed = JSON.parse(readFileSync(path, 'utf8')) as { refreshToken?: string };
-  return parsed.refreshToken ?? null;
 }
 
 function containsNone(haystack: string, secrets: string[]): boolean {
@@ -189,9 +187,12 @@ test.describe('MCP connector lifecycle', () => {
     expect(result.code, `disconnect failed: ${result.stderr}`).toBe(0);
     expect(storedRefreshToken(credentialFile)).toBeNull();
 
-    const replay = await fetch(`${API_BASE_URL}/api/v1/auth/refresh`, {
+    const replay = await fetch(`${API_BASE_URL}/api/v1/auth/connector/refresh`, {
       method: 'POST',
-      headers: { 'content-type': 'application/json', origin: API_BASE_URL },
+      headers: {
+        'content-type': 'application/json',
+        [CONNECTOR_CLIENT_HEADER]: 'mcp-connector/0.1.0',
+      },
       body: JSON.stringify({ refreshToken: token }),
     });
     expect(replay.status, 'the revoked token must be rejected by the API').toBe(401);
@@ -248,6 +249,7 @@ const BOARD_MEMBER_WITHHELD = [
 async function connectAs(
   label: string,
   account: { email: string; password: string },
+  accessLevel?: ConnectorAccessLevel,
 ): Promise<string> {
   const credentialFile = credentialFileFor(label);
   const result = await connectConnector({
@@ -255,6 +257,7 @@ async function connectAs(
     email: account.email,
     password: account.password,
     credentialFile,
+    ...(accessLevel ? { accessLevel } : {}),
   });
   expect(result.code, `connect as ${label} failed: ${result.stderr}`).toBe(0);
   return credentialFile;
@@ -636,5 +639,173 @@ test.describe('Phase 1: the whole readable surface', () => {
     } finally {
       await connector.close();
     }
+  });
+});
+
+/**
+ * Concern: the session posture the connector signs in with, enforced by the
+ * API rather than by the connector.
+ *
+ * Every refusal here is provoked by posting directly with the session's own
+ * access token, not through a tool. A connector that simply offered no write
+ * tool would look identical from the outside, and would still leave the API
+ * open to anything holding the credential.
+ */
+test.describe('Connector session posture', () => {
+  const UNSAFE_PATH = '/api/v1/board-members';
+
+  async function postAs(credentialFile: string): Promise<Response> {
+    const accessToken = await accessTokenFromStoredCredential({
+      apiUrl: API_BASE_URL,
+      credentialFile,
+    });
+    return fetch(`${API_BASE_URL}${UNSAFE_PATH}`, {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/json',
+        authorization: `Bearer ${accessToken}`,
+        [CONNECTOR_CLIENT_HEADER]: 'mcp-connector/0.1.0',
+      },
+      body: JSON.stringify({ name: 'Posture Probe', role: 'TRUSTEE' }),
+    });
+  }
+
+  test('connect at read level says so, and the session still reads everything', async () => {
+    const credentialFile = credentialFileFor('posture-read');
+    const result = await connectConnector({
+      apiUrl: API_BASE_URL,
+      email: fixture.owner.email,
+      password: fixture.owner.password,
+      credentialFile,
+      accessLevel: 'read',
+    });
+    expect(result.code, `connect failed: ${result.stderr}`).toBe(0);
+    expect(result.stdout).toContain('Access level: READ');
+
+    const connector = await openConnector({ apiUrl: API_BASE_URL, credentialFile });
+    try {
+      const summary = await callTool(connector.client, 'compliance_summary');
+      expect(summary.isError, summary.text).toBe(false);
+      const register = await callTool(connector.client, 'board_register');
+      expect(register.isError, register.text).toBe(false);
+    } finally {
+      await connector.close();
+    }
+  });
+
+  test('a read-level session is refused an unsafe method by the API itself', async () => {
+    const response = await postAs(credentialFileFor('posture-read'));
+
+    expect(response.status, 'a read session must not be able to write').toBe(403);
+    const body = (await response.json()) as { code?: string };
+    expect(body.code).toBe('SESSION_READ_ONLY');
+  });
+
+  test('a write-level session is allowed the same request, so the refusal was the level', async () => {
+    const credentialFile = credentialFileFor('posture-write');
+    const result = await connectConnector({
+      apiUrl: API_BASE_URL,
+      email: fixture.owner.email,
+      password: fixture.owner.password,
+      credentialFile,
+      accessLevel: 'write',
+    });
+    expect(result.code, `connect failed: ${result.stderr}`).toBe(0);
+    expect(result.stdout).toContain('Access level: WRITE');
+
+    const response = await postAs(credentialFile);
+
+    // The point is only that the read-only gate is not what stops it. Whatever
+    // the route makes of the payload is the route's business.
+    expect(response.status, 'a write session must get past the posture check').not.toBe(403);
+  });
+
+  test('a browser-shaped request to a connector route is refused before any credential is read', async () => {
+    const body = JSON.stringify({
+      email: fixture.owner.email,
+      password: fixture.owner.password,
+      accessLevel: 'ADMIN',
+    });
+
+    const noClientHeader = await fetch(`${API_BASE_URL}/api/v1/auth/connector/login`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body,
+    });
+    expect(noClientHeader.status).toBe(403);
+    expect(((await noClientHeader.json()) as { code?: string }).code)
+      .toBe('BROWSER_CLIENT_REJECTED');
+
+    const withOrigin = await fetch(`${API_BASE_URL}/api/v1/auth/connector/login`, {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/json',
+        [CONNECTOR_CLIENT_HEADER]: 'mcp-connector/0.1.0',
+        origin: API_BASE_URL,
+      },
+      body,
+    });
+    expect(withOrigin.status, 'an origin is browser evidence even when it is allow-listed')
+      .toBe(403);
+
+    const withSecFetch = await fetch(`${API_BASE_URL}/api/v1/auth/connector/login`, {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/json',
+        [CONNECTOR_CLIENT_HEADER]: 'mcp-connector/0.1.0',
+        'sec-fetch-site': 'same-origin',
+      },
+      body,
+    });
+    expect(withSecFetch.status).toBe(403);
+  });
+
+  test('a connector token is refused on the browser refresh route, and survives the attempt', async () => {
+    const credentialFile = credentialFileFor('posture-write');
+    const token = storedRefreshToken(credentialFile);
+    expect(token).toBeTruthy();
+
+    const crossChannel = await fetch(`${API_BASE_URL}/api/v1/auth/refresh`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', origin: API_BASE_URL },
+      body: JSON.stringify({ refreshToken: token }),
+    });
+    expect(crossChannel.status, 'a keychain token must be useless in a browser').toBe(401);
+
+    // The route clears cookies on any failure, so a Set-Cookie header is
+    // expected here. What must not happen is a cookie carrying a value: the
+    // refusal may expire a browser's session, never start one.
+    const handed = crossChannel.headers.get('set-cookie') ?? '';
+    for (const pair of handed.matchAll(/charitypilot_[a-z]+=([^;,]*)/g)) {
+      expect(pair[1], `a cookie was handed back with a value: ${pair[0]}`).toBe('');
+    }
+
+    // A refusal is not a replay: the token was never spent, so the session
+    // family must still be alive. Quarantining here would mean anyone who
+    // could guess a token could log the owner out.
+    const stillWorks = await accessTokenFromStoredCredential({
+      apiUrl: API_BASE_URL,
+      credentialFile,
+    });
+    expect(stillWorks.length).toBeGreaterThan(0);
+  });
+
+  test('a credential is not sent to a host other than the one that issued it', async () => {
+    const credentialFile = credentialFileFor('posture-write');
+    const otherHost = API_BASE_URL.replace('127.0.0.1', 'localhost');
+    expect(otherHost, 'the test needs two spellings that are genuinely different origins')
+      .not.toBe(API_BASE_URL);
+
+    const result = await runConnector(
+      ['status', '--profile', 'local', '--base-url', otherHost],
+      { credentialFile },
+    );
+
+    expect(result.code, 'a redirected base URL must fail, not quietly connect').not.toBe(0);
+    expect(`${result.stdout}${result.stderr}`).toMatch(/issued by/i);
+    expect(
+      `${result.stdout}${result.stderr}`,
+      'the refusal must not carry the credential it refused to send',
+    ).not.toContain(storedRefreshToken(credentialFile) ?? 'unreachable');
   });
 });

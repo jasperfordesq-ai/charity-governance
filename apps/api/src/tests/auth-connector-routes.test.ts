@@ -336,3 +336,45 @@ test("the client header is never added to the CORS allowed list", async () => {
     await app.close();
   }
 });
+
+test("each browser-only header is refused on its own, and Node's own fetch is not", async () => {
+  const recorded: Recorded = {};
+  const { app, restore } = await buildApp(recorded);
+  try {
+    for (const header of ["referer", "sec-fetch-site", "sec-fetch-dest"]) {
+      const response = await app.inject({
+        method: "POST",
+        url: "/api/v1/auth/connector/login",
+        headers: {
+          [CONNECTOR_CLIENT_HEADER]: CLIENT,
+          [header]: header === "referer" ? "https://app.charitypilot.ie/" : "same-origin",
+        },
+        payload: loginBody(),
+      });
+      assert.equal(response.statusCode, 403, `${header} is browser evidence`);
+    }
+
+    // Node's fetch sets this on every request it makes. Treating it as browser
+    // evidence would refuse the connector along with the browser, which is
+    // exactly the bug this asserts against.
+    const nodeShaped = await app.inject({
+      method: "POST",
+      url: "/api/v1/auth/connector/login",
+      headers: {
+        [CONNECTOR_CLIENT_HEADER]: CLIENT,
+        "sec-fetch-mode": "cors",
+        "user-agent": "node",
+        accept: "*/*",
+      },
+      payload: loginBody(),
+    });
+    assert.equal(
+      nodeShaped.statusCode,
+      200,
+      "the connector's own request shape must be allowed through",
+    );
+  } finally {
+    restore();
+    await app.close();
+  }
+});

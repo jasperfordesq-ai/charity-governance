@@ -43,11 +43,14 @@ test('a truthy but malformed client header is not enough', () => {
 test('browser evidence is refused even when the client header is present', () => {
   // A browser attaches all of these itself and page script cannot remove them.
   // Node's fetch sends none of them, so their presence means a browser.
+  //
+  // sec-fetch-mode is absent on purpose: Node's fetch DOES send it, on every
+  // request, so requiring its absence would refuse the connector itself. It is
+  // covered by the case below instead.
   const evidence: Array<[string, string]> = [
     ['origin', 'https://app.charitypilot.ie'],
     ['referer', 'https://app.charitypilot.ie/login'],
     ['sec-fetch-site', 'same-origin'],
-    ['sec-fetch-mode', 'cors'],
     ['sec-fetch-dest', 'empty'],
   ];
 
@@ -105,4 +108,24 @@ test('a header arriving more than once is judged on its first value, not skipped
     }) as never,
   );
   assert.equal(result.ok, false, 'a repeated origin header must still count as browser evidence');
+});
+
+test("sec-fetch-mode alone is not browser evidence, because Node's fetch sends it", () => {
+  // Found the hard way: the connector could not sign in against a real API
+  // because undici sets sec-fetch-mode: cors on every request it makes. A
+  // browser sends sec-fetch-site and sec-fetch-dest beside it, and those two
+  // still refuse, so nothing is lost by admitting this one.
+  const result = assertNonBrowserClient(
+    connectorRequest({
+      headers: {
+        [CONNECTOR_CLIENT_HEADER]: 'mcp-connector/0.1.0',
+        'sec-fetch-mode': 'cors',
+        'user-agent': 'node',
+        accept: '*/*',
+        'accept-language': '*',
+      },
+    }) as never,
+  );
+
+  assert.equal(result.ok, true, "the connector's own request shape must be allowed");
 });

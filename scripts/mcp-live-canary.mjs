@@ -31,6 +31,29 @@ const MUTATIONS = {
     replace: '$1true$2',
     expect: 'governing_acts must withhold notes and resolutions from the closed gate.',
   },
+  // The two pillars of the connector's session posture. Both live in the API,
+  // because a connector that merely declined to offer a write tool would look
+  // identical from the outside while leaving the route open to anything
+  // holding the credential.
+  'connector-route-accepts-a-browser': {
+    file: 'apps/api/src/utils/non-browser-client.ts',
+    find: /(if \(headerValue\(request\.headers\[header\]\) )!== undefined(\) return refuse\(\);)/g,
+    // Still valid code, and still compares two strings, so the build stays
+    // honest; it simply never matches, which is what "the check was removed"
+    // looks like from the outside.
+    replace: "$1=== 'a-value-no-browser-ever-sends'$2",
+    expect:
+      'a connector route must refuse a request carrying an origin or a Sec-Fetch header.',
+  },
+  'read-only-session-may-write': {
+    file: 'apps/api/src/middleware/auth.ts',
+    // Inverted rather than deleted: comparing the access level against an
+    // invented string would not type-check, and a canary that cannot compile
+    // proves nothing.
+    find: /( {4})!(SAFE_METHODS\.has\(request\.method\))/g,
+    replace: '$1$2',
+    expect: 'a read-level session must be refused an unsafe method with SESSION_READ_ONLY.',
+  },
   // The dashboard shipped for a while returning its payload unfiltered. This
   // reproduces that exact state: a shape that hands the value straight back.
   'dashboard-passthrough': {
@@ -60,6 +83,9 @@ if (occurrences !== 1) {
 }
 
 function build() {
+  // The API is rebuilt by the isolated stack from source on every run, so only
+  // the connector needs an explicit build here. Building it regardless keeps
+  // the restore path identical whichever file a mutation touched.
   execFileSync('npm', ['run', 'build'], { cwd: 'mcp', stdio: 'inherit', shell: true });
 }
 
