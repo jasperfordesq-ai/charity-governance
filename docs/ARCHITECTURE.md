@@ -464,6 +464,22 @@ the tenant's own trash.** It is restorable by **their** administrators, from
 **their** site. CharityPilot cannot prevent that and does not pretend to. The
 charity's Confluence site is the charity's, not the platform's.
 
+**And the proof does not currently distinguish trashed from purged — say so.**
+What the read-back establishes is that `GET /wiki/api/v2/pages/{id}` no longer
+serves the page. Whether that endpoint answers 404 or 200 for a page sitting in
+the tenant's trash has **not been verified against a real Atlassian site**; it
+is recorded as an explicit unknown in the "Facts verified against Atlassian"
+table of
+`docs/superpowers/plans/2026-09-18-provider-aware-erasure-phase-5.md`, pending
+the Atlassian app install. If a trashed page 404s, then a delete that succeeded
+followed by a purge that returned success without actually purging would read
+back as proven erasure, and the row would say `PROCESSED` for content still
+restorable from the charity's trash. Nothing observed so far says that happens
+— but nothing verified says it cannot, and a DPO should be told the proof's
+scope, not a stronger version of it. The remedy, if the check comes back 404, is
+in that table: have `getPage` request the status explicitly so the read
+distinguishes purged from trashed.
+
 **3. The proof covers the page, not every attachment.** The eraser erases
 exactly the attachments the deletion row names. An attachment the row does not
 name is never enumerated — `listAttachments` is deliberately unused on this

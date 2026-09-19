@@ -105,6 +105,32 @@ is cast to the record type — a cast is a promise the compiler will not check f
 | Delete attachment | `DELETE /wiki/api/v2/attachments/{id}` | Moves to **trash** |
 | Purge attachment | `DELETE /wiki/api/v2/attachments/{id}?purge=true` | Permanent. Requires **administer space** permission |
 
+### Not verified — an explicit unknown the erasure proof rests on
+
+| Question | Status | Why it matters |
+|---|---|---|
+| Does `GET /wiki/api/v2/pages/{id}` return **404 or 200** for a page sitting in the tenant's **trash**? | **UNKNOWN. Not verified against a real site.** | The read-back *is* the proof (`confluence-erasure.ts`, the final `getPage`). `getPage` sends no `status` query parameter and returns `null` only on `CONFLUENCE_NOT_FOUND`. |
+
+**Do not settle this against fakes.** Every fake in the suite is written to the
+behaviour we assume, so a fake can only confirm the assumption. Today's tests catch an
+omitted purge through the asserted **call sequence**, not through the verification read —
+so the read is not currently proving what this table would need it to prove.
+
+**If a trashed page 404s, the proof is weaker than it reads.** A delete that succeeded,
+followed by a purge that returned any non-403 success without actually purging, reads back
+as proven erasure: the row reaches `PROCESSED` for content still restorable from the
+charity's own trash.
+
+**Check this the moment the Atlassian app install lands**, on a real site: delete a page
+without purging it, then `GET /wiki/api/v2/pages/{id}` and record the status code here.
+
+**Remedy if it 404s:** have `getPage` request the page status explicitly (the v2 API's
+`status` parameter, e.g. asking for trashed content) so the verification read can tell
+*purged* from *trashed*, and fail the attempt as `CONFLUENCE_ERASURE_UNVERIFIED` — which is
+transient — when the page is merely trashed. Until then,
+`docs/ARCHITECTURE.md` states the proof's scope as "no longer served by the API" rather
+than "permanently erased".
+
 Three consequences the design must respect:
 
 1. **Purge needs a higher permission than delete**, and attachment purge needs the highest of all.
