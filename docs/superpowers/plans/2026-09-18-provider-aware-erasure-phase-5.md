@@ -333,6 +333,21 @@ it does not wait for five.
 `runBoundedStorageDeletion` keeps its abort/timeout wrapper exactly as it is. Only the thing it
 calls changes.
 
+**There is now a second source of the same failure, added by Task 1.** `StorageService.deleteFile`
+and `downloadFile` refuse a provider they have no backend for, with
+`STORAGE_DELETE_PROVIDER_UNSUPPORTED` and `STORAGE_DOWNLOAD_PROVIDER_UNSUPPORTED`. Task 1 added
+those because the dispatch there was a `provider === 'local' ? local : supabase` else-fallthrough:
+once erasure stopped refusing unknown providers, a `confluence` row would have reached the
+**Supabase** branch, deleted nothing, reported success, and marked the row `PROCESSED` — a false
+proof of erasure, which is the worst outcome this pipeline can produce.
+
+Until this task lands, those refusals burn the full attempt budget and dead-letter as
+`MAX_ATTEMPTS_EXHAUSTED`. **Map them to `PROVIDER_NOT_ERASABLE` too**, alongside the dispatcher's
+own unknown-provider case. They are the same condition — this deployment has no way to erase these
+bytes — reported one layer down, and retrying cannot acquire a backend any more than it can
+acquire a permission. Pin it: a test that each code dead-letters on the first attempt with that
+reason.
+
 - [ ] **Step 1: Write the failing tests**
 
 ```ts
