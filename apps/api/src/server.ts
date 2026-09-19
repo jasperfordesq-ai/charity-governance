@@ -7,6 +7,7 @@ import { errorHandlerPlugin } from './plugins/error-handler.js';
 import { securityHeadersPlugin } from './plugins/security-headers.js';
 import { registerBrowserOriginProtection } from './plugins/browser-origin-protection.js';
 import { authRoutes } from './routes/auth/index.js';
+import { connectorAuthRoutes } from './routes/auth/connector.js';
 import { organisationRoutes } from './routes/organisations/index.js';
 import { complianceRoutes } from './routes/compliance/index.js';
 import { boardMemberRoutes } from './routes/board-members/index.js';
@@ -83,6 +84,9 @@ if (isMultiTenant()) {
 // Routes
 
 await app.register(authRoutes, { prefix: '/api/v1/auth' });
+// Registered as its own scope so the non-browser guard and the absent
+// cookie handling cannot leak into the browser auth routes beside it.
+await app.register(connectorAuthRoutes, { prefix: '/api/v1/auth/connector' });
 await app.register(organisationRoutes, { prefix: '/api/v1/organisation' });
 await app.register(complianceRoutes, { prefix: '/api/v1/compliance' });
 await app.register(boardMemberRoutes, { prefix: '/api/v1/board-members' });

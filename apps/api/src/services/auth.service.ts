@@ -9,6 +9,7 @@ import {
   revokeSessionToken,
   rotateSessionTokens,
 } from './session-tokens.js';
+import type { SessionPosture } from './session-tokens.js';
 import { publicOrganisationSelect } from '../utils/public-dtos.js';
 import {
   PasswordRecoveryService,
@@ -160,7 +161,7 @@ export class AuthService {
     return registrationAccepted();
   }
 
-  async login(data: LoginData) {
+  async login(data: LoginData, posture?: SessionPosture) {
     const user = await this.prisma.user.findUnique({
       where: { email: normalizeEmail(data.email) },
       select: {
@@ -223,13 +224,13 @@ export class AuthService {
     // transaction rechecks it while holding the principal lock shared with
     // password-reset serialization, so an old password can never mint a live
     // session after a reset has committed.
-    const tokens = await issueLoginSessionTokens(this.prisma, user);
+    const tokens = await issueLoginSessionTokens(this.prisma, user, posture);
 
     return { user, ...tokens };
   }
 
-  async refresh(refreshToken: string) {
-    return rotateSessionTokens(this.prisma, refreshToken);
+  async refresh(refreshToken: string, expectedClientKind?: SessionPosture['clientKind']) {
+    return rotateSessionTokens(this.prisma, refreshToken, expectedClientKind);
   }
 
   async logout(refreshToken: string) {
