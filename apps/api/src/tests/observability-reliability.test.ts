@@ -285,6 +285,9 @@ test('runProductionSchedulerOnce fires no error alert when both jobs succeed', {
         };
       },
     },
+    // The Confluence eraser reads a charity's connection through this; no test
+    // here reaches it, and it is required so a new entry point cannot omit it.
+    prisma: {} as never,
     documentStorageCleanupLimit: 7,
     authDeliveryBatchSize: 25,
     authDeliveryCleanupBatchSize: 500,

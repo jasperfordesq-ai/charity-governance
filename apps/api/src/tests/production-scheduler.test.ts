@@ -15,6 +15,15 @@ import type { ErrorAlertPayload } from '../services/error-alerts.service.js';
 import type { ErasureDispatcher } from '../services/document-erasure.js';
 
 const ORIGINAL_ENV = { ...process.env };
+/**
+ * Stands in for the Prisma client the Confluence eraser reads a charity's
+ * connection through. No test in this file reaches it: every `documentService`
+ * here is a fake that never asks the dispatcher for the confluence eraser. It
+ * is a required argument so that a new entry point cannot build a dispatcher
+ * without one — see the registration pins in `confluence-erasure.test.ts`.
+ */
+const SCHEDULER_PRISMA = {} as never;
+
 const API_SRC = join(process.cwd(), 'src');
 
 afterEach(() => {
@@ -214,6 +223,7 @@ test('runProductionSchedulerOnce runs reminders and document cleanup without ove
         };
       },
     },
+    prisma: SCHEDULER_PRISMA,
     documentStorageCleanupLimit: 7,
     authDeliveryBatchSize: 11,
     authDeliveryCleanupBatchSize: 222,
@@ -475,6 +485,7 @@ test('runDocumentStorageCleanup sends a sanitized operational alert when storage
         throw new Error('not reached');
       },
     },
+    prisma: SCHEDULER_PRISMA,
     documentStorageCleanupLimit: 7,
     logger: {
       info() {},
@@ -529,6 +540,7 @@ test('runDocumentStorageCleanup sends one actionable alert and acknowledges clai
     storageService: {
       async deleteFile() {},
     },
+    prisma: SCHEDULER_PRISMA,
     documentStorageCleanupLimit: 7,
     logger: {
       info() {},
@@ -564,6 +576,7 @@ test('transient document storage retries do not alert or fail the scheduler run'
       },
     },
     storageService: { async deleteFile() {} },
+    prisma: SCHEDULER_PRISMA,
     documentStorageCleanupLimit: 7,
     logger: { info() {}, error() {} },
     alertSender: async (payload) => { alerts.push(payload); },
@@ -589,6 +602,7 @@ test('failed dead-letter alert delivery releases the claim for a later scheduler
       async releaseDeadLetterAlertClaim(claim) { released.push(claim); return 1; },
     },
     storageService: { async deleteFile() {} },
+    prisma: SCHEDULER_PRISMA,
     documentStorageCleanupLimit: 7,
     logger: { info() {}, error() {} },
     alertSender: async () => { throw new Error('alert transport unavailable'); },

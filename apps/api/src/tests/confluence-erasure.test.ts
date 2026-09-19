@@ -392,30 +392,56 @@ for (const status of [401, 403]) {
 }
 
 /**
- * The line that makes every other line in this file reachable.
+ * The lines that make every other line in this file reachable.
  *
- * `cleanup-document-storage.ts` is a top-level script — importing it would
- * open a Prisma connection and run the job — so the registration is pinned by
- * reading it, the way `production-scheduler.test.ts` already pins the job
- * entrypoints' logging contract. Without the `confluence` entry the dispatcher
- * finds no eraser, and every Confluence deletion dead-letters as
- * PROVIDER_NOT_ERASABLE: a charity's published copy left in place while an
+ * **Both entry points, and one test per registration.** There are two places
+ * that build an erasure dispatcher: the standalone job
+ * `cleanup-document-storage.ts`, and `production-scheduler.ts`, which is the
+ * one that actually runs in production. A deployment running the in-process
+ * recurring scheduler rather than the standalone job is a deployment where a
+ * missing registration dead-letters every Confluence erasure as
+ * PROVIDER_NOT_ERASABLE — a charity's published copy left in place while an
  * operator is told the deployment cannot erase it.
+ *
+ * Each registration gets its own `test()` deliberately. A single test
+ * asserting both goes red either way, which tells an operator that *a*
+ * registration was lost without telling them *which* — and the two have
+ * different consequences: losing Supabase breaks every erasure today, losing
+ * Confluence breaks the one nothing exercises yet.
+ *
+ * These are read from source rather than imported: both files are top-level
+ * scripts, and importing either would open a Prisma connection and run the
+ * job. `production-scheduler.test.ts` already pins the job entrypoints'
+ * logging contract the same way.
  */
-test('the cleanup job registers the Confluence eraser alongside the Supabase one', () => {
-  const source = readFileSync(join(process.cwd(), 'src', 'jobs', 'cleanup-document-storage.ts'), 'utf8');
+const DISPATCHER_ENTRY_POINTS = [
+  'cleanup-document-storage.ts',
+  'production-scheduler.ts',
+] as const;
 
-  assert.match(
-    source,
-    /createErasureDispatcher\(\{[\s\S]*?\bconfluence:\s*createConfluenceEraser\(/,
-    'cleanup-document-storage.ts must register createConfluenceEraser under the confluence provider',
-  );
-  assert.match(
-    source,
-    /createErasureDispatcher\(\{[\s\S]*?\bsupabase:\s*createSupabaseEraser\(/,
-    'registering Confluence must not have displaced the Supabase eraser',
-  );
-});
+function entryPointSource(file: string): string {
+  return readFileSync(join(process.cwd(), 'src', 'jobs', file), 'utf8');
+}
+
+for (const file of DISPATCHER_ENTRY_POINTS) {
+  test(`${file} registers the Confluence eraser on its erasure dispatcher`, () => {
+    assert.match(
+      entryPointSource(file),
+      /createErasureDispatcher\(\{[\s\S]*?\bconfluence:\s*createConfluenceEraser\(/,
+      `${file} must register createConfluenceEraser under the confluence provider, or every ` +
+        'Confluence deletion this entry point claims dead-letters as PROVIDER_NOT_ERASABLE',
+    );
+  });
+
+  test(`${file} registers the Supabase eraser on its erasure dispatcher`, () => {
+    assert.match(
+      entryPointSource(file),
+      /createErasureDispatcher\(\{[\s\S]*?\bsupabase:\s*createSupabaseEraser\(/,
+      `${file} must register createSupabaseEraser under the supabase provider; registering ` +
+        'Confluence must not have displaced it',
+    );
+  });
+}
 
 // ---------------------------------------------------------------------------
 // The permanent-failure predicate, exercised through the engine that uses it.

@@ -14,6 +14,8 @@ import {
   createSupabaseEraser,
   type ErasureDispatcher,
 } from '../services/document-erasure.js';
+import { createConfluenceEraser } from '../services/confluence-erasure.js';
+import type { ConfluenceConnectionClient } from '../services/confluence-connection.service.js';
 import {
   validateAuthDeliveryEnv,
   validateDeadlineRemindersEnv,
@@ -180,6 +182,13 @@ export async function runDeadlineReminders(input: {
 export async function runDocumentStorageCleanup(input: {
   documentService: DocumentStorageCleanupRunner;
   storageService: StorageDeletionRunner;
+  /**
+   * Required, not optional, because the Confluence eraser reads the charity's
+   * connection through it. An optional field here would let a future entry
+   * point build a dispatcher without one and dead-letter every Confluence
+   * erasure; the compiler refuses that instead.
+   */
+  prisma: ConfluenceConnectionClient;
   documentStorageCleanupLimit: number;
   logger: SchedulerLogger;
   alertSender?: AlertSender;
@@ -188,6 +197,14 @@ export async function runDocumentStorageCleanup(input: {
     const dispatch = createErasureDispatcher({
       supabase: createSupabaseEraser((organisationId, storagePath, signal) =>
         input.storageService.deleteFile(organisationId, storagePath, signal)),
+      // Registered unconditionally, for the same reason
+      // `cleanup-document-storage.ts` registers it: a Confluence row is
+      // enqueued by the same `remove()` that enqueues a Supabase one, so
+      // leaving this unregistered on any deployment would dead-letter every
+      // Confluence erasure as PROVIDER_NOT_ERASABLE — a charity's published
+      // copy left in place while an operator is told the deployment cannot
+      // erase it. This is the entry point that actually runs in production.
+      confluence: createConfluenceEraser({ prisma: input.prisma }),
     });
     const result = await input.documentService.retryPendingStorageDeletions(
       dispatch,
@@ -368,6 +385,8 @@ export async function runProductionSchedulerOnce(input: {
   documentService: DocumentStorageCleanupRunner;
   storageService: StorageDeletionRunner;
   authEmailDeliveryService: AuthEmailDeliveryRunner;
+  /** Forwarded to {@link runDocumentStorageCleanup}, which needs it to erase Confluence rows. */
+  prisma: ConfluenceConnectionClient;
   documentStorageCleanupLimit: number;
   authDeliveryBatchSize: number;
   authDeliveryCleanupBatchSize: number;
@@ -383,6 +402,7 @@ export async function runProductionSchedulerOnce(input: {
   const documentStorageCleanupFailed = await runDocumentStorageCleanup({
     documentService: input.documentService,
     storageService: input.storageService,
+    prisma: input.prisma,
     documentStorageCleanupLimit: input.documentStorageCleanupLimit,
     logger: input.logger,
     alertSender: input.alertSender,
@@ -514,6 +534,7 @@ async function main(): Promise<void> {
       documentService,
       storageService,
       authEmailDeliveryService,
+      prisma,
       documentStorageCleanupLimit: config.documentStorageCleanupLimit,
       authDeliveryBatchSize: config.authDeliveryBatchSize,
       authDeliveryCleanupBatchSize: config.authDeliveryCleanupBatchSize,
@@ -546,6 +567,7 @@ async function main(): Promise<void> {
     run: () => runDocumentStorageCleanup({
       documentService,
       storageService,
+      prisma,
       documentStorageCleanupLimit: config.documentStorageCleanupLimit,
       logger,
     }),
