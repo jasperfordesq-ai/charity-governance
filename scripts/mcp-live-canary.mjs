@@ -65,6 +65,32 @@ const MUTATIONS = {
     replace: '$1$2',
     expect: 'a read-level session must be refused an unsafe method with SESSION_READ_ONLY.',
   },
+  // The approval is the only thing between an agent and a deletion. Both of
+  // these make it useless while leaving it apparently present, which is the
+  // shape a real regression would take.
+  'approval-is-reusable': {
+    file: 'apps/api/src/middleware/action-approval.ts',
+    // Both layers at once. The rule is enforced in the guard and again in the
+    // conditional update, so defeating one alone leaves the other enforcing it
+    // and the canary would pass while proving nothing.
+    edits: [
+      {
+        find: /approval\.consumedAt === null &&/g,
+        replace: '(approval.consumedAt === null || true) &&',
+      },
+      {
+        find: / {14}consumedAt: null,\r?\n {14}approvedAt: \{ not: null \},/g,
+        replace: '              approvedAt: { not: null },',
+      },
+    ],
+    expect: 'an approval must be spent by the one request that used it.',
+  },
+  'approval-not-needed': {
+    file: 'apps/api/src/middleware/action-approval.ts',
+    find: /(if \(!session \|\| session\.clientKind !== )"MCP_CONNECTOR"(\) return;)/g,
+    replace: '$1(("WEB") as typeof session.clientKind)$2',
+    expect: 'a removal from a connector session must be refused until a person approves it.',
+  },
   // The dashboard shipped for a while returning its payload unfiltered. This
   // reproduces that exact state: a shape that hands the value straight back.
   'dashboard-passthrough': {
@@ -84,13 +110,28 @@ if (!mutation) {
 }
 
 const original = readFileSync(mutation.file, 'utf8');
-const occurrences = (original.match(mutation.find) ?? []).length;
-if (occurrences !== 1) {
-  console.error(
-    `Canary "${name}" expected exactly one anchor in ${mutation.file}, found ${occurrences}. `
-      + 'Update the mutation rather than letting it hit the wrong place.',
-  );
-  process.exit(2);
+
+// A mutation may carry several edits. Some rules are enforced in two places —
+// once in a guard and again in a conditional database update — and defeating
+// only one of them leaves the other enforcing the rule, so the canary would
+// pass while proving nothing.
+const edits = Array.isArray(mutation.edits)
+  ? mutation.edits
+  : [{ find: mutation.find, replace: mutation.replace }];
+
+for (const edit of edits) {
+  const occurrences = (original.match(edit.find) ?? []).length;
+  if (occurrences !== 1) {
+    console.error(
+      `Canary "${name}" expected exactly one anchor for ${edit.find} in ${mutation.file}, `
+        + `found ${occurrences}. Update the mutation rather than letting it hit the wrong place.`,
+    );
+    process.exit(2);
+  }
+}
+
+function applyEdits(source) {
+  return edits.reduce((text, edit) => text.replace(edit.find, edit.replace), source);
 }
 
 function build() {
@@ -102,7 +143,7 @@ function build() {
 
 let outcome = 'unknown';
 try {
-  writeFileSync(mutation.file, original.replace(mutation.find, mutation.replace));
+  writeFileSync(mutation.file, applyEdits(original));
   // A mutation that does not compile would make the suite fail for the wrong
   // reason and the canary would congratulate itself. The build is therefore
   // judged separately, and a broken build is a broken canary, not a pass.

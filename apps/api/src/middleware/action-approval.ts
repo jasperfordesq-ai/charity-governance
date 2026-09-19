@@ -47,7 +47,7 @@ interface ApprovalRow {
   approvedAt: Date | null;
   consumedAt: Date | null;
   expiresAt: Date;
-  sessionId: string;
+  sessionFamilyId: string;
 }
 
 function headerValue(
@@ -66,8 +66,13 @@ export function requireActionApproval() {
     if (!session || session.clientKind !== "MCP_CONNECTOR") return;
 
     const routePattern = request.routeOptions?.url ?? request.url;
+    // Keyed on the family, not the session row. Rotation mints a new row on
+    // every refresh, so an approval bound to the row id would be dead before
+    // anyone could type a password — which is the one thing it exists to wait
+    // for. The family is stable for the life of a sign-in, and a separately
+    // signed-in connector still has a different one.
     const digest = digestAction({
-      sessionId: session.id,
+      sessionId: session.familyId,
       method: request.method,
       path: request.url,
       body: request.body,
@@ -88,7 +93,7 @@ export function requireActionApproval() {
             approvedAt: true,
             consumedAt: true,
             expiresAt: true,
-            sessionId: true,
+            sessionFamilyId: true,
           },
         },
       )) as ApprovalRow | null;
@@ -98,7 +103,7 @@ export function requireActionApproval() {
       // "expired" applies would let an agent map the approval space by trying.
       const usable =
         approval !== null &&
-        approval.sessionId === session.id &&
+        approval.sessionFamilyId === session.familyId &&
         approval.approvedAt !== null &&
         approval.consumedAt === null &&
         approval.expiresAt > now;
@@ -110,7 +115,7 @@ export function requireActionApproval() {
           {
             where: {
               id: approval.id,
-              sessionId: session.id,
+              sessionFamilyId: session.familyId,
               requestDigest: digest,
               consumedAt: null,
               approvedAt: { not: null },
@@ -138,7 +143,7 @@ export function requireActionApproval() {
     const live = async () =>
       request.server.prisma.authActionApproval.findFirst({
         where: {
-          sessionId: session.id,
+          sessionFamilyId: session.familyId,
           requestDigest: digest,
           consumedAt: null,
         },
@@ -164,7 +169,7 @@ export function requireActionApproval() {
           data: {
             organisationId: request.user.organisationId,
             userId: request.user.userId,
-            sessionId: session.id,
+            sessionFamilyId: session.familyId,
             requestDigest: digest,
             summary,
             method: request.method,

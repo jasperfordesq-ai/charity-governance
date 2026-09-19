@@ -93,7 +93,7 @@ test.describe('MCP connector lifecycle', () => {
     expect(result.stdout).toContain('MCP Harness Charity');
   });
 
-  test('the advertised tools are exactly the read surface, and none takes an organisationId', async () => {
+  test('the advertised tools are exactly the declared surface, and none takes an organisationId', async () => {
     const connector = await openConnector({
       apiUrl: API_BASE_URL,
       credentialFile: credentialFileFor('lifecycle'),
@@ -107,29 +107,46 @@ test.describe('MCP connector lifecycle', () => {
       expect(names).toEqual([
         'annual_report_readiness',
         'approval_readiness',
+        'board_member_create',
+        'board_member_delete',
+        'board_member_update',
         'board_register',
         'board_submissions',
+        'complaint_create',
+        'complaint_delete',
         'complaints_list',
         'compliance_principle',
         'compliance_principles',
         'compliance_record',
+        'compliance_record_set',
         'compliance_records',
         'compliance_signoff',
         'compliance_summary',
+        'conflict_create',
+        'conflict_delete',
         'conflicts_list',
         'confluence_status',
         'dashboard_overview',
+        'deadline_create',
+        'deadline_update',
         'deadlines_history',
         'deadlines_list',
         'document',
         'documents_list',
         'financial_controls',
+        'financial_controls_set',
+        'fundraising_create',
+        'fundraising_delete',
         'fundraising_list',
+        'governing_act_create',
+        'governing_act_update',
         'governing_acts',
         'governing_acts_voids',
         'members_list',
         'organisation',
         'registers_summary',
+        'risk_create',
+        'risk_delete',
         'risks_list',
         'team_list',
       ]);
@@ -1000,5 +1017,326 @@ test.describe('Connector accountability', () => {
       sessions.every((session) => typeof session['accessLevel'] === 'string'),
       'every session reports a level',
     ).toBe(true);
+  });
+});
+
+/**
+ * Concern: writing from the connector, and the approval that gates the half of
+ * it that cannot be undone.
+ *
+ * Driven through the connector over stdio, the way an assistant drives it, so
+ * what is proved is the thing a person would actually experience.
+ */
+test.describe('Connector writes and approval', () => {
+  let writeCredentialFile = '';
+  let adminCredentialFile = '';
+  let createdRiskId = '';
+
+  async function latestApprovals() {
+    return withDb(async (client) => {
+      const result = await client.query(
+        `SELECT "id", "summary", "approvedAt", "consumedAt", "sessionFamilyId", "routePattern"
+           FROM "AuthActionApproval"
+          ORDER BY "createdAt" DESC
+          LIMIT 5`,
+      );
+      return result.rows as Array<Record<string, unknown>>;
+    });
+  }
+
+  test('a read-level session is offered no tool that changes anything', async () => {
+    const credentialFile = credentialFileFor('writes-read');
+    const connected = await connectConnector({
+      apiUrl: API_BASE_URL,
+      email: fixture.writer.email,
+      password: fixture.writer.password,
+      credentialFile,
+      accessLevel: 'read',
+    });
+    expect(connected.code, connected.stderr).toBe(0);
+
+    const connector = await openConnector({ apiUrl: API_BASE_URL, credentialFile });
+    try {
+      const names = (await connector.client.listTools()).tools.map((tool) => tool.name);
+
+      expect(names.length).toBeGreaterThan(20);
+      expect(names).not.toContain('deadline_create');
+      expect(names).not.toContain('board_member_delete');
+    } finally {
+      await connector.close();
+    }
+  });
+
+  test('a tool that was never advertised is still refused when called', async () => {
+    const connector = await openConnector({
+      apiUrl: API_BASE_URL,
+      credentialFile: credentialFileFor('writes-read'),
+    });
+    try {
+      const result = await callTool(connector.client, 'deadline_create', {
+        title: 'Should never exist',
+        dueDate: '2026-12-01',
+      });
+
+      expect(result.isError, 'hiding a tool is not the same as refusing it').toBe(true);
+      expect(result.text).toMatch(/needs a session with write access/);
+      expect(result.text).toMatch(/Nothing was sent/);
+    } finally {
+      await connector.close();
+    }
+  });
+
+  test('a write-level session creates a record through a tool', async () => {
+    writeCredentialFile = credentialFileFor('writes-write');
+    const connected = await connectConnector({
+      apiUrl: API_BASE_URL,
+      email: fixture.writer.email,
+      password: fixture.writer.password,
+      credentialFile: writeCredentialFile,
+      accessLevel: 'write',
+    });
+    expect(connected.code, connected.stderr).toBe(0);
+
+    const connector = await openConnector({
+      apiUrl: API_BASE_URL,
+      credentialFile: writeCredentialFile,
+    });
+    try {
+      const result = await callTool(connector.client, 'deadline_create', {
+        title: 'Written by the connector',
+        dueDate: '2026-12-01',
+        reason: 'Proving the write path end to end',
+      });
+      expect(result.isError, result.text).toBe(false);
+
+      const created = result.json as { data?: { id?: string; title?: string } };
+      expect(created.data?.id, 'the created record must come back').toBeTruthy();
+      expect(created.data?.title).toBe('Written by the connector');
+
+      const listed = await callTool(connector.client, 'deadlines_list');
+      expect(listed.text).toContain('Written by the connector');
+    } finally {
+      await connector.close();
+    }
+  });
+
+  test('the write left an activity row naming the route and the reason', async () => {
+    const rows = await withDb(async (client) => {
+      const result = await client.query(
+        `SELECT "method", "routePattern", "statusCode", "reason"
+           FROM "ClientActivityEvent"
+          WHERE "routePattern" LIKE '%/deadlines'
+          ORDER BY "occurredAt" DESC LIMIT 1`,
+      );
+      return result.rows as Array<Record<string, unknown>>;
+    });
+
+    expect(rows.length).toBe(1);
+    expect(rows[0]!['method']).toBe('POST');
+    expect(rows[0]!['statusCode']).toBe(201);
+    expect(rows[0]!['reason']).toBe('Proving the write path end to end');
+  });
+
+  test('a field the tool does not declare is refused rather than forwarded', async () => {
+    const connector = await openConnector({
+      apiUrl: API_BASE_URL,
+      credentialFile: writeCredentialFile,
+    });
+    try {
+      const result = await callTool(connector.client, 'deadline_create', {
+        title: 'Should not be created',
+        dueDate: '2026-12-02',
+        organisationId: 'some-other-charity',
+      });
+
+      expect(result.isError).toBe(true);
+      expect(result.text).toMatch(/Unknown field "organisationId"/);
+    } finally {
+      await connector.close();
+    }
+  });
+
+  test('a removal is refused, with something for a person to run', async () => {
+    adminCredentialFile = credentialFileFor('writes-admin');
+    const connected = await connectConnector({
+      apiUrl: API_BASE_URL,
+      email: fixture.writer.email,
+      password: fixture.writer.password,
+      credentialFile: adminCredentialFile,
+      accessLevel: 'admin',
+    });
+    expect(connected.code, connected.stderr).toBe(0);
+
+    const connector = await openConnector({
+      apiUrl: API_BASE_URL,
+      credentialFile: adminCredentialFile,
+    });
+    try {
+      const made = await callTool(connector.client, 'risk_create', {
+        title: 'Risk created so it can be removed',
+        category: 'GOVERNANCE',
+        description: 'Exists only for this test',
+        likelihood: 1,
+        impact: 1,
+        mitigation: 'None needed',
+        reason: 'Setting up the approval test',
+      });
+      expect(made.isError, made.text).toBe(false);
+      createdRiskId = (made.json as { data: { id: string } }).data.id;
+
+      const refused = await callTool(connector.client, 'risk_delete', {
+        id: createdRiskId,
+        reason: 'Removing the record this test created',
+      });
+
+      expect(refused.isError, 'a removal must not just happen').toBe(true);
+      expect(refused.text).toMatch(/charitypilot-mcp approve /);
+      expect(refused.text).toMatch(/will not do this until you approve it yourself/);
+
+      const pending = await latestApprovals();
+      expect(pending.length, 'an approval was minted for the action').toBeGreaterThan(0);
+      expect(pending[0]!['approvedAt'], 'nothing approves it but the password route').toBeNull();
+    } finally {
+      await connector.close();
+    }
+  });
+
+  test('the record still exists, because the refusal refused', async () => {
+    const connector = await openConnector({
+      apiUrl: API_BASE_URL,
+      credentialFile: adminCredentialFile,
+    });
+    try {
+      const risks = await callTool(connector.client, 'risks_list');
+      expect(risks.text).toContain('Risk created so it can be removed');
+    } finally {
+      await connector.close();
+    }
+  });
+
+  test('approving lets exactly that one action through, once', async () => {
+    const pending = await latestApprovals();
+    const approvalId = String(pending[0]!['id']);
+
+    // The connector command requires a terminal, which is the whole point of
+    // it, so this approves the way that command does: with the session token
+    // already held and the password, against the same route.
+    const accessToken = await accessTokenFromStoredCredential({
+      apiUrl: API_BASE_URL,
+      credentialFile: adminCredentialFile,
+    });
+
+    const granted = await fetch(`${API_BASE_URL}/api/v1/auth/connector/approve`, {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/json',
+        authorization: `Bearer ${accessToken}`,
+        [CONNECTOR_CLIENT_HEADER]: 'mcp-connector/0.1.0',
+      },
+      body: JSON.stringify({ approvalId, password: fixture.writer.password }),
+    });
+    expect(granted.status).toBe(200);
+
+    const connector = await openConnector({
+      apiUrl: API_BASE_URL,
+      credentialFile: adminCredentialFile,
+    });
+    try {
+      const removed = await callTool(connector.client, 'risk_delete', {
+        id: createdRiskId,
+        reason: 'Removing the record this test created',
+        approvalId,
+      });
+      expect(removed.isError, removed.text).toBe(false);
+
+      const risks = await callTool(connector.client, 'risks_list');
+      expect(risks.text).not.toContain('Risk created so it can be removed');
+
+      const spent = await withDb(async (dbClient) => {
+        const result = await dbClient.query(
+          `SELECT "consumedAt" FROM "AuthActionApproval" WHERE "id" = $1`,
+          [approvalId],
+        );
+        return result.rows as Array<Record<string, unknown>>;
+      });
+      expect(spent[0]!['consumedAt'], 'the approval is spent by the request that used it')
+        .not.toBeNull();
+
+      // Single-use, and the distinction matters: the record is gone now, so a
+      // second attempt would fail either way. What proves the approval was
+      // spent is that the request is refused BEFORE it reaches the route, with
+      // a fresh approval demanded, rather than reaching it and finding nothing.
+      const again = await callTool(connector.client, 'risk_delete', {
+        id: createdRiskId,
+        reason: 'Trying to spend the approval twice',
+        approvalId,
+      });
+      expect(again.isError).toBe(true);
+      expect(
+        again.text,
+        'a spent approval must buy nothing, not merely fail for another reason',
+      ).toMatch(/charitypilot-mcp approve /);
+    } finally {
+      await connector.close();
+    }
+  });
+
+  test('a wrong password approves nothing', async () => {
+    let approvalId = '';
+    const connector = await openConnector({
+      apiUrl: API_BASE_URL,
+      credentialFile: adminCredentialFile,
+    });
+    try {
+      const made = await callTool(connector.client, 'risk_create', {
+        title: 'Risk for the wrong-password case',
+        category: 'GOVERNANCE',
+        description: 'Exists only for this test',
+        likelihood: 1,
+        impact: 1,
+        mitigation: 'None needed',
+        reason: 'Setting up the wrong-password test',
+      });
+      expect(made.isError, made.text).toBe(false);
+      const riskId = (made.json as { data: { id: string } }).data.id;
+
+      const refused = await callTool(connector.client, 'risk_delete', {
+        id: riskId,
+        reason: 'Should not happen',
+      });
+      expect(refused.isError).toBe(true);
+      // Anchored on the command, not the word: the message also says "approve it
+      // yourself" further up, and a looser pattern captures "it".
+      approvalId = /charitypilot-mcp approve ([A-Za-z0-9_-]+)/.exec(refused.text)?.[1] ?? '';
+      expect(approvalId).not.toBe('');
+    } finally {
+      await connector.close();
+    }
+
+    const accessToken = await accessTokenFromStoredCredential({
+      apiUrl: API_BASE_URL,
+      credentialFile: adminCredentialFile,
+    });
+
+    const attempt = await fetch(`${API_BASE_URL}/api/v1/auth/connector/approve`, {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/json',
+        authorization: `Bearer ${accessToken}`,
+        [CONNECTOR_CLIENT_HEADER]: 'mcp-connector/0.1.0',
+      },
+      body: JSON.stringify({ approvalId, password: 'not-the-password' }),
+    });
+
+    expect(attempt.status).toBe(401);
+
+    const rows = await withDb(async (client) => {
+      const result = await client.query(
+        `SELECT "approvedAt" FROM "AuthActionApproval" WHERE "id" = $1`,
+        [approvalId],
+      );
+      return result.rows as Array<Record<string, unknown>>;
+    });
+    expect(rows[0]!['approvedAt'], 'a wrong password must grant nothing').toBeNull();
   });
 });

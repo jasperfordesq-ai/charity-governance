@@ -10,13 +10,25 @@ import { test } from "node:test";
  * rules that make it single-use and short-lived are asserted here rather than
  * left to the code that reads it.
  */
-const migration = readFileSync(
-  new URL(
-    "../../prisma/migrations/20260920000000_add_auth_action_approval/migration.sql",
-    import.meta.url,
-  ),
-  "utf8",
-);
+/**
+ * The table as the pair of migrations leaves it.
+ *
+ * The second one renames the session column to the session FAMILY column,
+ * after the live suite showed that an approval bound to a single session row
+ * is dead before anyone can type a password: rotation mints a new row on every
+ * refresh. Both files are read together because together they are the table.
+ */
+const migration = [
+  "20260920000000_add_auth_action_approval",
+  "20260920010000_approval_binds_to_session_family",
+]
+  .map((name) =>
+    readFileSync(
+      new URL(`../../prisma/migrations/${name}/migration.sql`, import.meta.url),
+      "utf8",
+    ),
+  )
+  .join("\n");
 const schema = readFileSync(
   new URL("../../prisma/schema.prisma", import.meta.url),
   "utf8",
@@ -50,11 +62,16 @@ test("an approval cannot be granted after it has expired", () => {
   );
 });
 
-test("the approval is bound to a session, so another session cannot spend it", () => {
-  assert.match(migration, /"sessionId" TEXT NOT NULL/);
+test("the approval is bound to a session family, which survives rotation", () => {
+  assert.match(migration, /"sessionId" TEXT NOT NULL/, "created under the old name");
   assert.match(
     migration,
-    /CREATE INDEX "AuthActionApproval_sessionId_requestDigest_idx"/,
+    /RENAME COLUMN "sessionId" TO "sessionFamilyId"/,
+    "a session row lasts fifteen minutes; an approval has to outlive that",
+  );
+  assert.match(
+    migration,
+    /RENAME TO "AuthActionApproval_sessionFamilyId_requestDigest_idx"/,
   );
 });
 
@@ -80,7 +97,7 @@ test("the Prisma model matches the columns the migration creates", () => {
   for (const field of [
     "organisationId",
     "userId",
-    "sessionId",
+    "sessionFamilyId",
     "requestDigest",
     "summary",
     "method",

@@ -13,7 +13,7 @@ interface Row {
   id: string;
   organisationId: string;
   userId: string;
-  sessionId: string;
+  sessionFamilyId: string;
   requestDigest: string;
   summary: string;
   method: string;
@@ -66,7 +66,7 @@ function store(initial: Row[] = []) {
           if (
             rows.some(
               (row) =>
-                row.sessionId === data.sessionId &&
+                row.sessionFamilyId === data.sessionFamilyId &&
                 row.requestDigest === data.requestDigest &&
                 row.consumedAt === null,
             )
@@ -92,7 +92,7 @@ function store(initial: Row[] = []) {
 async function buildApp(options: {
   rows?: Row[];
   clientKind?: "WEB" | "MCP_CONNECTOR";
-  sessionId?: string;
+  familyId?: string;
 }) {
   const backing = store(options.rows ?? []);
   const app = Fastify({ logger: false });
@@ -106,7 +106,8 @@ async function buildApp(options: {
       email: "owner@example.org",
     } as never;
     request.authSession = {
-      id: options.sessionId ?? "sess-1",
+      id: "sess-1",
+      familyId: options.familyId ?? "fam-1",
       clientKind: options.clientKind ?? "MCP_CONNECTOR",
       accessLevel: "ADMIN",
     };
@@ -124,9 +125,9 @@ async function buildApp(options: {
 
 const PATH = "/api/v1/board-members/clx-1";
 
-function digestFor(path = PATH, sessionId = "sess-1"): string {
+function digestFor(path = PATH, familyId = "fam-1"): string {
   return digestAction({
-    sessionId,
+    sessionId: familyId,
     method: "DELETE",
     path,
     body: undefined,
@@ -138,7 +139,7 @@ function approvedRow(overrides: Partial<Row> = {}): Row {
     id: "apr-live",
     organisationId: "org-1",
     userId: "usr-1",
-    sessionId: "sess-1",
+    sessionFamilyId: "fam-1",
     requestDigest: digestFor(),
     summary: "Permanently delete: board members (DELETE)",
     method: "DELETE",
@@ -280,7 +281,7 @@ test("an expired approval is refused", async () => {
 
 test("another session's approval is refused", async () => {
   const { app } = await buildApp({
-    rows: [approvedRow({ sessionId: "sess-other" })],
+    rows: [approvedRow({ sessionFamilyId: "fam-other" })],
   });
   try {
     const response = await app.inject({
@@ -302,7 +303,7 @@ test("every refusal looks the same, so the approval space cannot be mapped", asy
   const cases: Array<[string, Row]> = [
     ["not approved", approvedRow({ approvedAt: null })],
     ["expired", approvedRow({ expiresAt: new Date(Date.now() - 1) })],
-    ["another session", approvedRow({ sessionId: "sess-other" })],
+    ["another session family", approvedRow({ sessionFamilyId: "fam-other" })],
     ["already used", approvedRow({ consumedAt: new Date() })],
   ];
 

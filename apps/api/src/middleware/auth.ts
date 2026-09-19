@@ -14,6 +14,14 @@ import { getAccessTokenFromRequest } from "../utils/auth-request-credential.js";
  */
 export type RequestAuthSession = {
   id: string;
+  /**
+   * The family this session belongs to, stable across every rotation.
+   *
+   * `id` changes on each refresh, so anything that has to outlive fifteen
+   * minutes — an approval waiting for a person to type a password, for one —
+   * must key off this instead.
+   */
+  familyId: string;
   clientKind: "WEB" | "MCP_CONNECTOR";
   accessLevel: "READ" | "WRITE" | "ADMIN";
 };
@@ -70,7 +78,7 @@ async function authenticateRequest(
           },
         },
       },
-      select: { id: true, clientKind: true, accessLevel: true },
+      select: { id: true, familyId: true, clientKind: true, accessLevel: true },
     }),
     request.server.prisma.user.findUnique({
       where: { id: payload.userId },
@@ -114,6 +122,7 @@ async function authenticateRequest(
   };
   request.authSession = {
     id: session.id,
+    familyId: session.familyId,
     // A session issued before this column existed reads as a full-authority
     // web session, which is what it was.
     clientKind: session.clientKind ?? "WEB",

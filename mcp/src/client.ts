@@ -156,6 +156,13 @@ export class ApiClient {
       throw new ApiError(response.status, await this.#refusalMessage(response));
     }
 
+    // A successful removal answers 204 with no body, which is correct and is
+    // not an error. Insisting on JSON here made every delete look like a
+    // broken connection to whoever called it.
+    if (response.status === 204) {
+      return { ok: true, status: 204 } as T;
+    }
+
     try {
       return (await response.json()) as T;
     } catch {

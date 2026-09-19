@@ -176,3 +176,17 @@ test('the retry uses a NEW token, not the expired one', async () => {
   assert.equal(seen[0], 'Bearer access1');
   assert.equal(seen[1], 'Bearer access2');
 });
+
+test('a 204 is a successful removal, not a broken connection', async () => {
+  const session = sessionReturning('access1');
+  const client = new ApiClient({
+    session,
+    baseUrl: 'https://example.test',
+    fetchImpl: async () => new Response(null, { status: 204 }),
+  });
+
+  // Insisting on JSON here made every delete report a captive portal.
+  const result = await client.delete<{ ok: boolean }>('/api/v1/governance-registers/risks/x');
+
+  assert.equal(result.ok, true);
+});

@@ -91,6 +91,10 @@ export interface McpFixture {
   owner: McpAccount;
   accentedOwner: McpAccount;
   admin: McpAccount;
+  /** A second administrator, so the write tests do not spend the first one's
+   *  sign-in budget. The connector sign-in route limits attempts per email
+   *  address, and a suite that connects repeatedly as one account exhausts it. */
+  writer: McpAccount;
   member: McpAccount;
   orgB: McpAccount;
   ids: { chairId: string; actId: string; documentId: string };
@@ -170,6 +174,14 @@ export async function seedMcpFixture(options: { apiUrl: string }): Promise<McpFi
   const admin = await createVerifiedAdmin({
     email: adminEmail,
     name: 'MCP Harness Admin',
+    organisationId: owner.organisationId,
+    password: MCP_TEST_PASSWORD,
+  });
+
+  const writerEmail = uniqueEmail('mcp-writer');
+  const writer = await createVerifiedAdmin({
+    email: writerEmail,
+    name: 'MCP Harness Writer',
     organisationId: owner.organisationId,
     password: MCP_TEST_PASSWORD,
   });
@@ -345,6 +357,12 @@ export async function seedMcpFixture(options: { apiUrl: string }): Promise<McpFi
       userId: admin.userId,
       organisationId: admin.organisationId,
       email: adminEmail,
+      password: MCP_TEST_PASSWORD,
+    },
+    writer: {
+      userId: writer.userId,
+      organisationId: writer.organisationId,
+      email: writerEmail,
       password: MCP_TEST_PASSWORD,
     },
     member: {

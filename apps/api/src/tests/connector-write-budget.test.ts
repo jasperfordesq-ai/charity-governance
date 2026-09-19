@@ -32,6 +32,7 @@ async function buildApp(options: {
         (typeof fromHeader === "string" ? fromHeader : undefined)
         ?? options.posture?.sessionId
         ?? "sess-1",
+      familyId: "fam-1",
       clientKind: options.posture?.clientKind ?? "MCP_CONNECTOR",
       accessLevel: "WRITE",
     };
