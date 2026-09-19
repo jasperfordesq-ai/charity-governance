@@ -31,6 +31,11 @@ cases).
 Both run from compiled output, so **an edited test re-run without a rebuild runs its previous
 version.**
 
+> ⚠️ **In `apps/web`, a new test file must be added to `tsconfig.test.json`'s explicit include
+> list, or it silently never compiles and never runs.** No error, no warning — the suite simply
+> reports a total that does not include it. Task 2 lost time to this. After adding any test file
+> there, check the reported test count actually went up by the number of tests you wrote.
+
 **For mutation testing, skip the build**: copy the source into a scratchpad, junction the
 **repository root's** `node_modules` (hoisted monorepo — the inner ones lack `tsx`/`typescript`),
 and run `node --import tsx --test`. **Build every baseline from a pristine source**
