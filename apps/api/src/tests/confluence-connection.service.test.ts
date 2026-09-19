@@ -1812,7 +1812,14 @@ test('disconnectConfluence deletes every stored credential and marks the row dis
     integration: { refreshClaimToken: 'held', refreshClaimedAt: NOW, refreshFailureCount: 3, lastError: 'boom' },
   });
 
-  await withKey(() => disconnectConfluence(fake.client, { integrationId: INTEGRATION_ID }));
+  // A fetch that answers rather than reaching Atlassian: this test is about
+  // the local half, and the revoke attempt now made first must not become a
+  // real network call from a unit suite.
+  await withKey(() =>
+    disconnectConfluence(fake.client, { integrationId: INTEGRATION_ID }, {
+      oauth: { fetch: async () => new Response(null, { status: 200 }) },
+    }),
+  );
 
   assert.equal(fake.credentials.length, 0);
   const row = fake.row();
@@ -1824,4 +1831,164 @@ test('disconnectConfluence deletes every stored credential and marks the row dis
   assert.equal(row.refreshClaimedAt, null);
   assert.equal(row.refreshFailureCount, 0);
   assert.equal(row.lastRefreshedAt, null);
+});
+
+// ── disconnect withdraws the grant at Atlassian ────────────────────────────
+//
+// `disconnectConfluence` used to delete CharityPilot's copy of the credentials
+// and stop there, leaving a live authorisation standing at the identity
+// provider that the charity believed they had cancelled. It now tells
+// Atlassian first — and, just as importantly, never lets that call decide
+// whether the local credentials are forgotten.
+
+const REVOKE_URL = 'https://auth.atlassian.com/oauth/revoke';
+
+type RevokeCall = {
+  url: string;
+  body: Record<string, unknown>;
+  /** How many sealed credentials were still on disk when the revoke was made. */
+  credentialsAtCall: number;
+};
+
+type DisconnectScenario = {
+  revokeSucceeds?: boolean;
+  revokeHangs?: boolean;
+  storedRefreshToken?: string | null;
+  /** Run with no `INTEGRATION_ENCRYPTION_KEY`, as a server that has lost it. */
+  withoutKey?: boolean;
+};
+
+async function disconnectWith(scenario: DisconnectScenario) {
+  const {
+    revokeSucceeds = true,
+    revokeHangs = false,
+    storedRefreshToken = STORED_REFRESH_TOKEN,
+    withoutKey = false,
+  } = scenario;
+
+  const fake = fakePrisma({
+    storedRefreshToken,
+    storedAccessToken: { plaintext: STORED_ACCESS_TOKEN, expiresAt: new Date(NOW.getTime() + 60_000) },
+  });
+
+  const revokes: RevokeCall[] = [];
+  const revokeFetch: typeof globalThis.fetch = async (input, init) => {
+    revokes.push({
+      url: String(input),
+      body: typeof init?.body === 'string' ? (JSON.parse(init.body) as Record<string, unknown>) : {},
+      credentialsAtCall: fake.credentials.length,
+    });
+
+    if (revokeHangs) {
+      // Resolves for nobody. The ONLY thing that can end this request is the
+      // deadline the service puts on it; with that bound removed the promise
+      // is never settled and the disconnect never returns, which is precisely
+      // the failure this scenario exists to detect.
+      return new Promise<Response>((_resolve, reject) => {
+        // A genuinely stalled request holds a socket open, and that handle is
+        // what keeps the event loop alive until the deadline fires.
+        // `AbortSignal.timeout`'s own timer is deliberately unref'd by Node,
+        // so without standing in for the socket the runner simply runs out of
+        // work and reports a pending promise — which would look like a
+        // failure while never having exercised the bound at all.
+        const inFlight = setTimeout(() => {}, 5_000);
+        init?.signal?.addEventListener('abort', () => {
+          clearTimeout(inFlight);
+          reject(new Error('the revoke request was aborted'));
+        });
+      });
+    }
+
+    // 503, not a thrown transport error: a refusal Atlassian actually answers
+    // with is the likelier failure and the one a naive `response.ok`-less
+    // implementation would silently read as success.
+    return new Response(null, { status: revokeSucceeds ? 200 : 503 });
+  };
+
+  const run = () =>
+    disconnectConfluence(fake.client, { integrationId: INTEGRATION_ID }, {
+      oauth: { fetch: revokeFetch, clientId: 'atlassian-client-id', clientSecret: 'atlassian-client-secret' },
+      // Short, so the hang scenario is decided in milliseconds. The production
+      // value is pinned separately by resolveConnectTimeoutMs's own test.
+      connectTimeoutMs: 25,
+    });
+
+  const result = withoutKey ? await withoutTheKey(run) : await withKey(run);
+
+  return { revokes, result, credentialsRemaining: fake.credentials.length, row: fake.row() };
+}
+
+/** The mirror of `withKey`: a deployment that has lost the key, or never had it. */
+async function withoutTheKey<T>(run: () => T | Promise<T>): Promise<T> {
+  const previous = process.env.INTEGRATION_ENCRYPTION_KEY;
+  delete process.env.INTEGRATION_ENCRYPTION_KEY;
+  try {
+    return await run();
+  } finally {
+    if (previous !== undefined) process.env.INTEGRATION_ENCRYPTION_KEY = previous;
+  }
+}
+
+test('the grant is revoked at Atlassian before the credentials are forgotten locally', async () => {
+  const { revokes, credentialsRemaining, result, row } = await disconnectWith({ revokeSucceeds: true });
+
+  assert.equal(revokes.length, 1);
+  assert.equal(credentialsRemaining, 0);
+  assert.equal(result.revoked, true);
+
+  const [revoke] = revokes;
+  assert.ok(revoke);
+  assert.equal(revoke.url, REVOKE_URL);
+  // The refresh token is what carries the grant; an access token cannot be
+  // withdrawn and expires within the hour anyway.
+  assert.equal(revoke.body.token, STORED_REFRESH_TOKEN);
+  assert.equal(revoke.body.client_id, 'atlassian-client-id');
+  assert.equal(revoke.body.client_secret, 'atlassian-client-secret');
+  // "Before" is the whole ordering claim: the revoke has to be made while the
+  // sealed refresh token still exists, because afterwards there is nothing
+  // left to present. Both credentials were still on disk at that moment.
+  assert.equal(revoke.credentialsAtCall, 2);
+  assert.equal(row.status, 'DISCONNECTED');
+});
+
+test('the credentials are forgotten locally even when revocation fails', async () => {
+  const { credentialsRemaining, result, row } = await disconnectWith({ revokeSucceeds: false });
+
+  assert.equal(credentialsRemaining, 0);
+  assert.equal(result.revoked, false);
+  // The charity asked to disconnect. Atlassian refusing to be told does not
+  // entitle CharityPilot to keep the secrets it was asked to destroy.
+  assert.equal(row.status, 'DISCONNECTED');
+  assert.equal(row.connectedAt, null);
+});
+
+test('a hanging revoke does not hold the disconnect open', async () => {
+  const { credentialsRemaining, result, row } = await disconnectWith({ revokeHangs: true });
+
+  assert.equal(credentialsRemaining, 0);
+  assert.equal(result.revoked, false);
+  assert.equal(row.status, 'DISCONNECTED');
+});
+
+test('no revoke is attempted when there is no refresh token to withdraw', async () => {
+  const { revokes, credentialsRemaining, result } = await disconnectWith({ storedRefreshToken: null });
+
+  // Nothing to revoke, so nothing is sent: a request carrying a null token
+  // would be refused by Atlassian and reported as a revocation that failed,
+  // when in truth there was never a grant of ours left to withdraw.
+  assert.equal(revokes.length, 0);
+  assert.equal(result.revoked, false);
+  assert.equal(credentialsRemaining, 0);
+});
+
+test('the credentials are forgotten even on a server that cannot open the vault', async () => {
+  const { revokes, credentialsRemaining, result, row } = await disconnectWith({ withoutKey: true });
+
+  // The DELETE route promises this: disconnect is not gated on the encryption
+  // key. Reading the sealed refresh token in order to revoke it must not have
+  // quietly made it so.
+  assert.equal(revokes.length, 0, 'an unopenable envelope cannot be presented to Atlassian');
+  assert.equal(result.revoked, false);
+  assert.equal(credentialsRemaining, 0);
+  assert.equal(row.status, 'DISCONNECTED');
 });

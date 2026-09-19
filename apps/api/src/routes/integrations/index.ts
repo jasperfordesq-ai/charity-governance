@@ -433,9 +433,13 @@ export async function integrationRoutes(
       }
 
       // Not gated on the encryption key: revoking access must keep working on
-      // a server that has lost or never had it. `disconnectConfluence` deletes
-      // sealed envelopes without opening any.
-      await disconnectConfluence(prisma, { integrationId: integration.id });
+      // a server that has lost or never had it. `disconnectConfluence` tries to
+      // open the sealed refresh token so it can withdraw the grant at
+      // Atlassian, but that attempt is best-effort — a missing key, like an
+      // unreachable Atlassian, still leaves the credentials deleted and the
+      // row disconnected. `deps` is passed so the revoke is made with the same
+      // Atlassian client the connection was made with.
+      await disconnectConfluence(prisma, { integrationId: integration.id }, deps);
       return sendNoContent(reply);
     } catch (error) {
       handleError(reply, error);

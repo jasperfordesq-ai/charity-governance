@@ -993,8 +993,12 @@ async function refreshUnderClaim(
 }
 
 /**
- * Drop the connection: delete every sealed credential, and return the row to
- * a disconnected state.
+ * Drop the connection: withdraw the grant at Atlassian, delete every sealed
+ * credential, and return the row to a disconnected state.
+ *
+ * The revocation comes first and is best effort — see the body. It is the
+ * difference between a charity that has been told "disconnected" and a
+ * charity whose authorisation is actually gone from the identity provider.
  *
  * Both halves are one transaction. Deleting the credentials while leaving the
  * row `CONNECTED` would advertise a connection with nothing behind it, and
@@ -1009,7 +1013,68 @@ async function refreshUnderClaim(
 export async function disconnectConfluence(
   prisma: ConfluenceConnectionClient,
   { integrationId }: ConfluenceIntegrationRef,
-): Promise<void> {
+  deps: ConfluenceConnectionDeps = {},
+): Promise<{ revoked: boolean }> {
+  // Atlassian's OAuth 2.0 (3LO) revocation endpoint, declared here rather than
+  // beside `TOKEN_URL` in `atlassian-oauth.ts` because that module is closed
+  // and the authorisation to open this one covers this function alone.
+  //
+  // The *refresh* token is what is presented. Access tokens are short-lived
+  // and cannot be withdrawn; revoking the refresh token is what ends the
+  // grant, which is the thing the charity believes they are cancelling.
+  const REVOKE_URL = 'https://auth.atlassian.com/oauth/revoke';
+
+  // ── best effort, bounded, and never a precondition of forgetting ─────────
+  //
+  // A charity that presses Disconnect has withdrawn their consent, and that
+  // is true whether or not Atlassian is reachable to be told. So the whole
+  // attempt is wrapped: a transport failure, a rejection, a missing
+  // encryption key, an envelope that will not open — none of them may leave
+  // sealed credentials on disk for a connection the user believes is gone.
+  // Making the deletion conditional on this succeeding would turn a third
+  // party's outage into CharityPilot keeping secrets it was told to destroy.
+  //
+  // Bounded on `CONNECT_REQUEST_TIMEOUT_MS` for the same reason the connect
+  // path is: an administrator is sitting in front of a browser tab, `fetch`
+  // has no default timeout in Node, and a stalled Atlassian would otherwise
+  // hold the disconnect open for undici's ~600s. The deadline turns the stall
+  // into an abort, the abort into the catch below, and the disconnect
+  // completes without it.
+  let revoked = false;
+  try {
+    const refreshToken = await loadIntegrationCredential(prisma, {
+      integrationId,
+      kind: REFRESH_TOKEN_KIND,
+    });
+    // Nothing to withdraw, and a request with a null token would be answered
+    // by Atlassian as a client error which `revoked` would then report as a
+    // failure that never happened.
+    if (refreshToken !== null) {
+      const revokeFetch = boundedFetch(
+        deps.oauth?.fetch ?? globalThis.fetch,
+        resolveConnectTimeoutMs(deps),
+      );
+      const response = await revokeFetch(REVOKE_URL, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+        body: JSON.stringify({
+          token: refreshToken,
+          // Resolved the same way `atlassian-oauth.ts` resolves them, so a
+          // deployment that injects its client does not revoke as a different
+          // one than it connected as.
+          client_id: deps.oauth?.clientId ?? process.env.ATLASSIAN_CLIENT_ID ?? '',
+          client_secret: deps.oauth?.clientSecret ?? process.env.ATLASSIAN_CLIENT_SECRET ?? '',
+        }),
+      });
+      revoked = response.ok;
+    }
+  } catch {
+    // Swallowed on purpose, and swallowed *whole*: the error is not rethrown,
+    // not logged and not attached as a `cause` anywhere, because Node's
+    // `fetch failed` cause chain can carry the request — and this request
+    // body holds a refresh token and the client secret.
+  }
+
   await prisma.$transaction(async (tx) => {
     await tx.integrationCredential.deleteMany({ where: { integrationId } });
     await tx.organisationIntegration.updateMany({
@@ -1026,4 +1091,9 @@ export async function disconnectConfluence(
       },
     });
   });
+
+  // The outcome is reported rather than thrown: the disconnect succeeded
+  // either way, and a caller that wants to say "we could not reach Atlassian
+  // to withdraw the authorisation" needs to be able to tell.
+  return { revoked };
 }
