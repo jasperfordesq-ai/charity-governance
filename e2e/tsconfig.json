@@ -9,6 +9,9 @@
     "skipLibCheck": true,
     "resolveJsonModule": true,
     "types": ["node"],
+    "paths": {
+      "@modelcontextprotocol/sdk/*": ["./node_modules/@modelcontextprotocol/sdk/dist/esm/*"]
+    },
     "noEmit": true
   },
   "include": ["**/*.ts"]
