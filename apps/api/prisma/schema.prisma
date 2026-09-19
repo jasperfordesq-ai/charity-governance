@@ -118,6 +118,7 @@ enum DocumentStorageDeletionState {
 enum DocumentStorageDeletionTerminalReason {
   MAX_ATTEMPTS_EXHAUSTED
   PERMANENT_STORAGE_PATH_REJECTED
+  PROVIDER_NOT_ERASABLE
 }
 
 enum DocumentStorageDeletionRecoveryActorType {

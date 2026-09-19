@@ -9,32 +9,13 @@ import {
   DocumentService,
   documentStorageDeletionRetryDelayMs,
 } from '../services/document.service.js';
+import {
+  buildFallbackPrisma,
+  pendingRecord,
+  supabaseDispatcher,
+} from './document-storage-deletion-fixtures.js';
 
 const NOW = new Date('2026-07-11T12:00:00.000Z');
-
-function pendingRecord(overrides: Record<string, unknown> = {}) {
-  return {
-    id: 'deletion-1',
-    organisationId: 'org-1',
-    storagePath: 'org-1/policy.pdf',
-    provider: 'supabase',
-    targetRef: null,
-    state: 'PENDING',
-    attempts: 0,
-    claimedAt: null,
-    nextAttemptAt: new Date('2026-07-11T11:00:00.000Z'),
-    deadLetteredAt: null,
-    terminalReason: null,
-    alertClaimToken: null,
-    alertClaimedAt: null,
-    alertedAt: null,
-    lastError: null,
-    lastAttemptAt: null,
-    processedAt: null,
-    createdAt: new Date('2026-07-11T10:00:00.000Z'),
-    ...overrides,
-  };
-}
 
 type OrganisationStorageRow = {
   documentStorageProvider: string | null;
@@ -81,62 +62,14 @@ async function enqueuedDeletionData(
   return created[0];
 }
 
-function buildFallbackPrisma(initial: ReturnType<typeof pendingRecord>) {
-  let row = { ...initial };
-  const finds: Array<{
-    where: Record<string, unknown>;
-    orderBy?: unknown;
-    take?: number;
-  }> = [];
-  const updates: Array<{ where: Record<string, unknown>; data: Record<string, unknown> }> = [];
-  const delegate = {
-    findMany: async (args: { where: Record<string, unknown>; orderBy?: unknown; take?: number }) => {
-      finds.push(args);
-      if (args.where.state === 'PENDING') return row.state === 'PENDING' ? [{ ...row }] : [];
-      if (args.where.state === 'DEAD_LETTER') return row.state === 'DEAD_LETTER' ? [{ ...row }] : [];
-      return [];
-    },
-    findFirst: async (args: { where: Record<string, unknown> }) => {
-      if (args.where.id !== row.id || args.where.state !== row.state) return null;
-      if (Object.hasOwn(args.where, 'claimedAt') && args.where.claimedAt !== row.claimedAt) return null;
-      return { ...row };
-    },
-    updateMany: async (args: { where: Record<string, unknown>; data: Record<string, unknown> }) => {
-      updates.push(args);
-      if (
-        args.where.id &&
-        args.where.id !== row.id &&
-        !(typeof args.where.id === 'object' && args.where.id !== null &&
-          Array.isArray((args.where.id as { in?: unknown }).in) &&
-          ((args.where.id as { in: unknown[] }).in).includes(row.id))
-      ) return { count: 0 };
-      if (args.where.state && args.where.state !== row.state) return { count: 0 };
-      if (typeof args.where.attempts === 'number' && args.where.attempts !== row.attempts) return { count: 0 };
-      if (Object.hasOwn(args.where, 'claimedAt') && args.where.claimedAt !== row.claimedAt) return { count: 0 };
-      if (args.where.alertClaimToken && args.where.alertClaimToken !== row.alertClaimToken) return { count: 0 };
-      row = { ...row, ...args.data };
-      return { count: 1 };
-    },
-  };
-  return {
-    prisma: {
-      documentStorageDeletion: delegate,
-      documentStorageDeletionRecovery: { create: async () => ({ id: 'recovery-1' }) },
-    },
-    finds,
-    updates,
-    row: () => row,
-  };
-}
-
 test('retryPendingStorageDeletions claims, deletes, and idempotently finalizes a due row', async () => {
   const mock = buildFallbackPrisma(pendingRecord());
   const deleted: Array<{ organisationId: string; storagePath: string }> = [];
   const service = new DocumentService(mock.prisma as never, () => NOW);
 
-  const result = await service.retryPendingStorageDeletions(async (organisationId, storagePath) => {
+  const result = await service.retryPendingStorageDeletions(supabaseDispatcher(async (organisationId, storagePath) => {
     deleted.push({ organisationId, storagePath });
-  });
+  }));
 
   assert.deepEqual(result, {
     processed: 1,
@@ -176,9 +109,9 @@ test('retryPendingStorageDeletions claims, deletes, and idempotently finalizes a
     ],
   });
 
-  const secondResult = await service.retryPendingStorageDeletions(async (organisationId, storagePath) => {
+  const secondResult = await service.retryPendingStorageDeletions(supabaseDispatcher(async (organisationId, storagePath) => {
     deleted.push({ organisationId, storagePath });
-  });
+  }));
   assert.deepEqual(secondResult, {
     processed: 0,
     failed: 0,
@@ -213,7 +146,7 @@ test('Postgres claim query selects only due bounded pending rows with skip-locke
   };
   const service = new DocumentService(prisma as never, () => NOW);
 
-  const result = await service.retryPendingStorageDeletions(async () => undefined, 10);
+  const result = await service.retryPendingStorageDeletions(supabaseDispatcher(async () => undefined), 10);
 
   const pendingQuery = queries.find(({ sql }) => sql.includes('"state" = \'PENDING\''));
   assert.ok(pendingQuery);
@@ -230,12 +163,12 @@ test('Postgres claim query selects only due bounded pending rows with skip-locke
 test('transient failures schedule deterministic exponential backoff and retain sanitized diagnostics', async () => {
   const mock = buildFallbackPrisma(pendingRecord());
   const service = new DocumentService(mock.prisma as never, () => NOW);
-  const result = await service.retryPendingStorageDeletions(async () => {
+  const result = await service.retryPendingStorageDeletions(supabaseDispatcher(async () => {
     throw Object.assign(
       new Error('storage unavailable for ops@example.org at org-1/policy.pdf?token=secret-token'),
       { code: 'StorageApiError', status: 503 },
     );
-  });
+  }));
 
   assert.equal(result.retryScheduled, 1);
   assert.equal(result.newlyDeadLettered, 0);
@@ -265,9 +198,9 @@ test('retry delay is deterministic, exponential, and capped', () => {
 test('the fifth failed attempt becomes a claimed dead letter instead of retrying forever', async () => {
   const mock = buildFallbackPrisma(pendingRecord({ attempts: 4 }));
   const service = new DocumentService(mock.prisma as never, () => NOW);
-  const result = await service.retryPendingStorageDeletions(async () => {
+  const result = await service.retryPendingStorageDeletions(supabaseDispatcher(async () => {
     throw new Error('provider still unavailable');
-  });
+  }));
 
   assert.equal(result.retryScheduled, 0);
   assert.equal(result.newlyDeadLettered, 1);
@@ -284,9 +217,9 @@ test('the fifth failed attempt becomes a claimed dead letter instead of retrying
 test('permanently forbidden storage paths dead-letter on their first bounded attempt', async () => {
   const mock = buildFallbackPrisma(pendingRecord());
   const service = new DocumentService(mock.prisma as never, () => NOW);
-  const result = await service.retryPendingStorageDeletions(async () => {
+  const result = await service.retryPendingStorageDeletions(supabaseDispatcher(async () => {
     throw new AppError(403, 'STORAGE_PATH_FORBIDDEN', 'Storage path does not belong to this organisation');
-  });
+  }));
 
   assert.equal(result.newlyDeadLettered, 1);
   assert.equal(mock.row().attempts, 1);
@@ -331,7 +264,7 @@ test('a hung provider deletion is aborted, recorded once, and cannot finalize la
   let providerResolved = false;
 
   const result = await service.retryPendingStorageDeletions(
-    async (_organisationId, _storagePath, signal) => {
+    supabaseDispatcher(async (_organisationId, _storagePath, signal) => {
       suppliedSignal = signal;
       await new Promise<void>((resolve) => {
         setTimeout(() => {
@@ -339,7 +272,7 @@ test('a hung provider deletion is aborted, recorded once, and cannot finalize la
           resolve();
         }, 60);
       });
-    },
+    }),
   );
 
   assert.equal(result.retryScheduled, 1);
@@ -377,7 +310,7 @@ test('maximum sequential claim batch is derived below the stale lease boundary',
     documentStorageDeletionRecovery: { create: async () => ({ id: 'unused' }) },
   };
   const service = new DocumentService(prisma as never, () => NOW);
-  await service.retryPendingStorageDeletions(async () => undefined, 1000);
+  await service.retryPendingStorageDeletions(supabaseDispatcher(async () => undefined), 1000);
   assert.equal(take, DOCUMENT_STORAGE_DELETION_MAX_CLAIM_BATCH);
 });
 

@@ -10,6 +10,11 @@ import {
 import { StorageService } from '../services/storage.service.js';
 import { createPrismaOrganisationStorageResolver } from '../services/document-storage-resolution.js';
 import {
+  createErasureDispatcher,
+  createSupabaseEraser,
+  type ErasureDispatcher,
+} from '../services/document-erasure.js';
+import {
   validateAuthDeliveryEnv,
   validateDeadlineRemindersEnv,
   validateDocumentStorageCleanupEnv,
@@ -45,7 +50,7 @@ type DeadlineReminderRunner = {
 
 type DocumentStorageCleanupRunner = {
   retryPendingStorageDeletions(
-    deleteFile: (organisationId: string, storagePath: string, signal?: AbortSignal) => Promise<void>,
+    dispatch: ErasureDispatcher,
     limit: number,
   ): Promise<DocumentStorageCleanupResult | { processed: number; failed: number }>;
   markDeadLetterAlertSent?(claim: { claimToken: string; ids: string[] }): Promise<number>;
@@ -180,8 +185,12 @@ export async function runDocumentStorageCleanup(input: {
   alertSender?: AlertSender;
 }): Promise<boolean> {
   try {
+    const dispatch = createErasureDispatcher({
+      supabase: createSupabaseEraser((organisationId, storagePath, signal) =>
+        input.storageService.deleteFile(organisationId, storagePath, signal)),
+    });
     const result = await input.documentService.retryPendingStorageDeletions(
-      (organisationId, storagePath, signal) => input.storageService.deleteFile(organisationId, storagePath, signal),
+      dispatch,
       input.documentStorageCleanupLimit,
     );
     input.logger.info(

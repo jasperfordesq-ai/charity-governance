@@ -32,6 +32,12 @@ const DISPOSITIONS = new Set<DocumentStorageDeletionRecoveryDisposition>([
 const TERMINAL_REASONS = new Set([
   'MAX_ATTEMPTS_EXHAUSTED',
   'PERMANENT_STORAGE_PATH_REJECTED',
+  // A row stranded because this deployment had no eraser for its provider is
+  // still the operator's to recover — by requeueing it once the provider's
+  // eraser is registered, or by completing it as externally remediated. Leaving
+  // the reason out of this set would make such a row unrecoverable by the only
+  // tool that can touch it.
+  'PROVIDER_NOT_ERASABLE',
 ] as const);
 const SHA256_PATTERN = /^[a-f0-9]{64}$/u;
 const ALLOWED_DATABASE_QUERY_OPTIONS = new Set([
@@ -48,7 +54,10 @@ const ALLOWED_DATABASE_QUERY_OPTIONS = new Set([
   'tcp_user_timeout',
 ]);
 
-type TerminalReason = 'MAX_ATTEMPTS_EXHAUSTED' | 'PERMANENT_STORAGE_PATH_REJECTED';
+type TerminalReason =
+  | 'MAX_ATTEMPTS_EXHAUSTED'
+  | 'PERMANENT_STORAGE_PATH_REJECTED'
+  | 'PROVIDER_NOT_ERASABLE';
 
 export type PlatformDocumentStorageRecoveryCommand = {
   mode: 'dry-run' | 'execute';

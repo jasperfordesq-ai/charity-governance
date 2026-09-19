@@ -12,6 +12,7 @@ import {
   waitForRecurringJobsToStop,
 } from '../jobs/production-scheduler.js';
 import type { ErrorAlertPayload } from '../services/error-alerts.service.js';
+import type { ErasureDispatcher } from '../services/document-erasure.js';
 
 const ORIGINAL_ENV = { ...process.env };
 const API_SRC = join(process.cwd(), 'src');
@@ -184,12 +185,11 @@ test('runProductionSchedulerOnce runs reminders and document cleanup without ove
     },
   };
   const documentService = {
-    async retryPendingStorageDeletions(
-      deleteFile: (organisationId: string, storagePath: string) => Promise<void>,
-      limit: number,
-    ) {
+    async retryPendingStorageDeletions(dispatch: ErasureDispatcher, limit: number) {
       events.push(`document-cleanup:${limit}`);
-      await deleteFile('org-1', 'org-1/policy.pdf');
+      const erase = dispatch('supabase');
+      assert.ok(erase, 'the scheduler must register a supabase eraser');
+      await erase({ organisationId: 'org-1', storagePath: 'org-1/policy.pdf', targetRef: null });
       return { processed: 1, failed: 0 };
     },
   };

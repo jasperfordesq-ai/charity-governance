@@ -22,11 +22,13 @@ const [
   { DeadlineRemindersService },
   { DocumentService },
   { runDeadlineReminders },
+  { createErasureDispatcher, createSupabaseEraser },
 ] = await Promise.all([
   import('../services/billing.service.js'),
   import('../services/deadline-reminders.service.js'),
   import('../services/document.service.js'),
   import('../jobs/production-scheduler.js'),
+  import('../services/document-erasure.js'),
 ]);
 
 // ---------------------------------------------------------------------------
@@ -386,6 +388,8 @@ test('claim query reclaims rows whose claim is older than the stale window', asy
             id: 'deletion-1',
             organisationId: 'org-1',
             storagePath: 'org-1/policy.pdf',
+            provider: 'supabase',
+            targetRef: null,
             state: 'PENDING',
             attempts: 0,
             claimedAt,
@@ -405,7 +409,10 @@ test('claim query reclaims rows whose claim is older than the stale window', asy
   };
   const service = new DocumentService(prisma as never);
 
-  const result = await service.retryPendingStorageDeletions(async () => undefined, 10);
+  const result = await service.retryPendingStorageDeletions(
+    createErasureDispatcher({ supabase: createSupabaseEraser(async () => undefined) }),
+    10,
+  );
 
   // The atomic-claim WHERE clause must include the stale-reclaim predicate so a
   // row whose claimedAt is older than the 10-minute stale window is re-claimable

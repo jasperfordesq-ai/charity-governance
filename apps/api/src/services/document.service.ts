@@ -8,11 +8,13 @@ import {
   createPrismaOrganisationStorageResolver,
   resolveProviderForOrganisation,
 } from './document-storage-resolution.js';
+import type { Eraser, ErasureDispatcher } from './document-erasure.js';
 
 type DocumentStorageDeletionState = 'PENDING' | 'DEAD_LETTER' | 'PROCESSED';
 type DocumentStorageDeletionTerminalReason =
   | 'MAX_ATTEMPTS_EXHAUSTED'
-  | 'PERMANENT_STORAGE_PATH_REJECTED';
+  | 'PERMANENT_STORAGE_PATH_REJECTED'
+  | 'PROVIDER_NOT_ERASABLE';
 export type DocumentStorageDeletionRecoveryDisposition =
   | 'REQUEUE_UNCHANGED'
   | 'REQUEUE_CORRECTED_PATH'
@@ -241,8 +243,26 @@ function deletionRecoveryDelegate(prisma: unknown): DocumentStorageDeletionRecov
   return (prisma as DocumentStorageDeletionClient).documentStorageDeletionRecovery;
 }
 
-function isPermanentStorageDeletionFailure(error: unknown): boolean {
-  return error instanceof AppError && error.code === 'STORAGE_PATH_FORBIDDEN';
+// Failures that no number of retries can clear, and the terminal reason each
+// one dead-letters with. `PROVIDER_NOT_ERASABLE` covers three spellings of one
+// condition — this deployment has no way to erase these bytes: the dispatcher
+// finding no eraser for the row's provider, and StorageService refusing a
+// provider it has no backend for on either the delete or the download path.
+// Retrying cannot acquire a backend any more than it can acquire a permission.
+const PERMANENT_STORAGE_DELETION_TERMINAL_REASONS: Record<string, DocumentStorageDeletionTerminalReason> = {
+  STORAGE_PATH_FORBIDDEN: 'PERMANENT_STORAGE_PATH_REJECTED',
+  PROVIDER_NOT_ERASABLE: 'PROVIDER_NOT_ERASABLE',
+  STORAGE_DELETE_PROVIDER_UNSUPPORTED: 'PROVIDER_NOT_ERASABLE',
+  STORAGE_DOWNLOAD_PROVIDER_UNSUPPORTED: 'PROVIDER_NOT_ERASABLE',
+};
+
+function permanentStorageDeletionTerminalReason(
+  error: unknown,
+): DocumentStorageDeletionTerminalReason | null {
+  if (!(error instanceof AppError)) return null;
+  return Object.prototype.hasOwnProperty.call(PERMANENT_STORAGE_DELETION_TERMINAL_REASONS, error.code)
+    ? PERMANENT_STORAGE_DELETION_TERMINAL_REASONS[error.code]
+    : null;
 }
 
 function publicDocument(doc: DocumentWithStandardLinks) {
@@ -284,7 +304,7 @@ export class DocumentService {
   }
 
   private async runBoundedStorageDeletion(
-    deleteFile: (organisationId: string, storagePath: string, signal?: AbortSignal) => Promise<void>,
+    erase: Eraser,
     deletion: DocumentStorageDeletionRecord,
   ): Promise<void> {
     const controller = new AbortController();
@@ -298,7 +318,16 @@ export class DocumentService {
 
     try {
       await Promise.race([
-        Promise.resolve().then(() => deleteFile(deletion.organisationId, deletion.storagePath, controller.signal)),
+        Promise.resolve().then(() =>
+          erase(
+            {
+              organisationId: deletion.organisationId,
+              storagePath: deletion.storagePath,
+              targetRef: deletion.targetRef,
+            },
+            controller.signal,
+          ),
+        ),
         timeout,
       ]);
     } finally {
@@ -723,13 +752,10 @@ export class DocumentService {
 
       const attempt = current.attempts + 1;
       const now = this.now();
-      const permanent = isPermanentStorageDeletionFailure(error);
-      const deadLettered = permanent || attempt >= DOCUMENT_STORAGE_DELETION_MAX_ATTEMPTS;
-      const terminalReason: DocumentStorageDeletionTerminalReason | null = permanent
-        ? 'PERMANENT_STORAGE_PATH_REJECTED'
-        : deadLettered
-          ? 'MAX_ATTEMPTS_EXHAUSTED'
-          : null;
+      const permanentReason = permanentStorageDeletionTerminalReason(error);
+      const deadLettered = permanentReason !== null || attempt >= DOCUMENT_STORAGE_DELETION_MAX_ATTEMPTS;
+      const terminalReason: DocumentStorageDeletionTerminalReason | null = permanentReason
+        ?? (deadLettered ? 'MAX_ATTEMPTS_EXHAUSTED' : null);
       const nextAttemptAt = deadLettered
         ? null
         : new Date(now.getTime() + documentStorageDeletionRetryDelayMs(attempt));
@@ -775,7 +801,7 @@ export class DocumentService {
   }
 
   async retryPendingStorageDeletions(
-    deleteFile: (organisationId: string, storagePath: string, signal?: AbortSignal) => Promise<void>,
+    dispatch: ErasureDispatcher,
     limit = 25,
   ): Promise<DocumentStorageCleanupResult> {
     const boundedLimit = Math.min(
@@ -789,8 +815,28 @@ export class DocumentService {
     let newlyDeadLettered = 0;
 
     for (const deletion of pending) {
+      const erase = dispatch(deletion.provider);
+      if (!erase) {
+        // Unerasable by this deployment. Record the attempt — one was genuinely
+        // made, and the audit trail should say so — but dead-letter now instead
+        // of waiting for the attempt budget to run out, which would only delay
+        // the operator alert while telling them nothing they do not already know.
+        const failure = await this.recordStorageDeletionFailure(
+          deletion.id,
+          new AppError(
+            501,
+            'PROVIDER_NOT_ERASABLE',
+            `No eraser is registered for document storage provider "${deletion.provider}".`,
+          ),
+          deletion.claimedAt,
+        );
+        if (failure.status === 'retry-scheduled') retryScheduled += 1;
+        if (failure.status === 'dead-lettered') newlyDeadLettered += 1;
+        continue;
+      }
+
       try {
-        await this.runBoundedStorageDeletion(deleteFile, deletion);
+        await this.runBoundedStorageDeletion(erase, deletion);
       } catch (error) {
         const failure = await this.recordStorageDeletionFailure(deletion.id, error, deletion.claimedAt);
         if (failure.status === 'retry-scheduled') retryScheduled += 1;
