@@ -132,12 +132,16 @@ test('publicationTitle normalises a name carrying whitespace and a control chara
 test('publicationTitle emits a title a page store would hold verbatim', () => {
   // Stated as the property rather than the literal, so it still holds if the
   // title's shape ever changes: what goes out must already equal what any
-  // reasonable store would rewrite it to.
-  const normalise = (value: string) => value.trim().replace(/\s+/g, ' ');
-  const title = publicationTitle({ id: 'doc-1', name: UNTIDY_NAME });
+  // reasonable store would rewrite it to. `normalise` here is every rewrite
+  // this module claims to anticipate, applied together -- a store doing all
+  // four must have nothing left to do.
+  const normalise = (value: string) =>
+    value.normalize('NFC').replace(/\p{Cf}/gu, '').trim().replace(/\s+/g, ' ');
+  const title = publicationTitle({ id: 'doc-1', name: HOSTILE_NAME });
 
   assert.equal(normalise(title), title, `a store would rewrite this title: ${JSON.stringify(title)}`);
   assert.equal(containsDisallowedXmlControlChar(title), false);
+  assert.equal(/\p{Cf}/u.test(title), false, `an invisible character survived: ${JSON.stringify(title)}`);
 });
 
 test('publicationTitle stays deterministic for an untrimmed name', () => {
@@ -179,6 +183,79 @@ test('publicationTitle still leads with the id marker when a name normalises awa
   const title = publicationTitle({ id: 'doc-1', name: `${TAB} ${LF}` });
 
   assert.equal(title, '(CharityPilot doc doc-1)');
+});
+
+// Invisible and ambiguous input, built numerically for the same reason the
+// control characters above are.
+const ZERO_WIDTH_SPACE = String.fromCharCode(0x200b);
+const ZERO_WIDTH_JOINER = String.fromCharCode(0x200d);
+const BYTE_ORDER_MARK = String.fromCharCode(0xfeff);
+const RIGHT_TO_LEFT_OVERRIDE = String.fromCharCode(0x202e);
+const COMBINING_ACUTE = String.fromCharCode(0x301);
+
+/** `Proteges` with a decomposed acute: one grapheme, two code points. */
+const DECOMPOSED_NAME = `Prote${COMBINING_ACUTE}ge${COMBINING_ACUTE}s Policy`;
+/** The same text precomposed: one grapheme, one code point. A store holding NFC stores this. */
+const COMPOSED_NAME = `Prot${String.fromCodePoint(0xe9)}g${String.fromCodePoint(0xe9)}s Policy`;
+
+/** Every rewrite class at once: whitespace, a control character, format characters, composition. */
+const HOSTILE_NAME =
+  `  ${ZERO_WIDTH_SPACE}Prote${COMBINING_ACUTE}ge${COMBINING_ACUTE}s${LF}${TAB}` +
+  `${BYTE_ORDER_MARK}${NUL}${RIGHT_TO_LEFT_OVERRIDE}Policy${ZERO_WIDTH_JOINER}  `;
+
+test('publicationTitle composes a decomposed name into the single spelling a store would hold', () => {
+  // The same text spelled two ways is two different strings, and a store that
+  // normalises to NFC holds only one of them. Without this the second attempt
+  // searches for the spelling the site does not have.
+  const decomposed = publicationTitle({ id: 'doc-1', name: DECOMPOSED_NAME });
+  const composed = publicationTitle({ id: 'doc-1', name: COMPOSED_NAME });
+
+  assert.equal(decomposed, composed, 'two spellings of one name must give one title');
+  assert.equal(decomposed.normalize('NFC'), decomposed, 'the title must already be in NFC');
+});
+
+test('publicationTitle removes the invisible characters a store would remove', () => {
+  // Zero-width spaces, joiners, the bidi overrides and the byte-order mark are
+  // Unicode format characters: invisible to a human comparing the two titles,
+  // and routinely stripped by a store -- which is exactly what makes them able
+  // to produce a second page with nobody able to see why.
+  const name = `Safeguarding${ZERO_WIDTH_SPACE}${BYTE_ORDER_MARK} ${RIGHT_TO_LEFT_OVERRIDE}Policy${ZERO_WIDTH_JOINER}`;
+  const title = publicationTitle({ id: 'doc-1', name });
+
+  assert.equal(title, 'Safeguarding Policy (CharityPilot doc doc-1)');
+  assert.equal(/\p{Cf}/u.test(title), false, `an invisible character survived: ${JSON.stringify(title)}`);
+});
+
+test('publicationTitle stays deterministic for a name carrying every rewrite class at once', () => {
+  const first = publicationTitle({ id: 'doc-1', name: HOSTILE_NAME });
+  const second = publicationTitle({ id: 'doc-1', name: HOSTILE_NAME });
+
+  assert.equal(first, second);
+  // Built from the composed constant rather than typed as a literal, so the
+  // expectation cannot itself be the decomposed spelling by accident.
+  assert.equal(first, `${COMPOSED_NAME} (CharityPilot doc doc-1)`);
+});
+
+test('publicationTitle gives two documents whose names differ only invisibly different titles', () => {
+  // Collision-freedom under the widest normalisation this module performs: two
+  // names that normalise to one string must still produce two titles, because
+  // the id is what separates them and the id is never normalised.
+  const first = publicationTitle({ id: 'doc-1', name: DECOMPOSED_NAME });
+  const second = publicationTitle({ id: 'doc-2', name: `${COMPOSED_NAME}${ZERO_WIDTH_SPACE}` });
+
+  assert.notEqual(first, second);
+  assert.ok(first.includes('doc-1'), `expected the id in: ${first}`);
+  assert.ok(second.includes('doc-2'), `expected the id in: ${second}`);
+});
+
+test('publicationTitle never strips a format character out of the document id', () => {
+  // The id is the whole of the collision-freedom guarantee. Normalisation is
+  // applied to the name portion only, so even an id carrying something this
+  // function would otherwise remove arrives whole.
+  const id = `doc${ZERO_WIDTH_SPACE}1`;
+  const title = publicationTitle({ id, name: 'Safeguarding Policy' });
+
+  assert.ok(title.includes(id), `expected the id verbatim in: ${JSON.stringify(title)}`);
 });
 
 test('publicationTitle still respects PUBLICATION_TITLE_MAX_LENGTH after normalising', () => {

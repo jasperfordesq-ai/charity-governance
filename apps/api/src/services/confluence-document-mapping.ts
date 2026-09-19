@@ -37,6 +37,13 @@ import { getPrimaryFrontendOrigin } from '../utils/frontend-origin.js';
  *   silently. Only the name portion is ever shortened to make room; the id
  *   suffix is fixed-length-appended afterward and never touched, which is
  *   what keeps this bounded form still collision-free (see above).
+ * - **In the form a store will hold verbatim.** Length is not the only rewrite
+ *   a page store performs — it also composes, strips invisible characters and
+ *   collapses whitespace, each with the same consequence. See
+ *   {@link normaliseTitleName}, which handles those as a class, and which also
+ *   records the one thing none of this can close: **nothing here has ever seen
+ *   what Confluence actually stores.** Until the Atlassian app install lands,
+ *   every rewrite anticipated here is anticipated from fakes.
  *
  * ## Content property vs. page body — different jobs, different limits
  *
@@ -117,26 +124,66 @@ function truncateToCodePoints(value: string, maxChars: number): string {
 }
 
 /**
+ * Unicode **format** characters (general category `Cf`): the zero-width space,
+ * the zero-width joiner and non-joiner, the soft hyphen, the bidi overrides
+ * and isolates, and the byte-order mark.
+ *
+ * Every one of them is invisible, and a page store that removes them (several
+ * do) stores a title that differs from the one this module computed while
+ * looking identical to a human reading both. Written as a Unicode **property
+ * escape**, which is ordinary source text and cannot round-trip into raw bytes
+ * the way a `\uXXXX` escape in this file once did — see
+ * {@link isDisallowedXmlControlCodePoint} for that history.
+ */
+const UNICODE_FORMAT_CHARACTERS = /\p{Cf}/gu;
+
+/**
  * Normalises the *name* portion of a page title to the form any reasonable
- * page store would hold it in: control characters removed, internal
- * whitespace runs collapsed to one space, ends trimmed.
+ * page store would hold it in: one canonical composition, no invisible
+ * characters, internal whitespace runs collapsed to one space, ends trimmed.
  *
  * This is the same guarantee {@link PUBLICATION_TITLE_MAX_LENGTH} gives for
  * length, for the same reason — see the module header. A store that
  * silently rewrites what it was handed leaves the computed title and the
  * stored title different, so the next attempt's `findPageByTitle` searches
  * for something nothing holds and the deliberately non-idempotent
- * `createPage` runs a second time. Length is not the only rewrite a wiki
- * performs: every one of them trims and collapses whitespace in a page
- * title, and none of them stores a C0 control character in one.
+ * `createPage` runs a second time. Length is only one of the rewrites a wiki
+ * performs. The four handled here are the ones that recur across stores, and
+ * they are handled as a **class** rather than as the particular characters
+ * that happened to be found:
+ *
+ * - **Canonical composition (NFC).** The same text can be spelled more than
+ *   one way — `e` followed by a combining acute is the same grapheme as the
+ *   single precomposed character, and the two are different strings. Stores
+ *   routinely normalise to NFC, so this does too, and the two spellings then
+ *   produce one title rather than two pages.
+ * - **Format characters (`Cf`).** Invisible and routinely stripped. See
+ *   {@link UNICODE_FORMAT_CHARACTERS}.
+ * - **Control characters (`Cc`).** Already stripped for the body's sake, and
+ *   no wiki stores one in a title. Tab, LF and CR survive this step and are
+ *   turned into spaces by the next, so a name's word boundaries are kept.
+ * - **Whitespace.** Trimmed at the ends, collapsed in the middle.
  *
  * Applied to the name only. The document id is what makes two documents'
  * titles distinct, and it is appended afterwards, whole and untouched — so
- * two documents whose names differ *only* in whitespace still get two
- * different titles, and normalising cannot make them collide.
+ * two documents whose names differ *only* in ways this function erases still
+ * get two different titles, and normalising cannot make them collide.
+ *
+ * **What this does not close, and cannot.** Adoption rests on the title this
+ * module computes being the title Confluence actually stores, and **no part of
+ * this codebase has ever seen what Confluence actually stores** — the
+ * Atlassian app install has not landed. Any store-side transformation not
+ * anticipated here reopens the duplicate-page failure, and a fake site cannot
+ * tell us about one. The way out is to stop keying adoption on the title at
+ * all: {@link publicationProperty} already writes the CharityPilot document id
+ * onto the page as a content property, and searching for *that* would be exact
+ * and immune to title handling entirely. It needs CQL search, which Phase 3
+ * did not build, and it needs a real site to verify against — so it is
+ * recorded here as the known answer, not built on speculation.
  */
 function normaliseTitleName(value: string): string {
-  return stripDisallowedXmlControlChars(value).replace(/\s+/g, ' ').trim();
+  const composed = value.normalize('NFC').replace(UNICODE_FORMAT_CHARACTERS, '');
+  return stripDisallowedXmlControlChars(composed).replace(/\s+/g, ' ').trim();
 }
 
 /**

@@ -583,5 +583,30 @@ and discarded. Pin it with a test that a late rejection does not surface as an u
 
 **None of criteria 1-3 can be verified against a real site until the Atlassian app install lands.**
 Everything here is proven against fakes, and a fake cannot tell you Atlassian changed a status code
-or that a title collides differently than assumed. **Say so in the final report.** The open question
-about whether a trashed page reads back as 404 is still open and still matters to criterion 3.
+or that a title collides differently than assumed. **Say so in the final report.**
+
+### Confirm these against a real site the moment the app install lands
+
+Four questions, all the same kind: assumptions that hold against every fake written for this phase
+and have never met the real thing. Each one, if answered the wrong way, breaks something this phase
+claims.
+
+1. **Does a trashed page read back as 404?** Bears on criterion 3 and on what Phase 5's erasure
+   proof actually proves. If a trashed page still reads 200, a delete that succeeded looks like one
+   that failed.
+2. **Are page titles unique within a space?** The adopt-on-409 design rests on it. Confluence's own
+   use of 409 for a duplicate title strongly implies it, but it is not stated in the v2 pages
+   documentation. The ambiguity guard means a wrong answer surfaces as a loud error rather than as
+   a document attached to an arbitrary page.
+3. **Is `space-id` honoured when sent as a bare string?** Task 4 sends it that way; Atlassian
+   documents an array of integers. If the filter is silently ignored, `findPageByTitle` matches
+   across the whole site rather than within the chosen space.
+4. **How does Confluence normalise a page title, and does it 409 on a title that collides only
+   after normalisation?** `publicationTitle` anticipates four store-side rewrites - canonical
+   composition, format characters, control characters, whitespace - and a title that survives all
+   four verbatim is what adoption depends on. A fifth rewrite nobody anticipated reopens the
+   duplicate-page failure, and no fake can reveal one. **The way out, when a real site is
+   available:** stop keying adoption on the title. The page already carries the CharityPilot
+   document id as a content property, and a CQL search on that property would be exact and immune
+   to title handling entirely. It needs CQL search, which Phase 3 did not build. Do not build it on
+   speculation - build it once a real site can verify it.

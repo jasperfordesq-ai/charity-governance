@@ -400,30 +400,58 @@ test('a conflict on create adopts the page a previous attempt made, creating onl
 // ---------------------------------------------------------------------------
 // Create-or-adopt against a site that rewrites the title it stores.
 //
-// Every wiki trims a page title and collapses the whitespace inside it. If the
-// title this codebase computes is not already in that form, the store holds
-// something else, the next attempt's findPageByTitle searches for a title
-// nothing holds, and the deliberately non-idempotent createPage runs again --
-// two pages for one board resolution. The defence is in publicationTitle;
-// these two tests are the end-to-end proof that it holds where it matters.
+// A page store rewrites what it is handed in more ways than one, and every one
+// of them has the same consequence: the title this codebase computed and the
+// title the site holds differ, the next attempt's findPageByTitle searches for
+// something nothing holds, and the deliberately non-idempotent createPage runs
+// again -- two pages for one board resolution. The defence is in
+// publicationTitle; these are the end-to-end proof, one entrant per class of
+// rewrite, so a class that stops being handled fails on its own.
 //
-// Control characters are built with `String.fromCharCode`, never a literal
-// escape sequence: such an escape has previously round-tripped into a raw
-// control byte on disk instead of staying as escape-sequence text.
+// Control and invisible characters are built with `String.fromCharCode`, never
+// a literal escape sequence: such an escape has previously round-tripped into
+// a raw control byte on disk instead of staying as escape-sequence text.
 // ---------------------------------------------------------------------------
 
-const UNTIDY_DOC: PublicationSource = {
+const NUL = String.fromCharCode(0);
+const LF = String.fromCharCode(10);
+const TAB = String.fromCharCode(9);
+const ZERO_WIDTH_SPACE = String.fromCharCode(0x200b);
+const ZERO_WIDTH_JOINER = String.fromCharCode(0x200d);
+const BYTE_ORDER_MARK = String.fromCharCode(0xfeff);
+const COMBINING_ACUTE = String.fromCharCode(0x301);
+
+/** One name carrying every rewrite class at once: whitespace, a control character, format characters, composition. */
+const HOSTILE_DOC: PublicationSource = {
   ...DOC,
-  name: `  Safeguarding${String.fromCharCode(10)}${String.fromCharCode(0)}Policy  `,
+  name:
+    `  ${ZERO_WIDTH_SPACE}Prote${COMBINING_ACUTE}ge${COMBINING_ACUTE}s${LF}${TAB}` +
+    `${BYTE_ORDER_MARK}${NUL}Policy${ZERO_WIDTH_JOINER}  `,
 };
 
 /**
- * A Confluence stand-in that is honest in every respect but one: when
- * `normalisesStoredTitles` is set it stores the trimmed, whitespace-collapsed
- * form of the title it was handed, the way a real page store does. Lookups are
- * honest either way -- an exact match against what is actually stored.
+ * How a page store rewrites the title it is handed before storing it. Each of
+ * these is something real stores do; none of them is exotic.
  */
-function fakeSite(normalisesStoredTitles: boolean) {
+const STORE_REWRITES: ReadonlyArray<{ behaviour: string; store: (title: string) => string }> = [
+  { behaviour: 'trims and collapses whitespace', store: (title) => title.trim().replace(/\s+/g, ' ') },
+  { behaviour: 'normalises titles to NFC', store: (title) => title.normalize('NFC') },
+  { behaviour: 'strips zero-width and other format characters', store: (title) => title.replace(/\p{Cf}/gu, '') },
+  {
+    behaviour: 'strips control characters',
+    store: (title) =>
+      Array.from(title)
+        .filter((char) => (char.codePointAt(0) ?? 0) >= 0x20)
+        .join(''),
+  },
+];
+
+/**
+ * A Confluence stand-in that is honest in every respect but one: it stores
+ * `store(title)` rather than `title`. Lookups are honest either way -- an exact
+ * match against what is actually stored.
+ */
+function fakeSite(store: (title: string) => string) {
   const pages: Array<{ id: string; title: string }> = [];
 
   const operations: Partial<ConfluencePublishOperations> = {
@@ -432,8 +460,7 @@ function fakeSite(normalisesStoredTitles: boolean) {
       return found === undefined ? null : { ...PAGE, id: found.id, title: found.title };
     },
     createPage: async (_client, input) => {
-      const stored = normalisesStoredTitles ? input.title.trim().replace(/\s+/g, ' ') : input.title;
-      const page = { id: `page-${pages.length + 1}`, title: stored };
+      const page = { id: `page-${pages.length + 1}`, title: store(input.title) };
       pages.push(page);
       return { ...PAGE, id: page.id, title: page.title };
     },
@@ -446,12 +473,12 @@ function fakeSite(normalisesStoredTitles: boolean) {
  * Two attempts for one document whose row never recorded a page id -- the
  * ordinary transport failure this outbox exists for: the create succeeded and
  * the connection dropped before `recordPage` committed. Returns what the site
- * holds afterwards and which page the second attempt settled on.
+ * holds afterwards and which page each attempt settled on.
  */
-async function retryAgainstSite(normalisesStoredTitles: boolean) {
-  const site = fakeSite(normalisesStoredTitles);
+async function retryAgainstSite(store: (title: string) => string) {
+  const site = fakeSite(store);
   const deps = () =>
-    spyDeps([], { readDocument: async () => UNTIDY_DOC, operations: site.operations });
+    spyDeps([], { readDocument: async () => HOSTILE_DOC, operations: site.operations });
 
   const first = await runPublisher(deps());
   const second = await runPublisher(deps());
@@ -459,21 +486,23 @@ async function retryAgainstSite(normalisesStoredTitles: boolean) {
   return { pages: site.pages, first, second };
 }
 
-test('a retried publish of an untidily named document creates only one page on a site that normalises titles', async () => {
-  const { pages, first, second } = await retryAgainstSite(true);
+for (const { behaviour, store } of STORE_REWRITES) {
+  test(`a retried publish creates only one page on a site that ${behaviour}`, async () => {
+    const { pages, first, second } = await retryAgainstSite(store);
 
-  assert.equal(
-    pages.length,
-    1,
-    `one board resolution must never become two pages; the site holds ${JSON.stringify(pages.map((page) => page.id))}`,
-  );
-  assert.equal(second.pageId, first.pageId, 'the retry must adopt the page the first attempt made');
-});
+    assert.equal(
+      pages.length,
+      1,
+      `one board resolution must never become two pages; the site holds ${JSON.stringify(pages.map((page) => page.id))}`,
+    );
+    assert.equal(second.pageId, first.pageId, 'the retry must adopt the page the first attempt made');
+  });
+}
 
 test('CONTROL: the same retry against a site that stores the title verbatim also adopts', async () => {
-  // The canary for the test above: if this one ever fails, the harness is
+  // The canary for the four tests above: if this one ever fails, the harness is
   // broken rather than the behaviour it claims to measure.
-  const { pages, first, second } = await retryAgainstSite(false);
+  const { pages, first, second } = await retryAgainstSite((title) => title);
 
   assert.equal(pages.length, 1);
   assert.equal(second.pageId, first.pageId);
