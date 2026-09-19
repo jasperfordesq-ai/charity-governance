@@ -176,6 +176,58 @@ These are the claims this design makes, each traceable to a mechanism:
 6. **Tokens never appear in logs.** Enforced by `redact.ts` and asserted by test.
 7. **No new network surface.** The connector accepts no connections.
 
+## Tenant isolation
+
+The platform is multi-tenant by default (`compose.production.yml`); the Hyper-V
+VM currently runs single-tenant, but the connector must be correct for both and
+must stay correct when the VM moves to hosted multi-tenant infrastructure.
+
+**Isolation is enforced server-side and the connector cannot widen it.** Two
+properties of the existing API make this true:
+
+1. `apps/api/src/middleware/auth.ts` sets `request.user.organisationId` from the
+   **database user record**, not from `payload.organisationId` in the JWT. A
+   forged or stale token claiming another organisation is ineffective. Covered by
+   `auth-isolation.test.ts:38` ("uses current database role and organisation
+   instead of stale JWT claims"). The same is true of `role`.
+2. **No non-owner route accepts an `organisationId` from the caller** — not in
+   params, body or query. The tenant is derived, never supplied. There is no
+   IDOR surface for the connector to reach.
+
+The connector's obligation is therefore narrow but absolute: do nothing that
+reintroduces a boundary the API has already closed.
+
+### Rules
+
+1. **No tool accepts an `organisationId` parameter.** Not required, not optional,
+   not pass-through. A tool that needs one is misdesigned. Enforced by a test
+   that walks every registered tool's input schema and fails if the string
+   `organisationId` appears anywhere in it.
+2. **No response cache on disk, ever.** Already excluded, restated here because
+   the tenant consequence is worse than the confidentiality one: a disk cache
+   outlives a session and can be read back under a different account.
+3. **Any in-memory cache is keyed by `sessionId` and dropped on every session
+   change** — `connect`, `disconnect`, and refresh-rotation failure. The default
+   is no cache at all; this rule exists so that adding one later cannot quietly
+   create cross-tenant bleed.
+4. **One keychain entry.** `connect` overwrites it and `disconnect` clears it, so
+   a second account on the same machine cannot inherit the first's session. No
+   multi-account storage, no profile switching — that is a feature request, and
+   it is the exact feature that would make rule 3 load-bearing.
+5. **`status` names the account and organisation currently connected.** A person
+   about to ask a question can see whose data they are about to read. Cheap, and
+   the only defence against the failure this design cannot prevent: someone
+   reading the right answer for the wrong charity without noticing.
+
+### Tests
+
+- every tool's input schema is free of `organisationId` (walks the registry, so a
+  tool added later is covered without anyone remembering)
+- a stubbed API returning data for organisation B while the session belongs to
+  organisation A is surfaced as an error, not returned — a defence-in-depth
+  assertion against an API regression, not against the current API
+- reconnecting as a different account leaves nothing readable from the first
+
 ## The personal-data gate
 
 **Whatever a tool returns is sent to an AI model.** Answering a broad question
