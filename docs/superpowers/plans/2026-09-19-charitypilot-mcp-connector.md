@@ -928,7 +928,21 @@ export class ApiClient {
       throw new ApiError(response.status, `CharityPilot returned ${response.status}.`);
     }
 
-    return (await response.json()) as T;
+    // Never let response.json() throw raw. Its SyntaxError embeds a fragment of the
+    // body ("Unexpected token '<', \"<html><bod\"..."), which both echoes the response
+    // and escapes redactSecrets — and it is not an ApiError, so callers branching on
+    // ApiError get an untyped throw instead of a clean message. Over Tailscale an HTML
+    // 200 is entirely plausible: a captive portal, a proxy error page, an auth
+    // interstitial.
+    try {
+      return (await response.json()) as T;
+    } catch {
+      throw new ApiError(
+        response.status,
+        'CharityPilot returned a response that was not JSON. If you are behind a captive '
+          + 'portal or proxy, check the connection and try again.',
+      );
+    }
   }
 }
 ```
