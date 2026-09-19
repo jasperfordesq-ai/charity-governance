@@ -175,6 +175,23 @@ ALTER TABLE "AuthSession"
 
 ### Phase 3: writes and per-action approval
 
+**DONE (2026-09-19).** Plan:
+`docs/superpowers/plans/2026-09-19-charitypilot-mcp-writes-and-approval.md`.
+
+Delivered: an `AuthActionApproval` row bound to a digest of the exact request;
+a 428 flow on every administrator-gated route for connector sessions; a
+password-checked `POST /auth/connector/approve`; seventeen write tools whose
+fields are declared and whose undeclared fields are refused; tool listing and
+call-time checks against the level the API says the session holds; and
+`charitypilot-mcp approve <id>`, which refuses to run without a terminal.
+
+Found while doing it, and fixed: an approval bound to the session ROW is dead
+on the first rotation, roughly fifteen minutes, which is less time than it
+takes a person to read a prompt. It binds to the session family instead. A
+successful removal answers 204, and the connector was treating an empty body
+as a broken connection. And the live single-use assertion was passing for the
+wrong reason — the record was already gone — which a canary caught.
+
 **API:**
 - New `AuthActionApproval` table: `id, sessionId, userId, organisationId, requestDigest, summary, expiresAt, approvedAt, consumedAt`. Add to `DISPOSABLE_DATABASE_RESET_TABLES`.
 - `requireSessionLevel('ADMIN')` routes additionally, for `MCP_CONNECTOR` sessions, require a valid approval: without `X-CharityPilot-Approval: <id>` → 428 `{approvalId, summary, expiresAt}` (5 minutes); with it → digest of `(sessionId, method, path, canonical body)` must match, single-use, then proceed.
