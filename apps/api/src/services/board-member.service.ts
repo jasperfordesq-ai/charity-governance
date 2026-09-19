@@ -40,6 +40,11 @@ export class BoardMemberService {
       conductSignedDate: data.conductSignedDate ? new Date(data.conductSignedDate) : undefined,
       inductionCompleted: data.inductionCompleted ?? false,
       inductionDate: data.inductionDate ? new Date(data.inductionDate) : undefined,
+      dateOfBirth: data.dateOfBirth ? new Date(data.dateOfBirth) : undefined,
+      residentialAddress: data.residentialAddress,
+      otherDirectorships: data.otherDirectorships,
+      formerNames: data.formerNames,
+      appointmentKind: data.appointmentKind,
     };
 
     validateDomainCompleteState(validateBoardMemberCompleteState, createData);
@@ -64,6 +69,7 @@ export class BoardMemberService {
           termEndDate: data.termEndDate !== undefined ? (data.termEndDate ? new Date(data.termEndDate) : null) : undefined,
           conductSignedDate: data.conductSignedDate !== undefined ? (data.conductSignedDate ? new Date(data.conductSignedDate) : null) : undefined,
           inductionDate: data.inductionDate !== undefined ? (data.inductionDate ? new Date(data.inductionDate) : null) : undefined,
+          dateOfBirth: data.dateOfBirth !== undefined ? (data.dateOfBirth ? new Date(data.dateOfBirth) : null) : undefined,
         };
         validateDomainCompleteState(validateBoardMemberCompleteState, {
           appointedDate: updateData.appointedDate ?? member.appointedDate,

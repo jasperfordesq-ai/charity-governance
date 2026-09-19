@@ -548,6 +548,10 @@ export interface PrincipleComplianceSummary {
 
 // ── Board Members ──
 
+// Mirrors the prisma DirectorAppointmentKind enum. A literal union rather than a TS enum so
+// the values parsed by `createBoardMemberSchema` / `updateBoardMemberSchema` stay assignable.
+export type DirectorAppointmentKind = 'BOARD' | 'MEMBERS';
+
 export interface BoardMemberResponse {
   id: string;
   organisationId: string;
@@ -561,6 +565,11 @@ export interface BoardMemberResponse {
   conductSignedDate: string | null;
   inductionCompleted: boolean;
   inductionDate: string | null;
+  dateOfBirth: string | null;
+  residentialAddress: string | null;
+  otherDirectorships: string | null;
+  formerNames: string | null;
+  appointmentKind: DirectorAppointmentKind | null;
 }
 
 export interface CreateBoardMemberRequest {
@@ -573,6 +582,11 @@ export interface CreateBoardMemberRequest {
   conductSignedDate?: string;
   inductionCompleted?: boolean;
   inductionDate?: string;
+  dateOfBirth?: string;
+  residentialAddress?: string;
+  otherDirectorships?: string;
+  formerNames?: string;
+  appointmentKind?: DirectorAppointmentKind;
 }
 
 export interface UpdateBoardMemberRequest {
@@ -586,6 +600,11 @@ export interface UpdateBoardMemberRequest {
   conductSignedDate?: string | null;
   inductionCompleted?: boolean;
   inductionDate?: string | null;
+  dateOfBirth?: string | null;
+  residentialAddress?: string | null;
+  otherDirectorships?: string | null;
+  formerNames?: string | null;
+  appointmentKind?: DirectorAppointmentKind | null;
 }
 
 // ── Documents ──
