@@ -291,9 +291,24 @@ than inventing a new reliability pattern.
 >    tests today** — this phase is the first writer, and item 2 above is the
 >    shape it must write.
 
-**Phase 5 — provider-aware erasure.** Extend the deletion lifecycle to purge
-from both stores, handling Confluence trash-then-purge. **Confluence cannot
+**Phase 5 — provider-aware erasure.** ~~Extend the deletion lifecycle to purge
+from both stores, handling Confluence trash-then-purge.~~ **Confluence cannot
 leave alpha before this ships.**
+
+> **SHIPPED 2026-09-19, and it does *not* purge from both stores.** Phase 5
+> built the trash-then-purge erasure, the dispatch, the first-attempt
+> dead-lettering, the operator recovery guard and the disclosure — but a
+> document produces **one** deletion row with **one** provider dispatched to
+> **one** eraser. Erasing both sides is what the *mirror* model requires, and
+> whether the mirror model is what we are building is **Open Question 1**,
+> which is unresolved. Item 6 of the Phase 4 note above carries the
+> requirement. Correcting this header because a document that contradicts
+> itself two paragraphs apart is worse than one that is simply out of date.
+>
+> **Confluence remains alpha.** Exit criterion 2 — that an erasure really
+> removes the page and attachment from a live site — cannot be verified until
+> the Atlassian app install lands. Everything is proven against fakes, and a
+> fake cannot tell you Atlassian changed a status code.
 
 > **RESOLVED 2026-09-19 — Phase 5, Task 6 (`41dc4bd`, `da0ab6f`), disclosed by
 > Task 7.** Closed as far as it can be closed, which is not as far as the note
