@@ -267,6 +267,11 @@ than inventing a new reliability pattern.
 from both stores, handling Confluence trash-then-purge. **Confluence cannot
 leave alpha before this ships.**
 
+> **RESOLVED 2026-09-19 — Phase 5, Task 6 (`41dc4bd`, `da0ab6f`), disclosed by
+> Task 7.** Closed as far as it can be closed, which is not as far as the note
+> below assumed. Read the original statement first, then the answer under it,
+> then what an administrator is now told.
+>
 > **A gap already visible, found in Phase 2's whole-branch review.**
 > `disconnectConfluence` deletes CharityPilot's sealed envelopes and resets the
 > integration row, but **never revokes the grant at Atlassian**. A charity that
@@ -341,7 +346,18 @@ leave alpha before this ships.**
 > is therefore not literally satisfiable as written, and should be read as
 > "disconnecting attempts revocation, records the outcome, and tells the
 > administrator what only they can do." Whoever closes the phase should restate
-> it rather than tick it.
+> it rather than tick it. It was restated in the phase plan on 2026-09-19
+> (`8022e99`) rather than ticked.
+>
+> **Where this is disclosed now, and why that closes the note.** The three
+> statements above were the whole of what Task 7 owed. They are carried into
+> the "What document erasure can and cannot prove" section of
+> `docs/ARCHITECTURE.md`, and into the connect-boundary disclosure returned by
+> `GET /api/v1/integrations/confluence/authorize`, so an administrator reads
+> them **before** authorising rather than discovering them after disconnecting.
+> The residency consequence is the one thing deliberately *not* written there:
+> it depends on Open Question 1 below, which is the owner's to rule on, and
+> that subsection is marked blocked rather than guessed.
 
 **Phase 6 — admin UI and health.** Connect/disconnect screens in `apps/web`, and
 per-tenant integration health that does not leak tenant data into the global

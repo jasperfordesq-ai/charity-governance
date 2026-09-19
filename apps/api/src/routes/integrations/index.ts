@@ -67,6 +67,84 @@ export const CONFLUENCE_OAUTH_SCOPES = [
   'offline_access',
 ] as const;
 
+/**
+ * What an administrator is told **before** they authorise, not after.
+ *
+ * Every line here is a limit on a data subject's erasure request, and the
+ * reason it sits on the *authorize* response rather than in a help page is
+ * that a footnote nobody read is not a disclosure. `docs/ARCHITECTURE.md`,
+ * "What document erasure can and cannot prove", is the long form; this is the
+ * short form, and the two must not drift.
+ *
+ * **Do not soften any of it.** Each sentence was written against something the
+ * platform genuinely cannot do:
+ *
+ * - Purge needs a higher permission than delete (space *manage/content* for a
+ *   page, *administer space* for an attachment), so a connected site may be
+ *   able to delete and unable to purge. That is an ordinary outcome.
+ * - Between delete and purge, and after a refused purge, the content is in the
+ *   charity's own trash, restorable by the charity's own administrators.
+ * - The erasure proof covers the page; an attachment CharityPilot did not
+ *   record is never enumerated.
+ * - Disconnecting deletes CharityPilot's copy of the credentials — provable —
+ *   and *attempts* a withdrawal at an endpoint Atlassian does not document.
+ *   It must never be phrased as "we revoked your access", and the 90-day
+ *   expiry is Atlassian's documented behaviour, not a CharityPilot guarantee.
+ *
+ * Nothing here states where a document authoritative in Confluence is
+ * *resident*: that turns on an unresolved question for the owner (Open
+ * Question 1 of the storage spec), and a residency claim that turns out wrong
+ * is worse than none. The disclaimer below is true either way it is ruled.
+ *
+ * **It goes on `authorize` and nowhere else.** `status` is a keys-allow-listed
+ * connection report guarded by a substring test that forbids the word "refresh"
+ * ever appearing in it, because no token material may reach a tenant-facing
+ * connection report. This prose names a refresh token, so carrying it there
+ * would mean loosening that guard to let prose through. Showing the limits one
+ * route earlier costs nothing; weakening a leak guard to repeat them costs a
+ * real defence.
+ *
+ * The copy is pinned by tests in `integrations-route.test.ts`, deliberately:
+ * this is the one place a reassuring edit would cost a charity its answer to a
+ * regulator.
+ */
+export const CONFLUENCE_CONNECT_DISCLOSURE = Object.freeze({
+  stage: 'alpha' as const,
+  headline:
+    'Confluence is an alpha integration. Read these limits before you connect — they change what ' +
+    'CharityPilot can promise a data subject who asks you to erase their data.',
+  erasure: Object.freeze([
+    'Erasure from your Confluence site is best-effort, and it is bounded by permissions you ' +
+      'control, not permissions CharityPilot holds.',
+    'CharityPilot deletes and then permanently purges the page and the attachments it recorded, ' +
+      'and proves the erasure by reading the page back and requiring a 404.',
+    'Purging needs a higher permission than deleting: the space manage/content permission for a ' +
+      'page, and the administer space permission for an attachment. If the connection you grant ' +
+      'cannot purge, CharityPilot reports the erasure as failed and needing a person with those ' +
+      'rights; it does not quietly report success.',
+    'Between the delete and the purge, and after a purge your site refuses, the content sits in ' +
+      "your own Confluence trash and your own administrators can restore it. CharityPilot cannot " +
+      'prevent that.',
+    'The proof covers the page. An attachment CharityPilot did not record is never looked for, so ' +
+      'the proof is only as complete as what CharityPilot published.',
+    'Content in your Confluence site is held wherever Atlassian hosts that site, which your own ' +
+      'administrators choose. CharityPilot makes no data-residency guarantee for it.',
+  ] as const),
+  disconnecting: Object.freeze([
+    'Disconnecting deletes CharityPilot’s copy of your Confluence credentials. That part is ' +
+      'complete and verifiable.',
+    'CharityPilot also attempts to withdraw the authorisation at Atlassian, but Atlassian ' +
+      'documents no way for an app to do this, so the attempt may silently do nothing. ' +
+      'CharityPilot does not claim to have revoked your access.',
+    'Atlassian documents that an unused refresh token expires after 90 days. That is Atlassian’s ' +
+      'behaviour and not a CharityPilot guarantee — they can change it without CharityPilot ' +
+      'noticing.',
+    'The only guaranteed way to withdraw the authorisation is yours to take: remove CharityPilot ' +
+      'in your Atlassian account’s connected-apps settings.',
+  ] as const),
+  reference: 'docs/ARCHITECTURE.md — "What document erasure can and cannot prove"',
+});
+
 export type IntegrationRoutesOptions = {
   /** Test seam only; production passes nothing and the service uses its own defaults. */
   confluenceDeps?: ConfluenceConnectionDeps;
@@ -307,7 +385,14 @@ export async function integrationRoutes(
       // kept alive.
       url.searchParams.set('prompt', 'consent');
 
-      return sendSuccess(reply, { authorizationUrl: url.toString() });
+      // The disclosure travels with the authorization URL rather than sitting
+      // in a help page, because this response *is* the moment before
+      // connecting: whatever the web app does with the URL, it has been handed
+      // the limits at the same time and cannot show one without the other.
+      return sendSuccess(reply, {
+        authorizationUrl: url.toString(),
+        disclosure: CONFLUENCE_CONNECT_DISCLOSURE,
+      });
     } catch (error) {
       handleError(reply, error);
     }

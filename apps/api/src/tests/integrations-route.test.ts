@@ -17,6 +17,7 @@ const [
     integrationRoutes,
     INTEGRATION_ROUTES_PREFIX,
     CONFLUENCE_OAUTH_SCOPES,
+    CONFLUENCE_CONNECT_DISCLOSURE,
   },
   { AppError },
   { signAccessToken },
@@ -921,5 +922,119 @@ test('a revocation Atlassian accepts is not logged as a problem', async () => {
     lines.find((line) => String(line.msg).includes('could not be confirmed as withdrawn')),
     undefined,
     'a revocation that succeeded must not warn — an operator who is warned every time stops reading',
+  );
+});
+
+// ────────────────────────────────────────────────────────────────────────────
+// The connect-boundary disclosure
+//
+// These tests pin user-facing copy, which is unusual and deliberate. Every
+// clause below is a limit on a data subject's erasure request; a later edit
+// that makes the integration sound more capable than it is would cost a
+// charity's DPO their answer to a regulator, and a pinned string is the only
+// thing that makes such an edit fail loudly instead of shipping.
+// ────────────────────────────────────────────────────────────────────────────
+
+/** Every sentence of the disclosure, flattened, for substring assertions. */
+function disclosureText(disclosure: unknown): string {
+  const record = disclosure as {
+    headline: string;
+    erasure: readonly string[];
+    disconnecting: readonly string[];
+  };
+  return [record.headline, ...record.erasure, ...record.disconnecting].join('\n');
+}
+
+test('authorize hands the administrator the limits along with the authorization URL', async () => {
+  restoreKey();
+  const { app } = await buildApp();
+  const response = await app.inject({
+    method: 'GET',
+    url: '/confluence/authorize',
+    headers: { authorization: bearer(ORG_A_ADMIN) },
+  });
+
+  assert.equal(response.statusCode, 200);
+  const { data } = JSON.parse(response.body);
+  assert.ok(data.authorizationUrl, 'the URL must still be there');
+  assert.deepEqual(
+    data.disclosure,
+    CONFLUENCE_CONNECT_DISCLOSURE,
+    'the limits must travel with the URL, so no client can show one without the other',
+  );
+  assert.equal(data.disclosure.stage, 'alpha');
+});
+
+test('the status response is left alone, so its no-token-material guard stays strict', async () => {
+  restoreKey();
+  const { app } = await buildApp({ rows: [connectedRow()] });
+  const response = await app.inject({
+    method: 'GET',
+    url: '/confluence/status',
+    headers: { authorization: bearer(ORG_A_ADMIN) },
+  });
+
+  assert.equal(response.statusCode, 200);
+  // Deliberate: the disclosure names a "refresh token", and `status` is
+  // guarded by a substring test that forbids that word precisely because no
+  // token material may appear on a tenant-facing connection report. Carrying
+  // prose onto this response would mean loosening that guard to let prose
+  // through, which is a worse trade than showing the limits one route earlier.
+  // `authorize` is the connect boundary, and it is where they are shown.
+  assert.equal(
+    (JSON.parse(response.body).data as Record<string, unknown>).disclosure,
+    undefined,
+    'the limits belong on authorize; status must stay a keys-allow-listed connection report',
+  );
+});
+
+test('the disclosure states the erasure limits the charity, not CharityPilot, controls', async () => {
+  const text = disclosureText(CONFLUENCE_CONNECT_DISCLOSURE);
+
+  // Best-effort, and whose permissions bound it.
+  assert.match(text, /best-effort/);
+  // The two permissions, named, because "higher permission" is not actionable.
+  assert.match(text, /manage\/content/);
+  assert.match(text, /administer space/);
+  // The delete-then-purge sequence and the read-back that is the proof.
+  assert.match(text, /404/);
+  // The trash window, and whose trash it is.
+  assert.match(text, /trash/);
+  assert.match(text, /CharityPilot cannot\s+prevent that/);
+  // A refused purge is reported, not quietly called success.
+  assert.match(text, /does not quietly report success/);
+  // The proof covers the page, not every attachment.
+  assert.match(text, /only as complete as what CharityPilot published/);
+  // No residency guarantee is claimed for content in the charity's own site.
+  assert.match(text, /no data-residency guarantee/);
+});
+
+test('the disclosure never claims CharityPilot revoked anything at Atlassian', async () => {
+  const text = disclosureText(CONFLUENCE_CONNECT_DISCLOSURE);
+
+  // What is provable.
+  assert.match(text, /complete and verifiable/);
+  // What is attempted but not provable — and it must not be phrased as done.
+  assert.match(text, /may silently do nothing/);
+  assert.match(text, /does not claim to have revoked your access/);
+  assert.ok(
+    !/\bwe(?: have)? revoked\b/i.test(text) && !/CharityPilot revoked/i.test(text),
+    'Atlassian documents no revocation for an app; claiming one would be a false assurance',
+  );
+  // The 90-day figure, attributed, and disclaimed as theirs to change.
+  assert.match(text, /90 days/);
+  assert.match(text, /not a CharityPilot guarantee/);
+  // The one action that is guaranteed, and whose it is.
+  assert.match(text, /only guaranteed way/);
+  assert.match(text, /connected-apps settings/);
+});
+
+test('the disclosure says it is alpha, and points at the long form', async () => {
+  assert.equal(CONFLUENCE_CONNECT_DISCLOSURE.stage, 'alpha');
+  assert.match(CONFLUENCE_CONNECT_DISCLOSURE.headline, /alpha/);
+  assert.match(
+    CONFLUENCE_CONNECT_DISCLOSURE.reference,
+    /docs\/ARCHITECTURE\.md/,
+    'the short form must name where the long form lives, or the two drift unnoticed',
   );
 });

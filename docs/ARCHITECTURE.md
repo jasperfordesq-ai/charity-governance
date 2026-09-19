@@ -412,6 +412,161 @@ step of a real connection — after a charity administrator had already granted
 access. The same rule is mirrored in `scripts/check-production.mjs`, whose
 `REQUIRED` list deliberately does **not** name either variable.
 
+### What document erasure can and cannot prove
+
+**Read this before answering a data subject's erasure request.** A charity's
+Data Protection Officer has to say, on the record, what has been erased and
+what has merely been asked to be erased. CharityPilot gives different answers
+for its own store and for a charity's Confluence site, and the difference is
+not a detail.
+
+The machinery: a `DocumentStorageDeletion` row carries a `provider` and an
+optional `targetRef`; `document-erasure.ts` dispatches the row to the eraser
+registered for that provider; a provider with no eraser dead-letters on the
+first attempt as `PROVIDER_NOT_ERASABLE` rather than retrying, because retrying
+cannot acquire a backend. `document.service.ts` holds the map from error code
+to terminal reason.
+
+#### Supabase: erasure is provable
+
+Where the authoritative copy is the object in Supabase, deletion is a delete
+against a store CharityPilot controls, through a pipeline built to prove it:
+claim, bounded retry, dead-letter, and a recovery ledger. Nothing about that
+guarantee depends on a third party's permission model.
+
+#### Confluence: erasure is best-effort, bounded by permissions the charity holds
+
+`confluence-erasure.ts` runs a fixed sequence per deletion row: for each
+attachment the row names, `delete` then `purge`; then the page, `delete` then
+`purge`; then a read of the page, which **must** return 404. The read is the
+proof. Issuing four DELETEs proves only that four requests were sent; the 404
+is what is actually known. A read that returns the page fails the attempt as
+`CONFLUENCE_ERASURE_UNVERIFIED`, which is transient — the page may be gone by
+the next attempt, and an Atlassian blip must not become a dead-letter a human
+has to clear by hand.
+
+Three things bound that, and none of them can be engineered away from here.
+
+**1. Purge needs a higher permission than delete, and the charity grants it.**
+`DELETE /wiki/api/v2/pages/{id}` moves a page to trash; the same call with
+`?purge=true` erases it permanently and requires the space *manage/content*
+permission. Purging an attachment requires **administer space**, the highest of
+the three. A connected site may be able to delete and unable to purge, and that
+is an ordinary outcome, not an edge case. When it happens the platform raises
+`CONFLUENCE_PURGE_FORBIDDEN` and dead-letters the row on the **first** attempt
+as `PROVIDER_NOT_ERASABLE`, with a message naming the missing permission —
+because no number of retries acquires a permission. Erasure then needs a human
+with those rights: someone who reconnects with the permission, or who purges
+the content in Confluence directly.
+
+**2. Between delete and purge, and after a refused purge, the content sits in
+the tenant's own trash.** It is restorable by **their** administrators, from
+**their** site. CharityPilot cannot prevent that and does not pretend to. The
+charity's Confluence site is the charity's, not the platform's.
+
+**3. The proof covers the page, not every attachment.** The eraser erases
+exactly the attachments the deletion row names. An attachment the row does not
+name is never enumerated — `listAttachments` is deliberately unused on this
+path — and the row still records `PROCESSED`. **The proof is therefore only as
+complete as the list the publish pipeline writes.** This is a known, open gap,
+recorded as item 5 of the Phase 4 note in
+`docs/superpowers/plans/2026-09-18-document-storage-providers-spec.md`, and it
+is open on purpose: closing it means enumerating attachments from Confluence
+rather than trusting the row, and whether that is right depends on whether the
+page is exclusively CharityPilot's. If a charity's own staff may attach files
+to it, enumerating and purging would destroy data CharityPilot never put there
+— a different and worse harm than the gap it closes. Do not read this paragraph
+as a defect that has been fixed.
+
+#### What to tell a data subject
+
+For a document whose authoritative copy is the Supabase object, the erasure
+guarantee for the **record** is the Supabase one, and the Confluence side is a
+published copy erased best-effort on top of it.
+
+**Where a document is authoritative in Confluence, there is no Irish copy to
+fall back on, and the guarantee for that document is only ever the best-effort
+one.** Do not carry the Supabase guarantee across. For a GDPR erasure request
+this is the material distinction, and it is the one a DPO has to state: either
+the platform can prove the bytes are gone, or it can prove only that it issued
+delete and purge and read back a 404 from a site whose trash and whose
+permissions belong to the charity.
+
+#### Residency of a Confluence-authoritative document — BLOCKED
+
+**Not documented here, deliberately. This is not an omission for whoever reads
+it next to fill in.** Whether Confluence may be authoritative at all is
+unresolved and is the owner's decision, not this document's: the storage spec
+is built on Confluence being a published mirror with Supabase (`eu-west-1`,
+Ireland) authoritative, while the architecture the DPO signed off on 2026-09-18
+has Confluence authoritative for chosen categories with CharityPilot holding
+references rather than duplicate copies. The two disagree about whether a
+charity's policy document is guaranteed to sit in Ireland, and a tenant's
+Confluence region is chosen by the tenant's own administrators — not
+configurable at all on Atlassian's Free plan.
+
+Tracked as Open Question 1 in
+`docs/superpowers/plans/2026-09-18-document-storage-providers-spec.md`. **Until
+the owner rules on it, make no residency claim about a document held in
+Confluence.** Publishing a residency claim that turns out to be wrong is worse
+than publishing none, because a DPO would be the one relying on it.
+
+#### Disconnecting does not provably revoke anything at Atlassian
+
+Three statements, all true, and all three have to be said together.
+
+1. **CharityPilot's own copy of the credentials is deleted, and that is
+   provable.** `disconnectConfluence` deletes the sealed envelopes and resets
+   the integration row in one transaction, and it is deliberately not
+   conditional on anything Atlassian does or says.
+2. **CharityPilot *attempts* to withdraw the authorisation, at an endpoint
+   Atlassian does not document.** One best-effort, bounded attempt at
+   `https://auth.atlassian.com/oauth/revoke` — the conventional OAuth
+   revocation path, which Atlassian's identity host may or may not honour.
+   Atlassian's OAuth 2.0 (3LO) documentation describes revocation as
+   user-initiated and documents no revoke endpoint for an app. **Never write
+   "we revoked your access."** The DELETE route logs a warning when the attempt
+   is not confirmed, so an operator can see a grant that may still be standing.
+3. **The two remedies that actually work are the charity's.** An unused
+   rotating refresh token expires after 90 days — *Atlassian's documented
+   behaviour, quoted from their documentation, not a CharityPilot guarantee;
+   nothing in this repository would notice if they changed it* — and, for
+   certainty sooner, the administrator removes CharityPilot in their own
+   Atlassian account's connected-apps settings, which is the route Atlassian
+   documents and the only one guaranteed to work.
+
+**The charity holds the only guaranteed action.** A DPO needs to know that,
+because it is theirs to take and nobody else can take it for them.
+
+#### Where an administrator is told this, and when
+
+Before they authorise, not after. `GET /api/v1/integrations/confluence/authorize`
+returns `disclosure` alongside `authorizationUrl` —
+`CONFLUENCE_CONNECT_DISCLOSURE` in
+`apps/api/src/routes/integrations/index.ts` — so whatever a client does with
+the URL, it was handed the limits in the same response and cannot show one
+without the other. That short form and this section must not drift, and the
+copy is pinned by tests in `integrations-route.test.ts` for the one reason that
+justifies pinning prose: a reassuring edit here would cost a charity its answer
+to a regulator.
+
+It is deliberately **not** repeated on `GET .../confluence/status`. That
+response is a keys-allow-listed connection report guarded by a substring test
+forbidding the word "refresh" from ever appearing in it, because no token
+material may reach a tenant-facing connection report. The disclosure names a
+refresh token, so repeating it there would mean loosening a leak guard to let
+prose through.
+
+#### Confluence is alpha, and stays alpha
+
+Confluence remains an alpha-stage provider. The exit criteria in
+`docs/superpowers/plans/2026-09-18-provider-aware-erasure-phase-5.md` list what
+must be true before it is promoted, and one of them — an erasure of a published
+document removing the attachment and the page with a read-back that 404s —
+cannot be verified against a real site until the Atlassian app install unblocks
+Phase 4. Everything above is verified against fakes, and a fake cannot tell you
+Atlassian changed a status code.
+
 ### Confluence OAuth: rotating refresh tokens, and why refreshes are serialised
 
 [Atlassian issues rotating, single-use refresh
