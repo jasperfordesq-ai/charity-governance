@@ -4,6 +4,7 @@ import { createHash } from 'node:crypto';
 import { resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import test from 'node:test';
+import { applyPrismaSelect, deadLetterRecord } from './document-storage-deletion-fixtures.js';
 import {
   parsePlatformDocumentStorageRecoveryArgs,
   platformDocumentRecoveryConfirmation,
@@ -11,29 +12,17 @@ import {
   type PlatformDocumentStorageRecoveryCommand,
 } from '../jobs/recover-document-storage-deletion.js';
 
-const DEAD_LETTER = {
-  id: 'deletion-1',
-  organisationId: 'org-1',
+// The row shape the production code reads, from the one factory that owns it.
+// Writing the fields out here instead would let this suite drift away from the
+// shape a `select` actually returns — the defect this file's `findFirst` fake
+// (which honours `select`) exists to make impossible.
+const DEAD_LETTER = deadLetterRecord({
   storagePath: 'foreign-org/rejected.pdf',
-  // The row shape the production code reads. A fabricated row that omits
-  // `provider` would exercise a shape no `select` in the pipeline returns, and
-  // would silently miss the provider guard on storage-path recovery.
-  provider: 'supabase',
-  targetRef: null,
-  state: 'DEAD_LETTER',
   attempts: 1,
   lastError: 'path rejected',
-  lastAttemptAt: new Date('2026-07-11T11:00:00.000Z'),
-  nextAttemptAt: null,
-  claimedAt: null,
-  deadLetteredAt: new Date('2026-07-11T11:00:00.000Z'),
   terminalReason: 'PERMANENT_STORAGE_PATH_REJECTED',
-  alertClaimToken: null,
-  alertClaimedAt: null,
-  alertedAt: new Date('2026-07-11T11:05:00.000Z'),
-  processedAt: null,
   createdAt: new Date('2026-07-11T09:00:00.000Z'),
-};
+});
 const PRODUCTION_DATABASE_URL = 'postgresql://recovery:secret@db.charitypilot.ie:5432/charitypilot?sslmode=verify-full&target_session_attrs=read-write&channel_binding=require&connect_timeout=10&application_name=charitypilot_document_recovery';
 const DATABASE_AUTHORITY_SHA256 = createHash('sha256').update(PRODUCTION_DATABASE_URL).digest('hex');
 const CORRECTED_PATH_SHA256 = createHash('sha256').update('org-1/corrected.pdf').digest('hex');
@@ -78,14 +67,10 @@ function database(row = DEAD_LETTER) {
   let update: { where?: Record<string, unknown>; data?: Record<string, unknown> } | undefined;
   const prisma: Record<string, unknown> = {
     documentStorageDeletion: {
-      findFirst: async () => ({
-        id: row.id,
-        provider: row.provider,
-        attempts: row.attempts,
-        terminalReason: row.terminalReason,
-        deadLetteredAt: row.deadLetteredAt,
-        alertedAt: row.alertedAt,
-      }),
+      // Honours `select`, so the row this job sees carries exactly the fields
+      // its own `select` asks for — no more. Deleting a field from that
+      // `select` must break a test here, not only production.
+      findFirst: async (args?: { select?: Record<string, unknown> }) => applyPrismaSelect(row, args),
       updateMany: async (args: { where?: Record<string, unknown>; data?: Record<string, unknown> }) => {
         update = args;
         return { count: 1 };

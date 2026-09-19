@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
+import { applyPrismaSelect, deadLetterRecord } from './document-storage-deletion-fixtures.js';
 
 process.env.JWT_SECRET ??= 'document-storage-recovery-route-test-secret';
 
@@ -17,29 +18,13 @@ const [
 
 type Role = 'OWNER' | 'ADMIN' | 'MEMBER';
 
-const DEAD_LETTER = {
-  id: 'deletion-1',
-  organisationId: 'org-1',
+// The row shape the production code reads, from the one factory that owns it.
+// The `findMany` fakes below honour `select`, so a field this listing stops
+// selecting is a field these tests stop seeing — as in production.
+const DEAD_LETTER = deadLetterRecord({
   storagePath: 'org-1/private-policy.pdf',
-  // The row shape the production code reads. A fabricated row that omits
-  // `provider` would exercise a shape no `select` in the pipeline returns, and
-  // would silently miss the provider guard on storage-path recovery.
-  provider: 'supabase',
-  targetRef: null,
-  state: 'DEAD_LETTER',
-  attempts: 5,
-  lastError: 'name=StorageApiError status=503 message=temporarily unavailable',
-  lastAttemptAt: new Date('2026-07-11T11:00:00.000Z'),
-  nextAttemptAt: null,
-  claimedAt: null,
-  deadLetteredAt: new Date('2026-07-11T11:00:00.000Z'),
-  terminalReason: 'MAX_ATTEMPTS_EXHAUSTED',
-  alertClaimToken: null,
-  alertClaimedAt: null,
-  alertedAt: new Date('2026-07-11T11:05:00.000Z'),
-  processedAt: null,
   createdAt: new Date('2026-07-11T09:00:00.000Z'),
-};
+});
 
 function recoveryQuery(row: typeof DEAD_LETTER | null = DEAD_LETTER) {
   return async (strings: TemplateStringsArray) => {
@@ -111,9 +96,13 @@ test('admin dead-letter listing is tenant-scoped and never exposes storage paths
   let query: unknown;
   const app = await buildApp('ADMIN', {
     documentStorageDeletion: {
-      findMany: async (args: unknown) => {
+      // Honours `select`, exactly as Prisma does: a field the service stops
+      // selecting is a field this test stops seeing. A fake that ignored
+      // `select` would keep supplying `provider` after the production
+      // `select` stopped asking for it, and the mutation would stay green.
+      findMany: async (args: { select?: Record<string, unknown> }) => {
         query = args;
-        return [DEAD_LETTER];
+        return [applyPrismaSelect(DEAD_LETTER, args)];
       },
     },
   });
@@ -145,7 +134,10 @@ test('a dead-letter listing says which provider each row belongs to', async () =
   };
   const app = await buildApp('ADMIN', {
     documentStorageDeletion: {
-      findMany: async () => [DEAD_LETTER, confluenceRow],
+      findMany: async (args: { select?: Record<string, unknown> }) => [
+        applyPrismaSelect(DEAD_LETTER, args),
+        applyPrismaSelect(confluenceRow, args),
+      ],
     },
   });
   try {
