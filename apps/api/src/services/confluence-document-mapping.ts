@@ -20,10 +20,23 @@ import { getPrimaryFrontendOrigin } from '../utils/frontend-origin.js';
  * - **Collision-free across documents** — two different documents must never
  *   produce the same title, or a retry would adopt the *wrong* page and
  *   attach one charity's file to another document's page. The document id is
- *   always appended, and CharityPilot document ids are unique primary keys,
- *   so two distinct documents can never collide even when their names are
- *   identical (two documents both named "Safeguarding Policy" get two
- *   different titles).
+ *   always appended **whole, never truncated**, and CharityPilot document ids
+ *   are unique primary keys, so two distinct documents can never collide even
+ *   when their names are identical, or long and identical up to where a fixed
+ *   character cap would otherwise cut them both the same way (two documents
+ *   both named "Safeguarding Policy" — or both named the same 300-character
+ *   string — get two different titles).
+ * - **Bounded, independent of Confluence's own limit.** {@link PUBLICATION_TITLE_MAX_LENGTH}
+ *   caps the title *here*, before Confluence ever sees it. Leaving an
+ *   over-limit title to Confluence has two possible outcomes and both are
+ *   bad: a rejection dead-letters the publish (loud, recoverable — the good
+ *   case), but a silent truncation stores a title different from the one
+ *   this module computed, so the next attempt's `findPageByTitle` searches
+ *   for a title nothing holds, finds nothing, and calls the deliberately
+ *   non-idempotent `createPage` — a second page for one board resolution,
+ *   silently. Only the name portion is ever shortened to make room; the id
+ *   suffix is fixed-length-appended afterward and never touched, which is
+ *   what keeps this bounded form still collision-free (see above).
  *
  * ## Content property vs. page body — different jobs, different limits
  *
@@ -60,6 +73,16 @@ export const CHARITYPILOT_PROPERTY_KEY = 'charitypilot.governance';
 const TITLE_ID_MARKER = 'CharityPilot doc';
 
 /**
+ * A hard ceiling on the title this module produces, independent of and well
+ * inside Confluence Cloud's own documented page-title limit (~255
+ * characters, never verified against a real site by this codebase). See the
+ * module header for why leaving this to Confluence is unsafe: a truncation
+ * on Confluence's side would be silent and would break `findPageByTitle`
+ * adoption on the very next retry.
+ */
+export const PUBLICATION_TITLE_MAX_LENGTH = 200;
+
+/**
  * Where a charity's own naming convention belongs, if one is ever confirmed.
  *
  * The DPO's Governance Hub *reportedly* prefixes policies `POL -` and
@@ -79,14 +102,32 @@ export function conventionalDocumentName(doc: { id: string; name: string; catego
 }
 
 /**
- * The page title for `doc`. Deterministic and collision-free — see the module
- * header. Two different documents named identically get two different
- * titles because the id is always appended; the same document always gets
- * the same title because this is a pure function of `doc.id` and `doc.name`.
+ * Truncates `value` to at most `maxChars` code points (never splitting a
+ * surrogate pair), replacing the last code point with an ellipsis when it
+ * truncates. Guarantees the result is at most `maxChars` code points long —
+ * not `maxChars + 1` — so a caller appending a fixed-length suffix afterward
+ * can rely on a hard total.
+ */
+function truncateToCodePoints(value: string, maxChars: number): string {
+  if (maxChars <= 0) return '';
+  const chars = Array.from(value);
+  if (chars.length <= maxChars) return value;
+  if (maxChars === 1) return chars[0];
+  return `${chars.slice(0, maxChars - 1).join('')}…`;
+}
+
+/**
+ * The page title for `doc`. Deterministic, collision-free, and bounded — see
+ * the module header for all three. The document id travels in a fixed suffix
+ * that is never truncated; only the name portion is shortened, and only by
+ * as much as the suffix's own length demands, so the total never exceeds
+ * {@link PUBLICATION_TITLE_MAX_LENGTH}.
  */
 export function publicationTitle(doc: { id: string; name: string }): string {
-  const displayName = conventionalDocumentName(doc);
-  return `${displayName} (${TITLE_ID_MARKER} ${doc.id})`;
+  const idSuffix = ` (${TITLE_ID_MARKER} ${doc.id})`;
+  const nameBudget = PUBLICATION_TITLE_MAX_LENGTH - idSuffix.length;
+  const displayName = truncateToCodePoints(conventionalDocumentName(doc), nameBudget);
+  return `${displayName}${idSuffix}`;
 }
 
 /**
@@ -171,13 +212,6 @@ export function publicationBody(doc: PublicationDocument): string {
 const NAME_CORRELATION_MAX_CHARS = 300;
 const REFERENCE_CORRELATION_MAX_CHARS = 200;
 
-/** Truncates on code points, not UTF-16 code units, so a surrogate pair is never split. */
-function truncateForProperty(value: string, maxChars: number): string {
-  const chars = Array.from(value);
-  if (chars.length <= maxChars) return value;
-  return `${chars.slice(0, maxChars).join('')}…`;
-}
-
 function toIsoOrNull(value: Date | string | null | undefined): string | null {
   if (value === null || value === undefined) return null;
   return value instanceof Date ? value.toISOString() : value;
@@ -207,12 +241,12 @@ export function publicationProperty(doc: PublicationDocument): unknown {
       documentId: doc.id,
       documentVersion: doc.version,
       organisationId: doc.organisationId,
-      documentName: truncateForProperty(doc.name, NAME_CORRELATION_MAX_CHARS),
+      documentName: truncateToCodePoints(doc.name, NAME_CORRELATION_MAX_CHARS),
       category: doc.category,
       boardMinuteReference:
         doc.boardMinuteReference == null
           ? null
-          : truncateForProperty(doc.boardMinuteReference, REFERENCE_CORRELATION_MAX_CHARS),
+          : truncateToCodePoints(doc.boardMinuteReference, REFERENCE_CORRELATION_MAX_CHARS),
       approvedDate: toIsoOrNull(doc.approvedDate),
       nextReviewDate: toIsoOrNull(doc.nextReviewDate),
     },

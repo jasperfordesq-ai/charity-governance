@@ -3,6 +3,7 @@ import test from 'node:test';
 import { CONFLUENCE_CONTENT_PROPERTY_MAX_BYTES } from '../services/confluence-pages.js';
 import {
   CHARITYPILOT_PROPERTY_KEY,
+  PUBLICATION_TITLE_MAX_LENGTH,
   publicationBody,
   publicationProperty,
   publicationTitle,
@@ -52,6 +53,51 @@ test('publicationTitle carries the document id somewhere in the title', () => {
   // some unrelated reason.
   const title = publicationTitle({ id: 'a-very-specific-id-123', name: 'Policy' });
   assert.ok(title.includes('a-very-specific-id-123'), `expected the document id in: ${title}`);
+});
+
+// ---------------------------------------------------------------------------
+// publicationTitle: the length cap.
+//
+// Confluence's own practical page-title limit (~255 chars) is never let
+// decide what happens to an over-limit title: a rejection would dead-letter
+// the publish (loud, recoverable), but a silent truncation on Confluence's
+// side would store a title different from the one this module computed, so
+// the next attempt's findPageByTitle search (built from the FULL,
+// un-truncated title) would find nothing and call the non-idempotent
+// createPage again -- a second page for one board resolution. So the cap is
+// enforced here, deterministically, before Confluence is ever asked.
+// ---------------------------------------------------------------------------
+
+const VERY_LONG_NAME = 'Safeguarding Policy for Vulnerable Adults and Children '.repeat(20);
+
+test('publicationTitle caps a very long document name within PUBLICATION_TITLE_MAX_LENGTH', () => {
+  const title = publicationTitle({ id: 'doc-1', name: VERY_LONG_NAME });
+  assert.ok(
+    title.length <= PUBLICATION_TITLE_MAX_LENGTH,
+    `expected at most ${PUBLICATION_TITLE_MAX_LENGTH} characters, got ${title.length}`,
+  );
+});
+
+test('publicationTitle stays deterministic for a very long document name', () => {
+  const d = { id: 'doc-1', name: VERY_LONG_NAME };
+  assert.equal(publicationTitle(d), publicationTitle(d));
+  assert.equal(publicationTitle(d), publicationTitle({ id: d.id, name: d.name }));
+});
+
+test('publicationTitle gives two long documents sharing a long common prefix different titles', () => {
+  // The case that matters most: naive truncation (cut the whole title to N
+  // chars, id included) makes two documents collide exactly when their names
+  // are similar -- which is exactly when a charity is most likely to have
+  // both. Both names below are far longer than PUBLICATION_TITLE_MAX_LENGTH
+  // and share a prefix that alone exceeds the cap, so a truncation-unaware
+  // implementation would produce the identical truncated name for both.
+  const sharedPrefix = 'Health and Safety Policy — Annual Review Edition — '.repeat(10);
+  const first = publicationTitle({ id: 'doc-1', name: `${sharedPrefix}Site A` });
+  const second = publicationTitle({ id: 'doc-2', name: `${sharedPrefix}Site B` });
+
+  assert.notEqual(first, second);
+  assert.ok(first.includes('doc-1'), `expected the id in: ${first}`);
+  assert.ok(second.includes('doc-2'), `expected the id in: ${second}`);
 });
 
 // ---------------------------------------------------------------------------
