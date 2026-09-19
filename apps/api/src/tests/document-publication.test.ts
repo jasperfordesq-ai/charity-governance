@@ -27,6 +27,24 @@ const migration = readFileSync(
   'utf8',
 );
 
+// The follow-up migration that makes the publish worker's create-then-attach
+// window expressible: `cloudId` and `pageId` recorded while `publishedAt` is
+// still null. Loaded separately, and applied after the table exists, because
+// the two files say different things and a proof that ran only the first would
+// be proving a shape production no longer has.
+const targetWindowDirectoryName = readdirSync(migrationsDirectory)
+  .filter((entry) => entry.endsWith('_publication_target_window'))
+  .sort()
+  .at(-1);
+assert.ok(
+  targetWindowDirectoryName,
+  'a hand-written <timestamp>_publication_target_window migration must exist',
+);
+const targetWindowMigration = readFileSync(
+  new URL(`../../prisma/migrations/${targetWindowDirectoryName}/migration.sql`, import.meta.url),
+  'utf8',
+);
+
 // PostgreSQL silently truncates an identifier at 63 bytes, and Prisma truncates
 // its derived names to the same limit. A longer name only *appears* to match the
 // migration text and shows up later as permanent drift.
@@ -246,6 +264,22 @@ test('the migration creates exactly the indexes the schema declares, under the s
   }
 });
 
+test('the target-window migration is atomic and touches only the publication table', () => {
+  assert.match(targetWindowMigration, /^BEGIN;/);
+  assert.match(targetWindowMigration, /COMMIT;\s*$/);
+  // It replaces one CHECK constraint and nothing else. A DROP of anything that
+  // holds data — a table, a column, an index — would be a different migration
+  // than the one this test permits.
+  assert.doesNotMatch(targetWindowMigration, /\bDROP\s+(?!CONSTRAINT\b)/i);
+  for (const forbidden of [/\bTRUNCATE\b/i, /\bDELETE\s+FROM\b/i, /\bUPDATE\s+"/i]) {
+    assert.doesNotMatch(targetWindowMigration, forbidden);
+  }
+  const touched = new Set(
+    [...targetWindowMigration.matchAll(/ALTER TABLE\s+"([A-Za-z0-9_]+)"/g)].map((match) => match[1]),
+  );
+  assert.deepEqual([...touched], ['DocumentPublication']);
+});
+
 test('the disposable E2E reset inventory lists the publication table exactly once', () => {
   assert.equal(
     DISPOSABLE_DATABASE_RESET_TABLES.filter((table) => table === 'DocumentPublication').length,
@@ -339,6 +373,9 @@ test(
       // The migration must stand on its own: it creates a table with no foreign
       // keys, so an empty database is the whole of its prerequisites.
       psql(container, migration);
+      // Then the follow-up that opens the create-then-attach window. Applied in
+      // order, exactly as `migrate deploy` applies them.
+      psql(container, targetWindowMigration);
 
       psql(container, insertPublication({ id: 'pub-1', documentId: 'doc-1' }));
       const defaults = psql(
@@ -393,12 +430,45 @@ test(
         // publication_target_consistent: an untrimmed id is refused HERE rather
         // than dead-lettering the erasure later, after the Irish copy is gone.
         `UPDATE "DocumentPublication" SET "state" = 'PROCESSED', "attempts" = 1, "nextAttemptAt" = NULL, "processedAt" = CURRENT_TIMESTAMP, "publishedAt" = CURRENT_TIMESTAMP, "cloudId" = 'cloud-1', "pageId" = ' page-1 ' WHERE "id" = 'pub-1';`,
-        // publication_target_consistent: a target with no publication behind it
-        `UPDATE "DocumentPublication" SET "pageId" = 'page-1', "cloudId" = 'cloud-1' WHERE "id" = 'pub-1';`,
+        // publication_target_consistent: a page id names nothing without the
+        // site it lives on, and a site names nothing without the page.
+        `UPDATE "DocumentPublication" SET "pageId" = 'page-1' WHERE "id" = 'pub-1';`,
+        `UPDATE "DocumentPublication" SET "cloudId" = 'cloud-1' WHERE "id" = 'pub-1';`,
+        // publication_target_consistent: an untrimmed id is refused during the
+        // create-then-attach window too, not only once published — the whole
+        // point is that the erasure parser never meets one.
+        `UPDATE "DocumentPublication" SET "cloudId" = 'cloud-1', "pageId" = ' page-1 ' WHERE "id" = 'pub-1';`,
+        // publication_target_consistent: an empty id addresses nothing, and
+        // btrim('') = '' would otherwise let it through.
+        `UPDATE "DocumentPublication" SET "cloudId" = '', "pageId" = 'page-1' WHERE "id" = 'pub-1';`,
+        // publication_target_consistent: an attachment hangs from a page
+        `UPDATE "DocumentPublication" SET "attachmentId" = 'att-1' WHERE "id" = 'pub-1';`,
       ];
       for (const statement of forbidden) {
         psql(container, statement, false);
       }
+
+      // The create-then-attach window, which the publish worker cannot survive
+      // a crash without: the page is recorded the moment it exists, with
+      // `publishedAt` still null because nothing has been attached to it yet.
+      // A row that could not say this would have to re-derive the page from a
+      // search on the next attempt — and a search that has not yet seen a page
+      // created seconds ago sends the worker to the deliberately
+      // non-idempotent `createPage`, which is how one board resolution becomes
+      // two pages.
+      psql(
+        container,
+        `UPDATE "DocumentPublication"
+         SET "cloudId" = 'cloud-1', "spaceId" = 'space-1', "pageId" = 'page-1',
+             "pageTitle" = 'Board Minutes', "updatedAt" = CURRENT_TIMESTAMP
+         WHERE "id" = 'pub-1';`,
+      );
+      const attaching = psql(
+        container,
+        `SELECT "state" || '|' || ("publishedAt" IS NULL) || '|' || "cloudId" || '|' || "pageId"
+         FROM "DocumentPublication" WHERE "id" = 'pub-1';`,
+      );
+      assert.equal(attaching.stdout.trim(), 'PENDING|true|cloud-1|page-1');
 
       // A legitimate terminal publication is still permitted, and it is the row
       // that remembers the site the bytes went to.

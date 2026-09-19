@@ -15,6 +15,13 @@ import {
   type ErasureDispatcher,
 } from '../services/document-erasure.js';
 import { createConfluenceEraser } from '../services/confluence-erasure.js';
+import {
+  createConfluencePublisher,
+  DocumentPublicationService,
+  type ConfluencePublisherDeps,
+  type DocumentPublicationRunResult,
+  type Publisher,
+} from '../services/document-publication.service.js';
 import type { ConfluenceConnectionClient } from '../services/confluence-connection.service.js';
 import {
   validateAuthDeliveryEnv,
@@ -32,6 +39,11 @@ import { requireAuthRecoveryControlForRuntime } from '../services/auth-recovery-
 const DEFAULT_DEADLINE_REMINDERS_INTERVAL_MS = 24 * 60 * 60 * 1000;
 const DEFAULT_DOCUMENT_STORAGE_CLEANUP_INTERVAL_MS = 60 * 60 * 1000;
 const DEFAULT_DOCUMENT_STORAGE_CLEANUP_LIMIT = 25;
+// More often than cleanup: a charity that uploads a governance document is
+// waiting to see it mirrored, where a deletion nobody is watching can wait an
+// hour. Still an outbox, so the interval is a floor on latency, not a promise.
+const DEFAULT_DOCUMENT_PUBLICATION_INTERVAL_MS = 5 * 60 * 1000;
+const DEFAULT_DOCUMENT_PUBLICATION_LIMIT = 25;
 const DEFAULT_AUTH_DELIVERY_INTERVAL_MS = 5 * 1000;
 const DEFAULT_AUTH_DELIVERY_BATCH_SIZE = 25;
 const DEFAULT_AUTH_DELIVERY_CLEANUP_BATCH_SIZE = 500;
@@ -63,6 +75,20 @@ type StorageDeletionRunner = {
   deleteFile(organisationId: string, storagePath: string, signal?: AbortSignal): Promise<void>;
 };
 
+type DocumentPublicationRunner = {
+  retryPendingPublications(
+    publish: Publisher,
+    limit: number,
+  ): Promise<DocumentPublicationRunResult | { processed: number; failed: number }>;
+  markDeadLetterAlertSent?(claim: { claimToken: string; ids: string[] }): Promise<number>;
+  releaseDeadLetterAlertClaim?(claim: { claimToken: string; ids: string[] }): Promise<number>;
+};
+
+/** Where the publish worker reads the authoritative bytes from. */
+type DocumentDownloadRunner = {
+  downloadFile(organisationId: string, storagePath: string): Promise<Uint8Array>;
+};
+
 type AuthEmailDeliveryRunner = {
   processDueDeliveries(input: {
     limit: number;
@@ -80,6 +106,8 @@ export type ProductionSchedulerConfig = {
   deadlineRemindersIntervalMs: number;
   documentStorageCleanupIntervalMs: number;
   documentStorageCleanupLimit: number;
+  documentPublicationIntervalMs: number;
+  documentPublicationLimit: number;
   authDeliveryIntervalMs: number;
   authDeliveryBatchSize: number;
   authDeliveryCleanupBatchSize: number;
@@ -91,6 +119,7 @@ export type ProductionSchedulerConfig = {
 export type ProductionSchedulerRunResult = {
   deadlineRemindersFailed: boolean;
   documentStorageCleanupFailed: boolean;
+  documentPublicationFailed: boolean;
   authEmailDeliveryFailed: boolean;
 };
 
@@ -107,6 +136,14 @@ export function productionSchedulerConfigFromEnv(env: SchedulerEnv = process.env
     documentStorageCleanupLimit: positiveIntegerEnv(
       env.DOCUMENT_STORAGE_CLEANUP_LIMIT,
       DEFAULT_DOCUMENT_STORAGE_CLEANUP_LIMIT,
+    ),
+    documentPublicationIntervalMs: positiveIntegerEnv(
+      env.DOCUMENT_PUBLICATION_INTERVAL_MS,
+      DEFAULT_DOCUMENT_PUBLICATION_INTERVAL_MS,
+    ),
+    documentPublicationLimit: positiveIntegerEnv(
+      env.DOCUMENT_PUBLICATION_LIMIT,
+      DEFAULT_DOCUMENT_PUBLICATION_LIMIT,
     ),
     authDeliveryIntervalMs: boundedPositiveIntegerEnv(
       env.AUTH_DELIVERY_INTERVAL_MS,
@@ -251,6 +288,83 @@ export async function runDocumentStorageCleanup(input: {
   }
 }
 
+/**
+ * Publishes the charities' governance documents into their own Confluence
+ * sites — the entry point that actually runs in production.
+ *
+ * **This is the second of two registrations, and it is the one that matters.**
+ * `publish-document-mirrors.ts` covers a cron deployment; a deployment running
+ * the in-process scheduler runs this. Phase 5 shipped a phase that was dead in
+ * production because only one of its two entry points was wired, so each
+ * registration is pinned by its own test.
+ */
+export async function runDocumentPublication(input: {
+  publicationService: DocumentPublicationRunner;
+  storageService: DocumentDownloadRunner;
+  /**
+   * Required, not optional, for the same reason `runDocumentStorageCleanup`'s
+   * is: the publisher reads the charity's connection, its chosen space and its
+   * document through it. An optional field would let a future entry point
+   * build a publisher without one, and publish nothing at all.
+   */
+  prisma: NonNullable<ConfluencePublisherDeps['prisma']>;
+  documentPublicationLimit: number;
+  logger: SchedulerLogger;
+  alertSender?: AlertSender;
+}): Promise<boolean> {
+  try {
+    const publish = createConfluencePublisher({
+      prisma: input.prisma,
+      // The authoritative Irish copy is where the bytes come from. Confluence
+      // is a mirror and is never read back from here.
+      downloadFile: (organisationId, storagePath) =>
+        input.storageService.downloadFile(organisationId, storagePath),
+    });
+    const result = await input.publicationService.retryPendingPublications(
+      publish,
+      input.documentPublicationLimit,
+    );
+    input.logger.info(
+      `[ProductionScheduler] Document publication run completed. Processed: ${result.processed}. Retry scheduled: ${'retryScheduled' in result ? result.retryScheduled : result.failed}. Newly dead-lettered: ${'newlyDeadLettered' in result ? result.newlyDeadLettered : 0}.`,
+    );
+    const deadLetterAlert = 'deadLetterAlert' in result ? result.deadLetterAlert : null;
+    if (deadLetterAlert) {
+      if (!input.publicationService.markDeadLetterAlertSent || !input.publicationService.releaseDeadLetterAlertClaim) {
+        throw new Error('Document publication dead-letter alert acknowledgement is unavailable');
+      }
+      const publishFailure = new Error(
+        `Document publication requires operator review for ${deadLetterAlert.ids.length} dead-lettered publication(s).`,
+      );
+      publishFailure.name = 'DocumentPublicationDeadLettered';
+      const delivered = await sendJobFailureAlert({
+        job: 'document-publication',
+        code: 'DOCUMENT_PUBLICATION_DEAD_LETTERED',
+        error: publishFailure,
+        logger: input.logger,
+        alertSender: input.alertSender,
+        affectedCount: deadLetterAlert.ids.length,
+      });
+      if (delivered) {
+        await input.publicationService.markDeadLetterAlertSent(deadLetterAlert);
+      } else {
+        await input.publicationService.releaseDeadLetterAlertClaim(deadLetterAlert);
+      }
+      return true;
+    }
+    return false;
+  } catch (error) {
+    logSchedulerError(input.logger, '[ProductionScheduler] Document publication run failed.', error);
+    await sendJobFailureAlert({
+      job: 'document-publication',
+      code: 'DOCUMENT_PUBLICATION_FAILED',
+      error,
+      logger: input.logger,
+      alertSender: input.alertSender,
+    });
+    return true;
+  }
+}
+
 export async function runAuthEmailDelivery(input: {
   deliveryService: AuthEmailDeliveryRunner;
   batchSize: number;
@@ -383,11 +497,17 @@ export async function runAuthEmailDelivery(input: {
 export async function runProductionSchedulerOnce(input: {
   deadlineService: DeadlineReminderRunner;
   documentService: DocumentStorageCleanupRunner;
-  storageService: StorageDeletionRunner;
+  publicationService: DocumentPublicationRunner;
+  storageService: StorageDeletionRunner & DocumentDownloadRunner;
   authEmailDeliveryService: AuthEmailDeliveryRunner;
-  /** Forwarded to {@link runDocumentStorageCleanup}, which needs it to erase Confluence rows. */
-  prisma: ConfluenceConnectionClient;
+  /**
+   * Forwarded to {@link runDocumentStorageCleanup}, which needs it to erase
+   * Confluence rows, and to {@link runDocumentPublication}, which needs it to
+   * publish them.
+   */
+  prisma: ConfluenceConnectionClient & NonNullable<ConfluencePublisherDeps['prisma']>;
   documentStorageCleanupLimit: number;
+  documentPublicationLimit: number;
   authDeliveryBatchSize: number;
   authDeliveryCleanupBatchSize: number;
   authDeliveryStaleSendingMs: number;
@@ -407,6 +527,14 @@ export async function runProductionSchedulerOnce(input: {
     logger: input.logger,
     alertSender: input.alertSender,
   });
+  const documentPublicationFailed = await runDocumentPublication({
+    publicationService: input.publicationService,
+    storageService: input.storageService,
+    prisma: input.prisma,
+    documentPublicationLimit: input.documentPublicationLimit,
+    logger: input.logger,
+    alertSender: input.alertSender,
+  });
   const authEmailDeliveryFailed = await runAuthEmailDelivery({
     deliveryService: input.authEmailDeliveryService,
     batchSize: input.authDeliveryBatchSize,
@@ -419,16 +547,19 @@ export async function runProductionSchedulerOnce(input: {
   return {
     deadlineRemindersFailed,
     documentStorageCleanupFailed,
+    documentPublicationFailed,
     authEmailDeliveryFailed,
   };
 }
 
 export async function sendJobFailureAlert(input: {
-  job: 'deadline-reminders' | 'document-storage-cleanup' | 'auth-email-delivery';
+  job: 'deadline-reminders' | 'document-storage-cleanup' | 'document-publication' | 'auth-email-delivery';
   code:
     | 'DEADLINE_REMINDERS_FAILED'
     | 'DOCUMENT_STORAGE_CLEANUP_FAILED'
     | 'DOCUMENT_STORAGE_DELETION_DEAD_LETTERED'
+    | 'DOCUMENT_PUBLICATION_FAILED'
+    | 'DOCUMENT_PUBLICATION_DEAD_LETTERED'
     | 'AUTH_EMAIL_DELIVERY_FAILED';
   error: unknown;
   logger: SchedulerLogger;
@@ -524,6 +655,7 @@ async function main(): Promise<void> {
   await requireAuthRecoveryControlForRuntime(prisma);
   const deadlineService = new DeadlineRemindersService(prisma);
   const documentService = new DocumentService(prisma);
+  const publicationService = new DocumentPublicationService(prisma);
   const storageService = new StorageService(createPrismaOrganisationStorageResolver(prisma));
   const authEmailDeliveryService = new AuthEmailDeliveryService(prisma);
   const logger: SchedulerLogger = console;
@@ -532,10 +664,12 @@ async function main(): Promise<void> {
     const result = await runProductionSchedulerOnce({
       deadlineService,
       documentService,
+      publicationService,
       storageService,
       authEmailDeliveryService,
       prisma,
       documentStorageCleanupLimit: config.documentStorageCleanupLimit,
+      documentPublicationLimit: config.documentPublicationLimit,
       authDeliveryBatchSize: config.authDeliveryBatchSize,
       authDeliveryCleanupBatchSize: config.authDeliveryCleanupBatchSize,
       authDeliveryStaleSendingMs: config.authDeliveryStaleSendingMs,
@@ -545,6 +679,7 @@ async function main(): Promise<void> {
     if (
       result.deadlineRemindersFailed ||
       result.documentStorageCleanupFailed ||
+      result.documentPublicationFailed ||
       result.authEmailDeliveryFailed
     ) {
       process.exitCode = 1;
@@ -572,6 +707,18 @@ async function main(): Promise<void> {
       logger,
     }),
   });
+  const documentPublicationJob = startRecurringJob({
+    name: 'Document publication',
+    intervalMs: config.documentPublicationIntervalMs,
+    logger,
+    run: () => runDocumentPublication({
+      publicationService,
+      storageService,
+      prisma,
+      documentPublicationLimit: config.documentPublicationLimit,
+      logger,
+    }),
+  });
   const authEmailDeliveryJob = startRecurringJob({
     name: 'Authentication email delivery',
     intervalMs: config.authDeliveryIntervalMs,
@@ -591,7 +738,7 @@ async function main(): Promise<void> {
     shutdownStarted = true;
     logger.info(`[ProductionScheduler] Received ${signal}; shutting down.`);
     const stopped = await waitForRecurringJobsToStop(
-      [deadlineRemindersJob, documentStorageCleanupJob, authEmailDeliveryJob],
+      [deadlineRemindersJob, documentStorageCleanupJob, documentPublicationJob, authEmailDeliveryJob],
       config.shutdownTimeoutMs,
     );
     if (!stopped) {

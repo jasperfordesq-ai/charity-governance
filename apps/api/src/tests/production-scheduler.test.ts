@@ -43,6 +43,8 @@ test('productionSchedulerConfigFromEnv resolves scheduler intervals and cleanup 
     DEADLINE_REMINDERS_INTERVAL_MS: '120000',
     DOCUMENT_STORAGE_CLEANUP_INTERVAL_MS: '60000',
     DOCUMENT_STORAGE_CLEANUP_LIMIT: '7',
+    DOCUMENT_PUBLICATION_INTERVAL_MS: '90000',
+    DOCUMENT_PUBLICATION_LIMIT: '9',
     AUTH_DELIVERY_INTERVAL_MS: '5000',
     AUTH_DELIVERY_BATCH_SIZE: '11',
     AUTH_DELIVERY_CLEANUP_BATCH_SIZE: '222',
@@ -55,6 +57,8 @@ test('productionSchedulerConfigFromEnv resolves scheduler intervals and cleanup 
     deadlineRemindersIntervalMs: 120000,
     documentStorageCleanupIntervalMs: 60000,
     documentStorageCleanupLimit: 7,
+    documentPublicationIntervalMs: 90000,
+    documentPublicationLimit: 9,
     authDeliveryIntervalMs: 5000,
     authDeliveryBatchSize: 11,
     authDeliveryCleanupBatchSize: 222,
@@ -69,6 +73,8 @@ test('productionSchedulerConfigFromEnv falls back to safe defaults for invalid n
     DEADLINE_REMINDERS_INTERVAL_MS: '0',
     DOCUMENT_STORAGE_CLEANUP_INTERVAL_MS: '-1',
     DOCUMENT_STORAGE_CLEANUP_LIMIT: 'not-a-number',
+    DOCUMENT_PUBLICATION_INTERVAL_MS: '0',
+    DOCUMENT_PUBLICATION_LIMIT: 'not-a-number',
     AUTH_DELIVERY_INTERVAL_MS: '0',
     AUTH_DELIVERY_BATCH_SIZE: '101',
     AUTH_DELIVERY_CLEANUP_BATCH_SIZE: '2',
@@ -80,6 +86,8 @@ test('productionSchedulerConfigFromEnv falls back to safe defaults for invalid n
     deadlineRemindersIntervalMs: 24 * 60 * 60 * 1000,
     documentStorageCleanupIntervalMs: 60 * 60 * 1000,
     documentStorageCleanupLimit: 25,
+    documentPublicationIntervalMs: 5 * 60 * 1000,
+    documentPublicationLimit: 25,
     authDeliveryIntervalMs: 5 * 1000,
     authDeliveryBatchSize: 25,
     authDeliveryCleanupBatchSize: 500,
@@ -183,6 +191,7 @@ test('production notification services use logger contracts instead of direct co
 test('runProductionSchedulerOnce runs reminders and document cleanup without overlapping API startup', async () => {
   const events: string[] = [];
   const deleted: Array<{ organisationId: string; storagePath: string }> = [];
+  const downloaded: Array<{ organisationId: string; storagePath: string }> = [];
   const deadlineService = {
     async sendDueReminders() {
       events.push('deadline-reminders');
@@ -191,6 +200,10 @@ test('runProductionSchedulerOnce runs reminders and document cleanup without ove
   const storageService = {
     async deleteFile(organisationId: string, storagePath: string) {
       deleted.push({ organisationId, storagePath });
+    },
+    async downloadFile(organisationId: string, storagePath: string) {
+      downloaded.push({ organisationId, storagePath });
+      return new Uint8Array([1, 2, 3]);
     },
   };
   const documentService = {
@@ -204,9 +217,17 @@ test('runProductionSchedulerOnce runs reminders and document cleanup without ove
   };
   const logs: string[] = [];
 
+  const publicationService = {
+    async retryPendingPublications(_publish: unknown, limit: number) {
+      events.push(`document-publication:${limit}`);
+      return { processed: 1, failed: 0 };
+    },
+  };
+
   const result = await runProductionSchedulerOnce({
     deadlineService,
     documentService,
+    publicationService,
     storageService,
     authEmailDeliveryService: {
       async processDueDeliveries(input) {
@@ -225,6 +246,7 @@ test('runProductionSchedulerOnce runs reminders and document cleanup without ove
     },
     prisma: SCHEDULER_PRISMA,
     documentStorageCleanupLimit: 7,
+    documentPublicationLimit: 9,
     authDeliveryBatchSize: 11,
     authDeliveryCleanupBatchSize: 222,
     authDeliveryStaleSendingMs: 45000,
@@ -241,16 +263,19 @@ test('runProductionSchedulerOnce runs reminders and document cleanup without ove
   assert.deepEqual(events, [
     'deadline-reminders',
     'document-cleanup:7',
+    'document-publication:9',
     'auth-delivery:11:222:45000',
   ]);
   assert.deepEqual(deleted, [{ organisationId: 'org-1', storagePath: 'org-1/policy.pdf' }]);
   assert.deepEqual(result, {
     deadlineRemindersFailed: false,
     documentStorageCleanupFailed: false,
+    documentPublicationFailed: false,
     authEmailDeliveryFailed: false,
   });
   assert.ok(logs.some((message) => message.includes('Deadline reminders run completed')));
   assert.ok(logs.some((message) => message.includes('Document storage cleanup run completed')));
+  assert.ok(logs.some((message) => message.includes('Document publication run completed')));
   assert.ok(logs.some((message) => message.includes('Authentication email delivery run completed')));
 });
 

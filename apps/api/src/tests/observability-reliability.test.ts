@@ -268,8 +268,16 @@ test('runProductionSchedulerOnce fires no error alert when both jobs succeed', {
         return { processed: 2, failed: 0 };
       },
     },
+    publicationService: {
+      async retryPendingPublications() {
+        return { processed: 1, failed: 0 };
+      },
+    },
     storageService: {
       async deleteFile() {},
+      async downloadFile() {
+        return new Uint8Array([1]);
+      },
     },
     authEmailDeliveryService: {
       async processDueDeliveries() {
@@ -285,10 +293,12 @@ test('runProductionSchedulerOnce fires no error alert when both jobs succeed', {
         };
       },
     },
-    // The Confluence eraser reads a charity's connection through this; no test
-    // here reaches it, and it is required so a new entry point cannot omit it.
+    // The Confluence eraser reads a charity's connection through this, and so
+    // does the publisher; no test here reaches it, and it is required so a new
+    // entry point cannot omit it.
     prisma: {} as never,
     documentStorageCleanupLimit: 7,
+    documentPublicationLimit: 9,
     authDeliveryBatchSize: 25,
     authDeliveryCleanupBatchSize: 500,
     authDeliveryStaleSendingMs: 60000,
@@ -303,6 +313,7 @@ test('runProductionSchedulerOnce fires no error alert when both jobs succeed', {
 
   assert.equal(result.deadlineRemindersFailed, false);
   assert.equal(result.documentStorageCleanupFailed, false);
+  assert.equal(result.documentPublicationFailed, false);
   assert.equal(result.authEmailDeliveryFailed, false);
   assert.equal(alerts.length, 0);
 });
