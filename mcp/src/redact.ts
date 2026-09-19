@@ -15,7 +15,8 @@ export function clearSecrets(): void {
 
 export function redactSecrets(input: string): string {
   let out = input;
-  for (const secret of secrets) out = out.split(secret).join('[redacted]');
+  const ordered = [...secrets].sort((a, b) => b.length - a.length);
+  for (const secret of ordered) out = out.split(secret).join('[redacted]');
   for (const pattern of PATTERNS) out = out.replace(pattern, '$1[redacted]');
   return out;
 }

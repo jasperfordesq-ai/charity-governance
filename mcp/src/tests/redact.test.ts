@@ -40,3 +40,16 @@ test('short or empty secrets are ignored so redaction cannot blank the output', 
   registerSecret('ab');
   assert.equal(redactSecrets('ab cd'), 'ab cd');
 });
+
+test('the length floor rejects exactly 8 characters', () => {
+  registerSecret('12345678');
+  assert.equal(redactSecrets('12345678'), '12345678', 'an 8-character value must not register');
+});
+
+test('an overlapping secret cannot leave a fragment of a longer one behind', () => {
+  registerSecret('abcdef1234567890');
+  registerSecret('abcdef1234');
+  const out = redactSecrets('token abcdef1234567890 here');
+  assert.ok(!out.includes('567890'), 'no fragment of the longer secret may survive');
+  assert.equal(out, 'token [redacted] here');
+});
