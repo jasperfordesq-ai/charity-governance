@@ -32,6 +32,7 @@ import {
 } from '../../services/confluence-connection.service.js';
 import { decodeIntegrationKey } from '../../services/integration-crypto.js';
 import { AppError, handleError } from '../../utils/errors.js';
+import { getPrimaryFrontendOrigin } from '../../utils/frontend-origin.js';
 import { sendNoContent, sendSuccess } from '../../utils/response.js';
 import { signIntegrationOAuthState, verifyIntegrationOAuthState } from './oauth-state.js';
 
@@ -40,12 +41,40 @@ const PROVIDER = 'CONFLUENCE' as const;
 const ATLASSIAN_AUTHORIZE_URL = 'https://auth.atlassian.com/authorize';
 
 /**
- * Where `server.ts` mounts this plugin. Exported because the `redirect_uri`
- * is built from it: the URI registered with Atlassian and the path that
- * actually answers must be the same string, and deriving one from the other
- * is how they stay that way through a future re-mount.
+ * Where `server.ts` mounts this plugin. Exported because the retired GET
+ * callback still answers underneath it, and because a caller that needs to
+ * name this API's own integration paths should derive them rather than
+ * retype them.
  */
 export const INTEGRATION_ROUTES_PREFIX = '/api/v1/integrations';
+
+/**
+ * The path of the **web app** page that Atlassian sends the administrator
+ * back to, and therefore the path half of the `redirect_uri` registered with
+ * Atlassian.
+ *
+ * It is a page and not this API for one reason, and it is not an edge case:
+ * the access-token cookie lives 15 minutes counted from login or the last
+ * refresh, **not** from the moment Connect was clicked, and the
+ * administrator then spends unbounded time on Atlassian's consent screen.
+ * They routinely come back with a dead cookie — at which point `authGuard`
+ * would answer a raw JSON 401 in a browser tab, and **the authorization code
+ * in that URL is single-use and already spent**, so retrying fails
+ * identically. A page can renew the session *before* spending the code; a
+ * bare API redirect cannot. `docs/ARCHITECTURE.md`, "The callback is
+ * cookie-authenticated, and the session can expire mid-flow", is the long
+ * form.
+ *
+ * `apps/web/src/app/(dashboard)/integrations/confluence/callback/page.tsx`
+ * serves it — `(dashboard)` is a Next route group and contributes no path
+ * segment.
+ *
+ * **Atlassian matches `redirect_uri` byte for byte.** This constant, the
+ * page's route, and the callback URL registered in the Atlassian developer
+ * console are one string in three places; changing any of them alone breaks
+ * every connection attempt with `invalid_grant`.
+ */
+export const CONFLUENCE_CALLBACK_PATH = '/integrations/confluence/callback';
 
 /**
  * The granular Confluence scopes, plus `offline_access`.
@@ -200,9 +229,9 @@ const MISSING_CALLBACK_ORIGIN: ConnectRefusal = {
   statusCode: 503,
   code: 'INTEGRATION_CALLBACK_ORIGIN_NOT_CONFIGURED',
   message:
-    'Connecting Confluence is unavailable because NEXT_PUBLIC_API_URL is not set to a valid http(s) ' +
-    'origin on this CharityPilot server. It is what the Atlassian OAuth callback URL is built from. ' +
-    'Set it and restart the API.',
+    'Connecting Confluence is unavailable because FRONTEND_URL is not set to a valid http(s) ' +
+    'origin on this CharityPilot server. It is the web origin the Atlassian OAuth callback URL is ' +
+    'built from. Set it and restart the API.',
 };
 
 /**
@@ -256,32 +285,98 @@ function sendConnectRefusal(request: FastifyRequest, reply: FastifyReply, refusa
 }
 
 /**
- * The callback URL, derived from the API's own public origin and this
- * plugin's mount path so the value registered with Atlassian and the route
- * that answers can never drift apart.
+ * The callback URL: the **web** origin plus `CONFLUENCE_CALLBACK_PATH`.
  *
- * `NEXT_PUBLIC_API_URL` may be a comma-separated list; the first entry is the
- * canonical origin, exactly as `getPrimaryFrontendOrigin` treats
- * `FRONTEND_URL`. Returns null rather than guessing when it is absent or is
- * not an http(s) URL.
+ * The origin comes from `getPrimaryFrontendOrigin()` — `FRONTEND_URL`, the
+ * variable the CORS allow-list, the billing return URLs and every emailed
+ * link already read. Deliberately **not** a second `WEB_ORIGIN`/`APP_ORIGIN`
+ * of its own: two variables that must agree are two variables that will
+ * drift, and a `redirect_uri` that drifts from the registered one fails every
+ * connection at the last step, after the charity has already granted access.
+ *
+ * Presence is tested on the raw variable rather than on the helper's answer,
+ * because `getPrimaryFrontendOrigin()` falls back to `http://localhost:3000`
+ * when nothing is set. That fallback is right for a development email link
+ * and wrong here: it would send a production administrator to their own
+ * laptop and tell nobody. Returning null instead makes `connectRefusal()`
+ * name the variable to set.
+ *
+ * Exported so a test can assert what gets registered without going through a
+ * route.
  */
-function confluenceRedirectUri(): string | null {
-  const configured = process.env.NEXT_PUBLIC_API_URL
-    ?.split(',')
-    .map((value) => value.trim())
-    .find(Boolean);
-  if (!configured) return null;
+export function confluenceRedirectUri(): string | null {
+  if (!process.env.FRONTEND_URL?.trim()) return null;
 
-  let origin: string;
   try {
-    const url = new URL(configured);
+    // `getPrimaryFrontendOrigin` already takes the first entry of a
+    // comma-separated list and strips trailing slashes; `url.origin` drops
+    // any path, so what is registered stays a bare origin plus this path.
+    const url = new URL(getPrimaryFrontendOrigin());
     if (url.protocol !== 'https:' && url.protocol !== 'http:') return null;
-    origin = url.origin;
+    return `${url.origin}${CONFLUENCE_CALLBACK_PATH}`;
   } catch {
     return null;
   }
+}
 
-  return `${origin}${INTEGRATION_ROUTES_PREFIX}/confluence/callback`;
+// ── the retired GET callback ────────────────────────────────────────────────
+
+/**
+ * What the old callback URL answers now.
+ *
+ * A deployment whose Atlassian app is still registered against
+ * `{API}/api/v1/integrations/confluence/callback` keeps sending
+ * administrators here, and they arrive having just granted access. A 404
+ * tells them nothing and tells the operator nothing; this names the change
+ * and the exact URL to register instead, which is the only thing standing
+ * between a stale registration and a silent, repeating failure.
+ *
+ * **It answers without a session, deliberately.** The expired-cookie 401 in
+ * a browser tab is the failure this whole change exists to remove; making
+ * the explanation itself require a live session would reproduce it for the
+ * one person who most needs to read it. Safe because the handler reads
+ * nothing from the request — no query string, no body, no user — and sends
+ * only this prose plus a URL derived from the server's own `FRONTEND_URL`.
+ *
+ * 410 rather than 404 or 400: the resource is gone on purpose, and the
+ * status says so to anything reading statuses rather than prose. It is below
+ * 500, so `sendError`'s production masking never reaches it and the operator
+ * keeps the message.
+ *
+ * The prose is pinned by `integrations-route.test.ts`.
+ */
+const RETIRED_GET_CALLBACK = Object.freeze({
+  statusCode: 410,
+  code: 'CONFLUENCE_CALLBACK_MOVED',
+  message:
+    'This Confluence OAuth callback URL has been retired. The callback is now a page in the ' +
+    'CharityPilot web app, which renews the administrator’s session before spending the ' +
+    'single-use authorization code, and the code and state are sent to this API in a POST body ' +
+    'rather than a query string. Nothing has been connected by this request. To fix it, ' +
+    're-register the callback URL of your Atlassian OAuth 2.0 (3LO) app at ' +
+    'https://developer.atlassian.com/console/myapps/ as exactly the URL in `callbackUrl` below — ' +
+    'Atlassian matches it byte for byte — and start the connection again from CharityPilot.',
+});
+
+/**
+ * The URL to re-register. When `FRONTEND_URL` is not configured there is no
+ * origin to name, so the answer says which variable supplies it rather than
+ * inventing one — the same operator also gets the 503 that names it.
+ */
+function retiredGetCallbackUrl(): string {
+  return confluenceRedirectUri() ?? `{FRONTEND_URL}${CONFLUENCE_CALLBACK_PATH}`;
+}
+
+/**
+ * The route-level opt-out from this plugin's two guards. Declaring it is the
+ * only way a route in this file answers without a session, and a route that
+ * declares it must read nothing from the request.
+ */
+const UNAUTHENTICATED_ROUTE = Object.freeze({ integrationAuth: 'none' as const });
+
+function answersWithoutASession(request: FastifyRequest): boolean {
+  const config = request.routeOptions?.config as { integrationAuth?: string } | undefined;
+  return config?.integrationAuth === 'none';
 }
 
 // ── ownership-scoped lookup ─────────────────────────────────────────────────
@@ -333,8 +428,26 @@ function siteFacts(config: unknown): SiteFacts {
   };
 }
 
-function stringParam(query: unknown, name: string): string | undefined {
-  const value = (query as Record<string, unknown> | undefined)?.[name];
+/**
+ * A non-empty string field of a JSON request body.
+ *
+ * The callback reads `code`, `state` and `error` from the **body** and never
+ * from the query string. They are secrets: a query string reaches access
+ * logs, `Referer` headers and browser history, and Phase 2 caught Caddy's
+ * *error* logger writing live authorization codes to stderr on a 502
+ * (`.superpowers/sdd/2026-09-18-confluence-oauth-phase-2/final-fix-report.md`).
+ * `redactSensitiveQueryParams` censors CharityPilot's own request log, but it
+ * cannot reach a proxy's. Moving the values out of the URL removes the
+ * surface instead of re-filtering it. Nothing in this API logs a request
+ * body: `serializeRequestForLog` mirrors Fastify's `req` serializer, which
+ * carries the method, URL, host and peer and no body, and
+ * `buildErrorAlertPayload` carries none either.
+ *
+ * Reads defensively: a body may be absent, null, an array or a non-object.
+ */
+function bodyParam(body: unknown, name: string): string | undefined {
+  if (!body || typeof body !== 'object' || Array.isArray(body)) return undefined;
+  const value = (body as Record<string, unknown>)[name];
   return typeof value === 'string' && value.length > 0 ? value : undefined;
 }
 
@@ -350,8 +463,19 @@ export async function integrationRoutes(
   // Hooks rather than per-route `preHandler`, for the same reason the lookup
   // above is structural: a route added to this file later inherits both
   // guards instead of needing somebody to remember them.
-  app.addHook('onRequest', authGuard);
-  app.addHook('preHandler', requireAdmin);
+  //
+  // The single exception is opt-*out*, declared on the route itself and
+  // visible from the route: `config: UNAUTHENTICATED_ROUTE`. A new route that
+  // says nothing is still guarded, so forgetting remains impossible; only
+  // writing the words unguards anything.
+  app.addHook('onRequest', async (request, reply) => {
+    if (answersWithoutASession(request)) return;
+    await authGuard(request, reply);
+  });
+  app.addHook('preHandler', async (request, reply) => {
+    if (answersWithoutASession(request)) return;
+    await requireAdmin(request, reply);
+  });
 
   /**
    * Returns the authorization URL; deliberately does not redirect, so the web
@@ -399,16 +523,43 @@ export async function integrationRoutes(
   });
 
   /**
+   * The old callback URL. Kept, and made to explain itself — see
+   * `RETIRED_GET_CALLBACK`. It reads nothing from the request, which is what
+   * makes answering it without a session safe.
+   */
+  app.get('/confluence/callback', { config: UNAUTHENTICATED_ROUTE }, async (request, reply) => {
+    // Warn rather than error: a stale registration is an operator's to-do,
+    // not a fault, and this must not page anybody. No request data is logged
+    // — the URL that carried it is censored by `redactSensitiveQueryParams`,
+    // and nothing here adds to it.
+    request.log.warn(
+      { code: RETIRED_GET_CALLBACK.code },
+      'A Confluence OAuth callback arrived at the retired API URL; the Atlassian app still needs ' +
+        'its callback URL re-registered against the web app.',
+    );
+    return reply.status(RETIRED_GET_CALLBACK.statusCode).send({
+      error: RETIRED_GET_CALLBACK.message,
+      code: RETIRED_GET_CALLBACK.code,
+      callbackUrl: retiredGetCallbackUrl(),
+    });
+  });
+
+  /**
    * The callback.
+   *
+   * A POST, because `code` and `state` arrive in the body: see `bodyParam`
+   * for why they may not be in a URL. The web page at
+   * `CONFLUENCE_CALLBACK_PATH` is what calls it, and it renews the session
+   * before doing so — which is the whole reason the callback moved.
    *
    * `state` is validated FIRST — before the configuration gate, before the
    * authorization code is even looked at, and long before anything is
    * exchanged or written. Everything after that line is allowed to assume
    * this authorisation belongs to the organisation making the request.
    */
-  app.get('/confluence/callback', async (request, reply) => {
+  app.post('/confluence/callback', async (request, reply) => {
     try {
-      const state = verifyIntegrationOAuthState(stringParam(request.query, 'state'), {
+      const state = verifyIntegrationOAuthState(bodyParam(request.body, 'state'), {
         organisationId: request.user.organisationId,
         provider: PROVIDER,
       });
@@ -419,7 +570,7 @@ export async function integrationRoutes(
       // Atlassian returns `error` instead of `code` when consent is refused.
       // Its value is attacker-controllable front-channel input, so it is
       // never echoed back or logged.
-      if (stringParam(request.query, 'error')) {
+      if (bodyParam(request.body, 'error')) {
         throw new AppError(
           400,
           'CONFLUENCE_OAUTH_DENIED',
@@ -428,7 +579,7 @@ export async function integrationRoutes(
         );
       }
 
-      const code = stringParam(request.query, 'code');
+      const code = bodyParam(request.body, 'code');
       if (!code) {
         throw new AppError(
           400,

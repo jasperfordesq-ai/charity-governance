@@ -9,6 +9,9 @@ process.env.INTEGRATION_ENCRYPTION_KEY = VALID_KEY;
 process.env.ATLASSIAN_CLIENT_ID = process.env.ATLASSIAN_CLIENT_ID ?? 'test-client-id';
 process.env.ATLASSIAN_CLIENT_SECRET = process.env.ATLASSIAN_CLIENT_SECRET ?? 'test-client-secret';
 process.env.NEXT_PUBLIC_API_URL = process.env.NEXT_PUBLIC_API_URL ?? 'https://api.example.test';
+// The web origin. `FRONTEND_URL` is the one source of truth for it — the CORS
+// allow-list, the emailed links and now the OAuth `redirect_uri` all read it.
+process.env.FRONTEND_URL = process.env.FRONTEND_URL ?? 'https://app.example.test';
 
 const [
   { default: Fastify },
@@ -16,13 +19,16 @@ const [
   {
     integrationRoutes,
     INTEGRATION_ROUTES_PREFIX,
+    CONFLUENCE_CALLBACK_PATH,
     CONFLUENCE_OAUTH_SCOPES,
     CONFLUENCE_CONNECT_DISCLOSURE,
+    confluenceRedirectUri,
   },
   { AppError },
   { signAccessToken },
   { apiLoggerOptionsForEnvironment },
   { sealIntegrationSecret },
+  { getPrimaryFrontendOrigin },
 ] = await Promise.all([
   import('fastify'),
   import('jsonwebtoken'),
@@ -31,7 +37,10 @@ const [
   import('../utils/jwt.js'),
   import('../utils/logger.js'),
   import('../services/integration-crypto.js'),
+  import('../utils/frontend-origin.js'),
 ]);
+
+const WEB_CALLBACK_URL = `${getPrimaryFrontendOrigin()}${CONFLUENCE_CALLBACK_PATH}`;
 
 // ── the fake datastore ──────────────────────────────────────────────────────
 //
@@ -257,6 +266,28 @@ function tokenExchangeThatMustNotRun() {
   };
 }
 
+/**
+ * The callback as the web page calls it: a POST carrying `code` and `state`
+ * in the body.
+ *
+ * Every callback test goes through this, deliberately. The query string is
+ * where the authorization code used to live and where a proxy's error log
+ * caught it; a helper that cannot build one is how these tests stay on the
+ * right side of that.
+ */
+function postCallback(
+  app: Awaited<ReturnType<typeof buildApp>>['app'],
+  actor: Actor | null,
+  payload: Record<string, string>,
+) {
+  return app.inject({
+    method: 'POST',
+    url: '/confluence/callback',
+    ...(actor ? { headers: { authorization: bearer(actor) } } : {}),
+    payload,
+  });
+}
+
 function restoreKey() {
   process.env.INTEGRATION_ENCRYPTION_KEY = VALID_KEY;
 }
@@ -268,11 +299,7 @@ function restoreKey() {
 test('the callback rejects a request with no state at all, before exchanging anything', async () => {
   restoreKey();
   const { app } = await buildApp({ exchangeAuthorizationCode: tokenExchangeThatMustNotRun() });
-  const response = await app.inject({
-    method: 'GET',
-    url: '/confluence/callback?code=an-authorization-code',
-    headers: { authorization: bearer(ORG_A_ADMIN) },
-  });
+  const response = await postCallback(app, ORG_A_ADMIN, { code: 'an-authorization-code' });
   assert.equal(response.statusCode, 400);
   assert.equal(JSON.parse(response.body).code, 'CONFLUENCE_OAUTH_STATE_INVALID');
 });
@@ -285,11 +312,7 @@ test('the callback rejects a state signed with the wrong secret', async () => {
     'not-the-jwt-secret',
     { algorithm: 'HS256', issuer: 'charitypilot-api', audience: 'charitypilot-integration-oauth-state', expiresIn: '10m' },
   );
-  const response = await app.inject({
-    method: 'GET',
-    url: `/confluence/callback?code=an-authorization-code&state=${encodeURIComponent(forged)}`,
-    headers: { authorization: bearer(ORG_A_ADMIN) },
-  });
+  const response = await postCallback(app, ORG_A_ADMIN, { code: 'an-authorization-code', state: forged });
   assert.equal(response.statusCode, 400);
   assert.equal(JSON.parse(response.body).code, 'CONFLUENCE_OAUTH_STATE_INVALID');
 });
@@ -309,10 +332,9 @@ test('the callback rejects an unsigned (alg=none) state', async () => {
       exp: Math.floor(Date.now() / 1000) + 600,
     }),
   ).toString('base64url');
-  const response = await app.inject({
-    method: 'GET',
-    url: `/confluence/callback?code=an-authorization-code&state=${encodeURIComponent(`${header}.${payload}.`)}`,
-    headers: { authorization: bearer(ORG_A_ADMIN) },
+  const response = await postCallback(app, ORG_A_ADMIN, {
+    code: 'an-authorization-code',
+    state: `${header}.${payload}.`,
   });
   assert.equal(response.statusCode, 400);
   assert.equal(JSON.parse(response.body).code, 'CONFLUENCE_OAUTH_STATE_INVALID');
@@ -327,10 +349,9 @@ test('the callback rejects a state bound to another organisation', async () => {
   const stolenState = await authorizeState(orgB.app, ORG_B_ADMIN);
 
   const orgA = await buildApp({ actor: ORG_A_ADMIN, exchangeAuthorizationCode: tokenExchangeThatMustNotRun() });
-  const response = await orgA.app.inject({
-    method: 'GET',
-    url: `/confluence/callback?code=an-authorization-code&state=${encodeURIComponent(stolenState)}`,
-    headers: { authorization: bearer(ORG_A_ADMIN) },
+  const response = await postCallback(orgA.app, ORG_A_ADMIN, {
+    code: 'an-authorization-code',
+    state: stolenState,
   });
   assert.equal(response.statusCode, 400);
   assert.equal(JSON.parse(response.body).code, 'CONFLUENCE_OAUTH_STATE_INVALID');
@@ -350,11 +371,7 @@ test('the callback rejects an expired state', async () => {
       expiresIn: '-1s',
     },
   );
-  const response = await app.inject({
-    method: 'GET',
-    url: `/confluence/callback?code=an-authorization-code&state=${encodeURIComponent(expired)}`,
-    headers: { authorization: bearer(ORG_A_ADMIN) },
-  });
+  const response = await postCallback(app, ORG_A_ADMIN, { code: 'an-authorization-code', state: expired });
   assert.equal(response.statusCode, 400);
   assert.equal(JSON.parse(response.body).code, 'CONFLUENCE_OAUTH_STATE_INVALID');
 });
@@ -362,10 +379,9 @@ test('the callback rejects an expired state', async () => {
 test('a CharityPilot access token cannot be replayed as a state', async () => {
   restoreKey();
   const { app } = await buildApp({ exchangeAuthorizationCode: tokenExchangeThatMustNotRun() });
-  const response = await app.inject({
-    method: 'GET',
-    url: `/confluence/callback?code=an-authorization-code&state=${encodeURIComponent(signAccessToken(ORG_A_ADMIN))}`,
-    headers: { authorization: bearer(ORG_A_ADMIN) },
+  const response = await postCallback(app, ORG_A_ADMIN, {
+    code: 'an-authorization-code',
+    state: signAccessToken(ORG_A_ADMIN),
   });
   assert.equal(response.statusCode, 400);
   assert.equal(JSON.parse(response.body).code, 'CONFLUENCE_OAUTH_STATE_INVALID');
@@ -390,11 +406,7 @@ test('a state minted by authorize is accepted by the callback of the same organi
   });
 
   const state = await authorizeState(app, ORG_A_ADMIN);
-  const response = await app.inject({
-    method: 'GET',
-    url: `/confluence/callback?code=an-authorization-code&state=${encodeURIComponent(state)}`,
-    headers: { authorization: bearer(ORG_A_ADMIN) },
-  });
+  const response = await postCallback(app, ORG_A_ADMIN, { code: 'an-authorization-code', state });
 
   assert.equal(response.statusCode, 200, response.body);
   const body = JSON.parse(response.body);
@@ -402,8 +414,9 @@ test('a state minted by authorize is accepted by the callback of the same organi
   assert.equal(body.data.siteUrl, 'https://charity-a.atlassian.net');
   assert.equal(exchanged.length, 1);
   // The redirect URI the callback exchanges with comes from the signed state,
-  // never from the request.
-  assert.ok(exchanged[0]!.endsWith(`|https://api.example.test${INTEGRATION_ROUTES_PREFIX}/confluence/callback`));
+  // never from the request — and it is the web app's page, which is what
+  // Atlassian has registered.
+  assert.ok(exchanged[0]!.endsWith(`|${WEB_CALLBACK_URL}`));
   assert.equal(store.credentials.length, 2);
 });
 
@@ -502,13 +515,26 @@ test('every integration route refuses an unauthenticated request', async () => {
   const { app } = await buildApp({ rows: [connectedRow()] });
   for (const [method, url] of [
     ['GET', '/confluence/authorize'],
-    ['GET', '/confluence/callback?code=c&state=s'],
+    ['POST', '/confluence/callback'],
     ['GET', '/confluence/status'],
     ['DELETE', '/confluence'],
   ] as const) {
     const response = await app.inject({ method, url });
     assert.equal(response.statusCode, 401, `${method} ${url}`);
   }
+  // The retired GET callback is the single, declared exception: see the test
+  // below. It is not in the loop because it must NOT be 401 — an expired
+  // cookie is exactly the failure it exists to explain.
+});
+
+test('a member may not post the callback either', async () => {
+  restoreKey();
+  const { app } = await buildApp({
+    actor: ORG_A_MEMBER,
+    exchangeAuthorizationCode: tokenExchangeThatMustNotRun(),
+  });
+  const response = await postCallback(app, ORG_A_MEMBER, { code: 'c', state: 's' });
+  assert.equal(response.statusCode, 403);
 });
 
 // ────────────────────────────────────────────────────────────────────────────
@@ -580,10 +606,9 @@ test('the callback refuses before contacting Atlassian when INTEGRATION_ENCRYPTI
   delete process.env.INTEGRATION_ENCRYPTION_KEY;
   try {
     const guarded = await buildApp({ exchangeAuthorizationCode: tokenExchangeThatMustNotRun() });
-    const response = await guarded.app.inject({
-      method: 'GET',
-      url: `/confluence/callback?code=an-authorization-code&state=${encodeURIComponent(state)}`,
-      headers: { authorization: bearer(ORG_A_ADMIN) },
+    const response = await postCallback(guarded.app, ORG_A_ADMIN, {
+      code: 'an-authorization-code',
+      state,
     });
     assert.equal(response.statusCode, 503);
     assert.equal(JSON.parse(response.body).code, 'INTEGRATION_ENCRYPTION_KEY_MISSING');
@@ -634,10 +659,7 @@ test('the authorization URL carries offline_access and the fixed Atlassian param
   assert.equal(url.searchParams.get('response_type'), 'code');
   assert.equal(url.searchParams.get('prompt'), 'consent');
   assert.equal(url.searchParams.get('client_id'), 'test-client-id');
-  assert.equal(
-    url.searchParams.get('redirect_uri'),
-    `https://api.example.test${INTEGRATION_ROUTES_PREFIX}/confluence/callback`,
-  );
+  assert.equal(url.searchParams.get('redirect_uri'), WEB_CALLBACK_URL);
 
   const scopes = (url.searchParams.get('scope') ?? '').split(' ');
   assert.ok(scopes.includes('offline_access'), 'without offline_access every charity drops within the hour');
@@ -660,6 +682,201 @@ test('authorize refuses when the Atlassian client credentials are not configured
     assert.equal(JSON.parse(response.body).code, 'ATLASSIAN_OAUTH_CLIENT_NOT_CONFIGURED');
   } finally {
     process.env.ATLASSIAN_CLIENT_ID = previous;
+  }
+});
+
+// ────────────────────────────────────────────────────────────────────────────
+// The callback is a page in the web app, and the code arrives in a body
+//
+// The access-token cookie lives 15 minutes from login or the last refresh,
+// not from the click on Connect, and the administrator then spends unbounded
+// time on Atlassian's consent screen. Coming back to a bare API callback with
+// a dead cookie meant a raw JSON 401 — and the code in that URL is single-use
+// and by then spent, so retrying failed identically. A page can renew the
+// session before spending the code. These tests hold the three things that
+// makes true.
+// ────────────────────────────────────────────────────────────────────────────
+
+test('the redirect_uri points at the web app, not the API', () => {
+  restoreKey();
+  const redirectUri = confluenceRedirectUri();
+  assert.ok(redirectUri, 'a configured FRONTEND_URL must yield a redirect URI');
+  assert.ok(redirectUri.startsWith(getPrimaryFrontendOrigin()), redirectUri);
+  assert.ok(!redirectUri.includes('/api/v1/'), redirectUri);
+  assert.ok(!redirectUri.includes(INTEGRATION_ROUTES_PREFIX), redirectUri);
+  // Atlassian matches this byte for byte, so it is pinned whole and not by
+  // shape: the registered value and this one are the same string.
+  assert.equal(redirectUri, 'https://app.example.test/integrations/confluence/callback');
+});
+
+test('the redirect_uri reads the web origin nothing else owns, so the two cannot drift', () => {
+  restoreKey();
+  const previous = process.env.FRONTEND_URL;
+  try {
+    process.env.FRONTEND_URL = 'https://moved.example.test';
+    assert.equal(confluenceRedirectUri(), `https://moved.example.test${CONFLUENCE_CALLBACK_PATH}`);
+    // A comma-separated list is the canonical origin first, exactly as the
+    // CORS allow-list and the emailed links read it.
+    process.env.FRONTEND_URL = 'https://first.example.test, https://second.example.test';
+    assert.equal(confluenceRedirectUri(), `https://first.example.test${CONFLUENCE_CALLBACK_PATH}`);
+  } finally {
+    process.env.FRONTEND_URL = previous;
+  }
+});
+
+test('connecting is refused, naming FRONTEND_URL, when the web origin is not configured', async () => {
+  restoreKey();
+  const previous = process.env.FRONTEND_URL;
+  try {
+    delete process.env.FRONTEND_URL;
+    // Not the localhost fallback `getPrimaryFrontendOrigin` gives an emailed
+    // link: sending a production administrator to their own laptop and
+    // telling nobody is the failure this refusal replaces.
+    assert.equal(confluenceRedirectUri(), null);
+
+    const { app } = await buildApp();
+    const response = await app.inject({
+      method: 'GET',
+      url: '/confluence/authorize',
+      headers: { authorization: bearer(ORG_A_ADMIN) },
+    });
+    assert.equal(response.statusCode, 503);
+    const body = JSON.parse(response.body);
+    assert.equal(body.code, 'INTEGRATION_CALLBACK_ORIGIN_NOT_CONFIGURED');
+    assert.match(body.error, /FRONTEND_URL/);
+  } finally {
+    process.env.FRONTEND_URL = previous;
+  }
+});
+
+test('the callback accepts code and state in the body, never the query string', async () => {
+  restoreKey();
+  const exchanged: string[] = [];
+  const { app } = await buildApp({
+    exchangeAuthorizationCode: async (code: string, redirectUri: string) => {
+      exchanged.push(`${code}|${redirectUri}`);
+      return {
+        accessToken: 'plaintext-access-token',
+        refreshToken: { kind: 'issued' as const, token: 'plaintext-refresh-token' },
+        expiresAt: new Date(Date.now() + 3_600_000),
+        scopes: [...CONFLUENCE_OAUTH_SCOPES],
+      };
+    },
+    listAccessibleResources: async () => [
+      { id: 'site-1', url: 'https://charity-a.atlassian.net', name: 'Charity A' },
+    ],
+  });
+
+  const state = await authorizeState(app, ORG_A_ADMIN);
+  const accepted = await postCallback(app, ORG_A_ADMIN, { code: 'c', state });
+  assert.equal(accepted.statusCode, 200, accepted.body);
+  assert.equal(JSON.parse(accepted.body).data.status, 'CONNECTED');
+  assert.deepEqual(exchanged, [`c|${WEB_CALLBACK_URL}`]);
+
+  // The same values in the query string of the same POST buy nothing: the
+  // route reads the body and only the body.
+  const viaQueryString = await app.inject({
+    method: 'POST',
+    url: `/confluence/callback?code=c&state=${encodeURIComponent(state)}`,
+    headers: { authorization: bearer(ORG_A_ADMIN) },
+    payload: {},
+  });
+  assert.equal(viaQueryString.statusCode, 400);
+  assert.equal(JSON.parse(viaQueryString.body).code, 'CONFLUENCE_OAUTH_STATE_INVALID');
+  assert.equal(exchanged.length, 1, 'a query-string code must never be exchanged');
+
+  // And with the state valid in the body, so the request gets past the CSRF
+  // check, a code left in the query string is still not a code. Without this
+  // the check above would pass on a route that happily fell back to the URL,
+  // because it never got far enough to try.
+  const freshState = await authorizeState(app, ORG_A_ADMIN);
+  const codeOnlyInTheUrl = await app.inject({
+    method: 'POST',
+    url: '/confluence/callback?code=SUPERSECRET-URL-CODE',
+    headers: { authorization: bearer(ORG_A_ADMIN) },
+    payload: { state: freshState },
+  });
+  assert.equal(codeOnlyInTheUrl.statusCode, 400);
+  assert.equal(JSON.parse(codeOnlyInTheUrl.body).code, 'CONFLUENCE_OAUTH_CODE_MISSING');
+  assert.equal(exchanged.length, 1, 'a query-string code must never be exchanged');
+});
+
+test('a body that is not an object is rejected as an invalid state, not a crash', async () => {
+  restoreKey();
+  const { app } = await buildApp({ exchangeAuthorizationCode: tokenExchangeThatMustNotRun() });
+  // A JSON array, a JSON null and no body at all: all front-channel-reachable
+  // shapes, none of them a record with a `state` on it.
+  const bodies: Array<Record<string, unknown> | undefined> = [
+    [] as unknown as Record<string, unknown>,
+    null as unknown as Record<string, unknown>,
+    undefined,
+  ];
+  for (const payload of bodies) {
+    const response = await app.inject({
+      method: 'POST',
+      url: '/confluence/callback',
+      headers: { authorization: bearer(ORG_A_ADMIN) },
+      ...(payload === undefined ? {} : { payload }),
+    });
+    assert.equal(response.statusCode, 400, JSON.stringify(payload));
+    assert.equal(JSON.parse(response.body).code, 'CONFLUENCE_OAUTH_STATE_INVALID');
+  }
+
+  // A literal JSON `null` body, sent raw so Fastify really parses it to null.
+  // `typeof null === 'object'`, so this is the shape that turns a property
+  // read into a TypeError and a 400 into a 500 if the falsy check goes.
+  const jsonNull = await app.inject({
+    method: 'POST',
+    url: '/confluence/callback',
+    headers: { authorization: bearer(ORG_A_ADMIN), 'content-type': 'application/json' },
+    payload: 'null',
+  });
+  assert.equal(jsonNull.statusCode, 400, jsonNull.body);
+  assert.equal(JSON.parse(jsonNull.body).code, 'CONFLUENCE_OAUTH_STATE_INVALID');
+});
+
+test('the retired GET callback explains what to re-register rather than 404ing', async () => {
+  restoreKey();
+  const { app } = await buildApp({ exchangeAuthorizationCode: tokenExchangeThatMustNotRun() });
+  const response = await app.inject({
+    method: 'GET',
+    url: '/confluence/callback?code=c&state=s',
+  });
+
+  // Unauthenticated on purpose. An administrator whose Atlassian app is still
+  // registered here arrives with a cookie that expired on the consent screen;
+  // answering 401 would reproduce, for the one person who must read this, the
+  // exact failure the move exists to remove.
+  assert.notEqual(response.statusCode, 404);
+  assert.notEqual(response.statusCode, 401);
+  assert.equal(response.statusCode, 410);
+  assert.match(response.body, /re-?register|callback URL/i);
+
+  const body = JSON.parse(response.body);
+  assert.equal(body.code, 'CONFLUENCE_CALLBACK_MOVED');
+  // Naming the change is half of it; the other half is the URL to register
+  // now, which an operator can copy straight into the Atlassian console.
+  assert.equal(body.callbackUrl, WEB_CALLBACK_URL);
+  assert.match(body.error, /re-register the callback URL/i);
+  assert.match(body.error, /Nothing has been connected/i);
+});
+
+test('the retired GET callback neither echoes nor exchanges what it was handed', async () => {
+  restoreKey();
+  const captured: string[] = [];
+  const { app } = await buildApp({
+    logStream: { write: (chunk: string) => void captured.push(chunk) },
+    exchangeAuthorizationCode: tokenExchangeThatMustNotRun(),
+  });
+  const response = await app.inject({
+    method: 'GET',
+    url: '/confluence/callback?code=SUPERSECRET-STALE-CODE&state=SUPERSECRET-STALE-STATE',
+  });
+
+  assert.equal(response.statusCode, 410);
+  const haystack = `${response.body}\n${captured.join('')}`;
+  for (const secret of ['SUPERSECRET-STALE-CODE', 'SUPERSECRET-STALE-STATE']) {
+    assert.ok(!haystack.includes(secret), `${secret} escaped the retired callback`);
   }
 });
 
@@ -734,10 +951,9 @@ test('no plaintext token, code or client secret reaches the response or the log'
   });
 
   const state = await authorizeState(app, ORG_A_ADMIN);
-  const response = await app.inject({
-    method: 'GET',
-    url: `/confluence/callback?code=SUPERSECRET-AUTHORIZATION-CODE&state=${encodeURIComponent(state)}`,
-    headers: { authorization: bearer(ORG_A_ADMIN) },
+  const response = await postCallback(app, ORG_A_ADMIN, {
+    code: 'SUPERSECRET-AUTHORIZATION-CODE',
+    state,
   });
 
   assert.equal(response.statusCode, 200, response.body);
@@ -746,14 +962,20 @@ test('no plaintext token, code or client secret reaches the response or the log'
     'SUPERSECRET-ACCESS-TOKEN',
     'SUPERSECRET-REFRESH-TOKEN',
     'SUPERSECRET-AUTHORIZATION-CODE',
+    state,
     process.env.ATLASSIAN_CLIENT_SECRET!,
   ]) {
     assert.ok(!haystack.includes(secret), `${secret} escaped the credential boundary`);
   }
-  // Fastify logs req.url on every request; the callback carries the code and
-  // the state in that URL. Both must be censored, and the rest of the URL
-  // must survive so the log line is still worth having.
-  assert.ok(captured.join('').includes('/confluence/callback?code=[redacted]&state=[redacted]'));
+  // Fastify logs `req.url` on every request and never the body. With the code
+  // and the state in the body there is nothing left in the URL to censor —
+  // which is the point: `redactSensitiveQueryParams` can only reach
+  // CharityPilot's own log, and Phase 2 caught a *proxy's* error log writing a
+  // live code. Pin that the logged URL is the bare path, so a future move
+  // back to the query string shows up here.
+  const logged = captured.join('');
+  assert.ok(logged.includes('"url":"/confluence/callback"'), logged);
+  assert.ok(!logged.includes('/confluence/callback?'), 'the callback URL must carry no query string');
 });
 
 test('the request logger censors credential-bearing query parameters and nothing else', async () => {
@@ -784,11 +1006,7 @@ test('an Atlassian reconnect-required 409 keeps its own code and is not a tenant
   });
 
   const state = await authorizeState(app, ORG_A_ADMIN);
-  const response = await app.inject({
-    method: 'GET',
-    url: `/confluence/callback?code=an-authorization-code&state=${encodeURIComponent(state)}`,
-    headers: { authorization: bearer(ORG_A_ADMIN) },
-  });
+  const response = await postCallback(app, ORG_A_ADMIN, { code: 'an-authorization-code', state });
 
   assert.equal(response.statusCode, 409);
   const body = JSON.parse(response.body);
@@ -803,11 +1021,7 @@ test('the callback rejects a missing authorization code after the state is valid
   restoreKey();
   const { app } = await buildApp({ exchangeAuthorizationCode: tokenExchangeThatMustNotRun() });
   const state = await authorizeState(app, ORG_A_ADMIN);
-  const response = await app.inject({
-    method: 'GET',
-    url: `/confluence/callback?state=${encodeURIComponent(state)}`,
-    headers: { authorization: bearer(ORG_A_ADMIN) },
-  });
+  const response = await postCallback(app, ORG_A_ADMIN, { state });
   assert.equal(response.statusCode, 400);
   assert.equal(JSON.parse(response.body).code, 'CONFLUENCE_OAUTH_CODE_MISSING');
 });
@@ -816,11 +1030,7 @@ test('the callback surfaces an Atlassian error returned in place of a code', asy
   restoreKey();
   const { app } = await buildApp({ exchangeAuthorizationCode: tokenExchangeThatMustNotRun() });
   const state = await authorizeState(app, ORG_A_ADMIN);
-  const response = await app.inject({
-    method: 'GET',
-    url: `/confluence/callback?error=access_denied&state=${encodeURIComponent(state)}`,
-    headers: { authorization: bearer(ORG_A_ADMIN) },
-  });
+  const response = await postCallback(app, ORG_A_ADMIN, { error: 'access_denied', state });
   assert.equal(response.statusCode, 400);
   assert.equal(JSON.parse(response.body).code, 'CONFLUENCE_OAUTH_DENIED');
 });
