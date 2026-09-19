@@ -532,9 +532,18 @@ operator can act, instead of dead-lettering later when the Supabase copy is alre
 Phase 5's dispatcher, permanence mapping, dead-lettering and operator recovery then handle it with
 no further change. That is the payoff for having built the erasure side first.
 
-**Only enqueue the second row if a publication actually succeeded.** A document that was never
-published has nothing in Confluence to erase, and a Confluence erasure row for it would dead-letter
-on a page that never existed — noise that trains an operator to ignore alerts.
+**Gate the second row on `pageId !== null` — NOT on `state === 'PROCESSED'`.** Task 7 found this and
+it matters. A publication that was *cancelled* because its document was deleted mid-flight keeps its
+identifiers deliberately, and its state is `PENDING`, not `PROCESSED` — but it **names a real page in
+the charity's Confluence**. Gating on `PROCESSED` would skip exactly those rows, leaving a page
+nobody can find and nobody can erase: the orphan this phase exists to prevent, created by the very
+check meant to prevent noise.
+
+The reason for a gate at all still holds: a document that was never published has nothing in
+Confluence, and a Confluence erasure row for it would dead-letter on a page that never existed —
+noise that trains an operator to ignore alerts. `pageId !== null` is the honest test of "is there
+something out there?", and `PROCESSED` is only a proxy for it that breaks in the one case that
+matters.
 
 **Also fix, while you are in this file — Task 6 found it and it can take the job down.** The bounded
 runner in `document.service.ts` has no guard against a **late rejection from an attempt that lost
@@ -547,7 +556,9 @@ and discarded. Pin it with a test that a late rejection does not surface as an u
 
 - [ ] **Step 1: Write the failing tests** — a published document produces two rows with the right
       providers and a well-formed `targetRef`; an unpublished one produces only the Supabase row; a
-      dead-lettered publication produces only the Supabase row; a late rejection from a timed-out
+      dead-lettered publication **that recorded a `pageId`** still produces the Confluence row; a
+      **cancelled-but-paged** publication (state `PENDING`, `pageId` set) still produces it; a
+      publication with no `pageId` produces only the Supabase row; a late rejection from a timed-out
       attempt is observed rather than left unhandled
 - [ ] **Step 2: Run and watch fail; Step 3: implement; Step 4: run and watch pass**
 - [ ] **Step 5: Correct `docs/ARCHITECTURE.md`** — the erasure section may now say both copies are
