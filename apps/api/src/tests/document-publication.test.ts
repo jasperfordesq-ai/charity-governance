@@ -425,8 +425,18 @@ test(
         `UPDATE "DocumentPublication" SET "state" = 'DEAD_LETTER', "attempts" = 0, "nextAttemptAt" = NULL, "deadLetteredAt" = CURRENT_TIMESTAMP, "terminalReason" = 'MAX_ATTEMPTS_EXHAUSTED' WHERE "id" = 'pub-1';`,
         // state_consistent: PROCESSED is not reachable without a processedAt
         `UPDATE "DocumentPublication" SET "state" = 'PROCESSED', "attempts" = 1, "nextAttemptAt" = NULL, "publishedAt" = CURRENT_TIMESTAMP, "cloudId" = 'c', "pageId" = 'p' WHERE "id" = 'pub-1';`,
-        // publication_target_consistent: published, but nothing says where
+        // publication_target_consistent: a site with no page on it. This is
+        // refused by the *pairing* rule -- `("pageId" IS NULL) = ("cloudId" IS
+        // NULL)` -- and not by the published-row rule further down, which never
+        // gets a say because the pairing rule has already failed. The
+        // published-row rule has its own statement below.
         `UPDATE "DocumentPublication" SET "state" = 'PROCESSED', "attempts" = 1, "nextAttemptAt" = NULL, "processedAt" = CURRENT_TIMESTAMP, "publishedAt" = CURRENT_TIMESTAMP, "cloudId" = 'cloud-1' WHERE "id" = 'pub-1';`,
+        // publication_target_consistent: published, but nothing says where.
+        // The only row that reaches this rule is one whose ids are *both*
+        // null, which the pairing rule is happy with -- and a DEAD_LETTER row
+        // is where it is reachable, because that branch of state_consistent
+        // says nothing at all about `publishedAt`.
+        `UPDATE "DocumentPublication" SET "state" = 'DEAD_LETTER', "attempts" = 1, "nextAttemptAt" = NULL, "deadLetteredAt" = CURRENT_TIMESTAMP, "terminalReason" = 'MAX_ATTEMPTS_EXHAUSTED', "publishedAt" = CURRENT_TIMESTAMP WHERE "id" = 'pub-1';`,
         // publication_target_consistent: an untrimmed id is refused HERE rather
         // than dead-lettering the erasure later, after the Irish copy is gone.
         `UPDATE "DocumentPublication" SET "state" = 'PROCESSED', "attempts" = 1, "nextAttemptAt" = NULL, "processedAt" = CURRENT_TIMESTAMP, "publishedAt" = CURRENT_TIMESTAMP, "cloudId" = 'cloud-1', "pageId" = ' page-1 ' WHERE "id" = 'pub-1';`,
@@ -439,8 +449,17 @@ test(
         // point is that the erasure parser never meets one.
         `UPDATE "DocumentPublication" SET "cloudId" = 'cloud-1', "pageId" = ' page-1 ' WHERE "id" = 'pub-1';`,
         // publication_target_consistent: an empty id addresses nothing, and
-        // btrim('') = '' would otherwise let it through.
+        // btrim('') = '' would otherwise let it through. Pinned on both ids:
+        // the pairing rule means a row always carries the two together, so
+        // either column alone could rot without the other noticing.
         `UPDATE "DocumentPublication" SET "cloudId" = '', "pageId" = 'page-1' WHERE "id" = 'pub-1';`,
+        `UPDATE "DocumentPublication" SET "cloudId" = 'cloud-1', "pageId" = '' WHERE "id" = 'pub-1';`,
+        // publication_target_consistent: and the untrimmed-id refusal on both
+        // ids too, for the same reason. `parseConfluenceErasureTarget` refuses
+        // an untrimmed `cloudId` at the application boundary; this is the
+        // database saying so independently, which is what makes the two a
+        // defence in depth rather than one check written twice.
+        `UPDATE "DocumentPublication" SET "cloudId" = ' cloud-1 ', "pageId" = 'page-1' WHERE "id" = 'pub-1';`,
         // publication_target_consistent: an attachment hangs from a page
         `UPDATE "DocumentPublication" SET "attachmentId" = 'att-1' WHERE "id" = 'pub-1';`,
       ];

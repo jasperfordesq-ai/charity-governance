@@ -101,6 +101,97 @@ test('publicationTitle gives two long documents sharing a long common prefix dif
 });
 
 // ---------------------------------------------------------------------------
+// publicationTitle: normalisation.
+//
+// The same failure as the length cap above, in the other direction a store
+// rewrites what it is handed. Every wiki trims a page title and collapses the
+// whitespace inside it, and none of them stores a C0 control character in one.
+// If this module computes a title a store will not hold verbatim, then the
+// next attempt's findPageByTitle searches for a title nothing holds, finds
+// nothing, and calls the non-idempotent createPage a second time -- a second
+// page for one board resolution. So the title is normalised here, before
+// Confluence is ever asked, and these tests are what keep it that way.
+//
+// Control characters are built with `String.fromCharCode` rather than a
+// literal escape sequence, for the reason DANGEROUS_NAME gives below.
+// ---------------------------------------------------------------------------
+
+const NUL = String.fromCharCode(0);
+const LF = String.fromCharCode(10);
+const TAB = String.fromCharCode(9);
+
+/** Leading and trailing space, an internal newline and tab run, and a NUL. */
+const UNTIDY_NAME = `  Safeguarding${LF}${TAB} ${NUL}Policy  `;
+
+test('publicationTitle normalises a name carrying whitespace and a control character', () => {
+  const title = publicationTitle({ id: 'doc-1', name: UNTIDY_NAME });
+
+  assert.equal(title, 'Safeguarding Policy (CharityPilot doc doc-1)');
+});
+
+test('publicationTitle emits a title a page store would hold verbatim', () => {
+  // Stated as the property rather than the literal, so it still holds if the
+  // title's shape ever changes: what goes out must already equal what any
+  // reasonable store would rewrite it to.
+  const normalise = (value: string) => value.trim().replace(/\s+/g, ' ');
+  const title = publicationTitle({ id: 'doc-1', name: UNTIDY_NAME });
+
+  assert.equal(normalise(title), title, `a store would rewrite this title: ${JSON.stringify(title)}`);
+  assert.equal(containsDisallowedXmlControlChar(title), false);
+});
+
+test('publicationTitle stays deterministic for an untrimmed name', () => {
+  // Determinism is what adoption rests on, and normalisation must not cost it.
+  const first = publicationTitle({ id: 'doc-1', name: UNTIDY_NAME });
+  const second = publicationTitle({ id: 'doc-1', name: UNTIDY_NAME });
+
+  assert.equal(first, second);
+});
+
+test('publicationTitle gives two documents whose names differ only in whitespace different titles', () => {
+  // Collision-freedom survives normalisation because the id is what separates
+  // two documents, not the name. Normalising the name portion can make two
+  // names identical; the ids must still keep the titles apart.
+  const first = publicationTitle({ id: 'doc-1', name: ' Safeguarding Policy' });
+  const second = publicationTitle({ id: 'doc-2', name: 'Safeguarding  Policy ' });
+
+  assert.notEqual(first, second);
+  assert.ok(first.includes('doc-1'), `expected the id in: ${first}`);
+  assert.ok(second.includes('doc-2'), `expected the id in: ${second}`);
+});
+
+test('publicationTitle never normalises the document id itself', () => {
+  // The id is the whole of the collision-freedom guarantee, so normalisation
+  // is applied to the name portion only and the id travels whole. An id is
+  // never expected to carry whitespace; this pins that even if one did, it
+  // would arrive intact rather than being quietly rewritten into another
+  // document's id.
+  const id = `doc${TAB}1`;
+  const title = publicationTitle({ id, name: 'Safeguarding Policy' });
+
+  assert.ok(title.includes(id), `expected the id verbatim in: ${JSON.stringify(title)}`);
+});
+
+test('publicationTitle still leads with the id marker when a name normalises away entirely', () => {
+  // A name of nothing but whitespace passes uploadDocumentSchema's min(1) only
+  // if the schema does not trim, and a title that began with a space would be
+  // rewritten by the store -- the very failure this normalisation prevents.
+  const title = publicationTitle({ id: 'doc-1', name: `${TAB} ${LF}` });
+
+  assert.equal(title, '(CharityPilot doc doc-1)');
+});
+
+test('publicationTitle still respects PUBLICATION_TITLE_MAX_LENGTH after normalising', () => {
+  const title = publicationTitle({ id: 'doc-1', name: `  ${VERY_LONG_NAME}${LF}${VERY_LONG_NAME}  ` });
+
+  assert.ok(
+    title.length <= PUBLICATION_TITLE_MAX_LENGTH,
+    `expected at most ${PUBLICATION_TITLE_MAX_LENGTH} characters, got ${title.length}`,
+  );
+  assert.ok(title.includes('doc-1'), `expected the id in: ${title}`);
+});
+
+// ---------------------------------------------------------------------------
 // publicationBody: escaping, and the body is a wrapper, not the document
 // ---------------------------------------------------------------------------
 

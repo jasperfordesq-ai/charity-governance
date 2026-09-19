@@ -25,3 +25,19 @@ test('uploadDocumentSchema accepts ISO dates and datetimes', () => {
     true,
   );
 });
+
+test('uploadDocumentSchema trims a document name, like its owner and reference siblings', () => {
+  const result = uploadDocumentSchema.safeParse({ ...baseDocument, name: '  Safeguarding policy  ' });
+
+  assert.equal(result.success, true);
+  if (!result.success) assert.fail('a padded document name should parse');
+  assert.equal(result.data.name, 'Safeguarding policy');
+});
+
+test('uploadDocumentSchema refuses a document name that is nothing but whitespace', () => {
+  const result = uploadDocumentSchema.safeParse({ ...baseDocument, name: '   ' });
+
+  assert.equal(result.success, false);
+  if (result.success) assert.fail('a whitespace-only document name should not parse');
+  assert.equal(result.error.issues[0]?.path.join('.'), 'name');
+});

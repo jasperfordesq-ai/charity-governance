@@ -15,7 +15,13 @@ const documentCategoryValues = [
 ] as const;
 
 export const uploadDocumentSchema = z.object({
-  name: z.string().min(1, 'Document name is required').max(300),
+  // Trimmed, like its `owner` and `boardMinuteReference` siblings below. An
+  // untrimmed name reaches Confluence as an untrimmed page title, and a title
+  // a page store rewrites is a title the next publish attempt cannot find
+  // again. This narrows the input; it does not close it (an embedded newline
+  // still passes here), which is why `publicationTitle` normalises
+  // independently and is where the guarantee actually lives.
+  name: z.string().trim().min(1, 'Document name is required').max(300),
   description: z.string().max(1000).optional(),
   category: z.enum(documentCategoryValues),
   owner: z.string().trim().max(200).optional(),

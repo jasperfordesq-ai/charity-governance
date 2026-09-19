@@ -1077,10 +1077,24 @@ export class DocumentPublicationService {
       }),
     );
     // The attempt outlives a lost race by one call (see `assertNotAborted`), so
-    // its later rejection has to land somewhere. Without this it lands on the
-    // process as an unhandled rejection and takes the whole job with it.
-    attempt.catch(() => undefined);
-
+    // its later rejection has to land somewhere. In Node an unhandled
+    // rejection terminates the process by default, so one slow publish that
+    // eventually fails could take down the scheduler that was about to process
+    // every other row.
+    //
+    // **`Promise.race` is what prevents that, and it has to stay the thing
+    // that does.** `race` attaches a rejection handler to *every* entrant, so
+    // the loser's late rejection is already observed and discarded by `race`
+    // itself. A separate `attempt.catch(...)` beside it would be dead code --
+    // there was one here, and it is gone. What is *not* safe is a refactor
+    // that stops handing `attempt` itself to `race`: observing only its
+    // fulfilment (`attempt.then(() => …)`, whether as an entrant or as a guard
+    // beside the race) leaves a derived promise whose rejection nothing
+    // handles, and the process dies. That was measured, not assumed, and it is
+    // pinned by 'a late rejection from a timed-out publish attempt is observed
+    // rather than left unhandled' in document-publication.service.test.ts.
+    // `document.service.ts`'s storage-deletion runner carries the same note for
+    // the same reason; the two must not drift.
     try {
       return await Promise.race([attempt, timeout]);
     } finally {

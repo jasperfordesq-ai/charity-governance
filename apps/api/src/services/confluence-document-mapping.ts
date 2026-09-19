@@ -117,17 +117,47 @@ function truncateToCodePoints(value: string, maxChars: number): string {
 }
 
 /**
- * The page title for `doc`. Deterministic, collision-free, and bounded — see
- * the module header for all three. The document id travels in a fixed suffix
- * that is never truncated; only the name portion is shortened, and only by
- * as much as the suffix's own length demands, so the total never exceeds
- * {@link PUBLICATION_TITLE_MAX_LENGTH}.
+ * Normalises the *name* portion of a page title to the form any reasonable
+ * page store would hold it in: control characters removed, internal
+ * whitespace runs collapsed to one space, ends trimmed.
+ *
+ * This is the same guarantee {@link PUBLICATION_TITLE_MAX_LENGTH} gives for
+ * length, for the same reason — see the module header. A store that
+ * silently rewrites what it was handed leaves the computed title and the
+ * stored title different, so the next attempt's `findPageByTitle` searches
+ * for something nothing holds and the deliberately non-idempotent
+ * `createPage` runs a second time. Length is not the only rewrite a wiki
+ * performs: every one of them trims and collapses whitespace in a page
+ * title, and none of them stores a C0 control character in one.
+ *
+ * Applied to the name only. The document id is what makes two documents'
+ * titles distinct, and it is appended afterwards, whole and untouched — so
+ * two documents whose names differ *only* in whitespace still get two
+ * different titles, and normalising cannot make them collide.
+ */
+function normaliseTitleName(value: string): string {
+  return stripDisallowedXmlControlChars(value).replace(/\s+/g, ' ').trim();
+}
+
+/**
+ * The page title for `doc`. Deterministic, collision-free, bounded, and in
+ * the form a page store will hold verbatim — see the module header for the
+ * first three and {@link normaliseTitleName} for the fourth. The document id
+ * travels in a fixed suffix that is never truncated; only the name portion is
+ * normalised and shortened, and only by as much as the suffix's own length
+ * demands, so the total never exceeds {@link PUBLICATION_TITLE_MAX_LENGTH}.
  */
 export function publicationTitle(doc: { id: string; name: string }): string {
   const idSuffix = ` (${TITLE_ID_MARKER} ${doc.id})`;
   const nameBudget = PUBLICATION_TITLE_MAX_LENGTH - idSuffix.length;
-  const displayName = truncateToCodePoints(conventionalDocumentName(doc), nameBudget);
-  return `${displayName}${idSuffix}`;
+  const displayName = truncateToCodePoints(normaliseTitleName(conventionalDocumentName(doc)), nameBudget);
+  // `trimStart` can only ever strip the suffix's own leading space, and only
+  // when the name normalised away to nothing (a name that was entirely
+  // whitespace, or a budget the id suffix consumed whole). It cannot reach
+  // the id, which ends the string in `)`. Without it such a title would go
+  // out with a leading space — precisely the rewrite this function exists to
+  // prevent.
+  return `${displayName}${idSuffix}`.trimStart();
 }
 
 /**

@@ -394,8 +394,11 @@ function buildPublicationCancelPrisma(publication: PublicationFixture | null) {
   // every call site because these tests are about cancellation, not erasure —
   // but they must be *present*, since `applyPrismaSelect` refuses to invent a
   // field the production `select` asks for.
+  // `claimedAt` joins them for the same reason: the cancel now reads it to
+  // tell "nothing is in flight, cancelling outright is safe" from "an attempt
+  // is mid-publish and its page id has not landed yet".
   let row: PublicationFixture | null = publication
-    ? { cloudId: 'cloud-1', attachmentId: null, ...publication }
+    ? { cloudId: 'cloud-1', attachmentId: null, claimedAt: null, ...publication }
     : null;
   const finds: Array<Record<string, unknown>> = [];
   const updates: Array<Record<string, unknown>> = [];
@@ -571,6 +574,7 @@ function publishedPublication(
     attachmentId: 'attachment-1',
     attempts: 1,
     state: 'PROCESSED',
+    claimedAt: null,
     ...overrides,
   };
 }
@@ -705,6 +709,222 @@ for (const [situation, overrides] of unprocessedButPaged) {
     );
   });
 }
+
+// ---------------------------------------------------------------------------
+// The delete window: a page created while a document is being deleted.
+//
+// The publish worker writes `pageId` from its own transaction, so a delete
+// path that merely *looked* at `pageId` was racing it: a page created inside
+// that window got only the `supabase` erasure row, and the page was left in
+// the charity's Confluence with nothing naming it and nothing about to erase
+// it. Both reads now take a `FOR UPDATE` lock on the publication row and
+// decide from the value read under it, the same claim mechanics
+// `claimPendingStorageDeletions` uses.
+//
+// The double below is the smallest thing that can show it: a real row lock has
+// exactly two effects that matter here, and it models both. A write issued
+// while the lock is held waits, and it lands the instant the holder commits.
+// ---------------------------------------------------------------------------
+
+/** Where the worker's `attachPublicationPage` write is issued. */
+type DeleteWindowMoment = 'after-the-delete-transaction-read' | 'after-the-cancellation-read';
+
+function buildDeleteWindowPrisma(moment: DeleteWindowMoment) {
+  const created: Array<Record<string, unknown>> = [];
+  let publication: Record<string, unknown> | null = {
+    id: 'publication-1',
+    cloudId: null,
+    pageId: null,
+    attachmentId: null,
+    attempts: 0,
+    state: 'PENDING',
+    // Claimed: a worker is mid-attempt on this row right now, which is the
+    // only way a page can appear during the deletion at all.
+    claimedAt: new Date('2026-07-11T11:59:00.000Z'),
+  };
+  let lockHeld = false;
+  let blocked: Array<() => void> = [];
+  let lockedReads = 0;
+
+  // `attachPublicationPage`, as the UPDATE it is: it must wait for the row
+  // lock, and if the row is gone by the time it runs it matches nothing --
+  // which is the `claimLost` the worker reports.
+  const workerRecordsThePage = () => {
+    const write = () => {
+      if (publication === null) return;
+      publication = { ...publication, cloudId: 'cloud-1', pageId: 'page-1' };
+    };
+    if (lockHeld) blocked.push(write);
+    else write();
+  };
+
+  const commit = () => {
+    lockHeld = false;
+    const waiting = blocked;
+    blocked = [];
+    for (const write of waiting) write();
+  };
+
+  const client = {
+    organisation: {
+      findUnique: async () => ({ documentStorageProvider: 'supabase', documentStorageAlphaOptIn: false }),
+    },
+    document: {
+      findFirst: async () => ({ id: 'doc-1', organisationId: 'org-1', fileUrl: 'org-1/policy.pdf' }),
+      delete: async () => ({ id: 'doc-1' }),
+    },
+    documentStorageDeletion: {
+      create: async (args: { data: Record<string, unknown> }) => {
+        created.push(args.data);
+        return { id: 'deletion-' + String(created.length) };
+      },
+    },
+    documentPublication: {
+      findFirst: async () => {
+        throw new Error(
+          'every read of the publication row on the delete path must be a locked read, not a plain findFirst',
+        );
+      },
+      updateMany: async () => ({ count: 1 }),
+      deleteMany: async (args: { where: Record<string, unknown> }) => {
+        if (publication === null || args.where.id !== publication.id) return { count: 0 };
+        if (Object.hasOwn(args.where, 'pageId') && args.where.pageId !== publication.pageId) {
+          return { count: 0 };
+        }
+        publication = null;
+        return { count: 1 };
+      },
+    },
+    // The `SELECT ... FOR UPDATE`. Taking the lock is what makes a concurrent
+    // write wait; the caller gets the snapshot as it stood at this instant.
+    $queryRaw: async (strings: TemplateStringsArray) => {
+      // The lock is the whole point, so the double refuses to stand in for a
+      // read that does not take one. Without this the model below would
+      // happily "lock" for a plain SELECT and prove nothing.
+      assert.match(
+        strings.join(' ? '),
+        /FOR UPDATE/,
+        'the publication row must be read FOR UPDATE, or the worker is not excluded at all',
+      );
+      lockedReads += 1;
+      lockHeld = true;
+      const snapshot = publication === null ? [] : [publication];
+      if (moment === 'after-the-delete-transaction-read' && lockedReads === 1) workerRecordsThePage();
+      if (moment === 'after-the-cancellation-read' && lockedReads === 2) workerRecordsThePage();
+      return snapshot;
+    },
+    $transaction: async <T>(callback: (tx: unknown) => Promise<T>) => {
+      try {
+        return await callback(client);
+      } finally {
+        commit();
+      }
+    },
+  };
+
+  return { prisma: client, created, publication: () => publication };
+}
+
+for (const moment of [
+  'after-the-delete-transaction-read',
+  'after-the-cancellation-read',
+] as const) {
+  test('a page recorded ' + moment + ' is still enqueued for erasure', async () => {
+    const mock = buildDeleteWindowPrisma(moment);
+    const service = new DocumentService(mock.prisma as never, () => NOW);
+
+    await service.remove('org-1', 'doc-1');
+
+    assert.deepEqual(
+      mock.created.map((row) => row.provider),
+      ['supabase', 'confluence'],
+      'a real page exists in the charity site, so both copies must be enqueued for erasure',
+    );
+    assert.deepEqual(mock.created[1].targetRef, {
+      kind: 'confluence',
+      cloudId: 'cloud-1',
+      pageId: 'page-1',
+      attachmentIds: [],
+    });
+  });
+}
+
+test('a publication holding a live claim is never cancelled out from under the attempt', async () => {
+  // The other half of the lock: the row must survive long enough for the page
+  // id the in-flight attempt is about to write to land somewhere. Destroying
+  // it would leave a page with no record of it anywhere -- worse than the race
+  // this fix exists to close.
+  const mock = buildDeleteWindowPrisma('after-the-cancellation-read');
+  const service = new DocumentService(mock.prisma as never, () => NOW);
+
+  await service.remove('org-1', 'doc-1');
+
+  const row = mock.publication();
+  assert.notEqual(row, null, 'the row naming the page must not be deleted while an attempt is in flight');
+  assert.equal(row!.pageId, 'page-1');
+});
+
+test('a page id recorded between the cancellation read and its delete is not destroyed', async () => {
+  // The `pageId: null` guard on the cancellation delete, on its own. A client
+  // that cannot issue the locked read -- a double, here -- falls back to a
+  // plain one, and then this guard is the only thing between a recorded page
+  // id and being destroyed outright: the "a page id learned and then lost"
+  // failure the whole pipeline is built around.
+  const created: Array<Record<string, unknown>> = [];
+  let publication: Record<string, unknown> | null = {
+    id: 'publication-1',
+    cloudId: null,
+    pageId: null,
+    attachmentId: null,
+    attempts: 0,
+    state: 'PENDING',
+    claimedAt: null,
+  };
+
+  const client = {
+    organisation: {
+      findUnique: async () => ({ documentStorageProvider: 'supabase', documentStorageAlphaOptIn: false }),
+    },
+    document: {
+      findFirst: async () => ({ id: 'doc-1', organisationId: 'org-1', fileUrl: 'org-1/policy.pdf' }),
+      delete: async () => ({ id: 'doc-1' }),
+    },
+    documentStorageDeletion: {
+      create: async (args: { data: Record<string, unknown> }) => {
+        created.push(args.data);
+        return { id: 'deletion-' + String(created.length) };
+      },
+    },
+    documentPublication: {
+      findFirst: async (args: { where: Record<string, unknown>; select?: Record<string, unknown> }) => {
+        const snapshot = publication === null ? null : applyPrismaSelect(publication, args);
+        // The cancellation read is the one that selects `state`. The worker
+        // records the page immediately after it, before the delete below runs.
+        if (args.select && Object.hasOwn(args.select, 'state') && publication !== null) {
+          publication = { ...publication, cloudId: 'cloud-1', pageId: 'page-1' };
+        }
+        return snapshot;
+      },
+      updateMany: async () => ({ count: 1 }),
+      deleteMany: async (args: { where: Record<string, unknown> }) => {
+        if (publication === null || args.where.id !== publication.id) return { count: 0 };
+        if (Object.hasOwn(args.where, 'pageId') && args.where.pageId !== publication.pageId) {
+          return { count: 0 };
+        }
+        publication = null;
+        return { count: 1 };
+      },
+    },
+    $transaction: async <T>(callback: (tx: unknown) => Promise<T>) => callback(client),
+  };
+
+  const service = new DocumentService(client as never, () => NOW);
+
+  await service.remove('org-1', 'doc-1');
+
+  assert.notEqual(publication, null, 'the only record of where the page is must survive the cancellation');
+  assert.equal(publication!.pageId, 'page-1');
+});
 
 test('a malformed Confluence erasure target fails the deletion while the document still exists', async () => {
   // `parseConfluenceErasureTarget` is the arbiter and its refusal is permanent,

@@ -397,6 +397,88 @@ test('a conflict on create adopts the page a previous attempt made, creating onl
   );
 });
 
+// ---------------------------------------------------------------------------
+// Create-or-adopt against a site that rewrites the title it stores.
+//
+// Every wiki trims a page title and collapses the whitespace inside it. If the
+// title this codebase computes is not already in that form, the store holds
+// something else, the next attempt's findPageByTitle searches for a title
+// nothing holds, and the deliberately non-idempotent createPage runs again --
+// two pages for one board resolution. The defence is in publicationTitle;
+// these two tests are the end-to-end proof that it holds where it matters.
+//
+// Control characters are built with `String.fromCharCode`, never a literal
+// escape sequence: such an escape has previously round-tripped into a raw
+// control byte on disk instead of staying as escape-sequence text.
+// ---------------------------------------------------------------------------
+
+const UNTIDY_DOC: PublicationSource = {
+  ...DOC,
+  name: `  Safeguarding${String.fromCharCode(10)}${String.fromCharCode(0)}Policy  `,
+};
+
+/**
+ * A Confluence stand-in that is honest in every respect but one: when
+ * `normalisesStoredTitles` is set it stores the trimmed, whitespace-collapsed
+ * form of the title it was handed, the way a real page store does. Lookups are
+ * honest either way -- an exact match against what is actually stored.
+ */
+function fakeSite(normalisesStoredTitles: boolean) {
+  const pages: Array<{ id: string; title: string }> = [];
+
+  const operations: Partial<ConfluencePublishOperations> = {
+    findPageByTitle: async (_client, _spaceId, title) => {
+      const found = pages.find((page) => page.title === title);
+      return found === undefined ? null : { ...PAGE, id: found.id, title: found.title };
+    },
+    createPage: async (_client, input) => {
+      const stored = normalisesStoredTitles ? input.title.trim().replace(/\s+/g, ' ') : input.title;
+      const page = { id: `page-${pages.length + 1}`, title: stored };
+      pages.push(page);
+      return { ...PAGE, id: page.id, title: page.title };
+    },
+  };
+
+  return { pages, operations };
+}
+
+/**
+ * Two attempts for one document whose row never recorded a page id -- the
+ * ordinary transport failure this outbox exists for: the create succeeded and
+ * the connection dropped before `recordPage` committed. Returns what the site
+ * holds afterwards and which page the second attempt settled on.
+ */
+async function retryAgainstSite(normalisesStoredTitles: boolean) {
+  const site = fakeSite(normalisesStoredTitles);
+  const deps = () =>
+    spyDeps([], { readDocument: async () => UNTIDY_DOC, operations: site.operations });
+
+  const first = await runPublisher(deps());
+  const second = await runPublisher(deps());
+
+  return { pages: site.pages, first, second };
+}
+
+test('a retried publish of an untidily named document creates only one page on a site that normalises titles', async () => {
+  const { pages, first, second } = await retryAgainstSite(true);
+
+  assert.equal(
+    pages.length,
+    1,
+    `one board resolution must never become two pages; the site holds ${JSON.stringify(pages.map((page) => page.id))}`,
+  );
+  assert.equal(second.pageId, first.pageId, 'the retry must adopt the page the first attempt made');
+});
+
+test('CONTROL: the same retry against a site that stores the title verbatim also adopts', async () => {
+  // The canary for the test above: if this one ever fails, the harness is
+  // broken rather than the behaviour it claims to measure.
+  const { pages, first, second } = await retryAgainstSite(false);
+
+  assert.equal(pages.length, 1);
+  assert.equal(second.pageId, first.pageId);
+});
+
 test('a conflict whose re-read finds nothing is the one unresolved conflict', async () => {
   const calls: string[] = [];
   await assert.rejects(
@@ -1005,6 +1087,46 @@ test('an attempt that outruns its bound is a failed attempt, not a failed job', 
   assert.equal(result.processed, 0);
   assert.equal(mock.row().state, 'PENDING');
   assert.equal(mock.row().attempts, 1);
+});
+
+test('a late rejection from a timed-out publish attempt is observed rather than left unhandled', async () => {
+  // A publisher that ignores its abort signal keeps running past the deadline
+  // and may reject when nothing is awaiting it. In Node that terminates the
+  // process, so one slow publish that eventually fails would take down the
+  // scheduler that was about to process every other row. `Promise.race`
+  // attaches a rejection handler to every entrant, which is what makes this
+  // safe today; this test is what stops a refactor removing that property
+  // silently -- and it is why the runner carries no separate `.catch()`.
+  const mock = buildFallbackPrisma(publicationRow());
+  const service = new DocumentPublicationService(mock.prisma as never, () => NOW, 20);
+
+  const unhandled: unknown[] = [];
+  const observe = (reason: unknown) => {
+    unhandled.push(reason);
+  };
+  process.on('unhandledRejection', observe);
+
+  try {
+    const result = await service.retryPendingPublications(
+      () =>
+        new Promise<PublicationOutcome>((_resolve, reject) => {
+          setTimeout(() => reject(new Error('the publisher failed, long after the deadline')), 60);
+        }),
+      10,
+    );
+
+    assert.equal(result.processed, 0);
+    assert.equal(mock.row().state, 'PENDING');
+
+    // Past the late rejection, then a full turn of the loop: Node only reports
+    // a rejection as unhandled once the microtask queue has drained.
+    await new Promise((resolve) => setTimeout(resolve, 120));
+    await new Promise((resolve) => setImmediate(resolve));
+
+    assert.deepEqual(unhandled, [], 'the losing attempt rejection must be observed and discarded');
+  } finally {
+    process.off('unhandledRejection', observe);
+  }
 });
 
 test('a dead-lettered publication is claimed for exactly one operator alert', async () => {
