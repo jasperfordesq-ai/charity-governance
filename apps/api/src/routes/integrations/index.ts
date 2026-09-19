@@ -26,10 +26,13 @@ import { authGuard } from '../../middleware/auth.js';
 import { requireAdmin } from '../../middleware/roles.js';
 import {
   connectConfluence,
+  currentAccessTokenForOrganisation,
   disconnectConfluence,
   type ConfluenceConnectionClient,
   type ConfluenceConnectionDeps,
 } from '../../services/confluence-connection.service.js';
+import { createConfluenceClient, type ConfluenceClientDeps } from '../../services/confluence-client.js';
+import { listSpaces } from '../../services/confluence-spaces.js';
 import { decodeIntegrationKey } from '../../services/integration-crypto.js';
 import { AppError, handleError } from '../../utils/errors.js';
 import { getPrimaryFrontendOrigin } from '../../utils/frontend-origin.js';
@@ -177,6 +180,13 @@ export const CONFLUENCE_CONNECT_DISCLOSURE = Object.freeze({
 export type IntegrationRoutesOptions = {
   /** Test seam only; production passes nothing and the service uses its own defaults. */
   confluenceDeps?: ConfluenceConnectionDeps;
+  /**
+   * Test seam only, for the HTTP core `createConfluenceClient` builds on —
+   * distinct from `confluenceDeps`, which governs the OAuth/token layer
+   * beneath it. Production passes nothing and the client uses its own
+   * defaults (a real `fetch`, real backoff timers).
+   */
+  confluenceClientDeps?: ConfluenceClientDeps;
 };
 
 // ── the configuration gate ──────────────────────────────────────────────────
@@ -429,6 +439,20 @@ function siteFacts(config: unknown): SiteFacts {
 }
 
 /**
+ * The Atlassian cloud id `createConfluenceClient` addresses the site with.
+ *
+ * Read out of the same `config` JSON `siteFacts` reads — `connectConfluence`
+ * writes it there as `siteId` — rather than a dedicated column, so there is
+ * one place a reconnect to a different site updates and one place this route
+ * reads it from.
+ */
+function cloudIdFromConfig(config: unknown): string | null {
+  if (!config || typeof config !== 'object' || Array.isArray(config)) return null;
+  const value = (config as Record<string, unknown>).siteId;
+  return typeof value === 'string' && value.length > 0 ? value : null;
+}
+
+/**
  * A non-empty string field of a JSON request body.
  *
  * The callback reads `code`, `state` and `error` from the **body** and never
@@ -652,6 +676,71 @@ export async function integrationRoutes(
         // deliberately never stored there.
         lastError: integration.lastError,
       });
+    } catch (error) {
+      handleError(reply, error);
+    }
+  });
+
+  /**
+   * The spaces a charity could publish into — the destination Phase 4's
+   * pipeline has otherwise had no way to choose, and what a later admin
+   * screen lets somebody pick from.
+   *
+   * The same ownership-scoped lookup as every other route here, refused
+   * *before* anything is opened at Atlassian: an organisation with no row, or
+   * a row not `CONNECTED`, gets a clean 404 rather than reaching a client
+   * built from a cloud id or token that is not there. That refusal costs
+   * nothing to give — no client, no request, no reconnect race — and it is
+   * what keeps "no live connection" from ever reaching `handleError` as a
+   * 500.
+   *
+   * The response is exactly what `listSpaces` returns: `{ id, key, name }`
+   * per space, nothing wider. See `confluence-spaces.ts` for why.
+   */
+  app.get('/confluence/spaces', async (request, reply) => {
+    try {
+      const integration = await findOwnConfluenceIntegration(app.prisma, request.user.organisationId);
+      if (!integration || integration.status !== 'CONNECTED') {
+        throw new AppError(
+          404,
+          'CONFLUENCE_NOT_CONNECTED',
+          'This organisation has no live Confluence connection to list spaces from.',
+        );
+      }
+
+      const cloudId = cloudIdFromConfig(integration.config);
+      if (cloudId === null) {
+        // Reachable only if a row was ever marked CONNECTED without the site
+        // id `connectConfluence` always writes alongside it — a data
+        // integrity fault, not an absent connection, so it is not folded into
+        // the 404 above.
+        throw new AppError(
+          502,
+          'CONFLUENCE_SITE_ID_MISSING',
+          "This organisation's Confluence connection has no recorded site id, so its spaces " +
+            'cannot be listed. Reconnect Confluence.',
+        );
+      }
+
+      const client = createConfluenceClient(
+        {
+          cloudId,
+          // A thunk, not a resolved value: the client re-derives the token per
+          // attempt, and a stale grant surfaces as CONFLUENCE_RECONNECT_REQUIRED
+          // rather than as a 500.
+          getAccessToken: () =>
+            currentAccessTokenForOrganisation(prisma, { organisationId: request.user.organisationId }, deps),
+        },
+        options.confluenceClientDeps ?? {},
+      );
+
+      const { cursor } = request.query as { cursor?: string };
+      const { spaces, nextCursor } = await listSpaces(
+        client,
+        typeof cursor === 'string' && cursor.length > 0 ? cursor : undefined,
+      );
+
+      return sendSuccess(reply, { spaces, nextCursor: nextCursor ?? null });
     } catch (error) {
       handleError(reply, error);
     }

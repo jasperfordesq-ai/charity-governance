@@ -204,6 +204,8 @@ type BuildOptions = {
   logStream?: { write(chunk: string): void };
   /** Injected `OAuthDeps`, which is how the disconnect route's revoke attempt is driven. */
   confluenceOAuth?: unknown;
+  /** Injected `fetch` for `createConfluenceClient`, distinct from the OAuth/token layer above. */
+  confluenceFetch?: unknown;
 };
 
 async function buildApp(options: BuildOptions = {}) {
@@ -229,6 +231,7 @@ async function buildApp(options: BuildOptions = {}) {
       ...(options.listAccessibleResources ? { listAccessibleResources: options.listAccessibleResources } : {}),
       ...(options.confluenceOAuth ? { oauth: options.confluenceOAuth } : {}),
     },
+    ...(options.confluenceFetch ? { confluenceClientDeps: { fetch: options.confluenceFetch } } : {}),
   } as never);
   return { app, store, actor };
 }
@@ -928,6 +931,141 @@ test('status reports an errored connection with its stored reason', async () => 
   const { data } = JSON.parse(response.body);
   assert.equal(data.status, 'ERROR');
   assert.equal(data.lastError, 'Atlassian rejected the stored grant.');
+});
+
+// ────────────────────────────────────────────────────────────────────────────
+// Spaces — the destination Phase 4's publish pipeline otherwise has no way to
+// choose.
+// ────────────────────────────────────────────────────────────────────────────
+
+/** A stored access token this route's client can actually use, without exercising the refresh path. */
+function sealedAccessTokenRow(
+  integrationId: string,
+  organisationId: string,
+  token = 'SUPERSECRET-VALID-ACCESS-TOKEN',
+): CredentialRow {
+  return {
+    integrationId,
+    kind: 'access_token',
+    sealed: sealIntegrationSecret(token, Buffer.from(VALID_KEY, 'hex'), 1, {
+      organisationId,
+      provider: 'CONFLUENCE',
+      kind: 'access_token',
+    }),
+    generation: 1,
+    expiresAt: new Date(Date.now() + 60 * 60 * 1000),
+  };
+}
+
+function fetchThatMustNotRun() {
+  return async () => {
+    throw new Error('Confluence must not be called for an organisation with no live connection');
+  };
+}
+
+test('spaces refuses with a clean 404 rather than a 500 when there is no connection at all', async () => {
+  restoreKey();
+  const { app } = await buildApp({ confluenceFetch: fetchThatMustNotRun() });
+  const response = await app.inject({
+    method: 'GET',
+    url: '/confluence/spaces',
+    headers: { authorization: bearer(ORG_A_ADMIN) },
+  });
+
+  assert.equal(response.statusCode, 404);
+  assert.equal(JSON.parse(response.body).code, 'CONFLUENCE_NOT_CONNECTED');
+});
+
+for (const status of ['DISCONNECTED', 'ERROR'] as const) {
+  test(`spaces refuses with the same clean 404 when the connection is ${status}, not live`, async () => {
+    restoreKey();
+    const { app } = await buildApp({
+      rows: [connectedRow({ status })],
+      confluenceFetch: fetchThatMustNotRun(),
+    });
+    const response = await app.inject({
+      method: 'GET',
+      url: '/confluence/spaces',
+      headers: { authorization: bearer(ORG_A_ADMIN) },
+    });
+
+    assert.equal(response.statusCode, 404);
+    assert.equal(JSON.parse(response.body).code, 'CONFLUENCE_NOT_CONNECTED');
+  });
+}
+
+test('spaces never reaches another organisation connection', async () => {
+  restoreKey();
+  const { app, store } = await buildApp({
+    rows: [connectedRow()],
+    actor: ORG_B_ADMIN,
+    confluenceFetch: fetchThatMustNotRun(),
+  });
+  const response = await app.inject({
+    method: 'GET',
+    url: '/confluence/spaces',
+    headers: { authorization: bearer(ORG_B_ADMIN) },
+  });
+
+  assert.equal(response.statusCode, 404);
+  assert.equal(JSON.parse(response.body).code, 'CONFLUENCE_NOT_CONNECTED');
+  assert.ok(
+    store.calls.integrationFindUnique.every(
+      (where) =>
+        (where as { organisationId_provider?: { organisationId: string } }).organisationId_provider
+          ?.organisationId === 'org-b',
+    ),
+    'the lookup must be scoped to the requesting organisation, never org-a',
+  );
+});
+
+test('spaces returns only id, key and name for a connected organisation, and follows a supplied cursor', async () => {
+  restoreKey();
+  const requestedUrls: string[] = [];
+  const { app, store } = await buildApp({
+    rows: [connectedRow()],
+    confluenceFetch: async (input: unknown) => {
+      requestedUrls.push(String(input));
+      return new Response(
+        JSON.stringify({
+          results: [
+            {
+              id: 'space1',
+              key: 'GOV',
+              name: 'Governance',
+              description: { plain: { value: 'Board minutes and policies' } },
+              permissions: [{ subject: 'user-1', operation: 'read' }],
+            },
+          ],
+          _links: { base: 'https://charity-a.atlassian.net/wiki' },
+        }),
+        { status: 200, headers: { 'Content-Type': 'application/json' } },
+      );
+    },
+  });
+  store.credentials.push(sealedAccessTokenRow('integration-a', 'org-a'));
+
+  const response = await app.inject({
+    method: 'GET',
+    url: '/confluence/spaces?cursor=RESUME-FROM-HERE',
+    headers: { authorization: bearer(ORG_A_ADMIN) },
+  });
+
+  assert.equal(response.statusCode, 200, response.body);
+  const { data } = JSON.parse(response.body);
+  assert.deepEqual(data.spaces, [{ id: 'space1', key: 'GOV', name: 'Governance' }]);
+  assert.equal(data.nextCursor, null);
+
+  assert.equal(requestedUrls.length, 1, 'exactly one upstream request for a single page of spaces');
+  const requested = new URL(requestedUrls[0]!);
+  assert.equal(requested.pathname, '/ex/confluence/site-1/wiki/api/v2/spaces');
+  assert.equal(requested.searchParams.get('cursor'), 'RESUME-FROM-HERE');
+  assert.equal(requested.searchParams.get('limit'), '250');
+
+  const serialised = response.body.toLowerCase();
+  for (const forbidden of ['token', 'fingerprint', 'sealed', 'ciphertext', 'secret', 'refresh']) {
+    assert.ok(!serialised.includes(forbidden), `spaces leaked ${forbidden}`);
+  }
 });
 
 // ────────────────────────────────────────────────────────────────────────────
