@@ -425,6 +425,104 @@ export async function updatePage(
 }
 
 // ---------------------------------------------------------------------------
+// Erasure
+// ---------------------------------------------------------------------------
+
+/**
+ * A purge Confluence refused on a permission it cannot be retried into having.
+ *
+ * Delete and purge require different grants — Atlassian's own semantics, not
+ * this client's choice — and a stored grant that can move a page to trash may
+ * still lack space *manage/content*, which purge requires. Retrying cannot
+ * acquire a permission, so this is raised once, on the first 403, rather than
+ * folded into the generic retry-and-fail path.
+ *
+ * The message is written for the operator who reads it, not the pipeline that
+ * raised it: it names the exact permission missing and states plainly that the
+ * page is not gone — it is sitting in the site's trash, recoverable by the
+ * tenant, until someone with that permission (or a reconnect that grants it)
+ * purges it.
+ */
+function purgeForbidden(what: 'page' | 'attachment', permission: string, id: string): AppError {
+  return new AppError(
+    403,
+    'CONFLUENCE_PURGE_FORBIDDEN',
+    `Confluence refused to permanently purge ${what} ${id}: the connected grant lacks the ` +
+      `${permission} permission. Retrying will not acquire it — a human must either reconnect ` +
+      `with that permission or purge it directly in Confluence. Until then the ${what} remains ` +
+      "recoverable in the site's trash; it has not been permanently erased.",
+    { id, permissionRequired: permission },
+  );
+}
+
+/**
+ * `true` only for the core's own translation of a 403 (`CONFLUENCE_RECONNECT_REQUIRED`
+ * carrying `details.status === 403`). A 401 reaches the same code with
+ * `details.status === 401` and is left alone: reconnecting is genuinely the fix
+ * for an expired token, but reconnecting cannot grant a permission the account
+ * never had, which is what a 403 on purge means.
+ */
+function isForbidden(error: unknown): boolean {
+  if (!isUpstream(error, 'CONFLUENCE_RECONNECT_REQUIRED')) return false;
+  return asObject((error as AppError).details)?.status === 403;
+}
+
+/**
+ * Moves a page to the site's trash.
+ *
+ * **Idempotent**, the mirror image of `createPage`'s hazard: a retried delete
+ * cannot duplicate anything, because absence is the goal. A 404 is therefore
+ * not surfaced as a failure — it is the outcome an erasure is trying to reach,
+ * whether this call put the page there or it was already gone.
+ */
+export async function deletePage(client: ConfluenceClient, pageId: string): Promise<void> {
+  const id = assertPageId(pageId);
+
+  try {
+    await client.request({
+      method: 'DELETE',
+      api: 'v2',
+      path: `pages/${id}`,
+      // Repeating a delete cannot duplicate or corrupt anything: the page is
+      // either already trashed (this call 404s, which is success) or it gets
+      // trashed now. This is the exact inverse of createPage's hazard.
+      idempotent: true,
+    });
+  } catch (error) {
+    if (isUpstream(error, 'CONFLUENCE_NOT_FOUND')) return;
+    throw error;
+  }
+}
+
+/**
+ * Permanently purges an already-trashed page. Confluence only accepts this on
+ * a page that is already in the trash; a page still `current` answers this
+ * with the same shape a stray retry would get after the first purge succeeds.
+ *
+ * **Idempotent**, for the same reason as `deletePage`: a 404 (already purged,
+ * or never existed) is success, not an error.
+ *
+ * **A 403 is terminal, not transient.** See `purgeForbidden`.
+ */
+export async function purgePage(client: ConfluenceClient, pageId: string): Promise<void> {
+  const id = assertPageId(pageId);
+
+  try {
+    await client.request({
+      method: 'DELETE',
+      api: 'v2',
+      path: `pages/${id}`,
+      query: { purge: 'true' },
+      idempotent: true,
+    });
+  } catch (error) {
+    if (isUpstream(error, 'CONFLUENCE_NOT_FOUND')) return;
+    if (isForbidden(error)) throw purgeForbidden('page', 'space manage/content', id);
+    throw error;
+  }
+}
+
+// ---------------------------------------------------------------------------
 // Content properties
 // ---------------------------------------------------------------------------
 

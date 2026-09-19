@@ -4,7 +4,9 @@ import { DOCUMENT_UPLOAD_MAX_FILE_SIZE } from '../routes/documents/document-uplo
 import type { ConfluenceClient, ConfluenceRequestSpec } from '../services/confluence-client.js';
 import {
   CONFLUENCE_ATTACHMENT_MAX_BYTES,
+  deleteAttachment,
   listAttachments,
+  purgeAttachment,
   uploadAttachment,
 } from '../services/confluence-attachments.js';
 import { AppError } from '../utils/errors.js';
@@ -91,6 +93,12 @@ function upstreamReconnectRequired(status: 401 | 403): AppError {
     `Confluence request failed with status ${status}. The charity must reconnect its Confluence site.`,
     { status },
   );
+}
+
+function upstreamNotFound(): AppError {
+  return new AppError(404, 'CONFLUENCE_NOT_FOUND', 'Confluence request failed with status 404.', {
+    status: 404,
+  });
 }
 
 async function rejectsWith(fn: () => Promise<unknown>): Promise<AppError> {
@@ -665,4 +673,81 @@ test('a 403 on listing is left exactly as the core raised it', async () => {
   const error = await rejectsWith(() => listAttachments(client, PAGE_ID));
 
   assert.equal(error, raised, 'listing sends no CSRF header, so it has nothing to add');
+});
+
+// ---------------------------------------------------------------------------
+// Erasure
+// ---------------------------------------------------------------------------
+
+const ATTACHMENT_ID = 'att789';
+
+test('deleteAttachment and purgeAttachment are issued as idempotent, unlike uploadAttachment', async () => {
+  const { client, specs } = harness([ok(undefined), ok(undefined)]);
+
+  await deleteAttachment(client, ATTACHMENT_ID);
+  await purgeAttachment(client, ATTACHMENT_ID);
+
+  assert.equal(specs.length, 2);
+  assert.equal(
+    specs[0]?.idempotent,
+    true,
+    'deleteAttachment MUST be idempotent: a retried delete cannot duplicate anything, because absence is the goal',
+  );
+  assert.equal(specs[1]?.idempotent, true, 'purgeAttachment MUST be idempotent for the same reason');
+});
+
+test('purge=true is requested on the purge call and on no other', async () => {
+  const { client, specs } = harness([ok(undefined), ok(undefined)]);
+
+  await deleteAttachment(client, ATTACHMENT_ID);
+  await purgeAttachment(client, ATTACHMENT_ID);
+
+  assert.equal(specs.length, 2);
+  assert.equal(specs[0]?.method, 'DELETE');
+  assert.equal(specs[0]?.path, `attachments/${ATTACHMENT_ID}`);
+  assert.equal(specs[0]?.query, undefined, 'delete must not purge');
+
+  assert.equal(specs[1]?.method, 'DELETE');
+  assert.equal(specs[1]?.path, `attachments/${ATTACHMENT_ID}`);
+  assert.deepEqual(specs[1]?.query, { purge: 'true' }, 'purge must ask for it explicitly');
+});
+
+test('a 404 from deleteAttachment is an accomplished erasure, not a failure', async () => {
+  const { client } = harness([throwing(upstreamNotFound())]);
+
+  // Resolves. This is also the shape of a page's delete cascading onto its own
+  // attachment: the attachment is already gone, which is already success.
+  await deleteAttachment(client, ATTACHMENT_ID);
+});
+
+test('a 404 from purgeAttachment is an accomplished erasure, not a failure', async () => {
+  const { client } = harness([throwing(upstreamNotFound())]);
+
+  await purgeAttachment(client, ATTACHMENT_ID);
+});
+
+test('deleteAttachment does not swallow anything but a 404', async () => {
+  const { client } = harness([throwing(upstreamReconnectRequired(403))]);
+
+  const error = await rejectsWith(() => deleteAttachment(client, ATTACHMENT_ID));
+  assert.equal(error.code, 'CONFLUENCE_RECONNECT_REQUIRED');
+});
+
+test('a forbidden purge names administer space as the missing permission, and says the attachment is only in the trash', async () => {
+  const { client } = harness([throwing(upstreamReconnectRequired(403))]);
+
+  const error = await rejectsWith(() => purgeAttachment(client, ATTACHMENT_ID));
+
+  assert.equal(error.code, 'CONFLUENCE_PURGE_FORBIDDEN');
+  assert.equal(error.statusCode, 403);
+  assert.match(error.message, /administer space/i);
+  assert.match(error.message, /trash/i);
+  assert.equal((error.details as Record<string, unknown>).permissionRequired, 'administer space');
+});
+
+test('a 401 on attachment purge is left as a reconnect, not relabelled as forbidden', async () => {
+  const { client } = harness([throwing(upstreamReconnectRequired(401))]);
+
+  const error = await rejectsWith(() => purgeAttachment(client, ATTACHMENT_ID));
+  assert.equal(error.code, 'CONFLUENCE_RECONNECT_REQUIRED');
 });

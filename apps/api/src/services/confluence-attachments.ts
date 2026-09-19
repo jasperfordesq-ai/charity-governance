@@ -38,6 +38,17 @@ import type { ConfluenceClient } from './confluence-client.js';
  * hazard the core was built around, but is still a change to a charity's
  * auditable record made by accident. An upload whose outcome is unknown is the
  * caller's to reconcile (list the page's attachments), not the core's to guess.
+ *
+ * ## Erasure is the opposite shape
+ *
+ * `deleteAttachment` and `purgeAttachment` are **idempotent**: absence is the
+ * goal, so a 404 resolves successfully rather than surfacing as a failure. A
+ * caller sequencing an erasure must delete (and purge) every attachment
+ * *before* the page that hosts it — page deletion may or may not cascade onto
+ * its attachments, and an attachment left behind because the page went first
+ * is a charity's document still sitting in their Confluence after an erasure
+ * request. If a cascade does happen, the attachment call meets a 404, which is
+ * already the success this module is built to report.
  */
 
 /** The shape callers get back, identical for both API versions. */
@@ -384,6 +395,94 @@ export async function listAttachments(
     `Confluence kept offering another page of attachments after ${MAX_LIST_PAGES} requests. ` +
       'The list was not read to the end, so it is not safe to treat as complete.',
   );
+}
+
+// ---------------------------------------------------------------------------
+// Erasure — both v2, both DELETE
+// ---------------------------------------------------------------------------
+
+function isUpstream(error: unknown, code: string): boolean {
+  return error instanceof AppError && error.code === code;
+}
+
+/**
+ * A purge Confluence refused on a permission it cannot be retried into having.
+ *
+ * Attachment purge needs **administer space** — the highest permission this
+ * client asks for anywhere, higher even than page purge's manage/content —
+ * because deleting the underlying file, not just the page that references it,
+ * is Atlassian's own dividing line. A grant that can delete, or even purge a
+ * page, may still lack this, and no number of retries changes that.
+ *
+ * As with the page version, the message is written for the operator: it names
+ * what is missing and states that the file is not gone, only trashed.
+ */
+function purgeForbidden(id: string): AppError {
+  return new AppError(
+    403,
+    'CONFLUENCE_PURGE_FORBIDDEN',
+    `Confluence refused to permanently purge attachment ${id}: the connected grant lacks the ` +
+      'administer space permission. Retrying will not acquire it — a human must either reconnect ' +
+      'with that permission or purge it directly in Confluence. Until then the attachment remains ' +
+      "recoverable in the site's trash; it has not been permanently erased.",
+    { id, permissionRequired: 'administer space' },
+  );
+}
+
+/** See `confluence-pages.ts`'s twin for why 401 is left alone here. */
+function isForbidden(error: unknown): boolean {
+  if (!isUpstream(error, 'CONFLUENCE_RECONNECT_REQUIRED')) return false;
+  return asObject((error as AppError).details)?.status === 403;
+}
+
+/**
+ * Moves an attachment to the site's trash.
+ *
+ * **Idempotent**: repeating a delete cannot duplicate or corrupt anything,
+ * because absence is the goal. A 404 (already trashed, already purged, or
+ * this attachment's page cascaded its own deletion onto it first) is
+ * therefore success, not a failure — see the module header on erasing the
+ * attachment before the page for why a cascade is expected here, not a bug.
+ */
+export async function deleteAttachment(client: ConfluenceClient, attachmentId: string): Promise<void> {
+  const id = assertPageId(attachmentId);
+
+  try {
+    await client.request({
+      method: 'DELETE',
+      api: 'v2',
+      path: `attachments/${id}`,
+      idempotent: true,
+    });
+  } catch (error) {
+    if (isUpstream(error, 'CONFLUENCE_NOT_FOUND')) return;
+    throw error;
+  }
+}
+
+/**
+ * Permanently purges an already-trashed attachment.
+ *
+ * **Idempotent**, for the same reason as `deleteAttachment`: a 404 is success.
+ *
+ * **A 403 is terminal, not transient.** See `purgeForbidden`.
+ */
+export async function purgeAttachment(client: ConfluenceClient, attachmentId: string): Promise<void> {
+  const id = assertPageId(attachmentId);
+
+  try {
+    await client.request({
+      method: 'DELETE',
+      api: 'v2',
+      path: `attachments/${id}`,
+      query: { purge: 'true' },
+      idempotent: true,
+    });
+  } catch (error) {
+    if (isUpstream(error, 'CONFLUENCE_NOT_FOUND')) return;
+    if (isForbidden(error)) throw purgeForbidden(id);
+    throw error;
+  }
 }
 
 // ---------------------------------------------------------------------------

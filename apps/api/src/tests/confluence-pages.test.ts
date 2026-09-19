@@ -4,9 +4,11 @@ import type { ConfluenceClient, ConfluenceRequestSpec } from '../services/conflu
 import {
   CONFLUENCE_CONTENT_PROPERTY_MAX_BYTES,
   createPage,
+  deletePage,
   getContentProperty,
   getContentPropertyRecord,
   getPage,
+  purgePage,
   setContentProperty,
   updatePage,
 } from '../services/confluence-pages.js';
@@ -516,6 +518,102 @@ test('updatePage refuses a version that is not a whole number it can increment',
   );
   assert.equal(error.code, 'CONFLUENCE_PAGE_VERSION_INVALID');
   assert.equal(specs.length, 0);
+});
+
+// ---------------------------------------------------------------------------
+// Erasure
+// ---------------------------------------------------------------------------
+
+test('deletePage and purgePage are issued as idempotent, unlike createPage', async () => {
+  const { client, specs } = harness([ok(undefined), ok(undefined)]);
+
+  await deletePage(client, PAGE_ID);
+  await purgePage(client, PAGE_ID);
+
+  assert.equal(specs.length, 2);
+  assert.equal(
+    specs[0]?.idempotent,
+    true,
+    'deletePage MUST be idempotent: a retried delete cannot duplicate anything, because absence is the goal',
+  );
+  assert.equal(
+    specs[1]?.idempotent,
+    true,
+    'purgePage MUST be idempotent for the same reason',
+  );
+});
+
+test('purge=true is requested on the purge call and on no other', async () => {
+  const { client, specs } = harness([ok(undefined), ok(undefined)]);
+
+  await deletePage(client, PAGE_ID);
+  await purgePage(client, PAGE_ID);
+
+  assert.equal(specs.length, 2);
+  assert.equal(specs[0]?.method, 'DELETE');
+  assert.equal(specs[0]?.path, `pages/${PAGE_ID}`);
+  assert.equal(specs[0]?.query, undefined, 'delete must not purge');
+
+  assert.equal(specs[1]?.method, 'DELETE');
+  assert.equal(specs[1]?.path, `pages/${PAGE_ID}`);
+  assert.deepEqual(specs[1]?.query, { purge: 'true' }, 'purge must ask for it explicitly');
+});
+
+test('a 404 from deletePage is an accomplished erasure, not a failure', async () => {
+  const { client } = harness([throwing(upstreamNotFound())]);
+
+  // Resolves. The absence 404 reports is the point of calling this at all.
+  await deletePage(client, PAGE_ID);
+});
+
+test('a 404 from purgePage is an accomplished erasure, not a failure', async () => {
+  const { client } = harness([throwing(upstreamNotFound())]);
+
+  await purgePage(client, PAGE_ID);
+});
+
+test('deletePage does not swallow anything but a 404', async () => {
+  const { client } = harness([throwing(upstreamReconnectRequired())]);
+
+  const error = await rejectsWith(() => deletePage(client, PAGE_ID));
+  assert.equal(error.code, 'CONFLUENCE_RECONNECT_REQUIRED');
+});
+
+test('a forbidden purge names the permission the grant is missing, and says the page is only in the trash', async () => {
+  const { client } = harness([throwing(upstreamReconnectRequired())]);
+
+  const error = await rejectsWith(() => purgePage(client, PAGE_ID));
+
+  assert.equal(error.code, 'CONFLUENCE_PURGE_FORBIDDEN');
+  assert.equal(error.statusCode, 403);
+  assert.match(error.message, /manage\/content/i);
+  assert.match(error.message, /trash/i);
+  assert.equal((error.details as Record<string, unknown>).permissionRequired, 'space manage/content');
+});
+
+test('a 401 on purge is left as a reconnect, not relabelled as forbidden: reconnecting cannot fix a missing permission, but it does fix an expired token', async () => {
+  const { client } = harness([
+    throwing(
+      new AppError(409, 'CONFLUENCE_RECONNECT_REQUIRED', 'Confluence request failed with status 401.', {
+        status: 401,
+      }),
+    ),
+  ]);
+
+  const error = await rejectsWith(() => purgePage(client, PAGE_ID));
+  assert.equal(error.code, 'CONFLUENCE_RECONNECT_REQUIRED');
+});
+
+test('deletePage and purgePage reject a page id that could address something other than a page', async () => {
+  const { client, specs } = harness([ok(undefined)]);
+
+  const deleteError = await rejectsWith(() => deletePage(client, '123/../../spaces'));
+  assert.equal(deleteError.code, 'CONFLUENCE_PAGE_ID_INVALID');
+
+  const purgeError = await rejectsWith(() => purgePage(client, '123/../../spaces'));
+  assert.equal(purgeError.code, 'CONFLUENCE_PAGE_ID_INVALID');
+
+  assert.equal(specs.length, 0, 'nothing should be sent for an unusable id');
 });
 
 // ---------------------------------------------------------------------------
