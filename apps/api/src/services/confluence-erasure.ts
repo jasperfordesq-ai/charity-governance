@@ -175,11 +175,22 @@ function aborted(): AppError {
 }
 
 /**
- * Checked before every single call, because the runner's only lever is the
+ * Checked *between* every pair of calls, because the runner's only lever is the
  * signal. An eraser that checked once at the top would carry on purging a
  * charity's content long after the row had recorded the attempt as timed out —
  * the row would say the erasure failed while the erasure was still happening,
  * and the two would disagree about what a charity's Confluence contains.
+ *
+ * **What this does not close, stated exactly.** The signal is checked between
+ * calls and is *not* threaded into them: `ConfluenceErasureOperations` takes no
+ * `AbortSignal`, and `confluence-client.ts` exposes no caller signal — it
+ * builds its own per-attempt deadline instead. So when the runner aborts,
+ * exactly one already-issued call can still complete afterwards. That one call
+ * is bounded by the client's own deadline, and the direction is fail-safe: a
+ * real erasure recorded as a failed attempt, re-proved by the 404 on the next
+ * one. It is never the other way round — the row cannot record an erasure that
+ * did not happen. Closing the last call means giving the closed client a caller
+ * signal, which is a change to that module, not to this one.
  */
 function assertNotAborted(signal: AbortSignal | undefined): void {
   if (signal?.aborted) throw aborted();
