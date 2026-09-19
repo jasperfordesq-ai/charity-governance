@@ -764,8 +764,16 @@ page before anything server-side has had a chance to refresh a cookie.
 
 1. Atlassian redirects to `{FRONTEND_URL}/integrations/confluence/callback` —
    a page in `apps/web`, not a route in `apps/api`. `code` and `state` arrive
-   in the page's `searchParams`, never logged and never left in the URL after
-   the exchange — the page replaces the history entry.
+   **in the query string of that redirect** (Atlassian appends them; nothing
+   here can prevent that), are read once out of the page's `searchParams`,
+   never logged by the application, and are removed from the URL by a
+   `history.replaceState` that runs *before* the exchange — so a reload or a
+   Back cannot resubmit them. The page's own `ranRef` guard stops a React
+   double-mount spending the code twice, and an Atlassian denial (`?error=…`)
+   never reaches the exchange at all. All three are pinned by
+   `src/lib/confluence-callback-page.test.ts`. What the page cannot scrub is
+   the request line the *proxy* already saw — that is what item 3's Caddy
+   filters are for.
 2. The page **renews the session first**, before it does anything with the
    code. `completeConfluenceCallback` takes an explicit `refresh` step ahead
    of `post`; this ordering is the entire point of the design, and is pinned
@@ -774,8 +782,25 @@ page before anything server-side has had a chance to refresh a cookie.
    the query string — to `{prefix}/confluence/callback` on the API. Secrets in
    a query string reach access logs, `Referer` headers and browser history;
    Phase 2 found Caddy's own error logger leaking a live authorization code
-   that way, and moving the values into a body removes the surface rather than
-   re-filtering it.
+   that way.
+
+   **This removes the API's query string, not the query string.** Atlassian
+   appends `?code=…&state=…` to whatever redirect URI is registered, and what
+   is registered is now the **web** page's address — which both Caddy profiles
+   proxy from the same site block as the API. So the reverse proxy still sees
+   `GET /integrations/confluence/callback?code=…&state=…` on every connection,
+   and on that path the code has **not been spent yet** when the access-log
+   line would be written. The `delete code` / `delete state` filters in
+   `caddy/Caddyfile*` are therefore **required on the normal path** and must
+   not be removed; they are not legacy defence for the retired API route. See
+   "The Caddy logs redact the OAuth callback query string" in
+   `docs/bluegreen-runbook.md`.
+
+   Those filters delete **top-level** parameters only. Anything that builds a
+   URL with a query string nested inside a parameter has to strip the secrets
+   itself — which is why `redirectToLogin` in `apps/web/src/proxy.ts` scrubs
+   `code`/`state` out of `next`, and why the callback path is excluded from
+   the login redirect altogether (see item 5).
 4. The outcome is reported as one of `connected`, `session-expired`,
    `state-invalid`, `code-spent`, or `failed`, because "your session expired
    while you were on Atlassian's screen, please connect again" is actionable
@@ -784,6 +809,19 @@ page before anything server-side has had a chance to refresh a cookie.
    distinction. A refresh failure specifically is reported as
    `session-expired` rather than the generic case, because that is the one an
    administrator can act on immediately.
+5. **The web middleware never bounces this page to `/login`.** `/integrations`
+   is a protected prefix, so on a dead session the middleware would ordinarily
+   answer `307 Location: /login?next=…%3Fcode%3D<live code>`, putting an
+   unspent authorization code into the `Location` header, the address bar,
+   browser history, the `Referer` of `/login`'s subresources, and the proxy
+   access log (Caddy's filter deletes only top-level parameters, and this one
+   is nested inside `next`). It would also be self-defeating: renewing the
+   session is precisely what this page does for itself. So `proxy.ts` lets the
+   callback path through instead of redirecting it, having still attempted the
+   server-side refresh and still applying the no-store headers — the page's own
+   refresh stays authoritative and reports `session-expired` if it fails. As
+   depth, `redirectToLogin` also strips `code`/`state` out of `next` for every
+   other path. Both are pinned by `src/proxy.test.ts`.
 
 **The old API-hosted `GET` callback still exists, and answers on purpose.** A
 charity whose Atlassian app is still registered against

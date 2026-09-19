@@ -26,6 +26,17 @@
 	# On a 502 the code was never delivered to the API, so it is unspent and
 	# still live at Atlassian, and the `state` has its full ten minutes left.
 	#
+	# Since Phase 6 the SAME query string also arrives on the NORMAL connect
+	# path, at the WEB origin:
+	#   GET /integrations/confluence/callback?code=…&state=…
+	# `confluenceRedirectUri()` registers {FRONTEND_URL}/integrations/
+	# confluence/callback, and Atlassian — not this codebase — appends the
+	# query string. Moving the exchange into a JSON body changed what the
+	# application does with the values, not how they arrive. So this filter
+	# is REQUIRED for the ordinary path, not just for a stale registration
+	# against the retired API address, and on that path the code has not yet
+	# been spent when the line would be written.
+	#
 	# Filtering the DEFAULT logger — rather than a site `log` — is therefore
 	# what closes it here, and it also covers any access log added later: a
 	# site-level `log` inherits nothing from this, so if one is ever added it

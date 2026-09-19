@@ -69,23 +69,43 @@
 	log {
 		# Redact the OAuth callback's query parameters before they are written.
 		#
-		# Caddy's JSON access log records `request.uri` INCLUDING the query
-		# string. The ordinary connect path no longer puts `code`/`state` in a
-		# query string at all — Phase 6 moved the callback to a web-app page
-		# that POSTs them in a body — but the OLD, retired API address still
-		# answers rather than 404ing, and a deployment whose Atlassian app is
-		# still registered against it can still produce
-		#   GET /api/v1/integrations/confluence/callback?code=...&state=...
-		# on every connection attempt made there, because Atlassian appends the
-		# query string, not this codebase. `apps/api/src/utils/logger.ts`
-		# already censors both parameters out of the API's own log; without the
-		# filter below they would still land here, one layer further out, which
-		# is the log an operator is most likely to `docker logs` and paste into
-		# a ticket. `code` is a single-use authorization code and `state` is the
-		# CSRF token the whole flow rests on.
+		# THIS FILTER IS REQUIRED ON THE NORMAL CONNECT PATH. It is not
+		# legacy defence, and it must not be removed.
 		#
-		# DO NOT remove this as noise — it is defence for a stale registration,
-		# not the normal path. See docs/bluegreen-runbook.md.
+		# Caddy's JSON access log records `request.uri` INCLUDING the query
+		# string. Phase 6 moved the callback from a route in apps/api to a
+		# PAGE in apps/web. That changed what the application does with
+		# `code`/`state` once it has them (it POSTs them in a JSON body
+		# instead of putting them in an API request line) — it did NOT
+		# change how they arrive. `confluenceRedirectUri()` registers
+		#   {FRONTEND_URL}/integrations/confluence/callback
+		# and ATLASSIAN, not this codebase, appends the query string to
+		# whatever redirect URI is registered. This site block proxies the
+		# web app and the API together, so on EVERY successful connection
+		# this proxy sees
+		#   GET /integrations/confluence/callback?code=...&state=...
+		# and this filter is the only thing keeping it out of the log.
+		#
+		# That request is the page LOAD, before the page POSTs the code, so
+		# the value in the log line would be a LIVE, UNSPENT authorization
+		# code with the `state` still inside its full TTL — worse than the
+		# retired-route case below, not better.
+		#
+		# The OLD, retired API address still answers rather than 404ing, so
+		# a deployment whose Atlassian app is still registered against
+		#   GET /api/v1/integrations/confluence/callback?code=...&state=...
+		# leaks the same way there. This filter covers BOTH paths.
+		# `apps/api/src/utils/logger.ts` censors both parameters out of the
+		# API's own log one layer in; this is the log an operator is most
+		# likely to `docker logs` and paste into a ticket.
+		#
+		# It deletes TOP-LEVEL `code`/`state` only — it cannot see either
+		# value nested inside another parameter (e.g.
+		# `/login?next=%2F...%3Fcode%3D...`), so application code that builds
+		# such a URL must strip the secrets itself. `redirectToLogin` in
+		# apps/web/src/proxy.ts does, and is pinned by a test.
+		#
+		# DO NOT remove this as noise. See docs/bluegreen-runbook.md.
 		output stdout
 		format filter {
 			wrap json

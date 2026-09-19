@@ -767,26 +767,60 @@ log encoder rather than plain `format json`:
 	}
 ```
 
-**Do not remove this, and do not "simplify" it back to `format json`.** Caddy's
-JSON access log records `request>uri` *including the query string*. On the
-ordinary connect path today, `code` and `state` never reach a query string at
-all — the callback moved to a page in the web app (Phase 6), which posts them
-to the API in a JSON body precisely so they never touch a URL, an access log,
-or a `Referer` header. But the **old, retired** callback address still
-answers rather than 404ing, and a deployment whose Atlassian app is still
-registered against it is exactly the deployment still capable of producing
+**This filter is required on the normal connect path. Never remove it, and
+never "simplify" it back to `format json`.** Caddy's JSON access log records
+`request>uri` *including the query string*, and on the ordinary path the proxy
+sees a live authorization code in that query string on **every single
+connection a charity makes**.
+
+Here is why, and it is worth reading before touching the block. Phase 6 moved
+the callback from a route in `apps/api` to a **page in `apps/web`**. What that
+changed is what the *application* does with `code` and `state` once it has
+them: the page reads them out of its own `searchParams` and POSTs them to the
+API in a JSON **body**, so they no longer appear in an API request line.
+
+What it did **not** change is how they arrive. `confluenceRedirectUri()`
+(`apps/api/src/routes/integrations/index.ts`) registers
+`{FRONTEND_URL}/integrations/confluence/callback` with Atlassian, and
+**Atlassian — not this codebase — appends `?code=…&state=…` to whatever
+redirect URI is registered.** Both site-serving profiles proxy the web app
+from the *same site block* that proxies the API, so on the ordinary path this
+proxy sees, on every connection:
+
+```
+GET /integrations/confluence/callback?code=<authorization code>&state=<signed CSRF state>
+```
+
+and this filter is the only thing keeping that line out of the log.
+
+Worse than the retired-route case, in fact: this request is the *page load*.
+The code has not been spent yet when the access-log line is written — the page
+spends it in a later POST — so what lands in the log is a **live, unspent**
+authorization code with the `state` still inside its full TTL.
+
+The **old, retired** API callback address also still answers rather than
+404ing, so a deployment whose Atlassian app is still registered against
 
 ```
 GET /api/v1/integrations/confluence/callback?code=<authorization code>&state=<signed CSRF state>
 ```
 
-on every connection attempt a charity makes there, because Atlassian — not
-this codebase — is the one appending the query string to that redirect.
-`apps/api/src/utils/logger.ts` already censors both parameters out of the
-API's own log; this filter closes the same leak one layer further out, in the
-log an operator is most likely to read with `docker logs` and paste into a
-ticket or a support thread. It is defence for a stale registration, not for
-the normal path, and it stays until nothing can still hit the retired route.
+produces the same leak there. The filter covers **both** — the normal web
+path and the retired API path — and `apps/api/src/utils/logger.ts` censors
+both parameters out of the API's own log one layer in.
+
+So: the filter is **not** legacy defence awaiting the retirement of an old
+route. It became *more* load-bearing in Phase 6, not less, because it now
+covers a path that runs for every charity that connects rather than only for
+stale registrations. Removing it would put a live authorization code into the
+proxy access log on every connection — re-opening the exact Phase 2 failure.
+
+Note also that the filter deletes **top-level** `code` and `state` only. It
+cannot see either value nested inside another parameter — a redirect built as
+`/login?next=%2F…%3Fcode%3D…` would sail straight through it. Anything in the
+application that builds a URL carrying a query string inside a parameter must
+strip the secrets itself; `redirectToLogin` in `apps/web/src/proxy.ts` does,
+and is pinned by a test.
 
 ### It is applied twice per file, and the second one is the important one
 
@@ -849,12 +883,14 @@ docker run --rm -v "$PWD/caddy:/etc/caddy:ro"   caddy:2-alpine@sha256:5f5c8640aa
 `grep -o … | wc -l` is deliberate: it prints a number every time, so a missing
 filter shows up as `0` rather than as no output at all.
 
-The residual risk if the filters were removed is bounded rather than nil — an
-access-logged `code` is single-use and already spent by the time the line is
-written, and replaying the `state` needs an authenticated session in the same
-organisation — but "no authorization code reaches a log" should be true of the
-deployment, not only of the application, and the error-log case is not covered
-by that reassurance at all.
+The residual risk if the filters were removed is **not** bounded, and an
+earlier revision of this runbook said it was. The reassurance used to be that
+an access-logged `code` is already spent by the time the line is written. That
+was true while the callback was an API route that spent the code inside the
+very request being logged. Since Phase 6 it is false on the normal path: the
+logged request is the web page's own load, and the page spends the code in a
+separate POST afterwards, so the access-logged value is **live and unspent**.
+The error-log case was never covered by that reassurance either.
 
 ## The nightly cron (private VM)
 
