@@ -1036,8 +1036,19 @@ Confluence may be promoted from alpha to GA when, and only when:
    when that attempt does not succeed, and tells the administrator the two remedies that do work —
    the grant dies after 90 days without use, or immediately if they remove CharityPilot in their
    Atlassian connected-apps settings.
-5. The limits in Task 7 are documented and shown to the administrator before they connect.
+5. **Met, by Phase 6 Task 3 (2026-09-19).** The limits in Task 7 are documented, and the connect
+   screen at `apps/web/src/app/(dashboard)/integrations/page.tsx` shows the disclosure the API
+   returns from `GET /confluence/authorize` *before* the administrator ever leaves for Atlassian —
+   not in a footnote they may never read. `buildConnectView` (`apps/web/src/lib/integration-status.ts`)
+   throws rather than returning a partial view when the disclosure is missing or incomplete, so the
+   page has no path that renders the authorize link without it standing next to it; this is pinned by
+   `integration-status.test.ts` and was verified by mutation (dropping any one of the three required
+   disclosure fields fails exactly that pinning test, and only that one). No client can obtain the
+   authorize URL from this UI without the disclosure arriving alongside it.
 
 Item 2 cannot be verified against a real site until the Atlassian app install unblocks Phase 4.
 Until then this phase is verified against fakes, and **that fact must be stated in the report** —
-a fake cannot tell you Atlassian changed a status code.
+a fake cannot tell you Atlassian changed a status code. **Confluence therefore remains alpha**:
+criterion 5 being met does not promote it, because criterion 2 is still open and criterion 1 (every
+task and a clean whole-branch review) was true only as of this phase's own close — it says nothing
+about Phase 6's code.

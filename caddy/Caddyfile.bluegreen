@@ -70,16 +70,22 @@
 		# Redact the OAuth callback's query parameters before they are written.
 		#
 		# Caddy's JSON access log records `request.uri` INCLUDING the query
-		# string, and this proxy carries
+		# string. The ordinary connect path no longer puts `code`/`state` in a
+		# query string at all — Phase 6 moved the callback to a web-app page
+		# that POSTs them in a body — but the OLD, retired API address still
+		# answers rather than 404ing, and a deployment whose Atlassian app is
+		# still registered against it can still produce
 		#   GET /api/v1/integrations/confluence/callback?code=...&state=...
-		# on every Confluence connection. `apps/api/src/utils/logger.ts` already
-		# censors both parameters out of the API's own log; without the filter
-		# below they would still land here, one layer further out, which is the
-		# log an operator is most likely to `docker logs` and paste into a
-		# ticket. `code` is a single-use authorization code and `state` is the
+		# on every connection attempt made there, because Atlassian appends the
+		# query string, not this codebase. `apps/api/src/utils/logger.ts`
+		# already censors both parameters out of the API's own log; without the
+		# filter below they would still land here, one layer further out, which
+		# is the log an operator is most likely to `docker logs` and paste into
+		# a ticket. `code` is a single-use authorization code and `state` is the
 		# CSRF token the whole flow rests on.
 		#
-		# DO NOT remove this as noise. See docs/bluegreen-runbook.md.
+		# DO NOT remove this as noise — it is defence for a stale registration,
+		# not the normal path. See docs/bluegreen-runbook.md.
 		output stdout
 		format filter {
 			wrap json

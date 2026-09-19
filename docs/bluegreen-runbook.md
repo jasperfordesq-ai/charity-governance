@@ -570,9 +570,14 @@ start. They are also not generatable: only Atlassian can issue them, so there is
 nothing for `openssl rand` to mint and a placeholder left behind would be
 rejected at boot. To enable Confluence on this host later, register an OAuth 2.0
 (3LO) app whose callback URL is exactly
-`https://<this host>/api/v1/integrations/confluence/callback` and whose scopes
-include `offline_access`, then uncomment **both** lines in `$DST` and redeploy.
-Uncommenting only one is refused at boot, deliberately.
+`https://<this host>/integrations/confluence/callback` — a **web-app** URL,
+not an API one; this host serves both from the same Tailscale origin, so only
+the path changes — and whose scopes include `offline_access`, then uncomment
+**both** lines in `$DST` and redeploy. Uncommenting only one is refused at
+boot, deliberately. The old `/api/v1/integrations/confluence/callback` address
+still answers, deliberately, with `410 CONFLUENCE_CALLBACK_MOVED` naming the
+change, so a host whose Atlassian app was registered before this changed fails
+loudly rather than silently.
 
 Gate: prints `OK: no placeholders left` and the seven non-secret lines show the Tailscale hostname, `charitypilot_personal_server` ×2, the override filename, and the documents volume name. (The appliance's `POSTGRES_PASSWORD` is 64 hex chars, so no URL-encoding is needed in `DATABASE_URL`; if `get POSTGRES_PASSWORD | grep -q '[^0-9a-f]'` prints anything, stop and percent-encode it by hand.)
 
@@ -763,17 +768,25 @@ log encoder rather than plain `format json`:
 ```
 
 **Do not remove this, and do not "simplify" it back to `format json`.** Caddy's
-JSON access log records `request>uri` *including the query string*, and both of
-these proxies carry
+JSON access log records `request>uri` *including the query string*. On the
+ordinary connect path today, `code` and `state` never reach a query string at
+all — the callback moved to a page in the web app (Phase 6), which posts them
+to the API in a JSON body precisely so they never touch a URL, an access log,
+or a `Referer` header. But the **old, retired** callback address still
+answers rather than 404ing, and a deployment whose Atlassian app is still
+registered against it is exactly the deployment still capable of producing
 
 ```
 GET /api/v1/integrations/confluence/callback?code=<authorization code>&state=<signed CSRF state>
 ```
 
-on every Confluence connection a charity makes. `apps/api/src/utils/logger.ts`
-already censors both parameters out of the API's own log; the filter closes the
-same leak one layer further out, in the log an operator is most likely to read
-with `docker logs` and paste into a ticket or a support thread.
+on every connection attempt a charity makes there, because Atlassian — not
+this codebase — is the one appending the query string to that redirect.
+`apps/api/src/utils/logger.ts` already censors both parameters out of the
+API's own log; this filter closes the same leak one layer further out, in the
+log an operator is most likely to read with `docker logs` and paste into a
+ticket or a support thread. It is defence for a stale registration, not for
+the normal path, and it stays until nothing can still hit the retired route.
 
 ### It is applied twice per file, and the second one is the important one
 

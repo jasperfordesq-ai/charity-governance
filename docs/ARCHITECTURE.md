@@ -693,20 +693,36 @@ structural, and is recorded in
 The callback URL registered with Atlassian must be, exactly:
 
 ```
-{NEXT_PUBLIC_API_URL}/api/v1/integrations/confluence/callback
+{FRONTEND_URL}/integrations/confluence/callback
 ```
 
-`/api/v1/integrations` is `INTEGRATION_ROUTES_PREFIX`, the prefix `server.ts`
-registers the plugin under, and the route itself is `/confluence/callback`. The
-API builds its own `redirect_uri` from the same two constants, so the value it
-sends and the path that answers cannot drift — but Atlassian matches the
-registered URL exactly, and a mismatch fails at the final step of a real
-connection, after the charity has granted access.
+This is a **web-app** URL, not an API one — see the next subsection for why.
+`/integrations/confluence/callback` is `CONFLUENCE_CALLBACK_PATH`, exported
+from `apps/api/src/routes/integrations/index.ts` so the web page (Task 2 of
+Phase 6) serves exactly this path rather than retyping it, and
+`confluenceRedirectUri()` builds the `redirect_uri` the API sends from the
+same constant plus `getPrimaryFrontendOrigin()` — `FRONTEND_URL`, the same
+variable the CORS allow-list and every emailed link already read. If
+`FRONTEND_URL` holds a comma-separated list of approved web origins, only the
+**first** one becomes the `redirect_uri`, so only that origin can complete a
+connection. Atlassian still matches the registered URL exactly, and a mismatch
+fails at the final step of a real connection, after the charity has granted
+access.
+
+**This used to be an API URL** —
+`{NEXT_PUBLIC_API_URL}/api/v1/integrations/confluence/callback` — until Phase
+6 moved it, for the reason the next subsection records. That old address is
+not a dead route: it still answers, deliberately, with `410 Gone` and code
+`CONFLUENCE_CALLBACK_MOVED`, naming the change and carrying the exact URL to
+re-register, so a deployment whose Atlassian app was never updated fails
+loudly rather than repeating a silent 401.
 
 #### The callback is cookie-authenticated, and the session can expire mid-flow
 
-**Read this before building the web side of the connect flow. The decision is
-not made yet, and it should be made knowingly rather than discovered.**
+**This was an open question through Phase 5. Phase 6 decided it. Read this
+before touching the connect flow — the reasoning below is the argument for
+the shape that exists now, and a future change that loses it can silently
+reintroduce the failure it removed.**
 
 Three lifetimes meet at the callback:
 
@@ -736,18 +752,54 @@ who has just granted access — and the authorization code in that URL is
 flow again, and nothing on the page explains why. Retrying hits the same wall,
 because the session is no fresher the second time.
 
-This is a live failure mode and a common one, and it argues for a specific
-shape: **register the callback against a page in the web app, which refreshes
-the session and then posts `code` and `state` to the API**, rather than a bare
-302 with the parameters in a fragment. Only the page-mediated form gets a chance
-to renew an expired session *before* the code is spent; the fragment form
-inherits exactly the failure above. Whatever is chosen, the registered callback
-URL must remain byte-identical to the `redirect_uri` the API sends, so a change
-of shape is a change to both.
+This is a live failure mode and a common one, and it decided the shape built in
+Phase 6: **the callback is registered against a page in the web app, which
+refreshes the session *before* it spends the code**, rather than a bare 302
+with the parameters in a URL fragment. Only the page-mediated form gets a
+chance to renew an expired session before the code is spent; the fragment form
+inherits exactly the failure above, because a fragment is still visible to the
+page before anything server-side has had a chance to refresh a cookie.
 
-The routes themselves deliberately do not redirect — the web app decides when
-and how to send the administrator to Atlassian — so this is genuinely the web
-work's call to make, and this note exists so it is made on purpose.
+**What was built, in order:**
+
+1. Atlassian redirects to `{FRONTEND_URL}/integrations/confluence/callback` —
+   a page in `apps/web`, not a route in `apps/api`. `code` and `state` arrive
+   in the page's `searchParams`, never logged and never left in the URL after
+   the exchange — the page replaces the history entry.
+2. The page **renews the session first**, before it does anything with the
+   code. `completeConfluenceCallback` takes an explicit `refresh` step ahead
+   of `post`; this ordering is the entire point of the design, and is pinned
+   by a test that asserts `refresh` happens before `post`.
+3. Only then does it `POST` `{ code, state }` — in the request **body**, not
+   the query string — to `{prefix}/confluence/callback` on the API. Secrets in
+   a query string reach access logs, `Referer` headers and browser history;
+   Phase 2 found Caddy's own error logger leaking a live authorization code
+   that way, and moving the values into a body removes the surface rather than
+   re-filtering it.
+4. The outcome is reported as one of `connected`, `session-expired`,
+   `state-invalid`, `code-spent`, or `failed`, because "your session expired
+   while you were on Atlassian's screen, please connect again" is actionable
+   and a spent code means the administrator **must** restart rather than
+   retry — collapsing these to one generic failure message would erase that
+   distinction. A refresh failure specifically is reported as
+   `session-expired` rather than the generic case, because that is the one an
+   administrator can act on immediately.
+
+**The old API-hosted `GET` callback still exists, and answers on purpose.** A
+charity whose Atlassian app is still registered against
+`{NEXT_PUBLIC_API_URL}/api/v1/integrations/confluence/callback` keeps sending
+administrators there. Rather than 404, it answers `410 Gone` with code
+`CONFLUENCE_CALLBACK_MOVED` and a pinned message naming the change and the
+exact URL to re-register — read without requiring a session, since requiring
+one would reproduce the very failure this change exists to remove, for the
+person who most needs to read the message. It reads nothing from the request
+(no query string, no body, no user), so it is safe to answer unauthenticated.
+
+The registered callback URL and the `redirect_uri` the API builds
+(`confluenceRedirectUri()`) must remain byte-identical — Atlassian matches it
+exactly — so a future change to either the path or the origin source is a
+change to both, and the routes still deliberately do not redirect: the web app
+alone decides when and how to send the administrator to Atlassian.
 
 #### Why the integration routes carry no `subscriptionGuard`
 
