@@ -311,6 +311,15 @@ told `null` can adopt nothing and must create.
 
 **More than one match must be an error, not a guess.** Raise a distinct code.
 
+> **A second thing only a real site can settle.** Task 4 sends `space-id` as a **bare string**,
+> because `ConfluenceRequestSpec.query` is `Record<string, string>` serialised through
+> `URLSearchParams.set` — one value per key, no repeated or bracketed form — and every Confluence id
+> in this codebase is already a string. Atlassian documents the parameter as an array of integers.
+> If that filter is silently ignored, `findPageByTitle` would match on title across the **whole
+> site** rather than within the chosen space. The ambiguity guard catches that case loudly (two
+> spaces holding the same title yields two results, which raises), so the failure is safe — but it
+> is still unverified. Confirm it when the app install lands.
+>
 > **An assumption worth naming.** The adopt-on-409 design rests on titles being unique within a
 > space. Confluence's own use of 409 for a duplicate title strongly implies it, but **it is not
 > stated on the v2 pages documentation and we have not verified it against a real site.** That is
