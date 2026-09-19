@@ -14,6 +14,7 @@
 
 - **Location is `mcp/` in the repo root.** Never `apps/mcp` or `packages/mcp` — those match the workspace globs `["packages/*","apps/*"]`, which would put the package in the root `package-lock.json` while `apps/api/Dockerfile` never copies its manifest, breaking `npm ci` in the image and with it blue-green deploys on the VM.
 - **`mcp/` has its own `package-lock.json`.** The root lockfile must not change. Any task whose diff touches the root `package-lock.json` is wrong.
+- **Install with `cd mcp && npm install`, never `npm install --prefix mcp`.** From the repo root the `--prefix` form means "install the current directory's package into that prefix", which injects `"charitypilot": "file:.."` into `mcp/package.json` and a parent link into its lockfile. `npm ci --prefix mcp` is safe and is what CI runs.
 - **Read-only.** No tool issues anything but `GET`. The only non-GET requests in the whole package are `POST /auth/login`, `POST /auth/refresh`, `POST /auth/logout`.
 - **No tool input schema may contain the string `organisationId`.** Enforced by test in Task 8.
 - **No token value is ever written to disk or to any log line.** Enforced by test in Task 2.
@@ -138,9 +139,16 @@ export const CONNECTOR_VERSION = '0.1.0';
 - [ ] **Step 3: Install and run the test**
 
 ```bash
-npm install --prefix mcp
+cd mcp && npm install && cd ..
 npm run test --prefix mcp
 ```
+
+**Do not run `npm install --prefix mcp` from the repository root.** To npm that means
+"install the package in the current directory (`charitypilot`) into the `mcp` prefix",
+and it writes `"charitypilot": "file:.."` into `mcp/package.json` and a
+`node_modules/charitypilot` link into the lockfile — the exact workspace coupling this
+package exists to avoid. `cd mcp && npm install` is correct. `npm ci --prefix mcp` is
+also safe (it takes no package argument), which is why CI does use it.
 
 Expected: PASS, 1 test. Confirm `git status` shows **no change** to the root `package-lock.json`. If it does, `mcp/` has been placed inside a workspace glob — stop and fix the location.
 
