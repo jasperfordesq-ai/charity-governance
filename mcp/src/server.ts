@@ -6,6 +6,12 @@ import {
 } from '@modelcontextprotocol/sdk/types.js';
 import { TOOLS, runTool, toolInputSchema } from './tools.js';
 import {
+  FILE_TOOLS,
+  runFileTool,
+  unavailableBecause,
+  type FileToolDefinition,
+} from './file-tools.js';
+import {
   fetchSessionPosture,
   permits,
   refusalFor,
@@ -18,12 +24,40 @@ import type { AccessLevel, ConnectorConfig } from './config.js';
 import { CONNECTOR_VERSION } from './version.js';
 import { redactSecrets } from './redact.js';
 
-export function buildToolList(level: AccessLevel = 'admin') {
-  return toolsFor(level, TOOLS).map((tool) => ({
-    name: tool.name,
-    description: tool.description,
-    inputSchema: toolInputSchema(tool),
-  }));
+const FILE_RANK: Record<AccessLevel, number> = { read: 0, write: 1, admin: 2 };
+
+/**
+ * The file tools are advertised only when the operator enabled them.
+ *
+ * Offering a tool that is switched off would have a model try it and read the
+ * refusal as a fault, rather than as a deliberate setting.
+ */
+function availableFileTools(
+  level: AccessLevel,
+  config: Pick<ConnectorConfig, 'uploadRoot' | 'downloadDir'>,
+): readonly FileToolDefinition[] {
+  return FILE_TOOLS.filter((tool) => {
+    if (FILE_RANK[level] < FILE_RANK[tool.level]) return false;
+    return tool.requires === 'uploadRoot' ? Boolean(config.uploadRoot) : Boolean(config.downloadDir);
+  });
+}
+
+export function buildToolList(
+  level: AccessLevel = 'admin',
+  config: Pick<ConnectorConfig, 'uploadRoot' | 'downloadDir'> = {},
+) {
+  return [
+    ...toolsFor(level, TOOLS).map((tool) => ({
+      name: tool.name,
+      description: tool.description,
+      inputSchema: toolInputSchema(tool),
+    })),
+    ...availableFileTools(level, config).map((tool) => ({
+      name: tool.name,
+      description: tool.description,
+      inputSchema: tool.inputSchema,
+    })),
+  ];
 }
 
 export async function startServer(config: ConnectorConfig, session: Session): Promise<void> {
@@ -62,10 +96,36 @@ export async function startServer(config: ConnectorConfig, session: Session): Pr
   }
 
   server.setRequestHandler(ListToolsRequestSchema, async () => ({
-    tools: buildToolList(await level()),
+    tools: buildToolList(await level(), config),
   }));
 
   server.setRequestHandler(CallToolRequestSchema, async (request) => {
+    const fileTool = FILE_TOOLS.find((t) => t.name === request.params.name);
+    if (fileTool) {
+      const current = await level();
+      if (FILE_RANK[current] < FILE_RANK[fileTool.level]) {
+        return {
+          isError: true,
+          content: [{ type: 'text', text: refusalFor(current, { ...fileTool, path: '' }) }],
+        };
+      }
+      const enabled =
+        fileTool.requires === 'uploadRoot' ? config.uploadRoot : config.downloadDir;
+      if (!enabled) {
+        return { isError: true, content: [{ type: 'text', text: unavailableBecause(fileTool) }] };
+      }
+      try {
+        const args = (request.params.arguments ?? {}) as Record<string, unknown>;
+        const result = await runFileTool(fileTool, client, config, args);
+        return { content: [{ type: 'text', text: JSON.stringify(result, null, 2) }] };
+      } catch (error) {
+        return {
+          isError: true,
+          content: [{ type: 'text', text: redactSecrets((error as Error).message) }],
+        };
+      }
+    }
+
     const tool = TOOLS.find((t) => t.name === request.params.name);
     if (!tool) {
       return { isError: true, content: [{ type: 'text', text: `Unknown tool: ${request.params.name}` }] };

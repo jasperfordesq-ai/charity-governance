@@ -33,6 +33,10 @@ export interface ConnectorConfig {
   passwordStdin: boolean;
   /** The approval to grant. Only meaningful for the approve command. */
   approvalId?: string | undefined;
+  /** The one directory documents may be uploaded from. Absent means no uploads. */
+  uploadRoot?: string | undefined;
+  /** The one directory documents may be downloaded into. Absent means no downloads. */
+  downloadDir?: string | undefined;
 }
 
 function hostnameOf(baseUrl: string): string | null {
@@ -52,6 +56,8 @@ export function parseArgs(argv: string[]): ConnectorConfig {
   let passwordStdin = false;
   let accessLevel: AccessLevel | undefined;
   let approvalId: string | undefined;
+  let uploadRoot: string | undefined;
+  let downloadDir: string | undefined;
 
   for (let i = 0; i < argv.length; i += 1) {
     const arg = argv[i]!;
@@ -87,6 +93,16 @@ export function parseArgs(argv: string[]): ConnectorConfig {
         );
       }
       accessLevel = value as AccessLevel;
+    } else if (arg === '--upload-root') {
+      i += 1;
+      const value = argv[i];
+      if (!value) throw new Error('--upload-root requires a directory');
+      uploadRoot = value;
+    } else if (arg === '--download-dir') {
+      i += 1;
+      const value = argv[i];
+      if (!value) throw new Error('--download-dir requires a directory');
+      downloadDir = value;
     } else if (arg === '--password-stdin') {
       passwordStdin = true;
     } else if (command === 'approve' && !arg.startsWith('-') && approvalId === undefined) {
@@ -125,6 +141,11 @@ export function parseArgs(argv: string[]): ConnectorConfig {
     // destructive actions until someone asks for them by name.
     accessLevel: accessLevel ?? (profile === 'local' ? 'admin' : 'write'),
     approvalId,
+    // Both absent by default. Reading files from a machine and writing
+    // personal data onto it are things the operator asks for by name,
+    // never things that are simply available.
+    uploadRoot,
+    downloadDir,
     email,
     passwordStdin,
   };

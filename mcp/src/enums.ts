@@ -45,3 +45,16 @@ export const COMPLIANCE_STATUSES = [
 ] as const;
 
 export const DIRECTOR_APPOINTMENT_KINDS = ['BOARD', 'MEMBERS'] as const;
+
+export const DOCUMENT_CATEGORIES = [
+  'CONSTITUTION',
+  'POLICY',
+  'BOARD_MINUTES',
+  'FINANCIAL_STATEMENT',
+  'INSURANCE',
+  'ANNUAL_REPORT',
+  'RISK_REGISTER',
+  'CODE_OF_CONDUCT',
+  'STRATEGIC_PLAN',
+  'OTHER',
+] as const;

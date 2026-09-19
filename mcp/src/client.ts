@@ -98,11 +98,81 @@ export class ApiClient {
     return this.#request<T>('DELETE', path, undefined, options);
   }
 
-  async #request<T>(
+  /**
+   * Uploads a file as multipart form data.
+   *
+   * Kept apart from the JSON verbs because almost nothing is shared: no
+   * content-type is set, since the runtime writes the multipart boundary
+   * itself, and the body is a FormData rather than a serialised object.
+   */
+  async upload<T>(
+    path: string,
+    file: { name: string; mimeType: string; bytes: Buffer },
+    fields: Record<string, string>,
+    options: WriteOptions = {},
+  ): Promise<T> {
+    const form = new FormData();
+    for (const [key, value] of Object.entries(fields)) form.append(key, value);
+    form.append(
+      'file',
+      new Blob([new Uint8Array(file.bytes)], { type: file.mimeType }),
+      file.name,
+    );
+    return this.#send<T>('POST', path, form, options);
+  }
+
+  /**
+   * Fetches a document's bytes.
+   *
+   * Returns the body rather than parsing it, because a stored document is not
+   * JSON and the personal-data gate cannot filter a file.
+   */
+  async download(
+    path: string,
+  ): Promise<{ bytes: Buffer; fileName: string | null }> {
+    const token = await this.#session.accessToken();
+    const response = await this.#fetch(`${this.#baseUrl}${path}`, {
+      method: 'GET',
+      headers: {
+        authorization: `Bearer ${token}`,
+        [CLIENT_HEADER]: `mcp-connector/${CONNECTOR_VERSION}`,
+      },
+    });
+
+    if (!response.ok) {
+      throw new ApiError(response.status, await this.#refusalMessage(response));
+    }
+
+    const disposition = response.headers.get('content-disposition') ?? '';
+    const match = /filename\*?=(?:UTF-8'')?"?([^";]+)"?/i.exec(disposition);
+
+    return {
+      bytes: Buffer.from(await response.arrayBuffer()),
+      fileName: match?.[1] ? decodeURIComponent(match[1]) : null,
+    };
+  }
+
+  #request<T>(
     method: Method,
     path: string,
     body: unknown,
     options: WriteOptions,
+  ): Promise<T> {
+    return this.#send<T>(
+      method,
+      path,
+      body === undefined ? undefined : JSON.stringify(body),
+      options,
+      body !== undefined,
+    );
+  }
+
+  async #send<T>(
+    method: Method,
+    path: string,
+    body: string | FormData | undefined,
+    options: WriteOptions,
+    isJson = false,
     isRetry = false,
   ): Promise<T> {
     const token = await this.#session.accessToken();
@@ -112,7 +182,9 @@ export class ApiClient {
       accept: 'application/json',
       [CLIENT_HEADER]: `mcp-connector/${CONNECTOR_VERSION}`,
     };
-    if (body !== undefined) headers['content-type'] = 'application/json';
+    // FormData sets its own content-type, including the boundary, so one set
+    // here would produce a body the server cannot parse.
+    if (isJson) headers['content-type'] = 'application/json';
     // Capped here as well as at the API, so an over-long reason is trimmed
     // rather than silently dropped by the server's own limit.
     if (options.reason) headers[REASON_HEADER] = options.reason.slice(0, 500);
@@ -123,7 +195,7 @@ export class ApiClient {
       response = await this.#fetch(`${this.#baseUrl}${path}`, {
         method,
         headers,
-        ...(body === undefined ? {} : { body: JSON.stringify(body) }),
+        ...(body === undefined ? {} : { body }),
       });
     } catch (cause) {
       throw new Error(
@@ -142,7 +214,16 @@ export class ApiClient {
     // session still fails fast instead of looping.
     if (response.status === 401 && !isRetry) {
       this.#session.invalidateAccessToken();
-      return this.#request<T>(method, path, body, options, true);
+      // A FormData body cannot be replayed once consumed, so an upload that
+      // meets an expired token is reported rather than retried silently.
+      if (body instanceof FormData) {
+        throw new ApiError(
+          401,
+          'The session expired while the file was being sent. Nothing was uploaded; '
+            + 'ask again and it will be retried with a fresh session.',
+        );
+      }
+      return this.#send<T>(method, path, body, options, isJson, true);
     }
     if (response.status === 401) {
       throw new ApiError(401, 'Session expired. Run: charitypilot-mcp connect');
