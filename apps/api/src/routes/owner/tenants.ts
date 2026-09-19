@@ -7,6 +7,7 @@ import { provisionTenant } from '../../services/owner-provisioning.service.js';
 import {
   getTenantConfiguration,
   updateTenantConfiguration,
+  listTenantAdministrativeEvents,
 } from '../../services/owner-tenant-configuration.service.js';
 
 /**
@@ -38,6 +39,19 @@ export async function ownerTenantRoutes(app: FastifyInstance): Promise<void> {
   app.get('/tenants', async (request, reply) => {
     try {
       reply.send(await listTenants(app.prisma, listQuerySchema.parse(request.query ?? {})));
+    } catch (err) {
+      if (err instanceof ZodError) {
+        reply.status(400).send({ error: 'Validation failed', code: 'VALIDATION_ERROR' });
+        return;
+      }
+      handleError(reply, err);
+    }
+  });
+
+  app.get('/tenants/:id/history', async (request, reply) => {
+    try {
+      const { id } = z.object({ id: z.string().min(1).max(64) }).parse(request.params);
+      reply.send({ events: await listTenantAdministrativeEvents(app.prisma, id) });
     } catch (err) {
       if (err instanceof ZodError) {
         reply.status(400).send({ error: 'Validation failed', code: 'VALIDATION_ERROR' });

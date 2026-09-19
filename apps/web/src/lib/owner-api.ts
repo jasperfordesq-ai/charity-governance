@@ -112,6 +112,16 @@ export type TenantConfiguration = {
   updatedAt: string;
 };
 
+/** What platform operators have done to one charity. Never the charity's own trail. */
+export type TenantAdministrativeEvent = {
+  id: string;
+  type: string;
+  actorLabel: string;
+  reason: string;
+  occurredAt: string;
+  context: unknown;
+};
+
 export const ownerApi = {
   async login(
     email: string,
@@ -184,6 +194,10 @@ export const ownerApi = {
   ) {
     const { data } = await client.patch(`/tenants/${id}/configuration`, body);
     return data.configuration as TenantConfiguration;
+  },
+  async tenantHistory(id: string) {
+    const { data } = await client.get(`/tenants/${id}/history`);
+    return data.events as TenantAdministrativeEvent[];
   },
   async transitionLifecycle(
     id: string,

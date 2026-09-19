@@ -155,6 +155,19 @@ test('a configuration change is saved, and recorded against the operator', async
   expect(audit[0]!.context).toMatchObject({ newDocumentStorageProvider: 'local' });
 });
 
+test('the history shows the change that was just made, and who made it', async ({ page }) => {
+  await useConsole(page);
+  await page.goto(`/owner/tenants/${tenantOrganisationId}`);
+
+  const history = page.getByTestId('tenant-history');
+  await expect(history).toContainText('Configuration changed');
+  await expect(history).toContainText(operatorEmail);
+  await expect(history).toContainText('storage set to local');
+  await expect(history, 'the reason is the point of asking for one').toContainText(
+    'keep their files on their own server',
+  );
+});
+
 test('a change cannot be saved without a reason', async ({ page }) => {
   await useConsole(page);
   await page.goto(`/owner/tenants/${tenantOrganisationId}`);

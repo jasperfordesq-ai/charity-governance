@@ -339,3 +339,55 @@ export async function updateTenantConfiguration(
     return toConfiguration(row, registry);
   });
 }
+
+export type TenantAdministrativeEvent = {
+  id: string;
+  type: string;
+  actorLabel: string;
+  reason: string;
+  occurredAt: Date;
+  context: unknown;
+};
+
+/**
+ * What platform operators have done to this charity, newest first.
+ *
+ * Only the events an operator caused: suspensions, closures and configuration
+ * changes. The charity's own security trail — who suspended whom, whose
+ * sessions were revoked — is theirs, is visible to them on their Team page,
+ * and is nobody at the platform's business to browse. An operator needs to see
+ * what the platform did, which is a much narrower thing.
+ */
+const OPERATOR_CAUSED_EVENTS = [
+  'ORGANISATION_SUSPENDED',
+  'ORGANISATION_REACTIVATED',
+  'ORGANISATION_CLOSED',
+  'ORGANISATION_CONFIGURATION_CHANGED',
+] as const;
+
+const ADMINISTRATIVE_EVENT_LIMIT = 50;
+
+export async function listTenantAdministrativeEvents(
+  prisma: PrismaClient,
+  tenantId: string,
+): Promise<TenantAdministrativeEvent[]> {
+  const rows = await prisma.securityAuditEvent.findMany({
+    where: {
+      organisationId: tenantId,
+      type: { in: [...OPERATOR_CAUSED_EVENTS] },
+      actorKind: 'SUPPORT',
+    },
+    select: {
+      id: true,
+      type: true,
+      actorLabel: true,
+      reason: true,
+      occurredAt: true,
+      context: true,
+    },
+    orderBy: [{ occurredAt: 'desc' }, { id: 'desc' }],
+    take: ADMINISTRATIVE_EVENT_LIMIT,
+  });
+
+  return rows as TenantAdministrativeEvent[];
+}

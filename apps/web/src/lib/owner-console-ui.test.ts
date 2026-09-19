@@ -185,3 +185,24 @@ test('the console never offers to remove another operator’s second factor', ()
 
   assert.doesNotMatch(security, /operatorId/);
 });
+
+test('the console shows what the platform has done to a charity', () => {
+  // An operator could change a charity's configuration with no way to see what
+  // had already been changed, by whom, or why — including their own earlier
+  // changes. Every row was being written and none was readable.
+  const page = owner('tenants', '[id]', 'page.tsx');
+  const panel = owner('tenants', '[id]', 'tenant-history-panel.tsx');
+
+  assert.match(page, /<TenantHistoryPanel tenantId=\{tenant\.id\} \/>/);
+  assert.match(panel, /tenantHistory/);
+  assert.match(panel, /ORGANISATION_CONFIGURATION_CHANGED/);
+});
+
+test('the history is the platform’s actions, not the charity’s own trail', () => {
+  const panel = owner('tenants', '[id]', 'tenant-history-panel.tsx');
+
+  for (const theirs of ['MEMBER_REMOVED', 'SESSION_REVOKED', 'MEMBER_ROLE_CHANGED']) {
+    assert.doesNotMatch(panel, new RegExp(theirs));
+  }
+  assert.match(panel, /own security history stays with/);
+});

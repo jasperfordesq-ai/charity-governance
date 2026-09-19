@@ -3,7 +3,11 @@ import test from 'node:test';
 
 process.env.JWT_SECRET = process.env.JWT_SECRET ?? 'owner-tenant-configuration-test-secret';
 
-const { getTenantConfiguration, updateTenantConfiguration } = await import(
+const {
+  getTenantConfiguration,
+  updateTenantConfiguration,
+  listTenantAdministrativeEvents,
+} = await import(
   '../services/owner-tenant-configuration.service.js'
 );
 const { createDocumentStorageProviderRegistry } = await import(
@@ -361,4 +365,42 @@ test('a charity that does not exist is a 404, not an empty configuration', async
     () => getTenantConfiguration(client as never, 'nope', registry),
     /not found/i,
   );
+});
+
+test('the history shows what the platform did, and only that', async () => {
+  // The charity's own security trail — who suspended whom, whose sessions were
+  // revoked — is theirs, is on their Team page, and is nobody at the platform's
+  // business to browse. An operator needs to see what the platform did.
+  let captured: Record<string, unknown> = {};
+  const client = {
+    securityAuditEvent: {
+      findMany: async ({ where, take, orderBy }: Record<string, unknown>) => {
+        captured = { where, take, orderBy };
+        return [];
+      },
+    },
+  };
+
+  await listTenantAdministrativeEvents(client as never, 'org-1');
+
+  const where = captured['where'] as Record<string, unknown>;
+  assert.equal(where['organisationId'], 'org-1');
+  assert.equal(
+    where['actorKind'],
+    'SUPPORT',
+    'only events a platform operator caused',
+  );
+
+  const types = (where['type'] as { in: string[] }).in;
+  assert.deepEqual(types.sort(), [
+    'ORGANISATION_CLOSED',
+    'ORGANISATION_CONFIGURATION_CHANGED',
+    'ORGANISATION_REACTIVATED',
+    'ORGANISATION_SUSPENDED',
+  ]);
+  for (const forbidden of ['MEMBER_REMOVED', 'SESSION_REVOKED', 'MEMBER_ROLE_CHANGED']) {
+    assert.ok(!types.includes(forbidden), `${forbidden} is the charity's business, not the platform's`);
+  }
+
+  assert.ok((captured['take'] as number) > 0, 'the history is bounded');
 });

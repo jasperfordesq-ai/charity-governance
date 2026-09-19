@@ -6,6 +6,7 @@ import { Button, Card, CardBody, Input, Textarea } from '@heroui/react';
 import { ownerApi, type TenantSummary } from '@/lib/owner-api';
 import { apiErrorMessage } from '@/lib/errors';
 import { TenantConfigurationPanel } from './tenant-configuration-panel';
+import { TenantHistoryPanel } from './tenant-history-panel';
 
 type Action = 'SUSPEND' | 'REACTIVATE' | 'CLOSE';
 
@@ -94,6 +95,8 @@ export default function OwnerTenantDetailPage() {
         {tenant.lifecycleStatus !== 'CLOSED' ? (
           <TenantConfigurationPanel tenantId={tenant.id} />
         ) : null}
+
+        <TenantHistoryPanel tenantId={tenant.id} />
 
         {tenant.lifecycleStatus !== 'CLOSED' ? (
           <div className="flex flex-col gap-2 rounded border border-danger p-4">
