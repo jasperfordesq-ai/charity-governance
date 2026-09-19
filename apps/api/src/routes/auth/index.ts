@@ -115,7 +115,12 @@ export async function authRoutes(app: FastifyInstance) {
           );
         }
 
-        const result = await authService.refresh(refreshToken);
+        // "WEB" is not decoration. This route sets cookies, so a connector
+        // refresh token spent here would become a browser session carried by a
+        // cookie the connector never had. The connector route refuses a web
+        // token for the mirror-image reason; a credential stolen from one
+        // channel must be useless in the other.
+        const result = await authService.refresh(refreshToken, "WEB");
         setAuthCookies(reply, result);
 
         reply.send({ ok: true });
