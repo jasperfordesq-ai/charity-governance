@@ -158,6 +158,48 @@ enum DocumentPublicationTerminalReason {
   PERMANENT_TARGET_REF_REJECTED
 }
 
+// What the reconcile job last saw when it read the mirrored page in Confluence.
+//
+// TRASHED and GONE are separate values because Confluence's v2 API cannot tell
+// them apart -- GET /pages/{id} answers 404 for both -- and the difference is
+// the whole of what a charity needs to know. TRASHED is restorable by them, in
+// their own site's trash. GONE is not restorable by anyone. Collapsing the two
+// into "deleted" would be the single most misleading word this product could
+// print, which is why the UI copy is pinned by a test that forbids it.
+//
+// UNKNOWN is not an absence: it is a determinate answer meaning "the site
+// refused to tell us" (a 403 on this page). It is distinct from a NULL
+// remoteState, which means the page has never been checked at all.
+enum DocumentPublicationRemoteState {
+  VISIBLE
+  ARCHIVED
+  TRASHED
+  GONE
+  UNKNOWN
+}
+
+// How a tenant's last reconcile visit ended, or -- for the last two values --
+// why it was deliberately not visited.
+//
+// EXPIRING_SOON and EXPIRED are the dormancy sweep, and they exist because of a
+// ruling rather than a technical need. The DPO ruled on 2026-09-20 that
+// refreshing a token as a by-product of an integration doing real work is
+// legitimate, but refreshing one solely to stop an otherwise dormant
+// authorisation expiring is not: unused access should be allowed to lapse and
+// the organisation asked to reconnect. So a tenant with nothing to reconcile is
+// never visited, its refresh token is never taken, and these two values record
+// the consequence approaching and then arriving -- rather than a keepalive
+// quietly preventing it.
+enum IntegrationReconcileOutcome {
+  OK
+  RECONNECT_REQUIRED
+  FORBIDDEN
+  SITE_NOT_ACCESSIBLE
+  RATE_LIMITED
+  EXPIRING_SOON
+  EXPIRED
+}
+
 enum RegisterStatus {
   OPEN
   MONITORING
@@ -517,6 +559,38 @@ model OrganisationIntegration {
   publishSpaceKey     String?
   publishSpaceName    String?
   publishSpaceSiteId  String?
+  // ── reconcile and dormancy ───────────────────────────────────────────────
+  //
+  // `lastReconcileAt` orders the tenant queue (NULLS FIRST), so a newly
+  // connected charity is visited before one that was visited an hour ago.
+  //
+  // `lastReconcileOutcome` is the tenant-level answer, and it carries the
+  // dormancy sweep's two values as well as the four failure modes. See
+  // IntegrationReconcileOutcome for why dormancy is recorded rather than
+  // prevented.
+  //
+  // `dormancyNoticedAt` exists so the notice is raised ONCE. Without it the
+  // six-hourly sweep would write an audit event every six hours for the rest
+  // of the expiry window -- roughly 120 events saying the same thing, which is
+  // how an audit log stops being read. It is cleared whenever the tenant is
+  // used again, because the next lapse is a new fact.
+  lastReconcileAt      DateTime?
+  lastReconcileOutcome IntegrationReconcileOutcome?
+  dormancyNoticedAt    DateTime?
+  // What the charity DECLARED about the Atlassian environment they connected,
+  // captured after connect. Not in `config`, for the same reason the publish
+  // space is not: a reconnect overwrites `config` wholesale and would silently
+  // erase it.
+  //
+  // DECLARED, never verified. CharityPilot does not control a connected site's
+  // residency or plan and cannot read either from the API; recording what the
+  // organisation stated, with who stated it and when, is the honest form. The
+  // screen that captures it says so, and so does the owner console that shows
+  // it.
+  declaredPlan        String?
+  declaredResidency   String?
+  declaredAt          DateTime?
+  declaredById        String?
   createdAt           DateTime            @default(now())
   updatedAt           DateTime            @updatedAt
 
@@ -1206,12 +1280,46 @@ model DocumentPublication {
   erasureRequestedAt DateTime?
   erasureDeletionId  String?
 
+  // ── what the reconcile job last saw on the Confluence side ───────────────
+  //
+  // Read-only mirror state. Nothing here is authoritative about the document:
+  // CharityPilot stays authoritative for approvals, deadlines and audit
+  // history, and this records only what the remote copy looked like when it
+  // was last read. That is the DPO-agreed architecture, and it is why these
+  // columns can be wrong for up to a reconcile interval without any governance
+  // consequence.
+  //
+  // THREE TIMESTAMPS, NOT ONE, and they answer different questions:
+  //  - `lastReconciledAt` is the last DETERMINATE answer. A 403 does not move
+  //    it, so "checked 3 days ago" never means "asked 3 days ago and was
+  //    refused".
+  //  - `reconcileAttemptedAt` is every attempt, determinate or not. It is what
+  //    the claim orders by, so a page the site keeps refusing cannot starve
+  //    the rest of the queue by never advancing.
+  //  - `remoteStateChangedAt` moves only when `remoteState` actually changes,
+  //    so "in the trash since Tuesday" is answerable.
+  //
+  // `reconcileError` holds a CODE, never upstream text: an error string from
+  // Atlassian is untrusted data, and this column is read back onto a screen.
+  remoteState          DocumentPublicationRemoteState?
+  remoteVersion        Int?
+  remoteTitle          String?
+  remoteStateChangedAt DateTime?
+  lastReconciledAt     DateTime?
+  reconcileAttemptedAt DateTime?
+  reconcileError       String?
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
   @@unique([documentId, provider])
   @@index([organisationId])
   @@index([state, nextAttemptAt, claimedAt, createdAt])
+  // Drives the reconcile stamp-claim: oldest attempt first, NULLS FIRST, within
+  // one provider. Deliberately not keyed on `state` as the outbox index is --
+  // the reconciler's interest is "which mirrors have I not looked at lately",
+  // and a row's publish state is checked after it is claimed, not before.
+  @@index([provider, reconcileAttemptedAt])
   // Prisma would derive a 69-byte name here and PostgreSQL would truncate it to
   // 63; naming it explicitly keeps schema and migration textually identical.
   @@index([state, alertedAt, alertClaimedAt, deadLetteredAt], map: "DocumentPublication_state_alert_deadLetteredAt_idx")
