@@ -141,3 +141,22 @@ test('an update at the wrong version is a 409 and changes nothing', async () => 
   assert.equal(fresh.status, 200);
   assert.equal(site.getPage(page.id)?.title, 'Renamed');
 });
+
+test('a space listing longer than the limit carries a next link', async () => {
+  const site = createFakeAtlassian();
+  for (let i = 1; i <= 3; i += 1) {
+    site.addSpace({ id: `space-${i}`, key: `KEY${i}`, name: `Space ${i}` });
+  }
+  const base = `https://api.atlassian.com/ex/confluence/${site.cloudId}`;
+  const auth = { Authorization: 'Bearer access-1' };
+
+  const first = await site.fetch(`${base}/wiki/api/v2/spaces?limit=2`, { headers: auth });
+  const firstBody = (await first.json()) as { results: unknown[]; _links: { next?: string } };
+  assert.equal(firstBody.results.length, 2);
+  assert.ok(firstBody._links.next, 'a truncated listing must offer a next link');
+
+  const second = await site.fetch(`${base}${firstBody._links.next}`, { headers: auth });
+  const secondBody = (await second.json()) as { results: unknown[]; _links: { next?: string } };
+  assert.equal(secondBody.results.length, 1);
+  assert.equal(secondBody._links.next, undefined);
+});

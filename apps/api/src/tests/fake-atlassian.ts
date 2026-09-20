@@ -50,7 +50,7 @@ export type FakePage = {
   properties: Map<string, { id: string; key: string; value: unknown; version: number }>;
 };
 
-type FakeSpace = { id: string; key: string; name: string };
+type FakeSpace = { id: string; key: string; name: string; type: 'global'; status: 'current' };
 
 const DEFAULT_CLOUD_ID = '11111111-2222-3333-4444-555555555555';
 const DEFAULT_SITE_URL = 'https://example.atlassian.net';
@@ -127,6 +127,7 @@ export function createFakeAtlassian(options: FakeAtlassianOptions = {}): FakeAtl
   const revokedTokens = new Set<string>();
 
   let nextPageId = 100001;
+  let nextPropertyId = 1;
   const confluencePrefix = `/ex/confluence/${cloudId}`;
 
   function notFound(): Response {
@@ -204,6 +205,41 @@ export function createFakeAtlassian(options: FakeAtlassianOptions = {}): FakeAtl
     return checkContentBearer(headers) ?? handler();
   }
 
+  /**
+   * A cursor is the index of the next unread item, encoded as a plain
+   * decimal string. `restPath` is the pathname relative to this site's
+   * Confluence prefix (e.g. `/wiki/api/v2/spaces`), because that is how
+   * Atlassian returns `_links.next` and how `confluence-spaces.ts` and
+   * `confluence-pages.ts` read it back: relative, with only the `cursor`
+   * query parameter taken from it.
+   */
+  function paginate<T>(
+    items: T[],
+    url: URL,
+    restPath: string,
+    defaultLimit = 25,
+  ): { results: T[]; _links: { next?: string } } {
+    const limitParam = url.searchParams.get('limit');
+    const parsedLimit = limitParam !== null ? Number(limitParam) : NaN;
+    const limit = Number.isFinite(parsedLimit) && parsedLimit > 0 ? Math.floor(parsedLimit) : defaultLimit;
+
+    const cursorParam = url.searchParams.get('cursor');
+    const start = cursorParam !== null && /^\d+$/.test(cursorParam) ? Number(cursorParam) : 0;
+
+    const page = items.slice(start, start + limit);
+    const nextStart = start + limit;
+
+    const links: { next?: string } = {};
+    if (nextStart < items.length) {
+      const nextParams = new URLSearchParams(url.searchParams);
+      nextParams.set('cursor', String(nextStart));
+      nextParams.set('limit', String(limit));
+      links.next = `${restPath}?${nextParams.toString()}`;
+    }
+
+    return { results: page, _links: links };
+  }
+
   function pageJson(page: FakePage): Record<string, unknown> {
     return {
       id: page.id,
@@ -276,6 +312,87 @@ export function createFakeAtlassian(options: FakeAtlassianOptions = {}): FakeAtl
     return new Response(null, { status: 204 });
   }
 
+  function listSpacesHandler(url: URL): Response {
+    const { results, _links } = paginate(spaces, url, '/wiki/api/v2/spaces');
+    return jsonResponse(200, { results, _links });
+  }
+
+  function listPagesHandler(url: URL): Response {
+    const titleFilter = url.searchParams.get('title');
+    const spaceIdFilter = url.searchParams.get('spaceId') ?? url.searchParams.get('space-id');
+
+    let items = Array.from(pages.values()).filter((page) => page.status === 'current');
+    if (titleFilter !== null) items = items.filter((page) => page.title === titleFilter);
+    if (spaceIdFilter !== null) items = items.filter((page) => page.spaceId === spaceIdFilter);
+
+    const { results, _links } = paginate(items.map(pageJson), url, '/wiki/api/v2/pages');
+    return jsonResponse(200, { results, _links });
+  }
+
+  function propertyJson(record: { id: string; key: string; value: unknown; version: number }): Record<string, unknown> {
+    return { id: record.id, key: record.key, value: record.value, version: { number: record.version } };
+  }
+
+  function listPropertiesHandler(pageId: string, url: URL): Response {
+    const page = pages.get(pageId);
+    if (page === undefined || page.status !== 'current') return notFound();
+
+    const keyFilter = url.searchParams.get('key');
+    let items = Array.from(page.properties.values());
+    if (keyFilter !== null) items = items.filter((record) => record.key === keyFilter);
+
+    const { results, _links } = paginate(items.map(propertyJson), url, `/wiki/api/v2/pages/${pageId}/properties`);
+    return jsonResponse(200, { results, _links });
+  }
+
+  function createPropertyHandler(pageId: string, bodyText: string | undefined): Response {
+    const page = pages.get(pageId);
+    if (page === undefined || page.status !== 'current') return notFound();
+
+    const body = parseJsonObject(bodyText) ?? {};
+    const key = typeof body.key === 'string' ? body.key : undefined;
+    if (key === undefined) return jsonResponse(400, { errors: [{ title: 'key is required' }] });
+    if (page.properties.has(key)) {
+      return jsonResponse(400, { errors: [{ title: 'Property already exists' }] });
+    }
+
+    const id = String(nextPropertyId);
+    nextPropertyId += 1;
+    const record = { id, key, value: body.value, version: 1 };
+    page.properties.set(key, record);
+
+    return jsonResponse(200, propertyJson(record));
+  }
+
+  function getPropertyByIdHandler(pageId: string, propertyId: string): Response {
+    const page = pages.get(pageId);
+    if (page === undefined || page.status !== 'current') return notFound();
+
+    const record = Array.from(page.properties.values()).find((entry) => entry.id === propertyId);
+    if (record === undefined) return notFound();
+
+    return jsonResponse(200, propertyJson(record));
+  }
+
+  function updatePropertyHandler(pageId: string, propertyId: string, bodyText: string | undefined): Response {
+    const page = pages.get(pageId);
+    if (page === undefined || page.status !== 'current') return notFound();
+
+    const record = Array.from(page.properties.values()).find((entry) => entry.id === propertyId);
+    if (record === undefined) return notFound();
+
+    const body = parseJsonObject(bodyText) ?? {};
+    const versionNumber = asObject(body.version)?.number;
+    if (typeof versionNumber !== 'number' || versionNumber !== record.version + 1) {
+      return jsonResponse(409, { errors: [{ title: 'Conflict' }] });
+    }
+
+    record.version = versionNumber;
+    if ('value' in body) record.value = body.value;
+
+    return jsonResponse(200, propertyJson(record));
+  }
+
   function getContentV1Handler(pageId: string, url: URL): Response {
     const page = pages.get(pageId);
     if (page === undefined) return notFound();
@@ -304,8 +421,13 @@ export function createFakeAtlassian(options: FakeAtlassianOptions = {}): FakeAtl
     if (url.hostname === API_HOST && url.pathname.startsWith(confluencePrefix)) {
       const rest = url.pathname.slice(confluencePrefix.length) || '/';
 
-      if (rest === '/wiki/api/v2/pages' && method === 'POST') {
-        return withAuth(headers, () => createPageHandler(bodyText));
+      if (rest === '/wiki/api/v2/pages') {
+        if (method === 'POST') return withAuth(headers, () => createPageHandler(bodyText));
+        if (method === 'GET') return withAuth(headers, () => listPagesHandler(url));
+      }
+
+      if (rest === '/wiki/api/v2/spaces' && method === 'GET') {
+        return withAuth(headers, () => listSpacesHandler(url));
       }
 
       const pageIdMatch = /^\/wiki\/api\/v2\/pages\/([^/]+)$/.exec(rest);
@@ -314,6 +436,20 @@ export function createFakeAtlassian(options: FakeAtlassianOptions = {}): FakeAtl
         if (method === 'GET') return withAuth(headers, () => getPageHandler(pageId));
         if (method === 'PUT') return withAuth(headers, () => updatePageHandler(pageId, bodyText));
         if (method === 'DELETE') return withAuth(headers, () => deletePageHandler(pageId, url));
+      }
+
+      const propertiesMatch = /^\/wiki\/api\/v2\/pages\/([^/]+)\/properties$/.exec(rest);
+      if (propertiesMatch) {
+        const pageId = propertiesMatch[1];
+        if (method === 'GET') return withAuth(headers, () => listPropertiesHandler(pageId, url));
+        if (method === 'POST') return withAuth(headers, () => createPropertyHandler(pageId, bodyText));
+      }
+
+      const propertyIdMatch = /^\/wiki\/api\/v2\/pages\/([^/]+)\/properties\/([^/]+)$/.exec(rest);
+      if (propertyIdMatch) {
+        const [, pageId, propertyId] = propertyIdMatch;
+        if (method === 'GET') return withAuth(headers, () => getPropertyByIdHandler(pageId, propertyId));
+        if (method === 'PUT') return withAuth(headers, () => updatePropertyHandler(pageId, propertyId, bodyText));
       }
 
       const contentMatch = /^\/wiki\/rest\/api\/content\/([^/]+)$/.exec(rest);
@@ -343,7 +479,7 @@ export function createFakeAtlassian(options: FakeAtlassianOptions = {}): FakeAtl
     calls,
     issuedRefreshTokens,
     addSpace(space: { id: string; key: string; name: string }): void {
-      spaces.push({ ...space });
+      spaces.push({ ...space, type: 'global', status: 'current' });
     },
     getPage(pageId: string): FakePage | undefined {
       return pages.get(pageId);
