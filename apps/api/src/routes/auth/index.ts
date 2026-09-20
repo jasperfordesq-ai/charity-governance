@@ -1,7 +1,11 @@
 import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
-import { ZodError } from "zod";
+import { z, ZodError } from "zod";
 import { AuthService } from "../../services/auth.service.js";
-import { authIdentityGuard } from "../../middleware/auth.js";
+import { authGuard, authIdentityGuard } from "../../middleware/auth.js";
+import {
+  grantApproval,
+  listPendingApprovals,
+} from "../../services/action-approval.service.js";
 import {
   registerSchema,
   loginSchema,
@@ -25,6 +29,9 @@ import {
   refreshTokenRateLimit,
 } from "../../utils/identifier-rate-limit.js";
 import { isRegistrationOpen, emailDeliveryMode } from "../../utils/deployment-profile.js";
+
+/** Password attempts a minute on the approvals page, per credential. */
+const APPROVAL_GRANT_MAX_PER_MINUTE = 10;
 
 function formatZodError(error: ZodError) {
   return {
@@ -282,6 +289,82 @@ export async function authRoutes(app: FastifyInstance) {
         const result = await authService.verifyEmail(body.token);
 
         reply.send(result);
+      } catch (err) {
+        if (err instanceof ZodError) {
+          reply.status(400).send(formatZodError(err));
+          return;
+        }
+        handleError(reply, err);
+      }
+    },
+  );
+
+  /**
+   * Approvals, for the person who has no terminal.
+   *
+   * A destructive action asked for by a connector is refused until somebody
+   * approves it with their password. `charitypilot-mcp approve` does that at
+   * a terminal, which is what keeps the agent that asked from also granting
+   * it — an agent can write to a process's input but cannot type at a
+   * terminal. A trustee running Claude Desktop has no terminal at all, and
+   * could approve nothing.
+   *
+   * These two routes are that person's way in. They are deliberately NOT on
+   * the connector prefix: that one refuses anything carrying evidence of a
+   * browser, and weakening it for one route would undo the property that
+   * lets those routes hand back tokens in the body. A page is a browser, so
+   * it comes in through the browser realm, under the ordinary origin
+   * protection, and re-asks for the password here exactly as the terminal
+   * does. Both call one service, so the rule cannot drift between them.
+   */
+  app.get("/approvals", { preHandler: [authGuard] }, async (request, reply) => {
+    try {
+      const pending = await listPendingApprovals(app.prisma, {
+        userId: request.user.userId,
+        organisationId: request.user.organisationId,
+      });
+      reply.send({ data: pending });
+    } catch (err) {
+      handleError(reply, err);
+    }
+  });
+
+  app.post(
+    "/approvals/:id/grant",
+    {
+      preHandler: [authGuard],
+      // Keyed on the caller's own credential: password attempts here must not
+      // be spendable against somebody else, and must not share the bucket the
+      // rest of their session uses.
+      config: { rateLimit: authCredentialRateLimit(APPROVAL_GRANT_MAX_PER_MINUTE) },
+    },
+    async (request, reply) => {
+      try {
+        const params = z
+          .object({ id: z.string().min(1).max(64) })
+          .parse(request.params);
+        const body = z.object({ password: z.string().min(1) }).parse(request.body);
+
+        const granted = await grantApproval(app.prisma, {
+          approvalId: params.id,
+          password: body.password,
+          userId: request.user.userId,
+          organisationId: request.user.organisationId,
+        });
+
+        if (!granted) {
+          // The same opaque refusal the terminal gets: nothing here says
+          // whether the identifier existed, belonged to somebody else, or had
+          // already been granted.
+          throw new AppError(
+            401,
+            "APPROVAL_REFUSED",
+            "That approval could not be granted. Check your password, and that the "
+              + "action is still waiting.",
+          );
+        }
+
+        reply.send({ ok: true, summary: granted.summary, expiresAt: granted.expiresAt });
       } catch (err) {
         if (err instanceof ZodError) {
           reply.status(400).send(formatZodError(err));

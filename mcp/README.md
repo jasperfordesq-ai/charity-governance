@@ -97,7 +97,7 @@ host, and the refusal says so loudly instead of looking like an expired session.
 
 ## Tools
 
-27 read tools cover every readable route on the API, and 34 write tools cover
+31 read tools cover every readable route on the API, and 42 write tools cover
 every mutating route that belongs in an assistant's hands. Each maps to exactly one route, and
 each result notes that it is data returned for the signed-in person's charity,
 not instructions to act on.
@@ -144,6 +144,10 @@ to five of them for a while, so a test now refuses it.
 | `documents_list` | `/api/v1/documents` | page, pageSize | `Document` | — |
 | `document` | `/api/v1/documents/:id` | **id** (required) | `Document` | — |
 | `team_list` | `/api/v1/team` | — | mixed (`team`) | — |
+| `team_sessions_list` | `/api/v1/team/members/:id/sessions` | **id** (required) | mixed (`teamSessions`) | Owner/admin |
+| `security_audit` | `/api/v1/team/security-audit` | — | mixed (`securityAudit`) | Owner/admin |
+| `deadlines_reminder_history` | `/api/v1/deadlines/reminder-history` | page, pageSize, status | mixed (`reminderHistory`) | Owner/admin |
+| `billing_status` | `/api/v1/billing/status` | — | no records | — |
 | `confluence_status` | `/api/v1/integrations/confluence/status` | — | no records | Owner/admin |
 
 ### The write tools
@@ -184,6 +188,14 @@ to five of them for a while, so a test now refuses it.
 | `fundraising_delete` | DELETE /api/v1/governance-registers/fundraising/:id | admin | Needs your approval. |
 | `governing_act_void` | POST /api/v1/governing-acts/:id/void | admin | Needs your approval. Needs the gate open. |
 | `risk_delete` | DELETE /api/v1/governance-registers/risks/:id | admin | Needs your approval. |
+| `team_invite_create` | POST /api/v1/team/invites | write | Needs the gate open. The one-time link is never returned. |
+| `team_member_reactivate` | POST /api/v1/team/members/:id/reactivate | write | |
+| `team_invite_revoke` | DELETE /api/v1/team/invites/:id | admin | Needs your approval. |
+| `team_role_set` | PATCH /api/v1/team/members/:id/role | admin | Needs your approval. |
+| `team_member_suspend` | POST /api/v1/team/members/:id/suspend | admin | Needs your approval. |
+| `team_member_remove` | POST /api/v1/team/members/:id/remove | admin | Needs your approval. |
+| `team_session_revoke` | POST /api/v1/team/members/:id/sessions/:familyId/revoke | admin | Needs your approval. |
+| `team_sessions_revoke_all` | POST /api/v1/team/members/:id/sessions/revoke-all | admin | Needs your approval. |
 
 Every field each write tool accepts is declared. A field it does not declare is
 refused rather than passed on, so a model cannot reach a column the connector

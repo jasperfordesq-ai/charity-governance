@@ -109,6 +109,7 @@ test.describe('MCP connector lifecycle', () => {
         'annual_report_readiness',
         'annual_report_set',
         'approval_readiness',
+        'billing_status',
         'board_member_create',
         'board_member_delete',
         'board_member_update',
@@ -135,11 +136,13 @@ test.describe('MCP connector lifecycle', () => {
         'deadline_update',
         'deadlines_history',
         'deadlines_list',
+        'deadlines_reminder_history',
         'document',
         'document_approval_set',
         'document_delete',
         'document_link_standard',
         'document_unlink_standard',
+        'document_upload_text',
         'documents_list',
         'financial_controls',
         'financial_controls_set',
@@ -160,8 +163,19 @@ test.describe('MCP connector lifecycle', () => {
         'risk_delete',
         'risk_update',
         'risks_list',
+        'security_audit',
         'session_info',
+        // team_invite_create is absent on purpose: inviting somebody names
+        // their email address, so it is offered only with the gate open.
+        'team_invite_revoke',
         'team_list',
+        'team_member_reactivate',
+        'team_member_remove',
+        'team_member_suspend',
+        'team_role_set',
+        'team_session_revoke',
+        'team_sessions_list',
+        'team_sessions_revoke_all',
       ]);
       // The tenant is never an argument. Output schemas do name organisationId,
       // because records carry it, so only what a client may SEND is checked.
@@ -1488,6 +1502,81 @@ test.describe('Connector writes and approval', () => {
       ).toMatch(/charitypilot-mcp approve /);
     } finally {
       await connector.close();
+    }
+  });
+
+  test('an approval can be granted from the web realm, for the person with no terminal', async () => {
+    // A trustee running a desktop AI client has no terminal to type at, so the
+    // web application grants the same approvals through its own route. Both
+    // routes call one service: what protects a grant is the password, not the
+    // channel it arrives on.
+    let secondRiskId = '';
+    const connector = await openConnector({
+      apiUrl: API_BASE_URL,
+      credentialFile: adminCredentialFile,
+      allowPersonalData: true,
+    });
+    try {
+      const made = await callTool(connector.client, 'risk_create', {
+        title: 'Second risk, removed from the web realm',
+        category: 'GOVERNANCE',
+        description: 'Exists only for this test',
+        likelihood: 1,
+        impact: 1,
+        mitigation: 'None needed',
+        reason: 'Setting up the web-realm approval test',
+      });
+      expect(made.isError, made.text).toBe(false);
+      secondRiskId = (made.json as { data: { id: string } }).data.id;
+
+      const refused = await callTool(connector.client, 'risk_delete', {
+        id: secondRiskId,
+        reason: 'Removing the second record this test created',
+      });
+      expect(refused.isError, 'a removal must still be refused first').toBe(true);
+    } finally {
+      await connector.close();
+    }
+
+    const token = await accessTokenFromStoredCredential({
+      apiUrl: API_BASE_URL,
+      credentialFile: adminCredentialFile,
+    });
+
+    // No connector client header: this is the browser realm's own route.
+    const listed = await fetch(`${API_BASE_URL}/api/v1/auth/approvals`, {
+      headers: { authorization: `Bearer ${token}` },
+    });
+    expect(listed.status).toBe(200);
+    const rows = ((await listed.json()) as { data: Array<Record<string, unknown>> }).data;
+    const waiting = rows.find((row) => row['resourceId'] === secondRiskId);
+    expect(waiting, 'the pending approval is listed for the person who must grant it').toBeTruthy();
+    expect(String(waiting!['summary'])).toContain('Second risk');
+
+    const granted = await fetch(
+      `${API_BASE_URL}/api/v1/auth/approvals/${String(waiting!['approvalId'])}/grant`,
+      {
+        method: 'POST',
+        headers: { 'content-type': 'application/json', authorization: `Bearer ${token}` },
+        body: JSON.stringify({ password: fixture.writer.password }),
+      },
+    );
+    expect(granted.status, 'the web realm grants it').toBe(200);
+
+    const after = await openConnector({
+      apiUrl: API_BASE_URL,
+      credentialFile: adminCredentialFile,
+      allowPersonalData: true,
+    });
+    try {
+      const removed = await callTool(after.client, 'risk_delete', {
+        id: secondRiskId,
+        reason: 'Removing the second record this test created',
+        approvalId: String(waiting!['approvalId']),
+      });
+      expect(removed.isError, removed.text).toBe(false);
+    } finally {
+      await after.close();
     }
   });
 

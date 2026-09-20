@@ -1,11 +1,11 @@
 import type { FastifyInstance } from "fastify";
-import bcrypt from "bcryptjs";
 import { z, ZodError } from "zod";
 import { AuthService } from "../../services/auth.service.js";
 import { authGuard } from "../../middleware/auth.js";
 import { AppError, handleError } from "../../utils/errors.js";
 import { publicUser } from "../../utils/public-dtos.js";
 import { assertNonBrowserClient } from "../../utils/non-browser-client.js";
+import { grantApproval } from "../../services/action-approval.service.js";
 import {
   bodyIdentifierRateLimit,
   refreshTokenRateLimit,
@@ -33,10 +33,6 @@ import {
  * choosing how much authority the session carries is the person who just
  * proved they hold the account.
  */
-/** Same cost as a real hash, so a missing account does not answer faster. */
-const DUMMY_PASSWORD_HASH =
-  '$2b$12$5x1wZg/1s7XL/AUM6hR6OeX6zHNP.H0FgxiRa5EDVKtm6RFwhiVdK';
-
 const ACCESS_LEVELS = ["READ", "WRITE", "ADMIN"] as const;
 
 const connectorLoginSchema = z.object({
@@ -182,36 +178,19 @@ export async function connectorAuthRoutes(app: FastifyInstance) {
     async (request, reply) => {
       try {
         const body = connectorApproveSchema.parse(request.body);
-        const now = new Date();
 
-        const account = await app.prisma.user.findUnique({
-          where: { id: request.user.userId },
-          select: { passwordHash: true },
+        // The rule lives in the service, because the web application grants
+        // the same approvals for the person who has no terminal to type at,
+        // and a browser path one condition looser than this one would be the
+        // whole control quietly undone.
+        const granted = await grantApproval(app.prisma, {
+          approvalId: body.approvalId,
+          password: body.password,
+          userId: request.user.userId,
+          organisationId: request.user.organisationId,
         });
 
-        const correct = await bcrypt.compare(
-          body.password,
-          account?.passwordHash ?? DUMMY_PASSWORD_HASH,
-        );
-
-        // The update is the check. Narrowing on every condition at once means
-        // there is no window between deciding an approval is grantable and
-        // granting it, and no branch that reveals which condition failed.
-        const granted = correct
-          ? await app.prisma.authActionApproval.updateMany({
-              where: {
-                id: body.approvalId,
-                userId: request.user.userId,
-                organisationId: request.user.organisationId,
-                approvedAt: null,
-                consumedAt: null,
-                expiresAt: { gt: now },
-              },
-              data: { approvedAt: now },
-            })
-          : { count: 0 };
-
-        if (granted.count !== 1) {
+        if (!granted) {
           throw new AppError(
             401,
             "APPROVAL_REFUSED",
@@ -220,18 +199,9 @@ export async function connectorAuthRoutes(app: FastifyInstance) {
           );
         }
 
-        const approval = await app.prisma.authActionApproval.findFirst({
-          where: { id: body.approvalId },
-          select: { summary: true, expiresAt: true },
-        });
-
         // Deliberately no token of any kind: approving an action is not
         // signing in, and the caller already holds a session.
-        reply.send({
-          ok: true,
-          summary: approval?.summary ?? null,
-          expiresAt: approval?.expiresAt.toISOString() ?? null,
-        });
+        reply.send({ ok: true, summary: granted.summary, expiresAt: granted.expiresAt });
       } catch (err) {
         if (err instanceof ZodError) {
           reply.status(400).send(formatZodError(err));

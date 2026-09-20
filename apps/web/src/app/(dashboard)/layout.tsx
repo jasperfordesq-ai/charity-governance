@@ -115,6 +115,11 @@ const NAV_ITEMS: NavItem[] = [
     icon: <UserRoundCog className={navIconClassName} strokeWidth={1.5} aria-hidden="true" />,
   },
   {
+    href: '/approvals',
+    label: 'Approvals',
+    icon: <ShieldCheck className={navIconClassName} strokeWidth={1.5} aria-hidden="true" />,
+  },
+  {
     href: '/billing',
     label: 'Billing',
     icon: <CreditCard className={navIconClassName} strokeWidth={1.5} aria-hidden="true" />,

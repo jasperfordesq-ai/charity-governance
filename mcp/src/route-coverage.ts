@@ -45,6 +45,23 @@ export const EXCLUDED_ROUTES: readonly ExcludedRoute[] = [
       + 'entirely unless that directory was given.',
   },
   {
+    path: '/api/v1/auth/approvals',
+    reason:
+      'The destructive actions waiting for the signed-in person to approve, for the page in '
+      + 'the web application that grants them. The whole approval surface is kept away from '
+      + 'tools: an agent that could read and grant its own pending approvals would make the '
+      + 'control meaningless. The connector reads the one approval it was handed through its '
+      + 'own command, not through a tool.',
+  },
+  {
+    path: '/api/v1/auth/connector/approvals/:id',
+    reason:
+      'Describes one approval so `charitypilot-mcp approve` can show a person what they are '
+      + 'about to approve before asking for their password. Driven by that command, never by '
+      + 'a tool.',
+    notInGroupIndex: true,
+  },
+  {
     path: '/api/v1/auth/me',
     reason:
       'Identifies the signed-in person. Served by the session_info tool, which returns the '

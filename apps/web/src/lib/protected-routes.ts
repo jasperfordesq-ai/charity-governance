@@ -9,6 +9,7 @@ export const PROTECTED_APP_PREFIXES = [
   '/deadlines',
   '/organisation',
   '/team',
+  '/approvals',
   '/billing',
   '/export',
   '/integrations',

@@ -209,6 +209,15 @@ export const EXCLUDED_MUTATIONS: readonly ExcludedMutation[] = [
       + 'what disconnect does.',
   },
   {
+    route: 'POST /api/v1/auth/approvals/:id/grant',
+    reason:
+      'Grants a pending approval after checking a password, for the person using the web '
+      + 'application because they have no terminal to type at. The entire value of '
+      + 'per-action approval is that the agent which asked for the action cannot also grant '
+      + 'it, so this must never be reachable as a tool — exactly as the connector realm’s '
+      + 'own approve route must not be.',
+  },
+  {
     route: 'POST /api/v1/auth/forgot-password',
     reason:
       'Starts a password reset by email. Nothing in a password-recovery flow should be '
