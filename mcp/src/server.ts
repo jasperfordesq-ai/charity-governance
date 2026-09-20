@@ -40,6 +40,27 @@ import { createDiagnostics } from './diagnostics.js';
 const FILE_RANK: Record<AccessLevel, number> = { read: 0, write: 1, admin: 2 };
 
 /**
+ * Whether the operator has switched this file tool on.
+ *
+ * A tool that reads from or writes to this machine exists only when a
+ * directory was named for it. One that does neither — text handed over in the
+ * call itself — is always available.
+ */
+function fileToolEnabled(
+  tool: FileToolDefinition,
+  config: Partial<Pick<ConnectorConfig, 'uploadRoot' | 'downloadDir'>>,
+): boolean {
+  switch (tool.requires) {
+    case 'uploadRoot':
+      return Boolean(config.uploadRoot);
+    case 'downloadDir':
+      return Boolean(config.downloadDir);
+    case 'nothing':
+      return true;
+  }
+}
+
+/**
  * The file tools are advertised only when the operator enabled them.
  *
  * Offering a tool that is switched off would have a model try it and read the
@@ -51,7 +72,7 @@ function availableFileTools(
 ): readonly FileToolDefinition[] {
   return FILE_TOOLS.filter((tool) => {
     if (FILE_RANK[level] < FILE_RANK[tool.level]) return false;
-    return tool.requires === 'uploadRoot' ? Boolean(config.uploadRoot) : Boolean(config.downloadDir);
+    return fileToolEnabled(tool, config);
   });
 }
 
@@ -155,9 +176,7 @@ export async function startServer(config: ConnectorConfig, session: Session): Pr
           { action: 'reconnect' },
         );
       }
-      const enabled =
-        fileTool.requires === 'uploadRoot' ? config.uploadRoot : config.downloadDir;
-      if (!enabled) {
+      if (!fileToolEnabled(fileTool, config)) {
         throw new ConnectorError('TOOL_DISABLED', unavailableBecause(fileTool));
       }
       return runFileTool(fileTool, client, config, args);

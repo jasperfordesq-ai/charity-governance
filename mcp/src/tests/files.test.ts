@@ -299,3 +299,93 @@ test('a linked directory pointing out of the root is refused', () => {
     /outside the directory this connector may use/,
   );
 });
+
+/* --- Phase C: the export, and an upload for a client with no disk --------- */
+
+test('the compliance report is written to the directory and never returned', async () => {
+  const { root } = sandbox();
+  const tool = FILE_TOOLS.find((t) => t.name === 'report_export')!;
+  const html = Buffer.from('<!doctype html><title>Compliance report</title>', 'utf8');
+
+  let asked = '';
+  const client = {
+    download: async (path: string) => {
+      asked = path;
+      return { bytes: html, fileName: null };
+    },
+  } as unknown as ApiClient;
+
+  const result = (await runFileTool(tool, client, config({ downloadDir: join(root, 'out') }), {
+    year: 2026,
+  })) as { saved: Record<string, unknown> };
+
+  assert.match(asked, /^\/api\/v1\/export\/compliance-report\?year=2026$/);
+  assert.match(String(result.saved['path']), /compliance-report-2026\.html$/);
+  assert.equal(result.saved['bytes'], html.length);
+  assert.ok(!JSON.stringify(result).includes('<!doctype'), 'the widest payload in the API stays off the wire');
+});
+
+test('the export is unavailable until a directory is named', async () => {
+  const tool = FILE_TOOLS.find((t) => t.name === 'report_export')!;
+  await assert.rejects(
+    () => runFileTool(tool, {} as ApiClient, config(), {}),
+    /Downloading is off/,
+  );
+});
+
+test('text can be filed as a document without a file on disk', async () => {
+  const tool = FILE_TOOLS.find((t) => t.name === 'document_upload_text')!;
+  let sent: { name: string; mimeType: string; bytes: Buffer } | undefined;
+  let fields: Record<string, string> | undefined;
+  const client = {
+    upload: async (
+      _path: string,
+      file: { name: string; mimeType: string; bytes: Buffer },
+      given: Record<string, string>,
+    ) => {
+      sent = file;
+      fields = given;
+      return { data: { id: 'doc-11', name: given['name'] } };
+    },
+  } as unknown as ApiClient;
+
+  const result = (await runFileTool(tool, client, config(), {
+    name: 'Reserves policy note',
+    category: 'POLICY',
+    format: 'txt',
+    content: 'The board reviewed the reserves policy on 4 January 2026.',
+  })) as { uploaded: Record<string, unknown> };
+
+  assert.equal(sent!.mimeType, 'text/plain');
+  assert.match(sent!.name, /\.txt$/);
+  assert.equal(sent!.bytes.toString('utf8'), 'The board reviewed the reserves policy on 4 January 2026.');
+  assert.equal(fields!['category'], 'POLICY');
+  assert.equal(result.uploaded['id'], 'doc-11');
+});
+
+test('a text upload needs no directory, because nothing is read from this machine', () => {
+  const tool = FILE_TOOLS.find((t) => t.name === 'document_upload_text')!;
+  assert.equal(tool.requires, 'nothing');
+});
+
+test('a text upload refuses an unsupported format and anything oversized', async () => {
+  const tool = FILE_TOOLS.find((t) => t.name === 'document_upload_text')!;
+  const client = { upload: async () => ({ data: { id: 'x' } }) } as unknown as ApiClient;
+
+  await assert.rejects(
+    () => runFileTool(tool, client, config(), {
+      name: 'A note', category: 'POLICY', format: 'pdf', content: 'x',
+    }),
+    /format/,
+  );
+
+  await assert.rejects(
+    () => runFileTool(tool, client, config(), {
+      name: 'A note',
+      category: 'POLICY',
+      format: 'txt',
+      content: 'x'.repeat(64 * 1024 + 1),
+    }),
+    /64/,
+  );
+});

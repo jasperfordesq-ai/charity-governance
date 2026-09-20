@@ -2,14 +2,18 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { buildToolList } from '../server.js';
 import { TOOLS, needsPersonalData } from '../tools.js';
+import { FILE_TOOLS } from '../file-tools.js';
 
 test('every tool is advertised once the gate that guards it is open', () => {
   // A couple of write tools cannot produce a valid request without fields the
   // personal-data gate withholds, so they are offered only when it is open.
   // Everything else is always offered.
   const withGateOpen = buildToolList('admin', { allowPersonalData: true });
-  // Every tool in the registry, plus session_info, which lives beside it.
-  assert.equal(withGateOpen.length, TOOLS.length + 1);
+  // Every tool in the registry, plus session_info, plus the file tools that
+  // need no directory named for them. The ones that read from or write to this
+  // machine are absent until the operator names one.
+  const alwaysOn = FILE_TOOLS.filter((tool) => tool.requires === 'nothing').length;
+  assert.equal(withGateOpen.length, TOOLS.length + 1 + alwaysOn);
 
   const withGateClosed = buildToolList('admin', { allowPersonalData: false });
   assert.ok(

@@ -38,7 +38,11 @@ export const EXCLUDED_ROUTES: readonly ExcludedRoute[] = [
   },
   {
     path: '/api/v1/export/compliance-report',
-    reason: 'The same handler and the same payload as the compliance-record export.',
+    reason:
+      'The same handler and the same payload as the compliance-record export. Served by the '
+      + 'report_export file tool rather than an ordinary read tool: it writes the report to a '
+      + 'directory the operator named and returns the path, never the HTML. It is absent '
+      + 'entirely unless that directory was given.',
   },
   {
     path: '/api/v1/auth/me',
