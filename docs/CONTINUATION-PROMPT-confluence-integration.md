@@ -1,7 +1,8 @@
 # CharityPilot × Confluence — handover
 
-*Last rewritten 2026-09-19, after Phase 4 closed. Paste everything below the line into a fresh
-session; it is written to stand alone.*
+*Last rewritten 2026-09-19, after Phase 4 closed. Amended 2026-09-20 after the connector audit
+(`docs/superpowers/specs/2026-09-20-confluence-connector-audit.md`). Paste everything below the line
+into a fresh session; it is written to stand alone.*
 
 ---
 
@@ -11,8 +12,10 @@ session; it is written to stand alone.*
 been used.** No call has ever reached a real Atlassian site. Four assumptions the design rests on
 have only ever met test doubles. The DPO who is meant to review it has been unable to connect since
 31 August. One design decision the owner made on 2026-09-19 means part of what was just built has to
-be reworked, and that rework is blocked on a question the owner has not yet answered. **The next
-step is almost certainly not more building.**
+be reworked; the question that blocked the rework was answered by email the same day (§2a). A full
+audit on 2026-09-20 found four further things that would fail on first contact with a real site
+(§5, items 5-8) and approved only the write-up, not the fixes. **The next step is almost certainly
+not more building.**
 
 ---
 
@@ -64,44 +67,50 @@ session *before* spending the code. **This changed what you register with Atlass
 ## 2a. Ordinary deletion must stop destroying the Confluence source
 
 The DPO's position, 2026-09-19: *"An ordinary CharityPilot deletion should not silently destroy the
-Confluence source."* Phase 4's final task does exactly that.
+Confluence source."* Phase 4's final task does exactly that, and **as of 2026-09-20 it still does**:
+`remove()` in `document.service.ts` (L854) enqueues a `confluence` erasure row inside the delete
+transaction, and the race compensator (L1130) does the same. Nothing has been changed yet.
 
-**The owner's ruling, 2026-09-19 — this is the design to build:**
+**The owner's ruling — settled in writing to the DPO on 2026-09-19 (thread "CharityPilot — access
+for you as DPO"):**
 
-> CharityPilot must not delete anything from Confluence. Deleting a Confluence-backed document on a
-> Confluence-enabled tenant is **refused**, telling the user to go to Confluence instead. A document
-> deleted in Confluence gets a note in CharityPilot that it is no longer visible there.
+> An ordinary CharityPilot deletion will remove our record and its reference only, and destroying
+> the Confluence source will require an explicit erasure workflow.
 
-**An open question blocks starting. The owner had not answered when this session ended.**
-"CharityPilot mirrors everything in Confluence" admits two readings, and they are materially
-different jobs:
+That is **option (a)** of the fork earlier drafts of this section left open: documents keep
+originating in CharityPilot and publishing to Confluence; the ordinary delete path stops touching
+Confluence; the Phase 5 erasure machinery stays and is rewired to an explicit, separately authorised
+workflow instead of firing on `pageId !== null`. **The fork is closed. Do not re-ask.** An earlier
+verbal ruling ("deletion is *refused*, telling the user to go to Confluence") is superseded by the
+written one: the record and the reference are removed; the page is left alone.
 
-- **(a)** Keep the flow as built — documents originate in CharityPilot and publish to Confluence —
-  but refuse deletion once published. **Small.**
-- **(b)** Invert — Confluence is where documents live and CharityPilot reads and references them.
-  **Large:** the publish pipeline becomes a read/reconcile pipeline.
+**The design to build** is T1.1 of `docs/superpowers/specs/2026-09-20-confluence-connector-audit.md`.
+In short:
 
-**(a) was recommended**, because the DPO's own steer is *"agree the publishing model before building
-it"*, after he has walked the Governance Hub with the owner. Inverting now pre-empts exactly that
-conversation, and (a) does not foreclose (b). **Ask; do not guess.**
+- `remove()` no longer calls `enqueueConfluenceErasure`. The `DocumentPublication` row is **kept**
+  and moved to a new `RETIRED` state (`retiredAt`, `retiredStoragePath`), so `cloudId`, `pageId`
+  and `attachmentId` survive for audit and for a later erasure.
+- `cancelConfluencePublication` becomes `retireConfluencePublication`: the same two locked passes,
+  but it retires rather than enqueues. The mid-flight case (`pageId === null && claimedAt !== null`)
+  is parked exactly as today so the worker can still record its page id; a reconcile job's orphan
+  sweep closes the residual.
+- The explicit erasure workflow is
+  `POST /api/v1/integrations/confluence/publications/:publicationId/erase` behind
+  `requireSessionLevel('ADMIN')` + `requireActionApproval()`, a reason and a typed confirmation. It
+  re-uses `createConfluenceErasureRow`. It is **refused until the tenant has granted
+  `delete:page:confluence` and `delete:attachment:confluence`** — scopes the app does not request
+  today (§5, item 5), so granted scopes must also be recorded per tenant.
+- The delete-path tests to invert live in `apps/api/src/tests/document-storage-cleanup.test.ts`
+  L446-964, not in the documents-route tests.
 
-**The cost is low, and here is why.** The machinery the DPO describes — recording the instruction,
-the action taken, the verified final state, and an administrator action where automatic deletion is
-impossible — **already exists** from Phase 5. `COMPLETE_EXTERNALLY_REMEDIATED` is literally "a human
-did this outside the system", recorded with actor, reason and database transaction id. It is wired
-to the wrong trigger, not missing. Mechanically, one private helper — `createConfluenceErasureRow`
-in `document.service.ts` — is called from two places; stopping the destruction means not calling it
-from the delete path.
+**Two details still decide whether the rework is any good:**
 
-**Four details decide whether the refusal is any good:**
-
-1. **Do not create undeletable records.** A disconnected integration, or a page confirmed gone, must
-   re-enable deletion.
-2. **Do not say "deleted" when you mean "not visible".** A vanished page may be restorable from
-   Confluence's trash — and whether a trashed page even reads as missing is unverified (§5).
-3. **Detecting a Confluence-side deletion is new work** — a job re-reading each referenced page.
-4. **Refusing deletion must not freeze everything else.** Approval status, review dates and evidence
-   links stay authoritative in CharityPilot and must remain editable.
+1. **Do not say "deleted" when you mean "not visible".** A vanished page may be restorable from
+   Confluence's trash. Atlassian's docs now confirm v2 `GET /pages/{id}` returns 404 for a trashed
+   *and* a purged page alike; only v1 `GET content/{id}?status=trashed` tells them apart.
+2. **Detecting a Confluence-side deletion is new work** — a job re-reading each referenced page
+   (audit T2.1/2.2). Without it the ruling's "a note that it is no longer visible there" has no
+   source of truth.
 
 ## 2b. "The admin panel" means three things; one of them does not exist
 
@@ -124,7 +133,9 @@ to it.
 
 # 3. Decisions that are the owner's, not yours
 
-1. **The (a)/(b) fork above.** Blocks the erasure rework.
+1. ~~**The (a)/(b) fork above.** Blocks the erasure rework.~~ **Closed 2026-09-19 by email — option
+   (a). See §2a.** What remains the owner's is *when* to build it; the 2026-09-20 audit was approved
+   as a write-up only.
 2. **Residency.** The owner's standing rule is that file storage is Irish, or at minimum EU. The DPO
    said on 2026-09-19 he would **not** make EU residency a universal prerequisite for other tenants
    — record each tenant's *declared* configuration and be explicit that CharityPilot does not
@@ -188,12 +199,40 @@ under *"Confirm these against a real site the moment the app install lands"* in 
 4. **How does Confluence normalise a stored title?** Adoption depends on the computed title matching
    what is stored. Three normalisation classes have already broken it.
 
+**Found by the 2026-09-20 connector audit** — these fail on a real site regardless of the four
+assumptions above. Evidence and the fixes are in
+`docs/superpowers/specs/2026-09-20-confluence-connector-audit.md` (findings A2, A3, A4, C4, B1);
+none has been fixed.
+
+5. **The delete scopes are not requested.** `CONFLUENCE_OAUTH_SCOPES`
+   (`apps/api/src/routes/integrations/index.ts` L98-106) lacks `delete:page:confluence` and
+   `delete:attachment:confluence`, which Atlassian's v2 delete endpoints require. Every erasure would
+   403 — and `deletePage` reports a 403 as `CONFLUENCE_RECONNECT_REQUIRED`, so it would be retried to
+   dead-letter under the wrong name. Granted scopes are not recorded per tenant, so a scope change
+   cannot be detected later either.
+6. **The connect flow binds `sites[0]`.** `connectConfluence` takes the first entry of
+   `accessible-resources`, whose order Atlassian documents as meaningless. Create the app with a
+   **resource-level grant** (a creation-time choice, added by Atlassian in June 2026) and, in code,
+   never bind silently when more than one site comes back.
+7. **`compose.production.yml` starves the workers.** `production-scheduler` and
+   `document-storage-cleanup` use `environment:` allowlists that omit `ATLASSIAN_CLIENT_ID`,
+   `ATLASSIAN_CLIENT_SECRET` and `INTEGRATION_ENCRYPTION_KEY`. On that profile the publisher cannot
+   refresh a token and the eraser cannot open a credential. Blue-green passes the whole env file and
+   is unaffected.
+8. **`env.INTEGRATION_ENCRYPTION_KEY` is not in the pino redaction list**
+   (`apps/api/src/utils/logger.ts` L41-51); every peer secret is.
+9. **Nothing keeps an idle tenant's refresh token alive.** Atlassian's rotating refresh tokens expire
+   after 90 days without use; refresh here is lazy, so a quiet charity silently loses its connection
+   and finds out at the next publish.
+
 **Owner actions outstanding:**
 
-- **Create the Atlassian OAuth 2.0 (3LO) app**, supplying `ATLASSIAN_CLIENT_ID` and
-  `ATLASSIAN_CLIENT_SECRET`. The scope that is easy to forget is **`offline_access`** — without it
-  no refresh token is issued and every charity disconnects within the hour. Set **both or neither**;
-  one alone, or a placeholder, is refused at boot.
+- **Create the Atlassian OAuth 2.0 (3LO) app** — as CharityPilot, with a **resource-level grant**
+  (item 6), the scopes listed in the audit's T1.2 (including the two delete scopes), sharing enabled,
+  and a second admin added — supplying `ATLASSIAN_CLIENT_ID` and `ATLASSIAN_CLIENT_SECRET`. The scope
+  that is easy to forget is **`offline_access`** — without it no refresh token is issued and every
+  charity disconnects within the hour. Set **both or neither**; one alone, or a placeholder, is
+  refused at boot.
 - **Register the callback as exactly `{FRONTEND_URL}/integrations/confluence/callback`** — a **web**
   URL, changed in Phase 6. Atlassian matches it byte-for-byte. The old API address answers `410`
   naming the change, so a stale registration fails loudly. Note `FRONTEND_URL` may hold a
@@ -338,8 +377,9 @@ forbidding `refresh`/`token`/`secret`. A task hit it and reverted rather than lo
 1. **Get the DPO connected** (`tailscale switch`) and give him least-privilege access. He has been
    blocked since 31 August and everything in his ordering sits behind his review.
 2. **Clear or expire the development logs** holding the leaked OAuth codes. He asked; it is not done.
-3. **Get the owner's answer on (a)/(b)**, then do the erasure rework. Small, and the machinery
-   exists.
+3. **Do the erasure rework** (§2a — the (a)/(b) question was answered by email on 2026-09-19).
+   Small, and the machinery exists — but it now also needs the delete scopes and recorded granted
+   scopes (§5, item 5), and the owner has approved only the audit write-up so far.
 4. **Build the owner-console integration health view** (section 2b). Small; the API already returns
    it.
 5. **Create the Atlassian OAuth app**, then let the DPO authorise — which may clear the 403 without
@@ -352,6 +392,9 @@ forbidding `refresh`/`token`/`secret`. A task hit it and reverted rather than lo
 
 ## The plans and where they live
 
+- `docs/superpowers/specs/2026-09-20-confluence-connector-audit.md` — **the audit**: what would
+  fail on a real site, what is missing for a tight integration, and the tiered fixes with their
+  design detail. Read this before touching the connector.
 - `docs/superpowers/plans/2026-09-18-document-storage-providers-spec.md` — **the binding authority.**
   Read its Open Questions first.
 - `docs/superpowers/plans/2026-09-19-confluence-publish-pipeline-phase-4.md` — the last phase built,
