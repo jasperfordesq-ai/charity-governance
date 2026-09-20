@@ -2,7 +2,7 @@
 import { createInterface } from 'node:readline/promises';
 import { stdin, stdout, stderr, argv, exit } from 'node:process';
 import { parseArgs, requestedDataScope } from './config.js';
-import { chooseCredentialStore, bindCredentialToOrigin } from './credentials.js';
+import { chooseCredentialStore, bindCredentialToOrigin, originOf } from './credentials.js';
 import {
   readPasswordFromStdin,
   assertNonInteractiveConnectAllowed,
@@ -98,6 +98,9 @@ async function main(): Promise<void> {
     chooseCredentialStore({
       profile: config.profile,
       credentialFile: process.env.CHARITYPILOT_CREDENTIAL_FILE,
+      // Each host keeps its own credential, so one machine can hold the VM's
+      // and a local stack's at once.
+      origin: originOf(config.baseUrl),
     }),
     config.baseUrl,
   );

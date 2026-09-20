@@ -1,7 +1,13 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { Entry } from '@napi-rs/keyring';
-import { createMemoryStore, bindCredentialToOrigin } from '../credentials.js';
+import {
+  createMemoryStore,
+  createHostScopedStore,
+  bindCredentialToOrigin,
+  originOf,
+  type CredentialStore,
+} from '../credentials.js';
 
 test('a fresh store holds nothing', () => {
   assert.equal(createMemoryStore().read(), null);
@@ -209,4 +215,81 @@ test('a base URL that is not a URL is refused before anything is stored', () => 
     () => bindCredentialToOrigin(createMemoryStore(), 'not a url'),
     /not a valid URL/i,
   );
+});
+
+/* --- Phase E: one credential per host ------------------------------------ */
+
+function fakeKeyring(initial: Record<string, string | null> = {}) {
+  const slots: Record<string, string | null> = { ...initial };
+  return {
+    slots,
+    make(account = 'refresh-token'): CredentialStore {
+      return {
+        read: () => slots[account] ?? null,
+        write: (token: string) => { slots[account] = token; },
+        clear: () => { slots[account] = null; },
+      };
+    },
+  };
+}
+
+const VM = 'https://charitypilot.tailae0b07.ts.net';
+const LOCAL = 'http://localhost:3002';
+
+function boundEntry(origin: string, token: string): string {
+  return JSON.stringify({ v: 1, origin, refreshToken: token });
+}
+
+test('each host keeps its own credential', () => {
+  const keyring = fakeKeyring();
+  const vm = bindCredentialToOrigin(createHostScopedStore(originOf(VM), keyring.make), VM);
+  const local = bindCredentialToOrigin(createHostScopedStore(originOf(LOCAL), keyring.make), LOCAL);
+
+  vm.write('vm-token');
+  local.write('local-token');
+
+  assert.equal(vm.read(), 'vm-token');
+  assert.equal(local.read(), 'local-token', 'connecting to one host must not evict the other');
+});
+
+test('the single entry written before this change is still honoured, for its own host', () => {
+  const keyring = fakeKeyring({ 'refresh-token': boundEntry(originOf(VM), 'old-token') });
+  const vm = bindCredentialToOrigin(createHostScopedStore(originOf(VM), keyring.make), VM);
+
+  assert.equal(vm.read(), 'old-token', 'upgrading must not sign anybody out');
+});
+
+test('another host ignores the old entry rather than refusing over it', () => {
+  const keyring = fakeKeyring({ 'refresh-token': boundEntry(originOf(VM), 'old-token') });
+  const local = bindCredentialToOrigin(createHostScopedStore(originOf(LOCAL), keyring.make), LOCAL);
+
+  assert.equal(
+    local.read(),
+    null,
+    'a host that never had a credential is not connected; it has not been redirected',
+  );
+});
+
+test('disconnecting clears this host, and leaves another host alone', () => {
+  const keyring = fakeKeyring({ 'refresh-token': boundEntry(originOf(VM), 'old-token') });
+  const local = bindCredentialToOrigin(createHostScopedStore(originOf(LOCAL), keyring.make), LOCAL);
+  local.write('local-token');
+  local.clear();
+
+  assert.equal(local.read(), null);
+  assert.equal(
+    keyring.slots['refresh-token'],
+    boundEntry(originOf(VM), 'old-token'),
+    'the other host was not asked to disconnect',
+  );
+});
+
+test('disconnecting clears the old entry when it belongs to this host', () => {
+  const keyring = fakeKeyring({ 'refresh-token': boundEntry(originOf(VM), 'old-token') });
+  const vm = bindCredentialToOrigin(createHostScopedStore(originOf(VM), keyring.make), VM);
+
+  vm.clear();
+
+  assert.equal(vm.read(), null, 'a credential left behind by disconnect is worse than none');
+  assert.equal(keyring.slots['refresh-token'], null);
 });

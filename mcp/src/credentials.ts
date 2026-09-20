@@ -11,8 +11,8 @@ export interface CredentialStore {
   clear(): void;
 }
 
-export function createKeyringStore(): CredentialStore {
-  const entry = new Entry(SERVICE, ACCOUNT);
+export function createKeyringStore(account: string = ACCOUNT): CredentialStore {
+  const entry = new Entry(SERVICE, account);
   return {
     read() {
       try {
@@ -102,15 +102,76 @@ export function createFileStore(path: string): CredentialStore {
   };
 }
 
+/** The keychain account a host's credential lives under. */
+export function accountForOrigin(origin: string): string {
+  return `${ACCOUNT}:${origin.toLowerCase()}`;
+}
+
+/**
+ * One credential per host, with the single old entry still honoured.
+ *
+ * Until now the keychain held exactly one refresh token, so connecting to the
+ * VM and to a local stack meant disconnecting in between, and a future
+ * production host would have made that worse. Each host now has its own
+ * entry.
+ *
+ * The entry written before this change is read when it belongs to this host,
+ * so upgrading signs nobody out, and is ignored rather than refused when it
+ * belongs to another — a refusal there would report a host mismatch for what
+ * is simply a credential this host never had.
+ */
+export function createHostScopedStore(
+  origin: string,
+  make: (account?: string) => CredentialStore = createKeyringStore,
+): CredentialStore {
+  const scoped = make(accountForOrigin(origin));
+  const legacy = make(ACCOUNT);
+
+  const legacyIfOurs = (): string | null => {
+    let raw: string | null = null;
+    try {
+      raw = legacy.read();
+    } catch {
+      return null;
+    }
+    if (raw === null) return null;
+    const bound = parseBound(raw);
+    // An entry written before credentials were bound to an origin carries no
+    // origin to compare, and could only ever have been this connector's.
+    return bound === null || bound.origin === origin.toLowerCase() ? raw : null;
+  };
+
+  return {
+    read() {
+      return scoped.read() ?? legacyIfOurs();
+    },
+    write(token: string) {
+      scoped.write(token);
+    },
+    clear() {
+      scoped.clear();
+      // Only this host's: clearing another host's old entry would sign the
+      // person out of something they did not ask to disconnect from.
+      if (legacyIfOurs() !== null) legacy.clear();
+    },
+  };
+}
+
 export function chooseCredentialStore(options: {
   profile: ConnectorProfile;
   credentialFile?: string | undefined;
-  keyring?: () => CredentialStore;
+  /** The host whose credential is wanted. Absent keeps the single old entry. */
+  origin?: string | undefined;
+  keyring?: (account?: string) => CredentialStore;
   file?: (path: string) => CredentialStore;
 }): CredentialStore {
   const keyring = options.keyring ?? createKeyringStore;
   const file = options.file ?? createFileStore;
-  if (!options.credentialFile) return keyring();
+  if (!options.credentialFile) {
+    return options.origin
+      ? createHostScopedStore(options.origin, keyring)
+      : keyring();
+  }
   if (options.profile !== 'local') {
     throw new Error(
       'CHARITYPILOT_CREDENTIAL_FILE is only valid with --profile local. '
@@ -136,7 +197,7 @@ interface BoundCredential {
 }
 
 /** Scheme, host and port, lower-cased. Anything else is not part of identity. */
-function originOf(baseUrl: string): string {
+export function originOf(baseUrl: string): string {
   let url: URL;
   try {
     url = new URL(baseUrl);
