@@ -15,8 +15,8 @@
     "test": "tsc -p tsconfig.json && node --test dist/tests/*.test.js"
   },
   "dependencies": {
-    "@modelcontextprotocol/sdk": "^1.0.0",
-    "@napi-rs/keyring": "^1.1.0"
+    "@modelcontextprotocol/sdk": "1.30.0",
+    "@napi-rs/keyring": "1.3.0"
   },
   "devDependencies": {
     "@types/node": "^22.0.0",

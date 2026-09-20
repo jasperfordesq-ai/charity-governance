@@ -1,6 +1,6 @@
 export const DEFAULT_BASE_URL = 'https://charitypilot.tailae0b07.ts.net';
 
-const COMMANDS = new Set(['serve', 'connect', 'disconnect', 'status', 'approve']);
+const COMMANDS = new Set(['serve', 'connect', 'disconnect', 'status', 'approve', 'help', 'version']);
 
 /**
  * Hosts that cannot leave this machine. The check is on the parsed URL's
@@ -63,6 +63,10 @@ export function parseArgs(argv: string[]): ConnectorConfig {
     const arg = argv[i]!;
     if (COMMANDS.has(arg)) {
       command = arg;
+    } else if (arg === '--help' || arg === '-h') {
+      command = 'help';
+    } else if (arg === '--version') {
+      command = 'version';
     } else if (arg === '--allow-personal-data') {
       allowPersonalData = true;
     } else if (arg === '--base-url') {

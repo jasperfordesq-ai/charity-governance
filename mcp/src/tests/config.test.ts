@@ -102,3 +102,10 @@ test('the access level can be chosen, and an unknown one is refused', () => {
   assert.throws(() => parseArgs(['--access-level', 'superuser']), /access level/i);
   assert.throws(() => parseArgs(['--access-level']), /requires a value/i);
 });
+
+test('--help and --version are commands, not unknown options', () => {
+  assert.equal(parseArgs(['--help']).command, 'help');
+  assert.equal(parseArgs(['-h']).command, 'help');
+  assert.equal(parseArgs(['--version']).command, 'version');
+  assert.equal(parseArgs(['help']).command, 'help');
+});

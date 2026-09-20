@@ -12,6 +12,33 @@ import { Session } from './session.js';
 import { startServer } from './server.js';
 import { ApiClient } from './client.js';
 import { redactSecrets } from './redact.js';
+import { CONNECTOR_VERSION } from './version.js';
+
+const USAGE = `charitypilot-mcp ${CONNECTOR_VERSION}
+
+An MCP server that lets an AI client read and change one charity's CharityPilot
+records as you. Run with no command to serve over stdio to an AI client.
+
+Commands (run these yourself, in a terminal):
+  connect      Sign in and store a refresh token in the OS credential store.
+               --access-level read|write|admin   (default: write)
+               --email <address>
+  status       Who the stored credential resolves to, and the level the API holds.
+  approve <id> Approve one action CharityPilot refused. Terminal only.
+  disconnect   Revoke the session on the server and clear the credential.
+  serve        Start the MCP server (the default).
+
+Options:
+  --base-url <https://host>   The API. Defaults to the tailnet address.
+  --allow-personal-data       Release the fields the personal-data gate withholds.
+                              A data-protection decision; ask your DPO first.
+  --upload-root <dir>         Offer document_upload for files under this directory.
+  --download-dir <dir>        Offer document_download, writing into this directory.
+  --toolsets <a,b>            Offer only these tool groups. See README.
+  --verbose                   Log each tool call to stderr, secrets redacted.
+  --profile local             Loopback-only test profile. See README.
+  --version, --help
+`;
 
 async function prompt(question: string, hidden: boolean): Promise<string> {
   const rl = createInterface({ input: stdin, output: stdout, terminal: true });
@@ -51,6 +78,14 @@ async function prompt(question: string, hidden: boolean): Promise<string> {
 
 async function main(): Promise<void> {
   const config = parseArgs(argv.slice(2));
+  if (config.command === 'version') {
+    stdout.write(`charitypilot-mcp ${CONNECTOR_VERSION}\n`);
+    return;
+  }
+  if (config.command === 'help') {
+    stdout.write(USAGE);
+    return;
+  }
   assertNonInteractiveConnectAllowed(config, stdin.isTTY === true);
   // Bound to the base URL in use: a credential minted against one host is never
   // presented to another, whatever changed the configuration.
