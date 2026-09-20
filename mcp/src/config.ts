@@ -11,7 +11,85 @@ const COMMANDS = new Set(['serve', 'connect', 'disconnect', 'status', 'approve',
  */
 export const LOOPBACK_HOSTS: ReadonlySet<string> = new Set(['localhost', '127.0.0.1', '[::1]']);
 
-export type ConnectorProfile = 'default' | 'local';
+/**
+ * The canonical production API origin.
+ *
+ * Already pinned in three other places in this repository: the web app's
+ * API configuration, its content security policy, and the production check on
+ * FRONTEND_URL. Pinning it here too means a redirected base URL in an AI
+ * client's configuration file is refused before a password is ever typed.
+ */
+export const PRODUCTION_API_ORIGIN = 'https://api.charitypilot.ie';
+
+export type ConnectorProfile = 'default' | 'local' | 'vm' | 'prod';
+
+interface ProfileRule {
+  /** What this profile is for, in one line, printed by help and by refusals. */
+  readonly describe: string;
+  /** The exact origin this profile may reach, when there is only one. */
+  readonly origin?: string;
+  /** Hostnames this profile may reach, when the origin is per-install. */
+  readonly hosts?: ReadonlySet<string>;
+  /** A host suffix this profile may reach, for the same reason. */
+  readonly hostSuffix?: string;
+  /** Plain http, which only a stack on this machine may use. */
+  readonly allowHttp?: boolean;
+}
+
+/**
+ * What each profile may reach.
+ *
+ * A profile is a pin, not a shortcut. The connector already refuses to send a
+ * stored credential to a host other than the one that issued it, because the
+ * configuration file naming the host is treated as something an attacker may
+ * write. A profile applies the same reasoning one step earlier, to the sign-in
+ * itself: with `--profile prod`, no edit to that file can point the password
+ * prompt at another host.
+ *
+ * `default` pins nothing, because a charity running its own deployment has an
+ * origin nobody here can know. It still requires https.
+ */
+const PROFILES: Record<ConnectorProfile, ProfileRule> = {
+  default: {
+    describe: 'Any https host. For a deployment this connector does not know about.',
+  },
+  local: {
+    describe: 'A stack on this machine only. The one profile that allows plain http.',
+    hosts: LOOPBACK_HOSTS,
+    allowHttp: true,
+  },
+  vm: {
+    describe: 'The private server on its Tailscale address.',
+    origin: DEFAULT_BASE_URL,
+  },
+  prod: {
+    describe: 'The hosted service at api.charitypilot.ie.',
+    origin: PRODUCTION_API_ORIGIN,
+  },
+};
+
+export const PROFILE_NAMES = Object.keys(PROFILES) as readonly ConnectorProfile[];
+
+/**
+ * The profiles whose origin is known in advance.
+ *
+ * `status` reads these to say which hosts this machine holds a credential
+ * for. `local` and `default` are absent because their host is whatever the
+ * operator named, so there is nothing to look up.
+ */
+export function pinnedProfiles(): readonly { profile: ConnectorProfile; origin: string }[] {
+  return PROFILE_NAMES.flatMap((profile) => {
+    const origin = PROFILES[profile].origin;
+    return origin === undefined ? [] : [{ profile, origin }];
+  });
+}
+
+/** Describes every profile, for `help` and for a refusal that names the others. */
+export function profileSummary(indent = '  '): string {
+  return PROFILE_NAMES
+    .map((name) => `${indent}${name.padEnd(8)}${PROFILES[name].describe}`)
+    .join('\n');
+}
 
 /**
  * How much authority the session asks for at sign-in.
@@ -82,6 +160,22 @@ function hostnameOf(baseUrl: string): string | null {
   }
 }
 
+/**
+ * Scheme, host and port, lower-cased, or null for anything unparseable.
+ *
+ * The same notion of identity `credentials.ts` binds a stored credential to,
+ * written again here rather than imported: this module is parsed before any
+ * credential store exists, and a profile must be able to refuse a base URL
+ * without the keychain being involved.
+ */
+function originOf(baseUrl: string): string | null {
+  try {
+    return new URL(baseUrl).origin.toLowerCase();
+  } catch {
+    return null;
+  }
+}
+
 export function parseArgs(argv: string[]): ConnectorConfig {
   let command = 'serve';
   let baseUrl = process.env.CHARITYPILOT_BASE_URL ?? DEFAULT_BASE_URL;
@@ -116,10 +210,13 @@ export function parseArgs(argv: string[]): ConnectorConfig {
       i += 1;
       const value = argv[i];
       if (!value) throw new Error('--profile requires a value');
-      if (value !== 'local') {
-        throw new Error(`Unknown profile: ${value}. The only profile is "local".`);
+      if (!PROFILE_NAMES.includes(value as ConnectorProfile)) {
+        throw new Error(
+          `Unknown profile: ${value}. The profiles are:
+${profileSummary()}`,
+        );
       }
-      profile = value;
+      profile = value as ConnectorProfile;
     } else if (arg === '--email') {
       i += 1;
       const value = argv[i];
@@ -191,22 +288,46 @@ export function parseArgs(argv: string[]): ConnectorConfig {
   uploadRoot = uploadRoot ?? nonEmpty(process.env.CHARITYPILOT_UPLOAD_ROOT);
   downloadDir = downloadDir ?? nonEmpty(process.env.CHARITYPILOT_DOWNLOAD_DIR);
 
-  if (profile === 'local') {
-    // The local profile exists so a test stack on this machine can be driven
-    // over plain http. It is confined to loopback so it can never become a way
-    // to reach the VM, or any other host, without TLS.
-    const hostname = hostnameOf(baseUrl);
-    if (hostname === null || !LOOPBACK_HOSTS.has(hostname)) {
+  const rule = PROFILES[profile];
+
+  // Checked on the parsed URL, never on a string prefix:
+  // "https://api.charitypilot.ie.evil.example" begins with the right
+  // characters and resolves wherever its owner chooses.
+  if (!rule.allowHttp && !baseUrl.startsWith('https://')) {
+    throw new Error('The base URL must use https. TLS verification is not optional.');
+  }
+  if (rule.allowHttp && !baseUrl.startsWith('http://') && !baseUrl.startsWith('https://')) {
+    throw new Error('The base URL must use http or https.');
+  }
+
+  if (rule.origin !== undefined) {
+    const asked = originOf(baseUrl);
+    if (asked === null || asked !== originOf(rule.origin)) {
       throw new Error(
-        '--profile local only accepts a loopback base URL (localhost, 127.0.0.1 or [::1]). '
-          + `Got: ${baseUrl}`,
+        `--profile ${profile} only reaches ${rule.origin}. Got: ${baseUrl}. `
+          + 'A profile is a pin: if this is genuinely a different deployment, name it '
+          + 'with --profile default and its own --base-url.',
       );
     }
-    if (!baseUrl.startsWith('http://') && !baseUrl.startsWith('https://')) {
-      throw new Error('The base URL must use http or https.');
+  }
+
+  if (rule.hosts !== undefined) {
+    const hostname = hostnameOf(baseUrl);
+    if (hostname === null || !rule.hosts.has(hostname)) {
+      throw new Error(
+        `--profile ${profile} only accepts a loopback base URL (localhost, 127.0.0.1 or `
+          + `[::1]). Got: ${baseUrl}`,
+      );
     }
-  } else if (!baseUrl.startsWith('https://')) {
-    throw new Error('The base URL must use https. TLS verification is not optional.');
+  }
+
+  if (rule.hostSuffix !== undefined) {
+    const hostname = hostnameOf(baseUrl);
+    if (hostname === null || !hostname.endsWith(rule.hostSuffix)) {
+      throw new Error(
+        `--profile ${profile} only reaches a host ending ${rule.hostSuffix}. Got: ${baseUrl}`,
+      );
+    }
   }
 
   return {

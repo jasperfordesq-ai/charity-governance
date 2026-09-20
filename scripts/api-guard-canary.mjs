@@ -316,6 +316,39 @@ const MUTATIONS = {
       'the source assertion must catch any guard that sends without returning, not only the '
       + 'one somebody wrote a behaviour test for.',
   },
+  // A profile is a pin. These leave the pin present and consulted, and
+  // simply never refusing, which is what a pin that stopped pinning looks
+  // like from the outside.
+  'a-pinned-profile-reaches-anywhere': {
+    package: 'mcp',
+    file: 'mcp/src/config.ts',
+    find: /    if \(asked === null \|\| asked !== originOf\(rule\.origin\)\) \{/,
+    replace: '    if (asked === null) {',
+    tests: ['config'],
+    expect:
+      'a pinned profile must refuse a host that merely looks right, because the file naming '
+      + 'the host is one an attacker may write.',
+  },
+  'status-hides-a-second-credential': {
+    package: 'mcp',
+    file: 'mcp/src/status.ts',
+    find: /  if \(held\.length <= 1\) return '';/,
+    replace: "  if (held.length <= 99) return '';",
+    tests: ['status'],
+    expect:
+      'an operator holding credentials for two hosts must be told, because every command '
+      + 'acts on whichever one the base URL names.',
+  },
+  'the-tarball-ships-the-sources': {
+    package: 'mcp',
+    file: 'mcp/package.json',
+    // Still an allowlist, and still excluding the tests. It simply sweeps
+    // the sources in beside them.
+    find: /"!dist\/tests"/,
+    replace: '"src", "!dist/tests"',
+    tests: ['packaging'],
+    expect: 'the tarball must carry the build, not the sources.',
+  },
   'a-member-may-edit-a-document': {
     file: 'apps/api/src/routes/documents/index.ts',
     find: /(  app\.patch<\{ Params: \{ id: string \} \}>\('\/:id', )\{ preHandler: \[requireAdmin\] \}, (async)/,

@@ -1,4 +1,5 @@
 import type { SessionPosture } from './session-level.js';
+import type { StoredCredential } from './credentials.js';
 
 export interface StatusIdentity {
   email: string;
@@ -15,10 +16,35 @@ export interface StatusIdentity {
  * credential connected at read level was reported as WRITE by anyone who ran
  * status without repeating the flag.
  */
+function formatCredentials(
+  credentials: readonly StoredCredential[],
+  currentOrigin: string,
+): string {
+  const held = credentials.filter((credential) => credential.present);
+  // One credential is the ordinary case and needs no explaining. The block
+  // exists for the operator who has connected to more than one host and would
+  // otherwise have no way to tell, because `disconnect` acts on whichever one
+  // the base URL names.
+  if (held.length <= 1) return '';
+
+  const lines = held.map((credential) => {
+    const here = credential.origin === currentOrigin.toLowerCase() ? '  (this one)' : '';
+    return `  ${credential.origin}${here}`;
+  });
+
+  return (
+    `\nThis machine holds credentials for:\n${lines.join('\n')}\n`
+    + 'Every command acts on whichever host --base-url names.\n'
+  );
+}
+
 export function formatStatus(
   me: StatusIdentity,
   posture: SessionPosture | null,
   allowPersonalData: boolean,
+  /** Presence per host, never a token. Empty means nothing was looked up. */
+  credentials: readonly StoredCredential[] = [],
+  currentOrigin = '',
 ): string {
   const level = posture
     ? posture.accessLevel.toUpperCase()
@@ -39,5 +65,6 @@ export function formatStatus(
     + `Organisation: ${me.organisation?.name ?? '(unnamed organisation)'}\n`
     + `Access level: ${level}\n`
     + `Personal data: ${scope}\n`
+    + formatCredentials(credentials, currentOrigin)
   );
 }

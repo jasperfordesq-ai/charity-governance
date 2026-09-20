@@ -1,8 +1,18 @@
 #!/usr/bin/env node
 import { createInterface } from 'node:readline/promises';
 import { stdin, stdout, stderr, argv, exit } from 'node:process';
-import { parseArgs, requestedDataScope } from './config.js';
-import { chooseCredentialStore, bindCredentialToOrigin, originOf } from './credentials.js';
+import {
+  parseArgs,
+  requestedDataScope,
+  pinnedProfiles,
+  profileSummary,
+} from './config.js';
+import {
+  chooseCredentialStore,
+  bindCredentialToOrigin,
+  originOf,
+  storedCredentials,
+} from './credentials.js';
 import {
   readPasswordFromStdin,
   assertNonInteractiveConnectAllowed,
@@ -41,7 +51,8 @@ Options:
   --download-dir <dir>        Offer document_download, writing into this directory.
   --toolsets <a,b>            Offer only these tool groups. See README.
   --verbose                   Log each tool call to stderr, secrets redacted.
-  --profile local             Loopback-only test profile. See README.
+  --profile <name>            Pin which host this may reach:
+${profileSummary('      ')}
   --version, --help
 `;
 
@@ -178,7 +189,16 @@ async function main(): Promise<void> {
       // this process was started with; the two disagree whenever the flag is
       // omitted, which is most of the time.
       const posture = await fetchSessionPosture(client);
-      stdout.write(formatStatus(me, posture, config.allowPersonalData));
+      // The hosts worth looking for are the pinned profiles plus wherever
+      // this invocation is pointed; the keyring cannot be enumerated, so
+      // there is no list to read.
+      const held = storedCredentials([
+        ...pinnedProfiles().map((pinned) => pinned.origin),
+        config.baseUrl,
+      ]);
+      stdout.write(
+        formatStatus(me, posture, config.allowPersonalData, held, originOf(config.baseUrl)),
+      );
     } catch (error) {
       stdout.write(
         `Stored credential found, but it could not be verified: ${redactSecrets((error as Error).message)}\n`,

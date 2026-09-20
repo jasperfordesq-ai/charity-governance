@@ -1,6 +1,13 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { parseArgs, requestedDataScope, DEFAULT_BASE_URL } from '../config.js';
+import {
+  parseArgs,
+  requestedDataScope,
+  profileSummary,
+  DEFAULT_BASE_URL,
+  PROFILE_NAMES,
+  PRODUCTION_API_ORIGIN,
+} from '../config.js';
 
 test('the default base URL is the tailnet address', () => {
   assert.equal(parseArgs([]).baseUrl, DEFAULT_BASE_URL);
@@ -166,4 +173,101 @@ test('the two directories may arrive as environment variables, for a packaged bu
     if (before.download === undefined) delete process.env.CHARITYPILOT_DOWNLOAD_DIR;
     else process.env.CHARITYPILOT_DOWNLOAD_DIR = before.download;
   }
+});
+
+// ── profiles as pins ───────────────────────────────────────────────────────
+
+test('every profile is described, so a refusal can name the alternatives', () => {
+  assert.deepEqual([...PROFILE_NAMES], ['default', 'local', 'vm', 'prod']);
+  for (const name of PROFILE_NAMES) {
+    assert.match(profileSummary(), new RegExp(`\\b${name}\\b`), `${name} must be described`);
+  }
+});
+
+test('the vm profile reaches the private server and nothing else', () => {
+  const config = parseArgs(['status', '--profile', 'vm', '--base-url', DEFAULT_BASE_URL]);
+  assert.equal(config.profile, 'vm');
+  assert.equal(config.baseUrl, DEFAULT_BASE_URL);
+});
+
+test('the prod profile reaches the hosted service and nothing else', () => {
+  const config = parseArgs([
+    'status', '--profile', 'prod', '--base-url', PRODUCTION_API_ORIGIN,
+  ]);
+  assert.equal(config.profile, 'prod');
+});
+
+// The reason a profile is worth having: the configuration file naming the host
+// is treated as something an attacker may write, so a pin refuses a redirected
+// base URL before any password is typed.
+test('a pinned profile refuses a host that merely looks right', () => {
+  for (const [profile, url] of [
+    ['prod', 'https://api.charitypilot.ie.evil.example'],
+    ['prod', 'https://evil.example/api.charitypilot.ie'],
+    ['prod', 'https://app.charitypilot.ie'],
+    ['vm', 'https://charitypilot.tailae0b07.ts.net.evil.example'],
+    ['vm', 'https://charitypilot.other-tailnet.ts.net'],
+  ] as const) {
+    assert.throws(
+      () => parseArgs(['status', '--profile', profile, '--base-url', url]),
+      new RegExp(`--profile ${profile} only reaches`),
+      `${profile} must refuse ${url}`,
+    );
+  }
+});
+
+test('a pinned profile refuses plain http even to its own host', () => {
+  assert.throws(
+    () => parseArgs(['status', '--profile', 'prod', '--base-url', 'http://api.charitypilot.ie']),
+    /must use https/,
+  );
+});
+
+test('a pinned profile ignores the path, because identity is scheme, host and port', () => {
+  // Trailing paths arrive from copy-and-paste constantly and say nothing about
+  // which machine is being reached.
+  const config = parseArgs([
+    'status', '--profile', 'prod', '--base-url', `${PRODUCTION_API_ORIGIN}/api/v1`,
+  ]);
+  assert.equal(config.profile, 'prod');
+});
+
+test('local is still loopback only, and still the one profile allowing http', () => {
+  assert.equal(
+    parseArgs(['status', '--profile', 'local', '--base-url', 'http://127.0.0.1:3002']).profile,
+    'local',
+  );
+  assert.throws(
+    () => parseArgs(['status', '--profile', 'local', '--base-url', 'https://api.charitypilot.ie']),
+    /only accepts a loopback base URL/,
+  );
+  assert.throws(
+    () => parseArgs(['status', '--profile', 'local', '--base-url', 'http://127.0.0.1.evil.example']),
+    /only accepts a loopback base URL/,
+  );
+});
+
+test('the default profile pins nothing but still requires https', () => {
+  // A charity running its own deployment has an origin nobody here can know.
+  assert.equal(
+    parseArgs(['status', '--base-url', 'https://charity.example/api']).baseUrl,
+    'https://charity.example/api',
+  );
+  assert.throws(
+    () => parseArgs(['status', '--base-url', 'http://charity.example']),
+    /must use https/,
+  );
+});
+
+test('an unknown profile is refused with the real list rather than a bare error', () => {
+  assert.throws(
+    () => parseArgs(['status', '--profile', 'staging']),
+    (err: unknown) => {
+      const message = (err as Error).message;
+      assert.match(message, /Unknown profile: staging/);
+      assert.match(message, /\bvm\b/);
+      assert.match(message, /\bprod\b/);
+      return true;
+    },
+  );
 });

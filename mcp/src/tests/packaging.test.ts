@@ -74,9 +74,10 @@ test('the bundle passes the directories the way the connector reads them', () =>
 });
 
 test('the package still refuses to be published by accident', () => {
-  // Publishing is the owner's to do, and it is one line away: drop `private`
-  // and choose a name. Until then npm refuses, which is the right default for
-  // a package that talks to one charity's records.
+  // Publishing claims a public name and commits somebody to maintaining it,
+  // which is the owner's decision rather than an engineering one. Everything
+  // else a publish needs is in place below, so dropping this line is now the
+  // only line.
   assert.equal(json('package.json')['private'], true);
 });
 
@@ -85,4 +86,59 @@ test('the built entry point the bundle names exists after a build', () => {
     existsSync(resolve(PACKAGE_ROOT, 'dist/cli.js')),
     'this suite runs from dist, so the entry point must be beside it',
   );
+});
+
+// ── what an npm publish would actually ship ────────────────────────────────
+
+test('everything a publish needs is there, so removing one line is enough', () => {
+  const pkg = json('package.json');
+
+  // The comment above used to say publishing was one line away. It was not:
+  // without these, a publish would have shipped the sources and the tests,
+  // and npm would have warned about a package with no licence and no
+  // description. Now it is one line.
+  assert.equal(pkg['license'], 'AGPL-3.0-or-later');
+  assert.ok(typeof pkg['description'] === 'string' && (pkg['description'] as string).length > 40);
+  assert.ok(pkg['repository'], 'npm shows the source link on the listing');
+});
+
+test('a publish cannot ship an unbuilt or untested dist', () => {
+  const scripts = json('package.json')['scripts'] as Record<string, string>;
+  // `npm test` compiles first, so this covers both.
+  assert.equal(scripts['prepublishOnly'], 'npm test');
+});
+
+test('the tarball carries the built connector and nothing else', async (t) => {
+  // Asked of npm rather than inferred from the files list, because the list
+  // is the intention and the tarball is the fact.
+  const { execFileSync } = await import('node:child_process');
+
+  let output: string;
+  try {
+    output = execFileSync('npm', ['pack', '--dry-run', '--json'], {
+      cwd: PACKAGE_ROOT,
+      encoding: 'utf8',
+      shell: true,
+      stdio: ['ignore', 'pipe', 'ignore'],
+    });
+  } catch {
+    t.skip('npm could not be run here');
+    return;
+  }
+
+  const [tarball] = JSON.parse(output) as [{ files: { path: string }[] }];
+  const paths = tarball.files.map((file) => file.path);
+
+  assert.ok(paths.includes('dist/cli.js'), 'the entry point must ship');
+  assert.ok(paths.includes('manifest.json'), 'the Claude Desktop bundle manifest must ship');
+  assert.ok(paths.includes('README.md'), 'somebody installing this needs the instructions');
+
+  const tests = paths.filter((path) => path.includes('.test.'));
+  assert.deepEqual(tests, [], 'tests are not part of what an operator installs');
+
+  const sources = paths.filter((path) => path.startsWith('src/'));
+  assert.deepEqual(sources, [], 'the sources are on GitHub; the tarball carries the build');
+
+  const handover = paths.filter((path) => path.includes('HANDOVER'));
+  assert.deepEqual(handover, [], 'the handover is for whoever maintains this, not for npm');
 });

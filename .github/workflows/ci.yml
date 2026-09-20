@@ -57,6 +57,14 @@ jobs:
       - name: Test MCP connector
         run: npm run test --prefix mcp
 
+      # The manifest is what somebody installs in Claude Desktop, and nothing
+      # else validates it against the published schema. Packing the bundle is
+      # NOT done here: it embeds @napi-rs/keyring, which is a native module, so
+      # a bundle built on this runner would only install on Linux. Packing
+      # belongs on the platform the bundle is for.
+      - name: Validate the Claude Desktop bundle manifest
+        run: npx --yes @anthropic-ai/mcpb@2.1.2 validate mcp/manifest.json
+
       - name: Verify isolated E2E orchestration contract
         run: npm run test:e2e:contract
 

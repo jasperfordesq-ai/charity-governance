@@ -167,6 +167,54 @@ export function createHostScopedStore(
   };
 }
 
+export interface StoredCredential {
+  origin: string;
+  /** Whether this machine holds a credential for that host. Never the token. */
+  present: boolean;
+}
+
+/**
+ * Which of the given hosts this machine holds a credential for.
+ *
+ * Presence only. The token is never returned, never printed and never
+ * compared: the question `status` is answering is "what am I signed in to",
+ * and the answer to that needs no secret in it.
+ *
+ * The keyring this connector uses can fetch an entry by name but cannot
+ * enumerate them, so the hosts to look for have to be supplied. The pinned
+ * profiles are that list, plus whatever host the caller is currently
+ * pointed at.
+ *
+ * A keychain that refuses to be read — locked, or absent on a headless
+ * machine — reads as absent rather than throwing. `status` reporting nothing
+ * found is a better answer than `status` failing.
+ */
+export function storedCredentials(
+  origins: readonly string[],
+  make: (account?: string) => CredentialStore = createKeyringStore,
+): StoredCredential[] {
+  const seen = new Set<string>();
+
+  return origins.flatMap((raw) => {
+    let origin: string;
+    try {
+      origin = originOf(raw);
+    } catch {
+      return [];
+    }
+    if (seen.has(origin)) return [];
+    seen.add(origin);
+
+    let present = false;
+    try {
+      present = createHostScopedStore(origin, make).read() !== null;
+    } catch {
+      present = false;
+    }
+    return [{ origin, present }];
+  });
+}
+
 export function chooseCredentialStore(options: {
   profile: ConnectorProfile;
   credentialFile?: string | undefined;

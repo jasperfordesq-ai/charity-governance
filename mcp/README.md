@@ -56,10 +56,25 @@ one-off commands you run yourself from a terminal — see below):
 }
 ```
 
+Claude Code takes the same thing as one line:
+
+```bash
+claude mcp add charitypilot -- node /absolute/path/to/mcp/dist/cli.js serve --profile vm
+```
+
 Use an absolute path. If you want every tool call to return the full,
 un-redacted personal data (see the gate below), add `--allow-personal-data`
 to `args` — but read that section first, because it is not a convenience
 switch.
+
+### Why there is no `npx charitypilot-mcp` yet
+
+The package is marked private, so `npm publish` refuses. That is deliberate:
+publishing claims a public name and commits somebody to maintaining it, which
+is the owner's decision rather than an engineering one. Everything else a
+publish needs is in place, and a test asserts it, so removing that one line is
+the only step left. The tarball carries the build, the bundle manifest and this
+file, and nothing else.
 
 ## Installing it as a bundle in Claude Desktop
 
@@ -450,6 +465,30 @@ the same time without either evicting the other. `connect`, `status` and
 A credential is still bound to the host that issued it: if something changes
 the base URL, the stored token is refused rather than sent to the new host,
 and the refusal says so plainly instead of looking like an expired session.
+
+`status` lists the hosts this machine holds a credential for whenever there is
+more than one, and marks the one the command is acting on. It reports presence
+only; no token is ever printed.
+
+### Profiles pin which host a command may reach
+
+```
+--profile default   Any https host. For a deployment this connector does not know about.
+--profile local     A stack on this machine only. The one profile that allows plain http.
+--profile vm        The private server on its Tailscale address.
+--profile prod      The hosted service at api.charitypilot.ie.
+```
+
+A profile is a pin, not a shortcut. The connector already refuses to send a
+stored credential to a host other than the one that issued it, because the AI
+client's configuration file naming that host is treated as something an
+attacker may write. A profile applies the same reasoning one step earlier, to
+the sign-in itself: with `--profile prod`, no edit to that file can point the
+password prompt somewhere else. The check is on the parsed origin, so a host
+like `api.charitypilot.ie.evil.example` is refused rather than matched.
+
+`default` pins nothing, because a charity running its own deployment has an
+origin nobody here can know. It still requires https.
 
 ## What's actually stored on disk
 
