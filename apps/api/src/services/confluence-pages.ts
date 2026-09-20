@@ -530,6 +530,34 @@ function readResults(body: unknown): unknown[] | undefined {
 }
 
 /**
+ * The cursor from `_links.next`, or `undefined` on the last page.
+ *
+ * Identical in shape and reasoning to `confluence-spaces.ts`'s version: only
+ * the `cursor` query parameter is taken from the link Confluence sent, never
+ * the path wholesale — a response body does not get to choose what this client
+ * requests next.
+ */
+function readNextCursor(body: unknown): string | undefined {
+  const next = asObject(asObject(body)?._links)?.next;
+  if (typeof next !== 'string' || next.length === 0) return undefined;
+
+  try {
+    // The base is a placeholder; only the query is read from the result.
+    const cursor = new URL(next, 'https://confluence.invalid').searchParams.get('cursor');
+    return cursor !== null && cursor.length > 0 ? cursor : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+/**
+ * The same bound `confluence-spaces.ts` and `confluence-attachments.ts` apply,
+ * for the same reason: a misbehaving or looping upstream must not be able to
+ * hold a caller open for ever.
+ */
+const MAX_LIST_PAGES = 40;
+
+/**
  * Finds a page by its exact title within a space — the caller-side re-read
  * that turns `createPage`'s non-idempotence into something a retrying outbox
  * can live with.
@@ -565,22 +593,60 @@ export async function findPageByTitle(
   spaceId: string,
   title: string,
 ): Promise<ConfluencePage | null> {
-  const response = await client.request({
-    method: 'GET',
-    api: 'v2',
-    path: 'pages',
-    query: { title, 'space-id': spaceId },
-    // A read changes nothing, so the core may retry it on a 429 or a 5xx.
-    idempotent: true,
-  });
+  // THE WALK IS WHAT MAKES THE AMBIGUITY CHECK SOUND, and its absence was a
+  // correctness bug rather than a missing feature.
+  //
+  // This function decides whether to ADOPT an existing page or create a new
+  // one. Reading only the first response page meant that a second page with the
+  // same title, sitting past the cursor boundary, was invisible: the count came
+  // back as 1, the ambiguity guard stayed quiet, and the publisher adopted
+  // whichever of the two Confluence happened to return first — then wrote a
+  // charity's governance document onto it and recorded that page as the one it
+  // would later erase. The loud `CONFLUENCE_PAGE_TITLE_AMBIGUOUS` refusal
+  // existed precisely to prevent that, and could be walked past.
+  //
+  // The walk stops the moment a second match is seen. It is looking for "more
+  // than one", not for "how many", so there is never a reason to read further.
+  const matches: unknown[] = [];
+  let cursor: string | undefined;
 
-  const results = readResults(response.body);
-  if (results === undefined) throw invalidResponse('page list');
+  for (let page = 0; page < MAX_LIST_PAGES; page += 1) {
+    const response = await client.request({
+      method: 'GET',
+      api: 'v2',
+      path: 'pages',
+      query: { title, 'space-id': spaceId, ...(cursor === undefined ? {} : { cursor }) },
+      // A read changes nothing, so the core may retry it on a 429 or a 5xx.
+      idempotent: true,
+    });
 
-  if (results.length === 0) return null;
-  if (results.length > 1) throw titleAmbiguous(spaceId, title, results.length);
+    const results = readResults(response.body);
+    if (results === undefined) throw invalidResponse('page list');
+    matches.push(...results);
 
-  return parsePage(results[0]);
+    if (matches.length > 1) throw titleAmbiguous(spaceId, title, matches.length);
+
+    cursor = readNextCursor(response.body);
+    if (cursor === undefined) break;
+  }
+
+  // Reaching the cap without exhausting the cursor is NOT treated as "one
+  // match found". Unlike a space picker, which is well served by a partial
+  // list, a caller here is deciding whether to adopt: an unfinished search is
+  // not evidence of uniqueness, and must not be reported as though it were.
+  if (cursor !== undefined) {
+    throw new AppError(
+      502,
+      'CONFLUENCE_PAGE_SEARCH_UNBOUNDED',
+      'Confluence kept returning more pages for this title than this client will read, so ' +
+        'whether the title is unique in the space could not be established. Nothing was adopted.',
+      { spaceId, title },
+    );
+  }
+
+  if (matches.length === 0) return null;
+
+  return parsePage(matches[0]);
 }
 
 // ---------------------------------------------------------------------------
@@ -730,33 +796,41 @@ function serialiseContentProperty(key: string, value: unknown): string {
   return serialised;
 }
 
-function parseContentProperty(body: unknown, expectedKey: string): ConfluenceContentProperty | null {
+/**
+ * Picks the property with the requested key out of one response page.
+ *
+ * Returns `undefined` for "not on this page" — distinct from `null`, which the
+ * caller uses for "not set at all", and which it may only conclude once the
+ * cursor is exhausted.
+ *
+ * The key comparison is load-bearing: the id returned here is what
+ * `setContentProperty` then PUTs to, so taking a record on trust because it
+ * happened to come back first would overwrite an unrelated property.
+ */
+function pickContentProperty(
+  body: unknown,
+  expectedKey: string,
+): ConfluenceContentProperty | undefined {
   const results = asObject(body)?.results;
-  if (!Array.isArray(results) || results.length === 0) return null;
+  if (!Array.isArray(results) || results.length === 0) return undefined;
 
-  const record = asObject(results[0]);
-  if (record === undefined) throw invalidResponse('content property');
+  for (const entry of results) {
+    const record = asObject(entry);
+    if (record === undefined) throw invalidResponse('content property');
+    if (record.key !== expectedKey) continue;
 
-  const id = readId(record.id);
-  if (id === undefined) throw invalidResponse('content property id');
+    const id = readId(record.id);
+    if (id === undefined) throw invalidResponse('content property id');
 
-  // The `?key=` filter is load-bearing: this id is what `setContentProperty`
-  // then PUTs to. If Confluence ever answered with a property that is not the
-  // one asked for, taking `results[0]` on trust would overwrite an unrelated
-  // property. One comparison closes that, and it is cheap.
-  if (record.key !== expectedKey) throw invalidResponse('content property for the requested key');
+    const versionNumber = asObject(record.version)?.number;
+    if (typeof versionNumber !== 'number' || !Number.isFinite(versionNumber)) {
+      throw invalidResponse('content property version');
+    }
 
-  const versionNumber = asObject(record.version)?.number;
-  if (typeof versionNumber !== 'number' || !Number.isFinite(versionNumber)) {
-    throw invalidResponse('content property version');
+    return { id, key: expectedKey, value: record.value, version: versionNumber };
   }
 
-  return {
-    id,
-    key: expectedKey,
-    value: record.value,
-    version: versionNumber,
-  };
+  return undefined;
 }
 
 /**
@@ -779,15 +853,60 @@ export async function getContentPropertyRecord(
   const id = assertPageId(pageId);
   const propertyKey = assertPropertyKey(key);
 
-  const response = await client.request({
-    method: 'GET',
-    api: 'v2',
-    path: `pages/${id}/properties`,
-    query: { key: propertyKey },
-    idempotent: true,
-  });
+  // The `?key=` filter should make this a single-result read, and on a
+  // well-behaved site it is. The walk exists for the case where it is not:
+  // previously the code took `results[0]`, compared its key, and threw
+  // `CONFLUENCE_RESPONSE_INVALID` if it did not match — so a site that returned
+  // an unfiltered or differently ordered list would fail every publish with a
+  // diagnostic blaming Confluence's response shape, when the property was
+  // simply on the next page. Following the cursor turns that into a correct
+  // read, and keeps the loud failure for the case where the key genuinely is
+  // not there.
+  let cursor: string | undefined;
+  let sawUnrelatedProperty = false;
 
-  return parseContentProperty(response.body, propertyKey);
+  for (let page = 0; page < MAX_LIST_PAGES; page += 1) {
+    const response = await client.request({
+      method: 'GET',
+      api: 'v2',
+      path: `pages/${id}/properties`,
+      query: { key: propertyKey, ...(cursor === undefined ? {} : { cursor }) },
+      idempotent: true,
+    });
+
+    const found = pickContentProperty(response.body, propertyKey);
+    if (found !== undefined) return found;
+
+    const results = asObject(response.body)?.results;
+    if (Array.isArray(results) && results.length > 0) sawUnrelatedProperty = true;
+
+    cursor = readNextCursor(response.body);
+    if (cursor === undefined) {
+      // EMPTY is not the same answer as WRONG, and the difference decides what
+      // the caller does next.
+      //
+      // An empty result list on a live page means the property is genuinely
+      // unset, and `null` tells the caller to create it. But a list that came
+      // back NON-empty without ever containing the requested key means the
+      // `?key=` filter was not honoured — the site is behaving contrary to
+      // Atlassian's documentation, and this client no longer knows what it is
+      // looking at. Answering `null` there would have the caller create a
+      // property that may already exist, so the original loud refusal stands.
+      if (sawUnrelatedProperty) throw invalidResponse('content property for the requested key');
+      return null;
+    }
+  }
+
+  // As in `findPageByTitle`: an unfinished search is not evidence of absence.
+  // Returning `null` here would tell the publisher the property is unset, and
+  // it would then create a second one.
+  throw new AppError(
+    502,
+    'CONFLUENCE_CONTENT_PROPERTY_SEARCH_UNBOUNDED',
+    'Confluence returned more content-property pages than this client will read without ' +
+      'answering the requested key, so whether the property exists could not be established.',
+    { key: propertyKey },
+  );
 }
 
 /** The property's value alone, or `null` when it is not set on an existing page. */

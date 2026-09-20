@@ -1,4 +1,4 @@
-import { DOCUMENT_UPLOAD_MAX_FILE_SIZE } from '../routes/documents/document-upload-validation.js';
+import { DOCUMENT_UPLOAD_MAX_FILE_SIZE } from './document-upload-limits.js';
 import { AppError } from '../utils/errors.js';
 import type { ConfluenceClient } from './confluence-client.js';
 

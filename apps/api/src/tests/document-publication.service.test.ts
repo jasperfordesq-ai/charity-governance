@@ -7,6 +7,8 @@ import {
   createConfluencePublisher,
   DocumentPublicationService,
   DOCUMENT_PUBLICATION_MAX_ATTEMPTS,
+  confluenceRetryAfterMs,
+  documentPublicationRetryDelayMs,
   publicationErasureTarget,
   publicationFilename,
   type ConfluencePublisherDeps,
@@ -1331,4 +1333,82 @@ test('production-scheduler.ts waits for the publication job on shutdown', () => 
     /waitForRecurringJobsToStop\(\s*\[[^\]]*documentPublicationJob/,
     'a job left out of the shutdown list keeps uploading while the process exits',
   );
+});
+
+// ---------------------------------------------------------------------------
+// Retry-After, and why the outbox has to be the thing that waits.
+//
+// `confluence-client.ts` will not hold a request thread open for longer than a
+// minute, so when Atlassian asks for five it hands the number back instead of
+// sleeping a truncated delay and retrying into a certain refusal. That is only
+// an improvement if this queue then USES the number — otherwise the backoff
+// retries early, spends the attempt, and four of those dead-letter a
+// publication for a condition that would have cleared on its own.
+// ---------------------------------------------------------------------------
+
+test('a rate limit longer than the backoff pushes the next attempt out to meet it', async () => {
+  const mock = buildFallbackPrisma(publicationRow({ attempts: 0, claimedAt: null }));
+  const service = new DocumentPublicationService(mock.prisma as never, () => NOW);
+
+  const rateLimited = new AppError(429, 'CONFLUENCE_RATE_LIMITED', 'slow down', {
+    status: 429,
+    retryAfterSeconds: 900,
+  });
+
+  const result = await service.recordPublicationFailure('pub-1', rateLimited, null);
+
+  assert.equal(result.status, 'retry-scheduled');
+  assert.equal(
+    result.nextAttemptAt?.getTime(),
+    NOW.getTime() + 900_000,
+    'the queue must come back when Confluence said to, not when its own backoff says',
+  );
+});
+
+test('the ordinary backoff is a floor a short Retry-After cannot undercut', async () => {
+  const mock = buildFallbackPrisma(publicationRow({ attempts: 3, claimedAt: null }));
+  const service = new DocumentPublicationService(mock.prisma as never, () => NOW);
+
+  const rateLimited = new AppError(429, 'CONFLUENCE_RATE_LIMITED', 'slow down', {
+    status: 429,
+    retryAfterSeconds: 1,
+  });
+
+  const result = await service.recordPublicationFailure('pub-1', rateLimited, null);
+
+  // A one-second header must not pull a fourth attempt forward past the
+  // exponential backoff: the header says the earliest Confluence will accept
+  // it, not the soonest this queue should try.
+  assert.equal(result.nextAttemptAt?.getTime(), NOW.getTime() + documentPublicationRetryDelayMs(4));
+});
+
+test('an error carrying no Retry-After is scheduled by the backoff alone', async () => {
+  const mock = buildFallbackPrisma(publicationRow({ attempts: 0, claimedAt: null }));
+  const service = new DocumentPublicationService(mock.prisma as never, () => NOW);
+
+  const result = await service.recordPublicationFailure('pub-1', new Error('network'), null);
+
+  assert.equal(result.nextAttemptAt?.getTime(), NOW.getTime() + documentPublicationRetryDelayMs(1));
+});
+
+test('an upstream Retry-After cannot park a publication beyond an operator horizon', () => {
+  const absurd = new AppError(429, 'CONFLUENCE_RATE_LIMITED', 'slow down', {
+    status: 429,
+    // The header is upstream-controlled and a misconfigured proxy can send
+    // anything. A year would park the row past any window anybody is watching.
+    retryAfterSeconds: 60 * 60 * 24 * 365,
+  });
+
+  assert.equal(confluenceRetryAfterMs(absurd), 60 * 60 * 1000);
+});
+
+test('a non-numeric or negative Retry-After is ignored rather than trusted', () => {
+  for (const seconds of [-1, 0, Number.NaN, Number.POSITIVE_INFINITY, '600' as unknown as number]) {
+    const error = new AppError(429, 'CONFLUENCE_RATE_LIMITED', 'slow down', {
+      status: 429,
+      retryAfterSeconds: seconds,
+    });
+    assert.equal(confluenceRetryAfterMs(error), undefined, `for ${String(seconds)}`);
+  }
+  assert.equal(confluenceRetryAfterMs(new Error('plain')), undefined);
 });

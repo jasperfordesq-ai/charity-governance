@@ -432,6 +432,34 @@ function upstreamFailure(status: number, detail: string | undefined): AppError {
   return new AppError(statusCode, 'CONFLUENCE_REQUEST_FAILED', describe(status, detail), details);
 }
 
+/**
+ * A rate limit whose `Retry-After` is longer than this client will wait.
+ *
+ * Deliberately the SAME code (`CONFLUENCE_RATE_LIMITED`) an exhausted retry
+ * loop raises, because it means the same thing to every caller that already
+ * handles it — Confluence is rate limiting, nothing was applied, try later.
+ * What is different is `details.retryAfterSeconds`, which an outbox can put
+ * straight into `nextAttemptAt` instead of guessing with its own backoff.
+ */
+function rateLimitedRetryAfter(
+  retryAfterSeconds: number | undefined,
+  detail: string | undefined,
+): AppError {
+  return new AppError(
+    429,
+    'CONFLUENCE_RATE_LIMITED',
+    describe(
+      429,
+      detail,
+      retryAfterSeconds === undefined
+        ? 'Confluence asked for a longer wait than this client will hold a request open for.'
+        : `Confluence asked for a ${retryAfterSeconds}-second wait, which is longer than this ` +
+          'client will hold a request open for. Nothing was changed.',
+    ),
+    retryAfterSeconds === undefined ? { status: 429 } : { status: 429, retryAfterSeconds },
+  );
+}
+
 function rateLimitedUnsafeRetry(retryAfterSeconds: number | undefined): AppError {
   return new AppError(
     429,
@@ -646,6 +674,23 @@ export function createConfluenceClient(
         // caller decides when to reissue something that could duplicate
         // content, and it is handed the delay Confluence asked for.
         if (!idempotent) throw rateLimitedUnsafeRetry(retryAfterSecondsOf(retryAfterMs));
+
+        // ASKED FOR LONGER THAN THIS CLIENT WILL WAIT: hand the delay back
+        // rather than sleeping a truncated one.
+        //
+        // `backoffMs` clamps at MAX_BACKOFF_MS (60s). When Atlassian says
+        // `Retry-After: 300`, sleeping 60 and retrying spends an attempt on a
+        // request that is certain to be refused again — and repeating that
+        // exhausts all four attempts inside five minutes while never once
+        // waiting as long as the server asked. The outbox then dead-letters a
+        // publication for a condition that would have cleared on its own.
+        //
+        // The caller is a queue with a `nextAttemptAt`, so it can wait minutes
+        // where this loop cannot. Telling it how long is strictly better than
+        // pretending to have honoured a header this client cannot honour.
+        if (retryAfterMs !== undefined && retryAfterMs > MAX_BACKOFF_MS) {
+          throw rateLimitedRetryAfter(retryAfterSecondsOf(retryAfterMs), detail);
+        }
 
         if (attempt === CONFLUENCE_MAX_ATTEMPTS) throw upstreamFailure(status, detail);
         const delayMs = backoffMs(attempt, retryAfterMs, random);

@@ -322,15 +322,40 @@ test('a Retry-After given as an HTTP date is resolved against the injected clock
   assert.deepEqual(h.sleeps, [7000]);
 });
 
-test('an hour-long Retry-After is clamped, not obeyed', async () => {
+test('an hour-long Retry-After is handed to the caller, not slept through or truncated', async () => {
   const h = harness([jsonStep(429, {}, { 'Retry-After': '3600' })]);
 
-  await captureError(h.request(GET_PAGE));
+  const error = await captureError(h.request(GET_PAGE));
 
-  assert.ok(h.sleeps.length > 0);
-  for (const ms of h.sleeps) {
-    assert.ok(ms <= 60_000, `a proxy's hour-long Retry-After must not pin a publish job: got ${ms}`);
-  }
+  // This test used to assert that the delay was CLAMPED to 60s and slept. It
+  // protected the right thing — a proxy's hour-long header must not pin a
+  // publish job — by the wrong mechanism: sleeping 60s and retrying spends an
+  // attempt on a request certain to be refused again, so four attempts burn
+  // inside five minutes without ever once waiting as long as the server asked,
+  // and the outbox dead-letters a publication for a condition that would have
+  // cleared on its own.
+  //
+  // Handing the delay back serves the original intent better. The request
+  // thread is not held at all, and the caller — a queue with a `nextAttemptAt`
+  // that can wait minutes where this loop cannot — is told how long to wait.
+  assert.deepEqual(h.sleeps, [], 'the request thread must not be held for an hour, or for a minute');
+  assert.equal(error.code, 'CONFLUENCE_RATE_LIMITED');
+  assert.equal(
+    (error.details as { retryAfterSeconds?: number }).retryAfterSeconds,
+    3600,
+    'the caller cannot schedule a sensible retry without the number Confluence gave',
+  );
+});
+
+test('a Retry-After this client can wait out is still slept and retried in-process', async () => {
+  const h = harness([jsonStep(429, {}, { 'Retry-After': '5' }), jsonStep(200, {})]);
+
+  // The boundary matters in both directions: handing every 429 back to the
+  // caller would turn a five-second blip into a queue round trip.
+  await h.request(GET_PAGE);
+
+  assert.equal(h.sleeps.length, 1);
+  assert.ok(h.sleeps[0] >= 5000, `expected to honour the 5s the server asked for: got ${h.sleeps[0]}`);
 });
 
 test('a zero or past Retry-After is floored, not taken as "retry immediately"', async () => {

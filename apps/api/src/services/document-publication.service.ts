@@ -708,6 +708,23 @@ function isFilenameSafeCodePoint(codePoint: number): boolean {
  * new version of the first, and the row records one `attachmentId`. So the
  * second file would be the one nothing remembers how to erase.
  */
+/**
+ * The `Retry-After` Confluence asked for, in milliseconds, if this error
+ * carries one.
+ *
+ * Bounded at an hour. The header is upstream-controlled — a misconfigured proxy
+ * can send an enormous one — and an unbounded value here would park a
+ * publication beyond any window an operator is watching.
+ */
+export function confluenceRetryAfterMs(error: unknown): number | undefined {
+  if (!(error instanceof AppError)) return undefined;
+  const details = error.details;
+  if (details === null || typeof details !== 'object') return undefined;
+  const seconds = (details as { retryAfterSeconds?: unknown }).retryAfterSeconds;
+  if (typeof seconds !== 'number' || !Number.isFinite(seconds) || seconds <= 0) return undefined;
+  return Math.min(Math.round(seconds * 1000), 60 * 60 * 1000);
+}
+
 export function publicationFilename(doc: { id: string; name: string }): string {
   let cleaned = '';
   for (const character of doc.name) {
@@ -1104,9 +1121,22 @@ export class DocumentPublicationService {
       const deadLettered = permanentReason !== null || attempt >= DOCUMENT_PUBLICATION_MAX_ATTEMPTS;
       const terminalReason: DocumentPublicationTerminalReason | null =
         permanentReason ?? (deadLettered ? 'MAX_ATTEMPTS_EXHAUSTED' : null);
+      // A `Retry-After` the client could not wait out beats this outbox's own
+      // backoff. `confluence-client.ts` hands the number back rather than
+      // sleeping a truncated delay, precisely so a queue that CAN wait minutes
+      // schedules for when Confluence said to come back — retrying earlier
+      // spends an attempt on a request certain to be refused again, and four of
+      // those dead-letter a publication for a condition that clears on its own.
+      //
+      // `Math.max`, not a replacement: the ordinary backoff is still the floor,
+      // so a small or absent header cannot make the queue retry sooner than it
+      // otherwise would.
+      const retryAfterMs = confluenceRetryAfterMs(error);
       const nextAttemptAt = deadLettered
         ? null
-        : new Date(now.getTime() + documentPublicationRetryDelayMs(attempt));
+        : new Date(
+            now.getTime() + Math.max(documentPublicationRetryDelayMs(attempt), retryAfterMs ?? 0),
+          );
 
       const update = await publicationDelegate(tx).updateMany({
         where: { id, state: 'PENDING', processedAt: null, attempts: current.attempts, claimedAt },

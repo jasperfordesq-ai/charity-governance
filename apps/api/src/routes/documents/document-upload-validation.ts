@@ -9,7 +9,11 @@ const ALLOWED_MIME_TYPES = new Set([
   'image/png',
 ]);
 
-export const DOCUMENT_UPLOAD_MAX_FILE_SIZE = 10 * 1024 * 1024; // 10 MB
+// Re-exported from the service layer, where it now lives. See
+// services/document-upload-limits.ts for why the direction of that import was
+// inverted: a background job must not reach into routes/ for a domain bound.
+export { DOCUMENT_UPLOAD_MAX_FILE_SIZE } from '../../services/document-upload-limits.js';
+import { DOCUMENT_UPLOAD_MAX_FILE_SIZE } from '../../services/document-upload-limits.js';
 export const DOCUMENT_UPLOAD_MULTIPART_LIMITS = {
   fileSize: DOCUMENT_UPLOAD_MAX_FILE_SIZE,
   files: 1,
