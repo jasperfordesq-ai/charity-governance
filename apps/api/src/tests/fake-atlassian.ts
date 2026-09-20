@@ -341,6 +341,32 @@ export function createFakeAtlassian(options: FakeAtlassianOptions = {}): FakeAtl
     };
   }
 
+  /**
+   * True when some OTHER non-purged page in `spaceId` already holds `title`.
+   * `excludingPageId` lets an update check itself out of its own uniqueness
+   * check, so a no-op rename (or a version bump with the same title) is not
+   * mistaken for a collision.
+   *
+   * UNVERIFIED ASSUMPTION, pinned here rather than buried in a commit
+   * message: the audit's platform table (docs/superpowers/specs/2026-09-20-
+   * confluence-connector-audit.md §3) never confirms what a real duplicate-
+   * title create actually answers. 409 was chosen because production's
+   * create-or-adopt only adopts on `isConflict` (document-publication
+   * .service.ts:886), which maps a 409 — not because any real site has been
+   * asked. If Atlassian answers something else (400, for one), this fake can
+   * no longer falsify that branch, and this is the first place to fix on
+   * first contact with a real site.
+   */
+  function titleTakenInSpace(spaceId: string, title: string, excludingPageId?: string): boolean {
+    return Array.from(pages.values()).some(
+      (existing) =>
+        existing.id !== excludingPageId &&
+        existing.spaceId === spaceId &&
+        existing.title === title &&
+        existing.status !== 'purged',
+    );
+  }
+
   function createPageHandler(bodyText: string | undefined): Response {
     const body = parseJsonObject(bodyText) ?? {};
     const spaceId = typeof body.spaceId === 'string' ? body.spaceId : undefined;
@@ -352,10 +378,7 @@ export function createFakeAtlassian(options: FakeAtlassianOptions = {}): FakeAtl
     // docblock, and the create-or-adopt design at document-publication
     // .service.ts:850 depends on it). A trashed page still occupies its title
     // — only a purge frees it — so the check spans every non-purged page.
-    const duplicate = Array.from(pages.values()).some(
-      (existing) => existing.spaceId === spaceId && existing.title === title && existing.status !== 'purged',
-    );
-    if (duplicate) {
+    if (titleTakenInSpace(spaceId, title)) {
       return jsonResponse(409, {
         errors: [{ title: `A page titled "${title}" already exists in this space.` }],
       });
@@ -393,8 +416,20 @@ export function createFakeAtlassian(options: FakeAtlassianOptions = {}): FakeAtl
       return jsonResponse(409, { errors: [{ title: 'Conflict' }] });
     }
 
+    const nextTitle = typeof body.title === 'string' ? body.title : page.title;
+
+    // Same class as createPageHandler's check: a rename is a title-uniqueness
+    // event too. Excluding this page's own id means a no-op rename (or any
+    // update that leaves the title unchanged) is never mistaken for a
+    // collision with itself.
+    if (nextTitle !== page.title && titleTakenInSpace(page.spaceId, nextTitle, page.id)) {
+      return jsonResponse(409, {
+        errors: [{ title: `A page titled "${nextTitle}" already exists in this space.` }],
+      });
+    }
+
     page.version = versionNumber;
-    if (typeof body.title === 'string') page.title = body.title;
+    page.title = nextTitle;
 
     return jsonResponse(200, pageJson(page));
   }

@@ -398,6 +398,20 @@ test('the create-or-adopt shape works: a 409 on create is resolved by findPageBy
   });
   const original = (await created.json()) as { id: string };
 
+  // A decoy in the SAME space under a DIFFERENT title. Without this, only
+  // one page would exist in the space when the lookup below runs (the 409'd
+  // create never got stored), so an unfiltered listing would still return
+  // exactly one result and happen to match by id — proving the 409-then-
+  // adopt shape but not that the lookup actually matched on title. With the
+  // decoy present, removing `listPagesHandler`'s title filter returns BOTH
+  // pages and fails the length assertion below.
+  const decoyCreated = await site.fetch(`${base}/wiki/api/v2/pages`, {
+    method: 'POST',
+    headers: auth,
+    body: JSON.stringify({ spaceId: 'space-1', title: 'Unrelated Policy' }),
+  });
+  const decoy = (await decoyCreated.json()) as { id: string };
+
   const conflict = await site.fetch(`${base}/wiki/api/v2/pages`, {
     method: 'POST',
     headers: auth,
@@ -412,6 +426,7 @@ test('the create-or-adopt shape works: a 409 on create is resolved by findPageBy
   const foundBody = (await found.json()) as { results: { id: string }[] };
   assert.equal(foundBody.results.length, 1, 'exactly one page must be adoptable, not zero and not many');
   assert.equal(foundBody.results[0]?.id, original.id);
+  assert.notEqual(foundBody.results[0]?.id, decoy.id);
 });
 
 test('a title is still occupied by a trashed page, and is only freed by a purge', async () => {
@@ -444,6 +459,78 @@ test('a title is still occupied by a trashed page, and is only freed by a purge'
     body: JSON.stringify({ spaceId: 'space-1', title: 'Retention Policy' }),
   });
   assert.equal(afterPurge.status, 200, 'once purged, the title is free again');
+});
+
+test('a rename (PUT) onto a title already occupied in the space is a 409, same as a create', async () => {
+  const site = createFakeAtlassian();
+  site.addSpace({ id: 'space-1', key: 'GOV', name: 'Governance' });
+  const base = `https://api.atlassian.com/ex/confluence/${site.cloudId}`;
+  const auth = { Authorization: 'Bearer access-1', 'Content-Type': 'application/json' };
+
+  const firstCreated = await site.fetch(`${base}/wiki/api/v2/pages`, {
+    method: 'POST',
+    headers: auth,
+    body: JSON.stringify({ spaceId: 'space-1', title: 'Safeguarding Policy' }),
+  });
+  const first = (await firstCreated.json()) as { id: string };
+
+  const secondCreated = await site.fetch(`${base}/wiki/api/v2/pages`, {
+    method: 'POST',
+    headers: auth,
+    body: JSON.stringify({ spaceId: 'space-1', title: 'Retention Policy' }),
+  });
+  const second = (await secondCreated.json()) as { id: string };
+
+  // Renaming the second page onto the first page's title must be refused —
+  // republish-on-change (a scheduled phase) renames pages, and it must be
+  // built against a double that refuses this exactly as a real site would.
+  const renamed = await site.fetch(`${base}/wiki/api/v2/pages/${second.id}`, {
+    method: 'PUT',
+    headers: auth,
+    body: JSON.stringify({
+      id: second.id,
+      title: 'Safeguarding Policy',
+      status: 'current',
+      version: { number: 2 },
+    }),
+  });
+  assert.equal(renamed.status, 409);
+  assert.equal(site.getPage(second.id)?.title, 'Retention Policy', 'the refused rename must change nothing');
+  assert.equal(site.getPage(second.id)?.version, 1, 'a refused rename must not consume the version bump either');
+
+  // The first page's own title is unaffected — it may still legitimately
+  // "rename" to itself.
+  assert.equal(site.getPage(first.id)?.title, 'Safeguarding Policy');
+});
+
+test('a rename to a page\'s own existing title is not a collision with itself', async () => {
+  const site = createFakeAtlassian();
+  site.addSpace({ id: 'space-1', key: 'GOV', name: 'Governance' });
+  const base = `https://api.atlassian.com/ex/confluence/${site.cloudId}`;
+  const auth = { Authorization: 'Bearer access-1', 'Content-Type': 'application/json' };
+
+  const created = await site.fetch(`${base}/wiki/api/v2/pages`, {
+    method: 'POST',
+    headers: auth,
+    body: JSON.stringify({ spaceId: 'space-1', title: 'Safeguarding Policy' }),
+  });
+  const page = (await created.json()) as { id: string };
+
+  // A no-op rename (same title, a legitimate version-only update) must
+  // succeed: the page must not be treated as colliding with itself.
+  const noop = await site.fetch(`${base}/wiki/api/v2/pages/${page.id}`, {
+    method: 'PUT',
+    headers: auth,
+    body: JSON.stringify({
+      id: page.id,
+      title: 'Safeguarding Policy',
+      status: 'current',
+      version: { number: 2 },
+    }),
+  });
+  assert.equal(noop.status, 200);
+  assert.equal(site.getPage(page.id)?.version, 2);
+  assert.equal(site.getPage(page.id)?.title, 'Safeguarding Policy');
 });
 
 test('handleToken rejects a mismatched client_id or client_secret with invalid_client, and accepts a match', async () => {

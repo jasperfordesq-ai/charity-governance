@@ -11,9 +11,12 @@ work in progress.
 `apps/api/src/tests/fake-atlassian.ts` (see the corrected T2.9, below), covering the OAuth token
 endpoint with refresh rotation, `accessible-resources`, v2 pages (create/get/update/delete/purge), the
 v1 trashed-content read, spaces and content properties with cursor pagination, and switchable rate
-limiting. It models the four platform behaviours recorded in section 3 above: a v2 404 that hides both
-trash and purge, purge refused unless the page is already trashed, `PUT` requiring `version + 1`, and
-refresh-token rotation. Production client, page and space operations are driven against it by
+limiting. It models five platform behaviours: a v2 404 that hides both trash and purge, purge refused
+unless the page is already trashed, `PUT` requiring `version + 1`, refresh-token rotation — all
+recorded in section 3 above — and per-space title uniqueness on both create and rename. The fifth is
+not recorded in section 3: it is inferred from Confluence's own use of 409 for a duplicate title
+(confluence-pages.ts:271) and has never been confirmed against a real site (finding A6). Production
+client, page and space operations are driven against it by
 `apps/api/src/tests/confluence-round-trip.test.ts`.
 
 **Method.** Three sweeps of the repository (backend services and Prisma model; design documents and
