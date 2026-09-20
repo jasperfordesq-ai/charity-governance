@@ -113,6 +113,7 @@ async function buildApp(options: {
       familyId: options.familyId ?? "fam-1",
       clientKind: options.clientKind ?? "MCP_CONNECTOR",
       accessLevel: "ADMIN",
+      dataScope: "FULL",
     };
   });
 

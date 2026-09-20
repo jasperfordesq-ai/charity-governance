@@ -24,6 +24,15 @@ export type RequestAuthSession = {
   familyId: string;
   clientKind: "WEB" | "MCP_CONNECTOR";
   accessLevel: "READ" | "WRITE" | "ADMIN";
+  /**
+   * How much personal data this session may see.
+   *
+   * Read here rather than taken from a flag on the connector's command line,
+   * which lived in the AI client's configuration file — a file the connector
+   * otherwise treats as attacker-writable, which is why a stored credential
+   * is bound to the host that issued it.
+   */
+  dataScope: "WITHHELD" | "FULL";
 };
 
 declare module "fastify" {
@@ -78,7 +87,13 @@ async function authenticateRequest(
           },
         },
       },
-      select: { id: true, familyId: true, clientKind: true, accessLevel: true },
+      select: {
+        id: true,
+        familyId: true,
+        clientKind: true,
+        accessLevel: true,
+        dataScope: true,
+      },
     }),
     request.server.prisma.user.findUnique({
       where: { id: payload.userId },
@@ -127,6 +142,9 @@ async function authenticateRequest(
     // web session, which is what it was.
     clientKind: session.clientKind ?? "WEB",
     accessLevel: session.accessLevel ?? "ADMIN",
+    // A session issued before this column existed saw everything, which is
+    // what FULL means.
+    dataScope: session.dataScope ?? "FULL",
   };
 
   // A read-only session may not change anything, whatever the account behind

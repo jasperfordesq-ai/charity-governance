@@ -35,10 +35,29 @@ import {
  */
 const ACCESS_LEVELS = ["READ", "WRITE", "ADMIN"] as const;
 
+const DATA_SCOPES = ["WITHHELD", "FULL"] as const;
+
+/**
+ * The roles that may hold a session which sees personal data.
+ *
+ * The connector's gate used to be a flag on its command line, so any role
+ * could open it — a member could read a trustee's date of birth and home
+ * address by editing a configuration file. Releasing that data is a
+ * data-protection decision for the charity, so it is now refused below this
+ * floor by the API, at the moment the password is checked.
+ *
+ * Reading it in the web application is unchanged: this is about what a
+ * session may hand to a model.
+ */
+const DATA_SCOPE_ROLE_FLOOR = new Set(["OWNER", "ADMIN"]);
+
 const connectorLoginSchema = z.object({
   email: z.string().email(),
   password: z.string().min(1),
   accessLevel: z.enum(ACCESS_LEVELS),
+  // Absent means WITHHELD: the connector's long-standing default, now a
+  // property of the session rather than of the process that started it.
+  dataScope: z.enum(DATA_SCOPES).optional(),
   deviceLabel: z.string().trim().min(1).max(120).optional(),
 });
 
@@ -80,14 +99,31 @@ export async function connectorAuthRoutes(app: FastifyInstance) {
     async (request, reply) => {
       try {
         const body = connectorLoginSchema.parse(request.body);
+        const dataScope = body.dataScope ?? "WITHHELD";
         const result = await authService.login(
           { email: body.email, password: body.password },
           {
             // Never from the body: the route decides what kind of client this is.
             clientKind: "MCP_CONNECTOR",
             accessLevel: body.accessLevel,
+            dataScope,
           },
         );
+
+        // Checked after the password, not before: refusing earlier would say
+        // which addresses have which role to anyone who asked. The session has
+        // already been issued at this point, so it is revoked rather than left
+        // behind — a session nobody can use is still a session somebody holds.
+        if (dataScope === "FULL" && !DATA_SCOPE_ROLE_FLOOR.has(result.user.role)) {
+          await authService.logout(result.refreshToken);
+          throw new AppError(
+            403,
+            "DATA_SCOPE_FORBIDDEN",
+            "This account's role may not hold a connector session that sees personal "
+              + "data. Connect without asking for full data, or ask an owner or "
+              + "administrator to do it.",
+          );
+        }
 
         // Deliberately no setAuthCookies. A test asserts no set-cookie header
         // leaves these routes.
@@ -98,6 +134,7 @@ export async function connectorAuthRoutes(app: FastifyInstance) {
           session: {
             clientKind: "MCP_CONNECTOR",
             accessLevel: body.accessLevel,
+            dataScope,
             deviceLabel: body.deviceLabel ?? null,
           },
         });
@@ -285,6 +322,7 @@ export async function connectorAuthRoutes(app: FastifyInstance) {
         reply.send({
           clientKind: request.authSession.clientKind,
           accessLevel: request.authSession.accessLevel,
+          dataScope: request.authSession.dataScope,
           role: request.user.role,
           organisationId: request.user.organisationId,
         });

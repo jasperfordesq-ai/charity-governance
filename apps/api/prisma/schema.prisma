@@ -240,6 +240,16 @@ enum AuthSessionAccessLevel {
   ADMIN
 }
 
+/// How much personal data a session may see: WITHHELD applies the connector's
+/// field policy, FULL releases the whole record. Chosen once, by whoever typed
+/// the password, and immutable thereafter — it used to be a flag in an AI
+/// client's configuration file, which is a file the connector otherwise treats
+/// as attacker-writable.
+enum AuthSessionDataScope {
+  WITHHELD
+  FULL
+}
+
 enum SecurityAuditActorKind {
   USER
   SUPPORT
@@ -593,6 +603,7 @@ model AuthSession {
   // restoring a narrowed session to full authority.
   clientKind             AuthSessionClientKind        @default(WEB)
   accessLevel            AuthSessionAccessLevel       @default(ADMIN)
+  dataScope              AuthSessionDataScope         @default(FULL)
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt

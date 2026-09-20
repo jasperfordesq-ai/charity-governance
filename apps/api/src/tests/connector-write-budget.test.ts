@@ -35,6 +35,7 @@ async function buildApp(options: {
       familyId: "fam-1",
       clientKind: options.posture?.clientKind ?? "MCP_CONNECTOR",
       accessLevel: "WRITE",
+      dataScope: "WITHHELD",
     };
   });
 

@@ -237,6 +237,9 @@ test("the route decides the client kind, whatever the body claims", async () => 
     assert.deepEqual(recorded.loginPosture, {
       clientKind: "MCP_CONNECTOR",
       accessLevel: "READ",
+      // Absent from the body, so the session withholds personal data. The
+      // default lives here now rather than in the connector's command line.
+      dataScope: "WITHHELD",
     });
   } finally {
     restore();
@@ -660,6 +663,97 @@ test("a browser cannot read an approval either", async () => {
     });
     assert.equal(response.statusCode, 403);
     assert.equal(response.json().code, "BROWSER_CLIENT_REJECTED");
+  } finally {
+    restore();
+    await app.close();
+  }
+});
+
+test("the data scope reaches the session, and defaults to withholding", async () => {
+  for (const [asked, expected] of [
+    [undefined, "WITHHELD"],
+    ["WITHHELD", "WITHHELD"],
+    ["FULL", "FULL"],
+  ] as const) {
+    const recorded: Recorded = {};
+    const { app, restore } = await buildApp(recorded);
+    try {
+      const response = await app.inject({
+        method: "POST",
+        url: "/api/v1/auth/connector/login",
+        headers: { [CONNECTOR_CLIENT_HEADER]: CLIENT },
+        payload: loginBody(asked === undefined ? {} : { dataScope: asked }),
+      });
+
+      assert.equal(response.statusCode, 200, `asking for ${asked ?? "nothing"}`);
+      assert.equal(
+        (recorded.loginPosture as { dataScope?: string }).dataScope,
+        expected,
+      );
+      assert.equal(response.json().session.dataScope, expected);
+    } finally {
+      restore();
+      await app.close();
+    }
+  }
+});
+
+test("a role below the floor may not hold a session that sees personal data", async () => {
+  const recorded: Recorded = {};
+  const { app, restore } = await buildApp(recorded, {
+    login: async () => ({
+      user: {
+        id: "usr-2",
+        email: "member@example.org",
+        name: "Member",
+        role: "MEMBER",
+        organisationId: "org-1",
+        emailVerified: true,
+        organisation: {
+          id: "org-1",
+          name: "Probe Charity",
+          charitablePurpose: [],
+          updatedAt: new Date("2026-01-01T00:00:00.000Z"),
+        },
+      },
+      accessToken: "access-token-value",
+      refreshToken: "refresh-token-value",
+    }),
+  });
+  try {
+    const response = await app.inject({
+      method: "POST",
+      url: "/api/v1/auth/connector/login",
+      headers: { [CONNECTOR_CLIENT_HEADER]: CLIENT },
+      payload: loginBody({ dataScope: "FULL" }),
+    });
+
+    assert.equal(response.statusCode, 403);
+    assert.equal(response.json().code, "DATA_SCOPE_FORBIDDEN");
+    // The refusal comes after the password, so it cannot be used to learn
+    // which addresses hold which role, and the session it issued is revoked
+    // rather than left behind.
+    assert.equal(response.json().accessToken, undefined);
+  } finally {
+    restore();
+    await app.close();
+  }
+});
+
+test("an unknown data scope is refused before any credential is read", async () => {
+  const recorded: Recorded = {};
+  const { app, restore } = await buildApp(recorded);
+  try {
+    const response = await app.inject({
+      method: "POST",
+      url: "/api/v1/auth/connector/login",
+      headers: { [CONNECTOR_CLIENT_HEADER]: CLIENT },
+      payload: loginBody({ dataScope: "EVERYTHING" }),
+    });
+
+    assert.equal(response.statusCode, 400);
+    assert.equal(response.json().code, "VALIDATION_ERROR");
+    assert.equal(recorded.loginPosture, undefined, "the service was never reached");
   } finally {
     restore();
     await app.close();

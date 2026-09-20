@@ -31,9 +31,15 @@ type LoginSessionUser = SessionUser & {
 export type SessionPosture = {
   clientKind: 'WEB' | 'MCP_CONNECTOR';
   accessLevel: 'READ' | 'WRITE' | 'ADMIN';
+  /** How much personal data the session may see. Chosen at the password. */
+  dataScope: 'WITHHELD' | 'FULL';
 };
 
-const WEB_SESSION_POSTURE: SessionPosture = { clientKind: 'WEB', accessLevel: 'ADMIN' };
+const WEB_SESSION_POSTURE: SessionPosture = {
+  clientKind: 'WEB',
+  accessLevel: 'ADMIN',
+  dataScope: 'FULL',
+};
 
 type SessionLocatorRow = {
   id: string;
@@ -63,6 +69,7 @@ type LockedFamilyRow = LockedPrincipalRow & {
   deviceLabel: string | null;
   clientKind: SessionPosture['clientKind'];
   accessLevel: SessionPosture['accessLevel'];
+  dataScope: SessionPosture['dataScope'];
 };
 
 type SessionClient = PrismaClient | Prisma.TransactionClient;
@@ -209,7 +216,8 @@ async function lockPrincipalAndFamily(
         session."revokedAt",
         session."deviceLabel",
         session."clientKind",
-        session."accessLevel"
+        session."accessLevel",
+        session."dataScope"
       FROM "AuthSession" AS session
       JOIN locked_user ON locked_user."id" = session."userId"
       WHERE session."familyId" = ${locator.familyId}::uuid
@@ -230,7 +238,8 @@ async function lockPrincipalAndFamily(
       locked_family."revokedAt",
       locked_family."deviceLabel",
       locked_family."clientKind",
-      locked_family."accessLevel"
+      locked_family."accessLevel",
+      locked_family."dataScope"
     FROM locked_family
     JOIN locked_user ON true
     JOIN locked_organisation
@@ -266,6 +275,7 @@ async function issueSessionTokensWithClient(
       expiresAt: refreshTokenExpiresAt(issuedAt),
       clientKind: posture.clientKind,
       accessLevel: posture.accessLevel,
+      dataScope: posture.dataScope,
     },
     select: { id: true },
   });
@@ -424,6 +434,7 @@ export async function rotateSessionTokens(
         deviceLabel: session.deviceLabel,
         clientKind: session.clientKind,
         accessLevel: session.accessLevel,
+        dataScope: session.dataScope,
       },
       select: { id: true },
     });

@@ -69,7 +69,7 @@ test('an explicit posture is written as given', async () => {
   await issueSessionTokensInTransaction(
     tx.client as never,
     { id: ACTIVE_USER.id, organisationId: ACTIVE_USER.organisationId, role: ACTIVE_USER.role },
-    { clientKind: 'MCP_CONNECTOR', accessLevel: 'READ' },
+    { clientKind: 'MCP_CONNECTOR', accessLevel: 'READ', dataScope: 'WITHHELD' },
   );
 
   assert.equal(tx.created[0]!.clientKind, 'MCP_CONNECTOR');
@@ -104,6 +104,7 @@ function connectorFamilyRow(overrides: Row = {}): Row {
     deviceLabel: 'Jasper laptop',
     clientKind: 'MCP_CONNECTOR',
     accessLevel: 'READ',
+    dataScope: 'WITHHELD',
     ...overrides,
   };
 }
@@ -121,6 +122,11 @@ test('rotation carries the posture into the successor session', async () => {
   const successor = rotating.tx.created.at(-1)!;
   assert.equal(successor.clientKind, 'MCP_CONNECTOR', 'a rotated session must not widen');
   assert.equal(successor.accessLevel, 'READ');
+  assert.equal(
+    successor.dataScope,
+    'WITHHELD',
+    'a successor that lost the scope would come back FULL by default: the widest possible failure, and a silent one',
+  );
   assert.equal(
     successor.deviceLabel,
     'Jasper laptop',
