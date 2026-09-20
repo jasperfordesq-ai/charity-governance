@@ -187,14 +187,27 @@ function parseResults(out) {
 // the ledger links each e2e guarantee to a title that must exist in a spec file.
 function readE2eTitles() {
   const titles = new Set();
-  let files = [];
-  try { files = readdirSync(E2E_DIR).filter((f) => f.endsWith('.spec.ts')); } catch { return titles; }
-  for (const f of files) {
-    const src = readFileSync(join(E2E_DIR, f), 'utf8');
-    const re = /(?:^|\s)test\(\s*(['"`])((?:\\.|(?!\1).)*)\1/g;
-    let m;
-    while ((m = re.exec(src))) titles.add(m[2].trim());
-  }
+  // Walked rather than listed. The connector suites live in e2e/tests/mcp/,
+  // and a flat read made every title in them invisible to the ledger: a
+  // guarantee linked to one read as a broken link, and — the direction that
+  // matters more — a whole suite could be deleted without the ledger noticing.
+  const walk = (dir) => {
+    let entries = [];
+    try { entries = readdirSync(dir, { withFileTypes: true }); } catch { return; }
+    for (const entry of entries) {
+      const full = join(dir, entry.name);
+      if (entry.isDirectory()) {
+        walk(full);
+        continue;
+      }
+      if (!entry.name.endsWith('.spec.ts')) continue;
+      const src = readFileSync(full, 'utf8');
+      const re = /(?:^|\s)test\(\s*(['"`])((?:\\.|(?!\1).)*)\1/g;
+      let m;
+      while ((m = re.exec(src))) titles.add(m[2].trim());
+    }
+  };
+  walk(E2E_DIR);
   return titles;
 }
 

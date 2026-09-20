@@ -16,15 +16,15 @@ Generated: 2026-09-20 - Source of truth: [`docs/reliability/guarantees.json`](re
 
 | Surface | covered | partial | gap | n/a | Total |
 |---|---|---|---|---|---|
-| API | 392 | 0 | 0 | 14 | 406 |
-| Web | 112 | 0 | 0 | 6 | 118 |
-| **Total** | **504** | **0** | **0** | **20** | **524** |
+| API | 396 | 0 | 0 | 14 | 410 |
+| Web | 113 | 0 | 0 | 6 | 119 |
+| **Total** | **509** | **0** | **0** | **20** | **529** |
 
-**API suite:** 2126 passing, 0 failing. **Web suite:** 497 passing, 0 failing. **E2E linkage:** 45 Playwright titles found; not executed by this command.
+**API suite:** 2173 passing, 0 failing. **Web suite:** 497 passing, 0 failing. **E2E linkage:** 123 Playwright titles found; not executed by this command.
 
 **Executed E2E result:** NOT VERIFIED BY THIS COMMAND. Use a successful managed E2E workflow or `npm run test:e2e` result bound to the relevant SHA.
 
-**Linkage:** 504/504 covered guarantees verified against a passing/linked test.
+**Linkage:** 509/509 covered guarantees verified against a passing/linked test.
 
 **Linkage check: COMPLETE**
 
@@ -55,7 +55,7 @@ no data loss / accessibility & resilience.
 
 ---
 
-## API surface - the matrix (406 guarantees)
+## API surface - the matrix (410 guarantees)
 
 ### auth - `/api/v1/auth`
 
@@ -410,7 +410,7 @@ _15 guarantees - covered 12  n/a 3_
 
 ### owner console - `/api/v1/owner`
 
-_16 guarantees - covered 16_
+_20 guarantees - covered 20_
 
 | Concern | Guarantee | Status | Proven by |
 |---|---|---|---|
@@ -420,6 +420,10 @@ _16 guarantees - covered 16_
 | Auth & session integrity | setOwnerCookies marks both the owner access and refresh cookies HttpOnly, SameSite=lax, scoped to /api/v1/owner, and Secure in production (absent outside it); clearOwnerCookies expires both. | covered | `owner cookies are HttpOnly, SameSite=lax, Secure in production, and scoped to /api/v1/owner`<br/><sub>owner-auth-routes.test.ts</sub> |
 | Auth & session integrity | buildOperatorSetPasswordLink puts the reset token in the URL fragment (#token=), never the query string, keeping it out of server access logs and Referer headers. | covered | `the bootstrap link carries its token in the fragment, never the query string`<br/><sub>create-platform-operator.test.ts</sub> |
 | Auth & session integrity | buildOperatorSetPasswordLink is the sole place in create-platform-operator.ts that constructs the /owner/set-password URL — main() and the --reissue path cannot quietly grow a second, untested link composition. | covered | `buildOperatorSetPasswordLink is the sole composition site for set-password links`<br/><sub>create-platform-operator.test.ts</sub> |
+| authorization | A platform operator connector session cannot be established without an enrolled second factor. The login route refuses an operator whose totpEnrolledAt is null, and guard_platform_operator_session refuses the INSERT independently, so a route that forgot the check could still not mint one. | covered | `an operator with no enrolled authenticator is refused, and told where to enrol`<br/><sub>operator-connector-login.test.ts</sub> |
+| authorization | Every operator write requires a human approval typed at a terminal, and the refusal STOPS the request: the handler never runs and the charity is unchanged. Asserted against an app built with both onSend hooks, because with only one Fastify short-circuits a reply that was sent but not returned. | covered | `closing a charity without an approval does not close it`<br/><sub>operator-connector-realm.test.ts</sub> |
+| authorization | An operator approval is bound to the session family that asked for it, is spendable exactly once, and a second connector cannot spend the first one's. Every failure mode is reported identically so the approval space cannot be mapped by trying. | covered | `an approval belonging to another session family is refused`<br/><sub>operator-connector-realm.test.ts</sub> |
+| authorization | Rotating an operator session carries its posture and family forward and refuses a token minted for the other client kind, so a console credential is useless to the connector, a connector credential is useless in the console, and a READ session never comes back with ADMIN authority. | covered | `a rotation carries the posture and the family forward`<br/><sub>operator-session.test.ts</sub> |
 | Authorization boundary | Every owner route returns 404 under CHARITYPILOT_DEPLOYMENT_MODE=personal-server, because ownerRoutes registers nothing in that mode. | covered | `owner routes are not registered in personal-server mode`<br/><sub>owner-auth-routes.test.ts</sub> |
 | Authorization boundary | A CLOSED organisation cannot be reactivated from the console; the transition is refused before any write. | covered | `a closed tenant cannot be reopened from the console`<br/><sub>owner-tenant-lifecycle.test.ts</sub> |
 | Authorization boundary | No source file outside services/owner-tenants.service.ts writes Organisation.lifecycleStatus, and no tenant-facing route imports the owner service. | covered | `only the owner tenants service writes Organisation.lifecycleStatus`<br/><sub>owner-sole-writer.test.ts</sub> |
@@ -601,7 +605,7 @@ _10 guarantees - covered 10_
 
 ---
 
-## Web surface - the matrix (118 guarantees)
+## Web surface - the matrix (119 guarantees)
 
 > The customer-facing mirror of the API ledger. Fast `node:test` unit tests prove the
 > extractable logic (auth/session, validation parity, plan/role decisions, redirect & download
@@ -610,7 +614,7 @@ _10 guarantees - covered 10_
 
 ### platform - proxy / CSP / API client / session refresh
 
-_57 guarantees - covered 57_
+_58 guarantees - covered 58_
 
 | Concern | Guarantee | Status | Proven by |
 |---|---|---|---|
@@ -650,6 +654,7 @@ _57 guarantees - covered 57_
 | Auth & session integrity | The protected-path matcher catches percent-encoded variants before Next normalisation, so an encoded deep link cannot dodge the auth gate. | covered | `matches encoded dashboard application routes before Next normalisation`<br/><sub>lib/protected-routes.test.ts</sub> |
 | Auth & session integrity | The protected-path matcher does not over-match public, auth, or similarly-named routes (no false redirects). | covered | `does not match public, auth, or similarly named routes`<br/><sub>lib/protected-routes.test.ts</sub> |
 | Auth & session integrity | A login ?next= value is honoured only for a same-origin protected app path. | covered | `allows same-origin protected app next paths`<br/><sub>lib/safe-next-path.test.ts</sub> |
+| authorization | The operator realm exposes no charity governance record and no personal data. Its tool surface is exactly session_info plus the seven tenant tools; every charity tool, the reference resolver and search are absent from the listing AND refused when called by name, with a message naming the realm that reads them. | covered | `a charity tool is refused by name, and told which realm reads it` <sup>e2e</sup><br/><sub>tests/mcp/operator-connector-live.spec.ts</sub> |
 | deployment-profile | All four NEXT_PUBLIC_CHARITYPILOT_* capability-axis env vars set to the empty string derive their mode default rather than throwing, so a Docker build that omits the corresponding build args (every existing build) does not fail `next build` or throw at render. | covered | `all NEXT_PUBLIC_CHARITYPILOT_* axis vars set to the empty string derive defaults without throwing (Docker build-arg regression pin)`<br/><sub>lib/deployment-profile.test.ts</sub> |
 | deployment-profile | Only an explicit allowlist of files may reference NEXT_PUBLIC_CHARITYPILOT_DEPLOYMENT_MODE directly; every other file in apps/web/src must key behaviour on a capability axis (webTenancyIsMulti / webRegistrationIsOpen / webEmailDelivery / webBillingMode) instead of the raw deployment mode. | covered | `only allowlisted files reference NEXT_PUBLIC_CHARITYPILOT_DEPLOYMENT_MODE directly`<br/><sub>lib/deployment-profile-structure.test.ts</sub> |
 | Graceful degradation | A webpack chunk-load failure (stale deploy) is recognised as recoverable. | covered | `recognises webpack chunk load failures as recoverable`<br/><sub>lib/chunk-load-recovery.test.ts</sub> |

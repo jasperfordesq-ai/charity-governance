@@ -5914,6 +5914,67 @@
     "proposedTitle": ""
   },
   {
+    "id": "operator-connector-authz-1",
+    "surface": "api",
+    "group": "owner",
+    "concern": "authorization",
+    "guarantee": "A platform operator connector session cannot be established without an enrolled second factor. The login route refuses an operator whose totpEnrolledAt is null, and guard_platform_operator_session refuses the INSERT independently, so a route that forgot the check could still not mint one.",
+    "status": "covered",
+    "testFile": "apps/api/src/tests/operator-connector-login.test.ts",
+    "testTitle": "an operator with no enrolled authenticator is refused, and told where to enrol",
+    "gapDescription": "",
+    "proposedTitle": ""
+  },
+  {
+    "id": "operator-connector-authz-2",
+    "surface": "api",
+    "group": "owner",
+    "concern": "authorization",
+    "guarantee": "Every operator write requires a human approval typed at a terminal, and the refusal STOPS the request: the handler never runs and the charity is unchanged. Asserted against an app built with both onSend hooks, because with only one Fastify short-circuits a reply that was sent but not returned.",
+    "status": "covered",
+    "testFile": "apps/api/src/tests/operator-connector-realm.test.ts",
+    "testTitle": "closing a charity without an approval does not close it",
+    "gapDescription": "",
+    "proposedTitle": ""
+  },
+  {
+    "id": "operator-connector-authz-3",
+    "surface": "api",
+    "group": "owner",
+    "concern": "authorization",
+    "guarantee": "An operator approval is bound to the session family that asked for it, is spendable exactly once, and a second connector cannot spend the first one's. Every failure mode is reported identically so the approval space cannot be mapped by trying.",
+    "status": "covered",
+    "testFile": "apps/api/src/tests/operator-connector-realm.test.ts",
+    "testTitle": "an approval belonging to another session family is refused",
+    "gapDescription": "",
+    "proposedTitle": ""
+  },
+  {
+    "id": "operator-connector-authz-4",
+    "surface": "api",
+    "group": "owner",
+    "concern": "authorization",
+    "guarantee": "Rotating an operator session carries its posture and family forward and refuses a token minted for the other client kind, so a console credential is useless to the connector, a connector credential is useless in the console, and a READ session never comes back with ADMIN authority.",
+    "status": "covered",
+    "testFile": "apps/api/src/tests/operator-session.test.ts",
+    "testTitle": "a rotation carries the posture and the family forward",
+    "gapDescription": "",
+    "proposedTitle": ""
+  },
+  {
+    "id": "operator-connector-privacy-1",
+    "surface": "web",
+    "group": "web-platform",
+    "concern": "authorization",
+    "guarantee": "The operator realm exposes no charity governance record and no personal data. Its tool surface is exactly session_info plus the seven tenant tools; every charity tool, the reference resolver and search are absent from the listing AND refused when called by name, with a message naming the realm that reads them.",
+    "status": "covered",
+    "testFile": "e2e/tests/mcp/operator-connector-live.spec.ts",
+    "testTitle": "a charity tool is refused by name, and told which realm reads it",
+    "gapDescription": "",
+    "proposedTitle": "",
+    "testType": "e2e"
+  },
+  {
     "id": "bluegreen-graceful-degradation-1",
     "surface": "api",
     "group": "bluegreen",

@@ -455,11 +455,67 @@ reference, touches nothing the gate withholds and always works. Rewriting its
 description is refused, and the refusal names the fields it objected to so the
 rest of the record can still be changed.
 
+## Administering the platform: `--realm operator`
+
+Everything above is the **charity realm**: you sign in as a person who belongs
+to one charity, and the connector reads and changes that charity's records.
+
+`--realm operator` is the other credential this platform has. You sign in as a
+**platform operator** — the account behind `/owner`, which is a different login
+page, a different password, a different cookie and a different signing secret
+from the charity application. A charity `OWNER` is the owner *of that charity*;
+it is not this, and there is no path from one to the other.
+
+```bash
+charitypilot-mcp connect --realm operator --profile vm \
+  --email you@example.org --code 123456 --access-level admin
+```
+
+**It can do everything the owner console does:**
+
+| Tool | What it does |
+| --- | --- |
+| `tenant_list` | Every charity on the platform, with status, plan and a user count |
+| `tenant_get` | One charity's summary, including the `lifecycleVersion` |
+| `tenant_history` | What operators have done to a charity, and the reasons given |
+| `tenant_configuration` | Its plan and document storage provider |
+| `tenant_create` | Provision a new charity and its first owner |
+| `tenant_configure` | Change a charity's plan or storage provider |
+| `tenant_lifecycle` | Suspend, reactivate or **close** a charity |
+
+**And it cannot read inside any charity.** Not one governance record, not one
+person. The tenant summary is a name, two registration numbers, a lifecycle
+status, a plan and a **count** of user accounts — never the accounts. Every
+charity tool is absent from the listing and still refused if called by name,
+with a message saying which realm reads it.
+
+That is not a gap. CharityPilot is a processor and each charity controls its
+own trustee, conflict and staff data, so an operator reading it on their own
+authority is not something the product should make easy — and a platform whose
+operator can read any customer's register at will does not pass an enterprise
+data-protection review. To read one charity, connect to it in the charity realm
+as somebody who belongs to it.
+
+Three consequences worth knowing before you use it:
+
+- **An authenticator is required.** Enrol at `/owner/security` first. A
+  credential an AI client holds, which can close a charity, does not rest on a
+  password alone — so `connect` refuses outright until one is enrolled.
+- **Every change is approved by a person**, not only the destructive ones, and
+  the command carries the realm: `charitypilot-mcp approve <id> --realm operator`.
+- **`--access-level` still applies**, and `tenant_lifecycle` needs `admin`.
+  Connect an agent at `read` if it only needs to look, which is most of the time.
+
+There is deliberately no `--data-scope` here, and passing one is an error
+rather than a no-op: there is no personal data in this realm to scope.
+
 ## Connecting to more than one CharityPilot
 
 Each host keeps its own credential, under its own entry in the OS credential
 store, so one machine can be connected to the VM and to a local test stack at
-the same time without either evicting the other. `connect`, `status` and
+the same time without either evicting the other. Each **realm** keeps its own
+entry too, so the same machine can hold a charity credential and a platform
+operator credential for the same host without either standing in for the other. `connect`, `status` and
 `disconnect` all act on whichever host `--base-url` names.
 
 A credential is still bound to the host that issued it: if something changes

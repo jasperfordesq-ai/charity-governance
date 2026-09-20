@@ -30,8 +30,9 @@ What each added is in `mcp/HANDOVER.md`; the plans are
 | H, API hardening | Built: the stale-write refusal on five routes, idempotency keys, the connector read budget, the three missing routes and the build identifier |
 
 The nine decisions in Part 3 were taken as recommended, except Confluence setup
-(deferred) and an operator connector (not started). Each is reversible and
-recorded in the commit that made it.
+(deferred). The operator connector, recorded here as not started, was built on
+2026-09-20 after the owner ruled on decision 8; see below. Each is reversible
+and recorded in the commit that made it.
 
 ### What is still not built
 
@@ -49,9 +50,16 @@ Everything below is a deliberate choice, not an oversight.
   ruling: it is the last way CharityPilot can destroy a page in a charity’s
   site, and the typed confirmation phrase it demands only means something if a
   person types it.
-- **An operator connector.** Not started. The `/owner` realm is a separate
-  credential and a separate cookie scope, and a connector that signed in there
-  would not be acting as the person running it.
+- ~~**An operator connector.** Not started.~~ **Built 2026-09-20.** Design:
+  `2026-09-21-operator-connector-design.md`. The objection recorded here — that
+  the `/owner` realm is a separate credential and cookie scope, so a connector
+  signing in there would not be acting as the person running it — was answered
+  rather than overruled: the operator connector signs in with the operator's own
+  password AND their authenticator, in their own terminal, and holds a session
+  whose posture says it is a connector. It is acting as the person running it,
+  and the API can tell. What it deliberately cannot do is read any charity's
+  governance records, which is the line the owner and the DPO's reasoning both
+  put in the same place.
 - **Publishing.** The package is still marked private, which is what stops
   `npm publish`. Everything else a publish needs is in place and a test asks
   npm what the tarball would contain, so removing that one line is the only
