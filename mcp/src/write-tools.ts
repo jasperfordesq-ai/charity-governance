@@ -640,8 +640,7 @@ export const WRITE_TOOLS: readonly ToolDefinition[] = [
   {
     name: 'document_delete',
     description:
-      'Permanently remove a document and its stored file.' + APPROVAL_NOTE
-      + ' Where the charity mirrors documents to Confluence, the mirrored page is removed too.',
+      'Permanently remove a document and its stored file.' + APPROVAL_NOTE,
     path: '/api/v1/documents/:id',
     method: 'DELETE',
     level: 'admin',

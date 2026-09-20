@@ -434,3 +434,8 @@ test('every concurrency stamp the API requires is declared as a control field', 
     }
   }
 });
+
+test('document_delete does not describe a Confluence deletion the owner has ruled out', () => {
+  const tool = WRITE_TOOLS.find((t) => t.name === 'document_delete')!;
+  assert.ok(!/confluence/i.test(tool.description));
+});

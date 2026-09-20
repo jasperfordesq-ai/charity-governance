@@ -10,7 +10,7 @@ which decisions were made unilaterally and are yours to reverse.
 ## Status in one paragraph
 
 **Updated 2026-09-19, after the full-access build.** The connector is no longer
-read-only. It reads the whole API through 27 tools, changes records through 17
+read-only. It reads the whole API through 27 tools, changes records through 34
 more, and moves documents in and out through 2 that appear only when the operator
 names a directory for them. The unit suite is 199 passing (two skipped, both
 POSIX-only file modes) and the live suite is 53. Typecheck is clean, and the
@@ -72,6 +72,27 @@ is the path that uses raw mode.
 
 If `connect` fails with "Sign-in failed. Check the email address and password." on a
 password you know is right, read the Origin section below before assuming anything.
+
+## Approving at a real terminal (owner checklist, unverified)
+
+`approve` refuses unless standard input is a terminal, and the password prompt uses raw
+mode. Neither has been exercised by a person at a keyboard. Run this once on each terminal
+you use, against the local stack, and record the result here:
+
+1. Ask the connector to delete a risk it created; copy the `approve` command it prints.
+2. Run it. It must print the summary naming the risk BEFORE asking for the password.
+3. Type a password containing an accented character and press Enter. It must be accepted.
+4. Run it again with the same identifier. It must say the approval is already approved.
+
+| Terminal | Date | Result |
+| --- | --- | --- |
+| Windows Terminal (PowerShell) | | |
+| PowerShell in VS Code | | |
+| Git Bash (mintty) | | |
+| macOS Terminal | | |
+
+If mintty fails step 2 with "must be run at a terminal", Node is not seeing a TTY there.
+Document Windows Terminal as the supported terminal rather than weakening the check.
 
 ## Repository state
 
@@ -146,6 +167,17 @@ In order:
    `--access-level read`.
 
 ## Open problems, in priority order
+
+### 0. `document_delete` still deletes from Confluence on the API side
+
+The owner ruled to the DPO on 2026-09-19 that an ordinary deletion removes CharityPilot's
+record and reference only, and that destroying the Confluence source needs an explicit
+erasure workflow. The API has not been changed: `DocumentService.enqueueConfluenceErasure`
+still enqueues a `confluence` erasure row from the ordinary delete path. Until it is,
+approving `document_delete` for a document that has been published deletes and purges the
+Confluence page. The connector cannot refuse the call selectively because the document
+metadata carries no publication field. The tool's description no longer claims the
+behaviour; the API change is owed and is the fix.
 
 ### 1. Split-host deployments cannot authenticate — RESOLVED 2026-09-19
 
