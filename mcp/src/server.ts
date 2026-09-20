@@ -35,6 +35,7 @@ import { INSTRUCTIONS } from './instructions.js';
 import { ConnectorError } from './errors.js';
 import { errorResult, okResult } from './results.js';
 import { SESSION_INFO_TOOL, runSessionInfo } from './session-info.js';
+import { createDiagnostics } from './diagnostics.js';
 
 const FILE_RANK: Record<AccessLevel, number> = { read: 0, write: 1, admin: 2 };
 
@@ -185,12 +186,23 @@ export async function startServer(config: ConnectorConfig, session: Session): Pr
     tools: buildToolList(await level(), config),
   }));
 
+  const diagnostics = createDiagnostics(config.verbose);
+
   server.setRequestHandler(CallToolRequestSchema, async (request) => {
     const args = (request.params.arguments ?? {}) as Record<string, unknown>;
+    const started = Date.now();
     try {
-      return okResult(await dispatch(request.params.name, args));
+      const value = await dispatch(request.params.name, args);
+      diagnostics.toolCall(request.params.name, 'ok', Date.now() - started);
+      return okResult(value);
     } catch (error) {
-      return errorResult(error);
+      const result = errorResult(error);
+      diagnostics.toolCall(
+        request.params.name,
+        `error ${String(result.structuredContent['code'])}`,
+        Date.now() - started,
+      );
+      return result;
     }
   });
 
