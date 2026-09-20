@@ -29,6 +29,18 @@ export interface SessionIdentity {
   organisationName: string;
 }
 
+/** One approval as the API describes it, for a person to read before granting it. */
+export interface ApprovalPreview {
+  approvalId: string;
+  summary: string;
+  method: string;
+  routePattern: string;
+  resourceId: string | null;
+  expiresAt: string;
+  approvedAt: string | null;
+  consumedAt: string | null;
+}
+
 interface SessionOptions {
   baseUrl: string;
   store: CredentialStore;
@@ -239,6 +251,69 @@ export class Session {
     return {
       summary: payload.summary ?? null,
       expiresAt: payload.expiresAt ?? null,
+    };
+  }
+
+  /**
+   * Reads an approval back so it can be shown before the password is asked
+   * for. Refuses, rather than proceeding blind, when the API cannot describe
+   * it: an approval nobody has read is an approval taken on the agent's word.
+   */
+  async describeApproval(approvalId: string): Promise<ApprovalPreview> {
+    const accessToken = await this.accessToken();
+    const response = await this.#fetch(
+      `${this.#baseUrl}/api/v1/auth/connector/approvals/${encodeURIComponent(approvalId)}`,
+      {
+        method: 'GET',
+        headers: {
+          accept: 'application/json',
+          authorization: `Bearer ${accessToken}`,
+          [CLIENT_HEADER]: `mcp-connector/${CONNECTOR_VERSION}`,
+        },
+      },
+    );
+
+    if (response.status === 404) {
+      let body: { code?: unknown } = {};
+      try {
+        body = (await response.json()) as { code?: unknown };
+      } catch {
+        body = {};
+      }
+      if (body.code === 'APPROVAL_NOT_FOUND') {
+        throw new Error(
+          'No pending approval with that identifier belongs to you. Check it against what '
+            + 'the assistant printed; approvals expire five minutes after they are asked for. '
+            + 'Nothing was approved.',
+        );
+      }
+      throw new Error(
+        `${this.#baseUrl} cannot describe approvals: it is running a build older than this `
+          + 'connector. Nothing was approved. Deploy the API before approving from here.',
+      );
+    }
+    if (!response.ok) {
+      throw new Error(
+        `Could not read the approval: CharityPilot returned ${response.status}. Nothing was approved.`,
+      );
+    }
+
+    const body = (await response.json()) as Partial<ApprovalPreview>;
+    if (typeof body.approvalId !== 'string' || typeof body.summary !== 'string') {
+      throw new Error(
+        'CharityPilot described the approval in a form this connector does not understand. '
+          + 'Nothing was approved.',
+      );
+    }
+    return {
+      approvalId: body.approvalId,
+      summary: body.summary,
+      method: typeof body.method === 'string' ? body.method : '?',
+      routePattern: typeof body.routePattern === 'string' ? body.routePattern : '?',
+      resourceId: typeof body.resourceId === 'string' ? body.resourceId : null,
+      expiresAt: typeof body.expiresAt === 'string' ? body.expiresAt : 'unknown',
+      approvedAt: typeof body.approvedAt === 'string' ? body.approvedAt : null,
+      consumedAt: typeof body.consumedAt === 'string' ? body.consumedAt : null,
     };
   }
 

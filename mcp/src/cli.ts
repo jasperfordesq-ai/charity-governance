@@ -15,6 +15,7 @@ import { redactSecrets } from './redact.js';
 import { CONNECTOR_VERSION } from './version.js';
 import { fetchSessionPosture } from './session-level.js';
 import { formatStatus } from './status.js';
+import { approvalState, explainState, formatApprovalPreview } from './approval-preview.js';
 
 const USAGE = `charitypilot-mcp ${CONNECTOR_VERSION}
 
@@ -125,16 +126,25 @@ async function main(): Promise<void> {
 
   if (config.command === 'approve') {
     assertApproveAllowed(config, stdin.isTTY === true);
-    // The target is printed before the password, as connect does: an approval
+    // The target is printed before anything else, as connect does: an approval
     // sent to the wrong host is a password sent to the wrong host.
     stdout.write(`Target: ${config.baseUrl}\n`);
-    stdout.write(`Approving: ${config.approvalId}\n`);
+    // What is being approved is shown BEFORE the password is asked for. The
+    // summary is the API's own, built from the route and the record, so the
+    // person is checking the agent's account against the server's.
+    const preview = await session.describeApproval(config.approvalId!);
+    stdout.write(formatApprovalPreview(preview));
+    const state = approvalState(preview, new Date());
+    if (state !== 'pending') {
+      stdout.write(`${explainState(state)}\n`);
+      return;
+    }
     const password = await prompt('Password (not shown): ', true);
     const outcome = await session.approve(config.approvalId!, password);
     stdout.write(
-      `Approved: ${outcome.summary ?? config.approvalId}\n`
-        + 'Ask the assistant to try the action again. The approval covers that one '
-        + 'action and nothing else.\n',
+      `Approved: ${outcome.summary ?? preview.summary}\n`
+        + 'Ask the assistant to try the action again with exactly the same arguments plus '
+        + `approvalId: ${config.approvalId}. The approval covers that one action and nothing else.\n`,
     );
     return;
   }

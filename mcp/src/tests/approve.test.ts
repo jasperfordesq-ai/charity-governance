@@ -136,3 +136,43 @@ test('the password is never written into an error, even when the call fails', as
     },
   );
 });
+
+test('describing an approval uses the bearer token and returns what the API said', async () => {
+  const seen: Array<{ url: string; headers: Headers }> = [];
+  const session = new Session({
+    baseUrl: 'https://example.test',
+    store: createMemoryStore('r1'),
+    fetchImpl: async (input, init) => {
+      const url = String(input);
+      seen.push({ url, headers: new Headers(init?.headers) });
+      if (url.endsWith('/refresh')) return tokenResponse();
+      return new Response(JSON.stringify({
+        approvalId: 'apr-1', summary: 'Permanently delete risk "Flood"', method: 'DELETE',
+        routePattern: '/api/v1/governance-registers/risks/:id', resourceId: 'r-1',
+        createdAt: '2026-09-20T10:00:00.000Z', expiresAt: '2026-09-20T10:05:00.000Z',
+        approvedAt: null, consumedAt: null,
+      }), { status: 200, headers: { 'content-type': 'application/json' } });
+    },
+  });
+
+  const preview = await session.describeApproval('apr-1');
+
+  assert.equal(preview.summary, 'Permanently delete risk "Flood"');
+  assert.equal(preview.resourceId, 'r-1');
+  const request = seen.find((s) => s.url.endsWith('/approvals/apr-1'))!;
+  assert.equal(request.headers.get('authorization'), 'Bearer a1');
+  assert.match(request.headers.get('x-charitypilot-client') ?? '', /^mcp-connector\//);
+});
+
+test('an approval that is not yours, and an API too old to describe one, are told apart', async () => {
+  const build = (body: unknown) => new Session({
+    baseUrl: 'https://example.test',
+    store: createMemoryStore('r1'),
+    fetchImpl: async (input) => String(input).endsWith('/refresh')
+      ? tokenResponse()
+      : new Response(JSON.stringify(body), { status: 404, headers: { 'content-type': 'application/json' } }),
+  });
+
+  await assert.rejects(() => build({ code: 'APPROVAL_NOT_FOUND', error: 'x' }).describeApproval('apr-1'), /belongs to you/);
+  await assert.rejects(() => build({ message: 'Route GET:/x not found', statusCode: 404 }).describeApproval('apr-1'), /older than this connector/);
+});
