@@ -139,10 +139,18 @@ const EXPECTED_INDEXES: ReadonlyArray<{
 ];
 
 test('the publication state and terminal-reason enums Task 4 dispatches on exist', () => {
-  assert.match(
-    schema,
-    /enum DocumentPublicationState \{\s*PENDING\s*DEAD_LETTER\s*PROCESSED\s*\}/,
-  );
+  // Checked for membership rather than an exact three-value shape: RETIRED's
+  // doc comment lives inside this enum block, and the exact, order-sensitive
+  // value list (including RETIRED) is pinned separately below.
+  const publicationStates = schema.match(/enum DocumentPublicationState \{([\s\S]*?)\}/);
+  assert.ok(publicationStates, 'schema.prisma must declare DocumentPublicationState');
+  for (const value of ['PENDING', 'DEAD_LETTER', 'PROCESSED']) {
+    assert.match(
+      publicationStates[1],
+      new RegExp(`^\\s*${value}\\s*$`, 'm'),
+      `DocumentPublicationState must declare ${value}`,
+    );
+  }
   const terminalReasons = schema.match(/enum DocumentPublicationTerminalReason \{([\s\S]*?)\}/);
   assert.ok(terminalReasons, 'schema.prisma must declare DocumentPublicationTerminalReason');
   const declared = terminalReasons[1].split('\n').map((line) => line.trim()).filter(Boolean);
@@ -156,6 +164,22 @@ test('the publication state and terminal-reason enums Task 4 dispatches on exist
     'PERMANENT_CONTENT_PROPERTY_REJECTED',
     'PERMANENT_TARGET_REF_REJECTED',
   ]);
+});
+
+test('the publication state machine carries a retired state for a deleted document', () => {
+  // A published document whose CharityPilot record has been deleted keeps
+  // naming its Confluence page rather than being erased or discarded: an
+  // ordinary deletion removes our record and our reference only, and
+  // destroying the source is a separate, explicitly authorised action.
+  // Comment lines inside the enum block (RETIRED's) are stripped so this pins
+  // the value list, not the documentation prose around it.
+  const block = schema.match(/enum DocumentPublicationState \{([^}]*)\}/)?.[1] ?? '';
+  const values = block
+    .split('\n')
+    .map((line) => line.trim())
+    .filter((line) => line.length > 0 && !line.startsWith('//'));
+
+  assert.deepEqual(values, ['PENDING', 'DEAD_LETTER', 'PROCESSED', 'RETIRED']);
 });
 
 test('the publication row copies the DocumentStorageDeletion reliability shape field by field', () => {

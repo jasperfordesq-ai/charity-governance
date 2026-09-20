@@ -138,6 +138,12 @@ enum DocumentPublicationState {
   PENDING
   DEAD_LETTER
   PROCESSED
+  // A published document whose CharityPilot record has been deleted. The page
+  // is still in the charity's Confluence site and is deliberately left there:
+  // an ordinary deletion removes our record and our reference, and destroying
+  // the source is a separate, explicitly authorised action. The identifiers
+  // are kept because they are the only thing that can still address the page.
+  RETIRED
 }
 
 // One reason per permanent publish failure, plus the exhausted-retries reason
@@ -1124,8 +1130,16 @@ model DocumentPublication {
   alertClaimedAt  DateTime?
   alertedAt       DateTime?
   processedAt     DateTime?
-  createdAt       DateTime                           @default(now())
-  updatedAt       DateTime                           @updatedAt
+
+  // Set when the document was deleted in CharityPilot. See the RETIRED state.
+  retiredAt          DateTime?
+  retiredStoragePath String?
+  // Stamped by the explicit erasure workflow, never by an ordinary deletion.
+  erasureRequestedAt DateTime?
+  erasureDeletionId  String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
   @@unique([documentId, provider])
   @@index([organisationId])
