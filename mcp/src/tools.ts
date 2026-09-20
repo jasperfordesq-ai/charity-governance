@@ -46,6 +46,40 @@ export interface ToolDefinition {
 }
 
 /**
+ * Narrows each record to the fields the caller asked for.
+ *
+ * Only ever a subset of what the gate would release anyway: the argument is
+ * validated against the same allowlist, so asking for a field cannot reach
+ * one. It exists because a long register is a long payload, and an agent
+ * counting open risks does not need every column of every row.
+ *
+ * Applied to the envelope's records, not to the envelope: the pagination
+ * meta says whether there is more, and dropping it would hide that.
+ */
+export function selectFields(value: unknown, fields: readonly string[]): unknown {
+  if (fields.length === 0) return value;
+
+  const keepFrom = (record: unknown): unknown => {
+    if (Array.isArray(record)) return record.map(keepFrom);
+    if (record === null || typeof record !== 'object') return record;
+    const out: Record<string, unknown> = {};
+    for (const field of fields) {
+      if (field in (record as Record<string, unknown>)) {
+        out[field] = (record as Record<string, unknown>)[field];
+      }
+    }
+    return out;
+  };
+
+  if (value !== null && typeof value === 'object' && !Array.isArray(value)
+    && 'data' in (value as Record<string, unknown>)) {
+    const envelope = value as Record<string, unknown>;
+    return { ...envelope, data: keepFrom(envelope.data) };
+  }
+  return keepFrom(value);
+}
+
+/**
  * Removes named keys from a response at every depth.
  *
  * Unconditional, unlike the gate: an invite link lets whoever holds it join
@@ -648,6 +682,24 @@ export function toolInputSchema(tool: ToolDefinition): object {
   };
   const required = [...(fromParams.required ?? []), ...(fromBody.required ?? [])];
 
+  // Only on reads of one model: a write returns the record it changed, where
+  // narrowing the answer would hide what was written.
+  if (!tool.method && tool.model) {
+    properties['fields'] = {
+      type: 'array',
+      // organisationId is left out: it is the same on every record a session
+      // can see, so asking for it buys nothing, and the tenant is never
+      // something a caller names.
+      items: {
+        type: 'string',
+        enum: SAFE_FIELDS[tool.model].filter((field) => field !== 'organisationId'),
+      },
+      description:
+        'Return only these fields of each record, to keep a long list short. The '
+        + 'pagination figures are always returned.',
+    };
+  }
+
   if (tool.method) {
     properties['reason'] = {
       type: 'string',
@@ -676,6 +728,36 @@ export function toolInputSchema(tool: ToolDefinition): object {
   return schema;
 }
 
+/**
+ * Splits a requested field list off the arguments, refusing anything the gate
+ * would not release in the first place.
+ */
+function takeFields(
+  tool: ToolDefinition,
+  args: Record<string, unknown>,
+): { fields: string[]; rest: Record<string, unknown> } {
+  if (!('fields' in args)) return { fields: [], rest: args };
+
+  const { fields: requested, ...rest } = args;
+  if (!tool.model) {
+    throw new Error(`${tool.name} does not take a fields argument.`);
+  }
+  if (!Array.isArray(requested) || requested.some((field) => typeof field !== 'string')) {
+    throw new Error('fields must be a list of field names.');
+  }
+
+  const safe = new Set(SAFE_FIELDS[tool.model]);
+  const unknown = (requested as string[]).filter((field) => !safe.has(field));
+  if (unknown.length > 0) {
+    throw new Error(
+      `${unknown.join(', ')} cannot be asked for on a ${tool.model}. Available: `
+        + `${[...safe].join(', ')}.`,
+    );
+  }
+
+  return { fields: requested as string[], rest };
+}
+
 export async function runTool(
   tool: ToolDefinition,
   client: ApiClient,
@@ -683,9 +765,13 @@ export async function runTool(
   args: Record<string, unknown> = {},
 ): Promise<unknown> {
   if (!tool.method) {
-    const path = buildPath(tool.path, tool.params ?? [], args);
+    // Peeled off before the path is built: it shapes the answer here rather
+    // than travelling to an API that has no such parameter.
+    const { fields, rest } = takeFields(tool, args);
+    const path = buildPath(tool.path, tool.params ?? [], rest);
     const raw = await client.get<unknown>(path);
-    return stripKeys(applyPolicy(tool, raw, allowPersonalData), tool.redactAlways ?? []);
+    const filtered = stripKeys(applyPolicy(tool, raw, allowPersonalData), tool.redactAlways ?? []);
+    return selectFields(filtered, fields);
   }
 
   const { pathArgs, bodyArgs, reason, approvalId } = partition(tool, args);

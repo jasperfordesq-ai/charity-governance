@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { TOOLS, runTool, outputSchemaFor } from '../tools.js';
+import { TOOLS, runTool, outputSchemaFor, toolInputSchema } from '../tools.js';
 import { SAFE_FIELDS } from '../field-policy.js';
 import { ConnectorError } from '../errors.js';
 import { buildToolList } from '../server.js';
@@ -184,4 +184,74 @@ test('governing_acts returns resolutions when the gate is opened', async () => {
 
   const result = await runTool(tool, clientReturning({ data: [act] }), true) as { data: Record<string, unknown>[] };
   assert.deepEqual(result.data[0], act);
+});
+
+/* --- Phase F: asking for fewer fields ------------------------------------ */
+
+test('a read can be narrowed to named fields, and the pagination survives', async () => {
+  const tool = TOOLS.find((t) => t.name === 'board_register')!;
+  const api = clientReturning({
+    data: [
+      { id: 'bm1', name: 'Aoife Chairperson', role: 'Chair', appointedDate: '2021-03-02', isActive: true },
+    ],
+    total: 1,
+    page: 1,
+    pageSize: 50,
+    hasMore: false,
+  });
+
+  const result = (await runTool(tool, api, false, { fields: ['id', 'role'] })) as {
+    data: Record<string, unknown>[];
+    total: number;
+    hasMore: boolean;
+  };
+
+  assert.deepEqual(result.data, [{ id: 'bm1', role: 'Chair' }]);
+  assert.equal(result.total, 1, 'the caller still needs to know whether there is more');
+  assert.equal(result.hasMore, false);
+});
+
+test('a field the gate withholds cannot be asked for', async () => {
+  const tool = TOOLS.find((t) => t.name === 'board_register')!;
+  const api = clientReturning({ data: [] });
+
+  await assert.rejects(
+    () => runTool(tool, api, false, { fields: ['dateOfBirth'] }),
+    /dateOfBirth cannot be asked for/,
+    'the selection is a subset of the allowlist, never a way around it',
+  );
+});
+
+test('fields is offered on a read of one model, and nowhere else', () => {
+  const read = toolInputSchema(TOOLS.find((t) => t.name === 'board_register')!) as {
+    properties: Record<string, { items?: { enum?: string[] } }>;
+  };
+  assert.ok(read.properties['fields'], 'a long register is worth shortening');
+  assert.ok(read.properties['fields']!.items?.enum?.includes('name'));
+  assert.ok(
+    !read.properties['fields']!.items?.enum?.includes('dateOfBirth'),
+    'the advertised choices are the fields the gate releases',
+  );
+
+  const write = toolInputSchema(TOOLS.find((t) => t.name === 'board_member_update')!) as {
+    properties: Record<string, unknown>;
+  };
+  assert.equal(
+    write.properties['fields'],
+    undefined,
+    'narrowing what a write returns would hide what it wrote',
+  );
+
+  const counts = toolInputSchema(TOOLS.find((t) => t.name === 'compliance_summary')!) as {
+    properties: Record<string, unknown>;
+  };
+  assert.equal(counts.properties['fields'], undefined, 'there are no records to narrow');
+});
+
+test('asking for fields on a tool that has none says so rather than ignoring it', async () => {
+  const tool = TOOLS.find((t) => t.name === 'compliance_summary')!;
+  await assert.rejects(
+    () => runTool(tool, clientReturning({}), false, { fields: ['anything'] }),
+    /does not take a fields argument/,
+  );
 });
