@@ -1,6 +1,8 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { TOOLS, runTool } from '../tools.js';
+import { TOOLS, runTool, outputSchemaFor } from '../tools.js';
+import { SAFE_FIELDS } from '../field-policy.js';
+import { ConnectorError } from '../errors.js';
 import { buildToolList } from '../server.js';
 import { ApiClient } from '../client.js';
 import { Session } from '../session.js';
@@ -24,6 +26,38 @@ function clientReturning(payload: unknown): ApiClient {
     }),
   });
 }
+
+test('a model-gated tool declares an output schema listing the fields the closed gate returns', () => {
+  for (const tool of TOOLS) {
+    const schema = outputSchemaFor(tool) as {
+      type?: string;
+      properties?: { data?: { anyOf?: Array<{ items?: { properties?: Record<string, unknown> } }> } };
+      additionalProperties?: boolean;
+    } | undefined;
+    if (!tool.model) {
+      assert.equal(schema, undefined, `${tool.name} has no model and should declare no schema`);
+      continue;
+    }
+    assert.ok(schema, tool.name);
+    assert.equal(schema.type, 'object');
+    assert.equal(schema.additionalProperties, true, 'the open gate returns more fields than the schema lists');
+    const record = schema.properties?.data?.anyOf?.find((alt) => alt.items)?.items;
+    assert.deepEqual(Object.keys(record?.properties ?? {}), [...SAFE_FIELDS[tool.model]], tool.name);
+  }
+});
+
+test('gate and reason refusals carry codes', async () => {
+  const conflict = TOOLS.find((t) => t.name === 'conflict_update')!;
+  await assert.rejects(
+    () => runTool(conflict, {} as never, false, { id: 'c1', nature: 'x' }),
+    (err: unknown) => err instanceof ConnectorError && err.code === 'PERSONAL_DATA_WITHHELD',
+  );
+  const remove = TOOLS.find((t) => t.name === 'risk_delete')!;
+  await assert.rejects(
+    () => runTool(remove, {} as never, true, { id: 'r1' }),
+    (err: unknown) => err instanceof ConnectorError && err.code === 'REASON_REQUIRED',
+  );
+});
 
 test('no advertised input schema mentions organisationId', () => {
   // Walks what clients are actually told they may send, which is generated,

@@ -4,7 +4,13 @@ import {
   CallToolRequestSchema,
   ListToolsRequestSchema,
 } from '@modelcontextprotocol/sdk/types.js';
-import { TOOLS, annotationsFor, runTool, toolInputSchema } from './tools.js';
+import {
+  TOOLS,
+  annotationsFor,
+  outputSchemaFor,
+  runTool,
+  toolInputSchema,
+} from './tools.js';
 import {
   FILE_TOOLS,
   runFileTool,
@@ -23,8 +29,9 @@ import { ApiClient } from './client.js';
 import type { Session } from './session.js';
 import type { AccessLevel, ConnectorConfig } from './config.js';
 import { CONNECTOR_VERSION } from './version.js';
-import { redactSecrets } from './redact.js';
 import { INSTRUCTIONS } from './instructions.js';
+import { ConnectorError } from './errors.js';
+import { errorResult, okResult } from './results.js';
 
 const FILE_RANK: Record<AccessLevel, number> = { read: 0, write: 1, admin: 2 };
 
@@ -49,12 +56,16 @@ export function buildToolList(
   config: Partial<Pick<ConnectorConfig, 'uploadRoot' | 'downloadDir' | 'allowPersonalData'>> = {},
 ) {
   return [
-    ...toolsFor(level, TOOLS, config.allowPersonalData ?? false).map((tool) => ({
-      name: tool.name,
-      description: tool.description,
-      inputSchema: toolInputSchema(tool),
-      annotations: annotationsFor(tool),
-    })),
+    ...toolsFor(level, TOOLS, config.allowPersonalData ?? false).map((tool) => {
+      const outputSchema = outputSchemaFor(tool);
+      return {
+        name: tool.name,
+        description: tool.description,
+        inputSchema: toolInputSchema(tool),
+        annotations: annotationsFor(tool),
+        ...(outputSchema ? { outputSchema } : {}),
+      };
+    }),
     ...availableFileTools(level, config).map((tool) => ({
       name: tool.name,
       description: tool.description,
@@ -83,40 +94,35 @@ export async function startServer(config: ConnectorConfig, session: Session): Pr
    */
   const level = createLevelResolver(() => fetchSessionPosture(client), config.accessLevel);
 
-  server.setRequestHandler(ListToolsRequestSchema, async () => ({
-    tools: buildToolList(await level(), config),
-  }));
-
-  server.setRequestHandler(CallToolRequestSchema, async (request) => {
-    const fileTool = FILE_TOOLS.find((t) => t.name === request.params.name);
+  /**
+   * Runs one tool and returns its raw value, or throws.
+   *
+   * Every refusal the connector makes itself is a ConnectorError with a code,
+   * so the caller can turn any throw into a structured error result without
+   * knowing which branch refused.
+   */
+  async function dispatch(name: string, args: Record<string, unknown>): Promise<unknown> {
+    const fileTool = FILE_TOOLS.find((t) => t.name === name);
     if (fileTool) {
       const current = await level();
       if (FILE_RANK[current] < FILE_RANK[fileTool.level]) {
-        return {
-          isError: true,
-          content: [{ type: 'text', text: refusalFor(current, { ...fileTool, path: '' }) }],
-        };
+        throw new ConnectorError(
+          'SESSION_LEVEL_TOO_LOW',
+          refusalFor(current, { ...fileTool, path: '' }),
+          { action: 'reconnect' },
+        );
       }
       const enabled =
         fileTool.requires === 'uploadRoot' ? config.uploadRoot : config.downloadDir;
       if (!enabled) {
-        return { isError: true, content: [{ type: 'text', text: unavailableBecause(fileTool) }] };
+        throw new ConnectorError('TOOL_DISABLED', unavailableBecause(fileTool));
       }
-      try {
-        const args = (request.params.arguments ?? {}) as Record<string, unknown>;
-        const result = await runFileTool(fileTool, client, config, args);
-        return { content: [{ type: 'text', text: JSON.stringify(result, null, 2) }] };
-      } catch (error) {
-        return {
-          isError: true,
-          content: [{ type: 'text', text: redactSecrets((error as Error).message) }],
-        };
-      }
+      return runFileTool(fileTool, client, config, args);
     }
 
-    const tool = TOOLS.find((t) => t.name === request.params.name);
+    const tool = TOOLS.find((t) => t.name === name);
     if (!tool) {
-      return { isError: true, content: [{ type: 'text', text: `Unknown tool: ${request.params.name}` }] };
+      throw new ConnectorError('UNKNOWN_TOOL', `Unknown tool: ${name}`);
     }
 
     // Re-checked here and not only in the listing: the Model Context Protocol
@@ -124,21 +130,24 @@ export async function startServer(config: ConnectorConfig, session: Session): Pr
     // hidden from a list is not a tool that cannot be called.
     const current = await level();
     if (!permits(current, tool)) {
-      return {
-        isError: true,
-        content: [{ type: 'text', text: refusalFor(current, tool) }],
-      };
+      throw new ConnectorError('SESSION_LEVEL_TOO_LOW', refusalFor(current, tool), {
+        action: 'reconnect',
+      });
     }
 
+    return runTool(tool, client, config.allowPersonalData, args);
+  }
+
+  server.setRequestHandler(ListToolsRequestSchema, async () => ({
+    tools: buildToolList(await level(), config),
+  }));
+
+  server.setRequestHandler(CallToolRequestSchema, async (request) => {
+    const args = (request.params.arguments ?? {}) as Record<string, unknown>;
     try {
-      const args = (request.params.arguments ?? {}) as Record<string, unknown>;
-      const result = await runTool(tool, client, config.allowPersonalData, args);
-      return { content: [{ type: 'text', text: JSON.stringify(result, null, 2) }] };
+      return okResult(await dispatch(request.params.name, args));
     } catch (error) {
-      return {
-        isError: true,
-        content: [{ type: 'text', text: redactSecrets((error as Error).message) }],
-      };
+      return errorResult(error);
     }
   });
 

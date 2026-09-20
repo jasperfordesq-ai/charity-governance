@@ -10,6 +10,7 @@ import { buildPath, inputSchemaFor, paramName, type ParamSpec } from './tool-inp
 import { buildBody, bodySchemaFor, type FieldSpec } from './tool-body.js';
 import { GOVERNING_ACT_KINDS, GOVERNING_ACT_STATUSES } from './enums.js';
 import { WRITE_TOOLS } from './write-tools.js';
+import { ConnectorError } from './errors.js';
 
 export interface ToolDefinition {
   name: string;
@@ -344,6 +345,48 @@ export function annotationsFor(tool: ToolDefinition): ToolAnnotations {
 }
 
 /**
+ * What a client is told a result looks like.
+ *
+ * Declared only for tools whose payload is one model, and generated from the
+ * same allowlist the gate applies, so the schema is the gate's promise made
+ * checkable: with the gate closed, only the listed fields are present. Every
+ * property is left untyped and additional properties are allowed, because the
+ * open gate returns the full record and a client validating a result against
+ * this schema must not be told a true record is invalid.
+ */
+export function outputSchemaFor(tool: ToolDefinition): object | undefined {
+  if (!tool.model) return undefined;
+  const record = {
+    type: 'object',
+    description:
+      `One ${tool.model} record. With the personal-data gate closed only the listed `
+      + 'fields are present; with it open the full record is.',
+    properties: Object.fromEntries(SAFE_FIELDS[tool.model].map((field) => [field, {}])),
+    additionalProperties: true,
+  };
+  return {
+    type: 'object',
+    properties: {
+      data: {
+        anyOf: [
+          { type: 'array', items: record },
+          record,
+          { type: 'null' },
+          { type: 'string' },
+          { type: 'number' },
+          { type: 'boolean' },
+        ],
+      },
+      total: { type: 'integer' },
+      page: { type: 'integer' },
+      pageSize: { type: 'integer' },
+      hasMore: { type: 'boolean' },
+    },
+    additionalProperties: true,
+  };
+}
+
+/**
  * A tool declares a model when every record in its payload is one model, or a
  * shape when the payload mixes them. Declaring both is a contradiction about
  * what the payload is, so it throws rather than silently preferring one.
@@ -538,7 +581,8 @@ export async function runTool(
   // would leave a tool that cannot produce a valid request.
   const gated = gatedFieldsInCall(tool, bodyArgs);
   if (gated.length > 0 && !allowPersonalData) {
-    throw new Error(
+    throw new ConnectorError(
+      'PERSONAL_DATA_WITHHELD',
       `This call would write ${gated.join(', ')}, which the personal-data gate withholds `
         + `when reading a ${tool.model}. Writing them needs the connector started with `
         + '--allow-personal-data, which is a data-protection decision rather than a '
@@ -550,9 +594,11 @@ export async function runTool(
   // A reason is required for the actions that cannot be undone, and only for
   // those. Demanding one everywhere would train a caller to write filler.
   if (tool.destructive && !reason) {
-    throw new Error(
+    throw new ConnectorError(
+      'REASON_REQUIRED',
       `${tool.name} removes something permanently. Pass a reason saying why, which is `
         + 'recorded against the action.',
+      { action: 'fix_arguments' },
     );
   }
 
