@@ -21,6 +21,7 @@ import { test } from "node:test";
 const migration = [
   "20260920000000_add_auth_action_approval",
   "20260920010000_approval_binds_to_session_family",
+  "20260920050000_add_approval_resource_id",
 ]
   .map((name) =>
     readFileSync(
@@ -84,6 +85,11 @@ test("a row cannot name a user from a different charity", () => {
 
 test("the migration carries nothing the blue-green gate blocks", () => {
   assert.doesNotMatch(migration, /SET NOT NULL/);
+});
+
+test("an approval records which record it is about", () => {
+  assert.match(migration, /ALTER TABLE "AuthActionApproval"\s+ADD COLUMN "resourceId" TEXT;/);
+  assert.match(schema, /model AuthActionApproval \{[\s\S]*?resourceId\s+String\?/);
 });
 
 test("the table is cleared between isolated runs", () => {

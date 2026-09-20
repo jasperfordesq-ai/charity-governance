@@ -1,5 +1,6 @@
 import type { FastifyRequest, FastifyReply } from "fastify";
 import { digestAction } from "../utils/action-digest.js";
+import { describeAction } from "../services/action-summary.js";
 
 /**
  * Requires a human approval, typed at a terminal, for one destructive action.
@@ -131,8 +132,16 @@ export function requireActionApproval() {
 
     // No usable approval: mint one for exactly this request and tell the
     // caller what to run. The row is created unapproved; only the password
-    // route can approve it.
-    const summary = summarise(request.method, routePattern);
+    // route can approve it. The summary names the record where the route has
+    // one, so the person approving is checking the agent's account against
+    // the server's rather than taking it on trust.
+    const { summary, resourceId } = await describeAction(
+      request.server.prisma,
+      request.user.organisationId,
+      request.method,
+      routePattern,
+      (request.params ?? {}) as Record<string, string | undefined>,
+    );
     const expiresAt = new Date(now.getTime() + APPROVAL_TTL_MS);
 
     // One live approval per session and digest, so asking twice does not leave
@@ -147,7 +156,7 @@ export function requireActionApproval() {
           requestDigest: digest,
           consumedAt: null,
         },
-        select: { id: true, summary: true, expiresAt: true, approvedAt: true },
+        select: { id: true, summary: true, resourceId: true, expiresAt: true, approvedAt: true },
       });
 
     let pending = await live();
@@ -174,9 +183,10 @@ export function requireActionApproval() {
             summary,
             method: request.method,
             routePattern,
+            resourceId,
             expiresAt,
           },
-          select: { id: true, summary: true, expiresAt: true, approvedAt: true },
+          select: { id: true, summary: true, resourceId: true, expiresAt: true, approvedAt: true },
         });
       } catch {
         pending = await live();
@@ -200,6 +210,7 @@ export function requireActionApproval() {
       code: "APPROVAL_REQUIRED",
       approvalId: pending.id,
       summary: pending.summary,
+      resourceId: pending.resourceId ?? resourceId,
       expiresAt: pending.expiresAt.toISOString(),
       command: `charitypilot-mcp approve ${pending.id}`,
     });

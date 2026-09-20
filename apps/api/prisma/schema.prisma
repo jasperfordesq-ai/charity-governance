@@ -696,6 +696,8 @@ model AuthActionApproval {
   summary         String
   method          String
   routePattern    String
+  /// The identifier of the record the action is about, when the route has one.
+  resourceId      String?
   createdAt       DateTime     @default(now())
   expiresAt       DateTime
   approvedAt      DateTime?

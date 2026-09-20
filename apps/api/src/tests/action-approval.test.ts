@@ -18,6 +18,7 @@ interface Row {
   summary: string;
   method: string;
   routePattern: string;
+  resourceId: string | null;
   expiresAt: Date;
   approvedAt: Date | null;
   consumedAt: Date | null;
@@ -93,10 +94,12 @@ async function buildApp(options: {
   rows?: Row[];
   clientKind?: "WEB" | "MCP_CONNECTOR";
   familyId?: string;
+  /** Record delegates the summary lookup may consult, e.g. `boardMember`. */
+  lookups?: Record<string, unknown>;
 }) {
   const backing = store(options.rows ?? []);
   const app = Fastify({ logger: false });
-  app.decorate("prisma", backing.client as never);
+  app.decorate("prisma", { ...backing.client, ...(options.lookups ?? {}) } as never);
 
   app.addHook("onRequest", async (request) => {
     request.user = {
@@ -144,12 +147,27 @@ function approvedRow(overrides: Partial<Row> = {}): Row {
     summary: "Permanently delete: board members (DELETE)",
     method: "DELETE",
     routePattern: "/api/v1/board-members/:id",
+    resourceId: "clx-1",
     expiresAt: new Date(Date.now() + APPROVAL_TTL_MS),
     approvedAt: new Date(),
     consumedAt: null,
     ...overrides,
   };
 }
+
+test("the refusal names the record when the charity has one by that identifier", async () => {
+  const { app } = await buildApp({
+    lookups: { boardMember: { findFirst: async () => ({ name: "Aoife Chairperson", role: "Chair" }) } },
+  });
+  try {
+    const response = await app.inject({ method: "DELETE", url: PATH });
+    assert.equal(response.statusCode, 428);
+    assert.match(response.json().summary, /Aoife Chairperson/);
+    assert.equal(response.json().resourceId, "clx-1");
+  } finally {
+    await app.close();
+  }
+});
 
 test("without an approval the request is refused with something to run", async () => {
   const { app, rows } = await buildApp({});
