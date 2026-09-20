@@ -1,5 +1,6 @@
 import type { ApiClient } from './client.js';
 import type { ConnectorConfig } from './config.js';
+import type { ToolAnnotations } from './tools.js';
 import { readUploadable, writeDownload, FileAccessError } from './files.js';
 import { DOCUMENT_CATEGORIES } from './enums.js';
 
@@ -24,6 +25,7 @@ export interface FileToolDefinition {
   description: string;
   level: 'write' | 'admin';
   inputSchema: object;
+  annotations: ToolAnnotations;
   /** Why the tool is unavailable when the operator has not enabled it. */
   requires: 'uploadRoot' | 'downloadDir';
 }
@@ -37,6 +39,13 @@ export const FILE_TOOLS: readonly FileToolDefinition[] = [
       + 'types CharityPilot accepts.',
     level: 'write',
     requires: 'uploadRoot',
+    annotations: {
+      title: 'Document upload',
+      readOnlyHint: false,
+      destructiveHint: false,
+      idempotentHint: false,
+      openWorldHint: false,
+    },
     inputSchema: {
       type: 'object',
       properties: {
@@ -62,6 +71,15 @@ export const FILE_TOOLS: readonly FileToolDefinition[] = [
       + 'document cannot be filtered the way a record can.',
     level: 'write',
     requires: 'downloadDir',
+    // A download writes a file onto the operator's machine, so it is not
+    // read-only in the protocol's sense, though it changes nothing at the API.
+    annotations: {
+      title: 'Document download',
+      readOnlyHint: false,
+      destructiveHint: false,
+      idempotentHint: true,
+      openWorldHint: false,
+    },
     inputSchema: {
       type: 'object',
       properties: {

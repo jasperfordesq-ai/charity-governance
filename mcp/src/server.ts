@@ -4,7 +4,7 @@ import {
   CallToolRequestSchema,
   ListToolsRequestSchema,
 } from '@modelcontextprotocol/sdk/types.js';
-import { TOOLS, runTool, toolInputSchema } from './tools.js';
+import { TOOLS, annotationsFor, runTool, toolInputSchema } from './tools.js';
 import {
   FILE_TOOLS,
   runFileTool,
@@ -53,11 +53,13 @@ export function buildToolList(
       name: tool.name,
       description: tool.description,
       inputSchema: toolInputSchema(tool),
+      annotations: annotationsFor(tool),
     })),
     ...availableFileTools(level, config).map((tool) => ({
       name: tool.name,
       description: tool.description,
       inputSchema: tool.inputSchema,
+      annotations: tool.annotations,
     })),
   ];
 }

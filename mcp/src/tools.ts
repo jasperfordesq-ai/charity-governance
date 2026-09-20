@@ -309,6 +309,40 @@ const READ_TOOLS: readonly ToolDefinition[] = [
  */
 export const TOOLS: readonly ToolDefinition[] = [...READ_TOOLS, ...WRITE_TOOLS];
 
+export interface ToolAnnotations {
+  title: string;
+  readOnlyHint: boolean;
+  destructiveHint: boolean;
+  idempotentHint: boolean;
+  openWorldHint: boolean;
+}
+
+export function titleFor(name: string): string {
+  const [first = '', ...rest] = name.split('_');
+  return [first.charAt(0).toUpperCase() + first.slice(1), ...rest].join(' ');
+}
+
+/**
+ * The hints the protocol lets a tool carry, derived from the definition so
+ * they cannot disagree with it.
+ *
+ * `destructiveHint` follows the approval gate: a removal or a void. An update
+ * changes a record but leaves it, and calling it destructive would make every
+ * client prompt for every field correction, which teaches people to click
+ * through. `openWorldHint` is false throughout: the connector reaches one API
+ * and nothing else.
+ */
+export function annotationsFor(tool: ToolDefinition): ToolAnnotations {
+  const read = tool.method === undefined;
+  return {
+    title: titleFor(tool.name),
+    readOnlyHint: read,
+    destructiveHint: tool.destructive === true,
+    idempotentHint: read || tool.method === 'PUT' || tool.method === 'DELETE',
+    openWorldHint: false,
+  };
+}
+
 /**
  * A tool declares a model when every record in its payload is one model, or a
  * shape when the payload mixes them. Declaring both is a contradiction about
