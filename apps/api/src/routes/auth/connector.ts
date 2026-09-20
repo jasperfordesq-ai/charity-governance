@@ -242,6 +242,68 @@ export async function connectorAuthRoutes(app: FastifyInstance) {
     },
   );
 
+  /**
+   * Reads one approval back, so `charitypilot-mcp approve` can show a person
+   * what they are about to approve BEFORE asking for their password. Without
+   * this the summary was printed only after the grant, and the person was
+   * approving on the agent's word.
+   *
+   * Only the person the approval belongs to can read it. Anyone else, and any
+   * identifier that does not exist, gets the same not-found.
+   */
+  app.get(
+    "/approvals/:id",
+    { preHandler: [authGuard] },
+    async (request, reply) => {
+      try {
+        const id = z.string().min(1).max(64).parse((request.params as { id?: unknown }).id);
+        const approval = await app.prisma.authActionApproval.findFirst({
+          where: {
+            id,
+            userId: request.user.userId,
+            organisationId: request.user.organisationId,
+          },
+          select: {
+            id: true,
+            summary: true,
+            method: true,
+            routePattern: true,
+            resourceId: true,
+            createdAt: true,
+            expiresAt: true,
+            approvedAt: true,
+            consumedAt: true,
+          },
+        });
+        if (!approval) {
+          throw new AppError(
+            404,
+            "APPROVAL_NOT_FOUND",
+            "No approval with that identifier belongs to you. Approvals expire five "
+              + "minutes after they are asked for.",
+          );
+        }
+        reply.send({
+          approvalId: approval.id,
+          summary: approval.summary,
+          method: approval.method,
+          routePattern: approval.routePattern,
+          resourceId: approval.resourceId,
+          createdAt: approval.createdAt.toISOString(),
+          expiresAt: approval.expiresAt.toISOString(),
+          approvedAt: approval.approvedAt?.toISOString() ?? null,
+          consumedAt: approval.consumedAt?.toISOString() ?? null,
+        });
+      } catch (err) {
+        if (err instanceof ZodError) {
+          reply.status(400).send(formatZodError(err));
+          return;
+        }
+        handleError(reply, err);
+      }
+    },
+  );
+
   app.get(
     "/session",
     { preHandler: [authGuard] },

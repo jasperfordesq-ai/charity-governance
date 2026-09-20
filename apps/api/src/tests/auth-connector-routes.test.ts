@@ -25,9 +25,9 @@ const approvalStore = {
 const REAL_PASSWORD = "a-real-password";
 const PASSWORD_HASH = bcrypt.hashSync(REAL_PASSWORD, 4);
 
-function connectorToken(): string {
+function connectorToken(userId = "usr-1"): string {
   return signAccessToken({
-    userId: "usr-1",
+    userId,
     organisationId: "org-1",
     email: "owner@example.org",
     role: "OWNER",
@@ -61,8 +61,10 @@ function fakePrisma(recorded: Recorded) {
       }),
     },
     user: {
-      findUnique: async () => ({
-        id: "usr-1",
+      // Answers for whichever account the token names, so a test can act as a
+      // second person in the same charity.
+      findUnique: async ({ where }: { where: { id?: string } }) => ({
+        id: where?.id ?? "usr-1",
         organisationId: "org-1",
         role: "OWNER",
         emailVerified: true,
@@ -76,10 +78,27 @@ function fakePrisma(recorded: Recorded) {
         approvalStore.granted.push(where);
         return { count: 1 };
       },
-      findFirst: async () => ({
-        summary: "Permanently delete: board members (DELETE)",
-        expiresAt: new Date("2026-01-01T00:05:00.000Z"),
-      }),
+      // Honours the where clause the routes actually send: the approve route
+      // reads back by id alone, the preview route by id AND owner. Anything
+      // that is not the one row this fake holds, or not this user's, is null.
+      findFirst: async ({ where }: { where: Record<string, unknown> }) => {
+        const mine =
+          (where["userId"] === undefined || where["userId"] === "usr-1")
+          && (where["organisationId"] === undefined || where["organisationId"] === "org-1")
+          && (where["id"] === undefined || where["id"] === "apr-1");
+        if (!mine) return null;
+        return {
+          id: "apr-1",
+          summary: 'Permanently delete board member "Aoife Chairperson" (Chair)',
+          method: "DELETE",
+          routePattern: "/api/v1/board-members/:id",
+          resourceId: "bm-1",
+          createdAt: new Date("2026-01-01T00:00:00.000Z"),
+          expiresAt: new Date("2026-01-01T00:05:00.000Z"),
+          approvedAt: null,
+          consumedAt: null,
+        };
+      },
     },
   };
 }
@@ -553,6 +572,94 @@ test("a malformed body is refused before any password is compared", async () => 
 
     assert.equal(response.statusCode, 400);
     assert.equal(response.json().code, "VALIDATION_ERROR");
+  } finally {
+    restore();
+    await app.close();
+  }
+});
+
+test("an approval can be read back by the person it belongs to, before they approve it", async () => {
+  const recorded: Recorded = {};
+  const { app, restore } = await buildApp(recorded);
+  try {
+    const response = await app.inject({
+      method: "GET",
+      url: "/api/v1/auth/connector/approvals/apr-1",
+      headers: {
+        [CONNECTOR_CLIENT_HEADER]: CLIENT,
+        authorization: `Bearer ${connectorToken()}`,
+      },
+    });
+    assert.equal(response.statusCode, 200);
+    const body = response.json();
+    assert.equal(body.approvalId, "apr-1");
+    assert.match(body.summary, /Aoife Chairperson/);
+    assert.equal(body.resourceId, "bm-1");
+    assert.equal(body.method, "DELETE");
+    assert.equal(body.approvedAt, null);
+    assert.equal(body.expiresAt, "2026-01-01T00:05:00.000Z");
+  } finally {
+    restore();
+    await app.close();
+  }
+});
+
+test("an approval that is not yours, or does not exist, reads as not found and says nothing more", async () => {
+  const recorded: Recorded = {};
+  const { app, restore } = await buildApp(recorded);
+  try {
+    const response = await app.inject({
+      method: "GET",
+      url: "/api/v1/auth/connector/approvals/apr-someone-elses",
+      headers: {
+        [CONNECTOR_CLIENT_HEADER]: CLIENT,
+        authorization: `Bearer ${connectorToken()}`,
+      },
+    });
+    assert.equal(response.statusCode, 404);
+    assert.equal(response.json().code, "APPROVAL_NOT_FOUND");
+    assert.equal(response.json().summary, undefined);
+  } finally {
+    restore();
+    await app.close();
+  }
+});
+
+test("a colleague cannot read an approval that is not theirs, even by its identifier", async () => {
+  const recorded: Recorded = {};
+  const { app, restore } = await buildApp(recorded);
+  try {
+    const response = await app.inject({
+      method: "GET",
+      url: "/api/v1/auth/connector/approvals/apr-1",
+      headers: {
+        [CONNECTOR_CLIENT_HEADER]: CLIENT,
+        authorization: `Bearer ${connectorToken("usr-2")}`,
+      },
+    });
+    assert.equal(response.statusCode, 404);
+    assert.equal(response.json().code, "APPROVAL_NOT_FOUND");
+  } finally {
+    restore();
+    await app.close();
+  }
+});
+
+test("a browser cannot read an approval either", async () => {
+  const recorded: Recorded = {};
+  const { app, restore } = await buildApp(recorded);
+  try {
+    const response = await app.inject({
+      method: "GET",
+      url: "/api/v1/auth/connector/approvals/apr-1",
+      headers: {
+        [CONNECTOR_CLIENT_HEADER]: CLIENT,
+        authorization: `Bearer ${connectorToken()}`,
+        origin: "https://app.example.org",
+      },
+    });
+    assert.equal(response.statusCode, 403);
+    assert.equal(response.json().code, "BROWSER_CLIENT_REJECTED");
   } finally {
     restore();
     await app.close();
