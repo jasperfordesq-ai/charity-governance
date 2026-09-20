@@ -13,6 +13,8 @@ import { startServer } from './server.js';
 import { ApiClient } from './client.js';
 import { redactSecrets } from './redact.js';
 import { CONNECTOR_VERSION } from './version.js';
+import { fetchSessionPosture } from './session-level.js';
+import { formatStatus } from './status.js';
 
 const USAGE = `charitypilot-mcp ${CONNECTOR_VERSION}
 
@@ -154,12 +156,11 @@ async function main(): Promise<void> {
         email: string; name: string; role: string;
         organisation?: { name?: string } | null;
       }>('/api/v1/auth/me');
-      stdout.write(
-        `Connected as ${me.name} <${me.email}> (${me.role})\n` +
-        `Organisation: ${me.organisation?.name ?? '(unnamed organisation)'}\n` +
-        `Access level: ${config.accessLevel.toUpperCase()}\n` +
-        `Personal data: ${config.allowPersonalData ? 'ALLOWED' : 'withheld (default)'}\n`,
-      );
+      // The level is read from the API, where it is held, not from the flag
+      // this process was started with; the two disagree whenever the flag is
+      // omitted, which is most of the time.
+      const posture = await fetchSessionPosture(client);
+      stdout.write(formatStatus(me, posture, config.allowPersonalData));
     } catch (error) {
       stdout.write(
         `Stored credential found, but it could not be verified: ${redactSecrets((error as Error).message)}\n`,
