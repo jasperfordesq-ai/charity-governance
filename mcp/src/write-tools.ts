@@ -82,6 +82,7 @@ export const WRITE_TOOLS: readonly ToolDefinition[] = [
     params: [{ kind: 'id', name: 'id' }],
     model: 'BoardMember',
     body: [
+      { kind: 'timestamp', name: 'expectedUpdatedAt', required: true, control: true, describe: CONCURRENCY },
       { kind: 'string', name: 'name', max: 200 },
       { kind: 'string', name: 'role', max: 100 },
       { kind: 'date', name: 'appointedDate' },
@@ -394,6 +395,7 @@ export const WRITE_TOOLS: readonly ToolDefinition[] = [
     params: [{ kind: 'id', name: 'id' }],
     model: 'ConflictRecord',
     body: [
+      { kind: 'timestamp', name: 'expectedUpdatedAt', required: true, control: true, describe: CONCURRENCY },
       { kind: 'id', name: 'boardMemberId' },
       { kind: 'string', name: 'trusteeName', max: 200 },
       { kind: 'string', name: 'matter', max: 300 },
@@ -416,6 +418,7 @@ export const WRITE_TOOLS: readonly ToolDefinition[] = [
     params: [{ kind: 'id', name: 'id' }],
     model: 'RiskRecord',
     body: [
+      { kind: 'timestamp', name: 'expectedUpdatedAt', required: true, control: true, describe: CONCURRENCY },
       { kind: 'string', name: 'title', max: 300 },
       { kind: 'enum', name: 'category', values: RISK_CATEGORIES },
       { kind: 'string', name: 'description', max: 3000 },
@@ -437,6 +440,7 @@ export const WRITE_TOOLS: readonly ToolDefinition[] = [
     params: [{ kind: 'id', name: 'id' }],
     model: 'ComplaintRecord',
     body: [
+      { kind: 'timestamp', name: 'expectedUpdatedAt', required: true, control: true, describe: CONCURRENCY },
       { kind: 'date', name: 'receivedDate' },
       { kind: 'string', name: 'source', max: 200 },
       { kind: 'string', name: 'summary', max: 3000 },
@@ -456,6 +460,7 @@ export const WRITE_TOOLS: readonly ToolDefinition[] = [
     params: [{ kind: 'id', name: 'id' }],
     model: 'FundraisingRecord',
     body: [
+      { kind: 'timestamp', name: 'expectedUpdatedAt', required: true, control: true, describe: CONCURRENCY },
       { kind: 'string', name: 'name', max: 300 },
       { kind: 'string', name: 'activityType', max: 200 },
       { kind: 'date', name: 'startDate' },

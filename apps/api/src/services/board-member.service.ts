@@ -10,6 +10,7 @@ import {
 } from '../utils/domain-validation.js';
 import { AppError } from '../utils/errors.js';
 import { lockOrganisationForUpdate } from './organisation-lock.js';
+import { assertUnchanged } from '../utils/optimistic-concurrency.js';
 
 export class BoardMemberService {
   constructor(private prisma: PrismaClient) {}
@@ -51,7 +52,12 @@ export class BoardMemberService {
     return runDomainInvariantWrite(() => this.prisma.boardMember.create({ data: createData }));
   }
 
-  async update(organisationId: string, id: string, data: UpdateBoardMemberRequest) {
+  async update(
+    organisationId: string,
+    id: string,
+    data: UpdateBoardMemberRequest,
+    expectedUpdatedAt?: string,
+  ) {
     return runDomainInvariantWrite(
       () => this.prisma.$transaction(async (transaction) => {
         await lockOrganisationForUpdate(transaction, organisationId);
@@ -62,6 +68,7 @@ export class BoardMemberService {
         if (!member) {
           throw new AppError(404, 'BOARD_MEMBER_NOT_FOUND', 'Board member not found');
         }
+        assertUnchanged(member, expectedUpdatedAt, 'BOARD_MEMBER_UPDATE_CONFLICT');
 
         const updateData = {
           ...data,

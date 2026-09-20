@@ -132,6 +132,14 @@ const boardMemberPatchSchema = z.object({
   otherDirectorships: z.string().max(1000).nullable().optional(),
   formerNames: z.string().max(500).nullable().optional(),
   appointmentKind: z.enum(directorAppointmentKindValues).nullable().optional(),
+  /**
+   * The trustee's `updatedAt` as the caller read it.
+   *
+   * Optional, because the board page's form does not carry it yet. The
+   * connector always sends it, so an assistant working from a register it read
+   * an hour ago cannot silently overwrite a change made in between.
+   */
+  expectedUpdatedAt: z.string().datetime({ offset: true }).optional(),
 });
 
 export const updateBoardMemberSchema = boardMemberPatchSchema.superRefine(

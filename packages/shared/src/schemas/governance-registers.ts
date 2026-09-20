@@ -112,7 +112,20 @@ export const createConflictRecordSchema = z.object({
   nextReviewDate: nullableDateInputSchema,
 });
 
-export const updateConflictRecordSchema = createConflictRecordSchema.partial();
+/**
+ * The record's `updatedAt` as the caller read it.
+ *
+ * Optional, because the web application's register forms do not carry it yet.
+ * The connector always sends it, so an assistant working from a record it read
+ * an hour ago cannot silently overwrite a change somebody made in between —
+ * which is the case this exists for. Making it mandatory is a follow-up once
+ * the forms thread it through.
+ */
+export const expectedUpdatedAtSchema = z.string().datetime({ offset: true }).optional();
+
+export const updateConflictRecordSchema = createConflictRecordSchema
+  .partial()
+  .extend({ expectedUpdatedAt: expectedUpdatedAtSchema });
 
 export const createRiskRecordSchema = z.object({
   title: z.string().trim().min(1).max(300),
@@ -127,7 +140,9 @@ export const createRiskRecordSchema = z.object({
   boardMinuteReference: nullableText(200),
 });
 
-export const updateRiskRecordSchema = createRiskRecordSchema.partial();
+export const updateRiskRecordSchema = createRiskRecordSchema
+  .partial()
+  .extend({ expectedUpdatedAt: expectedUpdatedAtSchema });
 
 export const createComplaintRecordSchema = z.object({
   receivedDate: dateInputSchema,
@@ -140,7 +155,9 @@ export const createComplaintRecordSchema = z.object({
   boardMinuteReference: nullableText(200),
 });
 
-export const updateComplaintRecordSchema = createComplaintRecordSchema.partial();
+export const updateComplaintRecordSchema = createComplaintRecordSchema
+  .partial()
+  .extend({ expectedUpdatedAt: expectedUpdatedAtSchema });
 
 const fundraisingRecordInputSchema = z.object({
   name: z.string().trim().min(1).max(300),
@@ -162,6 +179,7 @@ export const createFundraisingRecordSchema = fundraisingRecordInputSchema.superR
 
 export const updateFundraisingRecordSchema = fundraisingRecordInputSchema
   .partial()
+  .extend({ expectedUpdatedAt: expectedUpdatedAtSchema })
   .superRefine((value, ctx) => {
     if (hasOwn(value, 'startDate') && hasOwn(value, 'endDate')) {
       refineFundraisingCompleteState(value, ctx);

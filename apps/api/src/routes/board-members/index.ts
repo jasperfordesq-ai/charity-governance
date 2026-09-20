@@ -44,8 +44,8 @@ export async function boardMemberRoutes(app: FastifyInstance) {
 
   app.patch<{ Params: { id: string } }>('/:id', { preHandler: [requireAdmin] }, async (request, reply) => {
     try {
-      const data = updateBoardMemberSchema.parse(request.body);
-      return sendSuccess(reply, await service.update(request.user.organisationId, request.params.id, data));
+      const { expectedUpdatedAt, ...data } = updateBoardMemberSchema.parse(request.body);
+      return sendSuccess(reply, await service.update(request.user.organisationId, request.params.id, data, expectedUpdatedAt));
     } catch (err) {
       if (err instanceof ZodError) {
         return reply.status(400).send({ error: 'Validation failed', code: 'VALIDATION_ERROR', details: err.errors });

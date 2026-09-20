@@ -68,6 +68,7 @@ test('an update is refused only for the withheld fields it actually sends', asyn
   // Status and minute reference are both on the safe side of the policy.
   await runTool(tool, api, false, {
     id: 'r1',
+    expectedUpdatedAt: '2026-09-20T12:00:00.000Z',
     status: 'CLOSED',
     boardMinuteReference: 'M-14',
     reason: 'The board closed it',
@@ -78,6 +79,7 @@ test('an update is refused only for the withheld fields it actually sends', asyn
     () =>
       runTool(tool, api, false, {
         id: 'r1',
+        expectedUpdatedAt: '2026-09-20T12:00:00.000Z',
         description: 'Names a specific member of staff',
         reason: 'Rewriting the description',
       }),
@@ -151,9 +153,15 @@ test('a required field that is missing is refused before anything is sent', () =
 
 test('an omitted optional field is absent, so a patch cannot blank a column', () => {
   const tool = WRITE_TOOLS.find((t) => t.name === 'board_member_update')!;
-  const body = buildBody(tool.body!, { name: 'New Name' });
+  const body = buildBody(tool.body!, {
+    expectedUpdatedAt: '2026-09-20T12:00:00.000Z',
+    name: 'New Name',
+  });
 
-  assert.deepEqual(body, { name: 'New Name' });
+  assert.deepEqual(body, {
+    expectedUpdatedAt: '2026-09-20T12:00:00.000Z',
+    name: 'New Name',
+  });
   assert.ok(!('role' in body), 'an untouched column must not be sent as null');
 });
 

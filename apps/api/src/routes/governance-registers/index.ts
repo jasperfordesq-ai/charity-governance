@@ -79,8 +79,8 @@ export async function governanceRegisterRoutes(app: FastifyInstance) {
 
   app.patch<{ Params: { id: string } }>('/conflicts/:id', { preHandler: [requireAdmin] }, async (request, reply) => {
     try {
-      const data = updateConflictRecordSchema.parse(request.body) as UpdateConflictRecordRequest;
-      return sendSuccess(reply, await service.updateConflict(request.user.organisationId, request.params.id, data));
+      const { expectedUpdatedAt, ...data } = updateConflictRecordSchema.parse(request.body) as UpdateConflictRecordRequest & { expectedUpdatedAt?: string };
+      return sendSuccess(reply, await service.updateConflict(request.user.organisationId, request.params.id, data, expectedUpdatedAt));
     } catch (err) {
       if (err instanceof ZodError) return validationError(reply, err);
       handleError(reply, err);
@@ -116,8 +116,8 @@ export async function governanceRegisterRoutes(app: FastifyInstance) {
 
   app.patch<{ Params: { id: string } }>('/risks/:id', { preHandler: [requireAdmin] }, async (request, reply) => {
     try {
-      const data = updateRiskRecordSchema.parse(request.body) as UpdateRiskRecordRequest;
-      return sendSuccess(reply, await service.updateRisk(request.user.organisationId, request.params.id, data));
+      const { expectedUpdatedAt, ...data } = updateRiskRecordSchema.parse(request.body) as UpdateRiskRecordRequest & { expectedUpdatedAt?: string };
+      return sendSuccess(reply, await service.updateRisk(request.user.organisationId, request.params.id, data, expectedUpdatedAt));
     } catch (err) {
       if (err instanceof ZodError) return validationError(reply, err);
       handleError(reply, err);
@@ -153,8 +153,8 @@ export async function governanceRegisterRoutes(app: FastifyInstance) {
 
   app.patch<{ Params: { id: string } }>('/complaints/:id', { preHandler: [requireAdmin] }, async (request, reply) => {
     try {
-      const data = updateComplaintRecordSchema.parse(request.body) as UpdateComplaintRecordRequest;
-      return sendSuccess(reply, await service.updateComplaint(request.user.organisationId, request.params.id, data));
+      const { expectedUpdatedAt, ...data } = updateComplaintRecordSchema.parse(request.body) as UpdateComplaintRecordRequest & { expectedUpdatedAt?: string };
+      return sendSuccess(reply, await service.updateComplaint(request.user.organisationId, request.params.id, data, expectedUpdatedAt));
     } catch (err) {
       if (err instanceof ZodError) return validationError(reply, err);
       handleError(reply, err);
@@ -190,8 +190,8 @@ export async function governanceRegisterRoutes(app: FastifyInstance) {
 
   app.patch<{ Params: { id: string } }>('/fundraising/:id', { preHandler: [requireAdmin] }, async (request, reply) => {
     try {
-      const data = updateFundraisingRecordSchema.parse(request.body) as UpdateFundraisingRecordRequest;
-      return sendSuccess(reply, await service.updateFundraising(request.user.organisationId, request.params.id, data));
+      const { expectedUpdatedAt, ...data } = updateFundraisingRecordSchema.parse(request.body) as UpdateFundraisingRecordRequest & { expectedUpdatedAt?: string };
+      return sendSuccess(reply, await service.updateFundraising(request.user.organisationId, request.params.id, data, expectedUpdatedAt));
     } catch (err) {
       if (err instanceof ZodError) return validationError(reply, err);
       handleError(reply, err);

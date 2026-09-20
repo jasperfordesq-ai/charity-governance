@@ -21,6 +21,7 @@ import {
 } from '../utils/domain-validation.js';
 import { AppError } from '../utils/errors.js';
 import { lockOrganisationForUpdate } from './organisation-lock.js';
+import { assertUnchanged } from '../utils/optimistic-concurrency.js';
 
 const toDate = (value?: string | null) => (value ? new Date(value) : null);
 
@@ -104,17 +105,23 @@ export class GovernanceRegisterService {
     );
   }
 
-  async updateConflict(organisationId: string, id: string, data: Partial<CreateConflictRecordRequest>) {
+  async updateConflict(
+    organisationId: string,
+    id: string,
+    data: Partial<CreateConflictRecordRequest>,
+    expectedUpdatedAt?: string,
+  ) {
     return runDomainInvariantWrite(
       () => this.prisma.$transaction(async (transaction) => {
         await lockOrganisationForUpdate(transaction, organisationId);
         const record = await transaction.conflictRecord.findFirst({
           where: { id, organisationId },
-          select: { id: true },
+          select: { id: true, updatedAt: true },
         });
         if (!record) {
           throw new AppError(404, 'CONFLICT_NOT_FOUND', 'Governance register record not found');
         }
+        assertUnchanged(record, expectedUpdatedAt, 'REGISTER_UPDATE_CONFLICT');
         if (data.boardMemberId !== undefined) {
           await this.ensureBoardMember(transaction, organisationId, data.boardMemberId);
         }
@@ -193,8 +200,8 @@ export class GovernanceRegisterService {
     });
   }
 
-  async updateRisk(organisationId: string, id: string, data: Partial<CreateRiskRecordRequest>) {
-    await this.ensureRecord('riskRecord', organisationId, id, 'RISK_NOT_FOUND');
+  async updateRisk(organisationId: string, id: string, data: Partial<CreateRiskRecordRequest>, expectedUpdatedAt?: string) {
+    await this.ensureRecord('riskRecord', organisationId, id, 'RISK_NOT_FOUND', expectedUpdatedAt);
     return this.prisma.riskRecord.update({
       where: { id },
       data: {
@@ -240,8 +247,8 @@ export class GovernanceRegisterService {
     });
   }
 
-  async updateComplaint(organisationId: string, id: string, data: Partial<CreateComplaintRecordRequest>) {
-    await this.ensureRecord('complaintRecord', organisationId, id, 'COMPLAINT_NOT_FOUND');
+  async updateComplaint(organisationId: string, id: string, data: Partial<CreateComplaintRecordRequest>, expectedUpdatedAt?: string) {
+    await this.ensureRecord('complaintRecord', organisationId, id, 'COMPLAINT_NOT_FOUND', expectedUpdatedAt);
     return this.prisma.complaintRecord.update({
       where: { id },
       data: {
@@ -289,7 +296,12 @@ export class GovernanceRegisterService {
     return runDomainInvariantWrite(() => this.prisma.fundraisingRecord.create({ data: createData }));
   }
 
-  async updateFundraising(organisationId: string, id: string, data: Partial<CreateFundraisingRecordRequest>) {
+  async updateFundraising(
+    organisationId: string,
+    id: string,
+    data: Partial<CreateFundraisingRecordRequest>,
+    expectedUpdatedAt?: string,
+  ) {
     return runDomainInvariantWrite(
       () => this.prisma.$transaction(async (transaction) => {
         await lockOrganisationForUpdate(transaction, organisationId);
@@ -299,6 +311,7 @@ export class GovernanceRegisterService {
         if (!record) {
           throw new AppError(404, 'FUNDRAISING_NOT_FOUND', 'Governance register record not found');
         }
+        assertUnchanged(record, expectedUpdatedAt, 'REGISTER_UPDATE_CONFLICT');
 
         const updateData = {
           name: data.name,
@@ -531,6 +544,7 @@ export class GovernanceRegisterService {
     organisationId: string,
     id: string,
     code: string,
+    expectedUpdatedAt?: string,
   ) {
     const record =
       model === 'conflictRecord'
@@ -543,6 +557,7 @@ export class GovernanceRegisterService {
     if (!record) {
       throw new AppError(404, code, 'Governance register record not found');
     }
+    assertUnchanged(record, expectedUpdatedAt, 'REGISTER_UPDATE_CONFLICT');
   }
 
   private async ensureBoardMember(
