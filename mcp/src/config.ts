@@ -1,3 +1,5 @@
+import { TOOL_GROUPS, type ToolGroup } from './tools.js';
+
 export const DEFAULT_BASE_URL = 'https://charitypilot.tailae0b07.ts.net';
 
 const COMMANDS = new Set(['serve', 'connect', 'disconnect', 'status', 'approve', 'help', 'version']);
@@ -37,6 +39,10 @@ export interface ConnectorConfig {
   uploadRoot?: string | undefined;
   /** The one directory documents may be downloaded into. Absent means no downloads. */
   downloadDir?: string | undefined;
+  /** The tool groups to offer. Absent means every group. */
+  toolsets?: readonly ToolGroup[] | undefined;
+  /** Log each tool call to stderr, secrets redacted. */
+  verbose: boolean;
 }
 
 function hostnameOf(baseUrl: string): string | null {
@@ -58,6 +64,8 @@ export function parseArgs(argv: string[]): ConnectorConfig {
   let approvalId: string | undefined;
   let uploadRoot: string | undefined;
   let downloadDir: string | undefined;
+  let toolsets: ToolGroup[] | undefined;
+  let verbose = false;
 
   for (let i = 0; i < argv.length; i += 1) {
     const arg = argv[i]!;
@@ -109,6 +117,25 @@ export function parseArgs(argv: string[]): ConnectorConfig {
       downloadDir = value;
     } else if (arg === '--password-stdin') {
       passwordStdin = true;
+    } else if (arg === '--toolsets') {
+      i += 1;
+      const value = argv[i];
+      if (!value) throw new Error('--toolsets requires a comma-separated list, or "all".');
+      if (value === 'all') {
+        toolsets = undefined;
+      } else {
+        const names = value.split(',').map((n) => n.trim()).filter(Boolean);
+        for (const name of names) {
+          if (!(TOOL_GROUPS as readonly string[]).includes(name)) {
+            throw new Error(
+              `Unknown toolset: ${name}. Use one of: ${TOOL_GROUPS.join(', ')}, or all.`,
+            );
+          }
+        }
+        toolsets = names as ToolGroup[];
+      }
+    } else if (arg === '--verbose') {
+      verbose = true;
     } else if (command === 'approve' && !arg.startsWith('-') && approvalId === undefined) {
       // `approve <id>`: a bare value, the way the refusal message prints it.
       approvalId = arg;
@@ -150,6 +177,8 @@ export function parseArgs(argv: string[]): ConnectorConfig {
     // never things that are simply available.
     uploadRoot,
     downloadDir,
+    toolsets,
+    verbose,
     email,
     passwordStdin,
   };

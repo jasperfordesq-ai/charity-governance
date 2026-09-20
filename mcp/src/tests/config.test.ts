@@ -103,6 +103,18 @@ test('the access level can be chosen, and an unknown one is refused', () => {
   assert.throws(() => parseArgs(['--access-level']), /requires a value/i);
 });
 
+test('--toolsets narrows to named groups, and refuses a name it does not know', () => {
+  assert.deepEqual(parseArgs(['--toolsets', 'compliance,registers']).toolsets, ['compliance', 'registers']);
+  assert.equal(parseArgs([]).toolsets, undefined);
+  assert.equal(parseArgs(['--toolsets', 'all']).toolsets, undefined);
+  assert.throws(() => parseArgs(['--toolsets', 'billing']), /Unknown toolset: billing/);
+});
+
+test('--verbose is off unless asked for', () => {
+  assert.equal(parseArgs(['--verbose']).verbose, true);
+  assert.equal(parseArgs([]).verbose, false);
+});
+
 test('--help and --version are commands, not unknown options', () => {
   assert.equal(parseArgs(['--help']).command, 'help');
   assert.equal(parseArgs(['-h']).command, 'help');

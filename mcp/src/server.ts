@@ -7,9 +7,11 @@ import {
 import {
   TOOLS,
   annotationsFor,
+  groupOf,
   outputSchemaFor,
   runTool,
   toolInputSchema,
+  type ToolGroup,
 } from './tools.js';
 import {
   FILE_TOOLS,
@@ -52,15 +54,29 @@ function availableFileTools(
   });
 }
 
+/** The file tools belong with the documents they move. */
+const FILE_TOOL_GROUP: ToolGroup = 'documents';
+
+function inToolsets(
+  group: ToolGroup,
+  toolsets: readonly ToolGroup[] | undefined,
+): boolean {
+  return toolsets === undefined || toolsets.includes(group);
+}
+
 export function buildToolList(
   level: AccessLevel = 'admin',
-  config: Partial<Pick<ConnectorConfig, 'uploadRoot' | 'downloadDir' | 'allowPersonalData'>> = {},
+  config: Partial<
+    Pick<ConnectorConfig, 'uploadRoot' | 'downloadDir' | 'allowPersonalData' | 'toolsets'>
+  > = {},
 ) {
   return [
     // Always first and always offered: an agent has to be able to ask who it
-    // is acting as before it does anything else, whatever the level.
+    // is acting as before it does anything else, whatever the level or groups.
     { ...SESSION_INFO_TOOL },
-    ...toolsFor(level, TOOLS, config.allowPersonalData ?? false).map((tool) => {
+    ...toolsFor(level, TOOLS, config.allowPersonalData ?? false)
+      .filter((tool) => inToolsets(groupOf(tool), config.toolsets))
+      .map((tool) => {
       const outputSchema = outputSchemaFor(tool);
       return {
         name: tool.name,
@@ -70,13 +86,30 @@ export function buildToolList(
         ...(outputSchema ? { outputSchema } : {}),
       };
     }),
-    ...availableFileTools(level, config).map((tool) => ({
-      name: tool.name,
-      description: tool.description,
-      inputSchema: tool.inputSchema,
-      annotations: tool.annotations,
-    })),
+    ...(inToolsets(FILE_TOOL_GROUP, config.toolsets)
+      ? availableFileTools(level, config).map((tool) => ({
+          name: tool.name,
+          description: tool.description,
+          inputSchema: tool.inputSchema,
+          annotations: tool.annotations,
+        }))
+      : []),
   ];
+}
+
+/**
+ * A tool outside the enabled groups is refused if called, because a client
+ * may call a tool it was never shown. This is a setting, not a security
+ * control: the API refuses what the session may not do regardless.
+ */
+function assertInToolsets(name: string, group: ToolGroup, toolsets: readonly ToolGroup[] | undefined): void {
+  if (inToolsets(group, toolsets)) return;
+  throw new ConnectorError(
+    'TOOL_DISABLED',
+    `${name} is in the "${group}" tool group, and this connector was started with `
+      + `--toolsets ${(toolsets ?? []).join(',')}. Nothing was sent. The person running the `
+      + 'connector can widen the list.',
+  );
 }
 
 export async function startServer(config: ConnectorConfig, session: Session): Promise<void> {
@@ -112,6 +145,7 @@ export async function startServer(config: ConnectorConfig, session: Session): Pr
 
     const fileTool = FILE_TOOLS.find((t) => t.name === name);
     if (fileTool) {
+      assertInToolsets(name, FILE_TOOL_GROUP, config.toolsets);
       const current = await level();
       if (FILE_RANK[current] < FILE_RANK[fileTool.level]) {
         throw new ConnectorError(
@@ -132,6 +166,7 @@ export async function startServer(config: ConnectorConfig, session: Session): Pr
     if (!tool) {
       throw new ConnectorError('UNKNOWN_TOOL', `Unknown tool: ${name}`);
     }
+    assertInToolsets(name, groupOf(tool), config.toolsets);
 
     // Re-checked here and not only in the listing: the Model Context Protocol
     // does not stop a client calling a tool it was never shown, and a tool

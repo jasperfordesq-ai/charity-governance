@@ -35,6 +35,7 @@ function config(overrides: Partial<ConnectorConfig> = {}): ConnectorConfig {
     profile: 'default',
     accessLevel: 'write',
     passwordStdin: false,
+    verbose: false,
     ...overrides,
   };
 }

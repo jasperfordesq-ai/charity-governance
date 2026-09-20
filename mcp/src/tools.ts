@@ -344,6 +344,46 @@ export function annotationsFor(tool: ToolDefinition): ToolAnnotations {
   };
 }
 
+export const TOOL_GROUPS = [
+  'compliance',
+  'organisation',
+  'deadlines',
+  'board',
+  'minute-book',
+  'registers',
+  'documents',
+  'team',
+  'integrations',
+] as const;
+export type ToolGroup = (typeof TOOL_GROUPS)[number];
+
+/**
+ * Groups follow the API's own route prefixes, so a tool cannot be filed under
+ * the wrong heading by hand and a tool added later lands in a group without
+ * anyone remembering. Sixty-odd tools always listed is a real cost in a
+ * client's context; a person working on the minute book can ask for that.
+ */
+const GROUP_BY_PREFIX: readonly (readonly [string, ToolGroup])[] = [
+  ['/api/v1/compliance', 'compliance'],
+  ['/api/v1/organisation', 'organisation'],
+  ['/api/v1/dashboard', 'organisation'],
+  ['/api/v1/deadlines', 'deadlines'],
+  ['/api/v1/board-members', 'board'],
+  ['/api/v1/governing-acts', 'minute-book'],
+  ['/api/v1/governance-registers', 'registers'],
+  ['/api/v1/members', 'registers'],
+  ['/api/v1/documents', 'documents'],
+  ['/api/v1/team', 'team'],
+  ['/api/v1/integrations', 'integrations'],
+];
+
+export function groupOf(tool: { path: string }): ToolGroup {
+  for (const [prefix, group] of GROUP_BY_PREFIX) {
+    if (tool.path === prefix || tool.path.startsWith(`${prefix}/`)) return group;
+  }
+  throw new Error(`${tool.path} belongs to no tool group`);
+}
+
 /**
  * What a client is told a result looks like.
  *
