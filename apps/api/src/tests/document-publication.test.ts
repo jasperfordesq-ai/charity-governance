@@ -138,19 +138,29 @@ const EXPECTED_INDEXES: ReadonlyArray<{
   },
 ];
 
-test('the publication state and terminal-reason enums Task 4 dispatches on exist', () => {
-  // Checked for membership rather than an exact three-value shape: RETIRED's
-  // doc comment lives inside this enum block, and the exact, order-sensitive
-  // value list (including RETIRED) is pinned separately below.
-  const publicationStates = schema.match(/enum DocumentPublicationState \{([\s\S]*?)\}/);
-  assert.ok(publicationStates, 'schema.prisma must declare DocumentPublicationState');
-  for (const value of ['PENDING', 'DEAD_LETTER', 'PROCESSED']) {
-    assert.match(
-      publicationStates[1],
-      new RegExp(`^\\s*${value}\\s*$`, 'm'),
-      `DocumentPublicationState must declare ${value}`,
-    );
-  }
+test('the publication state and terminal-reason enums are pinned exhaustively, retired state included', () => {
+  // Exact-shape, not membership: an accidental extra value anywhere in either
+  // block — including one slipped in ahead of RETIRED's doc comment — must
+  // fail this test. This one test owns the whole pin for both enums, on
+  // purpose: splitting an exact-shape check from a membership check across
+  // two tests leaves the exhaustive guarantee living only as an undocumented
+  // pairing between them, and a future reader who deletes the apparent
+  // duplicate would silently remove the only exhaustive check left.
+  //
+  // A published document whose CharityPilot record has been deleted keeps
+  // naming its Confluence page rather than being erased or discarded: an
+  // ordinary deletion removes our record and our reference only, and
+  // destroying the source is a separate, explicitly authorised action. RETIRED
+  // is how the state machine says that. Comment lines inside the enum block
+  // (RETIRED's) are stripped so this pins the value list, not the
+  // documentation prose around it.
+  const stateBlock = schema.match(/enum DocumentPublicationState \{([^}]*)\}/)?.[1] ?? '';
+  const stateValues = stateBlock
+    .split('\n')
+    .map((line) => line.trim())
+    .filter((line) => line.length > 0 && !line.startsWith('//'));
+  assert.deepEqual(stateValues, ['PENDING', 'DEAD_LETTER', 'PROCESSED', 'RETIRED']);
+
   const terminalReasons = schema.match(/enum DocumentPublicationTerminalReason \{([\s\S]*?)\}/);
   assert.ok(terminalReasons, 'schema.prisma must declare DocumentPublicationTerminalReason');
   const declared = terminalReasons[1].split('\n').map((line) => line.trim()).filter(Boolean);
@@ -164,22 +174,6 @@ test('the publication state and terminal-reason enums Task 4 dispatches on exist
     'PERMANENT_CONTENT_PROPERTY_REJECTED',
     'PERMANENT_TARGET_REF_REJECTED',
   ]);
-});
-
-test('the publication state machine carries a retired state for a deleted document', () => {
-  // A published document whose CharityPilot record has been deleted keeps
-  // naming its Confluence page rather than being erased or discarded: an
-  // ordinary deletion removes our record and our reference only, and
-  // destroying the source is a separate, explicitly authorised action.
-  // Comment lines inside the enum block (RETIRED's) are stripped so this pins
-  // the value list, not the documentation prose around it.
-  const block = schema.match(/enum DocumentPublicationState \{([^}]*)\}/)?.[1] ?? '';
-  const values = block
-    .split('\n')
-    .map((line) => line.trim())
-    .filter((line) => line.length > 0 && !line.startsWith('//'));
-
-  assert.deepEqual(values, ['PENDING', 'DEAD_LETTER', 'PROCESSED', 'RETIRED']);
 });
 
 test('the publication row copies the DocumentStorageDeletion reliability shape field by field', () => {
