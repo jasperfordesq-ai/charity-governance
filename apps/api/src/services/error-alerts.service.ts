@@ -24,13 +24,23 @@ export type ErrorAlertPayload = {
 };
 
 export type OperationalErrorAlertInput = {
-  job: 'deadline-reminders' | 'document-storage-cleanup' | 'document-publication' | 'auth-email-delivery';
+  job:
+    | 'deadline-reminders'
+    | 'document-storage-cleanup'
+    | 'document-publication'
+    | 'document-reconcile'
+    | 'auth-email-delivery';
   code:
     | 'DEADLINE_REMINDERS_FAILED'
     | 'DOCUMENT_STORAGE_CLEANUP_FAILED'
     | 'DOCUMENT_STORAGE_DELETION_DEAD_LETTERED'
     | 'DOCUMENT_PUBLICATION_FAILED'
     | 'DOCUMENT_PUBLICATION_DEAD_LETTERED'
+    // No `action` for this one, deliberately. A failed reconcile run leaves
+    // nothing for an operator to work through — the rows keep their stamps and
+    // the next run picks them up — so offering a dead-letter queue to review
+    // would send somebody looking for a queue that does not exist.
+    | 'DOCUMENT_RECONCILE_FAILED'
     | 'AUTH_EMAIL_DELIVERY_FAILED';
   error: unknown;
   affectedCount?: number;

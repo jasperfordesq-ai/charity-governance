@@ -332,6 +332,80 @@ export async function getPage(
 }
 
 /**
+ * v1 content answers a different shape from v2: the space is a nested object
+ * rather than a `spaceId` field, and the status is carried explicitly.
+ *
+ * Leniency is calibrated differently here too. This parse only ever runs on a
+ * read, never after a write, so there is no lost-identifier case — but it is
+ * also the *second* question asked about a page the caller already knows is
+ * not visible, so a malformed answer must not be reported as "gone". It throws
+ * instead, and the caller records the read as indeterminate.
+ */
+function parseV1Content(body: unknown): ConfluencePage {
+  const content = asObject(body);
+  if (content === undefined) throw invalidResponse('trashed page');
+
+  const id = readId(content.id);
+  if (id === undefined) throw invalidResponse('trashed page id');
+
+  const versionNumber = asObject(content.version)?.number;
+  if (typeof versionNumber !== 'number' || !Number.isFinite(versionNumber)) {
+    throw invalidResponse('trashed page version');
+  }
+
+  return {
+    id,
+    title: typeof content.title === 'string' ? content.title : '',
+    // v1 nests the space. A trashed page still belongs to one, and the id is
+    // read leniently because the caller already holds the space it asked
+    // about — losing it here would fail a read that otherwise succeeded.
+    spaceId: readId(asObject(content.space)?.id) ?? '',
+    version: versionNumber,
+    webUrl: readWebUrl(asObject(content._links)),
+  };
+}
+
+/**
+ * Asks the one question v2 cannot answer: is this page in the site's trash, or
+ * is it gone?
+ *
+ * **This exists because `GET /pages/{id}` answers 404 for both**, and the
+ * difference is the whole of what a charity needs to know — a trashed page is
+ * restorable by them, in their own site's trash, and a purged one is not
+ * restorable by anyone. v2 has no `status=trashed` filter, so the only route to
+ * the distinction is this v1 read, which is not deprecated.
+ *
+ * `null` means genuinely not found, which the caller reads as gone **only
+ * because it has already had a 404 from v2**. Called on its own, a `null` here
+ * says nothing about whether a *current* page exists — this endpoint is
+ * filtered to trashed content and answers 404 for a perfectly healthy page.
+ * It is not a general existence check and must not be used as one.
+ */
+export async function getTrashedPage(
+  client: ConfluenceClient,
+  pageId: string,
+): Promise<ConfluencePage | null> {
+  const id = assertPageId(pageId);
+
+  let response;
+  try {
+    response = await client.request({
+      method: 'GET',
+      api: 'v1',
+      path: `content/${id}`,
+      query: { status: 'trashed', expand: 'version,space' },
+      // A read changes nothing.
+      idempotent: true,
+    });
+  } catch (error) {
+    if (isUpstream(error, 'CONFLUENCE_NOT_FOUND')) return null;
+    throw error;
+  }
+
+  return parseV1Content(response.body);
+}
+
+/**
  * A refused update, expressed as what is actually known about it — which is
  * less than this error used to claim.
  *

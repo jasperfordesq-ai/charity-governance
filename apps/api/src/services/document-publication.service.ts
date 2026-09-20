@@ -34,6 +34,11 @@ import {
   type PublicationDocument,
 } from './confluence-document-mapping.js';
 import { parseConfluenceErasureTarget, type ConfluenceErasureTarget } from './confluence-erasure-target.js';
+import type {
+  DocumentPublicationRemoteState,
+  ReconcilablePublication,
+  RemoteStateReading,
+} from './confluence-reconcile.service.js';
 
 /**
  * The publish worker: the sequence that turns a `DocumentPublication` row into
@@ -235,6 +240,13 @@ type QueryRaw = <T = unknown>(strings: TemplateStringsArray, ...values: unknown[
 
 type DocumentPublicationDelegate = {
   updateMany(args: { where: Record<string, unknown>; data: Record<string, unknown> }): Promise<{ count: number }>;
+  /**
+   * Required rather than optional, deliberately. The one caller is the orphan
+   * sweep's null-`pageId` branch, and an optional method would let a test
+   * double omit it — turning "the row is deleted" into a silent no-op that
+   * every assertion about the other branch would still pass.
+   */
+  deleteMany(args: { where: Record<string, unknown> }): Promise<{ count: number }>;
   findFirst(args: {
     where: Record<string, unknown>;
     select?: Record<string, boolean>;
@@ -1381,6 +1393,213 @@ export class DocumentPublicationService {
       if (claim.count === 1) ids.push(candidate.id);
     }
     return ids.length > 0 ? { claimToken, ids } : null;
+  }
+
+  /**
+   * Claims rows for a reconcile read.
+   *
+   * A **stamp-claim**, not the outbox lease. `claimedAt` belongs to the publish
+   * state machine — a lease that a publisher can lose, with `claimLost` as the
+   * consequence — and borrowing it here would let a read block a write on a row
+   * it is only looking at. Reads are idempotent, so the weaker guarantee is the
+   * correct one: stamping `reconcileAttemptedAt` under `FOR UPDATE SKIP LOCKED`
+   * keeps two schedulers off the same row and orders the queue, and that is all
+   * it needs to do.
+   *
+   * Ordered by `reconcileAttemptedAt` NULLS FIRST so a page that has never been
+   * checked goes ahead of one checked yesterday. The stamp is written whether
+   * or not the read then succeeds, which is what stops a page the site keeps
+   * refusing from starving every page behind it.
+   *
+   * `pageId IS NOT NULL` because a row that never got as far as creating a page
+   * has nothing remote to read. Including it would also make a tenant that is
+   * mid-publish look like it has reconcile work, which matters: an empty claim
+   * is what the reconciler reads as "dormant, do not take a token".
+   */
+  async claimPublicationsForReconcile(input: {
+    organisationId: string;
+    limit: number;
+    minAgeMs: number;
+  }): Promise<ReconcilablePublication[]> {
+    const limit = Math.max(1, Math.floor(input.limit));
+    const minAgeMs = Math.max(0, Math.floor(input.minAgeMs));
+    const client = this.prisma as unknown as DocumentPublicationClient;
+
+    if (client.$transaction && client.$queryRaw) {
+      return client.$transaction(async (tx) => {
+        if (!tx.$queryRaw) return [];
+        return tx.$queryRaw<ReconcilablePublication[]>`
+          UPDATE "DocumentPublication"
+          SET "reconcileAttemptedAt" = CURRENT_TIMESTAMP,
+              "updatedAt" = CURRENT_TIMESTAMP
+          WHERE "id" IN (
+            SELECT "id"
+            FROM "DocumentPublication"
+            WHERE "organisationId" = ${input.organisationId}
+              AND "provider" = 'confluence'
+              AND "state" IN ('PENDING', 'PROCESSED')
+              AND "pageId" IS NOT NULL
+              AND (
+                "reconcileAttemptedAt" IS NULL OR
+                "reconcileAttemptedAt" < CURRENT_TIMESTAMP - (${minAgeMs} * INTERVAL '1 millisecond')
+              )
+            ORDER BY "reconcileAttemptedAt" ASC NULLS FIRST
+            LIMIT ${limit}
+            FOR UPDATE SKIP LOCKED
+          )
+          RETURNING "id", "organisationId", "pageId", "remoteState"
+        `;
+      });
+    }
+
+    const stampedAt = this.now();
+    const staleBefore = new Date(stampedAt.getTime() - minAgeMs);
+    const candidates = await publicationDelegate(this.prisma).findMany({
+      where: {
+        organisationId: input.organisationId,
+        provider: 'confluence',
+        state: { in: ['PENDING', 'PROCESSED'] },
+        pageId: { not: null },
+        OR: [{ reconcileAttemptedAt: null }, { reconcileAttemptedAt: { lt: staleBefore } }],
+      },
+      orderBy: [{ reconcileAttemptedAt: 'asc' }],
+      take: limit,
+    });
+
+    const claimed: ReconcilablePublication[] = [];
+    for (const candidate of candidates) {
+      const row = candidate as unknown as {
+        id: string;
+        organisationId: string;
+        pageId: string | null;
+        remoteState: DocumentPublicationRemoteState | null;
+        reconcileAttemptedAt: Date | null;
+      };
+      const result = await publicationDelegate(this.prisma).updateMany({
+        where: { id: row.id, reconcileAttemptedAt: row.reconcileAttemptedAt },
+        data: { reconcileAttemptedAt: stampedAt },
+      });
+      if (result.count === 1) {
+        claimed.push({
+          id: row.id,
+          organisationId: row.organisationId,
+          pageId: row.pageId,
+          remoteState: row.remoteState,
+        });
+      }
+    }
+    return claimed;
+  }
+
+  /**
+   * Writes what the remote page turned out to be.
+   *
+   * Three rules the CHECK constraint also enforces, stated here because a
+   * reader of this method should not have to open the migration to learn them:
+   *
+   *  - `lastReconciledAt` moves only on a DETERMINATE answer. An UNKNOWN keeps
+   *    the previous stamp, so "checked 3 days ago" can never mean "asked 3 days
+   *    ago and was refused".
+   *  - `remoteStateChangedAt` moves only when the state actually changes, which
+   *    is what makes "in the trash since Tuesday" answerable.
+   *  - version and title are written only when they were actually read. An
+   *    UNKNOWN learns nothing about either, and overwriting the last known
+   *    values with null would turn a refused read into a loss of information.
+   */
+  async recordRemoteState(
+    publicationId: string,
+    reading: RemoteStateReading,
+    previousState: DocumentPublicationRemoteState | null,
+  ): Promise<boolean> {
+    const at = this.now();
+    const data: Record<string, unknown> = {
+      remoteState: reading.state,
+      reconcileError: reading.errorCode,
+    };
+
+    if (previousState !== reading.state) data.remoteStateChangedAt = at;
+    if (reading.determinate) {
+      data.lastReconciledAt = at;
+      data.remoteVersion = reading.version;
+      data.remoteTitle = reading.title === null ? null : reading.title.slice(0, 500);
+    }
+
+    const result = await publicationDelegate(this.prisma).updateMany({
+      where: { id: publicationId },
+      data,
+    });
+    return result.count === 1;
+  }
+
+  /**
+   * Closes the window the publish state machine cannot close itself.
+   *
+   * `remove()` retires a publication when it deletes a document, and the
+   * worker-side `retirePublicationIfDocumentGone` catches the mid-attempt case.
+   * Between them sits a row whose `Document` disappeared while nothing held a
+   * claim on it: no publisher will ever look at it again, so nothing will ever
+   * retire it, and it would sit PENDING for ever pointing at a real page.
+   *
+   * A row with a `pageId` becomes RETIRED, because the page exists and the
+   * identifiers are the only thing that can still address it — the owner's
+   * 2026-09-19 ruling is that an ordinary deletion leaves the Confluence page
+   * alone, so retiring is the whole of the correct action. A row WITHOUT a
+   * `pageId` addresses nothing at all and is deleted outright; keeping it would
+   * be keeping a record of a charity's document name for no purpose, which is
+   * the sort of thing a DPO is right to ask about.
+   */
+  async retireOrphanedPublications(limit = 100): Promise<{ retired: number; deleted: number }> {
+    const bounded = Math.max(1, Math.floor(limit));
+    const candidates = await publicationDelegate(this.prisma).findMany({
+      where: { state: { in: ['PENDING', 'PROCESSED'] }, claimedAt: null },
+      orderBy: [{ createdAt: 'asc' }],
+      take: bounded,
+    });
+
+    let retired = 0;
+    let deleted = 0;
+
+    for (const candidate of candidates) {
+      const row = candidate as unknown as {
+        id: string;
+        documentId: string;
+        organisationId: string;
+        pageId: string | null;
+      };
+
+      const doc = await this.prisma.document.findFirst({
+        where: { id: row.documentId, organisationId: row.organisationId },
+        select: { id: true },
+      });
+      if (doc !== null) continue;
+
+      if (row.pageId === null) {
+        const removed = await publicationDelegate(this.prisma).deleteMany({
+          where: { id: row.id, pageId: null, claimedAt: null },
+        });
+        deleted += removed.count;
+        continue;
+      }
+
+      const result = await publicationDelegate(this.prisma).updateMany({
+        // `claimedAt: null` repeated in the WHERE, not just the query above: a
+        // publisher may have claimed this row in the time between the two, and
+        // retiring a row mid-attempt is exactly the race
+        // `retirePublicationIfDocumentGone` exists to handle properly.
+        where: { id: row.id, claimedAt: null, state: { in: ['PENDING', 'PROCESSED'] } },
+        data: {
+          state: 'RETIRED',
+          retiredAt: this.now(),
+          nextAttemptAt: null,
+          claimedAt: null,
+          alertClaimToken: null,
+          alertClaimedAt: null,
+        },
+      });
+      retired += result.count;
+    }
+
+    return { retired, deleted };
   }
 
   /** Records that the operator alert for this claim was delivered. */

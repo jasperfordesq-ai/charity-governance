@@ -4,6 +4,11 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import test from 'node:test';
 import { API_LOG_REDACT_PATHS } from '../utils/logger.js';
+import {
+  emptyIntegrationEstate,
+  recordingReconcileRunner,
+  unreachableReconciler,
+} from './reconcile-doubles.js';
 
 // Set every env var the imported modules read at import/construction time, BEFORE imports.
 process.env.JWT_SECRET = process.env.JWT_SECRET ?? 'observability-reliability-test-secret';
@@ -273,6 +278,7 @@ test('runProductionSchedulerOnce fires no error alert when both jobs succeed', {
       async retryPendingPublications() {
         return { processed: 1, failed: 0 };
       },
+      ...recordingReconcileRunner().runner,
     },
     storageService: {
       async deleteFile() {},
@@ -295,11 +301,17 @@ test('runProductionSchedulerOnce fires no error alert when both jobs succeed', {
       },
     },
     // The Confluence eraser reads a charity's connection through this, and so
-    // does the publisher; no test here reaches it, and it is required so a new
-    // entry point cannot omit it.
-    prisma: {} as never,
+    // do the publisher and the reconcile pass. The eraser and publisher are
+    // never reached here; the reconcile pass is, so the estate is empty rather
+    // than absent, and `unreachableReconciler` fails the test loudly if a
+    // tenant ever appears where this test assumes none.
+    prisma: emptyIntegrationEstate(),
+    reconcile: unreachableReconciler,
     documentStorageCleanupLimit: 7,
     documentPublicationLimit: 9,
+    documentReconcileTenantsPerRun: 10,
+    documentReconcilePagesPerRun: 50,
+    documentReconcileMinPageAgeMs: 24 * 60 * 60 * 1000,
     authDeliveryBatchSize: 25,
     authDeliveryCleanupBatchSize: 500,
     authDeliveryStaleSendingMs: 60000,

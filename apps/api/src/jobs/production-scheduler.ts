@@ -24,6 +24,18 @@ import {
 } from '../services/document-publication.service.js';
 import type { ConfluenceConnectionClient } from '../services/confluence-connection.service.js';
 import {
+  createConfluenceReconciler,
+  type ConfluenceReconciler,
+  type DocumentPublicationRemoteState,
+  type ReconcilablePublication,
+  type RemoteStateReading,
+} from '../services/confluence-reconcile.service.js';
+import {
+  listTenantsForReconcile,
+  recordTenantReconcileOutcome,
+  sweepDormantIntegrations,
+} from '../services/integration-reconcile.service.js';
+import {
   validateAuthDeliveryEnv,
   validateDeadlineRemindersEnv,
   validateDocumentStorageCleanupEnv,
@@ -44,6 +56,21 @@ const DEFAULT_DOCUMENT_STORAGE_CLEANUP_LIMIT = 25;
 // hour. Still an outbox, so the interval is a floor on latency, not a promise.
 const DEFAULT_DOCUMENT_PUBLICATION_INTERVAL_MS = 5 * 60 * 1000;
 const DEFAULT_DOCUMENT_PUBLICATION_LIMIT = 25;
+// Six-hourly, and slower than everything else on purpose. Reconcile answers
+// "has somebody moved this page in Confluence", which is not a question a
+// charity is sitting watching — and every visit spends from an hourly points
+// pool Atlassian meters across every tenant of the app, so the interval is a
+// budget decision before it is a latency one.
+const DEFAULT_DOCUMENT_RECONCILE_INTERVAL_MS = 6 * 60 * 60 * 1000;
+const DEFAULT_DOCUMENT_RECONCILE_TENANTS_PER_RUN = 10;
+const DEFAULT_DOCUMENT_RECONCILE_PAGES_PER_RUN = 50;
+// A page is not re-read within a day of the last attempt. Without a floor, a
+// tenant with three pages would have them re-read every six hours for ever,
+// which is the same spend as a tenant with twelve and buys nothing.
+const DEFAULT_DOCUMENT_RECONCILE_MIN_AGE_MS = 24 * 60 * 60 * 1000;
+// Twenty per cent of six hours. Enough to break lockstep between workers that
+// started together without materially changing how often a tenant is seen.
+const DOCUMENT_RECONCILE_JITTER_FRACTION = 0.2;
 const DEFAULT_AUTH_DELIVERY_INTERVAL_MS = 5 * 1000;
 const DEFAULT_AUTH_DELIVERY_BATCH_SIZE = 25;
 const DEFAULT_AUTH_DELIVERY_CLEANUP_BATCH_SIZE = 500;
@@ -89,6 +116,20 @@ type DocumentDownloadRunner = {
   downloadFile(organisationId: string, storagePath: string): Promise<Uint8Array>;
 };
 
+type DocumentReconcileRunner = {
+  claimPublicationsForReconcile(input: {
+    organisationId: string;
+    limit: number;
+    minAgeMs: number;
+  }): Promise<ReconcilablePublication[]>;
+  recordRemoteState(
+    publicationId: string,
+    reading: RemoteStateReading,
+    previousState: DocumentPublicationRemoteState | null,
+  ): Promise<boolean>;
+  retireOrphanedPublications(limit?: number): Promise<{ retired: number; deleted: number }>;
+};
+
 type AuthEmailDeliveryRunner = {
   processDueDeliveries(input: {
     limit: number;
@@ -108,6 +149,10 @@ export type ProductionSchedulerConfig = {
   documentStorageCleanupLimit: number;
   documentPublicationIntervalMs: number;
   documentPublicationLimit: number;
+  documentReconcileIntervalMs: number;
+  documentReconcileTenantsPerRun: number;
+  documentReconcilePagesPerRun: number;
+  documentReconcileMinPageAgeMs: number;
   authDeliveryIntervalMs: number;
   authDeliveryBatchSize: number;
   authDeliveryCleanupBatchSize: number;
@@ -120,6 +165,7 @@ export type ProductionSchedulerRunResult = {
   deadlineRemindersFailed: boolean;
   documentStorageCleanupFailed: boolean;
   documentPublicationFailed: boolean;
+  documentReconcileFailed: boolean;
   authEmailDeliveryFailed: boolean;
 };
 
@@ -144,6 +190,22 @@ export function productionSchedulerConfigFromEnv(env: SchedulerEnv = process.env
     documentPublicationLimit: positiveIntegerEnv(
       env.DOCUMENT_PUBLICATION_LIMIT,
       DEFAULT_DOCUMENT_PUBLICATION_LIMIT,
+    ),
+    documentReconcileIntervalMs: positiveIntegerEnv(
+      env.DOCUMENT_RECONCILE_INTERVAL_MS,
+      DEFAULT_DOCUMENT_RECONCILE_INTERVAL_MS,
+    ),
+    documentReconcileTenantsPerRun: positiveIntegerEnv(
+      env.DOCUMENT_RECONCILE_TENANTS_PER_RUN,
+      DEFAULT_DOCUMENT_RECONCILE_TENANTS_PER_RUN,
+    ),
+    documentReconcilePagesPerRun: positiveIntegerEnv(
+      env.DOCUMENT_RECONCILE_PAGES_PER_RUN,
+      DEFAULT_DOCUMENT_RECONCILE_PAGES_PER_RUN,
+    ),
+    documentReconcileMinPageAgeMs: positiveIntegerEnv(
+      env.DOCUMENT_RECONCILE_MIN_PAGE_AGE_MS,
+      DEFAULT_DOCUMENT_RECONCILE_MIN_AGE_MS,
     ),
     authDeliveryIntervalMs: boundedPositiveIntegerEnv(
       env.AUTH_DELIVERY_INTERVAL_MS,
@@ -494,12 +556,137 @@ export async function runAuthEmailDelivery(input: {
     reviewAlert !== null;
 }
 
+/**
+ * One reconcile pass: a bounded number of tenants, a bounded number of pages
+ * each, then the orphan sweep and the dormancy sweep.
+ *
+ * ORDER MATTERS. The dormancy sweep runs LAST, after the tenants with work have
+ * been visited and have refreshed their tokens as a by-product. Running it first
+ * would warn a charity that its authorisation is about to lapse in the same run
+ * that then used it, which is both wrong and alarming.
+ *
+ * WHAT THIS JOB WILL NOT DO. It never refreshes a token for a tenant it has no
+ * work for. That is the DPO's 2026-09-20 ruling and it is implemented in the
+ * reconciler's first three lines — an empty claim returns before `connect` is
+ * called — not here, so that no future caller of the reconciler can lose it.
+ */
+export async function runDocumentReconcile(input: {
+  prisma: ConfluenceConnectionClient;
+  publicationService: DocumentReconcileRunner;
+  reconcile: ConfluenceReconciler;
+  tenantsPerRun: number;
+  pagesPerRun: number;
+  minPageAgeMs: number;
+  logger: SchedulerLogger;
+  alertSender?: AlertSender;
+  now?: () => Date;
+}): Promise<boolean> {
+  const now = input.now ?? (() => new Date());
+  try {
+    const tenants = await listTenantsForReconcile(
+      input.prisma as unknown as Parameters<typeof listTenantsForReconcile>[0],
+      input.tenantsPerRun,
+    );
+
+    let tenantsVisited = 0;
+    let tenantsSkipped = 0;
+    let pagesRead = 0;
+    let rateLimited = false;
+
+    for (const tenant of tenants) {
+      const publications = await input.publicationService.claimPublicationsForReconcile({
+        organisationId: tenant.organisationId,
+        limit: input.pagesPerRun,
+        minAgeMs: input.minPageAgeMs,
+      });
+
+      const result = await input.reconcile({
+        tenant: {
+          organisationId: tenant.organisationId,
+          integrationId: tenant.integrationId,
+          siteId: tenant.siteId,
+        },
+        publications,
+      });
+
+      for (const { publicationId, reading } of result.readings) {
+        const previous = publications.find((row) => row.id === publicationId)?.remoteState ?? null;
+        await input.publicationService.recordRemoteState(publicationId, reading, previous);
+        pagesRead += 1;
+      }
+
+      if (publications.length === 0) {
+        // Not a failure and not a visit. Recorded so the log can distinguish
+        // "nothing to do" from "did not get to it", which is the difference
+        // between a healthy quiet estate and a starved queue.
+        tenantsSkipped += 1;
+      } else {
+        tenantsVisited += 1;
+        await recordTenantReconcileOutcome(
+          input.prisma as unknown as Parameters<typeof recordTenantReconcileOutcome>[0],
+          { integrationId: tenant.integrationId, outcome: result.outcome, at: now() },
+        );
+      }
+
+      if (result.abortRun) {
+        // The points pool is shared across every tenant of the app, so moving
+        // to the next charity spends the same exhausted budget. Rows already
+        // claimed but unread keep their stamp and are simply older next run.
+        rateLimited = true;
+        break;
+      }
+    }
+
+    const orphans = await input.publicationService.retireOrphanedPublications();
+    const notices = await sweepDormantIntegrations(
+      input.prisma as unknown as Parameters<typeof sweepDormantIntegrations>[0],
+      { now: now() },
+    );
+
+    for (const notice of notices) {
+      input.logger.info(
+        `[ProductionScheduler] Confluence authorisation ${notice.outcome === 'EXPIRED' ? 'has expired' : 'is approaching expiry'} ` +
+          `for organisation ${notice.organisationId} (lapses ${notice.expiresAt.toISOString()}). ` +
+          'Not refreshed: an unused authorisation is allowed to lapse and the organisation asked to reconnect.',
+      );
+    }
+
+    input.logger.info(
+      `[ProductionScheduler] Document reconcile run completed. Tenants visited: ${tenantsVisited}. ` +
+        `Skipped as dormant: ${tenantsSkipped}. Pages read: ${pagesRead}. ` +
+        `Orphans retired: ${orphans.retired}, deleted: ${orphans.deleted}. Dormancy notices: ${notices.length}.` +
+        (rateLimited ? ' Run stopped early: Confluence rate limited the shared pool.' : ''),
+    );
+
+    return false;
+  } catch (error) {
+    logSchedulerError(input.logger, '[ProductionScheduler] Document reconcile run failed.', error);
+    await sendJobFailureAlert({
+      job: 'document-reconcile',
+      code: 'DOCUMENT_RECONCILE_FAILED',
+      error,
+      logger: input.logger,
+      alertSender: input.alertSender,
+    });
+    return true;
+  }
+}
+
 export async function runProductionSchedulerOnce(input: {
   deadlineService: DeadlineReminderRunner;
   documentService: DocumentStorageCleanupRunner;
-  publicationService: DocumentPublicationRunner;
+  publicationService: DocumentPublicationRunner & DocumentReconcileRunner;
   storageService: StorageDeletionRunner & DocumentDownloadRunner;
   authEmailDeliveryService: AuthEmailDeliveryRunner;
+  /**
+   * Required, like `prisma`. An optional reconciler would let a caller build a
+   * scheduler that silently never checks a single mirror, which is exactly the
+   * failure `runDocumentStorageCleanup`'s required `prisma` exists to prevent.
+   */
+  reconcile: ConfluenceReconciler;
+  documentReconcileTenantsPerRun: number;
+  documentReconcilePagesPerRun: number;
+  documentReconcileMinPageAgeMs: number;
   /**
    * Forwarded to {@link runDocumentStorageCleanup}, which needs it to erase
    * Confluence rows, and to {@link runDocumentPublication}, which needs it to
@@ -535,6 +722,16 @@ export async function runProductionSchedulerOnce(input: {
     logger: input.logger,
     alertSender: input.alertSender,
   });
+  const documentReconcileFailed = await runDocumentReconcile({
+    prisma: input.prisma,
+    publicationService: input.publicationService,
+    reconcile: input.reconcile,
+    tenantsPerRun: input.documentReconcileTenantsPerRun,
+    pagesPerRun: input.documentReconcilePagesPerRun,
+    minPageAgeMs: input.documentReconcileMinPageAgeMs,
+    logger: input.logger,
+    alertSender: input.alertSender,
+  });
   const authEmailDeliveryFailed = await runAuthEmailDelivery({
     deliveryService: input.authEmailDeliveryService,
     batchSize: input.authDeliveryBatchSize,
@@ -548,18 +745,25 @@ export async function runProductionSchedulerOnce(input: {
     deadlineRemindersFailed,
     documentStorageCleanupFailed,
     documentPublicationFailed,
+    documentReconcileFailed,
     authEmailDeliveryFailed,
   };
 }
 
 export async function sendJobFailureAlert(input: {
-  job: 'deadline-reminders' | 'document-storage-cleanup' | 'document-publication' | 'auth-email-delivery';
+  job:
+    | 'deadline-reminders'
+    | 'document-storage-cleanup'
+    | 'document-publication'
+    | 'document-reconcile'
+    | 'auth-email-delivery';
   code:
     | 'DEADLINE_REMINDERS_FAILED'
     | 'DOCUMENT_STORAGE_CLEANUP_FAILED'
     | 'DOCUMENT_STORAGE_DELETION_DEAD_LETTERED'
     | 'DOCUMENT_PUBLICATION_FAILED'
     | 'DOCUMENT_PUBLICATION_DEAD_LETTERED'
+    | 'DOCUMENT_RECONCILE_FAILED'
     | 'AUTH_EMAIL_DELIVERY_FAILED';
   error: unknown;
   logger: SchedulerLogger;
@@ -592,10 +796,39 @@ export function startRecurringJob(input: {
   intervalMs: number;
   run: () => Promise<boolean>;
   logger: SchedulerLogger;
+  /**
+   * Spreads the next wake-up over `intervalMs * jitterFraction`, so several
+   * workers that started together do not stay in lockstep for ever.
+   *
+   * It matters for the Confluence jobs specifically: Atlassian meters one
+   * hourly points pool **across every tenant of the app**, so synchronised
+   * workers do not merely queue behind each other, they concentrate the whole
+   * estate's spend into the same few seconds and make one charity's busy
+   * moment into everybody's 429.
+   *
+   * Defaults to 0 — no jitter — because every existing job's tests assert exact
+   * interval arithmetic, and a default that perturbed them would be a change to
+   * jobs this work has no business changing.
+   */
+  jitterFraction?: number;
+  random?: () => number;
 }): RecurringJobHandle {
   let stopped = false;
   let timer: ReturnType<typeof setTimeout> | undefined;
   let activeRun: Promise<void> | undefined;
+
+  const jitterFraction =
+    typeof input.jitterFraction === 'number' && Number.isFinite(input.jitterFraction)
+      ? Math.min(1, Math.max(0, input.jitterFraction))
+      : 0;
+  const random = input.random ?? Math.random;
+  // Jitter is added, never subtracted. Subtracting would let a job run more
+  // often than its configured interval, which for a rate-limited upstream is
+  // the opposite of the point.
+  const nextDelay = (): number =>
+    jitterFraction === 0
+      ? input.intervalMs
+      : Math.round(input.intervalMs * (1 + random() * jitterFraction));
 
   const runAndSchedule = () => {
     if (stopped) return;
@@ -613,7 +846,7 @@ export function startRecurringJob(input: {
     void currentRun.then(() => {
       if (activeRun === currentRun) activeRun = undefined;
       if (!stopped) {
-        timer = setTimeout(runAndSchedule, input.intervalMs);
+        timer = setTimeout(runAndSchedule, nextDelay());
       }
     });
   };
@@ -658,6 +891,7 @@ async function main(): Promise<void> {
   const publicationService = new DocumentPublicationService(prisma);
   const storageService = new StorageService(createPrismaOrganisationStorageResolver(prisma));
   const authEmailDeliveryService = new AuthEmailDeliveryService(prisma);
+  const reconcile = createConfluenceReconciler({ prisma });
   const logger: SchedulerLogger = console;
 
   if (config.runOnce) {
@@ -668,8 +902,12 @@ async function main(): Promise<void> {
       storageService,
       authEmailDeliveryService,
       prisma,
+      reconcile,
       documentStorageCleanupLimit: config.documentStorageCleanupLimit,
       documentPublicationLimit: config.documentPublicationLimit,
+      documentReconcileTenantsPerRun: config.documentReconcileTenantsPerRun,
+      documentReconcilePagesPerRun: config.documentReconcilePagesPerRun,
+      documentReconcileMinPageAgeMs: config.documentReconcileMinPageAgeMs,
       authDeliveryBatchSize: config.authDeliveryBatchSize,
       authDeliveryCleanupBatchSize: config.authDeliveryCleanupBatchSize,
       authDeliveryStaleSendingMs: config.authDeliveryStaleSendingMs,
@@ -680,6 +918,7 @@ async function main(): Promise<void> {
       result.deadlineRemindersFailed ||
       result.documentStorageCleanupFailed ||
       result.documentPublicationFailed ||
+      result.documentReconcileFailed ||
       result.authEmailDeliveryFailed
     ) {
       process.exitCode = 1;
@@ -719,6 +958,24 @@ async function main(): Promise<void> {
       logger,
     }),
   });
+  const documentReconcileJob = startRecurringJob({
+    name: 'Document reconcile',
+    intervalMs: config.documentReconcileIntervalMs,
+    // The only job that jitters. Every visit spends from an hourly points pool
+    // Atlassian meters across every tenant of the app, so two workers waking
+    // together concentrate the whole estate's spend into the same few seconds.
+    jitterFraction: DOCUMENT_RECONCILE_JITTER_FRACTION,
+    logger,
+    run: () => runDocumentReconcile({
+      prisma,
+      publicationService,
+      reconcile,
+      tenantsPerRun: config.documentReconcileTenantsPerRun,
+      pagesPerRun: config.documentReconcilePagesPerRun,
+      minPageAgeMs: config.documentReconcileMinPageAgeMs,
+      logger,
+    }),
+  });
   const authEmailDeliveryJob = startRecurringJob({
     name: 'Authentication email delivery',
     intervalMs: config.authDeliveryIntervalMs,
@@ -738,7 +995,13 @@ async function main(): Promise<void> {
     shutdownStarted = true;
     logger.info(`[ProductionScheduler] Received ${signal}; shutting down.`);
     const stopped = await waitForRecurringJobsToStop(
-      [deadlineRemindersJob, documentStorageCleanupJob, documentPublicationJob, authEmailDeliveryJob],
+      [
+        deadlineRemindersJob,
+        documentStorageCleanupJob,
+        documentPublicationJob,
+        documentReconcileJob,
+        authEmailDeliveryJob,
+      ],
       config.shutdownTimeoutMs,
     );
     if (!stopped) {

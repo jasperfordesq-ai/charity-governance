@@ -12,17 +12,27 @@ import {
   waitForRecurringJobsToStop,
 } from '../jobs/production-scheduler.js';
 import type { ErrorAlertPayload } from '../services/error-alerts.service.js';
+import { emptyIntegrationEstate, recordingReconcileRunner, unreachableReconciler } from './reconcile-doubles.js';
 import type { ErasureDispatcher } from '../services/document-erasure.js';
 
 const ORIGINAL_ENV = { ...process.env };
 /**
  * Stands in for the Prisma client the Confluence eraser reads a charity's
- * connection through. No test in this file reaches it: every `documentService`
- * here is a fake that never asks the dispatcher for the confluence eraser. It
- * is a required argument so that a new entry point cannot build a dispatcher
- * without one — see the registration pins in `confluence-erasure.test.ts`.
+ * connection through, and — since the scheduler gained the reconcile pass — the
+ * one the tenant list and dormancy sweep read through as well.
+ *
+ * No test in this file reaches the eraser: every `documentService` here is a
+ * fake that never asks the dispatcher for it. It is a required argument so that
+ * a new entry point cannot build a dispatcher without one — see the
+ * registration pins in `confluence-erasure.test.ts`.
+ *
+ * The reconcile pass DOES reach it, which is why it is no longer `{}`. An empty
+ * estate is the honest shape for these tests: nothing here is about Confluence,
+ * and pairing it with `unreachableReconciler` means a future change that
+ * accidentally produced a tenant would fail loudly rather than start making
+ * real calls inside a test about deadline reminders.
  */
-const SCHEDULER_PRISMA = {} as never;
+const SCHEDULER_PRISMA = emptyIntegrationEstate();
 
 const API_SRC = join(process.cwd(), 'src');
 
@@ -45,6 +55,10 @@ test('productionSchedulerConfigFromEnv resolves scheduler intervals and cleanup 
     DOCUMENT_STORAGE_CLEANUP_LIMIT: '7',
     DOCUMENT_PUBLICATION_INTERVAL_MS: '90000',
     DOCUMENT_PUBLICATION_LIMIT: '9',
+    DOCUMENT_RECONCILE_INTERVAL_MS: '3600000',
+    DOCUMENT_RECONCILE_TENANTS_PER_RUN: '4',
+    DOCUMENT_RECONCILE_PAGES_PER_RUN: '13',
+    DOCUMENT_RECONCILE_MIN_PAGE_AGE_MS: '7200000',
     AUTH_DELIVERY_INTERVAL_MS: '5000',
     AUTH_DELIVERY_BATCH_SIZE: '11',
     AUTH_DELIVERY_CLEANUP_BATCH_SIZE: '222',
@@ -59,6 +73,10 @@ test('productionSchedulerConfigFromEnv resolves scheduler intervals and cleanup 
     documentStorageCleanupLimit: 7,
     documentPublicationIntervalMs: 90000,
     documentPublicationLimit: 9,
+    documentReconcileIntervalMs: 3600000,
+    documentReconcileTenantsPerRun: 4,
+    documentReconcilePagesPerRun: 13,
+    documentReconcileMinPageAgeMs: 7200000,
     authDeliveryIntervalMs: 5000,
     authDeliveryBatchSize: 11,
     authDeliveryCleanupBatchSize: 222,
@@ -75,6 +93,10 @@ test('productionSchedulerConfigFromEnv falls back to safe defaults for invalid n
     DOCUMENT_STORAGE_CLEANUP_LIMIT: 'not-a-number',
     DOCUMENT_PUBLICATION_INTERVAL_MS: '0',
     DOCUMENT_PUBLICATION_LIMIT: 'not-a-number',
+    DOCUMENT_RECONCILE_INTERVAL_MS: '-5',
+    DOCUMENT_RECONCILE_TENANTS_PER_RUN: '',
+    DOCUMENT_RECONCILE_PAGES_PER_RUN: 'lots',
+    DOCUMENT_RECONCILE_MIN_PAGE_AGE_MS: '0',
     AUTH_DELIVERY_INTERVAL_MS: '0',
     AUTH_DELIVERY_BATCH_SIZE: '101',
     AUTH_DELIVERY_CLEANUP_BATCH_SIZE: '2',
@@ -88,6 +110,10 @@ test('productionSchedulerConfigFromEnv falls back to safe defaults for invalid n
     documentStorageCleanupLimit: 25,
     documentPublicationIntervalMs: 5 * 60 * 1000,
     documentPublicationLimit: 25,
+    documentReconcileIntervalMs: 6 * 60 * 60 * 1000,
+    documentReconcileTenantsPerRun: 10,
+    documentReconcilePagesPerRun: 50,
+    documentReconcileMinPageAgeMs: 24 * 60 * 60 * 1000,
     authDeliveryIntervalMs: 5 * 1000,
     authDeliveryBatchSize: 25,
     authDeliveryCleanupBatchSize: 500,
@@ -217,11 +243,13 @@ test('runProductionSchedulerOnce runs reminders and document cleanup without ove
   };
   const logs: string[] = [];
 
+  const reconcileRunner = recordingReconcileRunner();
   const publicationService = {
     async retryPendingPublications(_publish: unknown, limit: number) {
       events.push(`document-publication:${limit}`);
       return { processed: 1, failed: 0 };
     },
+    ...reconcileRunner.runner,
   };
 
   const result = await runProductionSchedulerOnce({
@@ -245,8 +273,12 @@ test('runProductionSchedulerOnce runs reminders and document cleanup without ove
       },
     },
     prisma: SCHEDULER_PRISMA,
+    reconcile: unreachableReconciler,
     documentStorageCleanupLimit: 7,
     documentPublicationLimit: 9,
+    documentReconcileTenantsPerRun: 10,
+    documentReconcilePagesPerRun: 50,
+    documentReconcileMinPageAgeMs: 24 * 60 * 60 * 1000,
     authDeliveryBatchSize: 11,
     authDeliveryCleanupBatchSize: 222,
     authDeliveryStaleSendingMs: 45000,
@@ -271,12 +303,22 @@ test('runProductionSchedulerOnce runs reminders and document cleanup without ove
     deadlineRemindersFailed: false,
     documentStorageCleanupFailed: false,
     documentPublicationFailed: false,
+    documentReconcileFailed: false,
     authEmailDeliveryFailed: false,
   });
   assert.ok(logs.some((message) => message.includes('Deadline reminders run completed')));
   assert.ok(logs.some((message) => message.includes('Document storage cleanup run completed')));
   assert.ok(logs.some((message) => message.includes('Document publication run completed')));
+  assert.ok(logs.some((message) => message.includes('Document reconcile run completed')));
   assert.ok(logs.some((message) => message.includes('Authentication email delivery run completed')));
+
+  // The reconcile pass is registered, not merely tolerated. An empty estate
+  // means no tenant is claimed, but the orphan sweep is not per-tenant and must
+  // still run — a scheduler that skipped it whenever nothing was connected
+  // would leave orphaned rows unswept on exactly the deployments that have the
+  // least attention on them.
+  assert.equal(reconcileRunner.calls.claims.length, 0, 'an empty estate claims nothing');
+  assert.equal(reconcileRunner.calls.orphanSweeps, 1, 'the orphan sweep runs regardless of tenants');
 });
 
 test('auth email delivery alerts with count-only terminal outcomes', async () => {
