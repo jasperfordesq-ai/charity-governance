@@ -8,6 +8,7 @@ import { securityHeadersPlugin } from './plugins/security-headers.js';
 import { registerBrowserOriginProtection } from './plugins/browser-origin-protection.js';
 import { clientActivityLogPlugin } from './plugins/client-activity-log.js';
 import { connectorWriteBudgetPlugin } from './plugins/connector-write-budget.js';
+import { connectorIdempotencyPlugin } from './plugins/connector-idempotency.js';
 import { authRoutes } from './routes/auth/index.js';
 import { connectorAuthRoutes } from './routes/auth/connector.js';
 import { organisationRoutes } from './routes/organisations/index.js';
@@ -92,6 +93,11 @@ await app.register(clientActivityLogPlugin);
 // loop cannot spend the shared address allowance and lock the owner out of the
 // web application running on the same machine.
 await app.register(connectorWriteBudgetPlugin);
+
+// Registered after the write budget so a create that is refused for being over
+// budget never claims a key it will not spend. Opt-in: a connector POST with no
+// Idempotency-Key behaves exactly as it did before.
+await app.register(connectorIdempotencyPlugin);
 
 // A deployment that serves the owner console must have a distinct owner secret.
 // Collapsing the two secrets would silently remove the isolation the console relies on.

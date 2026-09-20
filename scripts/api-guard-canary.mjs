@@ -105,6 +105,99 @@ const MUTATIONS = {
     tests: ['rate-limit-key'],
     expect: 'the shared limiter must be keyed by session, not only by address.',
   },
+  // Idempotency. Each of these leaves a plugin that still claims, still
+  // records and still replays — it simply stops being the thing that prevents
+  // a duplicate, which is invisible until a connection drops.
+  'a-duplicate-claim-is-treated-as-fresh': {
+    file: 'apps/api/src/plugins/connector-idempotency.ts',
+    // The insert still races, still fails, and the failure is still noticed —
+    // it is simply read as "carry on" rather than "somebody else has this
+    // key". Everything downstream looks normal; the record is just made twice.
+    find: /        if \(isUniqueViolation\(error\)\) return undefined;/,
+    replace: '        if (isUniqueViolation(error)) return "a-second-claim";',
+    tests: ['connector-idempotency'],
+    expect:
+      'a second request holding a claimed key must be replayed or refused, never carried '
+      + 'out beside the first.',
+  },
+  'a-key-is-not-bound-to-its-request': {
+    file: 'apps/api/src/plugins/connector-idempotency.ts',
+    find: /if \(existing\.requestDigest !== requestDigest\) \{/,
+    replace: 'if (existing.requestDigest === "never") {',
+    tests: ['connector-idempotency'],
+    expect:
+      'a key reused for a different body must be refused, not answered with the first '
+      + "request's result.",
+  },
+  'a-failed-create-keeps-its-key': {
+    file: 'apps/api/src/plugins/connector-idempotency.ts',
+    find: /      if \(reply\.statusCode >= 500\) \{/,
+    replace: '      if (reply.statusCode >= 599) {',
+    tests: ['connector-idempotency'],
+    expect: 'a server error must release the key so the retry genuinely runs.',
+  },
+  'an-abandoned-claim-blocks-forever': {
+    file: 'apps/api/src/plugins/connector-idempotency.ts',
+    find: /        now\.getTime\(\) - existing\.createdAt\.getTime\(\) > IDEMPOTENCY_IN_FLIGHT_GRACE_MS;/,
+    replace: '        false && IDEMPOTENCY_IN_FLIGHT_GRACE_MS > 0;',
+    tests: ['connector-idempotency'],
+    expect:
+      'a claim whose attempt died must be taken over, or every retry is refused for a day.',
+  },
+  // The connector's half of the same story: naming a create, and the retry
+  // that naming makes safe.
+  'a-create-is-not-named': {
+    package: 'mcp',
+    file: 'mcp/src/client.ts',
+    // The key is still generated and the header constant is still used; the
+    // header simply never goes out, so the API sees an ordinary create.
+    find: /if \(options\.idempotencyKey\) headers\[IDEMPOTENCY_HEADER\] = options\.idempotencyKey;/,
+    replace:
+      "if (options.idempotencyKey === 'never') headers[IDEMPOTENCY_HEADER] = options.idempotencyKey;",
+    tests: ['client'],
+    expect: 'every create must carry an Idempotency-Key header.',
+  },
+  'two-creates-share-one-name': {
+    package: 'mcp',
+    file: 'mcp/src/client.ts',
+    // randomUUID is still called, so nothing is left unused; its value is
+    // simply thrown away, which is what a key that stopped being unique
+    // looks like.
+    find: /idempotencyKey: options\.idempotencyKey \?\? randomUUID\(\),/,
+    replace: "idempotencyKey: options.idempotencyKey ?? `${randomUUID().slice(0, 0)}one-key`,",
+    tests: ['client'],
+    expect: 'two separate creates must be two requests, not one repeated.',
+  },
+  'a-dropped-connection-is-never-retried': {
+    package: 'mcp',
+    file: 'mcp/src/client.ts',
+    find: /        && !retried\.connection\r?\n/,
+    replace: '        && retried.connection !== undefined\n',
+    tests: ['client'],
+    expect: 'a named create that met a dropped connection must be asked again once.',
+  },
+  'an-upload-is-resent-after-a-dropped-connection': {
+    package: 'mcp',
+    file: 'mcp/src/client.ts',
+    // Two locks at once. An upload is not resent today because it carries no
+    // key, and it would still not be resent if it did, because the body has
+    // been consumed. Removing either alone leaves the other holding, and the
+    // canary would pass while proving nothing.
+    edits: [
+      {
+        find: /    return this\.#send<T>\('POST', path, form, options\);/,
+        replace:
+          "    return this.#send<T>('POST', path, form, { ...options, idempotencyKey: 'an-upload' });",
+      },
+      {
+        find: /        && !\(body instanceof FormData\)\r?\n/,
+        replace: '        && !(body instanceof Date)\n',
+      },
+    ],
+    tests: ['client'],
+    expect:
+      'a consumed multipart body must never be resent, or the retry uploads an empty file.',
+  },
   'a-member-may-edit-a-document': {
     file: 'apps/api/src/routes/documents/index.ts',
     find: /(  app\.patch<\{ Params: \{ id: string \} \}>\('\/:id', )\{ preHandler: \[requireAdmin\] \}, (async)/,
@@ -125,12 +218,17 @@ function run(command, args, cwd) {
   execFileSync(command, args, { cwd, stdio: 'pipe', shell: true });
 }
 
-function build(withShared) {
+/** Where a mutation's tests live: the API unless the mutation says otherwise. */
+function packageDir(mutation) {
+  return mutation?.package === 'mcp' ? 'mcp' : 'apps/api';
+}
+
+function build(withShared, dir = 'apps/api') {
   // `packages/shared` is a built package: a schema change that is not compiled
   // never reaches the API, so a canary that skipped this step would report a
   // mutation working when it had never been applied.
   if (withShared) run('npm', ['run', 'build'], 'packages/shared');
-  run('npx', ['tsc', '-p', 'tsconfig.json'], 'apps/api');
+  run('npx', ['tsc', '-p', 'tsconfig.json'], dir);
 }
 
 let problems = 0;
@@ -138,22 +236,37 @@ let problems = 0;
 for (const name of selected) {
   const mutation = MUTATIONS[name];
   const original = readFileSync(mutation.file, 'utf8');
-  const occurrences = (original.match(new RegExp(mutation.find.source, 'g')) ?? []).length;
 
-  if (occurrences !== 1) {
+  // A property may be held by two locks at once. Removing one leaves the
+  // other holding it, and the canary would pass while proving nothing, so
+  // such a mutation names both edits and applies them together.
+  const edits = mutation.edits ?? [{ find: mutation.find, replace: mutation.replace }];
+  let anchorProblem = false;
+
+  for (const edit of edits) {
+    const occurrences = (original.match(new RegExp(edit.find.source, 'g')) ?? []).length;
+    if (occurrences === 1) continue;
     console.error(
-      `CANARY BROKEN: "${name}" expected exactly one anchor in ${mutation.file}, found `
-        + `${occurrences}. Update the mutation rather than letting it hit the wrong place.`,
+      `CANARY BROKEN: "${name}" expected exactly one anchor for ${edit.find} in `
+        + `${mutation.file}, found ${occurrences}. Update the mutation rather than letting `
+        + 'it hit the wrong place.',
     );
+    anchorProblem = true;
+  }
+
+  if (anchorProblem) {
     problems += 1;
     continue;
   }
 
   let outcome = 'unknown';
   try {
-    writeFileSync(mutation.file, original.replace(mutation.find, mutation.replace));
+    writeFileSync(
+      mutation.file,
+      edits.reduce((text, edit) => text.replace(edit.find, edit.replace), original),
+    );
     try {
-      build(mutation.shared === true);
+      build(mutation.shared === true, packageDir(mutation));
     } catch {
       outcome = 'build-broken';
       throw new Error('build');
@@ -162,7 +275,7 @@ for (const name of selected) {
       run(
         'node',
         ['--test', ...mutation.tests.map((file) => `dist/tests/${file}.test.js`)],
-        'apps/api',
+        packageDir(mutation),
       );
       outcome = 'tests-passed';
     } catch {
@@ -192,6 +305,7 @@ for (const name of selected) {
 
 // Leaves the tree built from the restored sources, whichever mutation ran.
 build(true);
+if (selected.some((name) => MUTATIONS[name].package === 'mcp')) build(false, 'mcp');
 
 console.log(problems === 0 ? 'Every canary behaved correctly.' : `${problems} canary problem(s).`);
 process.exit(problems === 0 ? 0 : 1);

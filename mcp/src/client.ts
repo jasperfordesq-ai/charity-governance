@@ -1,3 +1,4 @@
+import { randomUUID } from 'node:crypto';
 import type { Session } from './session.js';
 import { redactSecrets } from './redact.js';
 import { CONNECTOR_VERSION } from './version.js';
@@ -6,6 +7,8 @@ import { ConnectionError, type ErrorAction } from './errors.js';
 const CLIENT_HEADER = 'x-charitypilot-client';
 const REASON_HEADER = 'x-charitypilot-reason';
 const APPROVAL_HEADER = 'x-charitypilot-approval';
+/** The IETF draft spelling, which is what the API reads. */
+const IDEMPOTENCY_HEADER = 'idempotency-key';
 
 export interface ValidationDetail {
   field: string;
@@ -93,6 +96,12 @@ export interface WriteOptions {
   reason?: string | undefined;
   /** An approval identifier previously granted by a human at a terminal. */
   approvalId?: string | undefined;
+  /**
+   * Names this create, so a retry of it is answered rather than carried out
+   * again. Filled in automatically for every POST; passed explicitly only by
+   * a caller that wants two calls treated as one request.
+   */
+  idempotencyKey?: string | undefined;
 }
 
 type Method = 'GET' | 'POST' | 'PATCH' | 'PUT' | 'DELETE';
@@ -237,8 +246,20 @@ export class ApiClient {
     return this.#request<T>('GET', path, undefined, {});
   }
 
+  /**
+   * A create, named so it happens once.
+   *
+   * Every POST carries a fresh key unless the caller supplied one. It costs a
+   * header and it makes the one failure this connector cannot otherwise
+   * survive recoverable: a connection that drops after the API committed,
+   * where the agent cannot tell a record that was created from one that was
+   * not, and retrying is the only thing it can reasonably do.
+   */
   post<T>(path: string, body: unknown, options: WriteOptions = {}): Promise<T> {
-    return this.#request<T>('POST', path, body, options);
+    return this.#request<T>('POST', path, body, {
+      ...options,
+      idempotencyKey: options.idempotencyKey ?? randomUUID(),
+    });
   }
 
   patch<T>(path: string, body: unknown, options: WriteOptions = {}): Promise<T> {
@@ -336,7 +357,10 @@ export class ApiClient {
     body: string | FormData | undefined,
     options: WriteOptions,
     isJson = false,
-    isRetry = false,
+    // Each recovery is taken at most once, and they are tracked separately so
+    // a token refresh does not spend the dropped-connection attempt, or the
+    // other way round.
+    retried: { unauthorised?: boolean; connection?: boolean } = {},
   ): Promise<T> {
     const token = await this.#session.accessToken();
 
@@ -352,6 +376,7 @@ export class ApiClient {
     // rather than silently dropped by the server's own limit.
     if (options.reason) headers[REASON_HEADER] = options.reason.slice(0, 500);
     if (options.approvalId) headers[APPROVAL_HEADER] = options.approvalId;
+    if (options.idempotencyKey) headers[IDEMPOTENCY_HEADER] = options.idempotencyKey;
 
     let response: Response;
     try {
@@ -361,6 +386,22 @@ export class ApiClient {
         ...(body === undefined ? {} : { body }),
       });
     } catch (cause) {
+      // A create that met a dropped connection may already have happened, and
+      // nothing on this side can tell. With a key it is safe to ask again:
+      // the API either carries it out, never having seen the first attempt,
+      // or answers with the result of the attempt it did see. Without a key
+      // the failure is reported instead, because a blind retry is how one
+      // board meeting becomes two.
+      if (
+        options.idempotencyKey !== undefined
+        && !retried.connection
+        && !(body instanceof FormData)
+      ) {
+        return this.#send<T>(method, path, body, options, isJson, {
+          ...retried,
+          connection: true,
+        });
+      }
       throw new ConnectionError(
         'Cannot reach CharityPilot. Check that Tailscale is connected. '
           + `(${redactSecrets((cause as Error).message)})`,
@@ -373,7 +414,7 @@ export class ApiClient {
     // even though the next call would have succeeded — which defeats the whole point
     // of implementing refresh rotation. Bounded to one attempt so a genuinely dead
     // session still fails fast instead of looping.
-    if (response.status === 401 && !isRetry) {
+    if (response.status === 401 && !retried.unauthorised) {
       this.#session.invalidateAccessToken();
       // A FormData body cannot be replayed once consumed, so an upload that
       // meets an expired token is reported rather than retried silently.
@@ -384,7 +425,10 @@ export class ApiClient {
             + 'ask again and it will be retried with a fresh session.',
         );
       }
-      return this.#send<T>(method, path, body, options, isJson, true);
+      return this.#send<T>(method, path, body, options, isJson, {
+        ...retried,
+        unauthorised: true,
+      });
     }
     if (response.status === 401) {
       throw new ApiError(401, 'Session expired. Run: charitypilot-mcp connect');

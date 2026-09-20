@@ -334,3 +334,178 @@ test('a download whose access token has expired is retried once', async () => {
   assert.equal(fileName, 'minutes.pdf');
   assert.equal(bytes.toString('latin1'), '%PDF');
 });
+
+// ── naming a create so it happens once ─────────────────────────────────────
+
+test('every create carries a key, and no two creates carry the same one', async () => {
+  const keys: (string | null)[] = [];
+  const client = new ApiClient({
+    session: sessionReturning('access1'),
+    baseUrl: 'https://example.test',
+    fetchImpl: async (_input, init) => {
+      keys.push(new Headers(init?.headers).get('idempotency-key'));
+      return new Response(JSON.stringify({ data: { id: 'x' } }), {
+        status: 201, headers: { 'content-type': 'application/json' },
+      });
+    },
+  });
+
+  await client.post('/api/v1/board-members', { name: 'A Trustee' });
+  await client.post('/api/v1/board-members', { name: 'A Trustee' });
+
+  assert.equal(keys.length, 2);
+  assert.ok(keys[0], 'a create must be named');
+  assert.notEqual(keys[0], keys[1], 'two creates are two requests');
+  assert.match(keys[0] as string, /^[0-9a-f-]{36}$/);
+});
+
+test('a caller may name a create itself, to make two calls one request', async () => {
+  let seen: string | null = null;
+  const client = new ApiClient({
+    session: sessionReturning('access1'),
+    baseUrl: 'https://example.test',
+    fetchImpl: async (_input, init) => {
+      seen = new Headers(init?.headers).get('idempotency-key');
+      return new Response(JSON.stringify({}), {
+        status: 201, headers: { 'content-type': 'application/json' },
+      });
+    },
+  });
+
+  await client.post('/api/v1/board-members', { name: 'A Trustee' }, {
+    idempotencyKey: 'a-key-the-caller-chose',
+  });
+
+  assert.equal(seen, 'a-key-the-caller-chose');
+});
+
+test('a change and a removal carry no key, because repeating them is already safe', async () => {
+  const keys: (string | null)[] = [];
+  const client = new ApiClient({
+    session: sessionReturning('access1'),
+    baseUrl: 'https://example.test',
+    fetchImpl: async (_input, init) => {
+      keys.push(new Headers(init?.headers).get('idempotency-key'));
+      return new Response(JSON.stringify({}), {
+        status: 200, headers: { 'content-type': 'application/json' },
+      });
+    },
+  });
+
+  await client.patch('/api/v1/board-members/bm-1', { name: 'Renamed' });
+  await client.delete('/api/v1/board-members/bm-1');
+
+  assert.deepEqual(keys, [null, null]);
+});
+
+test('a create that meets a dropped connection is asked again, with the same key', async () => {
+  const keys: (string | null)[] = [];
+  let attempts = 0;
+  const client = new ApiClient({
+    session: sessionReturning('access1'),
+    baseUrl: 'https://example.test',
+    fetchImpl: async (_input, init) => {
+      attempts += 1;
+      keys.push(new Headers(init?.headers).get('idempotency-key'));
+      if (attempts === 1) throw new TypeError('fetch failed');
+      return new Response(JSON.stringify({ data: { id: 'act-1' } }), {
+        status: 201, headers: { 'content-type': 'application/json' },
+      });
+    },
+  });
+
+  const result = await client.post<{ data: { id: string } }>('/api/v1/governing-acts', {
+    title: 'Board meeting',
+  });
+
+  assert.equal(attempts, 2);
+  assert.equal(keys[0], keys[1], 'the retry must be the same request, not a second one');
+  assert.deepEqual(result, { data: { id: 'act-1' } });
+});
+
+test('a create is asked again once and no more', async () => {
+  let attempts = 0;
+  const client = new ApiClient({
+    session: sessionReturning('access1'),
+    baseUrl: 'https://example.test',
+    fetchImpl: async () => {
+      attempts += 1;
+      throw new TypeError('fetch failed');
+    },
+  });
+
+  await assert.rejects(
+    () => client.post('/api/v1/governing-acts', { title: 'Board meeting' }),
+    (err: unknown) => {
+      assert.ok(err instanceof ConnectionError);
+      return true;
+    },
+  );
+  assert.equal(attempts, 2, 'one attempt and one retry, never a loop');
+});
+
+test('a read that meets a dropped connection is not asked again', async () => {
+  let attempts = 0;
+  const client = new ApiClient({
+    session: sessionReturning('access1'),
+    baseUrl: 'https://example.test',
+    fetchImpl: async () => {
+      attempts += 1;
+      throw new TypeError('fetch failed');
+    },
+  });
+
+  await assert.rejects(() => client.get('/api/v1/board-members'), ConnectionError);
+  assert.equal(attempts, 1);
+});
+
+test('an upload that meets a dropped connection is reported, never resent', async () => {
+  // Held by two things. An upload carries no key, so the retry is not offered
+  // in the first place; and a FormData body is consumed by the first attempt,
+  // so even a named upload would be refused a second send rather than putting
+  // an empty file where the operator's document should be.
+  let attempts = 0;
+  const client = new ApiClient({
+    session: sessionReturning('access1'),
+    baseUrl: 'https://example.test',
+    fetchImpl: async () => {
+      attempts += 1;
+      throw new TypeError('fetch failed');
+    },
+  });
+
+  await assert.rejects(
+    () => client.upload(
+      '/api/v1/documents',
+      { name: 'policy.txt', mimeType: 'text/plain', bytes: Buffer.from('hello') },
+      { name: 'Policy', category: 'POLICY' },
+    ),
+    ConnectionError,
+  );
+  assert.equal(attempts, 1);
+});
+
+test('a token refresh and a dropped connection are each allowed their own attempt', async () => {
+  const seen: string[] = [];
+  let attempts = 0;
+  const client = new ApiClient({
+    session: sessionReturning('access1'),
+    baseUrl: 'https://example.test',
+    fetchImpl: async (_input, init) => {
+      attempts += 1;
+      seen.push(new Headers(init?.headers).get('authorization') ?? '');
+      if (attempts === 1) return new Response('{}', { status: 401 });
+      if (attempts === 2) throw new TypeError('fetch failed');
+      return new Response(JSON.stringify({ data: { id: 'x' } }), {
+        status: 201, headers: { 'content-type': 'application/json' },
+      });
+    },
+  });
+
+  const result = await client.post<{ data: { id: string } }>('/api/v1/governing-acts', {
+    title: 'Board meeting',
+  });
+
+  assert.equal(attempts, 3, 'the refresh must not have spent the connection attempt');
+  assert.deepEqual(result, { data: { id: 'x' } });
+});
