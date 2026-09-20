@@ -4,7 +4,14 @@ import Fastify from 'fastify';
 import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { healthRoutes } from '../routes/health/index.js';
+
+// The health routes verify a connector's bearer token, so importing them loads
+// utils/jwt.ts, which resolves JWT_SECRET at module scope and throws without it.
+// A static import is evaluated before any statement here could set that, so the
+// route module is imported dynamically, as the other health suites do.
+process.env.JWT_SECRET = process.env.JWT_SECRET ?? 'personal-server-health-test-secret';
+
+const { healthRoutes } = await import('../routes/health/index.js');
 
 const ENV_KEYS = [
   'NODE_ENV',

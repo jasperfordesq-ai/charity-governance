@@ -54,6 +54,15 @@ jobs:
       - name: Typecheck MCP connector
         run: npm run typecheck --prefix mcp
 
+      # The two packages check each other against the other's build output, and
+      # each fails loudly rather than skipping when that output is missing: the
+      # API suite reads mcp/dist/field-policy.js, and the connector suite reads
+      # apps/api/dist/services/search.service.js. So both must be BUILT before
+      # either is TESTED. The connector is built here (typecheck is --noEmit and
+      # emits nothing), and "Test MCP connector" runs after "Build API".
+      - name: Build MCP connector
+        run: npm run build --prefix mcp
+
       # The manifest is what somebody installs in Claude Desktop, and nothing
       # else validates it against the published schema. Packing the bundle is
       # NOT done here: it embeds @napi-rs/keyring, which is a native module, so

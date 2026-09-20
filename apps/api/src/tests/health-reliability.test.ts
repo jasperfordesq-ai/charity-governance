@@ -5,6 +5,10 @@ import test from 'node:test';
 // Billing/Email/Storage service constructors and the readiness key gate), so the
 // env mutations below are applied per-test and always restored in a finally block.
 
+// The health routes verify a connector's bearer token, so importing them loads
+// utils/jwt.ts, which resolves JWT_SECRET at module scope and throws without it.
+process.env.JWT_SECRET = process.env.JWT_SECRET ?? 'health-reliability-test-secret';
+
 const [{ default: Fastify }, { healthRoutes }] = await Promise.all([
   import('fastify'),
   import('../routes/health/index.js'),

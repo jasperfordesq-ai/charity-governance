@@ -4,6 +4,11 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import test from 'node:test';
 
+// The health routes verify a connector's bearer token, so importing them loads
+// utils/jwt.ts, which resolves JWT_SECRET at module scope and throws without it.
+// Set before the import below, exactly as the auth suites do.
+process.env.JWT_SECRET = process.env.JWT_SECRET ?? 'deployment-profile-providers-test-secret';
+
 const [{ default: Fastify }, { healthRoutes }, { manualInviteUrl }] = await Promise.all([
   import('fastify'),
   import('../routes/health/index.js'),

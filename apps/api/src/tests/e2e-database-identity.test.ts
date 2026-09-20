@@ -6,10 +6,16 @@ import test from 'node:test';
 import { fileURLToPath } from 'node:url';
 import rateLimit from '@fastify/rate-limit';
 import Fastify from 'fastify';
-import {
-  E2E_DATABASE_IDENTITY_PROBE_MAX_PER_MINUTE,
-  healthRoutes,
-} from '../routes/health/index.js';
+
+// The health routes verify a connector's bearer token, so importing them loads
+// utils/jwt.ts, which resolves JWT_SECRET at module scope and throws without it.
+// A static import is evaluated before any statement here could set that, so the
+// route module is imported dynamically, as the other health suites do.
+process.env.JWT_SECRET = process.env.JWT_SECRET ?? 'e2e-database-identity-test-secret';
+
+const { E2E_DATABASE_IDENTITY_PROBE_MAX_PER_MINUTE, healthRoutes } = await import(
+  '../routes/health/index.js'
+);
 
 const INSTANCE_ID = '9d9899dc-9bea-45ca-a916-c9a2e023e46e';
 const READINESS_KEY = 'e2e-readiness-key-with-enough-entropy';

@@ -3,6 +3,10 @@ import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import test from 'node:test';
 
+// The health routes verify a connector's bearer token, so importing them loads
+// utils/jwt.ts, which resolves JWT_SECRET at module scope and throws without it.
+process.env.JWT_SECRET = process.env.JWT_SECRET ?? 'health-readiness-test-secret';
+
 const [{ default: Fastify }, { healthRoutes }] = await Promise.all([
   import('fastify'),
   import('../routes/health/index.js'),
