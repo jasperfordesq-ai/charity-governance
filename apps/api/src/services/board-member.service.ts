@@ -29,6 +29,21 @@ export class BoardMemberService {
     return { data, total, page, pageSize, hasMore: skip + data.length < total };
   }
 
+  /**
+   * One trustee.
+   *
+   * `list` pages fifty at a time, so an agent following a reference from a
+   * conflict record or a resolution had to walk the register to resolve one
+   * identifier it already held.
+   */
+  async getById(organisationId: string, id: string) {
+    const member = await this.prisma.boardMember.findFirst({ where: { id, organisationId } });
+    if (!member) {
+      throw new AppError(404, 'BOARD_MEMBER_NOT_FOUND', 'Board member not found');
+    }
+    return member;
+  }
+
   async create(organisationId: string, data: CreateBoardMemberRequest) {
     const createData = {
       organisationId,

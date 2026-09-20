@@ -51,6 +51,17 @@ export async function governingActRoutes(app: FastifyInstance) {
     }
   });
 
+  // Declared before the parametric routes it shares a prefix with only for
+  // readability: Fastify matches a static segment ahead of a parametric one
+  // whatever the registration order, so `/voids` is never read as an id.
+  app.get<{ Params: { id: string } }>('/:id', async (request, reply) => {
+    try {
+      return sendSuccess(reply, await service.getById(request.user.organisationId, request.params.id));
+    } catch (err) {
+      handleError(reply, err);
+    }
+  });
+
   app.post('/', { preHandler: [requireAdmin] }, async (request, reply) => {
     try {
       const data = createGoverningActSchema.parse(request.body) as CreateGoverningActRequest;

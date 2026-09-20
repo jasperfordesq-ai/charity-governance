@@ -843,3 +843,134 @@ test('an organisation pinned to local storage has its uploaded bytes written to 
     await app.close();
   }
 });
+
+// ── changing a document's card (PATCH /:id) ─────────────────────────────────
+
+function patchPrisma(overrides: {
+  existing?: { id: string; updatedAt: Date } | null;
+  onUpdate?: (args: { where: { id: string }; data: Record<string, unknown> }) => void;
+} = {}) {
+  const existing = overrides.existing === undefined
+    ? { id: 'doc-1', updatedAt: new Date('2026-06-08T00:00:00.000Z') }
+    : overrides.existing;
+
+  return {
+    subscription: subscription(),
+    organisation: {
+      findUnique: async () => ({ documentStorageProvider: null, documentStorageAlphaOptIn: false }),
+      findUniqueOrThrow: async () => ({ complexity: 'SIMPLE' }),
+    },
+    document: {
+      findFirst: async () => existing,
+      update: async (args: { where: { id: string }; data: Record<string, unknown> }) => {
+        overrides.onUpdate?.(args);
+        return publicDocument({ ...args.data, id: args.where.id });
+      },
+    },
+  };
+}
+
+test('a document edit carrying a stale updatedAt is refused and never reaches the update', async () => {
+  let updateCalled = false;
+  const app = await buildDocumentsApp(patchPrisma({ onUpdate: () => { updateCalled = true; } }) as never);
+
+  const response = await app.inject({
+    method: 'PATCH',
+    url: '/doc-1',
+    headers: { authorization: authHeader },
+    payload: { name: 'Renamed', expectedUpdatedAt: '2026-06-07T00:00:00.000Z' },
+  });
+
+  assert.equal(response.statusCode, 409);
+  assert.equal(response.json().code, 'DOCUMENT_UPDATE_CONFLICT');
+  assert.equal(updateCalled, false, 'a refused edit must not be written');
+  await app.close();
+});
+
+test('a document edit naming no field to change is refused rather than silently doing nothing', async () => {
+  const app = await buildDocumentsApp(patchPrisma() as never);
+
+  const response = await app.inject({
+    method: 'PATCH',
+    url: '/doc-1',
+    headers: { authorization: authHeader },
+    payload: { expectedUpdatedAt: '2026-06-08T00:00:00.000Z' },
+  });
+
+  assert.equal(response.statusCode, 400);
+  assert.equal(response.json().code, 'VALIDATION_ERROR');
+  await app.close();
+});
+
+test('a document edit naming only the stored file is refused, because the file is not editable here', async () => {
+  const app = await buildDocumentsApp(patchPrisma() as never);
+
+  const response = await app.inject({
+    method: 'PATCH',
+    url: '/doc-1',
+    headers: { authorization: authHeader },
+    payload: {
+      expectedUpdatedAt: '2026-06-08T00:00:00.000Z',
+      fileUrl: 'org-1/somewhere-else.pdf',
+      version: 9,
+      approvalAsserted: true,
+    },
+  });
+
+  assert.equal(response.statusCode, 400, 'an edit that would change nothing it is allowed to change is not a success');
+  assert.equal(response.json().code, 'VALIDATION_ERROR');
+  await app.close();
+});
+
+test('an explicit null clears a review date, and an absent field is left alone', async () => {
+  let written: Record<string, unknown> = {};
+  const app = await buildDocumentsApp(
+    patchPrisma({ onUpdate: (args) => { written = args.data; } }) as never,
+  );
+
+  const response = await app.inject({
+    method: 'PATCH',
+    url: '/doc-1',
+    headers: { authorization: authHeader },
+    payload: { expectedUpdatedAt: '2026-06-08T00:00:00.000Z', nextReviewDate: null },
+  });
+
+  assert.equal(response.statusCode, 200);
+  assert.equal(written.nextReviewDate, null, 'null must clear the column');
+  assert.equal(written.approvedDate, undefined, 'an absent field must not be written');
+  assert.equal(written.name, undefined);
+  await app.close();
+});
+
+test('a member cannot change a document', async () => {
+  const app = Fastify({ logger: false });
+  app.decorate('prisma', {
+    authSession: { findFirst: async () => ({ id: 'session-1' }) },
+    user: { findUnique: async () => ({ id: 'user-1', organisationId: 'org-1', role: 'MEMBER' as const, emailVerified: true }) },
+    subscription: subscription(),
+    document: {
+      update: async () => {
+        throw new Error('a member must never reach the update');
+      },
+    },
+  } as never);
+  await app.register(multipart, { limits: DOCUMENT_UPLOAD_MULTIPART_LIMITS });
+  await app.register(documentRoutes);
+
+  const memberHeader = `Bearer ${signAccessToken({
+    userId: 'user-1',
+    organisationId: 'org-1',
+    role: 'MEMBER',
+    sessionId: 'session-1',
+  })}`;
+
+  const response = await app.inject({
+    method: 'PATCH',
+    url: '/doc-1',
+    headers: { authorization: memberHeader },
+    payload: { name: 'Renamed', expectedUpdatedAt: '2026-06-08T00:00:00.000Z' },
+  });
+
+  assert.equal(response.statusCode, 403);
+  await app.close();
+});

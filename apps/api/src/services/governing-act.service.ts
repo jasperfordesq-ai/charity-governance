@@ -116,6 +116,22 @@ export class GoverningActService {
     });
   }
 
+  /**
+   * One act with its resolutions.
+   *
+   * `list` returns the whole minute book, so reading a single meeting meant
+   * fetching every meeting. The private `requireGoverningAct` below cannot
+   * serve this: it omits the resolutions, which are the part worth reading.
+   */
+  async getById(organisationId: string, id: string): Promise<GoverningAct> {
+    const act = await this.prisma.governingAct.findFirst({
+      where: { id, organisationId },
+      include: { resolutions: true },
+    });
+    if (!act) throw govActNotFound();
+    return act;
+  }
+
   async create(organisationId: string, data: CreateGoverningActRequest): Promise<GoverningAct> {
     if (data.approvedAtActId) {
       await this.requireGoverningAct(organisationId, data.approvedAtActId);

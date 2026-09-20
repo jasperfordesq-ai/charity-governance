@@ -1,7 +1,8 @@
 import type { PrismaClient } from '@prisma/client';
 import { randomUUID } from 'node:crypto';
-import { SubscriptionPlan } from '@charitypilot/shared';
+import { SubscriptionPlan, type UpdateDocumentRequest } from '@charitypilot/shared';
 import { AppError } from '../utils/errors.js';
+import { assertUnchanged } from '../utils/optimistic-concurrency.js';
 import { formatProviderError } from '../utils/provider-errors.js';
 import { assertOrganisationStoragePath } from './storage.service.js';
 import {
@@ -14,6 +15,15 @@ import {
   type PublishTargetClient,
 } from './confluence-publish-target.service.js';
 import { DOCUMENT_PUBLICATION_MAX_ATTEMPTS } from './document-publication.service.js';
+
+/**
+ * An absent field leaves the column alone; an explicit null clears it.
+ *
+ * `undefined` and `null` mean different things in a PATCH body, and collapsing
+ * them would make clearing a review date impossible to express.
+ */
+const toNullableDate = (value?: string | null): Date | null | undefined =>
+  value === undefined ? undefined : value === null ? null : new Date(value);
 
 type DocumentStorageDeletionState = 'PENDING' | 'DEAD_LETTER' | 'PROCESSED';
 type DocumentStorageDeletionTerminalReason =
@@ -681,6 +691,52 @@ export class DocumentService {
     }
 
     return publicDocument(doc);
+  }
+
+  /**
+   * Changes a document's card. The stored file is never touched here.
+   *
+   * A rename leaves a mirrored Confluence page under its original title. That
+   * is deliberate: `DocumentPublication.pageTitle` records what the page is
+   * actually called, so the two names differing is visible in the data rather
+   * than hidden, and re-titling a page a charity's own people may have linked
+   * to belongs to the publish pipeline, not to an edit here.
+   */
+  async update(
+    organisationId: string,
+    id: string,
+    data: UpdateDocumentRequest,
+    expectedUpdatedAt?: string,
+  ) {
+    const includeAdditionalStandards = await documentStandardLinkScope(this.prisma, organisationId);
+
+    const updated = await this.prisma.$transaction(async (tx) => {
+      const existing = await tx.document.findFirst({
+        where: { id, organisationId },
+        select: { id: true, updatedAt: true },
+      });
+
+      if (!existing) {
+        throw new AppError(404, 'DOCUMENT_NOT_FOUND', 'Document not found');
+      }
+      assertUnchanged(existing, expectedUpdatedAt, 'DOCUMENT_UPDATE_CONFLICT');
+
+      return tx.document.update({
+        where: { id },
+        data: {
+          name: data.name,
+          description: data.description,
+          category: data.category,
+          owner: data.owner,
+          approvedDate: toNullableDate(data.approvedDate),
+          nextReviewDate: toNullableDate(data.nextReviewDate),
+          boardMinuteReference: data.boardMinuteReference,
+        },
+        include: scopedPublicDocumentInclude(includeAdditionalStandards),
+      });
+    });
+
+    return publicDocument(updated);
   }
 
   async getDownloadDescriptor(organisationId: string, id: string): Promise<{

@@ -850,3 +850,66 @@ test('a refusal whose act reference contains 40001 is not mistaken for a seriali
 
   assert.equal(attempts, 1, 'a deliberate refusal must not be retried');
 });
+
+test('reading one act scopes the lookup to the caller’s charity and brings its resolutions', async () => {
+  let seen: { where?: Record<string, unknown>; include?: Record<string, unknown> } = {};
+  const app = await buildApp({
+    governingAct: {
+      findFirst: async (args: { where: Record<string, unknown>; include: Record<string, unknown> }) => {
+        seen = args;
+        return { ...APPROVED_ACT, resolutions: [{ id: 'res-1', text: 'That the policy be adopted.' }] };
+      },
+    },
+  });
+
+  const response = await app.inject({
+    method: 'GET',
+    url: `${PREFIX}/act-1`,
+    headers: { authorization: tokenFor('MEMBER') },
+  });
+
+  assert.equal(response.statusCode, 200);
+  assert.deepEqual(seen.where, { id: 'act-1', organisationId: 'org-1' });
+  assert.deepEqual(seen.include, { resolutions: true });
+  assert.equal(response.json().data.resolutions.length, 1);
+  await app.close();
+});
+
+test('an act belonging to another charity reads as missing, not as forbidden', async () => {
+  const app = await buildApp({
+    governingAct: { findFirst: async () => null },
+  });
+
+  const response = await app.inject({
+    method: 'GET',
+    url: `${PREFIX}/act-from-another-charity`,
+    headers: { authorization: tokenFor('ADMIN') },
+  });
+
+  assert.equal(response.statusCode, 404);
+  assert.equal(response.json().code, 'GOVERNING_ACT_NOT_FOUND');
+  await app.close();
+});
+
+test('the voids list is still its own route and is never read as an act identifier', async () => {
+  let findFirstCalled = false;
+  const app = await buildApp({
+    governingAct: {
+      findFirst: async () => {
+        findFirstCalled = true;
+        return null;
+      },
+    },
+    governingActVoid: { findMany: async () => [] },
+  });
+
+  const response = await app.inject({
+    method: 'GET',
+    url: `${PREFIX}/voids`,
+    headers: { authorization: tokenFor('ADMIN') },
+  });
+
+  assert.equal(response.statusCode, 200);
+  assert.equal(findFirstCalled, false, 'a static segment must win over the parametric route');
+  await app.close();
+});

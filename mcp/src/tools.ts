@@ -231,6 +231,16 @@ const READ_TOOLS: readonly ToolDefinition[] = [
     model: 'BoardMember',
   },
   {
+    name: 'board_member_get',
+    description:
+      'One trustee by identifier, as the board register returns them. Use this to resolve a '
+      + 'boardMemberId carried on a conflict record rather than paging the register.' + GATED
+      + 'date of birth, home address, former names, other directorships, email address.',
+    path: '/api/v1/board-members/:id',
+    params: [{ kind: 'id', name: 'id' }],
+    model: 'BoardMember',
+  },
+  {
     name: 'governing_acts',
     description:
       'The minute book: board meetings, written resolutions and general meetings, with kind, '
@@ -242,6 +252,17 @@ const READ_TOOLS: readonly ToolDefinition[] = [
       { kind: 'enum', name: 'kind', values: GOVERNING_ACT_KINDS },
       { kind: 'enum', name: 'status', values: GOVERNING_ACT_STATUSES },
     ],
+    model: 'GoverningAct',
+  },
+  {
+    name: 'governing_act_get',
+    description:
+      'One meeting or written resolution by identifier, with its resolutions. The minute book '
+      + 'tool returns every act, which is a great deal to read to answer a question about '
+      + 'one.' + GATED + 'resolution text, who abstained, and any link back to a conflict '
+      + 'record.' + COMPLETE_PLAN,
+    path: '/api/v1/governing-acts/:id',
+    params: [{ kind: 'id', name: 'id' }],
     model: 'GoverningAct',
   },
   {

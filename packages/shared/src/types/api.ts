@@ -632,6 +632,20 @@ export interface DocumentResponse {
   updatedAt: string;
 }
 
+export interface UpdateDocumentRequest {
+  name?: string;
+  description?: string | null;
+  // The enum's values rather than the enum itself, for the reason given above
+  // DirectorAppointmentKind: a string parsed out of a request body is not
+  // assignable to a TypeScript enum, so a route would have to cast the very
+  // value its schema just validated.
+  category?: `${DocumentCategory}`;
+  owner?: string | null;
+  approvedDate?: string | null;
+  nextReviewDate?: string | null;
+  boardMinuteReference?: string | null;
+}
+
 export interface LinkStandardRequest {
   standardId: string;
 }

@@ -6,9 +6,9 @@ import { requireSessionLevel } from '../../middleware/session-level.js';
 import { requireActionApproval } from '../../middleware/action-approval.js';
 import { subscriptionGuard } from '../../middleware/subscription.js';
 import { requireAdmin } from '../../middleware/roles.js';
-import { uploadDocumentSchema, linkStandardSchema } from '@charitypilot/shared';
+import { uploadDocumentSchema, updateDocumentSchema, linkStandardSchema } from '@charitypilot/shared';
 import { AppError, handleError } from '../../utils/errors.js';
-import { sendCreated, sendNoContent } from '../../utils/response.js';
+import { sendCreated, sendNoContent, sendSuccess } from '../../utils/response.js';
 import { formatProviderError } from '../../utils/provider-errors.js';
 import { createPrismaOrganisationStorageResolver } from '../../services/document-storage-resolution.js';
 import { z, ZodError } from 'zod';
@@ -124,6 +124,24 @@ export async function documentRoutes(app: FastifyInstance) {
     try {
       return await service.getById(request.user.organisationId, request.params.id);
     } catch (err) {
+      handleError(reply, err);
+    }
+  });
+
+  // Changes the card, never the file. Replacing a file is a new upload, so
+  // this route has no multipart branch and cannot move a document's storage
+  // path out from under a download already in flight.
+  app.patch<{ Params: { id: string } }>('/:id', { preHandler: [requireAdmin] }, async (request, reply) => {
+    try {
+      const { expectedUpdatedAt, ...data } = updateDocumentSchema.parse(request.body);
+      return sendSuccess(
+        reply,
+        await service.update(request.user.organisationId, request.params.id, data, expectedUpdatedAt),
+      );
+    } catch (err) {
+      if (err instanceof ZodError) {
+        return reply.status(400).send({ error: 'Validation failed', code: 'VALIDATION_ERROR', details: err.errors });
+      }
       handleError(reply, err);
     }
   });

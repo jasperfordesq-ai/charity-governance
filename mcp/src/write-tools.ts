@@ -8,6 +8,7 @@ import {
   ORGANISATION_COMPLEXITIES,
   CONFLICT_STATUSES,
   DIRECTOR_APPOINTMENT_KINDS,
+  DOCUMENT_CATEGORIES,
   GOVERNING_ACT_KINDS,
   GOVERNING_ACT_STATUSES,
   REGISTER_STATUSES,
@@ -621,6 +622,28 @@ export const WRITE_TOOLS: readonly ToolDefinition[] = [
   },
 
   /* --- documents and the standards they evidence --------------------------- */
+  {
+    name: 'document_update',
+    description:
+      'Change a document’s name, description, category, owner, review dates or board '
+      + 'minute reference. The stored file is never touched: replacing a file is a new '
+      + 'upload. A rename does not re-title a page mirrored into Confluence.',
+    path: '/api/v1/documents/:id',
+    method: 'PATCH',
+    level: 'write',
+    params: [{ kind: 'id', name: 'id' }],
+    model: 'Document',
+    body: [
+      { kind: 'timestamp', name: 'expectedUpdatedAt', required: true, control: true, describe: CONCURRENCY },
+      { kind: 'string', name: 'name', max: 300 },
+      { kind: 'string', name: 'description', max: 1000 },
+      { kind: 'enum', name: 'category', values: DOCUMENT_CATEGORIES },
+      { kind: 'string', name: 'owner', max: 200 },
+      { kind: 'date', name: 'approvedDate' },
+      { kind: 'date', name: 'nextReviewDate' },
+      { kind: 'string', name: 'boardMinuteReference', max: 200 },
+    ],
+  },
   {
     name: 'document_link_standard',
     description: 'Link a document to a Governance Code standard as evidence for it.',

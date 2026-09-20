@@ -224,3 +224,62 @@ test('PATCH /board-members/:id returns the stable validation contract for a merg
     await app.close();
   }
 });
+
+// ── reading one trustee by identifier ───────────────────────────────────────
+
+test('reading one trustee scopes the lookup to the caller’s charity', async () => {
+  const calls: Call[] = [];
+  const prisma = {
+    boardMember: {
+      findFirst: async (args: unknown) => {
+        calls.push({ name: 'boardMember.findFirst', args });
+        return { id: 'bm-1', organisationId: 'org_1', name: 'A Trustee' };
+      },
+    },
+  };
+  const service = new BoardMemberService(prisma as never);
+
+  const member = await service.getById('org_1', 'bm-1');
+
+  assert.equal(member.name, 'A Trustee');
+  assert.deepEqual(
+    (calls[0]?.args as { where: unknown }).where,
+    { id: 'bm-1', organisationId: 'org_1' },
+  );
+});
+
+test('a trustee belonging to another charity reads as missing, not as forbidden', async () => {
+  const service = new BoardMemberService({
+    boardMember: { findFirst: async () => null },
+  } as never);
+
+  await assert.rejects(
+    () => service.getById('org_1', 'bm-from-another-charity'),
+    (err: { statusCode?: number; code?: string }) => {
+      assert.equal(err.statusCode, 404);
+      assert.equal(err.code, 'BOARD_MEMBER_NOT_FOUND');
+      return true;
+    },
+  );
+});
+
+test('a member may read one trustee, because the register is already theirs to read', async () => {
+  const app = Fastify({ logger: false });
+  app.decorate('prisma', {
+    ...authModels('MEMBER', activeSubscription()),
+    boardMember: {
+      findFirst: async () => ({ id: 'bm-1', organisationId: 'org-1', name: 'A Trustee' }),
+    },
+  } as never);
+  await app.register(boardMemberRoutes, { prefix: '/board-members' });
+
+  const response = await app.inject({
+    method: 'GET',
+    url: '/board-members/bm-1',
+    headers: { authorization: tokenFor('MEMBER') },
+  });
+
+  assert.equal(response.statusCode, 200);
+  assert.equal(response.json().data.name, 'A Trustee');
+  await app.close();
+});
