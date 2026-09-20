@@ -163,3 +163,24 @@ test('a build that cannot say which version it is produces no warning at all', a
     assert.equal(api.note, undefined, 'a silent build must not be reported as out of date');
   }
 });
+
+test('session_info names the realm in the charity realm too, not only the operator one', async () => {
+  // The operator branch has always returned `realm: "operator"`. The charity
+  // branch returned nothing, so "no realm field" meant "charity" only to a
+  // reader who already knew that. An agent holding both connectors could not
+  // tell them apart from this answer, which is the one it is told to call
+  // first.
+  const info = await runSessionInfo(
+    client({ '/api/v1/auth/me': ME, '/api/v1/auth/connector/session': { accessLevel: 'WRITE', role: 'OWNER' } }),
+    { baseUrl: 'https://example.test', allowPersonalData: false, realm: 'charity' },
+  );
+  assert.equal(info['realm'], 'charity');
+});
+
+test('an invocation that names no realm still reports the charity realm it defaults to', async () => {
+  const info = await runSessionInfo(
+    client({ '/api/v1/auth/me': ME }),
+    { baseUrl: 'https://example.test', allowPersonalData: false },
+  );
+  assert.equal(info['realm'], 'charity');
+});

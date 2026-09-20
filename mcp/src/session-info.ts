@@ -169,6 +169,11 @@ export async function runSessionInfo(
   const apiVersion = health?.build?.version ?? null;
 
   return {
+    // Stated rather than implied by the absence of the operator realm's own
+    // field. An agent may hold a connector for each, and this is the tool it
+    // is told to call first; "which one am I in" should not be answered by
+    // noticing what is missing.
+    realm: 'charity',
     organisation: {
       id: me.organisationId ?? null,
       name: me.organisation?.name ?? null,

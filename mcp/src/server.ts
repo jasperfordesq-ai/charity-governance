@@ -1,5 +1,6 @@
 import { Server } from '@modelcontextprotocol/sdk/server/index.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
+import type { Transport } from '@modelcontextprotocol/sdk/shared/transport.js';
 import {
   CallToolRequestSchema,
   GetPromptRequestSchema,
@@ -39,7 +40,7 @@ import { OPERATOR_TOOLS, OPERATOR_TOOL_NAMES } from './operator-tools.js';
 import { CONNECTOR_VERSION } from './version.js';
 import { FETCH_TOOL, resolveReference } from './references.js';
 import { RESOURCES, RESOURCE_TEMPLATES, readResource } from './resources.js';
-import { INSTRUCTIONS } from './instructions.js';
+import { instructionsFor } from './instructions.js';
 import { ConnectorError } from './errors.js';
 import { errorResult, okResult } from './results.js';
 import { SESSION_INFO_TOOL, runSessionInfo } from './session-info.js';
@@ -177,13 +178,22 @@ function assertInToolsets(name: string, group: ToolGroup, toolsets: readonly Too
   );
 }
 
-export async function startServer(config: ConnectorConfig, session: Session): Promise<void> {
+export async function startServer(
+  config: ConnectorConfig,
+  session: Session,
+  /**
+   * Where the server listens. Injected the same way `Session` takes a
+   * `fetchImpl`: stdio is the only transport a client ever uses, and a test
+   * that wants to drive a real initialize needs a seam that is not a pipe.
+   */
+  transport: Transport = new StdioServerTransport(),
+): Promise<void> {
   const client = new ApiClient({ session, baseUrl: config.baseUrl });
   const server = new Server(
     { name: 'charitypilot', version: CONNECTOR_VERSION },
     {
       capabilities: { tools: {}, prompts: {}, resources: {} },
-      instructions: INSTRUCTIONS,
+      instructions: instructionsFor(config.realm),
     },
   );
 
@@ -399,5 +409,5 @@ export async function startServer(config: ConnectorConfig, session: Session): Pr
     }
   });
 
-  await server.connect(new StdioServerTransport());
+  await server.connect(transport);
 }

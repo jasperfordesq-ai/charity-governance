@@ -6,6 +6,12 @@ import { buildToolList } from '../server.js';
 import { OPERATOR_TOOLS, OPERATOR_TOOL_NAMES } from '../operator-tools.js';
 import { TOOLS } from '../tools.js';
 import { FILE_TOOLS } from '../file-tools.js';
+import { startServer } from '../server.js';
+import { INSTRUCTIONS } from '../instructions.js';
+import { Session } from '../session.js';
+import { createMemoryStore } from '../credentials.js';
+import { Client } from '@modelcontextprotocol/sdk/client/index.js';
+import { InMemoryTransport } from '@modelcontextprotocol/sdk/inMemory.js';
 
 /**
  * The operator realm, from the connector's side.
@@ -218,4 +224,65 @@ test('tenant_lifecycle requires the version it read, so it cannot act on a stale
   const version = lifecycle?.body?.find((field) => field.name === 'expectedLifecycleVersion');
   assert.ok(version, 'closing a charity on a stale read is how the wrong charity gets closed');
   assert.equal(version.required, true);
+});
+
+// ---------------------------------------------------------------------------
+// What the client is told on initialize, in each realm
+
+/**
+ * Drives a real `initialize` against a real server over a linked in-memory
+ * transport pair, and returns what the client was told about this server.
+ *
+ * Nothing here is stubbed but the transport: the instructions asserted on are
+ * the bytes a client actually receives, not a constant read back out of the
+ * module that defines it.
+ */
+async function instructionsSeenByClient(realm: 'charity' | 'operator'): Promise<string> {
+  const config = parseArgs([
+    'serve', '--realm', realm, '--profile', 'local', '--base-url', 'http://localhost:3002',
+  ]);
+  const session = new Session({
+    baseUrl: config.baseUrl,
+    store: createMemoryStore('refresh'),
+    realm,
+    fetchImpl: async () => new Response('{}', { status: 500 }),
+  });
+
+  const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
+  await startServer(config, session, serverTransport);
+
+  const client = new Client({ name: 'harness', version: '0' });
+  await client.connect(clientTransport);
+  const instructions = client.getInstructions() ?? '';
+  await client.close();
+  return instructions;
+}
+
+test('the operator realm never tells a client it is inside one charity', async () => {
+  const instructions = await instructionsSeenByClient('operator');
+
+  assert.notEqual(
+    instructions,
+    INSTRUCTIONS,
+    'the operator realm was handed the charity realm\'s instructions',
+  );
+  // Each of these is a statement that is FALSE in this realm. An agent told
+  // any of them starts from a wrong belief about what it is connected to, and
+  // reads its first refusal as a bug rather than as the boundary.
+  for (const falsehood of [
+    'governance records of one Irish charity',
+    'personal-data gate',
+    'page and pageSize',
+    'acts as the signed-in person',
+  ]) {
+    assert.ok(
+      !instructions.includes(falsehood),
+      `the operator realm is told "${falsehood}", which is not true of it`,
+    );
+  }
+  assert.match(instructions, /platform operator/i);
+});
+
+test('the charity realm still gets the instructions it always had', async () => {
+  assert.equal(await instructionsSeenByClient('charity'), INSTRUCTIONS);
 });
