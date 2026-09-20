@@ -101,50 +101,16 @@ export const INTEGRATION_ROUTES_PREFIX = '/api/v1/integrations';
  */
 export const CONFLUENCE_CALLBACK_PATH = '/integrations/confluence/callback';
 
-/**
- * The granular Confluence scopes, plus `offline_access`.
- *
- * **`offline_access` is not optional and is not decoration.** Without it
- * Atlassian issues no refresh token at all, the access token dies within the
- * hour, and every connected charity is silently disconnected before lunchtime
- * with nothing able to renew it. `connectConfluence` refuses a connection
- * whose exchange produced no refresh token for exactly this reason; this list
- * is what stops that refusal ever being reached.
- */
-export const CONFLUENCE_OAUTH_SCOPES = [
-  'read:page:confluence',
-  'write:page:confluence',
-  // Atlassian's v2 DELETE /pages/{id} requires this, and the purge that follows
-  // it requires it too. Without it an erasure 403s, and confluence-client maps
-  // a 403 to CONFLUENCE_RECONNECT_REQUIRED — a wrong diagnosis that would be
-  // retried to dead-letter.
-  'delete:page:confluence',
-  'read:attachment:confluence',
-  'write:attachment:confluence',
-  'delete:attachment:confluence',
-  'read:space:confluence',
-  'read:content-details:confluence',
-  'offline_access',
-] as const;
 
-/**
- * The scopes the explicit erasure workflow cannot proceed without.
- *
- * Deliberately narrower than `CONFLUENCE_OAUTH_SCOPES`: this is the set a
- * *request* is gated on, not the set we ask for. `search:confluence` is not
- * requested at all, even though the audit's later CQL work will want it —
- * the DPO's standing ask is narrowest scopes, and a scope we do not yet use
- * is one we should not yet hold.
- */
-export const CONFLUENCE_REQUIRED_ERASURE_SCOPES = [
-  'delete:page:confluence',
-  'delete:attachment:confluence',
-] as const;
-
-export function missingConfluenceScopes(granted: readonly string[]): string[] {
-  const held = new Set(granted);
-  return CONFLUENCE_REQUIRED_ERASURE_SCOPES.filter((scope) => !held.has(scope));
-}
+// Re-exported from the service layer, where these now live. See
+// services/confluence-scopes.ts: the owner console health view needs the scope
+// requirement and must not reach into routes/ for it.
+export {
+  CONFLUENCE_OAUTH_SCOPES,
+  CONFLUENCE_REQUIRED_ERASURE_SCOPES,
+  missingConfluenceScopes,
+} from '../../services/confluence-scopes.js';
+import { CONFLUENCE_OAUTH_SCOPES, missingConfluenceScopes } from '../../services/confluence-scopes.js';
 
 /**
  * What an administrator is told **before** they authorise, not after.

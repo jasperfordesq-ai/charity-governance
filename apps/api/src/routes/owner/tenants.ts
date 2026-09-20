@@ -11,6 +11,7 @@ import {
   updateTenantConfiguration,
   listTenantAdministrativeEvents,
 } from '../../services/owner-tenant-configuration.service.js';
+import { getTenantIntegrationHealth } from '../../services/owner-integration-health.service.js';
 
 /**
  * What a platform operator may change about a charity they do not belong to.
@@ -81,6 +82,29 @@ export async function ownerTenantRoutes(app: FastifyInstance): Promise<void> {
     try {
       const { id } = z.object({ id: z.string().min(1).max(64) }).parse(request.params);
       return reply.send({ configuration: await getTenantConfiguration(app.prisma, id) });
+    } catch (err) {
+      if (err instanceof ZodError) {
+        return reply.status(400).send({ error: 'Validation failed', code: 'VALIDATION_ERROR' });
+      }
+      return handleError(reply, err);
+    }
+  });
+
+  /**
+   * The missing third of the admin panel: why a charity's publishing has
+   * stopped, answerable without reading the database.
+   *
+   * A GET and nothing else, deliberately, and there is no sibling PATCH. There
+   * is no operator "reconnect" — connecting needs the charity's own Atlassian
+   * sign-in, so an operator could not perform it if the button existed — and no
+   * operator "re-queue", because pushing a charity's governance documents to a
+   * third-party site on somebody else's behalf is not an action a platform
+   * operator has standing to take. See the service header.
+   */
+  app.get('/tenants/:id/integration-health', async (request, reply) => {
+    try {
+      const { id } = z.object({ id: z.string().min(1).max(64) }).parse(request.params);
+      return reply.send({ health: await getTenantIntegrationHealth(app.prisma, id) });
     } catch (err) {
       if (err instanceof ZodError) {
         return reply.status(400).send({ error: 'Validation failed', code: 'VALIDATION_ERROR' });
