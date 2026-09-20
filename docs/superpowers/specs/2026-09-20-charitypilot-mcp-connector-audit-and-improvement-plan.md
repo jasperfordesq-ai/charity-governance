@@ -11,6 +11,28 @@ Part 3.
 for CharityPilot's purposes, and the owner should be able to do everything the platform
 does without opening the web application.
 
+## Status, end of 2026-09-20
+
+Phases A to H were worked through in one session after the owner asked for it.
+What each added is in `mcp/HANDOVER.md`; the plans are
+`2026-09-20-charitypilot-mcp-phase-a-b-defects-and-legibility.md` and
+`2026-09-20-charitypilot-mcp-phase-c-surface.md`.
+
+| Phase | State |
+| --- | --- |
+| A, defects | Built, except the terminal checklist (the owner's to run) and the `document_delete` API fix, which belongs to the other session's Confluence Tier 1 plan |
+| B, legibility | Built |
+| C, surface gaps | Built, except Confluence setup tools, deliberately deferred |
+| D, gate as session posture | Built; the role floor is owner or administrator and wants the DPO's confirmation |
+| E, credentials and packaging | Built; publishing to npm and packing the bundle are the owner's to do |
+| F, search and workflows | Prompts and field selection built; **search, resources and fetch-by-reference not built** |
+| G, remote transport | **Designed, not built**, in `2026-09-20-charitypilot-mcp-remote-transport-design.md`. Blocked on the hosting move |
+| H, API hardening | The stale-write refusal built on five routes; idempotency keys, the connector read budget and three missing routes not built |
+
+The nine decisions in Part 3 were taken as recommended, except Confluence setup
+(deferred) and an operator connector (not started). Each is reversible and
+recorded in the commit that made it.
+
 ## Summary
 
 The connector's security posture is already better than most vendor connectors. The

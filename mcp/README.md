@@ -332,11 +332,43 @@ groups is refused if called with `TOOL_DISABLED`, naming the group it is in.
 outcome and the time taken, with secrets redacted and arguments never
 logged. stdout stays the protocol stream.
 
+**Prompts.** A charity's work is sequenced, and an agent infers some of that
+order and gets the rest wrong. Five prompts carry it, and your client offers
+them to you by name:
+
+| Prompt | What it does |
+| --- | --- |
+| `governance_health_check` | Reads the whole picture and ranks what is overdue, what is about to be, and what is merely untidy |
+| `prepare_board_meeting` | Builds an agenda from what the records say is outstanding |
+| `record_board_meeting` | Writes a held meeting into the minute book in the order the records expect |
+| `annual_return_readiness` | Says whether you can file, and what is missing |
+| `fix_a_wrong_deadline` | Works out whether a deadline is really overdue or generated from a wrong date, and fixes the cause |
+
+**Fewer fields.** A list tool takes `fields` to return only the columns you
+want, which keeps a long register short. The choices offered are the fields the
+gate would release anyway, so asking for one cannot reach a withheld one, and
+the pagination figures always come back.
+
 ## The personal-data gate
 
 By default, the connector answers governance questions without sending
-personal data to your AI model provider. Concretely, with no flag, on the
-tools that currently exist:
+personal data to your AI model provider.
+
+**The gate belongs to the session, not to this process.** You choose it when
+you sign in, with `connect --data-scope withheld|full`, and the API records it
+on the session beside the access level. It cannot be changed afterwards: a
+session is narrowed at sign-in or not at all. Until this change it was a flag
+on the `serve` command, read from your AI client's configuration file — a file
+this connector otherwise treats as something an attacker may write, which is
+why a stored credential refuses to be sent to any host but the one that issued
+it. Editing that file can no longer decide whether a trustee's home address
+reaches a model.
+
+Asking for `full` is refused unless your account is an owner or an
+administrator. That refusal happens after your password is checked, so it
+cannot be used to find out who holds which role.
+
+Concretely, with the scope withheld, on the tools that currently exist:
 
 - **`board_register`**: trustee names and roles, appointment and term dates,
   and conduct/induction status come back. Dates of birth, home addresses,
@@ -376,15 +408,20 @@ exists for — what's outstanding, what needs board attention, whether
 something was properly recorded — without the content of anyone's personal
 or sensitive record leaving the building.
 
-Pass `--allow-personal-data` and all of it comes back on the tools that exist
-today: dates of birth, home addresses, and full resolution text including
-who abstained and any conflict-record link. Doing so isn't a convenience
-toggle — it means that data is being sent to whichever AI model provider
-your client uses, which is a data-processing decision with its own
-lawful-basis and residency questions. That decision belongs to the
-organisation's data protection officer, not to whoever happens to be running
-the connector that day. Don't pass this flag without checking with them
-first.
+Connect with `--data-scope full` and all of it comes back: dates of birth, home
+addresses, and full resolution text including who abstained and any
+conflict-record link. Doing so isn't a convenience toggle — it means that data
+is being sent to whichever AI model provider your client uses, which is a
+data-processing decision with its own lawful-basis and residency questions.
+That decision belongs to the organisation's data protection officer, not to
+whoever happens to be running the connector that day. Don't ask for it without
+checking with them first.
+
+`--allow-personal-data` is the old spelling. At `connect` it still means
+`--data-scope full`, so an existing command keeps meaning what it meant. On
+`serve` it now decides nothing, unless the API is a build too old to hold a
+scope at all, in which case the connector falls back to it and `status` says
+so.
 
 ## The gate applies to writes too
 
@@ -440,6 +477,11 @@ member may not do.
 The default is `write` everywhere except the local test profile. The connector
 only offers the tools the level allows, and asks the API what the level actually
 is rather than trusting the flag it was started with.
+
+The data scope is chosen the same way and at the same moment, with
+`--data-scope`, and is likewise the session's rather than this process's. A
+session therefore carries three things decided by whoever typed the password:
+which client it belongs to, how much it may do, and how much it may see.
 
 ## Approving something that cannot be undone
 

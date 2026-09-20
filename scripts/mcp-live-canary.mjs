@@ -125,6 +125,23 @@ const MUTATIONS = {
     replace: '$1false$2',
     expect: 'board_member_delete must carry destructiveHint true.',
   },
+  // The personal-data gate is a property of the session now. A login route
+  // that ignored what was asked for would hand every connector session the
+  // whole record, and nothing about the connector would look different.
+  'every-session-sees-everything': {
+    file: 'apps/api/src/routes/auth/connector.ts',
+    find: /(const dataScope = )body\.dataScope \?\? "WITHHELD"(;)/g,
+    replace: '$1"FULL"$2',
+    expect: 'a session connected without asking for personal data must not see it.',
+  },
+  // The floor is what stops a member holding a session that reads a trustee's
+  // home address. Widening it leaves every other test green.
+  'any-role-may-see-personal-data': {
+    file: 'apps/api/src/routes/auth/connector.ts',
+    find: /(const DATA_SCOPE_ROLE_FLOOR = new Set\(\["OWNER", "ADMIN")(\]\);)/g,
+    replace: '$1, "MEMBER"$2',
+    expect: 'a member must be refused a session that sees personal data.',
+  },
 };
 
 const name = process.argv[2];

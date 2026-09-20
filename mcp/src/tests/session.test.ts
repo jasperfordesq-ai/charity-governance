@@ -409,3 +409,38 @@ test('a 429 says the attempts ran out, not that the password is wrong', async ()
   });
   assert.equal(store.read(), null);
 });
+
+test('a role refused the data scope is told that, not that the host is wrong', async () => {
+  // Both refusals are 403. One happens before any credential is read; this one
+  // happens after the password, and the person can act on it.
+  const session = new Session({
+    baseUrl: 'https://example.test',
+    store: createMemoryStore(),
+    dataScope: 'full',
+    fetchImpl: async () => new Response(
+      JSON.stringify({
+        code: 'DATA_SCOPE_FORBIDDEN',
+        error: "This account's role may not hold a connector session that sees personal data.",
+      }),
+      { status: 403, headers: { 'content-type': 'application/json' } },
+    ),
+  });
+
+  await assert.rejects(
+    () => session.login('member@example.org', 'correct-password'),
+    /role may not hold a connector session that sees personal data/,
+  );
+});
+
+test('a 403 with no code still reads as the host being wrong', async () => {
+  const session = new Session({
+    baseUrl: 'https://example.test',
+    store: createMemoryStore(),
+    fetchImpl: async () => new Response('{}', { status: 403 }),
+  });
+
+  await assert.rejects(
+    () => session.login('owner@example.org', 'correct-password'),
+    /reachable only by the connector/,
+  );
+});

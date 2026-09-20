@@ -98,6 +98,20 @@ export class Session {
       // including 401, keeps the generic message: it must not leak whether the
       // email exists.
       if (response.status === 403) {
+        // Two different refusals share this status. One happens before any
+        // credential is read, and says nothing about the account; the other
+        // happens after the password, and is the API declining to issue a
+        // session that wide to this role. Reporting the second as the first
+        // would send somebody looking for a broken host.
+        let body: { code?: unknown; error?: unknown } = {};
+        try {
+          body = (await response.json()) as { code?: unknown; error?: unknown };
+        } catch {
+          body = {};
+        }
+        if (body.code === 'DATA_SCOPE_FORBIDDEN' && typeof body.error === 'string') {
+          throw new Error(body.error);
+        }
         throw new Error(
           'CharityPilot refused this request before checking the credentials. The '
             + 'connector sign-in route is reachable only by the connector, so this '

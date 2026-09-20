@@ -9,24 +9,48 @@ which decisions were made unilaterally and are yours to reverse.
 
 ## Status in one paragraph
 
-**Updated 2026-09-20, after Phases A and B of the audit.** The connector is no
-longer read-only. It reads the whole API through 27 tools, changes records through
-34 more, moves documents in and out through 2 that appear only when the operator
-names a directory for them, and answers `session_info` always. The unit suite is
-258 (two skipped, both POSIX-only file modes), the API suite is 1822, and the live
-suite is 60. Typecheck is clean, and the package still lives OUTSIDE the npm
-workspace globs, so nothing about it can reach the API's Docker build or the
-blue-green deploy.
+**Updated 2026-09-20, after Phases A to H of the audit.** The connector is no
+longer read-only. It reads the whole API through 31 tools, changes records
+through 42 more, moves documents and reports through 4 file tools, answers
+`session_info` always, and offers 5 prompts for the jobs that take more than one
+tool. The unit suite is 310, the API suite is 1843, and the web suite is 498.
+Typecheck is clean, and the package still lives OUTSIDE the npm workspace globs,
+so nothing about it can reach the API's Docker build or the blue-green deploy.
 
-**Phases A and B of the 2026-09-20 audit are built**
-(`docs/superpowers/specs/2026-09-20-charitypilot-mcp-connector-audit-and-improvement-plan.md`,
-plan `docs/superpowers/plans/2026-09-20-charitypilot-mcp-phase-a-b-defects-and-legibility.md`):
-`approve` shows what is being approved before asking for a password, and the API's
-summary names the record; refusals carry the API's code, the fields that were wrong
-and what to do next; `status` reports the level the API holds; downloads survive an
-expired token; and the server carries instructions, annotations, structured results
-and errors, `session_info`, tool groups (`--toolsets`) and a diagnostics flag
-(`--verbose`). Phases C to H wait on the owner's rulings in Part 3 of the audit.
+**What the 2026-09-20 audit added, by phase**
+(spec `docs/superpowers/specs/2026-09-20-charitypilot-mcp-connector-audit-and-improvement-plan.md`):
+
+- **A — the defects.** `approve` shows what is being approved before asking for
+  a password, and the API's summary names the record. Refusals carry the API's
+  code, the fields that were wrong and what to do next. `status` reports the
+  level the API holds. Downloads survive an expired token.
+- **B — legibility.** Server instructions, tool annotations, structured results
+  and errors, `session_info`, tool groups (`--toolsets`), `--verbose`. Tool
+  descriptions stopped repeating what the instructions say.
+- **C — the surface.** Team management at the level the API already required,
+  the sessions list, the security audit, reminder history, billing status, the
+  compliance report export, a text upload for clients with no file system, and
+  an approvals page in the web application so a person with no terminal can
+  grant one.
+- **D — the personal-data gate is session posture.** `AuthSession.dataScope`,
+  immutable and pinned per family. `connect --data-scope full` asks for it, the
+  API refuses it below owner or administrator, and editing an AI client's
+  configuration file no longer decides what a model may see.
+- **E — reach.** One credential per host, and a validated `.mcpb` bundle
+  manifest so Claude Desktop can install it in one step.
+- **F — workflows.** Prompts, and a `fields` argument to keep a long list short.
+  **Search was not built**; see below.
+- **G — remote transport.** Designed only, in
+  `docs/superpowers/specs/2026-09-20-charitypilot-mcp-remote-transport-design.md`.
+  Blocked on the hosting move and on the DPO seeing it.
+- **H — API hardening.** Five update routes can now refuse a stale write; the
+  connector requires the stamp on all five.
+
+**Still not built, deliberately:** search (an API route plus tools; the design
+in the audit is to match only fields the gate would release anyway, so it needs
+no scope interaction), MCP resources, idempotency keys on creates, a read budget
+for connector sessions, and `GET` routes for one governing act and one board
+member. None is blocking; each is listed in the audit.
 
 Everything that limits it lives in the API, not here:
 
