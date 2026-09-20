@@ -1,0 +1,8 @@
+{
+  "mcpServers": {
+    "charitypilot": {
+      "command": "node",
+      "args": ["mcp/dist/cli.js", "serve", "--profile", "vm"]
+    }
+  }
+}
