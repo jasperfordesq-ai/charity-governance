@@ -31,8 +31,23 @@ const requeueStorageDeletionSchema = z.object({
     .pipe(
       z
         .string()
-        .min(10, 'Give a recovery reason of at least 10 characters')
-        .max(500, 'Recovery reason must be at most 500 characters')
+        // `char_length` in the `DocumentStorageDeletionRecovery_reason_bounded`
+        // CHECK this backs counts Unicode code points, not UTF-16 code
+        // units — zod's built-in `.min()`/`.max()` count `.length`, which is
+        // code units. Five astral-plane characters (most emoji) are ten
+        // UTF-16 units but five code points: `.min(10)` would accept them
+        // and the CHECK would then reject the INSERT, turning a 400 into a
+        // 500. `Array.from` iterates by code point (the same idiom
+        // `confluenceErasureSchema` in `routes/integrations/index.ts` uses
+        // for this), so counting its length agrees with Postgres.
+        .refine(
+          (value) => Array.from(value).length >= 10,
+          'Give a recovery reason of at least 10 characters',
+        )
+        .refine(
+          (value) => Array.from(value).length <= 500,
+          'Recovery reason must be at most 500 characters',
+        )
         // Mirrors `confluenceErasureSchema` in `routes/integrations/index.ts`
         // exactly — both back a CHECK of the same shape, so the two must read
         // the same. Postgres's `[[:cntrl:]]` also matches the C1 block,

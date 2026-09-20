@@ -503,3 +503,35 @@ test('operator recovery requires an exact confirmation and substantive safe reas
     await app.close();
   }
 });
+
+// Mirrors the erasure route's "short in code points but long in UTF-16
+// units" test: both `requeueStorageDeletionSchema` and its service-layer
+// backstop in `DocumentService#recoverDeadLetterStorageDeletion` must count
+// Unicode code points, not UTF-16 units, or a reason that plain `.length`
+// accepts violates `DocumentStorageDeletionRecovery_reason_bounded`'s
+// `char_length` check as a 500 instead of a 400.
+test('a recovery reason short in code points but long in UTF-16 units is rejected, not waved through by .length', async () => {
+  let touched = false;
+  const app = await buildApp('ADMIN', {
+    documentStorageDeletion: { findFirst: async () => { touched = true; return DEAD_LETTER; } },
+  });
+  try {
+    // Five astral-plane characters are ten UTF-16 units (a plain `.length`
+    // read) but five Unicode code points.
+    const response = await app.inject({
+      method: 'POST',
+      url: '/storage-deletions/deletion-1/requeue',
+      headers: { authorization: authorization('ADMIN') },
+      payload: { reason: '😀😀😀😀😀', confirmation: 'REQUEUE DOCUMENT STORAGE DELETION', disposition: 'REQUEUE_UNCHANGED' },
+    });
+
+    assert.equal(response.statusCode, 400, JSON.stringify(response.json()));
+    assert.ok(
+      response.body.includes('at least 10 characters'),
+      'must be refused for being too short in code points, not accepted as 10 UTF-16 units',
+    );
+    assert.equal(touched, false);
+  } finally {
+    await app.close();
+  }
+});

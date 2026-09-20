@@ -1350,9 +1350,18 @@ export class DocumentService {
     nextAttemptAt: Date | null;
   }> {
     const reason = input.reason.replace(/\r\n?/g, '\n').trim();
+    // Counts Unicode code points, not UTF-16 units, to agree with the
+    // `char_length`-based `DocumentStorageDeletionRecovery_reason_bounded`
+    // CHECK this guard backs — the same reasoning as the bounds refinements
+    // on `requeueStorageDeletionSchema` in `routes/documents/index.ts` and
+    // `confluenceErasureSchema` in `routes/integrations/index.ts`. A plain
+    // `reason.length` here would accept five astral-plane characters (ten
+    // UTF-16 units, five code points) that the CHECK then rejects, turning
+    // this guard's 400 into a 500.
+    const reasonCodePointLength = Array.from(reason).length;
     if (
-      reason.length < 10 ||
-      reason.length > 500 ||
+      reasonCodePointLength < 10 ||
+      reasonCodePointLength > 500 ||
       /[\u0000-\u0009\u000b\u000c\u000e-\u001f\u007f]/.test(reason)
     ) {
       throw new AppError(400, 'INVALID_RECOVERY_REASON', 'Give a safe recovery reason between 10 and 500 characters.');
