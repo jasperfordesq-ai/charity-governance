@@ -930,6 +930,29 @@ export async function integrationRoutes(
     }
   });
 
+  // ── why the two routes below carry no subscriptionGuard either ────────────
+  //
+  // Someone will ask this, because the neighbouring `documents` routes DO
+  // carry `subscriptionGuard` and these do not — see
+  // `docs/ARCHITECTURE.md`'s "Why the integration routes carry no
+  // subscriptionGuard" for the first reason, which already covers this whole
+  // plugin: no `Subscription` row is the normal, permanent state on the
+  // personal-server appliance, and gating connection itself would break that
+  // profile outright.
+  //
+  // The second reason is the one that actually decides it for THESE two
+  // routes. `GET /confluence/publications` returns `pageTitle`, which
+  // carries a deleted document's name — the same information the gated
+  // `documents` routes would otherwise refuse to a charity with no active
+  // subscription. And the erasure route exists so a charity can honour a
+  // data subject's erasure request. Gating that behind billing status would
+  // be indefensible to a regulator: "we could not delete your data because
+  // the charity's invoice was overdue" is not an answer anyone can give.
+  // The listing is the only way to discover a publication id at all, so
+  // gating the listing would gate the erasure by the back door even if the
+  // erase route itself stayed ungated. Both must stay reachable regardless
+  // of billing state, which is why neither carries the guard, and why one
+  // must not be added later without re-reading this comment.
   const confluenceErasureSchema = z
     .object({
       reason: z

@@ -122,6 +122,13 @@ export async function requestConfluenceErasure(
         storagePath: publication.retiredStoragePath ?? `publication:${publication.id}`,
         provider: 'confluence',
         targetRef,
+        // Persisted, not just validated and dropped: a DPO or regulator asking
+        // who authorised destroying a specific page, and why, must get an
+        // actual answer from this row. The route already bounds `reason` to
+        // 10-500 characters before this is ever called; the database CHECK
+        // added alongside these columns enforces the same bound independently.
+        reason: input.reason,
+        requestedById: input.requestedById,
       },
     });
 

@@ -1096,6 +1096,14 @@ model DocumentStorageDeletion {
   storagePath             String
   provider                String                                      @default("supabase")
   targetRef               Json?
+  // Who asked for this destruction, and why. Null for the ordinary,
+  // unattended Supabase cleanup every document deletion enqueues — nobody
+  // "requests" that, it just happens. Written only by the explicit Confluence
+  // erasure workflow (`confluence-erasure-request.service.ts`), which always
+  // writes both together: a record that exists only to be discarded is worse
+  // than no record, because it implies an audit trail that isn't there.
+  reason                  String?
+  requestedById           String?
   state                   DocumentStorageDeletionState                @default(PENDING)
   attempts                Int                                         @default(0)
   lastError               String?

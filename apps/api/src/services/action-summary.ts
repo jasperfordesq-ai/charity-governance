@@ -117,6 +117,25 @@ const LOOKUPS: Record<string, Lookup> = {
     });
     return row ? `Void minute-book entry ${row.reference} ${quoted(row.title)}` : null;
   },
+  // Keyed by `publicationId`, not `id` — the erase route's own param name —
+  // which is also why `resourceId` below is null for this route: it is
+  // derived from `params["id"]` alone. The document is already gone by the
+  // time a publication can be erased (that is what RETIRED means), so
+  // `documentId` — a bare id, not a name — is the only remaining reference
+  // to it; `pageTitle` is what actually makes the prompt useful.
+  "POST /api/v1/integrations/confluence/publications/:publicationId/erase": async (
+    prisma,
+    organisationId,
+    params,
+  ) => {
+    const row = await prisma.documentPublication.findFirst({
+      where: { id: idOf(params, "publicationId"), organisationId, provider: "confluence" },
+      select: { pageTitle: true, documentId: true },
+    });
+    return row
+      ? `Permanently erase the Confluence page ${quoted(row.pageTitle)} for deleted document ${row.documentId}`
+      : null;
+  },
 };
 
 export interface ActionDescription {

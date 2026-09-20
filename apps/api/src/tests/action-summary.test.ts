@@ -76,3 +76,32 @@ test("voiding names the minute by reference and title", async () => {
   const described = await describeAction(prisma, "org-1", "POST", "/api/v1/governing-acts/:id/void", { id: "g-1" });
   assert.equal(described.summary, 'Void minute-book entry BM-2026-03 "March board meeting"');
 });
+
+test("erasing a Confluence page names the page and the document it belonged to, scoped to the charity", async () => {
+  const seen: Array<Record<string, unknown>> = [];
+  const prisma = prismaWith({
+    documentPublication: {
+      findFirst: async (args: { where: Record<string, unknown> }) => {
+        seen.push(args.where);
+        return { pageTitle: "Board minutes 2026-08", documentId: "doc-9" };
+      },
+    },
+  });
+
+  // The route's own param is `publicationId`, not `id` — this is exactly the
+  // lookup that was missing before this fix, and why an operator previously
+  // saw a bare "Carry out: ..." prompt with no page named in it.
+  const described = await describeAction(
+    prisma,
+    "org-1",
+    "POST",
+    "/api/v1/integrations/confluence/publications/:publicationId/erase",
+    { publicationId: "pub-1" },
+  );
+
+  assert.equal(
+    described.summary,
+    'Permanently erase the Confluence page "Board minutes 2026-08" for deleted document doc-9',
+  );
+  assert.deepEqual(seen[0], { id: "pub-1", organisationId: "org-1", provider: "confluence" });
+});

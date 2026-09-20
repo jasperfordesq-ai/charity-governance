@@ -975,8 +975,10 @@ export class DocumentPublicationService {
    * dead-letters, and no operator is alerted for a document a user simply
    * deleted.
    *
-   * `retiredStoragePath` is left `null` rather than re-derived from a document
-   * that is already gone — the column is nullable for exactly this, and
+   * `retiredStoragePath` is omitted from this write rather than re-derived
+   * from a document that is already gone: a path `remove()`'s second pass
+   * already wrote survives untouched, and a row this worker alone retires
+   * simply keeps whatever it already had (null, the common case) — which
    * Task 4's erasure service already falls back when it is absent.
    *
    * No row lock: unlike `retireConfluencePublication`, which has to decide

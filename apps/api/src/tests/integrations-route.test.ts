@@ -74,6 +74,26 @@ type IntegrationRow = {
 
 type CredentialRow = { integrationId: string; kind: string; sealed: unknown; generation: number; expiresAt: Date | null };
 
+// The retired-publication side of the store, for the erasure workflow's own
+// two routes. Kept separate from `IntegrationRow` because it is a different
+// table (`DocumentPublication`), addressed by its own id, never an
+// `integrationId`.
+type PublicationRow = {
+  id: string;
+  organisationId: string;
+  documentId: string;
+  provider: string;
+  state: string;
+  cloudId: string | null;
+  pageId: string | null;
+  attachmentId: string | null;
+  pageTitle: string | null;
+  retiredAt: Date | null;
+  retiredStoragePath: string | null;
+  erasureRequestedAt: Date | null;
+  erasureDeletionId: string | null;
+};
+
 type Calls = {
   integrationFindUnique: unknown[];
   integrationUpsert: unknown[];
@@ -81,15 +101,26 @@ type Calls = {
   credentialDeleteMany: unknown[];
 };
 
-function makeStore(rows: IntegrationRow[]) {
+function makeStore(rows: IntegrationRow[], publications: PublicationRow[] = []) {
   const integrations = new Map(rows.map((row) => [row.id, { ...row }]));
   const credentials: CredentialRow[] = [];
+  const publicationRows = new Map(publications.map((row) => [row.id, { ...row }]));
+  const deletions: Array<Record<string, unknown>> = [];
+  let nextDeletionId = 1;
   const calls: Calls = {
     integrationFindUnique: [],
     integrationUpsert: [],
     integrationUpdateMany: [],
     credentialDeleteMany: [],
   };
+
+  // A plain equality match over whatever keys `where` names — every where
+  // clause the erasure workflow issues (`id`, `organisationId`, `provider`,
+  // `state`, `erasureDeletionId: null`) is exact-match, so this is enough to
+  // reproduce Prisma's filtering faithfully for these tests.
+  function publicationMatches(row: PublicationRow, where: Record<string, unknown>): boolean {
+    return Object.entries(where).every(([key, value]) => (row as unknown as Record<string, unknown>)[key] === value);
+  }
 
   function find(where: Record<string, unknown>): IntegrationRow | undefined {
     if (typeof where.id === 'string') return integrations.get(where.id);
@@ -181,15 +212,86 @@ function makeStore(rows: IntegrationRow[]) {
       findUnique: async () => null,
       upsert: async () => ({ id: 1 }),
     },
+    // No row, always — this store models the personal-server appliance,
+    // where a `Subscription` row never exists. `subscriptionGuard` reads
+    // exactly this delegate; present so that IF it were ever added to this
+    // plugin (it deliberately is not — see the comment above the erasure
+    // routes in `routes/integrations/index.ts`), the pinning tests below
+    // would newly hit it and go red, rather than throwing on a missing
+    // delegate method and going red for the wrong reason.
+    subscription: {
+      findUnique: async () => null,
+    },
+    documentPublication: {
+      findMany: async (args: {
+        where: Record<string, unknown>;
+        select?: Record<string, boolean>;
+        orderBy?: Record<string, 'asc' | 'desc'>;
+        take?: number;
+      }) => {
+        let matched = [...publicationRows.values()].filter((row) => publicationMatches(row, args.where));
+        const orderKey = args.orderBy ? Object.keys(args.orderBy)[0] : undefined;
+        if (orderKey) {
+          const direction = args.orderBy![orderKey] === 'asc' ? 1 : -1;
+          matched = [...matched].sort((a, b) => {
+            const av = (a as unknown as Record<string, unknown>)[orderKey];
+            const bv = (b as unknown as Record<string, unknown>)[orderKey];
+            const at = av instanceof Date ? av.getTime() : 0;
+            const bt = bv instanceof Date ? bv.getTime() : 0;
+            return (at - bt) * direction;
+          });
+        }
+        if (typeof args.take === 'number') matched = matched.slice(0, args.take);
+        if (!args.select) return matched.map((row) => ({ ...row }));
+        return matched.map((row) => {
+          const projected: Record<string, unknown> = {};
+          for (const key of Object.keys(args.select!)) {
+            projected[key] = (row as unknown as Record<string, unknown>)[key];
+          }
+          return projected;
+        });
+      },
+      findFirst: async (args: { where: Record<string, unknown> }) => {
+        const row = [...publicationRows.values()].find((r) => publicationMatches(r, args.where));
+        return row ? { ...row } : null;
+      },
+      updateMany: async (args: { where: Record<string, unknown>; data: Record<string, unknown> }) => {
+        const hits = [...publicationRows.values()].filter((r) => publicationMatches(r, args.where));
+        for (const row of hits) publicationRows.set(row.id, { ...row, ...args.data } as PublicationRow);
+        return { count: hits.length };
+      },
+    },
+    documentStorageDeletion: {
+      create: async (args: { data: Record<string, unknown> }) => {
+        const id = `deletion-${nextDeletionId++}`;
+        deletions.push({ id, ...args.data });
+        return { id };
+      },
+    },
     $transaction: async <T>(run: (tx: unknown) => Promise<T>): Promise<T> => run(client),
   };
 
-  return { client, calls, integrations, credentials };
+  return { client, calls, integrations, credentials, publications: publicationRows, deletions };
 }
 
 // ── actors ──────────────────────────────────────────────────────────────────
 
-type Actor = { userId: string; organisationId: string; role: 'OWNER' | 'ADMIN' | 'MEMBER'; sessionId: string };
+type Actor = {
+  userId: string;
+  organisationId: string;
+  role: 'OWNER' | 'ADMIN' | 'MEMBER';
+  sessionId: string;
+  // Both optional and both absent by default, which is why every actor above
+  // reproduces the pre-existing behaviour: `middleware/auth.ts` defaults an
+  // absent `accessLevel` to 'ADMIN' and an absent `clientKind` to 'WEB' (its
+  // documented behaviour for "a session issued before this column existed").
+  // Set explicitly only by the erase route's own auth-stack tests, which need
+  // a session that is admin-ROLE but not admin-LEVEL, or one that is a
+  // connector, to exercise the two route-specific preHandlers rather than the
+  // plugin-wide `requireAdmin` role check every other test here already pins.
+  accessLevel?: 'READ' | 'WRITE' | 'ADMIN';
+  clientKind?: 'WEB' | 'MCP_CONNECTOR';
+};
 
 const ORG_A_ADMIN: Actor = { userId: 'user-a', organisationId: 'org-a', role: 'ADMIN', sessionId: 'session-a' };
 const ORG_B_ADMIN: Actor = { userId: 'user-b', organisationId: 'org-b', role: 'ADMIN', sessionId: 'session-b' };
@@ -201,7 +303,14 @@ function bearer(actor: Actor): string {
 
 function authModels(actor: Actor) {
   return {
-    authSession: { findFirst: async () => ({ id: actor.sessionId }) },
+    authSession: {
+      findFirst: async () => ({
+        id: actor.sessionId,
+        familyId: actor.sessionId,
+        ...(actor.accessLevel ? { accessLevel: actor.accessLevel } : {}),
+        ...(actor.clientKind ? { clientKind: actor.clientKind } : {}),
+      }),
+    },
     user: {
       findUnique: async () => ({
         id: actor.userId,
@@ -210,11 +319,27 @@ function authModels(actor: Actor) {
         emailVerified: true,
       }),
     },
+    // Only reached by a connector session with no offered approval header —
+    // `requireActionApproval` mints one and answers 428 rather than ever
+    // calling `updateMany`, so `findFirst` (no live approval) and `create`
+    // (mint) are all any test here needs.
+    authActionApproval: {
+      findFirst: async () => null,
+      create: async (args: { data: Record<string, unknown> }) => ({
+        id: 'approval-1',
+        summary: args.data.summary,
+        resourceId: args.data.resourceId ?? null,
+        expiresAt: args.data.expiresAt,
+        approvedAt: null,
+      }),
+    },
   };
 }
 
 type BuildOptions = {
   rows?: IntegrationRow[];
+  /** Retired `DocumentPublication` rows, for the erasure workflow's two routes. */
+  publications?: PublicationRow[];
   actor?: Actor;
   exchangeAuthorizationCode?: unknown;
   listAccessibleResources?: unknown;
@@ -227,7 +352,7 @@ type BuildOptions = {
 
 async function buildApp(options: BuildOptions = {}) {
   const actor = options.actor ?? ORG_A_ADMIN;
-  const store = makeStore(options.rows ?? []);
+  const store = makeStore(options.rows ?? [], options.publications ?? []);
   const app = Fastify(
     options.logStream
       ? {
@@ -1702,6 +1827,86 @@ test('the disclosure says it is alpha, and points at the long form', async () =>
 });
 
 // ────────────────────────────────────────────────────────────────────────────
+// GET /confluence/publications: the retired publications a charity can still
+// ask to erase. `pageTitle` carries the deleted document's name — the only
+// human-readable trace left of it — so this listing must be tenant-scoped as
+// strictly as any other route in this file, and these tests prove the
+// scoping rather than merely observing that a fixture happened to come back
+// empty.
+// ────────────────────────────────────────────────────────────────────────────
+
+function retiredPublicationRow(overrides: Partial<PublicationRow> = {}): PublicationRow {
+  return {
+    id: 'publication-1',
+    organisationId: 'org-a',
+    documentId: 'document-1',
+    provider: 'confluence',
+    state: 'RETIRED',
+    cloudId: 'cloud-1',
+    pageId: 'page-1',
+    attachmentId: 'att-1',
+    pageTitle: 'Board minutes 2026-08',
+    retiredAt: new Date('2026-09-19T09:00:00.000Z'),
+    retiredStoragePath: 'org-a/board-minutes.pdf',
+    erasureRequestedAt: null,
+    erasureDeletionId: null,
+    ...overrides,
+  };
+}
+
+test("listing retired publications never reaches another organisation's row", async () => {
+  const { app } = await buildApp({
+    publications: [
+      retiredPublicationRow(),
+      retiredPublicationRow({ id: 'publication-2', organisationId: 'org-b', pageTitle: "Org B's confidential policy" }),
+    ],
+  });
+
+  const response = await app.inject({
+    method: 'GET',
+    url: '/confluence/publications',
+    headers: { authorization: bearer(ORG_A_ADMIN) },
+  });
+
+  assert.equal(response.statusCode, 200, response.body);
+  const { data } = JSON.parse(response.body);
+  assert.equal(data.publications.length, 1);
+  assert.equal(data.publications[0].id, 'publication-1');
+  assert.ok(
+    !response.body.includes("Org B's confidential policy"),
+    "a page title — a deleted document's name — must never reach another organisation",
+  );
+});
+
+test('the publications listing returns exactly the allow-listed shape', async () => {
+  const { app } = await buildApp({ publications: [retiredPublicationRow()] });
+
+  const response = await app.inject({
+    method: 'GET',
+    url: '/confluence/publications',
+    headers: { authorization: bearer(ORG_A_ADMIN) },
+  });
+
+  assert.equal(response.statusCode, 200, response.body);
+  const { data } = JSON.parse(response.body);
+  assert.equal(data.publications.length, 1);
+  assert.deepEqual(Object.keys(data.publications[0]).sort(), [
+    'documentId',
+    'erasureRequested',
+    'id',
+    'pageTitle',
+    'retiredAt',
+  ]);
+  assert.deepEqual(data.publications[0], {
+    id: 'publication-1',
+    documentId: 'document-1',
+    pageTitle: 'Board minutes 2026-08',
+    retiredAt: '2026-09-19T09:00:00.000Z',
+    erasureRequested: false,
+  });
+});
+
+// ────────────────────────────────────────────────────────────────────────────
 // The explicit erasure workflow: destroying a Confluence page is now
 // something a charity has to separately ask for, after its document has been
 // deleted in CharityPilot. These tests cover this file's own responsibility —
@@ -1761,4 +1966,98 @@ test('an erasure needs the typed confirmation, not just a reason', async () => {
   });
 
   assert.equal(response.statusCode, 400, response.body);
+});
+
+// The erase route's own preHandler stack: `requireSessionLevel('ADMIN')` and
+// `requireActionApproval()`, on top of the plugin-wide `requireAdmin` role
+// check every route here already carries. Neither is pinned by the member
+// test above — that 403 comes from `requireAdmin`, which checks the
+// account's ROLE, not the session's LEVEL — so a session that collapsed
+// this route's own preHandler array away would still pass every existing
+// test in this file.
+//
+// A `READ`-level session is deliberately NOT used to pin
+// `requireSessionLevel('ADMIN')`: `middleware/auth.ts`'s `authGuard` (the
+// plugin-wide `onRequest` hook, ahead of every preHandler) already refuses
+// any non-safe method on a READ session with its own, different 403
+// (`SESSION_READ_ONLY`), which would pass whether or not this route's own
+// guard exists at all and would pin the wrong thing. `WRITE` is neither
+// read-only nor admin-level, so it reaches `requireSessionLevel('ADMIN')`
+// specifically and only that guard can refuse it.
+test('a WRITE-level session cannot request a Confluence erasure, however trusted the account role is', async () => {
+  const WRITE_LEVEL_ADMIN: Actor = { ...ORG_A_ADMIN, accessLevel: 'WRITE' };
+  const { app } = await buildApp({
+    rows: [{ ...connectedRow(), grantedScopes: [...CONFLUENCE_REQUIRED_ERASURE_SCOPES] }],
+    actor: WRITE_LEVEL_ADMIN,
+  });
+
+  const response = await app.inject({
+    method: 'POST',
+    url: '/confluence/publications/publication-1/erase',
+    headers: { authorization: bearer(WRITE_LEVEL_ADMIN) },
+    payload: { reason: 'Data subject erasure request 2026-41', confirmation: 'ERASE CONFLUENCE COPY' },
+  });
+
+  assert.equal(response.statusCode, 403, response.body);
+  assert.equal(JSON.parse(response.body).code, 'SESSION_LEVEL_TOO_LOW');
+});
+
+test('a connector session needs a typed approval before it can request a Confluence erasure', async () => {
+  const CONNECTOR_ADMIN: Actor = { ...ORG_A_ADMIN, clientKind: 'MCP_CONNECTOR' };
+  const { app } = await buildApp({
+    rows: [{ ...connectedRow(), grantedScopes: [...CONFLUENCE_REQUIRED_ERASURE_SCOPES] }],
+    actor: CONNECTOR_ADMIN,
+  });
+
+  const response = await app.inject({
+    method: 'POST',
+    url: '/confluence/publications/publication-1/erase',
+    headers: { authorization: bearer(CONNECTOR_ADMIN) },
+    payload: { reason: 'Data subject erasure request 2026-41', confirmation: 'ERASE CONFLUENCE COPY' },
+  });
+
+  assert.equal(response.statusCode, 428, response.body);
+  assert.equal(JSON.parse(response.body).code, 'APPROVAL_REQUIRED');
+});
+
+// ────────────────────────────────────────────────────────────────────────────
+// The owner's ruling: these two routes stay reachable with no active
+// subscription, on purpose, for two reasons documented above the routes in
+// `routes/integrations/index.ts` — the personal-server appliance never has a
+// `Subscription` row, and gating a data-subject erasure right behind billing
+// status would be indefensible regardless. These tests pin that decision:
+// the store's `subscription.findUnique` always answers null (no row, exactly
+// the appliance's permanent state), and both routes must still succeed. If
+// `subscriptionGuard` is ever added to this plugin, it will read that same
+// delegate, get null, refuse with 403 NO_SUBSCRIPTION, and turn these red.
+// ────────────────────────────────────────────────────────────────────────────
+
+test('a charity with no subscription can still list its retired Confluence publications', async () => {
+  const { app } = await buildApp({ publications: [retiredPublicationRow()] });
+
+  const response = await app.inject({
+    method: 'GET',
+    url: '/confluence/publications',
+    headers: { authorization: bearer(ORG_A_ADMIN) },
+  });
+
+  assert.equal(response.statusCode, 200, response.body);
+  assert.equal(JSON.parse(response.body).data.publications.length, 1);
+});
+
+test('a charity with no subscription can still request a Confluence erasure', async () => {
+  const { app } = await buildApp({
+    rows: [{ ...connectedRow(), grantedScopes: [...CONFLUENCE_REQUIRED_ERASURE_SCOPES] }],
+    publications: [retiredPublicationRow()],
+  });
+
+  const response = await app.inject({
+    method: 'POST',
+    url: '/confluence/publications/publication-1/erase',
+    headers: { authorization: bearer(ORG_A_ADMIN) },
+    payload: { reason: 'Data subject erasure request 2026-41', confirmation: 'ERASE CONFLUENCE COPY' },
+  });
+
+  assert.equal(response.statusCode, 200, response.body);
+  assert.equal(typeof JSON.parse(response.body).data.storageDeletionId, 'string');
 });
