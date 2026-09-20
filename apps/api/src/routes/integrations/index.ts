@@ -152,10 +152,15 @@ export const CONFLUENCE_CONNECT_DISCLOSURE = Object.freeze({
     'Confluence is an alpha integration. Read these limits before you connect — they change what ' +
     'CharityPilot can promise a data subject who asks you to erase their data.',
   erasure: Object.freeze([
-    'Erasure from your Confluence site is best-effort, and it is bounded by permissions you ' +
-      'control, not permissions CharityPilot holds.',
-    'CharityPilot deletes and then permanently purges the page and the attachments it recorded, ' +
-      'and proves the erasure by reading the page back and requiring a 404.',
+    'Deleting a document in CharityPilot does not delete anything from your Confluence site. It ' +
+      'removes CharityPilot’s record and its reference; the page and its attachments stay where ' +
+      'they are, and your own administrators keep control of them.',
+    'Erasure from your Confluence site is a separate action an administrator has to ask for ' +
+      'explicitly, and it is best-effort: it is bounded by permissions you control, not ' +
+      'permissions CharityPilot holds.',
+    'When an erasure is requested, CharityPilot deletes and then permanently purges the page and ' +
+      'the attachments it recorded, and proves the erasure by reading the page back and requiring ' +
+      'a 404.',
     'Purging needs a higher permission than deleting: the space manage/content permission for a ' +
       'page, and the administer space permission for an attachment. If the connection you grant ' +
       'cannot purge, CharityPilot reports the erasure as failed and needing a person with those ' +

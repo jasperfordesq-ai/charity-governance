@@ -1643,6 +1643,13 @@ test('the disclosure states the erasure limits the charity, not CharityPilot, co
   assert.match(text, /no data-residency guarantee/);
 });
 
+test('the disclosure says an ordinary deletion leaves the Confluence page in place', () => {
+  const erasure = CONFLUENCE_CONNECT_DISCLOSURE.erasure.join(' ');
+
+  assert.match(erasure, /deleting a document in CharityPilot does not delete/i);
+  assert.match(erasure, /separate|explicit/i);
+});
+
 test('the disclosure never claims CharityPilot revoked anything at Atlassian', async () => {
   const text = disclosureText(CONFLUENCE_CONNECT_DISCLOSURE);
 
