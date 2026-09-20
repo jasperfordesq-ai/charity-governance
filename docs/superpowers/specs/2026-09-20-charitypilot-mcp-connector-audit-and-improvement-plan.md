@@ -24,7 +24,7 @@ What each added is in `mcp/HANDOVER.md`; the plans are
 | B, legibility | Built |
 | C, surface gaps | Built, except Confluence setup tools, deliberately deferred |
 | D, gate as session posture | Built; the role floor is owner or administrator and wants the DPO's confirmation |
-| E, credentials and packaging | Built; publishing to npm and packing the bundle are the owner's to do |
+| E, credentials and packaging | Built, including named profiles and the credential listing; publishing to npm and packing the bundle are the owner's to do |
 | F, search and workflows | Built: prompts, field selection, the search route and tool, fetch by reference, and resources |
 | G, remote transport | **Designed, not built**, in `2026-09-20-charitypilot-mcp-remote-transport-design.md`. Blocked on the hosting move and the DPO review |
 | H, API hardening | Built: the stale-write refusal on five routes, idempotency keys, the connector read budget, the three missing routes and the build identifier |
@@ -52,8 +52,19 @@ Everything below is a deliberate choice, not an oversight.
 - **An operator connector.** Not started. The `/owner` realm is a separate
   credential and a separate cookie scope, and a connector that signed in there
   would not be acting as the person running it.
-- **Publishing.** `npm publish` and `mcpb pack` are the owner’s to run, as is
-  the terminal checklist for `approve`.
+- **Publishing.** The package is still marked private, which is what stops
+  `npm publish`. Everything else a publish needs is in place and a test asks
+  npm what the tarball would contain, so removing that one line is the only
+  step left. It is the owner’s, because publishing claims a public name and
+  commits somebody to maintaining it. `mcpb pack` is the owner’s too, and so
+  is the terminal checklist for `approve`.
+- **Two Phase E items were superseded rather than skipped.** The bundle does
+  not offer an access-level field, because Phase D moved that authority onto
+  the session: the field would only have set the fallback used when the API
+  cannot be reached, which is a confusing thing to put in front of somebody
+  installing a bundle. And continuous integration validates the bundle
+  manifest but does not pack the bundle, because packing embeds a native
+  module, so a bundle built on the Linux runner would only install on Linux.
 - **The deploy.** None of this is on the VM. Everything here is committed and
   unpushed, by the owner’s decision while a second session shares the checkout.
 
