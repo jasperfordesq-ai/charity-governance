@@ -1170,11 +1170,10 @@ test('connectConfluence records the site, stores both tokens, and clears any sta
       {
         now: clock,
         exchangeAuthorizationCode: async () => tokens(),
-        // Two sites: the first is chosen, and `siteCount` records that a
-        // choice was made on the charity's behalf.
+        // One site: connectConfluence refuses to guess when there is more
+        // than one, so the success path is exercised only with exactly one.
         listAccessibleResources: async () => [
           { id: 'site-9', url: 'https://charity.atlassian.net', name: 'Charity Wiki' },
-          { id: 'site-10', url: 'https://charity-two.atlassian.net', name: 'Second Site' },
         ],
       },
     ),
@@ -1199,7 +1198,7 @@ test('connectConfluence records the site, stores both tokens, and clears any sta
     siteId: 'site-9',
     siteUrl: 'https://charity.atlassian.net',
     siteName: 'Charity Wiki',
-    siteCount: 2,
+    siteCount: 1,
   });
 
   // The status flip is the LAST write, after both credentials exist.
@@ -1207,6 +1206,31 @@ test('connectConfluence records the site, stores both tokens, and clears any sta
   assert.equal(last.data.status, 'CONNECTED');
 
   assert.equal(JSON.stringify(fake.integrationWrites).includes('auth-code-EEEE'), false);
+});
+
+test('connectConfluence refuses to pick a site when the grant covers several', async () => {
+  const fake = fakePrisma({ integration: { status: 'DISCONNECTED' }, storedRefreshToken: null });
+
+  await assert.rejects(
+    withKey(() =>
+      connectConfluence(
+        fake.client,
+        { organisationId: ORG_ID, userId: 'user-9', code: 'auth-code', redirectUri: 'https://api.example/cb' },
+        {
+          now: clock,
+          exchangeAuthorizationCode: async () => tokens(),
+          listAccessibleResources: async () => [
+            { id: 'site-9', url: 'https://charity.atlassian.net', name: 'Charity Wiki' },
+            { id: 'site-10', url: 'https://other.atlassian.net', name: 'Someone Else' },
+          ],
+        },
+      ),
+    ),
+    (error: unknown) => error instanceof AppError && error.code === 'CONFLUENCE_MULTIPLE_SITES',
+  );
+
+  assert.equal(fake.credentialWrites.length, 0, 'no credential is stored when the site is ambiguous');
+  assert.notEqual(fake.row().status, 'CONNECTED');
 });
 
 test('connectConfluence does not advertise a connection before the credentials exist', async () => {

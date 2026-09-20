@@ -682,12 +682,36 @@ export async function connectConfluence(
       'The Atlassian account that authorised CharityPilot can reach no Confluence site.',
     );
   }
-  // Choosing the first site is deliberate and temporary: letting a charity
-  // pick among several belongs with the UI that shows them, and is out of
-  // scope here. `siteCount` is recorded so that choice stays *visible* — a
-  // status route can say "site 1 of N" rather than leaving a decision made on
-  // a charity's behalf undiscoverable after the fact. Only non-secret
-  // connection facts go into `config`.
+  // Taking sites[0] was wrong, and quietly so: Atlassian documents the order of
+  // accessible-resources as meaningless, so an administrator who belongs to two
+  // sites had a one-in-two chance of publishing their charity's governance
+  // documents into the wrong company's Confluence — with nothing on any screen
+  // saying which had been chosen.
+  //
+  // Refusing is the right shape rather than a stopgap, because the fix is a
+  // property of the app itself: an OAuth app created with a RESOURCE-LEVEL
+  // grant issues tokens scoped to the single site the user picks at consent, so
+  // this list has exactly one entry and this branch never runs. That is how
+  // CharityPilot's app is registered (see docs/production-runbook.md). If this
+  // branch ever DOES run it means the app was registered with an account-level
+  // grant, and a loud configuration error is exactly what should happen.
+  //
+  // The cost, stated plainly: an administrator of several Atlassian sites
+  // cannot connect until CharityPilot offers a picker. Confluence is alpha and
+  // opt-in, and a charity that cannot connect is a far smaller harm than a
+  // charity connected to somebody else's site.
+  if (sites.length > 1) {
+    throw new AppError(
+      400,
+      'CONFLUENCE_MULTIPLE_SITES',
+      'The Atlassian account that authorised CharityPilot can reach more than one Confluence ' +
+        'site, and CharityPilot will not guess which one this charity meant. Authorise from an ' +
+        'account with access to a single site, or ask CharityPilot support to check how the ' +
+        'Atlassian app is registered.',
+      { siteCount: sites.length },
+    );
+  }
+
   const config = {
     siteId: site.id,
     siteUrl: site.url,
