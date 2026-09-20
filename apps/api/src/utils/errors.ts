@@ -1,18 +1,12 @@
 import type { FastifyReply } from 'fastify';
 import { buildErrorAlertPayload, sendErrorAlert, shouldSendErrorAlert } from '../services/error-alerts.service.js';
 import { serializeErrorForLog } from './logger.js';
+import { AppError } from './app-error.js';
 
-export class AppError extends Error {
-  constructor(
-    public statusCode: number,
-    public code: string,
-    message: string,
-    public details?: unknown,
-  ) {
-    super(message);
-    this.name = 'AppError';
-  }
-}
+// Re-exported so the many `from '../utils/errors.js'` imports keep working;
+// the class moved out only so that pure modules can throw it without pulling
+// fastify in. See ./app-error.ts.
+export { AppError };
 
 function isProduction(): boolean {
   return process.env.NODE_ENV === 'production';

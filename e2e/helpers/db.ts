@@ -946,9 +946,12 @@ export async function enrolOperatorSecondFactor(operatorId: string): Promise<str
   }
   process.env.OWNER_JWT_SECRET = ownerSecret;
 
+  // Both of these are dependency-free on purpose. Importing the service itself
+  // would pull @prisma/client and fastify into this harness's type-check, which
+  // installs neither — see scripts/check-e2e-api-imports.mjs.
   const [{ generateTotpSecret }, { sealTotpSecret }] = await Promise.all([
     import("../../apps/api/src/utils/totp"),
-    import("../../apps/api/src/services/operator-second-factor.service"),
+    import("../../apps/api/src/services/operator-totp-crypto"),
   ]);
 
   const secret = generateTotpSecret();
