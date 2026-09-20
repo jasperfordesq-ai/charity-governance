@@ -3,6 +3,7 @@ import { mkdtemp } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import test from 'node:test';
+import { API_LOG_REDACT_PATHS } from '../utils/logger.js';
 
 // Set every env var the imported modules read at import/construction time, BEFORE imports.
 process.env.JWT_SECRET = process.env.JWT_SECRET ?? 'observability-reliability-test-secret';
@@ -397,5 +398,19 @@ test('alert webhook send aborts when the webhook hangs past the timeout', {
     assert.equal(observedSignal?.aborted, true);
   } finally {
     restoreEnv(envSnapshot);
+  }
+});
+
+test('the key that unseals every charity credential is redacted like its peers', () => {
+  assert.ok(
+    API_LOG_REDACT_PATHS.includes('env.INTEGRATION_ENCRYPTION_KEY'),
+    'INTEGRATION_ENCRYPTION_KEY decrypts every stored Atlassian credential; it must never reach a log',
+  );
+
+  // Pinned as a set, so the next secret added to env is noticed here rather
+  // than being the one that is forgotten.
+  const redactPaths: readonly string[] = API_LOG_REDACT_PATHS;
+  for (const secret of ['env.JWT_SECRET', 'env.AUTH_RECOVERY_SECRET', 'env.ATLASSIAN_CLIENT_SECRET']) {
+    assert.ok(redactPaths.includes(secret), `${secret} must stay redacted`);
   }
 });

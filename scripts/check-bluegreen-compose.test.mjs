@@ -29,6 +29,19 @@ function serviceSection(name) {
   return remainder.slice(0, nextService === -1 ? remainder.length : nextService);
 }
 
+// Takes the lines from `  <name>:` up to (not including) the next line that
+// starts a sibling top-level entry, i.e. the next line matching `^  \S`.
+function serviceBlock(source, name) {
+  const header = `  ${name}:\n`;
+  const start = source.indexOf(`\n${header}`);
+  assert.notEqual(start, -1, `missing ${name} service`);
+  const blockStart = start + 1;
+  const afterHeader = blockStart + header.length;
+  const nextSibling = source.slice(afterHeader).search(/^  \S/m);
+  const end = nextSibling === -1 ? source.length : afterHeader + nextSibling;
+  return source.slice(blockStart, end);
+}
+
 test('the blue-green compose file declares colour-scoped profiles for api and web only', () => {
   assert.match(serviceSection('api-blue'), /profiles:\s*\n\s+- blue\s*\n/);
   assert.match(serviceSection('web-blue'), /profiles:\s*\n\s+- blue\s*\n/);
@@ -189,6 +202,25 @@ test('scheduler and job singletons mirror compose.production.yml but run the loc
   assert.match(scheduler, /restart: unless-stopped/);
   for (const section of [deadline, cleanup, rotation]) {
     assert.match(section, /restart: "no"/);
+  }
+});
+
+test('the production scheduler is given what the Confluence worker needs', () => {
+  const scheduler = serviceBlock(productionCompose, 'production-scheduler');
+
+  for (const key of ['ATLASSIAN_CLIENT_ID', 'ATLASSIAN_CLIENT_SECRET', 'INTEGRATION_ENCRYPTION_KEY']) {
+    assert.ok(
+      scheduler.includes(key),
+      `production-scheduler cannot publish or erase without ${key}; it uses an environment allowlist, not env_file`,
+    );
+  }
+});
+
+test('the document storage cleanup job can open a sealed credential', () => {
+  const cleanup = serviceBlock(productionCompose, 'document-storage-cleanup');
+
+  for (const key of ['ATLASSIAN_CLIENT_ID', 'ATLASSIAN_CLIENT_SECRET', 'INTEGRATION_ENCRYPTION_KEY']) {
+    assert.ok(cleanup.includes(key), `the Confluence eraser needs ${key}`);
   }
 });
 

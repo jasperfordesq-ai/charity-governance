@@ -123,6 +123,15 @@ services:
       DOCUMENT_STORAGE_CLEANUP_LIMIT: ${DOCUMENT_STORAGE_CLEANUP_LIMIT:-25}
       DEADLINE_REMINDERS_INTERVAL_MS: ${DEADLINE_REMINDERS_INTERVAL_MS:-86400000}
       DOCUMENT_STORAGE_CLEANUP_INTERVAL_MS: ${DOCUMENT_STORAGE_CLEANUP_INTERVAL_MS:-3600000}
+      # The Confluence publisher refreshes an Atlassian token and the eraser
+      # opens a sealed credential; both fail without these. This service uses an
+      # explicit allowlist rather than env_file, so a value not named here is
+      # simply absent — silently, at 3am, in a worker nobody is watching.
+      ATLASSIAN_CLIENT_ID: ${ATLASSIAN_CLIENT_ID:-}
+      ATLASSIAN_CLIENT_SECRET: ${ATLASSIAN_CLIENT_SECRET:-}
+      INTEGRATION_ENCRYPTION_KEY: ${INTEGRATION_ENCRYPTION_KEY:-}
+      DOCUMENT_PUBLICATION_INTERVAL_MS: ${DOCUMENT_PUBLICATION_INTERVAL_MS:-300000}
+      DOCUMENT_PUBLICATION_LIMIT: ${DOCUMENT_PUBLICATION_LIMIT:-25}
     read_only: true
     tmpfs:
       - /tmp
@@ -171,6 +180,46 @@ services:
       STORAGE_DELETE_TIMEOUT_MS: ${STORAGE_DELETE_TIMEOUT_MS:-5000}
       ERROR_ALERT_WEBHOOK_URL: ${ERROR_ALERT_WEBHOOK_URL:?Set ERROR_ALERT_WEBHOOK_URL}
       DOCUMENT_STORAGE_CLEANUP_LIMIT: ${DOCUMENT_STORAGE_CLEANUP_LIMIT:-25}
+      # The Confluence publisher refreshes an Atlassian token and the eraser
+      # opens a sealed credential; both fail without these. This service uses an
+      # explicit allowlist rather than env_file, so a value not named here is
+      # simply absent — silently, at 3am, in a worker nobody is watching.
+      ATLASSIAN_CLIENT_ID: ${ATLASSIAN_CLIENT_ID:-}
+      ATLASSIAN_CLIENT_SECRET: ${ATLASSIAN_CLIENT_SECRET:-}
+      INTEGRATION_ENCRYPTION_KEY: ${INTEGRATION_ENCRYPTION_KEY:-}
+    read_only: true
+    tmpfs:
+      - /tmp
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    networks:
+      - charitypilot-production
+
+  document-publication:
+    image: ${CHARITYPILOT_API_IMAGE:?Set CHARITYPILOT_API_IMAGE}
+    profiles:
+      - jobs
+    command: ["node", "dist/jobs/publish-document-mirrors.js"]
+    restart: "no"
+    environment:
+      NODE_ENV: production
+      DATABASE_URL: ${DATABASE_URL:?Set DATABASE_URL}
+      SUPABASE_URL: ${SUPABASE_URL:?Set SUPABASE_URL}
+      SUPABASE_SERVICE_ROLE_KEY: ${SUPABASE_SERVICE_ROLE_KEY:?Set SUPABASE_SERVICE_ROLE_KEY}
+      SUPABASE_STORAGE_BUCKET: ${SUPABASE_STORAGE_BUCKET:?Set SUPABASE_STORAGE_BUCKET}
+      STORAGE_DELETE_TIMEOUT_MS: ${STORAGE_DELETE_TIMEOUT_MS:-5000}
+      ERROR_ALERT_WEBHOOK_URL: ${ERROR_ALERT_WEBHOOK_URL:?Set ERROR_ALERT_WEBHOOK_URL}
+      DOCUMENT_STORAGE_CLEANUP_LIMIT: ${DOCUMENT_STORAGE_CLEANUP_LIMIT:-25}
+      # The Confluence publisher refreshes an Atlassian token and the eraser
+      # opens a sealed credential; both fail without these. This service uses an
+      # explicit allowlist rather than env_file, so a value not named here is
+      # simply absent — silently, at 3am, in a worker nobody is watching.
+      ATLASSIAN_CLIENT_ID: ${ATLASSIAN_CLIENT_ID:-}
+      ATLASSIAN_CLIENT_SECRET: ${ATLASSIAN_CLIENT_SECRET:-}
+      INTEGRATION_ENCRYPTION_KEY: ${INTEGRATION_ENCRYPTION_KEY:-}
+      DOCUMENT_PUBLICATION_LIMIT: ${DOCUMENT_PUBLICATION_LIMIT:-25}
     read_only: true
     tmpfs:
       - /tmp
