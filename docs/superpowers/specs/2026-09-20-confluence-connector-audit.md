@@ -1,9 +1,11 @@
 # Confluence connector audit — 2026-09-20
 
 **Status:** Tier 1 was approved and **implemented on 2026-09-20** — the deletion/erasure rework, the
-delete scopes and granted-scope recording, the multi-site refusal, and the production worker
-credentials all landed the same day as this audit. Tiers 2 and 3 below remain proposals for the owner
-and the DPO to sequence, not work in progress.
+delete scopes and granted-scope recording, and the production worker credentials all landed the same
+day as this audit. The multi-site refusal landed too, but it closes A3 only once the Atlassian app is
+registered with a resource-level grant — which, as of this writing, has not happened (see the T1.3
+correction, section 5). Tiers 2 and 3 below remain proposals for the owner and the DPO to sequence, not
+work in progress.
 
 **Also built on 2026-09-20, ahead of Tier 2:** an in-process fake Atlassian at
 `apps/api/src/tests/fake-atlassian.ts` (see the corrected T2.9, below), covering the OAuth token
@@ -31,8 +33,10 @@ the owner's written ruling (A1); the OAuth app does not request the scopes the e
 erasure would fail with a misleading "reconnect required" (A2); the connect flow binds a tenant to
 whichever site Atlassian happens to list first (A3); and the documented production compose profile
 never hands the worker containers the credentials they need (A4). **Tier 1, implemented the same day
-as this audit, has since closed all four — A1, A2, A3 and A4; see the status line above.** Beyond
-those, the integration is one-directional and one-shot — nothing ever re-reads a page, nothing keeps
+as this audit, has since closed A1, A2 and A4 outright, and A3 conditionally** — the shipped refusal
+closes it only once the Atlassian app is registered with a resource-level grant, which has not happened
+yet (see the T1.3 correction, section 5, and the status line above). Beyond those, the integration is
+one-directional and one-shot — nothing ever re-reads a page, nothing keeps
 an idle tenant's refresh token alive, nothing republishes an edit, and nothing is audited — so "tight"
 is still not the word: that gap is Tier 2 and Tier 3 work, and both remain proposals.
 
