@@ -36,6 +36,10 @@ import {
   sweepDormantIntegrations,
 } from '../services/integration-reconcile.service.js';
 import {
+  recordIntegrationAuditEventBestEffort,
+  type IntegrationAuditWriteClient,
+} from '../services/integration-audit.service.js';
+import {
   validateAuthDeliveryEnv,
   validateDeadlineRemindersEnv,
   validateDocumentStorageCleanupEnv,
@@ -571,7 +575,7 @@ export async function runAuthEmailDelivery(input: {
  * called — not here, so that no future caller of the reconciler can lose it.
  */
 export async function runDocumentReconcile(input: {
-  prisma: ConfluenceConnectionClient;
+  prisma: ConfluenceConnectionClient & IntegrationAuditWriteClient;
   publicationService: DocumentReconcileRunner;
   reconcile: ConfluenceReconciler;
   tenantsPerRun: number;
@@ -649,6 +653,41 @@ export async function runDocumentReconcile(input: {
           `for organisation ${notice.organisationId} (lapses ${notice.expiresAt.toISOString()}). ` +
           'Not refreshed: an unused authorisation is allowed to lapse and the organisation asked to reconnect.',
       );
+
+      // Only EXPIRED gets an audit row, and the distinction is not fussiness:
+      // the event asserts that reauthorisation IS required, which is not true
+      // yet during the warning window. The warning is visible in
+      // `lastReconcileOutcome` and on the owner console; the audit log records
+      // the moment the authorisation actually lapsed, which is the moment a DPO
+      // would later ask about.
+      if (notice.outcome !== 'EXPIRED') continue;
+
+      await recordIntegrationAuditEventBestEffort(
+        input.prisma,
+        {
+          organisationId: notice.organisationId,
+          type: 'INTEGRATION_REAUTHORISATION_REQUIRED',
+          // SYSTEM, because nobody did this. The charity stopped using the
+          // integration and Atlassian's inactivity expiry did the rest — and an
+          // audit row that named a person would be wrong about the one thing
+          // it exists to record.
+          actor: { kind: 'SYSTEM', label: 'CharityPilot scheduler' },
+          subjectLabel: 'Confluence integration',
+          reason:
+            'The Atlassian authorisation lapsed after 90 days without use. CharityPilot does not ' +
+            'refresh an unused authorisation to keep it alive, so reconnecting is required.',
+          context: {
+            integrationId: notice.integrationId,
+            provider: 'CONFLUENCE',
+            lapsedAt: notice.expiresAt.toISOString(),
+          },
+        },
+        (error) =>
+          input.logger.error(
+            '[ProductionScheduler] Failed to record the Confluence reauthorisation audit event.',
+            error,
+          ),
+      );
     }
 
     input.logger.info(
@@ -692,7 +731,9 @@ export async function runProductionSchedulerOnce(input: {
    * Confluence rows, and to {@link runDocumentPublication}, which needs it to
    * publish them.
    */
-  prisma: ConfluenceConnectionClient & NonNullable<ConfluencePublisherDeps['prisma']>;
+  prisma: ConfluenceConnectionClient &
+    NonNullable<ConfluencePublisherDeps['prisma']> &
+    IntegrationAuditWriteClient;
   documentStorageCleanupLimit: number;
   documentPublicationLimit: number;
   authDeliveryBatchSize: number;

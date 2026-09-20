@@ -15,10 +15,25 @@ const schema = readFileSync(new URL('schema.prisma', prismaRoot), 'utf8');
 const securityAuditEventTypes = (): string[] => {
   const body = schema.match(/enum SecurityAuditEventType \{([\s\S]*?)\}/u)?.[1];
   assert.ok(body, 'enum SecurityAuditEventType not found in schema.prisma');
-  return body
-    .split('\n')
-    .map((line) => line.replace(/\/\/.*$/u, '').trim())
-    .filter((line) => line.length > 0);
+  return (
+    body
+      .split('\n')
+      .map((line) => line.replace(/\/\/.*$/u, '').trim())
+      // Identifier-shaped lines only, rather than "anything non-empty".
+      //
+      // The comment-stripping regex above has no `m` flag, so `$` anchors to
+      // the end of the string and `.` does not match `\r` — which means that on
+      // a CRLF checkout (this repository's, via git's autocrlf) it fails to
+      // match a whole-line comment at all, and the comment survives as a
+      // "value". The first comment ever written inside this enum turned this
+      // test red and named nine lines of prose as missing enum values.
+      //
+      // Filtering on the shape of an enum value fixes that without loosening
+      // anything: it is strictly narrower than the previous emptiness test, and
+      // the `>= 13` assertion below is what stops a parser that matches nothing
+      // from passing silently.
+      .filter((line) => /^[A-Z][A-Z0-9_]*$/u.test(line))
+  );
 };
 
 // Migrations apply in lexical order, so the last migration that (re)defines the

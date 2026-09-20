@@ -47,6 +47,11 @@ import {
   readConfluencePublishTarget,
 } from '../../services/confluence-publish-target.service.js';
 import { decodeIntegrationKey } from '../../services/integration-crypto.js';
+import {
+  integrationAuditActor,
+  recordIntegrationAuditEvent,
+  recordIntegrationAuditEventBestEffort,
+} from '../../services/integration-audit.service.js';
 import { AppError, handleError } from '../../utils/errors.js';
 import { getPrimaryFrontendOrigin } from '../../utils/frontend-origin.js';
 import { sendNoContent, sendSuccess } from '../../utils/response.js';
@@ -746,7 +751,7 @@ export async function integrationRoutes(
         );
       }
 
-      const { siteUrl } = await connectConfluence(
+      const { integrationId, siteUrl } = await connectConfluence(
         prisma,
         {
           organisationId: request.user.organisationId,
@@ -756,6 +761,46 @@ export async function integrationRoutes(
           redirectUri: state.redirectUri,
         },
         deps,
+      );
+
+      // Two events, not one, because two different things happened and a DPO
+      // asks about them separately: an authorisation was granted, and a
+      // particular Atlassian site was bound to this charity. The second is
+      // worth its own row precisely because *nobody chose it* — there is no
+      // site picker, so the binding is made from the grant, and a log that
+      // recorded only "connected" would leave no trace of which site that
+      // produced or that a person never picked it.
+      //
+      // Written after the connection, not inside it: the connection service is
+      // closed, and a failure to write an audit row must not be capable of
+      // rolling back a grant that Atlassian has already issued.
+      await recordIntegrationAuditEventBestEffort(
+        app.prisma,
+        {
+          organisationId: request.user.organisationId,
+          type: 'INTEGRATION_CONNECTED',
+          actor: await integrationAuditActor(app.prisma, request.user),
+          subjectLabel: 'Confluence integration',
+          reason: 'A Confluence connection was authorised for this organisation.',
+          context: { integrationId, provider: PROVIDER, siteUrl },
+          requestId: request.id,
+        },
+        (error) => request.log.error({ err: error }, 'Failed to record the Confluence connect audit event.'),
+      );
+      await recordIntegrationAuditEventBestEffort(
+        app.prisma,
+        {
+          organisationId: request.user.organisationId,
+          type: 'INTEGRATION_SITE_SELECTED',
+          actor: { kind: 'SYSTEM', label: 'CharityPilot' },
+          subjectLabel: siteUrl,
+          reason:
+            'The Atlassian site was bound from the authorisation itself. CharityPilot offers no ' +
+            'site picker, so this was not a choice the administrator made.',
+          context: { integrationId, provider: PROVIDER, siteUrl },
+          requestId: request.id,
+        },
+        (error) => request.log.error({ err: error }, 'Failed to record the Confluence site audit event.'),
       );
 
       // The tokens stay behind the credential boundary. Only the site the
@@ -931,6 +976,35 @@ export async function integrationRoutes(
         (cursor) => listSpaces(client, cursor),
       );
 
+      // Where a charity's governance documents go is exactly the kind of
+      // decision a DPO reviews after the fact, and until now it left no trace:
+      // an administrator could repoint publication at a different space and
+      // nothing recorded that anybody had. Best-effort because the choice is
+      // already persisted by this line, and failing the response would invite a
+      // retry that would simply choose the same space again.
+      await recordIntegrationAuditEventBestEffort(
+        app.prisma,
+        {
+          organisationId: request.user.organisationId,
+          type: 'INTEGRATION_PUBLISH_TARGET_CHANGED',
+          actor: await integrationAuditActor(app.prisma, request.user),
+          subjectLabel: `${target.spaceName} (${target.spaceKey})`,
+          reason: 'The Confluence space this organisation publishes governance documents into was set.',
+          context: {
+            integrationId: integration.id,
+            provider: PROVIDER,
+            spaceId: target.spaceId,
+            spaceKey: target.spaceKey,
+            // The site is recorded with the space because space ids are
+            // per-site: the pair is the destination, and the id alone would not
+            // identify it after a reconnect to a different site.
+            cloudId,
+          },
+          requestId: request.id,
+        },
+        (error) => request.log.error({ err: error }, 'Failed to record the Confluence publish-target audit event.'),
+      );
+
       // The same shape `status` reports, so a client that re-reads and a
       // client that trusts this response agree about where publication goes.
       return sendSuccess(reply, {
@@ -1086,6 +1160,27 @@ export async function integrationRoutes(
           requestedById: request.user.userId,
         });
 
+        // NOT best-effort. Erasing a page from a charity's own Confluence site
+        // is the most consequential thing this connector can be asked to do —
+        // the owner's 2026-09-19 ruling makes it an explicitly authorised
+        // action precisely because an ordinary deletion must never reach it —
+        // and the record that somebody asked for it is part of what the charity
+        // is owed. If the row cannot be written, the caller is told, and the
+        // queued deletion is visible in the erasure listing either way.
+        //
+        // REQUESTED, not performed. A purge that later fails must not remove
+        // the record that it was asked for, so the event is written here rather
+        // than when the worker confirms the page is gone.
+        await recordIntegrationAuditEvent(app.prisma, {
+          organisationId: request.user.organisationId,
+          type: 'CONFLUENCE_ERASURE_REQUESTED',
+          actor: await integrationAuditActor(app.prisma, request.user),
+          subjectLabel: `Confluence publication ${publicationId}`,
+          reason: body.reason,
+          context: { publicationId, storageDeletionId: deletionId, provider: PROVIDER },
+          requestId: request.id,
+        });
+
         return sendSuccess(reply, { storageDeletionId: deletionId });
       } catch (error) {
         // The same explicit-first pattern documents/index.ts uses: a malformed
@@ -1131,6 +1226,29 @@ export async function integrationRoutes(
       // that a grant may still be standing. Expected to be the common case:
       // see the endpoint comment in `disconnectConfluence`. No token, no
       // secret and no Atlassian error text goes into this line.
+      // Best-effort, and this is the case the helper exists for: the
+      // credentials are already destroyed by the time this runs. Throwing here
+      // would tell a charity their disconnect failed while their tokens were
+      // already gone, inviting them to retry against a connection that no
+      // longer exists.
+      await recordIntegrationAuditEventBestEffort(
+        app.prisma,
+        {
+          organisationId: request.user.organisationId,
+          type: 'INTEGRATION_DISCONNECTED',
+          actor: await integrationAuditActor(app.prisma, request.user),
+          subjectLabel: 'Confluence integration',
+          reason: 'The Confluence connection was removed and its stored credentials deleted.',
+          // Recorded because it is the one place the standing-grant question is
+          // answerable later. Atlassian documents no revocation endpoint for an
+          // app, so `false` here means a grant may still exist on their side
+          // until it lapses or the administrator removes it themselves.
+          context: { integrationId: integration.id, provider: PROVIDER, atlassianRevocationConfirmed: revoked },
+          requestId: request.id,
+        },
+        (error) => request.log.error({ err: error }, 'Failed to record the Confluence disconnect audit event.'),
+      );
+
       if (!revoked) {
         request.log.warn(
           { integrationId: integration.id, provider: PROVIDER },

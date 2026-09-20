@@ -132,6 +132,21 @@ export interface TeamSessionResponse {
   revocationReason: AuthSessionRevocationReason | null;
 }
 
+/**
+ * Every value of the Prisma `SecurityAuditEventType` enum, and nothing else.
+ *
+ * This union is hand-written rather than inferred, so it drifts silently — and
+ * it had, in both directions at once: three values the database could produce
+ * were missing (`SESSION_REPLAY_DETECTED`,
+ * `ORGANISATION_CONFIGURATION_CHANGED`, `INVITE_LINK_REISSUED`), so a client
+ * narrowing on this type would fail to handle events it was actually sent; and
+ * one value here (`PASSWORD_RESET_COMPLETED`) did not exist in the database at
+ * all, so a `switch` could carry a branch that could never run.
+ *
+ * `security-audit-event-union.test.ts` now pins it against the Prisma schema in
+ * both directions. Add a value here whenever you add one there, or that test
+ * will say so.
+ */
 export type SecurityAuditEventType =
   | 'MEMBER_SUSPENDED'
   | 'MEMBER_REACTIVATED'
@@ -141,11 +156,20 @@ export type SecurityAuditEventType =
   | 'OWNERSHIP_RECOVERED'
   | 'SESSION_REVOKED'
   | 'ALL_SESSIONS_REVOKED'
+  | 'SESSION_REPLAY_DETECTED'
   | 'ORGANISATION_SUSPENDED'
   | 'ORGANISATION_REACTIVATED'
   | 'ORGANISATION_CLOSED'
+  | 'ORGANISATION_CONFIGURATION_CHANGED'
   | 'INVITE_REVOKED'
-  | 'PASSWORD_RESET_COMPLETED';
+  | 'INVITE_LINK_REISSUED'
+  | 'INTEGRATION_CONNECTED'
+  | 'INTEGRATION_SITE_SELECTED'
+  | 'INTEGRATION_DISCONNECTED'
+  | 'INTEGRATION_PUBLISH_TARGET_CHANGED'
+  | 'INTEGRATION_REAUTHORISATION_REQUIRED'
+  | 'DOCUMENT_PUBLICATION_DEAD_LETTERED'
+  | 'CONFLUENCE_ERASURE_REQUESTED';
 
 export interface SecurityAuditEventResponse {
   type: SecurityAuditEventType;

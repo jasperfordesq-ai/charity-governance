@@ -106,6 +106,13 @@ function makeStore(rows: IntegrationRow[], publications: PublicationRow[] = []) 
   const credentials: CredentialRow[] = [];
   const publicationRows = new Map(publications.map((row) => [row.id, { ...row }]));
   const deletions: Array<Record<string, unknown>> = [];
+  const auditEvents: Array<Record<string, unknown>> = [];
+  // One member, so `integrationAuditActor` has a name to resolve. Tests that
+  // care about the degraded path empty this array.
+  const users: Array<{ id: string; organisationId: string; name: string; email: string }> = [
+    { id: 'user-a', organisationId: 'org-a', name: 'Ada Trustee', email: 'ada@example.org' },
+    { id: 'user-b', organisationId: 'org-b', name: 'Bo Trustee', email: 'bo@example.org' },
+  ];
   let nextDeletionId = 1;
   const calls: Calls = {
     integrationFindUnique: [],
@@ -268,10 +275,36 @@ function makeStore(rows: IntegrationRow[], publications: PublicationRow[] = []) 
         return { id };
       },
     },
+    // Real delegates, not stubs that return null. The integration routes now
+    // write audit rows, and most of those writes are best-effort — so a double
+    // that threw, or that silently swallowed the row, would let every
+    // assertion about the route pass while the audit log recorded nothing.
+    // Collecting the rows here is what makes those events assertable.
+    user: {
+      findFirst: async (args: { where: Record<string, unknown> }) =>
+        users.find(
+          (row) => row.id === args.where.id && row.organisationId === args.where.organisationId,
+        ) ?? null,
+    },
+    securityAuditEvent: {
+      create: async (args: { data: Record<string, unknown> }) => {
+        auditEvents.push(args.data);
+        return { id: `audit-${auditEvents.length}` };
+      },
+    },
     $transaction: async <T>(run: (tx: unknown) => Promise<T>): Promise<T> => run(client),
   };
 
-  return { client, calls, integrations, credentials, publications: publicationRows, deletions };
+  return {
+    client,
+    calls,
+    integrations,
+    credentials,
+    publications: publicationRows,
+    deletions,
+    auditEvents,
+    users,
+  };
 }
 
 // ── actors ──────────────────────────────────────────────────────────────────
@@ -366,7 +399,17 @@ async function buildApp(options: BuildOptions = {}) {
         }
       : { logger: false },
   );
-  app.decorate('prisma', { ...authModels(actor), ...store.client } as never);
+  // `user` is MERGED rather than spread over, and the difference is not
+  // cosmetic. `authModels` supplies `user.findUnique`, which `authGuard` calls
+  // on every request; the store supplies `user.findFirst`, which the audit
+  // actor lookup calls. A plain spread let the store's `user` replace the
+  // guard's wholesale and every authenticated test in this file started
+  // answering 500.
+  app.decorate('prisma', {
+    ...authModels(actor),
+    ...store.client,
+    user: { ...authModels(actor).user, ...store.client.user },
+  } as never);
   await app.register(integrationRoutes, {
     confluenceDeps: {
       ...(options.exchangeAuthorizationCode ? { exchangeAuthorizationCode: options.exchangeAuthorizationCode } : {}),
@@ -2132,4 +2175,195 @@ test('a charity with no subscription can still request a Confluence erasure', as
 
   assert.equal(response.statusCode, 200, response.body);
   assert.equal(typeof JSON.parse(response.body).data.storageDeletionId, 'string');
+});
+
+
+// ────────────────────────────────────────────────────────────────────────────
+// The audit log.
+//
+// Until these events existed, the connector could be connected, pointed at a
+// space, publish a charity's governance documents for months and be
+// disconnected again without leaving one row anybody could review. A DPO
+// reviewing this system has to be able to establish, from the log alone, when
+// a charity's documents began leaving CharityPilot for a third-party site,
+// which site, who decided that, and when it stopped.
+//
+// Most of these writes are best-effort, which is exactly why they need
+// assertions: a swallowed failure looks identical to a successful write from
+// outside, so every test here reads the rows the double collected.
+// ────────────────────────────────────────────────────────────────────────────
+
+function auditOfType(store: { auditEvents: Array<Record<string, unknown>> }, type: string) {
+  return store.auditEvents.filter((event) => event.type === type);
+}
+
+function failingAuditWrites(app: { prisma: unknown }): void {
+  (app.prisma as { securityAuditEvent: { create: () => Promise<never> } }).securityAuditEvent.create =
+    async () => {
+      throw new Error('the audit table is unavailable');
+    };
+}
+
+test('disconnecting records who did it, and whether Atlassian confirmed the withdrawal', async () => {
+  restoreKey();
+  const { app, store } = await buildApp({ rows: [connectedRow()], actor: ORG_A_ADMIN });
+  store.credentials.push({
+    integrationId: 'integration-a',
+    kind: 'refresh_token',
+    sealed: {},
+    generation: 1,
+    expiresAt: null,
+  });
+
+  const response = await app.inject({
+    method: 'DELETE',
+    url: '/confluence',
+    headers: { authorization: bearer(ORG_A_ADMIN) },
+  });
+  assert.equal(response.statusCode, 204);
+
+  const events = auditOfType(store, 'INTEGRATION_DISCONNECTED');
+  assert.equal(events.length, 1, 'a disconnect that leaves no audit row is unreviewable');
+  assert.equal(events[0].organisationId, 'org-a');
+  assert.equal(events[0].actorKind, 'USER');
+  assert.equal(events[0].actorUserId, 'user-a');
+  assert.equal(events[0].actorLabel, 'Ada Trustee', 'a reviewer needs a name, not an opaque id');
+  // The one place the standing-grant question is answerable later: Atlassian
+  // documents no revocation endpoint for an app, so `false` means a grant may
+  // still exist on their side until it lapses or the administrator removes it.
+  assert.equal((events[0].context as Record<string, unknown>).atlassianRevocationConfirmed, false);
+});
+
+test('a failure to write the disconnect audit row does not fail the disconnect', async () => {
+  restoreKey();
+  const { app, store } = await buildApp({ rows: [connectedRow()], actor: ORG_A_ADMIN });
+  store.credentials.push({
+    integrationId: 'integration-a',
+    kind: 'refresh_token',
+    sealed: {},
+    generation: 1,
+    expiresAt: null,
+  });
+  failingAuditWrites(app as unknown as { prisma: unknown });
+
+  const response = await app.inject({
+    method: 'DELETE',
+    url: '/confluence',
+    headers: { authorization: bearer(ORG_A_ADMIN) },
+  });
+
+  // The credentials are already destroyed by the time the audit row is
+  // written. A 500 here would tell a charity their disconnect failed while
+  // their tokens were already gone, inviting a retry against a connection that
+  // no longer exists.
+  assert.equal(response.statusCode, 204, response.body);
+  assert.equal(store.credentials.length, 0, 'and the disconnect really did happen');
+});
+
+test('a disconnect still records the actor when the name cannot be read', async () => {
+  restoreKey();
+  const { app, store } = await buildApp({ rows: [connectedRow()], actor: ORG_A_ADMIN });
+  store.users.length = 0;
+
+  const response = await app.inject({
+    method: 'DELETE',
+    url: '/confluence',
+    headers: { authorization: bearer(ORG_A_ADMIN) },
+  });
+
+  assert.equal(response.statusCode, 204, response.body);
+  const events = auditOfType(store, 'INTEGRATION_DISCONNECTED');
+  assert.equal(events.length, 1);
+  // Degraded, not lost. `actorUserId` still identifies the person, so the row
+  // remains attributable; the label falls back rather than the action failing.
+  assert.equal(events[0].actorLabel, 'CharityPilot user');
+  assert.equal(events[0].actorUserId, 'user-a');
+});
+
+test('choosing a publish space records the destination, with the site it belongs to', async () => {
+  restoreKey();
+  const { app, store } = await buildApp({
+    rows: [connectedRow()],
+    confluenceFetch: fetchListing(LISTED_GOVERNANCE),
+  });
+  store.credentials.push(sealedAccessTokenRow('integration-a', 'org-a'));
+
+  const chosen = await putPublishSpace(app, ORG_A_ADMIN, { spaceId: 'space-gov' });
+  assert.equal(chosen.statusCode, 200, chosen.body);
+
+  const events = auditOfType(store, 'INTEGRATION_PUBLISH_TARGET_CHANGED');
+  assert.equal(events.length, 1);
+  assert.equal(events[0].subjectLabel, 'Governance (GOV)');
+  const context = events[0].context as Record<string, unknown>;
+  assert.equal(context.spaceId, 'space-gov');
+  // Space ids are per-site, so the pair is the destination; the id alone would
+  // not identify it after a reconnect to a different site.
+  assert.equal(context.cloudId, 'site-1');
+});
+
+test('requesting an erasure records that it was ASKED FOR, with the reason given', async () => {
+  const { app, store } = await buildApp({
+    rows: [{ ...connectedRow(), grantedScopes: [...CONFLUENCE_REQUIRED_ERASURE_SCOPES] }],
+    publications: [retiredPublicationRow()],
+  });
+
+  const response = await app.inject({
+    method: 'POST',
+    url: '/confluence/publications/publication-1/erase',
+    headers: { authorization: bearer(ORG_A_ADMIN) },
+    payload: { reason: 'Data subject erasure request 2026-41', confirmation: 'ERASE CONFLUENCE COPY' },
+  });
+  assert.equal(response.statusCode, 200, response.body);
+
+  const events = auditOfType(store, 'CONFLUENCE_ERASURE_REQUESTED');
+  assert.equal(events.length, 1);
+  assert.equal(events[0].reason, 'Data subject erasure request 2026-41');
+  // Requested, not performed: a purge that later fails must not remove the
+  // record that somebody asked for it.
+  assert.equal(typeof (events[0].context as Record<string, unknown>).storageDeletionId, 'string');
+});
+
+test('an erasure whose audit row cannot be written is reported as a failure', async () => {
+  const { app } = await buildApp({
+    rows: [{ ...connectedRow(), grantedScopes: [...CONFLUENCE_REQUIRED_ERASURE_SCOPES] }],
+    publications: [retiredPublicationRow()],
+  });
+  failingAuditWrites(app as unknown as { prisma: unknown });
+
+  const response = await app.inject({
+    method: 'POST',
+    url: '/confluence/publications/publication-1/erase',
+    headers: { authorization: bearer(ORG_A_ADMIN) },
+    payload: { reason: 'Data subject erasure request 2026-41', confirmation: 'ERASE CONFLUENCE COPY' },
+  });
+
+  // Deliberately NOT best-effort. Erasing from a charity's own Confluence site
+  // is the most consequential thing this connector does, and the record that
+  // somebody asked for it is part of what the charity is owed.
+  assert.equal(response.statusCode, 500, response.body);
+});
+
+test('no audit row this plugin writes carries token material', async () => {
+  restoreKey();
+  const { app, store } = await buildApp({
+    rows: [connectedRow()],
+    confluenceFetch: fetchListing(LISTED_GOVERNANCE),
+  });
+  store.credentials.push(sealedAccessTokenRow('integration-a', 'org-a'));
+
+  await putPublishSpace(app, ORG_A_ADMIN, { spaceId: 'space-gov' });
+  await app.inject({
+    method: 'DELETE',
+    url: '/confluence',
+    headers: { authorization: bearer(ORG_A_ADMIN) },
+  });
+
+  assert.ok(store.auditEvents.length >= 2, 'this test proves nothing if no rows were written');
+  const serialised = JSON.stringify(store.auditEvents);
+  for (const forbidden of ['access_token', 'refresh_token', 'sealed', 'ciphertext', 'Bearer ', VALID_KEY]) {
+    assert.ok(
+      !serialised.includes(forbidden),
+      `an audit row carried ${forbidden}, which is read back onto an operator's screen`,
+    );
+  }
 });

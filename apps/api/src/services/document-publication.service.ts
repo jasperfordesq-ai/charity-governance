@@ -39,6 +39,7 @@ import type {
   ReconcilablePublication,
   RemoteStateReading,
 } from './confluence-reconcile.service.js';
+import { recordIntegrationAuditEventBestEffort } from './integration-audit.service.js';
 
 /**
  * The publish worker: the sequence that turns a `DocumentPublication` row into
@@ -1167,7 +1168,47 @@ export class DocumentPublicationService {
           publication.claimedAt,
         );
         if (failure.status === 'retry-scheduled') retryScheduled += 1;
-        if (failure.status === 'dead-lettered') newlyDeadLettered += 1;
+        if (failure.status === 'dead-lettered') {
+          newlyDeadLettered += 1;
+          // Written here rather than inside `recordPublicationFailure`, whose
+          // transaction is a compare-and-set on the row's own attempt count: an
+          // audit write in there would widen a transaction that exists to be
+          // narrow, and a failure to log would roll back the dead-lettering
+          // itself — leaving a row that will be retried for ever because the
+          // attempt that exhausted it was undone.
+          //
+          // Best-effort for the same reason: the row is already terminal by
+          // this line, and the operator alert below does not depend on it.
+          await recordIntegrationAuditEventBestEffort(
+            this.prisma,
+            {
+              organisationId: publication.organisationId,
+              type: 'DOCUMENT_PUBLICATION_DEAD_LETTERED',
+              actor: { kind: 'SYSTEM', label: 'CharityPilot publish worker' },
+              subjectLabel: publication.pageTitle ?? `Document ${publication.documentId}`,
+              reason:
+                'Publishing this document to Confluence was abandoned after a permanent failure ' +
+                'or the retry limit. It will not be retried without an operator.',
+              context: {
+                publicationId: publication.id,
+                documentId: publication.documentId,
+                provider: publication.provider,
+                terminalReason: failure.terminalReason,
+                attempts: failure.attempts,
+                // Deliberately not the error text. `lastError` on the row
+                // carries it for an operator; an audit row is read by people
+                // reviewing governance, and upstream error strings are
+                // untrusted third-party text.
+              },
+            },
+            () => {
+              // Swallowed on purpose, and not logged from here: this service
+              // has no logger, and the dead-letter alert the caller raises is
+              // the operator-facing signal. Adding a console call here would be
+              // the first in the module.
+            },
+          );
+        }
         continue;
       }
 

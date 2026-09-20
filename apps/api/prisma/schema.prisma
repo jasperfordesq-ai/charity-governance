@@ -314,6 +314,22 @@ enum SecurityAuditEventType {
   ORGANISATION_CONFIGURATION_CHANGED
   INVITE_REVOKED
   INVITE_LINK_REISSUED
+  // The Confluence integration's lifecycle. A DPO must be able to answer, from
+  // the log alone: when was this charity connected, to which site, who chose it,
+  // where were its documents pointed, when did the authorisation lapse or get
+  // withdrawn, and when did somebody ask for something to be erased from the
+  // charity's own Confluence site.
+  INTEGRATION_CONNECTED
+  INTEGRATION_SITE_SELECTED
+  INTEGRATION_DISCONNECTED
+  INTEGRATION_PUBLISH_TARGET_CHANGED
+  // Both routes to the same condition: a grant Atlassian rejected, and one the
+  // dormancy sweep let lapse. `reason` distinguishes them.
+  INTEGRATION_REAUTHORISATION_REQUIRED
+  DOCUMENT_PUBLICATION_DEAD_LETTERED
+  // Requested, not performed: a purge that then fails must not remove the
+  // record that it was asked for.
+  CONFLUENCE_ERASURE_REQUESTED
 }
 
 enum PasswordRecoverySource {
