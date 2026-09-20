@@ -2,6 +2,8 @@ import { Server } from '@modelcontextprotocol/sdk/server/index.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
 import {
   CallToolRequestSchema,
+  GetPromptRequestSchema,
+  ListPromptsRequestSchema,
   ListToolsRequestSchema,
 } from '@modelcontextprotocol/sdk/types.js';
 import {
@@ -36,6 +38,7 @@ import { ConnectorError } from './errors.js';
 import { errorResult, okResult } from './results.js';
 import { SESSION_INFO_TOOL, runSessionInfo } from './session-info.js';
 import { createDiagnostics } from './diagnostics.js';
+import { findPrompt, promptListing } from './prompts.js';
 
 const FILE_RANK: Record<AccessLevel, number> = { read: 0, write: 1, admin: 2 };
 
@@ -138,7 +141,7 @@ export async function startServer(config: ConnectorConfig, session: Session): Pr
   const client = new ApiClient({ session, baseUrl: config.baseUrl });
   const server = new Server(
     { name: 'charitypilot', version: CONNECTOR_VERSION },
-    { capabilities: { tools: {} }, instructions: INSTRUCTIONS },
+    { capabilities: { tools: {}, prompts: {} }, instructions: INSTRUCTIONS },
   );
 
   /**
@@ -220,6 +223,33 @@ export async function startServer(config: ConnectorConfig, session: Session): Pr
   });
 
   const diagnostics = createDiagnostics(config.verbose);
+
+  // The multi-step governance jobs, offered to the person rather than
+  // inferred by the model. They read nothing and change nothing by
+  // themselves: each expands into a message naming the tools and the order.
+  server.setRequestHandler(ListPromptsRequestSchema, async () => ({
+    prompts: promptListing(),
+  }));
+
+  server.setRequestHandler(GetPromptRequestSchema, async (request) => {
+    const prompt = findPrompt(request.params.name);
+    if (!prompt) {
+      throw new ConnectorError('UNKNOWN_PROMPT', `Unknown prompt: ${request.params.name}`);
+    }
+
+    return {
+      description: prompt.description,
+      messages: [
+        {
+          role: 'user' as const,
+          content: {
+            type: 'text' as const,
+            text: prompt.build((request.params.arguments ?? {}) as Record<string, string>),
+          },
+        },
+      ],
+    };
+  });
 
   server.setRequestHandler(CallToolRequestSchema, async (request) => {
     const args = (request.params.arguments ?? {}) as Record<string, unknown>;
