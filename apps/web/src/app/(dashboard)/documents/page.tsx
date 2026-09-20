@@ -29,6 +29,9 @@ export default function DocumentsPage() {
     documentCounts,
     documents,
     downloadDocId,
+    mirrors,
+    retryMirrorPublication,
+    retryingMirror,
     fetchDocuments,
     fetchOrganisationProfile,
     handleDelete,
@@ -149,6 +152,9 @@ export default function DocumentsPage() {
         unlinkingStandard={unlinkingStandard}
         handleUnlinkStandard={handleUnlinkStandard}
         confirmDelete={confirmDelete}
+        mirrors={mirrors}
+        retryMirrorPublication={retryMirrorPublication}
+        retryingMirror={retryingMirror}
       />
 
       <DocumentUploadModal

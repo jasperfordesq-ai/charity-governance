@@ -8,6 +8,8 @@ import { EvidenceChip, StatusChip } from '@/components/ui/status';
 import type { DocumentResponse } from '@charitypilot/shared';
 import { DOCUMENT_CATEGORY_LABELS } from '@charitypilot/shared';
 import { X } from 'lucide-react';
+import { ConfluenceMirrorChip } from '@/components/governance/confluence-mirror-chip';
+import type { ConfluenceMirror } from '@/lib/integration-status';
 
 const formatDate = (value: string | null | undefined) => {
   if (!value) return 'Not set';
@@ -39,6 +41,9 @@ export function DocumentListPanel({
   unlinkingStandard,
   handleUnlinkStandard,
   confirmDelete,
+  mirrors,
+  retryMirrorPublication,
+  retryingMirror,
 }: {
   canManage: boolean;
   documents: DocumentResponse[];
@@ -54,6 +59,10 @@ export function DocumentListPanel({
   unlinkingStandard: string | null;
   handleUnlinkStandard: (docId: string, standardId: string) => void | Promise<void>;
   confirmDelete: (docId: string) => void;
+  /** Absent for a document whose mirror could not be read; the chip renders nothing. */
+  mirrors: Map<string, ConfluenceMirror>;
+  retryMirrorPublication: (docId: string) => void | Promise<void>;
+  retryingMirror: string | null;
 }) {
   return (
     <DataList
@@ -138,6 +147,12 @@ export function DocumentListPanel({
                           <dd>{formatDate(doc.createdAt)} ({formatFileSize(doc.fileSize)})</dd>
                         </div>
                       </dl>
+                      <ConfluenceMirrorChip
+                        mirror={mirrors.get(doc.id)}
+                        canManage={canManage}
+                        retrying={retryingMirror === doc.id}
+                        onRetry={() => retryMirrorPublication(doc.id)}
+                      />
                       <div className="mt-3 flex flex-wrap gap-2" aria-live="polite">
                         {(doc.standardLinks ?? []).length > 0 ? (
                           (doc.standardLinks ?? []).map((link) => {

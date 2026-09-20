@@ -11,6 +11,8 @@ import { useToast } from '@/components/toast';
 import { evidencePackItems, operationalEvidenceSignals } from '@/lib/regulator-guidance';
 import { getTrustedDocumentDownloadUrl } from '@/lib/url-security';
 import { documentDownloadFilename } from '@/lib/document-download-filename';
+import { loadDocumentMirrors } from '@/lib/document-mirrors';
+import type { ConfluenceMirror } from '@/lib/integration-status';
 import { buildDocumentProfilePrompts } from './document-profile-prompts';
 import { MAX_FILE_SIZE } from './document-upload-modal';
 import type {
@@ -60,13 +62,23 @@ export function useDocumentsWorkflow() {
   const [linkingStandard, setLinkingStandard] = useState(false);
   const [unlinkingStandard, setUnlinkingStandard] = useState<string | null>(null);
   const [downloadDocId, setDownloadDocId] = useState<string | null>(null);
+  const [mirrors, setMirrors] = useState<Map<string, ConfluenceMirror>>(new Map());
+  const [retryingMirror, setRetryingMirror] = useState<string | null>(null);
 
   const fetchDocuments = useCallback(async (showLoading = false) => {
     if (showLoading) setLoading(true);
     setLoadError('');
     try {
       const res = await api.get('/documents');
-      setDocuments(res.data?.data ?? res.data ?? []);
+      const loaded: DocumentResponse[] = res.data?.data ?? res.data ?? [];
+      setDocuments(loaded);
+      // After the documents, never instead of them, and never blocking them.
+      // `loadDocumentMirrors` resolves to an empty map on any failure, so a
+      // charity with no Confluence integration, an expired session or a 500 all
+      // render the list with no mirror chips rather than an error. A document
+      // with no entry shows nothing at all — "we could not ask" is not "there
+      // is no page", and only one of those is safe to tell a trustee.
+      setMirrors(await loadDocumentMirrors(loaded.map((doc) => doc.id)));
     } catch (err) {
       const message = apiErrorMessage(err, 'Documents could not be loaded. Please try again.');
       logClientError('Failed to load documents', err);
@@ -367,6 +379,27 @@ export function useDocumentsWorkflow() {
     }
   };
 
+  /**
+   * Asks the API to re-queue a failed publication, then re-reads the mirrors.
+   *
+   * Only a DEAD_LETTER row is eligible and the API enforces that, answering 409
+   * otherwise — which is surfaced rather than swallowed, because an
+   * administrator who pressed the button is entitled to know nothing was tried.
+   */
+  const retryMirrorPublication = async (documentId: string) => {
+    setRetryingMirror(documentId);
+    try {
+      await api.post(`/documents/${documentId}/publication/retry`);
+      toast('Queued for publishing to Confluence again', 'success');
+      setMirrors(await loadDocumentMirrors(documents.map((doc) => doc.id)));
+    } catch (err) {
+      logClientError('Confluence publication retry failed', err);
+      toast(apiErrorMessage(err, 'This publication could not be queued again'), 'error');
+    } finally {
+      setRetryingMirror(null);
+    }
+  };
+
   return {
     canManage,
     categoryOptions,
@@ -379,6 +412,9 @@ export function useDocumentsWorkflow() {
     documents,
     downloadDocId,
     fetchDocuments,
+    mirrors,
+    retryMirrorPublication,
+    retryingMirror,
     fetchOrganisationProfile,
     handleDelete,
     handleDownload,
