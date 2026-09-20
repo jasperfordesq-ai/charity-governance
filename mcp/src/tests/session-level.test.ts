@@ -2,7 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { TOOLS } from '../tools.js';
 import {
-  createLevelResolver,
+  createPostureResolver,
   fetchSessionPosture,
   permits,
   refusalFor,
@@ -86,7 +86,22 @@ test('the level is read from the API, not from the flag the connector was starte
 
   const posture = await fetchSessionPosture(client);
 
-  assert.deepEqual(posture, { accessLevel: 'read', role: 'OWNER' });
+  // An API that reports no scope reports it as unknown rather than as a
+  // default, so the caller can tell "withheld" from "this build cannot say".
+  assert.deepEqual(posture, { accessLevel: 'read', dataScope: null, role: 'OWNER' });
+});
+
+test('the scope is read from the API too, in either direction', async () => {
+  for (const [reported, expected] of [['FULL', 'full'], ['WITHHELD', 'withheld']] as const) {
+    const client = clientReturning(() =>
+      new Response(JSON.stringify({ accessLevel: 'ADMIN', dataScope: reported, role: 'OWNER' }), {
+        status: 200,
+        headers: { 'content-type': 'application/json' },
+      }),
+    );
+
+    assert.equal((await fetchSessionPosture(client))?.dataScope, expected);
+  }
 });
 
 test('an API that cannot answer leaves the level unknown rather than guessing', async () => {
@@ -129,12 +144,41 @@ test('permits is ordinal, so each level includes the ones below it', () => {
 });
 
 test('an unknown posture is not cached, so a later answer replaces the fallback', async () => {
-  const answers: Array<{ accessLevel: 'read' | 'write' | 'admin'; role: string } | null> = [null, { accessLevel: 'read', role: 'MEMBER' }];
+  const answers = [
+    null,
+    { accessLevel: 'read' as const, dataScope: 'withheld' as const, role: 'MEMBER' },
+  ];
   let asked = 0;
-  const level = createLevelResolver(async () => { asked += 1; return answers.shift() ?? null; }, 'write');
+  const posture = createPostureResolver(
+    async () => { asked += 1; return answers.shift() ?? null; },
+    { accessLevel: 'write', allowPersonalData: false },
+  );
 
-  assert.equal(await level(), 'write', 'the fallback stands in while the API cannot answer');
-  assert.equal(await level(), 'read', 'the next call asks again and gets the real level');
-  assert.equal(await level(), 'read');
-  assert.equal(asked, 2, 'once known, the level is not fetched again');
+  assert.equal((await posture()).accessLevel, 'write', 'the fallback stands in while the API cannot answer');
+  assert.equal((await posture()).accessLevel, 'read', 'the next call asks again and gets the real level');
+  assert.equal((await posture()).accessLevel, 'read');
+  assert.equal(asked, 2, 'once known, the posture is not fetched again');
+});
+
+test('the scope comes from the session, and the flag loses to it', async () => {
+  const posture = createPostureResolver(
+    async () => ({ accessLevel: 'admin', dataScope: 'withheld', role: 'OWNER' }),
+    // The process was started with the flag on; the session says otherwise.
+    { accessLevel: 'admin', allowPersonalData: true },
+  );
+
+  assert.equal((await posture()).allowPersonalData, false);
+});
+
+test('an API that holds no scope leaves the operator\'s own choice standing', async () => {
+  const posture = createPostureResolver(
+    async () => ({ accessLevel: 'write', dataScope: null, role: 'OWNER' }),
+    { accessLevel: 'write', allowPersonalData: true },
+  );
+
+  assert.equal(
+    (await posture()).allowPersonalData,
+    true,
+    'a build older than the column must not silently narrow or widen',
+  );
 });

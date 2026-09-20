@@ -23,10 +23,21 @@ export function formatStatus(
   const level = posture
     ? posture.accessLevel.toUpperCase()
     : 'unknown (this API predates the session route, so the level it holds cannot be read)';
+
+  // The scope belongs to the session, so it is reported from the session. An
+  // API too old to hold one falls back to the flag this process was started
+  // with, and says which it is reading.
+  const scope =
+    posture?.dataScope === 'full'
+      ? 'ALLOWED by this session'
+      : posture?.dataScope === 'withheld'
+        ? 'withheld by this session'
+        : `${allowPersonalData ? 'ALLOWED' : 'withheld'} by this process (this API holds no scope)`;
+
   return (
     `Connected as ${me.name} <${me.email}> (${me.role})\n`
     + `Organisation: ${me.organisation?.name ?? '(unnamed organisation)'}\n`
     + `Access level: ${level}\n`
-    + `Personal data: ${allowPersonalData ? 'ALLOWED' : 'withheld (default)'} for this process\n`
+    + `Personal data: ${scope}\n`
   );
 }

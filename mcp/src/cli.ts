@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 import { createInterface } from 'node:readline/promises';
 import { stdin, stdout, stderr, argv, exit } from 'node:process';
-import { parseArgs } from './config.js';
+import { parseArgs, requestedDataScope } from './config.js';
 import { chooseCredentialStore, bindCredentialToOrigin } from './credentials.js';
 import {
   readPasswordFromStdin,
@@ -25,6 +25,7 @@ records as you. Run with no command to serve over stdio to an AI client.
 Commands (run these yourself, in a terminal):
   connect      Sign in and store a refresh token in the OS credential store.
                --access-level read|write|admin   (default: write)
+               --data-scope withheld|full        (default: withheld)
                --email <address>
   status       Who the stored credential resolves to, and the level the API holds.
   approve <id> Approve one action CharityPilot refused. Terminal only.
@@ -33,8 +34,9 @@ Commands (run these yourself, in a terminal):
 
 Options:
   --base-url <https://host>   The API. Defaults to the tailnet address.
-  --allow-personal-data       Release the fields the personal-data gate withholds.
-                              A data-protection decision; ask your DPO first.
+  --allow-personal-data       The old spelling of --data-scope full, honoured at
+                              connect. The scope now lives on the session, so a
+                              connected session decides, not this flag.
   --upload-root <dir>         Offer document_upload for files under this directory.
   --download-dir <dir>        Offer document_download, writing into this directory.
   --toolsets <a,b>            Offer only these tool groups. See README.
@@ -103,6 +105,7 @@ async function main(): Promise<void> {
     baseUrl: config.baseUrl,
     store,
     accessLevel: config.accessLevel,
+    dataScope: requestedDataScope(config),
   });
 
   if (config.command === 'connect') {
@@ -119,7 +122,9 @@ async function main(): Promise<void> {
       `Connected as ${identity.name} <${identity.email}> (${identity.role})\n` +
       `Organisation: ${identity.organisationName}\n` +
       `Access level: ${config.accessLevel.toUpperCase()}\n` +
-      `Personal data: ${config.allowPersonalData ? 'ALLOWED' : 'withheld (default)'}\n`,
+      // Recorded on the session by the API, not on this process: it holds for
+      // every client that uses this credential until somebody signs in again.
+      `Personal data: ${requestedDataScope(config).toUpperCase()}\n`,
     );
     return;
   }

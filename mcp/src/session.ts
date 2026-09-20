@@ -1,5 +1,5 @@
 import type { CredentialStore } from './credentials.js';
-import type { AccessLevel } from './config.js';
+import type { AccessLevel, DataScope } from './config.js';
 import { registerSecret } from './redact.js';
 import { CONNECTOR_VERSION } from './version.js';
 
@@ -45,6 +45,7 @@ interface SessionOptions {
   baseUrl: string;
   store: CredentialStore;
   accessLevel?: AccessLevel;
+  dataScope?: DataScope;
   fetchImpl?: typeof fetch;
 }
 
@@ -56,6 +57,7 @@ interface ConnectorTokens {
 export class Session {
   readonly #baseUrl: string;
   readonly #accessLevel: AccessLevel;
+  readonly #dataScope: DataScope;
   readonly #store: CredentialStore;
   readonly #fetch: typeof fetch;
   #accessToken: string | null = null;
@@ -70,6 +72,7 @@ export class Session {
     // Sending one would get every call rejected; not sending one is also what
     // makes a split-host deployment work, where the app and the API differ.
     this.#accessLevel = options.accessLevel ?? 'write';
+    this.#dataScope = options.dataScope ?? 'withheld';
     this.#store = options.store;
     this.#fetch = options.fetchImpl ?? fetch;
   }
@@ -83,6 +86,7 @@ export class Session {
       email,
       password,
       accessLevel: this.#accessLevel.toUpperCase(),
+      dataScope: this.#dataScope.toUpperCase(),
     });
     if (!response.ok) {
       // A 403 here says nothing about whether the credentials are correct: it

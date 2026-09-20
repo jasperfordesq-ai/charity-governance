@@ -20,7 +20,7 @@ import {
   type FileToolDefinition,
 } from './file-tools.js';
 import {
-  createLevelResolver,
+  createPostureResolver,
   fetchSessionPosture,
   permits,
   refusalFor,
@@ -151,7 +151,11 @@ export async function startServer(config: ConnectorConfig, session: Session): Pr
    * is not a security decision: the server refuses what the session may not do
    * regardless of what is offered here.
    */
-  const level = createLevelResolver(() => fetchSessionPosture(client), config.accessLevel);
+  const posture = createPostureResolver(() => fetchSessionPosture(client), {
+    accessLevel: config.accessLevel,
+    allowPersonalData: config.allowPersonalData,
+  });
+  const level = async (): Promise<AccessLevel> => (await posture()).accessLevel;
 
   /**
    * Runs one tool and returns its raw value, or throws.
@@ -180,6 +184,9 @@ export async function startServer(config: ConnectorConfig, session: Session): Pr
         throw new ConnectorError('TOOL_DISABLED', unavailableBecause(fileTool));
       }
       return runFileTool(fileTool, client, config, args);
+      // A file tool moves whole files, which the field policy cannot filter,
+      // so the scope has nothing to say about it: a document is handed over
+      // or it is not, and the directory setting is what decides.
     }
 
     const tool = TOOLS.find((t) => t.name === name);
@@ -191,19 +198,26 @@ export async function startServer(config: ConnectorConfig, session: Session): Pr
     // Re-checked here and not only in the listing: the Model Context Protocol
     // does not stop a client calling a tool it was never shown, and a tool
     // hidden from a list is not a tool that cannot be called.
-    const current = await level();
-    if (!permits(current, tool)) {
-      throw new ConnectorError('SESSION_LEVEL_TOO_LOW', refusalFor(current, tool), {
+    const held = await posture();
+    if (!permits(held.accessLevel, tool)) {
+      throw new ConnectorError('SESSION_LEVEL_TOO_LOW', refusalFor(held.accessLevel, tool), {
         action: 'reconnect',
       });
     }
 
-    return runTool(tool, client, config.allowPersonalData, args);
+    return runTool(tool, client, held.allowPersonalData, args);
   }
 
-  server.setRequestHandler(ListToolsRequestSchema, async () => ({
-    tools: buildToolList(await level(), config),
-  }));
+  server.setRequestHandler(ListToolsRequestSchema, async () => {
+    const held = await posture();
+    return {
+      tools: buildToolList(held.accessLevel, {
+        ...config,
+        // The API holds the scope, not the flag this process was started with.
+        allowPersonalData: held.allowPersonalData,
+      }),
+    };
+  });
 
   const diagnostics = createDiagnostics(config.verbose);
 

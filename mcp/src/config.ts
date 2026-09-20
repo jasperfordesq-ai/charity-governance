@@ -25,6 +25,19 @@ export type AccessLevel = 'read' | 'write' | 'admin';
 
 const ACCESS_LEVELS: readonly AccessLevel[] = ['read', 'write', 'admin'];
 
+/**
+ * How much personal data the session may see.
+ *
+ * Chosen at sign-in and recorded on the session by the API, like the access
+ * level beside it. It used to be `--allow-personal-data` on the serve command,
+ * read from the AI client's configuration file — a file this connector
+ * otherwise treats as something an attacker may write, which is why a stored
+ * credential refuses to be sent to a host other than the one that issued it.
+ */
+export type DataScope = 'withheld' | 'full';
+
+const DATA_SCOPES: readonly DataScope[] = ['withheld', 'full'];
+
 export interface ConnectorConfig {
   command: string;
   baseUrl: string;
@@ -43,6 +56,16 @@ export interface ConnectorConfig {
   toolsets?: readonly ToolGroup[] | undefined;
   /** Log each tool call to stderr, secrets redacted. */
   verbose: boolean;
+  /**
+   * The scope asked for at sign-in. Absent falls back to the personal-data
+   * flag, so an older invocation keeps meaning what it meant.
+   */
+  dataScope?: DataScope | undefined;
+}
+
+/** What `connect` should ask the API for, given everything the caller said. */
+export function requestedDataScope(config: ConnectorConfig): DataScope {
+  return config.dataScope ?? (config.allowPersonalData ? 'full' : 'withheld');
 }
 
 function hostnameOf(baseUrl: string): string | null {
@@ -66,6 +89,7 @@ export function parseArgs(argv: string[]): ConnectorConfig {
   let downloadDir: string | undefined;
   let toolsets: ToolGroup[] | undefined;
   let verbose = false;
+  let dataScope: DataScope | undefined;
 
   for (let i = 0; i < argv.length; i += 1) {
     const arg = argv[i]!;
@@ -134,6 +158,16 @@ export function parseArgs(argv: string[]): ConnectorConfig {
         }
         toolsets = names as ToolGroup[];
       }
+    } else if (arg === '--data-scope') {
+      i += 1;
+      const value = argv[i];
+      if (!value) throw new Error('--data-scope requires a value');
+      if (!DATA_SCOPES.includes(value as DataScope)) {
+        throw new Error(
+          `Unknown data scope: ${value}. Use one of: ${DATA_SCOPES.join(', ')}.`,
+        );
+      }
+      dataScope = value as DataScope;
     } else if (arg === '--verbose') {
       verbose = true;
     } else if (command === 'approve' && !arg.startsWith('-') && approvalId === undefined) {
@@ -179,6 +213,7 @@ export function parseArgs(argv: string[]): ConnectorConfig {
     downloadDir,
     toolsets,
     verbose,
+    dataScope,
     email,
     passwordStdin,
   };

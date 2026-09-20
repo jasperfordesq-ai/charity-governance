@@ -48,6 +48,14 @@ export async function runSessionInfo(
     fetchSessionPosture(client),
   ]);
 
+  // What this answer may itself contain follows the session's scope, not the
+  // flag: reporting the person's own name under a session that withholds it
+  // would be the one place the policy did not apply.
+  const allowPersonalData =
+    posture?.dataScope === null || posture === null
+      ? config.allowPersonalData
+      : posture.dataScope === 'full';
+
   return {
     organisation: {
       id: me.organisationId ?? null,
@@ -59,14 +67,17 @@ export async function runSessionInfo(
       accessLevelNote: posture
         ? 'As the API reports it.'
         : 'Unknown: this API predates the session route.',
+      // The scope is the session's, chosen by whoever typed the password. A
+      // build older than the column reports null, and the flag stands in.
+      dataScope: posture?.dataScope ?? (allowPersonalData ? 'full' : 'withheld'),
       clientKind: 'MCP_CONNECTOR',
     },
     connector: {
       version: CONNECTOR_VERSION,
       baseUrl: config.baseUrl,
-      personalData: config.allowPersonalData ? 'released' : 'withheld',
+      personalData: allowPersonalData ? 'released' : 'withheld',
     },
-    account: config.allowPersonalData
+    account: allowPersonalData
       ? { name: me.name ?? null, email: me.email ?? null }
       : { note: 'Name and email are withheld while the personal-data gate is closed.' },
   };

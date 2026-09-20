@@ -70,3 +70,30 @@ test('the tool is read-only and takes no arguments', () => {
   assert.equal(SESSION_INFO_TOOL.annotations.readOnlyHint, true);
   assert.deepEqual((SESSION_INFO_TOOL.inputSchema as { properties: object }).properties, {});
 });
+
+test('a session that withholds personal data overrides a process that was told otherwise', async () => {
+  const info = await runSessionInfo(
+    client({
+      '/api/v1/auth/me': ME,
+      '/api/v1/auth/connector/session': { accessLevel: 'ADMIN', dataScope: 'WITHHELD', role: 'OWNER' },
+    }),
+    // Started with the flag on. The session says no, and the session holds it.
+    { baseUrl: 'https://example.test', allowPersonalData: true },
+  );
+
+  const text = JSON.stringify(info);
+  assert.match(text, /"dataScope":"withheld"/);
+  assert.ok(!text.includes('owner@harness.ie'), 'the flag must not reopen what the session closed');
+});
+
+test('a session that allows personal data releases it, whatever the process was told', async () => {
+  const info = await runSessionInfo(
+    client({
+      '/api/v1/auth/me': ME,
+      '/api/v1/auth/connector/session': { accessLevel: 'ADMIN', dataScope: 'FULL', role: 'OWNER' },
+    }),
+    { baseUrl: 'https://example.test', allowPersonalData: false },
+  );
+
+  assert.match(JSON.stringify(info), /owner@harness.ie/);
+});

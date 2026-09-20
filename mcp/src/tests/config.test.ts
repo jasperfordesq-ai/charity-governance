@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { parseArgs, DEFAULT_BASE_URL } from '../config.js';
+import { parseArgs, requestedDataScope, DEFAULT_BASE_URL } from '../config.js';
 
 test('the default base URL is the tailnet address', () => {
   assert.equal(parseArgs([]).baseUrl, DEFAULT_BASE_URL);
@@ -122,4 +122,23 @@ test('--help and --version are commands, not unknown options', () => {
   assert.equal(parseArgs(['-h']).command, 'help');
   assert.equal(parseArgs(['--version']).command, 'version');
   assert.equal(parseArgs(['help']).command, 'help');
+});
+
+test('--data-scope chooses what the session may see, and defaults to withholding', () => {
+  assert.equal(parseArgs([]).dataScope, undefined);
+  assert.equal(parseArgs(['--data-scope', 'full']).dataScope, 'full');
+  assert.equal(parseArgs(['--data-scope', 'withheld']).dataScope, 'withheld');
+  assert.throws(() => parseArgs(['--data-scope', 'everything']), /Unknown data scope/);
+  assert.throws(() => parseArgs(['--data-scope']), /requires a value/);
+});
+
+test('the old personal-data flag still means full, and the explicit scope wins', () => {
+  assert.equal(requestedDataScope(parseArgs([])), 'withheld');
+  assert.equal(requestedDataScope(parseArgs(['--allow-personal-data'])), 'full');
+  assert.equal(requestedDataScope(parseArgs(['--data-scope', 'full'])), 'full');
+  assert.equal(
+    requestedDataScope(parseArgs(['--allow-personal-data', '--data-scope', 'withheld'])),
+    'withheld',
+    'the flag is the old spelling; asking explicitly must decide',
+  );
 });

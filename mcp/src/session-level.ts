@@ -1,5 +1,5 @@
 import type { ApiClient } from './client.js';
-import type { AccessLevel } from './config.js';
+import type { AccessLevel, DataScope } from './config.js';
 import { needsPersonalData, type ToolDefinition } from './tools.js';
 
 /**
@@ -19,11 +19,18 @@ const RANK: Record<AccessLevel, number> = { read: 0, write: 1, admin: 2 };
 
 export interface SessionPosture {
   accessLevel: AccessLevel;
+  /**
+   * How much personal data this session may see, as the API holds it. A build
+   * older than the column says nothing, and the caller falls back to what the
+   * operator asked for.
+   */
+  dataScope: DataScope | null;
   role: string;
 }
 
 interface SessionResponse {
   accessLevel?: string;
+  dataScope?: string;
   role?: string;
 }
 
@@ -34,7 +41,12 @@ export async function fetchSessionPosture(
     const body = await client.get<SessionResponse>('/api/v1/auth/connector/session');
     const level = String(body.accessLevel ?? '').toLowerCase();
     if (level !== 'read' && level !== 'write' && level !== 'admin') return null;
-    return { accessLevel: level, role: String(body.role ?? 'unknown') };
+    const scope = String(body.dataScope ?? '').toLowerCase();
+    return {
+      accessLevel: level,
+      dataScope: scope === 'full' ? 'full' : scope === 'withheld' ? 'withheld' : null,
+      role: String(body.role ?? 'unknown'),
+    };
   } catch {
     // An API that predates this route, or one that cannot be reached right
     // now. Returning null means "unknown", and the caller falls back to the
@@ -52,20 +64,36 @@ export async function fetchSessionPosture(
  * unknown posture now stands in for one call and is asked for again on the
  * next.
  */
-export function createLevelResolver(
+export interface HeldPosture {
+  accessLevel: AccessLevel;
+  /** True when the API says this session may see personal data. */
+  allowPersonalData: boolean;
+}
+
+export function createPostureResolver(
   fetchPosture: () => Promise<SessionPosture | null>,
-  fallback: AccessLevel,
-): () => Promise<AccessLevel> {
-  let held: AccessLevel | null = null;
-  let resolving: Promise<AccessLevel> | null = null;
+  fallback: HeldPosture,
+): () => Promise<HeldPosture> {
+  let held: HeldPosture | null = null;
+  let resolving: Promise<HeldPosture> | null = null;
 
   return async () => {
     if (held) return held;
     if (!resolving) {
       resolving = fetchPosture()
         .then((posture) => {
-          if (posture) held = posture.accessLevel;
-          return posture?.accessLevel ?? fallback;
+          if (!posture) return fallback;
+          held = {
+            accessLevel: posture.accessLevel,
+            // A build older than the data-scope column says nothing about it.
+            // The operator's own choice stands in, exactly as it did before
+            // the column existed, rather than silently widening or narrowing.
+            allowPersonalData:
+              posture.dataScope === null
+                ? fallback.allowPersonalData
+                : posture.dataScope === 'full',
+          };
+          return held;
         })
         .finally(() => {
           resolving = null;
