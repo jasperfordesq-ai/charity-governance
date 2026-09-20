@@ -137,6 +137,15 @@ function makeStore(rows: IntegrationRow[], publications: PublicationRow[] = []) 
         (row) => row.organisationId === composite.organisationId && row.provider === composite.provider,
       );
     }
+    // Flat field filters, which is what `updateMany` takes. `findUnique` needs
+    // the composite key; `updateMany` does not have one and matches on ordinary
+    // columns, so a double that only understood the composite silently answered
+    // "no such row" to every narrow update written that way.
+    if (typeof where.organisationId === 'string' && typeof where.provider === 'string') {
+      return [...integrations.values()].find(
+        (row) => row.organisationId === where.organisationId && row.provider === where.provider,
+      );
+    }
     return undefined;
   }
 
@@ -1113,6 +1122,11 @@ test('status reports the connection without any token material', async () => {
   // unchanged and still applies to every one of them.
   assert.deepEqual(Object.keys(data).sort(), [
     'connectedAt',
+    // Three strings a charity administrator typed about their own Atlassian
+    // tenancy, plus a literal `false`. Nothing here is read from Atlassian and
+    // nothing is derived from credential material; the substring guard below is
+    // unchanged and still applies to all of it.
+    'declaredEnvironment',
     'lastError',
     'provider',
     'publishSpace',
@@ -1124,6 +1138,11 @@ test('status reports the connection without any token material', async () => {
     'status',
     'unavailableActions',
   ]);
+  // The caveat travels with the value, always. A client cannot render a
+  // residency claim from this response without also being handed the fact that
+  // CharityPilot does not control it — which is the whole reason the field is
+  // called a DECLARATION and not a setting.
+  assert.equal(data.declaredEnvironment.controlledByCharityPilot, false);
   assert.equal(data.provider, 'CONFLUENCE');
   assert.equal(data.status, 'CONNECTED');
   assert.equal(data.siteUrl, 'https://charity-a.atlassian.net');
@@ -2366,4 +2385,136 @@ test('no audit row this plugin writes carries token material', async () => {
       `an audit row carried ${forbidden}, which is read back onto an operator's screen`,
     );
   }
+});
+
+// ────────────────────────────────────────────────────────────────────────────
+// The declared environment.
+//
+// CharityPilot does not control a connected Atlassian site's residency or plan
+// and cannot read either from the API. These record what the organisation
+// STATES, with a date and a person against it, and every response says so.
+// Nothing in the product branches on the value — a route that looked like it
+// were configuring residency would be a lie told in the interface, which is the
+// failure the DPO's 2026-09-19 point was about.
+// ────────────────────────────────────────────────────────────────────────────
+
+function putDeclaration(
+  app: Awaited<ReturnType<typeof buildApp>>['app'],
+  actor: Actor,
+  payload: Record<string, string | null>,
+) {
+  return app.inject({
+    method: 'PUT',
+    url: '/confluence/declared-environment',
+    headers: { authorization: bearer(actor) },
+    payload,
+  });
+}
+
+test('a declaration is recorded with who made it and when', async () => {
+  restoreKey();
+  const { app, store } = await buildApp({ rows: [connectedRow()], actor: ORG_A_ADMIN });
+
+  const response = await putDeclaration(app, ORG_A_ADMIN, {
+    plan: 'Premium',
+    residency: 'EU (Ireland)',
+  });
+
+  assert.equal(response.statusCode, 200, response.body);
+  const { data } = JSON.parse(response.body);
+  assert.equal(data.declaredEnvironment.residency, 'EU (Ireland)');
+  assert.equal(data.declaredEnvironment.plan, 'Premium');
+  assert.equal(typeof data.declaredEnvironment.declaredAt, 'string');
+  assert.equal(data.declaredEnvironment.controlledByCharityPilot, false);
+
+  const saved = store.integrations.get('integration-a')!;
+  assert.equal((saved as unknown as Record<string, unknown>).declaredResidency, 'EU (Ireland)');
+  // Who said so is part of the record. A residency claim with nobody's name
+  // against it is not something a DPO can follow up.
+  assert.equal((saved as unknown as Record<string, unknown>).declaredById, 'user-a');
+});
+
+test('the declaration is NOT written to config, which a reconnect overwrites', async () => {
+  restoreKey();
+  const { app, store } = await buildApp({ rows: [connectedRow()], actor: ORG_A_ADMIN });
+
+  await putDeclaration(app, ORG_A_ADMIN, { plan: 'Premium', residency: 'EU (Ireland)' });
+
+  // `connectConfluence` spreads `config` into its upsert, so a reconnect — the
+  // recovery action CharityPilot's own error messages recommend — would
+  // silently erase a declaration stored there while the owner console went on
+  // showing the value it read before.
+  assert.deepEqual(store.integrations.get('integration-a')!.config, {
+    siteId: 'site-1',
+    siteUrl: 'https://charity-a.atlassian.net',
+    siteName: 'Charity A',
+    siteCount: 2,
+  });
+});
+
+test('clearing a declaration clears the attribution with it', async () => {
+  restoreKey();
+  const { app, store } = await buildApp({ rows: [connectedRow()], actor: ORG_A_ADMIN });
+
+  await putDeclaration(app, ORG_A_ADMIN, { plan: 'Premium', residency: 'EU (Ireland)' });
+  const response = await putDeclaration(app, ORG_A_ADMIN, { plan: null, residency: null });
+
+  assert.equal(response.statusCode, 200, response.body);
+  const saved = store.integrations.get('integration-a')! as unknown as Record<string, unknown>;
+  // A "who said so" with nothing said is what the CHECK forbids, and a stale
+  // attribution would be worse than no record.
+  assert.equal(saved.declaredAt, null);
+  assert.equal(saved.declaredById, null);
+});
+
+test('a declaration longer than the column allows is refused as a 400, not a 500', async () => {
+  restoreKey();
+  const { app } = await buildApp({ rows: [connectedRow()], actor: ORG_A_ADMIN });
+
+  const response = await putDeclaration(app, ORG_A_ADMIN, { residency: 'e'.repeat(101) });
+
+  assert.equal(response.statusCode, 400, response.body);
+  assert.equal(JSON.parse(response.body).code, 'INTEGRATION_DECLARATION_INVALID');
+});
+
+test('a declaration is counted by code point, so emoji do not become a 500', async () => {
+  restoreKey();
+  const { app } = await buildApp({ rows: [connectedRow()], actor: ORG_A_ADMIN });
+
+  // 60 astral-plane characters: 120 UTF-16 units, 60 code points. Postgres's
+  // char_length counts code points, so this fits the 100 the CHECK allows —
+  // and a JavaScript `.length` test would have refused it. The inverse mistake
+  // (accepting 60 emoji against a `.length` bound of 100 when the CHECK counts
+  // differently) is the one that turns a 400 into a 500.
+  const response = await putDeclaration(app, ORG_A_ADMIN, { residency: '\u{1F1EE}'.repeat(60) });
+
+  assert.equal(response.statusCode, 200, response.body);
+});
+
+test('a control character in a declaration is refused before it reaches the CHECK', async () => {
+  restoreKey();
+  const { app } = await buildApp({ rows: [connectedRow()], actor: ORG_A_ADMIN });
+
+  // U+0085 is matched by PostgreSQL's [[:cntrl:]] and is NOT JavaScript
+  // whitespace, so `.trim()` leaves it: omitting the C1 range would let it past
+  // here and fail the CHECK, turning a 400 into a 500.
+  const response = await putDeclaration(app, ORG_A_ADMIN, { residency: 'EUIreland' });
+
+  assert.equal(response.statusCode, 400, response.body);
+  assert.equal(JSON.parse(response.body).code, 'INTEGRATION_DECLARATION_INVALID');
+});
+
+test('a declaration cannot be recorded against another organisation', async () => {
+  restoreKey();
+  const { app, store } = await buildApp({ rows: [connectedRow()], actor: ORG_B_ADMIN });
+
+  const response = await putDeclaration(app, ORG_B_ADMIN, { residency: 'US' });
+
+  // No integrationId is accepted anywhere on this surface, so the only lookup
+  // is org-b's own — which has no row.
+  assert.equal(response.statusCode, 404, response.body);
+  assert.equal(
+    (store.integrations.get('integration-a')! as unknown as Record<string, unknown>).declaredResidency,
+    undefined,
+  );
 });

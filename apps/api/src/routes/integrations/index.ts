@@ -52,6 +52,10 @@ import {
   recordIntegrationAuditEvent,
   recordIntegrationAuditEventBestEffort,
 } from '../../services/integration-audit.service.js';
+import {
+  declaredEnvironmentResponse,
+  recordDeclaredEnvironment,
+} from '../../services/integration-declared-environment.service.js';
 import { AppError, handleError } from '../../utils/errors.js';
 import { getPrimaryFrontendOrigin } from '../../utils/frontend-origin.js';
 import { sendNoContent, sendSuccess } from '../../utils/response.js';
@@ -455,6 +459,10 @@ type OwnIntegration = {
   publishSpaceName: string | null;
   publishSpaceSiteId: string | null;
   grantedScopes: string[];
+  /** What the charity DECLARED about its Atlassian environment. Never verified. */
+  declaredPlan: string | null;
+  declaredResidency: string | null;
+  declaredAt: Date | null;
 };
 
 /**
@@ -490,6 +498,12 @@ async function findOwnConfluenceIntegration(
       // what the connection may do, never how to do it — and the erasure gate
       // needs it.
       grantedScopes: true,
+      // Declared, never verified. Safe to return: it is a charity
+      // administrator's claim about their own Atlassian tenancy, and the
+      // response marks it as one.
+      declaredPlan: true,
+      declaredResidency: true,
+      declaredAt: true,
     },
   });
   return (found as OwnIntegration | null) ?? null;
@@ -886,6 +900,11 @@ export async function integrationRoutes(
         // by a substring test that forbids "token" and "secret" anywhere in it,
         // and a list of Atlassian scope names is the kind of field that invites
         // someone to widen that guard later.
+        // Declared by the charity, never established by CharityPilot. The block
+        // carries `controlledByCharityPilot: false` on every response so a
+        // client cannot render the value without the caveat that makes it
+        // honest.
+        declaredEnvironment: declaredEnvironmentResponse(integration),
         reauthorisationRequired: missingScopes.length > 0,
         unavailableActions: missingScopes.length > 0 ? ['ERASE_CONFLUENCE_COPY'] : [],
       });
@@ -1197,6 +1216,56 @@ export async function integrationRoutes(
       }
     },
   );
+
+  /**
+   * Records what the charity says about the Atlassian environment it connected.
+   *
+   * **A DECLARATION, NOT A SETTING.** Nothing CharityPilot does changes because
+   * of what is stored here — publication does not branch on it, erasure does not
+   * branch on it, and no guard reads it. It exists so that an organisation can
+   * state, on the record, where it believes its Confluence data lives and on
+   * what plan, and so that an operator and a DPO can see that statement later
+   * with a date and a name against it.
+   *
+   * That is the honest shape of the thing, because CharityPilot does not control
+   * a connected site's residency and cannot read it from the API. A route that
+   * looked like it were configuring residency would be a lie told in the
+   * interface, which is precisely the failure the DPO's 2026-09-19 point was
+   * about.
+   *
+   * A PUT because it is idempotent: the same declaration twice is the same
+   * organisation saying the same thing.
+   */
+  app.put('/confluence/declared-environment', async (request, reply) => {
+    try {
+      const integration = await findOwnConfluenceIntegration(app.prisma, request.user.organisationId);
+      if (!integration) {
+        throw new AppError(
+          404,
+          'CONFLUENCE_NOT_CONNECTED',
+          'This organisation has no Confluence integration to record a declaration against.',
+        );
+      }
+
+      const declared = await recordDeclaredEnvironment(app.prisma, {
+        organisationId: request.user.organisationId,
+        declaredById: request.user.userId,
+        plan: bodyParam(request.body, 'plan'),
+        residency: bodyParam(request.body, 'residency'),
+      });
+
+      return sendSuccess(reply, {
+        provider: PROVIDER,
+        declaredEnvironment: declaredEnvironmentResponse({
+          declaredPlan: declared.plan,
+          declaredResidency: declared.residency,
+          declaredAt: declared.declaredAt,
+        }),
+      });
+    } catch (error) {
+      return handleError(reply, error);
+    }
+  });
 
   app.delete('/confluence', async (request, reply) => {
     try {

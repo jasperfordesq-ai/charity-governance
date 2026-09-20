@@ -611,6 +611,23 @@ the owner rules on it, make no residency claim about a document held in
 Confluence.** Publishing a residency claim that turns out to be wrong is worse
 than publishing none, because a DPO would be the one relying on it.
 
+**What exists as of 2026-09-21, and why it does not unblock the above.** An
+organisation can now record what it *declares* about its Atlassian environment —
+plan and residency — through `PUT /api/v1/integrations/confluence/declared-environment`,
+stored in dedicated `declared*` columns on `OrganisationIntegration` with the
+person and the date against it, and shown on the owner console.
+
+That is deliberately not a residency claim and must not be read as the start of
+one. It is a charity administrator's statement about their own tenancy, which
+CharityPilot cannot verify and does not control; every response carrying it also
+carries `controlledByCharityPilot: false`, and nothing in the product branches on
+the value. The block above is about what *CharityPilot* asserts. Recording what a
+charity asserts is the honest thing that could be built without the owner's
+ruling, and it is all that has been. See
+`services/integration-declared-environment.service.ts`, whose header says the
+same thing at greater length for whoever is tempted to add a lookup and turn a
+declaration into an assertion.
+
 #### Disconnecting does not provably revoke anything at Atlassian
 
 Three statements, all true, and all three have to be said together.
