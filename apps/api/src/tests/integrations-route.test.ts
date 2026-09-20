@@ -21,6 +21,8 @@ const [
     INTEGRATION_ROUTES_PREFIX,
     CONFLUENCE_CALLBACK_PATH,
     CONFLUENCE_OAUTH_SCOPES,
+    CONFLUENCE_REQUIRED_ERASURE_SCOPES,
+    missingConfluenceScopes,
     CONFLUENCE_CONNECT_DISCLOSURE,
     confluenceRedirectUri,
   },
@@ -709,6 +711,20 @@ test('authorize refuses when the Atlassian client credentials are not configured
   }
 });
 
+test('the authorize scopes include the two Atlassian requires to erase', () => {
+  assert.ok(CONFLUENCE_OAUTH_SCOPES.includes('delete:page:confluence'));
+  assert.ok(CONFLUENCE_OAUTH_SCOPES.includes('delete:attachment:confluence'));
+  assert.ok(CONFLUENCE_OAUTH_SCOPES.includes('offline_access'), 'still the one that cannot be dropped');
+});
+
+test('a connection that predates the delete scopes reports what it is missing', () => {
+  assert.deepEqual(
+    missingConfluenceScopes([]).sort(),
+    ['delete:attachment:confluence', 'delete:page:confluence'],
+  );
+  assert.deepEqual(missingConfluenceScopes([...CONFLUENCE_REQUIRED_ERASURE_SCOPES]), []);
+});
+
 // ────────────────────────────────────────────────────────────────────────────
 // The callback is a page in the web app, and the code arrives in a body
 //
@@ -930,10 +946,12 @@ test('status reports the connection without any token material', async () => {
     'provider',
     'publishSpace',
     'publishing',
+    'reauthorisationRequired',
     'siteCount',
     'siteName',
     'siteUrl',
     'status',
+    'unavailableActions',
   ]);
   assert.equal(data.provider, 'CONFLUENCE');
   assert.equal(data.status, 'CONNECTED');

@@ -453,6 +453,7 @@ model Organisation {
   securityAuditEvents         SecurityAuditEvent[]
   clientActivityEvents        ClientActivityEvent[]
   authActionApprovals         AuthActionApproval[]
+  connectorIdempotency        ConnectorIdempotencyRecord[]
   passwordRecoveryRequests    PasswordRecoveryRequest[]
   authSecurityEmailOutbox     AuthSecurityEmailOutbox[]
   integrations                OrganisationIntegration[]
@@ -484,6 +485,13 @@ model OrganisationIntegration {
   refreshClaimToken   String?
   refreshFailureCount Int                 @default(0)
   lastRefreshedAt     DateTime?
+  // The scopes Atlassian said it granted, from the token response. Recorded
+  // because a tenant that authorised before a scope was added has a working
+  // connection that cannot do the new thing, and the only honest way to tell
+  // that apart from a broken connection is to have written down what was
+  // granted. Empty for every connection made before this column existed —
+  // which reads, correctly, as "we do not know, so assume not granted".
+  grantedScopes       String[]            @default([])
   // ── where this charity's documents are published ────────────────────────
   // Dedicated columns, NOT `config`, and that is a correctness requirement
   // rather than a style choice. `connectConfluence` builds a `connectingState`
@@ -564,17 +572,18 @@ model User {
   verifyToken       String?   @unique
   verifyTokenExpiry DateTime?
 
-  complianceUpdates            ComplianceRecord[]        @relation("UpdatedBy")
-  signoffUpdates               ComplianceSignoff[]       @relation("SignoffUpdatedBy")
-  documentUploads              Document[]                @relation("UploadedBy")
-  sentInvites                  TeamInvite[]              @relation("InvitedBy")
+  complianceUpdates            ComplianceRecord[]           @relation("UpdatedBy")
+  signoffUpdates               ComplianceSignoff[]          @relation("SignoffUpdatedBy")
+  documentUploads              Document[]                   @relation("UploadedBy")
+  sentInvites                  TeamInvite[]                 @relation("InvitedBy")
   reminderLogs                 DeadlineReminderLog[]
   authSessions                 AuthSession[]
-  billingAuthorityGrants       BillingAuthorityGrant[]   @relation("BillingAuthorityActor")
-  securityAuditEventsAsActor   SecurityAuditEvent[]      @relation("SecurityAuditActor")
-  securityAuditEventsAsSubject SecurityAuditEvent[]      @relation("SecurityAuditSubject")
+  billingAuthorityGrants       BillingAuthorityGrant[]      @relation("BillingAuthorityActor")
+  securityAuditEventsAsActor   SecurityAuditEvent[]         @relation("SecurityAuditActor")
+  securityAuditEventsAsSubject SecurityAuditEvent[]         @relation("SecurityAuditSubject")
   clientActivityEvents         ClientActivityEvent[]
   authActionApprovals          AuthActionApproval[]
+  connectorIdempotency         ConnectorIdempotencyRecord[]
   passwordRecoveryRequests     PasswordRecoveryRequest[]
   authSecurityEmailOutbox      AuthSecurityEmailOutbox[]
 
@@ -723,6 +732,46 @@ model AuthActionApproval {
   @@unique([id, organisationId])
   @@index([sessionFamilyId, requestDigest])
   @@index([expiresAt])
+}
+
+/// One connector POST, remembered long enough to answer a retry with the same
+/// answer instead of creating a second record.
+///
+/// Only POST, because only POST duplicates: an update is already guarded by
+/// expectedUpdatedAt and a removal by a human approval, and both are safe to
+/// repeat. A dropped connection after a create is the case nothing else covers.
+///
+/// The digest binds the key to the request that claimed it, so a key cannot be
+/// spent on a different create however the agent holding it is persuaded in
+/// between. It is built by the API from the method, the matched route and the
+/// body, never from anything the caller names it.
+model ConnectorIdempotencyRecord {
+  id             String       @id @default(cuid())
+  organisationId String
+  organisation   Organisation @relation(fields: [organisationId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  userId         String
+  user           User         @relation(fields: [userId, organisationId], references: [id, organisationId], onDelete: Restrict, onUpdate: Restrict)
+  /// As the client sent it. Scoped per user rather than per session, because a
+  /// session rotates every fifteen minutes and a retry must still be recognised.
+  key            String
+  requestDigest  String
+  method         String
+  routePattern   String
+  /// Null until the first attempt has answered. A second request arriving while
+  /// it is still null is told the first is in flight rather than being allowed
+  /// to run beside it.
+  completedAt    DateTime?
+  statusCode     Int?
+  /// The response as it was sent, so a retry is answered identically. Null when
+  /// the body was too large to keep; the replay then says so rather than
+  /// inventing a different answer.
+  responseBody   String?
+  createdAt      DateTime     @default(now())
+  expiresAt      DateTime
+
+  @@unique([userId, key])
+  @@index([expiresAt])
+  @@index([organisationId, createdAt])
 }
 
 model PasswordRecoveryRequest {

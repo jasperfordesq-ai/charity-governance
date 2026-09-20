@@ -86,6 +86,7 @@ type IntegrationRow = {
   refreshClaimToken: string | null;
   refreshFailureCount: number;
   lastRefreshedAt: Date | null;
+  grantedScopes: string[];
 };
 
 type CredentialRow = {
@@ -218,6 +219,7 @@ function fakePrisma(options: FakeOptions = {}) {
       refreshClaimToken: null,
       refreshFailureCount: 0,
       lastRefreshedAt: null,
+      grantedScopes: [],
       ...integration,
     });
   }
@@ -240,6 +242,7 @@ function fakePrisma(options: FakeOptions = {}) {
       refreshClaimToken: null,
       refreshFailureCount: 0,
       lastRefreshedAt: null,
+      grantedScopes: [],
     });
     credentials.push({
       integrationId: other.integrationId,
@@ -347,6 +350,7 @@ function fakePrisma(options: FakeOptions = {}) {
           refreshClaimToken: null,
           refreshFailureCount: 0,
           lastRefreshedAt: null,
+          grantedScopes: [],
         };
         applyIntegrationData(created, args.create);
         writeLog.push({ table: 'integration', data: args.create });
@@ -1229,6 +1233,34 @@ test('connectConfluence does not advertise a connection before the credentials e
   );
 
   assert.notEqual(fake.row().status, 'CONNECTED', 'a row with no usable credential must not read CONNECTED');
+});
+
+test('connectConfluence records the scopes Atlassian actually granted', async () => {
+  const fake = fakePrisma({ integration: { status: 'DISCONNECTED' }, storedRefreshToken: null });
+
+  await withKey(() =>
+    connectConfluence(
+      fake.client,
+      { organisationId: ORG_ID, userId: 'user-9', code: 'auth-code', redirectUri: 'https://api.example/cb' },
+      {
+        now: clock,
+        // Deliberately NOT the set CharityPilot asks for: a consent screen can
+        // show one set and grant another, and the erasure gate reads what was
+        // granted, never what was requested.
+        exchangeAuthorizationCode: async () =>
+          tokens({ scopes: ['read:page:confluence', 'delete:page:confluence', 'offline_access'] }),
+        listAccessibleResources: async () => [
+          { id: 'site-9', url: 'https://charity.atlassian.net', name: 'Charity Wiki' },
+        ],
+      },
+    ),
+  );
+
+  assert.deepEqual(fake.row().grantedScopes, [
+    'read:page:confluence',
+    'delete:page:confluence',
+    'offline_access',
+  ]);
 });
 
 test('connectConfluence refuses an authorization that issued no refresh token', async () => {

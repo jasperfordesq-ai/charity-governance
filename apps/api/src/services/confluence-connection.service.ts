@@ -727,6 +727,10 @@ export async function connectConfluence(
     config,
     connectedAt: at,
     connectedById: userId,
+    // What Atlassian said it granted, not what we asked for. A user can be
+    // shown a consent screen for one set and grant another, and the erasure
+    // gate has to know which it got.
+    grantedScopes: tokens.scopes,
     // A reconnect supersedes whatever the old credential was doing, including
     // a claim leaked by a crash and the failure count that went with it.
     refreshFailureCount: 0,

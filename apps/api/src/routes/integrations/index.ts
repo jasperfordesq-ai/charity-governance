@@ -98,12 +98,37 @@ export const CONFLUENCE_CALLBACK_PATH = '/integrations/confluence/callback';
 export const CONFLUENCE_OAUTH_SCOPES = [
   'read:page:confluence',
   'write:page:confluence',
+  // Atlassian's v2 DELETE /pages/{id} requires this, and the purge that follows
+  // it requires it too. Without it an erasure 403s, and confluence-client maps
+  // a 403 to CONFLUENCE_RECONNECT_REQUIRED — a wrong diagnosis that would be
+  // retried to dead-letter.
+  'delete:page:confluence',
   'read:attachment:confluence',
   'write:attachment:confluence',
+  'delete:attachment:confluence',
   'read:space:confluence',
   'read:content-details:confluence',
   'offline_access',
 ] as const;
+
+/**
+ * The scopes the explicit erasure workflow cannot proceed without.
+ *
+ * Deliberately narrower than `CONFLUENCE_OAUTH_SCOPES`: this is the set a
+ * *request* is gated on, not the set we ask for. `search:confluence` is not
+ * requested at all, even though the audit's later CQL work will want it —
+ * the DPO's standing ask is narrowest scopes, and a scope we do not yet use
+ * is one we should not yet hold.
+ */
+export const CONFLUENCE_REQUIRED_ERASURE_SCOPES = [
+  'delete:page:confluence',
+  'delete:attachment:confluence',
+] as const;
+
+export function missingConfluenceScopes(granted: readonly string[]): string[] {
+  const held = new Set(granted);
+  return CONFLUENCE_REQUIRED_ERASURE_SCOPES.filter((scope) => !held.has(scope));
+}
 
 /**
  * What an administrator is told **before** they authorise, not after.
@@ -417,6 +442,7 @@ type OwnIntegration = {
   publishSpaceKey: string | null;
   publishSpaceName: string | null;
   publishSpaceSiteId: string | null;
+  grantedScopes: string[];
 };
 
 /**
@@ -448,6 +474,10 @@ async function findOwnConfluenceIntegration(
       publishSpaceKey: true,
       publishSpaceName: true,
       publishSpaceSiteId: true,
+      // What Atlassian granted. Not credential material — a scope name says
+      // what the connection may do, never how to do it — and the erasure gate
+      // needs it.
+      grantedScopes: true,
     },
   });
   return (found as OwnIntegration | null) ?? null;
@@ -759,6 +789,8 @@ export async function integrationRoutes(
           lastError: null,
           publishSpace: null,
           publishing: false,
+          reauthorisationRequired: false,
+          unavailableActions: [],
         });
       }
 
@@ -767,6 +799,7 @@ export async function integrationRoutes(
       // connected — the whole per-site rule lives in one place, and this route
       // asks it rather than re-deciding it.
       const target = readConfluencePublishTarget(integration);
+      const missingScopes = missingConfluenceScopes(integration.grantedScopes);
       return sendSuccess(reply, {
         provider: PROVIDER,
         status: integration.status,
@@ -783,6 +816,13 @@ export async function integrationRoutes(
         // Neither substitutes for the other, and this is the only field that
         // says whether both are true.
         publishing: integration.status === 'CONNECTED' && target !== null,
+        // Named for what the administrator must DO, not for what is absent, and
+        // deliberately not carrying the scope strings: this response is guarded
+        // by a substring test that forbids "token" and "secret" anywhere in it,
+        // and a list of Atlassian scope names is the kind of field that invites
+        // someone to widen that guard later.
+        reauthorisationRequired: missingScopes.length > 0,
+        unavailableActions: missingScopes.length > 0 ? ['ERASE_CONFLUENCE_COPY'] : [],
       });
     } catch (error) {
       handleError(reply, error);
