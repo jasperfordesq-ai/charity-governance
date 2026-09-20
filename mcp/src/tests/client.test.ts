@@ -1,6 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { ApiClient, ApiError } from '../client.js';
+import { ApiClient, ApiError, ApprovalRequiredError } from '../client.js';
+import { ConnectionError } from '../errors.js';
 import { Session } from '../session.js';
 import { createMemoryStore } from '../credentials.js';
 
@@ -189,4 +190,127 @@ test('a 204 is a successful removal, not a broken connection', async () => {
   const result = await client.delete<{ ok: boolean }>('/api/v1/governance-registers/risks/x');
 
   assert.equal(result.ok, true);
+});
+
+function clientAnswering(status: number, body: unknown, headers: Record<string, string> = {}): ApiClient {
+  return new ApiClient({
+    session: sessionReturning('access1'),
+    baseUrl: 'https://example.test',
+    fetchImpl: async () => new Response(JSON.stringify(body), {
+      status,
+      headers: { 'content-type': 'application/json', ...headers },
+    }),
+  });
+}
+
+test('a validation error names the fields that were wrong', async () => {
+  const client = clientAnswering(400, {
+    error: 'Validation failed',
+    code: 'VALIDATION_ERROR',
+    details: [{ field: 'dueDate', message: 'Invalid date' }],
+  });
+  await assert.rejects(() => client.post('/api/v1/deadlines', {}), (err: unknown) => {
+    assert.ok(err instanceof ApiError);
+    assert.equal(err.code, 'VALIDATION_ERROR');
+    assert.match(err.message, /dueDate: Invalid date/);
+    assert.match(err.message, /Correct the fields/);
+    assert.equal(err.action, 'fix_arguments');
+    assert.deepEqual(err.details, [{ field: 'dueDate', message: 'Invalid date' }]);
+    return true;
+  });
+});
+
+test('a conflict tells the agent to read the record again', async () => {
+  const client = clientAnswering(409, {
+    error: 'Deadline was changed by someone else',
+    code: 'DEADLINE_UPDATE_CONFLICT',
+  });
+  await assert.rejects(() => client.patch('/api/v1/deadlines/d1', {}), (err: unknown) => {
+    assert.ok(err instanceof ApiError);
+    assert.match(err.message, /DEADLINE_UPDATE_CONFLICT/);
+    assert.match(err.message, /Read it again/);
+    assert.equal(err.action, 'reread');
+    assert.equal(err.retryable, true);
+    return true;
+  });
+});
+
+test('a missing record is distinguished from a missing route', async () => {
+  const record = clientAnswering(404, { error: 'Deadline not found', code: 'DEADLINE_NOT_FOUND' });
+  await assert.rejects(() => record.get('/api/v1/deadlines/d1'), (err: unknown) => {
+    assert.ok(err instanceof ApiError);
+    assert.match(err.message, /No such record in this charity/);
+    return true;
+  });
+
+  const route = clientAnswering(404, { message: 'Route GET:/x not found', error: 'Not Found', statusCode: 404 });
+  await assert.rejects(() => route.get('/api/v1/x'), (err: unknown) => {
+    assert.ok(err instanceof ApiError);
+    assert.equal(err.code, null);
+    assert.match(err.message, /older than this connector/);
+    return true;
+  });
+});
+
+test('a rate limit carries the seconds to wait', async () => {
+  const client = clientAnswering(429, { error: 'Too many', code: 'CONNECTOR_WRITE_LIMIT' }, { 'retry-after': '17' });
+  await assert.rejects(() => client.post('/api/v1/deadlines', {}), (err: unknown) => {
+    assert.ok(err instanceof ApiError);
+    assert.equal(err.retryAfterSeconds, 17);
+    assert.match(err.message, /Wait 17 seconds/);
+    assert.equal(err.action, 'wait');
+    return true;
+  });
+});
+
+test('a code the connector does not know is named but its text is not quoted', async () => {
+  const client = clientAnswering(403, { error: 'path /srv/files/x.pdf is outside the root', code: 'STORAGE_PATH_FORBIDDEN' });
+  await assert.rejects(() => client.get('/api/v1/documents/1'), (err: unknown) => {
+    assert.ok(err instanceof ApiError);
+    assert.match(err.message, /STORAGE_PATH_FORBIDDEN/);
+    assert.ok(!err.message.includes('/srv/files'), 'unknown codes keep their text server-side');
+    return true;
+  });
+});
+
+test('a server error is marked retryable', async () => {
+  const client = clientAnswering(500, { error: 'Internal server error', code: 'INTERNAL_ERROR' });
+  await assert.rejects(() => client.get('/api/v1/organisation'), (err: unknown) => {
+    assert.ok(err instanceof ApiError);
+    assert.equal(err.retryable, true);
+    assert.match(err.message, /try again shortly/);
+    return true;
+  });
+});
+
+test('an approval refusal says to call again with the same arguments and the identifier', async () => {
+  const client = clientAnswering(428, {
+    code: 'APPROVAL_REQUIRED',
+    approvalId: 'apr_9',
+    summary: 'Permanently delete risk "Flood"',
+    command: 'charitypilot-mcp approve apr_9',
+    expiresAt: '2026-09-20T10:00:00.000Z',
+    resourceId: 'risk_1',
+  });
+  await assert.rejects(() => client.delete('/api/v1/governance-registers/risks/risk_1'), (err: unknown) => {
+    assert.ok(err instanceof ApprovalRequiredError);
+    assert.match(err.message, /exactly the same arguments plus approvalId: apr_9/);
+    assert.equal(err.resourceId, 'risk_1');
+    return true;
+  });
+});
+
+test('a network failure is a ConnectionError, retryable, with the cause redacted', async () => {
+  const client = new ApiClient({
+    session: sessionReturning('access1'),
+    baseUrl: 'https://example.test',
+    fetchImpl: async () => { throw new Error('ECONNREFUSED Bearer access1'); },
+  });
+  await assert.rejects(() => client.get('/api/v1/organisation'), (err: unknown) => {
+    assert.ok(err instanceof ConnectionError);
+    assert.equal(err.code, 'NETWORK');
+    assert.equal(err.retryable, true);
+    assert.ok(!err.message.includes('access1'));
+    return true;
+  });
 });

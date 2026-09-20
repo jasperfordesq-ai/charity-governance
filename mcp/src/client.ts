@@ -1,17 +1,42 @@
 import type { Session } from './session.js';
 import { redactSecrets } from './redact.js';
 import { CONNECTOR_VERSION } from './version.js';
+import { ConnectionError, type ErrorAction } from './errors.js';
 
 const CLIENT_HEADER = 'x-charitypilot-client';
 const REASON_HEADER = 'x-charitypilot-reason';
 const APPROVAL_HEADER = 'x-charitypilot-approval';
 
+export interface ValidationDetail {
+  field: string;
+  message: string;
+}
+
+interface ApiErrorExtra {
+  code: string | null;
+  details: readonly ValidationDetail[];
+  retryAfterSeconds: number | null;
+  retryable: boolean;
+  action: ErrorAction;
+}
+
 export class ApiError extends Error {
   readonly status: number;
-  constructor(status: number, message: string) {
+  readonly code: string | null;
+  readonly details: readonly ValidationDetail[];
+  readonly retryAfterSeconds: number | null;
+  readonly retryable: boolean;
+  readonly action: ErrorAction;
+
+  constructor(status: number, message: string, extra: Partial<ApiErrorExtra> = {}) {
     super(redactSecrets(message));
     this.name = 'ApiError';
     this.status = status;
+    this.code = extra.code ?? null;
+    this.details = extra.details ?? [];
+    this.retryAfterSeconds = extra.retryAfterSeconds ?? null;
+    this.retryable = extra.retryable ?? status >= 500;
+    this.action = extra.action ?? 'none';
   }
 }
 
@@ -30,25 +55,30 @@ export class ApprovalRequiredError extends Error {
   readonly summary: string;
   readonly command: string;
   readonly expiresAt: string;
+  readonly resourceId: string | null;
 
   constructor(details: {
     approvalId: string;
     summary: string;
     command: string;
     expiresAt: string;
+    resourceId: string | null;
   }) {
     super(
       `${details.summary}\n\n`
         + 'CharityPilot will not do this until you approve it yourself. In your own '
         + `terminal, run:\n\n    ${details.command}\n\n`
-        + 'You will be asked for your password there. Then ask me to try again. '
-        + `The approval expires at ${details.expiresAt} and covers only this one action.`,
+        + 'You will be shown what you are approving there and asked for your password. '
+        + 'Then call this tool again with exactly the same arguments plus '
+        + `approvalId: ${details.approvalId}. The approval expires at ${details.expiresAt} `
+        + 'and covers only this one action.',
     );
     this.name = 'ApprovalRequiredError';
     this.approvalId = details.approvalId;
     this.summary = details.summary;
     this.command = details.command;
     this.expiresAt = details.expiresAt;
+    this.resourceId = details.resourceId;
   }
 }
 
@@ -66,6 +96,131 @@ export interface WriteOptions {
 }
 
 type Method = 'GET' | 'POST' | 'PATCH' | 'PUT' | 'DELETE';
+
+/**
+ * Codes whose `error` text is written for the person making the request and
+ * carries nothing about anyone else, so it may be quoted to a model.
+ *
+ * Everything else keeps its text server-side and is reported by code alone.
+ * A code is a token, not free text, so naming it costs nothing; the storage
+ * and Confluence families are left out because their messages can embed
+ * storage paths, which encode original filenames.
+ */
+const QUOTABLE_CODES = new Set([
+  'SESSION_READ_ONLY',
+  'SESSION_LEVEL_TOO_LOW',
+  'CONNECTOR_WRITE_LIMIT',
+  'BROWSER_CLIENT_REJECTED',
+  'VALIDATION_ERROR',
+  'FORBIDDEN',
+  'PLAN_FEATURE_UNAVAILABLE',
+  'EMAIL_NOT_VERIFIED',
+  'UNAUTHORIZED',
+  'APPROVAL_REFUSED',
+  'APPROVAL_RACED',
+  'ORGANISATION_INACTIVE',
+]);
+const QUOTABLE_PATTERNS = [/_NOT_FOUND$/, /_CONFLICT$/, /^DEADLINE_/, /^GENERATED_DEADLINE_/];
+
+function isQuotable(code: string): boolean {
+  return QUOTABLE_CODES.has(code) || QUOTABLE_PATTERNS.some((pattern) => pattern.test(code));
+}
+
+/**
+ * What the agent should do next, by code family. The text is the connector's,
+ * never the server's, so it can say things the API has no reason to know, such
+ * as which connector command re-connects at a higher level.
+ */
+function guidanceFor(
+  status: number,
+  code: string | null,
+  retryAfterSeconds: number | null,
+): { text: string; action: ErrorAction; retryable: boolean } {
+  if (code === 'VALIDATION_ERROR') {
+    return { text: 'Correct the fields named above and call again.', action: 'fix_arguments', retryable: false };
+  }
+  if (code && /_NOT_FOUND$/.test(code)) {
+    return {
+      text: 'No such record in this charity. Check the identifier against the matching list tool.',
+      action: 'fix_arguments',
+      retryable: false,
+    };
+  }
+  if (code && (/_CONFLICT$/.test(code) || /^DEADLINE_/.test(code) || /^GENERATED_DEADLINE_/.test(code))) {
+    return {
+      text: 'The record changed since it was read, or cannot be changed this way. Read it again and retry with its current updatedAt.',
+      action: 'reread',
+      retryable: true,
+    };
+  }
+  if (code === 'SESSION_READ_ONLY') {
+    return {
+      text: 'Re-connect with "charitypilot-mcp connect --access-level write" to change records.',
+      action: 'reconnect',
+      retryable: false,
+    };
+  }
+  if (code === 'SESSION_LEVEL_TOO_LOW') {
+    return {
+      text: 'Re-connect with "charitypilot-mcp connect --access-level admin".',
+      action: 'reconnect',
+      retryable: false,
+    };
+  }
+  if (code === 'FORBIDDEN') {
+    return {
+      text: "Your account's role does not allow this, and re-connecting at another level will not change that.",
+      action: 'none',
+      retryable: false,
+    };
+  }
+  if (code === 'PLAN_FEATURE_UNAVAILABLE') {
+    return { text: 'This needs the Complete plan.', action: 'none', retryable: false };
+  }
+  if (status === 429) {
+    return {
+      text: `Wait ${retryAfterSeconds ?? 60} seconds and try again.`,
+      action: 'wait',
+      retryable: true,
+    };
+  }
+  if (status === 404 && !code) {
+    return {
+      text: 'CharityPilot has no such route. The API may be running a build older than this connector.',
+      action: 'none',
+      retryable: false,
+    };
+  }
+  if (status >= 500) {
+    return {
+      text: 'CharityPilot had an internal problem. Nothing about the request needs to change; try again shortly.',
+      action: 'wait',
+      retryable: true,
+    };
+  }
+  return { text: '', action: 'none', retryable: false };
+}
+
+function validationDetails(raw: unknown): ValidationDetail[] {
+  if (!Array.isArray(raw)) return [];
+  const out: ValidationDetail[] = [];
+  for (const item of raw.slice(0, 20)) {
+    const record = item as { field?: unknown; message?: unknown };
+    if (typeof record.message !== 'string') continue;
+    out.push({
+      field: typeof record.field === 'string' && record.field.length > 0 ? record.field.slice(0, 200) : '(body)',
+      message: record.message.slice(0, 200),
+    });
+  }
+  return out;
+}
+
+function retryAfterFrom(response: Response): number | null {
+  const raw = response.headers.get('retry-after');
+  if (raw === null) return null;
+  const seconds = Number(raw);
+  return Number.isInteger(seconds) && seconds >= 0 ? seconds : null;
+}
 
 export class ApiClient {
   readonly #session: Session;
@@ -140,7 +295,7 @@ export class ApiClient {
     });
 
     if (!response.ok) {
-      throw new ApiError(response.status, await this.#refusalMessage(response));
+      throw await this.#refusal(response);
     }
 
     const disposition = response.headers.get('content-disposition') ?? '';
@@ -198,11 +353,9 @@ export class ApiClient {
         ...(body === undefined ? {} : { body }),
       });
     } catch (cause) {
-      throw new Error(
-        redactSecrets(
-          'Cannot reach CharityPilot. Check that Tailscale is connected. ' +
-            `(${(cause as Error).message})`,
-        ),
+      throw new ConnectionError(
+        'Cannot reach CharityPilot. Check that Tailscale is connected. '
+          + `(${redactSecrets((cause as Error).message)})`,
       );
     }
 
@@ -234,7 +387,7 @@ export class ApiClient {
     }
 
     if (!response.ok) {
-      throw new ApiError(response.status, await this.#refusalMessage(response));
+      throw await this.#refusal(response);
     }
 
     // A successful removal answers 204 with no body, which is correct and is
@@ -261,12 +414,14 @@ export class ApiClient {
       summary?: string;
       command?: string;
       expiresAt?: string;
+      resourceId?: string | null;
     };
 
     if (!body.approvalId || !body.command) {
       return new ApiError(
         428,
         'CharityPilot asked for an approval but did not say which one. Nothing was changed.',
+        { code: 'APPROVAL_REQUIRED' },
       );
     }
 
@@ -275,39 +430,46 @@ export class ApiClient {
       summary: body.summary ?? 'An action that cannot be undone',
       command: body.command,
       expiresAt: body.expiresAt ?? 'shortly',
+      resourceId: typeof body.resourceId === 'string' ? body.resourceId : null,
     });
   }
 
   /**
-   * A refusal message the person can act on, without echoing internals.
+   * An ApiError the agent can act on.
    *
-   * Only the small set of codes this connector causes are quoted back, and
-   * only their `error` text. Anything else keeps the bare status, because a
-   * message chosen by the server for some other audience may carry detail
-   * that has no business reaching a model.
+   * Only codes the connector knows to be safe have their text quoted; every
+   * other code is named and its text left where it was. Validation details
+   * are always forwarded, because they describe the request rather than the
+   * charity, and without them the model cannot correct itself.
    */
-  async #refusalMessage(response: Response): Promise<string> {
+  async #refusal(response: Response): Promise<ApiError> {
     const body = (await this.#safeJson(response)) as {
       code?: unknown;
       error?: unknown;
+      details?: unknown;
     };
-    const quotable = new Set([
-      'SESSION_READ_ONLY',
-      'SESSION_LEVEL_TOO_LOW',
-      'CONNECTOR_WRITE_LIMIT',
-      'BROWSER_CLIENT_REJECTED',
-      'VALIDATION_ERROR',
-    ]);
+    const code = typeof body.code === 'string' ? body.code : null;
+    const details = code === 'VALIDATION_ERROR' ? validationDetails(body.details) : [];
+    const retryAfterSeconds = retryAfterFrom(response);
+    const guidance = guidanceFor(response.status, code, retryAfterSeconds);
 
-    if (
-      typeof body.code === 'string'
-      && quotable.has(body.code)
-      && typeof body.error === 'string'
-    ) {
-      return `${body.error} (${body.code})`;
-    }
+    const head =
+      code && isQuotable(code) && typeof body.error === 'string'
+        ? `${body.error} (${code})`
+        : code
+          ? `CharityPilot refused the request (${code}).`
+          : `CharityPilot returned ${response.status}.`;
 
-    return `CharityPilot returned ${response.status}.`;
+    const lines = [head, ...details.map((d) => `- ${d.field}: ${d.message}`)];
+    if (guidance.text) lines.push(guidance.text);
+
+    return new ApiError(response.status, lines.join('\n'), {
+      code,
+      details,
+      retryAfterSeconds,
+      retryable: guidance.retryable,
+      action: guidance.action,
+    });
   }
 
   async #safeJson(response: Response): Promise<Record<string, unknown>> {
