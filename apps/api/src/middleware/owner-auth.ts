@@ -8,26 +8,22 @@ declare module 'fastify' {
   }
 }
 
-function unauthorized(reply: FastifyReply): void {
-  reply.status(401).send({ error: 'Owner authentication required', code: 'OWNER_UNAUTHORIZED' });
+function unauthorized(reply: FastifyReply): FastifyReply {
+  return reply.status(401).send({ error: 'Owner authentication required', code: 'OWNER_UNAUTHORIZED' });
 }
 
 export async function requirePlatformOperator(
   request: FastifyRequest,
   reply: FastifyReply,
-): Promise<void> {
+): Promise<void | FastifyReply> {
   const token = getOwnerAccessTokenFromRequest(request);
-  if (!token) {
-    unauthorized(reply);
-    return;
-  }
+  if (!token) return unauthorized(reply);
 
   let payload: { operatorId: string; sessionId: string };
   try {
     payload = verifyOperatorAccessToken(token);
   } catch {
-    unauthorized(reply);
-    return;
+    return unauthorized(reply);
   }
 
   // The signature alone is not enough: the session must still be live and the
@@ -49,8 +45,7 @@ export async function requirePlatformOperator(
   ]);
 
   if (!session || !operator || operator.lifecycleStatus !== 'ACTIVE') {
-    unauthorized(reply);
-    return;
+    return unauthorized(reply);
   }
 
   request.operator = { id: operator.id, email: operator.email };

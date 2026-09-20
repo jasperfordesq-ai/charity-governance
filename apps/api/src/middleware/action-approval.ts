@@ -196,14 +196,13 @@ export function requireActionApproval() {
     if (!pending) {
       // The only way here is a row created and consumed between the two reads.
       // Refusing is correct: there is nothing left for this request to spend.
-      reply.status(409).send({
+      return reply.status(409).send({
         error: "That approval was used while this request was being prepared. Try again.",
         code: "APPROVAL_RACED",
       });
-      return;
     }
 
-    reply.status(428).send({
+    return reply.status(428).send({
       error:
         "This action needs your approval. Run the command below in your own "
         + "terminal; the password is typed there, not here.",

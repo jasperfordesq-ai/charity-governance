@@ -115,7 +115,7 @@ export const connectorWriteBudgetPlugin = fp(
       const verdict = budget.take(request.authSession.id);
       if (verdict.allowed) return;
 
-      reply
+      return reply
         .header("retry-after", String(verdict.retryAfterSeconds))
         .status(429)
         .send({

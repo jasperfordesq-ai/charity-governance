@@ -25,7 +25,7 @@ export function requireSessionLevel(minimum: AccessLevel) {
     const level = request.authSession?.accessLevel ?? "ADMIN";
 
     if (RANK[level] < RANK[minimum]) {
-      reply.status(403).send({
+      return reply.status(403).send({
         error:
           minimum === "ADMIN"
             ? "This action needs a session with administrator access. Re-connect at that level to perform it."

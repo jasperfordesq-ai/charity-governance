@@ -55,7 +55,7 @@ export const errorHandlerPlugin = fp(async (app: FastifyInstance) => {
   });
 
   app.setNotFoundHandler((_request, reply) => {
-    reply.status(404).send({
+    return reply.status(404).send({
       error: 'Route not found',
       code: 'NOT_FOUND',
     });

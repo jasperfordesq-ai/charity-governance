@@ -295,6 +295,27 @@ const MUTATIONS = {
       'a record read as a resource must go through the tool dispatch, so it meets the level, '
       + 'the toolsets and the personal-data gate.',
   },
+  // The class of bug that made every refusal in this codebase advisory.
+  // Fastify only short-circuits a request when an async hook RETURNS the
+  // reply it sent; with two onSend hooks registered it does not guess.
+  'a-refused-removal-happens-anyway': {
+    file: 'apps/api/src/middleware/action-approval.ts',
+    find: /    return reply\.status\(428\)\.send\(\{/,
+    replace: '    reply.status(428).send({',
+    tests: ['action-approval-stops-the-request', 'guards-stop-the-request'],
+    expect:
+      'a refused removal must not happen: the agent is told nothing happened, the person is '
+      + 'never asked, and the record is gone.',
+  },
+  'a-guard-that-does-not-return-is-not-noticed': {
+    file: 'apps/api/src/middleware/session-level.ts',
+    find: /      return reply\.status\(403\)\.send\(\{/,
+    replace: '      reply.status(403).send({',
+    tests: ['guards-stop-the-request'],
+    expect:
+      'the source assertion must catch any guard that sends without returning, not only the '
+      + 'one somebody wrote a behaviour test for.',
+  },
   'a-member-may-edit-a-document': {
     file: 'apps/api/src/routes/documents/index.ts',
     find: /(  app\.patch<\{ Params: \{ id: string \} \}>\('\/:id', )\{ preHandler: \[requireAdmin\] \}, (async)/,

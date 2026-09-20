@@ -52,23 +52,21 @@ async function authenticateRequest(
   const token = getAccessTokenFromRequest(request);
 
   if (!token) {
-    reply
+    return reply
       .status(401)
       .send({
         error: "Missing or invalid authentication token",
         code: "UNAUTHORIZED",
       });
-    return;
   }
 
   let payload: TokenPayload;
   try {
     payload = verifyAccessToken(token);
   } catch {
-    reply
+    return reply
       .status(401)
       .send({ error: "Invalid or expired token", code: "UNAUTHORIZED" });
-    return;
   }
 
   const [session, user] = await Promise.all([
@@ -115,18 +113,16 @@ async function authenticateRequest(
     (user.organisation?.lifecycleStatus !== undefined &&
       user.organisation.lifecycleStatus !== "ACTIVE")
   ) {
-    reply
+    return reply
       .status(401)
       .send({ error: "Invalid or expired token", code: "UNAUTHORIZED" });
-    return;
   }
 
   if (!user.emailVerified && !options.allowUnverified) {
-    reply.status(403).send({
+    return reply.status(403).send({
       error: "Please verify your email before continuing",
       code: "EMAIL_NOT_VERIFIED",
     });
-    return;
   }
 
   request.user = {
@@ -154,11 +150,10 @@ async function authenticateRequest(
     request.authSession.accessLevel === "READ" &&
     !SAFE_METHODS.has(request.method)
   ) {
-    reply.status(403).send({
+    return reply.status(403).send({
       error: "This session is read-only",
       code: "SESSION_READ_ONLY",
     });
-    return;
   }
 }
 

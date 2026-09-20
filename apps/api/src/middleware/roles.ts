@@ -6,7 +6,7 @@ type Role = TokenPayload['role'];
 export function requireRole(...roles: Role[]) {
   return async function roleGuard(request: FastifyRequest, reply: FastifyReply): Promise<void> {
     if (!roles.includes(request.user.role)) {
-      reply.status(403).send({
+      return reply.status(403).send({
         error: 'You do not have permission to perform this action.',
         code: 'FORBIDDEN',
       });

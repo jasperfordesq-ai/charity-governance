@@ -13,11 +13,10 @@ export async function subscriptionGuard(request: FastifyRequest, reply: FastifyR
   });
 
   if (!subscription) {
-    reply.status(403).send({
+    return reply.status(403).send({
       error: 'No active subscription. Please subscribe to continue.',
       code: 'NO_SUBSCRIPTION',
     });
-    return;
   }
 
   const now = new Date();
@@ -28,23 +27,21 @@ export async function subscriptionGuard(request: FastifyRequest, reply: FastifyR
 
   if (subscription.status === 'TRIALING') {
     if (subscription.trialEndsAt && subscription.trialEndsAt <= now) {
-      reply.status(403).send({
+      return reply.status(403).send({
         error: 'Your trial has expired. Please subscribe to continue.',
         code: 'TRIAL_EXPIRED',
       });
-      return;
     }
   }
 
   if (subscription.status === 'PAST_DUE') {
-    reply.status(403).send({
+    return reply.status(403).send({
       error: 'Your payment is past due and the grace period has ended. Please update billing to continue.',
       code: 'PAST_DUE_GRACE_EXPIRED',
     });
-    return;
   }
 
-  reply.status(403).send({
+  return reply.status(403).send({
     error: 'Your subscription is no longer active. Please resubscribe.',
     code: 'SUBSCRIPTION_INACTIVE',
   });

@@ -12,7 +12,7 @@ export async function requireCompletePlan(request: FastifyRequest, reply: Fastif
     return;
   }
 
-  reply.status(403).send({
+  return reply.status(403).send({
     error: 'This feature requires the Complete plan.',
     code: 'PLAN_FEATURE_UNAVAILABLE',
   });
