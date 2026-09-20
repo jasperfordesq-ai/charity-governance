@@ -4,7 +4,10 @@ import {
   CallToolRequestSchema,
   GetPromptRequestSchema,
   ListPromptsRequestSchema,
+  ListResourceTemplatesRequestSchema,
+  ListResourcesRequestSchema,
   ListToolsRequestSchema,
+  ReadResourceRequestSchema,
 } from '@modelcontextprotocol/sdk/types.js';
 import {
   TOOLS,
@@ -33,6 +36,8 @@ import { ApiClient } from './client.js';
 import type { Session } from './session.js';
 import type { AccessLevel, ConnectorConfig } from './config.js';
 import { CONNECTOR_VERSION } from './version.js';
+import { FETCH_TOOL, resolveReference } from './references.js';
+import { RESOURCES, RESOURCE_TEMPLATES, readResource } from './resources.js';
 import { INSTRUCTIONS } from './instructions.js';
 import { ConnectorError } from './errors.js';
 import { errorResult, okResult } from './results.js';
@@ -82,10 +87,21 @@ function availableFileTools(
 /** The file tools belong with the documents they move. */
 const FILE_TOOL_GROUP: ToolGroup = 'documents';
 
+/**
+ * Search is offered whatever groups were asked for.
+ *
+ * It looks across every kind of record, so filing it under one group would
+ * be arbitrary; and it is the tool that makes a narrow toolset workable,
+ * because it is how an agent finds the identifier the narrowed tools take.
+ * It still takes a `types` argument, so a narrowed session can narrow it too.
+ */
+const ALWAYS_OFFERED: ToolGroup = 'search';
+
 function inToolsets(
   group: ToolGroup,
   toolsets: readonly ToolGroup[] | undefined,
 ): boolean {
+  if (group === ALWAYS_OFFERED) return true;
   return toolsets === undefined || toolsets.includes(group);
 }
 
@@ -99,6 +115,9 @@ export function buildToolList(
     // Always first and always offered: an agent has to be able to ask who it
     // is acting as before it does anything else, whatever the level or groups.
     { ...SESSION_INFO_TOOL },
+    // Offered beside it for the same reason search is: a reference is
+    // useless without the tool that reads it, and search is always offered.
+    { ...FETCH_TOOL },
     ...toolsFor(level, TOOLS, config.allowPersonalData ?? false)
       .filter((tool) => inToolsets(groupOf(tool), config.toolsets))
       .map((tool) => {
@@ -141,7 +160,10 @@ export async function startServer(config: ConnectorConfig, session: Session): Pr
   const client = new ApiClient({ session, baseUrl: config.baseUrl });
   const server = new Server(
     { name: 'charitypilot', version: CONNECTOR_VERSION },
-    { capabilities: { tools: {}, prompts: {} }, instructions: INSTRUCTIONS },
+    {
+      capabilities: { tools: {}, prompts: {}, resources: {} },
+      instructions: INSTRUCTIONS,
+    },
   );
 
   /**
@@ -168,6 +190,15 @@ export async function startServer(config: ConnectorConfig, session: Session): Pr
    * knowing which branch refused.
    */
   async function dispatch(name: string, args: Record<string, unknown>): Promise<unknown> {
+    if (name === FETCH_TOOL.name) {
+      // Resolved to an ordinary tool call and run through this same
+      // function, so the level, the toolsets and the personal-data gate are
+      // applied in the one place they are applied for everything else. A
+      // second copy of those checks here is a second copy to keep in step.
+      const target = resolveReference(args.ref);
+      return dispatch(target.tool, target.args);
+    }
+
     if (name === SESSION_INFO_TOOL.name) {
       return runSessionInfo(client, config);
     }
@@ -249,6 +280,28 @@ export async function startServer(config: ConnectorConfig, session: Session): Pr
         },
       ],
     };
+  });
+
+  // Reference data a client can attach without asking a question: the
+  // Governance Code and the guidance behind it. Records are reachable the
+  // same way, by the reference search hands out, but are not listed — there
+  // may be thousands, and listing them would be a second, worse search.
+  server.setRequestHandler(ListResourcesRequestSchema, async () => ({
+    resources: RESOURCES.map((resource) => ({ ...resource })),
+  }));
+
+  server.setRequestHandler(ListResourceTemplatesRequestSchema, async () => ({
+    resourceTemplates: RESOURCE_TEMPLATES.map((template) => ({ ...template })),
+  }));
+
+  server.setRequestHandler(ReadResourceRequestSchema, async (request) => {
+    // A record read as a resource goes through `dispatch`, so it meets the
+    // level check, the toolset check and the personal-data gate exactly as
+    // it would as a tool call. A resource that skipped them would be a way
+    // around them.
+    const contents = await readResource(request.params.uri, client, (tool, args) =>
+      dispatch(tool, args));
+    return { contents: [contents] };
   });
 
   server.setRequestHandler(CallToolRequestSchema, async (request) => {

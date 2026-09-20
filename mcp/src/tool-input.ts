@@ -18,7 +18,13 @@ export type ParamSpec =
   | { kind: 'year' }
   | { kind: 'enum'; name: string; values: readonly string[] }
   | { kind: 'flag'; name: string }
-  | { kind: 'id'; name: string };
+  | { kind: 'id'; name: string }
+  /** Free text the caller writes, bounded and required. */
+  | { kind: 'text'; name: string; max: number; describe: string }
+  /** Several of a fixed set at once, sent as one comma-separated value. */
+  | { kind: 'enumList'; name: string; values: readonly string[]; describe: string }
+  /** A whole number the caller chooses, within a stated range. */
+  | { kind: 'count'; name: string; min: number; max: number; describe: string };
 
 /**
  * A path parameter is interpolated into a URL path, so the character set is
@@ -88,6 +94,30 @@ export function inputSchemaFor(params: readonly ParamSpec[]): object {
         };
         required.push(name);
         break;
+      case 'text':
+        properties[name] = {
+          type: 'string',
+          minLength: 1,
+          maxLength: spec.max,
+          description: spec.describe,
+        };
+        required.push(name);
+        break;
+      case 'enumList':
+        properties[name] = {
+          type: 'array',
+          items: { type: 'string', enum: [...spec.values] },
+          description: spec.describe,
+        };
+        break;
+      case 'count':
+        properties[name] = {
+          type: 'integer',
+          minimum: spec.min,
+          maximum: spec.max,
+          description: spec.describe,
+        };
+        break;
     }
   }
 
@@ -132,6 +162,21 @@ export function buildPath(
       continue;
     }
 
+    // Checked before the skip below, because free text is required: an
+    // absent `q` is a caller that forgot to say what it was looking for,
+    // not a filter left off, and sending the request without it would put
+    // the refusal at the far end of a round trip.
+    if (spec.kind === 'text') {
+      if (typeof value !== 'string' || value.trim().length === 0) {
+        throw new Error(`${name} must be some text to look for.`);
+      }
+      if (value.length > spec.max) {
+        throw new Error(`${name} must be at most ${spec.max} characters.`);
+      }
+      query.push(`${name}=${encodeURIComponent(value)}`);
+      continue;
+    }
+
     if (value === undefined) continue;
 
     switch (spec.kind) {
@@ -155,6 +200,27 @@ export function buildPath(
         // The API tests for the literal string "true"; anything else reads as
         // off, so a false flag is omitted rather than sent as "false".
         if (value) query.push(`${name}=true`);
+        break;
+      case 'enumList': {
+        if (!Array.isArray(value)) throw new Error(`${name} must be a list.`);
+        const unknown = value.filter(
+          (entry) => typeof entry !== 'string' || !spec.values.includes(entry),
+        );
+        if (unknown.length > 0) {
+          throw new Error(
+            `${name} may only contain: ${spec.values.join(', ')}. `
+            + `Received: ${unknown.map((entry) => String(entry)).join(', ')}.`,
+          );
+        }
+        // An empty list means the same as not asking, so it is not sent:
+        // an empty `types=` would otherwise read as a filter matching nothing.
+        if (value.length > 0) {
+          query.push(`${name}=${value.map((entry) => encodeURIComponent(String(entry))).join(',')}`);
+        }
+        break;
+      }
+      case 'count':
+        query.push(`${name}=${integerIn(name, value, spec.min, spec.max)}`);
         break;
     }
   }

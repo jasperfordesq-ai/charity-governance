@@ -226,6 +226,63 @@ const MUTATIONS = {
       'a connector newer than the API must say so, or the symptom is a bare 404 from a route '
       + 'that is not deployed yet.',
   },
+  // Search. A hit is itself an answer, so these are about what may be
+  // matched at all, not only about what comes back.
+  'a-closed-gate-searches-everything': {
+    file: 'apps/api/src/services/search.service.ts',
+    find: /      const fields = full \? \[\.\.\.spec\.safeFields, \.\.\.spec\.personalFields\] : spec\.safeFields;/,
+    replace: '      const fields = [...spec.safeFields, ...spec.personalFields];',
+    tests: ['search-route'],
+    expect:
+      'a withheld column must not be searched at all while the gate is closed: being told a '
+      + 'record matches a name is being told the name is in it.',
+  },
+  'a-search-leaves-the-charity': {
+    file: 'apps/api/src/services/search.service.ts',
+    find: /        \.\.\.\(spec\.tenantScoped \? \{ organisationId \} : \{\}\),/,
+    replace: '        ...(spec.tenantScoped ? {} : {}),',
+    tests: ['search-route'],
+    expect: 'a search must never leave the caller’s own charity.',
+  },
+  'a-caller-may-name-its-own-scope': {
+    file: 'apps/api/src/routes/search/index.ts',
+    // The session is still consulted, so nothing is unused; it is simply no
+    // longer the only thing consulted, which is the whole guarantee.
+    find: /          dataScope: request\.authSession\?\.dataScope \?\? 'FULL',/,
+    replace:
+      "          dataScope: (request.query as { dataScope?: 'WITHHELD' | 'FULL' }).dataScope"
+      + " ?? request.authSession?.dataScope ?? 'FULL',",
+    tests: ['search-route'],
+    expect: 'the scope of a search is the session’s, never the query string’s.',
+  },
+  // Following a reference, and the guards it must not walk around.
+  'a-reference-may-name-any-path': {
+    package: 'mcp',
+    file: 'mcp/src/references.ts',
+    // The pattern is still referenced, so the import and the constant stay
+    // used and the build is honest; it simply no longer decides anything.
+    find: /  if \(!ID_PATTERN\.test\(id\)\) \{/,
+    replace: '  if (!(ID_PATTERN.source.length > 0 && id.length > 0)) {',
+    tests: ['references'],
+    expect:
+      'an identifier that could open another path must be refused, because a reference is '
+      + 'interpolated into a URL.',
+  },
+  'a-resource-reads-around-the-guards': {
+    package: 'mcp',
+    file: 'mcp/src/resources.ts',
+    find: /    text: JSON\.stringify\(await runRecord\(target\.tool, target\.args\), null, 2\),/,
+    replace:
+      '    text: JSON.stringify('
+      + '      await client.get<unknown>(`/api/v1/documents/${String(target.args.id)}`),'
+      + '      null,'
+      + '      2,'
+      + '    ),',
+    tests: ['resources'],
+    expect:
+      'a record read as a resource must go through the tool dispatch, so it meets the level, '
+      + 'the toolsets and the personal-data gate.',
+  },
   'a-member-may-edit-a-document': {
     file: 'apps/api/src/routes/documents/index.ts',
     find: /(  app\.patch<\{ Params: \{ id: string \} \}>\('\/:id', )\{ preHandler: \[requireAdmin\] \}, (async)/,

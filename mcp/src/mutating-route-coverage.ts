@@ -163,6 +163,17 @@ export const EXCLUDED_MUTATIONS: readonly ExcludedMutation[] = [
     notInGroupIndex: true,
   },
   {
+    route: 'POST /api/v1/integrations/confluence/publications/:publicationId/erase',
+    reason:
+      'The only remaining way for CharityPilot to destroy a page in a charity’s own '
+      + 'Confluence site. The owner ruled on 2026-09-19 that this must be a deliberate human '
+      + 'act, and the route already demands an administrator session, an approval and a typed '
+      + 'confirmation phrase — a phrase only means something if a person types it. It is '
+      + 'strictly more destructive than disconnecting Confluence, which is excluded above for '
+      + 'the same reason.',
+    notInGroupIndex: true,
+  },
+  {
     route: 'PUT /api/v1/integrations/confluence/publish-space',
     reason:
       'Chooses which Confluence space the charity’s documents are mirrored into. A setting '

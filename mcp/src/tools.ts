@@ -116,12 +116,62 @@ const ADMIN_ONLY = ' Needs an owner or administrator account.';
 const PAGED: readonly ParamSpec[] = [{ kind: 'page' }, { kind: 'pageSize' }];
 
 const READ_TOOLS: readonly ToolDefinition[] = [
+  /* --- finding a record, and reading the one you found ------------------ */
+  {
+    name: 'search',
+    description:
+      'Find records that mention something, across trustees, the minute book and its '
+      + 'resolutions, the four registers, documents, deadlines and the Governance Code. '
+      + 'Each hit says what kind of record it is, which field matched, the text around the '
+      + 'match, and a reference to pass to the fetch tool.' + GATED + 'every free-text '
+      + 'field is beyond reach: while the gate is closed those columns are not searched at '
+      + 'all, because being told a record matches a name is itself being told the name is '
+      + 'in it. The answer says which kinds were looked in.',
+    path: '/api/v1/search',
+    params: [
+      {
+        kind: 'text',
+        name: 'q',
+        max: 200,
+        describe:
+          'What to look for. Matched anywhere in a field, ignoring case. Per cent and '
+          + 'underscore are wildcards.',
+      },
+      {
+        kind: 'enumList',
+        name: 'types',
+        values: ['BoardMember', 'GoverningAct', 'Resolution', 'ConflictRecord', 'RiskRecord', 'ComplaintRecord', 'FundraisingRecord', 'Document', 'Deadline', 'GovernanceStandard'],
+        describe: 'Which kinds of record to look in. Omit to look in all of them.',
+      },
+      {
+        kind: 'count',
+        name: 'limit',
+        min: 1,
+        max: 50,
+        describe: 'Most hits per kind of record. 20 by default.',
+      },
+    ],
+    shape: 'search',
+  },
+
   /* --- compliance ------------------------------------------------------- */
   {
     name: 'compliance_summary',
     description: 'Overall Governance Code compliance status.',
     path: '/api/v1/compliance/summary',
     noRecordsBecause: 'Counts and percentages only; no records about anyone.',
+  },
+  {
+    name: 'governance_guidance',
+    description:
+      'What each Governance Code standard asks for under Irish law: whether the obligation '
+      + 'is in force, the evidence it wants, whether the board must approve it, which '
+      + 'specialist should review it, and the sources it is drawn from. Reference data, the '
+      + 'same for every charity in Ireland, and also offered as a resource a client can '
+      + 'attach for a whole conversation.',
+    path: '/api/v1/compliance/guidance',
+    noRecordsBecause:
+      'Published guidance about Irish charity law. It mentions no charity and nobody in one.',
   },
   {
     name: 'compliance_principles',
@@ -200,6 +250,15 @@ const READ_TOOLS: readonly ToolDefinition[] = [
     model: 'Deadline',
   },
   {
+    name: 'deadline_get',
+    description:
+      'One deadline from the calendar, by identifier.' + GATED
+      + 'the description and the profile that generated it.',
+    path: '/api/v1/deadlines/:id',
+    params: [{ kind: 'id', name: 'id' }],
+    model: 'Deadline',
+  },
+  {
     name: 'deadlines_history',
     description: 'Completed governance deadlines, with the same fields withheld as the deadline list.',
     path: '/api/v1/deadlines/history',
@@ -266,6 +325,17 @@ const READ_TOOLS: readonly ToolDefinition[] = [
     model: 'GoverningAct',
   },
   {
+    name: 'resolution_get',
+    description:
+      'One resolution by identifier, with the meeting that passed it. Use this to follow a '
+      + 'search hit: a decision with no date or reference is not evidence of anything.' + GATED
+      + 'the resolution text itself, who abstained, and any link to a conflict record.'
+      + COMPLETE_PLAN,
+    path: '/api/v1/governing-acts/resolutions/:id',
+    params: [{ kind: 'id', name: 'id' }],
+    model: 'Resolution',
+  },
+  {
     name: 'governing_acts_voids',
     description:
       'Minutes that were voided, with the reference and dates that keep them traceable.' + GATED
@@ -301,11 +371,30 @@ const READ_TOOLS: readonly ToolDefinition[] = [
     model: 'ConflictRecord',
   },
   {
+    name: 'conflict_get',
+    description:
+      'One entry in the conflicts of interest register, by identifier.' + GATED
+      + 'the trustee named, the matter, its nature, the action taken, the decision.'
+      + COMPLETE_PLAN,
+    path: '/api/v1/governance-registers/conflicts/:id',
+    params: [{ kind: 'id', name: 'id' }],
+    model: 'ConflictRecord',
+  },
+  {
     name: 'risks_list',
     description:
       'The risk register: title, category, likelihood, impact, status and review dates.' + GATED
       + 'description, mitigation, the named owner.' + COMPLETE_PLAN,
     path: '/api/v1/governance-registers/risks',
+    model: 'RiskRecord',
+  },
+  {
+    name: 'risk_get',
+    description:
+      'One entry in the risk register, by identifier.' + GATED
+      + 'description, mitigation, the named owner.' + COMPLETE_PLAN,
+    path: '/api/v1/governance-registers/risks/:id',
+    params: [{ kind: 'id', name: 'id' }],
     model: 'RiskRecord',
   },
   {
@@ -317,12 +406,31 @@ const READ_TOOLS: readonly ToolDefinition[] = [
     model: 'ComplaintRecord',
   },
   {
+    name: 'complaint_get',
+    description:
+      'One entry in the complaints register, by identifier.' + GATED
+      + 'summary, source, action taken, outcome.' + COMPLETE_PLAN,
+    path: '/api/v1/governance-registers/complaints/:id',
+    params: [{ kind: 'id', name: 'id' }],
+    model: 'ComplaintRecord',
+  },
+  {
     name: 'fundraising_list',
     description:
       'The fundraising register: activity, dates, whether it was public facing, and complaint '
       + 'counts.' + GATED + 'any third-party fundraiser named, the controls, the review outcome.'
       + COMPLETE_PLAN,
     path: '/api/v1/governance-registers/fundraising',
+    model: 'FundraisingRecord',
+  },
+  {
+    name: 'fundraising_get',
+    description:
+      'One entry in the fundraising register, by identifier.' + GATED
+      + 'any third-party fundraiser named, the controls, the review outcome.'
+      + COMPLETE_PLAN,
+    path: '/api/v1/governance-registers/fundraising/:id',
+    params: [{ kind: 'id', name: 'id' }],
     model: 'FundraisingRecord',
   },
   {
@@ -426,6 +534,18 @@ const READ_TOOLS: readonly ToolDefinition[] = [
     noRecordsBecause:
       'Connection status for one integration; the route allowlists its own keys and returns no credential.',
   },
+  {
+    name: 'confluence_publications',
+    description:
+      'Pages still standing in this charity’s Confluence after the documents that made '
+      + 'them were deleted here, with the page title, when it was retired and whether an '
+      + 'erasure has already been asked for. Answers “what is still out there”. The '
+      + 'titles are as Confluence holds them, which may differ from a document’s current '
+      + 'name: renaming a document here deliberately does not re-title its page.'
+      + ADMIN_ONLY,
+    path: '/api/v1/integrations/confluence/publications',
+    shape: 'confluencePublications',
+  },
 ];
 
 /**
@@ -472,6 +592,7 @@ export function annotationsFor(tool: ToolDefinition): ToolAnnotations {
 }
 
 export const TOOL_GROUPS = [
+  'search',
   'compliance',
   'organisation',
   'deadlines',
@@ -492,6 +613,7 @@ export type ToolGroup = (typeof TOOL_GROUPS)[number];
  * client's context; a person working on the minute book can ask for that.
  */
 const GROUP_BY_PREFIX: readonly (readonly [string, ToolGroup])[] = [
+  ['/api/v1/search', 'search'],
   ['/api/v1/compliance', 'compliance'],
   ['/api/v1/organisation', 'organisation'],
   ['/api/v1/dashboard', 'organisation'],

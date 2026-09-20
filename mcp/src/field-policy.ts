@@ -297,7 +297,9 @@ export type ShapeName =
   | 'complianceRecords'
   | 'teamSessions'
   | 'securityAudit'
-  | 'reminderHistory';
+  | 'reminderHistory'
+  | 'search'
+  | 'confluencePublications';
 
 function asRecord(value: unknown): Record<string, unknown> | null {
   if (value === null || typeof value !== 'object' || Array.isArray(value)) return null;
@@ -543,6 +545,52 @@ function filterReminderHistory(value: unknown): unknown {
   return out;
 }
 
+/**
+ * A page of search hits.
+ *
+ * The API has already decided what this session may match: while the gate is
+ * closed it never searches a withheld column, so no hit can be built out of
+ * one. This is the second lock. It keeps exactly the keys a hit is known to
+ * have, so a field added to the hit at the API — a matched trustee's name
+ * beside the record, say — cannot flow through to a closed session because
+ * nobody remembered this file.
+ */
+const SEARCH_HIT_FIELDS = ['type', 'id', 'title', 'field', 'snippet', 'ref'] as const;
+const SEARCH_ENVELOPE_FIELDS = ['query', 'dataScope', 'truncated', 'searched', 'note'] as const;
+
+function filterSearch(value: unknown): unknown {
+  const envelope = asRecord(value);
+  if (!envelope) return value;
+
+  const out: Record<string, unknown> = {};
+  for (const key of SEARCH_ENVELOPE_FIELDS) {
+    if (key in envelope) out[key] = envelope[key];
+  }
+  out.data = mapArray(envelope.data, (hit) => pick(hit, SEARCH_HIT_FIELDS));
+  return out;
+}
+
+/**
+ * Pages left standing in a charity’s Confluence after the documents they
+ * mirrored were deleted here.
+ *
+ * Every key is already safe — identifiers, a page title, a date and a flag,
+ * with a document’s name being safe on the Document policy too. This exists
+ * to pin the key set, so a column added to the route later cannot reach a
+ * closed session because nobody remembered this file.
+ */
+const PUBLICATION_FIELDS = [
+  'id', 'documentId', 'pageTitle', 'retiredAt', 'erasureRequested',
+] as const;
+
+function filterConfluencePublications(value: unknown): unknown {
+  const envelope = asRecord(value);
+  if (!envelope) return value;
+  return {
+    publications: mapArray(envelope.publications, (row) => pick(row, PUBLICATION_FIELDS)),
+  };
+}
+
 const SHAPES: Record<ShapeName, (value: unknown) => unknown> = {
   dashboard: filterDashboard,
   team: filterTeam,
@@ -552,6 +600,8 @@ const SHAPES: Record<ShapeName, (value: unknown) => unknown> = {
   teamSessions: filterTeamSessions,
   securityAudit: filterSecurityAudit,
   reminderHistory: filterReminderHistory,
+  search: filterSearch,
+  confluencePublications: filterConfluencePublications,
 };
 
 export function applyShapePolicy<T>(shape: ShapeName, value: T, allowPersonalData: boolean): T {

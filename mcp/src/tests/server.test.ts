@@ -9,11 +9,11 @@ test('every tool is advertised once the gate that guards it is open', () => {
   // personal-data gate withholds, so they are offered only when it is open.
   // Everything else is always offered.
   const withGateOpen = buildToolList('admin', { allowPersonalData: true });
-  // Every tool in the registry, plus session_info, plus the file tools that
-  // need no directory named for them. The ones that read from or write to this
-  // machine are absent until the operator names one.
+  // Every tool in the registry, plus session_info and fetch, plus the file
+  // tools that need no directory named for them. The ones that read from or
+  // write to this machine are absent until the operator names one.
   const alwaysOn = FILE_TOOLS.filter((tool) => tool.requires === 'nothing').length;
-  assert.equal(withGateOpen.length, TOOLS.length + 1 + alwaysOn);
+  assert.equal(withGateOpen.length, TOOLS.length + 2 + alwaysOn);
 
   const withGateClosed = buildToolList('admin', { allowPersonalData: false });
   assert.ok(

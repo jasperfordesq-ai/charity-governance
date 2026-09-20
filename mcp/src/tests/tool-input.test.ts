@@ -110,3 +110,88 @@ test('a tool with no params advertises an empty closed object', () => {
     additionalProperties: false,
   });
 });
+
+// ── the kinds the search tool needs ────────────────────────────────────────
+
+const SEARCH_PARAMS = [
+  { kind: 'text' as const, name: 'q', max: 200, describe: 'What to look for.' },
+  {
+    kind: 'enumList' as const,
+    name: 'types',
+    values: ['BoardMember', 'Document'] as const,
+    describe: 'Which kinds.',
+  },
+  { kind: 'count' as const, name: 'limit', min: 1, max: 50, describe: 'Most hits.' },
+];
+
+test('free text is required, bounded, and escaped into the query string', () => {
+  const schema = inputSchemaFor(SEARCH_PARAMS) as {
+    required: string[];
+    properties: { q: { maxLength: number; minLength: number } };
+  };
+  assert.deepEqual(schema.required, ['q']);
+  assert.equal(schema.properties.q.maxLength, 200);
+  assert.equal(schema.properties.q.minLength, 1);
+
+  assert.equal(
+    buildPath('/api/v1/search', SEARCH_PARAMS, { q: 'roof & gutters' }),
+    '/api/v1/search?q=roof%20%26%20gutters',
+  );
+});
+
+test('empty text is refused rather than sent as a search for everything', () => {
+  for (const q of ['', '   ', 42, undefined]) {
+    assert.throws(() => buildPath('/api/v1/search', SEARCH_PARAMS, { q }), /q must be/);
+  }
+});
+
+test('text longer than the tool declared is refused here, not at the server', () => {
+  assert.throws(
+    () => buildPath('/api/v1/search', SEARCH_PARAMS, { q: 'x'.repeat(201) }),
+    /at most 200 characters/,
+  );
+});
+
+test('a list of kinds is sent as one comma-separated value', () => {
+  assert.equal(
+    buildPath('/api/v1/search', SEARCH_PARAMS, { q: 'roof', types: ['BoardMember', 'Document'] }),
+    '/api/v1/search?q=roof&types=BoardMember,Document',
+  );
+});
+
+test('an empty list means the same as not asking, and is not sent', () => {
+  // An empty `types=` would read at the server as a filter matching nothing,
+  // which is the opposite of what an empty list means.
+  assert.equal(
+    buildPath('/api/v1/search', SEARCH_PARAMS, { q: 'roof', types: [] }),
+    '/api/v1/search?q=roof',
+  );
+});
+
+test('a kind the tool never offered is refused, and the refusal names the real ones', () => {
+  assert.throws(
+    () => buildPath('/api/v1/search', SEARCH_PARAMS, { q: 'roof', types: ['Payroll'] }),
+    /may only contain: BoardMember, Document/,
+  );
+  assert.throws(
+    () => buildPath('/api/v1/search', SEARCH_PARAMS, { q: 'roof', types: 'BoardMember' }),
+    /must be a list/,
+  );
+});
+
+test('a count outside the declared range is refused', () => {
+  assert.equal(
+    buildPath('/api/v1/search', SEARCH_PARAMS, { q: 'roof', limit: 50 }),
+    '/api/v1/search?q=roof&limit=50',
+  );
+  for (const limit of [0, 51, 1.5, '20']) {
+    assert.throws(() => buildPath('/api/v1/search', SEARCH_PARAMS, { q: 'roof', limit }), /limit/);
+  }
+});
+
+test('an argument the search tool never declared is still refused', () => {
+  assert.throws(
+    () => buildPath('/api/v1/search', SEARCH_PARAMS, { q: 'roof', dataScope: 'full' }),
+    /Unknown argument "dataScope"/,
+  );
+});
