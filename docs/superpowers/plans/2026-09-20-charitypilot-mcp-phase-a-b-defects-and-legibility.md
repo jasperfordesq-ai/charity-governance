@@ -10,6 +10,15 @@
 
 **Spec:** `docs/superpowers/specs/2026-09-20-charitypilot-mcp-connector-audit-and-improvement-plan.md`, Part 1.2 (defects D1 to D6, D9 to D13), Part 1.4 (P1, P2, P3, P4, P7, P12, P13), Part 2 Phases A and B.
 
+**Status, 2026-09-20:** all seventeen tasks are built and committed on `master`. Connector
+suite 258, API suite 1822, live suite 60, all green; the eight scratch canaries and both
+live canaries each went red as intended. Two deviations from the text below: Task 8 does
+not refuse `document_delete` for a published document, because the document DTO carries no
+publication field (recorded in `mcp/HANDOVER.md`); and the live tests reuse the Phase 1
+owner credential rather than signing in again, because the API allows five sign-ins per
+email a minute and the suite already spends most of them. Task 9's terminal checklist is
+the owner's to run and is still unticked.
+
 ## Global Constraints
 
 - `mcp/` stays outside the npm workspace. Run `npm install` only from inside `mcp/`; never `npm install --prefix mcp` from the repository root.

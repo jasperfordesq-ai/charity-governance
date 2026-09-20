@@ -108,6 +108,23 @@ const MUTATIONS = {
     expect:
       'dashboard_overview must withhold activity free text and staff names from the closed gate.',
   },
+  // The summary a person reads before typing a password used to name only the
+  // route. This puts it back to that state while leaving the lookup table in
+  // place, so the file still compiles.
+  'approval-summary-nameless': {
+    file: 'apps/api/src/services/action-summary.ts',
+    find: /( {6})named = await lookup\(prisma, organisationId, params\);/g,
+    replace: '$1named = null;',
+    expect: 'the refusal and the approval preview must name the record being removed.',
+  },
+  // A client decides whether to ask before a call from these hints. A delete
+  // that says it is not destructive is a delete nobody is asked about.
+  'delete-says-it-is-safe': {
+    file: 'mcp/src/tools.ts',
+    find: /( {4}destructiveHint: )tool\.destructive === true(,)/g,
+    replace: '$1false$2',
+    expect: 'board_member_delete must carry destructiveHint true.',
+  },
 };
 
 const name = process.argv[2];

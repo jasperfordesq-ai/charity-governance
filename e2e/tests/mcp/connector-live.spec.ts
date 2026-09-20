@@ -160,9 +160,12 @@ test.describe('MCP connector lifecycle', () => {
         'risk_delete',
         'risk_update',
         'risks_list',
+        'session_info',
         'team_list',
       ]);
-      expect(JSON.stringify(listed.tools)).not.toContain('organisationId');
+      // The tenant is never an argument. Output schemas do name organisationId,
+      // because records carry it, so only what a client may SEND is checked.
+      expect(JSON.stringify(listed.tools.map((tool) => tool.inputSchema))).not.toContain('organisationId');
     } finally {
       await connector.close();
     }
@@ -664,10 +667,106 @@ test.describe('Phase 1: the whole readable surface', () => {
     try {
       const result = await callTool(connector.client, 'confluence_status');
       expect(result.isError, 'a member must not read integration status').toBe(true);
-      expect(result.text).toMatch(/403/);
+      // The API's own code is named, and the connector says what it means for
+      // the agent: a role refusal, which no re-connection changes.
+      expect(result.text).toMatch(/FORBIDDEN/);
+      expect(result.text).toMatch(/role does not allow/);
       expect(result.text, 'an authorisation refusal is not a crash').not.toMatch(/\n\s+at /);
     } finally {
       await connector.close();
+    }
+  });
+});
+
+/**
+ * Concern: what the connector tells a client beyond the tools, so an agent
+ * that has never met CharityPilot can use it from the first call. These read
+ * the advertised list rather than a hand-written one, so a tool added later is
+ * covered without anyone remembering.
+ */
+test.describe('Phase B: legible to the agent', () => {
+  // The lifecycle block disconnects its credential on purpose, so this block
+  // reuses the owner's Phase 1 credential, which stays connected. It does not
+  // sign in again: the API allows five sign-ins per email a minute, and the
+  // suite already spends most of them.
+  let phaseBCredential = '';
+
+  test('the server carries instructions, and every tool carries annotations', async () => {
+    phaseBCredential = credentialFileFor('phase1');
+    const connector = await openConnector({ apiUrl: API_BASE_URL, credentialFile: phaseBCredential });
+    try {
+      expect(connector.client.getInstructions() ?? '').toContain('session_info');
+      const listed = await connector.client.listTools();
+      for (const tool of listed.tools) {
+        const annotations = tool.annotations as { readOnlyHint?: unknown; destructiveHint?: unknown } | undefined;
+        expect(typeof annotations?.readOnlyHint, tool.name).toBe('boolean');
+        expect(typeof annotations?.destructiveHint, tool.name).toBe('boolean');
+      }
+      const remove = listed.tools.find((tool) => tool.name === 'board_member_delete');
+      expect((remove?.annotations as { destructiveHint?: boolean } | undefined)?.destructiveHint).toBe(true);
+    } finally {
+      await connector.close();
+    }
+  });
+
+  test('every argument-free tool answers with structured content equal to its text', async () => {
+    const connector = await openConnector({ apiUrl: API_BASE_URL, credentialFile: phaseBCredential });
+    try {
+      const listed = await connector.client.listTools();
+      const argumentFree = listed.tools.filter((tool) => {
+        const schema = tool.inputSchema as { required?: string[] };
+        const changes = /_(delete|set|create|update|void|upload|download)$/.test(tool.name);
+        return !(schema.required?.length) && !changes;
+      });
+      expect(argumentFree.length).toBeGreaterThan(20);
+      for (const tool of argumentFree) {
+        const result = await callTool(connector.client, tool.name);
+        expect(result.isError, `${tool.name}: ${result.text}`).toBe(false);
+        expect(result.structured, tool.name).toEqual(result.json);
+      }
+    } finally {
+      await connector.close();
+    }
+  });
+
+  test('an error is structured with a code and an action', async () => {
+    const connector = await openConnector({ apiUrl: API_BASE_URL, credentialFile: phaseBCredential });
+    try {
+      const result = await callTool(connector.client, 'document', { id: 'no-such-document' });
+      expect(result.isError).toBe(true);
+      const structured = result.structured as Record<string, unknown>;
+      expect(structured['code']).toBe('DOCUMENT_NOT_FOUND');
+      expect(structured['action']).toBe('fix_arguments');
+    } finally {
+      await connector.close();
+    }
+  });
+
+  test('session_info names the charity and the level, and withholds the person until the gate opens', async () => {
+    const closed = await openConnector({ apiUrl: API_BASE_URL, credentialFile: phaseBCredential });
+    try {
+      const info = await callTool(closed.client, 'session_info');
+      expect(info.isError, info.text).toBe(false);
+      expect(info.text).toContain('MCP Harness Charity');
+      expect(info.text).toContain('"role": "OWNER"');
+      // The local profile's default level is admin; the API, not the flag, is
+      // what this reports, which the read-level status test proves separately.
+      expect(info.text).toContain('"accessLevel": "admin"');
+      expect(info.text).toContain('"accessLevelNote": "As the API reports it."');
+      expect(info.text).not.toContain(fixture.owner.email);
+    } finally {
+      await closed.close();
+    }
+    const open = await openConnector({
+      apiUrl: API_BASE_URL,
+      credentialFile: phaseBCredential,
+      allowPersonalData: true,
+    });
+    try {
+      const info = await callTool(open.client, 'session_info');
+      expect(info.text).toContain(fixture.owner.email);
+    } finally {
+      await open.close();
     }
   });
 });
@@ -711,6 +810,16 @@ test.describe('Connector session posture', () => {
     });
     expect(result.code, `connect failed: ${result.stderr}`).toBe(0);
     expect(result.stdout).toContain('Access level: READ');
+
+    // Run WITHOUT the flag: status must report the level the API holds, not
+    // the default the flag would supply.
+    const status = await runConnector(
+      ['status', '--profile', 'local', '--base-url', API_BASE_URL],
+      { credentialFile },
+    );
+    expect(status.code, status.stderr).toBe(0);
+    expect(status.stdout, 'status must report the level the API holds, not the default flag')
+      .toContain('Access level: READ');
 
     const connector = await openConnector({ apiUrl: API_BASE_URL, credentialFile });
     try {
@@ -1253,6 +1362,9 @@ test.describe('Connector writes and approval', () => {
       expect(refused.isError, 'a removal must not just happen').toBe(true);
       expect(refused.text).toMatch(/charitypilot-mcp approve /);
       expect(refused.text).toMatch(/will not do this until you approve it yourself/);
+      expect(refused.text, 'the refusal names the record being removed')
+        .toContain('Risk created so it can be removed');
+      expect(refused.text).toMatch(/exactly the same arguments plus approvalId: /);
 
       const pending = await latestApprovals();
       expect(pending.length, 'an approval was minted for the action').toBeGreaterThan(0);
@@ -1260,6 +1372,37 @@ test.describe('Connector writes and approval', () => {
     } finally {
       await connector.close();
     }
+  });
+
+  test('the approval can be read back by its owner and by nobody else', async () => {
+    const pending = await latestApprovals();
+    const approvalId = String(pending[0]!['id']);
+
+    // The admin credential belongs to the writer, who asked for the removal.
+    const ownToken = await accessTokenFromStoredCredential({
+      apiUrl: API_BASE_URL,
+      credentialFile: adminCredentialFile,
+    });
+    const own = await fetch(`${API_BASE_URL}/api/v1/auth/connector/approvals/${approvalId}`, {
+      headers: { authorization: `Bearer ${ownToken}`, [CONNECTOR_CLIENT_HEADER]: 'mcp-connector/0.1.0' },
+    });
+    expect(own.status).toBe(200);
+    const body = (await own.json()) as Record<string, unknown>;
+    expect(String(body['summary'])).toContain('Risk created so it can be removed');
+    expect(body['resourceId']).toBe(createdRiskId);
+    expect(body['approvedAt']).toBeNull();
+
+    // The owner, still connected from Phase 1: same charity, different person
+    // from the writer who asked.
+    const otherToken = await accessTokenFromStoredCredential({
+      apiUrl: API_BASE_URL,
+      credentialFile: credentialFileFor('phase1'),
+    });
+    const other = await fetch(`${API_BASE_URL}/api/v1/auth/connector/approvals/${approvalId}`, {
+      headers: { authorization: `Bearer ${otherToken}`, [CONNECTOR_CLIENT_HEADER]: 'mcp-connector/0.1.0' },
+    });
+    expect(other.status, 'an approval is readable only by the person it belongs to').toBe(404);
+    expect(((await other.json()) as Record<string, unknown>)['code']).toBe('APPROVAL_NOT_FOUND');
   });
 
   test('the record still exists, because the refusal refused', async () => {

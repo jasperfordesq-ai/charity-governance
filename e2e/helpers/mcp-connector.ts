@@ -202,6 +202,8 @@ export interface ToolCallResult {
   isError: boolean;
   text: string;
   json: unknown;
+  /** The result's structuredContent, or null when the connector sent none. */
+  structured: unknown;
 }
 
 export async function callTool(
@@ -218,5 +220,6 @@ export async function callTool(
   } catch {
     json = null;
   }
-  return { isError: result.isError === true, text, json };
+  const structured = (result as { structuredContent?: unknown }).structuredContent ?? null;
+  return { isError: result.isError === true, text, json, structured };
 }

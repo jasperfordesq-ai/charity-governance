@@ -9,13 +9,24 @@ which decisions were made unilaterally and are yours to reverse.
 
 ## Status in one paragraph
 
-**Updated 2026-09-19, after the full-access build.** The connector is no longer
-read-only. It reads the whole API through 27 tools, changes records through 34
-more, and moves documents in and out through 2 that appear only when the operator
-names a directory for them. The unit suite is 199 passing (two skipped, both
-POSIX-only file modes) and the live suite is 53. Typecheck is clean, and the
-package still lives OUTSIDE the npm workspace globs, so nothing about it can reach
-the API's Docker build or the blue-green deploy.
+**Updated 2026-09-20, after Phases A and B of the audit.** The connector is no
+longer read-only. It reads the whole API through 27 tools, changes records through
+34 more, moves documents in and out through 2 that appear only when the operator
+names a directory for them, and answers `session_info` always. The unit suite is
+258 (two skipped, both POSIX-only file modes), the API suite is 1822, and the live
+suite is 60. Typecheck is clean, and the package still lives OUTSIDE the npm
+workspace globs, so nothing about it can reach the API's Docker build or the
+blue-green deploy.
+
+**Phases A and B of the 2026-09-20 audit are built**
+(`docs/superpowers/specs/2026-09-20-charitypilot-mcp-connector-audit-and-improvement-plan.md`,
+plan `docs/superpowers/plans/2026-09-20-charitypilot-mcp-phase-a-b-defects-and-legibility.md`):
+`approve` shows what is being approved before asking for a password, and the API's
+summary names the record; refusals carry the API's code, the fields that were wrong
+and what to do next; `status` reports the level the API holds; downloads survive an
+expired token; and the server carries instructions, annotations, structured results
+and errors, `session_info`, tool groups (`--toolsets`) and a diagnostics flag
+(`--verbose`). Phases C to H wait on the owner's rulings in Part 3 of the audit.
 
 Everything that limits it lives in the API, not here:
 
