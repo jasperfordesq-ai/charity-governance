@@ -1,5 +1,9 @@
 import type { FastifyInstance } from 'fastify';
 import { ComplianceService } from '../../services/compliance.service.js';
+import {
+  IRISH_COMPLIANCE_MATRIX,
+  IRISH_COMPLIANCE_MATRIX_LAST_CHECKED,
+} from '@charitypilot/shared';
 import { authGuard } from '../../middleware/auth.js';
 import { subscriptionGuard } from '../../middleware/subscription.js';
 import { requireAdmin } from '../../middleware/roles.js';
@@ -24,6 +28,41 @@ export async function complianceRoutes(app: FastifyInstance) {
 
   app.addHook('onRequest', authGuard);
   app.addHook('onRequest', subscriptionGuard);
+
+  /**
+   * The regulator guidance behind the Governance Code, as reference data.
+   *
+   * The same for every charity in Ireland: which obligation each standard
+   * carries, whether it is in force, what evidence it wants, whether a board
+   * has to approve it, which specialist should look at it, and the sources
+   * it is drawn from. No tenant data at all, which is why it needs no
+   * filtering and why an agent can hold it as context for a whole session.
+   *
+   * Still behind the auth guard: it is the work that went into reading the
+   * law, and there is no reason to serve it to anyone who asks.
+   */
+  app.get('/guidance', async (_request, reply) => {
+    try {
+      return sendSuccess(reply, {
+        lastChecked: IRISH_COMPLIANCE_MATRIX_LAST_CHECKED,
+        entries: IRISH_COMPLIANCE_MATRIX.map((entry) => ({
+          id: entry.id,
+          principleNumbers: entry.principleNumbers,
+          standardCodes: entry.standardCodes,
+          featureArea: entry.featureArea,
+          userTask: entry.userTask,
+          commencementStatus: entry.commencementStatus,
+          applicabilityNote: entry.applicabilityNote,
+          evidenceRequired: entry.evidenceRequired,
+          boardApproval: entry.boardApproval,
+          professionalReview: entry.professionalReview,
+          sourceRefs: entry.sourceRefs,
+        })),
+      });
+    } catch (err) {
+      handleError(reply, err);
+    }
+  });
 
   // GET /principles — all 6 principles with standards (filtered by org complexity)
   app.get('/principles', async (request, reply) => {

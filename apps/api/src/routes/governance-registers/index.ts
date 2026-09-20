@@ -67,6 +67,16 @@ export async function governanceRegisterRoutes(app: FastifyInstance) {
     }
   });
 
+  app.get<{ Params: { id: string } }>('/conflicts/:id', async (request, reply) => {
+    try {
+      return sendSuccess(
+        reply,
+        await service.getRecord('conflict', request.user.organisationId, request.params.id),
+      );
+    } catch (err) {
+      handleError(reply, err);
+    }
+  });
   app.post('/conflicts', { preHandler: [requireAdmin] }, async (request, reply) => {
     try {
       const data = createConflictRecordSchema.parse(request.body) as CreateConflictRecordRequest;
@@ -104,6 +114,16 @@ export async function governanceRegisterRoutes(app: FastifyInstance) {
     }
   });
 
+  app.get<{ Params: { id: string } }>('/risks/:id', async (request, reply) => {
+    try {
+      return sendSuccess(
+        reply,
+        await service.getRecord('risk', request.user.organisationId, request.params.id),
+      );
+    } catch (err) {
+      handleError(reply, err);
+    }
+  });
   app.post('/risks', { preHandler: [requireAdmin] }, async (request, reply) => {
     try {
       const data = createRiskRecordSchema.parse(request.body) as CreateRiskRecordRequest;
@@ -141,6 +161,16 @@ export async function governanceRegisterRoutes(app: FastifyInstance) {
     }
   });
 
+  app.get<{ Params: { id: string } }>('/complaints/:id', async (request, reply) => {
+    try {
+      return sendSuccess(
+        reply,
+        await service.getRecord('complaint', request.user.organisationId, request.params.id),
+      );
+    } catch (err) {
+      handleError(reply, err);
+    }
+  });
   app.post('/complaints', { preHandler: [requireAdmin] }, async (request, reply) => {
     try {
       const data = createComplaintRecordSchema.parse(request.body) as CreateComplaintRecordRequest;
@@ -178,6 +208,16 @@ export async function governanceRegisterRoutes(app: FastifyInstance) {
     }
   });
 
+  app.get<{ Params: { id: string } }>('/fundraising/:id', async (request, reply) => {
+    try {
+      return sendSuccess(
+        reply,
+        await service.getRecord('fundraising', request.user.organisationId, request.params.id),
+      );
+    } catch (err) {
+      handleError(reply, err);
+    }
+  });
   app.post('/fundraising', { preHandler: [requireAdmin] }, async (request, reply) => {
     try {
       const data = createFundraisingRecordSchema.parse(request.body) as CreateFundraisingRecordRequest;

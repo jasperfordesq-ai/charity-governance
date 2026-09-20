@@ -68,6 +68,14 @@ export async function deadlineRoutes(app: FastifyInstance) {
     }
   });
 
+  app.get<{ Params: { id: string } }>('/:id', async (request, reply) => {
+    try {
+      return sendSuccess(reply, await service.getById(request.user.organisationId, request.params.id));
+    } catch (err) {
+      handleError(reply, err);
+    }
+  });
+
   app.post('/', { preHandler: [requireAdmin] }, async (request, reply) => {
     try {
       const data = createDeadlineSchema.parse(request.body);

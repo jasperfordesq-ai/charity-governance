@@ -96,6 +96,18 @@ export class DeadlineService {
     };
   }
 
+  /**
+   * One deadline.
+   *
+   * The calendar route pages fifty at a time, so following a reference to a
+   * single obligation meant walking the year.
+   */
+  async getById(organisationId: string, id: string) {
+    const deadline = await this.prisma.deadline.findFirst({ where: { id, organisationId } });
+    if (!deadline) throw new AppError(404, 'DEADLINE_NOT_FOUND', 'Deadline not found');
+    return deadline;
+  }
+
   async history(organisationId: string, page = 1, pageSize = 50) {
     const bounds = pageBounds(page, pageSize);
     const where = {

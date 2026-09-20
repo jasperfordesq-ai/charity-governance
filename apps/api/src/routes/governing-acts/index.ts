@@ -82,7 +82,18 @@ export async function governingActRoutes(app: FastifyInstance) {
     }
   });
 
-  // ── Resolutions ─────────────────────────────────────────────────────────────
+  // ── Resolutions ───────────────────────────────────────────────────────────
+
+  app.get<{ Params: { id: string } }>('/resolutions/:id', async (request, reply) => {
+    try {
+      return sendSuccess(
+        reply,
+        await service.getResolution(request.user.organisationId, request.params.id),
+      );
+    } catch (err) {
+      handleError(reply, err);
+    }
+  });
 
   app.post<{ Params: { id: string } }>(
     '/:id/resolutions',

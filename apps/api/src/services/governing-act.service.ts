@@ -206,6 +206,24 @@ export class GoverningActService {
     }))!;
   }
 
+  /**
+   * One resolution, with the act it belongs to.
+   *
+   * A resolution is only meaningful beside its meeting — a decision with no
+   * date or reference is not evidence of anything — so the act comes with it.
+   */
+  async getResolution(organisationId: string, id: string) {
+    const resolution = await this.prisma.resolution.findFirst({
+      where: { id, organisationId },
+      include: { governingAct: true },
+    });
+
+    if (!resolution) {
+      throw new AppError(404, 'RESOLUTION_NOT_FOUND', 'Resolution not found');
+    }
+    return resolution;
+  }
+
   async createResolution(
     organisationId: string,
     governingActId: string,

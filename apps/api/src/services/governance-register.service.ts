@@ -48,6 +48,27 @@ function annualReportReadinessResponse(
   };
 }
 
+/** The four registers, which differ only in their table and their refusal. */
+export type RegisterRecordKind = 'conflict' | 'risk' | 'complaint' | 'fundraising';
+
+const REGISTER_RECORDS: Record<
+  RegisterRecordKind,
+  { delegate: string; code: string; name: string }
+> = {
+  conflict: { delegate: 'conflictRecord', code: 'CONFLICT_NOT_FOUND', name: 'Conflict record' },
+  risk: { delegate: 'riskRecord', code: 'RISK_NOT_FOUND', name: 'Risk record' },
+  complaint: {
+    delegate: 'complaintRecord',
+    code: 'COMPLAINT_NOT_FOUND',
+    name: 'Complaint record',
+  },
+  fundraising: {
+    delegate: 'fundraisingRecord',
+    code: 'FUNDRAISING_NOT_FOUND',
+    name: 'Fundraising record',
+  },
+};
+
 export class GovernanceRegisterService {
   constructor(private prisma: PrismaClient) {}
 
@@ -69,6 +90,23 @@ export class GovernanceRegisterService {
       annualReportReadinessPercent: annualReadinessPercent(annual),
       financialControlsPercent: financialControlsPercent(financial),
     };
+  }
+
+  /**
+   * One register record, whichever of the four registers it is in.
+   *
+   * Written once rather than four times because the four differ only in the
+   * table and the code they refuse with, and a copy of this per register is
+   * four places to forget the organisationId.
+   */
+  async getRecord(kind: RegisterRecordKind, organisationId: string, id: string) {
+    const { delegate, code, name } = REGISTER_RECORDS[kind];
+    const record = await (this.prisma as unknown as Record<string, {
+      findFirst: (args: unknown) => Promise<unknown>;
+    }>)[delegate]!.findFirst({ where: { id, organisationId } });
+
+    if (!record) throw new AppError(404, code, `${name} not found`);
+    return record;
   }
 
   listConflicts(organisationId: string) {
