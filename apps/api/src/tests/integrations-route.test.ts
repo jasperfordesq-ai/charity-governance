@@ -1968,6 +1968,55 @@ test('an erasure needs the typed confirmation, not just a reason', async () => {
   assert.equal(response.statusCode, 400, response.body);
 });
 
+// The zod schema must refuse anything the database's own
+// `DocumentStorageDeletion_request_consistent` CHECK would refuse, or a
+// caller-fixable 400 becomes an on-call-paging 500 the moment the two
+// disagree. Both cases below passed zod and reached the CHECK before the
+// schema's refinements were added.
+test('an erasure reason with a control character is rejected before it can violate the database CHECK', async () => {
+  const { app } = await buildApp({
+    rows: [{ ...connectedRow(), grantedScopes: [...CONFLUENCE_REQUIRED_ERASURE_SCOPES] }],
+  });
+
+  const response = await app.inject({
+    method: 'POST',
+    url: '/confluence/publications/publication-1/erase',
+    headers: { authorization: bearer(ORG_A_ADMIN) },
+    // A tab: a control character outside the newline the CHECK exempts.
+    payload: { reason: 'Erasure\trequest 2026-41', confirmation: 'ERASE CONFLUENCE COPY' },
+  });
+
+  assert.equal(response.statusCode, 400, response.body);
+  assert.ok(
+    response.body.includes('control characters'),
+    'a tab must be refused by the schema, not left for the database CHECK to reject as a 500',
+  );
+});
+
+test('a reason short in code points but long in UTF-16 units is rejected, not waved through by .length', async () => {
+  const { app } = await buildApp({
+    rows: [{ ...connectedRow(), grantedScopes: [...CONFLUENCE_REQUIRED_ERASURE_SCOPES] }],
+  });
+
+  // Five astral-plane characters are ten UTF-16 units (a plain `.length`
+  // read, which is what `.min(10)` uses) but five Unicode code points —
+  // what Postgres's `char_length` counts. `.min(10)` alone would accept
+  // this; the CHECK, requiring at least 10 code points, would then refuse
+  // the INSERT as a 500.
+  const response = await app.inject({
+    method: 'POST',
+    url: '/confluence/publications/publication-1/erase',
+    headers: { authorization: bearer(ORG_A_ADMIN) },
+    payload: { reason: '😀😀😀😀😀', confirmation: 'ERASE CONFLUENCE COPY' },
+  });
+
+  assert.equal(response.statusCode, 400, response.body);
+  assert.ok(
+    response.body.includes('at least 10 characters'),
+    'must be refused for being too short in code points, not accepted as 10 UTF-16 units',
+  );
+});
+
 // The erase route's own preHandler stack: `requireSessionLevel('ADMIN')` and
 // `requireActionApproval()`, on top of the plugin-wide `requireAdmin` role
 // check every route here already carries. Neither is pinned by the member

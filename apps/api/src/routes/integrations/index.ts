@@ -961,8 +961,32 @@ export async function integrationRoutes(
         .pipe(
           z
             .string()
-            .min(10, 'Give an erasure reason of at least 10 characters')
-            .max(500, 'Erasure reason must be at most 500 characters'),
+            // `char_length` in the `DocumentStorageDeletion_request_consistent`
+            // CHECK this backs counts Unicode code points, not UTF-16 code
+            // units — zod's built-in `.min()`/`.max()` count `.length`, which
+            // is code units. Five astral-plane characters (most emoji) are
+            // ten UTF-16 units but five code points: `.min(10)` would accept
+            // them and the CHECK would then reject the INSERT, turning a 400
+            // into a 500. `Array.from` iterates by code point (the same idiom
+            // `confluence-document-mapping.ts` and `team.service.ts` already
+            // use for this), so counting its length agrees with Postgres.
+            .refine(
+              (value) => Array.from(value).length >= 10,
+              'Give an erasure reason of at least 10 characters',
+            )
+            .refine(
+              (value) => Array.from(value).length <= 500,
+              'Erasure reason must be at most 500 characters',
+            )
+            // Mirrors `requeueStorageDeletionSchema` in
+            // `routes/documents/index.ts` exactly — both back a CHECK of the
+            // same shape (`replace(reason, E'\n', '') !~ '[[:cntrl:]]'`), so
+            // the two must read the same rather than drift into two
+            // independent definitions of "control character".
+            .refine(
+              (value) => !/[\u0000-\u0009\u000b\u000c\u000e-\u001f\u007f]/.test(value),
+              'Erasure reason contains unsupported control characters',
+            ),
         ),
       confirmation: z.literal('ERASE CONFLUENCE COPY'),
     })
