@@ -3,7 +3,9 @@ import test from 'node:test';
 import { existsSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import {
+  allMirrorCopy,
   buildConnectView,
+  describeConfluenceMirror,
   describeConfluencePublishing,
   describeConfluenceStatus,
   parseConfluenceSpaces,
@@ -346,4 +348,147 @@ test('the integrations page shows the publishing state and the space picker from
     src.includes('/integrations/confluence/spaces'),
     'the chosen space must be picked from the spaces the API lists, never typed in',
   );
+});
+
+// ───────────────────────────────────────────────────────────────────────────
+// The mirror copy, and the one word it may never contain.
+// ───────────────────────────────────────────────────────────────────────────
+
+test('no sentence about a Confluence page ever says "deleted"', () => {
+  const copy = allMirrorCopy();
+  assert.ok(copy.length >= 12, `this guard proves nothing over ${copy.length} strings`);
+
+  for (const sentence of copy) {
+    // v2 answers 404 for a trashed page AND a purged one. Only the v1 trashed
+    // read tells them apart, and one is restorable by the charity in thirty
+    // seconds while the other is not restorable by anyone. "Deleted" collapses
+    // that, and a governance product telling a trustee their policy was deleted
+    // when it is sitting in their own trash has told them something false about
+    // a governance record.
+    assert.doesNotMatch(
+      sentence,
+      /delet/i,
+      `mirror copy must never say "deleted": ${JSON.stringify(sentence)}`,
+    );
+  }
+});
+
+test('the copy guard reads the real strings, not an empty list', () => {
+  // The canary for the guard above: a refactor that made `allMirrorCopy`
+  // return nothing would leave it green over zero sentences.
+  const copy = allMirrorCopy();
+  assert.ok(copy.some((sentence) => sentence.includes('trash')));
+  assert.ok(copy.some((sentence) => sentence.includes('could not be found')));
+});
+
+test('a trashed page is described as restorable, by them, in their own site', () => {
+  const display = describeConfluenceMirror({
+    publication: 'PUBLISHED',
+    pageUrl: null,
+    remote: {
+      state: 'TRASHED',
+      title: 'Safeguarding Policy',
+      version: 3,
+      lastReconciledAt: '2026-09-20T09:00:00.000Z',
+      reconcileError: null,
+    },
+  });
+
+  assert.match(display.detail, /trash/);
+  assert.match(display.detail, /restored/);
+  assert.equal(display.actionable, true, 'there is something the charity can do about this one');
+  assert.match(display.detail, /2026-09-20/, 'a reader must know how fresh this is');
+});
+
+test('a page that could not be found says exactly that, and claims nothing more', () => {
+  const display = describeConfluenceMirror({
+    publication: 'PUBLISHED',
+    pageUrl: null,
+    remote: {
+      state: 'GONE',
+      title: null,
+      version: null,
+      lastReconciledAt: '2026-09-20T09:00:00.000Z',
+      reconcileError: null,
+    },
+  });
+
+  // CharityPilot polled and could not find it. It cannot witness who removed
+  // it, or whether it is recoverable by some route it cannot see.
+  assert.match(display.detail, /could not be found/);
+  assert.equal(display.actionable, false);
+  assert.doesNotMatch(display.detail, /permanent|forever|unrecoverable/i);
+});
+
+test('an unreadable page is reported as unknown, not as absent', () => {
+  const display = describeConfluenceMirror({
+    publication: 'PUBLISHED',
+    pageUrl: null,
+    remote: {
+      state: 'UNKNOWN',
+      title: null,
+      version: null,
+      lastReconciledAt: null,
+      reconcileError: 'CONFLUENCE_PAGE_FORBIDDEN',
+    },
+  });
+
+  assert.match(display.detail, /unknown/i);
+  // The difference between "we looked and it is gone" and "we were not allowed
+  // to look" is the difference between a governance incident and a permissions
+  // problem.
+  assert.doesNotMatch(display.detail, /no longer/i);
+});
+
+test('a published page that has never been checked does not claim to have been', () => {
+  const display = describeConfluenceMirror({
+    publication: 'PUBLISHED',
+    pageUrl: null,
+    remote: null,
+  });
+
+  assert.match(display.detail, /not been checked/);
+  assert.equal(display.tone, 'positive');
+});
+
+test('a retired publication explains that the Confluence page was left alone', () => {
+  const display = describeConfluenceMirror({ publication: 'RETIRED', pageUrl: null, remote: null });
+
+  // The owner's 2026-09-19 ruling, in the one place a trustee would ever meet
+  // it: an ordinary deletion here does not touch the charity's own site.
+  assert.match(display.detail, /left in place/);
+  assert.match(display.detail, /own site/);
+});
+
+test('a failed publication tells an administrator there is something to do', () => {
+  const display = describeConfluenceMirror({ publication: 'FAILED', pageUrl: null, remote: null });
+
+  assert.equal(display.tone, 'danger');
+  assert.equal(display.actionable, true);
+  assert.match(display.detail, /try again/);
+});
+
+test('a document never published says so without implying a page exists', () => {
+  for (const mirror of [null, { publication: 'NOT_PUBLISHED' as const, pageUrl: null, remote: null }]) {
+    const display = describeConfluenceMirror(mirror);
+    assert.equal(display.label, 'Not published');
+    assert.match(display.detail, /CharityPilot only/);
+  }
+});
+
+test('an unparseable check date is omitted rather than rendered as Invalid Date', () => {
+  const display = describeConfluenceMirror({
+    publication: 'PUBLISHED',
+    pageUrl: null,
+    remote: {
+      state: 'VISIBLE',
+      title: null,
+      version: null,
+      lastReconciledAt: 'not-a-date',
+      reconcileError: null,
+    },
+  });
+
+  assert.doesNotMatch(display.detail, /Invalid Date|NaN/);
+  assert.equal(display.detail, 'Published to Confluence.');
 });

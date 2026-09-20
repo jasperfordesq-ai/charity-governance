@@ -350,3 +350,203 @@ export function parseConfluenceSpaces(payload: unknown): ConfluenceSpace[] {
   }
   return spaces;
 }
+
+// ───────────────────────────────────────────────────────────────────────────
+// THE WORD "DELETED" IS FORBIDDEN IN EVERY LINE BELOW.
+// ───────────────────────────────────────────────────────────────────────────
+//
+// Confluence answers a 404 through its v2 API for a page in the site's trash
+// AND for one that has been purged. The reconcile job separates them with a v1
+// read, and that distinction is the entire product value of this feature — one
+// is restorable by the charity's own administrators, in their own trash, and
+// the other is not restorable by anyone.
+//
+// "Deleted" collapses the two. A trustee told their policy was deleted, when it
+// is sitting in their site's trash and could be restored in thirty seconds, has
+// been told something false by a governance product about a governance record.
+// A trustee told it was deleted when it is genuinely unrecoverable has been
+// told something true only by accident.
+//
+// `integration-status.test.ts` pins this by regex over every string this module
+// can produce. Do not add a sentence here without running it.
+
+/** Mirrors `DocumentPublicationRemoteState` in the API's Prisma schema. */
+export type ConfluenceRemoteState = 'VISIBLE' | 'ARCHIVED' | 'TRASHED' | 'GONE' | 'UNKNOWN';
+
+/** Mirrors the publication states the API reports for a document. */
+export type ConfluencePublicationState =
+  | 'NOT_PUBLISHED'
+  | 'PENDING'
+  | 'PUBLISHED'
+  | 'FAILED'
+  | 'RETIRED';
+
+export type ConfluenceMirror = {
+  publication: ConfluencePublicationState;
+  pageUrl: string | null;
+  remote: {
+    state: ConfluenceRemoteState;
+    title: string | null;
+    version: number | null;
+    lastReconciledAt: string | null;
+    reconcileError: string | null;
+  } | null;
+};
+
+export type MirrorDisplay = {
+  /** One short line for a badge. */
+  label: string;
+  /** The sentence shown beneath it. Never the word "deleted". */
+  detail: string;
+  tone: 'neutral' | 'positive' | 'warning' | 'danger';
+  /** True when the charity can act: retry a failure, or look in their own trash. */
+  actionable: boolean;
+};
+
+function checkedSuffix(lastReconciledAt: string | null): string {
+  if (lastReconciledAt === null) return '';
+  const parsed = new Date(lastReconciledAt);
+  if (Number.isNaN(parsed.getTime())) return '';
+  // The date only. An exact timestamp invites a reader to treat this as live,
+  // and it is a six-hourly poll.
+  return `, checked ${parsed.toISOString().slice(0, 10)}`;
+}
+
+/**
+ * What to show a trustee about the Confluence copy of one document.
+ *
+ * The publication state comes first: a page CharityPilot never managed to
+ * create has no remote state worth describing, and describing one would imply
+ * a page exists.
+ */
+export function describeConfluenceMirror(mirror: ConfluenceMirror | null): MirrorDisplay {
+  if (mirror === null || mirror.publication === 'NOT_PUBLISHED') {
+    return {
+      label: 'Not published',
+      detail: 'This document is held in CharityPilot only. It has not been published to Confluence.',
+      tone: 'neutral',
+      actionable: false,
+    };
+  }
+
+  if (mirror.publication === 'PENDING') {
+    return {
+      label: 'Publishing',
+      detail: 'This document is queued to be published to Confluence.',
+      tone: 'neutral',
+      actionable: false,
+    };
+  }
+
+  if (mirror.publication === 'FAILED') {
+    return {
+      label: 'Not published',
+      detail:
+        'Publishing this document to Confluence did not succeed and has stopped being retried. ' +
+        'An administrator can try again.',
+      tone: 'danger',
+      actionable: true,
+    };
+  }
+
+  if (mirror.publication === 'RETIRED') {
+    return {
+      label: 'No longer tracked',
+      detail:
+        'This document was removed from CharityPilot. The Confluence page was left in place, ' +
+        'which is deliberate — removing a record here does not touch the charity’s own site.',
+      tone: 'neutral',
+      actionable: false,
+    };
+  }
+
+  // PUBLISHED, so what matters now is what the page looks like at the far end.
+  if (mirror.remote === null) {
+    return {
+      label: 'Published',
+      detail: 'Published to Confluence. The page has not been checked yet.',
+      tone: 'positive',
+      actionable: false,
+    };
+  }
+
+  const checked = checkedSuffix(mirror.remote.lastReconciledAt);
+
+  switch (mirror.remote.state) {
+    case 'VISIBLE':
+      return {
+        label: 'Published',
+        detail: `Published to Confluence${checked}.`,
+        tone: 'positive',
+        actionable: false,
+      };
+    case 'ARCHIVED':
+      return {
+        label: 'Archived in Confluence',
+        detail: `The page has been archived in Confluence${checked}. It is still there and can be restored by a site administrator.`,
+        tone: 'warning',
+        actionable: true,
+      };
+    case 'TRASHED':
+      return {
+        label: 'No longer visible in Confluence',
+        // Restorable, and by THEM. This is the sentence the whole v1 trashed
+        // read exists to make it possible to write truthfully.
+        detail: `No longer visible in Confluence${checked} — it is in the site’s trash and can be restored there.`,
+        tone: 'warning',
+        actionable: true,
+      };
+    case 'GONE':
+      return {
+        label: 'No longer visible in Confluence',
+        // NOT "deleted", even though this is the case where it very likely was.
+        // CharityPilot polled and could not find it; it cannot witness who
+        // removed it or whether it is recoverable by some route it cannot see.
+        detail: `No longer visible in Confluence${checked} — the page could not be found.`,
+        tone: 'danger',
+        actionable: false,
+      };
+    case 'UNKNOWN':
+    default:
+      return {
+        label: 'Could not check Confluence',
+        detail:
+          'CharityPilot could not read this page in Confluence, so what it says there is unknown. ' +
+          // "does not have permission", not "no longer has permission". The
+          // phrase "no longer" is reserved for the two states that genuinely
+          // mean the page is not visible, and a reader skimming this line must
+          // not take a permissions problem for a missing document.
+          'This usually means the connection does not have permission to read it.',
+        tone: 'warning',
+        actionable: false,
+      };
+  }
+}
+
+/** Every sentence this module can produce, for the copy guard to scan. */
+export function allMirrorCopy(): string[] {
+  const states: ConfluenceRemoteState[] = ['VISIBLE', 'ARCHIVED', 'TRASHED', 'GONE', 'UNKNOWN'];
+  const publications: ConfluencePublicationState[] = [
+    'NOT_PUBLISHED',
+    'PENDING',
+    'PUBLISHED',
+    'FAILED',
+    'RETIRED',
+  ];
+
+  const copy: string[] = [];
+  for (const publication of publications) {
+    const withoutRemote = describeConfluenceMirror({ publication, pageUrl: null, remote: null });
+    copy.push(withoutRemote.label, withoutRemote.detail);
+    for (const state of states) {
+      const display = describeConfluenceMirror({
+        publication,
+        pageUrl: null,
+        remote: { state, title: null, version: null, lastReconciledAt: null, reconcileError: null },
+      });
+      copy.push(display.label, display.detail);
+    }
+  }
+  copy.push(...[describeConfluenceMirror(null).label, describeConfluenceMirror(null).detail]);
+  return copy;
+}

@@ -8,6 +8,10 @@ import { subscriptionGuard } from '../../middleware/subscription.js';
 import { requireAdmin } from '../../middleware/roles.js';
 import { uploadDocumentSchema, updateDocumentSchema, linkStandardSchema } from '@charitypilot/shared';
 import { AppError, handleError } from '../../utils/errors.js';
+import {
+  mirrorsForDocuments,
+  retryFailedPublication,
+} from '../../services/document-mirror.service.js';
 import { sendCreated, sendNoContent, sendSuccess } from '../../utils/response.js';
 import { formatProviderError } from '../../utils/provider-errors.js';
 import { createPrismaOrganisationStorageResolver } from '../../services/document-storage-resolution.js';
@@ -100,6 +104,91 @@ export async function documentRoutes(app: FastifyInstance) {
       return handleError(reply, err);
     }
   });
+
+  /**
+   * What the Confluence copy of these documents looks like.
+   *
+   * A SEPARATE ENDPOINT RATHER THAN A FIELD ON EVERY DOCUMENT, and the reason
+   * is the DPO-agreed architecture rather than convenience. A document's
+   * response is CharityPilot's own authoritative record; the mirror is an
+   * observation of somebody else's system that may be up to a reconcile
+   * interval out of date. Folding one into the other would present them as
+   * equally current, and would also make a documents list fail whenever the
+   * mirror could not be read.
+   *
+   * Ids come in on the query string, so the common case — a documents page that
+   * has just listed twenty documents — is one query rather than twenty.
+   * Ungated by subscription for the same reason `GET /confluence/publications`
+   * is: it reports where a charity's own documents have been sent.
+   */
+  app.get('/confluence-mirrors', async (request, reply) => {
+    try {
+      const { ids } = request.query as { ids?: string };
+      const documentIds = (ids ?? '')
+        .split(',')
+        .map((id) => id.trim())
+        .filter((id) => id.length > 0)
+        // Bounded: this is one IN clause, and an unbounded list from a query
+        // string is a way to ask the database for the whole table.
+        .slice(0, 100);
+
+      const integration = await app.prisma.organisationIntegration.findUnique({
+        where: {
+          organisationId_provider: { organisationId: request.user.organisationId, provider: 'CONFLUENCE' },
+        },
+        select: { config: true },
+      });
+      const config = integration?.config as { siteUrl?: unknown } | null | undefined;
+      const siteUrl = typeof config?.siteUrl === 'string' ? config.siteUrl : null;
+
+      const mirrors = await mirrorsForDocuments(app.prisma, {
+        organisationId: request.user.organisationId,
+        documentIds,
+        siteUrl,
+      });
+
+      return reply.send({ mirrors: Object.fromEntries(mirrors) });
+    } catch (error) {
+      return handleError(reply, error);
+    }
+  });
+
+  /**
+   * Puts a failed publication back in the queue.
+   *
+   * ADMIN, because it sends a charity's governance document to a third-party
+   * site, and only a `DEAD_LETTER` row is eligible — see
+   * `retryFailedPublication` for why each of the other states is excluded, and
+   * in particular why a RETIRED row must never be revived.
+   *
+   * A 409 when nothing matched, not a cheerful 200: an administrator who
+   * pressed "try again" is entitled to know that nothing was tried.
+   */
+  app.post<{ Params: { id: string } }>(
+    '/:id/publication/retry',
+    { preHandler: [requireAdmin] },
+    async (request, reply) => {
+      try {
+        const retried = await retryFailedPublication(app.prisma, {
+          organisationId: request.user.organisationId,
+          documentId: request.params.id,
+        });
+
+        if (!retried) {
+          throw new AppError(
+            409,
+            'DOCUMENT_PUBLICATION_NOT_RETRYABLE',
+            'This document has no failed Confluence publication to retry. It may already be ' +
+              'queued, already published, or belong to a document that has been removed.',
+          );
+        }
+
+        return reply.send({ retried: true });
+      } catch (error) {
+        return handleError(reply, error);
+      }
+    },
+  );
 
   app.get('/storage-deletions/dead-letter', { preHandler: [requireAdmin] }, async (request, reply) => {
     try {
