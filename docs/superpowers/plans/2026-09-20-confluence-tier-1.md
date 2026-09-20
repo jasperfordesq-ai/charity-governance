@@ -272,11 +272,16 @@ In `apps/api/src/tests/document-storage-cleanup.test.ts`, replace the body of `'
 
 ```ts
 test('a publication that already has a pageId is retired, not erased, when its document is deleted', async () => {
+  // claimedAt is set deliberately: a worker that recorded its page id and is
+  // still mid-attempt is the case where retirement has to take the row away
+  // from it, and a fixture that left claimedAt null would assert the clearing
+  // trivially — it was already null.
   const mock = buildPublicationCancelPrisma({
     id: 'publication-1',
     pageId: 'page-99',
     attempts: 1,
     state: 'PENDING',
+    claimedAt: new Date('2026-09-20T11:59:00.000Z'),
   });
   const service = new DocumentService(mock.prisma as never, () => NOW);
 
@@ -291,7 +296,7 @@ test('a publication that already has a pageId is retired, not erased, when its d
   assert.ok(row!.retiredAt instanceof Date);
   assert.equal(row!.retiredStoragePath, 'org-1/policy.pdf');
   assert.equal(row!.nextAttemptAt, null, 'nothing retries a retired row');
-  assert.equal(row!.claimedAt, null);
+  assert.equal(row!.claimedAt, null, 'the in-flight attempt loses the row and reports it, rather than finishing silently');
 });
 ```
 
