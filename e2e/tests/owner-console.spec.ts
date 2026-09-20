@@ -76,21 +76,27 @@ async function signInAsNewOperator(page: Page): Promise<string> {
  * Located by test id rather than by accessible name: the trigger is a button
  * whose name HeroUI composes from the label and the current value, so a
  * pattern that matches before a value is chosen stops matching afterwards.
- * The listbox is also replaced during its opening animation, so the click
- * stays inside the retry boundary and a detached option is re-resolved from a
- * freshly opened listbox rather than reported as a flaky failure.
+ *
+ * Each attempt starts from a CLOSED listbox. The first version of this checked
+ * whether the option was already visible and skipped reopening if it was, which
+ * meant a retry could click into a listbox that was still re-rendering: on CI
+ * that produced "element is not stable", then "element was detached from the
+ * DOM", until the retry budget ran out. Pressing Escape and reopening makes
+ * every attempt identical, and the timeouts are generous because a hosted
+ * runner animates more slowly than a developer's machine.
  */
 async function choose(page: Page, testId: string, option: string): Promise<void> {
   const trigger = page.getByTestId(testId).getByRole('button').last();
-  await trigger.scrollIntoViewIfNeeded();
   const item = page.getByRole('option', { name: option, exact: true });
+
   await expect(async () => {
-    if (!(await item.isVisible().catch(() => false))) {
-      await trigger.click();
-    }
-    await item.click({ timeout: 2000 });
-    await expect(trigger).toContainText(option, { timeout: 2000 });
-  }).toPass({ timeout: 30_000 });
+    await page.keyboard.press('Escape');
+    await trigger.scrollIntoViewIfNeeded();
+    await trigger.click();
+    await expect(item).toBeVisible({ timeout: 5_000 });
+    await item.click({ timeout: 5_000 });
+    await expect(trigger).toContainText(option, { timeout: 5_000 });
+  }).toPass({ timeout: 60_000 });
 }
 test('a wrong password does not sign anybody in', async ({ page }) => {
   const operatorEmail = uniqueEmail('operator');

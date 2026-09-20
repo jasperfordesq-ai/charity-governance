@@ -951,7 +951,10 @@ test('platform audit JSON command is read-only and machine-readable', () => {
   assert.match(payload.legalPosture, /not legal advice/);
   // 35 since 2026-09-19: the Confluence work added /integrations and
   // /integrations/confluence/callback. Both P2, so p0Routes below is unchanged.
-  assert.equal(payload.counts.routes, 35);
+  // 36 since 2026-09-20: the platform console gained /owner/security, where an
+  // operator manages their own second factor. P2 as the rest of that realm is,
+  // so p0Routes below is unchanged again.
+  assert.equal(payload.counts.routes, 36);
   assert.equal(payload.counts.p0Routes, 16);
   assert.equal(payload.counts.oversizedRouteFiles, 0);
   assert.ok(payload.routeAudit.some((route) => route.route === '/dashboard' && route.priority === 'P0'));
