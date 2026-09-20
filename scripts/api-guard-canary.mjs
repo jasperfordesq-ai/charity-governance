@@ -198,6 +198,34 @@ const MUTATIONS = {
     expect:
       'a consumed multipart body must never be resent, or the retry uploads an empty file.',
   },
+  // The build identifier, and the drift warning it exists for.
+  'anyone-may-learn-the-build': {
+    file: 'apps/api/src/routes/health/index.ts',
+    find: /    \.\.\.\(isSignedIn\(request\) \? \{ build: buildIdentity\(\) \} : \{\}\),/,
+    replace: '    ...(isSignedIn(request) || true ? { build: buildIdentity() } : {}),',
+    tests: ['build-identity'],
+    expect: 'a caller with no credential must learn nothing about the build.',
+  },
+  'ten-comes-before-nine': {
+    file: 'apps/api/src/utils/build-identity.ts',
+    // Only the first number is ever consulted: the loop gives its verdict
+    // on the major version and never reaches the minor or the patch. Valid
+    // code, and the shape a comparison written in a hurry actually takes.
+    find: /    if \(a\[index\]! < b\[index\]!\) return false;/,
+    replace: '    return false;',
+    tests: ['build-identity'],
+    expect: 'a release must be compared by all three of its numbers, not only the first.',
+  },
+  'a-newer-connector-says-nothing': {
+    package: 'mcp',
+    file: 'mcp/src/session-info.ts',
+    find: /      \.\.\.\(isNewerRelease\(CONNECTOR_VERSION, apiVersion\)/,
+    replace: '      ...(isNewerRelease(CONNECTOR_VERSION, apiVersion) && false',
+    tests: ['session-info'],
+    expect:
+      'a connector newer than the API must say so, or the symptom is a bare 404 from a route '
+      + 'that is not deployed yet.',
+  },
   'a-member-may-edit-a-document': {
     file: 'apps/api/src/routes/documents/index.ts',
     find: /(  app\.patch<\{ Params: \{ id: string \} \}>\('\/:id', )\{ preHandler: \[requireAdmin\] \}, (async)/,
@@ -304,8 +332,18 @@ for (const name of selected) {
 }
 
 // Leaves the tree built from the restored sources, whichever mutation ran.
-build(true);
-if (selected.some((name) => MUTATIONS[name].package === 'mcp')) build(false, 'mcp');
+// A failure here is not a canary result: the sources are already restored, and
+// the likeliest cause is somebody else's edit in the same checkout. Reported
+// in a sentence rather than as a stack, so it is not mistaken for one.
+try {
+  build(true);
+  if (selected.some((name) => MUTATIONS[name].package === 'mcp')) build(false, 'mcp');
+} catch {
+  console.error(
+    'Every mutation was restored, but the rebuild afterwards failed. Nothing here caused '
+      + 'that — build the tree yourself to see why.',
+  );
+}
 
 console.log(problems === 0 ? 'Every canary behaved correctly.' : `${problems} canary problem(s).`);
 process.exit(problems === 0 ? 0 : 1);

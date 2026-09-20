@@ -97,3 +97,69 @@ test('a session that allows personal data releases it, whatever the process was 
 
   assert.match(JSON.stringify(info), /owner@harness.ie/);
 });
+
+// ── which build is on the other end ────────────────────────────────────────
+
+test('session_info reports the API build beside its own', async () => {
+  const info = await runSessionInfo(
+    client({
+      '/api/v1/auth/me': ME,
+      '/api/v1/auth/connector/session': { accessLevel: 'WRITE', role: 'OWNER', dataScope: 'WITHHELD' },
+      '/api/v1/health': { status: 'ok', build: { version: '0.1.0', revision: 'abc1234' } },
+    }),
+    { baseUrl: 'https://example.test', allowPersonalData: false },
+  );
+
+  const api = info.api as Record<string, unknown>;
+  assert.equal(api.version, '0.1.0');
+  assert.equal(api.revision, 'abc1234');
+  assert.equal(api.note, undefined, 'matching builds need no warning');
+});
+
+test('a connector newer than the API says so, because the symptom is otherwise a bare 404', async () => {
+  const info = await runSessionInfo(
+    client({
+      '/api/v1/auth/me': ME,
+      '/api/v1/auth/connector/session': { accessLevel: 'WRITE', role: 'OWNER', dataScope: 'WITHHELD' },
+      '/api/v1/health': { status: 'ok', build: { version: '0.0.9', revision: null } },
+    }),
+    { baseUrl: 'https://example.test', allowPersonalData: false },
+  );
+
+  const api = info.api as Record<string, unknown>;
+  assert.equal(api.version, '0.0.9');
+  assert.match(String(api.note), /0\.0\.9/);
+  assert.match(String(api.note), /until CharityPilot is updated/);
+});
+
+test('an API newer than the connector is not a warning', async () => {
+  const info = await runSessionInfo(
+    client({
+      '/api/v1/auth/me': ME,
+      '/api/v1/auth/connector/session': { accessLevel: 'WRITE', role: 'OWNER', dataScope: 'WITHHELD' },
+      '/api/v1/health': { status: 'ok', build: { version: '9.9.9', revision: null } },
+    }),
+    { baseUrl: 'https://example.test', allowPersonalData: false },
+  );
+
+  assert.equal((info.api as Record<string, unknown>).note, undefined);
+});
+
+test('a build that cannot say which version it is produces no warning at all', async () => {
+  for (const health of [undefined, { status: 'ok' }, { status: 'ok', build: { version: null } }]) {
+    const answers: Record<string, unknown> = {
+      '/api/v1/auth/me': ME,
+      '/api/v1/auth/connector/session': { accessLevel: 'WRITE', role: 'OWNER', dataScope: 'WITHHELD' },
+    };
+    if (health !== undefined) answers['/api/v1/health'] = health;
+
+    const info = await runSessionInfo(client(answers), {
+      baseUrl: 'https://example.test',
+      allowPersonalData: false,
+    });
+
+    const api = info.api as Record<string, unknown>;
+    assert.equal(api.version, null);
+    assert.equal(api.note, undefined, 'a silent build must not be reported as out of date');
+  }
+});

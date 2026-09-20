@@ -6,6 +6,9 @@ import { EmailService } from '../../services/email.service.js';
 import { StorageService, withReadinessTimeout } from '../../services/storage.service.js';
 import { isConfiguredSecret } from '../../utils/env.js';
 import { billingMode, emailDeliveryMode } from '../../utils/deployment-profile.js';
+import { buildIdentity } from '../../utils/build-identity.js';
+import { parseBearerAuthorizationHeader } from '../../utils/auth-request-credential.js';
+import { verifyAccessToken } from '../../utils/jwt.js';
 
 const READINESS_HEADER = 'x-charitypilot-readiness-key';
 const E2E_MARKER_VERSION = 1;
@@ -58,8 +61,33 @@ function readinessDependencyTimeoutMs(): number {
   return Number.isInteger(configured) && configured > 0 ? configured : 3000;
 }
 
+/**
+ * Whether this caller holds a token this API signed.
+ *
+ * Only the signature is checked, never the session row: the question is not
+ * "may this session do anything" but "is this somebody at all", and a health
+ * route must answer without touching the database.
+ */
+function isSignedIn(request: FastifyRequest): boolean {
+  const token = parseBearerAuthorizationHeader(request.headers.authorization);
+  if (token === undefined) return false;
+  try {
+    verifyAccessToken(token);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 export async function healthRoutes(app: FastifyInstance) {
-  app.get('/', async () => ({ status: 'ok', timestamp: new Date().toISOString() }));
+  app.get('/', async (request) => ({
+    status: 'ok',
+    timestamp: new Date().toISOString(),
+    // Told to a signed-in caller only. The connector reads it to say
+    // something useful when it is newer than the API it is talking to,
+    // instead of reporting a bare 404 from a route that is not deployed yet.
+    ...(isSignedIn(request) ? { build: buildIdentity() } : {}),
+  }));
 
   app.get(
     '/e2e-database-identity',
