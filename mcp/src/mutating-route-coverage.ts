@@ -98,18 +98,11 @@ export const EXCLUDED_MUTATIONS: readonly ExcludedMutation[] = [
 
   /* --- team membership and ownership ------------------------------------ */
   {
-    route: 'POST /api/v1/team/invites',
-    reason:
-      'Invites a person into the charity. Deciding who has access is a decision for a human '
-      + 'looking at the Team page, not something to be arranged in a conversation.',
-  },
-  {
     route: 'POST /api/v1/team/invites/:id/link',
-    reason: 'Reissues an invite link, which is a credential. Same reasoning as issuing one.',
-  },
-  {
-    route: 'DELETE /api/v1/team/invites/:id',
-    reason: 'Revokes an invite. Access decisions stay with the Team page.',
+    reason:
+      'Answers with the one-time invite link itself, which is a credential to join the '
+      + 'charity. Creating an invite is offered (the connector drops the link from that '
+      + 'response); fetching the link back exists only to put it in front of a person.',
   },
   {
     route: 'POST /api/v1/team/accept-invite',
@@ -118,36 +111,12 @@ export const EXCLUDED_MUTATIONS: readonly ExcludedMutation[] = [
       + 'has no meaning for an already signed-in connector.',
   },
   {
-    route: 'PATCH /api/v1/team/members/:id/role',
-    reason: 'Changes what a colleague may do. An access decision; see the invite routes.',
-  },
-  {
-    route: 'POST /api/v1/team/members/:id/suspend',
-    reason: 'Ends a colleague’s access. An access decision.',
-  },
-  {
-    route: 'POST /api/v1/team/members/:id/reactivate',
-    reason: 'Restores a colleague’s access. An access decision.',
-  },
-  {
-    route: 'POST /api/v1/team/members/:id/remove',
-    reason: 'Removes a colleague. An access decision, and the least reversible of them.',
-  },
-  {
-    route: 'POST /api/v1/team/members/:id/sessions/:familyId/revoke',
-    reason:
-      'Ends one of a colleague’s sessions. A security action taken while looking at the '
-      + 'session list, which the connector does not show.',
-  },
-  {
-    route: 'POST /api/v1/team/members/:id/sessions/revoke-all',
-    reason: 'Ends all of a colleague’s sessions, with the same reasoning.',
-  },
-  {
     route: 'POST /api/v1/team/ownership/transfer',
     reason:
-      'Hands the charity to somebody else. It signs the current owner out as it goes, and it '
-      + 'is not a thing to do through an intermediary.',
+      'Hands the charity to somebody else. It signs the current owner out as it goes and '
+      + 'requires a typed confirmation string, so it is not a thing to do through an '
+      + 'intermediary. The other access decisions are offered, because the API gates each of '
+      + 'them with an administrator session and a per-action approval.',
   },
 
   /* --- billing ----------------------------------------------------------- */

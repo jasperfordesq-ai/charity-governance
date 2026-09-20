@@ -111,6 +111,7 @@ test('the fields each tool declares exist in the API schema it posts to', () => 
     'members',
     'organisation',
     'document',
+    'team',
   ]
     .map((name) =>
       readFileSync(resolve(REPO, 'packages/shared/src/schemas', `${name}.ts`), 'utf8'),
@@ -438,4 +439,110 @@ test('every concurrency stamp the API requires is declared as a control field', 
 test('document_delete does not describe a Confluence deletion the owner has ruled out', () => {
   const tool = WRITE_TOOLS.find((t) => t.name === 'document_delete')!;
   assert.ok(!/confluence/i.test(tool.description));
+});
+
+/* --- Phase C: the team ---------------------------------------------------- */
+
+const TEAM_TOOLS = [
+  'team_invite_create', 'team_invite_revoke', 'team_role_set',
+  'team_member_suspend', 'team_member_reactivate', 'team_member_remove',
+  'team_session_revoke', 'team_sessions_revoke_all',
+];
+
+test('every team tool exists and sits at the level the API requires of it', () => {
+  const byName = new Map(WRITE_TOOLS.map((tool) => [tool.name, tool]));
+  for (const name of TEAM_TOOLS) {
+    assert.ok(byName.has(name), `${name} is missing`);
+  }
+  // The API gates these with requireSessionLevel('ADMIN') and an approval.
+  for (const name of ['team_invite_revoke', 'team_role_set', 'team_member_suspend',
+    'team_member_remove', 'team_session_revoke', 'team_sessions_revoke_all']) {
+    assert.equal(byName.get(name)!.level, 'admin', `${name} must need an administrator session`);
+  }
+  // These two only add or restore access, and the API does not gate them.
+  assert.equal(byName.get('team_invite_create')!.level, 'write');
+  assert.equal(byName.get('team_member_reactivate')!.level, 'write');
+});
+
+test('a reason shorter than the API accepts is refused before anything is sent', async () => {
+  const tool = WRITE_TOOLS.find((t) => t.name === 'team_member_suspend')!;
+  let sent = false;
+  const api = client(async () => { sent = true; return jsonOk(); });
+
+  await assert.rejects(
+    () => runTool(tool, api, false, {
+      id: 'usr1',
+      expectedMembershipVersion: 3,
+      reason: 'too short',
+    }),
+    /at least 10 characters/,
+  );
+  assert.equal(sent, false, 'the API must not see a request the connector knows it will refuse');
+});
+
+test('a reason the API accepts goes through, in the body and in the header', async () => {
+  const tool = WRITE_TOOLS.find((t) => t.name === 'team_member_suspend')!;
+  let seenBody = '';
+  let seenReason: string | null = null;
+  const api = client(async (_input, init) => {
+    seenBody = String(init?.body ?? '');
+    seenReason = new Headers(init?.headers).get('x-charitypilot-reason');
+    return jsonOk({ ok: true });
+  });
+
+  await runTool(tool, api, false, {
+    id: 'usr1',
+    expectedMembershipVersion: 3,
+    reason: 'Suspended pending the safeguarding review',
+  });
+
+  assert.deepEqual(JSON.parse(seenBody), {
+    expectedMembershipVersion: 3,
+    reason: 'Suspended pending the safeguarding review',
+  });
+  assert.equal(seenReason, 'Suspended pending the safeguarding review');
+});
+
+test('the concurrency stamp is a control field, so it is not personal data', () => {
+  const tool = WRITE_TOOLS.find((t) => t.name === 'team_role_set')!;
+  assert.ok(!gatedFieldsOf(tool).includes('expectedMembershipVersion'));
+  const schema = toolInputSchema(tool) as { required: string[] };
+  for (const field of ['role', 'expectedMembershipVersion', 'reason']) {
+    assert.ok(schema.required.includes(field), `${field} is required by the API`);
+  }
+});
+
+test('revoking one session takes both identifiers the route names', () => {
+  const tool = WRITE_TOOLS.find((t) => t.name === 'team_session_revoke')!;
+  const schema = toolInputSchema(tool) as { required: string[] };
+  assert.ok(schema.required.includes('id'));
+  assert.ok(schema.required.includes('familyId'));
+});
+
+test('inviting somebody needs the gate open, because it names their address', () => {
+  // The same rule that makes member_create need the gate: an email address is
+  // a person's, and TeamInvite.email is withheld on the way out.
+  const tool = WRITE_TOOLS.find((t) => t.name === 'team_invite_create')!;
+  assert.ok(needsPersonalData(tool));
+});
+
+test('an invite link never reaches the model, even with the gate open', async () => {
+  // On a deployment that delivers invites by hand the API answers with the
+  // one-time link. That is a credential to join the charity, not personal
+  // data, so opening the personal-data gate must not release it either.
+  const tool = WRITE_TOOLS.find((t) => t.name === 'team_invite_create')!;
+  const api = client(async () => jsonOk({
+    message: 'Invite created. Share the one-time link with the recipient.',
+    manualInviteUrl: 'https://charity.example/accept-invite?token=SECRETTOKEN',
+  }));
+
+  const result = await runTool(tool, api, true, {
+    email: 'new.trustee@example.ie',
+    role: 'MEMBER',
+  });
+
+  const text = JSON.stringify(result);
+  assert.ok(!text.includes('SECRETTOKEN'), 'the join credential must never reach the model');
+  assert.ok(!text.includes('manualInviteUrl'));
+  assert.match(text, /Invite created/);
 });

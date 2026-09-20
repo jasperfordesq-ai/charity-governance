@@ -22,7 +22,7 @@
 export type ControlField = { control?: true };
 
 export type FieldSpec = ControlField & (
-  | { kind: 'string'; name: string; max: number; required?: boolean; describe?: string }
+  | { kind: 'string'; name: string; max: number; min?: number; required?: boolean; describe?: string }
   | { kind: 'date'; name: string; required?: boolean; describe?: string }
   | { kind: 'timestamp'; name: string; required?: boolean; describe?: string }
   | { kind: 'integer'; name: string; min: number; max: number; required?: boolean; describe?: string }
@@ -49,7 +49,12 @@ export function bodySchemaFor(fields: readonly FieldSpec[]): object {
     const describe = field.describe ? { description: field.describe } : {};
     switch (field.kind) {
       case 'string':
-        properties[field.name] = { type: 'string', maxLength: field.max, ...describe };
+        properties[field.name] = {
+          type: 'string',
+          maxLength: field.max,
+          ...(field.min === undefined ? {} : { minLength: field.min }),
+          ...describe,
+        };
         break;
       case 'date':
         properties[field.name] = {
@@ -143,6 +148,11 @@ export function buildBody(
         if (typeof value !== 'string') refuse(field.name, 'must be text.');
         if (value.length > field.max) {
           refuse(field.name, `must be ${field.max} characters or fewer.`);
+        }
+        // Checked here as well as at the API so a caller learns the rule from
+        // the refusal rather than from a validation error a round trip later.
+        if (field.min !== undefined && value.length < field.min) {
+          refuse(field.name, `must be at least ${field.min} characters.`);
         }
         body[field.name] = value;
         break;

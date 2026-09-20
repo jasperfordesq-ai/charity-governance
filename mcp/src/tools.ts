@@ -39,6 +39,31 @@ export interface ToolDefinition {
   /** Removes something, or cannot be undone. A reason is required, and the API
    *  asks a person to approve it before it happens. */
   destructive?: boolean;
+  /** Keys stripped from the response whatever the gate says. The gate governs
+   *  personal data; a credential is a different thing, and opening the gate
+   *  must not release one. */
+  redactAlways?: readonly string[];
+}
+
+/**
+ * Removes named keys from a response at every depth.
+ *
+ * Unconditional, unlike the gate: an invite link lets whoever holds it join
+ * the charity, so there is no setting under which it should reach a model.
+ * Applied by key name rather than by position because the shape of a response
+ * is the API's to change.
+ */
+function stripKeys(value: unknown, keys: readonly string[]): unknown {
+  if (keys.length === 0) return value;
+  if (Array.isArray(value)) return value.map((item) => stripKeys(item, keys));
+  if (value === null || typeof value !== 'object') return value;
+
+  const out: Record<string, unknown> = {};
+  for (const [key, item] of Object.entries(value as Record<string, unknown>)) {
+    if (keys.includes(key)) continue;
+    out[key] = stripKeys(item, keys);
+  }
+  return out;
 }
 
 /**
@@ -660,7 +685,7 @@ export async function runTool(
   if (!tool.method) {
     const path = buildPath(tool.path, tool.params ?? [], args);
     const raw = await client.get<unknown>(path);
-    return applyPolicy(tool, raw, allowPersonalData);
+    return stripKeys(applyPolicy(tool, raw, allowPersonalData), tool.redactAlways ?? []);
   }
 
   const { pathArgs, bodyArgs, reason, approvalId } = partition(tool, args);
@@ -714,5 +739,5 @@ export async function runTool(
 
   // The response to a write is the record as it now stands, so it goes through
   // the same gate a read would. A write is not a way around the policy.
-  return applyPolicy(tool, raw, allowPersonalData);
+  return stripKeys(applyPolicy(tool, raw, allowPersonalData), tool.redactAlways ?? []);
 }

@@ -1,5 +1,6 @@
 import type { ToolDefinition } from './tools.js';
 import {
+  ASSIGNABLE_TEAM_ROLES,
   ANNUAL_REPORT_FILING_STATUSES,
   COMPLIANCE_SIGNOFF_STATUSES,
   COMPLIANCE_STATUSES,
@@ -36,6 +37,14 @@ const APPROVAL_NOTE = ' Cannot be undone; you approve it in your own terminal fi
 const CONCURRENCY =
   'The updatedAt value from the record as you read it. CharityPilot refuses the '
   + 'change if someone else altered the record in the meantime.';
+
+const MEMBERSHIP_VERSION =
+  'The membershipVersion from team_list, read just now. CharityPilot refuses the '
+  + 'change if that colleague\'s membership moved in the meantime.';
+
+const TEAM_REASON =
+  'Why, in at least ten characters. Recorded in the charity\'s security audit '
+  + 'beside who did it.';
 
 export const WRITE_TOOLS: readonly ToolDefinition[] = [
   /* --- board register ---------------------------------------------------- */
@@ -676,6 +685,150 @@ export const WRITE_TOOLS: readonly ToolDefinition[] = [
         required: true,
         describe: 'Why the entry is void. Recorded in the minute book beside it.',
       },
+    ],
+  },
+
+  /* --- the people with access --------------------------------------------- */
+  //
+  // The API gates every destructive one of these with an administrator-level
+  // session AND a per-action approval, which is what makes them offerable at
+  // all: the connector is not deciding who may do them.
+  //
+  // `reason` is declared as a control field here. It is not a column of the
+  // record being changed — it lands in the security audit — and the same
+  // string already travels ungated in the activity header on every write, so
+  // treating the body copy as personal data would be incoherent as well as
+  // stopping an owner suspending a compromised account with the gate closed.
+  //
+  // Ownership transfer is deliberately absent: it signs the caller out as it
+  // happens and needs a typed confirmation string. Reissuing an invite link is
+  // absent too, because it answers with a credential.
+  {
+    name: 'team_invite_create',
+    description:
+      'Invite a person to this charity by email, as an administrator or a member. Where a '
+      + 'deployment hands out invite links by hand instead of emailing them, the link is not '
+      + 'returned here: it is a credential, so reissue it from the Team page.',
+    path: '/api/v1/team/invites',
+    method: 'POST',
+    level: 'write',
+    model: 'TeamInvite',
+    redactAlways: ['manualInviteUrl'],
+    body: [
+      {
+        kind: 'string',
+        name: 'email',
+        max: 320,
+        required: true,
+        describe: 'The address to invite. Needs the gate open, like any other person\'s address.',
+      },
+      { kind: 'enum', name: 'role', values: ASSIGNABLE_TEAM_ROLES },
+    ],
+  },
+  {
+    name: 'team_invite_revoke',
+    description: 'Withdraw an invitation that has not been accepted.' + APPROVAL_NOTE,
+    path: '/api/v1/team/invites/:id',
+    method: 'DELETE',
+    level: 'admin',
+    destructive: true,
+    params: [{ kind: 'id', name: 'id' }],
+    noRecordsBecause: 'Returns a confirmation, not a record.',
+    body: [{ kind: 'string', name: 'reason', min: 10, max: 500, required: true, describe: TEAM_REASON }],
+  },
+  {
+    name: 'team_role_set',
+    description:
+      'Change what a colleague may do, between administrator and member. The owner\'s own role '
+      + 'is transferred rather than assigned, and that is not offered here.' + APPROVAL_NOTE,
+    path: '/api/v1/team/members/:id/role',
+    method: 'PATCH',
+    level: 'admin',
+    destructive: true,
+    params: [{ kind: 'id', name: 'id' }],
+    model: 'User',
+    body: [
+      { kind: 'enum', name: 'role', values: ASSIGNABLE_TEAM_ROLES, required: true },
+      { kind: 'integer', name: 'expectedMembershipVersion', control: true, min: 1, max: 1_000_000, required: true, describe: MEMBERSHIP_VERSION },
+      { kind: 'string', name: 'reason', control: true, min: 10, max: 500, required: true, describe: TEAM_REASON },
+    ],
+  },
+  {
+    name: 'team_member_suspend',
+    description:
+      'Suspend a colleague\'s access. Their sessions end and they cannot sign in until they '
+      + 'are reactivated. The record of what they did is kept.' + APPROVAL_NOTE,
+    path: '/api/v1/team/members/:id/suspend',
+    method: 'POST',
+    level: 'admin',
+    destructive: true,
+    params: [{ kind: 'id', name: 'id' }],
+    model: 'User',
+    body: [
+      { kind: 'integer', name: 'expectedMembershipVersion', control: true, min: 1, max: 1_000_000, required: true, describe: MEMBERSHIP_VERSION },
+      { kind: 'string', name: 'reason', control: true, min: 10, max: 500, required: true, describe: TEAM_REASON },
+    ],
+  },
+  {
+    name: 'team_member_reactivate',
+    description: 'Restore a suspended colleague\'s access.',
+    path: '/api/v1/team/members/:id/reactivate',
+    method: 'POST',
+    level: 'write',
+    params: [{ kind: 'id', name: 'id' }],
+    model: 'User',
+    body: [
+      { kind: 'integer', name: 'expectedMembershipVersion', control: true, min: 1, max: 1_000_000, required: true, describe: MEMBERSHIP_VERSION },
+      { kind: 'string', name: 'reason', control: true, min: 10, max: 500, required: true, describe: TEAM_REASON },
+    ],
+  },
+  {
+    name: 'team_member_remove',
+    description:
+      'Remove a colleague from this charity. The least reversible of the access decisions.'
+      + APPROVAL_NOTE,
+    path: '/api/v1/team/members/:id/remove',
+    method: 'POST',
+    level: 'admin',
+    destructive: true,
+    params: [{ kind: 'id', name: 'id' }],
+    model: 'User',
+    body: [
+      { kind: 'integer', name: 'expectedMembershipVersion', control: true, min: 1, max: 1_000_000, required: true, describe: MEMBERSHIP_VERSION },
+      { kind: 'string', name: 'reason', control: true, min: 10, max: 500, required: true, describe: TEAM_REASON },
+    ],
+  },
+  {
+    name: 'team_session_revoke',
+    description:
+      'End one of a colleague\'s sign-in sessions. Take the familyId from team_sessions_list.'
+      + APPROVAL_NOTE,
+    path: '/api/v1/team/members/:id/sessions/:familyId/revoke',
+    method: 'POST',
+    level: 'admin',
+    destructive: true,
+    params: [
+      { kind: 'id', name: 'id' },
+      { kind: 'id', name: 'familyId' },
+    ],
+    noRecordsBecause: 'Returns how many sessions ended, not a record about anyone.',
+    body: [
+      { kind: 'integer', name: 'expectedMembershipVersion', control: true, min: 1, max: 1_000_000, required: true, describe: MEMBERSHIP_VERSION },
+      { kind: 'string', name: 'reason', min: 10, max: 500, required: true, describe: TEAM_REASON },
+    ],
+  },
+  {
+    name: 'team_sessions_revoke_all',
+    description: 'End every one of a colleague\'s sign-in sessions at once.' + APPROVAL_NOTE,
+    path: '/api/v1/team/members/:id/sessions/revoke-all',
+    method: 'POST',
+    level: 'admin',
+    destructive: true,
+    params: [{ kind: 'id', name: 'id' }],
+    noRecordsBecause: 'Returns how many sessions ended, not a record about anyone.',
+    body: [
+      { kind: 'integer', name: 'expectedMembershipVersion', control: true, min: 1, max: 1_000_000, required: true, describe: MEMBERSHIP_VERSION },
+      { kind: 'string', name: 'reason', min: 10, max: 500, required: true, describe: TEAM_REASON },
     ],
   },
 
