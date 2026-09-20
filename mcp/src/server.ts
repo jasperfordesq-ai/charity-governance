@@ -24,6 +24,7 @@ import type { Session } from './session.js';
 import type { AccessLevel, ConnectorConfig } from './config.js';
 import { CONNECTOR_VERSION } from './version.js';
 import { redactSecrets } from './redact.js';
+import { INSTRUCTIONS } from './instructions.js';
 
 const FILE_RANK: Record<AccessLevel, number> = { read: 0, write: 1, admin: 2 };
 
@@ -65,7 +66,7 @@ export async function startServer(config: ConnectorConfig, session: Session): Pr
   const client = new ApiClient({ session, baseUrl: config.baseUrl });
   const server = new Server(
     { name: 'charitypilot', version: CONNECTOR_VERSION },
-    { capabilities: { tools: {} } },
+    { capabilities: { tools: {} }, instructions: INSTRUCTIONS },
   );
 
   /**
