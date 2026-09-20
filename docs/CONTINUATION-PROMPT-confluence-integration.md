@@ -29,7 +29,7 @@ four findings (§5, items 5-8, all now fixed). Tiers 2 and 3 remain proposals, n
 | 1 | Credential vault — AES-256-GCM envelope encryption, key generations, no token ever logged | Complete |
 | 2 | OAuth connection lifecycle — connect, refresh, disconnect. Atlassian's refresh tokens are single-use, so refreshes are serialised per charity | Complete |
 | 3 | Confluence API client — v1/v2 hybrid; pages, attachments, content properties, delete and purge | Complete |
-| 5 | Provider-aware erasure — dispatch by provider, dead-lettering, operator recovery, read-back proof | Complete. **Its delete-both-copies behaviour is being reworked — see §2** |
+| 5 | Provider-aware erasure — dispatch by provider, dead-lettering, operator recovery, read-back proof | Complete. **Its delete-both-copies behaviour was reworked and landed on 2026-09-20 — see §2a** |
 | 6 | Integration admin screens — connect/disconnect, the OAuth callback moved to a web page, per-tenant health | Complete. **"Admin panel" is broader than this — see §2** |
 | 4 | Publish pipeline — outbox, create-or-adopt, page mapping, dual erasure | Complete. **Built after the DPO asked us to pause — see §4** |
 
@@ -64,7 +64,7 @@ session *before* spending the code. **This changed what you register with Atlass
 
 ---
 
-# 2. What is wrong, and being reworked
+# 2. One thing that was wrong and is fixed; one gap that still is
 
 ## 2a. Ordinary deletion must stop destroying the Confluence source
 
