@@ -47,6 +47,27 @@ test.beforeAll(async () => {
 });
 
 /**
+ * The cookie notice is fixed to the bottom of the viewport and is loaded with
+ * `ssr: false`, so it mounts some time after hydration rather than with the
+ * page. The Plan select sits at the bottom edge of a 720px viewport: when the
+ * notice arrives while its listbox is open, the popover is repositioned over
+ * the space the notice took, and HeroUI remounts the options underneath
+ * Playwright. That is the "element is not stable", then "element was detached
+ * from the DOM" this suite kept failing on, and no retry budget could outlast
+ * it, because the notice does not go away on its own.
+ *
+ * The tenant-facing suites never see it: registerViaUi, loginViaUi and
+ * acceptInviteViaUi each suppress the notice. This console signs in through the
+ * owner realm with its own form, so it passes through none of them and was the
+ * only suite left exposed.
+ */
+test.beforeEach(async ({ page }) => {
+  await page.addInitScript(() => {
+    localStorage.setItem('cookie-consent', 'declined');
+  });
+});
+
+/**
  * A fresh operator per test, signed in on the fixture's own page.
  *
  * Two constraints meet here. The sign-in route limits attempts per email

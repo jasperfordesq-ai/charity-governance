@@ -54,9 +54,6 @@ jobs:
       - name: Typecheck MCP connector
         run: npm run typecheck --prefix mcp
 
-      - name: Test MCP connector
-        run: npm run test --prefix mcp
-
       # The manifest is what somebody installs in Claude Desktop, and nothing
       # else validates it against the published schema. Packing the bundle is
       # NOT done here: it embeds @napi-rs/keyring, which is a native module, so
@@ -200,6 +197,13 @@ jobs:
 
       - name: Build API
         run: npm run build -w @charitypilot/api
+
+      # Runs here, not beside the other MCP steps: references.test.ts reads the
+      # reference kinds out of the API's own build output, so that the two lists
+      # cannot drift apart unnoticed. It fails loudly rather than skipping when
+      # apps/api/dist is absent, which is why it must follow "Build API".
+      - name: Test MCP connector
+        run: npm run test --prefix mcp
 
       - name: Build web
         env:
