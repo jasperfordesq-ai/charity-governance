@@ -142,3 +142,28 @@ test('the old personal-data flag still means full, and the explicit scope wins',
     'the flag is the old spelling; asking explicitly must decide',
   );
 });
+
+test('the two directories may arrive as environment variables, for a packaged bundle', () => {
+  // A bundle cannot add or drop a flag depending on whether somebody filled a
+  // field in, so it sets the value either way and an unanswered field arrives
+  // empty.
+  const before = {
+    upload: process.env.CHARITYPILOT_UPLOAD_ROOT,
+    download: process.env.CHARITYPILOT_DOWNLOAD_DIR,
+  };
+  try {
+    process.env.CHARITYPILOT_UPLOAD_ROOT = '/home/jasper/charity-docs';
+    process.env.CHARITYPILOT_DOWNLOAD_DIR = '   ';
+    const fromEnv = parseArgs([]);
+    assert.equal(fromEnv.uploadRoot, '/home/jasper/charity-docs');
+    assert.equal(fromEnv.downloadDir, undefined, 'an unanswered field is not a directory');
+
+    const flagWins = parseArgs(['--upload-root', '/elsewhere']);
+    assert.equal(flagWins.uploadRoot, '/elsewhere');
+  } finally {
+    if (before.upload === undefined) delete process.env.CHARITYPILOT_UPLOAD_ROOT;
+    else process.env.CHARITYPILOT_UPLOAD_ROOT = before.upload;
+    if (before.download === undefined) delete process.env.CHARITYPILOT_DOWNLOAD_DIR;
+    else process.env.CHARITYPILOT_DOWNLOAD_DIR = before.download;
+  }
+});

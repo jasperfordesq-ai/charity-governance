@@ -61,6 +61,30 @@ un-redacted personal data (see the gate below), add `--allow-personal-data`
 to `args` — but read that section first, because it is not a convenience
 switch.
 
+## Installing it as a bundle in Claude Desktop
+
+Editing a JSON file by hand is the old way. The package carries an MCP bundle
+manifest, so it can be built into a single `.mcpb` file that Claude Desktop
+installs in one step and that asks, in its own dialog, for the two folders the
+document tools need:
+
+```bash
+cd mcp && npm ci && npm run build
+npx @anthropic-ai/mcpb pack
+```
+
+That writes `charitypilot.mcpb` beside the package. Open it with Claude Desktop
+to install. Leave either folder question blank and that tool is not offered at
+all, exactly as leaving the flag off does.
+
+The bundle passes the two folders as `CHARITYPILOT_UPLOAD_ROOT` and
+`CHARITYPILOT_DOWNLOAD_DIR`, which the connector reads when the matching flag
+is absent. Signing in is still `connect`, at a terminal, because the password
+belongs to a person.
+
+**It is not on npm.** The package is marked private, so `npm publish` refuses.
+Publishing it, and choosing the name it would take, is the owner's decision.
+
 ## connect / status / disconnect
 
 These are run by hand, in a terminal, before (and after) you use the
@@ -378,6 +402,17 @@ The judgement is per call. Closing a risk off, or correcting its minute
 reference, touches nothing the gate withholds and always works. Rewriting its
 description is refused, and the refusal names the fields it objected to so the
 rest of the record can still be changed.
+
+## Connecting to more than one CharityPilot
+
+Each host keeps its own credential, under its own entry in the OS credential
+store, so one machine can be connected to the VM and to a local test stack at
+the same time without either evicting the other. `connect`, `status` and
+`disconnect` all act on whichever host `--base-url` names.
+
+A credential is still bound to the host that issued it: if something changes
+the base URL, the stored token is refused rather than sent to the new host,
+and the refusal says so plainly instead of looking like an expired session.
 
 ## What's actually stored on disk
 

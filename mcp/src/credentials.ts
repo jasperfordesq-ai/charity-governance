@@ -24,7 +24,17 @@ export function createKeyringStore(account: string = ACCOUNT): CredentialStore {
     write(token: string) {
       // A failed write means the session did not persist. Swallowing the error
       // would report a sign-in that silently will not survive, masking the problem.
-      entry.setPassword(token);
+      try {
+        entry.setPassword(token);
+      } catch (cause) {
+        throw new Error(
+          'The operating system\'s credential store would not keep the credential, so '
+            + 'the sign-in was not saved. On a desktop this usually means the keychain '
+            + 'is locked. On a headless Linux machine it usually means nothing is '
+            + 'providing one: install and unlock a Secret Service such as gnome-keyring, '
+            + `and run connect again. (${(cause as Error).message})`,
+        );
+      }
     },
     clear() {
       try {

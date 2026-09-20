@@ -68,6 +68,12 @@ export function requestedDataScope(config: ConnectorConfig): DataScope {
   return config.dataScope ?? (config.allowPersonalData ? 'full' : 'withheld');
 }
 
+/** An unanswered configuration field arrives as an empty string, not as absent. */
+function nonEmpty(value: string | undefined): string | undefined {
+  const trimmed = value?.trim();
+  return trimmed ? trimmed : undefined;
+}
+
 function hostnameOf(baseUrl: string): string | null {
   try {
     return new URL(baseUrl).hostname;
@@ -177,6 +183,13 @@ export function parseArgs(argv: string[]): ConnectorConfig {
       throw new Error(`Unknown option: ${arg}`);
     }
   }
+
+  // A packaged bundle cannot add or drop a command-line flag depending on
+  // whether the person filled a field in, so the two directories may also
+  // arrive as environment variables. An empty value is the same as an absent
+  // one: that is what an unanswered field looks like.
+  uploadRoot = uploadRoot ?? nonEmpty(process.env.CHARITYPILOT_UPLOAD_ROOT);
+  downloadDir = downloadDir ?? nonEmpty(process.env.CHARITYPILOT_DOWNLOAD_DIR);
 
   if (profile === 'local') {
     // The local profile exists so a test stack on this machine can be driven

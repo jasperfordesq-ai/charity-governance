@@ -1,0 +1,49 @@
+{
+  "manifest_version": "0.2",
+  "name": "charitypilot",
+  "display_name": "CharityPilot",
+  "version": "0.1.0",
+  "description": "Read and change one Irish charity's governance records in CharityPilot.",
+  "long_description": "Answers governance questions and makes changes by calling CharityPilot's own API as you, at the access level you chose when you signed in. Everything it can do you can do in the web application, and every limit is enforced by the API rather than by this connector. Anything that cannot be undone stops and asks you to approve it, in your own terminal or on the Approvals page.",
+  "author": {
+    "name": "CharityPilot"
+  },
+  "homepage": "https://github.com/jasperfordesq-ai/charity-governance",
+  "documentation": "https://github.com/jasperfordesq-ai/charity-governance/blob/master/mcp/README.md",
+  "server": {
+    "type": "node",
+    "entry_point": "dist/cli.js",
+    "mcp_config": {
+      "command": "node",
+      "args": [
+        "${__dirname}/dist/cli.js",
+        "serve"
+      ],
+      "env": {
+        "CHARITYPILOT_UPLOAD_ROOT": "${user_config.upload_root}",
+        "CHARITYPILOT_DOWNLOAD_DIR": "${user_config.download_dir}"
+      }
+    }
+  },
+  "user_config": {
+    "upload_root": {
+      "type": "directory",
+      "title": "Folder documents may be uploaded from",
+      "description": "Leave this empty and uploading is not offered at all. Nothing outside the folder you choose can be read, however a path is spelled.",
+      "required": false
+    },
+    "download_dir": {
+      "type": "directory",
+      "title": "Folder documents are downloaded into",
+      "description": "Leave this empty and downloading is not offered at all. A download writes the file and reports where it went; the contents are never returned to the assistant.",
+      "required": false
+    }
+  },
+  "keywords": [
+    "charity",
+    "governance",
+    "compliance",
+    "ireland"
+  ],
+  "license": "UNLICENSED"
+}
