@@ -344,9 +344,27 @@ Design and plans, all committed:
 - `docs/superpowers/plans/2026-09-19-charitypilot-mcp-connector-accountability.md` (2c)
 - `docs/superpowers/plans/2026-09-19-charitypilot-mcp-writes-and-approval.md` (phase 3)
 
-The canaries are the other half of the evidence. Each one in
-`scripts/mcp-live-canary.mjs` names the property it defeats and has been run:
-the personal-data gate, the dashboard shape, the browser-evidence guard, the
-read-only gate, the activity log, approval reuse, approval being needed at all,
-and upload containment. A canary whose mutation does not compile reports zero
-failures and looks like a pass, so check the run produced a `# tests` line.
+The canaries are the other half of the evidence, and there are now two sets.
+
+`scripts/mcp-live-canary.mjs` breaks a property and requires the live suite,
+against a real stack in Docker, to notice. It covers the personal-data gate
+in both its forms, the dashboard shape, the browser-evidence guard, the
+read-only gate, the activity log, approval reuse, approval being needed at
+all, upload containment, the approval summary naming its record, delete
+annotations, the scope a session asks for, and the role floor on that scope.
+It takes minutes per mutation.
+
+`scripts/api-guard-canary.mjs` does the same for guards a unit test covers,
+in seconds rather than minutes, so a guard can be checked as it is written.
+It covers the two tenant filters on the by-identifier reads, the stale-write
+refusal, the null that clears a date, the refusal of an edit that changes
+nothing, the administrator check on a document edit, the three parts of the
+read budget, the four parts of idempotency on the API side and the four on
+the connector side, the build identifier and its comparison, and the three
+search guards plus the two on following a reference. Run it with no argument
+for all of them, or with one name.
+
+A canary whose mutation does not compile reports zero failures and looks like
+a pass. Both scripts judge the build separately and say so; if one reports
+`CANARY BROKEN` while somebody else is mid-edit in the same checkout, that is
+their build failing, not your guard.

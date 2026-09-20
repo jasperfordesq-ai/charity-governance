@@ -25,13 +25,45 @@ What each added is in `mcp/HANDOVER.md`; the plans are
 | C, surface gaps | Built, except Confluence setup tools, deliberately deferred |
 | D, gate as session posture | Built; the role floor is owner or administrator and wants the DPO's confirmation |
 | E, credentials and packaging | Built; publishing to npm and packing the bundle are the owner's to do |
-| F, search and workflows | Prompts and field selection built; **search, resources and fetch-by-reference not built** |
-| G, remote transport | **Designed, not built**, in `2026-09-20-charitypilot-mcp-remote-transport-design.md`. Blocked on the hosting move |
-| H, API hardening | The stale-write refusal built on five routes; idempotency keys, the connector read budget and three missing routes not built |
+| F, search and workflows | Built: prompts, field selection, the search route and tool, fetch by reference, and resources |
+| G, remote transport | **Designed, not built**, in `2026-09-20-charitypilot-mcp-remote-transport-design.md`. Blocked on the hosting move and the DPO review |
+| H, API hardening | Built: the stale-write refusal on five routes, idempotency keys, the connector read budget, the three missing routes and the build identifier |
 
 The nine decisions in Part 3 were taken as recommended, except Confluence setup
 (deferred) and an operator connector (not started). Each is reversible and
 recorded in the commit that made it.
+
+### What is still not built
+
+Everything below is a deliberate choice, not an oversight.
+
+- **The remote transport (Phase G).** Designed only. It is the first time a
+  model provider's servers would reach the API directly, so the DPO should see
+  the design before it is built, and it is blocked on the hosting move either
+  way. The design recommends shipping it read-only first.
+- **Confluence setup tools.** Connecting, disconnecting and choosing a publish
+  space stay out of the connector. Disconnecting deletes mirrored pages, which
+  the owner's 2026-09-19 ruling forbids CharityPilot from doing, and choosing a
+  space is a decision made once while looking at a list of spaces.
+- **Erasing a Confluence page.** Excluded on the Confluence session’s own
+  ruling: it is the last way CharityPilot can destroy a page in a charity’s
+  site, and the typed confirmation phrase it demands only means something if a
+  person types it.
+- **An operator connector.** Not started. The `/owner` realm is a separate
+  credential and a separate cookie scope, and a connector that signed in there
+  would not be acting as the person running it.
+- **Publishing.** `npm publish` and `mcpb pack` are the owner’s to run, as is
+  the terminal checklist for `approve`.
+- **The deploy.** None of this is on the VM. Everything here is committed and
+  unpushed, by the owner’s decision while a second session shares the checkout.
+
+### Ranking, and when to revisit it
+
+Search is a case-insensitive substring match rather than Postgres full text.
+At a charity’s size that is immediate and it finds partial words, which is
+what somebody typing expects. The trade is that results are ordered by kind
+and recency rather than by relevance. Revisit it when a single charity’s
+minute book passes a few thousand resolutions.
 
 ## Summary
 

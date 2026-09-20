@@ -604,6 +604,40 @@ backslash is an invalid escape and the client refuses the file.
 `CHARITYPILOT_CREDENTIAL_FILE` is accepted only with `--profile local`; set
 it anywhere else and the connector refuses to start.
 
+## Finding things, and reading what you found
+
+`search` looks across trustees, the minute book and its resolutions, the four
+registers, documents, deadlines and the Governance Code. Each hit names the
+kind of record, the field that matched, the text around the match, and a
+reference like `charitypilot://governing-act/abc123`.
+
+`fetch` reads the record behind one of those references. It is a router: it
+turns the reference into the ordinary tool call for that kind of record, so
+the access level, the toolsets and the personal-data gate apply exactly as
+they would if you had called that tool yourself.
+
+Both are offered whatever `--toolsets` you asked for. Narrowing to one area is
+only workable if an agent can still find the identifier the narrowed tools
+take.
+
+Two resources can be attached for a whole conversation rather than fetched per
+question: `charitypilot://governance-code`, the six principles and standards
+with this charity's status against each, and `charitypilot://regulator-guidance`,
+what each standard asks for under Irish law. Any record is readable as a
+resource too, by the same reference search hands out.
+
+## Retrying a create
+
+Every create the connector sends carries an `Idempotency-Key`. If the
+connection drops before the answer arrives, it asks once more with the same
+key, and CharityPilot either carries it out or replies with the result of the
+attempt it already saw. One dropped connection can no longer turn one board
+meeting into two.
+
+An upload is the exception, twice over: it carries no key, and a multipart body
+already consumed cannot be sent again. A failed upload is reported rather than
+retried.
+
 ## Known limitations / follow-up
 
 - **The registers are exposed per type, not as one tool.** An earlier version of
@@ -615,10 +649,21 @@ it anywhere else and the connector refuses to start.
 - **Pagination is available but not automatic.** The list tools accept `page`
   and `pageSize` and report `hasMore`. Nothing follows the pages for you, so a
   question spanning a long register needs more than one call.
-- **Connector reads share your address's rate limit.** Changes have their own
-  per-session budget; reads do not, because at the point the shared limiter runs
-  the API does not yet know which session a request belongs to. A read loop can
-  therefore still spend the allowance your browser shares.
-- **Team membership, ownership transfer, billing and the Confluence routes have
-  no tool**, deliberately, and each says why in `src/mutating-route-coverage.ts`.
-  Confluence disconnection will not be exposed at all.
+- **A read loop no longer locks you out of your browser.** Reads and changes
+  are each counted against the session rather than the address, so an agent
+  running on your machine cannot spend the allowance your browser needs on the
+  same machine. Changes have the smaller budget of the two.
+- **Team membership, ownership transfer, billing and most Confluence routes
+  have no tool**, deliberately, and each says why in
+  `src/mutating-route-coverage.ts`. Confluence disconnection and page erasure
+  will not be exposed at all: both destroy pages in the charity's own site,
+  and the owner has ruled that must be a deliberate human act.
+- **Search is ordered by kind and recency, not by relevance.** It matches
+  substrings rather than words, which finds partial words but cannot rank. At
+  a charity's size that is the better trade; revisit it if a minute book grows
+  past a few thousand resolutions.
+- **Search answers differently under the two scopes.** A session that
+  withholds personal data does not search the free-text columns at all, not
+  even to count a match: being told a record mentions a name is being told the
+  name is in it. The answer says which kinds were looked in, so a narrow
+  answer is not mistaken for an empty one.
