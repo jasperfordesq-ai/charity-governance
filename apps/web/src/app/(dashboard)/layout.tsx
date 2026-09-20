@@ -313,21 +313,23 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
         aria-label="Primary navigation"
         aria-hidden={!navInteractive ? true : undefined}
         className={`
-          fixed inset-y-0 left-0 z-40 w-64 bg-white dark:bg-gray-900 border-r border-gray-200 dark:border-gray-800 transform transition-transform duration-200 ease-in-out
-          lg:translate-x-0 lg:static lg:z-auto
+          fixed inset-y-0 left-0 z-40 flex w-64 flex-col bg-white dark:bg-gray-900 border-r border-gray-200 dark:border-gray-800 transform transition-transform duration-200 ease-in-out
+          lg:translate-x-0 lg:sticky lg:top-0 lg:z-auto lg:h-screen
           ${sidebarOpen ? 'translate-x-0' : '-translate-x-full'}
         `}
       >
         {/* Logo */}
-        <div className="flex items-center gap-2.5 px-5 h-16 border-b border-gray-200 dark:border-gray-800">
+        <div className="flex flex-shrink-0 items-center gap-2.5 px-5 h-16 border-b border-gray-200 dark:border-gray-800">
           <div className="w-8 h-8 rounded-lg bg-teal-primary flex items-center justify-center">
             <ShieldCheck className="w-5 h-5 text-white" strokeWidth={2} aria-hidden="true" />
           </div>
           <span className="text-lg font-bold text-teal-primary">CharityPilot</span>
         </div>
 
-        {/* Navigation links */}
-        <nav className="flex flex-col gap-0.5 p-3 mt-2">
+        {/* Navigation links. The list is longer than a short laptop window can
+            hold, so it takes the leftover column height and scrolls inside it
+            (min-h-0 is what lets a flex child shrink far enough to scroll). */}
+        <nav className="flex min-h-0 flex-1 flex-col gap-0.5 overflow-y-auto p-3 mt-2">
           {visibleNavItems.map((item) => {
             const active = isActive(item.href);
             return (
@@ -361,8 +363,14 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
           })}
         </nav>
 
-        {/* Sidebar footer */}
-        <div className="absolute bottom-0 left-0 right-0 p-4 border-t border-gray-200 dark:border-gray-800">
+        {/* Sidebar footer. In flow at the end of the column, not positioned over
+            it: absolutely positioned, it reserved no height of its own and so
+            was painted straight over the last navigation items on any window
+            too short for both. */}
+        <div
+          data-testid="sidebar-footer"
+          className="flex-shrink-0 p-4 border-t border-gray-200 dark:border-gray-800"
+        >
           <div className="text-xs text-gray-400 dark:text-gray-400 text-center space-y-1">
             {/* Appliance branding — lifecycle, not a capability axis. Keep on MODE. */}
             <p>{personalServer ? 'CharityPilot private server' : 'CharityPilot v1.0'}</p>
