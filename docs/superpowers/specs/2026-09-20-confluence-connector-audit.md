@@ -1,5 +1,23 @@
 # Confluence connector audit — 2026-09-20
 
+**Status update, 2026-09-21: TIER 2 IS BUILT.** T2.1/T2.2 (reconcile, with the dormancy sweep in
+place of the keepalive the DPO refused), T2.3 (republish on change — the owner opted in on
+2026-09-21, overriding this document's "defer" default), T2.4 (audit events), T2.5 (the
+per-document mirror surface: API and copy, UI pending), T2.6 (owner-console integration health),
+T2.7 (declared environment) and T2.8 (client hardening) all landed across eight commits,
+`cd4caf3`..`4370692`. The API suite went 1994 → 2079 tests and the web suite 498 → 508, both green.
+
+Two items are **not** done and are not claimed: the React components for T2.5, and T2.9's Playwright
+spec, which needs a running stack and the UI surface that does not exist yet. The CQL adoption
+fallback in T2.8 was deliberately skipped — it needs `search:confluence`, and the standing ask is
+that a scope we do not use is one we should not hold.
+
+Three defects were found by building rather than by reading, and each is recorded where it was
+fixed: `findPageByTitle` could walk past its own ambiguity guard and adopt the wrong page; adding
+enum values without widening `SecurityAuditEvent_subject_check` would have made every audit write
+fail at the database; and the audit actor lookup ran outside the best-effort catch, so a failed
+name read turned a successful disconnect into a 500.
+
 **Status:** Tier 1 was approved and **implemented on 2026-09-20** — the deletion/erasure rework, the
 delete scopes and granted-scope recording, and the production worker credentials all landed the same
 day as this audit. The multi-site refusal landed too, but it closes A3 only once the Atlassian app is

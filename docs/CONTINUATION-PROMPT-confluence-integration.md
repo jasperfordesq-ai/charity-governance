@@ -243,7 +243,14 @@ work.
    (`apps/api/src/utils/logger.ts` L41-51) even though every peer secret was in it. It is now
    redacted (`0890f07`), and the two publication tuning variables are documented in all three env
    examples.
-9. **Still open — Tier 2, and reframed on 2026-09-20.** Atlassian's rotating refresh tokens expire
+9. **BUILT 2026-09-21** as part of Tier 2, in the reframed form below rather than as a keepalive.
+   The dormancy sweep in `integration-reconcile.service.ts` warns at 60 days with the date, marks
+   `EXPIRED` at 90 and writes an `INTEGRATION_REAUTHORISATION_REQUIRED` audit event, and the
+   reconcile job never takes a token for a tenant with nothing to reconcile. Two canaries hold that
+   line and both were mutation-tested. The original framing is kept below because the reasoning is
+   what matters.
+
+   Atlassian's rotating refresh tokens expire
    after 90 days without use; refresh here is lazy, so a quiet charity silently loses its connection
    and finds out at the next publish. **The DPO ruled in writing on 2026-09-20 that the expiry is to
    be kept**: refreshing a token as a by-product of an integration with a real reconciliation or
