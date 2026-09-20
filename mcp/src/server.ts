@@ -32,6 +32,7 @@ import { CONNECTOR_VERSION } from './version.js';
 import { INSTRUCTIONS } from './instructions.js';
 import { ConnectorError } from './errors.js';
 import { errorResult, okResult } from './results.js';
+import { SESSION_INFO_TOOL, runSessionInfo } from './session-info.js';
 
 const FILE_RANK: Record<AccessLevel, number> = { read: 0, write: 1, admin: 2 };
 
@@ -56,6 +57,9 @@ export function buildToolList(
   config: Partial<Pick<ConnectorConfig, 'uploadRoot' | 'downloadDir' | 'allowPersonalData'>> = {},
 ) {
   return [
+    // Always first and always offered: an agent has to be able to ask who it
+    // is acting as before it does anything else, whatever the level.
+    { ...SESSION_INFO_TOOL },
     ...toolsFor(level, TOOLS, config.allowPersonalData ?? false).map((tool) => {
       const outputSchema = outputSchemaFor(tool);
       return {
@@ -102,6 +106,10 @@ export async function startServer(config: ConnectorConfig, session: Session): Pr
    * knowing which branch refused.
    */
   async function dispatch(name: string, args: Record<string, unknown>): Promise<unknown> {
+    if (name === SESSION_INFO_TOOL.name) {
+      return runSessionInfo(client, config);
+    }
+
     const fileTool = FILE_TOOLS.find((t) => t.name === name);
     if (fileTool) {
       const current = await level();

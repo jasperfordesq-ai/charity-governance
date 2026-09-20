@@ -34,8 +34,8 @@ test('titles are words, not identifiers', () => {
 
 test('every advertised tool, file tools included, carries annotations', () => {
   const listed = buildToolList('admin', { allowPersonalData: true, uploadRoot: '/tmp/x', downloadDir: '/tmp/y' });
-  // Every ordinary tool and both file tools.
-  assert.equal(listed.length, TOOLS.length + FILE_TOOLS.length);
+  // Every ordinary tool, both file tools, and session_info.
+  assert.equal(listed.length, TOOLS.length + FILE_TOOLS.length + 1);
   for (const tool of listed) {
     const a = (tool as { annotations?: { readOnlyHint?: unknown } }).annotations;
     assert.equal(typeof a?.readOnlyHint, 'boolean', tool.name);

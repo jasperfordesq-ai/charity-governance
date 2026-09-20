@@ -43,8 +43,9 @@ export const EXCLUDED_ROUTES: readonly ExcludedRoute[] = [
   {
     path: '/api/v1/auth/me',
     reason:
-      'Identifies the signed-in person. The connector already reports that through its own '
-      + 'status command, where a human reads it, rather than handing it to a model.',
+      'Identifies the signed-in person. Served by the session_info tool, which returns the '
+      + 'charity, role and level always and the person\'s name and email only when the '
+      + 'personal-data gate is open, rather than by a tool of its own.',
   },
   {
     path: '/api/v1/billing/status',

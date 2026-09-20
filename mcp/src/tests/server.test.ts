@@ -8,7 +8,8 @@ test('every tool is advertised once the gate that guards it is open', () => {
   // personal-data gate withholds, so they are offered only when it is open.
   // Everything else is always offered.
   const withGateOpen = buildToolList('admin', { allowPersonalData: true });
-  assert.equal(withGateOpen.length, TOOLS.length);
+  // Every tool in the registry, plus session_info, which lives beside it.
+  assert.equal(withGateOpen.length, TOOLS.length + 1);
 
   const withGateClosed = buildToolList('admin', { allowPersonalData: false });
   assert.ok(
