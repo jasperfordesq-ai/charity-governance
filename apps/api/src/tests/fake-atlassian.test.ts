@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import { readdirSync, readFileSync } from 'node:fs';
 import test from 'node:test';
 import { createFakeAtlassian } from './fake-atlassian.js';
 
@@ -350,4 +351,313 @@ test('v1 content returns v1\'s own body shape, not v2\'s', async () => {
   assert.equal(trashedBody.status, 'trashed');
   assert.deepEqual(trashedBody.space, { id: 'space-1', key: 'GOV' });
   assert.equal((trashedBody as { spaceId?: unknown }).spaceId, undefined);
+});
+
+// --- Final fix wave (whole-phase review) --------------------------------
+
+test('a second create with the same title in the same space is a 409, matching Confluence per-space title uniqueness', async () => {
+  const site = createFakeAtlassian();
+  site.addSpace({ id: 'space-1', key: 'GOV', name: 'Governance' });
+  const base = `https://api.atlassian.com/ex/confluence/${site.cloudId}`;
+  const auth = { Authorization: 'Bearer access-1', 'Content-Type': 'application/json' };
+
+  const first = await site.fetch(`${base}/wiki/api/v2/pages`, {
+    method: 'POST',
+    headers: auth,
+    body: JSON.stringify({ spaceId: 'space-1', title: 'Safeguarding Policy' }),
+  });
+  assert.equal(first.status, 200);
+
+  const second = await site.fetch(`${base}/wiki/api/v2/pages`, {
+    method: 'POST',
+    headers: auth,
+    body: JSON.stringify({ spaceId: 'space-1', title: 'Safeguarding Policy' }),
+  });
+  assert.equal(second.status, 409);
+
+  // A different space is unaffected: uniqueness is per-space, not global.
+  site.addSpace({ id: 'space-2', key: 'OTHER', name: 'Other' });
+  const elsewhere = await site.fetch(`${base}/wiki/api/v2/pages`, {
+    method: 'POST',
+    headers: auth,
+    body: JSON.stringify({ spaceId: 'space-2', title: 'Safeguarding Policy' }),
+  });
+  assert.equal(elsewhere.status, 200);
+});
+
+test('the create-or-adopt shape works: a 409 on create is resolved by findPageByTitle locating the original', async () => {
+  const site = createFakeAtlassian();
+  site.addSpace({ id: 'space-1', key: 'GOV', name: 'Governance' });
+  const base = `https://api.atlassian.com/ex/confluence/${site.cloudId}`;
+  const auth = { Authorization: 'Bearer access-1', 'Content-Type': 'application/json' };
+
+  const created = await site.fetch(`${base}/wiki/api/v2/pages`, {
+    method: 'POST',
+    headers: auth,
+    body: JSON.stringify({ spaceId: 'space-1', title: 'Safeguarding Policy' }),
+  });
+  const original = (await created.json()) as { id: string };
+
+  const conflict = await site.fetch(`${base}/wiki/api/v2/pages`, {
+    method: 'POST',
+    headers: auth,
+    body: JSON.stringify({ spaceId: 'space-1', title: 'Safeguarding Policy' }),
+  });
+  assert.equal(conflict.status, 409);
+
+  // Production's findPageByTitle sends the space id under the hyphenated
+  // key — see confluence-pages.ts:498.
+  const query = new URLSearchParams({ title: 'Safeguarding Policy', 'space-id': 'space-1' });
+  const found = await site.fetch(`${base}/wiki/api/v2/pages?${query.toString()}`, { headers: auth });
+  const foundBody = (await found.json()) as { results: { id: string }[] };
+  assert.equal(foundBody.results.length, 1, 'exactly one page must be adoptable, not zero and not many');
+  assert.equal(foundBody.results[0]?.id, original.id);
+});
+
+test('a title is still occupied by a trashed page, and is only freed by a purge', async () => {
+  const site = createFakeAtlassian();
+  site.addSpace({ id: 'space-1', key: 'GOV', name: 'Governance' });
+  const base = `https://api.atlassian.com/ex/confluence/${site.cloudId}`;
+  const auth = { Authorization: 'Bearer access-1', 'Content-Type': 'application/json' };
+
+  const created = await site.fetch(`${base}/wiki/api/v2/pages`, {
+    method: 'POST',
+    headers: auth,
+    body: JSON.stringify({ spaceId: 'space-1', title: 'Retention Policy' }),
+  });
+  const page = (await created.json()) as { id: string };
+
+  await site.fetch(`${base}/wiki/api/v2/pages/${page.id}`, { method: 'DELETE', headers: auth });
+
+  const whileTrashed = await site.fetch(`${base}/wiki/api/v2/pages`, {
+    method: 'POST',
+    headers: auth,
+    body: JSON.stringify({ spaceId: 'space-1', title: 'Retention Policy' }),
+  });
+  assert.equal(whileTrashed.status, 409, 'a merely trashed page must still occupy its title');
+
+  await site.fetch(`${base}/wiki/api/v2/pages/${page.id}?purge=true`, { method: 'DELETE', headers: auth });
+
+  const afterPurge = await site.fetch(`${base}/wiki/api/v2/pages`, {
+    method: 'POST',
+    headers: auth,
+    body: JSON.stringify({ spaceId: 'space-1', title: 'Retention Policy' }),
+  });
+  assert.equal(afterPurge.status, 200, 'once purged, the title is free again');
+});
+
+test('handleToken rejects a mismatched client_id or client_secret with invalid_client, and accepts a match', async () => {
+  const site = createFakeAtlassian({ clientId: 'real-client', clientSecret: 'real-secret' });
+  const tokenRequest = (overrides: Record<string, unknown>) =>
+    site.fetch('https://auth.atlassian.com/oauth/token', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        grant_type: 'authorization_code',
+        client_id: 'real-client',
+        client_secret: 'real-secret',
+        code: 'the-code',
+        redirect_uri: 'https://app.example/integrations/confluence/callback',
+        ...overrides,
+      }),
+    });
+
+  const wrongSecret = await tokenRequest({ client_secret: 'wrong-secret' });
+  assert.equal(wrongSecret.status, 401);
+  assert.deepEqual(await wrongSecret.json(), { error: 'invalid_client' });
+
+  const wrongClient = await tokenRequest({ client_id: 'wrong-client' });
+  assert.equal(wrongClient.status, 401);
+  assert.deepEqual(await wrongClient.json(), { error: 'invalid_client' });
+
+  const correct = await tokenRequest({});
+  assert.equal(correct.status, 200);
+});
+
+test('a fake without configured client credentials accepts any client_id/client_secret (unchanged default)', async () => {
+  const site = createFakeAtlassian();
+  const response = await site.fetch('https://auth.atlassian.com/oauth/token', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      grant_type: 'authorization_code',
+      client_id: 'whatever',
+      client_secret: 'whatever',
+      code: 'the-code',
+      redirect_uri: 'https://app.example/callback',
+    }),
+  });
+  assert.equal(response.status, 200);
+});
+
+test('handleToken rejects an authorization_code grant missing code or redirect_uri', async () => {
+  const site = createFakeAtlassian();
+  const tokenRequest = (body: Record<string, unknown>) =>
+    site.fetch('https://auth.atlassian.com/oauth/token', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    });
+
+  const missingCode = await tokenRequest({
+    grant_type: 'authorization_code',
+    redirect_uri: 'https://app.example/callback',
+  });
+  assert.equal(missingCode.status, 400);
+
+  const missingRedirect = await tokenRequest({
+    grant_type: 'authorization_code',
+    code: 'the-code',
+  });
+  assert.equal(missingRedirect.status, 400);
+
+  const emptyCode = await tokenRequest({
+    grant_type: 'authorization_code',
+    code: '',
+    redirect_uri: 'https://app.example/callback',
+  });
+  assert.equal(emptyCode.status, 400);
+});
+
+test('the granted-scope string is configurable, so both "scope missing" and "scope present" are expressible', async () => {
+  const tokenRequest = (site: ReturnType<typeof createFakeAtlassian>) =>
+    site.fetch('https://auth.atlassian.com/oauth/token', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        grant_type: 'authorization_code',
+        code: 'the-code',
+        redirect_uri: 'https://app.example/callback',
+      }),
+    });
+
+  const defaultSite = createFakeAtlassian();
+  const defaultBody = (await (await tokenRequest(defaultSite)).json()) as { scope: string };
+  assert.ok(
+    !defaultBody.scope.includes('delete:page:confluence'),
+    'the default granted scope must not include the erasure scope',
+  );
+
+  const erasureScope =
+    'read:confluence-content.all write:confluence-content delete:page:confluence offline_access';
+  const erasureSite = createFakeAtlassian({ grantedScope: erasureScope });
+  const erasureBody = (await (await tokenRequest(erasureSite)).json()) as { scope: string };
+  assert.equal(erasureBody.scope, erasureScope);
+  assert.ok(erasureBody.scope.includes('delete:page:confluence'));
+});
+
+test('accessible-resources returns exactly one site by default', async () => {
+  const site = createFakeAtlassian();
+  const tokenResponse = await site.fetch('https://auth.atlassian.com/oauth/token', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      grant_type: 'authorization_code',
+      code: 'the-code',
+      redirect_uri: 'https://app.example/callback',
+    }),
+  });
+  const { access_token: accessToken } = (await tokenResponse.json()) as { access_token: string };
+
+  const response = await site.fetch('https://api.atlassian.com/oauth/token/accessible-resources', {
+    headers: { Authorization: `Bearer ${accessToken}` },
+  });
+  assert.equal(response.status, 200);
+  const body = (await response.json()) as { id: string; url: string; name: string }[];
+  assert.equal(body.length, 1);
+  assert.equal(body[0]?.id, site.cloudId);
+});
+
+test('addSite makes accessible-resources report more than one site, exercising the CONFLUENCE_MULTIPLE_SITES path', async () => {
+  const site = createFakeAtlassian();
+  site.addSite({ id: 'other-cloud-id', url: 'https://other.atlassian.net', name: 'Other Co' });
+
+  const tokenResponse = await site.fetch('https://auth.atlassian.com/oauth/token', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      grant_type: 'authorization_code',
+      code: 'the-code',
+      redirect_uri: 'https://app.example/callback',
+    }),
+  });
+  const { access_token: accessToken } = (await tokenResponse.json()) as { access_token: string };
+
+  const response = await site.fetch('https://api.atlassian.com/oauth/token/accessible-resources', {
+    headers: { Authorization: `Bearer ${accessToken}` },
+  });
+  const body = (await response.json()) as { id: string; name: string }[];
+  assert.equal(body.length, 2, 'a charity administrator belonging to two sites must see both');
+  assert.deepEqual(
+    body.map((entry) => entry.id),
+    [site.cloudId, 'other-cloud-id'],
+  );
+});
+
+test('FakeCall records the Authorization header actually sent, including its absence', async () => {
+  const site = createFakeAtlassian();
+  site.addSpace({ id: 'space-1', key: 'GOV', name: 'Governance' });
+  const base = `https://api.atlassian.com/ex/confluence/${site.cloudId}`;
+
+  await site.fetch(`${base}/wiki/api/v2/spaces`, { headers: { Authorization: 'Bearer token-one' } });
+  await site.fetch(`${base}/wiki/api/v2/spaces`, { headers: { Authorization: 'Bearer token-two' } });
+  await site.fetch(`${base}/wiki/api/v2/spaces`); // no Authorization header at all
+
+  assert.deepEqual(
+    site.calls.map((call) => call.authorization),
+    ['Bearer token-one', 'Bearer token-two', undefined],
+  );
+});
+
+test('a page created in a keyed space carries a realistic Confluence webui link', async () => {
+  const site = createFakeAtlassian();
+  site.addSpace({ id: 'space-1', key: 'GOV', name: 'Governance' });
+  const base = `https://api.atlassian.com/ex/confluence/${site.cloudId}`;
+  const auth = { Authorization: 'Bearer access-1', 'Content-Type': 'application/json' };
+
+  const created = await site.fetch(`${base}/wiki/api/v2/pages`, {
+    method: 'POST',
+    headers: auth,
+    body: JSON.stringify({ spaceId: 'space-1', title: 'Safeguarding Policy' }),
+  });
+  const body = (await created.json()) as { id: string; _links: { base: string; webui: string } };
+
+  assert.equal(body._links.base, 'https://example.atlassian.net/wiki');
+  assert.equal(body._links.webui, `/spaces/GOV/pages/${body.id}/Safeguarding+Policy`);
+});
+
+function collectTsFiles(dirUrl: URL): URL[] {
+  const files: URL[] = [];
+  for (const entry of readdirSync(dirUrl, { withFileTypes: true })) {
+    if (entry.isDirectory()) {
+      files.push(...collectTsFiles(new URL(`${entry.name}/`, dirUrl)));
+    } else if (entry.isFile() && entry.name.endsWith('.ts')) {
+      files.push(new URL(entry.name, dirUrl));
+    }
+  }
+  return files;
+}
+
+test('no production source file under services/ or routes/ imports the test-only fake Atlassian', () => {
+  // This module's own docblock says "No production source file may import
+  // it." That held in fact but had no canary — this is the canary. It walks
+  // TypeScript SOURCE (not the compiled dist/ this test itself runs from:
+  // tests execute as dist/tests/fake-atlassian.test.js, so the source tree is
+  // two levels up and back down into src/).
+  const srcRoot = new URL('../../src/', import.meta.url);
+  const offenders: string[] = [];
+
+  for (const dir of ['services/', 'routes/']) {
+    for (const file of collectTsFiles(new URL(dir, srcRoot))) {
+      if (readFileSync(file, 'utf8').includes('fake-atlassian')) {
+        offenders.push(file.pathname);
+      }
+    }
+  }
+
+  assert.deepEqual(
+    offenders,
+    [],
+    `production source file(s) import (or mention) the test-only fake: ${offenders.join(', ')}`,
+  );
 });

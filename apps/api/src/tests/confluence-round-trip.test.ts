@@ -45,13 +45,22 @@ test('the real client publishes, reads back and then erases a page on the fake',
   assert.ok(page.id);
   assert.equal(page.spaceId, 'space-1');
   assert.equal(page.version, 1);
-  assert.equal(page.webUrl, `https://example.atlassian.net/pages/${page.id}`);
+  // Real Confluence Cloud bases web links at `…/wiki` and shapes the webui
+  // path as `/spaces/{spaceKey}/pages/{pageId}/{Title+With+Pluses}`, not the
+  // bare site URL plus `/pages/{id}` the fake used to answer with.
+  assert.equal(
+    page.webUrl,
+    `https://example.atlassian.net/wiki/spaces/GOV/pages/${page.id}/Safeguarding+Policy`,
+  );
 
   const readBack = await getPage(client, page.id);
   assert.equal(readBack?.title, 'Safeguarding Policy');
   assert.equal(readBack?.spaceId, 'space-1');
   assert.equal(readBack?.version, 1);
-  assert.equal(readBack?.webUrl, `https://example.atlassian.net/pages/${page.id}`);
+  assert.equal(
+    readBack?.webUrl,
+    `https://example.atlassian.net/wiki/spaces/GOV/pages/${page.id}/Safeguarding+Policy`,
+  );
 
   await deletePage(client, page.id);
   assert.equal(await getPage(client, page.id), null, 'a trashed page reads as absent through v2');

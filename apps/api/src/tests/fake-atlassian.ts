@@ -19,9 +19,17 @@ export type FakeAtlassianOptions = {
   siteName?: string;
   clientId?: string;
   clientSecret?: string;
+  /**
+   * The `scope` string the token endpoint reports back. Configurable — not
+   * hardcoded — because Tier 1 shipped granted-scope recording, and a test
+   * has to be able to express both "erasure refused because the scope is
+   * missing" and "erasure proceeds because it is present". Defaults to a
+   * scope string that does NOT include `delete:page:confluence`.
+   */
+  grantedScope?: string;
 };
 
-export type FakeCall = { method: string; url: string };
+export type FakeCall = { method: string; url: string; authorization: string | undefined };
 
 export type FakeRateLimitSpec = {
   after?: number;
@@ -29,12 +37,21 @@ export type FakeRateLimitSpec = {
   nearLimit?: boolean;
 };
 
+/** One entry of `accessible-resources`. Real Atlassian's field is `id` (the cloudId), not `cloudId`. */
+export type FakeAccessibleResource = { id: string; url: string; name: string; scopes?: string[] };
+
 export type FakeAtlassian = {
   fetch: typeof globalThis.fetch;
   cloudId: string;
   calls: FakeCall[];
   issuedRefreshTokens: string[];
   addSpace(space: { id: string; key: string; name: string }): void;
+  /**
+   * Adds another site to what `accessible-resources` reports, so a test can
+   * drive the multi-site case (`CONFLUENCE_MULTIPLE_SITES`) — previously
+   * impossible, since the fake always answered with exactly one site.
+   */
+  addSite(site: FakeAccessibleResource): void;
   getPage(pageId: string): FakePage | undefined;
   allPages(): FakePage[];
   rateLimit(spec: FakeRateLimitSpec): void;
@@ -55,6 +72,7 @@ type FakeSpace = { id: string; key: string; name: string; type: 'global'; status
 const DEFAULT_CLOUD_ID = '11111111-2222-3333-4444-555555555555';
 const DEFAULT_SITE_URL = 'https://example.atlassian.net';
 const DEFAULT_SITE_NAME = 'Example';
+const DEFAULT_GRANTED_SCOPE = 'read:confluence-content.all write:confluence-content offline_access';
 
 // Pinned in apps/api/src/services/atlassian-oauth.ts:9-10. The fake must
 // match these exactly.
@@ -115,11 +133,17 @@ export function createFakeAtlassian(options: FakeAtlassianOptions = {}): FakeAtl
   const cloudId = options.cloudId ?? DEFAULT_CLOUD_ID;
   const siteUrl = options.siteUrl ?? DEFAULT_SITE_URL;
   const siteName = options.siteName ?? DEFAULT_SITE_NAME;
+  const grantedScope = options.grantedScope ?? DEFAULT_GRANTED_SCOPE;
 
   const calls: FakeCall[] = [];
   const issuedRefreshTokens: string[] = [];
   const spaces: FakeSpace[] = [];
   const pages = new Map<string, FakePage>();
+  // The site this fake actually serves Confluence content for is always
+  // first. `addSite` only widens what `accessible-resources` reports.
+  const accessibleResources: FakeAccessibleResource[] = [
+    { id: cloudId, url: siteUrl, name: siteName, scopes: [] },
+  ];
 
   let tokenCounter = 0;
   let currentRefreshToken: string | undefined;
@@ -178,16 +202,42 @@ export function createFakeAtlassian(options: FakeAtlassianOptions = {}): FakeAtl
       access_token: pair.access_token,
       refresh_token: pair.refresh_token,
       expires_in: 3600,
-      scope: 'read:confluence-content.all write:confluence-content offline_access',
+      scope: grantedScope,
       token_type: 'Bearer',
     };
   }
 
+  /**
+   * True when the options supplied a `clientId`/`clientSecret` to validate
+   * against and the request's `client_id`/`client_secret` do not match. When
+   * the fake was not configured with credentials, every request passes —
+   * matching how most tests construct it without caring about OAuth
+   * registration at all.
+   */
+  function clientCredentialsMismatch(body: Record<string, unknown>): boolean {
+    if (options.clientId !== undefined && body.client_id !== options.clientId) return true;
+    if (options.clientSecret !== undefined && body.client_secret !== options.clientSecret) return true;
+    return false;
+  }
+
   function handleToken(bodyText: string | undefined): Response {
     const body = parseJsonObject(bodyText) ?? {};
+
+    if (clientCredentialsMismatch(body)) {
+      return jsonResponse(401, { error: 'invalid_client' });
+    }
+
     const grantType = body.grant_type;
 
     if (grantType === 'authorization_code') {
+      const code = body.code;
+      const redirectUri = body.redirect_uri;
+      if (typeof code !== 'string' || code.length === 0) {
+        return jsonResponse(400, { error: 'invalid_request' });
+      }
+      if (typeof redirectUri !== 'string' || redirectUri.length === 0) {
+        return jsonResponse(400, { error: 'invalid_request' });
+      }
       return jsonResponse(200, tokenResponseBody(mintTokenPair()));
     }
 
@@ -205,7 +255,15 @@ export function createFakeAtlassian(options: FakeAtlassianOptions = {}): FakeAtl
   function handleAccessibleResources(headers: Headers): Response {
     const token = extractBearer(headers.get('Authorization'));
     if (token === undefined || revokedTokens.has(token) || !validAccessTokens.has(token)) return unauthorized();
-    return jsonResponse(200, [{ id: cloudId, url: siteUrl, name: siteName, scopes: [] }]);
+    return jsonResponse(
+      200,
+      accessibleResources.map((resource) => ({
+        id: resource.id,
+        url: resource.url,
+        name: resource.name,
+        scopes: resource.scopes ?? [],
+      })),
+    );
   }
 
   /** Ruling B: any non-empty, non-revoked bearer token is accepted on Confluence content routes. */
@@ -255,6 +313,23 @@ export function createFakeAtlassian(options: FakeAtlassianOptions = {}): FakeAtl
     return { results: page, _links: links };
   }
 
+  /** Real Confluence Cloud bases web links at `…/wiki`, not the bare site URL. */
+  function wikiBase(): string {
+    return `${siteUrl.replace(/\/+$/, '')}/wiki`;
+  }
+
+  /**
+   * Real Confluence's webui path is `/spaces/{spaceKey}/pages/{pageId}/{Title
+   * with spaces turned into +}`, not `/pages/{id}`. The existing
+   * `confluence-round-trip.test.ts` assertions pinned the old, unrealistic
+   * shape; they were updated alongside this fix (finding 6a).
+   */
+  function webuiPath(spaceId: string, pageId: string, title: string): string {
+    const key = spaces.find((entry) => entry.id === spaceId)?.key ?? '';
+    const slug = title.trim().replace(/\s+/g, '+');
+    return `/spaces/${key}/pages/${pageId}/${slug}`;
+  }
+
   function pageJson(page: FakePage): Record<string, unknown> {
     return {
       id: page.id,
@@ -262,7 +337,7 @@ export function createFakeAtlassian(options: FakeAtlassianOptions = {}): FakeAtl
       title: page.title,
       spaceId: page.spaceId,
       version: { number: page.version },
-      _links: { base: siteUrl, webui: `/pages/${page.id}` },
+      _links: { base: wikiBase(), webui: webuiPath(page.spaceId, page.id, page.title) },
     };
   }
 
@@ -271,13 +346,28 @@ export function createFakeAtlassian(options: FakeAtlassianOptions = {}): FakeAtl
     const spaceId = typeof body.spaceId === 'string' ? body.spaceId : undefined;
     if (spaceId === undefined) return jsonResponse(400, { errors: [{ title: 'spaceId is required' }] });
 
+    const title = typeof body.title === 'string' ? body.title : '';
+
+    // Confluence enforces per-space title uniqueness (confluence-pages.ts:271's
+    // docblock, and the create-or-adopt design at document-publication
+    // .service.ts:850 depends on it). A trashed page still occupies its title
+    // — only a purge frees it — so the check spans every non-purged page.
+    const duplicate = Array.from(pages.values()).some(
+      (existing) => existing.spaceId === spaceId && existing.title === title && existing.status !== 'purged',
+    );
+    if (duplicate) {
+      return jsonResponse(409, {
+        errors: [{ title: `A page titled "${title}" already exists in this space.` }],
+      });
+    }
+
     const id = String(nextPageId);
     nextPageId += 1;
 
     const page: FakePage = {
       id,
       spaceId,
-      title: typeof body.title === 'string' ? body.title : '',
+      title,
       version: 1,
       status: 'current',
       properties: new Map(),
@@ -428,7 +518,7 @@ export function createFakeAtlassian(options: FakeAtlassianOptions = {}): FakeAtl
       title: page.title,
       space: { id: page.spaceId, key: space?.key ?? '' },
       version: { number: page.version },
-      _links: { base: siteUrl, webui: `/pages/${page.id}` },
+      _links: { base: wikiBase(), webui: webuiPath(page.spaceId, page.id, page.title) },
     };
   }
 
@@ -507,7 +597,7 @@ export function createFakeAtlassian(options: FakeAtlassianOptions = {}): FakeAtl
     const headers = toHeaders(input, init);
     const bodyText = toBodyText(init);
 
-    calls.push({ method, url: url.toString() });
+    calls.push({ method, url: url.toString(), authorization: headers.get('Authorization') ?? undefined });
 
     if (rateLimitSpec !== undefined) {
       requestsSinceRateLimit += 1;
@@ -534,6 +624,9 @@ export function createFakeAtlassian(options: FakeAtlassianOptions = {}): FakeAtl
     issuedRefreshTokens,
     addSpace(space: { id: string; key: string; name: string }): void {
       spaces.push({ ...space, type: 'global', status: 'current' });
+    },
+    addSite(site: FakeAccessibleResource): void {
+      accessibleResources.push(site);
     },
     getPage(pageId: string): FakePage | undefined {
       return pages.get(pageId);
