@@ -1005,7 +1005,15 @@ export class DocumentPublicationService {
       data: {
         state: 'RETIRED',
         retiredAt: this.now(),
-        retiredStoragePath: null,
+        // `retiredStoragePath` is deliberately omitted rather than set to null
+        // here. `remove()`'s second pass may already have retired this row with
+        // a correct path before this worker-side retire runs; setting null
+        // unconditionally would clobber the only column telling an operator
+        // which document a retired row belonged to once the Document row is
+        // gone. Leaving the field out of this update preserves a path already
+        // written by `remove()`; a row retired only by this worker simply keeps
+        // the null it already has, which `publicationErasureTarget`'s caller
+        // already falls back on.
         nextAttemptAt: null,
         claimedAt: null,
         alertClaimToken: null,

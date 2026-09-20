@@ -69,6 +69,7 @@ type IntegrationRow = {
   publishSpaceKey: string | null;
   publishSpaceName: string | null;
   publishSpaceSiteId: string | null;
+  grantedScopes: string[];
 };
 
 type CredentialRow = { integrationId: string; kind: string; sealed: unknown; generation: number; expiresAt: Date | null };
@@ -135,6 +136,7 @@ function makeStore(rows: IntegrationRow[]) {
           publishSpaceKey: null,
           publishSpaceName: null,
           publishSpaceSiteId: null,
+          grantedScopes: [],
           ...(args.create as Partial<IntegrationRow>),
         };
         integrations.set(created.id, created);
@@ -265,6 +267,7 @@ function connectedRow(overrides: Partial<IntegrationRow> = {}): IntegrationRow {
     publishSpaceKey: null,
     publishSpaceName: null,
     publishSpaceSiteId: null,
+    grantedScopes: [],
     ...overrides,
   };
 }
@@ -1696,4 +1699,66 @@ test('the disclosure says it is alpha, and points at the long form', async () =>
     /docs\/ARCHITECTURE\.md/,
     'the short form must name where the long form lives, or the two drift unnoticed',
   );
+});
+
+// ────────────────────────────────────────────────────────────────────────────
+// The explicit erasure workflow: destroying a Confluence page is now
+// something a charity has to separately ask for, after its document has been
+// deleted in CharityPilot. These tests cover this file's own responsibility —
+// the admin guard, the scope gate and the typed-confirmation schema — not the
+// erasure service itself, which has its own unit tests.
+// ────────────────────────────────────────────────────────────────────────────
+
+const CONNECTED_WITHOUT_DELETE_SCOPES: IntegrationRow = {
+  ...connectedRow(),
+  grantedScopes: ['read:page:confluence', 'offline_access'],
+};
+
+test('a member cannot request a Confluence erasure', async () => {
+  const { app } = await buildApp({ rows: [CONNECTED_WITHOUT_DELETE_SCOPES], actor: ORG_A_MEMBER });
+
+  const response = await app.inject({
+    method: 'POST',
+    url: '/confluence/publications/publication-1/erase',
+    headers: { authorization: bearer(ORG_A_MEMBER) },
+    payload: { reason: 'Data subject erasure request 2026-41', confirmation: 'ERASE CONFLUENCE COPY' },
+  });
+
+  assert.equal(response.statusCode, 403, response.body);
+});
+
+test('an erasure is refused when the connection never granted the delete scopes', async () => {
+  const { app } = await buildApp({ rows: [CONNECTED_WITHOUT_DELETE_SCOPES] });
+
+  const response = await app.inject({
+    method: 'POST',
+    url: '/confluence/publications/publication-1/erase',
+    headers: { authorization: bearer(ORG_A_ADMIN) },
+    payload: { reason: 'Data subject erasure request 2026-41', confirmation: 'ERASE CONFLUENCE COPY' },
+  });
+
+  assert.equal(response.statusCode, 409, response.body);
+  // This file's error envelope is flat — `{ error, code, details }` — rather
+  // than a nested `error.code`, matching every other route's response above.
+  assert.equal(JSON.parse(response.body).code, 'CONFLUENCE_ERASURE_SCOPE_MISSING');
+  assert.equal(
+    response.body.includes('delete:page:confluence'),
+    true,
+    'naming the missing scope is what makes the remedy obvious',
+  );
+});
+
+test('an erasure needs the typed confirmation, not just a reason', async () => {
+  const { app } = await buildApp({
+    rows: [{ ...connectedRow(), grantedScopes: [...CONFLUENCE_REQUIRED_ERASURE_SCOPES] }],
+  });
+
+  const response = await app.inject({
+    method: 'POST',
+    url: '/confluence/publications/publication-1/erase',
+    headers: { authorization: bearer(ORG_A_ADMIN) },
+    payload: { reason: 'Data subject erasure request 2026-41', confirmation: 'yes' },
+  });
+
+  assert.equal(response.statusCode, 400, response.body);
 });

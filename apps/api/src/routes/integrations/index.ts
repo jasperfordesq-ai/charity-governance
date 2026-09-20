@@ -23,8 +23,15 @@
  * here.
  */
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
+import { z, ZodError } from 'zod';
 import { authGuard } from '../../middleware/auth.js';
 import { requireAdmin } from '../../middleware/roles.js';
+import { requireSessionLevel } from '../../middleware/session-level.js';
+import { requireActionApproval } from '../../middleware/action-approval.js';
+import {
+  listRetiredConfluencePublications,
+  requestConfluenceErasure,
+} from '../../services/confluence-erasure-request.service.js';
 import {
   connectConfluence,
   currentAccessTokenForOrganisation,
@@ -922,6 +929,113 @@ export async function integrationRoutes(
       handleError(reply, error);
     }
   });
+
+  const confluenceErasureSchema = z
+    .object({
+      reason: z
+        .string()
+        .transform((value) => value.replace(/\r\n?/g, '\n').trim())
+        .pipe(
+          z
+            .string()
+            .min(10, 'Give an erasure reason of at least 10 characters')
+            .max(500, 'Erasure reason must be at most 500 characters'),
+        ),
+      confirmation: z.literal('ERASE CONFLUENCE COPY'),
+    })
+    .strict();
+
+  const publicationIdSchema = z.string().min(1).max(160).regex(/^[A-Za-z0-9_-]+$/);
+
+  /**
+   * The pages this charity could still ask to erase — publications whose document
+   * has been deleted in CharityPilot while the Confluence page was left standing.
+   *
+   * Note what this route does NOT accept: an `integrationId`. The publication is
+   * found by its own id scoped to the authenticated organisation, the same rule
+   * every other route in this file follows.
+   */
+  app.get('/confluence/publications', async (request, reply) => {
+    try {
+      const rows = await listRetiredConfluencePublications(app.prisma, request.user.organisationId);
+      return sendSuccess(reply, {
+        publications: rows.map((row) => ({
+          id: row.id,
+          documentId: row.documentId,
+          pageTitle: row.pageTitle,
+          retiredAt: row.retiredAt ? new Date(row.retiredAt).toISOString() : null,
+          erasureRequested: row.erasureRequestedAt !== null,
+        })),
+      });
+    } catch (error) {
+      handleError(reply, error);
+    }
+  });
+
+  /**
+   * Destroy the Confluence page a deleted document left behind.
+   *
+   * The same preHandler stack as `DELETE /documents/:id`, because it is the same
+   * weight of action: a recent-authentication check and an explicit approval, on
+   * top of the admin guard this whole plugin already applies.
+   */
+  app.post<{ Params: { publicationId: string } }>(
+    '/confluence/publications/:publicationId/erase',
+    { preHandler: [requireSessionLevel('ADMIN'), requireActionApproval()] },
+    async (request, reply) => {
+      try {
+        const body = confluenceErasureSchema.parse(request.body);
+        const publicationId = publicationIdSchema.parse(request.params.publicationId);
+
+        const integration = await findOwnConfluenceIntegration(app.prisma, request.user.organisationId);
+        if (!integration || integration.status !== 'CONNECTED') {
+          throw new AppError(
+            404,
+            'CONFLUENCE_NOT_CONNECTED',
+            'This charity has no live Confluence connection, so nothing can be erased from it.',
+          );
+        }
+
+        // Refused here rather than at Atlassian, and that is the whole point: the
+        // call would 403, confluence-client reports a 403 as
+        // CONFLUENCE_RECONNECT_REQUIRED, and an operator would be sent to fix a
+        // connection that is not broken. Naming the missing scopes up front makes
+        // the remedy — reconnect, which re-consents to the new scopes — obvious.
+        const missing = missingConfluenceScopes(integration.grantedScopes);
+        if (missing.length > 0) {
+          throw new AppError(
+            409,
+            'CONFLUENCE_ERASURE_SCOPE_MISSING',
+            'This Confluence connection was authorised before CharityPilot asked for permission to ' +
+              'delete pages, so it cannot erase anything. Disconnect and reconnect Confluence to ' +
+              'grant it, then request the erasure again.',
+            { missingScopes: missing },
+          );
+        }
+
+        const { deletionId } = await requestConfluenceErasure(app.prisma, {
+          organisationId: request.user.organisationId,
+          publicationId,
+          reason: body.reason,
+          requestedById: request.user.userId,
+        });
+
+        return sendSuccess(reply, { storageDeletionId: deletionId });
+      } catch (error) {
+        // The same explicit-first pattern documents/index.ts uses: a malformed
+        // body or a malformed id is a 400 the caller can fix, and must not fall
+        // through to handleError's generic 500 branch, which does not know Zod.
+        if (error instanceof ZodError) {
+          return reply.status(400).send({
+            error: 'Validation failed',
+            code: 'VALIDATION_ERROR',
+            details: error.errors,
+          });
+        }
+        handleError(reply, error);
+      }
+    },
+  );
 
   app.delete('/confluence', async (request, reply) => {
     try {

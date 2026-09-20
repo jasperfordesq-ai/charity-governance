@@ -85,6 +85,8 @@ function publicationRow(overrides: Partial<DocumentPublicationRecord> = {}): Doc
     attachmentId: null,
     pageTitle: null,
     publishedAt: null,
+    retiredAt: null,
+    retiredStoragePath: null,
     state: 'PENDING',
     attempts: 0,
     claimedAt: null,
@@ -1027,6 +1029,40 @@ test('a worker that records a page and then finds its document gone retires the 
   assert.equal(row.retiredStoragePath, null, 'not re-derived from a document that no longer exists');
   assert.equal(row.nextAttemptAt, null, 'nothing retries a retired row');
   assert.equal(row.claimedAt, null, 'the park branch left this claim standing; retirement is what clears it');
+});
+
+test('a path already written by remove() survives the worker-side retire', async () => {
+  // Standing in for the ordering where `document.service.ts`'s `remove()` has
+  // already run its second pass and stamped a correct `retiredStoragePath`
+  // onto this row before this worker's own in-flight attempt discovers the
+  // same document is gone. `retirePublicationIfDocumentGone`'s updateMany
+  // matches on `id` and `pageId: { not: null }` only -- it does not check
+  // state -- so it fires regardless, and Task 4's erasure service reads this
+  // column to find the document a retired row belonged to. If this worker's
+  // retire clobbered it back to null, an operator would lose the one thing
+  // that still names it.
+  const mock = buildFallbackPrisma(
+    publicationRow({
+      attempts: DOCUMENT_PUBLICATION_MAX_ATTEMPTS,
+      nextAttemptAt: new Date('9999-12-31T00:00:00.000Z'),
+      retiredStoragePath: 'org-1/policy.pdf',
+    }),
+    false,
+  );
+  const service = new DocumentPublicationService(mock.prisma as never, () => NOW);
+
+  await service.retryPendingPublications(async ({ recordPage }) => {
+    await recordPage({ cloudId: 'cloud-1', spaceId: 'space-1', pageId: 'page-1', pageTitle: TITLE });
+    throw new Error('unreachable: recordPage must already have thrown once the document is gone');
+  }, 10);
+
+  const row = mock.row();
+  assert.equal(row.state, 'RETIRED');
+  assert.equal(
+    row.retiredStoragePath,
+    'org-1/policy.pdf',
+    'a path remove() already wrote must not be clobbered back to null',
+  );
 });
 
 test('a worker whose document is still there is undisturbed by the new check', async () => {
