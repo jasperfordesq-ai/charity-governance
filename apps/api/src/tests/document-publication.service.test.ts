@@ -132,8 +132,13 @@ function applyPrismaSelect(
  * The fallback (non-raw-SQL) Prisma path the outbox takes when the client
  * exposes neither `$queryRaw` nor `$transaction`. Deliberately the same double
  * shape `document-storage-deletion-fixtures.ts` uses for the sibling outbox.
+ *
+ * `documentExists` defaults to `true` — the overwhelmingly common case, and
+ * the one every test before `retirePublicationIfDocumentGone` existed was
+ * written against — so only a test that deliberately passes `false` exercises
+ * the owner's 2026-09-19 ruling's worker-side half.
  */
-function buildFallbackPrisma(initial: DocumentPublicationRecord) {
+function buildFallbackPrisma(initial: DocumentPublicationRecord, documentExists = true) {
   let row = { ...initial };
   const updates: Array<{ where: Record<string, unknown>; data: Record<string, unknown> }> = [];
   const delegate = {
@@ -182,7 +187,12 @@ function buildFallbackPrisma(initial: DocumentPublicationRecord) {
     },
   };
   return {
-    prisma: { documentPublication: delegate },
+    prisma: {
+      documentPublication: delegate,
+      document: {
+        findFirst: async () => (documentExists ? { id: row.documentId } : null),
+      },
+    },
     updates,
     row: () => row,
   };
@@ -974,6 +984,59 @@ test('the page is written to the row with publishedAt still null, mid-attempt', 
       'database CHECK depends on the distinction',
   );
   assert.equal(row.state, 'PENDING');
+});
+
+// ---------------------------------------------------------------------------
+// The owner's 2026-09-19 ruling, the worker's half: a document deleted while
+// this attempt was still inside Confluence's HTTP call, with no database
+// write issued yet for `document.service.ts`'s `retireConfluencePublication`
+// to block on. Both of that method's passes see `pageId` still null and can
+// only park the row -- exactly the state the fixture below starts from -- so
+// closing the race is this module's job, the moment it records the page.
+// ---------------------------------------------------------------------------
+
+test('a worker that records a page and then finds its document gone retires the row, not stranding it PENDING', async () => {
+  // Standing in for the row `retireConfluencePublication`'s park branch would
+  // have left behind: a claim held (an attempt is in flight -- the only way a
+  // page can appear at all), pageId still null, pushed past the retry
+  // ceiling. None of that is in `attachPublicationPage`'s own WHERE clause
+  // (id, state, processedAt, publishedAt, claimedAt), so it succeeds despite
+  // it, which is the bug this proves fixed.
+  const mock = buildFallbackPrisma(
+    publicationRow({ attempts: DOCUMENT_PUBLICATION_MAX_ATTEMPTS, nextAttemptAt: new Date('9999-12-31T00:00:00.000Z') }),
+    false,
+  );
+  const service = new DocumentPublicationService(mock.prisma as never, () => NOW);
+
+  const result = await service.retryPendingPublications(async ({ recordPage }) => {
+    await recordPage({ cloudId: 'cloud-1', spaceId: 'space-1', pageId: 'page-1', pageTitle: TITLE });
+    throw new Error('unreachable: recordPage must already have thrown once the document is gone');
+  }, 10);
+
+  // Not scored as a failure of any kind: nothing failed, a user simply
+  // deleted their own document while it happened to be publishing.
+  assert.equal(result.processed, 0);
+  assert.equal(result.retryScheduled, 0);
+  assert.equal(result.newlyDeadLettered, 0, 'nothing failed, so nothing may dead-letter or alert an operator');
+
+  const row = mock.row();
+  assert.equal(row.state, 'RETIRED', 'not PENDING (stranded) and not DEAD_LETTER (a false alarm)');
+  assert.equal(row.pageId, 'page-1', 'the page id is the only thing that can still address the page');
+  assert.equal(row.cloudId, 'cloud-1');
+  assert.ok(row.retiredAt instanceof Date);
+  assert.equal(row.retiredStoragePath, null, 'not re-derived from a document that no longer exists');
+  assert.equal(row.nextAttemptAt, null, 'nothing retries a retired row');
+  assert.equal(row.claimedAt, null, 'the park branch left this claim standing; retirement is what clears it');
+});
+
+test('a worker whose document is still there is undisturbed by the new check', async () => {
+  const mock = buildFallbackPrisma(publicationRow());
+  const service = new DocumentPublicationService(mock.prisma as never, () => NOW);
+
+  const result = await service.retryPendingPublications(async () => outcome(), 10);
+
+  assert.equal(result.processed, 1);
+  assert.equal(mock.row().state, 'PROCESSED');
 });
 
 /**

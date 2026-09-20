@@ -701,21 +701,29 @@ for (const [situation, overrides] of unprocessedButPaged) {
 // The delete window: a page created while a document is being deleted.
 //
 // The publish worker writes `pageId` from its own transaction, so a delete
-// path that merely *looked* at `pageId` was racing it: a page created inside
-// that window would be left in the charity's Confluence with nothing naming
-// it, unless retirement itself catches it. `retireConfluencePublication`'s two
-// passes each take a `FOR UPDATE` lock on the publication row and decide from
-// the value read under it, the same claim mechanics `claimPendingStorageDeletions`
-// uses — but two passes, not three, so only a write landing before the
-// *second* read is guaranteed to be caught. A write landing later is the
-// residual case the method's own doc comment accepts: the row survives with
-// the page id that still addresses it, but does not reach `RETIRED` within
-// this call.
+// path that merely *looked* at `pageId` was racing it. `retireConfluencePublication`'s
+// two passes each take a `FOR UPDATE` lock on the publication row and decide
+// from the value read under it, the same claim mechanics
+// `claimPendingStorageDeletions` uses — and that closes the race for a write
+// that is *already blocked* on one of those locks when the other pass takes
+// it: it lands the instant the lock releases, and the next pass sees it.
 //
-// The double below is the smallest thing that can show both outcomes: a real
-// row lock has exactly two effects that matter here, and it models both. A
-// write issued while the lock is held waits, and it lands the instant the
-// holder commits.
+// What these two passes do NOT close is the far more common shape of the
+// race: a worker still inside Confluence's `createPage` HTTP call, with no
+// database write issued yet to block on anything. Both passes below see
+// `pageId` still null for that case and can only park the row -- this file's
+// tests below confirm exactly that, in isolation. It is closed one file over:
+// `document-publication.service.ts`'s `retirePublicationIfDocumentGone` runs
+// immediately after the worker's own write finally lands, whenever that is,
+// and retires the row itself if the document is gone by then. So a row this
+// suite shows leaving `remove()` still `PENDING` is not stranded in the real
+// system -- it is retired moments later, by the other half of this lifecycle,
+// which `document-publication.service.test.ts` covers.
+//
+// The double below is the smallest thing that can show the two outcomes THIS
+// file's two-pass mechanism produces: a real row lock has exactly two effects
+// that matter here, and it models both. A write issued while the lock is held
+// waits, and it lands the instant the holder commits.
 // ---------------------------------------------------------------------------
 
 /** Where the worker's `attachPublicationPage` write is issued. */
@@ -863,13 +871,14 @@ test('a page recorded before the second locked read is retired, not left danglin
 });
 
 test('a publication holding a live claim is never destroyed out from under the attempt', async () => {
-  // The residual case `retireConfluencePublication`'s own doc comment
-  // accepts: a write landing after the second locked read is not caught by
-  // this call, so the row never reaches `RETIRED` here. What still must hold
-  // is the safety property -- the row survives long enough for the page id
-  // the in-flight attempt is about to write to land somewhere. Destroying it
-  // would leave a page with no record of it anywhere, which is worse than an
-  // incomplete retirement.
+  // A write landing after this method's second locked read is not caught by
+  // this call, so the row never reaches `RETIRED` here -- see the section
+  // comment above for where it is caught instead. What this call still must
+  // guarantee on its own is the safety property: the row survives long enough
+  // for the page id the in-flight attempt is about to write to land
+  // somewhere. Destroying it would leave a page with no record of it
+  // anywhere, which is worse than a retirement finishing one file later than
+  // this one.
   const mock = buildDeleteWindowPrisma('after-the-cancellation-read');
   const service = new DocumentService(mock.prisma as never, () => NOW);
 

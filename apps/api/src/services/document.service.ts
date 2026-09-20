@@ -943,15 +943,28 @@ export class DocumentService {
    * fallback cannot lock, which is why it is a fallback and not the path
    * production takes.
    *
-   * **Residual, deliberately not closed here.** A worker already between
-   * `createPage` and `recordPage` when this lock is taken has made a page this
-   * read cannot see. The second locked look in
-   * {@link DocumentService.retireConfluencePublication} catches it when the
-   * write lands before that second read; a write landing after even that
-   * leaves a page whose row was retired — loudly, as the worker's own
-   * `claimLost`, not silently. Closing that last sliver means refusing the
-   * delete while any attempt is in flight, which is a product decision, not a
-   * bug fix.
+   * **A worker between `createPage` and `recordPage` when this lock is
+   * taken** has issued no database write yet, so nothing is blocked on this
+   * lock and this read cannot see the page it is about to create. Neither can
+   * the second locked look in
+   * {@link DocumentService.retireConfluencePublication}: both of its passes
+   * see `pageId` still null, so they can only park the row, leaving
+   * `claimedAt` untouched. The worker's write then lands, moments later, on a
+   * row this method has already finished with — **silently**, not as the
+   * worker's own `claimLost`: `attachPublicationPage`'s own WHERE clause
+   * checks `id`, `state`, `processedAt`, `publishedAt` and `claimedAt`, none
+   * of which the park branch changed, so the write matches and succeeds.
+   *
+   * **That case is closed, but not by a lock — and not here.**
+   * `document-publication.service.ts`'s `retirePublicationIfDocumentGone`
+   * runs immediately after that write succeeds, the only moment anything
+   * holds both facts a retire needs at once: the page just recorded, and the
+   * document's absence. This method's lock still earns its keep in a
+   * narrower case: a worker whose write was **already** issued and blocked on
+   * this very lock (past `createPage`, into its own `UPDATE`) when the first
+   * pass took it. That write lands the instant the lock releases, and the
+   * second pass sees it — which is the case the two-pass shape of
+   * `retireConfluencePublication` exists for.
    */
   private async lockConfluencePublication(
     tx: unknown,
@@ -996,14 +1009,20 @@ export class DocumentService {
    *   and nothing is about to, because the lock is what a would-be claimer
    *   skips. The row is deleted outright; it records nothing.
    * - **no page id, an attempt in flight** — that attempt may be between
-   *   `createPage` and `recordPage` right now, with its write blocked on this
-   *   very lock. Deleting the row would make that write match nothing and leave
-   *   a real page with no record of it anywhere. The row is parked instead and
-   *   the caller takes one more locked look, by which time the blocked write
-   *   has landed.
+   *   `createPage` and `recordPage` right now. Deleting the row would risk a
+   *   write landing on it later that matches nothing, leaving a real page
+   *   with no record of it anywhere, so the row is parked instead. The
+   *   second pass below only catches the page id if the attempt's own write
+   *   was **already** blocked on this lock when the first pass took it — the
+   *   far more common case, the attempt still inside Confluence's `createPage`
+   *   call with no write issued yet, is closed by the worker itself: see
+   *   `document-publication.service.ts`'s `retirePublicationIfDocumentGone`.
    * - **a page id is recorded** — retire it.
    *
-   * **Residual, deliberately accepted.** Retiring clears `claimedAt`, so an
+   * **Residual, deliberately accepted — the unrecorded attachment.** A
+   * different gap from the one above: this one survives even after the
+   * worker's own post-record check, because that check runs *before* the
+   * attachment is uploaded, not after. Retiring clears `claimedAt`, so an
    * attempt that had recorded its page but not yet its attachment loses its
    * claim and reports it (`claimLost`) rather than finishing. The attachment it
    * uploaded is then in Confluence without this row naming it, and a later
@@ -1052,8 +1071,16 @@ export class DocumentService {
       // so the value just read is still true at this write. Retiring a row that
       // is already RETIRED is a no-op in practice (the document can only be
       // deleted once) and harmless if it happens.
+      //
+      // `pageId: { not: null }` *is* kept, though — the same belt-and-braces
+      // the delete branch above keeps its `pageId: null` for. `FOR UPDATE`
+      // makes it redundant on the raw-SQL path, but `lockConfluencePublication`
+      // degrades to an unlocked `findFirst` for a client that cannot issue
+      // one (a test double), and for that fallback this is the only thing
+      // between a page id read a moment ago and retiring a row that has since
+      // lost it.
       await publicationDelegate(tx).updateMany({
-        where: { id: publication.id },
+        where: { id: publication.id, pageId: { not: null } },
         data: {
           state: 'RETIRED',
           retiredAt: this.now(),
@@ -1074,9 +1101,13 @@ export class DocumentService {
       const pass = async (): Promise<boolean> =>
         client.$transaction ? client.$transaction(settle) : settle(this.prisma);
 
-      // At most two passes, never a loop. A write blocked on the first pass's
-      // lock lands the instant that pass commits, so the second pass sees the
-      // page id it recorded and retires it.
+      // At most two passes, never a loop. When the attempt's own write was
+      // already blocked on the first pass's lock, it lands the instant that
+      // pass commits, and the second pass sees the page id and retires it.
+      // When nothing was blocked yet — the attempt still inside its HTTP call
+      // — the second pass finds pageId still null too and the row stays
+      // parked; that case is closed instead by the worker's own post-record
+      // check in document-publication.service.ts.
       if (await pass()) await pass();
     } catch (error) {
       console.error(

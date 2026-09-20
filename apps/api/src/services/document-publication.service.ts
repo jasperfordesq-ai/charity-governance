@@ -75,6 +75,26 @@ import { parseConfluenceErasureTarget, type ConfluenceErasureTarget } from './co
  * record it because the attempt ran out of time is precisely how the id gets
  * lost.
  *
+ * ## The document can vanish mid-attempt — the other half of a two-file ruling
+ *
+ * `document.service.ts`'s `retireConfluencePublication` is the owner's
+ * 2026-09-19 ruling that an ordinary deletion must leave a published
+ * Confluence page in place: it retires (never erases) a publication row that
+ * already names a page. But a worker still inside this module's `createPage`
+ * HTTP call when the document is deleted has issued no database write yet, so
+ * `retireConfluencePublication`'s row lock closes on nothing — both of its
+ * passes see `pageId` still null, and it can only park the row (stop the
+ * retry loop; `claimedAt` is deliberately left alone, because an attempt may
+ * still be holding it). This worker then lands the page id moments later,
+ * on a row `remove()` has already finished with and will never revisit.
+ *
+ * So this module retires the row itself: {@link
+ * DocumentPublicationService.retirePublicationIfDocumentGone} runs
+ * immediately after `recordPage` succeeds, the one moment that holds both
+ * facts at once — the page id just written, and the document's absence.
+ * Between the two files, every ordering the delete and the publish worker can
+ * race in ends the same way: retired, never erased, never stranded PENDING.
+ *
  * ## The target is validated with the parser that will read it
  *
  * Phase 5's `parseConfluenceErasureTarget` is the arbiter of what an erasure
@@ -106,7 +126,7 @@ import { parseConfluenceErasureTarget, type ConfluenceErasureTarget } from './co
 // The row
 // ---------------------------------------------------------------------------
 
-export type DocumentPublicationState = 'PENDING' | 'DEAD_LETTER' | 'PROCESSED';
+export type DocumentPublicationState = 'PENDING' | 'DEAD_LETTER' | 'PROCESSED' | 'RETIRED';
 
 /**
  * Task 1 shipped these six and no more. A permanent condition maps onto one of
@@ -147,6 +167,9 @@ export type DocumentPublicationRecord = {
   lastError?: string | null;
   lastAttemptAt?: Date | null;
   processedAt?: Date | null;
+  /** Set only by retirement — see `retirePublicationIfDocumentGone` and `document.service.ts`'s `retireConfluencePublication`. */
+  retiredAt?: Date | null;
+  retiredStoragePath?: string | null;
   createdAt?: Date;
 };
 
@@ -156,6 +179,16 @@ const PUBLICATION_RETRY_BASE_MS = 5 * 60 * 1000;
 const PUBLICATION_RETRY_MAX_MS = 6 * 60 * 60 * 1000;
 
 export const DOCUMENT_PUBLICATION_MAX_ATTEMPTS = 5;
+
+/**
+ * See {@link DocumentPublicationService.retirePublicationIfDocumentGone} for
+ * why this message exists alongside `document.service.ts`'s
+ * `RETIRED_PUBLICATION_MESSAGE` rather than sharing it: the two are the same
+ * ruling, told from the two different moments it can be discovered.
+ */
+const PUBLICATION_RETIRED_MID_ATTEMPT_MESSAGE =
+  'The document was deleted in CharityPilot while this page was being published. The Confluence ' +
+  'page was deliberately left in place; destroying it is a separate, explicitly authorised erasure.';
 
 /**
  * One attempt downloads up to 10 MB from Supabase and pushes it to Atlassian,
@@ -451,6 +484,25 @@ function documentMissing(documentId: string): AppError {
     'DOCUMENT_NOT_FOUND',
     `Document ${documentId} no longer exists, so there is nothing to publish.`,
     { documentId },
+  );
+}
+
+/**
+ * The document vanished *after* this attempt recorded a page for it — not
+ * transient, and not a failure at all: see
+ * {@link DocumentPublicationService.retirePublicationIfDocumentGone}, which
+ * has already retired the row by the time this is thrown. The throw exists
+ * only to stop `publish()` continuing into `downloadFile` against bytes an
+ * ordinary deletion may already be erasing, and to unwind through the same
+ * "ignored" path an ordinary lost claim already takes: `recordPublicationFailure`
+ * finds no `PENDING` row left to act on, once this has run.
+ */
+function documentRetiredMidAttempt(publicationId: string): AppError {
+  return new AppError(
+    404,
+    'DOCUMENT_PUBLICATION_RETIRED_MID_ATTEMPT',
+    'The document was deleted while this page was being published; the publication has been retired.',
+    { publicationId },
   );
 }
 
@@ -897,6 +949,74 @@ export class DocumentPublicationService {
     return result.count === 1;
   }
 
+  /**
+   * The worker's half of the owner's 2026-09-19 ruling; see the module
+   * header's "The document can vanish mid-attempt", and
+   * `document.service.ts`'s `retireConfluencePublication` for the other half
+   * and the constraint (`DocumentPublication_state_consistent`'s `RETIRED`
+   * arm) both halves write to.
+   *
+   * Called from `recordPage`, immediately after `attachPublicationPage` has
+   * successfully attached a page id — the only moment this worker holds both
+   * facts a retire needs at once: the page it just recorded, and whether the
+   * document that page is for still exists. `retireConfluencePublication`'s
+   * own row lock cannot see this attempt at all while it is here, inside
+   * Confluence's HTTP call, with no database write issued yet to block on;
+   * this is the case that closes.
+   *
+   * A no-op, quietly, when the document is still there — the overwhelmingly
+   * common case, checked on every attempt that reaches this point. When it is
+   * gone: retires the row (never deletes it — the page it names is real) and
+   * throws, so `publish()` never reaches `downloadFile` against bytes an
+   * ordinary deletion may already be erasing. That throw unwinds through the
+   * same "ignored" path an ordinary lost claim already takes:
+   * `recordPublicationFailure` finds no `PENDING` row left to match, once the
+   * row below has committed, so nothing here is scored as a failure, nothing
+   * dead-letters, and no operator is alerted for a document a user simply
+   * deleted.
+   *
+   * `retiredStoragePath` is left `null` rather than re-derived from a document
+   * that is already gone — the column is nullable for exactly this, and
+   * Task 4's erasure service already falls back when it is absent.
+   *
+   * No row lock: unlike `retireConfluencePublication`, which has to decide
+   * between three outcomes (delete outright, park, or retire) from a value it
+   * just read, this method already knows both facts it needs are true —
+   * `attachPublicationPage` just proved the page id is this row's, and the
+   * `document.findFirst` above is the read this decision is made from — so a
+   * single targeted `UPDATE` is enough. The `pageId: { not: null }` guard
+   * below is the same belt-and-braces `retireConfluencePublication`'s delete
+   * branch keeps for a client that cannot lock: harmless when it is
+   * redundant, and it costs nothing to keep.
+   */
+  private async retirePublicationIfDocumentGone(
+    publicationId: string,
+    documentId: string,
+    organisationId: string,
+  ): Promise<void> {
+    const doc = await this.prisma.document.findFirst({
+      where: { id: documentId, organisationId },
+      select: { id: true },
+    });
+    if (doc !== null) return;
+
+    await publicationDelegate(this.prisma).updateMany({
+      where: { id: publicationId, pageId: { not: null } },
+      data: {
+        state: 'RETIRED',
+        retiredAt: this.now(),
+        retiredStoragePath: null,
+        nextAttemptAt: null,
+        claimedAt: null,
+        alertClaimToken: null,
+        alertClaimedAt: null,
+        lastError: PUBLICATION_RETIRED_MID_ATTEMPT_MESSAGE,
+      },
+    });
+
+    throw documentRetiredMidAttempt(publicationId);
+  }
+
   async markPublicationProcessed(
     id: string,
     outcome: PublicationOutcome,
@@ -1073,6 +1193,14 @@ export class DocumentPublicationService {
             publication.claimedAt,
           );
           if (!recorded) throw claimLost(publication.id);
+
+          // The owner's 2026-09-19 ruling, the worker's half — see
+          // `retirePublicationIfDocumentGone`'s doc comment.
+          await this.retirePublicationIfDocumentGone(
+            publication.id,
+            publication.documentId,
+            publication.organisationId,
+          );
         },
       }),
     );
