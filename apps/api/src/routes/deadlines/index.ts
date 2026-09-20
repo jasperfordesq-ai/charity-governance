@@ -26,7 +26,7 @@ export async function deadlineRoutes(app: FastifyInstance) {
       const bounds = pagination({ page, pageSize });
       return await service.list(request.user.organisationId, bounds.page, bounds.pageSize);
     } catch (err) {
-      handleError(reply, err);
+      return handleError(reply, err);
     }
   });
 
@@ -36,7 +36,7 @@ export async function deadlineRoutes(app: FastifyInstance) {
       const bounds = pagination({ page, pageSize });
       return await service.history(request.user.organisationId, bounds.page, bounds.pageSize);
     } catch (err) {
-      handleError(reply, err);
+      return handleError(reply, err);
     }
   });
 
@@ -64,7 +64,7 @@ export async function deadlineRoutes(app: FastifyInstance) {
         { deadlineId: query.deadlineId, status },
       );
     } catch (err) {
-      handleError(reply, err);
+      return handleError(reply, err);
     }
   });
 
@@ -72,7 +72,7 @@ export async function deadlineRoutes(app: FastifyInstance) {
     try {
       return sendSuccess(reply, await service.getById(request.user.organisationId, request.params.id));
     } catch (err) {
-      handleError(reply, err);
+      return handleError(reply, err);
     }
   });
 
@@ -85,7 +85,7 @@ export async function deadlineRoutes(app: FastifyInstance) {
       if (err instanceof ZodError) {
         return reply.status(400).send({ error: 'Validation failed', code: 'VALIDATION_ERROR', details: err.errors });
       }
-      handleError(reply, err);
+      return handleError(reply, err);
     }
   });
 
@@ -97,7 +97,7 @@ export async function deadlineRoutes(app: FastifyInstance) {
       if (err instanceof ZodError) {
         return reply.status(400).send({ error: 'Validation failed', code: 'VALIDATION_ERROR', details: err.errors });
       }
-      handleError(reply, err);
+      return handleError(reply, err);
     }
   });
 
@@ -110,7 +110,7 @@ export async function deadlineRoutes(app: FastifyInstance) {
       if (err instanceof ZodError) {
         return reply.status(400).send({ error: 'Validation failed', code: 'VALIDATION_ERROR', details: err.errors });
       }
-      handleError(reply, err);
+      return handleError(reply, err);
     }
   });
 }

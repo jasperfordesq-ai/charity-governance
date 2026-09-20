@@ -97,7 +97,7 @@ export async function documentRoutes(app: FastifyInstance) {
         Math.min(100, Math.max(1, parseInt(pageSize ?? '50', 10) || 50)),
       );
     } catch (err) {
-      handleError(reply, err);
+      return handleError(reply, err);
     }
   });
 
@@ -109,7 +109,7 @@ export async function documentRoutes(app: FastifyInstance) {
         Math.min(100, Math.max(1, Number.parseInt(limit ?? '50', 10) || 50)),
       );
     } catch (error) {
-      handleError(reply, error);
+      return handleError(reply, error);
     }
   });
 
@@ -136,7 +136,7 @@ export async function documentRoutes(app: FastifyInstance) {
             details: error.errors,
           });
         }
-        handleError(reply, error);
+        return handleError(reply, error);
       }
     },
   );
@@ -145,7 +145,7 @@ export async function documentRoutes(app: FastifyInstance) {
     try {
       return await service.getById(request.user.organisationId, request.params.id);
     } catch (err) {
-      handleError(reply, err);
+      return handleError(reply, err);
     }
   });
 
@@ -163,7 +163,7 @@ export async function documentRoutes(app: FastifyInstance) {
       if (err instanceof ZodError) {
         return reply.status(400).send({ error: 'Validation failed', code: 'VALIDATION_ERROR', details: err.errors });
       }
-      handleError(reply, err);
+      return handleError(reply, err);
     }
   });
 
@@ -209,7 +209,7 @@ export async function documentRoutes(app: FastifyInstance) {
         .header('Content-Disposition', `attachment; filename="${filename}"`)
         .send(file);
     } catch (err) {
-      handleError(reply, err);
+      return handleError(reply, err);
     }
   });
 
@@ -359,7 +359,7 @@ export async function documentRoutes(app: FastifyInstance) {
       if (err instanceof ZodError) {
         return reply.status(400).send({ error: 'Validation failed', code: 'VALIDATION_ERROR', details: err.errors });
       }
-      handleError(reply, err);
+      return handleError(reply, err);
     }
   });
 
@@ -385,7 +385,7 @@ export async function documentRoutes(app: FastifyInstance) {
       }
       return sendNoContent(reply);
     } catch (err) {
-      handleError(reply, err);
+      return handleError(reply, err);
     }
   });
 
@@ -399,7 +399,7 @@ export async function documentRoutes(app: FastifyInstance) {
       if (err instanceof ZodError) {
         return reply.status(400).send({ error: 'Validation failed', code: 'VALIDATION_ERROR', details: err.errors });
       }
-      handleError(reply, err);
+      return handleError(reply, err);
     }
   });
 
@@ -413,7 +413,7 @@ export async function documentRoutes(app: FastifyInstance) {
       if (err instanceof ZodError) {
         return reply.status(400).send({ error: 'Validation failed', code: 'VALIDATION_ERROR', details: err.errors });
       }
-      handleError(reply, err);
+      return handleError(reply, err);
     }
   });
 
@@ -427,7 +427,7 @@ export async function documentRoutes(app: FastifyInstance) {
       if (err instanceof ZodError) {
         return reply.status(400).send({ error: 'Validation failed', code: 'VALIDATION_ERROR', details: err.errors });
       }
-      handleError(reply, err);
+      return handleError(reply, err);
     }
   });
 
@@ -441,7 +441,7 @@ export async function documentRoutes(app: FastifyInstance) {
       );
       return sendNoContent(reply);
     } catch (err) {
-      handleError(reply, err);
+      return handleError(reply, err);
     }
   });
 }

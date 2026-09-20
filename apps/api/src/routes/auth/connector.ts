@@ -127,7 +127,7 @@ export async function connectorAuthRoutes(app: FastifyInstance) {
 
         // Deliberately no setAuthCookies. A test asserts no set-cookie header
         // leaves these routes.
-        reply.send({
+        return reply.send({
           user: publicUser(result.user),
           accessToken: result.accessToken,
           refreshToken: result.refreshToken,
@@ -140,10 +140,9 @@ export async function connectorAuthRoutes(app: FastifyInstance) {
         });
       } catch (err) {
         if (err instanceof ZodError) {
-          reply.status(400).send(formatZodError(err));
-          return;
+          return reply.status(400).send(formatZodError(err));
         }
-        handleError(reply, err);
+        return handleError(reply, err);
       }
     },
   );
@@ -162,16 +161,15 @@ export async function connectorAuthRoutes(app: FastifyInstance) {
           "MCP_CONNECTOR",
         );
 
-        reply.send({
+        return reply.send({
           accessToken: result.accessToken,
           refreshToken: result.refreshToken,
         });
       } catch (err) {
         if (err instanceof ZodError) {
-          reply.status(400).send(formatZodError(err));
-          return;
+          return reply.status(400).send(formatZodError(err));
         }
-        handleError(reply, err);
+        return handleError(reply, err);
       }
     },
   );
@@ -185,13 +183,12 @@ export async function connectorAuthRoutes(app: FastifyInstance) {
         if (body.refreshToken) {
           await authService.logout(body.refreshToken);
         }
-        reply.send({ ok: true });
+        return reply.send({ ok: true });
       } catch (err) {
         if (err instanceof ZodError) {
-          reply.status(400).send(formatZodError(err));
-          return;
+          return reply.status(400).send(formatZodError(err));
         }
-        handleError(reply, err);
+        return handleError(reply, err);
       }
     },
   );
@@ -238,13 +235,12 @@ export async function connectorAuthRoutes(app: FastifyInstance) {
 
         // Deliberately no token of any kind: approving an action is not
         // signing in, and the caller already holds a session.
-        reply.send({ ok: true, summary: granted.summary, expiresAt: granted.expiresAt });
+        return reply.send({ ok: true, summary: granted.summary, expiresAt: granted.expiresAt });
       } catch (err) {
         if (err instanceof ZodError) {
-          reply.status(400).send(formatZodError(err));
-          return;
+          return reply.status(400).send(formatZodError(err));
         }
-        handleError(reply, err);
+        return handleError(reply, err);
       }
     },
   );
@@ -290,7 +286,7 @@ export async function connectorAuthRoutes(app: FastifyInstance) {
               + "minutes after they are asked for.",
           );
         }
-        reply.send({
+        return reply.send({
           approvalId: approval.id,
           summary: approval.summary,
           method: approval.method,
@@ -303,10 +299,9 @@ export async function connectorAuthRoutes(app: FastifyInstance) {
         });
       } catch (err) {
         if (err instanceof ZodError) {
-          reply.status(400).send(formatZodError(err));
-          return;
+          return reply.status(400).send(formatZodError(err));
         }
-        handleError(reply, err);
+        return handleError(reply, err);
       }
     },
   );
@@ -319,7 +314,7 @@ export async function connectorAuthRoutes(app: FastifyInstance) {
         if (!request.authSession) {
           throw new AppError(401, "UNAUTHORIZED", "No session");
         }
-        reply.send({
+        return reply.send({
           clientKind: request.authSession.clientKind,
           accessLevel: request.authSession.accessLevel,
           dataScope: request.authSession.dataScope,
@@ -327,7 +322,7 @@ export async function connectorAuthRoutes(app: FastifyInstance) {
           organisationId: request.user.organisationId,
         });
       } catch (err) {
-        handleError(reply, err);
+        return handleError(reply, err);
       }
     },
   );

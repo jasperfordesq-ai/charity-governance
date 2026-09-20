@@ -155,7 +155,7 @@ export async function ownerConnectorAuthRoutes(app: FastifyInstance): Promise<vo
 
         // Deliberately no setOwnerCookies. A test asserts no set-cookie header
         // leaves these routes.
-        reply.send({
+        return reply.send({
           operator: { id: operator.id, email: operator.email, name: operator.name },
           accessToken: tokens.accessToken,
           refreshToken: tokens.refreshToken,
@@ -171,10 +171,9 @@ export async function ownerConnectorAuthRoutes(app: FastifyInstance): Promise<vo
         });
       } catch (err) {
         if (err instanceof ZodError) {
-          reply.status(400).send(formatZodError(err));
-          return;
+          return reply.status(400).send(formatZodError(err));
         }
-        handleError(reply, err);
+        return handleError(reply, err);
       }
     },
   );
@@ -189,13 +188,12 @@ export async function ownerConnectorAuthRoutes(app: FastifyInstance): Promise<vo
         // useless here and a connector credential useless in the console. The
         // refusal is the same opaque one an unknown token gets.
         const tokens = await rotateOperatorSession(app.prisma, body.refreshToken, 'MCP_CONNECTOR');
-        reply.send({ accessToken: tokens.accessToken, refreshToken: tokens.refreshToken });
+        return reply.send({ accessToken: tokens.accessToken, refreshToken: tokens.refreshToken });
       } catch (err) {
         if (err instanceof ZodError) {
-          reply.status(400).send(formatZodError(err));
-          return;
+          return reply.status(400).send(formatZodError(err));
         }
-        handleError(reply, err);
+        return handleError(reply, err);
       }
     },
   );
@@ -209,13 +207,12 @@ export async function ownerConnectorAuthRoutes(app: FastifyInstance): Promise<vo
         if (body.refreshToken) {
           await revokeOperatorSession(app.prisma, body.refreshToken);
         }
-        reply.send({ ok: true });
+        return reply.send({ ok: true });
       } catch (err) {
         if (err instanceof ZodError) {
-          reply.status(400).send(formatZodError(err));
-          return;
+          return reply.status(400).send(formatZodError(err));
         }
-        handleError(reply, err);
+        return handleError(reply, err);
       }
     },
   );
@@ -256,17 +253,16 @@ export async function ownerConnectorAuthRoutes(app: FastifyInstance): Promise<vo
 
         // No token of any kind: approving an action is not signing in, and the
         // caller already holds a session.
-        reply.send({
+        return reply.send({
           ok: true,
           summary: granted.summary,
           expiresAt: granted.expiresAt.toISOString(),
         });
       } catch (err) {
         if (err instanceof ZodError) {
-          reply.status(400).send(formatZodError(err));
-          return;
+          return reply.status(400).send(formatZodError(err));
         }
-        handleError(reply, err);
+        return handleError(reply, err);
       }
     },
   );
@@ -307,7 +303,7 @@ export async function ownerConnectorAuthRoutes(app: FastifyInstance): Promise<vo
         );
       }
 
-      reply.send({
+      return reply.send({
         approvalId: approval.id,
         summary: approval.summary,
         method: approval.method,
@@ -321,10 +317,9 @@ export async function ownerConnectorAuthRoutes(app: FastifyInstance): Promise<vo
       });
     } catch (err) {
       if (err instanceof ZodError) {
-        reply.status(400).send(formatZodError(err));
-        return;
+        return reply.status(400).send(formatZodError(err));
       }
-      handleError(reply, err);
+      return handleError(reply, err);
     }
   });
 
@@ -339,7 +334,7 @@ export async function ownerConnectorAuthRoutes(app: FastifyInstance): Promise<vo
         select: { name: true, totpEnrolledAt: true },
       });
 
-      reply.send({
+      return reply.send({
         realm: 'operator',
         clientKind: session.clientKind,
         accessLevel: session.accessLevel,
@@ -354,7 +349,7 @@ export async function ownerConnectorAuthRoutes(app: FastifyInstance): Promise<vo
         personalData: 'NONE',
       });
     } catch (err) {
-      handleError(reply, err);
+      return handleError(reply, err);
     }
   });
 }

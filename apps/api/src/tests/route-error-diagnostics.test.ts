@@ -62,7 +62,7 @@ async function buildDiagnosticApp(logLines: string[]) {
     try {
       throw rootCauseError();
     } catch (error) {
-      handleError(reply, error);
+      return handleError(reply, error);
     }
   });
   return app;

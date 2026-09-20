@@ -25,7 +25,7 @@ export async function boardMemberRoutes(app: FastifyInstance) {
         Math.min(100, Math.max(1, parseInt(pageSize ?? '50', 10) || 50)),
       );
     } catch (err) {
-      handleError(reply, err);
+      return handleError(reply, err);
     }
   });
 
@@ -33,7 +33,7 @@ export async function boardMemberRoutes(app: FastifyInstance) {
     try {
       return sendSuccess(reply, await service.getById(request.user.organisationId, request.params.id));
     } catch (err) {
-      handleError(reply, err);
+      return handleError(reply, err);
     }
   });
 
@@ -46,7 +46,7 @@ export async function boardMemberRoutes(app: FastifyInstance) {
       if (err instanceof ZodError) {
         return reply.status(400).send({ error: 'Validation failed', code: 'VALIDATION_ERROR', details: err.errors });
       }
-      handleError(reply, err);
+      return handleError(reply, err);
     }
   });
 
@@ -58,7 +58,7 @@ export async function boardMemberRoutes(app: FastifyInstance) {
       if (err instanceof ZodError) {
         return reply.status(400).send({ error: 'Validation failed', code: 'VALIDATION_ERROR', details: err.errors });
       }
-      handleError(reply, err);
+      return handleError(reply, err);
     }
   });
 
@@ -67,7 +67,7 @@ export async function boardMemberRoutes(app: FastifyInstance) {
       await service.remove(request.user.organisationId, request.params.id);
       return sendNoContent(reply);
     } catch (err) {
-      handleError(reply, err);
+      return handleError(reply, err);
     }
   });
 }

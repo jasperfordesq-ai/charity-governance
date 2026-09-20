@@ -56,39 +56,36 @@ export async function ownerTenantRoutes(app: FastifyInstance): Promise<void> {
 
   app.get('/tenants', async (request, reply) => {
     try {
-      reply.send(await listTenants(app.prisma, listQuerySchema.parse(request.query ?? {})));
+      return reply.send(await listTenants(app.prisma, listQuerySchema.parse(request.query ?? {})));
     } catch (err) {
       if (err instanceof ZodError) {
-        reply.status(400).send({ error: 'Validation failed', code: 'VALIDATION_ERROR' });
-        return;
+        return reply.status(400).send({ error: 'Validation failed', code: 'VALIDATION_ERROR' });
       }
-      handleError(reply, err);
+      return handleError(reply, err);
     }
   });
 
   app.get('/tenants/:id/history', async (request, reply) => {
     try {
       const { id } = z.object({ id: z.string().min(1).max(64) }).parse(request.params);
-      reply.send({ events: await listTenantAdministrativeEvents(app.prisma, id) });
+      return reply.send({ events: await listTenantAdministrativeEvents(app.prisma, id) });
     } catch (err) {
       if (err instanceof ZodError) {
-        reply.status(400).send({ error: 'Validation failed', code: 'VALIDATION_ERROR' });
-        return;
+        return reply.status(400).send({ error: 'Validation failed', code: 'VALIDATION_ERROR' });
       }
-      handleError(reply, err);
+      return handleError(reply, err);
     }
   });
 
   app.get('/tenants/:id/configuration', async (request, reply) => {
     try {
       const { id } = z.object({ id: z.string().min(1).max(64) }).parse(request.params);
-      reply.send({ configuration: await getTenantConfiguration(app.prisma, id) });
+      return reply.send({ configuration: await getTenantConfiguration(app.prisma, id) });
     } catch (err) {
       if (err instanceof ZodError) {
-        reply.status(400).send({ error: 'Validation failed', code: 'VALIDATION_ERROR' });
-        return;
+        return reply.status(400).send({ error: 'Validation failed', code: 'VALIDATION_ERROR' });
       }
-      handleError(reply, err);
+      return handleError(reply, err);
     }
   });
 
@@ -97,7 +94,7 @@ export async function ownerTenantRoutes(app: FastifyInstance): Promise<void> {
       const { id } = z.object({ id: z.string().min(1).max(64) }).parse(request.params);
       const { reason, ...change } = configurationSchema.parse(request.body ?? {});
 
-      reply.send({
+      return reply.send({
         configuration: await updateTenantConfiguration(app.prisma, {
           tenantId: id,
           change,
@@ -107,23 +104,21 @@ export async function ownerTenantRoutes(app: FastifyInstance): Promise<void> {
       });
     } catch (err) {
       if (err instanceof ZodError) {
-        reply.status(400).send({ error: 'Validation failed', code: 'VALIDATION_ERROR' });
-        return;
+        return reply.status(400).send({ error: 'Validation failed', code: 'VALIDATION_ERROR' });
       }
-      handleError(reply, err);
+      return handleError(reply, err);
     }
   });
 
   app.get('/tenants/:id', async (request, reply) => {
     try {
       const { id } = z.object({ id: z.string().min(1).max(64) }).parse(request.params);
-      reply.send({ tenant: await getTenant(app.prisma, id) });
+      return reply.send({ tenant: await getTenant(app.prisma, id) });
     } catch (err) {
       if (err instanceof ZodError) {
-        reply.status(400).send({ error: 'Validation failed', code: 'VALIDATION_ERROR' });
-        return;
+        return reply.status(400).send({ error: 'Validation failed', code: 'VALIDATION_ERROR' });
       }
-      handleError(reply, err);
+      return handleError(reply, err);
     }
   });
 
@@ -148,13 +143,12 @@ export async function ownerTenantRoutes(app: FastifyInstance): Promise<void> {
         expectedLifecycleVersion: body.expectedLifecycleVersion,
         operator: request.operator,
       });
-      reply.send({ tenant });
+      return reply.send({ tenant });
     } catch (err) {
       if (err instanceof ZodError) {
-        reply.status(400).send({ error: 'Validation failed', code: 'VALIDATION_ERROR' });
-        return;
+        return reply.status(400).send({ error: 'Validation failed', code: 'VALIDATION_ERROR' });
       }
-      handleError(reply, err);
+      return handleError(reply, err);
     }
   });
 
@@ -180,13 +174,12 @@ export async function ownerTenantRoutes(app: FastifyInstance): Promise<void> {
     try {
       const body = provisionBodySchema.parse(request.body);
       const result = await provisionTenant(app.prisma, body);
-      reply.status(201).send(result);
+      return reply.status(201).send(result);
     } catch (err) {
       if (err instanceof ZodError) {
-        reply.status(400).send({ error: 'Validation failed', code: 'VALIDATION_ERROR' });
-        return;
+        return reply.status(400).send({ error: 'Validation failed', code: 'VALIDATION_ERROR' });
       }
-      handleError(reply, err);
+      return handleError(reply, err);
     }
   });
 }

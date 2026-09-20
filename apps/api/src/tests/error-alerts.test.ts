@@ -41,7 +41,7 @@ async function buildErrorApp() {
     try {
       throw new AppError(400, 'BAD_REQUEST', 'Bad request', { field: 'name' });
     } catch (err) {
-      handleError(reply, err);
+      return handleError(reply, err);
     }
   });
 
@@ -53,7 +53,7 @@ async function buildErrorApp() {
         'Failed to download file: provider-secret',
       );
     } catch (err) {
-      handleError(reply, err);
+      return handleError(reply, err);
     }
   });
 
@@ -65,7 +65,7 @@ async function buildErrorApp() {
         'Storage provider unavailable: provider-secret',
       );
     } catch (err) {
-      handleError(reply, err);
+      return handleError(reply, err);
     }
   });
 

@@ -44,15 +44,14 @@ export async function teamRoutes(app: FastifyInstance) {
         const result = await service.acceptInvite(body);
 
         setAuthCookies(reply, result);
-        reply.status(201).send({
+        return reply.status(201).send({
           user: publicUser(result.user),
         });
       } catch (err) {
         if (err instanceof ZodError) {
-          reply.status(400).send(formatZodError(err));
-          return;
+          return reply.status(400).send(formatZodError(err));
         }
-        handleError(reply, err);
+        return handleError(reply, err);
       }
     },
   );
@@ -64,7 +63,7 @@ export async function teamRoutes(app: FastifyInstance) {
       try {
         return await service.list(request.user.organisationId, request.user.userId);
       } catch (err) {
-        handleError(reply, err);
+        return handleError(reply, err);
       }
     });
 
@@ -77,13 +76,12 @@ export async function teamRoutes(app: FastifyInstance) {
           request.user.role,
           body,
         );
-        reply.status(202).send(invite);
+        return reply.status(202).send(invite);
       } catch (err) {
         if (err instanceof ZodError) {
-          reply.status(400).send(formatZodError(err));
-          return;
+          return reply.status(400).send(formatZodError(err));
         }
-        handleError(reply, err);
+        return handleError(reply, err);
       }
     });
 
@@ -98,7 +96,7 @@ export async function teamRoutes(app: FastifyInstance) {
           request.id,
         );
       } catch (err) {
-        handleError(reply, err);
+        return handleError(reply, err);
       }
     });
 
@@ -116,10 +114,9 @@ export async function teamRoutes(app: FastifyInstance) {
         );
       } catch (err) {
         if (err instanceof ZodError) {
-          reply.status(400).send(formatZodError(err));
-          return;
+          return reply.status(400).send(formatZodError(err));
         }
-        handleError(reply, err);
+        return handleError(reply, err);
       }
     });
 
@@ -138,10 +135,9 @@ export async function teamRoutes(app: FastifyInstance) {
         });
       } catch (err) {
         if (err instanceof ZodError) {
-          reply.status(400).send(formatZodError(err));
-          return;
+          return reply.status(400).send(formatZodError(err));
         }
-        handleError(reply, err);
+        return handleError(reply, err);
       }
     });
 
@@ -159,10 +155,9 @@ export async function teamRoutes(app: FastifyInstance) {
         });
       } catch (err) {
         if (err instanceof ZodError) {
-          reply.status(400).send(formatZodError(err));
-          return;
+          return reply.status(400).send(formatZodError(err));
         }
-        handleError(reply, err);
+        return handleError(reply, err);
       }
     });
 
@@ -180,10 +175,9 @@ export async function teamRoutes(app: FastifyInstance) {
         });
       } catch (err) {
         if (err instanceof ZodError) {
-          reply.status(400).send(formatZodError(err));
-          return;
+          return reply.status(400).send(formatZodError(err));
         }
-        handleError(reply, err);
+        return handleError(reply, err);
       }
     });
 
@@ -201,10 +195,9 @@ export async function teamRoutes(app: FastifyInstance) {
         });
       } catch (err) {
         if (err instanceof ZodError) {
-          reply.status(400).send(formatZodError(err));
-          return;
+          return reply.status(400).send(formatZodError(err));
         }
-        handleError(reply, err);
+        return handleError(reply, err);
       }
     });
 
@@ -224,10 +217,9 @@ export async function teamRoutes(app: FastifyInstance) {
         return result;
       } catch (err) {
         if (err instanceof ZodError) {
-          reply.status(400).send(formatZodError(err));
-          return;
+          return reply.status(400).send(formatZodError(err));
         }
-        handleError(reply, err);
+        return handleError(reply, err);
       }
     });
 
@@ -241,7 +233,7 @@ export async function teamRoutes(app: FastifyInstance) {
           currentSessionId: request.user.sessionId,
         });
       } catch (err) {
-        handleError(reply, err);
+        return handleError(reply, err);
       }
     });
 
@@ -263,10 +255,9 @@ export async function teamRoutes(app: FastifyInstance) {
         return result;
       } catch (err) {
         if (err instanceof ZodError) {
-          reply.status(400).send(formatZodError(err));
-          return;
+          return reply.status(400).send(formatZodError(err));
         }
-        handleError(reply, err);
+        return handleError(reply, err);
       }
     });
 
@@ -286,10 +277,9 @@ export async function teamRoutes(app: FastifyInstance) {
         return result;
       } catch (err) {
         if (err instanceof ZodError) {
-          reply.status(400).send(formatZodError(err));
-          return;
+          return reply.status(400).send(formatZodError(err));
         }
-        handleError(reply, err);
+        return handleError(reply, err);
       }
     });
 
@@ -300,7 +290,7 @@ export async function teamRoutes(app: FastifyInstance) {
           request.user.userId,
         );
       } catch (err) {
-        handleError(reply, err);
+        return handleError(reply, err);
       }
     });
   });

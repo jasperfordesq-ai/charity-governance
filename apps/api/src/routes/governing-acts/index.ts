@@ -47,7 +47,7 @@ export async function governingActRoutes(app: FastifyInstance) {
       return sendSuccess(reply, await service.list(request.user.organisationId, query));
     } catch (err) {
       if (err instanceof ZodError) return validationError(reply, err);
-      handleError(reply, err);
+      return handleError(reply, err);
     }
   });
 
@@ -58,7 +58,7 @@ export async function governingActRoutes(app: FastifyInstance) {
     try {
       return sendSuccess(reply, await service.getById(request.user.organisationId, request.params.id));
     } catch (err) {
-      handleError(reply, err);
+      return handleError(reply, err);
     }
   });
 
@@ -68,7 +68,7 @@ export async function governingActRoutes(app: FastifyInstance) {
       return sendCreated(reply, await service.create(request.user.organisationId, data));
     } catch (err) {
       if (err instanceof ZodError) return validationError(reply, err);
-      handleError(reply, err);
+      return handleError(reply, err);
     }
   });
 
@@ -78,7 +78,7 @@ export async function governingActRoutes(app: FastifyInstance) {
       return sendSuccess(reply, await service.update(request.user.organisationId, request.params.id, data));
     } catch (err) {
       if (err instanceof ZodError) return validationError(reply, err);
-      handleError(reply, err);
+      return handleError(reply, err);
     }
   });
 
@@ -91,7 +91,7 @@ export async function governingActRoutes(app: FastifyInstance) {
         await service.getResolution(request.user.organisationId, request.params.id),
       );
     } catch (err) {
-      handleError(reply, err);
+      return handleError(reply, err);
     }
   });
 
@@ -107,7 +107,7 @@ export async function governingActRoutes(app: FastifyInstance) {
         );
       } catch (err) {
         if (err instanceof ZodError) return validationError(reply, err);
-        handleError(reply, err);
+        return handleError(reply, err);
       }
     },
   );
@@ -124,7 +124,7 @@ export async function governingActRoutes(app: FastifyInstance) {
         );
       } catch (err) {
         if (err instanceof ZodError) return validationError(reply, err);
-        handleError(reply, err);
+        return handleError(reply, err);
       }
     },
   );
@@ -136,7 +136,7 @@ export async function governingActRoutes(app: FastifyInstance) {
     try {
       return sendSuccess(reply, await service.listVoids(request.user.organisationId));
     } catch (err) {
-      handleError(reply, err);
+      return handleError(reply, err);
     }
   });
 
@@ -149,7 +149,7 @@ export async function governingActRoutes(app: FastifyInstance) {
       );
     } catch (err) {
       if (err instanceof ZodError) return validationError(reply, err);
-      handleError(reply, err);
+      return handleError(reply, err);
     }
   });
 
@@ -159,7 +159,7 @@ export async function governingActRoutes(app: FastifyInstance) {
     try {
       return sendSuccess(reply, await service.getBoardSubmissions(request.user.organisationId));
     } catch (err) {
-      handleError(reply, err);
+      return handleError(reply, err);
     }
   });
 
@@ -181,7 +181,7 @@ export async function governingActRoutes(app: FastifyInstance) {
         return sendSuccess(reply, { ok: true });
       } catch (err) {
         if (err instanceof ZodError) return validationError(reply, err);
-        handleError(reply, err);
+        return handleError(reply, err);
       }
     },
   );

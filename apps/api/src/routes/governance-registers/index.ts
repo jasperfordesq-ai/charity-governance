@@ -55,7 +55,7 @@ export async function governanceRegisterRoutes(app: FastifyInstance) {
       return sendSuccess(reply, await service.summary(request.user.organisationId, year));
     } catch (err) {
       if (err instanceof ZodError) return validationError(reply, err);
-      handleError(reply, err);
+      return handleError(reply, err);
     }
   });
 
@@ -63,7 +63,7 @@ export async function governanceRegisterRoutes(app: FastifyInstance) {
     try {
       return sendSuccess(reply, await service.listConflicts(request.user.organisationId));
     } catch (err) {
-      handleError(reply, err);
+      return handleError(reply, err);
     }
   });
 
@@ -74,7 +74,7 @@ export async function governanceRegisterRoutes(app: FastifyInstance) {
         await service.getRecord('conflict', request.user.organisationId, request.params.id),
       );
     } catch (err) {
-      handleError(reply, err);
+      return handleError(reply, err);
     }
   });
   app.post('/conflicts', { preHandler: [requireAdmin] }, async (request, reply) => {
@@ -83,7 +83,7 @@ export async function governanceRegisterRoutes(app: FastifyInstance) {
       return sendCreated(reply, await service.createConflict(request.user.organisationId, data));
     } catch (err) {
       if (err instanceof ZodError) return validationError(reply, err);
-      handleError(reply, err);
+      return handleError(reply, err);
     }
   });
 
@@ -93,7 +93,7 @@ export async function governanceRegisterRoutes(app: FastifyInstance) {
       return sendSuccess(reply, await service.updateConflict(request.user.organisationId, request.params.id, data, expectedUpdatedAt));
     } catch (err) {
       if (err instanceof ZodError) return validationError(reply, err);
-      handleError(reply, err);
+      return handleError(reply, err);
     }
   });
 
@@ -102,7 +102,7 @@ export async function governanceRegisterRoutes(app: FastifyInstance) {
       await service.removeConflict(request.user.organisationId, request.params.id);
       return sendNoContent(reply);
     } catch (err) {
-      handleError(reply, err);
+      return handleError(reply, err);
     }
   });
 
@@ -110,7 +110,7 @@ export async function governanceRegisterRoutes(app: FastifyInstance) {
     try {
       return sendSuccess(reply, await service.listRisks(request.user.organisationId));
     } catch (err) {
-      handleError(reply, err);
+      return handleError(reply, err);
     }
   });
 
@@ -121,7 +121,7 @@ export async function governanceRegisterRoutes(app: FastifyInstance) {
         await service.getRecord('risk', request.user.organisationId, request.params.id),
       );
     } catch (err) {
-      handleError(reply, err);
+      return handleError(reply, err);
     }
   });
   app.post('/risks', { preHandler: [requireAdmin] }, async (request, reply) => {
@@ -130,7 +130,7 @@ export async function governanceRegisterRoutes(app: FastifyInstance) {
       return sendCreated(reply, await service.createRisk(request.user.organisationId, data));
     } catch (err) {
       if (err instanceof ZodError) return validationError(reply, err);
-      handleError(reply, err);
+      return handleError(reply, err);
     }
   });
 
@@ -140,7 +140,7 @@ export async function governanceRegisterRoutes(app: FastifyInstance) {
       return sendSuccess(reply, await service.updateRisk(request.user.organisationId, request.params.id, data, expectedUpdatedAt));
     } catch (err) {
       if (err instanceof ZodError) return validationError(reply, err);
-      handleError(reply, err);
+      return handleError(reply, err);
     }
   });
 
@@ -149,7 +149,7 @@ export async function governanceRegisterRoutes(app: FastifyInstance) {
       await service.removeRisk(request.user.organisationId, request.params.id);
       return sendNoContent(reply);
     } catch (err) {
-      handleError(reply, err);
+      return handleError(reply, err);
     }
   });
 
@@ -157,7 +157,7 @@ export async function governanceRegisterRoutes(app: FastifyInstance) {
     try {
       return sendSuccess(reply, await service.listComplaints(request.user.organisationId));
     } catch (err) {
-      handleError(reply, err);
+      return handleError(reply, err);
     }
   });
 
@@ -168,7 +168,7 @@ export async function governanceRegisterRoutes(app: FastifyInstance) {
         await service.getRecord('complaint', request.user.organisationId, request.params.id),
       );
     } catch (err) {
-      handleError(reply, err);
+      return handleError(reply, err);
     }
   });
   app.post('/complaints', { preHandler: [requireAdmin] }, async (request, reply) => {
@@ -177,7 +177,7 @@ export async function governanceRegisterRoutes(app: FastifyInstance) {
       return sendCreated(reply, await service.createComplaint(request.user.organisationId, data));
     } catch (err) {
       if (err instanceof ZodError) return validationError(reply, err);
-      handleError(reply, err);
+      return handleError(reply, err);
     }
   });
 
@@ -187,7 +187,7 @@ export async function governanceRegisterRoutes(app: FastifyInstance) {
       return sendSuccess(reply, await service.updateComplaint(request.user.organisationId, request.params.id, data, expectedUpdatedAt));
     } catch (err) {
       if (err instanceof ZodError) return validationError(reply, err);
-      handleError(reply, err);
+      return handleError(reply, err);
     }
   });
 
@@ -196,7 +196,7 @@ export async function governanceRegisterRoutes(app: FastifyInstance) {
       await service.removeComplaint(request.user.organisationId, request.params.id);
       return sendNoContent(reply);
     } catch (err) {
-      handleError(reply, err);
+      return handleError(reply, err);
     }
   });
 
@@ -204,7 +204,7 @@ export async function governanceRegisterRoutes(app: FastifyInstance) {
     try {
       return sendSuccess(reply, await service.listFundraising(request.user.organisationId));
     } catch (err) {
-      handleError(reply, err);
+      return handleError(reply, err);
     }
   });
 
@@ -215,7 +215,7 @@ export async function governanceRegisterRoutes(app: FastifyInstance) {
         await service.getRecord('fundraising', request.user.organisationId, request.params.id),
       );
     } catch (err) {
-      handleError(reply, err);
+      return handleError(reply, err);
     }
   });
   app.post('/fundraising', { preHandler: [requireAdmin] }, async (request, reply) => {
@@ -224,7 +224,7 @@ export async function governanceRegisterRoutes(app: FastifyInstance) {
       return sendCreated(reply, await service.createFundraising(request.user.organisationId, data));
     } catch (err) {
       if (err instanceof ZodError) return validationError(reply, err);
-      handleError(reply, err);
+      return handleError(reply, err);
     }
   });
 
@@ -234,7 +234,7 @@ export async function governanceRegisterRoutes(app: FastifyInstance) {
       return sendSuccess(reply, await service.updateFundraising(request.user.organisationId, request.params.id, data, expectedUpdatedAt));
     } catch (err) {
       if (err instanceof ZodError) return validationError(reply, err);
-      handleError(reply, err);
+      return handleError(reply, err);
     }
   });
 
@@ -243,7 +243,7 @@ export async function governanceRegisterRoutes(app: FastifyInstance) {
       await service.removeFundraising(request.user.organisationId, request.params.id);
       return sendNoContent(reply);
     } catch (err) {
-      handleError(reply, err);
+      return handleError(reply, err);
     }
   });
 
@@ -253,7 +253,7 @@ export async function governanceRegisterRoutes(app: FastifyInstance) {
       return sendSuccess(reply, await service.getAnnualReportReadiness(request.user.organisationId, year));
     } catch (err) {
       if (err instanceof ZodError) return validationError(reply, err);
-      handleError(reply, err);
+      return handleError(reply, err);
     }
   });
 
@@ -263,7 +263,7 @@ export async function governanceRegisterRoutes(app: FastifyInstance) {
       return sendSuccess(reply, await service.upsertAnnualReportReadiness(request.user.organisationId, data));
     } catch (err) {
       if (err instanceof ZodError) return validationError(reply, err);
-      handleError(reply, err);
+      return handleError(reply, err);
     }
   });
 
@@ -273,7 +273,7 @@ export async function governanceRegisterRoutes(app: FastifyInstance) {
       return sendSuccess(reply, await service.getFinancialControlReview(request.user.organisationId, year));
     } catch (err) {
       if (err instanceof ZodError) return validationError(reply, err);
-      handleError(reply, err);
+      return handleError(reply, err);
     }
   });
 
@@ -283,7 +283,7 @@ export async function governanceRegisterRoutes(app: FastifyInstance) {
       return sendSuccess(reply, await service.upsertFinancialControlReview(request.user.organisationId, data));
     } catch (err) {
       if (err instanceof ZodError) return validationError(reply, err);
-      handleError(reply, err);
+      return handleError(reply, err);
     }
   });
 }

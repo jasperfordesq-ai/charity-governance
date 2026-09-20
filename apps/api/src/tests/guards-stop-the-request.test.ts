@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { readdir, readFile } from 'node:fs/promises';
+import type { Dirent } from 'node:fs';
 
 /**
  * Every guard that refuses must return the reply it sent.
@@ -20,6 +21,20 @@ import { readdir, readFile } from 'node:fs/promises';
  */
 const GUARD_DIRECTORIES = ['src/middleware', 'src/plugins'];
 
+/**
+ * The same rule, for the handlers rather than the guards in front of them.
+ *
+ * A guard that does not return leaks the request past a refusal. A *handler*
+ * that does not return makes Fastify answer a second time: `reply.sent` is
+ * `raw.writableEnded`, still false while an async `onSend` hook runs, so a
+ * handler resolving `undefined` looks like one that never answered. The second
+ * answer re-runs every `onSend` hook and writes a head that is already
+ * written — the live `ERR_HTTP_HEADERS_SENT`. Same shape, same fix, so the
+ * same detector covers both. `tests/routes-answer-once.test.ts` holds the
+ * behaviour this protects.
+ */
+const HANDLER_DIRECTORIES = ['src/routes'];
+
 /** Files whose sends end the lifecycle rather than interrupt it. */
 const EXEMPT = new Set([
   // The error handler and the not-found handler are the end of the request,
@@ -30,8 +45,19 @@ const EXEMPT = new Set([
 
 async function sourceFiles(directory: string): Promise<string[]> {
   const root = new URL(`../../${directory}/`, import.meta.url);
-  const entries = await readdir(root);
-  return entries.filter((name) => name.endsWith('.ts')).map((name) => `${directory}/${name}`);
+  const entries: Dirent[] = await readdir(root, { withFileTypes: true });
+  const files: string[] = [];
+
+  for (const entry of entries) {
+    // Routes are nested a directory deep per resource, so this recurses; the
+    // guard directories are flat and are unaffected by it.
+    if (entry.isDirectory()) {
+      files.push(...(await sourceFiles(`${directory}/${entry.name}`)));
+    } else if (entry.name.endsWith('.ts')) {
+      files.push(`${directory}/${entry.name}`);
+    }
+  }
+  return files;
 }
 
 /**
@@ -57,6 +83,26 @@ function sendsWithoutReturning(source: string): number[] {
   return lines;
 }
 
+/**
+ * `handleError` is a send wearing a helper's name, so it needs the same rule.
+ *
+ * It returned `void` until this was fixed, which made the rule impossible to
+ * obey: `return handleError(reply, err)` still resolved `undefined` and the
+ * request was still answered twice. It returns the reply now, and this is what
+ * stops the next call site dropping it.
+ */
+function handleErrorsWithoutReturning(source: string): number[] {
+  const code = source.replace(/\/\*[\s\S]*?\*\//g, '').replace(/^[ \t]*\/\/.*$/gm, '');
+  const statement = /(^|[;{}\n])([ \t]*)(return\s+)?handleError\s*\(/g;
+  const lines: number[] = [];
+
+  for (const match of code.matchAll(statement)) {
+    if (match[3]) continue;
+    lines.push(code.slice(0, match.index + match[1]!.length).split('\n').length);
+  }
+  return lines;
+}
+
 test('no guard sends a refusal without returning it', async () => {
   const offenders: string[] = [];
 
@@ -73,6 +119,26 @@ test('no guard sends a refusal without returning it', async () => {
     [],
     'These send a reply without returning it. Fastify then carries on with the '
       + `request, so the thing being refused happens anyway:\n${offenders.join('\n')}`,
+  );
+});
+
+test('no route handler answers without returning the answer', async () => {
+  const offenders: string[] = [];
+
+  for (const directory of HANDLER_DIRECTORIES) {
+    for (const file of await sourceFiles(directory)) {
+      const source = await readFile(new URL(`../../${file}`, import.meta.url), 'utf8');
+      for (const line of sendsWithoutReturning(source)) offenders.push(`${file}:${line}`);
+      for (const line of handleErrorsWithoutReturning(source)) offenders.push(`${file}:${line}`);
+    }
+  }
+
+  assert.deepEqual(
+    offenders,
+    [],
+    'These answer the request without returning the answer. Fastify cannot tell '
+      + 'that from a handler that never answered, so it answers a second time and '
+      + `writes a head that is already written:\n${offenders.join('\n')}`,
   );
 });
 

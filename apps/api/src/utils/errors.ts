@@ -41,7 +41,25 @@ function reportHandledServerError(
   });
 }
 
-export function sendError(reply: FastifyReply, error: AppError): void {
+/**
+ * Both of these return the reply, and every caller must return what they
+ * return.
+ *
+ * Fastify decides an async handler has answered by looking at what its promise
+ * resolves to. `reply.sent` is `raw.writableEnded`, which is still false while
+ * an async `onSend` hook is running, so a handler that sends and then resolves
+ * with `undefined` looks to Fastify like a handler that never answered — and
+ * Fastify sends again, re-running the whole `onSend` chain over a response
+ * whose head is already written.
+ *
+ * Returning `void` from here made that impossible to fix at the call site:
+ * `return handleError(reply, err)` still resolves `undefined`. Returning the
+ * reply works because `Reply` is itself a thenable whose `then` waits for the
+ * response to finish, so the handler's promise cannot settle until the answer
+ * is fully out. `tests/routes-answer-once.test.ts` holds the behaviour and
+ * `tests/guards-stop-the-request.test.ts` holds the call sites.
+ */
+export function sendError(reply: FastifyReply, error: AppError): FastifyReply {
   reportHandledServerError(reply, error, error.statusCode);
 
   const exposeMessage = error.statusCode < 500 || !isProduction();
@@ -58,19 +76,18 @@ export function sendError(reply: FastifyReply, error: AppError): void {
     payload.details = error.details;
   }
 
-  reply.status(error.statusCode).send(payload);
+  return reply.status(error.statusCode).send(payload);
 }
 
-export function handleError(reply: FastifyReply, err: unknown): void {
+export function handleError(reply: FastifyReply, err: unknown): FastifyReply {
   if (err instanceof AppError) {
-    sendError(reply, err);
-    return;
+    return sendError(reply, err);
   }
 
   const error = err instanceof Error ? err : new Error('Unexpected non-error exception');
   reportHandledServerError(reply, error, 500);
 
-  reply.status(500).send({
+  return reply.status(500).send({
     error: 'Internal server error',
     code: 'INTERNAL_ERROR',
   });

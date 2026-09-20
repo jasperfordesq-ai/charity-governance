@@ -676,7 +676,7 @@ export async function integrationRoutes(
         disclosure: CONFLUENCE_CONNECT_DISCLOSURE,
       });
     } catch (error) {
-      handleError(reply, error);
+      return handleError(reply, error);
     }
   });
 
@@ -771,7 +771,7 @@ export async function integrationRoutes(
       // client that branches on the code (as it must — 409 is already spoken
       // for by TENANT_LIFECYCLE_CONFLICT elsewhere in the API) sees exactly
       // what the OAuth module meant.
-      handleError(reply, error);
+      return handleError(reply, error);
     }
   });
 
@@ -845,7 +845,7 @@ export async function integrationRoutes(
         unavailableActions: missingScopes.length > 0 ? ['ERASE_CONFLUENCE_COPY'] : [],
       });
     } catch (error) {
-      handleError(reply, error);
+      return handleError(reply, error);
     }
   });
 
@@ -879,7 +879,7 @@ export async function integrationRoutes(
 
       return sendSuccess(reply, { spaces, nextCursor: nextCursor ?? null });
     } catch (error) {
-      handleError(reply, error);
+      return handleError(reply, error);
     }
   });
 
@@ -939,7 +939,7 @@ export async function integrationRoutes(
         publishing: true,
       });
     } catch (error) {
-      handleError(reply, error);
+      return handleError(reply, error);
     }
   });
 
@@ -1034,7 +1034,7 @@ export async function integrationRoutes(
         })),
       });
     } catch (error) {
-      handleError(reply, error);
+      return handleError(reply, error);
     }
   });
 
@@ -1098,7 +1098,7 @@ export async function integrationRoutes(
             details: error.errors,
           });
         }
-        handleError(reply, error);
+        return handleError(reply, error);
       }
     },
   );
@@ -1142,7 +1142,7 @@ export async function integrationRoutes(
       }
       return sendNoContent(reply);
     } catch (error) {
-      handleError(reply, error);
+      return handleError(reply, error);
     }
   });
 }

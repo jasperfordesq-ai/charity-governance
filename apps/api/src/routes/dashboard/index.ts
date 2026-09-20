@@ -94,7 +94,7 @@ export async function dashboardRoutes(app: FastifyInstance) {
         recentActivity,
       });
     } catch (err) {
-      handleError(reply, err);
+      return handleError(reply, err);
     }
   });
 }

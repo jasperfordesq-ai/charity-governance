@@ -80,16 +80,15 @@ export async function ownerAuthRoutes(app: FastifyInstance): Promise<void> {
           // hunting for a problem that is not there. This leaks only that the
           // account has a second factor, which the person holding the correct
           // password for it already knows.
-          reply.status(401).send({
+          return reply.status(401).send({
             error: 'This account needs a code from its authenticator application.',
             code: 'SECOND_FACTOR_REQUIRED',
           });
-          return;
         }
 
         const tokens = await issueOperatorSession(app.prisma, operator.id);
         setOwnerCookies(reply, tokens);
-        reply.send({
+        return reply.send({
           operator: { id: operator.id, email: operator.email, name: operator.name },
           ...(secondFactor.required && secondFactor.satisfied && secondFactor.usedRecoveryCode
             ? {
@@ -101,10 +100,9 @@ export async function ownerAuthRoutes(app: FastifyInstance): Promise<void> {
         });
       } catch (err) {
         if (err instanceof ZodError) {
-          reply.status(400).send({ error: 'Validation failed', code: 'VALIDATION_ERROR' });
-          return;
+          return reply.status(400).send({ error: 'Validation failed', code: 'VALIDATION_ERROR' });
         }
-        handleError(reply, err);
+        return handleError(reply, err);
       }
     },
   );
@@ -120,10 +118,10 @@ export async function ownerAuthRoutes(app: FastifyInstance): Promise<void> {
         }
         const tokens = await rotateOperatorSession(app.prisma, refreshToken);
         setOwnerCookies(reply, tokens);
-        reply.send({ ok: true });
+        return reply.send({ ok: true });
       } catch (err) {
         clearOwnerCookies(reply);
-        handleError(reply, err);
+        return handleError(reply, err);
       }
     },
   );
@@ -135,7 +133,7 @@ export async function ownerAuthRoutes(app: FastifyInstance): Promise<void> {
       const refreshToken = getOwnerRefreshTokenFromRequest(request);
       if (refreshToken) await revokeOperatorSession(app.prisma, refreshToken);
       clearOwnerCookies(reply);
-      reply.send({ message: 'Signed out' });
+      return reply.send({ message: 'Signed out' });
     },
   );
 
@@ -154,9 +152,9 @@ export async function ownerAuthRoutes(app: FastifyInstance): Promise<void> {
     { preHandler: [requirePlatformOperator] },
     async (request, reply) => {
       try {
-        reply.send(await operatorSecondFactorState(app.prisma, request.operator.id));
+        return reply.send(await operatorSecondFactorState(app.prisma, request.operator.id));
       } catch (err) {
-        handleError(reply, err);
+        return handleError(reply, err);
       }
     },
   );
@@ -169,9 +167,9 @@ export async function ownerAuthRoutes(app: FastifyInstance): Promise<void> {
         // The secret is returned exactly once, here, so it can be scanned. It
         // is never readable again: a route that could hand it back would make
         // a stolen session enough to clone the factor.
-        reply.send(await beginOperatorEnrolment(app.prisma, request.operator.id));
+        return reply.send(await beginOperatorEnrolment(app.prisma, request.operator.id));
       } catch (err) {
-        handleError(reply, err);
+        return handleError(reply, err);
       }
     },
   );
@@ -187,13 +185,12 @@ export async function ownerAuthRoutes(app: FastifyInstance): Promise<void> {
         }
         // The recovery codes are shown once and never again, which the console
         // says out loud before it stops showing them.
-        reply.send(await completeOperatorEnrolment(app.prisma, request.operator.id, body.code));
+        return reply.send(await completeOperatorEnrolment(app.prisma, request.operator.id, body.code));
       } catch (err) {
         if (err instanceof ZodError) {
-          reply.status(400).send({ error: 'Validation failed', code: 'VALIDATION_ERROR' });
-          return;
+          return reply.status(400).send({ error: 'Validation failed', code: 'VALIDATION_ERROR' });
         }
-        handleError(reply, err);
+        return handleError(reply, err);
       }
     },
   );
@@ -205,19 +202,18 @@ export async function ownerAuthRoutes(app: FastifyInstance): Promise<void> {
       try {
         const body = secondFactorCodeSchema.parse(request.body ?? {});
         await removeOperatorSecondFactor(app.prisma, request.operator.id, body);
-        reply.send({ ok: true });
+        return reply.send({ ok: true });
       } catch (err) {
         if (err instanceof ZodError) {
-          reply.status(400).send({ error: 'Validation failed', code: 'VALIDATION_ERROR' });
-          return;
+          return reply.status(400).send({ error: 'Validation failed', code: 'VALIDATION_ERROR' });
         }
-        handleError(reply, err);
+        return handleError(reply, err);
       }
     },
   );
 
   app.get('/auth/me', { preHandler: [requirePlatformOperator] }, async (request, reply) => {
-    reply.send({ operator: request.operator });
+    return reply.send({ operator: request.operator });
   });
 
   const setPasswordSchema = z.object({
@@ -270,13 +266,12 @@ export async function ownerAuthRoutes(app: FastifyInstance): Promise<void> {
           });
         });
 
-        reply.send({ message: 'Password set. You can now sign in.' });
+        return reply.send({ message: 'Password set. You can now sign in.' });
       } catch (err) {
         if (err instanceof ZodError) {
-          reply.status(400).send({ error: 'Password must be at least 12 characters.', code: 'VALIDATION_ERROR' });
-          return;
+          return reply.status(400).send({ error: 'Password must be at least 12 characters.', code: 'VALIDATION_ERROR' });
         }
-        handleError(reply, err);
+        return handleError(reply, err);
       }
     },
   );

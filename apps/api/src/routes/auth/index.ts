@@ -52,7 +52,7 @@ async function providerEmailAuthGuard(
   reply: FastifyReply,
 ): Promise<void> {
   if (emailDeliveryMode() === "provider") return;
-  reply.status(404).send({ error: "Not found", code: "NOT_FOUND" });
+  return reply.status(404).send({ error: "Not found", code: "NOT_FOUND" });
 }
 
 export async function authRoutes(app: FastifyInstance) {
@@ -66,21 +66,19 @@ export async function authRoutes(app: FastifyInstance) {
     { config: { rateLimit: bodyIdentifierRateLimit(["email"]) } },
     async (request, reply) => {
       if (!isRegistrationOpen()) {
-        reply.status(404).send({ error: "Not found", code: "NOT_FOUND" });
-        return;
+        return reply.status(404).send({ error: "Not found", code: "NOT_FOUND" });
       }
 
       try {
         const body = registerSchema.parse(request.body);
         const result = await authService.register(body);
 
-        reply.status(202).send(result);
+        return reply.status(202).send(result);
       } catch (err) {
         if (err instanceof ZodError) {
-          reply.status(400).send(formatZodError(err));
-          return;
+          return reply.status(400).send(formatZodError(err));
         }
-        handleError(reply, err);
+        return handleError(reply, err);
       }
     },
   );
@@ -94,13 +92,12 @@ export async function authRoutes(app: FastifyInstance) {
         const result = await authService.login(body);
 
         setAuthCookies(reply, result);
-        reply.send({ user: publicUser(result.user) });
+        return reply.send({ user: publicUser(result.user) });
       } catch (err) {
         if (err instanceof ZodError) {
-          reply.status(400).send(formatZodError(err));
-          return;
+          return reply.status(400).send(formatZodError(err));
         }
-        handleError(reply, err);
+        return handleError(reply, err);
       }
     },
   );
@@ -130,14 +127,13 @@ export async function authRoutes(app: FastifyInstance) {
         const result = await authService.refresh(refreshToken, "WEB");
         setAuthCookies(reply, result);
 
-        reply.send({ ok: true });
+        return reply.send({ ok: true });
       } catch (err) {
         clearAuthCookies(reply);
         if (err instanceof ZodError) {
-          reply.status(400).send(formatZodError(err));
-          return;
+          return reply.status(400).send(formatZodError(err));
         }
-        handleError(reply, err);
+        return handleError(reply, err);
       }
     },
   );
@@ -156,14 +152,13 @@ export async function authRoutes(app: FastifyInstance) {
         }
 
         clearAuthCookies(reply);
-        reply.send({ ok: true });
+        return reply.send({ ok: true });
       } catch (err) {
         clearAuthCookies(reply);
         if (err instanceof ZodError) {
-          reply.status(400).send(formatZodError(err));
-          return;
+          return reply.status(400).send(formatZodError(err));
         }
-        handleError(reply, err);
+        return handleError(reply, err);
       }
     },
   );
@@ -202,9 +197,9 @@ export async function authRoutes(app: FastifyInstance) {
     async (request, reply) => {
       try {
         const user = await authService.getMe(request.user.userId);
-        reply.send(publicUser(user));
+        return reply.send(publicUser(user));
       } catch (err) {
-        handleError(reply, err);
+        return handleError(reply, err);
       }
     },
   );
@@ -223,13 +218,12 @@ export async function authRoutes(app: FastifyInstance) {
           requestId: request.id,
         });
 
-        reply.status(202).send(result);
+        return reply.status(202).send(result);
       } catch (err) {
         if (err instanceof ZodError) {
-          reply.status(400).send(formatZodError(err));
-          return;
+          return reply.status(400).send(formatZodError(err));
         }
-        handleError(reply, err);
+        return handleError(reply, err);
       }
     },
   );
@@ -246,9 +240,9 @@ export async function authRoutes(app: FastifyInstance) {
           request.user.userId,
         );
 
-        reply.send(result);
+        return reply.send(result);
       } catch (err) {
-        handleError(reply, err);
+        return handleError(reply, err);
       }
     },
   );
@@ -269,13 +263,12 @@ export async function authRoutes(app: FastifyInstance) {
         );
 
         clearAuthCookies(reply);
-        reply.send(result);
+        return reply.send(result);
       } catch (err) {
         if (err instanceof ZodError) {
-          reply.status(400).send(formatZodError(err));
-          return;
+          return reply.status(400).send(formatZodError(err));
         }
-        handleError(reply, err);
+        return handleError(reply, err);
       }
     },
   );
@@ -288,13 +281,12 @@ export async function authRoutes(app: FastifyInstance) {
         const body = verifyEmailSchema.parse(request.body);
         const result = await authService.verifyEmail(body.token);
 
-        reply.send(result);
+        return reply.send(result);
       } catch (err) {
         if (err instanceof ZodError) {
-          reply.status(400).send(formatZodError(err));
-          return;
+          return reply.status(400).send(formatZodError(err));
         }
-        handleError(reply, err);
+        return handleError(reply, err);
       }
     },
   );
@@ -323,9 +315,9 @@ export async function authRoutes(app: FastifyInstance) {
         userId: request.user.userId,
         organisationId: request.user.organisationId,
       });
-      reply.send({ data: pending });
+      return reply.send({ data: pending });
     } catch (err) {
-      handleError(reply, err);
+      return handleError(reply, err);
     }
   });
 
@@ -364,13 +356,12 @@ export async function authRoutes(app: FastifyInstance) {
           );
         }
 
-        reply.send({ ok: true, summary: granted.summary, expiresAt: granted.expiresAt });
+        return reply.send({ ok: true, summary: granted.summary, expiresAt: granted.expiresAt });
       } catch (err) {
         if (err instanceof ZodError) {
-          reply.status(400).send(formatZodError(err));
-          return;
+          return reply.status(400).send(formatZodError(err));
         }
-        handleError(reply, err);
+        return handleError(reply, err);
       }
     },
   );

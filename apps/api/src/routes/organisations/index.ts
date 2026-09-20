@@ -19,7 +19,7 @@ export async function organisationRoutes(app: FastifyInstance) {
       const org = await service.getOrganisation(request.user.organisationId);
       return sendSuccess(reply, org);
     } catch (err) {
-      handleError(reply, err);
+      return handleError(reply, err);
     }
   });
 
@@ -32,7 +32,7 @@ export async function organisationRoutes(app: FastifyInstance) {
       if (err instanceof ZodError) {
         return reply.status(400).send({ error: 'Validation failed', code: 'VALIDATION_ERROR', details: err.errors });
       }
-      handleError(reply, err);
+      return handleError(reply, err);
     }
   });
 }

@@ -99,7 +99,7 @@ export async function exportRoutes(app: FastifyInstance) {
       if (err instanceof ZodError) {
         return reply.status(400).send({ error: 'Validation failed', code: 'VALIDATION_ERROR', details: err.errors });
       }
-      handleError(reply, err);
+      return handleError(reply, err);
     }
   };
 

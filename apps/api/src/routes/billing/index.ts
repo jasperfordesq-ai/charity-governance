@@ -35,7 +35,7 @@ export async function billingRoutes(app: FastifyInstance) {
         if (err instanceof AppError && err.statusCode < 500) {
           app.log.warn({ code: err.code, statusCode: err.statusCode }, err.message);
         }
-        handleError(reply, err);
+        return handleError(reply, err);
       }
     });
   });
@@ -59,7 +59,7 @@ export async function billingRoutes(app: FastifyInstance) {
         if (err instanceof ZodError) {
           return reply.status(400).send({ error: 'Validation failed', code: 'VALIDATION_ERROR', details: err.errors });
         }
-        handleError(reply, err);
+        return handleError(reply, err);
       }
     };
 
@@ -71,7 +71,7 @@ export async function billingRoutes(app: FastifyInstance) {
           request.user.sessionId,
         );
       } catch (err) {
-        handleError(reply, err);
+        return handleError(reply, err);
       }
     };
 
@@ -88,7 +88,7 @@ export async function billingRoutes(app: FastifyInstance) {
           role: request.user.role,
         });
       } catch (err) {
-        handleError(reply, err);
+        return handleError(reply, err);
       }
     });
   });
