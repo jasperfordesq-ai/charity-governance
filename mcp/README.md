@@ -409,10 +409,13 @@ it never shares the OS credential store entry used for the VM:
 ```json
 { "mcpServers": { "charitypilot-local": {
     "command": "node",
-    "args": ["C:\platforms\htdocs\charity-governence\mcp\dist\cli.js",
+    "args": ["C:/platforms/htdocs/charity-governence/mcp/dist/cli.js",
              "serve", "--profile", "local", "--base-url", "http://localhost:3002"],
-    "env": { "CHARITYPILOT_CREDENTIAL_FILE": "C:\Users\jaspe\.charitypilot-mcp-local.json" } } } }
+    "env": { "CHARITYPILOT_CREDENTIAL_FILE": "C:/Users/jaspe/.charitypilot-mcp-local.json" } } } }
 ```
+
+Windows paths in JSON use forward slashes or doubled backslashes; a single
+backslash is an invalid escape and the client refuses the file.
 
 `CHARITYPILOT_CREDENTIAL_FILE` is accepted only with `--profile local`; set
 it anywhere else and the connector refuses to start.
