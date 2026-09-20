@@ -78,6 +78,36 @@ const WARNED = [
   ['validating-constraint', /\bADD\s+CONSTRAINT\b[^;]{0,200}?\b(?:CHECK|FOREIGN\s+KEY)\b(?![^;]{0,150}?\bNOT\s+VALID\b)/i],
 ];
 
+// The gate's one proof-carrying exemption.
+//
+// A destructive verb aimed at a table THIS SAME pending batch created is not
+// destructive. Blue-green blocks these verbs because the colour still serving
+// traffic has queries that read the thing being changed — but a table an
+// earlier migration in this very batch creates has never existed while that
+// colour was running, so it has no such queries and nothing of its can break.
+//
+// This is not a relaxation of the rule. It is the rule stated accurately: the
+// rule was always about what the old colour can see. And it is proof-carrying
+// — it applies only when the CREATE TABLE is in hand, in an earlier migration
+// of the batch being gated, which `gateMigrations` walks in apply order.
+//
+// Deliberately NOT extended to a table created earlier in the SAME migration
+// file. That case is safe by the identical argument, but nothing has needed
+// it, and each widening here costs a reader their reason to believe the gate
+// still means what it says. Add it when a migration actually wants it.
+//
+// The list below is exactly the four verbs the exemption was authorised for.
+// `drop-table` and `alter-column-type` would qualify under the same argument
+// and are still left out, for the same reason: the narrower rule is the one
+// that can be checked by eye. Both are pinned as NOT exempt, so widening this
+// set is a deliberate act with a failing test attached, not a drift.
+const EXEMPTIBLE_ON_BATCH_CREATED_TABLE = new Set([
+  'drop-column',
+  'rename-column',
+  'rename-table',
+  'set-not-null',
+]);
+
 const EXCERPT_MAX = 160;
 
 // Single-pass, string-literal-aware stripper. Removes `--` line comments and
@@ -137,6 +167,66 @@ function stripSqlNoise(sql) {
   return out;
 }
 
+// One table reference — `"Schema"."Name"`, `schema.name`, `"Name"`, `name` —
+// reduced to a single comparable token. Quoted identifiers keep their case
+// because Postgres does; unquoted ones fold to lower case because Postgres
+// does that too. Only the last segment is kept: this deploy has one schema,
+// and a reference that names it is the same table as one that does not.
+function normaliseTableRef(raw) {
+  if (!raw) return null;
+  const segments = [...raw.matchAll(/"([^"]*)"|([A-Za-z_][\w$]*)/g)].map((part) =>
+    part[1] !== undefined ? part[1] : part[2].toLowerCase(),
+  );
+  return segments.length > 0 ? segments[segments.length - 1] : null;
+}
+
+// Statement-splitting on already-stripped SQL. Comments are gone and string
+// literals are masked, so every remaining semicolon terminates a statement.
+//
+// Safe for this purpose even where it is imprecise: a dollar-quoted function
+// body is not understood and would split mid-body, which can only lose a
+// statement's identity and therefore only ever REFUSES an exemption. The
+// failure direction is "block", which is the direction a gate should fail in.
+function statementsOf(stripped) {
+  return stripped.split(';');
+}
+
+const CREATE_TABLE = /\bCREATE\s+TABLE\s+(?:IF\s+NOT\s+EXISTS\s+)?((?:"[^"]*"|[A-Za-z_][\w$]*)(?:\s*\.\s*(?:"[^"]*"|[A-Za-z_][\w$]*))?)/gi;
+const ALTER_TABLE_TARGET = /\bALTER\s+TABLE\s+(?:IF\s+EXISTS\s+)?(?:ONLY\s+)?((?:"[^"]*"|[A-Za-z_][\w$]*)(?:\s*\.\s*(?:"[^"]*"|[A-Za-z_][\w$]*))?)/i;
+
+/**
+ * The tables one migration's SQL creates, normalised.
+ *
+ * Exported so the evidence behind an exemption can be inspected and pinned
+ * on its own, rather than only through the gate's verdict.
+ */
+export function tablesCreatedBy(sql) {
+  const stripped = stripSqlNoise(sql);
+  const created = new Set();
+  for (const match of stripped.matchAll(CREATE_TABLE)) {
+    const name = normaliseTableRef(match[1]);
+    if (name) created.add(name);
+  }
+  return created;
+}
+
+/**
+ * Every table targeted by a statement that trips `pattern`.
+ *
+ * A `null` entry means a statement tripped the rule but its target could not
+ * be read — which denies the exemption, because an exemption needs proof and
+ * an unreadable target is not proof.
+ */
+function targetsTripping(stripped, pattern) {
+  const targets = [];
+  for (const statement of statementsOf(stripped)) {
+    if (!pattern.test(statement)) continue;
+    const found = statement.match(ALTER_TABLE_TARGET);
+    targets.push(found ? normaliseTableRef(found[1]) : null);
+  }
+  return targets;
+}
+
 function excerptOf(matchText) {
   const collapsed = matchText.replace(/\s+/g, ' ').trim();
   return collapsed.length > EXCERPT_MAX ? `${collapsed.slice(0, EXCERPT_MAX)}…` : collapsed;
@@ -173,18 +263,48 @@ export function pendingMigrations(releaseMigrationsDir, appliedNames) {
 
 /**
  * Lints one migration's SQL against the BLOCKED/WARNED vocabulary above.
- * Returns { blocked, warned }, each an array of { id, migration, excerpt }.
+ *
+ * Returns { blocked, warned, exempted }, each an array of
+ * { id, migration, excerpt }; an exempted finding also carries the `table`
+ * whose creation earlier in the batch is the proof, and is the one thing that
+ * can move a finding out of `blocked`.
+ *
+ * `tablesCreatedEarlierInBatch` is the accumulated evidence from the
+ * migrations that run before this one. Called without it — as every caller
+ * that lints a file in isolation does — nothing is exempt, so a migration
+ * judged on its own is judged exactly as strictly as it was before.
  */
-export function lintMigrationSql(name, sql) {
+export function lintMigrationSql(name, sql, { tablesCreatedEarlierInBatch } = {}) {
   const stripped = stripSqlNoise(sql);
+  const createdEarlier =
+    tablesCreatedEarlierInBatch instanceof Set
+      ? tablesCreatedEarlierInBatch
+      : new Set(tablesCreatedEarlierInBatch ?? []);
   const blocked = [];
   const warned = [];
+  const exempted = [];
 
   for (const [id, pattern] of BLOCKED) {
     const match = stripped.match(pattern);
-    if (match) {
-      blocked.push({ id, migration: name, excerpt: excerptOf(match[0]) });
+    if (!match) continue;
+
+    if (createdEarlier.size > 0 && EXEMPTIBLE_ON_BATCH_CREATED_TABLE.has(id)) {
+      const targets = targetsTripping(stripped, pattern);
+      // Every statement that trips the rule must aim at a table this batch
+      // created. One that does not is a real finding, and it does not stop
+      // being one because it shares a file with an exempt sibling.
+      if (targets.length > 0 && targets.every((table) => table !== null && createdEarlier.has(table))) {
+        exempted.push({
+          id,
+          migration: name,
+          excerpt: excerptOf(match[0]),
+          table: targets[0],
+        });
+        continue;
+      }
     }
+
+    blocked.push({ id, migration: name, excerpt: excerptOf(match[0]) });
   }
 
   for (const [id, pattern] of WARNED) {
@@ -194,7 +314,7 @@ export function lintMigrationSql(name, sql) {
     }
   }
 
-  return { blocked, warned };
+  return { blocked, warned, exempted };
 }
 
 /**
@@ -211,10 +331,20 @@ export function lintMigrationSql(name, sql) {
  *   this carries the same list that ok=false would otherwise have blocked on
  *   — an explicit, logged record that the gate was overridden rather than
  *   never having tripped.
+ * - exempted: findings that would have blocked but for the batch-created-table
+ *   exemption above. Reported for the same reason `overridden` is: a rule that
+ *   stopped applying must say so, or the next reader cannot tell a gate that
+ *   passed from a gate that was quietly narrowed.
  */
 export function gateMigrations(pending, { allowDestructive = false } = {}) {
   const blocked = [];
   const warned = [];
+  const exempted = [];
+  // Evidence accumulated in apply order: what the migrations BEFORE the one
+  // being linted have created. `pendingMigrations` sorts, and Prisma's folder
+  // names are timestamp-prefixed, so the order this walks is the order the
+  // database will run them in.
+  const createdEarlier = new Set();
 
   for (const { name, sql } of pending ?? []) {
     if (sql === undefined || sql === null) {
@@ -223,16 +353,19 @@ export function gateMigrations(pending, { allowDestructive = false } = {}) {
         migration: name,
         excerpt: '(no SQL content — migration.sql was missing or unreadable)',
       });
+      // No evidence is taken from a file that could not be read.
       continue;
     }
 
-    const findings = lintMigrationSql(name, sql);
+    const findings = lintMigrationSql(name, sql, { tablesCreatedEarlierInBatch: createdEarlier });
     blocked.push(...findings.blocked);
     warned.push(...findings.warned);
+    exempted.push(...findings.exempted);
+    for (const table of tablesCreatedBy(sql)) createdEarlier.add(table);
   }
 
   const overridden = allowDestructive && blocked.length > 0 ? blocked : [];
   const ok = !(blocked.length > 0 && !allowDestructive);
 
-  return { ok, blocked, warned, overridden };
+  return { ok, blocked, warned, overridden, exempted };
 }

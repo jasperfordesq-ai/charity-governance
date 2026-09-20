@@ -404,6 +404,35 @@ deliberate operation, not a subcommand this engine exposes). Only pass
 this flag after confirming the old colour genuinely tolerates the change,
 or accepting that recovery means restoring data, not flipping a switch.
 
+### The one case that is not the override: a table this batch created
+
+Before reaching for the flag, check whether the migration is changing a
+table an **earlier migration in the same pending batch** creates. The gate
+exempts that case on its own, and reports it:
+
+```
+NOTE: [rename-column] 20260920010000_approval_binds_to_session_family: exempt —
+"AuthActionApproval" is created by an earlier migration in this same pending
+batch, so the running colour has never seen it.
+```
+
+The reasoning is the gate's whole reasoning, applied honestly: these verbs
+are blocked because the colour still serving traffic has queries that read
+what is being changed. A table created inside this same batch has never
+existed while that colour was running, so it has no such queries, and the
+deploy stays rollbackable rather than being recorded `rollbackable: false`.
+
+The exemption is deliberately narrow, and each limit is pinned by a test:
+- only `DROP COLUMN`, `RENAME COLUMN`, `RENAME TO` and `SET NOT NULL`;
+- only an **earlier migration**, never a `CREATE TABLE` earlier in the same
+  file, and never one later in the batch;
+- only when **every** statement tripping the rule targets such a table.
+
+Anything else is still a real finding, and still wants the override or a
+rewritten migration. If you are about to pass `--allow-destructive-migration`
+for a table this batch creates, the gate has already let you through and
+something else is wrong — read the finding rather than the flag.
+
 ## Backup and restore-drill
 
 `npm run bluegreen:backup -- --env-file <path>` runs standalone (outside a

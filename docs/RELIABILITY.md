@@ -12,19 +12,19 @@ Playwright rows require a separate managed E2E result bound to the relevant SHA.
 
 ## At a glance
 
-Generated: 2026-09-02 - Source of truth: [`docs/reliability/guarantees.json`](reliability/guarantees.json)
+Generated: 2026-09-20 - Source of truth: [`docs/reliability/guarantees.json`](reliability/guarantees.json)
 
 | Surface | covered | partial | gap | n/a | Total |
 |---|---|---|---|---|---|
-| API | 390 | 0 | 0 | 14 | 404 |
+| API | 392 | 0 | 0 | 14 | 406 |
 | Web | 112 | 0 | 0 | 6 | 118 |
-| **Total** | **502** | **0** | **0** | **20** | **522** |
+| **Total** | **504** | **0** | **0** | **20** | **524** |
 
-**API suite:** 1197 passing, 0 failing. **Web suite:** 411 passing, 0 failing. **E2E linkage:** 31 Playwright titles found; not executed by this command.
+**API suite:** 2126 passing, 0 failing. **Web suite:** 497 passing, 0 failing. **E2E linkage:** 45 Playwright titles found; not executed by this command.
 
 **Executed E2E result:** NOT VERIFIED BY THIS COMMAND. Use a successful managed E2E workflow or `npm run test:e2e` result bound to the relevant SHA.
 
-**Linkage:** 502/502 covered guarantees verified against a passing/linked test.
+**Linkage:** 504/504 covered guarantees verified against a passing/linked test.
 
 **Linkage check: COMPLETE**
 
@@ -55,7 +55,7 @@ no data loss / accessibility & resilience.
 
 ---
 
-## API surface - the matrix (404 guarantees)
+## API surface - the matrix (406 guarantees)
 
 ### auth - `/api/v1/auth`
 
@@ -562,6 +562,8 @@ _10 guarantees - covered 10_
 |---|---|---|---|
 | State integrity / no data loss | gateMigrations reports ok:false and records the finding in blocked[] when a pending migration matches a destructive-class pattern (e.g. DROP TABLE) and --allow-destructive-migration was not passed. | covered | `gateMigrations: ok is false when something is blocked and allowDestructive is not set`<br/><sub>scripts/bluegreen/migration-gate.test.mjs</sub> |
 | State integrity / no data loss | Passing allowDestructive flips gateMigrations' ok to true but does not clear or shrink the blocked list — the same findings are also recorded verbatim in overridden, so what was permitted stays visible after the fact. | covered | `gateMigrations: allowDestructive flips ok true while preserving the blocked list in overridden`<br/><sub>scripts/bluegreen/migration-gate.test.mjs</sub> |
+| State integrity / no data loss | The migration gate's only exemption is proof-carrying: a DROP COLUMN, RENAME COLUMN, RENAME TO or SET NOT NULL is allowed through unattended only when an EARLIER migration in the same pending batch contains the CREATE TABLE for the table it targets, so the colour still serving traffic has never seen that table. The exemption is reported in exempted[], never silently. | covered | `the real approval_binds_to_session_family passes the gate when batched behind the migration that creates its table`<br/><sub>scripts/bluegreen/migration-gate.test.mjs</sub> |
+| State integrity / no data loss | The batch-created-table exemption is withheld whenever the proof is absent: the same migration linted on its own, a table the batch did not create, a table created LATER in the batch, a table created earlier in the SAME file, an unreadable ALTER TABLE target, and any file where one statement tripping the rule targets a table the batch did not create. Each of these blocks. | covered | `the same real migration still blocks on its own, so the exemption is carrying proof and not a name`<br/><sub>scripts/bluegreen/migration-gate.test.mjs</sub> |
 | Graceful degradation | When the post-cutover public smoke test fails, the deploy engine restores the previous active-upstreams file, reloads Caddy, restarts the scheduler on the old commit, and re-verifies the front door reports the OLD commit before returning failure — traffic is never left pointed at a colour that failed its own public smoke test. | covered | `deploy: public smoke failure restores upstreams, reloads, and re-verifies the OLD commit`<br/><sub>scripts/bluegreen-deploy.test.mjs</sub> |
 | At-least-once / idempotency | The cutover lock is released on every tested deploy abort path (preflight failure, a blocked migration, and a migration-run failure), so a failed deploy never leaves a stale lock blocking the next deploy or rollback attempt. | covered | `lock is released on every abort path`<br/><sub>scripts/bluegreen-deploy.test.mjs</sub> |
 | State integrity / no data loss | runRestoreDrill restores the backup into a throwaway scratch container reached only by docker run/exec — it never issues a docker compose command, never targets the compose db service or the charitypilot-bluegreen-db container family, and never carries a DSN whose host is db, so the drill cannot touch the live database. | covered | `runRestoreDrill restores into a throwaway container, never the live db, and passes clean`<br/><sub>scripts/bluegreen/backup.test.mjs</sub> |

@@ -5890,6 +5890,30 @@
     "proposedTitle": ""
   },
   {
+    "id": "bluegreen-state-integrity-3",
+    "surface": "api",
+    "group": "bluegreen",
+    "concern": "state-integrity",
+    "guarantee": "The migration gate's only exemption is proof-carrying: a DROP COLUMN, RENAME COLUMN, RENAME TO or SET NOT NULL is allowed through unattended only when an EARLIER migration in the same pending batch contains the CREATE TABLE for the table it targets, so the colour still serving traffic has never seen that table. The exemption is reported in exempted[], never silently.",
+    "status": "covered",
+    "testFile": "scripts/bluegreen/migration-gate.test.mjs",
+    "testTitle": "the real approval_binds_to_session_family passes the gate when batched behind the migration that creates its table",
+    "gapDescription": "",
+    "proposedTitle": ""
+  },
+  {
+    "id": "bluegreen-state-integrity-4",
+    "surface": "api",
+    "group": "bluegreen",
+    "concern": "state-integrity",
+    "guarantee": "The batch-created-table exemption is withheld whenever the proof is absent: the same migration linted on its own, a table the batch did not create, a table created LATER in the batch, a table created earlier in the SAME file, an unreadable ALTER TABLE target, and any file where one statement tripping the rule targets a table the batch did not create. Each of these blocks.",
+    "status": "covered",
+    "testFile": "scripts/bluegreen/migration-gate.test.mjs",
+    "testTitle": "the same real migration still blocks on its own, so the exemption is carrying proof and not a name",
+    "gapDescription": "",
+    "proposedTitle": ""
+  },
+  {
     "id": "bluegreen-graceful-degradation-1",
     "surface": "api",
     "group": "bluegreen",

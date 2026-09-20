@@ -1404,9 +1404,9 @@ async function executeDeploy(deps) {
   const { pending, unknownApplied } = pendingMigrations(migrationsDir, appliedNames);
   const migrationBatch = readMigrationBatch(migrationsDir, pending);
   const gate = gateMigrations(migrationBatch, { allowDestructive: options.allowDestructiveMigration });
-  let unknownAppliedWarning = '';
+  let gateNotices = '';
   if (unknownApplied.length > 0) {
-    unknownAppliedWarning = `WARNING: the live database has ${unknownApplied.length} applied migration(s) this release's checkout does not contain (${unknownApplied.join(', ')}) — this release is OLDER than the database, which is expected during a rollback-style deploy.\n`;
+    gateNotices = `WARNING: the live database has ${unknownApplied.length} applied migration(s) this release's checkout does not contain (${unknownApplied.join(', ')}) — this release is OLDER than the database, which is expected during a rollback-style deploy.\n`;
   }
   // M1 fix: a single deduped 'gate' status entry (never two writes for the
   // same phase) carrying the full picture, including the unknownApplied
@@ -1414,15 +1414,26 @@ async function executeDeploy(deps) {
   writeDeployStatus(
     resolvedStateDir,
     'gate',
-    `checked migration safety: ${pending.length} pending, ${gate.blocked.length} blocked, ${gate.warned.length} warned${unknownApplied.length > 0 ? `; ${unknownAppliedWarning.trim()}` : ''}`,
+    `checked migration safety: ${pending.length} pending, ${gate.blocked.length} blocked, ${gate.warned.length} warned${gate.exempted.length > 0 ? `, ${gate.exempted.length} exempt (table created earlier in this batch)` : ''}${unknownApplied.length > 0 ? `; ${gateNotices.trim()}` : ''}`,
   );
+  // An exemption is a rule that chose not to apply. It goes in the deploy's
+  // own output, beside the blocks, so nobody has to read this file to find
+  // out why a destructive-looking migration sailed through.
+  if (gate.exempted.length > 0) {
+    gateNotices += gate.exempted
+      .map(
+        (finding) =>
+          `NOTE: [${finding.id}] ${finding.migration}: exempt — "${finding.table}" is created by an earlier migration in this same pending batch, so the running colour has never seen it. ${finding.excerpt}`,
+      )
+      .join('\n') + '\n';
+  }
   if (!gate.ok) {
     const findings = gate.blocked
       .map((finding) => `- [${finding.id}] ${finding.migration}: ${finding.excerpt}`)
       .join('\n');
     return result(
       1,
-      unknownAppliedWarning,
+      gateNotices,
       `Blue-green deploy aborted: migration gate blocked ${gate.blocked.length} finding(s). Pass --allow-destructive-migration only after confirming the old colour tolerates these changes.${await stopDbOnAbort()}\n${findings}\n`,
     );
   }
@@ -1445,7 +1456,7 @@ async function executeDeploy(deps) {
     }
     return result(
       1,
-      unknownAppliedWarning,
+      gateNotices,
       `Blue-green deploy failed: migration failed: ${redact(error)}. Jobs were restarted on the old tag (${oldCommit ?? 'none'}); the old colour was never touched and remains serving.${await stopDbOnAbort()}\n`,
     );
   }
@@ -1478,7 +1489,7 @@ async function executeDeploy(deps) {
     }
     return result(
       1,
-      unknownAppliedWarning,
+      gateNotices,
       `Blue-green deploy failed: starting ${target} containers failed: ${redact(error)}. Traffic was never switched; the old colour remains live.${recoveryNote}${await stopDbOnAbort()}\n`,
     );
   }
@@ -1530,7 +1541,7 @@ async function executeDeploy(deps) {
     }
     return result(
       1,
-      unknownAppliedWarning,
+      gateNotices,
       `Blue-green deploy failed: candidate smoke test failed on the ${target} colour: ${redact(error)}. Traffic was never switched; the old colour remains live.${recoveryNote}${await stopDbOnAbort()}\n`,
     );
   }
@@ -1559,7 +1570,7 @@ async function executeDeploy(deps) {
     }
     return result(
       1,
-      unknownAppliedWarning,
+      gateNotices,
       `Blue-green deploy failed: starting Caddy failed while switching to ${target}: ${redact(error)}. Traffic was never switched; the old colour remains live.${recoveryNote}${await stopDbOnAbort()}\n`,
     );
   }
@@ -1600,7 +1611,7 @@ async function executeDeploy(deps) {
     }
     return result(
       1,
-      unknownAppliedWarning,
+      gateNotices,
       `Blue-green deploy failed: Caddy reload failed while switching to ${target}: ${redact(error)}. The previous upstream file was restored and reloaded; traffic was never switched.${recoveryNote}${await stopDbOnAbort()}\n`,
     );
   }
@@ -1639,7 +1650,7 @@ async function executeDeploy(deps) {
     if (!oldColor) {
       return result(
         1,
-        unknownAppliedWarning,
+        gateNotices,
         `Blue-green deploy failed: public smoke test failed after switching to ${target}: ${redact(error)}. No previous colour to revert to (first deploy) — traffic remains on ${target}, which failed its own public smoke test; inspect manually before retrying.\n`,
       );
     }
@@ -1671,7 +1682,7 @@ async function executeDeploy(deps) {
     }
     return result(
       1,
-      unknownAppliedWarning,
+      gateNotices,
       `Blue-green deploy failed: public smoke test failed after switching to ${target}: ${redact(error)}. Traffic was reverted to the old colour and re-verified.${revertError}\n`,
     );
   }
@@ -1714,7 +1725,7 @@ async function executeDeploy(deps) {
     }
     return result(
       1,
-      unknownAppliedWarning,
+      gateNotices,
       `Traffic has ALREADY been switched to ${target} (commit ${targetCommit}) and verified, but recording state failed (${redact(error)}). state.json still names ${oldColor ?? 'none'}. DO NOT run another deploy until state is corrected: write { activeColor: '${target}', commit: '${targetCommit}' } manually or fix the underlying filesystem issue and re-run 'status'.\n`,
     );
   }
@@ -1726,7 +1737,7 @@ async function executeDeploy(deps) {
   } catch (error) {
     return result(
       1,
-      unknownAppliedWarning,
+      gateNotices,
       `Blue-green deploy failed after cutover: starting the scheduler on ${targetCommit} failed: ${redact(error)}. Traffic is serving ${target} and state is recorded; scheduler restart/retire incomplete — inspect with status, re-run jobs manually or rollback.\n`,
     );
   }
@@ -1739,7 +1750,7 @@ async function executeDeploy(deps) {
     } catch (error) {
       return result(
         1,
-        unknownAppliedWarning,
+        gateNotices,
         `Blue-green deploy failed after cutover: stopping the old colour (${oldColor}) failed: ${redact(error)}. Traffic is serving ${target} and state is recorded; scheduler restart/retire incomplete — inspect with status, re-run jobs manually or rollback.\n`,
       );
     }
@@ -1753,7 +1764,7 @@ async function executeDeploy(deps) {
   writeDeployStatus(resolvedStateDir, 'record', 'state already recorded after public smoke; pruning backups');
   pruneBackups(resolvedStateDir, now());
 
-  return result(0, `${unknownAppliedWarning}Blue-green deploy completed: ${target} is now live at ${targetCommit}.\n`);
+  return result(0, `${gateNotices}Blue-green deploy completed: ${target} is now live at ${targetCommit}.\n`);
 }
 
 // ---------------------------------------------------------------------------

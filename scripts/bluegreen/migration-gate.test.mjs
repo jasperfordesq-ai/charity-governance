@@ -5,7 +5,12 @@ import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import test from 'node:test';
 
-import { pendingMigrations, lintMigrationSql, gateMigrations } from './migration-gate.mjs';
+import {
+  pendingMigrations,
+  lintMigrationSql,
+  gateMigrations,
+  tablesCreatedBy,
+} from './migration-gate.mjs';
 
 const repoRoot = dirname(dirname(dirname(fileURLToPath(import.meta.url))));
 
@@ -644,4 +649,249 @@ test('the real add_password_recovery_integrity migration passes with no truncate
   assert.equal(result.ok, true);
   const ids = result.blocked.map((f) => f.id);
   assert.equal(ids.includes('truncate'), false, 'a BEFORE TRUNCATE ON trigger guard must never trip the truncate rule');
+});
+
+// ---------------------------------------------------------------------------
+// The batch-created-table exemption.
+//
+// Pinned in BOTH directions throughout: every test that shows the exemption
+// applying has a sibling showing it withheld. An exemption that only has
+// tests proving it fires is how a gate stops being a gate.
+// ---------------------------------------------------------------------------
+
+const CREATES_FRESH = 'CREATE TABLE "Fresh" ("id" TEXT NOT NULL, "sessionId" TEXT);';
+
+test('tablesCreatedBy reads the tables a migration creates, normalising the reference', () => {
+  assert.deepEqual(
+    [...tablesCreatedBy('CREATE TABLE "Fresh" ("id" TEXT);')],
+    ['Fresh'],
+    'a quoted identifier keeps its case, because Postgres keeps it',
+  );
+  assert.deepEqual(
+    [...tablesCreatedBy('CREATE TABLE IF NOT EXISTS public."Fresh" ("id" TEXT);')],
+    ['Fresh'],
+    'the schema qualifier is not part of the identity here',
+  );
+  assert.deepEqual(
+    [...tablesCreatedBy('CREATE TABLE Loud ("id" TEXT);')],
+    ['loud'],
+    'an unquoted identifier folds to lower case, because Postgres folds it',
+  );
+  assert.deepEqual(
+    [...tablesCreatedBy('-- CREATE TABLE "Commented" ();')],
+    [],
+    'a commented-out CREATE TABLE is not evidence of anything',
+  );
+});
+
+test('rename-column is exempt when the table was created by an earlier migration in the same batch', () => {
+  const result = gateMigrations([
+    { name: '0001_create', sql: CREATES_FRESH },
+    {
+      name: '0002_rename',
+      sql: 'ALTER TABLE "Fresh" RENAME COLUMN "sessionId" TO "sessionFamilyId";',
+    },
+  ]);
+
+  assert.equal(result.ok, true);
+  assert.deepEqual(result.blocked, []);
+  assert.deepEqual(blockIds(result.exempted), ['rename-column']);
+  assert.equal(result.exempted[0].table, 'Fresh');
+  assert.equal(result.exempted[0].migration, '0002_rename');
+});
+
+test('rename-column is NOT exempt when the table already existed', () => {
+  const result = gateMigrations([
+    { name: '0001_create', sql: CREATES_FRESH },
+    {
+      name: '0002_rename',
+      sql: 'ALTER TABLE "Established" RENAME COLUMN "sessionId" TO "sessionFamilyId";',
+    },
+  ]);
+
+  assert.equal(result.ok, false, 'a table this batch did not create is the case the gate exists for');
+  assert.deepEqual(blockIds(result.blocked), ['rename-column']);
+  assert.deepEqual(result.exempted, []);
+});
+
+test('drop-column, rename-table and set-not-null are exempt on a batch-created table', () => {
+  for (const [id, sql] of [
+    ['drop-column', 'ALTER TABLE "Fresh" DROP COLUMN "sessionId";'],
+    ['rename-table', 'ALTER TABLE "Fresh" RENAME TO "Fresher";'],
+    ['set-not-null', 'ALTER TABLE "Fresh" ALTER COLUMN "sessionId" SET NOT NULL;'],
+  ]) {
+    const result = gateMigrations([
+      { name: '0001_create', sql: CREATES_FRESH },
+      { name: '0002_change', sql },
+    ]);
+
+    assert.equal(result.ok, true, `${id} should be exempt on a batch-created table`);
+    assert.deepEqual(blockIds(result.blocked), [], `${id} should not block`);
+    assert.deepEqual(blockIds(result.exempted), [id]);
+  }
+});
+
+test('the same three verbs still block on a table the batch did not create', () => {
+  for (const [id, sql] of [
+    ['drop-column', 'ALTER TABLE "Established" DROP COLUMN "sessionId";'],
+    ['rename-table', 'ALTER TABLE "Established" RENAME TO "Renamed";'],
+    ['set-not-null', 'ALTER TABLE "Established" ALTER COLUMN "sessionId" SET NOT NULL;'],
+  ]) {
+    const result = gateMigrations([
+      { name: '0001_create', sql: CREATES_FRESH },
+      { name: '0002_change', sql },
+    ]);
+
+    assert.equal(result.ok, false, `${id} must still block on a pre-existing table`);
+    assert.deepEqual(blockIds(result.blocked), [id]);
+  }
+});
+
+test('drop-table and alter-column-type are NOT exempt, even on a batch-created table', () => {
+  // Both would be safe by the same argument. Neither is in the exemptible
+  // set, and this pins that boundary so widening it is deliberate: adding
+  // `alter-column-type` to the set turns this test red.
+  //
+  // `drop-table` holds here for a second, independent reason — a bare
+  // DROP TABLE is not an ALTER TABLE, so the exemption cannot read a target
+  // for it and denies itself. Kept in this test as the statement of intent,
+  // not as the thing that catches the mutation.
+  for (const [id, sql] of [
+    ['drop-table', 'DROP TABLE "Fresh";'],
+    ['alter-column-type', 'ALTER TABLE "Fresh" ALTER COLUMN "sessionId" SET DATA TYPE INTEGER;'],
+  ]) {
+    const result = gateMigrations([
+      { name: '0001_create', sql: CREATES_FRESH },
+      { name: '0002_change', sql },
+    ]);
+
+    assert.equal(result.ok, false, `${id} is outside the exemption and must still block`);
+    assert.deepEqual(blockIds(result.blocked), [id]);
+    assert.deepEqual(result.exempted, []);
+  }
+});
+
+test('a table created in the SAME migration file is not evidence — the exemption is earlier-migration only', () => {
+  // The documented boundary of the exemption, and the one a refactor is most
+  // likely to erase by accident: collect the evidence before linting instead
+  // of after, and this case silently becomes exempt with every other test
+  // still green. It is safe in principle; it is simply not what this gate
+  // grants, and a gate that grants more than it says is the thing the header
+  // at the top of the implementation warns about.
+  const result = gateMigrations([
+    { name: '0001_create_then_change', sql: `${CREATES_FRESH}\nALTER TABLE "Fresh" DROP COLUMN "sessionId";` },
+  ]);
+
+  assert.equal(result.ok, false);
+  assert.deepEqual(blockIds(result.blocked), ['drop-column']);
+  assert.deepEqual(result.exempted, []);
+});
+
+test('order is evidence: a table created LATER in the batch exempts nothing', () => {
+  const result = gateMigrations([
+    { name: '0001_rename', sql: 'ALTER TABLE "Fresh" RENAME COLUMN "a" TO "b";' },
+    { name: '0002_create', sql: CREATES_FRESH },
+  ]);
+
+  assert.equal(result.ok, false, 'the rename runs first, against a table that does not exist yet');
+  assert.deepEqual(blockIds(result.blocked), ['rename-column']);
+  assert.deepEqual(result.exempted, []);
+});
+
+test('one exempt statement does not carry an unexempt sibling in the same file', () => {
+  const result = gateMigrations([
+    { name: '0001_create', sql: CREATES_FRESH },
+    {
+      name: '0002_change',
+      sql:
+        'ALTER TABLE "Fresh" DROP COLUMN "sessionId";\n'
+        + 'ALTER TABLE "Established" DROP COLUMN "legacy";',
+    },
+  ]);
+
+  assert.equal(result.ok, false);
+  assert.deepEqual(blockIds(result.blocked), ['drop-column']);
+  assert.deepEqual(result.exempted, [], 'a rule is exempt only when every statement tripping it is');
+});
+
+test('a statement whose target cannot be read is blocked, never exempted', () => {
+  // `ALTER TABLE"Fresh"` with no space still trips the rule (the rule only
+  // needs a word boundary) but the target reader wants whitespace and finds
+  // nothing. An exemption needs proof; an unreadable target is not proof, so
+  // this must fall through to a block. The failure direction of every
+  // uncertainty in this exemption is "block", and this is what pins it.
+  const result = gateMigrations([
+    { name: '0001_create', sql: CREATES_FRESH },
+    { name: '0002_change', sql: 'ALTER TABLE"Fresh" DROP COLUMN "sessionId";' },
+  ]);
+
+  assert.equal(result.ok, false);
+  assert.deepEqual(blockIds(result.blocked), ['drop-column']);
+  assert.deepEqual(result.exempted, []);
+});
+
+test('a migration linted on its own is judged as strictly as before — no batch, no exemption', () => {
+  const findings = lintMigrationSql(
+    '0002_rename',
+    'ALTER TABLE "Fresh" RENAME COLUMN "sessionId" TO "sessionFamilyId";',
+  );
+
+  assert.deepEqual(blockIds(findings.blocked), ['rename-column']);
+  assert.deepEqual(findings.exempted, []);
+});
+
+test('an unreadable migration contributes no evidence, so nothing after it is exempt', () => {
+  const result = gateMigrations([
+    { name: '0001_create', sql: undefined },
+    { name: '0002_rename', sql: 'ALTER TABLE "Fresh" RENAME COLUMN "a" TO "b";' },
+  ]);
+
+  assert.equal(result.ok, false);
+  assert.deepEqual(blockIds(result.blocked), ['unreadable-migration', 'rename-column']);
+});
+
+test('an exemption survives --allow-destructive without turning into an override', () => {
+  const result = gateMigrations(
+    [
+      { name: '0001_create', sql: CREATES_FRESH },
+      { name: '0002_rename', sql: 'ALTER TABLE "Fresh" RENAME COLUMN "a" TO "b";' },
+    ],
+    { allowDestructive: true },
+  );
+
+  assert.equal(result.ok, true);
+  assert.deepEqual(result.overridden, [], 'nothing was overridden, because nothing blocked');
+  assert.deepEqual(blockIds(result.exempted), ['rename-column']);
+});
+
+// ---------------------------------------------------------------------------
+// The real pair the exemption was built for.
+// ---------------------------------------------------------------------------
+
+function realMigration(name) {
+  return {
+    name,
+    sql: readFileSync(join(repoRoot, 'apps', 'api', 'prisma', 'migrations', name, 'migration.sql'), 'utf8'),
+  };
+}
+
+test('the real approval_binds_to_session_family passes the gate when batched behind the migration that creates its table', () => {
+  const create = realMigration('20260920000000_add_auth_action_approval');
+  const rename = realMigration('20260920010000_approval_binds_to_session_family');
+  assert.match(create.sql, /CREATE\s+TABLE\s+"AuthActionApproval"/i, 'fixture assumption');
+  assert.match(rename.sql, /RENAME\s+COLUMN\s+"sessionId"/i, 'fixture assumption');
+
+  const result = gateMigrations([create, rename]);
+
+  assert.equal(result.ok, true, 'this is the deploy that had to pass --allow-destructive');
+  assert.deepEqual(result.blocked, []);
+  assert.deepEqual(blockIds(result.exempted), ['rename-column']);
+  assert.equal(result.exempted[0].table, 'AuthActionApproval');
+});
+
+test('the same real migration still blocks on its own, so the exemption is carrying proof and not a name', () => {
+  const result = gateMigrations([realMigration('20260920010000_approval_binds_to_session_family')]);
+
+  assert.equal(result.ok, false);
+  assert.deepEqual(blockIds(result.blocked), ['rename-column']);
 });
