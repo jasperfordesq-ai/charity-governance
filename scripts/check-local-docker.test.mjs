@@ -954,7 +954,9 @@ test('platform audit JSON command is read-only and machine-readable', () => {
   // 36 since 2026-09-20: the platform console gained /owner/security, where an
   // operator manages their own second factor. P2 as the rest of that realm is,
   // so p0Routes below is unchanged again.
-  assert.equal(payload.counts.routes, 36);
+  // 37 since 2026-09-20: /approvals, where somebody with no terminal can approve
+  // a connector action. P2, so p0Routes below is unchanged again.
+  assert.equal(payload.counts.routes, 37);
   assert.equal(payload.counts.p0Routes, 16);
   assert.equal(payload.counts.oversizedRouteFiles, 0);
   assert.ok(payload.routeAudit.some((route) => route.route === '/dashboard' && route.priority === 'P0'));
