@@ -72,6 +72,14 @@ interface Searchable {
    * about, a resolution by its text.
    */
   readonly fullTitleFields?: readonly string[];
+  /**
+   * True when the route that reads this kind is behind the Complete plan.
+   *
+   * Search would otherwise be a way around that gate: a charity on the
+   * smaller plan cannot open the minute book or the registers, and being
+   * able to find what is in them is most of the way to reading them.
+   */
+  readonly completePlanOnly?: boolean;
   /** Reference data shared by every charity carries no organisationId. */
   readonly tenantScoped: boolean;
   /** The reference an agent passes back to fetch the record. */
@@ -94,6 +102,7 @@ export const SEARCHABLE: Record<SearchType, Searchable> = {
   },
   GoverningAct: {
     delegate: 'governingAct',
+    completePlanOnly: true,
     safeFields: ['reference', 'title', 'statutoryBasis'],
     personalFields: ['notes'],
     titleFields: ['title', 'reference'],
@@ -106,6 +115,7 @@ export const SEARCHABLE: Record<SearchType, Searchable> = {
     // the single most likely to name somebody, which is exactly why it is on
     // the withheld side rather than left out of the index.
     delegate: 'resolution',
+    completePlanOnly: true,
     safeFields: ['itemNumber'],
     personalFields: ['text', 'abstentions'],
     titleFields: ['itemNumber'],
@@ -116,6 +126,7 @@ export const SEARCHABLE: Record<SearchType, Searchable> = {
   },
   ConflictRecord: {
     delegate: 'conflictRecord',
+    completePlanOnly: true,
     safeFields: ['minuteReference'],
     personalFields: ['trusteeName', 'matter', 'nature', 'actionTaken', 'decision'],
     titleFields: ['minuteReference'],
@@ -126,6 +137,7 @@ export const SEARCHABLE: Record<SearchType, Searchable> = {
   },
   RiskRecord: {
     delegate: 'riskRecord',
+    completePlanOnly: true,
     safeFields: ['title', 'boardMinuteReference'],
     personalFields: ['description', 'mitigation', 'owner'],
     titleFields: ['title'],
@@ -135,6 +147,7 @@ export const SEARCHABLE: Record<SearchType, Searchable> = {
   },
   ComplaintRecord: {
     delegate: 'complaintRecord',
+    completePlanOnly: true,
     safeFields: ['boardMinuteReference'],
     personalFields: ['summary', 'source', 'actionTaken', 'outcome'],
     titleFields: ['boardMinuteReference'],
@@ -145,6 +158,7 @@ export const SEARCHABLE: Record<SearchType, Searchable> = {
   },
   FundraisingRecord: {
     delegate: 'fundraisingRecord',
+    completePlanOnly: true,
     safeFields: ['name', 'activityType', 'boardMinuteReference'],
     personalFields: ['thirdPartyFundraiser', 'controls', 'reviewOutcome'],
     titleFields: ['name'],
@@ -216,6 +230,8 @@ export interface SearchResult {
   /** Kinds actually looked in, after the requested filter and the plan. */
   searched: SearchType[];
   note?: string;
+  /** Said when a kind was left out because of the plan rather than the query. */
+  planNote?: string;
 }
 
 /**
@@ -299,7 +315,10 @@ export class SearchService {
    * standards. Mirrors the compliance service's own rule, so a search cannot
    * surface a standard the compliance pages would not show.
    */
-  private async reachesAdditionalStandards(organisationId: string): Promise<boolean> {
+  private async planScope(organisationId: string): Promise<{
+    complete: boolean;
+    additionalStandards: boolean;
+  }> {
     const [organisation, subscription] = await Promise.all([
       this.prisma.organisation.findUnique({
         where: { id: organisationId },
@@ -311,7 +330,11 @@ export class SearchService {
       }),
     ]);
 
-    return organisation?.complexity === 'COMPLEX' && subscription?.plan === 'COMPLETE';
+    const complete = subscription?.plan === 'COMPLETE';
+    return {
+      complete,
+      additionalStandards: complete && organisation?.complexity === 'COMPLEX',
+    };
   }
 
   async search(
@@ -340,10 +363,9 @@ export class SearchService {
     const requested = options.types?.length ? options.types : SEARCH_TYPES;
     const full = options.dataScope === 'FULL';
 
-    const standardsWanted = requested.includes('GovernanceStandard');
-    const additional = standardsWanted
-      ? await this.reachesAdditionalStandards(organisationId)
-      : false;
+    // One lookup for both questions the plan decides: which kinds may be
+    // searched at all, and how much of the Governance Code is in scope.
+    const plan = await this.planScope(organisationId);
 
     const data: SearchHit[] = [];
     const truncated: SearchType[] = [];
@@ -351,6 +373,12 @@ export class SearchService {
 
     for (const type of requested) {
       const spec = SEARCHABLE[type];
+
+      // Left out of `searched` as well as out of the results: a charity on
+      // the smaller plan should see that the minute book was not looked in,
+      // not be told there is nothing in it.
+      if (spec.completePlanOnly && !plan.complete) continue;
+
       const fields = full ? [...spec.safeFields, ...spec.personalFields] : spec.safeFields;
 
       // A kind with nothing searchable under this scope is left out of
@@ -361,7 +389,9 @@ export class SearchService {
 
       const where: Record<string, unknown> = {
         ...(spec.tenantScoped ? { organisationId } : {}),
-        ...(type === 'GovernanceStandard' && !additional ? { isCore: true } : {}),
+        ...(type === 'GovernanceStandard' && !plan.additionalStandards
+          ? { isCore: true }
+          : {}),
         OR: fields.map((field) => ({
           [field]: { contains: query, mode: 'insensitive' },
         })),
@@ -410,6 +440,12 @@ export class SearchService {
       truncated,
       searched,
     };
+
+    if (!plan.complete) {
+      result.planNote =
+        'The minute book and the four governance registers are on the Complete plan and '
+        + 'were not searched.';
+    }
 
     if (!full) {
       result.note =

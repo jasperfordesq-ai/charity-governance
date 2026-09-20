@@ -126,7 +126,9 @@ const READ_TOOLS: readonly ToolDefinition[] = [
       + 'match, and a reference to pass to the fetch tool.' + GATED + 'every free-text '
       + 'field is beyond reach: while the gate is closed those columns are not searched at '
       + 'all, because being told a record matches a name is itself being told the name is '
-      + 'in it. The answer says which kinds were looked in.',
+      + 'in it. The minute book and the four registers are on the Complete plan and are not '
+      + 'searched without it. The answer says which kinds were looked in either way, so a '
+      + 'narrow answer is not mistaken for an empty one.',
     path: '/api/v1/search',
     params: [
       {

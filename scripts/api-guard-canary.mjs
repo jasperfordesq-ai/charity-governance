@@ -237,6 +237,18 @@ const MUTATIONS = {
       'a withheld column must not be searched at all while the gate is closed: being told a '
       + 'record matches a name is being told the name is in it.',
   },
+  'a-search-walks-past-the-plan': {
+    file: 'apps/api/src/services/search.service.ts',
+    // The plan is still read and still consulted, so nothing is unused; the
+    // kinds behind it are simply never skipped, which is what a search that
+    // quietly became a way around the paywall looks like.
+    find: /      if \(spec\.completePlanOnly && !plan\.complete\) continue;/,
+    replace: '      if (spec.completePlanOnly === false && !plan.complete) continue;',
+    tests: ['search-route'],
+    expect:
+      'a charity on the smaller plan must not have its minute book or its registers '
+      + 'searched: finding what is in them is most of the way to reading them.',
+  },
   'a-search-leaves-the-charity': {
     file: 'apps/api/src/services/search.service.ts',
     find: /        \.\.\.\(spec\.tenantScoped \? \{ organisationId \} : \{\}\),/,

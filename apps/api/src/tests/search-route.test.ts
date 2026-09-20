@@ -59,7 +59,10 @@ const ACT = {
  * applies the `where` it is given, so a query that searches the wrong columns
  * returns the wrong rows here too.
  */
-function prismaWith(rows: Partial<Record<string, Record<string, unknown>[]>>) {
+function prismaWith(
+  rows: Partial<Record<string, Record<string, unknown>[]>>,
+  plan: 'ESSENTIALS' | 'COMPLETE' = 'COMPLETE',
+) {
   const calls: { delegate: string; where: Record<string, unknown> }[] = [];
 
   const matches = (row: Record<string, unknown>, where: Record<string, unknown>): boolean => {
@@ -91,13 +94,17 @@ function prismaWith(rows: Partial<Record<string, Record<string, unknown>[]>>) {
   for (const type of SEARCH_TYPES) prisma[SEARCHABLE[type].delegate] = delegate(SEARCHABLE[type].delegate);
   prisma.organisation = { findUnique: async () => ({ complexity: 'SIMPLE' }) };
   prisma.subscription = {
-    findUnique: async () => ({ plan: 'ESSENTIALS', status: 'ACTIVE', trialEndsAt: null }),
+    findUnique: async () => ({ plan, status: 'ACTIVE', trialEndsAt: null }),
   };
   return { prisma, calls };
 }
 
-async function buildApp(rows: Parameters<typeof prismaWith>[0], dataScope: Scope = 'WITHHELD') {
-  const { prisma, calls } = prismaWith(rows);
+async function buildApp(
+  rows: Parameters<typeof prismaWith>[0],
+  dataScope: Scope = 'WITHHELD',
+  plan: 'ESSENTIALS' | 'COMPLETE' = 'COMPLETE',
+) {
+  const { prisma, calls } = prismaWith(rows, plan);
   const app = Fastify({ logger: false });
 
   app.decorate('prisma', {
@@ -230,7 +237,11 @@ test('the Governance Code is searched without a charity, because it belongs to n
 
     assert.equal(hits[0].ref, 'charitypilot://standard/std-1');
     assert.equal(calls[0]!.where.organisationId, undefined);
-    assert.equal(calls[0]!.where.isCore, true, 'an ESSENTIALS plan sees the core standards only');
+    assert.equal(
+      calls[0]!.where.isCore,
+      true,
+      'a SIMPLE charity sees the core standards only, whatever its plan',
+    );
   } finally {
     await app.close();
   }
@@ -284,6 +295,7 @@ test('the response says which kinds were looked in, and the scope it looked unde
 
     assert.equal(body.dataScope, 'WITHHELD');
     assert.deepEqual(body.searched, SEARCH_TYPES, 'every kind has at least one safe column');
+    assert.equal(body.planNote, undefined, 'a Complete plan reaches every kind');
     assert.deepEqual(body.truncated, []);
   } finally {
     await app.close();
@@ -338,5 +350,50 @@ test('no column the closed gate searches is one the field policy withholds', asy
         `${type}.${field} is searched while the gate is closed but is withheld from a read`,
       );
     }
+  }
+});
+
+// Search must not be a way around the plan gate. The minute book and the four
+// registers are behind the Complete plan, and being able to find what is in
+// them is most of the way to reading them.
+test('a smaller plan does not have its minute book or registers searched', async () => {
+  const { app, calls } = await buildApp(
+    { governingAct: [ACT], conflictRecord: [CONFLICT], boardMember: [TRUSTEE] },
+    'FULL',
+    'ESSENTIALS',
+  );
+  try {
+    const body = (await get(app, '?q=Bridget')).json().data;
+
+    assert.deepEqual(
+      body.data.map((hit: { type: string }) => hit.type),
+      ['BoardMember'],
+      'only the kinds the smaller plan already reaches',
+    );
+    assert.ok(!body.searched.includes('GoverningAct'));
+    assert.ok(!body.searched.includes('ConflictRecord'));
+    assert.ok(!body.searched.includes('Resolution'));
+    assert.match(String(body.planNote), /Complete plan/);
+
+    const queried = calls.map((call) => call.delegate);
+    assert.ok(
+      !queried.includes('governingAct'),
+      'a kind the plan does not reach must not be queried at all',
+    );
+  } finally {
+    await app.close();
+  }
+});
+
+test('asking only for a kind the plan does not reach answers nothing, and says why', async () => {
+  const { app } = await buildApp({ conflictRecord: [CONFLICT] }, 'FULL', 'ESSENTIALS');
+  try {
+    const body = (await get(app, '?q=Bridget&types=ConflictRecord')).json().data;
+
+    assert.deepEqual(body.data, []);
+    assert.deepEqual(body.searched, [], 'nothing was looked in, which is not the same as empty');
+    assert.match(String(body.planNote), /Complete plan/);
+  } finally {
+    await app.close();
   }
 });
