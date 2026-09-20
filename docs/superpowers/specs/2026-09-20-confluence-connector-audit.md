@@ -21,9 +21,11 @@ first time it does: the ordinary document delete still destroys the Confluence c
 the owner's written ruling (A1); the OAuth app does not request the scopes the erasure path needs, so
 erasure would fail with a misleading "reconnect required" (A2); the connect flow binds a tenant to
 whichever site Atlassian happens to list first (A3); and the documented production compose profile
-never hands the worker containers the credentials they need (A4). Beyond those, the integration is
-one-directional and one-shot — nothing ever re-reads a page, nothing keeps an idle tenant's refresh
-token alive, nothing republishes an edit, and nothing is audited — so "tight" is not yet the word.
+never hands the worker containers the credentials they need (A4). **Tier 1, implemented the same day
+as this audit, has since closed all four — A1, A2, A3 and A4; see the status line above.** Beyond
+those, the integration is one-directional and one-shot — nothing ever re-reads a page, nothing keeps
+an idle tenant's refresh token alive, nothing republishes an edit, and nothing is audited — so "tight"
+is still not the word: that gap is Tier 2 and Tier 3 work, and both remain proposals.
 
 ---
 

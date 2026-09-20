@@ -11,11 +11,13 @@ into a fresh session; it is written to stand alone.*
 **Every phase of the Confluence integration is built, reviewed and green — and almost none of it has
 been used.** No call has ever reached a real Atlassian site. Four assumptions the design rests on
 have only ever met test doubles. The DPO who is meant to review it has been unable to connect since
-31 August. One design decision the owner made on 2026-09-19 means part of what was just built has to
-be reworked; the question that blocked the rework was answered by email the same day (§2a). A full
-audit on 2026-09-20 found four further things that would fail on first contact with a real site
-(§5, items 5-8) and approved only the write-up, not the fixes. **The next step is almost certainly
-not more building.**
+31 August. One design decision the owner made on 2026-09-19 meant part of what was already built had
+to be reworked; the question that blocked that rework was answered by email the same day (§2a), and
+the rework itself landed on 2026-09-20 (§2a). A full audit on 2026-09-20 found four further things
+that would fail on first contact with a real site (§5, items 5-8): the owner approved the audit's
+write-up that day, and — the same day — also approved and received Tier 1's implementation of those
+four findings (§5, items 5-8, all now fixed). Tiers 2 and 3 remain proposals, not work in progress.
+**The next step is almost certainly not more building.**
 
 ---
 
@@ -139,8 +141,10 @@ to it.
 # 3. Decisions that are the owner's, not yours
 
 1. ~~**The (a)/(b) fork above.** Blocks the erasure rework.~~ **Closed 2026-09-19 by email — option
-   (a). See §2a.** What remains the owner's is *when* to build it; the 2026-09-20 audit was approved
-   as a write-up only.
+   (a). See §2a.** The erasure rework itself is no longer pending: the 2026-09-20 audit's write-up was
+   approved that day, and Tier 1 — including the erasure rework — was subsequently approved and
+   implemented the same day. What remains the owner's is sequencing Tiers 2 and 3, which remain
+   proposals; see the audit's own status line.
 2. **Residency.** The owner's standing rule is that file storage is Irish, or at minimum EU. The DPO
    said on 2026-09-19 he would **not** make EU residency a universal prerequisite for other tenants
    — record each tenant's *declared* configuration and be explicit that CharityPilot does not
@@ -395,9 +399,14 @@ forbidding `refresh`/`token`/`secret`. A task hit it and reverted rather than lo
 1. **Get the DPO connected** (`tailscale switch`) and give him least-privilege access. He has been
    blocked since 31 August and everything in his ordering sits behind his review.
 2. **Clear or expire the development logs** holding the leaked OAuth codes. He asked; it is not done.
-3. **Do the erasure rework** (§2a — the (a)/(b) question was answered by email on 2026-09-19).
-   Small, and the machinery exists — but it now also needs the delete scopes and recorded granted
-   scopes (§5, item 5), and the owner has approved only the audit write-up so far.
+3. **Tier 2's opening work: keep idle refresh tokens alive, and detect a Confluence-side deletion.**
+   The erasure rework itself (§2a — the (a)/(b) question was answered by email on 2026-09-19) is done:
+   it landed on 2026-09-20 along with the delete scopes and recorded granted scopes it needed (§5,
+   item 5, now fixed). What is left in this area is Tier 2: a job that renews an idle tenant's
+   refresh token before Atlassian's 90-day inactivity expiry (§5, item 9, still open), and the
+   reconcile job that re-reads each referenced page to notice a Confluence-side deletion (§2a,
+   "detecting a Confluence-side deletion is new work"). Neither is approved for build — Tier 2
+   remains a proposal.
 4. **Build the owner-console integration health view** (section 2b). Small; the API already returns
    it.
 5. **Create the Atlassian OAuth app**, then let the DPO authorise — which may clear the 403 without
