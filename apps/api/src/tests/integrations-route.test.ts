@@ -1993,6 +1993,29 @@ test('an erasure reason with a control character is rejected before it can viola
   );
 });
 
+// U+0085 (NEL) is in the C1 control block, U+0080-U+009F. Postgres's
+// `[[:cntrl:]]` matches it, but it is not JavaScript whitespace, so
+// `.trim()` leaves it in place, and before the schema's character class
+// covered C1 this reason passed zod and then violated the CHECK.
+test('an erasure reason with a C1 control character (U+0085) is rejected before it can violate the database CHECK', async () => {
+  const { app } = await buildApp({
+    rows: [{ ...connectedRow(), grantedScopes: [...CONFLUENCE_REQUIRED_ERASURE_SCOPES] }],
+  });
+
+  const response = await app.inject({
+    method: 'POST',
+    url: '/confluence/publications/publication-1/erase',
+    headers: { authorization: bearer(ORG_A_ADMIN) },
+    payload: { reason: 'Erasure\u0085request 2026-41', confirmation: 'ERASE CONFLUENCE COPY' },
+  });
+
+  assert.equal(response.statusCode, 400, response.body);
+  assert.ok(
+    response.body.includes('control characters'),
+    'a C1 control character must be refused by the schema, not left for the database CHECK to reject as a 500',
+  );
+});
+
 test('a reason short in code points but long in UTF-16 units is rejected, not waved through by .length', async () => {
   const { app } = await buildApp({
     rows: [{ ...connectedRow(), grantedScopes: [...CONFLUENCE_REQUIRED_ERASURE_SCOPES] }],

@@ -370,7 +370,11 @@ names what is being tested and what a failure means.
    copy.
 8. Request an explicit erasure — `POST /api/v1/integrations/confluence/publications/:publicationId/erase`
    against that retired publication, with the typed confirmation `ERASE CONFLUENCE COPY`. Confirm the
-   page is deleted and purged, and that the read-back 404 is reached.
+   page is deleted and purged, and that the read-back 404 is reached. **A 404 alone does not prove
+   this** — step 4 above established that a trashed page and a purged page 404 identically, and that
+   `GET /wiki/rest/api/content/{id}?status=trashed` is the only way to tell them apart. So also confirm
+   that request returns something other than 200 for this page (i.e. it is not sitting in trash);
+   only the two checks together show the page was purged rather than merely trashed.
 
 **Do not trust this to unit tests alone — verify it against a running stack.** Commit `5857fe7` fixed
 a defect where every refusal this API made was advisory: Fastify only stops a request when an

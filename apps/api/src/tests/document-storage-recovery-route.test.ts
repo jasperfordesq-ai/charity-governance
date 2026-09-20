@@ -478,6 +478,16 @@ test('operator recovery requires an exact confirmation and substantive safe reas
       { reason: 'too short', confirmation: 'REQUEUE DOCUMENT STORAGE DELETION', disposition: 'REQUEUE_UNCHANGED' },
       { reason: 'Provider access was repaired by operations.', confirmation: 'requeue', disposition: 'REQUEUE_UNCHANGED' },
       { reason: `Safe reason ${String.fromCharCode(0)} invalid`, confirmation: 'REQUEUE DOCUMENT STORAGE DELETION', disposition: 'REQUEUE_UNCHANGED' },
+      // U+0085 (NEL) is in the C1 control block, U+0080-U+009F. Postgres's
+      // `[[:cntrl:]]` matches it, but it is not JavaScript whitespace, so
+      // `.trim()` leaves it in place — before the schema's character class
+      // covered C1 this reason passed zod and then violated the CHECK,
+      // turning a 400 into a 500.
+      {
+        reason: `Safe reason ${String.fromCharCode(0x85)} invalid`,
+        confirmation: 'REQUEUE DOCUMENT STORAGE DELETION',
+        disposition: 'REQUEUE_UNCHANGED',
+      },
     ]) {
       const response = await app.inject({
         method: 'POST',

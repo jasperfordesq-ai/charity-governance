@@ -33,8 +33,14 @@ const requeueStorageDeletionSchema = z.object({
         .string()
         .min(10, 'Give a recovery reason of at least 10 characters')
         .max(500, 'Recovery reason must be at most 500 characters')
+        // Mirrors `confluenceErasureSchema` in `routes/integrations/index.ts`
+        // exactly — both back a CHECK of the same shape, so the two must read
+        // the same. Postgres's `[[:cntrl:]]` also matches the C1 block,
+        // U+0080-U+009F, which is not JavaScript whitespace so `.trim()` leaves
+        // it in place; omitting that range here let a reason pass this
+        // refinement and then violate the CHECK, turning a 400 into a 500.
         .refine(
-          (value) => !/[\u0000-\u0009\u000b\u000c\u000e-\u001f\u007f]/.test(value),
+          (value) => !/[\u0000-\u0009\u000b\u000c\u000e-\u001f\u007f\u0080-\u009f]/.test(value),
           'Recovery reason contains unsupported control characters',
         ),
     ),

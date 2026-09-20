@@ -613,13 +613,26 @@ export async function integrationRoutes(
   // visible from the route: `config: UNAUTHENTICATED_ROUTE`. A new route that
   // says nothing is still guarded, so forgetting remains impossible; only
   // writing the words unguards anything.
+  //
+  // Both hooks RETURN the guard's promise rather than merely awaiting it.
+  // Commit 5857fe7 fixed a defect where every guard's refusal was advisory:
+  // Fastify only stops a request when an async `onSend` hook returns the
+  // reply it already sent, and a hook that awaits a guard and falls out the
+  // bottom returning `undefined` does not do that. It only ever worked here
+  // because Fastify short-circuits when exactly one `onSend` hook is
+  // registered, and this plugin's `authGuard`/`requireAdmin` wrappers are
+  // inert today only because a Fastify reply is thenable, so awaiting it
+  // still lets the request complete before the hook resolves. Do not go
+  // back to a bare `await`: a second `onSend` hook anywhere in the app makes
+  // that advisory again, and the repo-wide scan for the 5857fe7 pattern only
+  // reads `src/middleware` and `src/plugins`, so it cannot see this file.
   app.addHook('onRequest', async (request, reply) => {
     if (answersWithoutASession(request)) return;
-    await authGuard(request, reply);
+    return authGuard(request, reply);
   });
   app.addHook('preHandler', async (request, reply) => {
     if (answersWithoutASession(request)) return;
-    await requireAdmin(request, reply);
+    return requireAdmin(request, reply);
   });
 
   /**
@@ -983,8 +996,14 @@ export async function integrationRoutes(
             // same shape (`replace(reason, E'\n', '') !~ '[[:cntrl:]]'`), so
             // the two must read the same rather than drift into two
             // independent definitions of "control character".
+            // Postgres's `[[:cntrl:]]` also matches the C1 block, U+0080-U+009F
+            // (verified against the development database: `E'a\u0085b' ~ '[[:cntrl:]]'`
+            // is true), and U+0085 is not JavaScript whitespace so `.trim()` does
+            // not remove it — omitting that range here let a reason pass this
+            // refinement and then violate the CHECK, turning what should be a 400
+            // into a 500.
             .refine(
-              (value) => !/[\u0000-\u0009\u000b\u000c\u000e-\u001f\u007f]/.test(value),
+              (value) => !/[\u0000-\u0009\u000b\u000c\u000e-\u001f\u007f\u0080-\u009f]/.test(value),
               'Erasure reason contains unsupported control characters',
             ),
         ),

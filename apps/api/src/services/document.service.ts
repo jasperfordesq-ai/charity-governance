@@ -1005,9 +1005,23 @@ export class DocumentService {
    *
    * The three cases, and why each is safe:
    *
-   * - **no page id, nothing in flight** — nothing exists in the charity's site
-   *   and nothing is about to, because the lock is what a would-be claimer
-   *   skips. The row is deleted outright; it records nothing.
+   * - **no page id, nothing in flight** — safe in the ordinary case: nothing
+   *   exists in the charity's site and nothing is about to, because the lock
+   *   is what a would-be claimer skips. The row is deleted outright.
+   *   **One ordering defeats that:** an attempt's `createPage` succeeds but
+   *   the response arrives after `runBoundedPublication`'s per-attempt
+   *   timeout has already won, so `recordPublicationFailure` commits this
+   *   row with `pageId: null` and `claimedAt: null` while the page exists in
+   *   Confluence. The attempt then continues and calls `attachPublicationPage`,
+   *   which no longer matches a row with `claimedAt: null` and updates zero
+   *   rows — the page is never recorded. While the document still exists, a
+   *   retry is self-healing: create-or-adopt's `findPageByTitle` step finds
+   *   that page by title and adopts it. But once the document is deleted
+   *   before that retry runs, this branch deletes the row believing nothing
+   *   exists, and that self-healing path is no longer reachable — the page is
+   *   orphaned in Confluence with nothing naming it (no row, no `pageId`, no
+   *   content property, since the property is written last) until a reconcile
+   *   job exists to find it.
    * - **no page id, an attempt in flight** — that attempt may be between
    *   `createPage` and `recordPage` right now. Deleting the row would risk a
    *   write landing on it later that matches nothing, leaving a real page

@@ -515,7 +515,12 @@ request that may follow. `cancelConfluencePublication` is now
 passes as before, but retiring rather than enqueuing. A worker that records a
 page id after the document has already gone — the mid-flight race the old
 cancellation path had to handle — retires the row itself, so a page recorded
-during the delete window still reaches `RETIRED` rather than being orphaned.
+during the delete window still reaches `RETIRED` rather than being orphaned,
+**provided that retiring write itself succeeds** — a transient database error
+inside `retirePublicationIfDocumentGone` leaves the row dead-lettered while
+still naming a page, and the database's own hard floor on erasure requests
+(`state = 'RETIRED'`) then means that page can never be erased through the
+product.
 
 **Destroying the Confluence copy is a separate, explicitly authorised action,
 and the database enforces that it can only be taken against a publication

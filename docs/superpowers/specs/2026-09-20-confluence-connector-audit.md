@@ -202,6 +202,19 @@ can reach a log.
   `SITE_SELECTION_REQUIRED` and expose `PUT /confluence/site { siteId }` validated against the stored
   list; the callback page renders a picker. Never bind `sites[0]` silently.
 
+  **Reclassified 2026-09-20 — what shipped instead of this proposal.** The owner action above (a
+  resource-level grant, registered at creation) was taken, and with it in place `accessible-resources`
+  returns exactly one site for every correctly registered app — the multi-site case this proposal's
+  code guard exists for is then unreachable, not merely rare. What shipped is a refusal instead of a
+  picker: `connectConfluence` throws `CONFLUENCE_MULTIPLE_SITES` (400) when `sites.length > 1`, telling
+  the administrator to authorise from an account reaching a single site rather than storing a
+  provisional connection and asking them to choose. The picker's blast radius — a new status, a new
+  route, stored partial credentials, callback UI — was not worth taking in Tier 1 to cover a case a
+  correctly registered app cannot hit. This is why the verdict at the top of this document counts A3 as
+  closed by the refusal, not by the picker described above. The original proposal is left as written
+  above for the record; it is Tier 2 work, if a future need for account-level grants (an app not owned
+  by CharityPilot, or a change Atlassian makes) ever makes the picker worth building at all.
+
 **T1.4 Deployment wiring.**
 
 - `compose.production.yml`: add `ATLASSIAN_CLIENT_ID`, `ATLASSIAN_CLIENT_SECRET`,
