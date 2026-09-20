@@ -424,8 +424,8 @@ forbidding `refresh`/`token`/`secret`. A task hit it and reverted rather than lo
   design detail. Read this before touching the connector.
 - `docs/superpowers/plans/2026-09-18-document-storage-providers-spec.md` — **the binding authority.**
   Read its Open Questions first.
-- `docs/superpowers/plans/2026-09-19-confluence-publish-pipeline-phase-4.md` — the last phase built,
-  and the one being reworked. Carries the real-site checklist.
+- `docs/superpowers/plans/2026-09-19-confluence-publish-pipeline-phase-4.md` — the publish pipeline,
+  the phase Tier 1 reworked (§2a). Carries the real-site checklist.
 - `docs/superpowers/plans/2026-09-18-provider-aware-erasure-phase-5.md` — the erasure engine.
 - `docs/superpowers/plans/2026-09-19-integration-admin-ui-phase-6.md` — the integration screens.
 - `docs/ARCHITECTURE.md` — the security model, the error taxonomy, the rotation trap, and what
