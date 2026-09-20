@@ -39,9 +39,11 @@ never hands the worker containers the credentials they need (A4). **Tier 1, impl
 as this audit, has since closed A1, A2 and A4 outright, and A3 conditionally** — the shipped refusal
 closes it only once the Atlassian app is registered with a resource-level grant, which has not happened
 yet (see the T1.3 correction, section 5, and the status line above). Beyond those, the integration is
-one-directional and one-shot — nothing ever re-reads a page, nothing keeps
-an idle tenant's refresh token alive, nothing republishes an edit, and nothing is audited — so "tight"
-is still not the word: that gap is Tier 2 and Tier 3 work, and both remain proposals.
+one-directional and one-shot — nothing ever re-reads a page, nothing republishes an edit, and nothing
+is audited — so "tight" is still not the word: that gap is Tier 2 and Tier 3 work, and both remain
+proposals. An idle tenant's refresh token is *also* never renewed, but since the DPO's 2026-09-20
+ruling (section 2) that is the intended behaviour rather than a gap; what is missing there is the
+warning and the reconnect path, not the renewal.
 
 ---
 
@@ -59,6 +61,13 @@ is still not the word: that gap is Tier 2 and Tier 3 work, and both remain propo
   plainly that CharityPilot does not control a connected site's residency.
 - **OAuth app.** Owned by CharityPilot (not hOUR Timebank), narrowest scopes plus `offline_access`,
   ownership and recovery organisational.
+- **Token lifecycle (DPO, 2026-09-20, in writing).** Refreshing a tenant's token as a by-product of
+  an integration that has an ongoing reconciliation or monitoring *purpose* is legitimate. Refreshing
+  one **solely** to stop an otherwise dormant authorisation expiring is not: genuinely unused access
+  is not to be preserved indefinitely for convenience, and letting it lapse so the organisation must
+  reconnect is the preferred outcome. Expiry is a feature, not a fault to be engineered around. The
+  exact lifecycle is to be settled during the DPO's review, so T2.1 below is a proposal that must not
+  be built ahead of that conversation.
 - **Order of work.** Correct the deletion behaviour → the owner-console integration health view (the
   unbuilt third of "the admin panel") → the DPO's review → **agree the publishing model together**
   before building more of it.
@@ -109,7 +118,7 @@ is still not the word: that gap is Tier 2 and Tier 3 work, and both remain propo
 
 | # | Finding | Evidence |
 |---|---|---|
-| B1 | **No refresh keepalive.** Refresh happens lazily, on use. A tenant that publishes nothing for 90 days loses its rotating refresh token and discovers it at the next publish. | `apps/api/src/services/confluence-connection.service.ts:783-865`; no such job in `apps/api/src/jobs/production-scheduler.ts` |
+| B1 | **A dormant connection dies silently.** Refresh happens lazily, on use, so a tenant that publishes nothing for 90 days loses its rotating refresh token and discovers it at the next publish. **Restated after the DPO's 2026-09-20 ruling:** the expiry itself is correct and is to be kept — the defect is that nobody is told. There is no warning as the deadline approaches, no record that the connection lapsed, and the failure surfaces as a publish error rather than a "reconnect" prompt. | `apps/api/src/services/confluence-connection.service.ts:783-865`; no such job in `apps/api/src/jobs/production-scheduler.ts` |
 | B2 | **Nothing detects a change or deletion made in Confluence.** There is no reconcile job and no webhook (impossible for a 3LO app). `getPage` has exactly one production caller, the erasure read-back. The ruling's "a note that it is no longer visible there" has no source of truth. | `apps/api/src/jobs/`; `apps/api/src/services/confluence-pages.ts:311` |
 | B3 | **Edits never republish.** Publication is enqueued only on document create; `updatePage` has no production caller. The content property (approved date, next review date, minute reference, document version) is stale from the first edit in CharityPilot. | `apps/api/src/services/document.service.ts:762`, `:780-801`; `apps/api/src/services/document-publication.service.ts:801-844` |
 | B4 | **Rate-limit handling is reactive only.** A 429 is honoured, but `Retry-After` is clamped to 60 s (which burns attempts when Atlassian asks for longer), `X-RateLimit-NearLimit` is ignored, job intervals carry no jitter, and nothing accounts for the hourly pool shared by every tenant. | `apps/api/src/services/confluence-client.ts:487-494`, `:641-655`; `apps/api/src/jobs/production-scheduler.ts:590-631` |
@@ -264,7 +273,15 @@ Recorded in `docs/production-runbook.md`.
 
 ### Tier 2 — tightness that does not pre-empt the publishing-model conversation
 
-**T2.1 + T2.2 A reconcile job that is also the keepalive** (one job; the merge is deliberate).
+**T2.1 + T2.2 A reconcile job whose token refresh is a by-product, never a purpose** (one job).
+
+> **Changed 2026-09-20 by the DPO's ruling (section 2).** This was written as "a reconcile job that
+> is also the keepalive", with the merge presented as deliberate: every six-hourly visit rotated the
+> refresh token, which incidentally kept *every* connected tenant alive for ever, including tenants
+> with nothing to reconcile. That second effect is the thing the DPO refused. The job below keeps the
+> rotation where it is the by-product of real work, and drops it where it would be the only reason to
+> act. **Net effect: a tenant that is genuinely using the integration stays connected; a tenant that
+> is not is allowed to lapse and is asked to reconnect.**
 
 - Columns on `DocumentPublication`: enum `DocumentPublicationRemoteState { VISIBLE ARCHIVED TRASHED
   GONE UNKNOWN }`, `remoteState?`, `remoteVersion?`, `remoteTitle?` (≤ 500), `remoteStateChangedAt`,
@@ -272,13 +289,19 @@ Recorded in `docs/production-runbook.md`.
   `reconcileError?` (a code, never text); index `(provider, reconcileAttemptedAt)`. On
   `OrganisationIntegration`, written through a narrow `updateMany` as `confluence-publish-target.service.ts`
   does: `lastReconcileAt` and `lastReconcileOutcome` (`OK | RECONNECT_REQUIRED | FORBIDDEN |
-  SITE_NOT_ACCESSIBLE | RATE_LIMITED`).
+  SITE_NOT_ACCESSIBLE | RATE_LIMITED | EXPIRING_SOON | EXPIRED` — the last two added by the dormancy
+  sweep below).
 - New `apps/api/src/services/confluence-reconcile.service.ts` with `createConfluenceReconciler(deps)`
   mirroring `createConfluencePublisher` (injectable `connect`, `operations`,
-  `listAccessibleResources`). Per tenant: obtain a token through `currentAccessTokenForOrganisation`
-  (on a six-hour interval the one-hour access token is always expired, so every visit rotates the
-  refresh token — **that is the keepalive**, with no forced refresh and no further edit to the closed
-  module); probe `accessible-resources` once, and if the bound `siteId` is absent record
+  `listAccessibleResources`). **Per tenant, the first question is whether there is anything to do:**
+  a tenant with no `DocumentPublication` row in a live `DocumentPublicationState` — that is, none
+  `PENDING` and none `PROCESSED`; `RETIRED` and `DEAD_LETTER` rows do not count, because neither has a
+  CharityPilot record left to keep in step — is **skipped before any token is obtained**, and is left
+  to expire. Only a tenant with real reconcile work is visited. For those, obtain a token
+  through `currentAccessTokenForOrganisation` (on a six-hour interval the one-hour access token is
+  always expired, so the visit rotates the refresh token as a side effect of the work — not as its
+  purpose, and with no forced refresh and no further edit to the closed module); probe
+  `accessible-resources` once, and if the bound `siteId` is absent record
   `SITE_NOT_ACCESSIBLE` and touch no pages. Per page: `getPage` gives `VISIBLE` or `ARCHIVED` from
   `status` plus version and title; `null` triggers a new `getTrashedPage` in `confluence-pages.ts`
   (`GET v1 content/{id}?status=trashed&expand=version`, idempotent) — 200 means `TRASHED`, 404 means
@@ -300,14 +323,27 @@ Recorded in `docs/production-runbook.md`.
   `DOCUMENT_RECONCILE_PAGES_PER_RUN` (default 50) and a per-page minimum age of 24 h; registered in
   `main()`, `runProductionSchedulerOnce` and the shutdown list, with a sibling entry point
   `jobs/reconcile-document-mirrors.ts`. `startRecurringJob` gains `jitterFraction?` (default 0 keeps
-  existing tests green; 0.2 on a six-hour interval). Alert when a `CONNECTED` tenant's
-  `lastRefreshedAt` is older than 60 days.
+  existing tests green; 0.2 on a six-hour interval).
+- **The dormancy sweep replaces the old keepalive alert** (B1 as restated). In the same run, for every
+  `CONNECTED` integration whose `lastRefreshedAt` is older than 60 days: **do not refresh.** Set
+  `lastReconcileOutcome = EXPIRING_SOON`, record an integration audit event once (not once per run),
+  and surface it on the owner-console health view and to the tenant as "this connection will stop
+  working on <date> unless it is used; reconnect to keep it". Past 90 days, mark it `EXPIRED` and put
+  the integration into the same state a revoked authorisation produces, so the next publish fails as
+  "reconnect required" by design rather than by accident. The tenant's `DocumentPublication` rows and
+  their references are untouched — a lapsed authorisation is not a deletion, and the pages it already
+  published stay exactly where they are.
 - Tests: new `confluence-reconcile.service.test.ts` — 200 gives `VISIBLE` with version and title;
   404 then 200 gives `TRASHED`; 404 then 404 gives `GONE`; 403 gives `UNKNOWN` and the tenant
   `FORBIDDEN`; a rate limit aborts the run leaving rows unstamped; NearLimit stops claiming; a missing
-  site makes no page calls; the orphan sweep retires only unclaimed rows; a tenant with zero pages
-  still obtains a token (keepalive). `production-scheduler.test.ts` gains the `document-reconcile:*`
-  events and env keys, plus source-pin tests for both entry points.
+  site makes no page calls; the orphan sweep retires only unclaimed rows. **Two canaries for the
+  ruling, replacing the old "a tenant with zero pages still obtains a token" test, which asserted the
+  behaviour the DPO refused:** a tenant with no live publications makes **no token call at all** (spy
+  on `connect`/`currentAccessTokenForOrganisation` and assert it was never reached — a test that
+  merely asserts no *page* calls would pass while the token was still being rotated), and a tenant
+  past 60 days with no live publications is marked `EXPIRING_SOON` **without** its `lastRefreshedAt`
+  moving. `production-scheduler.test.ts` gains the `document-reconcile:*` events and env keys, plus
+  source-pin tests for both entry points.
 
 **T2.3 Republish on change — flagged: this extends the publish layer the DPO asked to pause.**
 `enqueueConfluencePublication` would also fire on a metadata update (`reason: METADATA` →

@@ -243,9 +243,15 @@ work.
    (`apps/api/src/utils/logger.ts` L41-51) even though every peer secret was in it. It is now
    redacted (`0890f07`), and the two publication tuning variables are documented in all three env
    examples.
-9. **Still open — Tier 2.** Nothing keeps an idle tenant's refresh token alive. Atlassian's rotating
-   refresh tokens expire after 90 days without use; refresh here is lazy, so a quiet charity silently
-   loses its connection and finds out at the next publish.
+9. **Still open — Tier 2, and reframed on 2026-09-20.** Atlassian's rotating refresh tokens expire
+   after 90 days without use; refresh here is lazy, so a quiet charity silently loses its connection
+   and finds out at the next publish. **The DPO ruled in writing on 2026-09-20 that the expiry is to
+   be kept**: refreshing a token as a by-product of an integration with a real reconciliation or
+   monitoring purpose is legitimate, but refreshing one solely to stop a dormant authorisation
+   lapsing is not — the organisation should reconnect instead. So what is open is no longer a
+   keepalive. It is the warning and the reconnect path: tell a tenant its connection is about to
+   lapse, record it when it does, and fail the next publish as "reconnect required" by design. See
+   the audit's section 2 ruling and the revised T2.1.
 
 **Owner actions outstanding:**
 
@@ -402,11 +408,12 @@ forbidding `refresh`/`token`/`secret`. A task hit it and reverted rather than lo
 3. **Tier 2's opening work: keep idle refresh tokens alive, and detect a Confluence-side deletion.**
    The erasure rework itself (§2a — the (a)/(b) question was answered by email on 2026-09-19) is done:
    it landed on 2026-09-20 along with the delete scopes and recorded granted scopes it needed (§5,
-   item 5, now fixed). What is left in this area is Tier 2: a job that renews an idle tenant's
-   refresh token before Atlassian's 90-day inactivity expiry (§5, item 9, still open), and the
-   reconcile job that re-reads each referenced page to notice a Confluence-side deletion (§2a,
-   "detecting a Confluence-side deletion is new work"). Neither is approved for build — Tier 2
-   remains a proposal.
+   item 5, now fixed). What is left in this area is Tier 2: the reconcile job that re-reads each
+   referenced page to notice a Confluence-side deletion (§2a, "detecting a Confluence-side deletion
+   is new work"), and — **no longer a renewal job, per the DPO's 2026-09-20 ruling** — the warning
+   and reconnect path for a connection that is about to lapse (§5, item 9, still open). Neither is
+   approved for build; Tier 2 remains a proposal, and the DPO has asked that the exact token
+   lifecycle be settled during his review rather than built first.
 4. **Build the owner-console integration health view** (section 2b). Small; the API already returns
    it.
 5. **Create the Atlassian OAuth app**, then let the DPO authorise — which may clear the 403 without
