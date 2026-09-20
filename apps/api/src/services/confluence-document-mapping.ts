@@ -1,4 +1,10 @@
 import { getPrimaryFrontendOrigin } from '../utils/frontend-origin.js';
+import {
+  categoryPrefix,
+  DEFAULT_PUBLISHING_MODEL,
+  type PublicationBodyMode,
+  type PublicationNamingConvention,
+} from './confluence-publishing-model.js';
 
 /**
  * Maps a CharityPilot governance document onto the page Confluence will hold
@@ -104,8 +110,25 @@ export const PUBLICATION_TITLE_MAX_LENGTH = 200;
  * depend on this function's output — only on `doc.id` and `doc.name`, which
  * this function must not drop.
  */
-export function conventionalDocumentName(doc: { id: string; name: string; category?: string }): string {
-  return doc.name;
+export function conventionalDocumentName(
+  doc: { id: string; name: string; category?: string },
+  naming: PublicationNamingConvention = DEFAULT_PUBLISHING_MODEL.naming,
+): string {
+  // The default is unchanged and must stay unchanged: the POL-/NOS- convention
+  // is REPORTED, never seen against a real site, and a page that looks native
+  // and is subtly wrong is worse than one that is obviously ours. An
+  // organisation that has explicitly opted in gets it; nobody else does.
+  if (naming !== 'CATEGORY_PREFIXED') return doc.name;
+
+  const prefix = doc.category === undefined ? null : categoryPrefix(doc.category);
+  if (prefix === null) return doc.name;
+
+  // Not applied twice. A document already named "POL - Safeguarding" must not
+  // become "POL - POL - Safeguarding" — which would also change the page title
+  // and so orphan the page the row already names.
+  if (doc.name.trimStart().toUpperCase().startsWith(`${prefix} -`)) return doc.name;
+
+  return `${prefix} - ${doc.name}`;
 }
 
 /**
@@ -194,10 +217,16 @@ function normaliseTitleName(value: string): string {
  * normalised and shortened, and only by as much as the suffix's own length
  * demands, so the total never exceeds {@link PUBLICATION_TITLE_MAX_LENGTH}.
  */
-export function publicationTitle(doc: { id: string; name: string }): string {
+export function publicationTitle(
+  doc: { id: string; name: string; category?: string },
+  naming: PublicationNamingConvention = DEFAULT_PUBLISHING_MODEL.naming,
+): string {
   const idSuffix = ` (${TITLE_ID_MARKER} ${doc.id})`;
   const nameBudget = PUBLICATION_TITLE_MAX_LENGTH - idSuffix.length;
-  const displayName = truncateToCodePoints(normaliseTitleName(conventionalDocumentName(doc)), nameBudget);
+  const displayName = truncateToCodePoints(
+    normaliseTitleName(conventionalDocumentName(doc, naming)),
+    nameBudget,
+  );
   // `trimStart` can only ever strip the suffix's own leading space, and only
   // when the name normalised away to nothing (a name that was entirely
   // whitespace, or a budget the id suffix consumed whole). It cannot reach
@@ -257,7 +286,12 @@ function escapeXhtmlText(value: string): string {
  * value — the document name most of all, since it is user input — goes
  * through {@link escapeXhtmlText}.
  */
-export function publicationBody(doc: PublicationDocument): string {
+export function publicationBody(
+  doc: PublicationDocument,
+  bodyMode: PublicationBodyMode = DEFAULT_PUBLISHING_MODEL.bodyMode,
+): string {
+  if (bodyMode === 'FULL_BODY') return fullBody(doc);
+
   const documentsUrl = `${getPrimaryFrontendOrigin()}/documents`;
 
   const name = escapeXhtmlText(doc.name);
@@ -275,6 +309,54 @@ export function publicationBody(doc: PublicationDocument): string {
     '<p>The approval record — what a Board approved, when, and under what resolution — ' +
     'remains the responsibility of CharityPilot and is not duplicated on this page. ' +
     `View it in <a href="${href}">${linkText}</a>.</p>`
+  );
+}
+
+/**
+ * The FULL_BODY page: the document's recorded substance, rendered.
+ *
+ * WHAT THIS IS AND IS NOT. CharityPilot holds a governance document as an
+ * uploaded FILE — a PDF, a Word document — and nothing here converts one to
+ * XHTML. So "full body" does not mean the document's text appears on the page.
+ * It means the record CharityPilot holds ABOUT the document — its category, its
+ * approval, its review date, its minute reference — is rendered as the page
+ * rather than withheld behind a one-line wrapper. The file is still attached,
+ * because the file is still the document.
+ *
+ * Rendering minutes and resolutions as page content — the other half of the
+ * audit's Tier 3 item — is a different piece of work: those are `GoverningAct`
+ * and `Resolution` records, not `Document`s, and they do not pass through this
+ * publisher at all.
+ *
+ * Off by default, because it puts more of a charity's governance record into a
+ * system whose residency CharityPilot does not control. That is Open Question 1
+ * and not an engineer's to answer.
+ */
+function fullBody(doc: PublicationDocument): string {
+  const documentsUrl = `${getPrimaryFrontendOrigin()}/documents`;
+  const href = escapeXhtmlText(documentsUrl);
+
+  const rows: string[] = [
+    `<p><strong>Document:</strong> ${escapeXhtmlText(doc.name)} (version ${escapeXhtmlText(String(doc.version))})</p>`,
+    `<p><strong>Category:</strong> ${escapeXhtmlText(doc.category)}</p>`,
+  ];
+
+  const approved = toIsoOrNull(doc.approvedDate);
+  if (approved !== null) rows.push(`<p><strong>Approved:</strong> ${escapeXhtmlText(approved)}</p>`);
+  const review = toIsoOrNull(doc.nextReviewDate);
+  if (review !== null) rows.push(`<p><strong>Next review:</strong> ${escapeXhtmlText(review)}</p>`);
+  if (doc.boardMinuteReference) {
+    rows.push(`<p><strong>Board minute:</strong> ${escapeXhtmlText(doc.boardMinuteReference)}</p>`);
+  }
+
+  return (
+    rows.join('') +
+    `<p><strong>CharityPilot reference:</strong> ${escapeXhtmlText(doc.id)}</p>` +
+    // Even here. A fuller page is still a published copy, and a reader must not
+    // be able to mistake it for the record of record.
+    '<p>This page is a <strong>published copy</strong> maintained by CharityPilot, and the ' +
+    'attached file is the document itself. The authoritative approval record lives in ' +
+    `<a href="${href}">CharityPilot</a>.</p>`
   );
 }
 

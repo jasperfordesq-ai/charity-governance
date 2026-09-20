@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import { DEFAULT_PUBLISHING_MODEL } from '../services/confluence-publishing-model.js';
 import test from 'node:test';
 
 import {
@@ -110,6 +111,9 @@ test('a space from the listed set is stored on its own columns, and config is le
     lists(FINANCE, GOVERNANCE),
   );
 
+  // No `publishingModel` here, deliberately: choosing a space never reads the
+  // row, so `chooseConfluencePublishSpace` returns the narrower
+  // `ChosenPublishSpace` rather than asserting a model it did not look at.
   assert.deepEqual(target, {
     cloudId: 'site-1',
     spaceId: 'space-gov',
@@ -286,6 +290,12 @@ test('a chosen space is still the destination after a reconnect to the same site
     spaceId: 'space-gov',
     spaceKey: 'GOV',
     spaceName: 'Governance',
+    // A reconnect rewrote `config`, which is where the publishing model lives —
+    // so an organisation that had configured one would lose it here. This
+    // charity had not, and gets the default, which is the behaviour it already
+    // had. Anything stored in `config` inherits that hazard; see the module
+    // header on why the publish columns are NOT in there.
+    publishingModel: DEFAULT_PUBLISHING_MODEL,
   });
 });
 
@@ -342,7 +352,13 @@ test('a connected organisation that has chosen a space has a publish destination
 
   const target = await confluencePublishTargetForOrganisation(store.client, 'org-a');
 
-  assert.deepEqual(target, { cloudId: 'site-1', spaceId: 'space-gov', spaceKey: 'GOV', spaceName: 'Governance' });
+  assert.deepEqual(target, {
+    cloudId: 'site-1',
+    spaceId: 'space-gov',
+    spaceKey: 'GOV',
+    spaceName: 'Governance',
+    publishingModel: DEFAULT_PUBLISHING_MODEL,
+  });
 });
 
 test('a connected organisation with no chosen space has NO publish destination, so nothing may enqueue', async () => {

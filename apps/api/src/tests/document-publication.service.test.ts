@@ -22,6 +22,7 @@ import type { ConfluenceClient } from '../services/confluence-client.js';
 import type { ConfluencePage } from '../services/confluence-pages.js';
 import type { ConfluenceAttachment } from '../services/confluence-attachments.js';
 import type { ConfluencePublishTarget } from '../services/confluence-publish-target.service.js';
+import { DEFAULT_PUBLISHING_MODEL } from '../services/confluence-publishing-model.js';
 import { CHARITYPILOT_PROPERTY_KEY, publicationTitle } from '../services/confluence-document-mapping.js';
 
 const NOW = new Date('2026-09-19T12:00:00.000Z');
@@ -38,6 +39,7 @@ const TARGET: ConfluencePublishTarget = {
   spaceId: 'space-1',
   spaceKey: 'GOV',
   spaceName: 'Governance',
+  publishingModel: DEFAULT_PUBLISHING_MODEL,
 };
 
 const DOC: PublicationSource = {
@@ -264,6 +266,18 @@ function spyDeps(calls: string[], overrides: SpyOverrides = {}): ConfluencePubli
         record(`setContentProperty:${pageId}:${key}`);
         if (overrides.operations?.setContentProperty) {
           await overrides.operations.setContentProperty(client, pageId, key, value);
+        }
+      },
+      addPageLabels: async (client, pageId, labels) => {
+        record(`addPageLabels:${pageId}:${[...labels].join('+')}`);
+        if (overrides.operations?.addPageLabels) {
+          await overrides.operations.addPageLabels(client, pageId, labels);
+        }
+      },
+      setContentState: async (client, pageId, stateName) => {
+        record(`setContentState:${pageId}:${stateName}`);
+        if (overrides.operations?.setContentState) {
+          await overrides.operations.setContentState(client, pageId, stateName);
         }
       },
       getPage: async (client, pageId) => {
@@ -1567,4 +1581,184 @@ test('a page that has vanished from Confluence is not recreated by a refresh', a
   assert.equal(error.code, 'CONFLUENCE_PAGE_MISSING_ON_REFRESH');
   assert.ok(!calls.some((call) => call.startsWith('createPage')), 'nothing may be recreated');
   assert.ok(!calls.some((call) => call.startsWith('updatePage')));
+});
+
+
+// ---------------------------------------------------------------------------
+// The publishing model, through the real publisher.
+//
+// The unit tests for `confluence-publishing-model.ts` prove the defaults are
+// today's values. These prove the publisher actually honours them — and, more
+// importantly, that an organisation which has configured nothing publishes
+// exactly as it did before the options existed.
+// ---------------------------------------------------------------------------
+
+function targetWith(model: Partial<typeof DEFAULT_PUBLISHING_MODEL>): ConfluencePublishTarget {
+  return { ...TARGET, publishingModel: { ...DEFAULT_PUBLISHING_MODEL, ...model } };
+}
+
+test('an unconfigured organisation publishes exactly as it did before the options existed', async () => {
+  const calls: string[] = [];
+  await runPublisher(spyDeps(calls, { readTarget: async () => TARGET }));
+
+  // No parent, no labels, no content state, and the wrapper body.
+  assert.ok(calls.some((call) => call.startsWith(`createPage:space-1:${TITLE}`)));
+  assert.ok(!calls.some((call) => call.startsWith('addPageLabels')), calls.join(', '));
+  assert.ok(!calls.some((call) => call.startsWith('setContentState')), calls.join(', '));
+});
+
+test('a configured parent page files the page under it instead of the space root', async () => {
+  const parents: Array<string | undefined> = [];
+  await runPublisher(
+    spyDeps([], {
+      readTarget: async () => targetWith({ parentPageId: 'root-page-1' }),
+      operations: {
+        createPage: async (_client, input) => {
+          parents.push(input.parentId);
+          return { ...PAGE, title: input.title };
+        },
+      },
+    }),
+  );
+
+  assert.deepEqual(parents, ['root-page-1']);
+});
+
+test('no parent is sent as absent, not as null', async () => {
+  const seen: Array<Record<string, unknown>> = [];
+  await runPublisher(
+    spyDeps([], {
+      operations: {
+        createPage: async (_client, input) => {
+          seen.push(input as unknown as Record<string, unknown>);
+          return { ...PAGE, title: input.title };
+        },
+      },
+    }),
+  );
+
+  // `undefined` is "no parent" to Confluence; an explicit null is a value it
+  // has to interpret, and the behaviour every existing charity has is the
+  // absence of the field.
+  assert.ok(!Object.hasOwn(seen[0], 'parentId'), JSON.stringify(seen[0]));
+});
+
+test('labels are applied only when asked for, and charitypilot always comes first', async () => {
+  const applied: string[][] = [];
+  await runPublisher(
+    spyDeps([], {
+      readTarget: async () => targetWith({ applyLabels: true }),
+      operations: {
+        addPageLabels: async (_client, _pageId, labels) => {
+          applied.push([...labels]);
+        },
+      },
+    }),
+  );
+
+  assert.equal(applied.length, 1);
+  assert.equal(applied[0][0], 'charitypilot');
+});
+
+test('a label failure does not fail a publication that has already landed', async () => {
+  const calls: string[] = [];
+  const outcome = await runPublisher(
+    spyDeps(calls, {
+      readTarget: async () => targetWith({ applyLabels: true }),
+      operations: {
+        addPageLabels: async () => {
+          throw new AppError(403, 'CONFLUENCE_PUBLISH_FORBIDDEN', 'no permission to label');
+        },
+      },
+    }),
+  );
+
+  // The page exists, the file is attached and the property is written by the
+  // time labels are attempted. A charity whose policy is mirrored correctly but
+  // carries no label has a cosmetic problem; a failed publish is a governance
+  // one.
+  assert.equal(outcome.pageId, 'page-1');
+  assert.ok(outcome.attachmentId);
+});
+
+test('the content state is mirrored only when asked for, and reflects the approval CharityPilot holds', async () => {
+  const states: string[] = [];
+  const operations = {
+    setContentState: async (_client: unknown, _pageId: string, stateName: string) => {
+      states.push(stateName);
+    },
+  };
+
+  await runPublisher(
+    spyDeps([], {
+      readTarget: async () => targetWith({ mirrorContentState: true }),
+      operations,
+      readDocument: async () => ({ ...DOC, approvedDate: new Date('2026-01-01T00:00:00.000Z') }),
+    }),
+  );
+  await runPublisher(
+    spyDeps([], {
+      readTarget: async () => targetWith({ mirrorContentState: true }),
+      operations,
+      readDocument: async () => ({ ...DOC, approvedDate: null }),
+    }),
+  );
+
+  // Two states, from the one field CharityPilot actually holds. It does not
+  // invent a workflow it has no record of.
+  assert.deepEqual(states, ['Approved', 'Under review']);
+});
+
+test('the content state is never written for an organisation that did not ask', async () => {
+  const calls: string[] = [];
+  await runPublisher(spyDeps(calls));
+
+  // Setting a content state publishes a NEW PAGE VERSION in a charity's site.
+  // Doing that unasked is exactly the class of write the DPO wanted discussed.
+  assert.ok(!calls.some((call) => call.startsWith('setContentState')), calls.join(', '));
+});
+
+test('the prefixed naming convention changes the title only for the categories it knows', async () => {
+  const titles: string[] = [];
+  const operations = {
+    createPage: async (_client: unknown, input: { title: string }) => {
+      titles.push(input.title);
+      return { ...PAGE, title: input.title };
+    },
+  };
+
+  for (const category of ['POLICY', 'MINUTES']) {
+    await runPublisher(
+      spyDeps([], {
+        readTarget: async () => targetWith({ naming: 'CATEGORY_PREFIXED' }),
+        operations,
+        readDocument: async () => ({ ...DOC, category }),
+      }),
+    );
+  }
+
+  assert.ok(titles[0].startsWith('POL - '), titles[0]);
+  // MINUTES has no confirmed prefix, so nothing is invented for it.
+  assert.ok(!titles[1].startsWith('POL'), titles[1]);
+  assert.ok(!titles[1].includes(' - '), titles[1]);
+});
+
+test('FULL_BODY renders the record CharityPilot holds, and still says it is a copy', async () => {
+  const bodies: string[] = [];
+  await runPublisher(
+    spyDeps([], {
+      readTarget: async () => targetWith({ bodyMode: 'FULL_BODY' }),
+      operations: {
+        createPage: async (_client, input) => {
+          bodies.push(input.bodyStorage);
+          return { ...PAGE, title: input.title };
+        },
+      },
+    }),
+  );
+
+  assert.match(bodies[0], /Category:/);
+  // Even a fuller page must not be mistakable for the record of record.
+  assert.match(bodies[0], /published copy/);
+  assert.match(bodies[0], /authoritative approval record/);
 });

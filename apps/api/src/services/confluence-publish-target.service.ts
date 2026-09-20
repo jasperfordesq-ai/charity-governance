@@ -47,6 +47,10 @@
  * `apps/web/src/lib/integration-status.ts`.
  */
 import { AppError } from '../utils/errors.js';
+import {
+  readPublishingModel,
+  type ConfluencePublishingModel,
+} from './confluence-publishing-model.js';
 import type { ListSpacesResult } from './confluence-spaces.js';
 
 /** The destination, fully resolved. Everything a publish needs and nothing else. */
@@ -57,7 +61,27 @@ export type ConfluencePublishTarget = {
   spaceKey: string;
   /** Display text only; may be empty for a space Confluence returned unnamed. */
   spaceName: string;
+  /**
+   * How a page is shaped. Read from the same row as the destination, because
+   * the two are one decision -- where documents go and what they look like when
+   * they arrive -- and a publisher that had to fetch them separately could
+   * publish with one and not the other.
+   *
+   * Defaults to exactly the behaviour CharityPilot had before the model was
+   * configurable. See confluence-publishing-model.ts.
+   */
+  publishingModel: ConfluencePublishingModel;
 };
+
+/**
+ * What choosing a space confirms back to the caller.
+ *
+ * Narrower than ConfluencePublishTarget on purpose: this function writes the
+ * destination and never reads the row, so it has no honest way to report how
+ * pages are shaped. Returning the full target would have it assert a default
+ * publishing model over whatever the organisation had actually configured.
+ */
+export type ChosenPublishSpace = Omit<ConfluencePublishTarget, 'publishingModel'>;
 
 /**
  * The columns this module reads. Deliberately a structural type: a caller that
@@ -70,6 +94,7 @@ export type PublishTargetRow = {
   publishSpaceKey: string | null;
   publishSpaceName: string | null;
   publishSpaceSiteId: string | null;
+  publishingModel?: unknown;
 };
 
 /** The narrow slice of Prisma this module uses. */
@@ -160,6 +185,8 @@ export function readConfluencePublishTarget(row: PublishTargetRow): ConfluencePu
     spaceKey,
     // Display text only, and its absence is not a reason to refuse to publish.
     spaceName: typeof row.publishSpaceName === 'string' ? row.publishSpaceName : '',
+    // From its own column, never from `config`: see the migration.
+    publishingModel: readPublishingModel(row.publishingModel),
   };
 }
 
@@ -189,6 +216,7 @@ export async function confluencePublishTargetForOrganisation(
       publishSpaceKey: true,
       publishSpaceName: true,
       publishSpaceSiteId: true,
+      publishingModel: true,
     },
   });
 
@@ -219,7 +247,7 @@ export async function chooseConfluencePublishSpace(
   prisma: PublishTargetClient,
   params: { integrationId: string; organisationId: string; cloudId: string; spaceId: string },
   listSpaces: SpaceLister,
-): Promise<ConfluencePublishTarget> {
+): Promise<ChosenPublishSpace> {
   const requested = typeof params.spaceId === 'string' ? params.spaceId.trim() : '';
   if (requested.length === 0) {
     throw new AppError(
@@ -250,7 +278,12 @@ export async function chooseConfluencePublishSpace(
     },
   });
 
-  return { cloudId: params.cloudId, spaceId: listed.id, spaceKey: listed.key, spaceName: listed.name };
+  return {
+    cloudId: params.cloudId,
+    spaceId: listed.id,
+    spaceKey: listed.key,
+    spaceName: listed.name,
+  };
 }
 
 /**

@@ -10,10 +10,12 @@ import {
   type ConfluenceConnectionDeps,
 } from './confluence-connection.service.js';
 import {
+  addPageLabels as addPageLabelsDefault,
   createPage as createPageDefault,
   findPageByTitle as findPageByTitleDefault,
   getPage as getPageDefault,
   setContentProperty as setContentPropertyDefault,
+  setContentState as setContentStateDefault,
   updatePage as updatePageDefault,
   type ConfluencePage,
   type CreatePageInput,
@@ -43,6 +45,10 @@ import type {
   RemoteStateReading,
 } from './confluence-reconcile.service.js';
 import { recordIntegrationAuditEventBestEffort } from './integration-audit.service.js';
+import {
+  publicationLabels,
+  type PublicationBodyMode,
+} from './confluence-publishing-model.js';
 
 /**
  * The publish worker: the sequence that turns a `DocumentPublication` row into
@@ -582,6 +588,8 @@ export type ConfluencePublishOperations = {
   uploadAttachment(client: ConfluenceClient, input: UploadAttachmentInput): Promise<ConfluenceAttachment>;
   setContentProperty(client: ConfluenceClient, pageId: string, key: string, value: unknown): Promise<void>;
   getPage(client: ConfluenceClient, pageId: string): Promise<ConfluencePage | null>;
+  addPageLabels(client: ConfluenceClient, pageId: string, labels: readonly string[]): Promise<void>;
+  setContentState(client: ConfluenceClient, pageId: string, stateName: string): Promise<void>;
   updatePage(client: ConfluenceClient, input: UpdatePageInput): Promise<ConfluencePage>;
 };
 
@@ -591,6 +599,8 @@ const DEFAULT_OPERATIONS: ConfluencePublishOperations = {
   uploadAttachment: uploadAttachmentDefault,
   setContentProperty: setContentPropertyDefault,
   getPage: getPageDefault,
+  addPageLabels: addPageLabelsDefault,
+  setContentState: setContentStateDefault,
   updatePage: updatePageDefault,
 };
 
@@ -796,7 +806,11 @@ export function createConfluencePublisher(deps: ConfluencePublisherDeps): Publis
 
     assertNotAborted(signal);
     const doc = await readDocument({ organisationId: row.organisationId, documentId: row.documentId });
-    const title = publicationTitle(doc);
+    // The publishing model travels with the destination: where documents go and
+    // what they look like when they arrive are one decision, and a publisher
+    // that fetched them separately could act on one and not the other.
+    const model = target.publishingModel;
+    const title = publicationTitle(doc, model.naming);
 
     assertNotAborted(signal);
     let client: ConfluenceClient;
@@ -825,7 +839,19 @@ export function createConfluencePublisher(deps: ConfluencePublisherDeps): Publis
     const refreshed =
       page.title === title
         ? page
-        : await refreshPage({ client, operations, pageId: page.id, doc, title, spaceKey: target.spaceKey, signal });
+        : await refreshPage({
+            client,
+            operations,
+            pageId: page.id,
+            doc,
+            title,
+            spaceKey: target.spaceKey,
+            // The same mode the page was created in. Rebuilding it in the
+            // default would rewrite a FULL_BODY page back to a stub on the
+            // first metadata edit.
+            bodyMode: model.bodyMode,
+            signal,
+          });
 
     const recorded: PublishedPage = {
       cloudId: target.cloudId,
@@ -871,6 +897,44 @@ export function createConfluencePublisher(deps: ConfluencePublisherDeps): Publis
     } catch (error) {
       if (isForbidden(error)) throw publishForbidden('write page metadata', target.spaceKey, error);
       throw error;
+    }
+
+    // ── the publishing model's optional writes ──────────────────────────
+    //
+    // BOTH ARE BEST-EFFORT, AND THAT IS DELIBERATE. The document is published
+    // by this line: the page exists, the file is attached, the governance
+    // property is written, and the row is about to record all three. A label
+    // that would not apply, or a content state a site's plan does not support,
+    // must not undo that — a charity whose policy is mirrored correctly but
+    // carries no `charitypilot` label has a cosmetic problem, whereas a failed
+    // publish is a governance one.
+    //
+    // Neither runs at all for an organisation that has not asked for it, which
+    // is every organisation until the publishing-model conversation happens.
+    const labels = publicationLabels(model, doc);
+    if (labels.length > 0) {
+      assertNotAborted(signal);
+      try {
+        await operations.addPageLabels(client, recorded.pageId, labels);
+      } catch {
+        // Swallowed. See above.
+      }
+    }
+
+    if (model.mirrorContentState) {
+      assertNotAborted(signal);
+      try {
+        // The only two states CharityPilot can honestly assert, from the one
+        // field it actually holds. It does NOT invent a workflow: a document
+        // with an approval date was approved, and one without is not yet.
+        await operations.setContentState(
+          client,
+          recorded.pageId,
+          doc.approvedDate ? 'Approved' : 'Under review',
+        );
+      } catch {
+        // Swallowed. See above.
+      }
     }
 
     return {
@@ -931,9 +995,10 @@ async function refreshPage(input: {
   doc: PublicationSource;
   title: string;
   spaceKey: string;
+  bodyMode: PublicationBodyMode;
   signal?: AbortSignal;
 }): Promise<{ id: string; title: string }> {
-  const { client, operations, pageId, doc, title, spaceKey, signal } = input;
+  const { client, operations, pageId, doc, title, spaceKey, bodyMode, signal } = input;
 
   const attemptRefresh = async (): Promise<{ id: string; title: string }> => {
     assertNotAborted(signal);
@@ -958,7 +1023,7 @@ async function refreshPage(input: {
     const updated = await operations.updatePage(client, {
       pageId,
       title,
-      bodyStorage: publicationBody(doc),
+      bodyStorage: publicationBody(doc, bodyMode),
       expectedVersion: current.version,
     });
     return { id: updated.id, title: updated.title };
@@ -1008,7 +1073,14 @@ async function resolvePage(input: {
     return await operations.createPage(client, {
       spaceId: target.spaceId,
       title,
-      bodyStorage: publicationBody(doc),
+      bodyStorage: publicationBody(doc, target.publishingModel.bodyMode),
+      // Files the page under a CharityPilot root page when the charity has
+      // chosen one, rather than leaving it loose at the space root. Omitted
+      // rather than passed as null when unset: `undefined` is "no parent", and
+      // that is the behaviour every existing charity already has.
+      ...(target.publishingModel.parentPageId === null
+        ? {}
+        : { parentId: target.publishingModel.parentPageId }),
     });
   } catch (error) {
     if (isForbidden(error)) throw publishForbidden('create a page', target.spaceKey, error);

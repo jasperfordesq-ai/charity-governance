@@ -1033,3 +1033,72 @@ export async function setContentProperty(
     throw error;
   }
 }
+
+/**
+ * Adds labels to a page. v1, because v2 has no label write.
+ *
+ * ADDITIVE, NEVER A REPLACEMENT. `POST content/{id}/label` appends; there is a
+ * `DELETE` that removes one, and this module deliberately does not call it.
+ * A charity's own space administrators label their own pages, and a tool that
+ * reconciled a label set would silently strip labels a person had put there —
+ * on pages in a site CharityPilot does not own. Adding `charitypilot` and a
+ * category is a claim about our own pages; removing anything is not ours to do.
+ *
+ * Idempotent: re-adding a label a page already carries is accepted and changes
+ * nothing, which is what makes this safe on a republish.
+ */
+export async function addPageLabels(
+  client: ConfluenceClient,
+  pageId: string,
+  labels: readonly string[],
+): Promise<void> {
+  const id = assertPageId(pageId);
+  if (labels.length === 0) return;
+
+  await client.request({
+    method: 'POST',
+    api: 'v1',
+    path: `content/${id}/label`,
+    body: labels.map((name) => ({ prefix: 'global', name })),
+    // Repeating this cannot duplicate anything: a label a page already has is
+    // accepted and ignored by Confluence.
+    idempotent: true,
+  });
+}
+
+/**
+ * Sets a page's content state ("Approved", "Under review").
+ *
+ * **This PUBLISHES A NEW PAGE VERSION**, which is why the caller is off by
+ * default. It is CharityPilot writing to a charity's Confluence on its own
+ * initiative every time an approval changes, and that is precisely the class of
+ * write the DPO asked to discuss before it becomes ordinary behaviour.
+ *
+ * v1, because v2 has no content-state endpoint.
+ */
+export async function setContentState(
+  client: ConfluenceClient,
+  pageId: string,
+  stateName: string,
+): Promise<void> {
+  const id = assertPageId(pageId);
+  const name = stateName.trim();
+  if (name.length === 0 || name.length > 64) {
+    throw new AppError(
+      400,
+      'CONFLUENCE_CONTENT_STATE_INVALID',
+      'A Confluence content state must be a short non-empty name.',
+      { pageId: id },
+    );
+  }
+
+  await client.request({
+    method: 'PUT',
+    api: 'v1',
+    path: `content/${id}/state`,
+    body: { name, color: '#0052CC' },
+    // Setting the same state twice lands on the same state. It does publish a
+    // version each time, which is why the caller checks whether it changed.
+    idempotent: true,
+  });
+}

@@ -589,6 +589,12 @@ model OrganisationIntegration {
   publishSpaceKey     String?
   publishSpaceName    String?
   publishSpaceSiteId  String?
+  // How pages are SHAPED. A dedicated column rather than `config`, for the
+  // third time and the same reason: a reconnect overwrites `config` wholesale,
+  // and a silently reset body mode would rewrite pages that already exist in a
+  // charity's site back to stubs on the next edit. NULL means the defaults,
+  // which are exactly the behaviour every existing charity has.
+  publishingModel     Json?
   // ── reconcile and dormancy ───────────────────────────────────────────────
   //
   // `lastReconcileAt` orders the tenant queue (NULLS FIRST), so a newly
