@@ -5,6 +5,15 @@ delete scopes and granted-scope recording, the multi-site refusal, and the produ
 credentials all landed the same day as this audit. Tiers 2 and 3 below remain proposals for the owner
 and the DPO to sequence, not work in progress.
 
+**Also built on 2026-09-20, ahead of Tier 2:** an in-process fake Atlassian at
+`apps/api/src/tests/fake-atlassian.ts` (see the corrected T2.9, below), covering the OAuth token
+endpoint with refresh rotation, `accessible-resources`, v2 pages (create/get/update/delete/purge), the
+v1 trashed-content read, spaces and content properties with cursor pagination, and switchable rate
+limiting. It models the four platform behaviours recorded in section 3 above: a v2 404 that hides both
+trash and purge, purge refused unless the page is already trashed, `PUT` requiring `version + 1`, and
+refresh-token rotation. Production client, page and space operations are driven against it by
+`apps/api/src/tests/confluence-round-trip.test.ts`.
+
 **Method.** Three sweeps of the repository (backend services and Prisma model; design documents and
 recorded decisions; web UI, jobs, owner console, tests and deployment), followed by hand
 re-verification of the four load-bearing findings (A1, A2, A4, C4) and a check of Atlassian's
@@ -107,7 +116,7 @@ is still not the word: that gap is Tier 2 and Tier 3 work, and both remain propo
 | C1 | **No audit trail.** Connect, disconnect, publish-space change, publication, dead-letter and erasure write no `SecurityAuditEvent`. The only trace of who connected is the mutable `connectedById`, which disconnect erases. Separately, the shared `SecurityAuditEventType` union has drifted from the Prisma enum: it lacks `SESSION_REPLAY_DETECTED`, `ORGANISATION_CONFIGURATION_CHANGED` and `INVITE_LINK_REISSUED`, and carries a phantom `PASSWORD_RESET_COMPLETED`. | `apps/api/prisma/schema.prisma:243-260`; `packages/shared/src/types/api.ts:135-148` |
 | C2 | **No per-document publication surface.** The documents API and UI show no publication state, no page link, no failure and no retry. A dead-lettered publication is invisible to the charity; the only signal is the aggregate `lastError` on `/integrations`. | `apps/web/src/app/(dashboard)/documents/**`; `apps/api/src/routes/documents/index.ts` |
 | C3 | **The owner-console integration health view is not built** — the third piece of "the admin panel" the DPO asked for. The tenant panel shows a status chip, the space key and `lastError`, read-only. | `apps/web/src/app/(owner)/owner/tenants/[id]/tenant-configuration-panel.tsx:157-177`; handover §2b |
-| C4 | `env.INTEGRATION_ENCRYPTION_KEY` is missing from the pino redaction list while every peer secret is present. | `apps/api/src/utils/logger.ts:41-51` |
+| C4 | **Closed 2026-09-20.** `env.INTEGRATION_ENCRYPTION_KEY` is present in the pino redaction list — this row was stale. Added in commit `0890f07`, pinned by `apps/api/src/tests/observability-reliability.test.ts:406`. | `apps/api/src/utils/logger.ts:51` |
 | C5 | No declared-residency record: the owner's ruling (record the tenant's declared plan and location, disclaim control) has no column and no UI. | `apps/api/prisma/schema.prisma:448-503` |
 | C6 | No Confluence types or zod schemas in `packages/shared`; the web app hand-mirrors the `/confluence/status` shape. No Playwright coverage of the flow and no Atlassian test double anywhere in the repository. | `apps/web/src/lib/integration-status.ts:46-188`; `e2e/tests/` |
 
@@ -202,18 +211,32 @@ can reach a log.
   `SITE_SELECTION_REQUIRED` and expose `PUT /confluence/site { siteId }` validated against the stored
   list; the callback page renders a picker. Never bind `sites[0]` silently.
 
-  **Reclassified 2026-09-20 — what shipped instead of this proposal.** The owner action above (a
-  resource-level grant, registered at creation) was taken, and with it in place `accessible-resources`
-  returns exactly one site for every correctly registered app — the multi-site case this proposal's
-  code guard exists for is then unreachable, not merely rare. What shipped is a refusal instead of a
-  picker: `connectConfluence` throws `CONFLUENCE_MULTIPLE_SITES` (400) when `sites.length > 1`, telling
-  the administrator to authorise from an account reaching a single site rather than storing a
-  provisional connection and asking them to choose. The picker's blast radius — a new status, a new
-  route, stored partial credentials, callback UI — was not worth taking in Tier 1 to cover a case a
-  correctly registered app cannot hit. This is why the verdict at the top of this document counts A3 as
-  closed by the refusal, not by the picker described above. The original proposal is left as written
-  above for the record; it is Tier 2 work, if a future need for account-level grants (an app not owned
-  by CharityPilot, or a change Atlassian makes) ever makes the picker worth building at all.
+  **Corrected 2026-09-20 — the owner action above was not taken.** This section previously said it
+  was; it was not. No `ATLASSIAN_CLIENT_ID` or `ATLASSIAN_CLIENT_SECRET` exists in `apps/api/.env`,
+  `.env`, any `compose*.yml`, or `D:\CharityPilot-VM\secrets\` — only commented-out placeholders in the
+  three `.env*.example` files. The app has not been created.
+
+  **Read this before creating the app — it is the single most expensive mistake available in this
+  connector.** A resource-level grant can only be chosen at app creation and cannot be converted
+  afterwards. The refusal described below (`CONFLUENCE_MULTIPLE_SITES`) is correct only if the app is
+  registered with one; no picker was built as its fallback, on the reasoning that a resource-level
+  grant makes the multi-site case unreachable. If the app is instead created account-level — by
+  accident, by someone who has not read this ruling, or because the console default changes — that same
+  refusal will block a genuine multi-site administrator outright, with no picker to fall back on. Create
+  the app as a resource-level grant, or build the picker first.
+
+  **What shipped instead of the picker (true regardless of the correction above).**
+  `connectConfluence` throws `CONFLUENCE_MULTIPLE_SITES` (400) when `sites.length > 1`, telling the
+  administrator to authorise from an account reaching a single site rather than storing a provisional
+  connection and asking them to choose. With a resource-level grant in place, `accessible-resources`
+  returns exactly one site for every correctly registered app, so the multi-site case this proposal's
+  code guard exists for is unreachable, not merely rare — which is why the picker's blast radius (a new
+  status, a new route, stored partial credentials, callback UI) was judged not worth taking in Tier 1.
+  This is why the verdict at the top of this document counts A3 as closed by the refusal rather than the
+  picker — but that closure holds only once the app is registered as a resource-level grant, which as
+  corrected above has not happened yet. The original proposal is left as written above for the record;
+  it is Tier 2 work, if a future need for account-level grants (an app not owned by CharityPilot, or a
+  change Atlassian makes) ever makes the picker worth building at all.
 
 **T1.4 Deployment wiring.**
 
@@ -326,6 +349,16 @@ of the route layer (D2).
 **T2.9 Tests.** An in-process fake Atlassian (token endpoint, `accessible-resources`, and the v1/v2
 routes the client uses) under `e2e/helpers/`, and a Playwright spec for `/integrations` (disclosure →
 callback outcomes → space choice → status) following the MCP harness pattern.
+
+**Corrected 2026-09-20 — built at a different location than proposed, and only half of this item.**
+The fake Atlassian was deliberately built at `apps/api/src/tests/fake-atlassian.ts`, not under
+`e2e/helpers/`. Reason: the code that needs the double most — the reconcile job, the publisher, the
+eraser, the client's rate-limit and error handling — is exercised by `apps/api`'s own `node:test`
+suite, and `e2e/` is a separate package that `apps/api`'s tests cannot import. Putting the fake where
+the tests that need it can reach it took priority over putting it where this row said it would go.
+What this item still owes: the Playwright spec for `/integrations` was deliberately **not** built in
+this phase. It needs a running stack and a UI surface to exercise, and belongs with the phase that
+builds that surface, not with the test double.
 
 ### Tier 3 — for the owner/DPO publishing-model meeting (not proposed for build)
 
