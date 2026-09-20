@@ -12,6 +12,7 @@ import {
   type FileToolDefinition,
 } from './file-tools.js';
 import {
+  createLevelResolver,
   fetchSessionPosture,
   permits,
   refusalFor,
@@ -70,30 +71,14 @@ export async function startServer(config: ConnectorConfig, session: Session): Pr
   /**
    * The level the API says this session holds.
    *
-   * Resolved once on the first request rather than at startup, because a
-   * connector that could not reach the API at launch should still start and
-   * report the problem per call, the way every other failure here does.
+   * Resolved on the first request rather than at startup, because a connector
+   * that could not reach the API at launch should still start and report the
+   * problem per call, the way every other failure here does. An API that
+   * cannot answer leaves the operator's own choice in place for that call. It
+   * is not a security decision: the server refuses what the session may not do
+   * regardless of what is offered here.
    */
-  let held: AccessLevel | null = null;
-  let resolving: Promise<AccessLevel> | null = null;
-
-  async function level(): Promise<AccessLevel> {
-    if (held) return held;
-    if (!resolving) {
-      resolving = fetchSessionPosture(client)
-        .then((posture) => {
-          // An API that cannot answer leaves the operator's own choice in
-          // place. It is not a security decision: the server refuses what the
-          // session may not do regardless of what is offered here.
-          held = posture?.accessLevel ?? config.accessLevel;
-          return held;
-        })
-        .finally(() => {
-          resolving = null;
-        });
-    }
-    return resolving;
-  }
+  const level = createLevelResolver(() => fetchSessionPosture(client), config.accessLevel);
 
   server.setRequestHandler(ListToolsRequestSchema, async () => ({
     tools: buildToolList(await level(), config),

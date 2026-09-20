@@ -284,6 +284,7 @@ export class ApiClient {
    */
   async download(
     path: string,
+    isRetry = false,
   ): Promise<{ bytes: Buffer; fileName: string | null }> {
     const token = await this.#session.accessToken();
     const response = await this.#fetch(`${this.#baseUrl}${path}`, {
@@ -293,6 +294,13 @@ export class ApiClient {
         [CLIENT_HEADER]: `mcp-connector/${CONNECTOR_VERSION}`,
       },
     });
+
+    // The same one-shot retry the JSON verbs get: a 401 fifteen minutes into
+    // a session is an expired access token, not a dead session.
+    if (response.status === 401 && !isRetry) {
+      this.#session.invalidateAccessToken();
+      return this.download(path, true);
+    }
 
     if (!response.ok) {
       throw await this.#refusal(response);

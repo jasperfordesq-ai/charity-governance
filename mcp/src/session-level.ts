@@ -43,6 +43,38 @@ export async function fetchSessionPosture(
   }
 }
 
+/**
+ * Resolves the level once and keeps it, but keeps only an answer.
+ *
+ * A connector that could not reach the API on its first request used to cache
+ * the operator's flag for the life of the process, so a transient outage at
+ * launch advertised the wrong tool list until the client restarted it. An
+ * unknown posture now stands in for one call and is asked for again on the
+ * next.
+ */
+export function createLevelResolver(
+  fetchPosture: () => Promise<SessionPosture | null>,
+  fallback: AccessLevel,
+): () => Promise<AccessLevel> {
+  let held: AccessLevel | null = null;
+  let resolving: Promise<AccessLevel> | null = null;
+
+  return async () => {
+    if (held) return held;
+    if (!resolving) {
+      resolving = fetchPosture()
+        .then((posture) => {
+          if (posture) held = posture.accessLevel;
+          return posture?.accessLevel ?? fallback;
+        })
+        .finally(() => {
+          resolving = null;
+        });
+    }
+    return resolving;
+  };
+}
+
 export function permits(held: AccessLevel, tool: ToolDefinition): boolean {
   return RANK[held] >= RANK[tool.level ?? 'read'];
 }

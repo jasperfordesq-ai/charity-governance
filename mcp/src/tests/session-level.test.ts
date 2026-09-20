@@ -2,6 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { TOOLS } from '../tools.js';
 import {
+  createLevelResolver,
   fetchSessionPosture,
   permits,
   refusalFor,
@@ -125,4 +126,15 @@ test('permits is ordinal, so each level includes the ones below it', () => {
   assert.equal(permits('admin', read), true);
   assert.equal(permits('admin', write), true);
   assert.equal(permits('admin', destroy), true);
+});
+
+test('an unknown posture is not cached, so a later answer replaces the fallback', async () => {
+  const answers: Array<{ accessLevel: 'read' | 'write' | 'admin'; role: string } | null> = [null, { accessLevel: 'read', role: 'MEMBER' }];
+  let asked = 0;
+  const level = createLevelResolver(async () => { asked += 1; return answers.shift() ?? null; }, 'write');
+
+  assert.equal(await level(), 'write', 'the fallback stands in while the API cannot answer');
+  assert.equal(await level(), 'read', 'the next call asks again and gets the real level');
+  assert.equal(await level(), 'read');
+  assert.equal(asked, 2, 'once known, the level is not fetched again');
 });

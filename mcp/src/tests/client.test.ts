@@ -314,3 +314,23 @@ test('a network failure is a ConnectionError, retryable, with the cause redacted
     return true;
   });
 });
+
+test('a download whose access token has expired is retried once', async () => {
+  let calls = 0;
+  const client = new ApiClient({
+    session: sessionReturning('access1'),
+    baseUrl: 'https://example.test',
+    fetchImpl: async () => {
+      calls += 1;
+      if (calls === 1) return new Response('{}', { status: 401 });
+      return new Response(new Uint8Array([37, 80, 68, 70]), {
+        status: 200,
+        headers: { 'content-disposition': 'attachment; filename="minutes.pdf"' },
+      });
+    },
+  });
+  const { bytes, fileName } = await client.download('/api/v1/documents/d1/download');
+  assert.equal(calls, 2);
+  assert.equal(fileName, 'minutes.pdf');
+  assert.equal(bytes.toString('latin1'), '%PDF');
+});
