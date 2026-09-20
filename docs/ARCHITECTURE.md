@@ -414,18 +414,26 @@ access. The same rule is mirrored in `scripts/check-production.mjs`, whose
 
 ### What document erasure can and cannot prove
 
-**Read this before answering a data subject's erasure request.** A charity's
-Data Protection Officer has to say, on the record, what has been erased and
-what has merely been asked to be erased. CharityPilot gives different answers
-for its own store and for a charity's Confluence site, and the difference is
-not a detail.
+**Read this before answering a data subject's erasure request.** The owner
+ruled on 2026-09-19, in writing to the DPO, that an ordinary CharityPilot
+deletion removes CharityPilot's record and its reference only, and leaves any
+page it published on the charity's Confluence site in place. Destroying that
+Confluence page is a separate, explicitly authorised action, taken only
+against a publication already retired — never a side effect of deleting the
+document. A charity's Data Protection Officer has to say, on the record, what
+has been erased and what has merely been asked to be erased, and the two
+questions now have different triggers as well as different guarantees.
 
 The machinery: a `DocumentStorageDeletion` row carries a `provider` and an
 optional `targetRef`; `document-erasure.ts` dispatches the row to the eraser
 registered for that provider; a provider with no eraser dead-letters on the
 first attempt as `PROVIDER_NOT_ERASABLE` rather than retrying, because retrying
 cannot acquire a backend. `document.service.ts` holds the map from error code
-to terminal reason.
+to terminal reason. Deleting a document always creates the `supabase` row
+through this pipeline. It no longer creates a `confluence` row as a side
+effect of that delete — a `confluence` row is created only by the explicit
+erasure endpoint described in *"What to tell a data subject"* below, and only
+against a publication that has already reached the `RETIRED` state.
 
 #### Supabase: erasure is provable
 
@@ -496,70 +504,77 @@ as a defect that has been fixed.
 
 #### What to tell a data subject
 
-**A mirrored document has two copies, and deleting it now erases both.** Under
-the mirror model this phase is built on — Supabase in Ireland authoritative,
-Confluence a published copy on top of it — one erasure row could only ever have
-proved one of the two gone. `remove()` in `document.service.ts` therefore
-enqueues **two** `DocumentStorageDeletion` rows for a document that was
-published:
+**An ordinary deletion erases the Supabase copy and leaves the Confluence page
+in place.** `remove()` in `document.service.ts` no longer enqueues a
+`confluence` erasure row at all. Instead, a `DocumentPublication` that named a
+page moves to a fourth state, `RETIRED` (`retiredAt`, `retiredStoragePath`),
+rather than being erased or left dangling: `cloudId`, `pageId` and
+`attachmentId` survive on the retired row for audit and for the erasure
+request that may follow. `cancelConfluencePublication` is now
+`retireConfluencePublication` for exactly this reason — the same two locked
+passes as before, but retiring rather than enqueuing. A worker that records a
+page id after the document has already gone — the mid-flight race the old
+cancellation path had to handle — retires the row itself, so a page recorded
+during the delete window still reaches `RETIRED` rather than being orphaned.
 
-- the `supabase` row, stamped with the provider the organisation resolves to,
-  exactly as before; and
-- a `confluence` row whose `targetRef` names the cloud, the page and the
-  attachments recorded on the document's `DocumentPublication`.
+**Destroying the Confluence copy is a separate, explicitly authorised action,
+and the database enforces that it can only be taken against a publication
+already `RETIRED`.**
+`POST /api/v1/integrations/confluence/publications/:publicationId/erase`
+requires an admin role, an `ADMIN` session level, an action approval and the
+typed confirmation `ERASE CONFLUENCE COPY`; it refuses with
+`CONFLUENCE_ERASURE_SCOPE_MISSING` unless the tenant has granted both
+`delete:page:confluence` and `delete:attachment:confluence`.
+`GET /api/v1/integrations/confluence/publications` lists the retired
+publications an administrator can act on — without it, nothing would name a
+publication once its document is gone. Restricting erasure to a retired
+publication is deliberate: it makes destroying a Confluence page a two-step
+action (delete the document, then erase the copy) and stops an administrator
+destroying the page a *live* document still points at.
 
-Phase 5's dispatcher then drives each row through its own eraser, its own
-retries and its own dead-letter. **The two guarantees stay different, and the
-difference is what a DPO has to state.**
-
-**The second row is enqueued when the publication recorded a `pageId` — not
-when it reached `PROCESSED`.** A publication that was cancelled because its
-document was deleted mid-flight, or that dead-lettered after its page was
-created, is not `PROCESSED`, but it names a real page in the charity's site. A
-`PROCESSED` gate would skip exactly those and leave a page nobody can find and
-nobody can erase. A document that was never published records no `pageId` and
-gets only the Supabase row, because a Confluence row for it would dead-letter
-against a page that never existed.
-
-The `targetRef` is built through `parseConfluenceErasureTarget`, the same
-arbiter the eraser reads it with, so a target the eraser would refuse fails the
-deletion **while the document still exists** rather than dead-lettering later,
-after the Supabase copy is already gone.
+The `targetRef` the erase endpoint builds is read through the same
+`parseConfluenceErasureTarget` arbiter the eraser reads it with, so a target
+the eraser would refuse fails the erasure request itself rather than
+dead-lettering later.
 
 **What may now be said, and what may not.**
 
-- The Supabase copy is erased, and that is **provable**: a delete against a
-  store CharityPilot controls, through a pipeline built to prove it — claim,
-  bounded retry, dead-letter, recovery ledger.
-- The Confluence copy is **asked to be erased, best-effort**, bounded by
+- The Supabase copy is erased by an ordinary deletion, and that is
+  **provable**: a delete against a store CharityPilot controls, through a
+  pipeline built to prove it — claim, bounded retry, dead-letter, recovery
+  ledger.
+- The Confluence page is **not touched by an ordinary deletion.** It stays
+  live, under the charity's own Confluence permissions, until an administrator
+  explicitly requests its erasure against the retired publication.
+- Once that explicit erasure is requested, it is **best-effort**, bounded by
   permissions the charity holds. Everything in *"Confluence: erasure is
   best-effort"* above applies unchanged: purge needs a higher permission than
   delete and the charity grants it; between delete and purge — and after a
   purge the site refuses — the content sits in **the charity's own trash**,
-  restorable by **their** administrators, from **their** site; and the read-back
-  proof does not yet distinguish trashed from purged.
+  restorable by **their** administrators, from **their** site; and the
+  read-back proof does not yet distinguish trashed from purged.
 - **The Confluence side has not been exercised against a real Atlassian site.**
-  The Atlassian app install has not landed, so every claim above the Supabase
-  line is proven against fakes only. A fake cannot report that Atlassian changed
-  a status code, and the open question of whether a trashed page reads back as
-  404 bears directly on what the Confluence erasure proves.
+  Every claim above the Supabase line is proven against fakes only. See the
+  real-site verification checklist in `docs/production-runbook.md`, to be run
+  before any tenant connects.
 
-So: do **not** tell a data subject that both copies are provably gone. Tell them
-that the Irish copy is provably gone, that erasure of the charity's Confluence
-copy was issued and verified only as far as a 404 read-back allows, and that the
-content may sit in the charity's own trash until someone with the right
+So: do **not** tell a data subject that deleting a document erases a Confluence
+copy. Tell them that the Irish copy is provably gone the moment the document is
+deleted, that the Confluence page is untouched until someone with the admin
+role explicitly requests its erasure, and that once requested, erasure was
+issued and verified only as far as a 404 read-back allows, with the content
+possibly sitting in the charity's own trash until someone with the right
 permissions purges it there.
 
-**On the model this rests on.** Erasing both sides is what the *mirror* model
-requires, and the mirror model is the reversible choice this phase took while
-Open Question 1 in
-`docs/superpowers/plans/2026-09-18-document-storage-providers-spec.md` remains
-**unresolved and the owner's to rule on**. Under the DPO's signed-off reading
-(2026-09-18, reference-not-duplicate: one document, one store) a document has
-one store and the second row is simply never enqueued, because nothing
-published means no `pageId`. If the owner rules the other way — Confluence
-authoritative for chosen categories — the second row is not the thing to
-change; the residency question below is.
+**On the model this rests on.** The behaviour above — Supabase erased
+immediately, Confluence retired and erased only on explicit request — is fixed
+by the owner's 2026-09-19 ruling regardless of how Open Question 1 in
+`docs/superpowers/plans/2026-09-18-document-storage-providers-spec.md` is
+eventually resolved. That question is a different one — whether Confluence may
+ever hold a document's *authoritative* bytes, rather than a published copy —
+and remains **unresolved and the owner's to rule on**; see "Residency of a
+Confluence-authoritative document" below. Nothing in this section changes
+depending on that answer.
 
 `documentStorageProviders` still registers only `supabase` and `local`.
 **Confluence is a publish target, never a storage provider**, so no

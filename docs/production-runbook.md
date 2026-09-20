@@ -336,6 +336,53 @@ Nobody deduces this from the code, so treat it as an operational fact:
 - An `invalid_grant` on a refresh that CharityPilot genuinely issued (that is, one where the refreshing worker held the claim — see [`docs/ARCHITECTURE.md`](ARCHITECTURE.md#confluence-oauth-rotating-refresh-tokens-and-why-refreshes-are-serialised)) sets the integration to `ERROR` with a `lastError`. On an integration that has been idle for roughly a quarter, expiry is the likeliest cause; the remedy is the same either way — re-authorise. Do **not** treat it as a credential-vault fault, and do **not** touch `INTEGRATION_ENCRYPTION_KEY` in response to it.
 - Nothing here can be fixed by rotating or regenerating a secret. Re-authorisation is the only route back, and it is cheap.
 
+### Verify against the owner's own Atlassian site before any tenant connects
+
+Run this checklist against a real Atlassian site, using the owner's own OAuth app, before letting any
+charity connect. Everything Confluence-side up to now has only ever met test doubles, so each line
+names what is being tested and what a failure means.
+
+1. Register the app **with a resource-level grant** — chosen at creation and not convertible
+   afterwards. Confirm `accessible-resources` returns exactly one site for a test authorisation; a
+   second entry means the grant is account-level and `CONFLUENCE_MULTIPLE_SITES` will refuse every
+   connection. This is the mitigation for the deliberate gap that an administrator whose Atlassian
+   account reaches several sites cannot connect until a site picker exists — none is built, and a
+   resource-level grant scopes the token to the single site chosen at consent, so the list has
+   exactly one entry.
+2. Confirm the consent screen lists the two delete scopes, `delete:page:confluence` and
+   `delete:attachment:confluence`. If it does not, the erasure workflow will refuse with
+   `CONFLUENCE_ERASURE_SCOPE_MISSING`. Note that `search:confluence` is deliberately **not**
+   requested, even though the connector audit's scope list included it: the DPO's standing ask is
+   narrowest scopes, and the CQL work that would use it is later-tier work — its absence is a decision,
+   not an oversight.
+3. Publish a document. Confirm the page is created in the chosen space with the expected title, and
+   that the title Confluence stores is byte-identical to the one CharityPilot computed — adoption
+   depends on it.
+4. Read the page back with `GET /wiki/api/v2/pages/{id}`. Trash it in the UI and read again: confirm
+   404. Then confirm `GET /wiki/rest/api/content/{id}?status=trashed` returns 200, which is the only
+   way to tell restorable from gone.
+5. Confirm `space-id` sent as a single value filters as expected — create a same-titled page in
+   another space and confirm `findPageByTitle` does not see it. If it does, title matching has
+   silently widened to the whole site.
+6. Round-trip a content property of just under 32 KB.
+7. Delete the document in CharityPilot. Confirm the page is **still there** and the publication row
+   reads `RETIRED`. This is the ruling in effect: an ordinary deletion never touches the Confluence
+   copy.
+8. Request an explicit erasure — `POST /api/v1/integrations/confluence/publications/:publicationId/erase`
+   against that retired publication, with the typed confirmation `ERASE CONFLUENCE COPY`. Confirm the
+   page is deleted and purged, and that the read-back 404 is reached.
+
+**Do not trust this to unit tests alone — verify it against a running stack.** Commit `5857fe7` fixed
+a defect where every refusal this API made was advisory: Fastify only stops a request when an
+asynchronous `onSend` hook returns the reply it already sent, and no guard here did — each one sent a
+reply and fell out the bottom of the hook. It worked only because Fastify short-circuits when exactly
+one `onSend` hook is registered, and this API had exactly one until a second was added. Until that
+fix, the erase route's action approval, `ADMIN` session level and typed confirmation would all have
+been advisory in production — none of them would actually have stopped the request. Nothing was ever
+deployed in that state. No unit test built an application with two `onSend` hooks, which is to say
+none of them built the application that actually runs, so step 8 above — and every refusal this
+runbook relies on — should be exercised against a running stack, not trusted from green unit tests.
+
 ## Hosting, DNS, And TLS
 
 Run `npm run check:production:hosting -- --production-env-file=.env.production` before launch. The checker verifies the configured production web and API origins are exactly `https://app.charitypilot.ie` and `https://api.charitypilot.ie`, resolve through public DNS, present authorized TLS certificates with enough remaining lifetime, respond over HTTPS, and include baseline security headers. Record the redacted output in the launch evidence ledger.

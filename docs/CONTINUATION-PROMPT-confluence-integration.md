@@ -67,9 +67,12 @@ session *before* spending the code. **This changed what you register with Atlass
 ## 2a. Ordinary deletion must stop destroying the Confluence source
 
 The DPO's position, 2026-09-19: *"An ordinary CharityPilot deletion should not silently destroy the
-Confluence source."* Phase 4's final task does exactly that, and **as of 2026-09-20 it still does**:
-`remove()` in `document.service.ts` (L854) enqueues a `confluence` erasure row inside the delete
-transaction, and the race compensator (L1130) does the same. Nothing has been changed yet.
+Confluence source."* Phase 4's final task did exactly that. **It has since been reworked and landed
+on 2026-09-20** (`a3e8b53`, `0644c9d`, `943e00b`, `eaf2a42`): `remove()` in `document.service.ts` no
+longer enqueues a `confluence` erasure row. A `DocumentPublication` naming a page is retired into a
+new `RETIRED` state instead — `cancelConfluencePublication` is now `retireConfluencePublication` — and
+the race compensator retires the row rather than erasing it. Destroying the Confluence page now
+requires the separate, explicitly authorised erasure workflow described below.
 
 **The owner's ruling — settled in writing to the DPO on 2026-09-19 (thread "CharityPilot — access
 for you as DPO"):**
@@ -84,23 +87,25 @@ workflow instead of firing on `pageId !== null`. **The fork is closed. Do not re
 verbal ruling ("deletion is *refused*, telling the user to go to Confluence") is superseded by the
 written one: the record and the reference are removed; the page is left alone.
 
-**The design to build** is T1.1 of `docs/superpowers/specs/2026-09-20-confluence-connector-audit.md`.
-In short:
+**What was built** is T1.1 of `docs/superpowers/specs/2026-09-20-confluence-connector-audit.md`. In
+short:
 
 - `remove()` no longer calls `enqueueConfluenceErasure`. The `DocumentPublication` row is **kept**
   and moved to a new `RETIRED` state (`retiredAt`, `retiredStoragePath`), so `cloudId`, `pageId`
   and `attachmentId` survive for audit and for a later erasure.
-- `cancelConfluencePublication` becomes `retireConfluencePublication`: the same two locked passes,
+- `cancelConfluencePublication` became `retireConfluencePublication`: the same two locked passes,
   but it retires rather than enqueues. The mid-flight case (`pageId === null && claimedAt !== null`)
-  is parked exactly as today so the worker can still record its page id; a reconcile job's orphan
+  is parked exactly as before so the worker can still record its page id; a reconcile job's orphan
   sweep closes the residual.
 - The explicit erasure workflow is
   `POST /api/v1/integrations/confluence/publications/:publicationId/erase` behind
   `requireSessionLevel('ADMIN')` + `requireActionApproval()`, a reason and a typed confirmation. It
-  re-uses `createConfluenceErasureRow`. It is **refused until the tenant has granted
-  `delete:page:confluence` and `delete:attachment:confluence`** — scopes the app does not request
-  today (§5, item 5), so granted scopes must also be recorded per tenant.
-- The delete-path tests to invert live in `apps/api/src/tests/document-storage-cleanup.test.ts`
+  re-uses `createConfluenceErasureRow`. It is **refused with `CONFLUENCE_ERASURE_SCOPE_MISSING`
+  unless the tenant has granted `delete:page:confluence` and `delete:attachment:confluence`** —
+  those scopes are now requested and granted scopes are recorded per tenant (§5, item 5, now fixed).
+  `GET /api/v1/integrations/confluence/publications` lists retired publications so an administrator
+  has something to act on.
+- The delete-path tests that were inverted live in `apps/api/src/tests/document-storage-cleanup.test.ts`
   L446-964, not in the documents-route tests.
 
 **Two details still decide whether the rework is any good:**
@@ -201,29 +206,42 @@ under *"Confirm these against a real site the moment the app install lands"* in 
 
 **Found by the 2026-09-20 connector audit** — these fail on a real site regardless of the four
 assumptions above. Evidence and the fixes are in
-`docs/superpowers/specs/2026-09-20-confluence-connector-audit.md` (findings A2, A3, A4, C4, B1);
-none has been fixed.
+`docs/superpowers/specs/2026-09-20-confluence-connector-audit.md` (findings A2, A3, A4, C4, B1).
+Items 5-8 are now **fixed**, landed the same day the audit was written; item 9 is open and is Tier 2
+work.
 
-5. **The delete scopes are not requested.** `CONFLUENCE_OAUTH_SCOPES`
-   (`apps/api/src/routes/integrations/index.ts` L98-106) lacks `delete:page:confluence` and
-   `delete:attachment:confluence`, which Atlassian's v2 delete endpoints require. Every erasure would
-   403 — and `deletePage` reports a 403 as `CONFLUENCE_RECONNECT_REQUIRED`, so it would be retried to
-   dead-letter under the wrong name. Granted scopes are not recorded per tenant, so a scope change
-   cannot be detected later either.
-6. **The connect flow binds `sites[0]`.** `connectConfluence` takes the first entry of
-   `accessible-resources`, whose order Atlassian documents as meaningless. Create the app with a
-   **resource-level grant** (a creation-time choice, added by Atlassian in June 2026) and, in code,
-   never bind silently when more than one site comes back.
-7. **`compose.production.yml` starves the workers.** `production-scheduler` and
-   `document-storage-cleanup` use `environment:` allowlists that omit `ATLASSIAN_CLIENT_ID`,
-   `ATLASSIAN_CLIENT_SECRET` and `INTEGRATION_ENCRYPTION_KEY`. On that profile the publisher cannot
-   refresh a token and the eraser cannot open a credential. Blue-green passes the whole env file and
-   is unaffected.
-8. **`env.INTEGRATION_ENCRYPTION_KEY` is not in the pino redaction list**
-   (`apps/api/src/utils/logger.ts` L41-51); every peer secret is.
-9. **Nothing keeps an idle tenant's refresh token alive.** Atlassian's rotating refresh tokens expire
-   after 90 days without use; refresh here is lazy, so a quiet charity silently loses its connection
-   and finds out at the next publish.
+5. **FIXED.** The delete scopes were not requested: `CONFLUENCE_OAUTH_SCOPES`
+   (`apps/api/src/routes/integrations/index.ts` L98-106) lacked `delete:page:confluence` and
+   `delete:attachment:confluence`, which Atlassian's v2 delete endpoints require, so every erasure
+   would have 403'd — and `deletePage` reports a 403 as `CONFLUENCE_RECONNECT_REQUIRED`, so it would
+   have been retried to dead-letter under the wrong name. `delete:page:confluence` and
+   `delete:attachment:confluence` are now requested (`ffdfd66`), and `OrganisationIntegration.grantedScopes`
+   records what Atlassian actually granted, so a scope change is now detectable and the erasure route
+   refuses with `CONFLUENCE_ERASURE_SCOPE_MISSING` rather than dead-lettering under the wrong name.
+6. **FIXED, by refusal rather than a picker.** The connect flow bound `sites[0]` — `connectConfluence`
+   took the first entry of `accessible-resources`, whose order Atlassian documents as meaningless.
+   `connectConfluence` now refuses with `CONFLUENCE_MULTIPLE_SITES` (`26f58ec`) when the grant covers
+   more than one Atlassian site, rather than silently binding the first. No site picker was built —
+   the audit's `SITE_SELECTION_REQUIRED`/`PUT /confluence/site` proposal was judged Tier 2 work for a
+   case a correctly registered app should never hit. **The consequence is real:** an administrator
+   whose Atlassian account reaches several sites cannot connect until a picker exists. The mitigation
+   is registering the app with a **resource-level grant**, which scopes tokens to the one site chosen
+   at consent, so `accessible-resources` returns exactly one entry. See the verification checklist in
+   `docs/production-runbook.md`.
+7. **FIXED.** `compose.production.yml` starved the workers — `production-scheduler` and
+   `document-storage-cleanup` used `environment:` allowlists that omitted `ATLASSIAN_CLIENT_ID`,
+   `ATLASSIAN_CLIENT_SECRET` and `INTEGRATION_ENCRYPTION_KEY`, so on that profile the publisher could
+   not refresh a token and the eraser could not open a credential. The production compose profile now
+   gives its worker containers those credentials and the integration encryption key (`0890f07`); the
+   `jobs:publish-document-mirrors` npm script and compose service were added alongside it. Blue-green
+   passes the whole env file and was never affected.
+8. **FIXED.** `env.INTEGRATION_ENCRYPTION_KEY` was missing from the pino redaction list
+   (`apps/api/src/utils/logger.ts` L41-51) even though every peer secret was in it. It is now
+   redacted (`0890f07`), and the two publication tuning variables are documented in all three env
+   examples.
+9. **Still open — Tier 2.** Nothing keeps an idle tenant's refresh token alive. Atlassian's rotating
+   refresh tokens expire after 90 days without use; refresh here is lazy, so a quiet charity silently
+   loses its connection and finds out at the next publish.
 
 **Owner actions outstanding:**
 

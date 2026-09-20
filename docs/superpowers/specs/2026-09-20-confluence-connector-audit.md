@@ -1,8 +1,9 @@
 # Confluence connector audit — 2026-09-20
 
-**Status:** audit only. The owner approved the write-up on 2026-09-20 and approved **no code
-changes**. Tiers 1–3 below are recommendations for the owner and the DPO to sequence, not work in
-progress.
+**Status:** Tier 1 was approved and **implemented on 2026-09-20** — the deletion/erasure rework, the
+delete scopes and granted-scope recording, the multi-site refusal, and the production worker
+credentials all landed the same day as this audit. Tiers 2 and 3 below remain proposals for the owner
+and the DPO to sequence, not work in progress.
 
 **Method.** Three sweeps of the repository (backend services and Prisma model; design documents and
 recorded decisions; web UI, jobs, owner console, tests and deployment), followed by hand
