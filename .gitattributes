@@ -1,3 +1,22 @@
 caddy/*.caddy text eol=lf
 caddy/Caddyfile.* text eol=lf
 scripts/bluegreen-nightly-backup.sh text eol=lf
+
+# A NUL byte in a source file makes git classify the file as binary, and a
+# binary file has no reviewable diff: `git diff` prints "Binary files differ"
+# and every later change to it lands unseen. `npm run security:control-bytes`
+# fails the build on such a byte, and these keep the diff readable in the
+# meantime, so the corruption shows up as the one-line change it is rather
+# than hiding the whole file.
+*.ts diff
+*.tsx diff
+*.js diff
+*.jsx diff
+*.mjs diff
+*.cjs diff
+*.json diff
+*.md diff
+*.sql diff
+*.prisma diff
+*.yml diff
+*.yaml diff

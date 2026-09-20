@@ -1666,8 +1666,8 @@ async function prompt(question: string, hidden: boolean): Promise<string> {
   for await (const chunk of stdin) {
     const char = chunk.toString('utf8');
     if (char === '\r' || char === '\n') break;
-    if (char === '') { stdin.setRawMode?.(previouslyRaw); rl.close(); exit(130); }
-    if (char === '') { value = value.slice(0, -1); continue; }
+    if (char === '\x03') { stdin.setRawMode?.(previouslyRaw); rl.close(); exit(130); }
+    if (char === '\x7f') { value = value.slice(0, -1); continue; }
     value += char;
   }
   stdin.setRawMode?.(previouslyRaw);

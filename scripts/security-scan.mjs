@@ -69,8 +69,65 @@ const sastDetectors = [
   },
 ];
 
+// Control characters have no business in source. They are invisible in an
+// editor, and a NUL makes git call the whole file binary: `git diff` prints
+// "Binary files differ" and `grep` prints "Binary file matches", so every
+// later change to that file lands unreviewed. They arrive by accident rather
+// than by intent — an `\x00` escape decoded one time too many, a shell
+// heredoc that ate its backslashes — which is why this looks for the byte
+// itself and not for whoever produced it.
+//
+// Tab, newline and carriage return are the three that legitimately appear.
+const CONTROL_BYTE_PATTERN = /[\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F]/g;
+
+// Checked by extension rather than by sniffing content, because sniffing is
+// what fails here: the usual "does it hold a NUL" test classifies a corrupted
+// source file as binary and skips it, which is the blind spot this detector
+// exists to close.
+const sourceTextExtensions = new Set([
+  '.caddy',
+  '.cjs',
+  '.css',
+  '.cts',
+  '.example',
+  '.html',
+  '.js',
+  '.json',
+  '.jsx',
+  '.md',
+  '.mjs',
+  '.mts',
+  '.prisma',
+  '.scss',
+  '.sh',
+  '.sql',
+  '.toml',
+  '.ts',
+  '.tsx',
+  '.yaml',
+  '.yml',
+]);
+
+const sourceTextFileNames = new Set([
+  'Caddyfile',
+  'Dockerfile',
+]);
+
+function isSourceTextPath(path) {
+  const fileName = normalizePath(path).split('/').at(-1) ?? '';
+  if (sourceTextFileNames.has(fileName)) return true;
+  const dotIndex = fileName.lastIndexOf('.');
+  if (dotIndex <= 0) return false;
+  return sourceTextExtensions.has(fileName.slice(dotIndex));
+}
+
+/** `\x00` rather than the byte, so a finding cannot drive the reader's terminal. */
+function escapedCodePoint(character) {
+  return `\\x${(character.codePointAt(0) ?? 0).toString(16).padStart(2, '0')}`;
+}
+
 function usage() {
-  return 'Usage: node scripts/security-scan.mjs <secrets|sast|scan> [--path <path>...]\n';
+  return 'Usage: node scripts/security-scan.mjs <secrets|sast|control-bytes|scan> [--path <path>...]\n';
 }
 
 function parseArgs(argv) {
@@ -99,7 +156,7 @@ function parseArgs(argv) {
     throw new Error(`Unknown argument: ${arg}`);
   }
 
-  if (!['secrets', 'sast', 'scan'].includes(mode)) {
+  if (!['secrets', 'sast', 'control-bytes', 'scan'].includes(mode)) {
     throw new Error(`Unknown scan mode: ${mode}`);
   }
 
@@ -295,6 +352,27 @@ function scanSast(files) {
   return findings;
 }
 
+function scanControlBytes(files) {
+  const findings = [];
+
+  for (const file of files) {
+    // Deliberately not readTextFile: that returns null for anything holding a
+    // NUL, which is precisely the file this detector is here to catch.
+    const content = readFileSync(file.absolutePath, 'utf8');
+
+    CONTROL_BYTE_PATTERN.lastIndex = 0;
+    for (const match of content.matchAll(CONTROL_BYTE_PATTERN)) {
+      findings.push({
+        detector: `control-byte-${escapedCodePoint(match[0])}`,
+        file: file.displayPath,
+        line: lineNumberForIndex(content, match.index ?? 0),
+      });
+    }
+  }
+
+  return findings;
+}
+
 function printFindings(label, findings, stderr = (message) => process.stderr.write(message)) {
   if (findings.length === 0) return;
   stderr(`${label} failed: ${findings.length} finding(s)\n`);
@@ -353,6 +431,17 @@ export function runSecurityScanFromArgs(args = process.argv.slice(2), {
       failed = true;
     } else {
       writeStdout(`SAST scan passed: scanned ${files.length} file(s).\n`);
+    }
+  }
+
+  if (options.mode === 'control-bytes' || options.mode === 'scan') {
+    const sourceFiles = files.filter((file) => isSourceTextPath(file.displayPath));
+    const findings = scanControlBytes(sourceFiles);
+    if (findings.length > 0) {
+      printFindings('Control byte scan', findings, writeStderr);
+      failed = true;
+    } else {
+      writeStdout(`Control byte scan passed: scanned ${sourceFiles.length} source file(s).\n`);
     }
   }
 

@@ -322,7 +322,7 @@ test("a response too large to keep replays as an answer that says so", async () 
 test("an unusable key is refused before anything is created", async () => {
   const { app, createdCount } = await buildApp();
   try {
-    for (const key of ["short", "has a space", "bell-character-and-long-enough"]) {
+    for (const key of ["short", "has a space", "\x07bell-character-and-long-enough"]) {
       const response = await post(app, { name: "One" }, key);
       assert.equal(response.statusCode, 400, `"${key}" must be refused`);
       assert.equal(response.json().code, "IDEMPOTENCY_KEY_INVALID");

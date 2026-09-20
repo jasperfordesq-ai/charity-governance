@@ -5022,7 +5022,11 @@ test('CI keeps every production release gate wired', () => {
   assert.match(packageJson.scripts['test:production-check'], /scripts\/security-scan\.test\.mjs/);
   assert.equal(packageJson.scripts['security:secrets'], 'node scripts/security-scan.mjs secrets');
   assert.equal(packageJson.scripts['security:sast'], 'node scripts/security-scan.mjs sast');
-  assert.equal(packageJson.scripts['security:scan'], 'npm run security:secrets && npm run security:sast');
+  assert.equal(packageJson.scripts['security:control-bytes'], 'node scripts/security-scan.mjs control-bytes');
+  assert.equal(
+    packageJson.scripts['security:scan'],
+    'npm run security:secrets && npm run security:sast && npm run security:control-bytes',
+  );
   assert.match(workflow, /run:\s+npm run security:scan/);
   assert.match(workflow, /run:\s+npm run db:generate -w @charitypilot\/api/);
   assert.match(workflow, /run:\s+npx prisma validate/);

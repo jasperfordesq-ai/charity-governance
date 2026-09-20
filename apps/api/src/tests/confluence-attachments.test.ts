@@ -548,7 +548,7 @@ for (const filename of [
   // caller-supplied name and whatever parses that part downstream.
   'notes\r\nX-Injected: yes.pdf',
   'tab\there.pdf',
-  'nul byte.pdf',
+  'nul\x00byte.pdf',
 ]) {
   test(`uploadAttachment rejects the filename ${JSON.stringify(filename.slice(0, 20))} before sending`, async () => {
     const { client, specs } = harness([ok(v1UploadBody())]);
