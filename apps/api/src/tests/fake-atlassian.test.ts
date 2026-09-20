@@ -160,3 +160,18 @@ test('a space listing longer than the limit carries a next link', async () => {
   assert.equal(secondBody.results.length, 1);
   assert.equal(secondBody._links.next, undefined);
 });
+
+test('rate limiting starts after the configured number of requests', async () => {
+  const site = createFakeAtlassian();
+  site.addSpace({ id: 'space-1', key: 'GOV', name: 'Governance' });
+  const base = `https://api.atlassian.com/ex/confluence/${site.cloudId}`;
+  const auth = { Authorization: 'Bearer access-1' };
+
+  site.rateLimit({ after: 1, retryAfterSeconds: 90 });
+
+  assert.equal((await site.fetch(`${base}/wiki/api/v2/spaces`, { headers: auth })).status, 200);
+
+  const limited = await site.fetch(`${base}/wiki/api/v2/spaces`, { headers: auth });
+  assert.equal(limited.status, 429);
+  assert.equal(limited.headers.get('Retry-After'), '90');
+});

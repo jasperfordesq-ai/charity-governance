@@ -130,6 +130,9 @@ export function createFakeAtlassian(options: FakeAtlassianOptions = {}): FakeAtl
   let nextPropertyId = 1;
   const confluencePrefix = `/ex/confluence/${cloudId}`;
 
+  let rateLimitSpec: FakeRateLimitSpec | undefined;
+  let requestsSinceRateLimit = 0;
+
   function notFound(): Response {
     return new Response(JSON.stringify({ errors: [{ title: 'Not Found' }] }), {
       status: 404,
@@ -144,8 +147,20 @@ export function createFakeAtlassian(options: FakeAtlassianOptions = {}): FakeAtl
     });
   }
 
+  function withNearLimitHeader(status: number, headers: Record<string, string>): Record<string, string> {
+    if (rateLimitSpec?.nearLimit === true && status >= 200 && status < 300) {
+      return { ...headers, 'X-RateLimit-NearLimit': 'true' };
+    }
+    return headers;
+  }
+
   function jsonResponse(status: number, body: unknown): Response {
-    return new Response(JSON.stringify(body), { status, headers: { 'Content-Type': 'application/json' } });
+    const headers = withNearLimitHeader(status, { 'Content-Type': 'application/json' });
+    return new Response(JSON.stringify(body), { status, headers });
+  }
+
+  function emptyResponse(status: number): Response {
+    return new Response(null, { status, headers: withNearLimitHeader(status, {}) });
   }
 
   function mintTokenPair(): { access_token: string; refresh_token: string } {
@@ -304,12 +319,12 @@ export function createFakeAtlassian(options: FakeAtlassianOptions = {}): FakeAtl
         return jsonResponse(400, { errors: [{ title: 'Page must be trashed before it can be purged' }] });
       }
       page.status = 'purged';
-      return new Response(null, { status: 204 });
+      return emptyResponse(204);
     }
 
     if (page.status === 'purged') return notFound();
     page.status = 'trashed';
-    return new Response(null, { status: 204 });
+    return emptyResponse(204);
   }
 
   function listSpacesHandler(url: URL): Response {
@@ -470,6 +485,17 @@ export function createFakeAtlassian(options: FakeAtlassianOptions = {}): FakeAtl
 
     calls.push({ method, url: url.toString() });
 
+    if (rateLimitSpec !== undefined) {
+      requestsSinceRateLimit += 1;
+      const after = rateLimitSpec.after ?? 0;
+      if (requestsSinceRateLimit > after) {
+        return new Response(null, {
+          status: 429,
+          headers: { 'Retry-After': String(rateLimitSpec.retryAfterSeconds ?? 60) },
+        });
+      }
+    }
+
     return route(method, url, headers, bodyText);
   }) as typeof globalThis.fetch;
 
@@ -487,8 +513,9 @@ export function createFakeAtlassian(options: FakeAtlassianOptions = {}): FakeAtl
     allPages(): FakePage[] {
       return Array.from(pages.values());
     },
-    rateLimit(): void {
-      // Implemented in Task 5.
+    rateLimit(spec: FakeRateLimitSpec): void {
+      rateLimitSpec = spec;
+      requestsSinceRateLimit = 0;
     },
     revokeAccessToken(token: string): void {
       revokedTokens.add(token);
