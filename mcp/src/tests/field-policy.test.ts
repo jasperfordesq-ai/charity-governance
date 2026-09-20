@@ -508,3 +508,59 @@ test('each new shape hands back a payload it does not recognise rather than thro
     assert.equal(applyShapePolicy(shape, 'unexpected', false), 'unexpected');
   }
 });
+
+// ── search hits ────────────────────────────────────────────────────────────
+
+const SEARCH_PAYLOAD = {
+  data: {
+    query: 'Ahern',
+    dataScope: 'WITHHELD',
+    searched: ['BoardMember'],
+    truncated: [],
+    note: 'This session withholds personal data.',
+    planNote: 'The minute book is on the Complete plan.',
+    data: [
+      {
+        type: 'BoardMember',
+        id: 'bm-1',
+        title: 'Bridget Ahern',
+        field: 'name',
+        snippet: 'Bridget Ahern',
+        ref: 'charitypilot://board-member/bm-1',
+        // A field the API does not send today. The point of the shape is that
+        // one added later cannot reach a closed session by default.
+        residentialAddress: '4 Kelly Street, Galway',
+      },
+    ],
+  },
+};
+
+test('a search hit keeps only the keys a hit is known to have', () => {
+  const filtered = applyShapePolicy('search', SEARCH_PAYLOAD, false) as {
+    data: { data: Array<Record<string, unknown>> };
+  };
+  const hit = filtered.data.data[0]!;
+
+  assert.deepEqual(
+    Object.keys(hit).sort(),
+    ['field', 'id', 'ref', 'snippet', 'title', 'type'],
+  );
+  assert.equal(hit.residentialAddress, undefined);
+});
+
+test('the search answer keeps what tells a caller why it is narrow', () => {
+  // Without these a caller cannot tell "nothing matched" from "most of the
+  // charity was not looked in", which is the whole reason they are sent.
+  const filtered = applyShapePolicy('search', SEARCH_PAYLOAD, false) as {
+    data: Record<string, unknown>;
+  };
+
+  assert.equal(filtered.data.dataScope, 'WITHHELD');
+  assert.deepEqual(filtered.data.searched, ['BoardMember']);
+  assert.equal(filtered.data.note, 'This session withholds personal data.');
+  assert.equal(filtered.data.planNote, 'The minute book is on the Complete plan.');
+});
+
+test('an open gate is handed the search answer as the API sent it', () => {
+  assert.deepEqual(applyShapePolicy('search', SEARCH_PAYLOAD, true), SEARCH_PAYLOAD);
+});

@@ -116,6 +116,11 @@ const DISPOSABLE_DATABASE_RESET_TABLES = Object.freeze([
   // Approvals for destructive actions. Like the activity record, it has no
   // foreign key to "AuthSession", so the AuthSession truncate does not clear it.
   "AuthActionApproval",
+  // Idempotency claims for connector creates. Keyed on the user rather than on
+  // the session, so the AuthSession truncate does not clear these either. A
+  // claim left behind would make the next suite's first create with the same
+  // key replay a record that no longer exists.
+  "ConnectorIdempotencyRecord",
   "BoardMember",
   "Member",
   "GoverningAct",

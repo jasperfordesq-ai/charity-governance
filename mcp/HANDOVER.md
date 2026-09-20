@@ -323,6 +323,23 @@ knowing.
   `{}` survived every per-task review because the stubs returned a bare array, a shape the
   API never produces. When you stub, copy the real envelope.
 
+## The trap that caught us on 2026-09-20
+
+**A guard must return the reply it sends.** Fastify stops a request when an
+asynchronous hook returns the reply; a hook that sends and then falls out of
+the bottom of the function only stops it while exactly one `onSend` hook is
+registered. This API had exactly one, so every guard in it appeared to work.
+Registering a second turned every refusal into a message, with the refused
+action carried out behind it — including the human approval between an agent
+and a deletion.
+
+It was found by the live suite, not by any unit test, because no unit test
+built an application with two `onSend` hooks, which is to say none of them
+built the application that runs. `guards-stop-the-request.test.ts` now fails
+on any guard written the old way, and
+`action-approval-stops-the-request.test.ts` builds the app the way the server
+does and asserts the handler never runs. If you add a guard, return the reply.
+
 ## Where the evidence is
 
 `.superpowers/sdd/2026-09-19-charitypilot-mcp-connector/` (gitignored, kept deliberately)

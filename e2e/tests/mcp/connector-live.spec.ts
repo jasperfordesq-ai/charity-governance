@@ -114,10 +114,12 @@ test.describe('MCP connector lifecycle', () => {
         'billing_status',
         'board_member_create',
         'board_member_delete',
+        'board_member_get',
         'board_member_update',
         'board_register',
         'board_submissions',
         'complaint_delete',
+        'complaint_get',
         'complaint_update',
         'complaints_list',
         'compliance_principle',
@@ -129,12 +131,15 @@ test.describe('MCP connector lifecycle', () => {
         'compliance_signoff_set',
         'compliance_summary',
         'conflict_delete',
+        'conflict_get',
         'conflict_update',
         'conflicts_list',
+        'confluence_publications',
         'confluence_status',
         'dashboard_overview',
         'deadline_create',
         'deadline_delete',
+        'deadline_get',
         'deadline_update',
         'deadlines_history',
         'deadlines_list',
@@ -144,15 +149,20 @@ test.describe('MCP connector lifecycle', () => {
         'document_delete',
         'document_link_standard',
         'document_unlink_standard',
+        'document_update',
         'document_upload_text',
         'documents_list',
+        'fetch',
         'financial_controls',
         'financial_controls_set',
         'fundraising_create',
         'fundraising_delete',
+        'fundraising_get',
         'fundraising_list',
         'fundraising_update',
+        'governance_guidance',
         'governing_act_create',
+        'governing_act_get',
         'governing_act_update',
         'governing_acts',
         'governing_acts_voids',
@@ -161,10 +171,13 @@ test.describe('MCP connector lifecycle', () => {
         'organisation',
         'organisation_update',
         'registers_summary',
+        'resolution_get',
         'resolution_update',
         'risk_delete',
+        'risk_get',
         'risk_update',
         'risks_list',
+        'search',
         'security_audit',
         'session_info',
         // team_invite_create is absent on purpose: inviting somebody names
@@ -1853,6 +1866,160 @@ test.describe('Connector documents', () => {
         category: 'POLICY',
       });
       expect(refused.isError, 'hiding a tool is not refusing it').toBe(true);
+    } finally {
+      await connector.close();
+    }
+  });
+});
+
+test.describe('Finding a record, and reading the one you found', () => {
+  // No new sign-ins. The API allows five a minute per email address and this
+  // file spends most of them above, so these reuse the sessions already
+  // connected: an owner with the gate closed, an administrator with it open,
+  // and a second charity. Each is exactly the posture these tests need.
+  // Resolved per test rather than once here: the directory these live in is
+  // made in beforeAll, which runs after this describe body is evaluated.
+  const withheld = () => credentialFileFor('phase1');
+  const full = () => credentialFileFor('gate-open');
+  const otherCharity = () => credentialFileFor('org-b');
+
+  test('search finds a trustee by name and the reference reads the record', async () => {
+    const connector = await openConnector({ apiUrl: API_BASE_URL, credentialFile: withheld() });
+    try {
+      const found = await callTool(connector.client, 'search', { q: 'Aoife' });
+      expect(found.isError, found.text).toBe(false);
+
+      const body = (found.json as {
+        data: {
+          data: Array<{ type: string; field: string; ref: string; title: string | null }>;
+          dataScope: string;
+        };
+      }).data;
+      expect(body.dataScope).toBe('WITHHELD');
+
+      const trustee = body.data.find((hit) => hit.type === 'BoardMember');
+      expect(trustee, 'a trustee name is on the public register and must be findable')
+        .toBeTruthy();
+      expect(trustee!.field).toBe('name');
+      expect(trustee!.ref).toBe(`charitypilot://board-member/${fixture.ids.chairId}`);
+
+      const read = await callTool(connector.client, 'fetch', { ref: trustee!.ref });
+      expect(read.isError, read.text).toBe(false);
+      expect(read.text).toContain('Aoife Chairperson');
+    } finally {
+      await connector.close();
+    }
+  });
+
+  // The property the design turns on: a hit is itself an answer.
+  test('a closed gate cannot find the same trustee through the conflicts register', async () => {
+    const connector = await openConnector({ apiUrl: API_BASE_URL, credentialFile: withheld() });
+    try {
+      const found = await callTool(connector.client, 'search', {
+        q: 'Aoife',
+        types: ['ConflictRecord', 'GoverningAct'],
+      });
+      expect(found.isError, found.text).toBe(false);
+
+      const body = (found.json as {
+        data: { data: Array<{ type: string }>; note?: string };
+      }).data;
+      expect(body.data, 'a withheld column must not be matched at all').toEqual([]);
+      expect(body.note).toContain('withholds personal data');
+    } finally {
+      await connector.close();
+    }
+  });
+
+  test('an open gate finds the conflict record and says which field matched', async () => {
+    const connector = await openConnector({ apiUrl: API_BASE_URL, credentialFile: full() });
+    try {
+      const found = await callTool(connector.client, 'search', {
+        q: 'Aoife',
+        types: ['ConflictRecord'],
+      });
+      expect(found.isError, found.text).toBe(false);
+
+      const body = (found.json as {
+        data: { data: Array<{ type: string; field: string; ref: string }>; dataScope: string };
+      }).data;
+      expect(body.dataScope).toBe('FULL');
+      expect(body.data).toHaveLength(1);
+      expect(body.data[0]!.field).toBe('trusteeName');
+
+      const read = await callTool(connector.client, 'fetch', { ref: body.data[0]!.ref });
+      expect(read.isError, read.text).toBe(false);
+      expect(read.text).toContain('PD-CANARY-MATTER');
+    } finally {
+      await connector.close();
+    }
+  });
+
+  test('search never reaches another charity’s records', async () => {
+    const connector = await openConnector({ apiUrl: API_BASE_URL, credentialFile: otherCharity() });
+    try {
+      const found = await callTool(connector.client, 'search', { q: 'Aoife' });
+      expect(found.isError, found.text).toBe(false);
+      expect((found.json as { data: { data: unknown[] } }).data.data).toEqual([]);
+      // The query is echoed back, so looking for the word itself would fail on
+      // the caller's own input. What must not appear is anything of the other
+      // charity's: the trustee's identifier, and the register text beside it.
+      expect(found.text).not.toContain(fixture.ids.chairId);
+      expect(found.text).not.toContain('Chairperson');
+    } finally {
+      await connector.close();
+    }
+  });
+
+  test('a reference the connector cannot place is refused, never guessed at', async () => {
+    const connector = await openConnector({ apiUrl: API_BASE_URL, credentialFile: withheld() });
+    try {
+      for (const ref of ['charitypilot://payroll/p-1', 'https://example.test/x', 'nonsense']) {
+        const refused = await callTool(connector.client, 'fetch', { ref });
+        expect(refused.isError, `${ref} must be refused`).toBe(true);
+        expect((refused.structured as { code?: string })?.code).toBe('REFERENCE_INVALID');
+      }
+    } finally {
+      await connector.close();
+    }
+  });
+
+  test('the Governance Code and the guidance behind it are readable as resources', async () => {
+    const connector = await openConnector({ apiUrl: API_BASE_URL, credentialFile: withheld() });
+    try {
+      const listed = await connector.client.listResources();
+      const uris = listed.resources.map((resource) => resource.uri).sort();
+      expect(uris).toEqual([
+        'charitypilot://governance-code',
+        'charitypilot://regulator-guidance',
+      ]);
+
+      const guidance = await connector.client.readResource({
+        uri: 'charitypilot://regulator-guidance',
+      });
+      const first = guidance.contents[0] as { mimeType?: string; text?: string };
+      expect(first.mimeType).toBe('application/json');
+
+      const parsed = JSON.parse(first.text ?? '{}') as {
+        data: { lastChecked: string; entries: unknown[] };
+      };
+      expect(parsed.data.lastChecked).toMatch(/^\d{4}-\d{2}-\d{2}$/);
+      expect(parsed.data.entries.length).toBeGreaterThan(0);
+    } finally {
+      await connector.close();
+    }
+  });
+
+  test('a record read as a resource is gated exactly as the tool would be', async () => {
+    const connector = await openConnector({ apiUrl: API_BASE_URL, credentialFile: withheld() });
+    try {
+      const read = await connector.client.readResource({
+        uri: `charitypilot://governing-act/${fixture.ids.actId}`,
+      });
+      const text = (read.contents[0] as { text?: string }).text ?? '';
+
+      expect(text).toContain('Quarterly board meeting');
+      expect(text, 'the gate must apply to a resource too').not.toContain('PD-CANARY-NOTES');
     } finally {
       await connector.close();
     }

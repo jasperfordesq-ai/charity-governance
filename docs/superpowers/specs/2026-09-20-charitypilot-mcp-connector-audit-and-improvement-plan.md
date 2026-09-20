@@ -57,6 +57,93 @@ Everything below is a deliberate choice, not an oversight.
 - **The deploy.** None of this is on the VM. Everything here is committed and
   unpushed, by the owner’s decision while a second session shares the checkout.
 
+### The one that mattered most, found by the live suite
+
+Every refusal this API made was advisory. A guard would send its refusal,
+the caller would be told the action was refused, and the action would then
+happen anyway.
+
+Fastify only stops a request when an asynchronous hook **returns** the reply
+it sent. Not one guard in this codebase did: they all sent and fell out of
+the bottom of the function. That worked for as long as it did because with
+exactly one `onSend` hook registered, Fastify short-circuits regardless. The
+API had exactly one, in `security-headers.ts`, and had done since the
+beginning.
+
+The connector’s idempotency plugin registered the second. From that moment,
+a connector asking to delete a risk record got the 428 that says "a person
+must approve this", and the record was deleted. The agent reported that
+nothing had happened. Nobody was ever asked. The record was gone.
+
+It was caught by the live suite, in a test that had been green an hour
+earlier: "the record still exists, because the refusal refused". Nothing in
+the unit tests could have caught it, because none of them built an
+application with two `onSend` hooks — which is to say, none of them built the
+application that actually runs.
+
+Everything that refuses is fixed: authentication, email verification, the
+read-only session, role, session level, subscription, plan, the write budget,
+the platform-operator guard and the action approval. Two tests hold it: one
+that builds the application the way the server builds it and asserts the
+handler never runs, and a source assertion over every guard file that fails
+on the next one written the old way. Both have canaries.
+
+**For the owner.** Nothing was deployed with this. It reached no live data,
+because none of this is on the VM yet. But it is worth knowing that the
+approval prompt — the thing designed so an agent could not destroy a record
+without a person typing a password — would not have stopped a deletion, and
+that the only reason it worked before today was a Fastify implementation
+detail nobody had relied on deliberately.
+
+### One finding for the owner, from two sessions at once
+
+Eleven guards in this codebase have now been found correct, and covered by a
+passing test that would have passed just as happily if the guard were deleted.
+Three of them were in the connector’s first build. Five more were found by the
+Confluence session’s reviewer on a single task, which deleted an entire
+authorisation stack and watched sixty-three tests stay green. The rest turned
+up in this audit.
+
+At eleven, that is not bad luck. It is a property of how this codebase is tested:
+tests are written to show the happy path works, and a guard is invisible on
+the happy path. A test that never constructs the case the guard exists for is
+a test the guard’s absence cannot fail.
+
+Two habits close it, and both are now in the repository rather than in
+anyone’s head:
+
+1. **Every guard gets a canary.** Break it on purpose, confirm the test goes
+   red, restore it. `scripts/mcp-live-canary.mjs` does this against a running
+   stack; `scripts/api-guard-canary.mjs` does it against unit tests in seconds.
+   Twenty-six mutations are recorded between them, each naming the property it
+   defeats. A mutation that does not compile is reported as a broken canary
+   rather than a pass.
+2. **Guard the data, not the route.** Twice in one day, two sessions shipped a
+   second route reaching data a first route protected, and the second inherited
+   nothing: a search that would have read the minute book past the plan gate,
+   and a publications listing that names documents a subscription check would
+   otherwise have withheld. Both were caught within the hour, and neither was
+   deployed. A third will not be, unless somebody is looking.
+
+The second of those two is a design question the owner should rule on, not a
+bug to fix quietly. The Confluence session deliberately left its listing
+ungated, because gating it would gate the erasure workflow behind it, and
+"we could not delete your data because the invoice was overdue" is not an
+answer anyone can give a regulator. That reasoning is right. It also means
+the rule is not "gate everything the same way" but "decide, per piece of data,
+what may reach it" — which nobody has written down yet.
+
+The eleventh is worth the owner meeting on its own, because it is not a test
+gap. The route that erases a page from a charity’s Confluence site accepts a
+reason and a requester, validates the reason at between ten and five hundred
+characters, and then writes neither anywhere. TypeScript cannot see it,
+because the fields are consumed by the type rather than by the code. A
+regulator asking who authorised destroying a page, and why, currently gets a
+storage path and nothing else. Asking for a reason and discarding it is worse
+than never asking for one. The Confluence session has ruled that it gets
+persisted; the tier that was going to add audit events is the one after that,
+so this is the gap in the meantime.
+
 ### Ranking, and when to revisit it
 
 Search is a case-insensitive substring match rather than Postgres full text.

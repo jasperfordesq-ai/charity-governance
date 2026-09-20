@@ -556,18 +556,26 @@ function filterReminderHistory(value: unknown): unknown {
  * nobody remembered this file.
  */
 const SEARCH_HIT_FIELDS = ['type', 'id', 'title', 'field', 'snippet', 'ref'] as const;
-const SEARCH_ENVELOPE_FIELDS = ['query', 'dataScope', 'truncated', 'searched', 'note'] as const;
+const SEARCH_ENVELOPE_FIELDS = [
+  'query', 'dataScope', 'truncated', 'searched', 'note', 'planNote',
+] as const;
 
 function filterSearch(value: unknown): unknown {
-  const envelope = asRecord(value);
-  if (!envelope) return value;
+  // Two levels deep: the route answers with the API's usual `{ data }`
+  // wrapper, and the search result inside it has a `data` array of its own.
+  // Filtering the outer one as though it were the result would keep nothing
+  // and hand back the whole result untouched under a key called `data`.
+  const wrapper = asRecord(value);
+  if (!wrapper) return value;
+  const result = asRecord(wrapper.data);
+  if (!result) return value;
 
   const out: Record<string, unknown> = {};
   for (const key of SEARCH_ENVELOPE_FIELDS) {
-    if (key in envelope) out[key] = envelope[key];
+    if (key in result) out[key] = result[key];
   }
-  out.data = mapArray(envelope.data, (hit) => pick(hit, SEARCH_HIT_FIELDS));
-  return out;
+  out.data = mapArray(result.data, (hit) => pick(hit, SEARCH_HIT_FIELDS));
+  return { data: out };
 }
 
 /**

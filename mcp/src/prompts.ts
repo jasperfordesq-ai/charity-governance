@@ -152,6 +152,41 @@ export const PROMPTS: readonly PromptDefinition[] = [
       + 'be, and change it only once I have confirmed. If the deadline was entered by hand, '
       + 'deadline_update is the right tool.',
   },
+  {
+    name: 'onboard_trustee',
+    title: 'Onboard a new trustee',
+    description:
+      'Adds a trustee to the register and walks the rest of it: the appointment, the code '
+      + 'of conduct, the induction, and the conflicts they have to declare.',
+    arguments: [
+      { name: 'name', description: 'The trustee’s name.', required: true },
+      { name: 'role', description: 'Chair, Treasurer, Secretary or Trustee.' },
+      {
+        name: 'appointed_date',
+        description: 'The date they were appointed, as YYYY-MM-DD.',
+      },
+    ],
+    build: (args) =>
+      `I am onboarding ${args['name'] ?? '(name)'} as a trustee`
+      + `${args['role'] ? `, as ${args['role']}` : ''}`
+      + `${args['appointed_date'] ? `, appointed ${args['appointed_date']}` : ''}.\n\n`
+      + 'Take this in order and stop at each step for me.\n\n'
+      + '1. Read board_register first. A trustee appointed twice is two rows in a register '
+      + 'the regulator reads, and the second one is hard to remove.\n'
+      + '2. board_member_create with the name, role and appointment date. Ask me for any '
+      + 'you do not have rather than guessing one.\n'
+      + '3. Ask me whether they have signed the code of conduct and completed induction, '
+      + 'and on what dates. Record them with board_member_update. Both are asked for by '
+      + 'the Governance Code and both need the date, not just the fact.\n'
+      + '4. Ask me whether they have any interest to declare — another directorship, a '
+      + 'supplier relationship, a family connection to a beneficiary. If they do, record '
+      + 'each one with conflict_create against this trustee.\n'
+      + '5. Ask me which meeting appointed them. If there is one, governing_acts or search '
+      + 'will find it, and the appointment should be traceable to a resolution of that '
+      + 'meeting rather than to nothing.\n\n'
+      + 'An appointment you cannot point at a meeting for is the finding an auditor writes '
+      + 'up, so say so plainly if we get to the end without one.',
+  },
 ];
 
 export function findPrompt(name: string): PromptDefinition | undefined {
