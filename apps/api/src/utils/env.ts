@@ -869,6 +869,24 @@ export function validateProductionEnv(): void {
 
   const issues: string[] = [];
 
+  // THE THIRD FENCE around the Atlassian endpoint override.
+  //
+  // `atlassian-endpoints.ts` already refuses to apply it when NODE_ENV is
+  // production, so a deployment carrying these variables would behave
+  // correctly — but it would be a deployment configured to send a charity's
+  // OAuth authorization codes somewhere other than Atlassian, one NODE_ENV
+  // mistake away from doing so. That is not a configuration to run with and
+  // log about; it is one to refuse to boot on.
+  for (const key of ['CHARITYPILOT_FAKE_ATLASSIAN', 'CHARITYPILOT_FAKE_ATLASSIAN_BASE_URL']) {
+    if (process.env[key] !== undefined) {
+      issues.push(
+        `${key} must not be set in production. It exists only so an end-to-end test can point ` +
+          'the API at a fake Atlassian, and a production deployment carrying it is one NODE_ENV ' +
+          "mistake away from sending charities' authorization codes to the wrong host.",
+      );
+    }
+  }
+
   try {
     requireConfiguredEnv('PORT', issues);
     parsePort(process.env.PORT, 3002);

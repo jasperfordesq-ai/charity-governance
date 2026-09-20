@@ -10,7 +10,7 @@ const CONTAINER_NUMBER_LABEL = 'com.docker.compose.container-number';
 const ONEOFF_LABEL = 'com.docker.compose.oneoff';
 
 const IMAGE_ROLES = Object.freeze(['app', 'database', 'gateway']);
-const SERVICE_NAMES = Object.freeze(['api', 'db', 'gateway', 'web']);
+const SERVICE_NAMES = Object.freeze(['api', 'db', 'fake-atlassian', 'gateway', 'web']);
 
 const NODE_BASE_ENV_KEYS = Object.freeze(['NODE_VERSION', 'PATH', 'YARN_VERSION']);
 const NODE_PATH = '/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin';
@@ -24,6 +24,14 @@ const API_RUNTIME_COMMAND = Object.freeze([
     'exec node --import tsx apps/api/src/server.ts\n',
 ]);
 const WEB_RUNTIME_COMMAND = Object.freeze(['node', 'apps/web/server.mjs']);
+// Pinned exactly, and more consequentially than the others: this service issues
+// OAuth tokens to anybody that asks, so what it runs must be provable from the
+// attestation and not merely from the compose file it was started with.
+const FAKE_ATLASSIAN_RUNTIME_COMMAND = Object.freeze([
+  'sh',
+  '-lc',
+  'exec node --import tsx apps/api/src/tests/fake-atlassian-server.ts',
+]);
 const WEB_RUNTIME_ENVIRONMENT = Object.freeze({
   CHARITYPILOT_INTERNAL_API_URL: 'http://api:3302',
   HOST: '0.0.0.0',
@@ -64,6 +72,19 @@ const SERVICE_CONTRACT = Object.freeze({
       '/tmp': 'rw,nosuid,nodev,noexec,size=128m,mode=1777',
       '/var/lib/charitypilot-e2e-documents':
         'rw,nosuid,nodev,noexec,size=256m,mode=0700,uid=1000,gid=1000',
+    }),
+  }),
+  'fake-atlassian': Object.freeze({
+    // The same app image as the API, so it cannot introduce a layer nothing
+    // else in the stack has, and the same hardening. It is on the internal
+    // network only and publishes nothing: that is what makes a service which
+    // issues OAuth tokens to anybody safe to run here.
+    imageRole: 'app',
+    healthy: true,
+    hardenedUser: true,
+    networks: Object.freeze(['e2e']),
+    tmpfs: Object.freeze({
+      '/tmp': 'rw,nosuid,nodev,noexec,size=64m,mode=1777',
     }),
   }),
   db: Object.freeze({
@@ -521,7 +542,12 @@ function assertGatewayEnvironment(config) {
 
 function assertApplicationRuntime(serviceName, config) {
   const environment = parseEnvironment(config.Env, `${serviceName} Config.Env`);
-  const expectedCommand = serviceName === 'api' ? API_RUNTIME_COMMAND : WEB_RUNTIME_COMMAND;
+  const expectedCommand =
+    serviceName === 'api'
+      ? API_RUNTIME_COMMAND
+      : serviceName === 'fake-atlassian'
+        ? FAKE_ATLASSIAN_RUNTIME_COMMAND
+        : WEB_RUNTIME_COMMAND;
   if (JSON.stringify(config.Cmd) !== JSON.stringify(expectedCommand)) {
     fail(`${serviceName} is not using the exact audited application command.`);
   }
@@ -529,6 +555,25 @@ function assertApplicationRuntime(serviceName, config) {
   if (serviceName === 'api') {
     if (environment.NODE_ENV !== 'development') {
       fail('api NODE_ENV must remain development for the TypeScript E2E server.');
+    }
+    // The two variables that redirect where a charity's OAuth authorization
+    // codes are sent. Attested by exact value, because 'set to something' is
+    // not the property that matters here -- 'set to the in-stack fake and
+    // nothing else' is.
+    if (environment.CHARITYPILOT_FAKE_ATLASSIAN !== '1') {
+      fail('api must enable the Atlassian fake explicitly, or the connector journey is untested.');
+    }
+    if (environment.CHARITYPILOT_FAKE_ATLASSIAN_BASE_URL !== 'http://fake-atlassian:4000') {
+      fail('api must point at the in-stack fake Atlassian and nothing else.');
+    }
+    return;
+  }
+
+  if (serviceName === 'fake-atlassian') {
+    // Never production: the server refuses to start under it, and this asserts
+    // the condition rather than trusting the refusal.
+    if (environment.NODE_ENV !== 'development') {
+      fail('fake-atlassian must not run with a production NODE_ENV.');
     }
     return;
   }
@@ -573,7 +618,7 @@ function assertContainer(container, serviceName, builtAttestation) {
     contract.networks,
   );
   if (serviceName === 'gateway') assertGatewayEnvironment(config);
-  if (serviceName === 'api' || serviceName === 'web') {
+  if (serviceName === 'api' || serviceName === 'web' || serviceName === 'fake-atlassian') {
     assertApplicationRuntime(serviceName, config);
   }
   return networks;
@@ -597,7 +642,9 @@ export function attestRunningContainers(containerInspectRecords, builtAttestatio
   }
 
   const records = requireArray(containerInspectRecords, 'container inspect records');
-  if (records.length !== SERVICE_NAMES.length) fail('exactly four project containers are required.');
+  if (records.length !== SERVICE_NAMES.length) {
+    fail(`exactly ${SERVICE_NAMES.length} project containers are required.`);
+  }
 
   const byService = new Map();
   for (const container of records) {

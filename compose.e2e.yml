@@ -49,6 +49,40 @@ services:
         aliases:
           - db.charitypilot-e2e.invalid
 
+  # A fake Atlassian, so the connector journey can be driven end to end without
+  # an Atlassian account and without a single byte leaving this stack.
+  #
+  # It issues OAuth tokens to anybody — that is the point of it — so note what
+  # keeps it harmless: it is on the INTERNAL `e2e` network only, it publishes no
+  # port, and the server itself refuses to start under NODE_ENV=production. The
+  # API reaches it only because `CHARITYPILOT_FAKE_ATLASSIAN=1` is set below,
+  # and `validateProductionEnv` refuses to boot a production deployment that
+  # carries that variable at all.
+  fake-atlassian:
+    <<: *app-runtime
+    command:
+      - sh
+      - -lc
+      - exec node --import tsx apps/api/src/tests/fake-atlassian-server.ts
+    environment:
+      NODE_ENV: development
+      FAKE_ATLASSIAN_PORT: "4000"
+      FAKE_ATLASSIAN_HOST: 0.0.0.0
+      FAKE_ATLASSIAN_CLOUD_ID: fake-cloud-id
+      NEXT_TELEMETRY_DISABLED: "1"
+    tmpfs:
+      - /tmp:rw,nosuid,nodev,noexec,size=64m,mode=1777
+    healthcheck:
+      test: ["CMD-SHELL", "node -e \"fetch('http://127.0.0.1:4000/__control/pages').then(r => process.exit(r.ok ? 0 : 1)).catch(() => process.exit(1))\""]
+      interval: 3s
+      timeout: 5s
+      retries: 40
+      start_period: 10s
+    networks:
+      e2e:
+        aliases:
+          - fake-atlassian.charitypilot-e2e.invalid
+
   api:
     <<: *app-runtime
     build:
@@ -57,6 +91,8 @@ services:
       target: app
     depends_on:
       db:
+        condition: service_healthy
+      fake-atlassian:
         condition: service_healthy
     command:
       - sh
@@ -85,6 +121,14 @@ services:
       DOCUMENT_STORAGE_DRIVER: local
       LOCAL_FILE_STORAGE_DIR: /var/lib/charitypilot-e2e-documents
       SEED_LOCAL_ADMIN: "false"
+      # The Confluence connector, pointed at the fake above. Both variables are
+      # required together — a base URL alone does nothing — and
+      # `validateProductionEnv` refuses to boot if either reaches production.
+      # The client id and secret are fixtures: the fake accepts any pair.
+      ATLASSIAN_CLIENT_ID: e2e-fake-client-id
+      ATLASSIAN_CLIENT_SECRET: e2e-fake-client-secret
+      CHARITYPILOT_FAKE_ATLASSIAN: "1"
+      CHARITYPILOT_FAKE_ATLASSIAN_BASE_URL: http://fake-atlassian:4000
       NEXT_TELEMETRY_DISABLED: "1"
     tmpfs:
       - /var/lib/charitypilot-e2e-documents:rw,nosuid,nodev,noexec,size=256m,mode=0700,uid=1000,gid=1000

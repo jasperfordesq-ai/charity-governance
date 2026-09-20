@@ -841,6 +841,32 @@ export function expectedLocalServiceEnvironments(identity) {
       REFRESH_TOKEN_TTL_DAYS: "7",
       SEED_LOCAL_ADMIN: "false",
       TRUSTED_PROXY_ADDRESSES: "",
+      // The Confluence connector, pointed at the in-stack fake.
+      //
+      // These four are pinned here for the same reason every other value is —
+      // the runner owns the contract — but two of them carry a sharper
+      // obligation. CHARITYPILOT_FAKE_ATLASSIAN and its base URL redirect where
+      // OAuth authorization codes are sent, so their exact values must be
+      // auditable from this file. The base URL must name the in-stack service
+      // and nothing else; `atlassian-endpoints.ts` independently refuses any
+      // host that is not loopback or private, and `validateProductionEnv`
+      // refuses to boot a production deployment that carries either variable.
+      //
+      // The client id and secret are fixtures. The fake accepts any pair, and
+      // there is no real Atlassian application behind them.
+      ATLASSIAN_CLIENT_ID: "e2e-fake-client-id",
+      ATLASSIAN_CLIENT_SECRET: "e2e-fake-client-secret",
+      CHARITYPILOT_FAKE_ATLASSIAN: "1",
+      CHARITYPILOT_FAKE_ATLASSIAN_BASE_URL: "http://fake-atlassian:4000",
+    },
+    "fake-atlassian": {
+      FAKE_ATLASSIAN_CLOUD_ID: "fake-cloud-id",
+      FAKE_ATLASSIAN_HOST: "0.0.0.0",
+      FAKE_ATLASSIAN_PORT: "4000",
+      NEXT_TELEMETRY_DISABLED: "1",
+      // Not "production": the fake refuses to start under it, which is its own
+      // last line of defence independent of everything above.
+      NODE_ENV: "development",
     },
     web: {
       CHARITYPILOT_INTERNAL_API_URL: "http://api:3302",
@@ -932,6 +958,24 @@ const EXPECTED_SERVICE_KEYS = Object.freeze({
     "stop_grace_period",
     "tmpfs",
   ]),
+  // No "build" and no "depends_on": the fake reuses the prebuilt app image and
+  // waits for nothing. No "ports": it is unreachable from outside the internal
+  // network, which is the property that makes a service issuing OAuth tokens to
+  // anybody safe to run at all.
+  "fake-atlassian": Object.freeze([
+    "cap_drop",
+    "command",
+    "entrypoint",
+    "environment",
+    "healthcheck",
+    "image",
+    "init",
+    "networks",
+    "read_only",
+    "security_opt",
+    "tmpfs",
+    "user",
+  ]),
   gateway: Object.freeze([
     "build",
     "cap_drop",
@@ -975,6 +1019,14 @@ const EXPECTED_SERVICE_COMMANDS = Object.freeze({
       "exec node --import tsx apps/api/src/server.ts\n",
   ]),
   db: null,
+  // The fake Atlassian. Pinned exactly like every other command here, and for
+  // a sharper reason than most: this service issues OAuth tokens to anybody, so
+  // what it runs must be auditable from this file alone.
+  "fake-atlassian": Object.freeze([
+    "sh",
+    "-lc",
+    "exec node --import tsx apps/api/src/tests/fake-atlassian-server.ts",
+  ]),
   gateway: Object.freeze(["/gateway/tcp-gateway.mjs"]),
   web: Object.freeze(["node", "apps/web/server.mjs"]),
 });
@@ -982,6 +1034,7 @@ const EXPECTED_SERVICE_COMMANDS = Object.freeze({
 const EXPECTED_SERVICE_ENTRYPOINTS = Object.freeze({
   api: null,
   db: null,
+  "fake-atlassian": null,
   gateway: Object.freeze(["node"]),
   web: null,
 });
@@ -989,6 +1042,7 @@ const EXPECTED_SERVICE_ENTRYPOINTS = Object.freeze({
 const EXPECTED_E2E_NETWORK_ALIASES = Object.freeze({
   api: Object.freeze(["api.charitypilot-e2e.invalid"]),
   db: Object.freeze(["db.charitypilot-e2e.invalid"]),
+  "fake-atlassian": Object.freeze(["fake-atlassian.charitypilot-e2e.invalid"]),
   web: Object.freeze(["web.charitypilot-e2e.invalid"]),
 });
 
@@ -1025,6 +1079,16 @@ const EXPECTED_HEALTHCHECKS = Object.freeze({
     retries: 10,
     start_period: "2s",
   }),
+  "fake-atlassian": Object.freeze({
+    test: Object.freeze([
+      "CMD-SHELL",
+      "node -e \"fetch('http://127.0.0.1:4000/__control/pages').then(r => process.exit(r.ok ? 0 : 1)).catch(() => process.exit(1))\"",
+    ]),
+    interval: "3s",
+    timeout: "5s",
+    retries: 40,
+    start_period: "10s",
+  }),
   web: Object.freeze({
     test: Object.freeze([
       "CMD-SHELL",
@@ -1047,6 +1111,7 @@ const EXPECTED_TMPFS = Object.freeze({
     "/var/run/postgresql:rw,nosuid,nodev,noexec,size=16m,mode=0775",
     "/tmp:rw,nosuid,nodev,noexec,size=32m,mode=1777",
   ]),
+  "fake-atlassian": Object.freeze(["/tmp:rw,nosuid,nodev,noexec,size=64m,mode=1777"]),
   gateway: Object.freeze([]),
   web: Object.freeze(["/tmp:rw,nosuid,nodev,noexec,size=128m,mode=1777"]),
 });
@@ -1097,7 +1162,7 @@ export function validateRenderedCompose(
     );
   }
   const serviceNames = Object.keys(model.services).sort();
-  const expectedServices = ["api", "db", "gateway", "web"];
+  const expectedServices = ["api", "db", "fake-atlassian", "gateway", "web"];
   if (JSON.stringify(serviceNames) !== JSON.stringify(expectedServices)) {
     throw new Error(
       `Isolated compose must contain only ${expectedServices.join(", ")}.`,
@@ -1190,8 +1255,15 @@ export function validateRenderedCompose(
       );
     }
     if (serviceName === "api") {
-      assertExactObjectKeys("api dependencies", service.depends_on, ["db"]);
-      assertHealthyDependency("api", service.depends_on, "db");
+      // The API waits for the fake as well as the database: a connector test
+      // that raced the fake would fail as though the connector were broken.
+      assertExactObjectKeys("api dependencies", service.depends_on, [
+        "db",
+        "fake-atlassian",
+      ]);
+      for (const dependencyName of ["db", "fake-atlassian"]) {
+        assertHealthyDependency("api", service.depends_on, dependencyName);
+      }
     } else if (serviceName === "gateway") {
       assertExactObjectKeys("gateway dependencies", service.depends_on, [
         "api",
@@ -1216,10 +1288,14 @@ export function validateRenderedCompose(
     }
 
     const build = service.build;
-    if (serviceName === "web") {
+    // web and fake-atlassian both reuse the prebuilt app image rather than
+    // building one of their own. For the fake that is the stronger guarantee:
+    // it runs the same audited image as the API, from the same sanitized
+    // context, so it cannot introduce a layer nothing else in the stack has.
+    if (serviceName === "web" || serviceName === "fake-atlassian") {
       if (build !== undefined) {
         throw new Error(
-          "web must reuse the exact prebuilt runner app image and must not export that tag again.",
+          `${serviceName} must reuse the exact prebuilt runner app image and must not export that tag again.`,
         );
       }
     } else {

@@ -1,4 +1,5 @@
 import { AppError } from '../utils/errors.js';
+import { atlassianEndpoints } from './atlassian-endpoints.js';
 
 /**
  * The HTTP core of the Confluence client: base URL, auth, retry policy and
@@ -96,7 +97,8 @@ const JITTER_FRACTION = 0.25;
 /** Upstream error text is surfaced only in this quantity; never the raw body. */
 const MAX_UPSTREAM_DETAIL_CHARS = 200;
 
-const API_BASE = 'https://api.atlassian.com/ex/confluence';
+// Resolved rather than constant so an end-to-end test can point the API at a
+// fake Atlassian. See atlassian-endpoints.ts for the fence.
 
 /**
  * Atlassian issues a cloud id as a UUID. The pattern is deliberately a little
@@ -230,7 +232,7 @@ function assertValidPath(path: string): string {
 
 function buildUrl(cloudId: string, spec: ConfluenceRequestSpec): string {
   const prefix = spec.api === 'v2' ? 'wiki/api/v2' : 'wiki/rest/api';
-  const url = new URL(`${API_BASE}/${cloudId}/${prefix}/${assertValidPath(spec.path)}`);
+  const url = new URL(`${atlassianEndpoints().apiBase}/${cloudId}/${prefix}/${assertValidPath(spec.path)}`);
   for (const [key, value] of Object.entries(spec.query ?? {})) {
     url.searchParams.set(key, value);
   }

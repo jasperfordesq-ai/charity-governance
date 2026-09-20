@@ -78,6 +78,16 @@ const FIXED_HEALTHCHECKS = {
     retries: 45,
     start_period: "5s",
   },
+  "fake-atlassian": {
+    test: [
+      "CMD-SHELL",
+      "node -e \"fetch('http://127.0.0.1:4000/__control/pages').then(r => process.exit(r.ok ? 0 : 1)).catch(() => process.exit(1))\"",
+    ],
+    interval: "3s",
+    timeout: "5s",
+    retries: 40,
+    start_period: "10s",
+  },
   gateway: {
     test: [
       "CMD",
@@ -113,6 +123,7 @@ const FIXED_TMPFS = {
     "/tmp:rw,nosuid,nodev,noexec,size=32m,mode=1777",
   ],
   web: ["/tmp:rw,nosuid,nodev,noexec,size=128m,mode=1777"],
+  "fake-atlassian": ["/tmp:rw,nosuid,nodev,noexec,size=64m,mode=1777"],
 };
 
 const TEST_RUNTIME_ATTESTATION_STUBS = Object.freeze({
@@ -170,11 +181,26 @@ function renderedCompose(projectName = FIXED_IDENTITY.projectName) {
             "./node_modules/.bin/tsx apps/api/prisma/seed.ts\n" +
             "exec node --import tsx apps/api/src/server.ts\n",
         ],
-        depends_on: { db: { condition: "service_healthy", required: true } },
+        depends_on: {
+          db: { condition: "service_healthy", required: true },
+          "fake-atlassian": { condition: "service_healthy", required: true },
+        },
         entrypoint: null,
         environment: environments.api,
         healthcheck: structuredClone(FIXED_HEALTHCHECKS.api),
         tmpfs: [...FIXED_TMPFS.api],
+      },
+      "fake-atlassian": {
+        ...appRuntime(projectName, "fake-atlassian"),
+        command: [
+          "sh",
+          "-lc",
+          "exec node --import tsx apps/api/src/tests/fake-atlassian-server.ts",
+        ],
+        entrypoint: null,
+        environment: environments["fake-atlassian"],
+        healthcheck: structuredClone(FIXED_HEALTHCHECKS["fake-atlassian"]),
+        tmpfs: [...FIXED_TMPFS["fake-atlassian"]],
       },
       db: {
         image: `${projectName}-database:local`,

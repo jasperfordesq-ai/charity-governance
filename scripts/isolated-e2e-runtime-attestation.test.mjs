@@ -23,6 +23,7 @@ const CONTAINER_IDS = Object.freeze({
   db: 'e'.repeat(64),
   gateway: 'f'.repeat(64),
   web: '1'.repeat(64),
+  'fake-atlassian': '9'.repeat(64),
 });
 const NETWORK_IDS = Object.freeze({ e2e: '2'.repeat(64), edge: '3'.repeat(64) });
 const ENDPOINT_IDS = Object.freeze({
@@ -31,6 +32,7 @@ const ENDPOINT_IDS = Object.freeze({
   gateway: '6'.repeat(64),
   gatewayEdge: '7'.repeat(64),
   web: '8'.repeat(64),
+  'fake-atlassian': 'a'.repeat(64),
 });
 const IPS = Object.freeze({
   api: '172.30.0.10',
@@ -38,6 +40,7 @@ const IPS = Object.freeze({
   gateway: '172.30.0.12',
   gatewayEdge: '172.31.0.2',
   web: '172.30.0.13',
+  'fake-atlassian': '172.30.0.14',
 });
 const GATEWAY_ENV = Object.freeze([
   'PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin',
@@ -48,6 +51,8 @@ const API_ENV = Object.freeze([
   ...GATEWAY_ENV,
   'NODE_ENV=development',
   'NEXT_TELEMETRY_DISABLED=1',
+  'CHARITYPILOT_FAKE_ATLASSIAN=1',
+  'CHARITYPILOT_FAKE_ATLASSIAN_BASE_URL=http://fake-atlassian:4000',
   'APP_VALUE=test',
 ]);
 const WEB_ENV = Object.freeze([
@@ -69,6 +74,12 @@ const API_COMMAND = Object.freeze([
     'exec node --import tsx apps/api/src/server.ts\n',
 ]);
 const WEB_COMMAND = Object.freeze(['node', 'apps/web/server.mjs']);
+const FAKE_ATLASSIAN_COMMAND = Object.freeze([
+  'sh',
+  '-lc',
+  'exec node --import tsx apps/api/src/tests/fake-atlassian-server.ts',
+]);
+const FAKE_ATLASSIAN_ENV = Object.freeze([...GATEWAY_ENV, 'NODE_ENV=development', 'APP_VALUE=test']);
 const PORTS = Object.freeze({
   '3302/tcp': Object.freeze([{ HostIp: '127.0.0.1', HostPort: '3302' }]),
   '3303/tcp': Object.freeze([{ HostIp: '127.0.0.1', HostPort: '3303' }]),
@@ -84,6 +95,9 @@ const TMPFS = Object.freeze({
     '/tmp': 'rw,nosuid,nodev,noexec,size=32m,mode=1777',
     '/var/lib/postgresql/data': 'rw,nosuid,nodev,size=1024m,mode=0700',
     '/var/run/postgresql': 'rw,nosuid,nodev,noexec,size=16m,mode=0775',
+  }),
+  'fake-atlassian': Object.freeze({
+    '/tmp': 'rw,nosuid,nodev,noexec,size=64m,mode=1777',
   }),
   gateway: Object.freeze({}),
   web: Object.freeze({
@@ -196,7 +210,14 @@ function containerRecord(serviceName) {
     Id: CONTAINER_IDS[serviceName],
     Image: IMAGE_IDS[imageRole],
     Config: {
-      Cmd: serviceName === 'api' ? [...API_COMMAND] : serviceName === 'web' ? [...WEB_COMMAND] : null,
+      Cmd:
+        serviceName === 'api'
+          ? [...API_COMMAND]
+          : serviceName === 'web'
+            ? [...WEB_COMMAND]
+            : serviceName === 'fake-atlassian'
+              ? [...FAKE_ATLASSIAN_COMMAND]
+              : null,
       Image: TAGS[imageRole],
       User: serviceName === 'db' ? '' : '1000:1000',
       Labels: labels(serviceName),
@@ -206,7 +227,9 @@ function containerRecord(serviceName) {
           ? [...API_ENV]
           : serviceName === 'web'
             ? [...WEB_ENV]
-            : ['PATH=/usr/bin', 'APP_VALUE=test'],
+            : serviceName === 'fake-atlassian'
+              ? [...FAKE_ATLASSIAN_ENV]
+              : ['PATH=/usr/bin', 'APP_VALUE=test'],
     },
     State: state(),
     HostConfig: hostConfig(serviceName),

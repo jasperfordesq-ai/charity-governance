@@ -1,4 +1,5 @@
 import { AppError } from '../utils/errors.js';
+import { atlassianEndpoints } from './atlassian-endpoints.js';
 
 // Deliberately does NOT import from '../utils/env.js'. env.ts already imports
 // two service modules (document-storage-resolution.js, integration-crypto.js);
@@ -6,8 +7,10 @@ import { AppError } from '../utils/errors.js';
 // like integration-crypto.ts — and reads process.env directly so env.ts (or
 // anything else) can safely import *this* module later without a cycle.
 
-const TOKEN_URL = 'https://auth.atlassian.com/oauth/token';
-const ACCESSIBLE_RESOURCES_URL = 'https://api.atlassian.com/oauth/token/accessible-resources';
+// Resolved rather than constant so an end-to-end test can point the API at a
+// fake Atlassian. See atlassian-endpoints.ts: the override is fenced behind two
+// independent flags, a private-address check and a production boot guard.
+
 
 // A token is never presented to Atlassian at the exact instant it expires:
 // callers that check `expiresAt` against "now" get a 60s buffer to act in.
@@ -278,7 +281,7 @@ async function requestTokens(
 
   let response: Response;
   try {
-    response = await fetchImpl(TOKEN_URL, {
+    response = await fetchImpl(atlassianEndpoints().tokenUrl, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -379,7 +382,7 @@ export async function listAccessibleResources(
 
   let response: Response;
   try {
-    response = await fetchImpl(ACCESSIBLE_RESOURCES_URL, {
+    response = await fetchImpl(atlassianEndpoints().accessibleResourcesUrl, {
       method: 'GET',
       headers: {
         Authorization: `Bearer ${accessToken}`,
