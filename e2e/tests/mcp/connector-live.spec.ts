@@ -76,7 +76,9 @@ test.describe('MCP connector lifecycle', () => {
     expect(result.stdout).toContain(fixture.owner.email);
     expect(result.stdout).toContain('(OWNER)');
     expect(result.stdout).toContain('MCP Harness Charity');
-    expect(result.stdout).toContain('withheld (default)');
+    // The scope is recorded on the session by the API now, not held by the
+    // process, so connect reports what it asked the session to carry.
+    expect(result.stdout).toContain('Personal data: WITHHELD');
 
     const token = storedRefreshToken(credentialFile);
     expect(token, 'a refresh token must be stored').toBeTruthy();
@@ -297,6 +299,7 @@ async function connectAs(
   label: string,
   account: { email: string; password: string },
   accessLevel?: ConnectorAccessLevel,
+  dataScope?: 'withheld' | 'full',
 ): Promise<string> {
   const credentialFile = credentialFileFor(label);
   const result = await connectConnector({
@@ -305,6 +308,7 @@ async function connectAs(
     password: account.password,
     credentialFile,
     ...(accessLevel ? { accessLevel } : {}),
+    ...(dataScope ? { dataScope } : {}),
   });
   expect(result.code, `connect as ${label} failed: ${result.stderr}`).toBe(0);
   return credentialFile;
@@ -388,11 +392,16 @@ test.describe('Personal-data gate, closed (the default)', () => {
 });
 
 test.describe('Personal-data gate, open', () => {
-  test('the withheld fields really were there', async () => {
+  test('a session connected to see personal data sees it', async () => {
+    // The scope belongs to the session now, so this needs its own credential
+    // rather than the same one with a flag: the flag cannot reopen what the
+    // session closed. Connected as the second administrator, because the
+    // sign-in route limits attempts per email address.
+    const credentialFile = await connectAs('gate-open', fixture.admin, 'admin', 'full');
+
     const connector = await openConnector({
       apiUrl: API_BASE_URL,
-      credentialFile: credentialFileFor('gate-closed'),
-      allowPersonalData: true,
+      credentialFile,
     });
     try {
       const board = await callTool(connector.client, 'board_register');
@@ -423,7 +432,7 @@ test.describe('Personal-data gate, open', () => {
 
 test.describe('Tenant isolation', () => {
   test('the other charity sees its own trustee and never this one', async () => {
-    const credentialFile = await connectAs('org-b', fixture.orgB);
+    const credentialFile = await connectAs('org-b', fixture.orgB, undefined, 'full');
     const connector = await openConnector({
       apiUrl: API_BASE_URL,
       credentialFile,
@@ -462,21 +471,25 @@ test.describe('Roles', () => {
     });
   }
 
-  test('a member can open the gate, which the API does not police', async () => {
-    const connector = await openConnector({
+  test('a member may not hold a session that sees personal data', async () => {
+    // This used to be the other way round, and was recorded as an open
+    // question for the data protection officer: the gate was a flag in a
+    // configuration file, so any role could open it. The API now refuses the
+    // scope below the role floor, at the password.
+    const refused = await connectConnector({
       apiUrl: API_BASE_URL,
-      credentialFile: credentialFileFor('member'),
-      allowPersonalData: true,
+      email: fixture.member.email,
+      password: fixture.member.password,
+      credentialFile: credentialFileFor('member-full'),
+      dataScope: 'full',
     });
-    try {
-      const board = await callTool(connector.client, 'board_register');
-      // Live evidence for the spec's open question to the data protection
-      // officer: reads are not role-gated by the API, so the client-side flag
-      // alone decides whether a trustee's home address reaches a model.
-      expect(board.text).toContain('PD-CANARY-ADDRESS');
-    } finally {
-      await connector.close();
-    }
+
+    expect(refused.code, 'connecting must fail').not.toBe(0);
+    expect(refused.stderr).toMatch(/role may not hold a connector session that sees personal data/);
+
+    // And nothing was left behind that could be used.
+    const stored = storedRefreshToken(credentialFileFor('member-full'));
+    expect(stored, 'a refused sign-in must store no credential').toBeFalsy();
   });
 });
 
@@ -574,8 +587,8 @@ test.describe('Phase 1: the whole readable surface', () => {
 
     const open = await openConnector({
       apiUrl: API_BASE_URL,
-      credentialFile: credentialFileFor('phase1'),
-      allowPersonalData: true,
+      // The session that may see personal data, not the one that withholds it.
+      credentialFile: credentialFileFor('gate-open'),
     });
     try {
       const result = await callTool(open.client, 'dashboard_overview');
@@ -589,7 +602,8 @@ test.describe('Phase 1: the whole readable surface', () => {
   });
 
   test('the gate opens for every tool, proving the closed-gate absences were filtering', async () => {
-    const credentialFile = credentialFileFor('phase1');
+    // The session connected to see personal data, not the one that withholds it.
+    const credentialFile = credentialFileFor('gate-open');
     const connector = await openConnector({
       apiUrl: API_BASE_URL,
       credentialFile,
@@ -771,14 +785,16 @@ test.describe('Phase B: legible to the agent', () => {
     } finally {
       await closed.close();
     }
+    // A session that may see personal data names the person; the withheld one
+    // above did not. The flag cannot make that difference any more.
     const open = await openConnector({
       apiUrl: API_BASE_URL,
-      credentialFile: phaseBCredential,
-      allowPersonalData: true,
+      credentialFile: credentialFileFor('gate-open'),
     });
     try {
       const info = await callTool(open.client, 'session_info');
-      expect(info.text).toContain(fixture.owner.email);
+      expect(info.text).toContain(fixture.admin.email);
+      expect(info.text).toContain('"dataScope": "full"');
     } finally {
       await open.close();
     }
@@ -1343,6 +1359,7 @@ test.describe('Connector writes and approval', () => {
       apiUrl: API_BASE_URL,
       email: fixture.writer.email,
       password: fixture.writer.password,
+      dataScope: 'full',
       credentialFile: adminCredentialFile,
       accessLevel: 'admin',
     });

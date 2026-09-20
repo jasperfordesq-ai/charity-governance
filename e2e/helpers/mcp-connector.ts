@@ -67,6 +67,8 @@ export async function connectConnector(options: {
   password: string;
   credentialFile: string;
   accessLevel?: ConnectorAccessLevel;
+  /** What the session may see. Absent leaves the connector's own default. */
+  dataScope?: 'withheld' | 'full';
 }): Promise<ConnectorRunResult> {
   const args = [
     'connect',
@@ -78,6 +80,7 @@ export async function connectConnector(options: {
   // Omitted rather than defaulted: a test that never passes one is then
   // exercising the connector's own default, which is the case worth covering.
   if (options.accessLevel) args.push('--access-level', options.accessLevel);
+  if (options.dataScope) args.push('--data-scope', options.dataScope);
   return runConnector(args, {
     credentialFile: options.credentialFile,
     stdinText: `${options.password}\n`,
