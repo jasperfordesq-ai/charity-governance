@@ -158,6 +158,20 @@ enum DocumentPublicationTerminalReason {
   PERMANENT_TARGET_REF_REJECTED
 }
 
+// Why a publication is queued.
+//
+// A row could only ever mean "a document was just uploaded" until republishing
+// on change gave the same row a second and third life. An operator looking at a
+// stuck row needs the difference: a CREATE that never landed is a page that
+// does not exist, a METADATA that never landed is a page whose recorded
+// approval dates are stale, and a FILE that never landed is a page carrying the
+// previous version of the document.
+enum DocumentPublicationReason {
+  CREATE
+  METADATA
+  FILE
+}
+
 // What the reconcile job last saw when it read the mirrored page in Confluence.
 //
 // TRASHED and GONE are separate values because Confluence's v2 API cannot tell
@@ -1277,6 +1291,13 @@ model DocumentPublication {
   // the three-state machine) live as CHECK constraints in the migration
   // 20260919140000_add_document_publication.
   state           DocumentPublicationState           @default(PENDING)
+  // `requeuedAt` is NULL on a row published only once, which is the common case
+  // and reads correctly as "never republished". A CHECK keeps the pair honest:
+  // a re-queue cannot be a CREATE, which stops a re-queue path from forgetting
+  // to say why and leaving a row claiming to be a fresh upload while pointing
+  // at a page that already exists.
+  reason          DocumentPublicationReason          @default(CREATE)
+  requeuedAt      DateTime?
   attempts        Int                                @default(0)
   lastError       String?
   lastAttemptAt   DateTime?

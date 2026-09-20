@@ -12,9 +12,12 @@ import {
 import {
   createPage as createPageDefault,
   findPageByTitle as findPageByTitleDefault,
+  getPage as getPageDefault,
   setContentProperty as setContentPropertyDefault,
+  updatePage as updatePageDefault,
   type ConfluencePage,
   type CreatePageInput,
+  type UpdatePageInput,
 } from './confluence-pages.js';
 import {
   uploadAttachment as uploadAttachmentDefault,
@@ -149,6 +152,9 @@ export type DocumentPublicationTerminalReason =
   | 'PERMANENT_CONTENT_PROPERTY_REJECTED'
   | 'PERMANENT_TARGET_REF_REJECTED';
 
+/** Mirrors the Prisma enum of the same name. */
+export type DocumentPublicationReason = 'CREATE' | 'METADATA' | 'FILE';
+
 export type DocumentPublicationRecord = {
   id: string;
   organisationId: string;
@@ -162,6 +168,9 @@ export type DocumentPublicationRecord = {
   pageTitle: string | null;
   publishedAt: Date | null;
   state: DocumentPublicationState;
+  /** Why this publication is queued. See DocumentPublicationReason in the schema. */
+  reason?: DocumentPublicationReason;
+  requeuedAt?: Date | null;
   attempts: number;
   claimedAt: Date | null;
   nextAttemptAt: Date | null;
@@ -572,6 +581,8 @@ export type ConfluencePublishOperations = {
   createPage(client: ConfluenceClient, input: CreatePageInput): Promise<ConfluencePage>;
   uploadAttachment(client: ConfluenceClient, input: UploadAttachmentInput): Promise<ConfluenceAttachment>;
   setContentProperty(client: ConfluenceClient, pageId: string, key: string, value: unknown): Promise<void>;
+  getPage(client: ConfluenceClient, pageId: string): Promise<ConfluencePage | null>;
+  updatePage(client: ConfluenceClient, input: UpdatePageInput): Promise<ConfluencePage>;
 };
 
 const DEFAULT_OPERATIONS: ConfluencePublishOperations = {
@@ -579,6 +590,8 @@ const DEFAULT_OPERATIONS: ConfluencePublishOperations = {
   createPage: createPageDefault,
   uploadAttachment: uploadAttachmentDefault,
   setContentProperty: setContentPropertyDefault,
+  getPage: getPageDefault,
+  updatePage: updatePageDefault,
 };
 
 /** Everything the mapping needs, plus where the bytes are and what they are. */
@@ -796,11 +809,29 @@ export function createConfluencePublisher(deps: ConfluencePublisherDeps): Publis
 
     const page = await resolvePage({ client, operations, row, target, doc, title, signal });
 
+    // REPUBLISHING A PAGE THAT ALREADY EXISTS.
+    //
+    // The attachment and the content property look after themselves on a
+    // re-queue: uploading the same filename creates a new attachment version,
+    // and `setContentProperty` reads the existing record and PUTs its
+    // successor. The page's own title and body do not — nothing rewrote them,
+    // so a charity that renamed a document saw the old name on the Confluence
+    // page for ever, while CharityPilot's own record and the erasure target
+    // both moved on.
+    //
+    // Only when it actually differs. A no-op `updatePage` would publish a new
+    // page version on every metadata edit, filling a charity's page history
+    // with revisions in which nothing visibly changed.
+    const refreshed =
+      page.title === title
+        ? page
+        : await refreshPage({ client, operations, pageId: page.id, doc, title, spaceKey: target.spaceKey, signal });
+
     const recorded: PublishedPage = {
       cloudId: target.cloudId,
       spaceId: target.spaceId,
-      pageId: page.id,
-      pageTitle: page.title,
+      pageId: refreshed.id,
+      pageTitle: refreshed.title,
     };
 
     // The arbiter, on what is about to be stored — before it is stored, and
@@ -874,6 +905,74 @@ function assertRecordableId(value: string, field: string): void {
       'Nothing was published. This will not improve on retry.',
     { field },
   );
+}
+
+/**
+ * Rewrites an existing page's title and body to match the document.
+ *
+ * THE VERSION IS READ, NEVER GUESSED. Confluence requires `current + 1` and
+ * answers 409 on a mismatch, so the page is read immediately before the write.
+ * The row's own record of the page is not a substitute: it carries a title, not
+ * a version, and the version may have moved for reasons nothing here caused —
+ * somebody edited the page in Confluence, or a previous attempt of this very
+ * publication succeeded and then failed to record.
+ *
+ * ONE RETRY, NOT A LOOP. A 409 here means the version moved between the read
+ * and the write, and re-reading once resolves the ordinary case (a concurrent
+ * reconcile, a person saving in the browser). A loop would keep a publish
+ * attempt fighting a human who is actively editing the page, and losing to
+ * them is the correct outcome: the next re-queue will carry the change, and
+ * `updatePage` is deliberately the one operation here that does not insist.
+ */
+async function refreshPage(input: {
+  client: ConfluenceClient;
+  operations: ConfluencePublishOperations;
+  pageId: string;
+  doc: PublicationSource;
+  title: string;
+  spaceKey: string;
+  signal?: AbortSignal;
+}): Promise<{ id: string; title: string }> {
+  const { client, operations, pageId, doc, title, spaceKey, signal } = input;
+
+  const attemptRefresh = async (): Promise<{ id: string; title: string }> => {
+    assertNotAborted(signal);
+    const current = await operations.getPage(client, pageId);
+    if (current === null) {
+      // The page this row names is gone from Confluence. Not this function's
+      // decision to make: creating a replacement here would quietly undo a
+      // deletion somebody made in their own site, which is the DPO's whole
+      // concern about a mirror that writes back. The reconcile job records it
+      // as TRASHED or GONE and a human decides.
+      throw new AppError(
+        409,
+        'CONFLUENCE_PAGE_MISSING_ON_REFRESH',
+        'The Confluence page this document was published to no longer exists, so its title and ' +
+          'body were not rewritten. Nothing was recreated: a page removed in Confluence is not ' +
+          "CharityPilot's to restore.",
+        { pageId },
+      );
+    }
+
+    assertNotAborted(signal);
+    const updated = await operations.updatePage(client, {
+      pageId,
+      title,
+      bodyStorage: publicationBody(doc),
+      expectedVersion: current.version,
+    });
+    return { id: updated.id, title: updated.title };
+  };
+
+  try {
+    return await attemptRefresh();
+  } catch (error) {
+    if (error instanceof AppError && error.code === 'CONFLUENCE_PAGE_VERSION_CONFLICT') {
+      return attemptRefresh();
+    }
+    if (isForbidden(error)) throw publishForbidden('update a page', spaceKey, error);
+    throw error;
+  }
 }
 
 /**

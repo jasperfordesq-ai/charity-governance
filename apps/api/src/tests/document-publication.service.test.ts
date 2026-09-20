@@ -90,6 +90,8 @@ function publicationRow(overrides: Partial<DocumentPublicationRecord> = {}): Doc
     retiredAt: null,
     retiredStoragePath: null,
     state: 'PENDING',
+    reason: 'CREATE',
+    requeuedAt: null,
     attempts: 0,
     claimedAt: null,
     nextAttemptAt: new Date('2026-09-19T11:00:00.000Z'),
@@ -264,6 +266,16 @@ function spyDeps(calls: string[], overrides: SpyOverrides = {}): ConfluencePubli
           await overrides.operations.setContentProperty(client, pageId, key, value);
         }
       },
+      getPage: async (client, pageId) => {
+        record(`getPage:${pageId}`);
+        return overrides.operations?.getPage ? overrides.operations.getPage(client, pageId) : PAGE;
+      },
+      updatePage: async (client, input) => {
+        record(`updatePage:${input.pageId}:${input.title}:v${input.expectedVersion}`);
+        return overrides.operations?.updatePage
+          ? overrides.operations.updatePage(client, input)
+          : { ...PAGE, title: input.title, version: input.expectedVersion + 1 };
+      },
     },
   };
 }
@@ -282,6 +294,16 @@ function runPublisher(
     signal: options.signal,
     recordPage: options.recordPage ?? (async () => undefined),
   });
+}
+
+/** Resolves with whatever a promise rejected with, so the error can be inspected. */
+async function captureRejection(promise: Promise<unknown>): Promise<unknown> {
+  try {
+    await promise;
+  } catch (error) {
+    return error;
+  }
+  throw new assert.AssertionError({ message: 'expected the promise to reject, but it resolved' });
 }
 
 function appError(error: unknown): AppError {
@@ -1411,4 +1433,138 @@ test('a non-numeric or negative Retry-After is ignored rather than trusted', () 
     assert.equal(confluenceRetryAfterMs(error), undefined, `for ${String(seconds)}`);
   }
   assert.equal(confluenceRetryAfterMs(new Error('plain')), undefined);
+});
+
+// ---------------------------------------------------------------------------
+// Republishing a page that already exists.
+//
+// A re-queued row keeps its pageId, so the publisher adopts rather than
+// creates. The attachment and the content property look after themselves —
+// the same filename makes a new attachment version, and setContentProperty
+// reads the existing record and PUTs its successor. The page's own title did
+// not, which is what these cover: a charity that renamed a document saw the old
+// name on the Confluence page for ever while CharityPilot's record moved on.
+// ---------------------------------------------------------------------------
+
+test('a re-queued row whose title has changed rewrites the page, and reports the new title', async () => {
+  const calls: string[] = [];
+  const outcome = await runPublisher(spyDeps(calls), {
+    row: publicationRow({ pageId: 'page-1', pageTitle: 'The Old Name', reason: 'METADATA' }),
+  });
+
+  // The version is READ immediately before the write. Confluence requires
+  // current + 1 and 409s on a mismatch, and the row carries a title but no
+  // version, so there is nothing here to guess from.
+  assert.ok(calls.includes('getPage:page-1'), 'the current version must be read, not assumed');
+  assert.ok(
+    calls.some((call) => call.startsWith(`updatePage:page-1:${TITLE}:v1`)),
+    `expected the page to be rewritten to ${TITLE}, got ${calls.join(', ')}`,
+  );
+  assert.equal(outcome.pageTitle, TITLE, 'the row must record the title the page now has');
+  assert.ok(!calls.some((call) => call.startsWith('createPage')), 'nothing may be created here');
+});
+
+test('a re-queue whose title is unchanged does not publish a new page version', async () => {
+  const calls: string[] = [];
+  await runPublisher(spyDeps(calls), {
+    row: publicationRow({ pageId: 'page-1', pageTitle: TITLE, reason: 'METADATA' }),
+  });
+
+  // A no-op updatePage would still bump the page version, filling a charity's
+  // page history with revisions in which nothing visibly changed.
+  assert.ok(!calls.some((call) => call.startsWith('updatePage')), calls.join(', '));
+  assert.ok(!calls.some((call) => call.startsWith('getPage')), 'and it must not even read to decide');
+  // The metadata is still rewritten — that is the point of a METADATA re-queue.
+  assert.ok(calls.some((call) => call.startsWith('setContentProperty:page-1')));
+  assert.ok(calls.some((call) => call.startsWith('uploadAttachment:page-1')));
+});
+
+test('a first publish never calls updatePage', async () => {
+  const calls: string[] = [];
+  await runPublisher(spyDeps(calls), { row: publicationRow({ pageId: null }) });
+
+  assert.ok(calls.some((call) => call.startsWith('createPage')));
+  assert.ok(!calls.some((call) => call.startsWith('updatePage')), calls.join(', '));
+});
+
+test('a version conflict on the refresh is re-read and retried exactly once', async () => {
+  const calls: string[] = [];
+  let updates = 0;
+  let version = 4;
+
+  const outcome = await runPublisher(
+    spyDeps(calls, {
+      operations: {
+        getPage: async () => ({ ...PAGE, version }),
+        updatePage: async (_client, input) => {
+          updates += 1;
+          if (updates === 1) {
+            // Somebody saved the page between the read and the write.
+            version = 9;
+            throw new AppError(409, 'CONFLUENCE_PAGE_VERSION_CONFLICT', 'stale version', {
+              pageId: input.pageId,
+            });
+          }
+          return { ...PAGE, title: input.title, version: input.expectedVersion + 1 };
+        },
+      },
+    }),
+    { row: publicationRow({ pageId: 'page-1', pageTitle: 'The Old Name', reason: 'METADATA' }) },
+  );
+
+  assert.equal(updates, 2, 'the conflict must be retried');
+  assert.ok(
+    calls.filter((call) => call.startsWith('getPage')).length === 2,
+    'the retry must RE-READ the version rather than resending the stale one',
+  );
+  assert.ok(calls.some((call) => call.endsWith(':v9')), `expected the second write at v9: ${calls.join(', ')}`);
+  assert.equal(outcome.pageTitle, TITLE);
+});
+
+test('a second version conflict is not retried again', async () => {
+  const calls: string[] = [];
+  let updates = 0;
+
+  const error = appError(
+    await captureRejection(
+      runPublisher(
+        spyDeps(calls, {
+          operations: {
+            updatePage: async (_client, input) => {
+              updates += 1;
+              throw new AppError(409, 'CONFLUENCE_PAGE_VERSION_CONFLICT', 'stale version', {
+                pageId: input.pageId,
+              });
+            },
+          },
+        }),
+        { row: publicationRow({ pageId: 'page-1', pageTitle: 'The Old Name', reason: 'METADATA' }) },
+      ),
+    ),
+  );
+
+  // Losing to a human who is actively editing the page is the correct outcome:
+  // the next re-queue carries the change, and a loop would have a publish
+  // attempt fight them.
+  assert.equal(updates, 2, 'one retry, not a loop');
+  assert.equal(error.code, 'CONFLUENCE_PAGE_VERSION_CONFLICT');
+});
+
+test('a page that has vanished from Confluence is not recreated by a refresh', async () => {
+  const calls: string[] = [];
+
+  const error = appError(
+    await captureRejection(
+      runPublisher(
+        spyDeps(calls, { operations: { getPage: async () => null } }),
+        { row: publicationRow({ pageId: 'page-1', pageTitle: 'The Old Name', reason: 'METADATA' }) },
+      ),
+    ),
+  );
+
+  // Recreating it here would quietly undo a deletion somebody made in their own
+  // site, which is the DPO's whole concern about a mirror that writes back.
+  assert.equal(error.code, 'CONFLUENCE_PAGE_MISSING_ON_REFRESH');
+  assert.ok(!calls.some((call) => call.startsWith('createPage')), 'nothing may be recreated');
+  assert.ok(!calls.some((call) => call.startsWith('updatePage')));
 });

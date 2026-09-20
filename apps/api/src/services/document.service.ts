@@ -736,6 +736,17 @@ export class DocumentService {
       });
     });
 
+    // The mirror's metadata is stale from this moment until it is republished.
+    // The content property carries the approved date, the next review date and
+    // the minute reference — exactly the fields this update can change — so a
+    // charity editing an approval date and seeing the old one on the Confluence
+    // page is reading a governance record that disagrees with CharityPilot's.
+    //
+    // Outside the transaction and best-effort, for the same reason the upload
+    // path's enqueue is: the authoritative Irish copy is already updated, and a
+    // mirror that is briefly behind is recoverable where a failed edit is not.
+    await this.enqueueConfluencePublication(organisationId, id, 'METADATA');
+
     return publicDocument(updated);
   }
 
@@ -830,7 +841,11 @@ export class DocumentService {
    * rethrown. See the comment at the call site for why this cannot even run
    * inside the document's own creation transaction.
    */
-  private async enqueueConfluencePublication(organisationId: string, documentId: string): Promise<void> {
+  private async enqueueConfluencePublication(
+    organisationId: string,
+    documentId: string,
+    reason: 'CREATE' | 'METADATA' | 'FILE' = 'CREATE',
+  ): Promise<void> {
     try {
       const target = await confluencePublishTargetForOrganisation(
         this.prisma as unknown as PublishTargetClient,
@@ -838,9 +853,61 @@ export class DocumentService {
       );
       if (target === null) return;
 
-      await publicationDelegate(this.prisma).create({
-        data: { organisationId, documentId, provider: 'confluence' },
+      if (reason === 'CREATE') {
+        await publicationDelegate(this.prisma).create({
+          data: { organisationId, documentId, provider: 'confluence' },
+        });
+        return;
+      }
+
+      // A RE-QUEUE REUSES THE ROW, and must, because the row is the only thing
+      // that remembers which Confluence page this document became. A second
+      // row would publish a second page and leave the first orphaned with a
+      // charity's governance document on it.
+      //
+      // `attempts: 0` and a cleared `lastError`/`deadLetteredAt`: a change is a
+      // new piece of work, and carrying the previous attempt count would let
+      // one bad afternoon dead-letter every future edit of that document. The
+      // page identifiers are deliberately NOT cleared — the publisher adopts
+      // `pageId` without a lookup, which is exactly how it republishes rather
+      // than creating again.
+      //
+      // Scoped to states that can be re-queued. A RETIRED row belongs to a
+      // deleted document and must never be revived: reviving one would
+      // republish a document the charity deleted, which is the precise thing
+      // the owner's 2026-09-19 ruling exists to prevent.
+      const requeued = await publicationDelegate(this.prisma).updateMany({
+        where: {
+          documentId,
+          organisationId,
+          provider: 'confluence',
+          state: { in: ['PROCESSED', 'DEAD_LETTER'] },
+        },
+        data: {
+          state: 'PENDING',
+          reason,
+          requeuedAt: new Date(),
+          attempts: 0,
+          lastError: null,
+          nextAttemptAt: new Date(),
+          claimedAt: null,
+          deadLetteredAt: null,
+          terminalReason: null,
+          alertClaimToken: null,
+          alertClaimedAt: null,
+          alertedAt: null,
+          processedAt: null,
+        },
       });
+
+      // Nothing to re-queue means this document was never published — the
+      // charity chose a space after uploading it, or the original publish is
+      // still PENDING and will carry the change anyway. Creating a row here
+      // would be right in the first case and a duplicate in the second, and
+      // the two are not distinguishable from a count. The reconcile job's
+      // orphan sweep and the next upload both cover the first case, so doing
+      // nothing is the answer that cannot be wrong.
+      if (requeued.count === 0) return;
     } catch (error) {
       // Log and move on. The document is already safely in Supabase; a
       // charity that cannot be mirrored on this upload is simply not
