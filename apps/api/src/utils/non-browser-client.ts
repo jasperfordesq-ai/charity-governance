@@ -3,6 +3,10 @@ import {
   ACCESS_TOKEN_COOKIE,
   REFRESH_TOKEN_COOKIE,
 } from "./auth-cookie-names.js";
+import {
+  OWNER_ACCESS_TOKEN_COOKIE,
+  OWNER_REFRESH_TOKEN_COOKIE,
+} from "./owner-cookies.js";
 
 /**
  * Decides whether a request came from a non-browser client.
@@ -90,7 +94,13 @@ export function assertNonBrowserClient(
 
   if (
     request.cookies?.[ACCESS_TOKEN_COOKIE] ||
-    request.cookies?.[REFRESH_TOKEN_COOKIE]
+    request.cookies?.[REFRESH_TOKEN_COOKIE] ||
+    // The operator console's cookies count as browser evidence for exactly the
+    // same reason the tenant ones do, and are checked here rather than only on
+    // the owner routes: a connector never holds either, whichever realm it is
+    // signing in to, so there is no case where allowing one is right.
+    request.cookies?.[OWNER_ACCESS_TOKEN_COOKIE] ||
+    request.cookies?.[OWNER_REFRESH_TOKEN_COOKIE]
   ) {
     return refuse();
   }

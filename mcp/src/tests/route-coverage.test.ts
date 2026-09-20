@@ -4,6 +4,7 @@ import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, resolve } from 'node:path';
 import { TOOLS } from '../tools.js';
+import { OPERATOR_TOOLS } from '../operator-tools.js';
 import { EXCLUDED_ROUTES } from '../route-coverage.js';
 
 const here = dirname(fileURLToPath(import.meta.url));
@@ -85,7 +86,7 @@ test('the route parser really finds routes', () => {
 });
 
 test('every readable route is either a tool or an exclusion with a reason', () => {
-  const toolPaths = new Set(TOOLS.map((tool) => tool.path));
+  const toolPaths = new Set([...TOOLS, ...OPERATOR_TOOLS].map((tool) => tool.path));
   const excludedPaths = new Set(EXCLUDED_ROUTES.map((entry) => entry.path));
 
   const uncovered = discoverGetRoutes().filter(
@@ -116,7 +117,7 @@ test('no exclusion is stale', () => {
 });
 
 test('a route is never both a tool and an exclusion', () => {
-  const toolPaths = new Set(TOOLS.map((tool) => tool.path));
+  const toolPaths = new Set([...TOOLS, ...OPERATOR_TOOLS].map((tool) => tool.path));
   const both = EXCLUDED_ROUTES.filter((entry) => toolPaths.has(entry.path)).map((e) => e.path);
   assert.deepEqual(both, [], 'A route cannot be both exposed and excluded.');
 });

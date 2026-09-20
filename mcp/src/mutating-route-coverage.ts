@@ -74,27 +74,6 @@ export const EXCLUDED_MUTATIONS: readonly ExcludedMutation[] = [
       + 'console is the last thing that should ever be reachable from a tool.',
     notInGroupIndex: true,
   },
-  {
-    route: 'POST /api/v1/owner/tenants',
-    reason:
-      'Creates a charity on the platform. Cross-tenant by definition; a connector that can '
-      + 'reach it is no longer single-tenant.',
-    notInGroupIndex: true,
-  },
-  {
-    route: 'PATCH /api/v1/owner/tenants/:id/configuration',
-    reason:
-      'Sets another charity’s document storage provider, alpha opt-in and plan. Decided by '
-      + 'a platform operator on the charity’s behalf, which is a different authority from '
-      + 'the one a connector holds; a charity changes what it can change through its own '
-      + 'settings.',
-    notInGroupIndex: true,
-  },
-  {
-    route: 'POST /api/v1/owner/tenants/:id/lifecycle',
-    reason: 'Suspends or closes a whole charity. Cross-tenant, with the same reasoning.',
-    notInGroupIndex: true,
-  },
 
   /* --- team membership and ownership ------------------------------------ */
   {
@@ -280,6 +259,42 @@ export const EXCLUDED_MUTATIONS: readonly ExcludedMutation[] = [
       'Grants an approval after checking a password typed at a terminal. The entire value of '
       + 'per-action approval is that the agent which asked for the action cannot also grant '
       + 'it, so this must never be reachable as a tool.',
+    notInGroupIndex: true,
+  },
+
+  // The operator realm's four, excluded for exactly the reasons the four above
+  // are, and listed separately rather than folded into them so that a change
+  // to one realm's sign-in cannot silently be taken as a decision about the
+  // other's.
+  {
+    route: 'POST /api/v1/owner/auth/connector/login',
+    reason:
+      'How the operator connector signs in, driven by the connect command. It also takes '
+      + 'the authenticator code, which is the one thing that must never be reachable by an '
+      + 'agent: a tool that could sign in as a platform operator would defeat both the '
+      + 'password prompt and the second factor.',
+    notInGroupIndex: true,
+  },
+  {
+    route: 'POST /api/v1/owner/auth/connector/refresh',
+    reason:
+      'Operator session rotation, handled inside the connector on every call. Exposing it '
+      + 'as a tool would let an agent spend the refresh token deliberately.',
+    notInGroupIndex: true,
+  },
+  {
+    route: 'POST /api/v1/owner/auth/connector/logout',
+    reason:
+      'How disconnect revokes the operator session. A tool would let an agent sign the '
+      + 'operator out.',
+    notInGroupIndex: true,
+  },
+  {
+    route: 'POST /api/v1/owner/auth/connector/approve',
+    reason:
+      'Grants an operator approval after checking a password typed at a terminal. Closing a '
+      + 'charity is the most destructive action in the product; an agent that could grant '
+      + 'its own approval for it would leave nothing standing in the way.',
     notInGroupIndex: true,
   },
 

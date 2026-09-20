@@ -1627,6 +1627,7 @@ model PlatformOperator {
 
   recoveryCodes PlatformOperatorRecoveryCode[]
   sessions      PlatformOperatorSession[]
+  approvals     OperatorActionApproval[]
   createdAt     DateTime                       @default(now())
   updatedAt     DateTime                       @updatedAt
 }
@@ -1647,6 +1648,17 @@ model PlatformOperatorRecoveryCode {
   @@index([operatorId, usedAt])
 }
 
+enum OperatorSessionClientKind {
+  WEB
+  MCP_CONNECTOR
+}
+
+enum OperatorSessionAccessLevel {
+  READ
+  WRITE
+  ADMIN
+}
+
 model PlatformOperatorSession {
   id         String           @id @default(cuid())
   operatorId String
@@ -1656,5 +1668,62 @@ model PlatformOperatorSession {
   expiresAt  DateTime
   createdAt  DateTime         @default(now())
 
+  /// Decided by the route that mints the session, never by anything the caller
+  /// sends, and pinned per family by guard_platform_operator_session. It is
+  /// what stops a browser console session being driven by the connector, and a
+  /// connector credential being replayed in the console.
+  ///
+  /// The same trigger refuses a MCP_CONNECTOR session outright when the
+  /// operator has no second factor enrolled: a credential an agent installs,
+  /// which can close a charity, may not rest on a password alone.
+  clientKind  OperatorSessionClientKind  @default(WEB)
+  /// How much authority this session carries. Chosen at connect, gated by the
+  /// password, pinned per family. There is deliberately no dataScope beside
+  /// it: the operator realm exposes no personal data, so the field could only
+  /// suggest that rule is configurable.
+  accessLevel OperatorSessionAccessLevel @default(ADMIN)
+
+  /// Stable for the life of one sign-in, across every rotation. An approval
+  /// bound to the session row id would be dead before anyone could type a
+  /// password, which is the one thing it exists to wait for.
+  familyId        String   @default(uuid()) @db.Uuid
+  familyCreatedAt DateTime @default(now())
+
   @@index([operatorId, revokedAt, expiresAt])
+  @@index([familyId])
+}
+
+/// One human approval for one operator action, bound to the exact request.
+///
+/// Separate from AuthActionApproval rather than a generalisation of it. That
+/// table is bound to an organisation twice — by organisationId and again by
+/// the composite foreign key on (userId, organisationId) — and an operator is
+/// not a User and belongs to no organisation. Relaxing it would mean two
+/// nullable identity columns and a check saying exactly one is set: a
+/// branching invariant on the row that stands between an agent and a deletion.
+model OperatorActionApproval {
+  id              String           @id @default(cuid())
+  operatorId      String
+  operator        PlatformOperator @relation(fields: [operatorId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  sessionFamilyId String           @db.Uuid
+  requestDigest   String
+  /// Built by the API from the route it matched, never from the request body.
+  summary         String
+  method          String
+  routePattern    String
+  /// The tenant the action is about, when the route names one. Deliberately
+  /// not a foreign key: an approval is evidence of what was asked, and has to
+  /// outlive the row it refers to.
+  resourceId      String?
+  /// The tenant's name as it read when the approval was minted, so the person
+  /// approving sees which charity they are about to close.
+  resourceLabel   String?
+  createdAt       DateTime         @default(now())
+  expiresAt       DateTime
+  approvedAt      DateTime?
+  consumedAt      DateTime?
+
+  @@unique([id, operatorId])
+  @@index([sessionFamilyId, requestDigest])
+  @@index([expiresAt])
 }

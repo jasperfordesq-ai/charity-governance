@@ -165,6 +165,7 @@ const DISPOSABLE_DATABASE_RESET_TABLES = Object.freeze([
   "PlatformOperatorRecoveryCode",
   "PlatformOperator",
   "PlatformOperatorSession",
+  "OperatorActionApproval",
 ]);
 
 const PUBLIC_TABLE_INVENTORY_SQL = `

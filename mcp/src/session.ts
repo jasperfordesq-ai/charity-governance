@@ -1,5 +1,5 @@
 import type { CredentialStore } from './credentials.js';
-import type { AccessLevel, DataScope } from './config.js';
+import type { AccessLevel, DataScope, Realm } from './config.js';
 import { registerSecret } from './redact.js';
 import { CONNECTOR_VERSION } from './version.js';
 
@@ -22,12 +22,34 @@ export class NotConnectedError extends Error {
 }
 
 export interface SessionIdentity {
+  /** Which credential realm this identity belongs to. */
+  realm: Realm;
   email: string;
   name: string;
-  role: string;
-  organisationId: string;
-  organisationName: string;
+  /**
+   * The charity role. Absent in the operator realm, which has no roles: an
+   * operator is an operator. Optional rather than a placeholder string, so a
+   * caller that prints it has to decide what to print when there is none.
+   */
+  role?: string;
+  /** Absent in the operator realm, which belongs to no organisation. */
+  organisationId?: string;
+  organisationName?: string;
+  /** Operator realm only: whether the account's second factor is enrolled. */
+  secondFactorEnrolled?: boolean;
 }
+
+/**
+ * Where each realm's connector routes live.
+ *
+ * The two sets are deliberately identical in shape. They differ in prefix and
+ * in what the login body carries, and in nothing else, so the token engine
+ * below does not branch on the realm at all.
+ */
+const REALM_PREFIX: Record<Realm, string> = {
+  charity: '/api/v1/auth/connector',
+  operator: '/api/v1/owner/auth/connector',
+};
 
 /** One approval as the API describes it, for a person to read before granting it. */
 export interface ApprovalPreview {
@@ -47,6 +69,11 @@ interface SessionOptions {
   accessLevel?: AccessLevel;
   dataScope?: DataScope;
   fetchImpl?: typeof fetch;
+  realm?: Realm;
+  /** Operator realm only: the authenticator code, typed once at connect. */
+  code?: string | undefined;
+  /** Operator realm only: a recovery code, when the authenticator is gone. */
+  recoveryCode?: string | undefined;
 }
 
 interface ConnectorTokens {
@@ -60,6 +87,10 @@ export class Session {
   readonly #dataScope: DataScope;
   readonly #store: CredentialStore;
   readonly #fetch: typeof fetch;
+  readonly #realm: Realm;
+  readonly #prefix: string;
+  readonly #code: string | undefined;
+  readonly #recoveryCode: string | undefined;
   #accessToken: string | null = null;
   #identity: SessionIdentity | null = null;
   #refreshInFlight: Promise<string> | null = null;
@@ -75,6 +106,14 @@ export class Session {
     this.#dataScope = options.dataScope ?? 'withheld';
     this.#store = options.store;
     this.#fetch = options.fetchImpl ?? fetch;
+    this.#realm = options.realm ?? 'charity';
+    this.#prefix = REALM_PREFIX[this.#realm];
+    this.#code = options.code;
+    this.#recoveryCode = options.recoveryCode;
+  }
+
+  realm(): Realm {
+    return this.#realm;
   }
 
   identity(): SessionIdentity | null {
@@ -82,11 +121,20 @@ export class Session {
   }
 
   async login(email: string, password: string): Promise<SessionIdentity> {
-    const response = await this.#post('/api/v1/auth/connector/login', {
+    const response = await this.#post(`${this.#prefix}/login`, {
       email,
       password,
       accessLevel: this.#accessLevel.toUpperCase(),
-      dataScope: this.#dataScope.toUpperCase(),
+      // The two realms differ here and nowhere else in this class. The
+      // operator realm has no data scope because it has no personal data to
+      // scope, and it requires the second factor because a credential an
+      // agent holds, which can close a charity, may not rest on a password.
+      ...(this.#realm === 'operator'
+        ? {
+            ...(this.#code ? { code: this.#code } : {}),
+            ...(this.#recoveryCode ? { recoveryCode: this.#recoveryCode } : {}),
+          }
+        : { dataScope: this.#dataScope.toUpperCase() }),
     });
     if (!response.ok) {
       // A 403 here says nothing about whether the credentials are correct: it
@@ -110,6 +158,13 @@ export class Session {
           body = {};
         }
         if (body.code === 'DATA_SCOPE_FORBIDDEN' && typeof body.error === 'string') {
+          throw new Error(body.error);
+        }
+        // The operator realm's own after-the-password refusal: the account has
+        // no authenticator, and a connector session may not rest on a password
+        // alone. Reporting it as a broken host would send somebody looking in
+        // entirely the wrong place for a message that already says what to do.
+        if (body.code === 'OPERATOR_SECOND_FACTOR_REQUIRED' && typeof body.error === 'string') {
           throw new Error(body.error);
         }
         throw new Error(
@@ -138,8 +193,9 @@ export class Session {
       throw new Error('Sign-in failed. Check the email address and password.');
     }
     const payload = (await response.json()) as ConnectorTokens & {
-      user: { email: string; name: string; role: string; organisationId: string;
-              organisation?: { name?: string } | null };
+      user?: { email: string; name: string; role: string; organisationId: string;
+               organisation?: { name?: string } | null };
+      operator?: { id: string; email: string; name: string };
     };
     const capturedRefreshToken = this.#absorbTokens(payload);
     if (!capturedRefreshToken) {
@@ -150,12 +206,41 @@ export class Session {
       );
     }
 
+    if (this.#realm === 'operator') {
+      const operator = payload.operator;
+      if (!operator) {
+        throw new Error(
+          'Sign-in succeeded but CharityPilot did not say who was signed in. The '
+            + 'connector is not talking to the operator realm the way it expects to.',
+        );
+      }
+      // No role and no organisation, because an operator has neither. The
+      // absent fields are the shape of the realm, not missing data.
+      this.#identity = {
+        realm: 'operator',
+        email: operator.email,
+        name: operator.name,
+        secondFactorEnrolled: true,
+      };
+      return this.#identity;
+    }
+
+    const user = payload.user;
+    if (!user) {
+      throw new Error(
+        'Sign-in succeeded but CharityPilot did not say who was signed in. Run '
+          + 'connect again — if this keeps happening, the connector is not talking '
+          + 'to CharityPilot the way it expects to.',
+      );
+    }
+
     this.#identity = {
-      email: payload.user.email,
-      name: payload.user.name,
-      role: payload.user.role,
-      organisationId: payload.user.organisationId,
-      organisationName: payload.user.organisation?.name ?? '(unnamed organisation)',
+      realm: 'charity',
+      email: user.email,
+      name: user.name,
+      role: user.role,
+      organisationId: user.organisationId,
+      organisationName: user.organisation?.name ?? '(unnamed organisation)',
     };
     return this.#identity;
   }
@@ -174,7 +259,7 @@ export class Session {
     const refreshToken = this.#store.read();
     if (!refreshToken) throw new NotConnectedError();
 
-    const response = await this.#post('/api/v1/auth/connector/refresh', { refreshToken });
+    const response = await this.#post(`${this.#prefix}/refresh`, { refreshToken });
     if (!response.ok) {
       // Only a 401 means the stored credential was actually rejected. A 403 here
       // says nothing about the credential's validity — it is the non-browser
@@ -235,7 +320,7 @@ export class Session {
   ): Promise<{ summary: string | null; expiresAt: string | null }> {
     const accessToken = await this.accessToken();
     const response = await this.#fetch(
-      `${this.#baseUrl}/api/v1/auth/connector/approve`,
+      `${this.#baseUrl}${this.#prefix}/approve`,
       {
         method: 'POST',
         headers: {
@@ -280,7 +365,7 @@ export class Session {
   async describeApproval(approvalId: string): Promise<ApprovalPreview> {
     const accessToken = await this.accessToken();
     const response = await this.#fetch(
-      `${this.#baseUrl}/api/v1/auth/connector/approvals/${encodeURIComponent(approvalId)}`,
+      `${this.#baseUrl}${this.#prefix}/approvals/${encodeURIComponent(approvalId)}`,
       {
         method: 'GET',
         headers: {
@@ -348,7 +433,7 @@ export class Session {
     }
     if (refreshToken) {
       try {
-        await this.#post('/api/v1/auth/connector/logout', { refreshToken });
+        await this.#post(`${this.#prefix}/logout`, { refreshToken });
       } catch {
         // Revocation is best-effort; the local credential is cleared regardless.
       }

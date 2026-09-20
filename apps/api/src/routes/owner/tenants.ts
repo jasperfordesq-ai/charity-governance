@@ -2,6 +2,8 @@ import type { FastifyInstance } from 'fastify';
 import { z, ZodError } from 'zod';
 import { handleError } from '../../utils/errors.js';
 import { requirePlatformOperator } from '../../middleware/owner-auth.js';
+import { requireOperatorSessionLevel } from '../../middleware/owner-session-level.js';
+import { requireOperatorActionApproval } from '../../middleware/owner-action-approval.js';
 import { listTenants, getTenant, transitionTenantLifecycle } from '../../services/owner-tenants.service.js';
 import { provisionTenant } from '../../services/owner-provisioning.service.js';
 import {
@@ -35,6 +37,22 @@ const listQuerySchema = z.object({
 
 export async function ownerTenantRoutes(app: FastifyInstance): Promise<void> {
   app.addHook('preHandler', requirePlatformOperator);
+
+  // The two questions a write has to answer, asked in order.
+  //
+  // The level says this session was ever connected with the authority to do
+  // this. The approval says a person agreed to this particular action, just
+  // now. A console session satisfies the second trivially — the approval guard
+  // returns immediately for anything that is not a connector — so these change
+  // nothing for the browser.
+  //
+  // Every operator write is approved, not only the destructive ones. A charity
+  // connector's mistake is contained to one charity, whose own people see it in
+  // their activity record; an operator's reaches across tenants.
+  const write = { preHandler: [requireOperatorSessionLevel('WRITE'), requireOperatorActionApproval()] };
+  // Closing a charity ends its access to the product. It asks for the level
+  // that has to be chosen deliberately at connect.
+  const destructive = { preHandler: [requireOperatorSessionLevel('ADMIN'), requireOperatorActionApproval()] };
 
   app.get('/tenants', async (request, reply) => {
     try {
@@ -74,7 +92,7 @@ export async function ownerTenantRoutes(app: FastifyInstance): Promise<void> {
     }
   });
 
-  app.patch('/tenants/:id/configuration', async (request, reply) => {
+  app.patch('/tenants/:id/configuration', write, async (request, reply) => {
     try {
       const { id } = z.object({ id: z.string().min(1).max(64) }).parse(request.params);
       const { reason, ...change } = configurationSchema.parse(request.body ?? {});
@@ -119,7 +137,7 @@ export async function ownerTenantRoutes(app: FastifyInstance): Promise<void> {
     expectedLifecycleVersion: z.number().int().min(1),
   });
 
-  app.post('/tenants/:id/lifecycle', async (request, reply) => {
+  app.post('/tenants/:id/lifecycle', destructive, async (request, reply) => {
     try {
       const { id } = z.object({ id: z.string().min(1).max(64) }).parse(request.params);
       const body = lifecycleBodySchema.parse(request.body);
@@ -158,7 +176,7 @@ export async function ownerTenantRoutes(app: FastifyInstance): Promise<void> {
       }
     });
 
-  app.post('/tenants', async (request, reply) => {
+  app.post('/tenants', write, async (request, reply) => {
     try {
       const body = provisionBodySchema.parse(request.body);
       const result = await provisionTenant(app.prisma, body);

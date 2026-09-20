@@ -69,10 +69,86 @@ interface Me {
   organisation?: { name?: string } | null;
 }
 
+interface OperatorSessionPayload {
+  realm?: string;
+  clientKind?: string;
+  accessLevel?: string;
+  operator?: { id?: string; email?: string; name?: string | null };
+  secondFactorEnrolled?: boolean;
+}
+
+/**
+ * Who this connector is acting as in the operator realm, and what it may do.
+ *
+ * Says what the realm CANNOT do as plainly as what it can. An agent that only
+ * learns it is a platform operator will reasonably assume that means access to
+ * everything, and then read a refusal as a bug rather than as the design.
+ */
+async function runOperatorSessionInfo(
+  client: ApiClient,
+  config: Pick<ConnectorConfig, 'baseUrl'>,
+): Promise<Record<string, unknown>> {
+  const [session, health] = await Promise.all([
+    client.get<OperatorSessionPayload>('/api/v1/owner/auth/connector/session'),
+    client.get<Health>('/api/v1/health').catch(() => null),
+  ]);
+
+  const apiVersion = health?.build?.version ?? null;
+
+  return {
+    realm: 'operator',
+    operator: {
+      id: session.operator?.id ?? null,
+      email: session.operator?.email ?? null,
+      name: session.operator?.name ?? null,
+      secondFactorEnrolled: session.secondFactorEnrolled ?? null,
+    },
+    session: {
+      accessLevel: session.accessLevel ?? null,
+      clientKind: 'MCP_CONNECTOR',
+      // There is no data scope in this realm, and saying so is the point.
+      dataScope: null,
+    },
+    scope: {
+      reaches: 'every charity on this platform, administratively',
+      neverReaches:
+        'no charity governance records and no personal data — no trustees, conflicts, '
+        + 'minutes, documents or staff. A tenant summary is a name, registration numbers, '
+        + 'a lifecycle status, a plan and a COUNT of user accounts.',
+      why:
+        'CharityPilot is a processor and each charity controls its own records. To read '
+        + 'one charity, connect in the charity realm as a person who belongs to it.',
+      everyChangeApproved:
+        'Every operator change is confirmed by a person at a terminal before it happens.',
+    },
+    connector: {
+      version: CONNECTOR_VERSION,
+      baseUrl: config.baseUrl,
+      personalData: 'none in this realm',
+    },
+    api: {
+      version: apiVersion,
+      revision: health?.build?.revision ?? null,
+      ...(isNewerRelease(CONNECTOR_VERSION, apiVersion)
+        ? {
+          note:
+            `This connector is ${CONNECTOR_VERSION} and CharityPilot is ${apiVersion}. `
+            + 'Some tools may be refused as unknown routes until CharityPilot is updated. '
+            + 'Tell the person; they deploy it.',
+        }
+        : {}),
+    },
+  };
+}
+
 export async function runSessionInfo(
   client: ApiClient,
-  config: Pick<ConnectorConfig, 'baseUrl' | 'allowPersonalData'>,
+  config: Pick<ConnectorConfig, 'baseUrl' | 'allowPersonalData'> & { realm?: ConnectorConfig['realm'] },
 ): Promise<Record<string, unknown>> {
+  if (config.realm === 'operator') {
+    return runOperatorSessionInfo(client, config);
+  }
+
   const [me, posture, health] = await Promise.all([
     client.get<Me>('/api/v1/auth/me'),
     fetchSessionPosture(client),

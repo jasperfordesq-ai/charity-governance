@@ -5,6 +5,7 @@ import { fileURLToPath } from 'node:url';
 import { dirname, join, resolve } from 'node:path';
 import { TOOLS } from '../tools.js';
 import { FILE_TOOLS } from '../file-tools.js';
+import { OPERATOR_TOOLS } from '../operator-tools.js';
 import { EXCLUDED_MUTATIONS } from '../mutating-route-coverage.js';
 
 const here = dirname(fileURLToPath(import.meta.url));
@@ -74,6 +75,41 @@ function prefixesByFile(): Map<string, string> {
     }
     if (prefix.startsWith('/api/v1')) byFile.set(file, prefix);
   }
+
+  // A group's index.ts may itself register a sibling under a further prefix.
+  // The owner realm does exactly this for its connector routes, which live at
+  // `/api/v1/owner/auth/connector` rather than at `/api/v1/owner`. Without
+  // this pass those routes are discovered under the group prefix, and the
+  // coverage rule would be satisfied by an exclusion naming a path the API
+  // does not serve — which is worse than no exclusion, because it reads as
+  // though somebody checked.
+  for (const [file, prefix] of [...byFile]) {
+    if (!file.endsWith('/index.ts')) continue;
+    const directory = file.slice(0, -'/index.ts'.length);
+    let source: string;
+    try {
+      source = readFileSync(resolve(API_ROUTES, file), 'utf8');
+    } catch {
+      continue;
+    }
+
+    const localImports = new Map<string, string>();
+    for (const match of source.matchAll(
+      /import\s*\{([^}]*)\}\s*from\s*'\.\/([A-Za-z-]+(?:\/[A-Za-z-]+)*)\.js'/g,
+    )) {
+      for (const name of match[1]!.split(',').map((n) => n.trim()).filter(Boolean)) {
+        localImports.set(name, `${directory}/${match[2]!}.ts`);
+      }
+    }
+
+    for (const match of source.matchAll(
+      /register\(\s*(\w+)\s*,\s*\{\s*prefix:\s*'([^']+)'/g,
+    )) {
+      const target = localImports.get(match[1]!);
+      if (target) byFile.set(target, `${prefix}${match[2]!}`);
+    }
+  }
+
   return byFile;
 }
 
@@ -108,7 +144,10 @@ function discoverMutations(): string[] {
 /** `METHOD path` for every tool that changes something. */
 function toolMutations(): Set<string> {
   const routes = new Set<string>();
-  for (const tool of TOOLS) {
+  // Both realms. A route offered by the operator connector is offered, and
+  // counting only the charity tools would make the rule demand a written
+  // reason for not exposing something that is exposed.
+  for (const tool of [...TOOLS, ...OPERATOR_TOOLS]) {
     if (tool.method) routes.add(`${tool.method} ${tool.path}`);
   }
   // The file tools are not ordinary tool definitions; both of their routes are
@@ -139,6 +178,18 @@ test('the mutation parser really finds routes', () => {
   assert.ok(
     found.includes('POST /api/v1/auth/connector/approve'),
     'a file registered under its own sub-prefix must resolve to that prefix',
+  );
+  assert.ok(
+    found.includes('POST /api/v1/owner/auth/connector/approve'),
+    'a file registered under a sub-prefix by its GROUP’s index.ts must resolve to '
+      + 'that composed prefix. Before this resolved, the operator connector routes were '
+      + 'discovered as /api/v1/owner/login, and an exclusion naming that path would have '
+      + 'satisfied the coverage rule while describing a route the API never served.',
+  );
+  assert.equal(
+    found.includes('POST /api/v1/owner/login'),
+    false,
+    'the uncomposed path must not appear: it is not a route',
   );
 });
 

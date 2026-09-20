@@ -32,11 +32,16 @@ const USAGE = `charitypilot-mcp ${CONNECTOR_VERSION}
 An MCP server that lets an AI client read and change one charity's CharityPilot
 records as you. Run with no command to serve over stdio to an AI client.
 
+With --realm operator it instead administers the whole platform: every charity's
+plan, configuration and lifecycle, and no charity's records.
+
 Commands (run these yourself, in a terminal):
   connect      Sign in and store a refresh token in the OS credential store.
                --access-level read|write|admin   (default: write)
                --data-scope withheld|full        (default: withheld)
                --email <address>
+               --code <digits>          The authenticator code (operator realm).
+               --recovery-code <code>   Instead of --code, if it is lost.
   status       Who the stored credential resolves to, and the level the API holds.
   approve <id> Approve one action CharityPilot refused. Terminal only.
   disconnect   Revoke the session on the server and clear the credential.
@@ -51,6 +56,12 @@ Options:
   --download-dir <dir>        Offer document_download, writing into this directory.
   --toolsets <a,b>            Offer only these tool groups. See README.
   --verbose                   Log each tool call to stderr, secrets redacted.
+  --realm charity|operator    Which credential this is. Default: charity.
+      charity   One charity's records, as a person who belongs to it.
+      operator  The platform operator: every charity administratively, and no
+                charity's records at all. Requires an enrolled authenticator,
+                keeps its own credential, and confirms every change with a
+                person at a terminal.
   --profile <name>            Pin which host this may reach:
 ${profileSummary('      ')}
   --version, --help
@@ -112,6 +123,10 @@ async function main(): Promise<void> {
       // Each host keeps its own credential, so one machine can hold the VM's
       // and a local stack's at once.
       origin: originOf(config.baseUrl),
+      // And each realm keeps its own, so one machine can hold a charity
+      // credential and a platform operator credential for the same host
+      // without either standing in for the other.
+      realm: config.realm,
     }),
     config.baseUrl,
   );
@@ -120,6 +135,9 @@ async function main(): Promise<void> {
     store,
     accessLevel: config.accessLevel,
     dataScope: requestedDataScope(config),
+    realm: config.realm,
+    code: config.code,
+    recoveryCode: config.recoveryCode,
   });
 
   if (config.command === 'connect') {
@@ -132,6 +150,19 @@ async function main(): Promise<void> {
       ? await readPasswordFromStdin(stdin as AsyncIterable<Buffer>)
       : await prompt('Password (not shown): ', true);
     const identity = await session.login(email, password);
+    if (identity.realm === 'operator') {
+      // What this credential cannot do is printed beside what it can, because
+      // "platform operator" reads as "everything" and it deliberately is not.
+      stdout.write(
+        `Connected as ${identity.name} <${identity.email}>\n`
+        + 'Realm: PLATFORM OPERATOR — every charity on this platform\n'
+        + `Access level: ${config.accessLevel.toUpperCase()}\n`
+        + 'Personal data: NONE. This realm administers charities and never reads\n'
+        + '               inside them: no trustees, conflicts, minutes or documents.\n'
+        + 'Every change is approved by a person at a terminal before it happens.\n',
+      );
+      return;
+    }
     stdout.write(
       `Connected as ${identity.name} <${identity.email}> (${identity.role})\n` +
       `Organisation: ${identity.organisationName}\n` +
@@ -181,6 +212,29 @@ async function main(): Promise<void> {
     }
     const client = new ApiClient({ session, baseUrl: config.baseUrl });
     try {
+      if (config.realm === 'operator') {
+        // A different realm reads a different route. /api/v1/auth/me is signed
+        // with the tenant secret and would refuse an operator token, which
+        // would be reported here as a credential that could not be verified —
+        // true, but for entirely the wrong reason.
+        const operator = await client.get<{
+          accessLevel?: string;
+          operator?: { email?: string; name?: string | null };
+          secondFactorEnrolled?: boolean;
+        }>('/api/v1/owner/auth/connector/session');
+
+        stdout.write(
+          `Connected as ${operator.operator?.name ?? '(unnamed)'} `
+          + `<${operator.operator?.email ?? 'unknown'}>\n`
+          + 'Realm: PLATFORM OPERATOR — every charity on this platform\n'
+          + `Access level: ${operator.accessLevel ?? 'unknown'}\n`
+          + 'Personal data: NONE. This realm administers charities and never reads\n'
+          + '               inside them: no trustees, conflicts, minutes or documents.\n'
+          + `Second factor: ${operator.secondFactorEnrolled ? 'enrolled' : 'NOT ENROLLED'}\n`,
+        );
+        return;
+      }
+
       const me = await client.get<{
         email: string; name: string; role: string;
         organisation?: { name?: string } | null;

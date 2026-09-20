@@ -1,6 +1,7 @@
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import { isMultiTenant } from '../../utils/deployment-profile.js';
 import { ownerAuthRoutes } from './auth.js';
+import { ownerConnectorAuthRoutes } from './connector.js';
 import { ownerTenantRoutes } from './tenants.js';
 
 // Optional extra tightening: when OWNER_ALLOWED_ORIGINS is set, the console
@@ -34,5 +35,9 @@ export async function ownerRoutes(app: FastifyInstance): Promise<void> {
 
   ownerOriginGuard(app);
   await app.register(ownerAuthRoutes);
+  // Registered under its own prefix rather than beside the browser routes,
+  // because its onRequest hook refuses anything carrying browser evidence and
+  // must not run over the console's own sign-in.
+  await app.register(ownerConnectorAuthRoutes, { prefix: '/auth/connector' });
   await app.register(ownerTenantRoutes);
 }

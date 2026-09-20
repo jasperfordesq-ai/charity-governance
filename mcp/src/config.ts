@@ -116,6 +116,23 @@ export type DataScope = 'withheld' | 'full';
 
 const DATA_SCOPES: readonly DataScope[] = ['withheld', 'full'];
 
+/**
+ * Which credential realm this invocation belongs to.
+ *
+ * `charity` signs in as a person inside one charity, and is everything this
+ * connector did before. `operator` signs in as a platform operator: no
+ * organisation, no role, every tenant, and no access to any charity's
+ * governance records at all.
+ *
+ * They are separate credentials in separate keychain entries, and a session in
+ * one realm is never presented to the other. That is not a convenience: the
+ * two realms have different signing secrets on the server, and an operator
+ * token carrying tenant claims is refused outright.
+ */
+export type Realm = 'charity' | 'operator';
+
+const REALMS: readonly Realm[] = ['charity', 'operator'];
+
 export interface ConnectorConfig {
   command: string;
   baseUrl: string;
@@ -139,6 +156,12 @@ export interface ConnectorConfig {
    * flag, so an older invocation keeps meaning what it meant.
    */
   dataScope?: DataScope | undefined;
+  /** Which credential realm this invocation belongs to. */
+  realm: Realm;
+  /** The authenticator code, for an operator connect. Typed once, at connect. */
+  code?: string | undefined;
+  /** A recovery code, for the operator whose authenticator is gone. */
+  recoveryCode?: string | undefined;
 }
 
 /** What `connect` should ask the API for, given everything the caller said. */
@@ -190,6 +213,9 @@ export function parseArgs(argv: string[]): ConnectorConfig {
   let toolsets: ToolGroup[] | undefined;
   let verbose = false;
   let dataScope: DataScope | undefined;
+  let realm: Realm = 'charity';
+  let code: string | undefined;
+  let recoveryCode: string | undefined;
 
   for (let i = 0; i < argv.length; i += 1) {
     const arg = argv[i]!;
@@ -271,6 +297,24 @@ ${profileSummary()}`,
         );
       }
       dataScope = value as DataScope;
+    } else if (arg === '--realm') {
+      i += 1;
+      const value = argv[i];
+      if (!value) throw new Error('--realm requires a value');
+      if (!REALMS.includes(value as Realm)) {
+        throw new Error(`Unknown realm: ${value}. Use one of: ${REALMS.join(', ')}.`);
+      }
+      realm = value as Realm;
+    } else if (arg === '--code') {
+      i += 1;
+      const value = argv[i];
+      if (!value) throw new Error('--code requires a value');
+      code = value;
+    } else if (arg === '--recovery-code') {
+      i += 1;
+      const value = argv[i];
+      if (!value) throw new Error('--recovery-code requires a value');
+      recoveryCode = value;
     } else if (arg === '--verbose') {
       verbose = true;
     } else if (command === 'approve' && !arg.startsWith('-') && approvalId === undefined) {
@@ -330,6 +374,32 @@ ${profileSummary()}`,
     }
   }
 
+  // The operator realm has no personal data to scope, and refusing here is
+  // how that is said out loud. Accepting the flag and ignoring it would leave
+  // somebody believing they had connected a session that can read a charity's
+  // records, which is the belief this realm exists to make impossible.
+  if (realm === 'operator') {
+    if (dataScope === 'full' || allowPersonalData) {
+      throw new Error(
+        'The operator realm never sees personal data, so it has no data scope to set. '
+          + 'A platform operator administers charities; it does not read their records. '
+          + 'Connect without --data-scope, or use --realm charity to read one charity as '
+          + 'a person who belongs to it.',
+      );
+    }
+    if (uploadRoot || downloadDir) {
+      throw new Error(
+        'The operator realm offers no document tools, so --upload-root and '
+          + '--download-dir have nothing to apply to.',
+      );
+    }
+    if (toolsets) {
+      throw new Error(
+        'The operator realm has one fixed tool set, so --toolsets does not apply to it.',
+      );
+    }
+  }
+
   return {
     command,
     baseUrl,
@@ -350,5 +420,8 @@ ${profileSummary()}`,
     dataScope,
     email,
     passwordStdin,
+    realm,
+    code,
+    recoveryCode,
   };
 }

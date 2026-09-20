@@ -7,16 +7,40 @@ process.env.OWNER_JWT_SECRET = 'owner-secret-operator-session-test';
 const [{ issueOperatorSession, rotateOperatorSession, revokeOperatorSession, hashOperatorToken }] =
   await Promise.all([import('../services/operator-session.service.js')]);
 
+interface StoredSession {
+  id: string;
+  operatorId: string;
+  tokenHash: string;
+  revokedAt: Date | null;
+  expiresAt: Date;
+  clientKind: string;
+  accessLevel: string;
+  familyId: string;
+  familyCreatedAt: Date;
+}
+
 function sessionStore() {
-  const rows: Record<string, { id: string; operatorId: string; tokenHash: string; revokedAt: Date | null; expiresAt: Date }> = {};
+  const rows: Record<string, StoredSession> = {};
   let n = 0;
   return {
     rows,
     prisma: {
       platformOperatorSession: {
-        create: async ({ data }: { data: { operatorId: string; tokenHash: string; expiresAt: Date } }) => {
+        // Stores whatever it is given, rather than a hand-picked four fields.
+        // A stub that silently drops a column reports a rotation as broken
+        // when the column is added, and — worse the other way round — would
+        // let a rotation that dropped the posture look like it worked.
+        create: async ({ data }: { data: Record<string, unknown> }) => {
           const id = `sess-${++n}`;
-          rows[id] = { id, operatorId: data.operatorId, tokenHash: data.tokenHash, revokedAt: null, expiresAt: data.expiresAt };
+          rows[id] = {
+            id,
+            revokedAt: null,
+            clientKind: 'WEB',
+            accessLevel: 'ADMIN',
+            familyId: `fam-${n}`,
+            familyCreatedAt: new Date('2026-09-20T00:00:00.000Z'),
+            ...(data as object),
+          } as StoredSession;
           return rows[id];
         },
         findFirst: async ({ where }: { where: Record<string, unknown> }) => {
@@ -110,4 +134,69 @@ test('an expired but not revoked refresh token cannot be rotated', async () => {
     (err: unknown) => err instanceof Error && err.message === 'Invalid or expired session',
   );
   assert.equal(Object.keys(rows).length, initialRowCount, 'no new session should be created');
+});
+
+// ---------------------------------------------------------------------------
+// Posture, added with the operator connector realm
+// ---------------------------------------------------------------------------
+
+test('a rotation carries the posture and the family forward', async () => {
+  // Not an optimisation. guard_platform_operator_session pins a family to one
+  // posture, so a rotation that dropped it would fail the insert against a
+  // real database. Here it would silently return a session with more
+  // authority than the one it replaced, which is the outcome worth pinning.
+  const { prisma, rows } = sessionStore();
+  const first = await issueOperatorSession(prisma, 'op-1', {
+    clientKind: 'MCP_CONNECTOR',
+    accessLevel: 'READ',
+  });
+
+  const second = await rotateOperatorSession(prisma, first.refreshToken, 'MCP_CONNECTOR');
+
+  const successor = Object.values(rows).find(
+    (row) => row.tokenHash === hashOperatorToken(second.refreshToken),
+  );
+  const original = Object.values(rows).find(
+    (row) => row.tokenHash === hashOperatorToken(first.refreshToken),
+  );
+
+  assert.equal(successor?.accessLevel, 'READ', 'a read session must not come back as admin');
+  assert.equal(successor?.clientKind, 'MCP_CONNECTOR');
+  assert.equal(successor?.familyId, original?.familyId, 'the family must survive rotation');
+  assert.deepEqual(successor?.familyCreatedAt, original?.familyCreatedAt);
+});
+
+test('a console refresh token cannot be rotated on the connector route', async () => {
+  // What makes a stolen console credential useless to the connector. The
+  // refusal is the same opaque one an unknown token gets, so the attempt
+  // learns nothing about which half was wrong.
+  const { prisma } = sessionStore();
+  const console_ = await issueOperatorSession(prisma, 'op-1');
+
+  await assert.rejects(
+    () => rotateOperatorSession(prisma, console_.refreshToken, 'MCP_CONNECTOR'),
+    /Invalid or expired session/,
+  );
+});
+
+test('a connector refresh token cannot be rotated on the console route', async () => {
+  const { prisma } = sessionStore();
+  const connector = await issueOperatorSession(prisma, 'op-1', {
+    clientKind: 'MCP_CONNECTOR',
+    accessLevel: 'ADMIN',
+  });
+
+  await assert.rejects(
+    () => rotateOperatorSession(prisma, connector.refreshToken, 'WEB'),
+    /Invalid or expired session/,
+  );
+});
+
+test('defaulting the posture gives a web session with full authority, as before', async () => {
+  const { prisma, rows } = sessionStore();
+  await issueOperatorSession(prisma, 'op-1');
+
+  const stored = Object.values(rows)[0];
+  assert.equal(stored?.clientKind, 'WEB');
+  assert.equal(stored?.accessLevel, 'ADMIN');
 });

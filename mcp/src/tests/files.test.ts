@@ -36,6 +36,7 @@ function config(overrides: Partial<ConnectorConfig> = {}): ConnectorConfig {
     accessLevel: 'write',
     passwordStdin: false,
     verbose: false,
+    realm: 'charity',
     ...overrides,
   };
 }

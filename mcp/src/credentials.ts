@@ -1,6 +1,6 @@
 import { Entry } from '@napi-rs/keyring';
 import { readFileSync, writeFileSync, rmSync, existsSync, chmodSync } from 'node:fs';
-import type { ConnectorProfile } from './config.js';
+import type { ConnectorProfile, Realm } from './config.js';
 
 const SERVICE = 'charitypilot-mcp';
 const ACCOUNT = 'refresh-token';
@@ -112,9 +112,19 @@ export function createFileStore(path: string): CredentialStore {
   };
 }
 
-/** The keychain account a host's credential lives under. */
-export function accountForOrigin(origin: string): string {
-  return `${ACCOUNT}:${origin.toLowerCase()}`;
+/**
+ * The keychain account a host's credential lives under.
+ *
+ * The operator realm gets its own entry, so one machine can hold a charity
+ * credential and a platform operator credential for the same host without
+ * either being able to stand in for the other. The charity spelling is
+ * unchanged from before the operator realm existed, so upgrading signs
+ * nobody out.
+ */
+export function accountForOrigin(origin: string, realm: Realm = 'charity'): string {
+  return realm === 'operator'
+    ? `${ACCOUNT}:operator:${origin.toLowerCase()}`
+    : `${ACCOUNT}:${origin.toLowerCase()}`;
 }
 
 /**
@@ -133,8 +143,13 @@ export function accountForOrigin(origin: string): string {
 export function createHostScopedStore(
   origin: string,
   make: (account?: string) => CredentialStore = createKeyringStore,
+  realm: Realm = 'charity',
 ): CredentialStore {
-  const scoped = make(accountForOrigin(origin));
+  const scoped = make(accountForOrigin(origin, realm));
+  // The single pre-host-scoping entry was always a charity credential: the
+  // operator realm did not exist when it was written. Reading it in the
+  // operator realm would hand an operator session a charity's refresh token.
+  if (realm === 'operator') return scoped;
   const legacy = make(ACCOUNT);
 
   const legacyIfOurs = (): string | null => {
@@ -220,6 +235,8 @@ export function chooseCredentialStore(options: {
   credentialFile?: string | undefined;
   /** The host whose credential is wanted. Absent keeps the single old entry. */
   origin?: string | undefined;
+  /** Which realm's credential is wanted. Absent means the charity realm. */
+  realm?: Realm | undefined;
   keyring?: (account?: string) => CredentialStore;
   file?: (path: string) => CredentialStore;
 }): CredentialStore {
@@ -227,7 +244,7 @@ export function chooseCredentialStore(options: {
   const file = options.file ?? createFileStore;
   if (!options.credentialFile) {
     return options.origin
-      ? createHostScopedStore(options.origin, keyring)
+      ? createHostScopedStore(options.origin, keyring, options.realm ?? 'charity')
       : keyring();
   }
   if (options.profile !== 'local') {

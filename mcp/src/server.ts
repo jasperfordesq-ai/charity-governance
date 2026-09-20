@@ -35,6 +35,7 @@ import {
 import { ApiClient } from './client.js';
 import type { Session } from './session.js';
 import type { AccessLevel, ConnectorConfig } from './config.js';
+import { OPERATOR_TOOLS, OPERATOR_TOOL_NAMES } from './operator-tools.js';
 import { CONNECTOR_VERSION } from './version.js';
 import { FETCH_TOOL, resolveReference } from './references.js';
 import { RESOURCES, RESOURCE_TEMPLATES, readResource } from './resources.js';
@@ -108,9 +109,29 @@ function inToolsets(
 export function buildToolList(
   level: AccessLevel = 'admin',
   config: Partial<
-    Pick<ConnectorConfig, 'uploadRoot' | 'downloadDir' | 'allowPersonalData' | 'toolsets'>
+    Pick<ConnectorConfig, 'uploadRoot' | 'downloadDir' | 'allowPersonalData' | 'toolsets' | 'realm'>
   > = {},
 ) {
+  // The operator realm REPLACES the charity surface rather than adding to it.
+  // No search and no fetch: both resolve references into one charity's
+  // records, which this realm does not reach. No file tools: there are no
+  // documents here to move.
+  if (config.realm === 'operator') {
+    return [
+      { ...SESSION_INFO_TOOL },
+      ...toolsFor(level, OPERATOR_TOOLS, false).map((tool) => {
+        const outputSchema = outputSchemaFor(tool);
+        return {
+          name: tool.name,
+          description: tool.description,
+          inputSchema: toolInputSchema(tool),
+          annotations: annotationsFor(tool),
+          ...(outputSchema ? { outputSchema } : {}),
+        };
+      }),
+    ];
+  }
+
   return [
     // Always first and always offered: an agent has to be able to ask who it
     // is acting as before it does anything else, whatever the level or groups.
@@ -190,6 +211,18 @@ export async function startServer(config: ConnectorConfig, session: Session): Pr
    * knowing which branch refused.
    */
   async function dispatch(name: string, args: Record<string, unknown>): Promise<unknown> {
+    // The operator realm is decided before anything else, because the two
+    // branches below — fetch and the file tools — resolve references and move
+    // documents inside ONE charity. Reaching them from an operator session
+    // would be the one thing this realm exists to make impossible, and neither
+    // is in the operator tool list, so both fall through to the refusal.
+    //
+    // session_info is the exception: an agent must be able to ask who it is
+    // acting as before it does anything, in either realm.
+    if (config.realm === 'operator' && name !== SESSION_INFO_TOOL.name) {
+      return dispatchOperator(name, args);
+    }
+
     if (name === FETCH_TOOL.name) {
       // Resolved to an ordinary tool call and run through this same
       // function, so the level, the toolsets and the personal-data gate are
@@ -240,6 +273,50 @@ export async function startServer(config: ConnectorConfig, session: Session): Pr
     }
 
     return runTool(tool, client, held.allowPersonalData, args);
+  }
+
+  /** Every tool call in the operator realm, and every refusal of one. */
+  async function dispatchOperator(
+    name: string,
+    args: Record<string, unknown>,
+  ): Promise<unknown> {
+    const operatorTool = OPERATOR_TOOLS.find((t) => t.name === name);
+    if (!operatorTool) {
+      // A charity tool asked for by name in the operator realm gets its own
+      // refusal, because the honest answer is not "no such tool". The tool
+      // exists; this credential is the wrong one to reach it with, and an
+      // agent told the name is unknown will try a different spelling rather
+      // than a different realm.
+      const isCharityTool = TOOLS.some((t) => t.name === name)
+        || FILE_TOOLS.some((t) => t.name === name)
+        || name === FETCH_TOOL.name;
+      throw new ConnectorError(
+        isCharityTool ? 'WRONG_REALM' : 'UNKNOWN_TOOL',
+        isCharityTool
+          ? `${name} reaches one charity's records, and this connector is signed in as a `
+            + 'platform operator. An operator administers charities and never reads '
+            + 'inside them. To read that charity, connect to it in the charity realm as '
+            + `a person who belongs to it. The tools here are: ${OPERATOR_TOOL_NAMES.join(', ')}.`
+          : `Unknown tool: ${name}. The operator realm offers: ${OPERATOR_TOOL_NAMES.join(', ')}.`,
+        { action: 'reconnect' },
+      );
+    }
+
+    // Re-checked here and not only in the listing, for the same reason the
+    // charity realm re-checks: the Model Context Protocol does not stop a
+    // client calling a tool it was never shown.
+    const held = await posture();
+    if (!permits(held.accessLevel, operatorTool)) {
+      throw new ConnectorError(
+        'SESSION_LEVEL_TOO_LOW',
+        refusalFor(held.accessLevel, operatorTool),
+        { action: 'reconnect' },
+      );
+    }
+
+    // `false` rather than the held scope: the operator realm has no personal
+    // data, so there is nothing for a gate to open.
+    return runTool(operatorTool, client, false, args);
   }
 
   server.setRequestHandler(ListToolsRequestSchema, async () => {

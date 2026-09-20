@@ -138,6 +138,53 @@ not be. Check `git log origin/master..HEAD` before assuming either way.
 Several agents were committing to this same working tree during the build. If you find
 unexpected modified files, check whether another session is mid-flight before reverting.
 
+## The operator realm (added 2026-09-20)
+
+`--realm operator` makes this the same connector against a different credential
+realm: the platform operator at `/owner`, rather than a person inside one
+charity. Design: `docs/superpowers/specs/2026-09-21-operator-connector-design.md`.
+
+**The two identity systems are separate tables, and neither is a role of the
+other.** A `User` always belongs to exactly one charity — `organisationId` is
+NOT NULL — and its `OWNER` role means owner of *that charity*. A
+`PlatformOperator` has no `organisationId` at all, its own password and TOTP,
+its own session table, its own cookies and its own signing secret. That is why
+the platform operator appears nowhere in the charity admin panel: it was never
+part of it. `verifyOperatorAccessToken` refuses any token carrying
+`organisationId` or `role`, so the realms cannot be confused even by accident.
+
+**What it can do:** everything the owner console can — list, read, create,
+configure and move the lifecycle of any tenant, including closing one.
+
+**What it cannot do, by design:** read any charity's governance records or
+personal data. Not one. The tenant summary is a name, two registration numbers,
+a lifecycle status, a plan and a **count** of user accounts. CharityPilot is a
+processor and each charity controls its own records, so an operator browsing a
+trustee register on their own authority is not defensible under Art. 28(3)(a) —
+and no enterprise data-protection review passes a vendor whose operator can.
+The wall is the feature, not a gap. To read one charity, connect to it in the
+charity realm as a person who belongs to it.
+
+**Three rules worth knowing before changing any of it:**
+
+1. **The second factor is mandatory.** An operator with no enrolled
+   authenticator is refused at connect and told to enrol at `/owner/security`.
+   The database refuses it independently, in
+   `guard_platform_operator_session`, because the login route is a route.
+2. **Every operator write needs a person**, not only the destructive ones. A
+   charity connector's mistake is contained to one charity, whose own people
+   see it in their activity record; an operator's reaches across tenants.
+3. **Approvals live in `OperatorActionApproval`, not `AuthActionApproval`.**
+   That table is bound to an organisation twice — by `organisationId` and again
+   by the composite foreign key on `(userId, organisationId)` — and an operator
+   is neither a `User` nor a member of anything.
+
+Both coverage tests now count operator tools as offered, and the mutating-route
+scanner learned to compose a prefix registered by a group's own `index.ts`.
+Before that fix the operator connector routes were discovered as
+`/api/v1/owner/login`, and an exclusion naming that path would have satisfied
+the coverage rule while describing a route the API never served.
+
 ## What is deliberately not built
 
 - **No response caching and no generic "call any endpoint" tool.** Both stay excluded.

@@ -116,20 +116,10 @@ export const EXCLUDED_ROUTES: readonly ExcludedRoute[] = [
   {
     path: '/api/v1/owner/auth/me',
     reason:
-      'The platform operator realm, which is a separate credential and not a tenant login. It '
-      + 'is reached with a different token and is out of scope for a charity-facing connector.',
-    notInGroupIndex: true,
-  },
-  {
-    path: '/api/v1/owner/tenants',
-    reason:
-      'Lists every charity on the platform. These are the only deliberately unscoped reads in '
-      + 'the codebase, and a connector that can reach them is no longer single-tenant.',
-    notInGroupIndex: true,
-  },
-  {
-    path: '/api/v1/owner/tenants/:id',
-    reason: 'One charity from the cross-tenant listing, with the same reasoning.',
+      'The browser console’s own identity route, reached with a cookie. The operator '
+      + 'connector asks /api/v1/owner/auth/connector/session instead, which reports the '
+      + 'session posture the cookie route knows nothing about, and is what session_info '
+      + 'calls in the operator realm.',
     notInGroupIndex: true,
   },
 ];
