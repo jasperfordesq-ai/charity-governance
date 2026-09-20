@@ -7,10 +7,21 @@ per-document mirror surface: API and copy, UI pending), T2.6 (owner-console inte
 T2.7 (declared environment) and T2.8 (client hardening) all landed across eight commits,
 `cd4caf3`..`4370692`. The API suite went 1994 → 2079 tests and the web suite 498 → 508, both green.
 
-Two items are **not** done and are not claimed: the React components for T2.5, and T2.9's Playwright
-spec, which needs a running stack and the UI surface that does not exist yet. The CQL adoption
-fallback in T2.8 was deliberately skipped — it needs `search:confluence`, and the standing ask is
-that a scope we do not use is one we should not hold.
+**T2.5's React components and T2.9's Playwright spec then landed too**, along with the decidable
+parts of Tier 3 (see section 5). The connector journey now runs in a browser against a fake Atlassian
+served inside the e2e stack, behind a four-way fence on the endpoint override — the two variables
+that redirect where OAuth codes are sent are refused outside development, refused for any non-private
+host, and refused at boot on a production path.
+
+Two things are deliberately **not** built. The CQL adoption fallback in T2.8 needs
+`search:confluence`, and the standing ask is that a scope we do not use is one we should not hold.
+Forge Remote needs a separate Forge application and cannot be a configuration change; the DPO's own
+condition for considering it was that polling proves insufficient, and polling has not run once
+against a real site.
+
+**Nothing in any of this has touched a real Atlassian site.** There is still no `ATLASSIAN_CLIENT_ID`
+in any environment outside the disposable test stack, so the test-tenant-first rule the owner gave
+the DPO on 2026-09-20 is untouched and still binds.
 
 Three defects were found by building rather than by reading, and each is recorded where it was
 fixed: `findPageByTitle` could walk past its own ambiguity guard and adopt the wrong page; adding
@@ -421,7 +432,28 @@ What this item still owes: the Playwright spec for `/integrations` was deliberat
 this phase. It needs a running stack and a UI surface to exercise, and belongs with the phase that
 builds that surface, not with the test double.
 
-### Tier 3 — for the owner/DPO publishing-model meeting (not proposed for build)
+### Tier 3 — for the owner/DPO publishing-model meeting
+
+**Status, 2026-09-21: the decidable parts are BUILT AS OPTIONS, defaulting to
+today's behaviour; the meeting still decides which are switched on.** The owner
+asked for the module finished overnight, and the honest way to finish a list of
+forks is to make each one expressible rather than to pick one. See
+`services/confluence-publishing-model.ts` — `DEFAULT_PUBLISHING_MODEL`
+reproduces the current behaviour field for field, and three tests pin that an
+organisation which has configured nothing publishes exactly as it did before.
+
+| Item | State |
+|---|---|
+| The reference model — cite an existing page and version as evidence | **Built.** `confluence-reference.service.ts`, three routes. CharityPilot never writes to a cited page, and a test scans the module for every write operation to keep it that way. |
+| Space shape — root page, `parentId`, labels, `POL -`/`NOS -` | **Built as options**, all off by default. The prefixes apply only to the two categories where a prefix is *reported*, and nothing is guessed for the rest. |
+| Content states through the v1 API | **Built as an option**, off by default, because setting a state publishes a new page version — CharityPilot writing to a charity's site on its own initiative. |
+| Classification levels | **Built as an option**: a label name the charity supplies, because the classifications are defined in their Atlassian instance and CharityPilot must not invent one. |
+| Full-body rendering versus stub-plus-attachment | **Both built**, `STUB_WITH_ATTACHMENT` the default. Note the limit recorded in the code: CharityPilot holds documents as files and nothing converts a PDF to XHTML, so `FULL_BODY` renders the record held *about* the document. Rendering minutes and resolutions as pages is separate work — those are `GoverningAct` and `Resolution` records that never reach this publisher. |
+| Forge Remote for real-time events | **Not built, and not buildable as a configuration change.** It needs a separate Forge application, its own deployment and an Atlassian registration. The DPO's own condition for considering it was that polling proves insufficient, and polling has not yet run once against a real site. |
+
+The original list follows unchanged, because the reasoning in it is what the
+meeting is actually for.
+
 
 - The reference model: link an existing Confluence page and version as evidence for a governance
   item (the model the DPO signed off).

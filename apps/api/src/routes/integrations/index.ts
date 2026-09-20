@@ -56,6 +56,11 @@ import {
   declaredEnvironmentResponse,
   recordDeclaredEnvironment,
 } from '../../services/integration-declared-environment.service.js';
+import {
+  citeConfluencePage,
+  listConfluenceReferences,
+  removeConfluenceReference,
+} from '../../services/confluence-reference.service.js';
 import { AppError, handleError } from '../../utils/errors.js';
 import { getPrimaryFrontendOrigin } from '../../utils/frontend-origin.js';
 import { sendNoContent, sendSuccess } from '../../utils/response.js';
@@ -1202,6 +1207,97 @@ export async function integrationRoutes(
    * A PUT because it is idempotent: the same declaration twice is the same
    * organisation saying the same thing.
    */
+  /**
+   * Cites a page the charity already has as evidence for one of their
+   * documents.
+   *
+   * THE OPPOSITE DIRECTION FROM PUBLISHING, and the model the DPO signed off on
+   * 2026-09-18. Nothing on this path writes to Confluence: the page is read
+   * once, to confirm it exists and to capture what was cited, and thereafter
+   * CharityPilot only points at it.
+   *
+   * ADMIN, because a citation is a governance assertion — it is the answer a
+   * charity gives when a regulator asks where the evidence is.
+   */
+  app.post<{ Params: { documentId: string } }>(
+    '/confluence/references/:documentId',
+    { preHandler: [requireAdmin] },
+    async (request, reply) => {
+      try {
+        const { cloudId } = await liveConnection(request.user.organisationId, 'cite a page from');
+        const pageId = bodyParam(request.body, 'pageId');
+        if (pageId === undefined) {
+          throw new AppError(
+            400,
+            'CONFLUENCE_PAGE_ID_REQUIRED',
+            'Name the Confluence page to cite. No page id was supplied.',
+          );
+        }
+
+        const reference = await citeConfluencePage(
+          app.prisma,
+          confluenceClientFor(request.user.organisationId, cloudId),
+          {
+            organisationId: request.user.organisationId,
+            documentId: request.params.documentId,
+            cloudId,
+            pageId,
+            citedById: request.user.userId,
+          },
+        );
+
+        return sendSuccess(reply, { reference });
+      } catch (error) {
+        return handleError(reply, error);
+      }
+    },
+  );
+
+  /** The pages cited for one document. Ungated, like the publications listing. */
+  app.get<{ Params: { documentId: string } }>(
+    '/confluence/references/:documentId',
+    async (request, reply) => {
+      try {
+        return sendSuccess(reply, {
+          references: await listConfluenceReferences(app.prisma, {
+            organisationId: request.user.organisationId,
+            documentId: request.params.documentId,
+          }),
+        });
+      } catch (error) {
+        return handleError(reply, error);
+      }
+    },
+  );
+
+  /**
+   * Removes CharityPilot's citation. **Touches nothing in Confluence.**
+   *
+   * A DELETE beside a Confluence page id reads like a deletion to anybody
+   * skimming a route list, so it is worth being explicit: this deletes a row in
+   * CharityPilot. The page is the charity's own, was never ours, and there is no
+   * code path from here that could reach it. No action approval is required for
+   * that reason — nothing outside CharityPilot changes.
+   */
+  app.delete<{ Params: { referenceId: string } }>(
+    '/confluence/references/by-id/:referenceId',
+    { preHandler: [requireAdmin] },
+    async (request, reply) => {
+      try {
+        const removed = await removeConfluenceReference(app.prisma, {
+          organisationId: request.user.organisationId,
+          referenceId: request.params.referenceId,
+        });
+        if (!removed) {
+          throw new AppError(404, 'CONFLUENCE_REFERENCE_NOT_FOUND', 'That citation was not found.');
+        }
+        return sendNoContent(reply);
+      } catch (error) {
+        return handleError(reply, error);
+      }
+    },
+  );
+
   app.put('/confluence/declared-environment', async (request, reply) => {
     try {
       const integration = await findOwnConfluenceIntegration(app.prisma, request.user.organisationId);
