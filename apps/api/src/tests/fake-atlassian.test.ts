@@ -175,3 +175,179 @@ test('rate limiting starts after the configured number of requests', async () =>
   assert.equal(limited.status, 429);
   assert.equal(limited.headers.get('Retry-After'), '90');
 });
+
+// --- Fix round 1 -------------------------------------------------------
+
+test('nearLimit alone never starts refusing requests, and tags successes', async () => {
+  const site = createFakeAtlassian();
+  site.addSpace({ id: 'space-1', key: 'GOV', name: 'Governance' });
+  const base = `https://api.atlassian.com/ex/confluence/${site.cloudId}`;
+  const auth = { Authorization: 'Bearer access-1' };
+
+  site.rateLimit({ nearLimit: true });
+
+  const first = await site.fetch(`${base}/wiki/api/v2/spaces`, { headers: auth });
+  assert.equal(first.status, 200);
+  assert.equal(first.headers.get('X-RateLimit-NearLimit'), 'true');
+
+  // A second (and third) request must still succeed: nearLimit alone carries
+  // no budget, so nothing should ever start refusing.
+  const second = await site.fetch(`${base}/wiki/api/v2/spaces`, { headers: auth });
+  assert.equal(second.status, 200);
+  assert.equal(second.headers.get('X-RateLimit-NearLimit'), 'true');
+});
+
+test('Ruling B: content routes reject a missing or malformed bearer, accept any other, and honour revocation', async () => {
+  const site = createFakeAtlassian();
+  site.addSpace({ id: 'space-1', key: 'GOV', name: 'Governance' });
+  const base = `https://api.atlassian.com/ex/confluence/${site.cloudId}`;
+
+  const missing = await site.fetch(`${base}/wiki/api/v2/spaces`);
+  assert.equal(missing.status, 401);
+
+  const malformed = await site.fetch(`${base}/wiki/api/v2/spaces`, {
+    headers: { Authorization: 'Token not-a-bearer-token' },
+  });
+  assert.equal(malformed.status, 401);
+
+  const empty = await site.fetch(`${base}/wiki/api/v2/spaces`, { headers: { Authorization: 'Bearer ' } });
+  assert.equal(empty.status, 401);
+
+  // An arbitrary token that was never issued by the OAuth endpoints is still
+  // accepted here — the production client's token comes from the vault, not
+  // from an exchange the test performed (Ruling B).
+  const token = 'whatever-the-vault-handed-back';
+  const accepted = await site.fetch(`${base}/wiki/api/v2/spaces`, { headers: { Authorization: `Bearer ${token}` } });
+  assert.equal(accepted.status, 200);
+
+  site.revokeAccessToken(token);
+  const revoked = await site.fetch(`${base}/wiki/api/v2/spaces`, { headers: { Authorization: `Bearer ${token}` } });
+  assert.equal(revoked.status, 401);
+});
+
+test('content properties round-trip: create, list, filter by key, get by id, and update', async () => {
+  const site = createFakeAtlassian();
+  site.addSpace({ id: 'space-1', key: 'GOV', name: 'Governance' });
+  const base = `https://api.atlassian.com/ex/confluence/${site.cloudId}`;
+  const auth = { Authorization: 'Bearer access-1', 'Content-Type': 'application/json' };
+
+  const created = await site.fetch(`${base}/wiki/api/v2/pages`, {
+    method: 'POST',
+    headers: auth,
+    body: JSON.stringify({ spaceId: 'space-1', title: 'Policy With Metadata' }),
+  });
+  const page = (await created.json()) as { id: string };
+
+  const createdProperty = await site.fetch(`${base}/wiki/api/v2/pages/${page.id}/properties`, {
+    method: 'POST',
+    headers: auth,
+    body: JSON.stringify({ key: 'approval-date', value: '2026-01-01' }),
+  });
+  assert.equal(createdProperty.status, 200);
+  const propertyBody = (await createdProperty.json()) as {
+    id: string;
+    key: string;
+    value: unknown;
+    version: { number: number };
+  };
+  assert.equal(propertyBody.key, 'approval-date');
+  assert.equal(propertyBody.value, '2026-01-01');
+  assert.equal(propertyBody.version.number, 1);
+
+  // A duplicate create is an upstream conflict, not a validation error.
+  const duplicate = await site.fetch(`${base}/wiki/api/v2/pages/${page.id}/properties`, {
+    method: 'POST',
+    headers: auth,
+    body: JSON.stringify({ key: 'approval-date', value: 'anything' }),
+  });
+  assert.equal(duplicate.status, 409);
+
+  const byId = await site.fetch(`${base}/wiki/api/v2/pages/${page.id}/properties/${propertyBody.id}`, {
+    headers: auth,
+  });
+  assert.equal(byId.status, 200);
+  const byIdBody = (await byId.json()) as { key: string };
+  assert.equal(byIdBody.key, 'approval-date');
+
+  const listed = await site.fetch(`${base}/wiki/api/v2/pages/${page.id}/properties?key=approval-date`, {
+    headers: auth,
+  });
+  const listedBody = (await listed.json()) as { results: { key: string }[] };
+  assert.equal(listedBody.results.length, 1);
+  assert.equal(listedBody.results[0]?.key, 'approval-date');
+
+  const noMatch = await site.fetch(`${base}/wiki/api/v2/pages/${page.id}/properties?key=nonexistent`, {
+    headers: auth,
+  });
+  const noMatchBody = (await noMatch.json()) as { results: unknown[] };
+  assert.equal(noMatchBody.results.length, 0);
+
+  const staleUpdate = await site.fetch(`${base}/wiki/api/v2/pages/${page.id}/properties/${propertyBody.id}`, {
+    method: 'PUT',
+    headers: auth,
+    body: JSON.stringify({ key: 'approval-date', value: 'stale-write', version: { number: 1 } }),
+  });
+  assert.equal(staleUpdate.status, 409);
+
+  const freshUpdate = await site.fetch(`${base}/wiki/api/v2/pages/${page.id}/properties/${propertyBody.id}`, {
+    method: 'PUT',
+    headers: auth,
+    body: JSON.stringify({ key: 'approval-date', value: '2026-02-01', version: { number: 2 } }),
+  });
+  assert.equal(freshUpdate.status, 200);
+  const freshBody = (await freshUpdate.json()) as { value: unknown; version: { number: number } };
+  assert.equal(freshBody.value, '2026-02-01');
+  assert.equal(freshBody.version.number, 2);
+});
+
+test('a findPageByTitle-shaped query resolves via the hyphenated space-id', async () => {
+  const site = createFakeAtlassian();
+  site.addSpace({ id: 'space-1', key: 'GOV', name: 'Governance' });
+  site.addSpace({ id: 'space-2', key: 'OTHER', name: 'Other' });
+  const base = `https://api.atlassian.com/ex/confluence/${site.cloudId}`;
+  const auth = { Authorization: 'Bearer access-1', 'Content-Type': 'application/json' };
+
+  await site.fetch(`${base}/wiki/api/v2/pages`, {
+    method: 'POST',
+    headers: auth,
+    body: JSON.stringify({ spaceId: 'space-1', title: 'Safeguarding Policy' }),
+  });
+  await site.fetch(`${base}/wiki/api/v2/pages`, {
+    method: 'POST',
+    headers: auth,
+    body: JSON.stringify({ spaceId: 'space-2', title: 'Safeguarding Policy' }),
+  });
+
+  // Production's findPageByTitle sends the space id under the hyphenated
+  // key, never `spaceId` — see confluence-pages.ts:498.
+  const query = new URLSearchParams({ title: 'Safeguarding Policy', 'space-id': 'space-1' });
+  const found = await site.fetch(`${base}/wiki/api/v2/pages?${query.toString()}`, { headers: auth });
+  const foundBody = (await found.json()) as { results: { spaceId: string }[] };
+
+  assert.equal(foundBody.results.length, 1);
+  assert.equal(foundBody.results[0]?.spaceId, 'space-1');
+});
+
+test('v1 content returns v1\'s own body shape, not v2\'s', async () => {
+  const site = createFakeAtlassian();
+  site.addSpace({ id: 'space-1', key: 'GOV', name: 'Governance' });
+  const base = `https://api.atlassian.com/ex/confluence/${site.cloudId}`;
+  const auth = { Authorization: 'Bearer access-1', 'Content-Type': 'application/json' };
+
+  const created = await site.fetch(`${base}/wiki/api/v2/pages`, {
+    method: 'POST',
+    headers: auth,
+    body: JSON.stringify({ spaceId: 'space-1', title: 'Safeguarding Policy' }),
+  });
+  const page = (await created.json()) as { id: string };
+
+  await site.fetch(`${base}/wiki/api/v2/pages/${page.id}`, { method: 'DELETE', headers: auth });
+
+  const trashed = await site.fetch(`${base}/wiki/rest/api/content/${page.id}?status=trashed`, { headers: auth });
+  const trashedBody = (await trashed.json()) as Record<string, unknown>;
+
+  assert.equal(trashedBody.type, 'page');
+  assert.equal(trashedBody.status, 'trashed');
+  assert.deepEqual(trashedBody.space, { id: 'space-1', key: 'GOV' });
+  assert.equal((trashedBody as { spaceId?: unknown }).spaceId, undefined);
+});

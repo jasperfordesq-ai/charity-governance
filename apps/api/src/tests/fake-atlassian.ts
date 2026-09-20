@@ -368,7 +368,12 @@ export function createFakeAtlassian(options: FakeAtlassianOptions = {}): FakeAtl
     const key = typeof body.key === 'string' ? body.key : undefined;
     if (key === undefined) return jsonResponse(400, { errors: [{ title: 'key is required' }] });
     if (page.properties.has(key)) {
-      return jsonResponse(400, { errors: [{ title: 'Property already exists' }] });
+      // Controller ruling (fix round 1, finding 5): a duplicate create is an
+      // upstream conflict (CONFLUENCE_CONFLICT territory — confluence-pages.ts:835),
+      // not a validation error. `setContentProperty` deliberately leaves
+      // duplicate-create for Confluence to reject; 400 would exercise the
+      // wrong branch in that caller.
+      return jsonResponse(409, { errors: [{ title: 'Property already exists' }] });
     }
 
     const id = String(nextPropertyId);
@@ -408,6 +413,25 @@ export function createFakeAtlassian(options: FakeAtlassianOptions = {}): FakeAtl
     return jsonResponse(200, propertyJson(record));
   }
 
+  /**
+   * v1's own body shape — deliberately not `pageJson`, which is v2's. Real
+   * v1 nests the space under `space: { id, key }` rather than a flat
+   * `spaceId`, and carries `type: 'page'`. Trash detection is the next
+   * consumer of this route, so the shape matters, not just the status code.
+   */
+  function contentV1Json(page: FakePage): Record<string, unknown> {
+    const space = spaces.find((entry) => entry.id === page.spaceId);
+    return {
+      id: page.id,
+      type: 'page',
+      status: page.status,
+      title: page.title,
+      space: { id: page.spaceId, key: space?.key ?? '' },
+      version: { number: page.version },
+      _links: { base: siteUrl, webui: `/pages/${page.id}` },
+    };
+  }
+
   function getContentV1Handler(pageId: string, url: URL): Response {
     const page = pages.get(pageId);
     if (page === undefined) return notFound();
@@ -415,11 +439,11 @@ export function createFakeAtlassian(options: FakeAtlassianOptions = {}): FakeAtl
     const status = url.searchParams.get('status');
     if (status === 'trashed') {
       if (page.status !== 'trashed') return notFound();
-      return jsonResponse(200, pageJson(page));
+      return jsonResponse(200, contentV1Json(page));
     }
 
     if (page.status !== 'current') return notFound();
-    return jsonResponse(200, pageJson(page));
+    return jsonResponse(200, contentV1Json(page));
   }
 
   function route(method: string, url: URL, headers: Headers, bodyText: string | undefined): Response {
@@ -487,7 +511,11 @@ export function createFakeAtlassian(options: FakeAtlassianOptions = {}): FakeAtl
 
     if (rateLimitSpec !== undefined) {
       requestsSinceRateLimit += 1;
-      const after = rateLimitSpec.after ?? 0;
+      // Infinity, not 0: `rateLimit({ nearLimit: true })` alone must never
+      // start refusing requests — it exists so a caller like the reconcile
+      // job can be shown "still succeeding, but close to the edge" without
+      // also supplying a budget. Finding 1 (fix round 1).
+      const after = rateLimitSpec.after ?? Infinity;
       if (requestsSinceRateLimit > after) {
         return new Response(null, {
           status: 429,
