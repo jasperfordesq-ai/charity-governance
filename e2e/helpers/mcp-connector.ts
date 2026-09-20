@@ -69,6 +69,12 @@ export async function connectConnector(options: {
   accessLevel?: ConnectorAccessLevel;
   /** What the session may see. Absent leaves the connector's own default. */
   dataScope?: 'withheld' | 'full';
+  /** Which credential realm. Absent is the charity realm, as the CLI is. */
+  realm?: 'charity' | 'operator';
+  /** The authenticator code, which the operator realm requires at connect. */
+  code?: string;
+  /** A recovery code, used instead of the authenticator code. */
+  recoveryCode?: string;
 }): Promise<ConnectorRunResult> {
   const args = [
     'connect',
@@ -81,6 +87,9 @@ export async function connectConnector(options: {
   // exercising the connector's own default, which is the case worth covering.
   if (options.accessLevel) args.push('--access-level', options.accessLevel);
   if (options.dataScope) args.push('--data-scope', options.dataScope);
+  if (options.realm) args.push('--realm', options.realm);
+  if (options.code) args.push('--code', options.code);
+  if (options.recoveryCode) args.push('--recovery-code', options.recoveryCode);
   return runConnector(args, {
     credentialFile: options.credentialFile,
     stdinText: `${options.password}\n`,
@@ -122,11 +131,15 @@ const CONNECTOR_CLIENT_VALUE = 'mcp-connector/0.1.0';
 export async function accessTokenFromStoredCredential(options: {
   apiUrl: string;
   credentialFile: string;
+  /** Which realm's refresh route to spend it on. Absent is the charity realm. */
+  realm?: 'charity' | 'operator';
 }): Promise<string> {
   const refreshToken = storedRefreshToken(options.credentialFile);
   if (!refreshToken) throw new Error(`No stored credential at ${options.credentialFile}`);
 
-  const response = await fetch(`${options.apiUrl}/api/v1/auth/connector/refresh`, {
+  const prefix =
+    options.realm === 'operator' ? '/api/v1/owner/auth/connector' : '/api/v1/auth/connector';
+  const response = await fetch(`${options.apiUrl}${prefix}/refresh`, {
     method: 'POST',
     headers: {
       'content-type': 'application/json',
@@ -171,12 +184,15 @@ export async function openConnector(options: {
   /** Passed only when a test means to enable it; absent is the shipped default. */
   uploadRoot?: string;
   downloadDir?: string;
+  /** Which credential realm this server serves. Absent is the charity realm. */
+  realm?: 'charity' | 'operator';
 }): Promise<OpenConnector> {
   assertConnectorBuilt();
   const args = [CONNECTOR_CLI, 'serve', '--profile', 'local', '--base-url', options.apiUrl];
   if (options.allowPersonalData) args.push('--allow-personal-data');
   if (options.uploadRoot) args.push('--upload-root', options.uploadRoot);
   if (options.downloadDir) args.push('--download-dir', options.downloadDir);
+  if (options.realm) args.push('--realm', options.realm);
 
   const transport = new StdioClientTransport({
     command: process.execPath,

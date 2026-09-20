@@ -286,6 +286,12 @@ export function createLocalRunIdentity(overrides = {}) {
       E2E_DATABASE_EXPECTED_SCHEMA: LOCAL_CONTRACT.databaseSchema,
       E2E_READINESS_API_KEY: readinessKey,
       E2E_JWT_SECRET: jwtSecret,
+      // The operator realm's signing secret, which the second-factor sealing
+      // key is derived from. A test that enrols an authenticator has to seal
+      // with the same root the API will open it with, or the API answers 500
+      // with "the stored second-factor secret could not be opened" and the
+      // test reads it as a broken product rather than a broken fixture.
+      E2E_OWNER_JWT_SECRET: ownerJwtSecret,
       E2E_AUTH_RECOVERY_SECRET: authRecoverySecret,
       E2E_WEB_URL: LOCAL_CONTRACT.webUrl,
       E2E_API_URL: LOCAL_CONTRACT.apiUrl,

@@ -190,6 +190,27 @@ export class Session {
             + 'connect again. The password was not checked, so nothing is wrong with it.',
         );
       }
+      // A 401 is normally "wrong email or password", and must stay that vague:
+      // saying which was wrong tells an attacker which addresses exist. The
+      // operator realm's second factor is the exception, because there the
+      // password WAS right, and the generic message sends somebody to retype a
+      // correct password against a route that limits attempts per address —
+      // spending the budget that remains on the one thing that is not wrong.
+      //
+      // Found by the live suite. The unit tests all stub the boundary this
+      // crosses, so every one of them was green while `connect --realm
+      // operator --code <wrong>` reported a bad password.
+      if (response.status === 401) {
+        let body: { code?: unknown; error?: unknown } = {};
+        try {
+          body = (await response.json()) as { code?: unknown; error?: unknown };
+        } catch {
+          body = {};
+        }
+        if (body.code === 'SECOND_FACTOR_REQUIRED' && typeof body.error === 'string') {
+          throw new Error(body.error);
+        }
+      }
       throw new Error('Sign-in failed. Check the email address and password.');
     }
     const payload = (await response.json()) as ConnectorTokens & {

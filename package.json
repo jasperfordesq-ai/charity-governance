@@ -95,7 +95,7 @@
     "test:e2e:contract": "node --test scripts/run-isolated-e2e.test.mjs scripts/isolated-e2e-runtime-attestation.test.mjs e2e/helpers/browser-origin-policy.test.cjs e2e/helpers/database-safety.test.cjs e2e/docker/tcp-gateway.test.mjs",
     "pretest:e2e": "npm run test:e2e:contract",
     "test:e2e": "node scripts/run-isolated-e2e.mjs",
-    "test:e2e:mcp": "node scripts/run-isolated-e2e.mjs -- tests/mcp/connector-live.spec.ts",
+    "test:e2e:mcp": "node scripts/run-isolated-e2e.mjs -- tests/mcp/connector-live.spec.ts tests/mcp/operator-connector-live.spec.ts",
     "test:e2e:owner": "node scripts/run-isolated-e2e.mjs -- tests/owner-console.spec.ts",
     "test:e2e:isolated:validate": "node scripts/run-isolated-e2e.mjs --validate-only",
     "test:e2e:responsive": "node scripts/run-isolated-e2e.mjs -- tests/responsive-smoke.spec.ts",

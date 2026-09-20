@@ -921,6 +921,79 @@ export async function createPlatformOperator(data: {
   });
 }
 
+/**
+ * Enrols an operator's authenticator directly, and returns its base32 secret.
+ *
+ * Written straight to the row rather than driven through the console, because
+ * the connector tests are about the connector: walking a browser through
+ * enrolment first would make every one of them depend on a UI they do not
+ * exercise. The console's own enrolment flow is covered by owner-console.spec.
+ *
+ * The secret is sealed with the API's own helper, so a test cannot pass by
+ * writing a shape the API would refuse to read.
+ */
+export async function enrolOperatorSecondFactor(operatorId: string): Promise<string> {
+  // The sealing key is derived from OWNER_JWT_SECRET, so this process must
+  // hold the same one the API container does. Without it the seal succeeds
+  // here and cannot be opened there, and the API answers 500 — which a test
+  // reads as a broken product rather than a broken fixture.
+  const ownerSecret = process.env.OWNER_JWT_SECRET ?? process.env.E2E_OWNER_JWT_SECRET;
+  if (!ownerSecret) {
+    throw new Error(
+      "enrolOperatorSecondFactor needs E2E_OWNER_JWT_SECRET, the secret the API "
+        + "container seals with. Run through scripts/run-isolated-e2e.mjs, which sets it.",
+    );
+  }
+  process.env.OWNER_JWT_SECRET = ownerSecret;
+
+  const [{ generateTotpSecret }, { sealTotpSecret }] = await Promise.all([
+    import("../../apps/api/src/utils/totp"),
+    import("../../apps/api/src/services/operator-second-factor.service"),
+  ]);
+
+  const secret = generateTotpSecret();
+  const now = new Date();
+
+  await withDb(async (client) => {
+    await client.query(
+      `UPDATE "PlatformOperator"
+          SET "totpSecret" = $2, "totpEnrolledAt" = $3, "totpPendingAt" = NULL
+        WHERE "id" = $1`,
+      [operatorId, JSON.stringify(sealTotpSecret(secret)), now],
+    );
+  });
+
+  return secret;
+}
+
+/** One operator approval row, read straight from the table. */
+export async function readOperatorApproval(approvalId: string): Promise<{
+  summary: string;
+  resourceLabel: string | null;
+  approvedAt: Date | null;
+  consumedAt: Date | null;
+} | null> {
+  return withDb(async (client) => {
+    const result = await client.query(
+      `SELECT "summary", "resourceLabel", "approvedAt", "consumedAt"
+         FROM "OperatorActionApproval" WHERE "id" = $1`,
+      [approvalId],
+    );
+    return result.rows[0] ?? null;
+  });
+}
+
+/** The lifecycle status a charity is actually in, whatever an agent was told. */
+export async function readTenantLifecycle(organisationId: string): Promise<string | null> {
+  return withDb(async (client) => {
+    const result = await client.query<{ lifecycleStatus: string }>(
+      `SELECT "lifecycleStatus" FROM "Organisation" WHERE "id" = $1`,
+      [organisationId],
+    );
+    return result.rows[0]?.lifecycleStatus ?? null;
+  });
+}
+
 /** The configuration columns an operator may change, read straight from the row. */
 export async function readTenantConfigurationRow(organisationId: string): Promise<{
   documentStorageProvider: string | null;
