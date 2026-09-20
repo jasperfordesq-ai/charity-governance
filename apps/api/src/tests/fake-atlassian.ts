@@ -124,6 +124,10 @@ export function createFakeAtlassian(options: FakeAtlassianOptions = {}): FakeAtl
   let tokenCounter = 0;
   let currentRefreshToken: string | undefined;
   const validAccessTokens = new Set<string>();
+  const revokedTokens = new Set<string>();
+
+  let nextPageId = 100001;
+  const confluencePrefix = `/ex/confluence/${cloudId}`;
 
   function notFound(): Response {
     return new Response(JSON.stringify({ errors: [{ title: 'Not Found' }] }), {
@@ -184,8 +188,106 @@ export function createFakeAtlassian(options: FakeAtlassianOptions = {}): FakeAtl
 
   function handleAccessibleResources(headers: Headers): Response {
     const token = extractBearer(headers.get('Authorization'));
-    if (token === undefined || !validAccessTokens.has(token)) return unauthorized();
+    if (token === undefined || revokedTokens.has(token) || !validAccessTokens.has(token)) return unauthorized();
     return jsonResponse(200, [{ id: cloudId, url: siteUrl, name: siteName, scopes: [] }]);
+  }
+
+  /** Ruling B: any non-empty, non-revoked bearer token is accepted on Confluence content routes. */
+  function checkContentBearer(headers: Headers): Response | undefined {
+    const token = extractBearer(headers.get('Authorization'));
+    if (token === undefined) return unauthorized();
+    if (revokedTokens.has(token)) return unauthorized();
+    return undefined;
+  }
+
+  function withAuth(headers: Headers, handler: () => Response): Response {
+    return checkContentBearer(headers) ?? handler();
+  }
+
+  function pageJson(page: FakePage): Record<string, unknown> {
+    return {
+      id: page.id,
+      status: page.status,
+      title: page.title,
+      spaceId: page.spaceId,
+      version: { number: page.version },
+      _links: { base: siteUrl, webui: `/pages/${page.id}` },
+    };
+  }
+
+  function createPageHandler(bodyText: string | undefined): Response {
+    const body = parseJsonObject(bodyText) ?? {};
+    const spaceId = typeof body.spaceId === 'string' ? body.spaceId : undefined;
+    if (spaceId === undefined) return jsonResponse(400, { errors: [{ title: 'spaceId is required' }] });
+
+    const id = String(nextPageId);
+    nextPageId += 1;
+
+    const page: FakePage = {
+      id,
+      spaceId,
+      title: typeof body.title === 'string' ? body.title : '',
+      version: 1,
+      status: 'current',
+      properties: new Map(),
+    };
+    pages.set(id, page);
+
+    return jsonResponse(200, pageJson(page));
+  }
+
+  function getPageHandler(pageId: string): Response {
+    const page = pages.get(pageId);
+    if (page === undefined || page.status !== 'current') return notFound();
+    return jsonResponse(200, pageJson(page));
+  }
+
+  function updatePageHandler(pageId: string, bodyText: string | undefined): Response {
+    const page = pages.get(pageId);
+    if (page === undefined || page.status !== 'current') return notFound();
+
+    const body = parseJsonObject(bodyText) ?? {};
+    const versionNumber = asObject(body.version)?.number;
+    if (typeof versionNumber !== 'number' || versionNumber !== page.version + 1) {
+      return jsonResponse(409, { errors: [{ title: 'Conflict' }] });
+    }
+
+    page.version = versionNumber;
+    if (typeof body.title === 'string') page.title = body.title;
+
+    return jsonResponse(200, pageJson(page));
+  }
+
+  function deletePageHandler(pageId: string, url: URL): Response {
+    const purge = url.searchParams.get('purge') === 'true';
+    const page = pages.get(pageId);
+    if (page === undefined) return notFound();
+
+    if (purge) {
+      if (page.status !== 'trashed') {
+        return jsonResponse(400, { errors: [{ title: 'Page must be trashed before it can be purged' }] });
+      }
+      page.status = 'purged';
+      return new Response(null, { status: 204 });
+    }
+
+    if (page.status === 'purged') return notFound();
+    page.status = 'trashed';
+    return new Response(null, { status: 204 });
+  }
+
+  function getContentV1Handler(pageId: string, url: URL): Response {
+    const page = pages.get(pageId);
+    if (page === undefined) return notFound();
+
+    const status = url.searchParams.get('status');
+    if (status === 'trashed') {
+      if (page.status !== 'trashed') return notFound();
+      return jsonResponse(200, pageJson(page));
+    }
+
+    if (page.status !== 'current') return notFound();
+    return jsonResponse(200, pageJson(page));
   }
 
   function route(method: string, url: URL, headers: Headers, bodyText: string | undefined): Response {
@@ -197,6 +299,28 @@ export function createFakeAtlassian(options: FakeAtlassianOptions = {}): FakeAtl
     if (url.hostname === API_HOST && url.pathname === ACCESSIBLE_RESOURCES_PATH) {
       if (method === 'GET') return handleAccessibleResources(headers);
       return notFound();
+    }
+
+    if (url.hostname === API_HOST && url.pathname.startsWith(confluencePrefix)) {
+      const rest = url.pathname.slice(confluencePrefix.length) || '/';
+
+      if (rest === '/wiki/api/v2/pages' && method === 'POST') {
+        return withAuth(headers, () => createPageHandler(bodyText));
+      }
+
+      const pageIdMatch = /^\/wiki\/api\/v2\/pages\/([^/]+)$/.exec(rest);
+      if (pageIdMatch) {
+        const pageId = pageIdMatch[1];
+        if (method === 'GET') return withAuth(headers, () => getPageHandler(pageId));
+        if (method === 'PUT') return withAuth(headers, () => updatePageHandler(pageId, bodyText));
+        if (method === 'DELETE') return withAuth(headers, () => deletePageHandler(pageId, url));
+      }
+
+      const contentMatch = /^\/wiki\/rest\/api\/content\/([^/]+)$/.exec(rest);
+      if (contentMatch) {
+        const pageId = contentMatch[1];
+        if (method === 'GET') return withAuth(headers, () => getContentV1Handler(pageId, url));
+      }
     }
 
     return notFound();
@@ -230,8 +354,8 @@ export function createFakeAtlassian(options: FakeAtlassianOptions = {}): FakeAtl
     rateLimit(): void {
       // Implemented in Task 5.
     },
-    revokeAccessToken(): void {
-      // Implemented in Task 3 (as the escape hatch behind Ruling B).
+    revokeAccessToken(token: string): void {
+      revokedTokens.add(token);
     },
   };
 }
