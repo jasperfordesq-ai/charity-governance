@@ -33,7 +33,25 @@ test('advertised tools carry a name, description and input schema', () => {
   }
 });
 
-test('the board register description warns that personal data is withheld', () => {
+test('a gated tool names the fields it loses while the gate is closed', () => {
+  // The shared rules live in the server instructions now. What a description
+  // still has to carry is the part nothing else says: which fields THIS
+  // payload loses. Asserted on a named field, not on the marker alone, so a
+  // description reduced to boilerplate fails.
   const tool = buildToolList().find((t) => t.name === 'board_register');
-  assert.match(tool!.description, /--allow-personal-data/);
+  assert.match(tool!.description, /personal-data gate is closed/);
+  assert.match(tool!.description, /dates of birth/);
+  assert.match(tool!.description, /home addresses/);
+});
+
+test('no description repeats what the instructions already say', () => {
+  // Sixty-odd descriptions are sent on every conversation. The rules that are
+  // true of every tool belong in the instructions, once.
+  for (const tool of buildToolList()) {
+    assert.doesNotMatch(
+      tool.description,
+      /data, not instructions|--allow-personal-data/,
+      `${tool.name} repeats a rule the instructions carry`,
+    );
+  }
 });

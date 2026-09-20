@@ -31,11 +31,7 @@ import {
  * action can be asked for and refused in one place; the API answers each with
  * a request for a person to approve it in their own terminal.
  */
-const CHANGES = ' Changes CharityPilot data. Say what you are changing and why before calling it.';
-
-const APPROVAL_NOTE =
-  ' You will be asked to approve this in your own terminal before it happens, '
-  + 'and the approval covers only this one record.';
+const APPROVAL_NOTE = ' Cannot be undone; you approve it in your own terminal first.';
 
 const CONCURRENCY =
   'The updatedAt value from the record as you read it. CharityPilot refuses the '
@@ -45,7 +41,7 @@ export const WRITE_TOOLS: readonly ToolDefinition[] = [
   /* --- board register ---------------------------------------------------- */
   {
     name: 'board_member_create',
-    description: 'Add a trustee or director to the board register.' + CHANGES,
+    description: 'Add a trustee or director to the board register.',
     path: '/api/v1/board-members',
     method: 'POST',
     level: 'write',
@@ -70,7 +66,7 @@ export const WRITE_TOOLS: readonly ToolDefinition[] = [
   },
   {
     name: 'board_member_update',
-    description: 'Change an entry in the board register.' + CHANGES,
+    description: 'Change an entry in the board register.',
     path: '/api/v1/board-members/:id',
     method: 'PATCH',
     level: 'write',
@@ -94,8 +90,7 @@ export const WRITE_TOOLS: readonly ToolDefinition[] = [
   {
     name: 'compliance_record_set',
     description:
-      'Set this charity’s status, evidence and notes against one Governance Code standard.'
-      + CHANGES,
+      'Set this charity’s status, evidence and notes against one Governance Code standard.',
     path: '/api/v1/compliance/records/:standardId',
     method: 'PUT',
     level: 'write',
@@ -125,7 +120,7 @@ export const WRITE_TOOLS: readonly ToolDefinition[] = [
   /* --- deadlines --------------------------------------------------------- */
   {
     name: 'deadline_create',
-    description: 'Add a governance deadline to the calendar.' + CHANGES,
+    description: 'Add a governance deadline to the calendar.',
     path: '/api/v1/deadlines',
     method: 'POST',
     level: 'write',
@@ -141,7 +136,7 @@ export const WRITE_TOOLS: readonly ToolDefinition[] = [
     name: 'deadline_update',
     description:
       'Change a deadline, including marking it complete or correcting a date that is '
-      + 'wrong.' + CHANGES,
+      + 'wrong.',
     path: '/api/v1/deadlines/:id',
     method: 'PATCH',
     level: 'write',
@@ -160,7 +155,7 @@ export const WRITE_TOOLS: readonly ToolDefinition[] = [
   /* --- registers --------------------------------------------------------- */
   {
     name: 'conflict_create',
-    description: 'Record a declared conflict of interest.' + CHANGES,
+    description: 'Record a declared conflict of interest.',
     path: '/api/v1/governance-registers/conflicts',
     method: 'POST',
     level: 'write',
@@ -181,7 +176,7 @@ export const WRITE_TOOLS: readonly ToolDefinition[] = [
   },
   {
     name: 'risk_create',
-    description: 'Add an entry to the risk register.' + CHANGES,
+    description: 'Add an entry to the risk register.',
     path: '/api/v1/governance-registers/risks',
     method: 'POST',
     level: 'write',
@@ -215,7 +210,7 @@ export const WRITE_TOOLS: readonly ToolDefinition[] = [
   },
   {
     name: 'complaint_create',
-    description: 'Record a complaint in the complaints register.' + CHANGES,
+    description: 'Record a complaint in the complaints register.',
     path: '/api/v1/governance-registers/complaints',
     method: 'POST',
     level: 'write',
@@ -233,7 +228,7 @@ export const WRITE_TOOLS: readonly ToolDefinition[] = [
   },
   {
     name: 'fundraising_create',
-    description: 'Add an activity to the fundraising register.' + CHANGES,
+    description: 'Add an activity to the fundraising register.',
     path: '/api/v1/governance-registers/fundraising',
     method: 'POST',
     level: 'write',
@@ -254,7 +249,7 @@ export const WRITE_TOOLS: readonly ToolDefinition[] = [
   },
   {
     name: 'financial_controls_set',
-    description: 'Record the board’s financial controls review for a reporting year.' + CHANGES,
+    description: 'Record the board’s financial controls review for a reporting year.',
     path: '/api/v1/governance-registers/financial-controls',
     method: 'PUT',
     level: 'write',
@@ -281,8 +276,7 @@ export const WRITE_TOOLS: readonly ToolDefinition[] = [
   {
     name: 'governing_act_create',
     description:
-      'Record a board meeting, general meeting or written resolution in the minute book.'
-      + CHANGES,
+      'Record a board meeting, general meeting or written resolution in the minute book.',
     path: '/api/v1/governing-acts',
     method: 'POST',
     level: 'write',
@@ -308,7 +302,7 @@ export const WRITE_TOOLS: readonly ToolDefinition[] = [
   },
   {
     name: 'governing_act_update',
-    description: 'Change an entry in the minute book.' + CHANGES,
+    description: 'Change an entry in the minute book.',
     path: '/api/v1/governing-acts/:id',
     method: 'PATCH',
     level: 'write',
@@ -384,7 +378,7 @@ export const WRITE_TOOLS: readonly ToolDefinition[] = [
   /* --- register updates --------------------------------------------------- */
   {
     name: 'conflict_update',
-    description: 'Change a declared conflict of interest.' + CHANGES,
+    description: 'Change a declared conflict of interest.',
     path: '/api/v1/governance-registers/conflicts/:id',
     method: 'PATCH',
     level: 'write',
@@ -406,7 +400,7 @@ export const WRITE_TOOLS: readonly ToolDefinition[] = [
   },
   {
     name: 'risk_update',
-    description: 'Change an entry in the risk register.' + CHANGES,
+    description: 'Change an entry in the risk register.',
     path: '/api/v1/governance-registers/risks/:id',
     method: 'PATCH',
     level: 'write',
@@ -427,7 +421,7 @@ export const WRITE_TOOLS: readonly ToolDefinition[] = [
   },
   {
     name: 'complaint_update',
-    description: 'Change an entry in the complaints register.' + CHANGES,
+    description: 'Change an entry in the complaints register.',
     path: '/api/v1/governance-registers/complaints/:id',
     method: 'PATCH',
     level: 'write',
@@ -446,7 +440,7 @@ export const WRITE_TOOLS: readonly ToolDefinition[] = [
   },
   {
     name: 'fundraising_update',
-    description: 'Change an activity in the fundraising register.' + CHANGES,
+    description: 'Change an activity in the fundraising register.',
     path: '/api/v1/governance-registers/fundraising/:id',
     method: 'PATCH',
     level: 'write',
@@ -473,7 +467,7 @@ export const WRITE_TOOLS: readonly ToolDefinition[] = [
     description:
       'Change the charity’s own profile: its registration details, financial year end, '
       + 'and the dates the deadline calendar is generated from. Correcting a date here is how '
-      + 'a deadline that is wrongly shown as late gets fixed.' + CHANGES,
+      + 'a deadline that is wrongly shown as late gets fixed.',
     path: '/api/v1/organisation',
     method: 'PATCH',
     level: 'write',
@@ -509,8 +503,7 @@ export const WRITE_TOOLS: readonly ToolDefinition[] = [
   {
     name: 'compliance_signoff_set',
     description:
-      'Record the board’s sign-off against the Governance Code for a reporting year.'
-      + CHANGES,
+      'Record the board’s sign-off against the Governance Code for a reporting year.',
     path: '/api/v1/compliance/signoff',
     method: 'PUT',
     level: 'write',
@@ -541,7 +534,7 @@ export const WRITE_TOOLS: readonly ToolDefinition[] = [
   },
   {
     name: 'annual_report_set',
-    description: 'Record how ready the annual report is for a reporting year.' + CHANGES,
+    description: 'Record how ready the annual report is for a reporting year.',
     path: '/api/v1/governance-registers/annual-report',
     method: 'PUT',
     level: 'write',
@@ -566,7 +559,7 @@ export const WRITE_TOOLS: readonly ToolDefinition[] = [
   /* --- the minute book ----------------------------------------------------- */
   {
     name: 'resolution_create',
-    description: 'Add a resolution to a meeting or written resolution in the minute book.' + CHANGES,
+    description: 'Add a resolution to a meeting or written resolution in the minute book.',
     path: '/api/v1/governing-acts/:id/resolutions',
     method: 'POST',
     level: 'write',
@@ -582,7 +575,7 @@ export const WRITE_TOOLS: readonly ToolDefinition[] = [
   },
   {
     name: 'resolution_update',
-    description: 'Change a resolution in the minute book.' + CHANGES,
+    description: 'Change a resolution in the minute book.',
     path: '/api/v1/governing-acts/resolutions/:id',
     method: 'PATCH',
     level: 'write',
@@ -600,8 +593,7 @@ export const WRITE_TOOLS: readonly ToolDefinition[] = [
   {
     name: 'document_approval_set',
     description:
-      'Record which resolution approved a document, or assert that the board approved it.'
-      + CHANGES,
+      'Record which resolution approved a document, or assert that the board approved it.',
     path: '/api/v1/governing-acts/documents/:documentId/approval',
     method: 'PATCH',
     level: 'write',
@@ -617,7 +609,7 @@ export const WRITE_TOOLS: readonly ToolDefinition[] = [
   /* --- documents and the standards they evidence --------------------------- */
   {
     name: 'document_link_standard',
-    description: 'Link a document to a Governance Code standard as evidence for it.' + CHANGES,
+    description: 'Link a document to a Governance Code standard as evidence for it.',
     path: '/api/v1/documents/:id/standards',
     method: 'POST',
     level: 'write',
@@ -694,7 +686,7 @@ export const WRITE_TOOLS: readonly ToolDefinition[] = [
   // useful subset: a member with no name is not a member.
   {
     name: 'member_create',
-    description: 'Add a person to the charity’s member register.' + CHANGES,
+    description: 'Add a person to the charity’s member register.',
     path: '/api/v1/members',
     method: 'POST',
     level: 'write',
@@ -709,7 +701,7 @@ export const WRITE_TOOLS: readonly ToolDefinition[] = [
     name: 'member_update',
     description:
       'Change an entry in the member register, including recording that someone ceased to '
-      + 'be a member.' + CHANGES,
+      + 'be a member.',
     path: '/api/v1/members/:id',
     method: 'PATCH',
     level: 'write',
