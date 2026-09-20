@@ -36,6 +36,7 @@ import { apiLoggerOptionsForEnvironment } from './utils/logger.js';
 import { parsePort } from './utils/port.js';
 import { normaliseOrigin } from './utils/request-origin.js';
 import { globalApiRateLimitMax } from './utils/global-rate-limit.js';
+import { sessionOrAddressRateLimitKey } from './utils/rate-limit-key.js';
 
 const environment = process.env.NODE_ENV ?? 'development';
 const defaultFrontendOrigins = ['http://localhost:3003', 'http://localhost:3000'];
@@ -69,6 +70,11 @@ await registerBrowserOriginProtection(app, allowedOrigins);
 await app.register(rateLimit, {
   max: globalApiRateLimitMax(),
   timeWindow: '1 minute',
+  // A signed-in session counts against itself rather than against the address
+  // it came from, so a connector reading in a loop on the owner's machine
+  // cannot spend the allowance the owner's browser needs on the same machine.
+  // See utils/rate-limit-key.ts for why the signature is verified first.
+  keyGenerator: sessionOrAddressRateLimitKey,
 });
 
 await app.register(multipart, {

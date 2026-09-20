@@ -14,10 +14,11 @@ import type { FastifyInstance, FastifyRequest } from "fastify";
  * Counted per session rather than per address, so one agent cannot spend
  * another's budget, and a second connector session is unaffected by the first.
  *
- * Read traffic still shares the address bucket. That is a known limitation
- * rather than an oversight: reads cannot be distinguished from the web
- * application's own reads at the point the shared limiter runs, which is
- * before the session is known.
+ * Read traffic is bounded separately, by the shared limiter rather than here:
+ * `utils/rate-limit-key.ts` counts a request carrying a verifiable bearer
+ * token against its own session instead of its address. This plugin therefore
+ * governs only how much a session may change, which is the number worth
+ * keeping small.
  */
 export const CONNECTOR_WRITE_MAX_PER_MINUTE = 30;
 

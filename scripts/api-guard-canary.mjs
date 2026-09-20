@@ -75,6 +75,36 @@ const MUTATIONS = {
     tests: ['governing-acts-reliability'],
     expect: 'reading one act must be scoped to the caller’s own charity.',
   },
+  // The read budget. All three of these leave a key generator that still
+  // compiles and still returns a string, which is what a regression here
+  // would look like: nothing throws, and the limiter quietly counts the
+  // wrong thing.
+  'an-invented-token-buys-its-own-budget': {
+    file: 'apps/api/src/utils/rate-limit-key.ts',
+    find: /(  \} catch \{\r?\n    )return request\.ip;/,
+    replace: '$1return `session:${token}`;',
+    tests: ['rate-limit-key'],
+    expect:
+      'a bearer token that does not verify must fall back to the address, or the address '
+      + 'limiter can be evaded by inventing a new token per request.',
+  },
+  'a-session-can-be-mistaken-for-an-address': {
+    file: 'apps/api/src/utils/rate-limit-key.ts',
+    find: /return `session:\$\{verifyAccessToken\(token\)\.sessionId\}`;/,
+    replace: 'return `${verifyAccessToken(token).sessionId}`;',
+    tests: ['rate-limit-key'],
+    expect: 'a session key must be prefixed so it can never collide with an address.',
+  },
+  'the-limiter-ignores-the-session': {
+    file: 'apps/api/src/server.ts',
+    // The generator is still referenced, so the import is still used and the
+    // build stays honest; it is simply never the value that is returned.
+    find: /  keyGenerator: sessionOrAddressRateLimitKey,/,
+    replace:
+      '  keyGenerator: (request) => String(request.ip ?? sessionOrAddressRateLimitKey(request)),',
+    tests: ['rate-limit-key'],
+    expect: 'the shared limiter must be keyed by session, not only by address.',
+  },
   'a-member-may-edit-a-document': {
     file: 'apps/api/src/routes/documents/index.ts',
     find: /(  app\.patch<\{ Params: \{ id: string \} \}>\('\/:id', )\{ preHandler: \[requireAdmin\] \}, (async)/,
