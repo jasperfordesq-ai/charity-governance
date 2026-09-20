@@ -61,6 +61,19 @@ export const DOCUMENT_CATEGORIES = [
 
 export const COMPLIANCE_SIGNOFF_STATUSES = ['DRAFT', 'BOARD_REVIEW', 'APPROVED'] as const;
 
+/** Mirrors the status filter the reminder-history route validates by hand. */
+export const DEADLINE_REMINDER_STATUSES = [
+  'RESERVED',
+  'SENT',
+  'SKIPPED',
+  'FAILED',
+  'SENDING',
+  'UNCERTAIN',
+] as const;
+
+/** The two roles a colleague can be given. OWNER is transferred, never assigned. */
+export const ASSIGNABLE_TEAM_ROLES = ['ADMIN', 'MEMBER'] as const;
+
 export const ANNUAL_REPORT_FILING_STATUSES = [
   'NOT_STARTED',
   'IN_PROGRESS',

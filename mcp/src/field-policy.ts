@@ -294,7 +294,10 @@ export type ShapeName =
   | 'team'
   | 'boardSubmissions'
   | 'complianceSignoff'
-  | 'complianceRecords';
+  | 'complianceRecords'
+  | 'teamSessions'
+  | 'securityAudit'
+  | 'reminderHistory';
 
 function asRecord(value: unknown): Record<string, unknown> | null {
   if (value === null || typeof value !== 'object' || Array.isArray(value)) return null;
@@ -481,12 +484,74 @@ function filterComplianceRecords(value: unknown): unknown {
   };
 }
 
+/**
+ * One colleague's sign-in sessions.
+ *
+ * `deviceLabel` is the name that person gave their own machine and
+ * `revocationReason` is free text an operator wrote about them. What survives
+ * is when each session began, when it expires, which kind of client it belongs
+ * to and how much it may do — the security answer the page exists to give,
+ * without the surveillance-shaped half.
+ */
+const TEAM_SESSION_FIELDS = [
+  'familyId', 'displaySuffix', 'familyCreatedAt', 'latestCreatedAt', 'expiresAt',
+  'clientKind', 'accessLevel', 'active', 'current', 'revokedAt',
+] as const;
+
+function filterTeamSessions(value: unknown): unknown {
+  return mapArray(value, (row) => pick(row, TEAM_SESSION_FIELDS));
+}
+
+/**
+ * The security audit.
+ *
+ * Every label on it is prose naming people — "Suspended Aoife Chairperson" —
+ * beside the operator's own reason for acting. There is no field to filter,
+ * for the same reason the dashboard's activity lines have none, so the whole
+ * value goes and what remains is that an event of some kind happened, and when.
+ */
+function filterSecurityAudit(value: unknown): unknown {
+  return mapArray(value, (row) => pick(row, ['type', 'occurredAt']));
+}
+
+/**
+ * Reminder delivery history.
+ *
+ * The recipient's address is the point of the withholding. `error` goes with
+ * it because it is raw provider text, which routinely quotes the address it
+ * failed to reach.
+ */
+const REMINDER_FIELDS = [
+  'id', 'deadlineId', 'deadlineTitle', 'deadlineDueDate', 'deadlineScheduleVersion',
+  'deadlineContextKind', 'deadlineSnapshotKnown', 'deliveryTimingKnown',
+  'legacyDeliveryStatus', 'legacyRecordedAt', 'reminderDays', 'status',
+  'reservedAt', 'attemptedAt', 'providerRequestStartedAt', 'reconciliationOutcome',
+  'reconciledAt', 'sentAt',
+] as const;
+
+function filterReminderHistory(value: unknown): unknown {
+  const envelope = asRecord(value);
+  if (!envelope || !('data' in envelope)) {
+    return mapArray(value, (row) => pick(row, REMINDER_FIELDS));
+  }
+
+  const out: Record<string, unknown> = {};
+  for (const key of ENVELOPE_META_FIELDS) {
+    if (key in envelope) out[key] = envelope[key];
+  }
+  out.data = mapArray(envelope.data, (row) => pick(row, REMINDER_FIELDS));
+  return out;
+}
+
 const SHAPES: Record<ShapeName, (value: unknown) => unknown> = {
   dashboard: filterDashboard,
   team: filterTeam,
   boardSubmissions: filterBoardSubmissions,
   complianceSignoff: filterComplianceSignoff,
   complianceRecords: filterComplianceRecords,
+  teamSessions: filterTeamSessions,
+  securityAudit: filterSecurityAudit,
+  reminderHistory: filterReminderHistory,
 };
 
 export function applyShapePolicy<T>(shape: ShapeName, value: T, allowPersonalData: boolean): T {

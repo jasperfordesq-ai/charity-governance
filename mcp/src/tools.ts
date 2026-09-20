@@ -8,7 +8,11 @@ import {
 } from './field-policy.js';
 import { buildPath, inputSchemaFor, paramName, type ParamSpec } from './tool-input.js';
 import { buildBody, bodySchemaFor, type FieldSpec } from './tool-body.js';
-import { GOVERNING_ACT_KINDS, GOVERNING_ACT_STATUSES } from './enums.js';
+import {
+  DEADLINE_REMINDER_STATUSES,
+  GOVERNING_ACT_KINDS,
+  GOVERNING_ACT_STATUSES,
+} from './enums.js';
 import { WRITE_TOOLS } from './write-tools.js';
 import { ConnectorError } from './errors.js';
 
@@ -142,6 +146,19 @@ const READ_TOOLS: readonly ToolDefinition[] = [
     path: '/api/v1/deadlines/history',
     params: PAGED,
     model: 'Deadline',
+  },
+  {
+    name: 'deadlines_reminder_history',
+    description:
+      'Whether each deadline reminder was sent, skipped or failed, and when.' + GATED
+      + 'the recipient\'s email address and the provider\'s error text, which quotes it.'
+      + ADMIN_ONLY,
+    path: '/api/v1/deadlines/reminder-history',
+    params: [
+      ...PAGED,
+      { kind: 'enum', name: 'status', values: DEADLINE_REMINDER_STATUSES },
+    ],
+    shape: 'reminderHistory',
   },
 
   /* --- the board and the minute book ------------------------------------- */
@@ -284,6 +301,40 @@ const READ_TOOLS: readonly ToolDefinition[] = [
     path: '/api/v1/team',
     shape: 'team',
   },
+  {
+    name: 'team_sessions_list',
+    description:
+      'One colleague\'s sign-in sessions: when each began, when it expires, whether it is '
+      + 'still active, and whether it belongs to a browser or a connector and at what level. '
+      + 'Use it to find the session to revoke.' + GATED + 'the label they gave their own '
+      + 'machine, and the reason any session was revoked.' + ADMIN_ONLY,
+    path: '/api/v1/team/members/:id/sessions',
+    params: [{ kind: 'id', name: 'id' }],
+    shape: 'teamSessions',
+  },
+  {
+    name: 'security_audit',
+    description:
+      'The twenty most recent security events for this charity: role changes, suspensions, '
+      + 'removals, session revocations and replayed credentials, with when each happened.'
+      + GATED + 'who acted, who it was about, and the reason given, all of which are prose '
+      + 'naming people.' + ADMIN_ONLY,
+    path: '/api/v1/team/security-audit',
+    shape: 'securityAudit',
+  },
+
+  /* --- billing ------------------------------------------------------------ */
+  {
+    name: 'billing_status',
+    description:
+      'The charity\'s own subscription: plan, status, billing interval, whether it is set to '
+      + 'cancel, and the trial and period end dates. Starting a payment is deliberately not '
+      + 'offered here.',
+    path: '/api/v1/billing/status',
+    noRecordsBecause:
+      'The charity\'s own plan, status and dates, plus flags saying which billing actions are '
+      + 'available to the caller; no records about anyone.',
+  },
 
   /* --- integrations ------------------------------------------------------ */
   {
@@ -349,6 +400,7 @@ export const TOOL_GROUPS = [
   'registers',
   'documents',
   'team',
+  'billing',
   'integrations',
 ] as const;
 export type ToolGroup = (typeof TOOL_GROUPS)[number];
@@ -370,6 +422,7 @@ const GROUP_BY_PREFIX: readonly (readonly [string, ToolGroup])[] = [
   ['/api/v1/members', 'registers'],
   ['/api/v1/documents', 'documents'],
   ['/api/v1/team', 'team'],
+  ['/api/v1/billing', 'billing'],
   ['/api/v1/integrations', 'integrations'],
 ];
 

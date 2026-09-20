@@ -48,30 +48,6 @@ export const EXCLUDED_ROUTES: readonly ExcludedRoute[] = [
       + 'personal-data gate is open, rather than by a tool of its own.',
   },
   {
-    path: '/api/v1/billing/status',
-    reason:
-      'Billing authority rather than governance: it reports whether a checkout or a billing '
-      + 'portal may be opened, which is the first half of spending money.',
-  },
-  {
-    path: '/api/v1/team/security-audit',
-    reason:
-      'Every row names a person and carries an operator-written reason for suspending or '
-      + 'removing them. Exposing it is a deliberate decision, not a default.',
-  },
-  {
-    path: '/api/v1/team/members/:id/sessions',
-    reason:
-      'Device labels and sign-in times for a named colleague. Useful for security review in '
-      + 'the app, surveillance-shaped in the hands of a model.',
-  },
-  {
-    path: '/api/v1/deadlines/reminder-history',
-    reason:
-      'Carries the email address each reminder was sent to, plus delivery and error text. '
-      + 'The deadlines themselves are available without it.',
-  },
-  {
     path: '/api/v1/documents/storage-deletions/dead-letter',
     reason:
       'An operational failure queue whose error text is raw provider output and can embed '

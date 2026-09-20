@@ -397,3 +397,114 @@ test('an unknown shape fails closed rather than returning the payload raw', () =
     /unknown response shape/i,
   );
 });
+
+/* --- Phase C shapes: three payloads the API builds by hand ---------------- */
+
+const SESSION_ROW = {
+  familyId: 'f1',
+  displaySuffix: 'AB',
+  familyCreatedAt: '2026-09-01T00:00:00.000Z',
+  latestCreatedAt: '2026-09-02T00:00:00.000Z',
+  expiresAt: '2026-09-30T00:00:00.000Z',
+  deviceLabel: "Aoife's MacBook",
+  clientKind: 'MCP_CONNECTOR',
+  accessLevel: 'WRITE',
+  active: true,
+  current: false,
+  revokedAt: null,
+  revocationReason: 'Suspected compromise of the laptop',
+};
+
+test('teamSessions keeps when and what, and withholds whose machine it was', () => {
+  const closed = applyShapePolicy('teamSessions', [SESSION_ROW], false) as Record<string, unknown>[];
+
+  assert.equal(closed[0]!['familyId'], 'f1');
+  assert.equal(closed[0]!['clientKind'], 'MCP_CONNECTOR');
+  assert.equal(closed[0]!['accessLevel'], 'WRITE');
+  assert.equal(closed[0]!['active'], true);
+  assert.ok(!('deviceLabel' in closed[0]!), 'a colleague names their own machine');
+  assert.ok(!('revocationReason' in closed[0]!), 'free text written about a person');
+});
+
+test('teamSessions releases the label and the reason when the gate is open', () => {
+  assert.deepEqual(applyShapePolicy('teamSessions', [SESSION_ROW], true), [SESSION_ROW]);
+});
+
+const AUDIT_ROW = {
+  type: 'MEMBER_SUSPENDED',
+  actorLabel: 'Jasper Ford (owner)',
+  subjectLabel: 'Aoife Chairperson',
+  reason: 'Suspended pending the outcome of the safeguarding review',
+  occurredAt: '2026-09-02T00:00:00.000Z',
+};
+
+test('securityAudit keeps that something happened and when, and nothing else', () => {
+  const closed = applyShapePolicy('securityAudit', [AUDIT_ROW], false) as Record<string, unknown>[];
+
+  assert.deepEqual(closed, [{ type: 'MEMBER_SUSPENDED', occurredAt: '2026-09-02T00:00:00.000Z' }]);
+  // Every label on this payload is prose naming people, so there is no field
+  // to filter: the whole value goes, the way the dashboard's activity does.
+  const text = JSON.stringify(closed);
+  assert.ok(!text.includes('Aoife'));
+  assert.ok(!text.includes('Jasper'));
+  assert.ok(!text.includes('safeguarding'));
+});
+
+test('securityAudit releases the labels when the gate is open', () => {
+  assert.deepEqual(applyShapePolicy('securityAudit', [AUDIT_ROW], true), [AUDIT_ROW]);
+});
+
+const REMINDER_ROW = {
+  id: 'rem1',
+  deadlineId: 'dl1',
+  deadlineTitle: 'Annual return',
+  deadlineDueDate: '2026-10-31',
+  deadlineScheduleVersion: 3,
+  deadlineContextKind: 'RECORDED_AT_RESERVATION',
+  deadlineSnapshotKnown: true,
+  deliveryTimingKnown: true,
+  legacyDeliveryStatus: null,
+  legacyRecordedAt: null,
+  email: 'treasurer@example.ie',
+  reminderDays: 14,
+  status: 'SENT',
+  error: 'smtp: mailbox treasurer@example.ie is full',
+  reservedAt: '2026-10-17T00:00:00.000Z',
+  attemptedAt: null,
+  providerRequestStartedAt: null,
+  reconciliationOutcome: null,
+  reconciledAt: null,
+  sentAt: '2026-10-17T00:01:00.000Z',
+};
+
+test('reminderHistory keeps the delivery record and withholds who it went to', () => {
+  const envelope = { data: [REMINDER_ROW], total: 1, page: 1, pageSize: 50, hasMore: false };
+  const closed = applyShapePolicy('reminderHistory', envelope, false) as {
+    data: Record<string, unknown>[];
+    total: number;
+    hasMore: boolean;
+  };
+
+  assert.equal(closed.total, 1, 'the pagination meta survives');
+  assert.equal(closed.hasMore, false);
+  assert.equal(closed.data[0]!['deadlineTitle'], 'Annual return');
+  assert.equal(closed.data[0]!['status'], 'SENT');
+  assert.ok(!('email' in closed.data[0]!), 'the recipient is the point of the withholding');
+  assert.ok(
+    !('error' in closed.data[0]!),
+    'provider error text quotes the address straight back',
+  );
+  assert.ok(!JSON.stringify(closed).includes('treasurer@example.ie'));
+});
+
+test('reminderHistory releases the recipient when the gate is open', () => {
+  const envelope = { data: [REMINDER_ROW], total: 1, page: 1, pageSize: 50, hasMore: false };
+  assert.deepEqual(applyShapePolicy('reminderHistory', envelope, true), envelope);
+});
+
+test('each new shape hands back a payload it does not recognise rather than throwing', () => {
+  for (const shape of ['teamSessions', 'securityAudit', 'reminderHistory'] as const) {
+    assert.equal(applyShapePolicy(shape, null, false), null);
+    assert.equal(applyShapePolicy(shape, 'unexpected', false), 'unexpected');
+  }
+});

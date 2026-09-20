@@ -107,7 +107,9 @@ test('--toolsets narrows to named groups, and refuses a name it does not know', 
   assert.deepEqual(parseArgs(['--toolsets', 'compliance,registers']).toolsets, ['compliance', 'registers']);
   assert.equal(parseArgs([]).toolsets, undefined);
   assert.equal(parseArgs(['--toolsets', 'all']).toolsets, undefined);
-  assert.throws(() => parseArgs(['--toolsets', 'billing']), /Unknown toolset: billing/);
+  // Not a group today and not a plausible one tomorrow: a name that later
+  // becomes real would turn this assertion into a false alarm, as "billing" did.
+  assert.throws(() => parseArgs(['--toolsets', 'payroll']), /Unknown toolset: payroll/);
 });
 
 test('--verbose is off unless asked for', () => {
