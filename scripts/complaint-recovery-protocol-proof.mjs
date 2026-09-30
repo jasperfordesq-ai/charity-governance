@@ -357,7 +357,7 @@ try {
     // silent wait or unhandled rejection.
     await Promise.race([locked, leader.then(() => { throw new Error('Leader ended before lock proof'); })]);
     const follower = prisma.$transaction(async tx => {
-      await tx.$executeRawUnsafe(`SET LOCAL application_name = 'cancellation-${suffix}'`);
+      await tx.$queryRaw`SELECT set_config('application_name', ${'cancellation-' + suffix}, true)`;
       return cancelFirst ? execute(tx) : cancel(tx);
     }, { timeout: 15000 }).then(value => ({ value }), error => ({ error }));
     try {
