@@ -2,6 +2,21 @@
 
 Last updated: 2026-09-30
 
+Complaint purge dashboard checkpoint (source only): Owner-only Registers panel
+now supports explicit six-area copy-plan review, exact recovery/hold/policy
+binding, withdrawal, separate permanent-action confirmation and paginated
+retained history. No disposition defaults are chosen for downstream copies.
+Confirmation is required; successful claim refreshes the recovery list without
+unmounting the review. Receipts explicitly distinguish primary disposal from
+erasure of retained copies. Synthetic Chromium journey passed in 10.5s (runner
+83953 exit 0), including authorization, withdrawal, second review, confirmation,
+primary absence, exact Owner receipt, recovery-list refresh and history after
+reload. Initial run failed on exact selector-label lookup; explicit accessible
+labels fixed it. Web/E2E types and edited-file lint passed. Evidence: private
+complaint-purge-browser-fixed.log; initial failure is retained separately.
+Scoped downstream disposition evidence, exact hosted gates, deployment and live
+acceptance remain required. Runtime remains e5e988a3; no live records changed.
+
 Complaint purge API checkpoint (source only): Owner browser routes now list
 paginated reviews, authorize an exact removed revision/recovery decision,
 withdraw unclaimed authority and explicitly confirm a primary purge claim.

@@ -49,7 +49,7 @@ type RemovedComplaint = { id: string; summary: string; revision: number; removed
   removal: { id: string; recoveryUntil: string; evidenceRef: string } };
 type Page = { items: RemovedComplaint[]; nextCursor: string | null };
 
-export function ComplaintRecoveryPanel({ onChanged }: { onChanged: () => void }) {
+export function ComplaintRecoveryPanel({ onChanged, refreshVersion=0 }: { onChanged: () => void; refreshVersion?: number }) {
   const [page, setPage] = useState<Page | null>(null);
   const [holdId, setHoldId] = useState<string | null>(null);
   const [review, setReview] = useState<RemovedComplaint | null>(null);
@@ -67,7 +67,7 @@ export function ComplaintRecoveryPanel({ onChanged }: { onChanged: () => void })
     } catch (cause) { if (serial === sequence.current) setError(apiErrorMessage(cause, 'Removed complaints could not be loaded.')); }
     finally { if (serial === sequence.current) setBusy(false); }
   }, []);
-  useEffect(() => { const counter = sequence; void load(); return () => { counter.current++; }; }, [load]);
+  useEffect(() => { const counter = sequence; void load(); return () => { counter.current++; }; }, [load, refreshVersion]);
   async function restore() {
     if (!review || pending.current) return;
     pending.current = true; setBusy(true); setError('');
