@@ -1,5 +1,12 @@
 # CharityPilot Full-Platform Remediation Audit
 
+> DPO-05 downstream-evidence dashboard, 2026-09-30: Owner scoped observations
+> and append-only corrections now have UI controls. Isolated Chromium proves
+> retained-backup evidence, reopening review, history after reload and no
+> primary-job mutation. Local build/type/lint checks pass. Actual copy disposal,
+> backup restore reconciliation, other record classes and deployment/live
+> acceptance remain open; recorded evidence is not complete erasure.
+
 > DPO-05 downstream disposition evidence, 2026-09-30: append-only scoped
 > observations and Owner-only browser API now distinguish pending, failed,
 > reviewer-verified absence and approved retention for versions, Confluence,

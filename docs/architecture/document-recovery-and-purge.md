@@ -31,6 +31,29 @@ purge/hold races, user-interface behavior or provider/backup disposal.
 
 ## Observed starting point
 
+Dashboard downstream-evidence checkpoint, 30 September 2026: each claimed
+disposal decision now exposes copy/backup history and an Owner form for a named
+scope. Plan-compatible outcomes, evidence, observation time, required follow-up
+and explicit review are shown. Later observations append a new revision with
+fixed area/scope; older entries are marked historical. History is paged and
+refreshable, forbidden responses clear its contents, and failed refresh after a
+successful write is reported without pretending the save failed.
+
+The isolated Chromium journey passes: record approved retention for a synthetic
+backup scope, append a needs-review correction, retain both revisions across a
+reload, and prove the primary job remains PENDING with no absence receipt.
+Runner exit 0 and the rendered history screenshot confirm this local checkpoint.
+Full web/E2E typechecks, edited UI lint, API build and 16 focused purge tests pass.
+The first browser runs found an observation timestamp rounded before the claim;
+the fixture now uses the actual database UTC clock with millisecond precision.
+The UI accepts that precision and timestamp refusals now explain the permitted
+interval. Database chronology guards were not weakened.
+
+Real external-copy inventories/disposal, backup restore reconciliation, other
+record classes, deployment/live verification and policy/DPO acceptance remain
+open. Reviewer-entered observations never assert complete erasure or perform
+provider actions. This checkpoint is local and has not been deployed.
+
 Downstream disposition evidence checkpoint, 30 September 2026: the new
 DocumentPurgeDispositionEvent ledger and restricted API retain append-only,
 revisioned observations for a named scope in versions, Confluence, exports,

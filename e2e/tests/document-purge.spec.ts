@@ -101,5 +101,54 @@ test('Owner reviews, cancels and executes primary disposal with retained history
   await gotoWithDevServerRetry(ownerPage, '/documents');
   await decisions.getByRole('button', { name: 'Load disposal decisions' }).click();
   await expect(decision(secondEvidence).getByText('Primary disposal job: PENDING. Other copies remain separately accountable.')).toBeVisible();
+  const copies = decision(secondEvidence).getByRole('region', { name: 'Copy and backup evidence' });
+  await copies.getByRole('button', { name: 'Load copy evidence', exact: true }).click();
+  await expect(copies.getByText('No downstream observations recorded.')).toBeVisible();
+  await copies.getByLabel('Evidence storage location', { exact: true }).selectOption('BACKUPS');
+  await reliableFill(copies.getByLabel('Copy or inventory scope reference', { exact: true }), 'SYNTHETIC-BACKUP-SET-001');
+  await copies.getByLabel('Reviewed copy outcome', { exact: true }).selectOption('RETAINED_APPROVED');
+  // This plan retains backups; absence may not be asserted through its form.
+  await expect(copies.getByLabel('Reviewed copy outcome').locator('option[value="VERIFIED_ABSENT"]')).toHaveCount(0);
+  const fillObservation = async (evidence: string) => {
+    await reliableFill(copies.getByLabel('Copy observation evidence reference', { exact: true }), evidence);
+    await reliableFill(copies.getByLabel('Reason for copy observation', { exact: true }), 'Synthetic review of the exact backup inventory and its custody evidence.');
+    // Observe the verified database clock, not a potentially skewed host clock.
+    // Text retains UTC explicitly: node-pg otherwise parses timestamp-without-zone
+    // in the Windows host zone. Preserve milliseconds at the claim boundary.
+    const clock = await withDb(client => client.query(`SELECT to_char(timezone('UTC',clock_timestamp()), 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"') AS now`));
+    const dates = await ownerPage.evaluate((serverTime: string) => {
+      const local = (date: Date) => new Date(date.getTime() - date.getTimezoneOffset() * 60000).toISOString().slice(0, 23);
+      return { observed: local(new Date(serverTime)), followup: local(new Date(new Date(serverTime).getTime() + 86400000)) };
+    }, clock.rows[0].now);
+    await copies.getByLabel('Copy observation time', { exact: true }).fill(dates.observed);
+    await copies.getByLabel('Copy follow-up time', { exact: true }).fill(dates.followup);
+    await copies.getByRole('checkbox', { name: 'I reviewed the evidence for this exact scope and outcome.' }).check();
+    const saved = ownerPage.waitForResponse(response => response.url().endsWith(`/purge-authorizations/${secondId}/dispositions`) && response.request().method() === 'POST');
+    await copies.getByRole('button', { name: 'Record copy observation', exact: true }).click();
+    const response = await saved;
+    if (response.status() !== 200) {
+      const timing = await withDb(client => client.query(`SELECT to_char("claimedAt", 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"') AS "claimedAt", to_char(timezone('UTC',clock_timestamp()), 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"') AS "databaseNow" FROM "DocumentPurgeClaim" WHERE "authorizationId"=$1`, [secondId]));
+      console.error('Synthetic observation timing:', JSON.stringify({ input: response.request().postDataJSON().observedAt, clocks: timing.rows, response: await response.json() }));
+    }
+    expect(response.status()).toBe(200);
+  };
+  await fillObservation('SYNTHETIC-BACKUP-RECEIPT-001');
+  const observation = (ref: string) => copies.getByRole('listitem').filter({ hasText: ref });
+  await expect(observation('SYNTHETIC-BACKUP-RECEIPT-001')).toContainText('Retained with approved authority');
+  await observation('SYNTHETIC-BACKUP-RECEIPT-001').getByRole('button', { name: 'Record a later observation' }).click();
+  await expect(copies.getByLabel('Copy or inventory scope reference')).toBeDisabled();
+  await copies.getByLabel('Reviewed copy outcome', { exact: true }).selectOption('NEEDS_REVIEW');
+  await fillObservation('SYNTHETIC-BACKUP-REOPEN-002');
+  await expect(observation('SYNTHETIC-BACKUP-REOPEN-002')).toContainText('Revision 2');
+  await expect(observation('SYNTHETIC-BACKUP-RECEIPT-001')).toContainText('Revision 1');
+  const savedEvents = await withDb(client => client.query(`SELECT revision,status FROM "DocumentPurgeDispositionEvent" WHERE "authorizationId"=$1 ORDER BY revision`, [secondId]));
+  expect(savedEvents.rows).toEqual([{ revision: 1, status: 'RETAINED_APPROVED' }, { revision: 2, status: 'NEEDS_REVIEW' }]);
+  const stillPending = await withDb(client => client.query(`SELECT state,"activeObjectAbsentAt" FROM "DocumentStorageDeletion" WHERE id=$1`, [deletionId]));
+  expect(stillPending.rows[0]).toEqual({ state: 'PENDING', activeObjectAbsentAt: null });
+  await gotoWithDevServerRetry(ownerPage, '/documents');
+  await decisions.getByRole('button', { name: 'Load disposal decisions' }).click();
+  await copies.getByRole('button', { name: 'Load copy evidence', exact: true }).click();
+  await expect(observation('SYNTHETIC-BACKUP-REOPEN-002')).toContainText('Needs review');
+  await copies.scrollIntoViewIfNeeded();
   await ownerPage.screenshot({ path: test.info().outputPath('purge-history.png'), fullPage: false, animations: 'disabled' });
 });

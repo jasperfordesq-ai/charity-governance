@@ -1,6 +1,7 @@
 'use client';
 
 import { useRef, useState } from 'react';
+import { DocumentDispositionEvidence } from './document-disposition-evidence';
 import { Button, Checkbox, Input, Textarea } from '@heroui/react';
 import { api } from '@/lib/api';
 import { useAuth } from '@/lib/auth-context';
@@ -127,6 +128,7 @@ export function DocumentPurgeReview({ document, onClaimed }: { document: Documen
         <Button size="sm" variant="flat" isDisabled={busy} onPress={() => { setReview({ kind: 'withdraw', authorization: row }); setReason(''); setEvidence(''); setError(''); }}>Review disposal cancellation</Button>
         <Button size="sm" color="danger" variant="flat" isDisabled={busy} onPress={() => { setReview({ kind: 'claim', authorization: row }); setConfirmed(false); setError(''); }}>Review permanent primary disposal</Button>
       </div> : null}
+      {row.claim ? <DocumentDispositionEvidence authorizationId={row.id} plan={row.dispositionPlan} isOwner={isOwner} /> : null}
     </li>)}</ul> : null}
     {cursor ? <Button size="sm" className="mt-3" onPress={() => load(true)} isDisabled={busy}>Load older disposal decisions</Button> : null}
     <ConfirmActionModal isOpen={review !== null} onOpenChange={open => { if (!open && !busy) setReview(null); }} ariaLabel="Review disposal decision"

@@ -178,6 +178,8 @@ test('recording downstream evidence is scoped, Owner-only, post-claim and cannot
   assert.deepEqual(state.dispositionArgs.data.observedAt, date);
   state.databaseFailure = Object.assign(new Error('Purge disposition revision changed; refresh history'), { name: 'PrismaClientUnknownRequestError' });
   await assert.rejects(service.recordDisposition('org-a', 'owner-a', 'auth-a', disposition), { statusCode: 409, code: 'PURGE_DISPOSITION_REVIEW_CHANGED' });
+  state.databaseFailure = Object.assign(new Error('Purge disposition observation must be between claim and recording'), { name: 'PrismaClientUnknownRequestError' });
+  await assert.rejects(service.recordDisposition('org-a', 'owner-a', 'auth-a', disposition), { statusCode: 409, code: 'PURGE_OBSERVATION_TIME_INVALID' });
 });
 
 test('downstream history paginates within one charity and authorization without claiming complete erasure', async () => {

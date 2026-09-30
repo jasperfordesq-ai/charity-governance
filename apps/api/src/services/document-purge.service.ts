@@ -62,6 +62,9 @@ export class DocumentPurgeService {
         if (error.message.includes('Purge claim must wait for retention and recovery expiry')) {
           throw new AppError(409, 'PURGE_NOT_DUE', 'The approved retention and recovery periods must both expire before primary disposal.');
         }
+        if (error.message.includes('Purge disposition observation must be between claim and recording')) {
+          throw new AppError(409, 'PURGE_OBSERVATION_TIME_INVALID', 'The observation time must be after the primary disposal claim and no later than the server time. Check the date, local time and device clock.');
+        }
         if (error.message.includes('Purge disposition')) {
           throw new AppError(409, 'PURGE_DISPOSITION_REVIEW_CHANGED', 'Refresh the scoped evidence history and review the approved plan, observation and follow-up dates.');
         }
