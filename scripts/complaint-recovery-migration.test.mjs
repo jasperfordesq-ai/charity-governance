@@ -248,6 +248,100 @@ test('complaint recovery migration preserves records and enforces reviewed remov
     sql(`UPDATE "ComplaintPurgeClaim" SET "actorUserId"='ordinary-admin';`,/append-only/);
     sql(`INSERT INTO "ComplaintRecord" (id,"organisationId","receivedDate",summary,status,"updatedAt")
       VALUES ('expired','a','2026-01-01','Reused identity','CLOSED',now());`,/cannot be reused/);
+    // Hold the first transaction open until PostgreSQL proves the competing
+    // connection is waiting on its lock. This tests ordering without timing luck.
+    async function orderedRace(first, second, rejection) {
+      const name = `complaint-race-${randomUUID()}`;
+      const leader = spawn('docker', ['--host', endpoint.Host, 'exec', '-i', container,
+        'psql', '-h', '127.0.0.1', '-U', 'postgres', '-v', 'ON_ERROR_STOP=1', '-Atq'],
+      { stdio: ['pipe','pipe','pipe'], timeout: 30_000 });
+      let output='', errors='';
+      leader.stdout.on('data', data => { output+=data; });
+      leader.stderr.on('data', data => { errors+=data; });
+      const finished = new Promise((resolve,reject) => {
+        leader.on('error',reject); leader.on('close',code=>resolve(code));
+      });
+      let follower;
+      try {
+        leader.stdin.write(`BEGIN; ${first} SELECT 'FIRST_READY';\n`);
+        for(let attempt=0; attempt<100 && !output.includes('FIRST_READY'); attempt++) {
+          assert.equal(errors,'',errors);
+          await new Promise(resolve=>setTimeout(resolve,25));
+        }
+        assert.ok(output.includes('FIRST_READY'),'first transaction acquired its locks');
+        follower=concurrent(`SET application_name='${name}'; ${second}`);
+        let waiting=false;
+        for(let attempt=0; attempt<50 && !waiting; attempt++) {
+          waiting=sql(`SELECT count(*) FROM pg_stat_activity WHERE application_name='${name}' AND wait_event_type='Lock';`)==='1';
+          if(!waiting) await new Promise(resolve=>setTimeout(resolve,25));
+        }
+        assert.ok(waiting,'competing transaction actually waited on a database lock');
+        leader.stdin.end('COMMIT;\n');
+        assert.equal(await finished,0,errors);
+        const result=await follower;
+        if(rejection) {
+          assert.notEqual(result.code,0,'superseded competing action must be refused');
+          assert.match(result.stderr,rejection);
+        } else assert.equal(result.code,0,result.stderr);
+      } finally {
+        if(!leader.stdin.writableEnded) leader.stdin.end('ROLLBACK;\n');
+        await finished;
+        if(follower) await follower;
+      }
+    }
+    function raceFixture(id, expired=true) {
+      sql(`INSERT INTO "ComplaintRecord" (id,"organisationId","receivedDate",summary,status,"updatedAt")
+        VALUES ('${id}','a','2026-01-01','Synthetic concurrent complaint','CLOSED',now());
+        INSERT INTO "ComplaintRemoval" (id,"organisationId","complaintId","recordRevision","actorUserId","policyId","evidenceRef",reason)
+        VALUES ('${id}-removal','a','${id}',1,'admin-a','final-review-policy','RACE-REMOVAL-001','Reviewed synthetic concurrent removal');
+        UPDATE "ComplaintRecord" SET "removalId"='${id}-removal',"removedAt"=(SELECT "occurredAt" FROM "ComplaintRemoval" WHERE id='${id}-removal') WHERE id='${id}';`);
+      if(expired) sql(`ALTER TABLE "ComplaintRemoval" DISABLE TRIGGER "ComplaintRemoval_append_only";
+        UPDATE "ComplaintRemoval" SET "recoveryUntil"=timezone('UTC',now())-INTERVAL '1 second' WHERE id='${id}-removal';
+        ALTER TABLE "ComplaintRemoval" ENABLE TRIGGER "ComplaintRemoval_append_only";`);
+      sql(`INSERT INTO "ComplaintPurgeAuthorization" (id,"organisationId","complaintId","recordRevision","holdRevision","removalId","policyId","actorUserId","recoveryUntil","dispositionPlan","evidenceRef",reason)
+        SELECT '${id}-authority','a','${id}',2,0,id,'final-review-policy','admin-a',"recoveryUntil",'${JSON.stringify(plan)}'::jsonb,'RACE-REVIEW-001','Reviewed synthetic concurrent disposal' FROM "ComplaintRemoval" WHERE id='${id}-removal';`);
+      return {
+        claim:claim(`${id}-claim`,`${id}-authority`,id),
+        hold:`INSERT INTO "ComplaintHoldEvent" (id,"organisationId","complaintId",revision,"recordRevision",held,"actorUserId","evidenceRef",reason)
+          VALUES ('${id}-hold','a','${id}',1,2,true,'admin-a','RACE-HOLD-001','Preserve synthetic concurrent record');`,
+        withdraw:`INSERT INTO "ComplaintPurgeAuthorizationWithdrawal" (id,"organisationId","authorizationId","actorUserId","evidenceRef",reason)
+          VALUES ('${id}-withdrawal','a','${id}-authority','admin-a','RACE-WITHDRAW-001','Withdraw synthetic concurrent authority');`,
+        restore:`UPDATE "ComplaintRecord" SET "removedAt"=NULL,"removalId"=NULL WHERE id='${id}';`,
+      };
+    }
+    for(const protection of ['hold','withdraw']) {
+      const protectedId=`${protection}-first`;
+      const protectedCase=raceFixture(protectedId);
+      await orderedRace(protectedCase[protection],protectedCase.claim,
+        protection==='hold'?/unchanged unheld revision/:/unwithdrawn Owner authority/);
+      assert.equal(sql(`SELECT count(*) FROM "ComplaintRecord" WHERE id='${protectedId}';`),'1');
+      assert.equal(sql(`SELECT count(*) FROM "ComplaintPurgeClaim" WHERE "complaintId"='${protectedId}';`),'0');
+      const purgedId=`claim-before-${protection}`;
+      const purgedCase=raceFixture(purgedId);
+      await orderedRace(purgedCase.claim,purgedCase[protection],
+        protection==='hold'?/current same-charity record revision/:/cannot be withdrawn/);
+      assert.equal(sql(`SELECT count(*) FROM "ComplaintRecord" WHERE id='${purgedId}';`),'0');
+      assert.equal(sql(`SELECT count(*) FROM "ComplaintPurgeClaim" WHERE "complaintId"='${purgedId}';`),'1');
+    }
+    // Restoration is only eligible before expiry, when purge is forbidden.
+    // Committing a valid restoration while claim waits invalidates the review.
+    const restoredCase=raceFixture('restore-first',false);
+    await orderedRace(restoredCase.restore,restoredCase.claim,/exact removed record/);
+    assert.equal(sql(`SELECT "removedAt" IS NULL FROM "ComplaintRecord" WHERE id='restore-first';`),'t');
+    assert.equal(sql(`SELECT count(*) FROM "ComplaintPurgeClaim" WHERE "complaintId"='restore-first';`),'0');
+    const deletedCase=raceFixture('claim-before-restore');
+    // A raw UPDATE waiting behind a committed DELETE affects zero rows. The
+    // recovery service separately reports not-found; SQL must not resurrect it.
+    await orderedRace(deletedCase.claim,deletedCase.restore);
+    assert.equal(sql(`SELECT count(*) FROM "ComplaintRecord" WHERE id='claim-before-restore';`),'0');
+    assert.equal(sql(`SELECT count(*) FROM "ComplaintPurgeClaim" WHERE "complaintId"='claim-before-restore';`),'1');
+    const transferred=raceFixture('owner-changed');
+    sql(`BEGIN; UPDATE "User" SET role='ADMIN' WHERE id='admin-a';
+      UPDATE "User" SET role='OWNER' WHERE id='ordinary-admin'; COMMIT;`);
+    sql(transferred.claim,/active charity Owner/);
+    assert.equal(sql(`SELECT count(*) FROM "ComplaintRecord" WHERE id='owner-changed';`),'1');
+    sql(`BEGIN; UPDATE "User" SET role='ADMIN' WHERE id='ordinary-admin';
+      UPDATE "User" SET role='OWNER' WHERE id='admin-a'; COMMIT;`);
     const authority = JSON.parse(sql(PURGE_RESTORE_SNAPSHOT_SQL));
     assert.doesNotMatch(JSON.stringify(authority), /Private original narrative|Reviewed synthetic administrative hold|HOLD-001/);
     const currentBackup = docker(['exec',container,'pg_dump','-U','postgres','--no-owner','--no-privileges','postgres']);

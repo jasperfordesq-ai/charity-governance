@@ -2,6 +2,22 @@
 
 Last updated: 2026-09-30
 
+Complaint purge concurrency checkpoint (source only): populated PostgreSQL
+tests now prove both orderings of hold/claim, withdrawal/claim and restore/claim.
+Each ordered test keeps the first transaction open until pg_stat_activity
+confirms the second connection is waiting on a database lock. A hold or
+withdrawal committed first blocks claim; claim committed first prevents a new
+hold/withdrawal. Valid restoration invalidates the reviewed removed revision;
+a raw restoration UPDATE waiting behind deletion affects no row and cannot
+resurrect it (the recovery service separately returns not-found). A valid
+single-Owner transfer also refuses the former Owner's claim. The first fixture
+incorrectly attempted an ownerless charity and was rejected by the existing
+continuity constraint; the corrected transaction transfers ownership legally.
+Full populated migration/backup proof passed in 47.2s. Evidence is in private
+complaint-purge-race-db-fixed.log. This closes the named database race gap;
+API/idempotency, confirmation UI, downstream copy evidence, hosted gates and
+deployment/live acceptance still remain. Live runtime is still e5e988a3.
+
 Complaint purge claim persistence increment (not deployed): a claim rechecks
 unwithdrawn same-Owner authority, exact removed record, current approved policy,
 unchanged unheld revision, original recovery deadline and elapsed retention.
