@@ -306,6 +306,78 @@ try {
   await assert.rejects(releaseHold, /writer or operation/);
   assert.equal((await hs.readControl()).activeOperation.operationId, 'next-hold-operation');
   assert.equal((await store.readControl()).activeOperation.operationId, staleContext.operationId);
+  // Local cancellation remains distinct from independent publication/release.
+  const cancelData = { actorUserId: 'admin-a', writerId: 'host-a', reasonCode: 'DEPENDENCIES_CHANGED', evidenceRef: 'CANCEL-001' };
+  await assert.rejects(prisma.complaintRecoveryCancellation.create({ data: { ...cancelData,
+    primaryPreparationId: capture.id } }), /cannot be cancelled/);
+  await assert.rejects(prisma.complaintRecoveryCancellation.create({ data: { ...cancelData,
+    primaryPreparationId: stale.id, actorUserId: 'ordinary-admin' } }), /current charity authority/);
+  await assert.rejects(prisma.complaintRecoveryCancellation.create({ data: { ...cancelData,
+    primaryPreparationId: stale.id, writerId: 'old-host' } }), /exact enforced writer/);
+  await assert.rejects(prisma.$transaction(async tx => {
+    await tx.complaintRecoveryCancellation.create({ data: { ...cancelData, primaryPreparationId: stale.id } });
+    throw new Error('cancel rollback');
+  }), /cancel rollback/);
+  assert.equal(await prisma.complaintRecoveryCancellation.count(), 0);
+  for (const isolationLevel of ['RepeatableRead', 'Serializable']) {
+    await assert.rejects(prisma.$transaction(tx => tx.complaintRecoveryCancellation.create({
+      data: { ...cancelData, primaryPreparationId: stale.id } }), { isolationLevel }), /read committed isolation/);
+    await assert.rejects(prisma.$transaction(tx => tx.complaintHoldRecoveryOutcome.create({
+      data: { preparationId: hp.id } }), { isolationLevel }), /read committed isolation/);
+    await assert.rejects(prisma.$transaction(tx => tx.complaintRecoveryExecution.create({ data: {
+      preparationId: stale.id, writerId: 'host-a', generation: 1, entryDigest: 'a'.repeat(64),
+      envelopeDigest: 'b'.repeat(64), controlRevision: 'test' } }), { isolationLevel }), /read committed isolation/);
+  }
+  const cancelled = await prisma.complaintRecoveryCancellation.create({ data: { ...cancelData,
+    primaryPreparationId: stale.id, transactionId: 1n, recordedAt: new Date('2000-01-01') } });
+  assert.ok(cancelled.transactionId > 1n); assert.ok(cancelled.recordedAt > new Date('2026-01-01'));
+  await assert.rejects(executePublishedComplaintOperation(prisma, journal, store, 'host-a', staleContext, keys, store), /Cancelled recovery operation/);
+  await assert.rejects(prisma.complaintRecoveryOutcome.create({ data: { preparationId: stale.id, claimId: 'not-a-claim' } }), /Cancelled recovery operation/);
+  await assert.rejects(prisma.complaintRecoveryCancellation.update({ where: { id: cancelled.id }, data: { reasonCode: 'OPERATOR_CANCELLED' } }), /append-only/);
+  await assert.rejects(prisma.complaintRecoveryCancellation.delete({ where: { id: cancelled.id } }), /append-only/);
+  await assert.rejects(prisma.complaintRecoveryCancellation.create({ data: { ...cancelData,
+    primaryPreparationId: stale.id, holdPreparationId: hp.id } }), /exactly one/);
+  await assert.rejects(prisma.complaintRecoveryCancellation.create({ data: { ...cancelData } }), /exactly one/);
+  const holdCancelData = { ...cancelData, actorUserId: 'admin-b', writerId: 'host-b' };
+  await assert.rejects(prisma.complaintRecoveryCancellation.create({ data: { ...holdCancelData, holdPreparationId: hp.id } }), /cannot be cancelled/);
+  for (const cancelFirst of [true, false]) {
+    const suffix = cancelFirst ? 'cancel-first' : 'execute-first';
+    await prisma.complaintRecord.create({ data: { id: suffix, organisationId: 'b', receivedDate: new Date(), summary: 'Synthetic cancellation race' } });
+    const prepared = await holdPreparations.capture('b', suffix, 'admin-b', { ...holdInput,
+      installationId: hb.installationId, operationId: suffix, expectedRecordRevision: 1, expectedHoldRevision: 0, held: true });
+    const cancel = tx => tx.complaintRecoveryCancellation.create({ data: { ...holdCancelData, holdPreparationId: prepared.id } });
+    const execute = tx => tx.complaintHoldRecoveryOutcome.create({ data: { preparationId: prepared.id } });
+    let ready, unlock;
+    const locked = new Promise(resolve => { ready = resolve; });
+    const proceed = new Promise(resolve => { unlock = resolve; });
+    const leader = prisma.$transaction(async tx => {
+      await (cancelFirst ? cancel(tx) : execute(tx)); ready(); await proceed;
+    }, { timeout: 15000 });
+    // Attach a handler immediately so an early leader failure cannot leave a
+    // silent wait or unhandled rejection.
+    await Promise.race([locked, leader.then(() => { throw new Error('Leader ended before lock proof'); })]);
+    const follower = prisma.$transaction(async tx => {
+      await tx.$executeRawUnsafe(`SET LOCAL application_name = 'cancellation-${suffix}'`);
+      return cancelFirst ? execute(tx) : cancel(tx);
+    }, { timeout: 15000 }).then(value => ({ value }), error => ({ error }));
+    try {
+      let waiting = false;
+      for (let attempt = 0; attempt < 100 && !waiting; attempt++) {
+        const rows = await prisma.$queryRaw`SELECT count(*)::int AS count FROM pg_stat_activity
+          WHERE application_name=${'cancellation-' + suffix} AND wait_event_type='Lock'`;
+        waiting = rows[0].count === 1;
+        if (!waiting) await new Promise(resolve => setTimeout(resolve, 25));
+      }
+      assert.ok(waiting, 'Cancellation/execution competitor actually waits for charity lock');
+    } finally { unlock(); await leader; }
+    const competed = await follower;
+    assert.match(String(competed.error), cancelFirst ? /Cancelled recovery operation/ : /cannot be cancelled/);
+    assert.equal(await prisma.complaintRecoveryCancellation.count({ where: { holdPreparationId: prepared.id } }), cancelFirst ? 1 : 0);
+    assert.equal(await prisma.complaintHoldRecoveryOutcome.count({ where: { preparationId: prepared.id } }), cancelFirst ? 0 : 1);
+    assert.equal(await prisma.complaintHoldEvent.count({ where: { complaintId: suffix } }), cancelFirst ? 0 : 1);
+  }
+  // Cancellation does not clear the independently reserved stale disposal slot.
+  assert.equal((await store.readControl()).activeOperation.operationId, staleContext.operationId);
   process.stdout.write('complaint-recovery-protocol-composition-verified');
 } finally {
   for (const value of retainedKeys.values()) value.key.fill(0);

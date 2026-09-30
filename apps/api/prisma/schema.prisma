@@ -1981,6 +1981,7 @@ model ComplaintHoldRecoveryPreparation {
   recordedAt DateTime @default(now())
   organisation Organisation @relation(fields: [organisationId], references: [id], onDelete: Restrict)
   outcome ComplaintHoldRecoveryOutcome?
+  cancellation ComplaintRecoveryCancellation?
 
   @@unique([organisationId, operationId])
 }
@@ -2011,6 +2012,7 @@ model ComplaintRecoveryPreparation {
   authorization ComplaintPurgeAuthorization @relation(fields: [authorizationId, organisationId], references: [id, organisationId], onDelete: Restrict)
   outcome ComplaintRecoveryOutcome?
   execution ComplaintRecoveryExecution?
+  cancellation ComplaintRecoveryCancellation?
 
   @@unique([organisationId, operationId])
   @@index([organisationId, recordedAt, id])
@@ -2948,4 +2950,19 @@ model ComplaintCopyHoldEvent {
   occurredAt DateTime @default(now())
   @@unique([authorizationId, area, scopeRef, revision], map: "ComplaintCopyHold_scope_revision_key")
   @@index([organisationId, authorizationId, occurredAt, id], map: "ComplaintCopyHoldEvent_history_idx")
+}
+
+// Inactive terminal cancellation of one original preparation, not remote release.
+model ComplaintRecoveryCancellation {
+  id String @id @default(cuid())
+  primaryPreparationId String? @unique
+  primaryPreparation ComplaintRecoveryPreparation? @relation(fields: [primaryPreparationId], references: [id], onDelete: Restrict)
+  holdPreparationId String? @unique
+  holdPreparation ComplaintHoldRecoveryPreparation? @relation(fields: [holdPreparationId], references: [id], onDelete: Restrict)
+  actorUserId String
+  writerId String
+  reasonCode String
+  evidenceRef String
+  transactionId BigInt @default(dbgenerated("txid_current()"))
+  recordedAt DateTime @default(now())
 }

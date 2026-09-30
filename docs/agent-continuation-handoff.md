@@ -1,5 +1,13 @@
 # CharityPilot Agent Continuation Handoff
 
+> DPO-05 local cancellation boundary: a new append-only cancellation record
+> targets exactly one disposal or hold preparation. Database guards serialize
+> cancellation against prepared execution/outcomes with the charity lock, reject
+> executed operations and require current charity authority plus the exact writer.
+> Cancellation does not clear independent reservations. Publication, cancellation
+> release, recovery replay, all-writer coverage and provider acceptance remain open.
+
+
 > DPO-05 committed hold release: an internal service now authenticates the
 > published hold outcome, compares its exact committed database receipt and
 > conditionally clears only the matching current reservation. Lost acknowledgements

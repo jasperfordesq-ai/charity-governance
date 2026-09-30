@@ -372,6 +372,28 @@ test('complaint recovery migration preserves records and enforces reviewed remov
       { cwd: fileURLToPath(new URL('../', import.meta.url)), input: captureUrl, encoding: 'utf8', timeout: 40000 });
     assert.equal(protocolProof.status, 0, protocolProof.stderr);
     assert.equal(protocolProof.stdout.trim(), 'complaint-recovery-protocol-composition-verified');
+    // Primary execution/cancellation race, in both explicit lock orders.
+    for (const cancelFirst of [true, false]) {
+      const id = cancelFirst ? 'primary-cancel-first' : 'primary-execute-first';
+      const fixture = raceFixture(id);
+      proveComplaintRecoveryPreparation(sql, `${id}-authority`, 'protocol-install');
+      const preparationId = `prepared-${id}-authority`;
+      const cancellation = `INSERT INTO "ComplaintRecoveryCancellation"
+        (id,"primaryPreparationId","actorUserId","writerId","reasonCode","evidenceRef")
+        VALUES ('${id}-cancel','${preparationId}','admin-a','host-a','OPERATOR_CANCELLED','CANCEL-RACE-001');`;
+      const execution = `INSERT INTO "ComplaintRecoveryExecution"
+        (id,"preparationId","writerId",generation,"entryDigest","envelopeDigest","controlRevision")
+        VALUES ('${id}-execution','${preparationId}','host-a',1,repeat('a',64),repeat('b',64),'synthetic-revision');
+        ${fixture.claim}
+        INSERT INTO "ComplaintRecoveryOutcome" (id,"preparationId","claimId")
+        VALUES ('${id}-outcome','${preparationId}','${id}-claim');`;
+      await orderedRace(cancelFirst ? cancellation : execution,
+        cancelFirst ? `BEGIN; ${execution} COMMIT;` : cancellation,
+        cancelFirst ? /Cancelled recovery operation/ : /cannot be cancelled/);
+      assert.equal(sql(`SELECT count(*) FROM "ComplaintRecoveryCancellation" WHERE "primaryPreparationId"='${preparationId}';`), cancelFirst ? '1' : '0');
+      assert.equal(sql(`SELECT count(*) FROM "ComplaintRecoveryOutcome" WHERE "preparationId"='${preparationId}';`), cancelFirst ? '0' : '1');
+      assert.equal(sql(`SELECT count(*) FROM "ComplaintRecord" WHERE id='${id}';`), cancelFirst ? '1' : '0');
+    }
     const disposition=(id,overrides={})=>{
       const value={organisation:'a',authorization:'fresh-purge',actor:'admin-a',area:'BACKUPS',revision:1,
         status:'RETAINED_APPROVED',observed:"timezone('UTC',clock_timestamp())",next:"timezone('UTC',now())+INTERVAL '30 days'",...overrides};

@@ -13,7 +13,7 @@ const tables = [
   'ComplaintRecoveryPreparation',
   'ComplaintRecoveryOutcome',
   'ComplaintRecoveryEnforcement', 'ComplaintRecoveryExecution',
-  'ComplaintHoldRecoveryPreparation', 'ComplaintHoldRecoveryOutcome',
+  'ComplaintHoldRecoveryPreparation', 'ComplaintHoldRecoveryOutcome', 'ComplaintRecoveryCancellation',
   'ComplaintPurgeDispositionEvent',
   'DocumentCopyDispositionAuthority', 'ComplaintCopyDispositionAuthority',
   'DocumentCopyHoldEvent', 'ComplaintCopyHoldEvent',
