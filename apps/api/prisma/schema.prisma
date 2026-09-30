@@ -1869,11 +1869,32 @@ model ComplaintRecord {
   status               RegisterStatus @default(OPEN)
   reviewedByBoard      Boolean        @default(false)
   boardMinuteReference String?
+  // Database-maintained version; changes invalidate earlier resolution evidence.
+  revision             Int            @default(1)
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
   @@index([organisationId])
+}
+
+// Evidence of a reviewed resolution date, not a retention or erasure decision.
+// Identifiers survive record removal; no complaint narrative is copied here.
+model ComplaintResolutionEvidence {
+  id             String   @id @default(cuid())
+  organisationId String
+  complaintId    String
+  revision       Int
+  recordRevision Int
+  state          String
+  resolvedAt     DateTime?
+  evidenceRef    String
+  reason         String
+  actorUserId    String
+  occurredAt     DateTime @default(now())
+
+  @@unique([organisationId, complaintId, revision], map: "ComplaintResolutionEvidence_revision_key")
+  @@index([organisationId, complaintId, occurredAt, id], map: "ComplaintResolutionEvidence_history_idx")
 }
 
 // Metadata-only register history survives removal of sensitive live rows.

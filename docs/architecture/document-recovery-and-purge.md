@@ -3,10 +3,39 @@
 Status: implementation and acceptance in progress, 30 September 2026. Local
 proof now covers policy administration, recoverable Vault removal and exact-byte
 restore, reviewed purge claims, the local primary-file worker and downstream
-evidence history. These R1-R3 capabilities still require exact-release deployment
-and live acceptance. R4 other record classes/stores, independently durable purge
+evidence history. These R1-R3 capabilities were deployed in private release
+442eb788 on 30 September; bounded Owner read-only checks passed. Actual-role,
+approved-policy and disposal acceptance remain open. R4 other record classes/stores, independently durable purge
 authority, supported recovery reopening and R5 acceptance remain open. Older
 checkpoints below describe the state when recorded, not the current API surface.
+
+### Complaint resolution evidence: persistence checkpoint
+
+R4 begins with explicit resolution evidence, because a complaint's generic
+`updatedAt` is not its resolution date. `ComplaintResolutionEvidence` preserves
+revisioned RECORDED/WITHDRAWN observations, a controlled evidence reference,
+reason and active same-charity administrator. The database requires a closed
+complaint and a resolution timestamp between receipt and the database clock.
+History is append-only and survives ordinary record removal. No complaint
+narrative is copied automatically, no old complaint gets an inferred resolution
+date, and no policy or deletion job is created by this migration.
+
+Every complaint update advances a database-maintained revision, including
+reopening and later closing. Evidence applies only to its exact record revision;
+all edits require explicit re-review before that evidence can support a future
+retention anchor. Consumers must also select the latest evidence revision and
+require RECORDED state, a currently closed record and matching charity/identity.
+An old RECORDED event must not be selected past a later withdrawal. Removed
+identities with retained evidence cannot be recreated and silently reuse it.
+
+`npm run test:complaint-resolution` exercises the migration after the preceding
+history in disposable PostgreSQL, preserving a populated legacy complaint and
+testing dates, tenant/role refusal, corrections, withdrawal, reopening, stale
+revisions, immutable history and removed-identity reuse. Schema validation,
+model/reset inventory and connector privacy coverage are separate checks.
+This checkpoint adds persistence only. Restricted API, review UI, concurrent
+request proof, policy consumption, recoverable complaint removal, purge and
+deployment remain required; it does not complete complaint retention or R4.
 
 Read the checkpoints below as dated implementation history, newest first within
 Observed starting point. Statements about missing routes/UI in older checkpoints

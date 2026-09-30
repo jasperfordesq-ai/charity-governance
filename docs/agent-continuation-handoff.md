@@ -2,6 +2,18 @@
 
 Last updated: 2026-09-30
 
+Complaint retention persistence checkpoint: a new, locally verified migration
+adds database-maintained complaint revisions and append-only resolution evidence.
+Evidence requires the current closed complaint, a valid resolution date and an
+active administrator of the same charity. Corrections and withdrawals retain
+history; subsequent complaint edits invalidate the earlier anchor, and removed
+identities with retained evidence cannot be reused. Existing complaints receive
+no inferred resolution date. The disposable PostgreSQL migration proof passes,
+as do schema validation, API build, 51 model/reset checks and 408 runnable MCP
+checks (two Windows skips). This slice is not deployed. Restricted API, review
+UI, concurrent request proof, policy consumption, recoverable complaint removal
+and purge remain open. No policy is activated and no live complaint is changed.
+
 Private deployment checkpoint: 442eb788920bb79b021eaef668c1a97af3bf81ce is live
 on the existing private host from 11:44:52 UTC. Exact CI and E2E succeeded;
 E2E recorded234 first-pass and two retry passes. Eight migrations passed the
