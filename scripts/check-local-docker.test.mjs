@@ -807,7 +807,14 @@ test('platform audit ledger records launch evidence gate hardening', () => {
   assert.match(auditLedger, /launch evidence approval state, final signoff state, and the next incomplete checks/);
   assert.match(auditLedger, /Release binding:/);
   assert.match(auditLedger, /Launch Progress Summary/);
-  assert.match(auditLedger, /Strict launch gates complete: 18 \/ 121 \(103 remaining, 14\.9% complete\)/);
+  // The generated ledger reflects local, uncommitted operator evidence. Check
+  // its arithmetic rather than requiring another checkout's historical score.
+  const progress = auditLedger.match(/Strict launch gates complete: (\d+) \/ (\d+) \((\d+) remaining, ([\d.]+)% complete\)/);
+  assert.ok(progress, 'strict progress must include counts and percentage');
+  const [, completed, total, remaining, percentage] = progress.map(Number);
+  assert.ok(total > 0 && completed >= 0 && completed <= total);
+  assert.equal(remaining, total - completed);
+  assert.equal(percentage, Math.round(completed / total * 1000) / 10);
   assert.match(auditLedger, /final approval role progress separately from checklist completion/);
   assert.match(auditLedger, /group missing production values by provider\/source/);
   assert.match(auditLedger, /Local-state note/);
@@ -956,7 +963,9 @@ test('platform audit JSON command is read-only and machine-readable', () => {
   // so p0Routes below is unchanged again.
   // 37 since 2026-09-20: /approvals, where somebody with no terminal can approve
   // a connector action. P2, so p0Routes below is unchanged again.
-  assert.equal(payload.counts.routes, 37);
+  // 41: DPO review added Data Requests, Governance Audit, Security & Data,
+  // and the session-renew route. Existing P0 routes are unchanged.
+  assert.equal(payload.counts.routes, 41);
   assert.equal(payload.counts.p0Routes, 16);
   assert.equal(payload.counts.oversizedRouteFiles, 0);
   assert.ok(payload.routeAudit.some((route) => route.route === '/dashboard' && route.priority === 'P0'));

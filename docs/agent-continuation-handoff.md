@@ -2,6 +2,18 @@
 
 Last updated: 2026-09-30
 
+Data Requests release-gate repair: request state, API operations and stale-response
+guards now live in a route-local hook, with shared typed records separate from
+the 381-line display route. Rendered forms and request handling are preserved.
+The local route inventory now counts all 41 routes; strict progress assertions
+validate arithmetic instead of requiring a different checkout's July score.
+The generated audit has been refreshed, without closing the human issue ledger.
+Web build, TypeScript, scoped lint, all 45 local-Docker tests and six isolated
+Chromium journeys pass (intake/pagination, response corrections, retained Vault
+associations, review navigation and Member restrictions). The complete root test
+command also passes. Exact revised hosted CI/E2E and deployment/live acceptance
+remain outstanding. Prior cf955dcf CI failed the now-corrected 37-route assertion.
+
 Windows release-check repair: Node-spawned Windows PowerShell inherited the
 bundled PowerShell edition's module search path. The ACL helper now imports its
 executing PSHOME Security module; archive-test creation likewise selects its

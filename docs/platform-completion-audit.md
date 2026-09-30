@@ -1,8 +1,8 @@
 # CharityPilot Platform Completion Audit
 
-Generated: 2026-07-12
+Generated: 2026-09-30
 
-Branch: `codex/linux-private-server-profile`
+Branch: `master`
 
 Generation note: repository state is intentionally live-only; run `npm run launch:status -- --json` from the release checkout before collecting launch evidence. Use `node scripts/platform-completion-audit.mjs --json` for machine-readable route, backend, launch, compliance, and next-action data without rewriting this Markdown ledger.
 
@@ -12,11 +12,11 @@ This ledger is a current-state engineering audit. It is not legal advice and doe
 
 | Area | Current state | Next action |
 | --- | --- | --- |
-| Product UI | 26 page routes scanned; 15 are P0 trustee/compliance workflows; 0 route files are 450+ lines. | Complete deployed browser QA for every route across desktop/mobile and both themes. |
-| API/backend | 12 route groups scanned with route-local guard heuristics and 81 API test files. | Preserve auth, tenant isolation, role guards, plan gates, validation, and redaction while fixing only audit-backed defects. |
-| Launch operations | .env.production exists but 18 production value issue(s) still need resolution. | Complete external provider, hosting, backup, observability, legal, browser QA, and security evidence before real charity data. |
+| Product UI | 41 page routes scanned; 16 are P0 trustee/compliance workflows; 0 route files are 450+ lines. | Browser-QA flagged P0 workflows and visual treatment on decorative or pill-heavy pages. |
+| API/backend | 19 route groups scanned with route-local guard heuristics and 176 API test files. | Preserve auth, tenant isolation, role guards, plan gates, validation, and redaction while fixing only audit-backed defects. |
+| Launch operations | You have not created a production environment file yet. | Complete external provider, hosting, backup, observability, legal, browser QA, and security evidence before real charity data. |
 | Irish compliance model | 12 matrix entries; last checked 2026-07-09; statuses guidance:6, conditional:3, not_commenced:2, in_force:1. | Refresh official sources before legal copy changes and record professional-review signoff outside git. |
-| Verification surface | 39 web unit test files, 81 API test files, 17 Playwright specs. | Run full release, production-check, accessibility, and deployed-browser gates before launch signoff. |
+| Verification surface | 52 web unit test files, 176 API test files, 27 Playwright specs. | Run full release, production-check, accessibility, and deployed-browser gates before launch signoff. |
 
 ## Fixed During This Audit Pass
 
@@ -129,7 +129,7 @@ This ledger is a current-state engineering audit. It is not legal advice and doe
 - Local destructive E2E now runs only through a managed standalone stack with a positive allow-list build context, pinned local Docker daemon and integrated builder, exact pre-start Compose/DSN validation, generated UUID-bound disposable database, protected marker, restricted role, keyed API binding proof, internal-only database/API/web services exposed solely through a secretless fixed-route loopback TCP gateway, bounded tmpfs data storage, a baked read-only production web runtime, and finally-enforced exact-project cleanup; cleanup residue fails the gate and the retired boolean reset flag grants no authority.
 - Exceptional remote-disposable database seams now require an active suite lease and same-session advisory-lease ownership before reset; after proven child-group absence, a fresh-connection outer janitor re-proves database identity, boundedly reacquires that lease, verifies API binding before and after the centralized reset, releases, and disconnects. Native-Windows remote-destructive execution is refused until Job Object-backed tree-lifetime proof exists; Linux and WSL process groups remain supported.
 - One bounded parent lifecycle covers local, deployed, and remote modes and rechecks cancellation immediately before spawn. POSIX completion requires process-group absence plus leader close; abnormal Windows termination requires checked bounded taskkill /T /F plus leader close. If termination remains unproven, the runner fails red, skips the remote janitor or local Docker cleanup, and preserves recovery inputs.
-- GET /auth/me combines a 60-per-minute credential bucket with an independent 1,000-per-minute coarse IP ceiling. A shared case-insensitive, tab-tolerant Bearer parser governs authentication, rate limiting, and origin checks, and malformed Authorization never falls back to cookies; logout remains origin-sensitive. The web proxy accepts only exact 200 for /me; on 401 with a refresh cookie it redirects to the browser's no-store `/session-renew` page instead of rotating from a web worker. Other failures return no-store 503. The browser renewal uses the shared cross-tab lock and the API retains single-use replay quarantine.
+- GET /auth/me now combines a 60-per-minute credential bucket with an independent 1,000-per-minute coarse IP ceiling. A shared case-insensitive, tab-tolerant Bearer parser governs authentication, rate limiting, and origin checks, and malformed Authorization never falls back to cookies; logout remains origin-sensitive. The proxy accepts only exact 200 for /me and refresh, requires exactly two strict nonempty scoped rotation cookies, forwards exactly two validated deletion cookies only on definitive refresh 401, and maps throttles, transient failures, and malformed responses to no-store 503.
 - The production readiness TODO now requires final-release-ref command transcripts, commit SHA, workflow run, and digest manifest evidence instead of preserving stale local selected-gate commit claims.
 - Deployed browser QA mode now uses existing non-sensitive test credentials and skips direct database reset or token-injection seams.
 - Regulator official-source links now use compact link styling instead of pill-badge styling behind a wiring regression test.
@@ -337,7 +337,7 @@ This ledger is a current-state engineering audit. It is not legal advice and doe
 | Priority | Area | Finding |
 | --- | --- | --- |
 | P0 | Production launch | Launch evidence remains a template and .env.production still has placeholders; real provider, hosting, backup, observability, legal, browser QA, and pentest evidence are external blockers. |
-| P1 | Frontend polish | No route files remain over 450 lines, route page inline SVG findings are closed, and route-surface static dark-mode/decorative findings are clear; deployed browser and accessibility evidence remain. |
+| P1 | Frontend polish | No route files remain over 450 lines and route page inline SVG findings are closed; shift frontend polish toward browser QA and visual treatment on flagged P0 routes. |
 
 ## Route Audit
 
@@ -346,27 +346,42 @@ This ledger is a current-state engineering audit. It is not legal advice and doe
 | P0 | `/` | marketing | `apps/web/src/app/(marketing)/page.tsx` | 365 | no | no obvious static risk; verify in browser |
 | P2 | `/about` | marketing | `apps/web/src/app/(marketing)/about/page.tsx` | 90 | no | no obvious static risk; verify in browser |
 | P1 | `/accept-invite` | auth | `apps/web/src/app/(auth)/accept-invite/page.tsx` | 163 | yes | no obvious static risk; verify in browser |
+| P2 | `/approvals` | dashboard | `apps/web/src/app/(dashboard)/approvals/page.tsx` | 236 | yes | no obvious static risk; verify in browser |
 | P0 | `/billing` | dashboard | `apps/web/src/app/(dashboard)/billing/page.tsx` | 232 | yes | no obvious static risk; verify in browser |
 | P2 | `/blog` | marketing | `apps/web/src/app/(marketing)/blog/page.tsx` | 33 | no | no obvious static risk; verify in browser |
 | P2 | `/blog/[slug]` | marketing | `apps/web/src/app/(marketing)/blog/[slug]/page.tsx` | 192 | no | no obvious static risk; verify in browser |
 | P0 | `/board` | dashboard | `apps/web/src/app/(dashboard)/board/page.tsx` | 124 | yes | no obvious static risk; verify in browser |
-| P0 | `/compliance` | dashboard | `apps/web/src/app/(dashboard)/compliance/page.tsx` | 150 | yes | no obvious static risk; verify in browser |
+| P0 | `/compliance` | dashboard | `apps/web/src/app/(dashboard)/compliance/page.tsx` | 152 | yes | no obvious static risk; verify in browser |
 | P0 | `/compliance/[principleId]` | dashboard | `apps/web/src/app/(dashboard)/compliance/[principleId]/page.tsx` | 107 | yes | no obvious static risk; verify in browser |
 | P0 | `/dashboard` | dashboard | `apps/web/src/app/(dashboard)/dashboard/page.tsx` | 143 | yes | no obvious static risk; verify in browser |
-| P0 | `/deadlines` | dashboard | `apps/web/src/app/(dashboard)/deadlines/page.tsx` | 187 | yes | no obvious static risk; verify in browser |
-| P0 | `/documents` | dashboard | `apps/web/src/app/(dashboard)/documents/page.tsx` | 205 | yes | no obvious static risk; verify in browser |
-| P0 | `/export` | dashboard | `apps/web/src/app/(dashboard)/export/page.tsx` | 159 | yes | no obvious static risk; verify in browser |
+| P2 | `/data-lifecycle` | dashboard | `apps/web/src/app/(dashboard)/data-lifecycle/page.tsx` | 381 | yes | no obvious static risk; verify in browser |
+| P0 | `/deadlines` | dashboard | `apps/web/src/app/(dashboard)/deadlines/page.tsx` | 193 | yes | no obvious static risk; verify in browser |
+| P0 | `/documents` | dashboard | `apps/web/src/app/(dashboard)/documents/page.tsx` | 338 | yes | no obvious static risk; verify in browser |
+| P0 | `/export` | dashboard | `apps/web/src/app/(dashboard)/export/page.tsx` | 184 | yes | no obvious static risk; verify in browser |
 | P1 | `/features` | marketing | `apps/web/src/app/(marketing)/features/page.tsx` | 253 | no | no obvious static risk; verify in browser |
-| P1 | `/forgot-password` | auth | `apps/web/src/app/(auth)/forgot-password/page.tsx` | 138 | yes | no obvious static risk; verify in browser |
-| P0 | `/login` | auth | `apps/web/src/app/(auth)/login/page.tsx` | 148 | yes | no obvious static risk; verify in browser |
-| P0 | `/organisation` | dashboard | `apps/web/src/app/(dashboard)/organisation/page.tsx` | 178 | yes | no obvious static risk; verify in browser |
+| P1 | `/forgot-password` | auth | `apps/web/src/app/(auth)/forgot-password/page.tsx` | 141 | yes | no obvious static risk; verify in browser |
+| P2 | `/governance-audit` | dashboard | `apps/web/src/app/(dashboard)/governance-audit/page.tsx` | 229 | yes | no obvious static risk; verify in browser |
+| P2 | `/integrations` | dashboard | `apps/web/src/app/(dashboard)/integrations/page.tsx` | 399 | yes | no obvious static risk; verify in browser |
+| P2 | `/integrations/confluence/callback` | dashboard | `apps/web/src/app/(dashboard)/integrations/confluence/callback/page.tsx` | 105 | yes | no obvious static risk; verify in browser |
+| P0 | `/login` | auth | `apps/web/src/app/(auth)/login/page.tsx` | 180 | yes | no obvious static risk; verify in browser |
+| P0 | `/minute-book` | dashboard | `apps/web/src/app/(dashboard)/minute-book/page.tsx` | 236 | yes | decorative or pill-heavy styling needs visual QA |
+| P0 | `/organisation` | dashboard | `apps/web/src/app/(dashboard)/organisation/page.tsx` | 200 | yes | no obvious static risk; verify in browser |
+| P2 | `/owner` | root | `apps/web/src/app/(owner)/owner/page.tsx` | 18 | no | dark-mode relies mostly on layout; screenshot QA required |
+| P2 | `/owner/login` | root | `apps/web/src/app/(owner)/owner/login/page.tsx` | 126 | yes | dark-mode relies mostly on layout; screenshot QA required |
+| P2 | `/owner/security` | root | `apps/web/src/app/(owner)/owner/security/page.tsx` | 194 | yes | dark-mode relies mostly on layout; screenshot QA required |
+| P2 | `/owner/set-password` | root | `apps/web/src/app/(owner)/owner/set-password/page.tsx` | 74 | yes | dark-mode relies mostly on layout; screenshot QA required |
+| P2 | `/owner/tenants` | root | `apps/web/src/app/(owner)/owner/tenants/page.tsx` | 163 | yes | dark-mode relies mostly on layout; screenshot QA required |
+| P2 | `/owner/tenants/[id]` | root | `apps/web/src/app/(owner)/owner/tenants/[id]/page.tsx` | 114 | yes | no obvious static risk; verify in browser |
+| P2 | `/owner/tenants/new` | root | `apps/web/src/app/(owner)/owner/tenants/new/page.tsx` | 173 | yes | no obvious static risk; verify in browser |
 | P0 | `/pricing` | marketing | `apps/web/src/app/(marketing)/pricing/page.tsx` | 256 | no | no obvious static risk; verify in browser |
 | P1 | `/privacy` | marketing | `apps/web/src/app/(marketing)/privacy/page.tsx` | 245 | no | no obvious static risk; verify in browser |
 | P0 | `/register` | auth | `apps/web/src/app/(auth)/register/page.tsx` | 267 | yes | no obvious static risk; verify in browser |
-| P0 | `/registers` | dashboard | `apps/web/src/app/(dashboard)/registers/page.tsx` | 197 | yes | no obvious static risk; verify in browser |
+| P0 | `/registers` | dashboard | `apps/web/src/app/(dashboard)/registers/page.tsx` | 209 | yes | no obvious static risk; verify in browser |
 | P0 | `/regulator` | dashboard | `apps/web/src/app/(dashboard)/regulator/page.tsx` | 189 | yes | no obvious static risk; verify in browser |
-| P1 | `/reset-password` | auth | `apps/web/src/app/(auth)/reset-password/page.tsx` | 230 | yes | no obvious static risk; verify in browser |
-| P1 | `/team` | dashboard | `apps/web/src/app/(dashboard)/team/page.tsx` | 448 | yes | no obvious static risk; verify in browser |
+| P1 | `/reset-password` | auth | `apps/web/src/app/(auth)/reset-password/page.tsx` | 236 | yes | no obvious static risk; verify in browser |
+| P2 | `/security-data` | dashboard | `apps/web/src/app/(dashboard)/security-data/page.tsx` | 89 | yes | no obvious static risk; verify in browser |
+| P2 | `/session-renew` | auth | `apps/web/src/app/(auth)/session-renew/page.tsx` | 66 | yes | dark-mode relies mostly on layout; screenshot QA required |
+| P1 | `/team` | dashboard | `apps/web/src/app/(dashboard)/team/page.tsx` | 424 | yes | no obvious static risk; verify in browser |
 | P1 | `/terms` | marketing | `apps/web/src/app/(marketing)/terms/page.tsx` | 265 | no | no obvious static risk; verify in browser |
 | P1 | `/verify-email` | auth | `apps/web/src/app/(auth)/verify-email/page.tsx` | 190 | yes | no obvious static risk; verify in browser |
 
@@ -374,18 +389,25 @@ This ledger is a current-state engineering audit. It is not legal advice and doe
 
 | Route group | File | Lines | Guard signals | Nearby tests | Audit note |
 | --- | --- | ---: | --- | ---: | --- |
-| `auth` | `apps/api/src/routes/auth/index.ts` | 287 | public/partial by design | 16 | preserve current guard and tenant boundary |
-| `billing` | `apps/api/src/routes/billing/index.ts` | 96 | auth, owner actions | 7 | preserve current guard and tenant boundary |
-| `board-members` | `apps/api/src/routes/board-members/index.ts` | 64 | auth, subscription, admin writes | 2 | preserve current guard and tenant boundary |
-| `compliance` | `apps/api/src/routes/compliance/index.ts` | 177 | auth, subscription, admin writes | 5 | preserve current guard and tenant boundary |
-| `dashboard` | `apps/api/src/routes/dashboard/index.ts` | 101 | auth, subscription | 1 | preserve current guard and tenant boundary |
-| `deadlines` | `apps/api/src/routes/deadlines/index.ts` | 107 | auth, subscription, admin writes | 6 | preserve current guard and tenant boundary |
-| `documents` | `apps/api/src/routes/documents/index.ts` | 406 | auth, subscription, admin writes | 6 | preserve current guard and tenant boundary |
-| `export` | `apps/api/src/routes/export/index.ts` | 215 | auth, subscription, plan gate | 3 | preserve current guard and tenant boundary |
-| `governance-registers` | `apps/api/src/routes/governance-registers/index.ts` | 243 | auth, subscription, admin writes | 2 | preserve current guard and tenant boundary |
-| `health` | `apps/api/src/routes/health/index.ts` | 237 | public/partial by design | 3 | preserve current guard and tenant boundary |
-| `organisations` | `apps/api/src/routes/organisations/index.ts` | 39 | auth, subscription, admin writes | 3 | preserve current guard and tenant boundary |
-| `team` | `apps/api/src/routes/team/index.ts` | 291 | auth, subscription | 5 | preserve current guard and tenant boundary |
+| `auth` | `apps/api/src/routes/auth/index.ts` | 458 | auth, admin writes | 24 | preserve current guard and tenant boundary |
+| `billing` | `apps/api/src/routes/billing/index.ts` | 97 | auth, owner actions | 7 | preserve current guard and tenant boundary |
+| `board-members` | `apps/api/src/routes/board-members/index.ts` | 75 | auth, subscription, admin writes | 3 | preserve current guard and tenant boundary |
+| `compliance` | `apps/api/src/routes/compliance/index.ts` | 279 | auth, subscription, admin writes | 5 | preserve current guard and tenant boundary |
+| `dashboard` | `apps/api/src/routes/dashboard/index.ts` | 108 | auth, subscription | 1 | preserve current guard and tenant boundary |
+| `data-lifecycle` | `apps/api/src/routes/data-lifecycle/index.ts` | 342 | auth, admin writes | 1 | preserve current guard and tenant boundary |
+| `deadlines` | `apps/api/src/routes/deadlines/index.ts` | 130 | auth, subscription, admin writes | 7 | preserve current guard and tenant boundary |
+| `documents` | `apps/api/src/routes/documents/index.ts` | 935 | auth, subscription, admin writes, owner actions | 16 | preserve current guard and tenant boundary |
+| `export` | `apps/api/src/routes/export/index.ts` | 291 | auth, subscription, admin writes, plan gate | 3 | preserve current guard and tenant boundary |
+| `governance-audit` | `apps/api/src/routes/governance-audit/index.ts` | 211 | auth, admin writes | 1 | preserve current guard and tenant boundary |
+| `governance-registers` | `apps/api/src/routes/governance-registers/index.ts` | 424 | auth, subscription, admin writes | 2 | preserve current guard and tenant boundary |
+| `governing-acts` | `apps/api/src/routes/governing-acts/index.ts` | 204 | auth, subscription, admin writes | 1 | preserve current guard and tenant boundary |
+| `health` | `apps/api/src/routes/health/index.ts` | 269 | public/partial by design | 5 | preserve current guard and tenant boundary |
+| `integrations` | `apps/api/src/routes/integrations/index.ts` | 1434 | auth, subscription, admin writes | 6 | preserve current guard and tenant boundary |
+| `members` | `apps/api/src/routes/members/index.ts` | 64 | auth, subscription, admin writes | 5 | preserve current guard and tenant boundary |
+| `organisations` | `apps/api/src/routes/organisations/index.ts` | 53 | auth, subscription, admin writes | 3 | preserve current guard and tenant boundary |
+| `owner` | `apps/api/src/routes/owner/index.ts` | 44 | none detected | 13 | verify auth guard before launch |
+| `search` | `apps/api/src/routes/search/index.ts` | 66 | auth, subscription | 1 | preserve current guard and tenant boundary |
+| `team` | `apps/api/src/routes/team/index.ts` | 319 | auth, subscription | 5 | preserve current guard and tenant boundary |
 
 ## Launch Evidence Blockers
 
@@ -397,22 +419,12 @@ This ledger is a current-state engineering audit. It is not legal advice and doe
 - Observability, uptime checks, alert routing, incident owner, and test-alert evidence are required.
 - Solicitor/governance/privacy review and external penetration test are required before real charity data.
 
-Local-state note: This generated section reflects the local non-committed `.env.production`; listed placeholder, provider, TLS, or cookie issues are not committed and may differ on another operator workstation or secret-store checkout.
+Local-state note: This generated section reflects local non-committed files. This checkout has no `.env.production` and no committed launch evidence; a partially configured production workstation may instead report `ENV_INCOMPLETE` with operator-supplied values still outstanding.
 
 ### Launch Evidence Ledger
 
-- .charitypilot-launch-evidence/production-launch-evidence.json exists. Checklist checks complete: 9 / 89.
-- approvedForLaunch: false
-- finalSignoff: pending
-- Final approval roles approved: 0 / 5
-- Release binding: Launch evidence is not bound to a concrete release artifact identity (7 field(s) missing or placeholder).
-- Next incomplete checks:
-  - releaseGate.check-production (pending)
-  - releaseGate.github-environment (missing)
-  - releaseGate.github-secret-store (missing)
-  - releaseGate.deploy-preflight (pending)
-  - releaseGate.deploy-production (pending)
-- Track progress with:  npm run check:production:evidence:status -- --evidence-file=.charitypilot-launch-evidence/production-launch-evidence.json
+- .charitypilot-launch-evidence/production-launch-evidence.json has not been created yet.
+- Create it with:  npm run check:production:evidence:init
 - Strict validation: `npm run check:production:evidence -- --evidence-file=.charitypilot-launch-evidence/production-launch-evidence.json`
 - Strict validation JSON: `npm run check:production:evidence -- --json --evidence-file=.charitypilot-launch-evidence/production-launch-evidence.json`
 
@@ -533,68 +545,15 @@ Local-state note: This generated section reflects the local non-committed `.env.
 
 ### Local Production Environment State
 
-- Phase: `ENV_INCOMPLETE`
-- .env.production exists but 18 production value issue(s) still need resolution.
-- This generated section reflects the local non-committed `.env.production`; listed placeholder, provider, TLS, or cookie issues are not committed and may differ on another operator workstation or secret-store checkout.
+- Phase: `NO_ENV`
+- You have not created a production environment file yet.
+- This generated section reflects local non-committed files. This checkout has no `.env.production` and no committed launch evidence; a partially configured production workstation may instead report `ENV_INCOMPLETE` with operator-supplied values still outstanding.
 
 ### Launch Progress Summary
 
-- Production values complete: 9 / 27 (18 remaining)
-- Launch evidence checks complete: 9/89 evidence checks (80 remaining)
-- Final signoffs approved: 0 / 5 (5 remaining)
-- Strict launch gates complete: 18 / 121 (103 remaining, 14.9% complete)
+- Production values complete: 0 / 27 (27 remaining)
+- Strict launch gates complete: 0 / 122 (122 remaining, 0% complete)
 - approvedForLaunch: false
-
-### Local Production Environment Issues
-
-The local non-committed production env still has 18 unresolved value issue(s):
-
-- `DOCUMENT_STORAGE_RECOVERY_DATABASE_HOST_ALLOWLIST` (missing): Value is missing from .env.production or the approved production secret source.
-- `STRIPE_BILLING_PORTAL_CONFIGURATION_ID` (missing): Value is missing from .env.production or the approved production secret source.
-- `TRUSTED_PROXY_ADDRESSES` (placeholder): Value still contains a REPLACE_ME placeholder.
-- `DATABASE_URL` (placeholder): Value still contains a REPLACE_ME placeholder.
-- `STRIPE_SECRET_KEY` (placeholder): Value still contains a REPLACE_ME placeholder.
-- `STRIPE_WEBHOOK_SECRET` (placeholder): Value still contains a REPLACE_ME placeholder.
-- `NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY` (placeholder): Value still contains a REPLACE_ME placeholder.
-- `STRIPE_ESSENTIALS_MONTHLY_PRICE_ID` (placeholder): Value still contains a REPLACE_ME placeholder.
-- `STRIPE_ESSENTIALS_YEARLY_PRICE_ID` (placeholder): Value still contains a REPLACE_ME placeholder.
-- `STRIPE_COMPLETE_MONTHLY_PRICE_ID` (placeholder): Value still contains a REPLACE_ME placeholder.
-- `STRIPE_COMPLETE_YEARLY_PRICE_ID` (placeholder): Value still contains a REPLACE_ME placeholder.
-- `RESEND_API_KEY` (placeholder): Value still contains a REPLACE_ME placeholder.
-- `SUPABASE_URL` (placeholder): Value still contains a REPLACE_ME placeholder.
-- `SUPABASE_SERVICE_ROLE_KEY` (placeholder): Value still contains a REPLACE_ME placeholder.
-- `ERROR_ALERT_WEBHOOK_URL` (placeholder): Value still contains a REPLACE_ME placeholder.
-- `CHARITYPILOT_API_IMAGE` (placeholder): Value still contains a REPLACE_ME placeholder.
-- `CHARITYPILOT_WEB_IMAGE` (placeholder): Value still contains a REPLACE_ME placeholder.
-- `CHARITYPILOT_MIGRATION_IMAGE` (placeholder): Value still contains a REPLACE_ME placeholder.
-
-Grouped by source:
-
-- Hosting, DNS, TLS, and proxy:
-  - `TRUSTED_PROXY_ADDRESSES`: Reverse-proxy IP/CIDR in front of the API (Step 4)
-- PostgreSQL:
-  - `DATABASE_URL`: Managed production PostgreSQL URL with sslmode=verify-full and target_session_attrs=read-write (Step 3)
-  - `DOCUMENT_STORAGE_RECOVERY_DATABASE_HOST_ALLOWLIST`: Exact managed PostgreSQL hostname authorized for audited document-deletion recovery (Step 3)
-- Stripe billing:
-  - `STRIPE_SECRET_KEY`: Stripe live secret key from the Stripe secret store (Step 2)
-  - `STRIPE_WEBHOOK_SECRET`: Stripe live webhook signing secret from the Stripe dashboard (Step 2)
-  - `NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY`: Stripe live publishable key from the Stripe dashboard (Step 2)
-  - `STRIPE_ESSENTIALS_MONTHLY_PRICE_ID`: Stripe live Essentials monthly recurring price ID (Step 2)
-  - `STRIPE_ESSENTIALS_YEARLY_PRICE_ID`: Stripe live Essentials yearly recurring price ID (Step 2)
-  - `STRIPE_COMPLETE_MONTHLY_PRICE_ID`: Stripe live Complete monthly recurring price ID (Step 2)
-  - `STRIPE_COMPLETE_YEARLY_PRICE_ID`: Stripe live Complete yearly recurring price ID (Step 2)
-  - `STRIPE_BILLING_PORTAL_CONFIGURATION_ID`: Pinned live Stripe billing portal configuration ID (Step 2)
-- Resend email:
-  - `RESEND_API_KEY`: Resend production API key from the secret store (Step 2)
-- Supabase storage:
-  - `SUPABASE_URL`: API-only Supabase project URL, https://<project-ref>.supabase.co (replace <project-ref> before use) (Step 2)
-  - `SUPABASE_SERVICE_ROLE_KEY`: Supabase service role key - secret store only (Step 2)
-- Observability:
-  - `ERROR_ALERT_WEBHOOK_URL`: HTTPS incident webhook (Slack etc.) (Step 2)
-- Release image promotion:
-  - `CHARITYPILOT_API_IMAGE`: Digest-pinned API image ref from release-image-digests.env (Step 6)
-  - `CHARITYPILOT_WEB_IMAGE`: Digest-pinned web image ref from release-image-digests.env (Step 6)
-  - `CHARITYPILOT_MIGRATION_IMAGE`: Digest-pinned migration image ref from release-image-digests.env (Step 6)
 
 ## Irish Compliance Source Posture
 
@@ -617,7 +576,7 @@ The matrix must stay source-cited and review-ready. The following official sourc
 ## Next Completion Sequence
 
 1. Close launch evidence: real secret store, provider accounts, hosting, DNS/TLS, backups, observability, release evidence, and external signoffs.
-2. Complete deployed browser QA across every route in desktop/mobile and light/dark mode, then attach production-only evidence.
+2. Browser-QA and polish flagged P0 workflows: dashboard, export, regulator, billing, compliance, documents, board, and auth/marketing entry points.
 3. Use deployed QA findings to fix route-specific state or visual regressions with shared primitives for loading, empty, error, locked-feature, review-warning, status, source, evidence, and sticky form actions.
 4. Keep compliance source metadata, professional-review flags, and conditional obligation prioritisation review-ready across deadlines, registers, evidence, exports, and regulator workflows without creating legal-certainty claims.
 5. Run deployed HTTPS browser QA, accessibility checks in both themes, tenant-isolation regression tests, document privacy checks, billing/email provider checks, and external penetration testing.
