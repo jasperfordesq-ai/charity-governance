@@ -35,6 +35,13 @@ export interface RecoveryControlStore {
   readControl(): Promise<unknown>;
   compareAndSwapControl(expectedRevision: string, next: RecoveryControlValue): Promise<boolean>;
 }
+export interface RecoveryReleaseStore extends RecoveryControlStore {
+  /** Only clears the exact active slot at its matching published outcome head.
+   * Caller must first verify full independent history/payloads and local commit. */
+  releaseControl(expectedRevision: string, expected: {
+    operationId: string; preparationDigest: string; generation: number; digest: string;
+  }): Promise<boolean>;
+}
 
 async function read(store: RecoveryControlStore): Promise<Control> {
   try { return controlSchema.parse(await store.readControl()); }
@@ -43,8 +50,8 @@ async function read(store: RecoveryControlStore): Promise<Control> {
 
 /** Reserve one exact preparation without expiry or takeover. This is NOT an
  * execution fence: local database enforcement and old-host isolation still need
- * integration. No initialization, writer replacement or release API is provided.
- * Release must eventually require a durably published exact operation outcome;
+ * integration. No initialization or writer replacement API is provided.
+ * Release is a separate committed-outcome workflow, never an acquisition option;
  * The unguarded format-1 publisher must never be used with this control protocol.
  * preparationDigest binds canonical local facts; the later encrypted envelope
  * has its own digest. Never substitute one for the other. */

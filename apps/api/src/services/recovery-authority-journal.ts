@@ -52,6 +52,13 @@ const unsigned = (entry: Omit<Entry, 'digest'>) => JSON.stringify({ format: entr
   generation: entry.generation, previousDigest: entry.previousDigest,
   operationId: entry.operationId, kind: entry.kind, factsDigest: entry.factsDigest });
 
+/** One entry's structure/hash only; this does not verify its chain or freshness. */
+export function validateRecoveryAuthorityEntry(raw: unknown) {
+  const entry = entrySchema.parse(raw);
+  if (entry.digest !== hash(unsigned(entry))) throw new Error('Invalid recovery authority entry digest');
+  return entry;
+}
+
 /** Intent-journal primitive only. Receipts are not permission to perform an
  * action or reopen an application. Full facts/reconciliation, genesis trust,
  * anti-truncation authority and the live provider integration remain required. */

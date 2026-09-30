@@ -11,6 +11,8 @@ import { publishVerifiedComplaintOutcome } from '../services/publish-verified-co
 import { prepareComplaintOutcomeFacts } from '../services/complaint-recovery-outcome.js';
 import { sealRecoveryOutcome } from '../services/recovery-outcome-envelope.js';
 import { readPublishedComplaintOutcome } from '../services/published-complaint-outcome.js';
+import { releaseCommittedComplaintOperation } from '../services/release-complaint-recovery-operation.js';
+import type { PrismaClient } from '@prisma/client';
 
 async function fixture() {
   const facts = complaintPreparationFixture();
@@ -60,7 +62,7 @@ test('verified outcome publication joins both envelopes and keeps the operation 
       writerEpoch: f.context.writerEpoch, preparationSourceRevision: f.context.sourceRevision,
       preparationId: 'prepared', preparationDigest: f.request.preparationDigest, outcomeId: 'outcome', claimId: 'claim',
       authorizationId: f.facts.authorization.id, complaintId: scenario === 'foreign-claim' ? 'other' : f.facts.complaint.id,
-      actorUserId: f.facts.actorUserId, transactionId: '123', claimedAt: '2026-09-30T20:00:00Z', recordedAt: '2026-09-30T20:00:01Z' }).body;
+      actorUserId: f.facts.actorUserId, transactionId: '123', claimedAt: '2026-09-30T20:00:00.000Z', recordedAt: '2026-09-30T20:00:01.000Z' }).body;
     const outcome = await sealRecoveryOutcome(body, f.context, f.keys);
     if (scenario === 'missing-preparation') f.replace(null);
     if (scenario === 'changed-control') {
@@ -88,6 +90,35 @@ test('verified outcome publication joins both envelopes and keeps the operation 
     const read = () => readPublishedComplaintOutcome(f.journal, source, f.context, f.keys, objects);
     assert.equal((await read()).body, body);
     assert.equal((await read()).actionAuthorized, false);
+    let hasLocalOutcome = false, localClaimId = 'claim';
+    const prisma = { complaintRecoveryOutcome: { async findFirst() { return hasLocalOutcome ? {
+      id: 'outcome', transactionId: 123n, recordedAt: new Date('2026-09-30T20:00:01Z'),
+      preparation: { id: 'prepared', organisationId: f.context.organisationId, installationId: f.context.installationId,
+        operationId: f.context.operationId, writerEpoch: f.context.writerEpoch, authorizationId: f.facts.authorization.id,
+        actorUserId: f.facts.actorUserId, facts: prepareComplaintRecoveryFacts(f.facts).body, factsDigest: f.request.preparationDigest },
+      claim: { id: localClaimId, organisationId: f.context.organisationId, authorizationId: f.facts.authorization.id,
+        complaintId: f.facts.complaint.id, actorUserId: f.facts.actorUserId, transactionId: 123n,
+        claimedAt: new Date('2026-09-30T20:00:00Z') },
+    } : null; } } } as unknown as PrismaClient;
+    const releaseStore = { ...f.control, async releaseControl(revision: string) {
+      const { revision: _revision, ...value } = f.current();
+      return f.control.compareAndSwapControl(revision, { ...value, activeOperation: null });
+    } };
+    const release = () => releaseCommittedComplaintOperation(prisma, f.journal, releaseStore,
+      f.request.writerId, f.context, f.keys, objects);
+    await assert.rejects(release, /unavailable/);
+    assert.notEqual(f.current().activeOperation, null);
+    hasLocalOutcome = true;
+    localClaimId = 'different-committed-claim';
+    await assert.rejects(release, /evidence does not match/);
+    assert.notEqual(f.current().activeOperation, null); localClaimId = 'claim';
+    f.loseAck(); await assert.rejects(release, /unknown/);
+    assert.equal(f.current().activeOperation, null);
+    assert.deepEqual(await release(), { released: true, replayed: true, actionAuthorized: false });
+    f.current().activeOperation = { operationId: 'new-operation', preparationDigest: 'b'.repeat(64) };
+    await assert.rejects(release, /writer or operation/); f.current().activeOperation = null;
+    await assert.rejects(() => releaseCommittedComplaintOperation(prisma, f.journal, releaseStore,
+      'old-writer', f.context, f.keys, objects), /writer or operation/);
     const unwrap = f.keys.unwrap;
     f.keys.unwrap = async (...args) => { const value = await unwrap(...args); f.changeControl(); return value; };
     await assert.rejects(read, /changed while reading/);

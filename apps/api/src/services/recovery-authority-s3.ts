@@ -3,6 +3,7 @@ import { Readable } from 'node:stream';
 import { GetObjectCommand, PutObjectCommand, S3Client, type S3ClientConfig } from '@aws-sdk/client-s3';
 import { z } from 'zod';
 import type { AuthorityObjectStore, AuthorityHeadPublisher, AuthorityCheckpoint } from './recovery-authority-journal.js';
+import { validateRecoveryAuthorityEntry } from './recovery-authority-journal.js';
 import { inspectRecoveryPreparationEnvelope } from './recovery-preparation-envelope.js';
 import { inspectRecoveryOutcomeEnvelope } from './recovery-outcome-envelope.js';
 import { validateRecoveryControlValue, type RecoveryControlStore, type RecoveryControlValue } from './recovery-operation-reservation.js';
@@ -257,6 +258,27 @@ export class S3AuthorityObjectStore implements AuthorityObjectStore, AuthorityHe
     }
     return this.writeObject(this.headRequest(), JSON.stringify({ ...next, publicationId: randomUUID() }),
       { IfMatch: current.etag });
+  }
+
+  /** Explicit release adapter, not a generic null-slot write. Full history,
+   * encrypted payloads and committed database evidence belong to the caller. */
+  async releaseControl(expectedRevision: string, raw: { operationId: string; preparationDigest: string; generation: number; digest: string }) {
+    z.string().regex(/^[a-f0-9]{64}$/).parse(expectedRevision);
+    const expected = z.object({ operationId: identity, preparationDigest: z.string().regex(/^[a-f0-9]{64}$/),
+      generation: z.number().int().min(2).max(10000), digest: z.string().regex(/^[a-f0-9]{64}$/) }).strict().parse(raw);
+    const current = await this.currentControl();
+    if (current.revision !== expectedRevision) return false;
+    if (current.value.generation !== expected.generation || current.value.digest !== expected.digest
+      || current.value.activeOperation?.operationId !== expected.operationId
+      || current.value.activeOperation.preparationDigest !== expected.preparationDigest) throw new Error('Recovery release control mismatch');
+    const body = await this.read(`authority/${this.config.installationId}/${this.config.organisationId}/${String(expected.generation).padStart(10, '0')}.json`);
+    if (body === null) throw new Error('Recovery release outcome is missing');
+    const entry = validateRecoveryAuthorityEntry(JSON.parse(body));
+    if (entry.kind !== 'COMPLAINT_OUTCOME_V1' || entry.installationId !== this.config.installationId
+      || entry.organisationId !== this.config.organisationId || entry.operationId !== expected.operationId
+      || entry.generation !== expected.generation || entry.digest !== expected.digest) throw new Error('Recovery release outcome mismatch');
+    return this.writeObject(this.headRequest(), JSON.stringify({ ...current.value, activeOperation: null,
+      publicationId: randomUUID() }), { IfMatch: current.etag });
   }
 
   /** S3 atomically matches ETag, not VersionId. A fresh publication ID prevents

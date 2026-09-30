@@ -296,6 +296,50 @@ test('journal and S3 adapter recover a lost publication acknowledgement together
   assert.equal((await restarted.inspectCurrent(store)).generation, 1);
 });
 
+test('S3 explicit release requires the exact outcome head and refuses generic slot clearing', async () => {
+  for (const scenario of ['valid', 'wrong-kind', 'wrong-operation', 'missing', 'corrupt', 'race']) {
+    const facts = { format: 1, installationId: config.installationId, organisationId: config.organisationId,
+      generation: 2, previousDigest: 'b'.repeat(64), operationId: scenario === 'wrong-operation' ? 'other' : 'operation-a',
+      kind: scenario === 'wrong-kind' ? 'DISPOSAL_RESULT' : 'COMPLAINT_OUTCOME_V1', factsDigest: 'c'.repeat(64) };
+    const digest = createHash('sha256').update(JSON.stringify(facts)).digest('hex');
+    let body = JSON.stringify({ ...control, generation: 2, digest,
+      activeOperation: { operationId: 'operation-a', preparationDigest: 'a'.repeat(64) },
+      publicationId: '11111111-1111-4111-8111-111111111111' });
+    let version = 0, writes = 0;
+    const store = fixture(async command => {
+      if (command instanceof GetObjectCommand) {
+        const head = command.input.Key?.endsWith('/head.json');
+        if (!head && scenario === 'missing') throw { name: 'NoSuchKey', $metadata: { httpStatusCode: 404 } };
+        const payload = head ? body : JSON.stringify({ ...facts, digest: scenario === 'corrupt' ? 'd'.repeat(64) : digest });
+        if (!head && scenario === 'race') { version++; body = JSON.stringify({ ...JSON.parse(body), writerId: 'replacement' }); }
+        return { ...metadata, VersionId: `version-${version}`, ETag: `"etag-${version}"`,
+          ContentLength: Buffer.byteLength(payload), Body: Readable.from([Buffer.from(payload)]) };
+      }
+      assert.ok(command instanceof PutObjectCommand);
+      assert.equal(command.input.Key, 'authority/install-a/charity-a/head.json');
+      if (command.input.IfMatch !== `"etag-${version}"`) throw { $metadata: { httpStatusCode: 412 } };
+      body = String(command.input.Body); version++; writes++; return { ...metadata, VersionId: `version-${version}` };
+    });
+    const before = await store.readControl();
+    const { revision, ...value } = before;
+    await assert.rejects(() => store.compareAndSwapControl(revision, { ...value, activeOperation: null }));
+    const expected = { operationId: 'operation-a', preparationDigest: 'a'.repeat(64), generation: 2, digest };
+    if (scenario === 'race') {
+      assert.equal(await store.releaseControl(revision, expected), false);
+      assert.notEqual((await store.readControl()).activeOperation, null); assert.equal(writes, 0); continue;
+    }
+    if (scenario !== 'valid') {
+      await assert.rejects(() => store.releaseControl(revision, expected)); assert.equal(writes, 0); continue;
+    }
+    assert.equal(await store.releaseControl(revision, expected), true);
+    const after = await store.readControl();
+    assert.equal(after.activeOperation, null); assert.equal(after.digest, digest); assert.equal(after.generation, 2);
+    assert.equal(after.writerId, before.writerId); assert.equal(after.writerEpoch, before.writerEpoch);
+    assert.notEqual(after.revision, revision);
+    assert.equal(await store.releaseControl(revision, expected), false); assert.equal(writes, 1);
+  }
+});
+
 test('a stalled S3 response body is aborted within the operation deadline', { timeout: 22000 }, async () => {
   const body = new Readable({ read() {} });
   const store = fixture(async () => ({ ...metadata, ContentLength: 2, Body: body }));
