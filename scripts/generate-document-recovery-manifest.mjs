@@ -1274,6 +1274,9 @@ function defaultSecureOwnerOnly(path, { directory = false } = {}) {
   }
   const command = spawnSync('powershell.exe', ['-NoProfile', '-NonInteractive', '-Command', [
     "$ErrorActionPreference = 'Stop'",
+    // A Node child may inherit another PowerShell edition's PSModulePath.
+    // Pin ACL cmdlets to the module shipped with this Windows PowerShell.
+    'Import-Module (Join-Path $PSHOME "Modules/Microsoft.PowerShell.Security/Microsoft.PowerShell.Security.psd1") -ErrorAction Stop',
     '$path = $env:CHARITYPILOT_OWNER_ONLY_PATH',
     "$isDirectory = $env:CHARITYPILOT_OWNER_ONLY_DIRECTORY -eq '1'",
     '$sid = [System.Security.Principal.WindowsIdentity]::GetCurrent().User',
@@ -1304,6 +1307,7 @@ function defaultOwnerOnlyCheck(path, { directory = false } = {}) {
   }
   const command = spawnSync('powershell.exe', ['-NoProfile', '-NonInteractive', '-Command', [
     "$ErrorActionPreference = 'Stop'",
+    'Import-Module (Join-Path $PSHOME "Modules/Microsoft.PowerShell.Security/Microsoft.PowerShell.Security.psd1") -ErrorAction Stop',
     '$path = $env:CHARITYPILOT_OWNER_ONLY_PATH',
     '$currentSid = [System.Security.Principal.WindowsIdentity]::GetCurrent().User',
     '$acl = Get-Acl -LiteralPath $path',

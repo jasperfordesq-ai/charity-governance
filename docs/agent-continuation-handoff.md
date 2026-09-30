@@ -2,6 +2,16 @@
 
 Last updated: 2026-09-30
 
+Release gate repair: Windows recovery-manifest ACL publication failed when a
+Node child inherited the bundled PowerShell edition's module search path.
+Both ACL setup and verification now explicitly import the Security module from
+the executing Windows PowerShell's PSHOME. Owner-only ACL semantics and
+fail-closed checks are unchanged; no execution-policy bypass was added. The
+real owner-only directory/file test passes, and test:production-check passes
+1,096 tests with zero failures and two platform skips when installed Git Bash
+is selected instead of the unavailable WSL launcher. This is local evidence;
+deployment and live acceptance remain outstanding.
+
 Restore archive follow-up: the bluegreen drill now checks extracted regular
 files against hashed current claimed local-storage keys. Matching paths fail
 even if bytes differ or primary cleanup is pending. Path ambiguity and duplicate
