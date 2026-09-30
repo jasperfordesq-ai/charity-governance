@@ -5,9 +5,12 @@
 > read-only check of Confluence page 2326571 showed current page V10 (22
 > September) with Nikita's named DPO contact and corrected section 20. Direct
 > read-only inspection of `https://hour-timebank.ie/privacy` showed a public
-> Version 2.0 notice effective 30 September with both corrections. This is a
-> bounded clause check, not complete page equivalence or proof of DPO mailbox
-> access/retirement of the unused address. The Vault worksheet remains PENDING;
+> Version 2.0 notice effective 30 September with both corrections. The rendered
+> notice bodies matched from the opening sentence to the final DPO contact
+> after whitespace and twenty heading-period normalizations (24,744
+> characters each). Page metadata/footer and PDF bytes were outside that
+> comparison. DPO mailbox access and retirement of the unused address remain
+> unverified. The Vault worksheet remains PENDING;
 > do not publish the stale circulated PDF. Private evidence:
 > `.charitypilot-private/privacy-notice-source-review-2026-09-30.md`.
 

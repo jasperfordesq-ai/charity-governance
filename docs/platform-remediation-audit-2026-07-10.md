@@ -4,9 +4,12 @@
 > retained in the Vault is an earlier uncorrected snapshot. Signed-in
 > Confluence page 2326571 V10 (22 September) and the directly inspected public
 > `https://hour-timebank.ie/privacy` Version 2.0 notice effective 30 September
-> both show Nikita's named DPO contact and the corrected section 20. This is a
-> bounded clause check, not full page equivalence or proof of DPO mailbox
-> access/retirement of the unused address. The 63 Vault worksheet decisions
+> both show Nikita's named DPO contact and the corrected section 20. The
+> rendered notice bodies matched from opening sentence to final DPO contact
+> after whitespace and twenty heading-period normalizations (24,744
+> characters each); page metadata/footer and PDF bytes were not compared.
+> DPO mailbox access and retirement of the unused address remain unverified.
+> The 63 Vault worksheet decisions
 > remain PENDING; do not publish the stale circulated PDF. Private evidence:
 > `.charitypilot-private/privacy-notice-source-review-2026-09-30.md`.
 
