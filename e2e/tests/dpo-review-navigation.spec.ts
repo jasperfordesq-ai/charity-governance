@@ -1,8 +1,8 @@
 import path from 'node:path';
 import assert from 'node:assert/strict';
-import { test, expect, reliableFill, uniqueEmail } from '../fixtures';
+import { test, expect, reliableFill, uniqueEmail, TEST_PASSWORD } from '../fixtures';
 import { IS_DEPLOYED_QA } from '../env';
-import { createAuthenticatedStorageState, createVerifiedMember, withDb } from '../helpers/db';
+import { createAuthenticatedStorageState, createVerifiedMember, createVerifiedOwner, withDb } from '../helpers/db';
 import { gotoWithDevServerRetry } from '../helpers/navigation';
 import { approveSyntheticDraftRecoveryPolicy } from '../helpers/draft-recovery-policy';
 
@@ -168,8 +168,15 @@ test.describe('DPO review navigation', () => {
     await expect(history.locator('ol > li').last().getByText('APPROVED')).toBeVisible();
   });
 
-  test('an Owner can page through older detailed document decisions with tied timestamps', async ({ owner, ownerPage }) => {
+  test('an Owner can page through older detailed document decisions with tied timestamps', async ({ newFencedContext }) => {
     test.setTimeout(120_000);
+    // This exact-count fixture must not inherit earlier history or leave its
+    // future-dated rows ahead of another journey's newly recorded decisions.
+    const owner = await createVerifiedOwner({ email: uniqueEmail('history'), password: TEST_PASSWORD,
+      name: 'History Owner', organisationName: 'Isolated History Charity' });
+    const storageState = await createAuthenticatedStorageState({ ...owner, role: 'OWNER' });
+    const context = await newFencedContext({ storageState });
+    const ownerPage = await context.newPage();
     const stamp = Date.now();
     const documentId = `dpo-history-${stamp}`;
     const occurredAt = new Date(stamp + 24 * 60 * 60 * 1000);

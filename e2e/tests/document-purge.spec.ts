@@ -117,7 +117,16 @@ test('Owner reviews, cancels and executes primary disposal with retained history
     // in the Windows host zone. Preserve milliseconds at the claim boundary.
     const clock = await withDb(client => client.query(`SELECT to_char(timezone('UTC',clock_timestamp()), 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"') AS now`));
     const dates = await ownerPage.evaluate((serverTime: string) => {
-      const local = (date: Date) => new Date(date.getTime() - date.getTimezoneOffset() * 60000).toISOString().slice(0, 23);
+      const local = (date: Date) => {
+        // Chromium normalises .800 to .8 (and zero seconds away). Playwright
+        // rejects a fill whose value changes, even when the instant is valid.
+        const input = document.createElement('input');
+        input.type = 'datetime-local';
+        input.step = '0.001';
+        input.value = new Date(date.getTime() - date.getTimezoneOffset() * 60000).toISOString().slice(0, 23);
+        if (new Date(input.value).getTime() !== date.getTime()) throw new Error('Observation precision was lost');
+        return input.value;
+      };
       return { observed: local(new Date(serverTime)), followup: local(new Date(new Date(serverTime).getTime() + 86400000)) };
     }, clock.rows[0].now);
     await copies.getByLabel('Copy observation time', { exact: true }).fill(dates.observed);

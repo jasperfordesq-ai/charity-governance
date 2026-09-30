@@ -2,6 +2,17 @@
 
 Last updated: 2026-09-30
 
+Browser retry follow-up: the three 6671d6fd retries were traced to fixture/input
+behavior. The exact-count history test shared a worker charity, inheriting seven
+earlier rows and leaving 202 future-dated rows ahead of later removal events.
+It now uses its own charity and fenced context. The purge datetime fixture now
+uses Chromium's canonical datetime-local value and checks millisecond fidelity;
+Playwright rejects a noncanonical value such as .800 when Chromium stores .8.
+All three affected journeys pass together on the first local attempt (34.3s),
+runner exit0, with unchanged product behavior and no relaxed assertions. E2E
+TypeScript and all116 isolation contract tests pass. Exact hosted confirmation
+for this test revision remains required.
+
 Local Docker startup follow-up: 6671d6fd CI 36705637183 passed the main tests,
 reliability ledger and PostgreSQL backup/restore, then its smoke API exited.
 A disposable PostgreSQL/application reproduction identified the demo seed's
