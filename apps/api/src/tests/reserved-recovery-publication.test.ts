@@ -92,3 +92,53 @@ test('unknown control publication resumes exact journal bytes and refuses change
   }
   assert.deepEqual([...f.rows.values()], original);
 });
+
+test('reserved hold outcome follows the exact preparation and preserves reservation across both acknowledgement failures', async () => {
+  for (const boundary of ['entry', 'head']) {
+    const f = fixture(); await reserveRecoveryOperation(reservation, f.store);
+    const prep = await f.journal.appendReservedHoldPreparation(publication, f.store);
+    const outcome = { operationId: reservation.operationId, writerId: reservation.writerId,
+      writerEpoch: reservation.writerEpoch, preparationDigest: reservation.preparationDigest,
+      preparationGeneration: prep.generation, preparationEntryDigest: prep.digest,
+      preparationEnvelopeDigest: publication.envelopeDigest, outcomeEnvelopeDigest: 'c'.repeat(64) };
+    if (boundary === 'entry') f.loseEntryAck(); else f.loseAck();
+    await assert.rejects(() => f.journal.appendReservedHoldOutcome(outcome, f.store), /unknown/);
+    const bytes = [...f.rows.values()];
+    const result = await f.journal.appendReservedHoldOutcome(outcome, f.store);
+    assert.equal(result.headPublished, true); assert.equal(result.actionAuthorized, false);
+    assert.equal(f.current().generation, 2); assert.equal(f.current().activeOperation?.operationId, reservation.operationId);
+    assert.deepEqual([...f.rows.values()], bytes);
+    assert.equal((await f.journal.inspect()).generation, 2);
+    await assert.rejects(() => f.journal.appendReservedHoldOutcome({ ...outcome, outcomeEnvelopeDigest: 'd'.repeat(64) }, f.store), /different facts/);
+    await assert.rejects(() => f.journal.appendReservedHoldOutcome({ ...outcome, preparationEnvelopeDigest: 'd'.repeat(64) }, f.store), /exact published preparation/);
+    await assert.rejects(() => f.journal.appendReservedHoldOutcome({ ...outcome, writerEpoch: 2 }, f.store), /reservation/);
+    assert.equal(f.rows.size, 2);
+  }
+});
+
+test('orphan hold outcomes are rejected before immutable journal writes', async () => {
+  const f = fixture();
+  await assert.rejects(() => f.journal.append({ operationId: 'operation', kind: 'COMPLAINT_HOLD_OUTCOME_V1',
+    factsDigest: 'a'.repeat(64), expectedGeneration: 0, expectedDigest: null }), /immediately follow/);
+  assert.equal(f.rows.size, 0);
+});
+
+
+test('hold and disposal outcomes cannot consume each other preparation kind', async () => {
+  for (const hold of [true, false]) {
+    const f = fixture(); await reserveRecoveryOperation(reservation, f.store);
+    const prep = hold ? await f.journal.appendReservedHoldPreparation(publication, f.store)
+      : await f.journal.appendReservedComplaintPreparation(publication, f.store);
+    const outcome = { operationId: reservation.operationId, writerId: reservation.writerId,
+      writerEpoch: reservation.writerEpoch, preparationDigest: reservation.preparationDigest,
+      preparationGeneration: prep.generation, preparationEntryDigest: prep.digest,
+      preparationEnvelopeDigest: publication.envelopeDigest, outcomeEnvelopeDigest: 'c'.repeat(64) };
+    await assert.rejects(() => hold ? f.journal.appendReservedComplaintOutcome(outcome, f.store)
+      : f.journal.appendReservedHoldOutcome(outcome, f.store), /exact published preparation/);
+    await assert.rejects(() => f.journal.append({ operationId: reservation.operationId,
+      kind: hold ? 'COMPLAINT_OUTCOME_V1' : 'COMPLAINT_HOLD_OUTCOME_V1',
+      factsDigest: 'c'.repeat(64), expectedGeneration: prep.generation,
+      expectedDigest: prep.digest }), /different facts|immediately follow/);
+    assert.equal(f.rows.size, 1); assert.equal(f.current().generation, 1);
+  }
+});

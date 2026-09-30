@@ -1,5 +1,13 @@
 # CharityPilot Full-Platform Remediation Audit
 
+> DPO-05 hold outcome publication: authenticated hold outcomes now publish only
+> after their exact hold preparation, retaining the operation reservation. Readers
+> verify both payload hashes, decision fields and stable current history. Lost
+> acknowledgements resume exact bytes; disposal and hold pairs cannot mix. This
+> inactive internal protocol is not independent provider custody, reservation
+> release, all-writer enforcement or a production-readiness claim.
+
+
 > DPO-05 hold outcome storage: strict minimal facts and separately authenticated
 > hold-outcome envelopes now support create-only ciphertext preservation and
 > exact-byte recovery reads. This is an inactive storage primitive. A locally

@@ -1,3 +1,6 @@
+import { prepareComplaintHoldOutcomeFacts } from '../services/complaint-hold-recovery-outcome.js';
+import { preserveHoldOutcome } from '../services/hold-outcome-envelope.js';
+import { publishVerifiedHoldOutcome, readPublishedHoldOutcome } from '../services/published-hold-outcome.js';
 import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
 import { Readable } from 'node:stream';
@@ -116,5 +119,61 @@ test('hold publication refuses unreserved facts, missing payload and changed con
     }
     await assert.rejects(publishVerifiedHoldPreparation(f.journal, f.store, f.request, f.context, f.keys, f.store));
     assert.equal([...f.objects.keys()].filter(key => /\/[0-9]{10}\.json$/.test(key)).length, 0);
+  }
+});
+
+async function outcomeFixture() {
+  const f = await fixture();
+  const preserved = await preserveHoldPreparation(f.prepared.body, f.context, f.keys, f.store);
+  const preparation = await publishVerifiedHoldPreparation(f.journal, f.store, f.request, f.context, f.keys, f.store);
+  const request = { writerId: 'host', preparationDigest: f.prepared.digest,
+    preparationGeneration: preparation.generation, preparationEntryDigest: preparation.digest,
+    preparationEnvelopeDigest: preserved.digest };
+  const facts = { format: 1, action: 'COMPLAINT_HOLD_COMMITTED', installationId: f.context.installationId,
+    organisationId: f.context.organisationId, operationId: f.context.operationId, writerEpoch: 1,
+    preparationSourceRevision: f.context.sourceRevision, preparationId: 'preparation', preparationDigest: f.prepared.digest,
+    outcomeId: 'outcome', holdEventId: 'hold', complaintId: 'complaint', actorUserId: 'admin',
+    holdRevision: 1, recordRevision: 1, held: true, transactionId: '123',
+    occurredAt: '2026-09-30T12:01:00Z', recordedAt: '2026-09-30T12:01:01Z' };
+  return { ...f, outcomeRequest: request, outcomeFacts: facts };
+}
+
+test('published hold outcome authenticates both payloads and retries exact bytes without releasing reservation', async () => {
+  const f = await outcomeFixture();
+  const body = prepareComplaintHoldOutcomeFacts(f.outcomeFacts).body;
+  await preserveHoldOutcome(body, f.context, f.keys, f.store);
+  const publish = () => publishVerifiedHoldOutcome(f.journal, f.store, f.outcomeRequest, f.context, f.keys, f.store);
+  f.loseAck(); await assert.rejects(publish, /unknown/);
+  f.loseAck(true); await assert.rejects(publish, /unknown/);
+  const before = [...f.objects.entries()];
+  assert.equal((await publish()).headPublished, true);
+  assert.deepEqual([...f.objects.entries()], before);
+  const source = { readHead: async () => { const { installationId, organisationId, generation, digest, revision } = await f.store.readControl();
+    return { installationId, organisationId, generation, digest, revision }; } };
+  const read = () => readPublishedHoldOutcome(f.journal, source, f.context, f.keys, f.store);
+  const result = await read(); assert.equal(result.body, body); assert.equal(result.preparationBody, f.prepared.body);
+  assert.equal(result.actionAuthorized, false);
+  assert.equal((await f.store.readControl()).activeOperation?.operationId, f.context.operationId);
+  const unwrap = f.keys.unwrap;
+  f.keys.unwrap = async () => {
+    const head = f.objects.get(f.headKey)!; const control = JSON.parse(head.body);
+    control.publicationId = '33333333-3333-4333-8333-333333333333';
+    f.objects.set(f.headKey, { body: JSON.stringify(control), version: head.version + 1 }); return unwrap();
+  };
+  await assert.rejects(read, /changed while reading/);
+  f.keys.unwrap = unwrap;
+  for (const key of f.objects.keys()) if (key.startsWith('hold-outcomes/')) f.objects.delete(key);
+  await assert.rejects(read, /unresolved/);
+});
+
+test('hold outcome publication refuses mismatched decisions and missing bytes before advancing history', async () => {
+  for (const changed of [{ holdEventId: 'wrong' }, { holdRevision: 2 }, { recordRevision: 2 }, { held: false },
+    { complaintId: 'wrong' }, { actorUserId: 'wrong' }, { preparationDigest: 'b'.repeat(64) }, null]) {
+    const f = await outcomeFixture();
+    if (changed) await preserveHoldOutcome(prepareComplaintHoldOutcomeFacts({ ...f.outcomeFacts, ...changed }).body,
+      f.context, f.keys, f.store);
+    await assert.rejects(publishVerifiedHoldOutcome(f.journal, f.store, f.outcomeRequest, f.context, f.keys, f.store), /match|missing/);
+    assert.equal((await f.store.readControl()).generation, 1);
+    assert.equal([...f.objects.keys()].filter(key => /\/[0-9]{10}\.json$/.test(key)).length, 1);
   }
 });

@@ -1,3 +1,4 @@
+import { publishVerifiedHoldOutcome, readPublishedHoldOutcome } from '../apps/api/src/services/published-hold-outcome.ts';
 import assert from 'node:assert/strict';
 import { createHash, randomBytes } from 'node:crypto';
 import { readFileSync } from 'node:fs';
@@ -247,8 +248,8 @@ try {
   await reserveRecoveryOperation({ ...hb, writerId: 'host-b', writerEpoch: 1, operationId: hc.operationId,
     preparationDigest: hp.digest, expectedGeneration: 0, expectedDigest: null }, hs);
   await assert.rejects(executeHold); // No authenticated published payload yet.
-  await preserveHoldPreparation(hpRow.facts, hc, keys, hs);
-  await publishVerifiedHoldPreparation(hj, hs, { writerId: 'host-b', preparationDigest: hp.digest,
+  const heldPreparation = await preserveHoldPreparation(hpRow.facts, hc, keys, hs);
+  const publishedHoldPreparation = await publishVerifiedHoldPreparation(hj, hs, { writerId: 'host-b', preparationDigest: hp.digest,
     expectedGeneration: 0, expectedDigest: null }, hc, keys, hs);
   await assert.rejects(executeHold, /bound to this writer/);
   await prisma.complaintRecoveryEnforcement.create({ data: { ...hb, writerId: 'host-b', writerEpoch: 1 } });
@@ -272,7 +273,21 @@ try {
   const preservedHold = await preserveHoldOutcome(committedHold.body, hc, keys, hs);
   assert.equal((await preserveHoldOutcome(committedHold.body, hc, keys, hs)).digest, preservedHold.digest);
   assert.equal((await readVerifiedHoldOutcome(preservedHold.digest, hc, keys, hs)).body, committedHold.body);
-  // This digest is local test evidence only, not a published independent head.
+  const holdOutcomeRequest = { writerId: 'host-b', preparationDigest: hp.digest,
+    preparationGeneration: publishedHoldPreparation.generation, preparationEntryDigest: publishedHoldPreparation.digest,
+    preparationEnvelopeDigest: heldPreparation.digest };
+  const publishedHoldOutcome = await publishVerifiedHoldOutcome(hj, hs, holdOutcomeRequest, hc, keys, hs);
+  assert.equal(publishedHoldOutcome.headPublished, true);
+  assert.equal((await publishVerifiedHoldOutcome(hj, hs, holdOutcomeRequest, hc, keys, hs)).replayed, true);
+  const holdHeadSource = { async readHead() {
+    const { installationId, organisationId, generation, digest, revision } = await hs.readControl();
+    return { installationId, organisationId, generation, digest, revision };
+  } };
+  const publishedHoldEvidence = await readPublishedHoldOutcome(hj, holdHeadSource, hc, keys, hs);
+  assert.equal(publishedHoldEvidence.body, committedHold.body);
+  assert.equal(publishedHoldEvidence.preparationBody, hpRow.facts);
+  assert.equal(publishedHoldEvidence.actionAuthorized, false);
+  // Synthetic provider only: no live custody or reservation release is implied.
   assert.equal((await hs.readControl()).activeOperation.operationId, hc.operationId);
   assert.equal((await store.readControl()).activeOperation.operationId, staleContext.operationId);
   process.stdout.write('complaint-recovery-protocol-composition-verified');

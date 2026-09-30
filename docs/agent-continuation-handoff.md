@@ -1,5 +1,13 @@
 # CharityPilot Agent Continuation Handoff
 
+> DPO-05 hold outcome publication: authenticated hold outcomes now publish only
+> after their exact hold preparation, retaining the operation reservation. Readers
+> verify both payload hashes, decision fields and stable current history. Lost
+> acknowledgements resume exact bytes; disposal and hold pairs cannot mix. This
+> inactive internal protocol is not independent provider custody, reservation
+> release, all-writer enforcement or a production-readiness claim.
+
+
 Last updated: 2026-09-30
 
 ## Resuming the DPO remediation after an interruption
