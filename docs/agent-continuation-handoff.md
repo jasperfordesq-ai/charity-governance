@@ -1,5 +1,15 @@
 # CharityPilot Agent Continuation Handoff
 
+> **Complaint writer inventory, 2026-09-30:** bounded current-source search
+> found the ordinary hold service and the hold-outcome SQL trigger both
+> writing `ComplaintHoldEvent`. The existing disposable protocol proof
+> directly inserts a hold *after* enforcement binding, confirming that
+> its fixture relies on the remaining database gap. Purge claim, removal
+> and resolution paths are separately listed in the private writer-gate
+> analysis. Static inventory does not prove all-writer enforcement;
+> provider and supported hold workflow remain inactive. Private evidence:
+> `.charitypilot-private/complaint-hold-writer-gate-analysis-2026-09-30.md`.
+
 > **63-row source-reference milestone, 2026-09-30:** all private document
 > worksheet rows now have some source evidence reference, 62 have some
 > proposal, and every decision remains PENDING. The Document Retention
