@@ -133,6 +133,7 @@ const DISPOSABLE_DATABASE_RESET_TABLES = Object.freeze([
   "MinuteBookChangeAudit",
   "Resolution",
   "Document",
+  "DocumentPurgeDispositionEvent",
   "DocumentPurgeClaim",
   "DocumentPurgeAuthorizationWithdrawal",
   "DocumentPurgeAuthorization",

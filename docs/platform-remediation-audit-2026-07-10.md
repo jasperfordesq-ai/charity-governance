@@ -1,5 +1,13 @@
 # CharityPilot Full-Platform Remediation Audit
 
+> DPO-05 downstream disposition evidence, 2026-09-30: append-only scoped
+> observations and Owner-only browser API now distinguish pending, failed,
+> reviewer-verified absence and approved retention for versions, Confluence,
+> exports, audit and backups. No primary job is dispatched by these records;
+> no aggregate erasure result exists. Dashboard editing, real provider evidence,
+> complete inventories, backup restore reconciliation, other record classes
+> and deployment/live acceptance remain open.
+
 > DPO connector exclusion follow-up, 2026-09-30: one-time invitation-link
 > retrieval, charity ownership transfer and billing checkout/portal starts
 > now require a web session at the API, including legacy billing aliases.

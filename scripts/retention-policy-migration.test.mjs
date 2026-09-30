@@ -233,7 +233,7 @@ test('retention policy and recovery-state upgrade preserve documents and enforce
       UPDATE "Document" SET "deletedAt"="deletedAt"-INTERVAL '31 days',"recoveryUntil"="recoveryUntil"-INTERVAL '31 days' WHERE id='retained-doc';
       ALTER TABLE "Document" ENABLE TRIGGER "Document_recovery_state_guard"; COMMIT;`);
     sql(claim('changed-deadline', 'unexpired-authorization'), /authorized revision and object/);
-    sql(authorizePurge('expired-authorization'));
+    sql(authorize('expired-authorization', 'owner-a', { ...plan, VERSIONS: { disposition: 'DISPOSE', evidenceRef: 'PLAN-VERSIONS-002' }, EXPORTS: { disposition: 'NOT_APPLICABLE', evidenceRef: 'PLAN-EXPORTS-002' } }).replace("'fingerprint'", "'purge-current'"));
     sql(`${insert('future-retention', ',"state","approvedById","approvedAt","approvalEvidenceRef","retentionAnchor","retentionDays"')} VALUES ('future-retention','retention-a','VAULT_DRAFT',6,'AFTER_ANCHOR',30,'owner-a','APPROVED','owner-a',CURRENT_TIMESTAMP,'POLICY-APPROVAL-006','CREATED_AT',365);`);
     sql(authorize('retention-not-due').replace("'fingerprint'", "'future-retention'"));
     sql(claim('retention-loser', 'retention-not-due'), /retention and recovery expiry/);
@@ -278,6 +278,45 @@ test('retention policy and recovery-state upgrade preserve documents and enforce
     sql(`UPDATE "DocumentPurgeClaim" SET "actorUserId"='owner-b';`, /append-only/);
     sql(`DELETE FROM "DocumentPurgeClaim";`, /append-only/);
     sql(`UPDATE "DocumentStorageDeletion" SET "storagePath"='retention-a/other.pdf' WHERE id='job-final-claim';`, /cannot redirect|identity is immutable/);
+    // Upgrade after an irreversible primary claim: downstream evidence must
+    // survive the already-absent Document without changing the queued job.
+    const jobBefore = sql(`SELECT row_to_json(j)::text FROM "DocumentStorageDeletion" j WHERE id='job-final-claim';`);
+    sql(readFileSync(`${migrations}/20260930070000_document_purge_disposition/migration.sql`, 'utf8'));
+    const evidence = (id, { org = 'retention-a', actor = 'owner-a', auth = 'expired-authorization', area = 'VERSIONS', scope = 'VERSION-SET-001', revision = 1,
+      status = 'VERIFIED_ABSENT', observed = 'CURRENT_TIMESTAMP', nextReview = 'NULL', ref = 'PROVIDER-RECEIPT-001' } = {}) => `INSERT INTO "DocumentPurgeDispositionEvent"
+      (id,"organisationId","authorizationId",area,"scopeRef",revision,status,"actorUserId","evidenceRef",reason,"observedAt","nextReviewAt","occurredAt")
+      VALUES ('${id}','${org}','${auth}','${area}','${scope}',${revision},'${status}','${actor}','${ref}',
+      'Reviewed synthetic scoped provider evidence',${observed},${nextReview},'2000-01-01');`;
+    sql(evidence('foreign-owner', { actor: 'owner-b' }), /active charity owner/);
+    sql(evidence('foreign-auth', { org: 'retention-b', actor: 'owner-b' }), /authorization not found/);
+    sql(evidence('unclaimed', { auth: 'unexpired-authorization' }), /requires a committed purge claim/);
+    sql(evidence('manual-primary', { area: 'PRIMARY' }), /check constraint/);
+    sql(evidence('retained-not-absent', { area: 'BACKUPS' }), /cannot contradict/);
+    sql(evidence('wrong-retain', { status: 'RETAINED_APPROVED', nextReview: "CURRENT_TIMESTAMP + INTERVAL '1 day'" }), /cannot contradict/);
+    sql(evidence('future', { observed: "CURRENT_TIMESTAMP + INTERVAL '1 day'" }), /observation must be/);
+    sql(evidence('old', { observed: "CURRENT_TIMESTAMP - INTERVAL '1 day'" }), /observation must be/);
+    sql(evidence('no-followup', { status: 'FAILED' }), /future follow-up/);
+    sql(evidence('past-followup', { status: 'FAILED', nextReview: "CURRENT_TIMESTAMP - INTERVAL '1 day'" }), /future follow-up/);
+    sql(evidence('url-evidence', { ref: 'https://private.example/receipt' }), /check constraint/);
+    sql(evidence('jump', { revision: 2 }), /revision changed/);
+    sql(evidence('verified'));
+    assert.equal(sql(`SELECT status || ':' || revision || ':' || ("occurredAt">'2026-01-01') FROM "DocumentPurgeDispositionEvent" WHERE id='verified';`), 'VERIFIED_ABSENT:1:true');
+    sql(evidence('retained-backup', { area: 'BACKUPS', scope: 'BACKUP-SET-001', status: 'RETAINED_APPROVED', nextReview: "CURRENT_TIMESTAMP + INTERVAL '1 day'" }));
+    sql(evidence('no-exports', { area: 'EXPORTS', scope: 'RECIPIENT-INVENTORY-001', status: 'NOT_APPLICABLE' }));
+    // A reviewed absence may later be corrected; history is never overwritten.
+    const correcting = session('disposition-holder', `BEGIN; ${evidence('correction', { revision: 2, status: 'NEEDS_REVIEW', nextReview: "CURRENT_TIMESTAMP + INTERVAL '1 day'" })} SELECT 'BARRIER';`, true);
+    await until(() => correcting.output().includes('BARRIER'), 'disposition correction did not reach its barrier');
+    const stale = session('disposition-stale', evidence('stale', { revision: 2 }));
+    await until(() => sql(`SELECT count(*) FROM pg_stat_activity WHERE application_name='disposition-stale' AND wait_event_type='Lock';`) === '1', 'disposition writes did not serialize');
+    correcting.child.stdin.end('COMMIT;');
+    assert.equal((await correcting.done).code, 0);
+    const staleResult = await stale.done;
+    assert.notEqual(staleResult.code, 0); assert.match(staleResult.stderr, /revision changed/);
+    sql(`UPDATE "DocumentPurgeDispositionEvent" SET status='VERIFIED_ABSENT' WHERE id='correction';`, /append-only/);
+    sql(`DELETE FROM "DocumentPurgeDispositionEvent" WHERE id='verified';`, /append-only/);
+    assert.equal(sql(`SELECT string_agg(status,',' ORDER BY revision) FROM "DocumentPurgeDispositionEvent" WHERE area='VERSIONS';`), 'VERIFIED_ABSENT,NEEDS_REVIEW');
+    assert.equal(sql(`SELECT row_to_json(j)::text FROM "DocumentStorageDeletion" j WHERE id='job-final-claim';`), jobBefore,
+      'review evidence must not dispatch, complete, redirect or alter primary cleanup');
   } finally {
     for (const item of sessions) if (item.child.exitCode === null) item.child.stdin.end('ROLLBACK;\n');
     const removed = docker(['rm', '--force', '--volumes', container]);

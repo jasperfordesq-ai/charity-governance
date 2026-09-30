@@ -3,7 +3,7 @@ import test from 'node:test';
 import { createHash } from 'node:crypto';
 import type { PrismaClient } from '@prisma/client';
 import Fastify from 'fastify';
-import { DocumentPurgeService, purgeAuthorizationInput } from '../services/document-purge.service.js';
+import { DocumentPurgeService, purgeAuthorizationInput, purgeDispositionInput } from '../services/document-purge.service.js';
 import { registerDocumentPurgeRoutes } from '../routes/documents/purge.js';
 
 const date = new Date('2026-09-30T12:00:00Z');
@@ -18,7 +18,7 @@ function fixture() {
     document: { id: 'doc-a', organisationId: 'org-a', updatedAt: date, deletedAt: date,
       deletionHold: false, fileUrl: 'org-a/pinned.txt', storageProvider: 'local', fileSize: bytes.length,
       recoverySha256: createHash('sha256').update(bytes).digest('hex'), recoveryUntil: date } as any,
-    databaseFailure: null as any, listArgs: null as any };
+    databaseFailure: null as any, listArgs: null as any, dispositionArgs: null as any, dispositionRows: [] as any[] };
   const tx: any = {
     $queryRaw: async () => [],
     user: { findFirst: async ({ where }: any) => where.id === 'owner-a' && where.organisationId === 'org-a' && state.role === 'OWNER' ? { id: 'owner-a' } : null },
@@ -28,6 +28,11 @@ function fixture() {
       findMany: async (args: any) => { state.listArgs = args; return []; },
       create: async ({ data }: any) => { if (state.databaseFailure) throw state.databaseFailure; state.writes.push(data);
         state.auth = { ...data, id: 'auth-a', withdrawal: null, claim: null }; return state.auth; },
+    },
+    documentPurgeDispositionEvent: {
+      findFirst: async ({ where }: any) => state.dispositionRows.find(row => row.id === where.id && row.organisationId === where.organisationId && row.authorizationId === where.authorizationId) ?? null,
+      findMany: async (args: any) => { state.dispositionArgs = args; return state.dispositionRows; },
+      create: async (args: any) => { if (state.databaseFailure) throw state.databaseFailure; state.dispositionArgs = args; state.writes.push(args.data); return args.data; },
     },
     documentPurgeAuthorizationWithdrawal: { create: async ({ data }: any) => { state.writes.push(data); return data; } },
     documentPurgeClaim: { create: async ({ data }: any) => {
@@ -128,10 +133,10 @@ test('purge routes restrict mutations to Owner web sessions and history to admin
       request.authSession = { clientKind, accessLevel: 'ADMIN' } as any;
     });
     const invoke = async () => { calls++; return {}; };
-    registerDocumentPurgeRoutes(app, { list: invoke, authorize: invoke, withdraw: invoke, claim: invoke } as any);
+    registerDocumentPurgeRoutes(app, { list: invoke, authorize: invoke, withdraw: invoke, claim: invoke, listDispositions: invoke, recordDisposition: invoke } as any);
     try {
       for (const [method, url] of [['GET','/purge-authorizations?documentId=doc-a'], ['POST','/purge-authorizations'],
-        ['POST','/purge-authorizations/auth-a/withdraw'], ['POST','/purge-authorizations/auth-a/claim']] as const) {
+        ['POST','/purge-authorizations/auth-a/withdraw'], ['POST','/purge-authorizations/auth-a/claim'], ['GET','/purge-authorizations/auth-a/dispositions'], ['POST','/purge-authorizations/auth-a/dispositions']] as const) {
         const allowed = clientKind === 'WEB' && (method === 'GET' ? role !== 'MEMBER' : role === 'OWNER');
         const before = calls;
         const response = await app.inject({ method, url, ...(method === 'POST' ? { payload: {} } : {}) });
@@ -140,4 +145,52 @@ test('purge routes restrict mutations to Owner web sessions and history to admin
       }
     } finally { await app.close(); }
   }
+});
+
+const disposition = { area: 'VERSIONS', scopeRef: 'VERSION-SET-001', revision: 1,
+  status: 'VERIFIED_ABSENT', observedAt: date.toISOString(), nextReviewAt: null,
+  evidenceRef: 'PROVIDER-RECEIPT-001', reason: 'Reviewed exact scope against provider evidence.', evidenceReviewed: true };
+
+test('downstream evidence requires a defined scope and explicit review and never permits primary absence claims', () => {
+  assert.equal(purgeDispositionInput.safeParse(disposition).success, true);
+  for (const change of [{ area: 'PRIMARY' }, { scopeRef: 'https://private.example/object' },
+    { evidenceReviewed: false }, { revision: 0 }, { revision: 1.5 }, { status: 'ERASED' },
+    { status: 'RETAINED_APPROVED' }, { status: 'FAILED' }, { observedAt: 'yesterday' },
+    { storagePath: 'injected/path' }, { actorUserId: 'owner-b' }]) {
+    assert.equal(purgeDispositionInput.safeParse({ ...disposition, ...change }).success, false, JSON.stringify(change));
+  }
+});
+
+test('recording downstream evidence is scoped, Owner-only, post-claim and cannot dispatch another job', async () => {
+  const { service, state } = fixture(); await service.authorize('org-a', 'owner-a', input);
+  await assert.rejects(service.recordDisposition('org-a', 'owner-a', 'auth-a', disposition), { code: 'PURGE_NOT_CLAIMED' });
+  await service.claim('org-a', 'owner-a', 'auth-a', { confirmPermanentPurge: true });
+  await assert.rejects(service.recordDisposition('org-b', 'owner-a', 'auth-a', disposition), { statusCode: 403 });
+  await assert.rejects(service.recordDisposition('org-a', 'owner-a', 'foreign-auth', disposition), { statusCode: 404 });
+  state.role = 'ADMIN';
+  await assert.rejects(service.recordDisposition('org-a', 'owner-a', 'auth-a', disposition), { statusCode: 403 });
+  state.role = 'OWNER';
+  await service.recordDisposition('org-a', 'owner-a', 'auth-a', disposition);
+  assert.equal(state.claims, 1);
+  assert.equal(state.dispositionArgs.data.organisationId, 'org-a');
+  assert.equal(state.dispositionArgs.data.authorizationId, 'auth-a');
+  assert.equal(state.dispositionArgs.data.evidenceReviewed, undefined);
+  assert.deepEqual(state.dispositionArgs.data.observedAt, date);
+  state.databaseFailure = Object.assign(new Error('Purge disposition revision changed; refresh history'), { name: 'PrismaClientUnknownRequestError' });
+  await assert.rejects(service.recordDisposition('org-a', 'owner-a', 'auth-a', disposition), { statusCode: 409, code: 'PURGE_DISPOSITION_REVIEW_CHANGED' });
+});
+
+test('downstream history paginates within one charity and authorization without claiming complete erasure', async () => {
+  const { service, state } = fixture(); await service.authorize('org-a', 'owner-a', input);
+  state.dispositionRows = Array.from({ length: 51 }, (_, i) => ({ id: `event-${i}`, organisationId: 'org-a', authorizationId: 'auth-a', occurredAt: date }));
+  const first = await service.listDispositions('org-a', 'auth-a', {});
+  assert.equal(first.items.length, 50); assert.equal(first.nextCursor, 'event-49');
+  assert.deepEqual(state.dispositionArgs.where, { organisationId: 'org-a', authorizationId: 'auth-a' });
+  assert.equal(state.dispositionArgs.take, 51);
+  assert.equal('erased' in first, false);
+  await service.listDispositions('org-a', 'auth-a', { before: first.nextCursor });
+  assert.deepEqual(state.dispositionArgs.where.OR, [{ occurredAt: { lt: date } }, { occurredAt: date, id: { lt: 'event-49' } }]);
+  await assert.rejects(service.listDispositions('org-b', 'auth-a', {}), { statusCode: 404 });
+  await assert.rejects(service.listDispositions('org-a', 'auth-a', { before: 'foreign-cursor' }), { statusCode: 404 });
+  for (const field of ['storagePath', 'sha256', 'provider', 'transactionId']) assert.equal(state.dispositionArgs.select[field], undefined);
 });

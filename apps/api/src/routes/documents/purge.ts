@@ -22,6 +22,26 @@ export function registerDocumentPurgeRoutes(app: FastifyInstance, service: Docum
       return handleError(reply, error);
     }
   });
+  app.get<{ Params: { id: string } }>('/purge-authorizations/:id/dispositions', {
+    preHandler: [requireAdmin, requireWebSession],
+  }, async (request, reply) => {
+    try { return sendSuccess(reply, await service.listDispositions(request.user.organisationId,
+      purgeId.parse(request.params.id), request.query)); }
+    catch (error) {
+      if (error instanceof ZodError) return reply.status(400).send({ code: 'VALIDATION_ERROR', error: 'Invalid disposal evidence history query' });
+      return handleError(reply, error);
+    }
+  });
+  app.post<{ Params: { id: string } }>('/purge-authorizations/:id/dispositions', {
+    preHandler: [requireSessionLevel('ADMIN'), requireOwner, requireWebSession],
+  }, async (request, reply) => {
+    try { return sendSuccess(reply, await service.recordDisposition(request.user.organisationId,
+      request.user.userId, purgeId.parse(request.params.id), request.body)); }
+    catch (error) {
+      if (error instanceof ZodError) return reply.status(400).send({ code: 'VALIDATION_ERROR', error: 'Review the scope, evidence, outcome and follow-up date', details: error.errors });
+      return handleError(reply, error);
+    }
+  });
   for (const operation of ['withdraw', 'claim'] as const) {
     app.post<{ Params: { id: string } }>(`/purge-authorizations/:id/${operation}`, {
       preHandler: [requireSessionLevel('ADMIN'), requireOwner, requireWebSession],

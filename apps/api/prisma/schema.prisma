@@ -1336,9 +1336,33 @@ model DocumentPurgeAuthorization {
   authorizedAt       DateTime @default(now())
   withdrawal         DocumentPurgeAuthorizationWithdrawal?
   claim              DocumentPurgeClaim?
+  dispositionEvents  DocumentPurgeDispositionEvent[]
 
   @@unique([id, organisationId])
   @@index([organisationId, documentId, authorizedAt])
+}
+
+// Reviewer evidence about an explicitly referenced downstream scope, never a
+// provider action or a whole-document erasure certificate. Primary absence is
+// derived only from the worker receipt. Later corrections append a revision.
+model DocumentPurgeDispositionEvent {
+  id              String @id @default(cuid())
+  organisationId  String
+  authorizationId String
+  authorization   DocumentPurgeAuthorization @relation(fields: [authorizationId, organisationId], references: [id, organisationId], onDelete: Restrict, map: "PurgeDisposition_authorization_fkey")
+  area            String
+  scopeRef        String
+  revision        Int
+  status          String
+  actorUserId     String
+  evidenceRef     String
+  reason          String
+  observedAt      DateTime
+  nextReviewAt    DateTime?
+  occurredAt      DateTime @default(now())
+
+  @@unique([authorizationId, area, scopeRef, revision], map: "PurgeDisposition_scope_revision_key")
+  @@index([organisationId, authorizationId, occurredAt, id], map: "PurgeDisposition_history_idx")
 }
 
 model DocumentPurgeAuthorizationWithdrawal {

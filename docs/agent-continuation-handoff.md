@@ -2,6 +2,30 @@
 
 Last updated: 2026-09-30
 
+Downstream disposition evidence checkpoint, 30 September 2026: the new
+DocumentPurgeDispositionEvent ledger and restricted API retain append-only,
+revisioned observations for a named scope in versions, Confluence, exports,
+audit records or backups. Owner writes require a claimed authorization, an
+explicit evidence review, controlled references and observation time. Unresolved
+and approved-retention outcomes require a future follow-up date. Primary-file
+absence cannot be entered here; it remains derived from the cleanup receipt.
+Outcomes cannot contradict the immutable plan. A later discovery reopens review
+by appending a revision; concurrent stale revisions are rejected.
+
+The API exposes paged same-charity history to Owner/Admin web sessions and
+writes only to the active Owner's privileged web session. It reports scoped
+reviewer evidence without an aggregate erased status or provider action.
+The dashboard editor, actual provider observations, complete copy inventories,
+backup restore reconciliation, other record classes and deployment/live
+acceptance remain outstanding. This ledger does not independently verify the
+reviewer's evidence or the completeness of the referenced scope.
+
+Verification: populated disposable PostgreSQL migration and real concurrent
+correction test pass, including unchanged pending primary-job data. Schema
+validation, API build, 24 focused service/route tests and all 51 model-map/reset
+safety tests pass. The isolated database was removed successfully. These are
+local proofs; no deployment or external-provider erasure is claimed.
+
 Local primary-purge worker checkpoint, 30 September 2026: the guarded runner
 now executes a real worker proof inside its exact attested API container, with
 two identity-verified PostgreSQL connections and local tmpfs files. The proof

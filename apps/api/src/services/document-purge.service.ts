@@ -16,6 +16,24 @@ export const purgeAuthorizationInput = retentionWithdrawalInput.extend({
 export const purgeClaimInput = z.object({ confirmPermanentPurge: z.literal(true) }).strict();
 export const purgeHistoryInput = z.object({ documentId: id.optional(), before: id.optional() }).strict();
 export const purgeId = id;
+export const purgeDispositionInput = retentionWithdrawalInput.extend({
+  area: z.enum(['VERSIONS', 'CONFLUENCE', 'EXPORTS', 'AUDIT', 'BACKUPS']),
+  scopeRef: z.string().regex(/^[A-Z0-9][A-Z0-9-]{2,119}$/),
+  revision: z.number().int().min(1).max(2147483647),
+  status: z.enum(['NEEDS_REVIEW', 'PENDING_DISPOSAL', 'FAILED', 'VERIFIED_ABSENT', 'RETAINED_APPROVED', 'NOT_APPLICABLE']),
+  observedAt: z.string().datetime({ offset: true }),
+  nextReviewAt: z.string().datetime({ offset: true }).nullable(),
+  evidenceReviewed: z.literal(true),
+}).strict().superRefine((value, ctx) => {
+  if (['NEEDS_REVIEW', 'PENDING_DISPOSAL', 'FAILED', 'RETAINED_APPROVED'].includes(value.status) && !value.nextReviewAt) {
+    ctx.addIssue({ code: z.ZodIssueCode.custom, path: ['nextReviewAt'], message: 'Record a follow-up review date for unresolved or retained copies.' });
+  }
+});
+const dispositionHistoryInput = z.object({ before: id.optional() }).strict();
+const dispositionReview = { id: true, authorizationId: true, area: true, scopeRef: true,
+  revision: true, status: true, actorUserId: true, evidenceRef: true, reason: true,
+  observedAt: true, nextReviewAt: true, occurredAt: true } as const;
+
 
 // Never return provider paths, fingerprints or PostgreSQL transaction IDs.
 const review = { id: true, documentId: true, documentRevision: true, policyId: true,
@@ -43,6 +61,9 @@ export class DocumentPurgeService {
       if (error instanceof Error && error.name === 'PrismaClientUnknownRequestError') {
         if (error.message.includes('Purge claim must wait for retention and recovery expiry')) {
           throw new AppError(409, 'PURGE_NOT_DUE', 'The approved retention and recovery periods must both expire before primary disposal.');
+        }
+        if (error.message.includes('Purge disposition')) {
+          throw new AppError(409, 'PURGE_DISPOSITION_REVIEW_CHANGED', 'Refresh the scoped evidence history and review the approved plan, observation and follow-up dates.');
         }
         if (/Purge (?:authorization (?:requires|must bind|not found)|claim (?:requires|cannot reuse)|withdrawal requires|has been claimed)/.test(error.message)) {
           throw new AppError(409, 'PURGE_REVIEW_CHANGED', 'Disposal could not proceed. Refresh the record, policy, holds and authorization before reviewing again.');
@@ -75,6 +96,34 @@ export class DocumentPurgeService {
       ...(anchor ? { OR: [{ authorizedAt: { lt: anchor.authorizedAt } }, { authorizedAt: anchor.authorizedAt, id: { lt: anchor.id } }] } : {}) },
       select: review, orderBy: [{ authorizedAt: 'desc' }, { id: 'desc' }], take: 51 });
     return { items: rows.slice(0, 50), nextCursor: rows.length > 50 ? rows[49]!.id : null };
+  }
+
+  async listDispositions(organisationId: string, authorizationId: string, raw: unknown) {
+    const { before } = dispositionHistoryInput.parse(raw);
+    const auth = await this.prisma.documentPurgeAuthorization.findFirst({ where: { id: authorizationId, organisationId }, select: { id: true } });
+    if (!auth) throw new AppError(404, 'PURGE_AUTHORIZATION_NOT_FOUND', 'Authorization not found');
+    const anchor = before ? await this.prisma.documentPurgeDispositionEvent.findFirst({
+      where: { id: before, organisationId, authorizationId }, select: { id: true, occurredAt: true },
+    }) : null;
+    if (before && !anchor) throw new AppError(404, 'PURGE_DISPOSITION_NOT_FOUND', 'Evidence cursor not found');
+    const rows = await this.prisma.documentPurgeDispositionEvent.findMany({ where: { organisationId, authorizationId,
+      ...(anchor ? { OR: [{ occurredAt: { lt: anchor.occurredAt } }, { occurredAt: anchor.occurredAt, id: { lt: anchor.id } }] } : {}) },
+      select: dispositionReview, orderBy: [{ occurredAt: 'desc' }, { id: 'desc' }], take: 51 });
+    // This is scoped reviewer evidence; no aggregation can assert all copies erased.
+    return { items: rows.slice(0, 50), nextCursor: rows.length > 50 ? rows[49]!.id : null };
+  }
+
+  async recordDisposition(organisationId: string, actorUserId: string, authorizationId: string, raw: unknown) {
+    const { evidenceReviewed: _confirmed, observedAt, nextReviewAt, ...input } = purgeDispositionInput.parse(raw);
+    return this.transaction(async tx => {
+      await this.owner(tx, organisationId, actorUserId);
+      await tx.$queryRaw`SELECT id FROM "DocumentPurgeAuthorization" WHERE id=${authorizationId} AND "organisationId"=${organisationId} FOR UPDATE`;
+      const auth = await tx.documentPurgeAuthorization.findFirst({ where: { id: authorizationId, organisationId }, select: { id: true, claim: { select: { id: true } } } });
+      if (!auth) throw new AppError(404, 'PURGE_AUTHORIZATION_NOT_FOUND', 'Authorization not found');
+      if (!auth.claim) throw new AppError(409, 'PURGE_NOT_CLAIMED', 'Record disposal evidence against a claimed authorization.');
+      return tx.documentPurgeDispositionEvent.create({ data: { ...input, organisationId, actorUserId, authorizationId,
+        observedAt: new Date(observedAt), nextReviewAt: nextReviewAt ? new Date(nextReviewAt) : null }, select: dispositionReview });
+    });
   }
 
   async authorize(organisationId: string, actorUserId: string, raw: unknown) {

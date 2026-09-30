@@ -31,6 +31,30 @@ purge/hold races, user-interface behavior or provider/backup disposal.
 
 ## Observed starting point
 
+Downstream disposition evidence checkpoint, 30 September 2026: the new
+DocumentPurgeDispositionEvent ledger and restricted API retain append-only,
+revisioned observations for a named scope in versions, Confluence, exports,
+audit records or backups. Owner writes require a claimed authorization, an
+explicit evidence review, controlled references and observation time. Unresolved
+and approved-retention outcomes require a future follow-up date. Primary-file
+absence cannot be entered here; it remains derived from the cleanup receipt.
+Outcomes cannot contradict the immutable plan. A later discovery reopens review
+by appending a revision; concurrent stale revisions are rejected.
+
+The API exposes paged same-charity history to Owner/Admin web sessions and
+writes only to the active Owner's privileged web session. It reports scoped
+reviewer evidence without an aggregate erased status or provider action.
+The dashboard editor, actual provider observations, complete copy inventories,
+backup restore reconciliation, other record classes and deployment/live
+acceptance remain outstanding. This ledger does not independently verify the
+reviewer's evidence or the completeness of the referenced scope.
+
+Verification: populated disposable PostgreSQL migration and real concurrent
+correction test pass, including unchanged pending primary-job data. Schema
+validation, API build, 24 focused service/route tests and all 51 model-map/reset
+safety tests pass. The isolated database was removed successfully. These are
+local proofs; no deployment or external-provider erasure is claimed.
+
 Local primary-purge worker checkpoint, 30 September 2026: the guarded runner
 now executes a real worker proof inside its exact attested API container, with
 two identity-verified PostgreSQL connections and local tmpfs files. The proof
@@ -395,3 +419,28 @@ Review the database link/hold triggers as well as the service checks.
 
 No live policy, file classification or destructive action is authorized by
 this specification itself.
+
+## Scoped downstream evidence API
+
+`GET /documents/purge-authorizations/:id/dispositions` returns up to 50 newest
+review observations with a same-authorization `before` cursor. Only Owner/Admin
+web sessions may read it. Paths, file hashes and raw provider errors are omitted.
+
+`POST` to the same path requires an Owner web session at ADMIN access level and:
+
+- `area`: VERSIONS, CONFLUENCE, EXPORTS, AUDIT or BACKUPS;
+- `scopeRef`: controlled inventory/copy reference (uppercase letters, digits,
+  hyphens; 3–120 characters), plus the next `revision` for that exact area/scope;
+- `status`: NEEDS_REVIEW, PENDING_DISPOSAL, FAILED, VERIFIED_ABSENT,
+  RETAINED_APPROVED or NOT_APPLICABLE;
+- `evidenceRef`, reason, `observedAt`, nullable `nextReviewAt`, and explicit
+  `evidenceReviewed: true`.
+
+The database binds the event to the charity and claimed authorization, enforces
+plan-compatible outcomes and database-time bounds, serializes revisions, and
+rejects edits/deletes. A scoped absence is a recorded reviewer observation,
+not an automatic provider verification or certification that an entire storage
+area is empty. Missing scopes and overdue reviews remain unresolved work.
+These events cannot create cleanup jobs, change the primary receipt or reopen
+the recoverable Document. Changing the original disposal plan needs separately
+reviewed authority; this endpoint cannot silently amend it.
