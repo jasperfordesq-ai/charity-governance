@@ -1,5 +1,14 @@
 # CharityPilot Agent Continuation Handoff
 
+> **Hold publication identity boundary, 2026-09-30:** current outcome SQL
+> applies a prepared hold atomically but its row has no authenticated
+> publication receipt. Adding a same-transaction event/outcome join or
+> digest fields alone would not prove remote publication to a broad
+> database writer. The private writer-gate analysis records two candidate
+> boundaries: restricted database roles or database-verifiable attestation
+> signed outside the ordinary writer. Neither is approved or implemented;
+> supported emergency preservation and direct-SQL rejection remain gates.
+
 > **Complaint writer inventory, 2026-09-30:** bounded current-source search
 > found the ordinary hold service and the hold-outcome SQL trigger both
 > writing `ComplaintHoldEvent`. The existing disposable protocol proof
