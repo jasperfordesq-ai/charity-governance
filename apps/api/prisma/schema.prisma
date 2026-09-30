@@ -1296,6 +1296,7 @@ model DataRetentionPolicyRevision {
   removedDocuments    Document[]
   purgeAuthorizations DocumentPurgeAuthorization[]
   complaintRemovals   ComplaintRemoval[]
+  complaintPurgeAuthorizations ComplaintPurgeAuthorization[]
 
   @@unique([id, organisationId])
   @@unique([organisationId, recordClass, revision], map: "RetentionPolicy_org_class_revision_key")
@@ -1915,10 +1916,47 @@ model ComplaintRemoval {
   // Computed by the database from the approved policy at insertion.
   recoveryUntil        DateTime @default(now())
   records              ComplaintRecord[]
+  purgeAuthorizations  ComplaintPurgeAuthorization[]
 
   @@unique([id, organisationId])
   @@unique([organisationId, complaintId, recordRevision])
   @@index([organisationId, occurredAt, id])
+}
+
+// Reviewed disposal plan only; does not erase the complaint or any copies.
+model ComplaintPurgeAuthorization {
+  id              String @id @default(cuid())
+  organisationId  String
+  complaintId     String
+  recordRevision  Int
+  holdRevision    Int
+  removalId       String
+  removal         ComplaintRemoval @relation(fields: [removalId, organisationId], references: [id, organisationId], onDelete: Restrict)
+  policyId        String
+  policy          DataRetentionPolicyRevision @relation(fields: [policyId, organisationId], references: [id, organisationId], onDelete: Restrict)
+  actorUserId     String
+  recoveryUntil   DateTime
+  dispositionPlan Json
+  evidenceRef     String
+  reason          String
+  authorizedAt    DateTime @default(now())
+  withdrawal      ComplaintPurgeAuthorizationWithdrawal?
+
+  @@unique([id, organisationId])
+  @@index([organisationId, complaintId, authorizedAt, id], map: "ComplaintPurgeAuthorization_history_idx")
+}
+
+model ComplaintPurgeAuthorizationWithdrawal {
+  id              String @id @default(cuid())
+  organisationId  String
+  authorizationId String @unique
+  authorization   ComplaintPurgeAuthorization @relation(fields: [authorizationId, organisationId], references: [id, organisationId], onDelete: Restrict)
+  actorUserId     String
+  evidenceRef     String
+  reason          String
+  occurredAt      DateTime @default(now())
+
+  @@unique([authorizationId, organisationId])
 }
 
 // Evidence of a reviewed resolution date, not a retention or erasure decision.

@@ -160,6 +160,60 @@ test('complaint recovery migration preserves records and enforces reviewed remov
       UPDATE "ComplaintRemoval" SET "recoveryUntil"=timezone('UTC',now())-INTERVAL '1 second' WHERE id='expired-removal';
       ALTER TABLE "ComplaintRemoval" ENABLE TRIGGER "ComplaintRemoval_append_only";`);
     sql(`UPDATE "ComplaintRecord" SET "removalId"=NULL,"removedAt"=NULL WHERE id='expired';`, /recovery window expired/);
+    const plan=Object.fromEntries(['PRIMARY','SNAPSHOTS','EXPORTS','AUDIT','BACKUPS','OTHER_COPIES'].map(area=>
+      [area,{disposition:area==='PRIMARY'?'DISPOSE':'RETAIN_APPROVED',evidenceRef:'COPY-REVIEW-001'}]));
+    const authorize=(id,overrides={})=>{
+      const value={actor:'admin-a',recordRevision:2,holdRevision:0,policy:'review-policy',deadline:'"recoveryUntil"',plan,...overrides};
+      return `INSERT INTO "ComplaintPurgeAuthorization" (id,"organisationId","complaintId","recordRevision","holdRevision","removalId","policyId","actorUserId","recoveryUntil","dispositionPlan","evidenceRef",reason)
+        SELECT '${id}','a','expired',${value.recordRevision},${value.holdRevision},id,'${value.policy}','${value.actor}',${value.deadline},'${JSON.stringify(value.plan)}'::jsonb,'PURGE-REVIEW-001','Reviewed synthetic disposal authority' FROM "ComplaintRemoval" WHERE id='expired-removal';`;
+    };
+    sql(`INSERT INTO "User" (id,email,name,"passwordHash",role,"organisationId","updatedAt")
+      VALUES ('ordinary-admin','complaint-admin@example.invalid','Synthetic Admin','fixture','ADMIN','a',now());`);
+    sql(authorize('admin-purge',{actor:'ordinary-admin'}),/active charity Owner/);
+    sql(authorize('member-purge',{actor:'member-a'}),/active charity Owner/);
+    sql(authorize('foreign-purge',{actor:'admin-b'}),/active charity Owner/);
+    sql(authorize('stale-purge',{recordRevision:1}),/exact record and recovery decision/);
+    sql(authorize('changed-deadline-purge',{deadline:'now()'}),/exact record and recovery decision/);
+    sql(authorize('wrong-policy-purge',{policy:'vault'}),/current approved complaint policy/);
+    sql(authorize('withdrawn-policy-purge',{policy:'policy'}),/current approved complaint policy/);
+    sql(authorize('missing-plan-purge',{plan:{PRIMARY:plan.PRIMARY}}),/six areas/);
+    sql(authorize('null-plan-purge',{plan:null}),/six areas/);
+    sql(authorize('null-area-purge',{plan:{...plan,BACKUPS:null}}),/area missing/);
+    sql(authorize('bad-evidence-purge',{plan:{...plan,BACKUPS:{disposition:'RETAIN_APPROVED',evidenceRef:'private@example.invalid'}}}),/reviewed dispositions and references/);
+    sql(authorize('bad-primary-purge',{plan:{...plan,PRIMARY:{disposition:'RETAIN_APPROVED',evidenceRef:'COPY-001'}}}),/primary disposition must be disposal/);
+    sql(`INSERT INTO "ComplaintHoldEvent" (id,"organisationId","complaintId",revision,"recordRevision",held,"actorUserId","evidenceRef",reason)
+      VALUES ('expired-hold','a','expired',1,2,true,'admin-a','HOLD-EXPIRED-001','Preserve this synthetic removed record');`);
+    sql(authorize('held-purge',{holdRevision:1}),/current unheld revision/);
+    sql(`INSERT INTO "ComplaintHoldEvent" (id,"organisationId","complaintId",revision,"recordRevision",held,"actorUserId","evidenceRef",reason)
+      VALUES ('expired-hold-release','a','expired',2,2,false,'admin-a','HOLD-EXPIRED-002','Release reviewed synthetic preservation');`);
+    sql(authorize('stale-hold-purge'),/current unheld revision/);
+    sql(authorize('reviewed-purge',{holdRevision:2}));
+    sql(`DELETE FROM "ComplaintRecord" WHERE id='expired';`,/separate verified workflow/);
+    assert.equal(sql(`SELECT count(*) FROM "ComplaintRecord" WHERE id='expired';`),'1');
+    sql(`UPDATE "ComplaintPurgeAuthorization" SET reason='Altered disposal authority' WHERE id='reviewed-purge';`,/append-only/);
+    const withdraw=(actor,organisation='a')=>`INSERT INTO "ComplaintPurgeAuthorizationWithdrawal" (id,"organisationId","authorizationId","actorUserId","evidenceRef",reason)
+      VALUES ('purge-withdrawn','${organisation}','reviewed-purge','${actor}','PURGE-WITHDRAW-001','Withdrawal of reviewed disposal authority');`;
+    sql(withdraw('ordinary-admin'),/active charity Owner/);
+    sql(withdraw('admin-b','b'),/same-charity authorization/);
+    sql(withdraw('admin-a'));
+    sql(`DELETE FROM "ComplaintPurgeAuthorizationWithdrawal";`,/append-only/);
+    sql(`INSERT INTO "DataRetentionPolicyWithdrawal" (id,"organisationId","policyId","actorUserId",reason,"evidenceRef")
+      VALUES ('review-policy-withdrawn','a','review-policy','admin-a','Replace synthetic review-only policy','WITHDRAW-003');
+      INSERT INTO "DataRetentionPolicyRevision" (id,"organisationId","recordClass",revision,state,"retentionMode","retentionAnchor","retentionDays","recoveryDays","createdById","approvedById","approvedAt","approvalEvidenceRef")
+      VALUES ('timed-review-policy','a','COMPLAINT',3,'APPROVED','AFTER_ANCHOR','RESOLVED_AT',1,30,'admin-a','admin-a',now(),'POLICY-004');`);
+    sql(authorize('missing-original-anchor',{policy:'timed-review-policy',holdRevision:2}),/matching original resolution evidence/);
+    sql(`INSERT INTO "ComplaintRecord" (id,"organisationId","receivedDate",summary,status,"updatedAt")
+      VALUES ('timed-review','a','2026-01-01','Synthetic timed review complaint','CLOSED',now());
+      INSERT INTO "ComplaintResolutionEvidence" (id,"organisationId","complaintId",revision,"recordRevision",state,"resolvedAt","evidenceRef",reason,"actorUserId")
+      VALUES ('timed-resolution','a','timed-review',1,1,'RECORDED','2026-01-02','RESOLUTION-005','Reviewed timed resolution before removal','admin-a');
+      INSERT INTO "ComplaintRemoval" (id,"organisationId","complaintId","recordRevision","actorUserId","policyId","resolutionEvidenceId","evidenceRef",reason)
+      VALUES ('timed-removal','a','timed-review',1,'admin-a','timed-review-policy','timed-resolution','REMOVAL-004','Reviewed timed complaint removal');
+      UPDATE "ComplaintRecord" SET "removalId"='timed-removal',"removedAt"=(SELECT "occurredAt" FROM "ComplaintRemoval" WHERE id='timed-removal') WHERE id='timed-review';
+      INSERT INTO "ComplaintPurgeAuthorization" (id,"organisationId","complaintId","recordRevision","holdRevision","removalId","policyId","actorUserId","recoveryUntil","dispositionPlan","evidenceRef",reason)
+      SELECT 'timed-authorization','a','timed-review',2,0,id,'timed-review-policy','admin-a',"recoveryUntil",'${JSON.stringify(plan)}'::jsonb,'PURGE-REVIEW-002','Reviewed timed complaint disposal plan' FROM "ComplaintRemoval" WHERE id='timed-removal';`);
+    assert.equal(sql(`SELECT a."recoveryUntil"=r."recoveryUntil" AND a."recoveryUntil">now()
+      FROM "ComplaintPurgeAuthorization" a JOIN "ComplaintRemoval" r ON r.id=a."removalId" WHERE a.id='timed-authorization';`),'t');
+    sql(`DELETE FROM "ComplaintRecord" WHERE id='timed-review';`,/separate verified workflow/);
     const authority = JSON.parse(sql(PURGE_RESTORE_SNAPSHOT_SQL));
     assert.doesNotMatch(JSON.stringify(authority), /Private original narrative|Reviewed synthetic administrative hold|HOLD-001/);
     const currentBackup = docker(['exec',container,'pg_dump','-U','postgres','--no-owner','--no-privileges','postgres']);
@@ -175,7 +229,7 @@ test('complaint recovery migration preserves records and enforces reviewed remov
       if(database==='old_complaint_restore') {
         assert.throws(()=>assertPurgeRestoreLedger(authority,snapshot),error=>{
           assert.equal(error.code,'PURGE_RESTORE_RECONCILIATION_REQUIRED');
-          for(const table of ['ComplaintHoldEvent','ComplaintRemoval','ComplaintResolutionEvidence','ComplaintRecoveryState']) {
+          for(const table of ['ComplaintHoldEvent','ComplaintRemoval','ComplaintResolutionEvidence','ComplaintRecoveryState','ComplaintPurgeAuthorization','ComplaintPurgeAuthorizationWithdrawal']) {
             assert.ok(error.report.differences.some(item=>item.table===table && (item.missing || item.changed)),table);
           }
           return true;

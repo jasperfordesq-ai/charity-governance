@@ -2,6 +2,19 @@
 
 Last updated: 2026-09-30
 
+Complaint purge review persistence increment (not deployed): immutable
+ComplaintPurgeAuthorization binds the current removed closed complaint revision,
+removal decision and original recovery deadline, latest unheld revision, active
+same-charity Owner and one current approved COMPLAINT policy. Timed policies
+require resolution evidence matching the original removal revision. The plan
+covers PRIMARY, SNAPSHOTS, EXPORTS, AUDIT, BACKUPS and OTHER_COPIES with controlled
+references. Owner withdrawals retain history. Both tables participate in restore
+reconciliation. These are reviewed intentions only: hard DELETE remains blocked,
+no execution route exists and no copy is erased. Next implement a separately
+verified atomic claim/delete receipt, rechecking policy/hold/owner/record and
+retention/recovery expiry; prevent withdrawal after claim, retain metadata audit,
+and extend restore resurrection checks before enabling the API/dashboard flow.
+
 Complaint-aware restore reconciliation increment: the current-authority snapshot
 now hashes complaint resolution, removal and hold ledgers plus current complaint
 revision/recovery pointers. This refuses an old restore that loses hold decisions

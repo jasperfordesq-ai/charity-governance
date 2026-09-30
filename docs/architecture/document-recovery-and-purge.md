@@ -22,6 +22,19 @@ after host loss or authorize application reopening.
 
 ### Complaint resolution evidence: persistence checkpoint
 
+Purge authorization persistence (local only): an immutable Owner review binds
+the removed complaint revision, exact removal decision and recovery deadline,
+latest unheld revision, current class policy and six-area disposition plan.
+The plan separates the primary database record from approved snapshots, exports,
+audit/evidence, backups and other copies. Timed-policy evidence must match the
+original pre-removal revision; removal's own revision increment is not a new
+resolution. Reviewed authority may be withdrawn by the active charity Owner;
+withdrawal retains the original decision. These ledgers are included in current
+restore authority. Authorization does not bypass the permanent-delete guard,
+queue disposal, prove copy absence, shorten recovery or adopt any live policy.
+Claim-time expiry/current-authority checks, atomic primary deletion, withdrawal
+cutoff, retained copy observations, API/UI and deployment are subsequent work.
+
 Administrative-hold persistence increment: `ComplaintHoldEvent` retains each
 apply/release transition with exact record/hold revisions and actor/evidence.
 It does not modify the complaint's content or invalidate resolution evidence.
