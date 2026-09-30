@@ -1,5 +1,15 @@
 # CharityPilot Full-Platform Remediation Audit
 
+> **Privacy Notice provenance follow-up, 2026-09-30:** the circulated V2 PDF
+> retained in the Vault is an earlier uncorrected snapshot. Signed-in
+> Confluence page 2326571 V10 (22 September) and the directly inspected public
+> `https://hour-timebank.ie/privacy` Version 2.0 notice effective 30 September
+> both show Nikita's named DPO contact and the corrected section 20. This is a
+> bounded clause check, not full page equivalence or proof of DPO mailbox
+> access/retirement of the unused address. The 63 Vault worksheet decisions
+> remain PENDING; do not publish the stale circulated PDF. Private evidence:
+> `.charitypilot-private/privacy-notice-source-review-2026-09-30.md`.
+
 > **Verified private VM release, 2026-09-30 22:57 Dublin:** source
 > `674be7107220acdf8335e107dbb1aa7234f249d8` runs on blue. Exact CI
 > 36780803672 and E2E 36780803674 succeeded (239 browser tests); migration
