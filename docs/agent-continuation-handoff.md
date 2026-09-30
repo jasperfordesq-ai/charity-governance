@@ -1,5 +1,14 @@
 # CharityPilot Agent Continuation Handoff
 
+> DPO-05 cancellation release (source only): a dedicated
+> service compares the authenticated published cancellation with its exact
+> committed database receipt and current writer before conditional reservation
+> release. No timeout clearing or takeover is permitted. This remains inactive
+> source work, verified by local API/database/protocol tests; live deployment,
+> independent custody, recovery replay and the
+> original DPO acceptance requirements remain separate and incomplete.
+
+
 > DPO-05 cancellation evidence publication: dedicated authenticated cancellation
 > envelopes and create-only storage now bind operation kind, scope and source.
 > Typed terminal journal entries follow the exact primary/hold preparation and

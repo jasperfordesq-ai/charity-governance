@@ -1,3 +1,4 @@
+import { releaseCommittedCancellationOperation } from '../apps/api/src/services/release-cancellation-recovery-operation.ts';
 import { preserveCancellation } from '../apps/api/src/services/cancellation-envelope.ts';
 import { publishVerifiedCancellation, readPublishedCancellation } from '../apps/api/src/services/published-cancellation.ts';
 import { readCommittedComplaintCancellation } from '../apps/api/src/services/complaint-recovery-cancellation.ts';
@@ -443,6 +444,8 @@ try {
   ]) {
     const request = { operationKind: kind, writerId, preparationDigest: prepDigest,
       preparationGeneration: prep.generation, preparationEntryDigest: prep.digest, preparationEnvelopeDigest: envelope.digest };
+    const releaseCancellation = () => releaseCommittedCancellationOperation(prisma, j, storage, writerId, kind, ctx, keys, storage);
+    await assert.rejects(releaseCancellation, /not published/);
     const publishCancellation = () => publishVerifiedCancellation(j, storage, request, ctx, keys, storage);
     await assert.rejects(publishCancellation, /missing/);
     const preserved = await preserveCancellation(evidence.body, ctx, keys, storage);
@@ -464,7 +467,38 @@ try {
     const key = `cancellations/${ctx.installationId}/${ctx.organisationId}/${ctx.operationId}.json`;
     const original = objects.get(key); objects.delete(key);
     await assert.rejects(readPublishedCancellation(j, source, ctx, kind, keys, storage), /unresolved/);
+    await assert.rejects(releaseCancellation, /unresolved/);
     assert.equal(objects.has(key), false); objects.set(key, original);
+    await assert.rejects(releaseCommittedCancellationOperation(prisma, j, storage, 'stale-writer', kind, ctx, keys, storage), /writer or operation mismatch/);
+    const missingLocal = { complaintRecoveryCancellation: { async findFirst() { return null; } } };
+    await assert.rejects(releaseCommittedCancellationOperation(missingLocal, j, storage, writerId, kind, ctx, keys, storage), /unavailable/);
+    const changedLocal = { complaintRecoveryCancellation: { async findFirst(args) {
+      const row = await prisma.complaintRecoveryCancellation.findFirst(args);
+      return { ...row, evidenceRef: 'CHANGED-EVIDENCE' };
+    } } };
+    await assert.rejects(releaseCommittedCancellationOperation(changedLocal, j, storage, writerId, kind, ctx, keys, storage), /evidence does not match/);
+    let controlReads = 0;
+    const changedControl = { async readControl() {
+      const value = await storage.readControl();
+      return ++controlReads > 1 ? { ...value, writerId: 'different-writer' } : value;
+    }, async releaseControl() { throw new Error('Changed control must never release'); } };
+    await assert.rejects(releaseCommittedCancellationOperation(prisma, j, changedControl, writerId, kind, ctx, keys, storage), /evidence does not match/);
+    const beforeRelease = await storage.readControl();
+    loseHeadAck = true;
+    await assert.rejects(releaseCancellation, /unknown/);
+    await prisma.$disconnect();
+    assert.deepEqual(await releaseCancellation(), { released: true, replayed: true, actionAuthorized: false });
+    const afterRelease = await storage.readControl();
+    assert.equal(afterRelease.activeOperation, null);
+    assert.equal(afterRelease.digest, beforeRelease.digest);
+    assert.equal(afterRelease.generation, beforeRelease.generation);
+    assert.equal(afterRelease.writerId, writerId);
+    await reserveRecoveryOperation({ installationId: ctx.installationId, organisationId: ctx.organisationId,
+      writerId, writerEpoch: ctx.writerEpoch, operationId: 'after-cancellation', preparationDigest: prepDigest,
+      expectedGeneration: afterRelease.generation, expectedDigest: afterRelease.digest }, storage);
+    await assert.rejects(releaseCancellation, /writer or operation mismatch/);
+    assert.equal((await storage.readControl()).activeOperation.operationId, 'after-cancellation');
+
   }
   process.stdout.write('complaint-recovery-protocol-composition-verified');
 } finally {
