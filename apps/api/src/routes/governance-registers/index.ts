@@ -98,6 +98,20 @@ const riskAuditQuerySchema = z.object({
 }).strict();
 const registerAuditQuerySchema = riskAuditQuerySchema;
 
+const complaintResolutionCommon = {
+  expectedRecordRevision: z.number().int().positive().max(2147483647),
+  expectedEvidenceRevision: z.number().int().nonnegative().max(2147483646),
+  evidenceRef: z.string().regex(/^[A-Z0-9][A-Z0-9-]{2,119}$/),
+  reason: z.string().trim().min(10).max(500).regex(/^[^\x00-\x1f\x7f]*$/),
+};
+const complaintResolutionSchema = z.discriminatedUnion('state', [
+  z.object({ ...complaintResolutionCommon, state: z.literal('RECORDED'), resolvedAt: z.string().datetime({ offset: true }) }).strict(),
+  z.object({ ...complaintResolutionCommon, state: z.literal('WITHDRAWN') }).strict(),
+]);
+const complaintResolutionQuerySchema = z.object({
+  beforeRevision: z.coerce.number().int().positive().max(2147483647).optional(),
+}).strict();
+
 export async function governanceRegisterRoutes(app: FastifyInstance) {
   const service = new GovernanceRegisterService(app.prisma);
 
@@ -264,6 +278,29 @@ export async function governanceRegisterRoutes(app: FastifyInstance) {
       await service.removeRisk(request.user.organisationId, request.params.id, request.user.userId);
       return sendNoContent(reply);
     } catch (err) {
+      return handleError(reply, err);
+    }
+  });
+
+  app.get<{ Params: { id: string } }>('/complaints/:id/resolution-evidence', { preHandler: [requireAdmin, requireControlReviewWebSession] }, async (request, reply) => {
+    try {
+      const { beforeRevision } = complaintResolutionQuerySchema.parse(request.query);
+      return sendSuccess(reply, await service.listComplaintResolutionEvidence(request.user.organisationId, request.params.id, beforeRevision));
+    } catch (err) {
+      if (err instanceof ZodError) return validationError(reply, err);
+      return handleError(reply, err);
+    }
+  });
+
+  app.post<{ Params: { id: string } }>('/complaints/:id/resolution-evidence', { preHandler: [requireAdmin, requireControlReviewWebSession] }, async (request, reply) => {
+    try {
+      const data = complaintResolutionSchema.parse(request.body);
+      return sendCreated(reply, await service.recordComplaintResolutionEvidence({
+        ...data, organisationId: request.user.organisationId, complaintId: request.params.id,
+        actorUserId: request.user.userId,
+      }));
+    } catch (err) {
+      if (err instanceof ZodError) return validationError(reply, err);
       return handleError(reply, err);
     }
   });

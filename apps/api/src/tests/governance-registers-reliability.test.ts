@@ -68,6 +68,7 @@ test('Members cannot read sensitive registers or their summary through list or d
       '/complaints',
       '/change-audit',
       '/complaints/sensitive-record',
+      '/complaints/sensitive-record/resolution-evidence',
     ]) {
       const response = await app.inject({ method: 'GET', url: `${PREFIX}${path}`, headers: { authorization: tokenFor('MEMBER') } });
       assert.equal(response.statusCode, 403, path);
@@ -95,6 +96,8 @@ test('Admin connector cannot directly read excluded control histories or record 
       ['GET', '/risks/risk-1/control-verifications'],
       ['GET', '/change-audit'],
       ['POST', '/risks/risk-1/control-verifications'],
+      ['GET', '/complaints/complaint-1/resolution-evidence'],
+      ['POST', '/complaints/complaint-1/resolution-evidence'],
     ]) {
       const response = await app.inject({ method: method as 'GET' | 'POST',
         url: `${PREFIX}${path}`, headers: { authorization: tokenFor('ADMIN') } });
@@ -1162,4 +1165,87 @@ test('governance register routes require authentication', async () => {
   } finally {
     await app.close();
   }
+});
+
+test('complaint resolution API binds actor and charity, rejects injected fields and both stale revisions', async () => {
+  let recordRevision = 2;
+  let evidenceRevision = 0;
+  const created: Array<Record<string, unknown>> = [];
+  const tx = {
+    $queryRaw: async () => [{ id: 'org-1' }],
+    complaintRecord: { findFirst: async ({ where }: { where: Record<string, unknown> }) => {
+      assert.deepEqual(where, { id: 'complaint-1', organisationId: 'org-1' });
+      return { id: 'complaint-1', revision: recordRevision, status: 'CLOSED', receivedDate: new Date('2026-01-01') };
+    } },
+    complaintResolutionEvidence: {
+      findFirst: async () => evidenceRevision ? { revision: evidenceRevision, state: 'RECORDED' } : null,
+      create: async ({ data }: { data: Record<string, unknown> }) => { created.push(data); evidenceRevision++; return data; },
+    },
+  };
+  const app = await buildApp({ $transaction: async (work: (value: unknown) => Promise<unknown>) => work(tx) });
+  const payload = { expectedRecordRevision: 2, expectedEvidenceRevision: 0, state: 'RECORDED',
+    resolvedAt: '2026-01-02T10:00:00.000Z', evidenceRef: 'CASE-001', reason: 'Reviewed controlled case evidence' };
+  const post = (body: object) => app.inject({ method: 'POST', url: `${PREFIX}/complaints/complaint-1/resolution-evidence`,
+    headers: { authorization: tokenFor('ADMIN') }, payload: body });
+  try {
+    assert.equal((await post({ ...payload, actorUserId: 'foreign' })).statusCode, 400);
+    assert.equal((await post({ ...payload, expectedRecordRevision: 1 })).statusCode, 409);
+    assert.equal((await post(payload)).statusCode, 201);
+    assert.equal(created[0].organisationId, 'org-1');
+    assert.equal(created[0].actorUserId, 'u1');
+    assert.equal(created[0].recordRevision, 2);
+    assert.equal((await post(payload)).statusCode, 409);
+    recordRevision++;
+    assert.equal((await post({ ...payload, expectedEvidenceRevision: 1 })).statusCode, 409);
+    assert.equal(created.length, 1);
+  } finally { await app.close(); }
+});
+
+test('Member cannot submit complaint resolution evidence', async () => {
+  const app = await buildApp({}, 'MEMBER');
+  try {
+    const response = await app.inject({ method: 'POST', url: `${PREFIX}/complaints/complaint-1/resolution-evidence`,
+      headers: { authorization: tokenFor('MEMBER') }, payload: {} });
+    assert.equal(response.statusCode, 403);
+    assert.equal(response.json().code, 'FORBIDDEN');
+  } finally { await app.close(); }
+});
+
+test('complaint resolution refuses missing records, invalid dates, open records and empty withdrawals', async () => {
+  let complaint: { revision: number; status: string; receivedDate: Date } | null = null;
+  let writes = 0;
+  const tx = {
+    $queryRaw: async () => [{ id: 'org-1' }],
+    complaintRecord: { findFirst: async () => complaint },
+    complaintResolutionEvidence: { findFirst: async () => null, create: async () => { writes++; } },
+  };
+  const service = new GovernanceRegisterService({ $transaction: async (work: (value: unknown) => Promise<unknown>) => work(tx) } as never);
+  const input = { organisationId: 'org-1', complaintId: 'complaint-1', actorUserId: 'u1',
+    expectedRecordRevision: 1, expectedEvidenceRevision: 0, state: 'RECORDED' as const,
+    resolvedAt: '2026-01-02T10:00:00.000Z', evidenceRef: 'CASE-001', reason: 'Reviewed controlled case evidence' };
+  await assert.rejects(service.recordComplaintResolutionEvidence(input), /not found/);
+  complaint = { revision: 1, status: 'OPEN', receivedDate: new Date('2026-01-01') };
+  await assert.rejects(service.recordComplaintResolutionEvidence(input), /closed complaint/);
+  complaint.status = 'CLOSED';
+  for (const resolvedAt of ['2025-01-01T00:00:00.000Z', '2999-01-01T00:00:00.000Z', 'invalid']) {
+    await assert.rejects(service.recordComplaintResolutionEvidence({ ...input, resolvedAt }), /resolution time/);
+  }
+  await assert.rejects(service.recordComplaintResolutionEvidence({ ...input, state: 'WITHDRAWN' }), /no current recorded/);
+  assert.equal(writes, 0);
+});
+
+test('complaint resolution history is bounded and tenant-scoped after source removal', async () => {
+  const queries: unknown[] = [];
+  const app = await buildApp({ complaintResolutionEvidence: { findMany: async (query: unknown) => {
+    queries.push(query); return Array.from({ length: 51 }, (_, index) => ({ revision: 99 - index }));
+  } } });
+  try {
+    const response = await app.inject({ method: 'GET', url: `${PREFIX}/complaints/removed/resolution-evidence?beforeRevision=100`,
+      headers: { authorization: tokenFor('ADMIN') } });
+    assert.equal(response.statusCode, 200);
+    assert.equal(response.json().data.items.length, 50);
+    assert.equal(response.json().data.nextBeforeRevision, 50);
+    assert.deepEqual(queries, [{ where: { organisationId: 'org-1', complaintId: 'removed', revision: { lt: 100 } },
+      orderBy: { revision: 'desc' }, take: 51 }]);
+  } finally { await app.close(); }
 });

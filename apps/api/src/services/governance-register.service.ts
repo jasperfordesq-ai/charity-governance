@@ -532,6 +532,51 @@ export class GovernanceRegisterService {
     });
   }
 
+  async listComplaintResolutionEvidence(organisationId: string, complaintId: string, beforeRevision?: number) {
+    // Retained evidence remains readable after source removal, scoped by both IDs.
+    const rows = await this.prisma.complaintResolutionEvidence.findMany({
+      where: { organisationId, complaintId, ...(beforeRevision === undefined ? {} : { revision: { lt: beforeRevision } }) },
+      orderBy: { revision: 'desc' }, take: 51,
+    });
+    const items = rows.slice(0, 50);
+    return { items, nextBeforeRevision: rows.length > 50 ? items[items.length - 1]!.revision : null };
+  }
+
+  async recordComplaintResolutionEvidence(input: {
+    organisationId: string; complaintId: string; actorUserId: string;
+    expectedRecordRevision: number; expectedEvidenceRevision: number;
+    state: 'RECORDED' | 'WITHDRAWN'; resolvedAt?: string;
+    evidenceRef: string; reason: string;
+  }) {
+    return this.prisma.$transaction(async (tx) => {
+      await lockOrganisationForUpdate(tx, input.organisationId);
+      const complaint = await tx.complaintRecord.findFirst({
+        where: { id: input.complaintId, organisationId: input.organisationId },
+      });
+      if (!complaint) throw new AppError(404, 'COMPLAINT_NOT_FOUND', 'Complaint record not found');
+      const latest = await tx.complaintResolutionEvidence.findFirst({
+        where: { organisationId: input.organisationId, complaintId: input.complaintId },
+        orderBy: { revision: 'desc' },
+      });
+      if (complaint.revision !== input.expectedRecordRevision || (latest?.revision ?? 0) !== input.expectedEvidenceRevision) {
+        throw new AppError(409, 'COMPLAINT_RESOLUTION_CONFLICT', 'The complaint or its resolution evidence changed. Reload and review it again.');
+      }
+      const resolvedAt = input.state === 'RECORDED' && input.resolvedAt ? new Date(input.resolvedAt) : null;
+      if (input.state === 'RECORDED' && (complaint.status !== 'CLOSED' || !resolvedAt ||
+        !Number.isFinite(resolvedAt.getTime()) || resolvedAt < complaint.receivedDate || resolvedAt.getTime() > Date.now())) {
+        throw new AppError(400, 'COMPLAINT_RESOLUTION_INVALID', 'Review a closed complaint and a resolution time between receipt and now.');
+      }
+      if (input.state === 'WITHDRAWN' && latest?.state !== 'RECORDED') {
+        throw new AppError(409, 'COMPLAINT_RESOLUTION_NOT_RECORDED', 'There is no current recorded resolution evidence to withdraw.');
+      }
+      return tx.complaintResolutionEvidence.create({ data: {
+        organisationId: input.organisationId, complaintId: input.complaintId, actorUserId: input.actorUserId,
+        revision: input.expectedEvidenceRevision + 1, recordRevision: complaint.revision,
+        state: input.state, resolvedAt, evidenceRef: input.evidenceRef, reason: input.reason,
+      } });
+    });
+  }
+
   async listRegisterAudit(organisationId: string, before?: string) {
     const anchor = before ? await this.prisma.governanceRegisterChangeAudit.findFirst({
       where: { id: before, organisationId }, select: { id: true, occurredAt: true },

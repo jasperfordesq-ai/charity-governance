@@ -8,7 +8,7 @@ import { listDataLifecycleEvidenceChanges } from '../../services/data-lifecycle-
 const PAGE_SIZE = 50;
 const feedSchema = z.enum([
   'organisation', 'deadlines', 'reminders', 'minute-book', 'document-controls', 'document-downloads',
-  'document-visibility', 'risks', 'registers', 'controls', 'compliance',
+  'document-visibility', 'risks', 'registers', 'complaint-resolution', 'controls', 'compliance',
   'reports', 'deletions', 'deletion-attempts', 'deletion-recoveries', 'data-requests',
   'data-request-links', 'data-request-targets', 'data-request-responses', 'data-request-coverage',
   'action-approvals', 'connector-actions', 'integrations',
@@ -71,6 +71,10 @@ function feedConfig(app: FastifyInstance, feed: Exclude<z.infer<typeof feedSchem
     case 'registers': return { delegate: delegate(app.prisma.governanceRegisterChangeAudit), orderField: 'occurredAt',
       select: { id: true, recordKind: true, recordId: true, actorUserId: true, action: true,
         previousStatus: true, nextStatus: true, changedFields: true, occurredAt: true } };
+    case 'complaint-resolution': return { delegate: delegate(app.prisma.complaintResolutionEvidence), orderField: 'occurredAt',
+      // Case references and free-text reasons belong in the restricted review.
+      select: { id: true, complaintId: true, actorUserId: true, revision: true,
+        recordRevision: true, state: true, occurredAt: true } };
     case 'controls': return { delegate: delegate(app.prisma.riskControlVerification), orderField: 'sequence',
       select: { id: true, sequence: true, riskId: true, actorUserId: true, controlReference: true,
         state: true, verifiedAt: true, riskRevision: true, occurredAt: true } };

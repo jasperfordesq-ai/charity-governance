@@ -33,9 +33,19 @@ history in disposable PostgreSQL, preserving a populated legacy complaint and
 testing dates, tenant/role refusal, corrections, withdrawal, reopening, stale
 revisions, immutable history and removed-identity reuse. Schema validation,
 model/reset inventory and connector privacy coverage are separate checks.
-This checkpoint adds persistence only. Restricted API, review UI, concurrent
-request proof, policy consumption, recoverable complaint removal, purge and
-deployment remain required; it does not complete complaint retention or R4.
+The next increment adds Owner/Admin browser-only resolution history and review
+routes, with strict inputs and a Registers review panel. Each submission names
+both the reviewed complaint revision and the latest evidence revision; writes
+lock the charity before checking them. A competing correction or complaint edit
+requires a fresh review. The panel retains corrections and withdrawals, labels
+stale evidence after edits, and pages history in batches of 50. Connector access
+is explicitly excluded. Local API checks cover scope, access, dates and stale
+submissions; browser concurrency acceptance is recorded separately in the
+continuation handoff. Policy consumption, recoverable complaint removal, purge,
+and deployment remain required. Governance Audit includes a metadata-only
+resolution feed; controlled case references and review reasons stay in the
+restricted complaint review. This does
+not complete complaint retention or R4.
 
 Read the checkpoints below as dated implementation history, newest first within
 Observed starting point. Statements about missing routes/UI in older checkpoints

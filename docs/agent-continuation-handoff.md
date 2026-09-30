@@ -2,6 +2,19 @@
 
 Last updated: 2026-09-30
 
+Complaint resolution review increment: Owner/Admin browser-only history and
+submission routes, a Registers review panel and a metadata-only Governance Audit
+feed are implemented locally. Both record and evidence revisions are checked
+under the charity lock. The isolated Chromium journey passed first-attempt:
+two competing browser reviews produced one 201 and one 409; withdrawal and
+correction preserved history; reopening invalidated the earlier evidence.
+The managed runner completed with exit 0. Fifty focused API/audit tests,
+408 runnable MCP tests (two Windows skips), API build, web/E2E type checks
+and edited web-file lint pass. The browser proof preceded the additive audit
+feed and callback cleanup; exact successor hosted acceptance remains required.
+No new private deployment occurred. Policy consumption, recoverable complaint
+removal, purge and broader record/store coverage remain technical work.
+
 Complaint retention persistence checkpoint: a new, locally verified migration
 adds database-maintained complaint revisions and append-only resolution evidence.
 Evidence requires the current closed complaint, a valid resolution date and an

@@ -726,3 +726,25 @@ test('every advertised archive feed has a tenant-scoped source', async () => {
     assert.deepEqual(calls, Object.keys(mapping));
   } finally { await app.close(); }
 });
+
+test('complaint resolution overview keeps controlled case details out of the audit feed', async () => {
+  const app = await appFor('ADMIN', { complaintResolutionEvidence: { findMany: async (args: Record<string, unknown>) => {
+    assert.deepEqual(args.where, { organisationId: 'org-1' });
+    const select = args.select as Record<string, boolean>;
+    assert.equal(select.evidenceRef, undefined);
+    assert.equal(select.reason, undefined);
+    assert.equal(select.resolvedAt, undefined);
+    assert.equal(select.complaintId, true);
+    assert.equal(select.recordRevision, true);
+    assert.equal(select.state, true);
+    return [{ id: 'resolution-1', complaintId: 'complaint-1', revision: 2, recordRevision: 4,
+      state: 'WITHDRAWN', occurredAt: new Date('2026-01-03') }];
+  } } });
+  try {
+    const response = await app.inject({ method: 'GET', url: '/governance-audit/complaint-resolution',
+      headers: { authorization: token('ADMIN') } });
+    assert.equal(response.statusCode, 200);
+    assert.doesNotMatch(response.body, /evidenceRef|reason|resolvedAt/);
+    assert.match(response.body, /WITHDRAWN/);
+  } finally { await app.close(); }
+});
