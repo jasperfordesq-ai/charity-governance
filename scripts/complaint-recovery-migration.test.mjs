@@ -261,6 +261,10 @@ test('complaint recovery migration preserves records and enforces reviewed remov
       ON c.id=o."claimId" AND c."transactionId"=o."transactionId";`),'1');
     sql(`UPDATE "ComplaintRecoveryOutcome" SET id='changed';`,/append-only/);
     sql(`DELETE FROM "ComplaintRecoveryOutcome";`,/append-only/);
+    const outcomeProof = spawnSync(process.execPath, ['--import', 'tsx', 'scripts/complaint-outcome-postgres-proof.mjs'],
+      { cwd: fileURLToPath(new URL('../', import.meta.url)), input: captureUrl, encoding: 'utf8', timeout: 30000 });
+    assert.equal(outcomeProof.status, 0, outcomeProof.stderr);
+    assert.equal(outcomeProof.stdout.trim(), 'committed-outcome-reader-verified');
     assert.equal(sql(`SELECT count(*) FROM "ComplaintRecord" WHERE id='expired';`),'0');
     assert.equal(sql(`SELECT "actorUserId"||':'||action||':'||"previousStatus" FROM "GovernanceRegisterChangeAudit" WHERE "recordId"='expired';`),'admin-a:DELETE:RECOVERABLE');
     sql(`INSERT INTO "ComplaintPurgeAuthorizationWithdrawal" (id,"organisationId","authorizationId","actorUserId","evidenceRef",reason)
