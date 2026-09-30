@@ -3831,3 +3831,11 @@ buffers best-effort, including late responses after timeout. API compilation and
 15 focused KMS/envelope tests pass; SDK request signing/serialization uses an
 isolated handler. No actual AWS request, key creation or production wiring occurred.
 Live permissions/custody and full recovery execution fencing remain unverified.
+
+Combined KMS/S3 adapter recreation now has executable synthetic proof: after lost
+write acknowledgement, newly constructed adapters recover the original ciphertext
+and digest without generating another key; unavailable key access refuses and
+leaves the object unchanged. Build and16 combined/provider/envelope tests pass.
+Backing provider state is synthetic, so this does not prove live AWS custody or
+VM-loss recovery. Hosted CI36749194751/E2E36749194762 passed for cb6b31b7's earlier
+capture repair; they do not verify the newer KMS/envelope changes. No deployment.
