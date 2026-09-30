@@ -1,5 +1,16 @@
 # CharityPilot Agent Continuation Handoff
 
+> **Two added March policies, 2026-09-30:** the retained original email
+> chain starts with 29 documents, records Sridevi's Asset Management and
+> Dissolution gap, Jasper's two added PDFs and later director replies for
+> the expanded 31. All normalised main-body tokens of each exact verified
+> Vault DOCX occur in its emailed PDF in order; this is not binary or full
+> visual equivalence. Private worksheet proposes Board/CURRENT March
+> text/RESTRICTED for both, pending later revisions and approval-chain
+> review. Counts: 53/63 source evidenced, 52 with some proposal, 11 with
+> none, all PENDING. No live change. Private evidence:
+> `.charitypilot-private/two-added-march-policies-source-review-2026-09-30.md`.
+
 > **Four website terms/privacy files, 2026-09-30:** the verified Vault
 > backup DOCX files for hour-timebank.ie Terms v2, Privacy v1 and Cookie
 > Policy, plus timebank.global Platform Terms v1, match the named March

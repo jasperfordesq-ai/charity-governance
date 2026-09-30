@@ -3543,3 +3543,12 @@ remaining external blockers and owners, and an explicit confirmation that no
 > 50 with proposals and 13 without; all PENDING. No live publication,
 > access, lifecycle or retention state changed. See private
 > `four-website-terms-source-review-2026-09-30.md`.
+
+> **Nikita added-policy source review, 2026-09-30:** Original March email
+> evidence expands the 29-item proposal to 31 after Asset Management and
+> Dissolution are added, with later director replies. The exact verified
+> Vault DOCX main-body tokens occur in the emailed PDF renderings in order;
+> binary/full visual identity and later revisions remain unverified.
+> Private worksheet now has 53/63 source-evidenced rows, 52 with proposals
+> and 11 without, all PENDING. No live approval, lifecycle or access change.
+> See private `two-added-march-policies-source-review-2026-09-30.md`.
