@@ -1,5 +1,15 @@
 # CharityPilot Full-Platform Remediation Audit
 
+> **DPO document-decision checkpoint, 2026-10-01:** The private worksheet
+> validator was rerun against the current 63 Vault rows: 63 have source
+> references, 62 have some proposed treatment, and all 63 remain PENDING.
+> The March Document Retention Schedule is the sole unproposed row while its
+> category, starting-event and copy rules are reconciled. This is review
+> preparation, not approved classification, publication, retention or
+> erasure. Earlier smaller counts in this ledger are dated snapshots.
+> See `.charitypilot-private/nikita-document-decisions-2026-09-30.csv` and
+> `.charitypilot-private/nikita-review-pack-2026-09-30.md`.
+
 > **DPO release evidence, 2026-10-01:** The deferred complaint-hold
 > constraint from `8d4a0058` is deployed to the private VM after exact
 > hosted CI/E2E success. Runtime and migration checks passed, with zero
