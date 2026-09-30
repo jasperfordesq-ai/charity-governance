@@ -2,6 +2,29 @@
 
 Last updated: 2026-09-30
 
+Current private runtime: e5e988a364c7ace46c7e77ac1a6821fb8cd2f17e on blue,
+deployed at 12:46:33 UTC. Exact CI 36715435652 and E2E 36715435558 succeeded;
+all 237 browser tests passed first-attempt, including the complaint recovery
+journey. Two migrations passed the deployment gate without override. API/web
+health, front-door smoke and exact scheduler version passed. Only Caddy publishes
+127.0.0.1:8080; Tailscale Serve remains tailnet-only. Previous 442eb788 on green
+is retained for rollback. Cutover/post-migration backups have verified off-host
+copies; the supported isolated restore drill passed with 125 migrations.
+Live complaint, policy and purge ledgers are empty, so this drill does not replace
+populated synthetic proof or authorize host-loss reopening. Signed-in Owner
+read-only acceptance confirms complaint resolution/recovery/policy panels,
+empty policy history and Governance Audit. No live policy or complaint changed.
+
+Next: audited complaint holds before permanent purge, then separate Owner
+authorization/claim, retained-copy evidence and complaint-aware restore
+reconciliation. Preserve broader R4 record/store coverage, independently durable
+purge authority, supported recovery reopening, role/content acceptance and all
+original policy/historical review decisions. Security & Data wording/navigation
+is corrected in the working source after this release; it is not yet deployed.
+The private release-e5e988a3-acceptance.md and complaint-purge-implementation-contract.md
+record the restricted operational evidence and next implementation contract.
+Older checkpoints below are historical and do not override this runtime status.
+
 Complaint recovery application checkpoint: browser-only Admin-level remove and
 restore routes now use charity/record/actor locks, current revision checks and
 transactional policy/evidence validation. Removal retains the immutable decision;

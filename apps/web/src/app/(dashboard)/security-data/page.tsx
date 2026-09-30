@@ -65,6 +65,11 @@ export default function SecurityDataPage() {
                 <Link className={linkClass} href="/documents">Open Documents</Link>
               </li>
               <li className="rounded-lg border border-gray-200 p-4 dark:border-gray-700">
+                <h3 className="font-semibold">Complaint recovery and retention</h3>
+                <p className="mt-1 text-gray-600 dark:text-gray-300">Review complaint resolution evidence, approved class rules and recoverable complaints. Permanent complaint erasure is not available.</p>
+                <Link className={linkClass} href="/registers">Open Registers</Link>
+              </li>
+              <li className="rounded-lg border border-gray-200 p-4 dark:border-gray-700">
                 <h3 className="font-semibold">Confluence copies</h3>
                 <p className="mt-1 text-gray-600 dark:text-gray-300">Review the connected site and its separate copy-erasure workflow.</p>
                 <Link className={linkClass} href="/integrations">Open Integrations</Link>
@@ -75,8 +80,9 @@ export default function SecurityDataPage() {
           <AppSection title="Controls still being established">
             <p className="text-sm leading-6 text-gray-600 dark:text-gray-300">
               A per-document administrative deletion hold blocks ordinary Vault deletion, but is not a legal-hold decision.
-              CharityPilot does not yet enforce an approved application-wide retention schedule or legal holds,
-              deleted-item recovery or application-wide permanent-purge console. A data request in the
+              Recovery controls cover eligible Vault drafts and complaints under approved class rules.
+              Vault draft disposal has a separate Owner review. Application-wide retention rules,
+              legal holds, recovery for other record classes and permanent complaint erasure remain incomplete. A data request in the
               review queue does not establish that any database record, stored file, Confluence copy or
               backup has been erased.
             </p>

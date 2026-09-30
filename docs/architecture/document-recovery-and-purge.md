@@ -20,8 +20,12 @@ transitions to register audit within the same transaction. The recovery list
 pages 50 records at a time; a stale page cursor requires reload. The isolated
 browser proof covers removal, recovery listing, content-identical restoration,
 audit actors and the requirement to re-review resolution evidence after restore.
-No permanent complaint purge route is enabled. Hosted successor verification
-and deployment remain required before live acceptance can be claimed.
+No permanent complaint purge route is enabled. Private release e5e988a3 deployed
+this extension at 12:46:33 UTC on 30 September. Exact hosted CI and all 237 browser
+tests passed; bounded Owner read-only checks confirm the empty complaint recovery
+and policy panels. No live policy was approved or complaint removed. The backup
+restore drill passed with empty complaint ledgers, so populated acceptance remains
+the isolated migration/browser proof rather than real-charity disposal evidence.
 
 Recovery persistence increment: `ComplaintRemoval` retains the reviewed actor,
 policy, evidence reference/reason and database-calculated deadline. A guarded
