@@ -19,6 +19,10 @@ if ($env:OS -ne 'Windows_NT') {
     throw 'The CharityPilot ACL helper can run only on Windows NTFS storage.'
 }
 
+# A Node parent may inherit another PowerShell edition's module search path.
+# Use the executing edition's signed built-in module, preserving all ACL checks.
+Import-Module (Join-Path $PSHOME 'Modules/Microsoft.PowerShell.Security/Microsoft.PowerShell.Security.psd1') -ErrorAction Stop
+
 if ($VerifyOnly -and $DryRun) {
     throw '-VerifyOnly and -DryRun cannot be used together.'
 }

@@ -337,7 +337,7 @@ test('release archive verifier proves an exact Windows extraction and rejects ta
     const escapedSource = source.replaceAll("'", "''");
     const escapedArchive = archive.replaceAll("'", "''");
     const zipped = spawnSync('powershell.exe', ['-NoLogo', '-NoProfile', '-NonInteractive', '-Command',
-      `Compress-Archive -LiteralPath '${escapedSource}' -DestinationPath '${escapedArchive}'`],
+      `Import-Module (Join-Path $PSHOME 'Modules/Microsoft.PowerShell.Archive/Microsoft.PowerShell.Archive.psd1') -ErrorAction Stop; Compress-Archive -LiteralPath '${escapedSource}' -DestinationPath '${escapedArchive}'`],
     { encoding: 'utf8', windowsHide: true });
     assert.equal(zipped.status, 0, zipped.stderr || zipped.stdout);
     const valid = invoke();

@@ -2,6 +2,15 @@
 
 Last updated: 2026-09-30
 
+Windows release-check repair: Node-spawned Windows PowerShell inherited the
+bundled PowerShell edition's module search path. The ACL helper now imports its
+executing PSHOME Security module; archive-test creation likewise selects its
+native Archive module. No execution-policy or ACL gate was weakened. All 164
+personal-server tests pass. The complete local test command now reaches the
+local-Docker suite, which exposes stale route-count expectations (37 versus 41)
+and an actual 893-line data-lifecycle page. Resolve that page's structure before
+claiming the full local gate; do not just relax the zero-oversized-page check.
+
 Canonical CI 36701064283 for 63ca0da5 passed the full PostgreSQL backup/restore
 step, resolving the sequence incompatibility with the unchanged verifier. The
 later API suite exposed a stale cross-charity delete fixture: missing recovery
