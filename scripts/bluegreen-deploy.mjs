@@ -397,6 +397,9 @@ export function preflightIssues({ fileEnv, resolvedEnvFilePath }) {
           decodeURIComponent(appUrl.password) === decodeURIComponent(adminUrl.password)) {
           issues.push('BLUEGREEN_APP_ENV_FILE DATABASE_URL must use a distinct restricted role with a password');
         }
+        if (!/^[a-z_][a-z0-9_]{0,62}$/u.test(decodeURIComponent(appUrl.username))) {
+          issues.push('BLUEGREEN_APP_ENV_FILE DATABASE_URL role must be a simple PostgreSQL identifier');
+        }
       } catch {
         issues.push('BLUEGREEN_APP_ENV_FILE must contain a valid DATABASE_URL');
       }

@@ -52,25 +52,25 @@ try {
   // Exercise a separate real PostgreSQL login under the complete migrated
   // schema. The runtime role can still write ordinary application rows, but
   // must not be able to forge the off-host outcome that admits a bound hold.
-  await prisma.$executeRawUnsafe("CREATE ROLE cp_protocol_runtime LOGIN NOINHERIT PASSWORD 'synthetic-runtime-proof'");
-  await prisma.$executeRawUnsafe('GRANT CONNECT ON DATABASE postgres TO cp_protocol_runtime');
-  await prisma.$executeRawUnsafe('GRANT USAGE ON SCHEMA public TO cp_protocol_runtime');
-  await prisma.$executeRawUnsafe('GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA public TO cp_protocol_runtime');
-  await prisma.$executeRawUnsafe('GRANT USAGE ON ALL SEQUENCES IN SCHEMA public TO cp_protocol_runtime');
-  await prisma.$executeRawUnsafe(`REVOKE INSERT, UPDATE, DELETE ON
+  await prisma.$executeRaw`CREATE ROLE cp_protocol_runtime LOGIN NOINHERIT PASSWORD 'synthetic-runtime-proof'`;
+  await prisma.$executeRaw`GRANT CONNECT ON DATABASE postgres TO cp_protocol_runtime`;
+  await prisma.$executeRaw`GRANT USAGE ON SCHEMA public TO cp_protocol_runtime`;
+  await prisma.$executeRaw`GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA public TO cp_protocol_runtime`;
+  await prisma.$executeRaw`GRANT USAGE ON ALL SEQUENCES IN SCHEMA public TO cp_protocol_runtime`;
+  await prisma.$executeRaw`REVOKE INSERT, UPDATE, DELETE ON
     "ComplaintHoldRecoveryOutcome", "ComplaintRecoveryEnforcement",
     "ComplaintRecoveryExecution", "ComplaintRecoveryOutcome",
-    "ComplaintRecoveryCancellation" FROM cp_protocol_runtime`);
+    "ComplaintRecoveryCancellation" FROM cp_protocol_runtime`;
   const runtimeUrl = new URL(adminDatabaseUrl);
   runtimeUrl.username = 'cp_protocol_runtime';
   runtimeUrl.password = 'synthetic-runtime-proof';
   const runtime = new PrismaClient({ datasources: { db: { url: runtimeUrl.toString() } } });
   try {
-    await assert.rejects(runtime.$executeRawUnsafe(`INSERT INTO "ComplaintHoldRecoveryOutcome"
+    await assert.rejects(runtime.$executeRaw`INSERT INTO "ComplaintHoldRecoveryOutcome"
       (id,"preparationId","holdEventId","transactionId") VALUES
-      ('forged-outcome','missing','forged-event',txid_current())`), /permission denied/);
-    await assert.rejects(runtime.$executeRawUnsafe('SET ROLE postgres'), /permission denied/);
-    await assert.rejects(runtime.$executeRawUnsafe('ALTER TABLE "ComplaintHoldEvent" DISABLE TRIGGER "ComplaintHoldEvent_recovery_gate"'), /must be owner/);
+      ('forged-outcome','missing','forged-event',txid_current())`, /permission denied/);
+    await assert.rejects(runtime.$executeRaw`SET ROLE postgres`, /permission denied/);
+    await assert.rejects(runtime.$executeRaw`ALTER TABLE "ComplaintHoldEvent" DISABLE TRIGGER "ComplaintHoldEvent_recovery_gate"`, /must be owner/);
     await assert.rejects(runtime.complaintHoldEvent.create({ data: {
       organisationId: 'a', complaintId: 'recovery-protocol', revision: 1,
       recordRevision: 2, held: true, actorUserId: 'admin-a',

@@ -2067,6 +2067,10 @@ test('separate app env requires a distinct runtime database role and no owner va
   assert.ok(preflightIssues({ fileEnv: owner, resolvedEnvFilePath: ownerPath })
     .some((issue) => issue.includes('distinct restricted role')));
 
+  writeFileSync(appPath, 'DATABASE_URL=postgresql://runtime%3Bbad:runtime-password@db:5432/charitypilot\n');
+  assert.ok(preflightIssues({ fileEnv: owner, resolvedEnvFilePath: ownerPath })
+    .some((issue) => issue.includes('simple PostgreSQL identifier')));
+
   writeFileSync(appPath, 'DATABASE_URL=postgresql://runtime:runtime-password@db:5432/other\nPOSTGRES_PASSWORD=leak\n');
   const unsafe = preflightIssues({ fileEnv: owner, resolvedEnvFilePath: ownerPath });
   assert.ok(unsafe.some((issue) => issue.includes('same compose database')));
