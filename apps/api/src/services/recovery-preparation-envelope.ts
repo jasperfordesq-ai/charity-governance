@@ -10,6 +10,11 @@ const contextSchema = z.object({ installationId: id, organisationId: id, operati
   keyId: z.string().regex(/^arn:aws:kms:eu-west-1:[0-9]{12}:key\/[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/),
 }).strict();
 export type RecoveryEnvelopeContext = z.infer<typeof contextSchema>;
+export function validateRecoveryEnvelopeContext(raw: unknown): RecoveryEnvelopeContext {
+  const result = contextSchema.safeParse(raw);
+  if (!result.success) throw new Error('Invalid recovery envelope context');
+  return result.data;
+}
 const base64 = (max: number) => z.string().min(1).max(max).refine(value => Buffer.from(value, 'base64').toString('base64') === value);
 const envelopeSchema = z.object({ format: z.literal(1), kind: z.literal('COMPLAINT_RECOVERY_PREPARATION'),
   context: contextSchema, wrappedKey: base64(8192), sealed: z.object({

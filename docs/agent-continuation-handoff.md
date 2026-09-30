@@ -3821,3 +3821,13 @@ suite. No external key provider, live storage policy or execution fencing exists
 Final envelope build and 57 focused preparation/crypto/S3 tests passed, including
 both later review guards. This is local evidence only. The original ciphertext
 preservation helper and replay namespace remain inactive and non-authorizing.
+
+### Bounded KMS data-key adapter implemented locally
+
+Source now includes an explicit-credential Ireland KMS adapter for fresh AES-256
+data keys and exact-key/context unwrap. It bounds calls, rejects wrong identity,
+algorithm or size, hides provider error details, and clears transferred plaintext
+buffers best-effort, including late responses after timeout. API compilation and
+15 focused KMS/envelope tests pass; SDK request signing/serialization uses an
+isolated handler. No actual AWS request, key creation or production wiring occurred.
+Live permissions/custody and full recovery execution fencing remain unverified.
