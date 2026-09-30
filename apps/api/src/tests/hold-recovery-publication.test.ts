@@ -1,3 +1,5 @@
+import type { PrismaClient } from '@prisma/client';
+import { releaseCommittedHoldOperation } from '../services/release-hold-recovery-operation.js';
 import { prepareComplaintHoldOutcomeFacts } from '../services/complaint-hold-recovery-outcome.js';
 import { preserveHoldOutcome } from '../services/hold-outcome-envelope.js';
 import { publishVerifiedHoldOutcome, readPublishedHoldOutcome } from '../services/published-hold-outcome.js';
@@ -175,5 +177,62 @@ test('hold outcome publication refuses mismatched decisions and missing bytes be
     await assert.rejects(publishVerifiedHoldOutcome(f.journal, f.store, f.outcomeRequest, f.context, f.keys, f.store), /match|missing/);
     assert.equal((await f.store.readControl()).generation, 1);
     assert.equal([...f.objects.keys()].filter(key => /\/[0-9]{10}\.json$/.test(key)).length, 1);
+  }
+});
+
+async function releaseFixture() {
+  const f = await outcomeFixture();
+  const row = { id: 'outcome', preparationId: 'preparation', holdEventId: 'hold', transactionId: 123n,
+    recordedAt: new Date(f.outcomeFacts.recordedAt),
+    preparation: { id: 'preparation', organisationId: f.context.organisationId, installationId: f.context.installationId,
+      operationId: f.context.operationId, writerEpoch: 1, actorUserId: 'admin', complaintId: 'complaint',
+      facts: f.prepared.body, factsDigest: f.prepared.digest },
+    holdEvent: { ...f.facts.decision, organisationId: f.context.organisationId, complaintId: 'complaint',
+      occurredAt: new Date(f.outcomeFacts.occurredAt) } };
+  const prisma = { complaintHoldRecoveryOutcome: { async findFirst() { return row; } } } as unknown as PrismaClient;
+  const body = prepareComplaintHoldOutcomeFacts({ ...f.outcomeFacts,
+    occurredAt: row.holdEvent.occurredAt.toISOString(), recordedAt: row.recordedAt.toISOString() }).body;
+  await preserveHoldOutcome(body, f.context, f.keys, f.store);
+  await publishVerifiedHoldOutcome(f.journal, f.store, f.outcomeRequest, f.context, f.keys, f.store);
+  const release = () => releaseCommittedHoldOperation(prisma, f.journal, f.store, 'host', f.context, f.keys, f.store);
+  return { ...f, row, prisma, release };
+}
+
+test('committed hold release survives lost acknowledgement and retains exact published history', async () => {
+  const f = await releaseFixture(); const before = await f.store.readControl();
+  f.loseAck(true); await assert.rejects(f.release, /unknown/);
+  const after = await f.store.readControl(); assert.equal(after.activeOperation, null);
+  assert.equal(after.digest, before.digest); assert.equal(after.generation, before.generation);
+  assert.equal(after.writerId, before.writerId); assert.equal(after.writerEpoch, before.writerEpoch);
+  const objects = [...f.objects.entries()];
+  assert.deepEqual(await f.release(), { released: true, replayed: true, actionAuthorized: false });
+  assert.deepEqual([...f.objects.entries()], objects);
+  await reserveRecoveryOperation({ ...f.request, installationId: f.context.installationId,
+    organisationId: f.context.organisationId, writerEpoch: 1, operationId: 'next-operation',
+    expectedGeneration: after.generation, expectedDigest: after.digest }, f.store);
+  await assert.rejects(f.release, /writer or operation/);
+});
+
+test('hold release refuses missing committed evidence, changed facts, stale writer and concurrent control changes', async () => {
+  for (const scenario of ['missing', 'facts', 'writer', 'epoch', 'control']) {
+    const f = await releaseFixture();
+    if (scenario === 'missing') f.prisma.complaintHoldRecoveryOutcome.findFirst = (async () => null) as never;
+    if (scenario === 'facts') f.row.id = 'different-committed-outcome';
+    if (scenario === 'writer' || scenario === 'epoch') {
+      const head = f.objects.get(f.headKey)!; const value = JSON.parse(head.body);
+      if (scenario === 'writer') value.writerId = 'different-host'; else value.writerEpoch = 2;
+      f.objects.set(f.headKey, { body: JSON.stringify(value), version: head.version + 1 });
+    }
+    if (scenario === 'control') {
+      const read = f.prisma.complaintHoldRecoveryOutcome.findFirst;
+      f.prisma.complaintHoldRecoveryOutcome.findFirst = (async () => {
+        const head = f.objects.get(f.headKey)!; const value = JSON.parse(head.body);
+        value.publicationId = '33333333-3333-4333-8333-333333333333';
+        f.objects.set(f.headKey, { body: JSON.stringify(value), version: head.version + 1 });
+        return read();
+      }) as never;
+    }
+    await assert.rejects(f.release, /unavailable|does not match|mismatch/);
+    assert.notEqual((await f.store.readControl()).activeOperation, null);
   }
 });

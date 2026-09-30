@@ -1,3 +1,4 @@
+import { releaseCommittedHoldOperation } from '../apps/api/src/services/release-hold-recovery-operation.ts';
 import { publishVerifiedHoldOutcome, readPublishedHoldOutcome } from '../apps/api/src/services/published-hold-outcome.ts';
 import assert from 'node:assert/strict';
 import { createHash, randomBytes } from 'node:crypto';
@@ -78,7 +79,7 @@ try {
       throw { $metadata: { httpStatusCode: 412 } };
     }
     objects.set(command.input.Key, { body: String(command.input.Body), version: ++version });
-    if (command.input.Key === headKey && loseHeadAck) { loseHeadAck = false; throw new Error('synthetic lost acknowledgement'); }
+    if (command.input.Key.endsWith('/head.json') && loseHeadAck) { loseHeadAck = false; throw new Error('synthetic lost acknowledgement'); }
     return { ...metadata, VersionId: `v-${version}` };
   };
   const store = new S3AuthorityObjectStore(config, credentials, client);
@@ -243,6 +244,7 @@ try {
     publicationId: '22222222-2222-4222-8222-222222222222' }), version: ++version });
   const hs = new S3AuthorityObjectStore({ ...config, ...hb }, credentials, client);
   const hj = new RecoveryAuthorityJournal(hs, hb, hi);
+  const releaseHold = () => releaseCommittedHoldOperation(prisma, hj, hs, 'host-b', hc, keys, hs);
   const executeHold = () => executePublishedComplaintHold(prisma, hj, hs, 'host-b', hc, keys, hs);
   await assert.rejects(executeHold, /writer or operation/);
   await reserveRecoveryOperation({ ...hb, writerId: 'host-b', writerEpoch: 1, operationId: hc.operationId,
@@ -276,6 +278,7 @@ try {
   const holdOutcomeRequest = { writerId: 'host-b', preparationDigest: hp.digest,
     preparationGeneration: publishedHoldPreparation.generation, preparationEntryDigest: publishedHoldPreparation.digest,
     preparationEnvelopeDigest: heldPreparation.digest };
+  await assert.rejects(releaseHold, /not published/);
   const publishedHoldOutcome = await publishVerifiedHoldOutcome(hj, hs, holdOutcomeRequest, hc, keys, hs);
   assert.equal(publishedHoldOutcome.headPublished, true);
   assert.equal((await publishVerifiedHoldOutcome(hj, hs, holdOutcomeRequest, hc, keys, hs)).replayed, true);
@@ -287,8 +290,21 @@ try {
   assert.equal(publishedHoldEvidence.body, committedHold.body);
   assert.equal(publishedHoldEvidence.preparationBody, hpRow.facts);
   assert.equal(publishedHoldEvidence.actionAuthorized, false);
-  // Synthetic provider only: no live custody or reservation release is implied.
+  // Synthetic provider only: no live custody or activation is implied.
   assert.equal((await hs.readControl()).activeOperation.operationId, hc.operationId);
+  loseHeadAck = true;
+  await assert.rejects(releaseHold, /unknown/);
+  await prisma.$disconnect();
+  assert.deepEqual(await releaseHold(), { released: true, replayed: true, actionAuthorized: false });
+  const releasedHoldControl = await hs.readControl();
+  assert.equal(releasedHoldControl.activeOperation, null);
+  assert.equal(releasedHoldControl.digest, publishedHoldOutcome.digest);
+  assert.equal(await prisma.complaintHoldEvent.count({ where: { complaintId: 'published-hold-complaint' } }), 1);
+  await reserveRecoveryOperation({ ...hb, writerId: 'host-b', writerEpoch: 1, operationId: 'next-hold-operation',
+    preparationDigest: hp.digest, expectedGeneration: releasedHoldControl.generation,
+    expectedDigest: releasedHoldControl.digest }, hs);
+  await assert.rejects(releaseHold, /writer or operation/);
+  assert.equal((await hs.readControl()).activeOperation.operationId, 'next-hold-operation');
   assert.equal((await store.readControl()).activeOperation.operationId, staleContext.operationId);
   process.stdout.write('complaint-recovery-protocol-composition-verified');
 } finally {

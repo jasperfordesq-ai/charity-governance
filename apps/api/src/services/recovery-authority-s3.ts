@@ -324,7 +324,7 @@ export class S3AuthorityObjectStore implements AuthorityObjectStore, AuthorityHe
     const body = await this.read(`authority/${this.config.installationId}/${this.config.organisationId}/${String(expected.generation).padStart(10, '0')}.json`);
     if (body === null) throw new Error('Recovery release outcome is missing');
     const entry = validateRecoveryAuthorityEntry(JSON.parse(body));
-    if (entry.kind !== 'COMPLAINT_OUTCOME_V1' || entry.installationId !== this.config.installationId
+    if ((entry.kind !== 'COMPLAINT_OUTCOME_V1' && entry.kind !== 'COMPLAINT_HOLD_OUTCOME_V1') || entry.installationId !== this.config.installationId
       || entry.organisationId !== this.config.organisationId || entry.operationId !== expected.operationId
       || entry.generation !== expected.generation || entry.digest !== expected.digest) throw new Error('Recovery release outcome mismatch');
     return this.writeObject(this.headRequest(), JSON.stringify({ ...current.value, activeOperation: null,

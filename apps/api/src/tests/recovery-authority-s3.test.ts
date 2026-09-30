@@ -297,10 +297,10 @@ test('journal and S3 adapter recover a lost publication acknowledgement together
 });
 
 test('S3 explicit release requires the exact outcome head and refuses generic slot clearing', async () => {
-  for (const scenario of ['valid', 'wrong-kind', 'wrong-operation', 'missing', 'corrupt', 'race']) {
+  for (const scenario of ['valid', 'valid-hold', 'wrong-kind', 'wrong-operation', 'missing', 'corrupt', 'race']) {
     const facts = { format: 1, installationId: config.installationId, organisationId: config.organisationId,
       generation: 2, previousDigest: 'b'.repeat(64), operationId: scenario === 'wrong-operation' ? 'other' : 'operation-a',
-      kind: scenario === 'wrong-kind' ? 'DISPOSAL_RESULT' : 'COMPLAINT_OUTCOME_V1', factsDigest: 'c'.repeat(64) };
+      kind: scenario === 'wrong-kind' ? 'DISPOSAL_RESULT' : scenario === 'valid-hold' ? 'COMPLAINT_HOLD_OUTCOME_V1' : 'COMPLAINT_OUTCOME_V1', factsDigest: 'c'.repeat(64) };
     const digest = createHash('sha256').update(JSON.stringify(facts)).digest('hex');
     let body = JSON.stringify({ ...control, generation: 2, digest,
       activeOperation: { operationId: 'operation-a', preparationDigest: 'a'.repeat(64) },
@@ -328,7 +328,7 @@ test('S3 explicit release requires the exact outcome head and refuses generic sl
       assert.equal(await store.releaseControl(revision, expected), false);
       assert.notEqual((await store.readControl()).activeOperation, null); assert.equal(writes, 0); continue;
     }
-    if (scenario !== 'valid') {
+    if (scenario !== 'valid' && scenario !== 'valid-hold') {
       await assert.rejects(() => store.releaseControl(revision, expected)); assert.equal(writes, 0); continue;
     }
     assert.equal(await store.releaseControl(revision, expected), true);

@@ -1,5 +1,13 @@
 # CharityPilot Full-Platform Remediation Audit
 
+> DPO-05 committed hold release: an internal service now authenticates the
+> published hold outcome, compares its exact committed database receipt and
+> conditionally clears only the matching current reservation. Lost acknowledgements
+> retry without duplicate effects; missing evidence and changed writers/heads
+> leave the reservation unresolved. This is not cancellation, takeover, provider
+> activation or all-writer enforcement. Hosted/live evidence remains separate.
+
+
 > DPO-05 hold outcome publication: authenticated hold outcomes now publish only
 > after their exact hold preparation, retaining the operation reservation. Readers
 > verify both payload hashes, decision fields and stable current history. Lost
