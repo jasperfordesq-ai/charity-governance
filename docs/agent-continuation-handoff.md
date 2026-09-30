@@ -1,5 +1,19 @@
 # CharityPilot Agent Continuation Handoff
 
+> **Trustee master-template source review, 2026-09-30:** exact backup
+> Induction Pack and separate Code of Conduct Declaration matched manifest
+> hashes. The March approval email names the pack as item 20 and its
+> attached body matches Vault text; both files have blank individual
+> signature fields. The private worksheet proposes Board/CURRENT adopted
+> **template**/RESTRICTED for the pack and Company Secretary/DRAFT blank
+> **master**/RESTRICTED for the declaration, pending current revision,
+> separate adoption and signed-return checks. No induction completion,
+> signed declarations or permanent-retention approval is inferred.
+> Twenty-one of 63 rows have source evidence, 20 have some proposal, 43 have
+> none, all PENDING. No live metadata changed. Private evidence:
+> `.charitypilot-private/trustee-templates-source-review-2026-09-30.md`.
+
+
 > **Independent hold recovery gate recheck, 2026-09-30 23:30 Dublin:** the
 > released ordinary hold service refuses changes once an enforcement binding
 > exists, but the database hold-event trigger still lacks an enforced
