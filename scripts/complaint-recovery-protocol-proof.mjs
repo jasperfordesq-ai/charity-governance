@@ -1,3 +1,5 @@
+import { readCommittedComplaintCancellation } from '../apps/api/src/services/complaint-recovery-cancellation.ts';
+import { cancelPublishedComplaintOperation } from '../apps/api/src/services/cancel-published-complaint-operation.ts';
 import { releaseCommittedHoldOperation } from '../apps/api/src/services/release-hold-recovery-operation.ts';
 import { publishVerifiedHoldOutcome, readPublishedHoldOutcome } from '../apps/api/src/services/published-hold-outcome.ts';
 import assert from 'node:assert/strict';
@@ -300,8 +302,13 @@ try {
   assert.equal(releasedHoldControl.activeOperation, null);
   assert.equal(releasedHoldControl.digest, publishedHoldOutcome.digest);
   assert.equal(await prisma.complaintHoldEvent.count({ where: { complaintId: 'published-hold-complaint' } }), 1);
+  const nextHoldContext = { ...hc, operationId: 'next-hold-operation' };
+  const nextHold = await holdPreparations.capture('b', 'published-hold-complaint', 'admin-b', {
+    ...holdInput, installationId: hb.installationId, operationId: nextHoldContext.operationId,
+    expectedRecordRevision: 1, expectedHoldRevision: 1, held: false });
+  const nextHoldRow = await prisma.complaintHoldRecoveryPreparation.findUniqueOrThrow({ where: { id: nextHold.id } });
   await reserveRecoveryOperation({ ...hb, writerId: 'host-b', writerEpoch: 1, operationId: 'next-hold-operation',
-    preparationDigest: hp.digest, expectedGeneration: releasedHoldControl.generation,
+    preparationDigest: nextHold.digest, expectedGeneration: releasedHoldControl.generation,
     expectedDigest: releasedHoldControl.digest }, hs);
   await assert.rejects(releaseHold, /writer or operation/);
   assert.equal((await hs.readControl()).activeOperation.operationId, 'next-hold-operation');
@@ -328,8 +335,32 @@ try {
       preparationId: stale.id, writerId: 'host-a', generation: 1, entryDigest: 'a'.repeat(64),
       envelopeDigest: 'b'.repeat(64), controlRevision: 'test' } }), { isolationLevel }), /read committed isolation/);
   }
-  const cancelled = await prisma.complaintRecoveryCancellation.create({ data: { ...cancelData,
-    primaryPreparationId: stale.id, transactionId: 1n, recordedAt: new Date('2000-01-01') } });
+  const cancelRequest = { ...cancelData, operationKind: 'PRIMARY' };
+  const cancelPrimary = () => cancelPublishedComplaintOperation(prisma, journal, store, cancelRequest, staleContext, keys, store);
+  await assert.rejects(cancelPublishedComplaintOperation(prisma, journal, store,
+    { ...cancelRequest, writerId: 'old-host' }, staleContext, keys, store), /writer or operation/);
+  await assert.rejects(cancelPublishedComplaintOperation(prisma, journal, store,
+    { ...cancelRequest, actorUserId: 'ordinary-admin' }, staleContext, keys, store), /current charity authority/);
+  const changedCancellationControl = { async readControl() {
+    const value = await store.readControl();
+    return { ...value, writerId: 'changed-host' };
+  }, async compareAndSwapControl() { throw new Error('Must not write control'); } };
+  await assert.rejects(cancelPublishedComplaintOperation(prisma, journal, changedCancellationControl,
+    cancelRequest, staleContext, keys, store), /writer or operation/);
+  const cancelledResult = await cancelPrimary();
+  assert.equal(cancelledResult.replayed, false); assert.equal(cancelledResult.actionAuthorized, false);
+  await prisma.$disconnect();
+  assert.deepEqual(await cancelPrimary(), { ...cancelledResult, replayed: true });
+  await assert.rejects(cancelPublishedComplaintOperation(prisma, journal, store,
+    { ...cancelRequest, evidenceRef: 'DIFFERENT-001' }, staleContext, keys, store), /identity changed/);
+  const cancelled = await prisma.complaintRecoveryCancellation.findUniqueOrThrow({ where: { id: cancelledResult.cancellationId } });
+  const cancellationEvidence = await readCommittedComplaintCancellation(prisma, { ...binding,
+    operationId: staleContext.operationId, operationKind: 'PRIMARY' });
+  assert.equal(JSON.parse(cancellationEvidence.body).cancellationId, cancelled.id);
+  assert.equal(JSON.parse(cancellationEvidence.body).preparationDigest, stale.digest);
+  assert.equal(cancellationEvidence.actionAuthorized, false);
+  await assert.rejects(readCommittedComplaintCancellation(prisma, { ...binding,
+    operationId: staleContext.operationId, operationKind: 'HOLD' }), /unavailable/);
   assert.ok(cancelled.transactionId > 1n); assert.ok(cancelled.recordedAt > new Date('2026-01-01'));
   await assert.rejects(executePublishedComplaintOperation(prisma, journal, store, 'host-a', staleContext, keys, store), /Cancelled recovery operation/);
   await assert.rejects(prisma.complaintRecoveryOutcome.create({ data: { preparationId: stale.id, claimId: 'not-a-claim' } }), /Cancelled recovery operation/);
@@ -376,6 +407,32 @@ try {
     assert.equal(await prisma.complaintHoldRecoveryOutcome.count({ where: { preparationId: prepared.id } }), cancelFirst ? 0 : 1);
     assert.equal(await prisma.complaintHoldEvent.count({ where: { complaintId: suffix } }), cancelFirst ? 0 : 1);
   }
+  const nextCancelRequest = { ...holdCancelData, operationKind: 'HOLD' };
+  const cancelNextHold = () => cancelPublishedComplaintOperation(prisma, hj, hs,
+    nextCancelRequest, nextHoldContext, keys, hs);
+  await assert.rejects(cancelNextHold, /not published/);
+  await preserveHoldPreparation(nextHoldRow.facts, nextHoldContext, keys, hs);
+  await publishVerifiedHoldPreparation(hj, hs, { writerId: 'host-b', preparationDigest: nextHold.digest,
+    expectedGeneration: releasedHoldControl.generation, expectedDigest: releasedHoldControl.digest }, nextHoldContext, keys, hs);
+  const cancellationBefore = await hs.readControl();
+  let reads = 0;
+  const changingCancellation = { async readControl() {
+    const value = await hs.readControl();
+    return ++reads > 1 ? { ...value, writerId: 'changed-host' } : value;
+  }, async compareAndSwapControl() { throw new Error('Cancellation must not write independent state'); } };
+  await assert.rejects(cancelPublishedComplaintOperation(prisma, hj, changingCancellation,
+    nextCancelRequest, nextHoldContext, keys, hs), /publication changed/);
+  assert.equal(await prisma.complaintRecoveryCancellation.count({ where: { holdPreparationId: nextHold.id } }), 0);
+  const cancelledHold = await cancelNextHold();
+  await prisma.$disconnect();
+  assert.deepEqual(await cancelNextHold(), { ...cancelledHold, replayed: true });
+  const holdCancelEvidence = await readCommittedComplaintCancellation(prisma, { ...hb,
+    operationId: nextHoldContext.operationId, operationKind: 'HOLD' });
+  assert.equal(JSON.parse(holdCancelEvidence.body).cancellationId, cancelledHold.cancellationId);
+  assert.equal(JSON.parse(holdCancelEvidence.body).preparationDigest, nextHold.digest);
+  assert.deepEqual(await hs.readControl(), cancellationBefore);
+  await assert.rejects(executePublishedComplaintHold(prisma, hj, hs, 'host-b', nextHoldContext, keys, hs), /Cancelled recovery operation/);
+  assert.equal((await prisma.complaintHoldEvent.findFirstOrThrow({ where: { complaintId: 'published-hold-complaint' }, orderBy: { revision: 'desc' } })).held, true);
   // Cancellation does not clear the independently reserved stale disposal slot.
   assert.equal((await store.readControl()).activeOperation.operationId, staleContext.operationId);
   process.stdout.write('complaint-recovery-protocol-composition-verified');

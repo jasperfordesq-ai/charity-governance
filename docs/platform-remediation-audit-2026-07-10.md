@@ -1,5 +1,13 @@
 # CharityPilot Full-Platform Remediation Audit
 
+> DPO-05 cancellation composition: an inactive service authenticates the exact
+> reserved primary/hold preparation and unchanged independent writer/head before
+> local cancellation. It rechecks current actor and local writer, and retries only
+> the same decision. A committed reader validates preparation bindings and emits
+> a minimal receipt. Cancellation still retains the independent reservation;
+> terminal encryption/publication/release and recovery replay remain incomplete.
+
+
 > DPO-05 local cancellation boundary: a new append-only cancellation record
 > targets exactly one disposal or hold preparation. Database guards serialize
 > cancellation against prepared execution/outcomes with the charity lock, reject
