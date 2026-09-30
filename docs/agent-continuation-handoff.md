@@ -3787,3 +3787,16 @@ including real Prisma capture/reconnect and the preservation race. The race
 assertion failed before the isolation/locking correction and now passes. API build
 and nine focused tests also passed. This supersedes the running-proof note above;
 it does not establish independent host fencing or authorize deployment/erasure.
+
+### Candidate encrypted preparation envelope, inactive
+
+A bounded seal/open module now binds complaint preparation bytes to installation,
+charity, operation, epoch, source and wrapping-key identity using the existing
+AES-256-GCM primitive in a separate recovery domain. A trusted data-key provider
+interface is supplied; no live KMS adapter/key or credentials exist. Build and 38
+focused preparation/envelope/crypto tests pass. Caller-owned returned key buffers
+are cleared best-effort; runtime/native copies are not claimed erased. Original
+envelope persistence and exact retry reconciliation remain required because fresh
+encryption changes bytes. No journal publication or production caller uses this
+module. Provider deadlines/custody, field-retention approval, execution fencing and
+recovery acceptance remain open.
