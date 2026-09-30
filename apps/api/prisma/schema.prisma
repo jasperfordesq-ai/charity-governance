@@ -1941,9 +1941,24 @@ model ComplaintPurgeAuthorization {
   reason          String
   authorizedAt    DateTime @default(now())
   withdrawal      ComplaintPurgeAuthorizationWithdrawal?
+  claim           ComplaintPurgeClaim?
 
   @@unique([id, organisationId])
   @@index([organisationId, complaintId, authorizedAt, id], map: "ComplaintPurgeAuthorization_history_idx")
+}
+
+model ComplaintPurgeClaim {
+  id              String @id @default(cuid())
+  organisationId  String
+  authorizationId String @unique
+  authorization   ComplaintPurgeAuthorization @relation(fields: [authorizationId, organisationId], references: [id, organisationId], onDelete: Restrict)
+  complaintId     String @unique
+  actorUserId     String
+  transactionId   BigInt @default(dbgenerated("txid_current()"))
+  claimedAt       DateTime @default(now())
+
+  @@unique([authorizationId, organisationId])
+  @@index([organisationId, claimedAt, id], map: "ComplaintPurgeClaim_history_idx")
 }
 
 model ComplaintPurgeAuthorizationWithdrawal {

@@ -9,6 +9,7 @@ const tables = [
   'DocumentPurgeClaim', 'DocumentPurgeDispositionEvent',
   'ComplaintResolutionEvidence', 'ComplaintRemoval', 'ComplaintHoldEvent',
   'ComplaintPurgeAuthorization', 'ComplaintPurgeAuthorizationWithdrawal',
+  'ComplaintPurgeClaim',
 ];
 const digest = expression => `encode(sha256(convert_to((${expression})::text,'UTF8')),'hex')`;
 const entries = tables.map(name => `SELECT '${name}' AS name, COALESCE(jsonb_agg(jsonb_build_object('id',t.id,'sha256',${digest('to_jsonb(t)')}) ORDER BY t.id),'[]'::jsonb) AS rows FROM "${name}" t`);
@@ -17,7 +18,9 @@ entries.push(`SELECT 'ClaimedPrimaryJobs' AS name, COALESCE(jsonb_agg(jsonb_buil
 // Recovery pointers are mutable; matching append-only decisions alone would
 // miss an older backup restoring a removed complaint to ordinary active views.
 entries.push(`SELECT 'ComplaintRecoveryState' AS name, COALESCE(jsonb_agg(jsonb_build_object('id',t.id,'sha256',${digest(`jsonb_build_object('id',t.id,'organisationId',t."organisationId",'revision',t.revision,'removedAt',t."removedAt",'removalId',t."removalId")`)}) ORDER BY t.id),'[]'::jsonb) AS rows FROM "ComplaintRecord" t`);
-export const PURGE_RESTORE_TABLES = Object.freeze([...tables, 'ClaimedPrimaryJobs', 'ComplaintRecoveryState']);
+entries.push(`SELECT 'ComplaintPrimaryConflicts' AS name, COALESCE(jsonb_agg(jsonb_build_object('id',c.id,'sha256',${digest('to_jsonb(c)')}) ORDER BY c.id),'[]'::jsonb) AS rows
+ FROM "ComplaintPurgeClaim" c JOIN "ComplaintRecord" r ON r.id=c."complaintId" AND r."organisationId"=c."organisationId"`);
+export const PURGE_RESTORE_TABLES = Object.freeze([...tables, 'ClaimedPrimaryJobs', 'ComplaintRecoveryState', 'ComplaintPrimaryConflicts']);
 // Object keys are hashed in PostgreSQL so raw storage paths are not returned.
 // Any claimed local object still present requires quarantine/reconciliation,
 // including a pending deletion; byte changes at the same key do not excuse it.
@@ -101,6 +104,11 @@ function validate(snapshot) {
     inventories.set(table,inventory);
   }
   const claims = references(snapshot.claims, 'claims');
+  if (inventories.get('ComplaintPrimaryConflicts').size) {
+    const error = new Error('Claimed complaint primary records are present; keep application access closed.');
+    error.code = 'PURGE_RESTORE_RECONCILIATION_REQUIRED';
+    throw error;
+  }
   if (claims.size !== inventories.get('DocumentPurgeClaim').size || claims.size !== inventories.get('ClaimedPrimaryJobs').size) {
     throw new Error('Incomplete purge restore claim/job lineage');
   }

@@ -2,7 +2,22 @@
 
 Last updated: 2026-09-30
 
-Complaint purge review persistence increment (not deployed): immutable
+Complaint purge claim persistence increment (not deployed): a claim rechecks
+unwithdrawn same-Owner authority, exact removed record, current approved policy,
+unchanged unheld revision, original recovery deadline and elapsed retention.
+Database-generated transaction identity binds the guarded primary DELETE to the
+claim; an AFTER trigger deletes exactly one complaint and appends metadata audit
+atomically. Any later transaction error restores all three. Claims are immutable,
+unique per complaint/authorization, prevent identity reuse and prohibit later
+withdrawal. Restore reconciliation includes claim history and rejects any
+claimed complaint still present even when source and restored snapshots agree.
+Real proof covers early/withdrawn/stale-policy/stale-hold refusal, rollback after
+delete and two competing claims accepting exactly one. Explicit hold/withdrawal/
+restore-versus-claim race coverage, API/idempotent retry UI, downstream evidence,
+hosted gates/deployment and bounded live acceptance remain required before
+calling complaint purge operational. No live records or policies changed.
+
+Earlier complaint purge review persistence checkpoint (superseded by the claim checkpoint above; not deployed): immutable
 ComplaintPurgeAuthorization binds the current removed closed complaint revision,
 removal decision and original recovery deadline, latest unheld revision, active
 same-charity Owner and one current approved COMPLAINT policy. Timed policies

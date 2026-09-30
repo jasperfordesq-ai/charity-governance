@@ -214,6 +214,40 @@ test('complaint recovery migration preserves records and enforces reviewed remov
     assert.equal(sql(`SELECT a."recoveryUntil"=r."recoveryUntil" AND a."recoveryUntil">now()
       FROM "ComplaintPurgeAuthorization" a JOIN "ComplaintRemoval" r ON r.id=a."removalId" WHERE a.id='timed-authorization';`),'t');
     sql(`DELETE FROM "ComplaintRecord" WHERE id='timed-review';`,/separate verified workflow/);
+    const claim=(id,authorization='fresh-purge',complaint='expired',actor='admin-a')=>
+      `INSERT INTO "ComplaintPurgeClaim" (id,"organisationId","authorizationId","complaintId","actorUserId")
+       VALUES ('${id}','a','${authorization}','${complaint}','${actor}');`;
+    sql(claim('early','timed-authorization','timed-review'),/wait for recovery expiry/);
+    sql(claim('withdrawn','reviewed-purge'),/unwithdrawn Owner authority/);
+    sql(`INSERT INTO "DataRetentionPolicyWithdrawal" (id,"organisationId","policyId","actorUserId",reason,"evidenceRef")
+      VALUES ('timed-policy-withdrawn','a','timed-review-policy','admin-a','Replace synthetic timed policy','WITHDRAW-004');
+      INSERT INTO "DataRetentionPolicyRevision" (id,"organisationId","recordClass",revision,state,"retentionMode","recoveryDays","createdById","approvedById","approvedAt","approvalEvidenceRef")
+      VALUES ('final-review-policy','a','COMPLAINT',4,'APPROVED','REVIEW_REQUIRED',30,'admin-a','admin-a',now(),'POLICY-005');`);
+    sql(claim('stale-policy','timed-authorization','timed-review'),/current approved complaint policy/);
+    sql(authorize('before-new-hold',{holdRevision:2,policy:'final-review-policy'}));
+    sql(`INSERT INTO "ComplaintHoldEvent" (id,"organisationId","complaintId",revision,"recordRevision",held,"actorUserId","evidenceRef",reason)
+      VALUES ('claim-hold','a','expired',3,2,true,'admin-a','CLAIM-HOLD-001','Preserve after disposal authorization');`);
+    sql(claim('held-claim','before-new-hold'),/unchanged unheld revision/);
+    sql(`INSERT INTO "ComplaintHoldEvent" (id,"organisationId","complaintId",revision,"recordRevision",held,"actorUserId","evidenceRef",reason)
+      VALUES ('claim-hold-release','a','expired',4,2,false,'admin-a','CLAIM-HOLD-002','Release hold after separate review');`);
+    sql(claim('stale-hold-claim','before-new-hold'),/unchanged unheld revision/);
+    sql(authorize('fresh-purge',{holdRevision:4,policy:'final-review-policy'}));
+    sql(claim('wrong-owner','fresh-purge','expired','ordinary-admin'),/matching unwithdrawn Owner authority/);
+    // A later transaction failure must roll back the claim, delete and audit.
+    sql(`BEGIN; ${claim('rolled-back')} SELECT 1/0; COMMIT;`,/division by zero/);
+    assert.equal(sql(`SELECT count(*) FROM "ComplaintPurgeClaim";`),'0');
+    assert.equal(sql(`SELECT count(*) FROM "ComplaintRecord" WHERE id='expired';`),'1');
+    assert.equal(sql(`SELECT count(*) FROM "GovernanceRegisterChangeAudit" WHERE "recordId"='expired';`),'0');
+    const claims=await Promise.all([concurrent(claim('claim-a')),concurrent(claim('claim-b'))]);
+    assert.equal(claims.filter(result=>result.code===0).length,1);
+    assert.equal(sql(`SELECT count(*) FROM "ComplaintPurgeClaim";`),'1');
+    assert.equal(sql(`SELECT count(*) FROM "ComplaintRecord" WHERE id='expired';`),'0');
+    assert.equal(sql(`SELECT "actorUserId"||':'||action||':'||"previousStatus" FROM "GovernanceRegisterChangeAudit" WHERE "recordId"='expired';`),'admin-a:DELETE:RECOVERABLE');
+    sql(`INSERT INTO "ComplaintPurgeAuthorizationWithdrawal" (id,"organisationId","authorizationId","actorUserId","evidenceRef",reason)
+      VALUES ('too-late','a','fresh-purge','admin-a','WITHDRAW-LATE-001','Cannot withdraw completed primary disposal');`,/cannot be withdrawn/);
+    sql(`UPDATE "ComplaintPurgeClaim" SET "actorUserId"='ordinary-admin';`,/append-only/);
+    sql(`INSERT INTO "ComplaintRecord" (id,"organisationId","receivedDate",summary,status,"updatedAt")
+      VALUES ('expired','a','2026-01-01','Reused identity','CLOSED',now());`,/cannot be reused/);
     const authority = JSON.parse(sql(PURGE_RESTORE_SNAPSHOT_SQL));
     assert.doesNotMatch(JSON.stringify(authority), /Private original narrative|Reviewed synthetic administrative hold|HOLD-001/);
     const currentBackup = docker(['exec',container,'pg_dump','-U','postgres','--no-owner','--no-privileges','postgres']);
@@ -229,7 +263,7 @@ test('complaint recovery migration preserves records and enforces reviewed remov
       if(database==='old_complaint_restore') {
         assert.throws(()=>assertPurgeRestoreLedger(authority,snapshot),error=>{
           assert.equal(error.code,'PURGE_RESTORE_RECONCILIATION_REQUIRED');
-          for(const table of ['ComplaintHoldEvent','ComplaintRemoval','ComplaintResolutionEvidence','ComplaintRecoveryState','ComplaintPurgeAuthorization','ComplaintPurgeAuthorizationWithdrawal']) {
+          for(const table of ['ComplaintHoldEvent','ComplaintRemoval','ComplaintResolutionEvidence','ComplaintRecoveryState','ComplaintPurgeAuthorization','ComplaintPurgeAuthorizationWithdrawal','ComplaintPurgeClaim']) {
             assert.ok(error.report.differences.some(item=>item.table===table && (item.missing || item.changed)),table);
           }
           return true;

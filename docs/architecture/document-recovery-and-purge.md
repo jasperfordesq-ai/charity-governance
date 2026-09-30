@@ -22,6 +22,19 @@ after host loss or authorize application reopening.
 
 ### Complaint resolution evidence: persistence checkpoint
 
+Primary purge claim persistence (local only): `ComplaintPurgeClaim` binds a
+current Owner-reviewed authorization to the PostgreSQL transaction that removes
+the exact primary complaint. The database rechecks current policy, original
+recovery deadline, elapsed resolution-based retention, record revision and
+unchanged unheld revision. It deletes one row and appends metadata-only audit in
+the same transaction; failure rolls back claim, deletion and audit. Claims cannot
+be changed, repeated for a complaint, withdrawn after execution or used to reuse
+the complaint identity. Restore authority includes claims and a conflict inventory
+that refuses a claimed complaint present in either compared database. This is
+primary-record absence only. Downstream observations, API/UI, the remaining race
+matrix and release acceptance are still open; no real disposal is authorized by
+these engineering tests.
+
 Purge authorization persistence (local only): an immutable Owner review binds
 the removed complaint revision, exact removal decision and recovery deadline,
 latest unheld revision, current class policy and six-area disposition plan.
