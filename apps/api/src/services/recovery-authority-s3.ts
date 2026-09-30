@@ -1,3 +1,4 @@
+import { inspectCancellationEnvelope } from './cancellation-envelope.js';
 import { createHash, randomUUID } from 'node:crypto';
 import { Readable } from 'node:stream';
 import { GetObjectCommand, PutObjectCommand, S3Client, type S3ClientConfig } from '@aws-sdk/client-s3';
@@ -228,6 +229,30 @@ export class S3AuthorityObjectStore implements AuthorityObjectStore, AuthorityHe
 
   async createHoldOutcome(operationId: string, envelope: string) {
     const request = this.holdOutcomeRequest(operationId); this.checkHoldOutcome(operationId, envelope);
+    return this.writeObject(request, envelope, { IfNoneMatch: '*' }, 32768);
+  }
+
+  private cancellationRequest(operationId: string) {
+    const request = this.replayRequest(operationId);
+    return { ...request, Key: `cancellations/${this.config.installationId}/${this.config.organisationId}/${operationId}.json` };
+  }
+
+  private checkCancellation(operationId: string, envelope: string) {
+    const context = inspectCancellationEnvelope(envelope);
+    if (context.installationId !== this.config.installationId || context.organisationId !== this.config.organisationId
+      || context.operationId !== operationId || context.keyId !== this.config.replayKeyArn) {
+      throw new Error('Cancellation envelope scope mismatch');
+    }
+  }
+
+  async readCancellation(operationId: string) {
+    const object = await this.readObject(this.cancellationRequest(operationId), undefined, 32768);
+    if (!object) return null;
+    this.checkCancellation(operationId, object.body); return object.body;
+  }
+
+  async createCancellation(operationId: string, envelope: string) {
+    const request = this.cancellationRequest(operationId); this.checkCancellation(operationId, envelope);
     return this.writeObject(request, envelope, { IfNoneMatch: '*' }, 32768);
   }
 

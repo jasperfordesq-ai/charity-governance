@@ -20,7 +20,8 @@ export interface AuthorityHeadSource {
 const identity = z.string().regex(/^[A-Za-z0-9_-]{1,120}$/);
 const digest = z.string().regex(/^[a-f0-9]{64}$/);
 const kinds = z.enum(['DISPOSAL_INTENT', 'DISPOSAL_RESULT', 'PRESERVATION_CHANGE', 'CONTROL_CHANGE',
-  'COMPLAINT_PREPARATION_V1', 'COMPLAINT_OUTCOME_V1', 'COMPLAINT_HOLD_PREPARATION_V1', 'COMPLAINT_HOLD_OUTCOME_V1']);
+  'COMPLAINT_PREPARATION_V1', 'COMPLAINT_OUTCOME_V1', 'COMPLAINT_HOLD_PREPARATION_V1', 'COMPLAINT_HOLD_OUTCOME_V1',
+  'COMPLAINT_CANCELLATION_V1', 'COMPLAINT_HOLD_CANCELLATION_V1']);
 const bindingSchema = z.object({ installationId: identity, organisationId: identity }).strict();
 const checkpointFields = {
   generation: z.number().int().nonnegative().max(10000), digest: digest.nullable(),
@@ -46,9 +47,11 @@ const entrySchema = z.object({ format: z.literal(1), installationId: identity, o
 }).strict();
 type Entry = z.infer<typeof entrySchema>;
 type Input = z.infer<typeof inputSchema>;
-const preparationKind = (kind: Entry['kind']) => kind === 'COMPLAINT_OUTCOME_V1'
-  ? 'COMPLAINT_PREPARATION_V1' : kind === 'COMPLAINT_HOLD_OUTCOME_V1'
-    ? 'COMPLAINT_HOLD_PREPARATION_V1' : undefined;
+const preparationKind = (kind: Entry['kind']) => {
+  if (kind === 'COMPLAINT_OUTCOME_V1' || kind === 'COMPLAINT_CANCELLATION_V1') return 'COMPLAINT_PREPARATION_V1';
+  if (kind === 'COMPLAINT_HOLD_OUTCOME_V1' || kind === 'COMPLAINT_HOLD_CANCELLATION_V1') return 'COMPLAINT_HOLD_PREPARATION_V1';
+  return undefined;
+};
 const hash = (value: string) => createHash('sha256').update(value, 'utf8').digest('hex');
 const unsigned = (entry: Omit<Entry, 'digest'>) => JSON.stringify({ format: entry.format,
   installationId: entry.installationId, organisationId: entry.organisationId,
@@ -331,8 +334,16 @@ export class RecoveryAuthorityJournal {
     return this.appendReservedOutcome(raw, control, 'COMPLAINT_HOLD_OUTCOME_V1');
   }
 
+  async appendReservedComplaintCancellation(raw: unknown, control: RecoveryControlStore) {
+    return this.appendReservedOutcome(raw, control, 'COMPLAINT_CANCELLATION_V1');
+  }
+
+  async appendReservedHoldCancellation(raw: unknown, control: RecoveryControlStore) {
+    return this.appendReservedOutcome(raw, control, 'COMPLAINT_HOLD_CANCELLATION_V1');
+  }
+
   private async appendReservedOutcome(raw: unknown, control: RecoveryControlStore,
-    kind: 'COMPLAINT_OUTCOME_V1' | 'COMPLAINT_HOLD_OUTCOME_V1') {
+    kind: 'COMPLAINT_OUTCOME_V1' | 'COMPLAINT_HOLD_OUTCOME_V1' | 'COMPLAINT_CANCELLATION_V1' | 'COMPLAINT_HOLD_CANCELLATION_V1') {
     const request = z.object({ operationId: identity, writerId: identity,
       writerEpoch: z.number().int().positive().max(2147483647), preparationDigest: digest,
       preparationEnvelopeDigest: digest, preparationEntryDigest: digest,

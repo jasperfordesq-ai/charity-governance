@@ -1,3 +1,5 @@
+import { preserveCancellation } from '../apps/api/src/services/cancellation-envelope.ts';
+import { publishVerifiedCancellation, readPublishedCancellation } from '../apps/api/src/services/published-cancellation.ts';
 import { readCommittedComplaintCancellation } from '../apps/api/src/services/complaint-recovery-cancellation.ts';
 import { cancelPublishedComplaintOperation } from '../apps/api/src/services/cancel-published-complaint-operation.ts';
 import { releaseCommittedHoldOperation } from '../apps/api/src/services/release-hold-recovery-operation.ts';
@@ -152,8 +154,8 @@ try {
   const stalePreparation = await prisma.complaintRecoveryPreparation.findUniqueOrThrow({ where: { id: stale.id } });
   await reserveRecoveryOperation({ ...binding, writerId: 'host-a', writerEpoch: 1, operationId: staleContext.operationId,
     preparationDigest: stale.digest, expectedGeneration: final.generation, expectedDigest: final.digest }, store);
-  await preserveRecoveryPreparation(stalePreparation.facts, staleContext, keys, store);
-  await publishVerifiedComplaintPreparation(journal, store, { writerId: 'host-a', preparationDigest: stale.digest,
+  const staleEnvelope = await preserveRecoveryPreparation(stalePreparation.facts, staleContext, keys, store);
+  const stalePublished = await publishVerifiedComplaintPreparation(journal, store, { writerId: 'host-a', preparationDigest: stale.digest,
     expectedGeneration: final.generation, expectedDigest: final.digest }, staleContext, keys, store);
   await prisma.complaintHoldEvent.create({ data: { organisationId: 'a', complaintId: 'recovery-stale', revision: 1,
     recordRevision: 2, held: true, actorUserId: 'admin-a', evidenceRef: 'LATER-HOLD-001', reason: 'Preserve after publication' } });
@@ -411,8 +413,8 @@ try {
   const cancelNextHold = () => cancelPublishedComplaintOperation(prisma, hj, hs,
     nextCancelRequest, nextHoldContext, keys, hs);
   await assert.rejects(cancelNextHold, /not published/);
-  await preserveHoldPreparation(nextHoldRow.facts, nextHoldContext, keys, hs);
-  await publishVerifiedHoldPreparation(hj, hs, { writerId: 'host-b', preparationDigest: nextHold.digest,
+  const nextHoldEnvelope = await preserveHoldPreparation(nextHoldRow.facts, nextHoldContext, keys, hs);
+  const nextHoldPublished = await publishVerifiedHoldPreparation(hj, hs, { writerId: 'host-b', preparationDigest: nextHold.digest,
     expectedGeneration: releasedHoldControl.generation, expectedDigest: releasedHoldControl.digest }, nextHoldContext, keys, hs);
   const cancellationBefore = await hs.readControl();
   let reads = 0;
@@ -435,6 +437,35 @@ try {
   assert.equal((await prisma.complaintHoldEvent.findFirstOrThrow({ where: { complaintId: 'published-hold-complaint' }, orderBy: { revision: 'desc' } })).held, true);
   // Cancellation does not clear the independently reserved stale disposal slot.
   assert.equal((await store.readControl()).activeOperation.operationId, staleContext.operationId);
+  for (const [kind, j, storage, ctx, evidence, prepDigest, envelope, prep, writerId] of [
+    ['PRIMARY', journal, store, staleContext, cancellationEvidence, stale.digest, staleEnvelope, stalePublished, 'host-a'],
+    ['HOLD', hj, hs, nextHoldContext, holdCancelEvidence, nextHold.digest, nextHoldEnvelope, nextHoldPublished, 'host-b'],
+  ]) {
+    const request = { operationKind: kind, writerId, preparationDigest: prepDigest,
+      preparationGeneration: prep.generation, preparationEntryDigest: prep.digest, preparationEnvelopeDigest: envelope.digest };
+    const publishCancellation = () => publishVerifiedCancellation(j, storage, request, ctx, keys, storage);
+    await assert.rejects(publishCancellation, /missing/);
+    const preserved = await preserveCancellation(evidence.body, ctx, keys, storage);
+    assert.equal((await preserveCancellation(evidence.body, ctx, keys, storage)).digest, preserved.digest);
+    await assert.rejects(publishVerifiedCancellation(j, storage, { ...request, writerId: 'stale-writer' }, ctx, keys, storage), /reservation mismatch/);
+    loseHeadAck = true;
+    await assert.rejects(publishCancellation, /unknown/);
+    const publishedCancellation = await publishCancellation();
+    assert.equal(publishedCancellation.headPublished, true); assert.equal(publishedCancellation.replayed, true);
+    const source = { async readHead() {
+      const { installationId, organisationId, generation, digest, revision } = await storage.readControl();
+      return { installationId, organisationId, generation, digest, revision };
+    } };
+    const result = await readPublishedCancellation(j, source, ctx, kind, keys, storage);
+    assert.equal(result.body, evidence.body); assert.equal(result.actionAuthorized, false);
+    assert.equal(result.envelopeDigest, preserved.digest);
+    assert.equal((await storage.readControl()).activeOperation.operationId, ctx.operationId);
+    await assert.rejects(readPublishedCancellation(j, source, ctx, kind === 'PRIMARY' ? 'HOLD' : 'PRIMARY', keys, storage), /not published/);
+    const key = `cancellations/${ctx.installationId}/${ctx.organisationId}/${ctx.operationId}.json`;
+    const original = objects.get(key); objects.delete(key);
+    await assert.rejects(readPublishedCancellation(j, source, ctx, kind, keys, storage), /unresolved/);
+    assert.equal(objects.has(key), false); objects.set(key, original);
+  }
   process.stdout.write('complaint-recovery-protocol-composition-verified');
 } finally {
   for (const value of retainedKeys.values()) value.key.fill(0);

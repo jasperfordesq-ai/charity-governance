@@ -1,0 +1,96 @@
+import { createHash } from 'node:crypto';
+import { z } from 'zod';
+import { openIntegrationSecret, sealIntegrationSecret } from './integration-crypto.js';
+import { prepareComplaintCancellationFacts } from './complaint-recovery-cancellation.js';
+import { validateRecoveryEnvelopeContext, type RecoveryEnvelopeContext, type RecoveryDataKeys } from './recovery-preparation-envelope.js';
+
+const base64 = (max: number) => z.string().min(1).max(max)
+  .refine(v => Buffer.from(v, 'base64').toString('base64') === v);
+const operationKindSchema = z.enum(['PRIMARY', 'HOLD']);
+export type CancellationOperationKind = z.infer<typeof operationKindSchema>;
+const envelopeSchema = z.object({ format: z.literal(1), kind: z.literal('COMPLAINT_CANCELLATION'), operationKind: operationKindSchema,
+  context: z.unknown().transform(validateRecoveryEnvelopeContext), wrappedKey: base64(8192),
+  sealed: z.object({ generation: z.number().int().positive(), iv: base64(16), tag: base64(24), ciphertext: base64(10924) }).strict(),
+}).strict();
+function inspect(body: string) {
+  if (Buffer.byteLength(body, 'utf8') > 32768) throw new Error('oversized');
+  const value = envelopeSchema.parse(JSON.parse(body));
+  if (JSON.stringify(value) !== body) throw new Error('noncanonical');
+  return value;
+}
+export function inspectCancellationEnvelope(body: string) {
+  try { return inspect(body).context; }
+  catch { throw new Error('Invalid cancellation envelope'); }
+}
+function requireFacts(body: string, context: RecoveryEnvelopeContext) {
+  if (Buffer.byteLength(body, 'utf8') > 8192) throw new Error('oversized');
+  const parsed = prepareComplaintCancellationFacts(JSON.parse(body));
+  const facts = JSON.parse(parsed.body);
+  if (parsed.body !== body || facts.installationId !== context.installationId
+    || facts.organisationId !== context.organisationId || facts.operationId !== context.operationId
+    || facts.writerEpoch !== context.writerEpoch || facts.preparationSourceRevision !== context.sourceRevision) throw new Error('binding');
+  return operationKindSchema.parse(facts.operationKind);
+}
+function secretContext(context: RecoveryEnvelopeContext, wrappedKey: string, operationKind: CancellationOperationKind) {
+  return { organisationId: context.organisationId, provider: 'charitypilot-cancellation-v1',
+    kind: JSON.stringify({ format: 1, kind: 'COMPLAINT_CANCELLATION', operationKind, context, wrappedKey }) };
+}
+export async function sealCancellation(body: string, rawContext: RecoveryEnvelopeContext, keys: RecoveryDataKeys) {
+  let key: Buffer | undefined;
+  try {
+    const context = validateRecoveryEnvelopeContext(rawContext), operationKind = requireFacts(body, context);
+    const generated = await keys.generate(context); key = generated.key;
+    if (!Buffer.isBuffer(key) || key.length !== 32 || generated.keyId !== context.keyId) throw new Error('key');
+    const wrappedKey = base64(8192).parse(generated.wrappedKey);
+    const sealed = sealIntegrationSecret(body, key, context.writerEpoch, secretContext(context, wrappedKey, operationKind));
+    const envelope = JSON.stringify(envelopeSchema.parse({ format: 1, kind: 'COMPLAINT_CANCELLATION', operationKind, context, wrappedKey, sealed }));
+    return { envelope, digest: createHash('sha256').update(envelope).digest('hex'), actionAuthorized: false as const };
+  } catch { throw new Error('Cancellation could not be encrypted'); }
+  finally { if (Buffer.isBuffer(key)) key.fill(0); }
+}
+export async function openCancellation(envelope: string, rawContext: RecoveryEnvelopeContext, operationKind: CancellationOperationKind, keys: RecoveryDataKeys) {
+  let key: Buffer | undefined;
+  try {
+    const context = validateRecoveryEnvelopeContext(rawContext), value = inspect(envelope);
+    if (value.operationKind !== operationKindSchema.parse(operationKind) || JSON.stringify(value.context) !== JSON.stringify(context) || value.sealed.generation !== context.writerEpoch) throw new Error('binding');
+    const opened = await keys.unwrap(value.wrappedKey, context); key = opened.key;
+    if (!Buffer.isBuffer(key) || key.length !== 32 || opened.keyId !== context.keyId) throw new Error('key');
+    const body = openIntegrationSecret(value.sealed, key, secretContext(context, value.wrappedKey, operationKind));
+    if (requireFacts(body, context) !== operationKind) throw new Error('kind'); return { body, actionAuthorized: false as const };
+  } catch { throw new Error('Cancellation could not be decrypted'); }
+  finally { if (Buffer.isBuffer(key)) key.fill(0); }
+}
+export interface CancellationObjects {
+  readCancellation(operationId: string): Promise<string | null>;
+  createCancellation(operationId: string, envelope: string): Promise<boolean>;
+}
+/** Digest must come from independently verified published history. Never derive
+ * it solely from the fetched envelope or restored local database. No fallback
+ * creates a replacement if published outcome bytes have disappeared. */
+export async function readVerifiedCancellation(expectedDigest: string, context: RecoveryEnvelopeContext, operationKind: CancellationOperationKind,
+  keys: RecoveryDataKeys, store: Pick<CancellationObjects, 'readCancellation'>) {
+  try {
+    context = validateRecoveryEnvelopeContext(context);
+    if (!/^[a-f0-9]{64}$/.test(expectedDigest)) throw new Error('digest');
+    const envelope = await store.readCancellation(context.operationId);
+    if (envelope === null || Buffer.byteLength(envelope, 'utf8') > 32768
+      || createHash('sha256').update(envelope).digest('hex') !== expectedDigest) throw new Error('missing or replaced');
+    return await openCancellation(envelope, context, operationKind, keys);
+  } catch { throw new Error('Referenced cancellation is unresolved'); }
+}
+/** Candidate preservation only. Published readers must require a trusted digest;
+ * this method cannot distinguish first creation from later object loss. */
+export async function preserveCancellation(body: string, context: RecoveryEnvelopeContext,
+  keys: RecoveryDataKeys, store: CancellationObjects) {
+  try {
+    context = validateRecoveryEnvelopeContext(context); const operationKind = requireFacts(body, context);
+    let envelope = await store.readCancellation(context.operationId), replayed = envelope !== null;
+    if (envelope === null) {
+      const candidate = await sealCancellation(body, context, keys);
+      replayed = !(await store.createCancellation(context.operationId, candidate.envelope));
+      envelope = await store.readCancellation(context.operationId);
+    }
+    if (envelope === null || (await openCancellation(envelope, context, operationKind, keys)).body !== body) throw new Error('conflict');
+    return { digest: createHash('sha256').update(envelope).digest('hex'), replayed, actionAuthorized: false as const };
+  } catch { throw new Error('Cancellation preservation unresolved; retry the same operation identity'); }
+}

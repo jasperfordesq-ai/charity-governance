@@ -1,5 +1,13 @@
 # CharityPilot Agent Continuation Handoff
 
+> DPO-05 cancellation evidence publication: dedicated authenticated cancellation
+> envelopes and create-only storage now bind operation kind, scope and source.
+> Typed terminal journal entries follow the exact primary/hold preparation and
+> exclude a later outcome for the same operation. Published readers verify full
+> current history and exact payload bytes. Reservations remain occupied; release,
+> recovery replay, all-writer/provider custody and original acceptance remain open.
+
+
 > DPO-05 cancellation composition: an inactive service authenticates the exact
 > reserved primary/hold preparation and unchanged independent writer/head before
 > local cancellation. It rechecks current actor and local writer, and retries only
