@@ -5,6 +5,7 @@ import { RetentionPolicyService } from '../../services/retention-policy.service.
 import { ComplaintRetentionService } from '../../services/complaint-retention.service.js';
 import { ComplaintRecoveryService } from '../../services/complaint-recovery.service.js';
 import { ComplaintHoldService } from '../../services/complaint-hold.service.js';
+import { ComplaintPurgeService } from '../../services/complaint-purge.service.js';
 import { requireSessionLevel } from '../../middleware/session-level.js';
 import { handleError } from '../../utils/errors.js';
 import { sendCreated, sendSuccess } from '../../utils/response.js';
@@ -24,6 +25,23 @@ export function registerComplaintRetentionRoutes(app: FastifyInstance) {
   const retention = new ComplaintRetentionService(app.prisma);
   const recovery = new ComplaintRecoveryService(app.prisma);
   const holds = new ComplaintHoldService(app.prisma);
+  const purge = new ComplaintPurgeService(app.prisma);
+  app.get('/complaints/purge-authorizations', { preHandler: [requireOwner, webOnly] }, async (request, reply) => {
+    try { return sendSuccess(reply, await purge.list(request.user.organisationId, request.user.userId, request.query)); }
+    catch (error) { return failure(reply, error); }
+  });
+  app.post<{ Params: { id: string } }>('/complaints/:id/purge-authorizations', { preHandler: [requireOwner, webOnly, requireSessionLevel('ADMIN')] }, async (request, reply) => {
+    try { return sendCreated(reply, await purge.authorize(request.user.organisationId, request.params.id, request.user.userId, request.body)); }
+    catch (error) { return failure(reply, error); }
+  });
+  app.post<{ Params: { id: string } }>('/complaints/purge-authorizations/:id/withdraw', { preHandler: [requireOwner, webOnly, requireSessionLevel('ADMIN')] }, async (request, reply) => {
+    try { return sendCreated(reply, await purge.withdraw(request.user.organisationId, request.user.userId, request.params.id, request.body)); }
+    catch (error) { return failure(reply, error); }
+  });
+  app.post<{ Params: { id: string } }>('/complaints/purge-authorizations/:id/claim', { preHandler: [requireOwner, webOnly, requireSessionLevel('ADMIN')] }, async (request, reply) => {
+    try { return sendSuccess(reply, await purge.claim(request.user.organisationId, request.user.userId, request.params.id, request.body)); }
+    catch (error) { return failure(reply, error); }
+  });
   const revision = z.number().int().positive().max(2147483647);
   app.get<{ Params: { id: string } }>('/complaints/:id/holds', { preHandler: [requireAdmin, webOnly] }, async (request, reply) => {
     try {

@@ -2,6 +2,22 @@
 
 Last updated: 2026-09-30
 
+Complaint purge API checkpoint (source only): Owner browser routes now list
+paginated reviews, authorize an exact removed revision/recovery decision,
+withdraw unclaimed authority and explicitly confirm a primary purge claim.
+Writes require ADMIN session level; every service transaction rechecks active
+same-charity Owner membership. Input binds original recovery deadline, removal,
+policy, record/hold revisions and all six reviewed copy-plan areas. Database
+guards remain authoritative for changed holds/policies and expiry. A retry
+returns the existing receipt without another deletion; transaction IDs are
+excluded. API conflicts give a refresh/review message without raw database text.
+Focused API tests: 44 passed. MCP: 408 passed, two Windows skips. API build
+passed. Read/write connector coverage explicitly excludes all four new routes.
+Private evidence: complaint-purge-api-final.log, complaint-purge-mcp.log and
+complaint-purge-api-build-final.log. Dashboard confirmation/history, scoped
+copy-disposition records, real browser proof, exact hosted gates and deployment
+remain; no live purge or policy change occurred. Runtime remains e5e988a3.
+
 Complaint purge concurrency checkpoint (source only): populated PostgreSQL
 tests now prove both orderings of hold/claim, withdrawal/claim and restore/claim.
 Each ordered test keeps the first transaction open until pg_stat_activity

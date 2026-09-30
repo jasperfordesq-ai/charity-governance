@@ -1213,6 +1213,32 @@ test('complaint resolution API binds actor and charity, rejects injected fields 
   } finally { await app.close(); }
 });
 
+test('complaint purge routes require Owner browser access and elevated writes before touching records',async()=>{
+  for(const scenario of [
+    {role:'MEMBER',clientKind:'WEB',accessLevel:'ADMIN'},
+    {role:'ADMIN',clientKind:'WEB',accessLevel:'ADMIN'},
+    {role:'OWNER',clientKind:'MCP_CONNECTOR',accessLevel:'ADMIN'},
+    {role:'OWNER',clientKind:'WEB',accessLevel:'READ'},
+  ] as const) {
+    let accesses=0;
+    const app=await buildApp({authSession:{findFirst:async()=>({id:'sess-1',...scenario,dataScope:'FULL'})},
+      $transaction:async()=>{accesses++;throw new Error('Forbidden access reached database');}},scenario.role);
+    try {
+      const paths:[ 'GET'|'POST',string][]=[
+        ['POST','/complaints/complaint-1/purge-authorizations'],
+        ['POST','/complaints/purge-authorizations/auth-1/withdraw'],
+        ['POST','/complaints/purge-authorizations/auth-1/claim'],
+      ];
+      if(scenario.accessLevel==='ADMIN') paths.push(['GET','/complaints/purge-authorizations']);
+      for(const [method,path] of paths) {
+        const response=await app.inject({method,url:`${PREFIX}${path}`,headers:{authorization:tokenFor(scenario.role)},payload:method==='POST'?{}:undefined});
+        assert.equal(response.statusCode,403,`${scenario.role}/${scenario.clientKind}/${scenario.accessLevel}: ${path}`);
+      }
+      assert.equal(accesses,0);
+    } finally {await app.close();}
+  }
+});
+
 test('Member cannot submit complaint resolution evidence', async () => {
   const app = await buildApp({}, 'MEMBER');
   try {
