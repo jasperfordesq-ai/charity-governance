@@ -29,7 +29,8 @@ type SubscriptionRow = { status: string; trialEndsAt: Date | null; plan?: string
 
 type PrismaMock = {
   authSession?: { findFirst: () => Promise<{ id: string } | null> };
-  user?: { findUnique: () => Promise<{ id: string; organisationId: string; role: Role; emailVerified: boolean } | null> };
+  user?: { findUnique: () => Promise<{ id: string; organisationId: string; role: Role; emailVerified: boolean } | null>; findFirst?: (args: unknown) => Promise<unknown> };
+  $queryRaw?: (...args: unknown[]) => Promise<unknown[]>;
   $transaction?: (callback: (tx: PrismaMock) => Promise<unknown>) => Promise<unknown>;
   subscription: { findUnique: () => Promise<SubscriptionRow | null> };
   document: {
@@ -38,6 +39,7 @@ type PrismaMock = {
     findMany?: (args: unknown) => Promise<unknown[]>;
     count?: (args: unknown) => Promise<number>;
     delete?: (args: unknown) => Promise<unknown>;
+    update?: (args: unknown) => Promise<unknown>;
     aggregate?: (args: unknown) => Promise<{ _sum: { fileSize: number | null } }>;
   };
   documentStorageDeletion?: {
@@ -1003,8 +1005,17 @@ test('DELETE /:id rejects and performs no side effects for a document belonging 
 
   const app = await buildDocumentsApp({
     subscription: activeSubscription(),
+    user: { ...authModels().user, findFirst: async () => ({ id: 'user-1' }) },
+    $queryRaw: async (...args) => {
+      assert.deepEqual(args.slice(1), ['foreign-doc', 'org-1']);
+      return [];
+    },
     document: {
-      findFirst: async () => null,
+      findFirst: async (args) => {
+        assert.deepEqual(args, { where: { id: 'foreign-doc', organisationId: 'org-1', deletedAt: null } });
+        return null;
+      },
+      update: async () => { throw new Error('foreign-org document must not enter recoverable state'); },
       delete: async () => {
         throw new Error('document.delete must not be called for a foreign-org document');
       },
@@ -1021,7 +1032,8 @@ test('DELETE /:id rejects and performs no side effects for a document belonging 
       method: 'DELETE',
       url: '/foreign-doc',
       headers: { authorization: authHeader },
-      payload: { reason: 'The draft was uploaded in error and is no longer required.' },
+      payload: { reason: 'The draft was uploaded in error and is no longer required.',
+        expectedUpdatedAt: '2026-09-30T00:00:00.000Z', policyId: 'policy-1', evidenceRef: 'TEST-REMOVAL-1' },
     });
 
     assert.equal(response.statusCode, 404);

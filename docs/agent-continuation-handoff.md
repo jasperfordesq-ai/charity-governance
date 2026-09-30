@@ -2,6 +2,14 @@
 
 Last updated: 2026-09-30
 
+Canonical CI 36701064283 for 63ca0da5 passed the full PostgreSQL backup/restore
+step, resolving the sequence incompatibility with the unchanged verifier. The
+later API suite exposed a stale cross-charity delete fixture: missing recovery
+policy/version/evidence fields stopped at validation. The fixture now submits
+the current request and asserts tenant-scoped lock/read plus no deletion or
+recovery update. API build and all 36 document reliability tests pass locally.
+Whole revised CI/E2E and deployment/live acceptance still remain required.
+
 Audit-ordering backup compatibility candidate: the integer cursor now uses a
 transactional database-default allocator. Populated upgrade/down/upgrade keeps
 historical rows and high-water ordering; append-only, concurrent allocation,
