@@ -6,7 +6,7 @@ import { KMSClient, GenerateDataKeyCommand, DecryptCommand } from '@aws-sdk/clie
 import { S3Client, GetObjectCommand, PutObjectCommand } from '@aws-sdk/client-s3';
 import { KmsRecoveryDataKeys } from '../services/recovery-data-keys-kms.js';
 import { S3AuthorityObjectStore } from '../services/recovery-authority-s3.js';
-import { preserveRecoveryPreparation, openRecoveryPreparation } from '../services/recovery-preparation-envelope.js';
+import { preserveRecoveryPreparation, readVerifiedRecoveryPreparation } from '../services/recovery-preparation-envelope.js';
 import { prepareComplaintRecoveryFacts } from '../services/complaint-recovery-preparation.js';
 import { complaintPreparationFixture } from './complaint-preparation-fixture.js';
 
@@ -73,8 +73,25 @@ test('recreated KMS and S3 adapters recover original encrypted bytes after lost 
     assert.equal(receipt.replayed, true); assert.equal(receipt.actionAuthorized, false);
     assert.equal(receipt.digest, createHash('sha256').update(original).digest('hex'));
     assert.equal(generations, 1); assert.equal([...objects.values()][0], original);
-    assert.equal((await openRecoveryPreparation(original, context, restarted.keys)).body, body);
+    const verified = await readVerifiedRecoveryPreparation(receipt.digest, context, restarted.keys, restarted.store);
+    assert.equal(verified.body, body); assert.equal(verified.actionAuthorized, false);
+    const objectKey = 'replay/install/charity/operation.json';
+    const keysBefore = returnedKeys.length;
+    objects.delete(objectKey);
+    await assert.rejects(() => readVerifiedRecoveryPreparation(receipt.digest, context, restarted.keys, restarted.store), /unresolved/);
+    assert.equal(objects.size, 0); assert.equal(generations, 1);
+    // A structurally valid replacement must fail before asking KMS to decrypt.
+    const replacement = JSON.parse(original);
+    replacement.sealed.ciphertext = Buffer.from('replacement').toString('base64');
+    objects.set(objectKey, JSON.stringify(replacement));
+    await assert.rejects(() => readVerifiedRecoveryPreparation(receipt.digest, context, restarted.keys, restarted.store), /unresolved/);
+    assert.equal(returnedKeys.length, keysBefore); assert.equal(generations, 1);
+    objects.set(objectKey, original);
+    await assert.rejects(() => readVerifiedRecoveryPreparation('', context, restarted.keys, restarted.store), /unresolved/);
+    await assert.rejects(() => readVerifiedRecoveryPreparation(receipt.digest, { ...context, writerEpoch: 2 }, restarted.keys, restarted.store), /unresolved/);
+    assert.equal(returnedKeys.length, keysBefore);
     keyUnavailable = true;
+    await assert.rejects(() => readVerifiedRecoveryPreparation(receipt.digest, context, restarted.keys, restarted.store), /unresolved/);
     await assert.rejects(() => preserveRecoveryPreparation(body, context, restarted.keys, restarted.store), /unresolved/);
     assert.equal(generations, 1); assert.equal([...objects.values()][0], original);
     assert.ok(returnedKeys.every(key => key.every(byte => byte === 0)));

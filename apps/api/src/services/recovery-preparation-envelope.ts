@@ -50,7 +50,9 @@ export interface RecoveryEnvelopeObjects {
 }
 
 /** Publish only a candidate blob, never an intent/head or execution permission.
- * Unknown writes require retrying this operation, not changing its identity. */
+ * Unknown writes require retrying this operation, not changing its identity.
+ * Once bound to trusted history, use readVerifiedRecoveryPreparation instead:
+ * this candidate publisher cannot distinguish first creation from object loss. */
 export async function preserveRecoveryPreparation(body: string, context: RecoveryEnvelopeContext,
   keys: RecoveryDataKeys, store: RecoveryEnvelopeObjects) {
   try {
@@ -69,6 +71,23 @@ export async function preserveRecoveryPreparation(body: string, context: Recover
     return { digest: createHash('sha256').update(envelope, 'utf8').digest('hex'), replayed,
       actionAuthorized: false as const };
   } catch { throw new Error('Recovery envelope preservation is unresolved; retry the same operation identity'); }
+}
+
+/** Read a previously bound envelope without any creation fallback. The required
+ * digest must come from independently verified history, never the fetched blob
+ * or a restored local database alone. Matching bytes are evidence, not current
+ * execution authority; this function does not verify the history itself. */
+export async function readVerifiedRecoveryPreparation(expectedDigest: string,
+  rawContext: RecoveryEnvelopeContext, keys: RecoveryDataKeys,
+  store: Pick<RecoveryEnvelopeObjects, 'readReplay'>) {
+  try {
+    const context = contextSchema.parse(rawContext);
+    if (!/^[a-f0-9]{64}$/.test(expectedDigest)) throw new Error('digest');
+    const envelope = await store.readReplay(context.operationId);
+    if (envelope === null || Buffer.byteLength(envelope, 'utf8') > 65536
+      || createHash('sha256').update(envelope, 'utf8').digest('hex') !== expectedDigest) throw new Error('missing or replaced');
+    return await openRecoveryPreparation(envelope, context, keys);
+  } catch { throw new Error('Referenced recovery preparation is unresolved'); }
 }
 
 function secretContext(context: RecoveryEnvelopeContext, wrappedKey: string) {
