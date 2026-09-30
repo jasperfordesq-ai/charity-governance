@@ -1344,6 +1344,8 @@ model DocumentPurgeAuthorization {
   @@index([organisationId, documentId, authorizedAt])
   copyAuthorities DocumentCopyDispositionAuthority[]
 
+  copyHolds DocumentCopyHoldEvent[]
+
 }
 
 // Reviewer evidence about an explicitly referenced downstream scope, never a
@@ -1949,6 +1951,8 @@ model ComplaintPurgeAuthorization {
   @@unique([id, organisationId])
   @@index([organisationId, complaintId, authorizedAt, id], map: "ComplaintPurgeAuthorization_history_idx")
   copyAuthorities ComplaintCopyDispositionAuthority[]
+
+  copyHolds ComplaintCopyHoldEvent[]
 
 }
 
@@ -2769,6 +2773,8 @@ model DocumentCopyDispositionAuthority {
   occurredAt DateTime @default(now())
   @@unique([authorizationId, area, scopeRef, revision], map: "DocumentCopyAuthority_scope_revision_key")
   @@index([organisationId, authorizationId, occurredAt, id], map: "DocumentCopyDispositionAuthority_history_idx")
+  holdRevision Int @default(0)
+
 }
 
 // Scoped later review history; does not change original primary authority.
@@ -2793,4 +2799,44 @@ model ComplaintCopyDispositionAuthority {
   occurredAt DateTime @default(now())
   @@unique([authorizationId, area, scopeRef, revision], map: "ComplaintCopyAuthority_scope_revision_key")
   @@index([organisationId, authorizationId, occurredAt, id], map: "ComplaintCopyDispositionAuthority_history_idx")
+  holdRevision Int @default(0)
+
+}
+
+// Scoped preservation survives removal of the primary record.
+model DocumentCopyHoldEvent {
+  id String @id @default(cuid())
+  organisationId String
+  authorizationId String
+  authorization DocumentPurgeAuthorization @relation(fields: [authorizationId, organisationId], references: [id, organisationId], onDelete: Restrict, map: "DocumentCopyHold_authorization_fkey")
+  area String
+  scopeRef String
+  revision Int
+  observationRevision Int
+  held Boolean
+  actorUserId String
+  evidenceRef String
+  reason String
+  occurredAt DateTime @default(now())
+  @@unique([authorizationId, area, scopeRef, revision], map: "DocumentCopyHold_scope_revision_key")
+  @@index([organisationId, authorizationId, occurredAt, id], map: "DocumentCopyHoldEvent_history_idx")
+}
+
+// Scoped preservation survives removal of the primary record.
+model ComplaintCopyHoldEvent {
+  id String @id @default(cuid())
+  organisationId String
+  authorizationId String
+  authorization ComplaintPurgeAuthorization @relation(fields: [authorizationId, organisationId], references: [id, organisationId], onDelete: Restrict, map: "ComplaintCopyHold_authorization_fkey")
+  area String
+  scopeRef String
+  revision Int
+  observationRevision Int
+  held Boolean
+  actorUserId String
+  evidenceRef String
+  reason String
+  occurredAt DateTime @default(now())
+  @@unique([authorizationId, area, scopeRef, revision], map: "ComplaintCopyHold_scope_revision_key")
+  @@index([organisationId, authorizationId, occurredAt, id], map: "ComplaintCopyHoldEvent_history_idx")
 }

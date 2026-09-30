@@ -1,5 +1,11 @@
 # CharityPilot Full-Platform Remediation Audit
 
+> DPO-05 scoped-copy holds, 2026-09-30: source now retains revisioned
+> preservation decisions after primary disposal and requires new copy authority
+> to bind the current unheld scope. Restore inventories include this history.
+> Policy/observation binding, API/UI/audit and deployment remain open; this is
+> not end-to-end copy disposal or independent host-loss recovery authority.
+
 > DPO-05 scoped-copy authority persistence, 2026-09-30: append-only,
 > time-limited Owner review/withdrawal histories now exist in source for both
 > documents and complaints. Original-plan observation guards remain unchanged.

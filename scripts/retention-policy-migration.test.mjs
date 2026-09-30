@@ -349,6 +349,7 @@ test('retention policy and recovery-state upgrade preserve documents and enforce
     assert.throws(() => assertPurgeRestoreLedger(authority, oldRestored), error => {
       assert.equal(error.code, 'PURGE_RESTORE_RECONCILIATION_REQUIRED');
       assert.equal(error.report.resurrectedDocuments, 1);
+      assert.ok(error.report.differences.some(item => item.table === 'DocumentCopyHoldEvent' && item.missing === 5));
       assert.ok(error.report.differences.some(item => item.table === 'DocumentCopyDispositionAuthority' && item.missing === 3));
       assert.ok(error.report.differences.some(item => item.table === 'DocumentPurgeClaim' && item.missing === 1));
       return true;

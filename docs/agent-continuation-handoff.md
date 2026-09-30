@@ -2,7 +2,36 @@
 
 Last updated: 2026-09-30
 
-## Scoped copy authority persistence — 30 September 2026 (source only)
+## Scoped copy preservation - 30 September 2026 (source only)
+
+Migration 2000 adds immutable document/complaint copy-hold histories under the
+retained primary disposal authorization. Active same-charity Owner/Admin review
+can preserve a named area/scope even before its first observation. Releases
+require the exact next revision; stale observation reviews, repeated states,
+foreign actors and immutable-history edits are refused. Primary records need
+not exist. Restore comparison and disposable reset/model inventories include
+both ledgers.
+
+New scoped authority records bind an explicit hold revision and require the
+current scope to be unheld; withdrawals remain possible while held. A hold
+arriving after a review is retained independently, so eventual consumers must
+recheck that hold revision rather than treating the older review as current.
+This is persistence and database enforcement only: API/UI, metadata audit,
+current policy binding and observation-time authority checks remain to be
+implemented. No external copy was deleted and no policy decision was approved.
+Runtime remains e39edbe8; migrations 1900/2000 are not deployed.
+
+Scoped-hold evidence: final real PostgreSQL complaint proof passed in 58.69s
+and document proof in 54.76s. Coverage includes Owner/Admin versus Member,
+suspended and foreign actors; newly discovered scopes; release/stale binding;
+withdrawal while held; both explicitly lock-ordered hold/review races; and
+populated restore rejection when hold history is missing. Supporting 94 tests,
+Prisma validation/generation and API build passed. Combined pending migrations
+1900/2000: zero blocked, two index warnings, no overrides. Private evidence:
+copy-hold-{red,database-final,unit,build}.log and copy-hold-migration-gate.json.
+All local test/build sessions are terminal. No live deployment occurred.
+
+## Scoped copy authority persistence â€” 30 September 2026 (source only)
 
 Migration 1900 adds separate document and complaint scoped authority histories.
 An active same-charity Owner can append a time-limited reviewed decision against

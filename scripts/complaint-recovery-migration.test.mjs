@@ -373,6 +373,14 @@ test('complaint recovery migration preserves records and enforces reviewed remov
     const competingAuthority = await Promise.all(['a','b'].map(suffix=>concurrent(scopedAuthority.review(`competing-authority-${suffix}`,{revision:4,previous:"'replacement-copy'"}))));
     assert.equal(competingAuthority.filter(result=>result.code===0).length,1);
     assert.match(competingAuthority.find(result=>result.code!==0).stderr,/authority revision/);
+    const lastScopeAuthority=sql(`SELECT id FROM "ComplaintCopyDispositionAuthority" WHERE revision=4;`);
+    await orderedRace(scopedAuthority.hold('racing-hold',{revision:5}),
+      scopedAuthority.review('blocked-copy-review',{revision:5,previous:`'${lastScopeAuthority}'`,holdRevision:4}),/current unheld scope/);
+    sql(scopedAuthority.hold('racing-release',{revision:6,held:false}));
+    await orderedRace(scopedAuthority.review('review-before-hold',{revision:5,previous:`'${lastScopeAuthority}'`,holdRevision:6}),
+      scopedAuthority.hold('hold-after-review',{revision:7}));
+    assert.equal(sql(`SELECT "holdRevision" FROM "ComplaintCopyDispositionAuthority" WHERE id='review-before-hold';`),'6');
+    assert.equal(sql(`SELECT held FROM "ComplaintCopyHoldEvent" WHERE id='hold-after-review';`),'t');
     const authority = JSON.parse(sql(PURGE_RESTORE_SNAPSHOT_SQL));
     assert.doesNotMatch(JSON.stringify(authority), /Private original narrative|Reviewed synthetic administrative hold|HOLD-001/);
     const currentBackup = docker(['exec',container,'pg_dump','-U','postgres','--no-owner','--no-privileges','postgres']);
@@ -388,7 +396,7 @@ test('complaint recovery migration preserves records and enforces reviewed remov
       if(database==='old_complaint_restore') {
         assert.throws(()=>assertPurgeRestoreLedger(authority,snapshot),error=>{
           assert.equal(error.code,'PURGE_RESTORE_RECONCILIATION_REQUIRED');
-          for(const table of ['ComplaintHoldEvent','ComplaintRemoval','ComplaintResolutionEvidence','ComplaintRecoveryState','ComplaintPurgeAuthorization','ComplaintPurgeAuthorizationWithdrawal','ComplaintPurgeClaim','ComplaintPurgeDispositionEvent','ComplaintCopyDispositionAuthority']) {
+          for(const table of ['ComplaintHoldEvent','ComplaintRemoval','ComplaintResolutionEvidence','ComplaintRecoveryState','ComplaintPurgeAuthorization','ComplaintPurgeAuthorizationWithdrawal','ComplaintPurgeClaim','ComplaintPurgeDispositionEvent','ComplaintCopyDispositionAuthority','ComplaintCopyHoldEvent']) {
             assert.ok(error.report.differences.some(item=>item.table===table && (item.missing || item.changed)),table);
           }
           return true;
