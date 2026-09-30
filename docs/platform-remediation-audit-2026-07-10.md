@@ -1,5 +1,14 @@
 # CharityPilot Full-Platform Remediation Audit
 
+> **DPO release evidence, 2026-10-01:** The deferred complaint-hold
+> constraint from `8d4a0058` is deployed to the private VM after exact
+> hosted CI/E2E success. Runtime and migration checks passed, with zero
+> active recovery bindings; backup preservation, off-VM copies and an
+> isolated restore were verified. Ordinary runtime database privileges
+> still allow plausible outcome insertion, and no independent provider or
+> host-loss reopening proof exists. Keep P05/P07/P08 and DPO acceptance
+> open. See `.charitypilot-private/release-8d4a0058-acceptance.md`.
+
 > **Complaint hold database gate follow-up, 2026-10-01:** a new deferred
 > constraint requires a matching same-transaction recovery outcome for
 > post-binding hold events. Direct inserts are refused in the real

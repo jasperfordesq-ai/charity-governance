@@ -1,5 +1,15 @@
 # CharityPilot Agent Continuation Handoff
 
+> **Private VM release, 2026-10-01 00:22 Dublin:** Exact CI
+> `36789520000` and E2E `36789520093` passed on `8d4a0058`; guarded
+> blue-green cutover made that revision live on green, retaining
+> `674be710` for rollback. The new deferred trigger is enabled and
+> recovery enforcement has zero bindings. Service, local host boundary,
+> preserved backup hashes, two copied recovery sets and isolated restore
+> (140 migrations, 63 documents) passed. This is a partial inactive
+> relational gate, not independent recovery or DPO acceptance. Private
+> receipt: `.charitypilot-private/release-8d4a0058-acceptance.md`.
+
 > **Complaint hold relational gate, 2026-10-01:** migration
 > `20261001020000_complaint_hold_recovery_event_gate` adds a deferred
 > same-transaction outcome check to every hold-event insert once a charity
