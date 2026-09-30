@@ -2,6 +2,22 @@
 
 Last updated: 2026-09-30
 
+## Copy review audit integration - 30 September 2026 (source only)
+
+Governance Audit now exposes six metadata-only feeds: document and complaint
+copy authority decisions, scoped preservation holds and copy observations.
+The dashboard names each history and links back to its restricted record area.
+Reasons, scope references and evidence references are excluded from the overview.
+Observations are labelled as observations, not proof of aggregate erasure.
+
+All 26 audit API tests pass, including six new cases covering Member/connector
+refusal, same-charity cursors, equal-timestamp pagination and exact response
+projections. API build, web type check and targeted page lint pass. Private
+copy-audit-red.log preserves six initial missing-feed failures; copy-audit-green.log
+records the passing run. No live records changed. Runtime remains e39edbe8;
+real browser verification, remaining lifecycle audit feeds, copy-review forms,
+deployment and the broader original DPO scope remain open.
+
 ## Copy review API - 30 September 2026 (source only)
 
 Document and complaint families now expose browser-only copy-authority and

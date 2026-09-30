@@ -24,6 +24,12 @@ const feedDefinitions = [
   { key: 'registers', label: 'Register record actions', path: '/governance-audit/registers', href: '/registers' },
   { key: 'complaint-resolution', label: 'Complaint resolution reviews', path: '/governance-audit/complaint-resolution', href: '/registers' },
   { key: 'complaint-holds', label: 'Complaint hold changes', path: '/governance-audit/complaint-holds', href: '/registers' },
+  { key: 'document-copy-authorities', label: 'Document copy authority decisions', path: '/governance-audit/document-copy-authorities', href: '/documents' },
+  { key: 'document-copy-holds', label: 'Document copy preservation holds', path: '/governance-audit/document-copy-holds', href: '/documents' },
+  { key: 'document-copy-evidence', label: 'Document copy observations', path: '/governance-audit/document-copy-evidence', href: '/documents' },
+  { key: 'complaint-copy-authorities', label: 'Complaint copy authority decisions', path: '/governance-audit/complaint-copy-authorities', href: '/registers' },
+  { key: 'complaint-copy-holds', label: 'Complaint copy preservation holds', path: '/governance-audit/complaint-copy-holds', href: '/registers' },
+  { key: 'complaint-copy-evidence', label: 'Complaint copy observations', path: '/governance-audit/complaint-copy-evidence', href: '/registers' },
   { key: 'controls', label: 'Control verification', path: '/governance-audit/controls', href: '/registers' },
   { key: 'compliance', label: 'Compliance changes', path: '/governance-audit/compliance', href: '/compliance' },
   { key: 'reports', label: 'Compliance report preparations', path: '/governance-audit/reports', href: '/export' },
@@ -55,6 +61,14 @@ function eventDate(event: AuditEvent): string | null {
 }
 
 function eventDescription(event: AuditEvent, feed: string): string {
+  if (feed.includes('-copy-')) {
+    const action = feed.endsWith('-holds')
+      ? (event.held === true ? 'Preservation hold recorded' : 'Preservation hold released')
+      : feed.endsWith('-authorities')
+        ? `Copy authority ${String(event.state ?? 'reviewed').replaceAll('_', ' ').toLowerCase()}`
+        : `Copy observation: ${String(event.status ?? 'recorded').replaceAll('_', ' ').toLowerCase()}`;
+    return `${action} · ${String(event.area ?? 'area unknown').replaceAll('_', ' ').toLowerCase()} · review ${String(event.authorizationId ?? 'unknown')}`;
+  }
   if (feed === 'reminders') {
     if (event.previousStatus === event.nextStatus && event.reconciliationOutcome) {
       return `Reminder reconciliation ${String(event.reconciliationOutcome).replaceAll('_', ' ').toLowerCase()} · deadline ${String(event.deadlineId ?? 'unknown')}`;

@@ -767,3 +767,66 @@ test('complaint hold audit exposes transitions without case evidence or reasons'
     assert.equal(response.json().data[0].held, true);
   } finally { await app.close(); }
 });
+
+
+for (const family of ['document', 'complaint']) {
+  for (const [suffix, modelSuffix, fields] of [
+    ['authorities', 'CopyDispositionAuthority', ['state', 'disposition', 'observationRevision', 'holdRevision']],
+    ['holds', 'CopyHoldEvent', ['held', 'observationRevision']],
+    ['evidence', 'PurgeDispositionEvent', ['status', 'copyAuthorityId']],
+  ] as const) {
+    test(`${family} copy ${suffix}: restricted metadata, tenant cursor and equal-time pagination`, async () => {
+      const feed = `${family}-copy-${suffix}`;
+      const safe = ['id', 'authorizationId', 'area', 'revision', 'actorUserId', 'occurredAt', ...fields];
+      const rows = Array.from({ length: 52 }, (_, i) => ({
+        id: `copy-${String(52 - i).padStart(3, '0')}`, occurredAt: new Date('2026-09-30T10:00:00Z'),
+        authorizationId: 'review-1', area: 'BACKUP', revision: i + 1, actorUserId: 'u1',
+        state: 'WITHDRAWN', disposition: null, observationRevision: 2, holdRevision: 3,
+        held: true, status: 'NEEDS_REVIEW', copyAuthorityId: null,
+        scopeRef: 'private scope', reason: 'private reason', evidenceRef: 'private evidence',
+        retentionEvidenceRef: 'private retention', holdEvidenceRef: 'private hold',
+      }));
+      let reads = 0;
+      const delegate = {
+        findFirst: async (args: { where: { organisationId: string; id: string } }) => {
+          assert.equal(args.where.organisationId, 'org-1');
+          return rows.find(row => row.id === args.where.id) ?? null;
+        },
+        findMany: async (args: { where: { organisationId: string; OR?: [unknown, { id: { lt: string } }] }; select: Record<string, boolean>; take: number; orderBy: unknown }) => {
+          reads++;
+          assert.equal(args.where.organisationId, 'org-1');
+          assert.deepEqual(Object.keys(args.select).sort(), [...safe].sort());
+          assert.deepEqual(args.orderBy, [{ occurredAt: 'desc' }, { id: 'desc' }]);
+          assert.equal(args.take, 51);
+          return rows.filter(row => !args.where.OR || row.id < args.where.OR[1].id.lt)
+            .slice(0, args.take).map(row => Object.fromEntries(Object.entries(row).filter(([key]) => args.select[key])));
+        },
+      };
+      for (const [role, clientKind] of [['MEMBER', 'WEB'], ['ADMIN', 'MCP_CONNECTOR'], ['ADMIN', 'WEB']] as const) {
+        const app = await appFor(role, {
+          [`${family}${modelSuffix}`]: delegate,
+          authSession: { findFirst: async () => ({ id: 's1', clientKind, accessLevel: 'ADMIN', dataScope: 'FULL' }) },
+        });
+        try {
+          const first = await app.inject({ method: 'GET', url: `/governance-audit/${feed}`, headers: { authorization: token(role) } });
+          if (role === 'MEMBER' || clientKind !== 'WEB') {
+            assert.equal(first.statusCode, 403);
+            assert.equal(reads, 0);
+            continue;
+          }
+          assert.equal(first.statusCode, 200, first.body);
+          assert.equal(first.json().data.length, 50);
+          assert.equal(first.json().nextCursor, 'copy-003');
+          assert.doesNotMatch(first.body, /private|scopeRef|evidenceRef|reason/);
+          const second = await app.inject({ method: 'GET', url: `/governance-audit/${feed}?before=copy-003`, headers: { authorization: token(role) } });
+          assert.equal(second.statusCode, 200);
+          assert.deepEqual(second.json().data.map((row: { id: string }) => row.id), ['copy-002', 'copy-001']);
+          assert.equal(second.json().nextCursor, null);
+          const foreign = await app.inject({ method: 'GET', url: `/governance-audit/${feed}?before=foreign`, headers: { authorization: token(role) } });
+          assert.equal(foreign.statusCode, 404);
+          assert.equal(reads, 2);
+        } finally { await app.close(); }
+      }
+    });
+  }
+}

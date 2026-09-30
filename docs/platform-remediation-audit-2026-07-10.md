@@ -1,5 +1,10 @@
 # CharityPilot Full-Platform Remediation Audit
 
+> DPO-05 copy audit integration, 2026-09-30: six restricted metadata feeds
+> now cover both families of copy authority, preservation holds and observations.
+> API tests, build, web types and targeted lint pass; browser/deployment proof,
+> remaining lifecycle histories and copy-review dashboard forms remain open.
+
 > DPO-05 copy review API, 2026-09-30: both families now have browser-only
 > authority/hold history and reviewed writes, plus separate copy policies.
 > Owner approval, Admin proposals/preservation and ADMIN session-level gates

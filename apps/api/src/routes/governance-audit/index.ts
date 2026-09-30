@@ -12,6 +12,12 @@ const feedSchema = z.enum([
   'reports', 'deletions', 'deletion-attempts', 'deletion-recoveries', 'data-requests',
   'data-request-links', 'data-request-targets', 'data-request-responses', 'data-request-coverage',
   'action-approvals', 'connector-actions', 'integrations',
+  'document-copy-authorities',
+  'document-copy-holds',
+  'document-copy-evidence',
+  'complaint-copy-authorities',
+  'complaint-copy-holds',
+  'complaint-copy-evidence',
 ]);
 const querySchema = z.object({
   before: z.string().min(1).max(160).regex(/^[A-Za-z0-9_-]+$/).optional(),
@@ -78,6 +84,19 @@ function feedConfig(app: FastifyInstance, feed: Exclude<z.infer<typeof feedSchem
     case 'complaint-holds': return { delegate: delegate(app.prisma.complaintHoldEvent), orderField: 'occurredAt',
       select: { id: true, complaintId: true, actorUserId: true, revision: true,
         recordRevision: true, held: true, occurredAt: true } };
+    // Scope references, reasons and evidence remain in restricted copy reviews.
+    case 'document-copy-authorities': return { delegate: delegate(app.prisma.documentCopyDispositionAuthority), orderField: 'occurredAt',
+      select: { id: true, authorizationId: true, area: true, revision: true, actorUserId: true, occurredAt: true, state: true, disposition: true, observationRevision: true, holdRevision: true } };
+    case 'document-copy-holds': return { delegate: delegate(app.prisma.documentCopyHoldEvent), orderField: 'occurredAt',
+      select: { id: true, authorizationId: true, area: true, revision: true, actorUserId: true, occurredAt: true, held: true, observationRevision: true } };
+    case 'document-copy-evidence': return { delegate: delegate(app.prisma.documentPurgeDispositionEvent), orderField: 'occurredAt',
+      select: { id: true, authorizationId: true, area: true, revision: true, actorUserId: true, occurredAt: true, status: true, copyAuthorityId: true } };
+    case 'complaint-copy-authorities': return { delegate: delegate(app.prisma.complaintCopyDispositionAuthority), orderField: 'occurredAt',
+      select: { id: true, authorizationId: true, area: true, revision: true, actorUserId: true, occurredAt: true, state: true, disposition: true, observationRevision: true, holdRevision: true } };
+    case 'complaint-copy-holds': return { delegate: delegate(app.prisma.complaintCopyHoldEvent), orderField: 'occurredAt',
+      select: { id: true, authorizationId: true, area: true, revision: true, actorUserId: true, occurredAt: true, held: true, observationRevision: true } };
+    case 'complaint-copy-evidence': return { delegate: delegate(app.prisma.complaintPurgeDispositionEvent), orderField: 'occurredAt',
+      select: { id: true, authorizationId: true, area: true, revision: true, actorUserId: true, occurredAt: true, status: true, copyAuthorityId: true } };
     case 'controls': return { delegate: delegate(app.prisma.riskControlVerification), orderField: 'sequence',
       select: { id: true, sequence: true, riskId: true, actorUserId: true, controlReference: true,
         state: true, verifiedAt: true, riskRevision: true, occurredAt: true } };
