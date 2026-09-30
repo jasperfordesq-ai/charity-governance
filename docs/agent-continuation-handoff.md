@@ -2,6 +2,22 @@
 
 Last updated: 2026-09-30
 
+## Inactive recovery reservation acquisition
+
+`recovery-operation-reservation.ts` adds acquisition against a strict format-2
+control contract: charity/installation binding, current writer ID and epoch,
+journal checkpoint, and one non-expiring operation/preparation digest. Atomic
+conflicts and lost acknowledgements require reconciliation or exact retry;
+receipts still return `actionAuthorized: false`. No live caller, provider adapter,
+release, initialization, writer replacement or database execution fence is wired.
+The provider integration must use one authoritative control resource for journal
+publication, reservations and writer changes. Do not combine this with a separate
+format-1 head or interpret it as host-loss recovery readiness. Preparation facts
+and encrypted envelope bytes have distinct digests and must remain distinguished.
+Local verification: four focused reservation tests, 2,502 main API tests and four
+separate PostgreSQL migration tests pass. Hosted verification and deployment of
+this addition remain pending; the private release receipt is authoritative.
+
 ## Recovery authority development and corrected release status
 
 The inactive recovery reader now joins full journal/current-head verification
