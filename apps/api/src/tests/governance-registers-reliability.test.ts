@@ -69,6 +69,7 @@ test('Members cannot read sensitive registers or their summary through list or d
       '/change-audit',
       '/complaints/sensitive-record',
       '/complaints/sensitive-record/resolution-evidence',
+      '/complaints/sensitive-record/holds',
       '/complaints/policy-revisions',
       '/complaints/removed',
       '/complaints/sensitive-record/retention-assessment',
@@ -100,6 +101,8 @@ test('Admin connector cannot directly read excluded control histories or record 
       ['GET', '/change-audit'],
       ['POST', '/risks/risk-1/control-verifications'],
       ['GET', '/complaints/complaint-1/resolution-evidence'],
+      ['GET', '/complaints/complaint-1/holds'],
+      ['POST', '/complaints/complaint-1/holds'],
       ['POST', '/complaints/complaint-1/resolution-evidence'],
       ['GET', '/complaints/policy-revisions'],
       ['GET', '/complaints/removed'],
@@ -1259,4 +1262,20 @@ test('complaint resolution history is bounded and tenant-scoped after source rem
     assert.deepEqual(queries, [{ where: { organisationId: 'org-1', complaintId: 'removed', revision: { lt: 100 } },
       orderBy: { revision: 'desc' }, take: 51 }]);
   } finally { await app.close(); }
+});
+
+test('complaint hold writes reject Members and read-only browser sessions before service work', async () => {
+  for (const role of ['MEMBER','ADMIN'] as const) {
+    let writes = 0;
+    const app = await buildApp({
+      authSession: { findFirst: async () => ({ id: 'sess-1', clientKind: 'WEB', accessLevel: 'READ', dataScope: 'FULL' }) },
+      $transaction: async () => { writes++; throw new Error('must not reach service'); },
+    }, role);
+    try {
+      const response = await app.inject({ method: 'POST', url: `${PREFIX}/complaints/complaint-1/holds`,
+        headers: { authorization: tokenFor(role) }, payload: {} });
+      assert.equal(response.statusCode,403);
+      assert.equal(writes,0);
+    } finally { await app.close(); }
+  }
 });

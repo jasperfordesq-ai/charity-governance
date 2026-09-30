@@ -66,7 +66,7 @@ export default function SecurityDataPage() {
               </li>
               <li className="rounded-lg border border-gray-200 p-4 dark:border-gray-700">
                 <h3 className="font-semibold">Complaint recovery and retention</h3>
-                <p className="mt-1 text-gray-600 dark:text-gray-300">Review complaint resolution evidence, approved class rules and recoverable complaints. Permanent complaint erasure is not available.</p>
+                <p className="mt-1 text-gray-600 dark:text-gray-300">Review complaint resolution evidence, administrative holds, approved class rules and recoverable complaints. Permanent complaint erasure is not available.</p>
                 <Link className={linkClass} href="/registers">Open Registers</Link>
               </li>
               <li className="rounded-lg border border-gray-200 p-4 dark:border-gray-700">
@@ -79,7 +79,7 @@ export default function SecurityDataPage() {
 
           <AppSection title="Controls still being established">
             <p className="text-sm leading-6 text-gray-600 dark:text-gray-300">
-              A per-document administrative deletion hold blocks ordinary Vault deletion, but is not a legal-hold decision.
+              Administrative holds block Vault document and complaint removal, but are not legal-hold decisions.
               Recovery controls cover eligible Vault drafts and complaints under approved class rules.
               Vault draft disposal has a separate Owner review. Application-wide retention rules,
               legal holds, recovery for other record classes and permanent complaint erasure remain incomplete. A data request in the

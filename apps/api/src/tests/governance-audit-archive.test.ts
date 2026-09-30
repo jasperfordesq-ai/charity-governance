@@ -748,3 +748,22 @@ test('complaint resolution overview keeps controlled case details out of the aud
     assert.match(response.body, /WITHDRAWN/);
   } finally { await app.close(); }
 });
+
+test('complaint hold audit exposes transitions without case evidence or reasons', async () => {
+  const app = await appFor('ADMIN', { complaintHoldEvent: { findMany: async (args: any) => {
+    assert.deepEqual(args.where, { organisationId: 'org-1' });
+    assert.equal(args.select.reason, undefined);
+    assert.equal(args.select.evidenceRef, undefined);
+    assert.equal(args.select.held, true);
+    assert.equal(args.select.actorUserId, true);
+    return [{ id: 'hold-1', complaintId: 'complaint-1', revision: 1, recordRevision: 2,
+      actorUserId: 'u1', held: true, occurredAt: new Date('2026-01-03') }];
+  } } });
+  try {
+    const response = await app.inject({ method: 'GET', url: '/governance-audit/complaint-holds',
+      headers: { authorization: token('ADMIN') } });
+    assert.equal(response.statusCode, 200);
+    assert.doesNotMatch(response.body, /evidenceRef|reason/);
+    assert.equal(response.json().data[0].held, true);
+  } finally { await app.close(); }
+});

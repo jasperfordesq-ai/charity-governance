@@ -141,6 +141,10 @@ export const EXCLUDED_MUTATIONS: readonly ExcludedMutation[] = [
     reason: 'Recording or withdrawing complaint resolution evidence requires human review in the dashboard.',
   },
   {
+    route: 'POST /api/v1/governance-registers/complaints/:id/holds',
+    reason: 'Applying or releasing complaint holds requires a human administrator in the dashboard.',
+  },
+  {
     route: 'POST /api/v1/governance-registers/risks/:id/control-verifications',
     reason: 'A dated control-verification claim or withdrawal must be made after a person checks the cited evidence in the Registers screen; the connector must not assert verification.',
   },

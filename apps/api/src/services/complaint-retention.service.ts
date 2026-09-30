@@ -24,6 +24,9 @@ export class ComplaintRetentionService {
         evidenceRevision: latest?.revision ?? 0, assessedAt: clock!.now,
         policyId: policies.length === 1 ? policies[0]!.id : null,
         removalAuthorized: false as const };
+      const hold = await tx.complaintHoldEvent.findFirst({ where: { organisationId, complaintId },
+        orderBy: { revision: 'desc' }, select: { held: true } });
+      if (hold?.held) return { ...base, state: 'ADMINISTRATIVE_HOLD' as const, retentionUntil: null };
       if (policies.length !== 1) return { ...base, state: 'POLICY_REVIEW_REQUIRED' as const, retentionUntil: null };
       const policy = policies[0]!;
       if (policy.retentionMode === 'PERMANENT') return { ...base, state: 'PERMANENT_RETENTION' as const, retentionUntil: null };

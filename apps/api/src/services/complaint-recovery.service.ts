@@ -36,6 +36,9 @@ export class ComplaintRecoveryService {
   remove(input: Input & { policyId: string; expectedEvidenceRevision: number; evidenceRef: string; reason: string }) {
     return this.prisma.$transaction(async tx => {
       const complaint = await this.lock(tx, input, false);
+      const hold = await tx.complaintHoldEvent.findFirst({ where: { organisationId: input.organisationId,
+        complaintId: input.complaintId }, orderBy: { revision: 'desc' }, select: { held: true } });
+      if (hold?.held) throw new AppError(409, 'COMPLAINT_HELD', 'An administrative hold blocks complaint removal. Review the hold separately.');
       if (complaint.status !== 'CLOSED' || complaint.reviewedByBoard || complaint.boardMinuteReference?.trim()) {
         throw new AppError(409, 'COMPLAINT_REMOVAL_REVIEW_REQUIRED', 'Only closed complaints without retained board evidence can enter recovery.');
       }

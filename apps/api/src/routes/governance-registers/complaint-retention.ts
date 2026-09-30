@@ -4,6 +4,7 @@ import { requireAdmin, requireOwner } from '../../middleware/roles.js';
 import { RetentionPolicyService } from '../../services/retention-policy.service.js';
 import { ComplaintRetentionService } from '../../services/complaint-retention.service.js';
 import { ComplaintRecoveryService } from '../../services/complaint-recovery.service.js';
+import { ComplaintHoldService } from '../../services/complaint-hold.service.js';
 import { requireSessionLevel } from '../../middleware/session-level.js';
 import { handleError } from '../../utils/errors.js';
 import { sendCreated, sendSuccess } from '../../utils/response.js';
@@ -22,7 +23,19 @@ export function registerComplaintRetentionRoutes(app: FastifyInstance) {
   const policies = new RetentionPolicyService(app.prisma, 'COMPLAINT');
   const retention = new ComplaintRetentionService(app.prisma);
   const recovery = new ComplaintRecoveryService(app.prisma);
+  const holds = new ComplaintHoldService(app.prisma);
   const revision = z.number().int().positive().max(2147483647);
+  app.get<{ Params: { id: string } }>('/complaints/:id/holds', { preHandler: [requireAdmin, webOnly] }, async (request, reply) => {
+    try {
+      const { before } = z.object({ before: z.coerce.number().int().positive().max(2147483647).optional() }).strict().parse(request.query);
+      return sendSuccess(reply, await holds.list(request.user.organisationId, request.params.id, before));
+    } catch (error) { return failure(reply, error); }
+  });
+  app.post<{ Params: { id: string } }>('/complaints/:id/holds', { preHandler: [requireAdmin, webOnly, requireSessionLevel('ADMIN')] }, async (request, reply) => {
+    try {
+      return sendCreated(reply, await holds.change(request.user.organisationId, request.params.id, request.user.userId, request.body));
+    } catch (error) { return failure(reply, error); }
+  });
   const removalInput = z.object({ expectedRevision: revision,
     expectedEvidenceRevision: z.number().int().nonnegative().max(2147483647),
     policyId: z.string().min(1).max(160), evidenceRef: z.string().regex(/^[A-Z0-9][A-Z0-9-]{2,119}$/),

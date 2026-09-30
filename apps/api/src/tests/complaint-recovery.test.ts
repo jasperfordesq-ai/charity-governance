@@ -6,6 +6,7 @@ function fixture() {
   const now = new Date('2026-09-30T12:00:00Z');
   const f = {
     actor: true,
+    held: false,
     row: { id: 'complaint', organisationId: 'org', revision: 4, status: 'CLOSED', summary: 'Private complaint narrative',
       reviewedByBoard: false, boardMinuteReference: null, removedAt: null, removal: null } as any,
     policies: [{ id: 'policy', retentionMode: 'AFTER_ANCHOR', retentionAnchor: 'RESOLVED_AT', retentionDays: 1 }] as any[],
@@ -35,6 +36,7 @@ function fixture() {
       return f.policies;
     } },
     complaintResolutionEvidence: { findFirst: async () => f.evidence },
+    complaintHoldEvent: { findFirst: async () => ({ held: f.held }) },
     complaintRemoval: { create: async ({ data }: any) => {
       const decision = { id: 'removal', ...data, occurredAt: now, recoveryUntil: new Date('2026-10-30T12:00:00Z') };
       f.decisions.push(decision); return decision;
@@ -63,6 +65,7 @@ test('complaint removal and restoration preserve content and record the actor wi
 
 test('complaint recovery refuses missing authority, stale revisions, board evidence and expired recovery', async () => {
   for (const change of [
+    (f: any) => { f.held = true; },
     (f: any) => { f.actor = false; },
     (f: any) => { f.row = null; },
     (f: any) => { f.row.revision++; },

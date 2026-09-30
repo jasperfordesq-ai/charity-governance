@@ -2,6 +2,27 @@
 
 Last updated: 2026-09-30
 
+Complaint hold application checkpoint: browser-only Owner/Admin hold history and
+state-change routes are implemented, with Admin session level for writes, active
+actor checks, charity/record/actor locks and exact record/hold revisions. Active
+holds now produce explicit retention/removal refusals. Governance Audit lists
+hold transition metadata without case reasons/references. Registers supports
+reviewed apply/release for active and recoverable complaints, preserving the
+selection and refreshing assessment after changes. Isolated Chromium passed
+first-attempt after a UI fix (16.8s, runner exit 0): apply blocks removal, release
+permits reviewed removal, a new hold on the removed record survives restoration,
+contents remain identical and all three hold events bind the exact actor.
+The initial test found a whole-page refresh losing the selected complaint; only
+hold history/assessment now refresh. All 58 focused API tests, 408 runnable MCP
+tests (two Windows skips), API build, web/E2E types and edited UI lint pass.
+Evidence: private complaint-hold-api.log, complaint-hold-mcp.log and
+complaint-hold-browser-fixed.log. Security & Data wording changed after the
+browser snapshot and passed focused lint. Exact hosted/deployment gates remain
+required; runtime remains e5e988a3. Next implement guarded complaint purge,
+copy disposition and complaint-aware restore reconciliation, preserving all
+broader record/store, durable authority, reopening and DPO acceptance scope.
+Older hold checkpoints below describe implementation order, not current API scope.
+
 Complaint hold persistence increment (not yet deployed): append-only
 ComplaintHoldEvent records alternating apply/release decisions, exact complaint
 and hold revisions, active same-charity Owner/Admin, controlled evidence and

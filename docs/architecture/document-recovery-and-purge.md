@@ -21,6 +21,19 @@ hold. History is immutable and survives future source disposal. This is an
 administrative preservation control, not a legal-hold determination. API/UI and
 release acceptance are still pending for this increment.
 
+Locally verified application extension: browser-only Owner/Admin routes expose
+paged hold history and reviewed state changes. Writes recheck the active actor,
+complaint revision and latest hold revision under charity/record/actor locks.
+Removal and retention assessment explicitly report an active administrative
+hold. Governance Audit exposes transition metadata, keeping evidence references
+and free-text reasons in the restricted review. Registers offers apply/release
+review for both active and recoverable complaints. Hold changes refresh their
+history and assessment without discarding the selected complaint. No default
+hold is created, no live policy is adopted, and permanent purge remains disabled.
+The isolated Chromium journey verifies apply/release, removal blocked by a hold,
+a hold on a recoverable complaint surviving restoration, exact preserved contents
+and actor-bound history. Hosted verification and deployment remain outstanding.
+
 Application extension: restricted browser Admin sessions can now submit reviewed
 removal or restoration from Registers. Writes lock the charity, complaint and
 acting administrator, check the reviewed revision, and preserve the database

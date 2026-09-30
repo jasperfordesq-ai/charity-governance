@@ -23,6 +23,7 @@ const feedDefinitions = [
   { key: 'risks', label: 'Risk changes', path: '/governance-audit/risks', href: '/registers' },
   { key: 'registers', label: 'Register record actions', path: '/governance-audit/registers', href: '/registers' },
   { key: 'complaint-resolution', label: 'Complaint resolution reviews', path: '/governance-audit/complaint-resolution', href: '/registers' },
+  { key: 'complaint-holds', label: 'Complaint hold changes', path: '/governance-audit/complaint-holds', href: '/registers' },
   { key: 'controls', label: 'Control verification', path: '/governance-audit/controls', href: '/registers' },
   { key: 'compliance', label: 'Compliance changes', path: '/governance-audit/compliance', href: '/compliance' },
   { key: 'reports', label: 'Compliance report preparations', path: '/governance-audit/reports', href: '/export' },

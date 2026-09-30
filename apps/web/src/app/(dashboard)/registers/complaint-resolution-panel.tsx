@@ -6,6 +6,7 @@ import type { ComplaintRecordResponse } from '@charitypilot/shared';
 import { api } from '@/lib/api';
 import { apiErrorMessage } from '@/lib/errors';
 import { ComplaintRemovalControl } from './complaint-recovery-panel';
+import { ComplaintHoldPanel } from './complaint-hold-panel';
 
 type Evidence = {
   id: string; revision: number; recordRevision: number; state: 'RECORDED' | 'WITHDRAWN';
@@ -15,6 +16,7 @@ type History = { items: Evidence[]; nextBeforeRevision: number | null };
 type ReviewedComplaint = ComplaintRecordResponse & { revision: number };
 type RetentionAssessment = { state: string; assessedAt: string; retentionUntil: string | null; removalAuthorized: false; policyId: string | null };
 const assessmentLabels: Record<string, string> = {
+  ADMINISTRATIVE_HOLD: 'An administrative hold blocks removal. Review the hold separately.',
   POLICY_REVIEW_REQUIRED: 'A current approved complaint policy is required.',
   PERMANENT_RETENTION: 'The policy requires permanent retention.',
   COMPLAINT_OPEN: 'The complaint must be closed before removal can be reviewed.',
@@ -26,6 +28,7 @@ const assessmentLabels: Record<string, string> = {
 
 export function ComplaintResolutionPanel({ complaints, onChanged }: { complaints: ComplaintRecordResponse[]; onChanged: () => void }) {
   const [id, setId] = useState('');
+  const [holdReviewVersion, setHoldReviewVersion] = useState(0);
   const selected = complaints.find((complaint) => complaint.id === id);
   return <section aria-label="Complaint resolution evidence" className="space-y-3 rounded-lg border p-4">
     <h2 className="text-lg font-semibold">Complaint resolution evidence</h2>
@@ -37,7 +40,8 @@ export function ComplaintResolutionPanel({ complaints, onChanged }: { complaints
       </select>
     </label>
     {!complaints.length ? <p>No complaints in the selected reporting year.</p> : null}
-    {selected ? <ComplaintResolutionReview key={`${selected.id}:${selected.updatedAt}`} id={selected.id} onChanged={onChanged} /> : null}
+    {selected ? <ComplaintResolutionReview key={`${selected.id}:${selected.updatedAt}:${holdReviewVersion}`} id={selected.id} onChanged={onChanged} /> : null}
+    {selected ? <ComplaintHoldPanel key={selected.id} id={selected.id} onChanged={() => setHoldReviewVersion(value => value + 1)} /> : null}
   </section>;
 }
 
@@ -135,7 +139,7 @@ function ComplaintResolutionReview({ id, onChanged }: { id: string; onChanged: (
         <Button isDisabled={commonDisabled || latest?.state !== 'RECORDED'} onPress={() => void submit('WITHDRAWN')}>Withdraw resolution evidence</Button>
       </div>
       <h3 className="font-semibold">Resolution review history</h3>
-      {!history.items.length ? <p>No resolution evidence recorded.</p> : <ol className="space-y-2">{history.items.map((item) => <li key={item.id} className="rounded border p-2">
+      {!history.items.length ? <p>No resolution evidence recorded.</p> : <ol aria-label="Resolution evidence history" className="space-y-2">{history.items.map((item) => <li key={item.id} className="rounded border p-2">
         <p>Review {item.revision}: {item.state === 'RECORDED' ? 'Recorded' : 'Withdrawn'} · {new Date(item.occurredAt).toLocaleString()}</p>
         {item.resolvedAt ? <p>Resolved: {new Date(item.resolvedAt).toLocaleString()}</p> : null}
         <p>{item.evidenceRef} — {item.reason}</p>

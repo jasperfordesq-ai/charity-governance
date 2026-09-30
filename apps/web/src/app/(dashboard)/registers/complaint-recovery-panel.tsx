@@ -5,6 +5,7 @@ import { Button, Input, Textarea } from '@heroui/react';
 import { api } from '@/lib/api';
 import { apiErrorMessage } from '@/lib/errors';
 import { ConfirmActionModal } from '@/components/ui/confirm-action-modal';
+import { ComplaintHoldPanel } from './complaint-hold-panel';
 
 type Removal = { expectedRevision: number; expectedEvidenceRevision: number; policyId: string; evidenceRef: string; reason: string };
 
@@ -50,6 +51,7 @@ type Page = { items: RemovedComplaint[]; nextCursor: string | null };
 
 export function ComplaintRecoveryPanel({ onChanged }: { onChanged: () => void }) {
   const [page, setPage] = useState<Page | null>(null);
+  const [holdId, setHoldId] = useState<string | null>(null);
   const [review, setReview] = useState<RemovedComplaint | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
@@ -84,6 +86,8 @@ export function ComplaintRecoveryPanel({ onChanged }: { onChanged: () => void })
     <ul className="space-y-2">{page?.items.map(item => <li key={item.id} className="rounded border p-3">
       <p>{item.summary}</p><p>Recovery deadline: {new Date(item.removal.recoveryUntil).toLocaleString()}</p>
       <p>Removal authority: {item.removal.evidenceRef}</p>
+      <Button isDisabled={busy} onPress={() => setHoldId(current => current === item.id ? null : item.id)}>Review administrative hold</Button>
+      {holdId === item.id ? <ComplaintHoldPanel id={item.id} /> : null}
       <Button isDisabled={busy} onPress={() => { setError(''); setReview(item); }}>Review complaint restoration</Button>
     </li>)}</ul>
     {page?.nextCursor ? <Button isDisabled={busy} onPress={() => void load(page.nextCursor!)}>Load older recoverable complaints</Button> : null}

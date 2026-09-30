@@ -50,7 +50,7 @@ test('complaint resolution reviews preserve corrections, reject competing review
   await reliableFill(winner.getByLabel('Controlled resolution evidence reference'), 'RESOLUTION-002');
   await reliableFill(winner.getByLabel('Resolution review reason'), 'The synthetic case reference needs correction.');
   await winner.getByRole('button', { name: 'Withdraw resolution evidence', exact: true }).click();
-  await expect(winner.locator('ol > li')).toHaveCount(2);
+  await expect(winner.getByRole('list', { name: 'Resolution evidence history' }).locator('li')).toHaveCount(2);
   await expect(winner.getByText('No current resolution evidence applies to this version.', { exact: false })).toBeVisible();
   await expect(winner.getByText('Current resolution evidence must be reviewed first.')).toBeVisible();
   await expect(winner.getByRole('button', { name: 'Withdraw resolution evidence', exact: true })).toBeDisabled();
@@ -58,7 +58,21 @@ test('complaint resolution reviews preserve corrections, reject competing review
   await reliableFill(winner.getByLabel('Controlled resolution evidence reference'), 'RESOLUTION-003');
   await reliableFill(winner.getByLabel('Resolution review reason'), 'Rechecked the corrected synthetic evidence.');
   await winner.getByRole('button', { name: 'Record resolution evidence', exact: true }).click();
-  await expect(winner.locator('ol > li')).toHaveCount(3);
+  await expect(winner.getByRole('list', { name: 'Resolution evidence history' }).locator('li')).toHaveCount(3);
+  const activeHold = winner.getByRole('region', { name: 'Complaint administrative hold' });
+  await reliableFill(activeHold.getByLabel('Hold evidence reference'), 'SYNTHETIC-HOLD-001');
+  await reliableFill(activeHold.getByLabel('Reason for hold change'), 'Preserve the synthetic case pending review.');
+  await activeHold.getByRole('button', { name: 'Review applying hold', exact: true }).click();
+  await winnerPage.getByRole('button', { name: 'Apply hold', exact: true }).click();
+  await expect(activeHold.getByText('Hold active — removal blocked.')).toBeVisible();
+  await expect(winner.getByText('An administrative hold blocks removal. Review the hold separately.')).toBeVisible();
+  await expect(winner.getByRole('button', { name: 'Review complaint removal', exact: true })).toBeDisabled();
+  await reliableFill(activeHold.getByLabel('Hold evidence reference'), 'SYNTHETIC-HOLD-002');
+  await reliableFill(activeHold.getByLabel('Reason for hold change'), 'Reviewed synthetic preservation can now end.');
+  await activeHold.getByRole('button', { name: 'Review hold release', exact: true }).click();
+  await winnerPage.getByRole('button', { name: 'Release hold', exact: true }).click();
+  await expect(activeHold.getByText('No active administrative hold.')).toBeVisible();
+  await expect(winner.getByText('The minimum retention period has elapsed; removal still requires review.')).toBeVisible();
   const snapshot = await withDb(async client => (await client.query(`SELECT to_jsonb(c)-ARRAY['revision','updatedAt','removedAt','removalId'] AS value FROM "ComplaintRecord" c WHERE id=$1`, [id])).rows[0].value);
   await reliableFill(winner.getByLabel('Complaint removal authority reference'), 'SYNTHETIC-REMOVE-001');
   await reliableFill(winner.getByLabel('Reason for removing this complaint'), 'Synthetic closed complaint reviewed for recovery proof.');
@@ -69,12 +83,20 @@ test('complaint resolution reviews preserve corrections, reject competing review
   const recovery = winnerPage.getByRole('region', { name: 'Recoverable complaints' });
   await expect(recovery.getByText('Synthetic resolution complaint', { exact: true })).toBeVisible();
   await expect(winner.getByRole('option', { name: 'Synthetic resolution complaint', exact: true })).toHaveCount(0);
+  await recovery.getByRole('button', { name: 'Review administrative hold', exact: true }).click();
+  const removedHold = recovery.getByRole('region', { name: 'Complaint administrative hold' });
+  await reliableFill(removedHold.getByLabel('Hold evidence reference'), 'SYNTHETIC-HOLD-003');
+  await reliableFill(removedHold.getByLabel('Reason for hold change'), 'Preserve the recoverable synthetic complaint.');
+  await removedHold.getByRole('button', { name: 'Review applying hold', exact: true }).click();
+  await winnerPage.getByRole('button', { name: 'Apply hold', exact: true }).click();
+  await expect(removedHold.getByText('Hold active — removal blocked.')).toBeVisible();
   await recovery.getByRole('button', { name: 'Review complaint restoration' }).click();
   const restored = winnerPage.waitForResponse(response => response.url().endsWith(`/complaints/${id}/restore`) && response.request().method() === 'POST');
   await winnerPage.getByRole('button', { name: 'Restore complaint', exact: true }).click();
   expect((await restored).status()).toBe(200);
   await expect(recovery.getByText('No recoverable complaints.')).toBeVisible();
   await winner.getByLabel('Complaint to review').selectOption(id);
+  await expect(activeHold.getByText('Hold active — removal blocked.')).toBeVisible();
   await expect(winner.getByText('No current resolution evidence applies to this version.', { exact: false })).toBeVisible();
   await withDb(async client => {
     const after = (await client.query(`SELECT to_jsonb(c)-ARRAY['revision','updatedAt','removedAt','removalId'] AS value FROM "ComplaintRecord" c WHERE id=$1`, [id])).rows[0].value;
@@ -85,10 +107,17 @@ test('complaint resolution reviews preserve corrections, reject competing review
       { actorUserId: owner.userId, previousStatus: 'ACTIVE', nextStatus: 'RECOVERABLE' },
       { actorUserId: owner.userId, previousStatus: 'RECOVERABLE', nextStatus: 'ACTIVE' },
     ]);
+    const holds = (await client.query(`SELECT "actorUserId",held,revision FROM "ComplaintHoldEvent"
+      WHERE "organisationId"=$1 AND "complaintId"=$2 ORDER BY revision`, [owner.organisationId,id])).rows;
+    expect(holds).toEqual([
+      { actorUserId: owner.userId, held: true, revision: 1 },
+      { actorUserId: owner.userId, held: false, revision: 2 },
+      { actorUserId: owner.userId, held: true, revision: 3 },
+    ]);
   });
   await withDb(client => client.query(`UPDATE "ComplaintRecord" SET status='OPEN', "updatedAt"=now() WHERE id=$1 AND "organisationId"=$2`, [id, owner.organisationId]));
   await winner.getByRole('button', { name: 'Reload complaint review' }).click();
   await expect(winner.getByText('No current resolution evidence applies to this version.', { exact: false })).toBeVisible();
   await expect(winner.getByRole('button', { name: 'Record resolution evidence', exact: true })).toBeDisabled();
-  await expect(winner.locator('ol > li')).toHaveCount(3);
+  await expect(winner.getByRole('list', { name: 'Resolution evidence history' }).locator('li')).toHaveCount(3);
 });
