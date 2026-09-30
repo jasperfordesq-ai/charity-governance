@@ -342,6 +342,32 @@ test('complaint recovery migration preserves records and enforces reviewed remov
     assert.equal(sql(`SELECT count(*) FROM "ComplaintRecord" WHERE id='owner-changed';`),'1');
     sql(`BEGIN; UPDATE "User" SET role='ADMIN' WHERE id='ordinary-admin';
       UPDATE "User" SET role='OWNER' WHERE id='admin-a'; COMMIT;`);
+    const disposition=(id,overrides={})=>{
+      const value={organisation:'a',authorization:'fresh-purge',actor:'admin-a',area:'BACKUPS',revision:1,
+        status:'RETAINED_APPROVED',observed:"timezone('UTC',clock_timestamp())",next:"timezone('UTC',now())+INTERVAL '30 days'",...overrides};
+      return `INSERT INTO "ComplaintPurgeDispositionEvent" (id,"organisationId","authorizationId",area,"scopeRef",revision,status,"actorUserId","evidenceRef",reason,"observedAt","nextReviewAt")
+        VALUES ('${id}','${value.organisation}','${value.authorization}','${value.area}','SYNTHETIC-BACKUP-SET',${value.revision},'${value.status}','${value.actor}','COPY-EVIDENCE-001','Reviewed synthetic retained backup scope',${value.observed},${value.next});`;
+    };
+    sql(disposition('member-copy',{actor:'member-a'}),/active charity owner/);
+    sql(disposition('foreign-copy',{organisation:'b',actor:'admin-b'}),/authorization not found/);
+    sql(disposition('unclaimed-copy',{authorization:'timed-authorization'}),/committed purge claim/);
+    sql(disposition('plan-conflict-copy',{status:'VERIFIED_ABSENT'}),/cannot contradict/);
+    sql(disposition('missing-followup-copy',{next:'NULL'}),/future follow-up/);
+    sql(disposition('future-copy',{observed:"timezone('UTC',now())+INTERVAL '1 day'"}),/between claim and recording/);
+    sql(disposition('before-claim-copy',{observed:"'2000-01-01'::timestamp"}),/between claim and recording/);
+    sql(disposition('primary-copy',{area:'PRIMARY',status:'NEEDS_REVIEW'}),/check constraint/);
+    sql(disposition('retained-backup'));
+    sql(disposition('stale-copy'),/revision changed/);
+    sql(`UPDATE "ComplaintPurgeDispositionEvent" SET status='VERIFIED_ABSENT';`,/append-only/);
+    sql(`DELETE FROM "ComplaintPurgeDispositionEvent";`,/append-only/);
+    const corrections=await Promise.all([
+      concurrent(disposition('copy-correction-a',{revision:2,status:'NEEDS_REVIEW'})),
+      concurrent(disposition('copy-correction-b',{revision:2,status:'NEEDS_REVIEW'})),
+    ]);
+    assert.equal(corrections.filter(result=>result.code===0).length,1);
+    assert.match(corrections.find(result=>result.code!==0).stderr,/revision changed/);
+    assert.equal(sql(`SELECT count(*) FROM "ComplaintPurgeDispositionEvent";`),'2');
+    assert.equal(sql(`SELECT count(*) FROM "ComplaintRecord" WHERE id='expired';`),'0');
     const authority = JSON.parse(sql(PURGE_RESTORE_SNAPSHOT_SQL));
     assert.doesNotMatch(JSON.stringify(authority), /Private original narrative|Reviewed synthetic administrative hold|HOLD-001/);
     const currentBackup = docker(['exec',container,'pg_dump','-U','postgres','--no-owner','--no-privileges','postgres']);
@@ -357,7 +383,7 @@ test('complaint recovery migration preserves records and enforces reviewed remov
       if(database==='old_complaint_restore') {
         assert.throws(()=>assertPurgeRestoreLedger(authority,snapshot),error=>{
           assert.equal(error.code,'PURGE_RESTORE_RECONCILIATION_REQUIRED');
-          for(const table of ['ComplaintHoldEvent','ComplaintRemoval','ComplaintResolutionEvidence','ComplaintRecoveryState','ComplaintPurgeAuthorization','ComplaintPurgeAuthorizationWithdrawal','ComplaintPurgeClaim']) {
+          for(const table of ['ComplaintHoldEvent','ComplaintRemoval','ComplaintResolutionEvidence','ComplaintRecoveryState','ComplaintPurgeAuthorization','ComplaintPurgeAuthorizationWithdrawal','ComplaintPurgeClaim','ComplaintPurgeDispositionEvent']) {
             assert.ok(error.report.differences.some(item=>item.table===table && (item.missing || item.changed)),table);
           }
           return true;

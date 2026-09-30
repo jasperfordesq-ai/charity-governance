@@ -10,6 +10,7 @@ const tables = [
   'ComplaintResolutionEvidence', 'ComplaintRemoval', 'ComplaintHoldEvent',
   'ComplaintPurgeAuthorization', 'ComplaintPurgeAuthorizationWithdrawal',
   'ComplaintPurgeClaim',
+  'ComplaintPurgeDispositionEvent',
 ];
 const digest = expression => `encode(sha256(convert_to((${expression})::text,'UTF8')),'hex')`;
 const entries = tables.map(name => `SELECT '${name}' AS name, COALESCE(jsonb_agg(jsonb_build_object('id',t.id,'sha256',${digest('to_jsonb(t)')}) ORDER BY t.id),'[]'::jsonb) AS rows FROM "${name}" t`);

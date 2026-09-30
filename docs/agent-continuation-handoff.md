@@ -2,6 +2,23 @@
 
 Last updated: 2026-09-30
 
+Complaint copy-disposition persistence checkpoint (source only): migration 1800
+adds immutable per-scope observations for snapshots, exports, audit/evidence,
+backups and other copies. The primary deletion result remains its separate
+claim receipt. Same-charity active Owner authority, an existing claim, exact
+scope revision, consistency with the reviewed plan, bounded observation time
+and future follow-up for retained/unresolved scopes are enforced in PostgreSQL.
+Concurrent corrections accept exactly one. Restore inventories now include this
+ledger; old populated backups lose authority and are refused. Real complaint
+migration/backup proof passed in 51.5s, 94 reconciliation/model/reset/backup tests
+passed, Prisma validate/generate and API build passed. Static migration gate:
+zero blocked, one new-table index warning, no override. Private logs use prefix
+complaint-copy-ledger. Initial test correctly failed for the missing ledger.
+API/UI recording and real browser proof remain next. Retained scopes needing a
+later change of approved disposition also require separately reviewed authority;
+the immutable original plan must not be silently changed. Exact hosted gates,
+deployment/live checks and wider record/store coverage remain open.
+
 Complaint purge dashboard checkpoint (source only): Owner-only Registers panel
 now supports explicit six-area copy-plan review, exact recovery/hold/policy
 binding, withdrawal, separate permanent-action confirmation and paginated

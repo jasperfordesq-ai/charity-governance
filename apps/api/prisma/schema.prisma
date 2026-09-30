@@ -1942,6 +1942,7 @@ model ComplaintPurgeAuthorization {
   authorizedAt    DateTime @default(now())
   withdrawal      ComplaintPurgeAuthorizationWithdrawal?
   claim           ComplaintPurgeClaim?
+  dispositions    ComplaintPurgeDispositionEvent[]
 
   @@unique([id, organisationId])
   @@index([organisationId, complaintId, authorizedAt, id], map: "ComplaintPurgeAuthorization_history_idx")
@@ -1959,6 +1960,26 @@ model ComplaintPurgeClaim {
 
   @@unique([authorizationId, organisationId])
   @@index([organisationId, claimedAt, id], map: "ComplaintPurgeClaim_history_idx")
+}
+
+model ComplaintPurgeDispositionEvent {
+  id              String @id @default(cuid())
+  organisationId  String
+  authorizationId String
+  authorization   ComplaintPurgeAuthorization @relation(fields: [authorizationId, organisationId], references: [id, organisationId], onDelete: Restrict, map: "ComplaintPurgeDisposition_authorization_fkey")
+  area            String
+  scopeRef        String
+  revision        Int
+  status          String
+  actorUserId     String
+  evidenceRef     String
+  reason          String
+  observedAt      DateTime
+  nextReviewAt    DateTime?
+  occurredAt      DateTime @default(now())
+
+  @@unique([authorizationId, area, scopeRef, revision], map: "ComplaintPurgeDisposition_scope_revision_key")
+  @@index([organisationId, authorizationId, occurredAt, id], map: "ComplaintPurgeDisposition_history_idx")
 }
 
 model ComplaintPurgeAuthorizationWithdrawal {
