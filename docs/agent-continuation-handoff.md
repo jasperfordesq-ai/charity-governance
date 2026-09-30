@@ -18,6 +18,15 @@ Local verification: four focused reservation tests, 2,502 main API tests and fou
 separate PostgreSQL migration tests pass. Hosted verification and deployment of
 this addition remain pending; the private release receipt is authoritative.
 
+The follow-up S3 adapter implements format-2 read/acquisition on the existing
+`head.json`, with its existing bounded encrypted/versioned object I/O and ETag
+conditional write. Format-1 and format-2 head readers reject one another. The
+adapter refuses release, writer/epoch changes and journal advancement; those
+guarded transitions and database integration remain unfinished. This is not a
+second independent head or an automatic protocol upgrade. No AWS resources,
+credentials or live caller have been activated. Focused adapter/reservation
+verification passes 22 tests, including unknown acknowledgement and contention.
+
 ## Recovery authority development and corrected release status
 
 The inactive recovery reader now joins full journal/current-head verification

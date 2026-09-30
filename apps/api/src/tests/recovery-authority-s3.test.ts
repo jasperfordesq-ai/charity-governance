@@ -5,6 +5,7 @@ import { S3Client, GetObjectCommand, PutObjectCommand } from '@aws-sdk/client-s3
 import { S3AuthorityObjectStore } from '../services/recovery-authority-s3.js';
 import { RecoveryAuthorityJournal } from '../services/recovery-authority-journal.js';
 import { createHash } from 'node:crypto';
+import { reserveRecoveryOperation } from '../services/recovery-operation-reservation.js';
 
 const config = { bucket: 'synthetic-authority-test', accountId: '123456789012',
   kmsKeyArn: 'arn:aws:kms:eu-west-1:123456789012:key/11111111-1111-1111-1111-111111111111',
@@ -148,6 +149,58 @@ function headFixture() {
 }
 const firstHead = { installationId: config.installationId, organisationId: config.organisationId,
   generation: 1, digest: 'a'.repeat(64) };
+
+const control = { format: 2 as const, installationId: config.installationId,
+  organisationId: config.organisationId, writerId: 'host-a', writerEpoch: 1,
+  generation: 0, digest: null, activeOperation: null };
+const reservation = { installationId: config.installationId, organisationId: config.organisationId,
+  writerId: 'host-a', writerEpoch: 1, operationId: 'operation-a', preparationDigest: 'a'.repeat(64),
+  expectedGeneration: 0, expectedDigest: null };
+function controlFixture() {
+  const f = headFixture();
+  f.replaceBody(JSON.stringify({ ...control, publicationId: '11111111-1111-4111-8111-111111111111' }));
+  return f;
+}
+
+test('S3 reservation shares head.json and old format cannot overwrite its control', async () => {
+  const f = controlFixture();
+  const before = await f.store.readControl();
+  const outcome = await reserveRecoveryOperation(reservation, f.store);
+  assert.equal(outcome.actionAuthorized, false);
+  assert.notEqual(outcome.revision, before.revision);
+  assert.equal(f.publications.length, 1);
+  assert.equal(JSON.parse(f.publications[0]!).activeOperation.operationId, reservation.operationId);
+  await assert.rejects(() => f.store.readHead(), /verification failed/);
+  await assert.rejects(() => f.store.compareAndSwap(outcome.revision, firstHead), /verification failed/);
+  await assert.rejects(() => headFixture().store.readControl(), /verification failed/);
+});
+
+test('S3 reservation races and lost acknowledgements retain only the exact winning operation', async () => {
+  const f = controlFixture();
+  const results = await Promise.allSettled([reservation, { ...reservation, operationId: 'operation-b' }]
+    .map(input => reserveRecoveryOperation(input, f.store)));
+  assert.equal(results.filter(r => r.status === 'fulfilled').length, 1);
+  assert.equal(f.publications.length, 1);
+  const lost = controlFixture(); lost.loseAck();
+  await assert.rejects(() => reserveRecoveryOperation(reservation, lost.store), /unknown/);
+  assert.equal((await reserveRecoveryOperation(reservation, lost.store)).replayed, true);
+  assert.equal(lost.publications.length, 1);
+});
+
+test('S3 acquisition cannot release, replace a writer, change history or switch charity', async () => {
+  const f = controlFixture(); const current = await f.store.readControl();
+  const next = { ...control, activeOperation: { operationId: 'operation-a', preparationDigest: 'a'.repeat(64) } };
+  for (const invalid of [{ ...next, activeOperation: null }, { ...next, writerId: 'host-b' },
+    { ...next, writerEpoch: 2 }, { ...next, generation: 1, digest: 'b'.repeat(64) },
+    { ...next, organisationId: 'foreign' }]) {
+    await assert.rejects(() => f.store.compareAndSwapControl(current.revision, invalid));
+  }
+  assert.equal(f.publications.length, 0);
+  await reserveRecoveryOperation(reservation, f.store);
+  const occupied = await f.store.readControl();
+  await assert.rejects(() => f.store.compareAndSwapControl(occupied.revision, control));
+  assert.equal(f.publications.length, 1);
+});
 
 test('S3 head publication uses ETag conditional replacement and unique publication identities', async () => {
   const f = headFixture();

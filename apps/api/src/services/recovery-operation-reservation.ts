@@ -5,10 +5,11 @@ const digest = z.string().regex(/^[a-f0-9]{64}$/);
 const epoch = z.number().int().positive().max(2147483647);
 const binding = { installationId: identity, organisationId: identity };
 const operationSchema = z.object({ operationId: identity, preparationDigest: digest }).strict();
-const controlSchema = z.object({ format: z.literal(2), ...binding,
+const controlFields = { format: z.literal(2), ...binding,
   writerId: identity, writerEpoch: epoch,
   generation: z.number().int().nonnegative().max(10000), digest: digest.nullable(),
-  activeOperation: operationSchema.nullable(),
+  activeOperation: operationSchema.nullable() };
+const controlSchema = z.object({ ...controlFields,
   revision: z.string().min(1).max(1024).regex(/^[\x21-\x7e]+$/),
 }).strict().refine(v => (v.generation === 0) === (v.digest === null));
 const requestSchema = z.object({ ...binding, writerId: identity, writerEpoch: epoch,
@@ -17,6 +18,10 @@ const requestSchema = z.object({ ...binding, writerId: identity, writerEpoch: ep
 }).strict().refine(v => (v.expectedGeneration === 0) === (v.expectedDigest === null));
 type Control = z.infer<typeof controlSchema>;
 export type RecoveryControlValue = Omit<Control, 'revision'>;
+export function validateRecoveryControlValue(raw: unknown): RecoveryControlValue {
+  return z.object(controlFields).strict()
+    .refine(v => (v.generation === 0) === (v.digest === null)).parse(raw);
+}
 
 /** Version-2 provider boundary, deliberately incompatible with the format-1
  * journal publisher. Must use the SAME authoritative control resource for all

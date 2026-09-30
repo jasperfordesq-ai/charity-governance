@@ -4,6 +4,7 @@ import { GetObjectCommand, PutObjectCommand, S3Client, type S3ClientConfig } fro
 import { z } from 'zod';
 import type { AuthorityObjectStore, AuthorityHeadPublisher, AuthorityCheckpoint } from './recovery-authority-journal.js';
 import { inspectRecoveryPreparationEnvelope } from './recovery-preparation-envelope.js';
+import { validateRecoveryControlValue, type RecoveryControlStore, type RecoveryControlValue } from './recovery-operation-reservation.js';
 
 const identity = z.string().regex(/^[A-Za-z0-9_-]{1,120}$/);
 const configuration = z.object({
@@ -34,7 +35,7 @@ function operationDeadline() {
  * independent custody must be verified separately before production use.
  * No default credentials or ambient endpoint are used by the default client.
  * Client injection is for isolated transport tests; it is a trusted boundary. */
-export class S3AuthorityObjectStore implements AuthorityObjectStore, AuthorityHeadPublisher {
+export class S3AuthorityObjectStore implements AuthorityObjectStore, AuthorityHeadPublisher, RecoveryControlStore {
   private readonly config: Configuration;
   private readonly client: S3Client;
   constructor(config: Configuration, credentials: NonNullable<S3ClientConfig['credentials']>, client?: S3Client) {
@@ -183,6 +184,48 @@ export class S3AuthorityObjectStore implements AuthorityObjectStore, AuthorityHe
   async readHead() {
     const current = await this.currentHead();
     return { ...current.checkpoint, revision: current.revision };
+  }
+
+  private async currentControl() {
+    const object = await this.readObject(this.headRequest());
+    if (!object) throw new Error('Recovery S3 control is missing; initialization is not automatic');
+    try {
+      const { publicationId, ...raw } = JSON.parse(object.body);
+      z.string().uuid().parse(publicationId);
+      const value = validateRecoveryControlValue(raw);
+      this.checkBinding(value);
+      // One representation prevents duplicate/ignored keys in this protocol.
+      if (JSON.stringify({ ...value, publicationId }) !== object.body) throw new Error('Noncanonical control');
+      const tag = etag.parse(object.etag);
+      const versionId = z.string().min(1).max(1024).parse(object.versionId);
+      const revision = createHash('sha256').update(JSON.stringify({ request: this.headRequest(),
+        etag: tag, versionId, body: object.body })).digest('hex');
+      return { value, etag: tag, revision };
+    } catch { throw new Error('Recovery S3 control verification failed'); }
+  }
+
+  async readControl() {
+    const current = await this.currentControl();
+    return { ...current.value, revision: current.revision };
+  }
+
+  /** Inactive format-2 acquisition only, on the SAME head.json as format 1.
+   * Each reader rejects the other format. No automatic upgrade, initialization,
+   * release, journal advance or writer change is supported here. Integration
+   * must implement those guarded transitions before activating this protocol.
+   * As for format 1, ETag CAS is not protection against privileged old-version
+   * replay; independent custody/retention controls remain required. */
+  async compareAndSwapControl(expectedRevision: string, raw: RecoveryControlValue): Promise<boolean> {
+    z.string().regex(/^[a-f0-9]{64}$/).parse(expectedRevision);
+    const next = validateRecoveryControlValue(raw); this.checkBinding(next);
+    const current = await this.currentControl();
+    if (current.revision !== expectedRevision) return false;
+    if (current.value.activeOperation !== null || next.activeOperation === null
+      || JSON.stringify({ ...next, activeOperation: null }) !== JSON.stringify(current.value)) {
+      throw new Error('Recovery S3 control permits exact reservation acquisition only');
+    }
+    return this.writeObject(this.headRequest(), JSON.stringify({ ...next, publicationId: randomUUID() }),
+      { IfMatch: current.etag });
   }
 
   /** S3 atomically matches ETag, not VersionId. A fresh publication ID prevents
