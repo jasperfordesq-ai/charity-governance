@@ -1,5 +1,10 @@
 # CharityPilot Full-Platform Remediation Audit
 
+> DPO-05 Admin preservation navigation, 2026-09-30: metadata-only scope
+> discovery now links committed claims to existing hold controls in both
+> dashboards. Separate Admin browser journeys pass; Owner authority remains
+> restricted. Exact deployment and full live/privacy acceptance remain open.
+
 > DPO-05 lifecycle audit, 2026-09-30: metadata feeds now cover retention
 > revisions/withdrawals, complaint recoverable removal and both families of
 > disposal review/withdrawal/claim. 35 API tests and two populated browser

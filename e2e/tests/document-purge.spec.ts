@@ -1,3 +1,4 @@
+import { adminCopyPreservation } from '../helpers/admin-copy-preservation';
 import { reviewLifecycleAudit } from '../helpers/lifecycle-audit';
 import { reviewCopyAuthority } from '../helpers/copy-authority';
 import { reviewCopyPolicy } from '../helpers/copy-policy';
@@ -9,7 +10,7 @@ import { withDb } from '../helpers/db';
 import { gotoWithDevServerRetry } from '../helpers/navigation';
 import { approveSyntheticDraftRecoveryPolicy } from '../helpers/draft-recovery-policy';
 
-test('Owner reviews, cancels and executes primary disposal with retained history', async ({ owner, ownerPage, browserOriginFence }) => {
+test('Owner reviews, cancels and executes primary disposal with retained history', async ({ owner, ownerPage, browserOriginFence, newFencedContext }) => {
   test.skip(IS_DEPLOYED_QA, 'Expiry fixture is permitted only in the runner-owned disposable database.');
   test.setTimeout(180_000);
   ownerPage.on('pageerror', error => console.error('Purge browser exception:', error.stack));
@@ -168,4 +169,5 @@ test('Owner reviews, cancels and executes primary disposal with retained history
   await reviewCopyPolicy(ownerPage, 'Document', true);
   await reviewCopyAuthority(ownerPage, copies, 'SYNTHETIC-BACKUP-REOPEN-002');
   await reviewLifecycleAudit(ownerPage, 'Document');
+  await adminCopyPreservation(owner.organisationId, 'document', newFencedContext);
 });

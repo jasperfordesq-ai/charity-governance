@@ -1,5 +1,6 @@
 'use client';
 
+import { CopyPreservationBrowser } from './copy-preservation-browser';
 import { Button } from '@heroui/react';
 import { Plus } from 'lucide-react';
 import { useDocumentTitle } from '@/lib/use-title';
@@ -227,7 +228,7 @@ export default function DocumentsPage() {
 
       {canManage ? <DocumentControlHistory /> : null}
       {canManage ? <DocumentDeletedItems onRestored={() => fetchDocuments(true)} /> : null}
-      {canManage ? <><DocumentRetentionPolicies /><RetentionPolicies recordClass="DOCUMENT_COPY" /></> : null}
+      {canManage ? <><DocumentRetentionPolicies /><RetentionPolicies recordClass="DOCUMENT_COPY" /><CopyPreservationBrowser kind="document" /></> : null}
       {canManage ? <DocumentStorageDeletionReview /> : null}
 
       <DocumentUploadModal

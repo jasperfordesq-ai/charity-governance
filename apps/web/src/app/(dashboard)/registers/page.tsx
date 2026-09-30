@@ -1,5 +1,6 @@
 'use client';
 
+import { CopyPreservationBrowser } from '../documents/copy-preservation-browser';
 import Link from 'next/link';
 import { useState } from 'react';
 import {
@@ -196,7 +197,7 @@ export default function RegistersPage() {
           {canManage ? <ComplaintResolutionPanel complaints={complaintsForSelectedYear} onChanged={fetchRegisters} /> : null}
           {canManage ? <ComplaintRecoveryPanel onChanged={fetchRegisters} refreshVersion={complaintRecoveryVersion} /> : null}
           <ComplaintPurgePanel onDisposed={()=>setComplaintRecoveryVersion(version=>version+1)} />
-          {canManage ? <><RetentionPolicies recordClass="COMPLAINT" /><RetentionPolicies recordClass="COMPLAINT_COPY" /></> : null}
+          {canManage ? <><RetentionPolicies recordClass="COMPLAINT" /><RetentionPolicies recordClass="COMPLAINT_COPY" /><CopyPreservationBrowser kind="complaint" /></> : null}
           {canManage ? <RegisterChangeAudit /> : null}
         </>
       )}

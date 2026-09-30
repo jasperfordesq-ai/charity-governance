@@ -14,6 +14,10 @@ function failure(reply:FastifyReply,error:unknown) {
 }
 /** Inside authenticated parent routes; prefixes and policy classes are server-owned. */
 export function registerCopyReviewRoutes(app:FastifyInstance,prefix:''|'/complaints',service:CopyReviewService,policies:RetentionPolicyService) {
+  app.get<{Params:{id:string}}>(`${prefix}/purge-authorizations/:id/copy-scopes`,{preHandler:[requireAdmin,requireWebSession]},async(req,reply)=>{
+    try{return sendSuccess(reply,await service.scopes(req.user.organisationId,req.user.userId,id.parse(req.params.id),req.query));}
+    catch(error){return failure(reply,error);}
+  });
   for(const history of ['authorities','holds'] as const) {
     const role=history==='authorities'?requireOwner:requireAdmin;
     const path=`${prefix}/purge-authorizations/:id/copy-${history}`;

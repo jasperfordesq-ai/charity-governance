@@ -2,6 +2,29 @@
 
 Last updated: 2026-09-30
 
+## Admin copy preservation navigation - 30 September 2026 (source only)
+
+Documents and Registers now include copy preservation administration for existing
+Owner/Admin viewers. It discovers committed primary claims through the metadata
+archive, then loads exact scope/revision metadata through a new browser-only
+copy-scopes endpoint. The service rechecks active Owner/Admin identity, same
+charity parent and committed claim; it excludes observation reasons/evidence.
+Admins retain no access to Owner-only complaint disposal plans or copy authority.
+
+The panel requires complete scope pages before selection, supports a newly
+identified scope at observation revision zero, and opens the existing guarded
+hold/release form. Stale revisions are rejected server-side. New-scope entry is
+implemented but not separately exercised in the new Admin browser journey.
+
+Nine API/service tests pass, including the role/client/session-level matrix and
+scoped metadata selection. API build, web/E2E types and targeted lint pass.
+Both compiled isolated Chromium journeys pass (27.5s and 35.1s): a separate
+Admin discovers a claimed scope, records a hold and reloads it; Owner approval
+controls remain absent. Existing Owner policy/authority/observation/audit flows
+also run. Evidence: private admin-copy-browser.log. Runner 81078 completed exit 0.
+Runtime remains e39edbe8. No real policy or business record changed. Exact release
+verification and live acceptance, plus broader original DPO scope, remain open.
+
 ## Retention and disposal audit coverage - 30 September 2026 (source only)
 
 Nine additional metadata feeds cover retention policy revisions/withdrawals,

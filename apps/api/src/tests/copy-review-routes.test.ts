@@ -9,9 +9,10 @@ test('copy review routes separate Owner approval, Admin preservation and privile
     const app=Fastify();let calls=0;
     app.addHook('onRequest',async req=>{req.user={userId:'actor',organisationId:'org',role} as any;req.authSession={clientKind,accessLevel} as any;});
     const invoke=async()=>{calls++;return {};};
-    registerCopyReviewRoutes(app,prefix,{list:invoke,review:invoke,hold:invoke} as any,{list:invoke,create:invoke,withdraw:invoke} as any);
+    registerCopyReviewRoutes(app,prefix,{list:invoke,review:invoke,hold:invoke,scopes:invoke} as any,{list:invoke,create:invoke,withdraw:invoke} as any);
     try {
       const cases=[
+        ['GET','/purge-authorizations/auth/copy-scopes',{},false],
         ['GET','/purge-authorizations/auth/copy-authorities',{},true],
         ['POST','/purge-authorizations/auth/copy-authorities',{},true],
         ['GET','/purge-authorizations/auth/copy-holds',{},false],

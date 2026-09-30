@@ -16,7 +16,7 @@ function fixture(kind:'DOCUMENT'|'COMPLAINT') {
   const tx:any={$queryRaw:async()=>[],user:{findFirst:async(args:any)=>{state.actorQueries.push(args);return state.allowed?{id:'actor'}:null;}},
     documentPurgeAuthorization:parent,complaintPurgeAuthorization:parent,
     documentCopyDispositionAuthority:history,complaintCopyDispositionAuthority:history,
-    documentCopyHoldEvent:history,complaintCopyHoldEvent:history};
+    documentCopyHoldEvent:history,complaintCopyHoldEvent:history,documentPurgeDispositionEvent:history,complaintPurgeDispositionEvent:history};
   return {state,service:new CopyReviewService({...tx,$transaction:async(fn:any)=>fn(tx)} as any,kind)};
 }
 for(const kind of ['DOCUMENT','COMPLAINT'] as const) {
@@ -59,5 +59,21 @@ for(const kind of ['DOCUMENT','COMPLAINT'] as const) {
     assert.deepEqual(state.reads.at(-1).where.OR,[{occurredAt:{lt:state.rows[49].occurredAt}},{occurredAt:state.rows[49].occurredAt,id:{lt:'row-49'}}]);
     state.error=Object.assign(new Error('Copy authority revision changed SECRET'),{name:'PrismaClientUnknownRequestError'});
     await assert.rejects(service.review('org','actor','auth',authority),(error:any)=>{assert.equal(error.statusCode,409);assert.doesNotMatch(error.message,/SECRET/);return true;});
+  });
+}
+
+for(const kind of ['DOCUMENT','COMPLAINT'] as const) {
+  test(`${kind} Admin scope discovery is bounded to claimed parent and omits review contents`,async()=>{
+    const {state,service}=fixture(kind);
+    await service.scopes('org','actor','auth',{});
+    assert.deepEqual(state.actorQueries[0].where.role,{in:['OWNER','ADMIN']});
+    assert.deepEqual(state.reads[0].where,{organisationId:'org',authorizationId:'auth'});
+    assert.deepEqual(state.reads[0].select,{id:true,area:true,scopeRef:true,revision:true,occurredAt:true});
+    assert.equal(state.reads[0].take,51);
+    await assert.rejects(service.scopes('org','actor','auth',{before:'foreign'}),{statusCode:404});
+    state.claimed=false;
+    await assert.rejects(service.scopes('org','actor','auth',{}),{statusCode:409});
+    state.allowed=false;
+    await assert.rejects(service.scopes('org','actor','auth',{}),{statusCode:403});
   });
 }

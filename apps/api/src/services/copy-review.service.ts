@@ -73,6 +73,21 @@ export class CopyReviewService {
       return {items:rows.slice(0,50),nextCursor:rows.length>50?rows[49]!.id:null};
     });
   }
+  async scopes(organisationId:string,actorUserId:string,authorizationId:string,raw:unknown) {
+    const {before}=z.object({before:id.optional()}).strict().parse(raw);
+    return this.transaction(async tx=>{
+      await this.parent(tx,organisationId,actorUserId,authorizationId,false);
+      const cursorArgs={where:{id:before,organisationId,authorizationId},select:{id:true,occurredAt:true}} as const;
+      const anchor=!before?null:this.kind==='DOCUMENT'?await tx.documentPurgeDispositionEvent.findFirst(cursorArgs):await tx.complaintPurgeDispositionEvent.findFirst(cursorArgs);
+      if(before&&!anchor)throw new AppError(404,'COPY_CURSOR_NOT_FOUND','Copy scope cursor not found.');
+      const args={where:{organisationId,authorizationId,...(anchor?{OR:[
+        {occurredAt:{lt:anchor.occurredAt}},{occurredAt:anchor.occurredAt,id:{lt:anchor.id}}]}:{})},
+        orderBy:[{occurredAt:'desc'},{id:'desc'}],take:51,
+        select:{id:true,area:true,scopeRef:true,revision:true,occurredAt:true}} as const;
+      const rows=this.kind==='DOCUMENT'?await tx.documentPurgeDispositionEvent.findMany({...args,orderBy:[{occurredAt:'desc'},{id:'desc'}]}):await tx.complaintPurgeDispositionEvent.findMany({...args,orderBy:[{occurredAt:'desc'},{id:'desc'}]});
+      return {items:rows.slice(0,50),nextCursor:rows.length>50?rows[49]!.id:null};
+    });
+  }
   async review(organisationId:string,actorUserId:string,authorizationId:string,raw:unknown) {
     const input=reviewInput.parse(raw);this.area(input.area);
     return this.transaction(async tx=>{
