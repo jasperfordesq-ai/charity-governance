@@ -1,5 +1,17 @@
 # CharityPilot Full-Platform Remediation Audit
 
+> **Garda Vetting adopted-text mismatch, 2026-09-30:** exact backup Vault
+> DOCX matches the plain local policy and the plain March email attachment's
+> extracted body. The retained approval schedule names item 6 as the ECRIS
+> Update and includes a distinct ECRIS attachment; later replies support
+> adoption of the 31-item suite. Resolve which exact text is operative and
+> retain it in the Vault before relying on this record or its standards links.
+> Existing plain-file worksheet proposal is Board/HISTORICAL/RESTRICTED,
+> pending controller review. Eighteen of 63 rows have source evidence, 16
+> have some proposal, 47 have none, all 63 PENDING. No live metadata changed.
+> Private evidence: `.charitypilot-private/garda-vetting-source-review-2026-09-30.md`.
+
+
 > **March approval drafts source review, 2026-09-30:** both exact DOCX files
 > match the post-release backup manifest. The board-meeting draft has blank
 > execution fields; the 25-item written draft conditions its effect on email

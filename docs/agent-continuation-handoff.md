@@ -1,5 +1,19 @@
 # CharityPilot Agent Continuation Handoff
 
+> **Garda Vetting adopted-text mismatch, 2026-09-30:** the exact backup Vault
+> DOCX is byte-identical to the plain local policy and its extracted body
+> matches the plain 21 March email attachment. The retained resolution email
+> expressly names an ECRIS Update for item 6 and attaches a distinct ECRIS
+> body; later director replies support the 31-item adoption. The mismatch is
+> about the operative text, not the existence of that adoption. Existing
+> plain Vault row proposes Board/HISTORICAL/RESTRICTED pending Board/DPO
+> decision, verified ECRIS record and standards-link reconciliation. Eighteen
+> of 63 worksheet rows have source evidence, 16 have some proposal, 47 have
+> none, all 63 PENDING. No live metadata changed. This finding postdates the
+> 23:15 Nikita email. Private evidence:
+> `.charitypilot-private/garda-vetting-source-review-2026-09-30.md`.
+
+
 > **March approval drafts source review, 2026-09-30:** two exact DOCX files
 > match the verified post-release backup. The board-meeting instrument has
 > blank execution fields; the written instrument lists 25 and conditions its
