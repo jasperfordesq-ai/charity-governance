@@ -47,6 +47,15 @@ No S3 resource has been provisioned or live-tested. Provisioning, bucket
 policy/retention, independent key custody, fencing and end-to-end recovery
 acceptance still gate activation.
 
+Replay/fencing design must account for the actual claim triggers: both primary
+records are deleted in the claim transaction; only document byte cleanup is
+deferred. A worker-only journal check or post-claim publication is too late.
+The ignored replay/fencing contract and source map cover 17 ledger models plus
+three mutable state/job models. Review their field-level retention and dependency
+requirements before exporting data. Current head observations do not fence a
+later hold, and replacement-host writes need an independent writer epoch. Do
+not replay old claims through ordinary insert triggers during restore planning.
+
 Before integration, implement fresh independent authority, protected replay
 facts, provider durability/permissions, action fencing and supported recovery
 reconciliation. The bounded sequential prototype must not be presented as the
