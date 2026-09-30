@@ -66,7 +66,7 @@ export default function SecurityDataPage() {
               </li>
               <li className="rounded-lg border border-gray-200 p-4 dark:border-gray-700">
                 <h3 className="font-semibold">Complaint recovery and retention</h3>
-                <p className="mt-1 text-gray-600 dark:text-gray-300">Review complaint resolution evidence, administrative holds, approved class rules and recoverable complaints. Permanent complaint erasure is not available.</p>
+                <p className="mt-1 text-gray-600 dark:text-gray-300">Review complaint resolution evidence, administrative holds, approved class rules and recoverable complaints. Owners can separately review permanent disposal of eligible primary complaint records. Copies and backups require their own disposition evidence.</p>
                 <Link className={linkClass} href="/registers">Open Registers</Link>
               </li>
               <li className="rounded-lg border border-gray-200 p-4 dark:border-gray-700">
@@ -81,8 +81,8 @@ export default function SecurityDataPage() {
             <p className="text-sm leading-6 text-gray-600 dark:text-gray-300">
               Administrative holds block Vault document and complaint removal, but are not legal-hold decisions.
               Recovery controls cover eligible Vault drafts and complaints under approved class rules.
-              Vault draft disposal has a separate Owner review. Application-wide retention rules,
-              legal holds, recovery for other record classes and permanent complaint erasure remain incomplete. A data request in the
+              Vault draft and primary complaint disposal each require a separate Owner review. Application-wide retention rules,
+              legal holds, recovery for other record classes and complete disposal of copies and backups remain incomplete. A data request in the
               review queue does not establish that any database record, stored file, Confluence copy or
               backup has been erased.
             </p>
