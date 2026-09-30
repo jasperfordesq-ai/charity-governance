@@ -1977,9 +1977,21 @@ model ComplaintRecoveryPreparation {
   factsDigest     String
   recordedAt      DateTime @default(now())
   authorization ComplaintPurgeAuthorization @relation(fields: [authorizationId, organisationId], references: [id, organisationId], onDelete: Restrict)
+  outcome ComplaintRecoveryOutcome?
 
   @@unique([organisationId, operationId])
   @@index([organisationId, recordedAt, id])
+}
+
+// Transaction-bound evidence only; no publication or reservation release authority.
+model ComplaintRecoveryOutcome {
+  id String @id @default(cuid())
+  preparationId String @unique
+  claimId String @unique
+  transactionId BigInt @default(dbgenerated("txid_current()"))
+  recordedAt DateTime @default(now())
+  preparation ComplaintRecoveryPreparation @relation(fields: [preparationId], references: [id], onDelete: Restrict)
+  claim ComplaintPurgeClaim @relation(fields: [claimId], references: [id], onDelete: Restrict)
 }
 
 model ComplaintPurgeClaim {
@@ -1991,6 +2003,7 @@ model ComplaintPurgeClaim {
   actorUserId     String
   transactionId   BigInt @default(dbgenerated("txid_current()"))
   claimedAt       DateTime @default(now())
+  recoveryOutcome ComplaintRecoveryOutcome?
 
   @@unique([authorizationId, organisationId])
   @@index([organisationId, claimedAt, id], map: "ComplaintPurgeClaim_history_idx")

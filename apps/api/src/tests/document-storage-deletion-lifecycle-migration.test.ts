@@ -614,6 +614,49 @@ test('real PostgreSQL 16 migration serializes login issuance against password re
   await runLoginPasswordResetRaceProof(POSTGRES_IMAGE);
 });
 
+test('real PostgreSQL 16 migration binds complaint recovery outcomes to the exact claim transaction', { timeout: 120_000 }, async () => {
+  const container = `charitypilot-outcome-${randomUUID()}`;
+  assertDockerSuccess(docker(['run', '--detach', '--name', container, '--network', 'none',
+    '-e', 'POSTGRES_HOST_AUTH_METHOD=trust', POSTGRES_IMAGE]), 'start outcome fixture');
+  try {
+    await waitForPostgres(container);
+    // Minimal parent tables isolate this migration's guard. These fixtures do
+    // not claim coverage of the separate production claim/deletion triggers.
+    psql(container, `
+      CREATE TABLE "Organisation" (id TEXT PRIMARY KEY);
+      INSERT INTO "Organisation" VALUES ('charity'),('other');
+      CREATE TABLE "ComplaintRecord" (id TEXT PRIMARY KEY);
+      CREATE TABLE "ComplaintRecoveryPreparation" (id TEXT PRIMARY KEY, "organisationId" TEXT,
+        "authorizationId" TEXT, "actorUserId" TEXT, facts TEXT);
+      INSERT INTO "ComplaintRecoveryPreparation" VALUES ('prep','charity','auth','owner','{"complaint":{"id":"complaint"}}');
+      CREATE TABLE "ComplaintPurgeClaim" (id TEXT PRIMARY KEY, "organisationId" TEXT,
+        "authorizationId" TEXT, "actorUserId" TEXT, "complaintId" TEXT,
+        "transactionId" BIGINT DEFAULT txid_current());
+    `);
+    psql(container, readFileSync(new URL('../../prisma/migrations/20260930233000_complaint_recovery_outcome/migration.sql', import.meta.url), 'utf8'));
+    const claim = (name: string, org = 'charity', auth = 'auth', actor = 'owner', complaint = 'complaint') =>
+      `INSERT INTO "ComplaintPurgeClaim" (id,"organisationId","authorizationId","actorUserId","complaintId") VALUES ('${name}','${org}','${auth}','${actor}','${complaint}');`;
+    const outcome = (name: string) => `INSERT INTO "ComplaintRecoveryOutcome" (id,"preparationId","claimId","transactionId","recordedAt") VALUES ('outcome','prep','${name}',1,'2000-01-01');`;
+    const mismatches: Array<[string, string, string, string, string]> = [
+      ['foreign','other','auth','owner','complaint'], ['wrong-authority','charity','other','owner','complaint'],
+      ['wrong-actor','charity','auth','other','complaint'], ['wrong-record','charity','auth','owner','other']];
+    for (const args of mismatches) {
+      const failed = psql(container, `BEGIN; ${claim(...args)} ${outcome(args[0])} COMMIT;`, false);
+      assert.match(failed.stderr, /matching primary claim/);
+    }
+    psql(container, claim('old'));
+    assert.match(psql(container, outcome('old'), false).stderr, /same transaction/);
+    assert.match(psql(container, `BEGIN; INSERT INTO "ComplaintRecord" VALUES ('complaint'); ${claim('still-present')} ${outcome('still-present')} COMMIT;`, false).stderr, /matching primary claim/);
+    psql(container, `BEGIN; ${claim('rollback')} ${outcome('rollback')} ROLLBACK;`);
+    assert.equal(psql(container, 'SELECT count(*) FROM "ComplaintRecoveryOutcome";').stdout.trim(), '0');
+    psql(container, `BEGIN; ${claim('committed')} ${outcome('committed')} COMMIT;`);
+    assert.equal(psql(container, `SELECT (o."transactionId"=c."transactionId" AND o."transactionId"<>1 AND o."recordedAt">'2000-01-01')::text FROM "ComplaintRecoveryOutcome" o JOIN "ComplaintPurgeClaim" c ON c.id=o."claimId";`).stdout.trim(), 'true');
+    for (const mutation of ['UPDATE "ComplaintRecoveryOutcome" SET id=\'changed\';', 'DELETE FROM "ComplaintRecoveryOutcome";']) {
+      assert.match(psql(container, mutation, false).stderr, /append-only/);
+    }
+  } finally { await removeDisposableContainer(container); }
+});
+
 test('disposable E2E reset inventory includes recovery evidence exactly once', () => {
   assert.equal(
     DISPOSABLE_DATABASE_RESET_TABLES.filter(

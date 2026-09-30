@@ -11,6 +11,7 @@ const tables = [
   'ComplaintPurgeAuthorization', 'ComplaintPurgeAuthorizationWithdrawal',
   'ComplaintPurgeClaim',
   'ComplaintRecoveryPreparation',
+  'ComplaintRecoveryOutcome',
   'ComplaintPurgeDispositionEvent',
   'DocumentCopyDispositionAuthority', 'ComplaintCopyDispositionAuthority',
   'DocumentCopyHoldEvent', 'ComplaintCopyHoldEvent',

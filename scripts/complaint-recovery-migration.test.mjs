@@ -247,13 +247,20 @@ test('complaint recovery migration preserves records and enforces reviewed remov
     assert.equal(captureProof.stdout.trim(), 'capture-retry-and-preservation-race-verified');
     sql(claim('wrong-owner','fresh-purge','expired','ordinary-admin'),/matching unwithdrawn Owner authority/);
     // A later transaction failure must roll back the claim, delete and audit.
-    sql(`BEGIN; ${claim('rolled-back')} SELECT 1/0; COMMIT;`,/division by zero/);
+    const outcome = id => `INSERT INTO "ComplaintRecoveryOutcome" (id,"preparationId","claimId")
+      VALUES ('outcome-${id}','prepared-fresh-purge','${id}');`;
+    sql(`BEGIN; ${claim('rolled-back')} ${outcome('rolled-back')} SELECT 1/0; COMMIT;`,/division by zero/);
+    assert.equal(sql(`SELECT count(*) FROM "ComplaintRecoveryOutcome";`),'0');
     assert.equal(sql(`SELECT count(*) FROM "ComplaintPurgeClaim";`),'0');
     assert.equal(sql(`SELECT count(*) FROM "ComplaintRecord" WHERE id='expired';`),'1');
     assert.equal(sql(`SELECT count(*) FROM "GovernanceRegisterChangeAudit" WHERE "recordId"='expired';`),'0');
-    const claims=await Promise.all([concurrent(claim('claim-a')),concurrent(claim('claim-b'))]);
+    const claims=await Promise.all(['claim-a','claim-b'].map(id => concurrent(`BEGIN; ${claim(id)} ${outcome(id)} COMMIT;`)));
     assert.equal(claims.filter(result=>result.code===0).length,1);
     assert.equal(sql(`SELECT count(*) FROM "ComplaintPurgeClaim";`),'1');
+    assert.equal(sql(`SELECT count(*) FROM "ComplaintRecoveryOutcome" o JOIN "ComplaintPurgeClaim" c
+      ON c.id=o."claimId" AND c."transactionId"=o."transactionId";`),'1');
+    sql(`UPDATE "ComplaintRecoveryOutcome" SET id='changed';`,/append-only/);
+    sql(`DELETE FROM "ComplaintRecoveryOutcome";`,/append-only/);
     assert.equal(sql(`SELECT count(*) FROM "ComplaintRecord" WHERE id='expired';`),'0');
     assert.equal(sql(`SELECT "actorUserId"||':'||action||':'||"previousStatus" FROM "GovernanceRegisterChangeAudit" WHERE "recordId"='expired';`),'admin-a:DELETE:RECOVERABLE');
     sql(`INSERT INTO "ComplaintPurgeAuthorizationWithdrawal" (id,"organisationId","authorizationId","actorUserId","evidenceRef",reason)
