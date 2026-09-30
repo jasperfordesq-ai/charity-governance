@@ -59,6 +59,33 @@ test('complaint resolution reviews preserve corrections, reject competing review
   await reliableFill(winner.getByLabel('Resolution review reason'), 'Rechecked the corrected synthetic evidence.');
   await winner.getByRole('button', { name: 'Record resolution evidence', exact: true }).click();
   await expect(winner.locator('ol > li')).toHaveCount(3);
+  const snapshot = await withDb(async client => (await client.query(`SELECT to_jsonb(c)-ARRAY['revision','updatedAt','removedAt','removalId'] AS value FROM "ComplaintRecord" c WHERE id=$1`, [id])).rows[0].value);
+  await reliableFill(winner.getByLabel('Complaint removal authority reference'), 'SYNTHETIC-REMOVE-001');
+  await reliableFill(winner.getByLabel('Reason for removing this complaint'), 'Synthetic closed complaint reviewed for recovery proof.');
+  await winner.getByRole('button', { name: 'Review complaint removal', exact: true }).click();
+  const removed = winnerPage.waitForResponse(response => response.url().endsWith(`/complaints/${id}/remove`) && response.request().method() === 'POST');
+  await winnerPage.getByRole('button', { name: 'Move complaint to recovery', exact: true }).click();
+  expect((await removed).status()).toBe(201);
+  const recovery = winnerPage.getByRole('region', { name: 'Recoverable complaints' });
+  await expect(recovery.getByText('Synthetic resolution complaint', { exact: true })).toBeVisible();
+  await expect(winner.getByRole('option', { name: 'Synthetic resolution complaint', exact: true })).toHaveCount(0);
+  await recovery.getByRole('button', { name: 'Review complaint restoration' }).click();
+  const restored = winnerPage.waitForResponse(response => response.url().endsWith(`/complaints/${id}/restore`) && response.request().method() === 'POST');
+  await winnerPage.getByRole('button', { name: 'Restore complaint', exact: true }).click();
+  expect((await restored).status()).toBe(200);
+  await expect(recovery.getByText('No recoverable complaints.')).toBeVisible();
+  await winner.getByLabel('Complaint to review').selectOption(id);
+  await expect(winner.getByText('No current resolution evidence applies to this version.', { exact: false })).toBeVisible();
+  await withDb(async client => {
+    const after = (await client.query(`SELECT to_jsonb(c)-ARRAY['revision','updatedAt','removedAt','removalId'] AS value FROM "ComplaintRecord" c WHERE id=$1`, [id])).rows[0].value;
+    expect(after).toEqual(snapshot);
+    const events = (await client.query(`SELECT "actorUserId","previousStatus","nextStatus" FROM "GovernanceRegisterChangeAudit"
+      WHERE "organisationId"=$1 AND "recordId"=$2 AND "changedFields" @> ARRAY['removedAt'] ORDER BY "occurredAt",id`, [owner.organisationId, id])).rows;
+    expect(events).toEqual([
+      { actorUserId: owner.userId, previousStatus: 'ACTIVE', nextStatus: 'RECOVERABLE' },
+      { actorUserId: owner.userId, previousStatus: 'RECOVERABLE', nextStatus: 'ACTIVE' },
+    ]);
+  });
   await withDb(client => client.query(`UPDATE "ComplaintRecord" SET status='OPEN', "updatedAt"=now() WHERE id=$1 AND "organisationId"=$2`, [id, owner.organisationId]));
   await winner.getByRole('button', { name: 'Reload complaint review' }).click();
   await expect(winner.getByText('No current resolution evidence applies to this version.', { exact: false })).toBeVisible();

@@ -83,7 +83,7 @@ export function RetentionPolicies({ recordClass }: { recordClass: 'VAULT_DRAFT' 
 
   return <section className={statusPanelClassName('neutral', 'p-5')} aria-label={title}>
     <h2 className="font-semibold">{title}</h2>
-    <p className="text-sm">{complaint ? 'These rules apply only to complaints. Timed rules require reviewed resolution evidence that still matches the closed complaint. Complaint recovery and permanent erasure controls are still being implemented.' : 'These rules apply only to unheld Vault drafts without linked evidence.'} Recovery days are separate from retention obligations. Record the charity’s approved rules; no period is supplied automatically. Other record classes and permanent erasure need separate review.</p>
+    <p className="text-sm">{complaint ? 'These rules apply only to complaints. Timed rules require reviewed resolution evidence that still matches the closed complaint. Complaints with board evidence require separate review; permanent erasure is not available here.' : 'These rules apply only to unheld Vault drafts without linked evidence.'} Recovery days are separate from retention obligations. Record the charity’s approved rules; no period is supplied automatically. Other record classes and permanent erasure need separate review.</p>
     <div className="mt-4 grid gap-3 sm:grid-cols-2">
       <label className="text-sm">Retention rule<select className="mt-1 block w-full rounded border p-2" value={mode} disabled={busy}
         onChange={event => setMode(event.target.value as Terms['retentionMode'])}>
@@ -120,7 +120,7 @@ export function RetentionPolicies({ recordClass }: { recordClass: 'VAULT_DRAFT' 
       title={complaint ? 'Approve complaint retention policy' : 'Approve draft retention policy'} confirmLabel="Approve and replace earlier approvals" confirming={busy}
       confirmDisabled={!isOwner || !confirmed || !validEvidence} onConfirm={() => save(true)}>
       <p>{review ? describe(review, anchor) : ''}</p>
-      <p className="mt-2">{complaint ? 'This becomes the current complaint assessment policy; recoverable removal is not yet available.' : 'This becomes available for new removals.'} It withdraws earlier approvals for this record class. Existing removed records keep their recorded deadlines. This does not authorise permanent erasure.</p>
+      <p className="mt-2">This becomes available for new removals. It withdraws earlier approvals for this record class. Existing removed records keep their recorded deadlines. This does not authorise permanent erasure.</p>
       <Input className="mt-3" label="Policy approval evidence reference" value={evidence} onValueChange={setEvidence} maxLength={120} isDisabled={busy}
         description="Capital letters, numbers and hyphens, for example POLICY-001." />
       <Checkbox className="mt-3" isSelected={confirmed} onValueChange={setConfirmed} isDisabled={busy}>I have authority to approve these exact terms and the cited evidence records that decision.</Checkbox>

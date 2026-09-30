@@ -144,6 +144,10 @@ export const EXCLUDED_ROUTES: readonly ExcludedRoute[] = [
     reason: 'Admin-only full before/after risk snapshots may contain personal narratives. Review them in the Governance Audit dashboard.',
   },
   {
+    path: '/api/v1/governance-registers/complaints/removed',
+    reason: 'Recoverable complaint records are restricted to the human administrator recovery screen.',
+  },
+  {
     path: '/api/v1/governance-registers/complaints/policy-revisions',
     reason: 'Complaint retention policy authority and history require human dashboard review.',
   },

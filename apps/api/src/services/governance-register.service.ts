@@ -655,7 +655,7 @@ export class GovernanceRegisterService {
       const row = await tx.complaintRecord.findFirst({ where: { id, organisationId, removedAt: null }, select: { id: true } });
       if (!row) throw new AppError(404, 'COMPLAINT_NOT_FOUND', 'Complaint record not found');
       throw new AppError(409, 'COMPLAINT_RECOVERY_REQUIRED',
-        'Permanent complaint deletion is unavailable. Policy-bound recoverable removal must be completed first.');
+        'Permanent complaint deletion is unavailable. Use the recoverable removal controls in the Registers dashboard.');
     });
   }
 

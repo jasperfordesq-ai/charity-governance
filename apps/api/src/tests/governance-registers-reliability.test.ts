@@ -70,6 +70,7 @@ test('Members cannot read sensitive registers or their summary through list or d
       '/complaints/sensitive-record',
       '/complaints/sensitive-record/resolution-evidence',
       '/complaints/policy-revisions',
+      '/complaints/removed',
       '/complaints/sensitive-record/retention-assessment',
     ]) {
       const response = await app.inject({ method: 'GET', url: `${PREFIX}${path}`, headers: { authorization: tokenFor('MEMBER') } });
@@ -101,6 +102,9 @@ test('Admin connector cannot directly read excluded control histories or record 
       ['GET', '/complaints/complaint-1/resolution-evidence'],
       ['POST', '/complaints/complaint-1/resolution-evidence'],
       ['GET', '/complaints/policy-revisions'],
+      ['GET', '/complaints/removed'],
+      ['POST', '/complaints/complaint-1/remove'],
+      ['POST', '/complaints/complaint-1/restore'],
       ['POST', '/complaints/policy-revisions'],
       ['GET', '/complaints/complaint-1/retention-assessment'],
     ]) {
@@ -1209,10 +1213,12 @@ test('complaint resolution API binds actor and charity, rejects injected fields 
 test('Member cannot submit complaint resolution evidence', async () => {
   const app = await buildApp({}, 'MEMBER');
   try {
-    const response = await app.inject({ method: 'POST', url: `${PREFIX}/complaints/complaint-1/resolution-evidence`,
-      headers: { authorization: tokenFor('MEMBER') }, payload: {} });
-    assert.equal(response.statusCode, 403);
-    assert.equal(response.json().code, 'FORBIDDEN');
+    for (const action of ['resolution-evidence', 'remove', 'restore']) {
+      const response = await app.inject({ method: 'POST', url: `${PREFIX}/complaints/complaint-1/${action}`,
+        headers: { authorization: tokenFor('MEMBER') }, payload: {} });
+      assert.equal(response.statusCode, 403);
+      assert.equal(response.json().code, 'FORBIDDEN');
+    }
   } finally { await app.close(); }
 });
 

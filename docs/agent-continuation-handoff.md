@@ -2,6 +2,23 @@
 
 Last updated: 2026-09-30
 
+Complaint recovery application checkpoint: browser-only Admin-level remove and
+restore routes now use charity/record/actor locks, current revision checks and
+transactional policy/evidence validation. Removal retains the immutable decision;
+restoration is limited by the recorded deadline. Both append actor-bound register
+audit transitions without copying complaint narratives. Registers now offers
+reviewed removal, a paged recovery list and confirmed restoration. Legacy DELETE
+remains refused and points to these controls. The isolated Chromium journey
+passed first-attempt (10.5s): active-list removal, recovery listing, content-identical
+restore, both exact actor audit entries and stale resolution evidence afterward.
+Runner exit 0. All 121 affected API tests, 408 runnable MCP tests (two Windows
+skips), API build, web/E2E types and edited-file lint pass; the real recovery
+migration proof passes again (25.3s). Exact successor hosted checks and private
+deployment are not yet accepted. Prioritize finishing those gates and deploying
+this complete recovery increment before the next purge implementation. Complaint
+purge, other record classes/stores, durable purge authority and recovery reopening
+remain in scope, alongside policy and role/content acceptance decisions.
+
 Complaint recovery persistence checkpoint: ComplaintRemoval now retains scoped,
 immutable actor/policy/evidence decisions and a database-calculated recovery
 deadline. ComplaintRecord has a guarded removal pointer and timestamp. The

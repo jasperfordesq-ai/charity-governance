@@ -11,6 +11,18 @@ checkpoints below describe the state when recorded, not the current API surface.
 
 ### Complaint resolution evidence: persistence checkpoint
 
+Application extension: restricted browser Admin sessions can now submit reviewed
+removal or restoration from Registers. Writes lock the charity, complaint and
+acting administrator, check the reviewed revision, and preserve the database
+guards. Removal checks current policy and latest evidence; restoration checks
+the retained recovery deadline. Both append actor-bound ACTIVE/RECOVERABLE
+transitions to register audit within the same transaction. The recovery list
+pages 50 records at a time; a stale page cursor requires reload. The isolated
+browser proof covers removal, recovery listing, content-identical restoration,
+audit actors and the requirement to re-review resolution evidence after restore.
+No permanent complaint purge route is enabled. Hosted successor verification
+and deployment remain required before live acceptance can be claimed.
+
 Recovery persistence increment: `ComplaintRemoval` retains the reviewed actor,
 policy, evidence reference/reason and database-calculated deadline. A guarded
 pointer removes a complaint from ordinary views without deleting its fields.

@@ -5,6 +5,7 @@ import { Button, Input, Textarea } from '@heroui/react';
 import type { ComplaintRecordResponse } from '@charitypilot/shared';
 import { api } from '@/lib/api';
 import { apiErrorMessage } from '@/lib/errors';
+import { ComplaintRemovalControl } from './complaint-recovery-panel';
 
 type Evidence = {
   id: string; revision: number; recordRevision: number; state: 'RECORDED' | 'WITHDRAWN';
@@ -12,7 +13,7 @@ type Evidence = {
 };
 type History = { items: Evidence[]; nextBeforeRevision: number | null };
 type ReviewedComplaint = ComplaintRecordResponse & { revision: number };
-type RetentionAssessment = { state: string; assessedAt: string; retentionUntil: string | null; removalAuthorized: false };
+type RetentionAssessment = { state: string; assessedAt: string; retentionUntil: string | null; removalAuthorized: false; policyId: string | null };
 const assessmentLabels: Record<string, string> = {
   POLICY_REVIEW_REQUIRED: 'A current approved complaint policy is required.',
   PERMANENT_RETENTION: 'The policy requires permanent retention.',
@@ -23,7 +24,7 @@ const assessmentLabels: Record<string, string> = {
   READY_FOR_REMOVAL_REVIEW: 'The minimum retention period has elapsed; removal still requires review.',
 };
 
-export function ComplaintResolutionPanel({ complaints }: { complaints: ComplaintRecordResponse[] }) {
+export function ComplaintResolutionPanel({ complaints, onChanged }: { complaints: ComplaintRecordResponse[]; onChanged: () => void }) {
   const [id, setId] = useState('');
   const selected = complaints.find((complaint) => complaint.id === id);
   return <section aria-label="Complaint resolution evidence" className="space-y-3 rounded-lg border p-4">
@@ -36,11 +37,11 @@ export function ComplaintResolutionPanel({ complaints }: { complaints: Complaint
       </select>
     </label>
     {!complaints.length ? <p>No complaints in the selected reporting year.</p> : null}
-    {selected ? <ComplaintResolutionReview key={`${selected.id}:${selected.updatedAt}`} id={selected.id} /> : null}
+    {selected ? <ComplaintResolutionReview key={`${selected.id}:${selected.updatedAt}`} id={selected.id} onChanged={onChanged} /> : null}
   </section>;
 }
 
-function ComplaintResolutionReview({ id }: { id: string }) {
+function ComplaintResolutionReview({ id, onChanged }: { id: string; onChanged: () => void }) {
   const [complaint, setComplaint] = useState<ReviewedComplaint | null>(null);
   const [history, setHistory] = useState<History | null>(null);
   const [assessment, setAssessment] = useState<RetentionAssessment | null>(null);
@@ -141,6 +142,11 @@ function ComplaintResolutionReview({ id }: { id: string }) {
         {item.recordRevision !== complaint.revision ? <p>The complaint has changed since this review.</p> : null}
       </li>)}</ol>}
       {history.nextBeforeRevision ? <Button isDisabled={busy} onPress={() => void more()}>Load older resolution reviews</Button> : null}
+      {complaint.reviewedByBoard || complaint.boardMinuteReference?.trim() ? <p>Removal of a complaint with board evidence requires separate review.</p> : null}
+      <ComplaintRemovalControl id={id} revision={complaint.revision} policyId={assessment?.policyId ?? null}
+        evidenceRevision={latest?.revision ?? 0} onChanged={onChanged}
+        eligible={!busy && !complaint.reviewedByBoard && !complaint.boardMinuteReference?.trim()
+          && ['READY_FOR_REMOVAL_REVIEW', 'INDIVIDUAL_REVIEW_REQUIRED'].includes(assessment?.state ?? '')} />
     </> : busy ? <p role="status">Loading complaint review…</p> : null}
   </div>;
 }

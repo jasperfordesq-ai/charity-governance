@@ -49,7 +49,9 @@ test('complaint recovery migration preserves records and enforces reviewed remov
       INSERT INTO "ComplaintRecord" (id,"organisationId","receivedDate",summary,status,"updatedAt")
       VALUES ('complaint','a','2026-01-01','Private original narrative','CLOSED',now()); COMMIT;`);
     const before = sql(`SELECT row_to_json(c)::jsonb::text FROM "ComplaintRecord" c;`);
-    sql(readFileSync(`${migrations}/${target}/migration.sql`, 'utf8'));
+    for (const name of names.filter(name => name >= target)) {
+      sql(readFileSync(`${migrations}/${name}/migration.sql`, 'utf8'));
+    }
     assert.equal(sql(`SELECT (row_to_json(c)::jsonb - ARRAY['removedAt','removalId'])::text FROM "ComplaintRecord" c;`), before);
     sql(`INSERT INTO "DataRetentionPolicyRevision" (id,"organisationId","recordClass",revision,state,"retentionMode","retentionAnchor","retentionDays","recoveryDays","createdById","approvedById","approvedAt","approvalEvidenceRef")
       VALUES ('policy','a','COMPLAINT',1,'APPROVED','AFTER_ANCHOR','RESOLVED_AT',1,30,'admin-a','admin-a',now(),'POLICY-001'),
