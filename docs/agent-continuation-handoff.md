@@ -2,6 +2,15 @@
 
 Last updated: 2026-09-30
 
+Reliability ledger follow-up: 2e2267be CI 36703357729 passed the test step but
+found eight stale guarantee links. Their claims still described immediate
+document deletion/cleanup and broad Member deadline reads. Existing IDs now
+describe provider-pinned upload reservations, recoverable removal, reviewed
+purge claim retry and current-rule Member deadline scope, linked to the actual
+tests. The executed reliability command reports API 2561/Web 542 passing test
+titles and all 509 covered links verified; docs/RELIABILITY.md is regenerated.
+Those are report/title counts, not new independent or deployed acceptance.
+
 DPO-02 logout ordering repair: dashboard navigation and idle expiry previously
 started logout without waiting for the response that clears cookies. Both now
 wait; logout never triggers refresh interception, and failed sign-out retains a
