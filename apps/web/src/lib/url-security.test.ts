@@ -118,7 +118,7 @@ test('isolated production trusts only the exact managed-runner document origin a
   const previousNodeEnv = process.env.NODE_ENV;
   const previousE2eMode = process.env.NEXT_PUBLIC_CHARITYPILOT_E2E_MODE;
   try {
-    process.env.NODE_ENV = 'production';
+    Object.assign(process.env, { NODE_ENV: 'production' });
     process.env.NEXT_PUBLIC_CHARITYPILOT_E2E_MODE = 'local-disposable';
     assert.equal(
       getTrustedDocumentDownloadUrl('http://127.0.0.1:3302/api/v1/documents/doc-1/download'),
@@ -143,8 +143,8 @@ test('isolated production trusts only the exact managed-runner document origin a
       null,
     );
   } finally {
-    if (previousNodeEnv === undefined) delete process.env.NODE_ENV;
-    else process.env.NODE_ENV = previousNodeEnv;
+    if (previousNodeEnv === undefined) Reflect.deleteProperty(process.env, 'NODE_ENV');
+    else Object.assign(process.env, { NODE_ENV: previousNodeEnv });
     if (previousE2eMode === undefined) delete process.env.NEXT_PUBLIC_CHARITYPILOT_E2E_MODE;
     else process.env.NEXT_PUBLIC_CHARITYPILOT_E2E_MODE = previousE2eMode;
   }
@@ -155,7 +155,7 @@ test('personal-server production trusts only its configured authenticated docume
   const previousDeploymentMode = process.env.NEXT_PUBLIC_CHARITYPILOT_DEPLOYMENT_MODE;
   const previousApiUrl = process.env.NEXT_PUBLIC_API_URL;
   try {
-    process.env.NODE_ENV = 'production';
+    Object.assign(process.env, { NODE_ENV: 'production' });
     process.env.NEXT_PUBLIC_CHARITYPILOT_DEPLOYMENT_MODE = 'personal-server';
     process.env.NEXT_PUBLIC_API_URL = 'http://127.0.0.1:8080';
 
@@ -188,8 +188,8 @@ test('personal-server production trusts only its configured authenticated docume
       null,
     );
   } finally {
-    if (previousNodeEnv === undefined) delete process.env.NODE_ENV;
-    else process.env.NODE_ENV = previousNodeEnv;
+    if (previousNodeEnv === undefined) Reflect.deleteProperty(process.env, 'NODE_ENV');
+    else Object.assign(process.env, { NODE_ENV: previousNodeEnv });
     if (previousDeploymentMode === undefined) delete process.env.NEXT_PUBLIC_CHARITYPILOT_DEPLOYMENT_MODE;
     else process.env.NEXT_PUBLIC_CHARITYPILOT_DEPLOYMENT_MODE = previousDeploymentMode;
     if (previousApiUrl === undefined) delete process.env.NEXT_PUBLIC_API_URL;

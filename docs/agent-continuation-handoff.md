@@ -2,6 +2,14 @@
 
 Last updated: 2026-09-30
 
+The previously recorded full-web typecheck gate is resolved. Test environment
+setup now respects Next's readonly NODE_ENV declaration; client logging tests
+also restore the actual pre-test environment. Full `tsc -p apps/web/tsconfig.json
+--noEmit --incremental false` passes without excluding tests. Test compilation
+and all 30 affected proxy, download-URL and client-logging tests pass. Production
+behavior is unchanged. Recovery retirement/race checkpoint is saved in
+`6a332ce1`; R3 purge authorization/outbox and R4/R5 remain open and undeployed.
+
 Obsolete DocumentService.remove and its private immediate-delete Confluence
 retirement subtree are removed. Their obsolete test helpers/assertions were
 retired; live cleanup-worker and publication-worker coverage remains and 191

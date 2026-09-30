@@ -4,6 +4,12 @@ Status: implementation in progress, 30 September 2026. R1 policy persistence
 and removal state are implemented locally; R2-R5 remain open. Other data
 classes and downstream stores remain in the full data-lifecycle scope.
 
+Read the checkpoints below as dated implementation history, newest first within
+Observed starting point. Statements about missing routes/UI in older checkpoints
+are superseded by the later policy-administration and browser-proof checkpoints.
+The full frontend typecheck failure mentioned below is now resolved: all web
+files, including tests, pass without exclusions; the 30 affected tests pass.
+
 Policy persistence checkpoint: immutable `DataRetentionPolicyRevision` rows
 record DRAFT or APPROVED proposals with a class, revision, retention mode and
 recovery days. Approval requires complete evidence facts and a currently

@@ -21,7 +21,7 @@ afterEach(() => {
 });
 
 test('DPO dashboard routes redirect a visitor before rendering and use protected no-store headers', async () => {
-  process.env.NODE_ENV = 'production';
+  Object.assign(process.env, { NODE_ENV: 'production' });
   for (const pathname of ['/governance-audit', '/security-data', '/data-lifecycle']) {
     const response = await proxy(new NextRequest(`https://app.charitypilot.ie${pathname}`));
     assert.equal(response.status, 307, pathname);
@@ -31,7 +31,7 @@ test('DPO dashboard routes redirect a visitor before rendering and use protected
 });
 
 test('expired protected page requests hand renewal to the browser without spending a refresh token', async () => {
-  process.env.NODE_ENV = 'production';
+  Object.assign(process.env, { NODE_ENV: 'production' });
   process.env.NEXT_PUBLIC_API_URL = 'https://api.charitypilot.ie';
   const calls: string[] = [];
   globalThis.fetch = (async (input: RequestInfo | URL) => {
@@ -59,7 +59,7 @@ test('expired protected page requests hand renewal to the browser without spendi
 });
 
 test('a rejected protected page without a refresh cookie still goes to login', async () => {
-  process.env.NODE_ENV = 'production';
+  Object.assign(process.env, { NODE_ENV: 'production' });
   process.env.NEXT_PUBLIC_API_URL = 'https://api.charitypilot.ie';
   globalThis.fetch = (async () => new Response(null, { status: 401 })) as typeof fetch;
   const response = await proxy(new NextRequest('https://app.charitypilot.ie/dashboard', {
@@ -69,7 +69,7 @@ test('a rejected protected page without a refresh cookie still goes to login', a
 });
 
 test('the public session-renew page has sensitive no-store headers', async () => {
-  process.env.NODE_ENV = 'production';
+  Object.assign(process.env, { NODE_ENV: 'production' });
   const response = await proxy(new NextRequest('https://app.charitypilot.ie/session-renew?next=%2Fdashboard'));
   assert.equal(response.status, 200);
   assert.equal(response.headers.get('cache-control'), 'no-store, no-cache, must-revalidate');
@@ -77,7 +77,7 @@ test('the public session-renew page has sensitive no-store headers', async () =>
 });
 
 test("parallel protected route checks share only an in-flight auth validation", async () => {
-  process.env.NODE_ENV = "production";
+  Object.assign(process.env, { NODE_ENV: "production" });
   process.env.NEXT_PUBLIC_API_URL = "https://api.charitypilot.ie";
 
   let finishValidation: ((response: Response) => void) | undefined;
@@ -117,7 +117,7 @@ test("parallel protected route checks share only an in-flight auth validation", 
 });
 
 test("non-401 auth validation failures fail closed without a false login redirect or refresh storm", async () => {
-  process.env.NODE_ENV = "production";
+  Object.assign(process.env, { NODE_ENV: "production" });
   process.env.NEXT_PUBLIC_API_URL = "https://api.charitypilot.ie";
 
   for (const failure of [
@@ -190,7 +190,7 @@ test("non-401 auth validation failures fail closed without a false login redirec
 });
 
 test("only the exact auth/me 200 contract authenticates a protected request", async () => {
-  process.env.NODE_ENV = "production";
+  Object.assign(process.env, { NODE_ENV: "production" });
   process.env.NEXT_PUBLIC_API_URL = "https://api.charitypilot.ie";
 
   for (const upstreamStatus of [201, 202, 204, 206, 299]) {
@@ -214,7 +214,7 @@ test("only the exact auth/me 200 contract authenticates a protected request", as
 });
 
 test("invalid or excessive auth Retry-After values fall back to a bounded delay", async () => {
-  process.env.NODE_ENV = "production";
+  Object.assign(process.env, { NODE_ENV: "production" });
   process.env.NEXT_PUBLIC_API_URL = "https://api.charitypilot.ie";
 
   let retryAfter = "not-a-number";
@@ -235,7 +235,7 @@ test("invalid or excessive auth Retry-After values fall back to a bounded delay"
 });
 
 test("local Docker server-side protected route validation uses the internal API origin", async () => {
-  process.env.NODE_ENV = "development";
+  Object.assign(process.env, { NODE_ENV: "development" });
   process.env.NEXT_PUBLIC_API_URL = "http://localhost:3002";
   process.env.CHARITYPILOT_INTERNAL_API_URL = "http://api:3002";
 
@@ -263,7 +263,7 @@ test("local Docker server-side protected route validation uses the internal API 
 });
 
 test("isolated production browser CSP and server auth validation use their distinct exact API origins", async () => {
-  process.env.NODE_ENV = "production";
+  Object.assign(process.env, { NODE_ENV: "production" });
   process.env.NEXT_PUBLIC_CHARITYPILOT_E2E_MODE = "local-disposable";
   process.env.NEXT_PUBLIC_API_URL = "http://127.0.0.1:3302";
   process.env.CHARITYPILOT_INTERNAL_API_URL = "http://api:3302";
@@ -295,7 +295,7 @@ test("isolated production browser CSP and server auth validation use their disti
 });
 
 test("personal-server production uses Caddy's public origin and the internal Fastify service", async () => {
-  process.env.NODE_ENV = "production";
+  Object.assign(process.env, { NODE_ENV: "production" });
   process.env.NEXT_PUBLIC_CHARITYPILOT_DEPLOYMENT_MODE = "personal-server";
   process.env.NEXT_PUBLIC_API_URL = "http://127.0.0.1:8080";
   process.env.CHARITYPILOT_INTERNAL_API_URL = "http://api:3002";
@@ -323,7 +323,7 @@ test("personal-server production uses Caddy's public origin and the internal Fas
 });
 
 test("personal-server production redirects public setup and billing entry points", async () => {
-  process.env.NODE_ENV = "production";
+  Object.assign(process.env, { NODE_ENV: "production" });
   process.env.NEXT_PUBLIC_CHARITYPILOT_DEPLOYMENT_MODE = "personal-server";
   process.env.NEXT_PUBLIC_API_URL = "http://127.0.0.1:8080";
   process.env.CHARITYPILOT_INTERNAL_API_URL = "http://api:3002";
@@ -340,7 +340,7 @@ test("personal-server production redirects public setup and billing entry points
 });
 
 test("personal-server HTTPS renewal uses the public origin across an internal HTTP proxy hop", async () => {
-  process.env.NODE_ENV = "production";
+  Object.assign(process.env, { NODE_ENV: "production" });
   process.env.NEXT_PUBLIC_CHARITYPILOT_DEPLOYMENT_MODE = "personal-server";
   process.env.NEXT_PUBLIC_API_URL =
     "https://charitypilot-board.example-tailnet.ts.net";
@@ -395,7 +395,7 @@ test("personal-server HTTPS renewal uses the public origin across an internal HT
 });
 
 test("a lookalike isolated marker cannot enable loopback production API access", async () => {
-  process.env.NODE_ENV = "production";
+  Object.assign(process.env, { NODE_ENV: "production" });
   process.env.NEXT_PUBLIC_CHARITYPILOT_E2E_MODE = "local-disposable-lookalike";
   process.env.NEXT_PUBLIC_API_URL = "http://127.0.0.1:3302";
   process.env.CHARITYPILOT_INTERNAL_API_URL = "http://api:3302";
@@ -428,7 +428,7 @@ test("a lookalike isolated marker cannot enable loopback production API access",
 });
 
 test("server-side protected route validation fails closed for unapproved production API origins", async () => {
-  process.env.NODE_ENV = "production";
+  Object.assign(process.env, { NODE_ENV: "production" });
   process.env.NEXT_PUBLIC_API_URL = "https://api.attacker.example";
 
   const fetchCalls: string[] = [];
@@ -490,7 +490,7 @@ function callbackRequest(cookie?: string): NextRequest {
 }
 
 test("the Confluence callback is never bounced to /login when no session cookie is present", async () => {
-  process.env.NODE_ENV = "production";
+  Object.assign(process.env, { NODE_ENV: "production" });
   process.env.NEXT_PUBLIC_API_URL = "https://api.charitypilot.ie";
 
   const fetchCalls: string[] = [];
@@ -522,7 +522,7 @@ test("the Confluence callback is never bounced to /login when no session cookie 
 });
 
 test("the Confluence callback reaches its own renewal logic without server refresh", async () => {
-  process.env.NODE_ENV = "production";
+  Object.assign(process.env, { NODE_ENV: "production" });
   process.env.NEXT_PUBLIC_API_URL = "https://api.charitypilot.ie";
 
   const calls: string[] = [];
@@ -554,7 +554,7 @@ test("the Confluence callback reaches its own renewal logic without server refre
 });
 
 test("a login redirect for any other protected path strips code and state out of next", async () => {
-  process.env.NODE_ENV = "production";
+  Object.assign(process.env, { NODE_ENV: "production" });
   process.env.NEXT_PUBLIC_API_URL = "https://api.charitypilot.ie";
 
   globalThis.fetch = (async () => new Response(null, { status: 401 })) as typeof fetch;
