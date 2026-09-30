@@ -209,10 +209,12 @@ export class S3AuthorityObjectStore implements AuthorityObjectStore, AuthorityHe
     return { ...current.value, revision: current.revision };
   }
 
-  /** Inactive format-2 acquisition only, on the SAME head.json as format 1.
+  /** Inactive format-2 reservation/publication, on the SAME head.json as format 1.
    * Each reader rejects the other format. No automatic upgrade, initialization,
-   * release, journal advance or writer change is supported here. Integration
-   * must implement those guarded transitions before activating this protocol.
+   * release or writer change is supported here. Publication advances exactly
+   * one generation while retaining the same reservation. Journal verification
+   * and reservation ownership are enforced by appendReservedComplaintPreparation.
+   * Outcome/database integration remains required before protocol activation.
    * As for format 1, ETag CAS is not protection against privileged old-version
    * replay; independent custody/retention controls remain required. */
   async compareAndSwapControl(expectedRevision: string, raw: RecoveryControlValue): Promise<boolean> {
@@ -220,9 +222,13 @@ export class S3AuthorityObjectStore implements AuthorityObjectStore, AuthorityHe
     const next = validateRecoveryControlValue(raw); this.checkBinding(next);
     const current = await this.currentControl();
     if (current.revision !== expectedRevision) return false;
-    if (current.value.activeOperation !== null || next.activeOperation === null
-      || JSON.stringify({ ...next, activeOperation: null }) !== JSON.stringify(current.value)) {
-      throw new Error('Recovery S3 control permits exact reservation acquisition only');
+    const acquisition = current.value.activeOperation === null && next.activeOperation !== null
+      && JSON.stringify({ ...next, activeOperation: null }) === JSON.stringify(current.value);
+    const publication = current.value.activeOperation !== null && next.generation === current.value.generation + 1
+      && JSON.stringify({ ...next, generation: current.value.generation, digest: current.value.digest })
+        === JSON.stringify(current.value);
+    if (!acquisition && !publication) {
+      throw new Error('Recovery S3 control permits exact acquisition or reserved publication only');
     }
     return this.writeObject(this.headRequest(), JSON.stringify({ ...next, publicationId: randomUUID() }),
       { IfMatch: current.etag });

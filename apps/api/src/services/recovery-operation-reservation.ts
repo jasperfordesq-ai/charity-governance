@@ -18,6 +18,9 @@ const requestSchema = z.object({ ...binding, writerId: identity, writerEpoch: ep
 }).strict().refine(v => (v.expectedGeneration === 0) === (v.expectedDigest === null));
 type Control = z.infer<typeof controlSchema>;
 export type RecoveryControlValue = Omit<Control, 'revision'>;
+export function validateRecoveryControl(raw: unknown): Control {
+  return controlSchema.parse(raw);
+}
 export function validateRecoveryControlValue(raw: unknown): RecoveryControlValue {
   return z.object(controlFields).strict()
     .refine(v => (v.generation === 0) === (v.digest === null)).parse(raw);
@@ -42,7 +45,7 @@ async function read(store: RecoveryControlStore): Promise<Control> {
  * execution fence: local database enforcement and old-host isolation still need
  * integration. No initialization, writer replacement or release API is provided.
  * Release must eventually require a durably published exact operation outcome;
- * format-1 appendPublished must never be used alongside this control protocol.
+ * The unguarded format-1 publisher must never be used with this control protocol.
  * preparationDigest binds canonical local facts; the later encrypted envelope
  * has its own digest. Never substitute one for the other. */
 export async function reserveRecoveryOperation(raw: unknown, store: RecoveryControlStore) {

@@ -187,7 +187,7 @@ test('S3 reservation races and lost acknowledgements retain only the exact winni
   assert.equal(lost.publications.length, 1);
 });
 
-test('S3 acquisition cannot release, replace a writer, change history or switch charity', async () => {
+test('S3 acquisition cannot release, replace a writer, combine history advancement or switch charity', async () => {
   const f = controlFixture(); const current = await f.store.readControl();
   const next = { ...control, activeOperation: { operationId: 'operation-a', preparationDigest: 'a'.repeat(64) } };
   for (const invalid of [{ ...next, activeOperation: null }, { ...next, writerId: 'host-b' },
@@ -200,6 +200,24 @@ test('S3 acquisition cannot release, replace a writer, change history or switch 
   const occupied = await f.store.readControl();
   await assert.rejects(() => f.store.compareAndSwapControl(occupied.revision, control));
   assert.equal(f.publications.length, 1);
+});
+
+test('S3 reserved publication advances one generation while preserving exact operation and writer', async () => {
+  const f = controlFixture(); await reserveRecoveryOperation(reservation, f.store);
+  const { revision, ...occupied } = await f.store.readControl();
+  const next = { ...occupied, generation: 1, digest: 'b'.repeat(64) };
+  for (const invalid of [{ ...next, generation: 2 }, { ...next, writerEpoch: 2 },
+    { ...next, activeOperation: null }, { ...next, activeOperation: {
+      operationId: 'other', preparationDigest: reservation.preparationDigest } }]) {
+    await assert.rejects(() => f.store.compareAndSwapControl(revision, invalid));
+  }
+  assert.equal(f.publications.length, 1);
+  assert.equal(await f.store.compareAndSwapControl(revision, next), true);
+  const published = await f.store.readControl();
+  assert.equal(published.generation, 1);
+  assert.deepEqual(published.activeOperation, occupied.activeOperation);
+  assert.notEqual(published.revision, revision);
+  assert.equal(await f.store.compareAndSwapControl(revision, next), false);
 });
 
 test('S3 head publication uses ETag conditional replacement and unique publication identities', async () => {

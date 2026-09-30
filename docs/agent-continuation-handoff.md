@@ -21,11 +21,20 @@ this addition remain pending; the private release receipt is authoritative.
 The follow-up S3 adapter implements format-2 read/acquisition on the existing
 `head.json`, with its existing bounded encrypted/versioned object I/O and ETag
 conditional write. Format-1 and format-2 head readers reject one another. The
-adapter refuses release, writer/epoch changes and journal advancement; those
-guarded transitions and database integration remain unfinished. This is not a
+adapter refuses release and writer/epoch changes. Reserved complaint preparation
+publication now advances one journal generation while preserving the exact
+active operation and writer. Outcome transitions and database integration remain
+unfinished. This is not a
 second independent head or an automatic protocol upgrade. No AWS resources,
 credentials or live caller have been activated. Focused adapter/reservation
-verification passes 22 tests, including unknown acknowledgement and contention.
+verification passed 22 tests before the subsequent publication integration.
+`appendReservedComplaintPreparation` rechecks the writer/epoch/preparation on
+every projected head read and conditional write, then uses existing journal
+chain/retry verification. The envelope digest must already have been verified by
+the caller; this method records it, does not fetch or decrypt it. Publication
+retains the reservation and grants no execution permission. Full local tests for
+this follow-up are recorded in the private roadmap; hosted/live acceptance remains
+separate.
 
 ## Recovery authority development and corrected release status
 

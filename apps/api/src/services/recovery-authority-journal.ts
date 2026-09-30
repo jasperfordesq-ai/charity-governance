@@ -1,5 +1,6 @@
 import { createHash } from 'node:crypto';
 import { z } from 'zod';
+import { validateRecoveryControl, type RecoveryControlStore } from './recovery-operation-reservation.js';
 
 /** Adapter must supply authenticated, strongly consistent reads and atomic
  * create-if-absent writes. Never implement create as read-then-overwrite.
@@ -276,6 +277,46 @@ export class RecoveryAuthorityJournal {
 
   async append(raw: Input) {
     return this.appendIntent(raw, false);
+  }
+
+  /** Publish an already verified candidate envelope under its exact reservation.
+   * This pins every head read/CAS to the writer, epoch and preparation facts.
+   * The caller must first verify the encrypted candidate's content and digest;
+   * this method only binds that digest into history. No release or execution
+   * permission is produced, and no production action invokes this path. */
+  async appendReservedComplaintPreparation(raw: unknown, control: RecoveryControlStore) {
+    const request = z.object({ operationId: identity, writerId: identity,
+      writerEpoch: z.number().int().positive().max(2147483647), preparationDigest: digest,
+      envelopeDigest: digest, expectedGeneration: z.number().int().nonnegative().max(9999),
+      expectedDigest: digest.nullable(),
+    }).strict().refine(v => (v.expectedGeneration === 0) === (v.expectedDigest === null)).parse(raw);
+    const current = async () => {
+      const value = validateRecoveryControl(await control.readControl());
+      if (value.installationId !== this.binding.installationId || value.organisationId !== this.binding.organisationId
+        || value.writerId !== request.writerId || value.writerEpoch !== request.writerEpoch
+        || value.activeOperation?.operationId !== request.operationId
+        || value.activeOperation.preparationDigest !== request.preparationDigest) {
+        throw new Error('Recovery publication reservation does not match');
+      }
+      return value;
+    };
+    // Validate before the generic journal path so no intent can be written
+    // without this reservation. Recheck on every later read and conditional write.
+    await current();
+    const publisher: AuthorityHeadPublisher = {
+      readHead: async () => {
+        const value = await current();
+        return { ...this.binding, generation: value.generation, digest: value.digest, revision: value.revision };
+      },
+      compareAndSwap: async (expectedRevision, next) => {
+        const { revision, ...value } = await current();
+        if (revision !== expectedRevision) return false;
+        return control.compareAndSwapControl(revision, { ...value, ...next });
+      },
+    };
+    return this.appendPublished({ operationId: request.operationId, kind: 'COMPLAINT_PREPARATION_V1',
+      factsDigest: request.envelopeDigest, expectedGeneration: request.expectedGeneration,
+      expectedDigest: request.expectedDigest }, publisher);
   }
 
   private async appendIntent(raw: Input, reusePrefix: boolean) {
