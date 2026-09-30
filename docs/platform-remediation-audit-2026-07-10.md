@@ -1,5 +1,11 @@
 # CharityPilot Full-Platform Remediation Audit
 
+> DPO-05 copy review API, 2026-09-30: both families now have browser-only
+> authority/hold history and reviewed writes, plus separate copy policies.
+> Owner approval, Admin proposals/preservation and ADMIN session-level gates
+> are tested. Audit/dashboard integration, browser proof, deployment and the
+> broader copy-provider/recovery acceptance requirements remain open.
+
 > DPO-05 Vault policy ambiguity, 2026-09-30: source now rejects removal,
 > disposal authorization and claim when another approved draft policy remains
 > unwithdrawn. Recovery takes the organisation lock before document/policy locks

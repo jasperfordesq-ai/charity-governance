@@ -23,7 +23,7 @@ export const retentionWithdrawalInput = z.object({
     && !/[\u0000-\u001f\u007f-\u009f]/.test(value), 'Give a reason of 10–500 characters without control characters'),
 }).strict();
 
-export type RetentionRecordClass = 'VAULT_DRAFT' | 'COMPLAINT';
+export type RetentionRecordClass = 'VAULT_DRAFT' | 'COMPLAINT' | 'DOCUMENT_COPY' | 'COMPLAINT_COPY';
 
 /** Class is chosen by the server route, never by a submitted policy body. */
 export class RetentionPolicyService {

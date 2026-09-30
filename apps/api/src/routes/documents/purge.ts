@@ -1,3 +1,6 @@
+import { RetentionPolicyService } from '../../services/retention-policy.service.js';
+import { registerCopyReviewRoutes } from '../copy-review.js';
+import { CopyReviewService } from '../../services/copy-review.service.js';
 import type { FastifyInstance } from 'fastify';
 import { ZodError } from 'zod';
 import { DocumentPurgeService, purgeId } from '../../services/document-purge.service.js';
@@ -8,6 +11,7 @@ import { sendCreated, sendSuccess } from '../../utils/response.js';
 
 /** Registered inside the authenticated/subscription-guarded document routes. */
 export function registerDocumentPurgeRoutes(app: FastifyInstance, service: DocumentPurgeService) {
+  registerCopyReviewRoutes(app,'',new CopyReviewService(app.prisma,'DOCUMENT'),new RetentionPolicyService(app.prisma,'DOCUMENT_COPY'));
   app.get('/purge-authorizations', { preHandler: [requireAdmin, requireWebSession] }, async (request, reply) => {
     try { return sendSuccess(reply, await service.list(request.user.organisationId, request.query)); }
     catch (error) {

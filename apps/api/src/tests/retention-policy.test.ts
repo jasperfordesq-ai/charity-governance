@@ -41,7 +41,7 @@ function fixture() {
     const savedRows = rows.slice(); const savedWithdrawals = withdrawals.slice();
     try { return await callback(tx); } catch (error) { rows = savedRows; withdrawals = savedWithdrawals; throw error; }
   } } as unknown as PrismaClient;
-  return { service: new RetentionPolicyService(prisma), complaints: new RetentionPolicyService(prisma, 'COMPLAINT'), locks,
+  return { documentCopies: new RetentionPolicyService(prisma,'DOCUMENT_COPY'), complaintCopies: new RetentionPolicyService(prisma,'COMPLAINT_COPY'), service: new RetentionPolicyService(prisma), complaints: new RetentionPolicyService(prisma, 'COMPLAINT'), locks,
     get rows() { return rows; }, get withdrawals() { return withdrawals; },
     setRole: (next: string) => { role = next; }, fail: () => { failCreate = true; } };
 }
@@ -122,4 +122,18 @@ test('complaint approvals use resolution anchors and cannot replace or withdraw 
     evidenceRef: 'WITHDRAW-001', reason: 'This belongs to a different record class.',
   }), (error: any) => error.statusCode === 404);
   assert.deepEqual(f.withdrawals.map(row => row.policyId), ['policy-2']);
+});
+
+
+test('copy policies keep independent classes and creation anchors without superseding original policies',async()=>{
+  const f=fixture();await f.service.create('org-a','actor-a',approved);await f.complaints.create('org-a','actor-a',approved);
+  const timed={...approved,retentionMode:'AFTER_ANCHOR',retentionDays:30};
+  f.setRole('ADMIN');await f.documentCopies.create('org-a','actor-a',draft);
+  await assert.rejects(f.documentCopies.create('org-a','actor-a',timed),{statusCode:403});
+  f.setRole('OWNER');await f.documentCopies.create('org-a','actor-a',timed);await f.complaintCopies.create('org-a','actor-a',timed);
+  assert.equal(f.withdrawals.length,0);
+  assert.deepEqual(f.rows.filter(row=>row.recordClass.endsWith('_COPY')&&row.state==='APPROVED').map(row=>[row.recordClass,row.retentionAnchor]),[['DOCUMENT_COPY','CREATED_AT'],['COMPLAINT_COPY','CREATED_AT']]);
+  await f.documentCopies.create('org-a','actor-a',approved);
+  assert.equal(f.withdrawals.length,1);assert.equal(f.withdrawals[0].policyId,'policy-4');
+  await assert.rejects(f.complaintCopies.create('org-a','actor-a',{...approved,recordClass:'VAULT_DRAFT'}));
 });

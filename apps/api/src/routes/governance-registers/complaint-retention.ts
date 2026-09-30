@@ -1,3 +1,5 @@
+import { registerCopyReviewRoutes } from '../copy-review.js';
+import { CopyReviewService } from '../../services/copy-review.service.js';
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import { z, ZodError } from 'zod';
 import { requireAdmin, requireOwner } from '../../middleware/roles.js';
@@ -21,6 +23,7 @@ function failure(reply: FastifyReply, error: unknown) {
 }
 
 export function registerComplaintRetentionRoutes(app: FastifyInstance) {
+  registerCopyReviewRoutes(app,'/complaints',new CopyReviewService(app.prisma,'COMPLAINT'),new RetentionPolicyService(app.prisma,'COMPLAINT_COPY'));
   const policies = new RetentionPolicyService(app.prisma, 'COMPLAINT');
   const retention = new ComplaintRetentionService(app.prisma);
   const recovery = new ComplaintRecoveryService(app.prisma);

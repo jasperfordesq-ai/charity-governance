@@ -2,6 +2,32 @@
 
 Last updated: 2026-09-30
 
+## Copy review API - 30 September 2026 (source only)
+
+Document and complaint families now expose browser-only copy-authority and
+copy-hold history/write endpoints beneath their purge authorization, plus
+separate copy-policy proposal/approval/withdrawal endpoints. Authority review
+and its history require the active Owner; holds allow active Owner/Admin.
+Policies allow Admin drafts and Owner approval/withdrawal. All mutations require
+ADMIN session level; direct connector access is refused. The server selects
+DOCUMENT_COPY/COMPLAINT_COPY, never a submitted record class.
+
+Strict review bodies require explicit confirmations, exact prior/scope/observation
+and hold revisions, evidence and bounded dates. Withdrawal cannot smuggle grant
+fields. Transactions recheck actor and same-charity primary claim, paginate
+history within that parent and convert named database conflicts into safe review
+guidance. No endpoint dispatches provider deletion or declares aggregate erasure.
+
+42 focused API/service tests pass, including both route prefixes, every role,
+WEB/connector sessions, READ/WRITE/ADMIN levels, controlled IDs, confirmations,
+scoped pagination and independent copy-policy histories/anchors. API build and
+408 connector tests pass (two Windows skips). Evidence: private
+copy-review-api-final.log, copy-review-build-final.log and copy-review-mcp.log;
+initial missing-module failures are retained in the red logs. All handles are
+terminal. Metadata-only governance audit integration, dashboard controls,
+real browser journeys and exact hosted/deployment acceptance remain next.
+Runtime remains e39edbe8. No live policy or record changed.
+
 ## Vault policy ambiguity guard - 30 September 2026 (source only)
 
 The legacy document-retention proof exposed a real guard gap: a selected
