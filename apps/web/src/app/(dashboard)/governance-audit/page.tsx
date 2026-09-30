@@ -30,6 +30,15 @@ const feedDefinitions = [
   { key: 'complaint-copy-authorities', label: 'Complaint copy authority decisions', path: '/governance-audit/complaint-copy-authorities', href: '/registers' },
   { key: 'complaint-copy-holds', label: 'Complaint copy preservation holds', path: '/governance-audit/complaint-copy-holds', href: '/registers' },
   { key: 'complaint-copy-evidence', label: 'Complaint copy observations', path: '/governance-audit/complaint-copy-evidence', href: '/registers' },
+  { key: 'retention-policies', label: 'Retention policy revisions', path: '/governance-audit/retention-policies', href: '/security-data' },
+  { key: 'retention-withdrawals', label: 'Retention policy withdrawals', path: '/governance-audit/retention-withdrawals', href: '/security-data' },
+  { key: 'complaint-removals', label: 'Complaint recoverable removals', path: '/governance-audit/complaint-removals', href: '/registers' },
+  { key: 'document-purge-reviews', label: 'Document disposal reviews', path: '/governance-audit/document-purge-reviews', href: '/documents' },
+  { key: 'document-purge-withdrawals', label: 'Document disposal authority withdrawals', path: '/governance-audit/document-purge-withdrawals', href: '/documents' },
+  { key: 'document-purge-claims', label: 'Document primary disposal claims', path: '/governance-audit/document-purge-claims', href: '/documents' },
+  { key: 'complaint-purge-reviews', label: 'Complaint disposal reviews', path: '/governance-audit/complaint-purge-reviews', href: '/registers' },
+  { key: 'complaint-purge-withdrawals', label: 'Complaint disposal authority withdrawals', path: '/governance-audit/complaint-purge-withdrawals', href: '/registers' },
+  { key: 'complaint-purge-claims', label: 'Complaint primary disposal claims', path: '/governance-audit/complaint-purge-claims', href: '/registers' },
   { key: 'controls', label: 'Control verification', path: '/governance-audit/controls', href: '/registers' },
   { key: 'compliance', label: 'Compliance changes', path: '/governance-audit/compliance', href: '/compliance' },
   { key: 'reports', label: 'Compliance report preparations', path: '/governance-audit/reports', href: '/export' },
@@ -56,11 +65,19 @@ function auditPage(value: unknown): { events: AuditEvent[]; nextCursor: string |
 }
 
 function eventDate(event: AuditEvent): string | null {
-  const value = event.occurredAt ?? event.createdAt;
+  const value = event.occurredAt ?? event.createdAt ?? event.authorizedAt ?? event.claimedAt;
   return typeof value === 'string' ? value : null;
 }
 
 function eventDescription(event: AuditEvent, feed: string): string {
+  if (feed === 'retention-policies') return `Policy ${String(event.state ?? 'recorded').toLowerCase()} · ${String(event.recordClass ?? 'class unknown')} · revision ${String(event.revision ?? '?')}`;
+  if (feed === 'retention-withdrawals') return `Policy withdrawn · ${String(event.policyId ?? 'unknown')}`;
+  if (feed === 'complaint-removals') return `Moved to recovery · complaint ${String(event.complaintId ?? 'unknown')}`;
+  if (feed.includes('-purge-')) {
+    const action = feed.endsWith('-reviews') ? 'Disposal authority recorded' : feed.endsWith('-withdrawals') ? 'Disposal authority withdrawn'
+      : feed.startsWith('document-') ? 'Primary disposal claimed; check storage receipt' : 'Primary complaint disposal claimed';
+    return `${action} · review ${String(event.authorizationId ?? event.id ?? 'unknown')}`;
+  }
   if (feed.includes('-copy-')) {
     const action = feed.endsWith('-holds')
       ? (event.held === true ? 'Preservation hold recorded' : 'Preservation hold released')

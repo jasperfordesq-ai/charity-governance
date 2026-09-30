@@ -2,6 +2,24 @@
 
 Last updated: 2026-09-30
 
+## Retention and disposal audit coverage - 30 September 2026 (source only)
+
+Nine additional metadata feeds cover retention policy revisions/withdrawals,
+complaint recoverable removal, and document/complaint primary disposal authority,
+withdrawal and claim. Authorization/claim feeds page by their own recorded times
+with an ID tie-breaker. The dashboard displays those timestamps and explicitly
+labels document claims as requiring a storage receipt. It excludes decision
+reasons, evidence references, disposition plans, storage paths and transaction IDs.
+
+All 35 audit API tests pass (nine initial missing-feed failures preserved in
+private lifecycle-audit-red.log; green run in lifecycle-audit-green.log).
+API build, web/E2E types and targeted lint pass. Both compiled isolated browser
+journeys pass in 55.3s, including populated policy, primary and copy audit feed
+responses and rendered decision labels, with private fields absent from payloads.
+Evidence: private lifecycle-audit-browser.log. Runner 37220 is terminal exit 0.
+Runtime remains e39edbe8; source is not yet deployed. Admin preservation navigation,
+release checks, live acceptance and broader original DPO scope remain outstanding.
+
 ## Scoped copy authority dashboard - 30 September 2026 (source only)
 
 Owners can now load complete scoped authority/hold histories and copy-policy

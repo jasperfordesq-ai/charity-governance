@@ -1,3 +1,4 @@
+import { reviewLifecycleAudit } from '../helpers/lifecycle-audit';
 import { reviewCopyAuthority } from '../helpers/copy-authority';
 import { reviewCopyPolicy } from '../helpers/copy-policy';
 import { reviewCopyPreservation } from '../helpers/copy-preservation';
@@ -166,4 +167,5 @@ test('Owner reviews, cancels and executes primary disposal with retained history
   await ownerPage.screenshot({ path: test.info().outputPath('purge-history.png'), fullPage: false, animations: 'disabled' });
   await reviewCopyPolicy(ownerPage, 'Document', true);
   await reviewCopyAuthority(ownerPage, copies, 'SYNTHETIC-BACKUP-REOPEN-002');
+  await reviewLifecycleAudit(ownerPage, 'Document');
 });

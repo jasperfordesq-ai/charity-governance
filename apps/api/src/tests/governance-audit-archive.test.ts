@@ -830,3 +830,158 @@ for (const family of ['document', 'complaint']) {
     });
   }
 }
+
+
+const lifecycleFeeds = [
+  [
+    "retention-policies",
+    "dataRetentionPolicyRevision",
+    "createdAt",
+    [
+      "id",
+      "createdAt",
+      "recordClass",
+      "revision",
+      "state",
+      "createdById",
+      "approvedById",
+      "approvedAt"
+    ]
+  ],
+  [
+    "retention-withdrawals",
+    "dataRetentionPolicyWithdrawal",
+    "occurredAt",
+    [
+      "id",
+      "occurredAt",
+      "policyId",
+      "actorUserId"
+    ]
+  ],
+  [
+    "complaint-removals",
+    "complaintRemoval",
+    "occurredAt",
+    [
+      "id",
+      "occurredAt",
+      "complaintId",
+      "recordRevision",
+      "policyId",
+      "actorUserId",
+      "recoveryUntil"
+    ]
+  ],
+  [
+    "document-purge-reviews",
+    "documentPurgeAuthorization",
+    "authorizedAt",
+    [
+      "id",
+      "authorizedAt",
+      "documentId",
+      "policyId",
+      "actorUserId"
+    ]
+  ],
+  [
+    "document-purge-withdrawals",
+    "documentPurgeAuthorizationWithdrawal",
+    "occurredAt",
+    [
+      "id",
+      "occurredAt",
+      "authorizationId",
+      "actorUserId"
+    ]
+  ],
+  [
+    "document-purge-claims",
+    "documentPurgeClaim",
+    "claimedAt",
+    [
+      "id",
+      "claimedAt",
+      "authorizationId",
+      "documentId",
+      "actorUserId",
+      "deletionId"
+    ]
+  ],
+  [
+    "complaint-purge-reviews",
+    "complaintPurgeAuthorization",
+    "authorizedAt",
+    [
+      "id",
+      "authorizedAt",
+      "complaintId",
+      "policyId",
+      "actorUserId"
+    ]
+  ],
+  [
+    "complaint-purge-withdrawals",
+    "complaintPurgeAuthorizationWithdrawal",
+    "occurredAt",
+    [
+      "id",
+      "occurredAt",
+      "authorizationId",
+      "actorUserId"
+    ]
+  ],
+  [
+    "complaint-purge-claims",
+    "complaintPurgeClaim",
+    "claimedAt",
+    [
+      "id",
+      "claimedAt",
+      "authorizationId",
+      "complaintId",
+      "actorUserId"
+    ]
+  ]
+] as const;
+
+for (const [feed, model, time, fields] of lifecycleFeeds) {
+  test(`${feed} metadata projection and timestamp cursor are scoped`, async () => {
+    const stamp = new Date('2026-09-30T12:00:00Z');
+    let reads = 0;
+    const source = Object.fromEntries([...fields.map(field => [field, field === time ? stamp : 'safe']),
+      ['reason', 'private reason'], ['evidenceRef', 'private evidence'], ['dispositionPlan', { private: true }],
+      ['storagePath', 'private/path'], ['transactionId', 123n], ['approvalEvidenceRef', 'private approval']]);
+    const delegate = {
+      findFirst: async (args: { where: { organisationId: string; id: string }; select: Record<string, boolean> }) => {
+        assert.equal(args.where.organisationId, 'org-1');
+        assert.deepEqual(args.select, { id: true, [time]: true });
+        return args.where.id === 'local' ? { id: 'local', [time]: stamp } : null;
+      },
+      findMany: async (args: { where: Record<string, unknown>; select: Record<string, boolean>; orderBy: unknown; take: number }) => {
+        reads++;
+        assert.equal(args.where.organisationId, 'org-1');
+        assert.deepEqual(Object.keys(args.select).sort(), [...fields].sort());
+        assert.deepEqual(args.orderBy, [{ [time]: 'desc' }, { id: 'desc' }]);
+        assert.deepEqual(args.where.OR, [{ [time]: { lt: stamp } }, { [time]: stamp, id: { lt: 'local' } }]);
+        assert.equal(args.take, 51);
+        return [Object.fromEntries(Object.entries(source).filter(([key]) => args.select[key]))];
+      },
+    };
+    for (const [role, clientKind] of [['MEMBER', 'WEB'], ['ADMIN', 'MCP_CONNECTOR'], ['ADMIN', 'WEB']] as const) {
+      const app = await appFor(role, { [model]: delegate,
+        authSession: { findFirst: async () => ({ id: 's1', clientKind, accessLevel: 'ADMIN', dataScope: 'FULL' }) } });
+      try {
+        const result = await app.inject({ method: 'GET', url: `/governance-audit/${feed}?before=local`, headers: { authorization: token(role) } });
+        if (role === 'MEMBER' || clientKind !== 'WEB') { assert.equal(result.statusCode, 403); assert.equal(reads, 0); continue; }
+        assert.equal(result.statusCode, 200, result.body);
+        assert.doesNotMatch(result.body, /private|reason|evidenceRef|storagePath|transactionId/);
+        assert.equal(result.json().data[0][time], stamp.toISOString());
+        const foreign = await app.inject({ method: 'GET', url: `/governance-audit/${feed}?before=foreign`, headers: { authorization: token(role) } });
+        assert.equal(foreign.statusCode, 404);
+        assert.equal(reads, 1);
+      } finally { await app.close(); }
+    }
+  });
+}

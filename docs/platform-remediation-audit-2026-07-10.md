@@ -1,5 +1,10 @@
 # CharityPilot Full-Platform Remediation Audit
 
+> DPO-05 lifecycle audit, 2026-09-30: metadata feeds now cover retention
+> revisions/withdrawals, complaint recoverable removal and both families of
+> disposal review/withdrawal/claim. 35 API tests and two populated browser
+> journeys pass. Deployment and full live/privacy acceptance remain open.
+
 > DPO-05 scoped authority dashboard, 2026-09-30: Owner review/withdrawal
 > forms now bind current policies and scope revisions, and later observations
 > can explicitly cite the reviewed authority. Both compiled isolated journeys

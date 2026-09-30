@@ -1,3 +1,4 @@
+import { reviewLifecycleAudit } from '../helpers/lifecycle-audit';
 import { reviewCopyAuthority } from '../helpers/copy-authority';
 import { reviewCopyPolicy } from '../helpers/copy-policy';
 import { reviewCopyPreservation } from '../helpers/copy-preservation';
@@ -108,4 +109,5 @@ test('Owner reviews and withdraws complaint disposal then explicitly purges only
   });
   await reviewCopyPolicy(page, 'Complaint', true);
   await reviewCopyAuthority(page, copies, 'SYNTHETIC-COPY-OBSERVATION-002');
+  await reviewLifecycleAudit(page, 'Complaint');
 });

@@ -12,6 +12,15 @@ const feedSchema = z.enum([
   'reports', 'deletions', 'deletion-attempts', 'deletion-recoveries', 'data-requests',
   'data-request-links', 'data-request-targets', 'data-request-responses', 'data-request-coverage',
   'action-approvals', 'connector-actions', 'integrations',
+  'retention-policies',
+  'retention-withdrawals',
+  'complaint-removals',
+  'document-purge-reviews',
+  'document-purge-withdrawals',
+  'document-purge-claims',
+  'complaint-purge-reviews',
+  'complaint-purge-withdrawals',
+  'complaint-purge-claims',
   'document-copy-authorities',
   'document-copy-holds',
   'document-copy-evidence',
@@ -29,14 +38,14 @@ async function requireAuditReviewWebSession(request: FastifyRequest, reply: Fast
   }
 }
 
-type AuditRow = { id: string; occurredAt?: Date; createdAt?: Date; sequence?: number };
+type AuditRow = { id: string; occurredAt?: Date; createdAt?: Date; authorizedAt?: Date; claimedAt?: Date; sequence?: number };
 type AuditDelegate = {
   findFirst(args: unknown): Promise<AuditRow | null>;
   findMany(args: unknown): Promise<AuditRow[]>;
 };
 type FeedConfig = {
   delegate: AuditDelegate;
-  orderField: 'occurredAt' | 'createdAt' | 'sequence';
+  orderField: 'occurredAt' | 'createdAt' | 'authorizedAt' | 'claimedAt' | 'sequence';
   select: Record<string, boolean>;
   filter?: Record<string, unknown>;
 };
@@ -97,6 +106,24 @@ function feedConfig(app: FastifyInstance, feed: Exclude<z.infer<typeof feedSchem
       select: { id: true, authorizationId: true, area: true, revision: true, actorUserId: true, occurredAt: true, held: true, observationRevision: true } };
     case 'complaint-copy-evidence': return { delegate: delegate(app.prisma.complaintPurgeDispositionEvent), orderField: 'occurredAt',
       select: { id: true, authorizationId: true, area: true, revision: true, actorUserId: true, occurredAt: true, status: true, copyAuthorityId: true } };
+    case 'retention-policies': return { delegate: delegate(app.prisma.dataRetentionPolicyRevision), orderField: 'createdAt',
+      select: { id: true, createdAt: true, recordClass: true, revision: true, state: true, createdById: true, approvedById: true, approvedAt: true } };
+    case 'retention-withdrawals': return { delegate: delegate(app.prisma.dataRetentionPolicyWithdrawal), orderField: 'occurredAt',
+      select: { id: true, occurredAt: true, policyId: true, actorUserId: true } };
+    case 'complaint-removals': return { delegate: delegate(app.prisma.complaintRemoval), orderField: 'occurredAt',
+      select: { id: true, occurredAt: true, complaintId: true, recordRevision: true, policyId: true, actorUserId: true, recoveryUntil: true } };
+    case 'document-purge-reviews': return { delegate: delegate(app.prisma.documentPurgeAuthorization), orderField: 'authorizedAt',
+      select: { id: true, authorizedAt: true, documentId: true, policyId: true, actorUserId: true } };
+    case 'document-purge-withdrawals': return { delegate: delegate(app.prisma.documentPurgeAuthorizationWithdrawal), orderField: 'occurredAt',
+      select: { id: true, occurredAt: true, authorizationId: true, actorUserId: true } };
+    case 'document-purge-claims': return { delegate: delegate(app.prisma.documentPurgeClaim), orderField: 'claimedAt',
+      select: { id: true, claimedAt: true, authorizationId: true, documentId: true, actorUserId: true, deletionId: true } };
+    case 'complaint-purge-reviews': return { delegate: delegate(app.prisma.complaintPurgeAuthorization), orderField: 'authorizedAt',
+      select: { id: true, authorizedAt: true, complaintId: true, policyId: true, actorUserId: true } };
+    case 'complaint-purge-withdrawals': return { delegate: delegate(app.prisma.complaintPurgeAuthorizationWithdrawal), orderField: 'occurredAt',
+      select: { id: true, occurredAt: true, authorizationId: true, actorUserId: true } };
+    case 'complaint-purge-claims': return { delegate: delegate(app.prisma.complaintPurgeClaim), orderField: 'claimedAt',
+      select: { id: true, claimedAt: true, authorizationId: true, complaintId: true, actorUserId: true } };
     case 'controls': return { delegate: delegate(app.prisma.riskControlVerification), orderField: 'sequence',
       select: { id: true, sequence: true, riskId: true, actorUserId: true, controlReference: true,
         state: true, verifiedAt: true, riskRevision: true, occurredAt: true } };
