@@ -1,5 +1,11 @@
 # CharityPilot Full-Platform Remediation Audit
 
+> DPO-05 Vault policy ambiguity, 2026-09-30: source now rejects removal,
+> disposal authorization and claim when another approved draft policy remains
+> unwithdrawn. Recovery takes the organisation lock before document/policy locks
+> and returns review guidance before reading file bytes. This addresses the
+> newly reproduced database-state gap; deployment and broader DPO scope remain.
+
 > DPO-05 copy-policy and observation binding, 2026-09-30: source binds later
 > copy decisions to distinct approved copy policies and exact scoped authority.
 > Current hold, expiry, retention and withdrawal checks prevent stale reuse;

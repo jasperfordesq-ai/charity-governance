@@ -21,6 +21,7 @@ function fixture() {
   let policy: Record<string, any> | null = { id: 'policy-a', retentionMode: 'REVIEW_REQUIRED', recoveryDays: 30 };
   let actor = true;
   let linked = false;
+  let competingPolicy = false;
   const audits: any[] = [];
   const locks: string[] = [];
   const tx = {
@@ -41,7 +42,7 @@ function fixture() {
       assert.deepEqual(where.withdrawal, { is: null });
       assert.equal(where.state, 'APPROVED');
       assert.equal(where.recordClass, 'VAULT_DRAFT');
-      return policy;
+      return where.id?.not ? (competingPolicy ? {id: 'other-policy'} : null) : policy;
     } },
     documentControlAudit: { create: async ({ data }: any) => { audits.push(data); return data; } },
     $queryRaw: async (strings: TemplateStringsArray) => {
@@ -56,6 +57,7 @@ function fixture() {
   } } as unknown as PrismaClient;
   return { prisma, audits, locks, get doc() { return document; },
     setPolicy: (value: typeof policy) => { policy = value; },
+    setCompetingPolicy: () => { competingPolicy = true; },
     disableActor: () => { actor = false; }, link: () => { linked = true; } };
 }
 
@@ -83,7 +85,9 @@ test('removal and restore preserve actual local bytes, identity and holds withou
     assert.equal(f.doc.externalPublicationApproved, false);
     assert.equal((await readFile(join(root, 'org-a/draft.txt'))).toString(), 'test');
     assert.deepEqual(f.audits.map(a => a.kind), ['RECORD_REMOVE', 'RECORD_RESTORE']);
-    assert.equal(f.locks.length, 3);
+    assert.equal(f.locks.length, 5);
+    assert.match(f.locks[0]!, /Organisation/);
+    assert.match(f.locks[3]!, /Organisation/);
   } finally {
     if (oldRoot === undefined) delete process.env.LOCAL_FILE_STORAGE_DIR;
     else process.env.LOCAL_FILE_STORAGE_DIR = oldRoot;
@@ -121,4 +125,12 @@ test('missing, replaced or expired recovery file never restores a record or writ
     assert.notEqual(f.doc.deletedAt, null);
     assert.deepEqual(f.audits.map(a => a.kind), ['RECORD_REMOVE']);
   }
+});
+
+
+test('ambiguous active policies refuse removal before reading stored bytes',async()=>{
+  const f=fixture();f.setCompetingPolicy();let reads=0;
+  const service=new DocumentRecoveryService(f.prisma,async()=>{reads++;return Buffer.from('test');});
+  await assert.rejects(service.remove(input),{statusCode:409,code:'DOCUMENT_RECOVERY_POLICY_REQUIRED'});
+  assert.equal(reads,0);assert.equal(f.doc.deletedAt,null);assert.equal(f.audits.length,0);
 });

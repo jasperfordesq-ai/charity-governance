@@ -2,6 +2,33 @@
 
 Last updated: 2026-09-30
 
+## Vault policy ambiguity guard - 30 September 2026 (source only)
+
+The legacy document-retention proof exposed a real guard gap: a selected
+approval could still support removal/authorization/claim while another approved
+VAULT_DRAFT policy remained unwithdrawn. Normal policy replacement already
+withdraws previous approvals; this fix also rejects ambiguous direct database
+state. Migration 2200 adds the check at all three transitions without editing
+historical policy decisions or creating a cleanup job on refusal.
+
+Recovery API transactions now lock the organisation before the document, matching
+policy and purge ordering. Removal refuses competing approvals before reading
+stored bytes. Withdrawal of the competing approval permits the reviewed operation;
+original recovery deadlines, retention checks, holds and atomic deletion remain.
+No evidence establishes that this ambiguous state exists in the live charity.
+Runtime remains e39edbe8; this migration and the copy-control changes await release.
+Review-management API/UI, metadata audit and full original DPO scope remain open.
+
+Ambiguity proof: the initial database and service tests accepted the operation
+and failed as expected. Final populated PostgreSQL proof passes in 65.38s,
+including an explicitly lock-ordered concurrent approval/claim refusal, no
+cleanup dispatch on refusal, and successful rollback-contained disposal after
+reviewed withdrawal. All 21 focused recovery/purge API tests and API build pass.
+Migration 2200 gate: zero blocked, zero warnings, no override. Private evidence:
+document-policy-conflict-{red,api-red,api-green,final,build}.log and gate.json.
+All test handles are terminal. The previously recorded primary-policy invariant
+gap is fixed in source; live deployment/acceptance remains outstanding.
+
 ## Copy policy and observation binding - 30 September 2026 (source only)
 
 Migration 2100 binds later document/complaint copy authority to a separately

@@ -52,6 +52,7 @@ export class DocumentRecoveryService {
       throw new AppError(400, 'DOCUMENT_REMOVAL_EVIDENCE_REQUIRED', 'Provide a controlled removal evidence reference.');
     }
     return this.prisma.$transaction(async (tx) => {
+      await tx.$queryRaw`SELECT id FROM "Organisation" WHERE id=${input.organisationId} FOR UPDATE`;
       await this.actor(tx, input);
       const doc = await this.locked(tx, input, false);
       if (doc.deletionHold || doc.lifecycleStatus !== 'DRAFT' || doc.approvalAsserted || doc.approvedByResolutionId) {
@@ -72,7 +73,11 @@ export class DocumentRecoveryService {
       const policy = await tx.dataRetentionPolicyRevision.findFirst({ where: { id: input.policyId,
         organisationId: input.organisationId, recordClass: 'VAULT_DRAFT', state: 'APPROVED',
         withdrawal: { is: null } } });
-      if (!policy || policy.retentionMode === 'PERMANENT') throw new AppError(409,
+      const competingPolicy = await tx.dataRetentionPolicyRevision.findFirst({ where: {
+        id: { not: input.policyId }, organisationId: input.organisationId,
+        recordClass: 'VAULT_DRAFT', state: 'APPROVED', withdrawal: { is: null },
+      }, select: { id: true } });
+      if (!policy || competingPolicy || policy.retentionMode === 'PERMANENT') throw new AppError(409,
         'DOCUMENT_RECOVERY_POLICY_REQUIRED', 'An approved current draft-removal policy is required.');
       const bytes = await this.readFile(input.organisationId, doc.fileUrl, doc.storageProvider!);
       if (bytes.length !== doc.fileSize) throw new AppError(409,
@@ -101,6 +106,7 @@ export class DocumentRecoveryService {
 
   async restore(input: RecoveryInput) {
     return this.prisma.$transaction(async (tx) => {
+      await tx.$queryRaw`SELECT id FROM "Organisation" WHERE id=${input.organisationId} FOR UPDATE`;
       await this.actor(tx, input);
       const doc = await this.locked(tx, input, true);
       // Restoring preserves a hold. A hold forbids destruction, not recovery.

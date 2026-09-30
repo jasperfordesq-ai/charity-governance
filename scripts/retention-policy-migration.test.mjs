@@ -1,3 +1,4 @@
+import { proveDocumentPolicyConflict } from './document-policy-conflict-proof.mjs';
 import { proveCopyBinding } from './copy-binding-proof.mjs';
 import { proveCopyAuthority } from './copy-authority-proof.mjs';
 import assert from 'node:assert/strict';
@@ -333,6 +334,14 @@ test('retention policy and recovery-state upgrade preserve documents and enforce
     sql(evidence('ambiguous-original-plan',{area:'BACKUPS',scope:'AMBIGUOUS-POLICY',status:'RETAINED_APPROVED',nextReview:"CURRENT_TIMESTAMP+INTERVAL '1 day'"}),/current original-plan policy/);
     sql(withdrawal('future-retention-withdrawn','retention-a','future-retention'));
     await proveCopyBinding(sql,{kind:'Document',organisation:'retention-a',actor:'owner-a',authorization:'expired-authorization'});
+    await proveDocumentPolicyConflict(sql,plan,async(first,second,rejection)=>{
+      const holder=session('policy-ambiguity-writer',`BEGIN; ${first} SELECT 'BARRIER';`,true);
+      await until(()=>holder.output().includes('BARRIER'),'policy approval did not acquire its lock');
+      const follower=session('policy-ambiguity-claim',second);
+      await until(()=>sql(`SELECT count(*) FROM pg_stat_activity WHERE application_name='policy-ambiguity-claim' AND wait_event_type='Lock';`)==='1','claim did not wait for policy approval');
+      holder.child.stdin.end('COMMIT;\n');assert.equal((await holder.done).code,0);
+      const result=await follower.done;assert.notEqual(result.code,0);assert.match(result.stderr,rejection);
+    });
     const authority = JSON.parse(sql(PURGE_RESTORE_SNAPSHOT_SQL));
     const localKeys = JSON.parse(sql(PURGE_RESTORE_LOCAL_OBJECTS_SQL));
     assert.equal(localKeys.length, 1);
