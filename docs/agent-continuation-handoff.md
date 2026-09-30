@@ -2,6 +2,16 @@
 
 Last updated: 2026-09-30
 
+R3 authorization persistence now binds an immutable Owner decision to the exact
+retained document revision/object, current policy and six-store disposition plan.
+Database upgrade/negative proof and teardown pass; schema validation and all 51
+model-map/reset-safety tests pass. A plan is not evidence of absence. No route or
+worker consumes it; hard deletion remains blocked and restoration remains
+available. Next implement authorization withdrawal and the atomic claim/outbox,
+rechecking current actor/policy, revision, holds, retention and recovery deadlines
+before releasing a pinned primary-storage job. Preserve separate downstream
+dispositions and test restore/hold/purge races. R3-R5 remain undeployed and open.
+
 The previously recorded full-web typecheck gate is resolved. Test environment
 setup now respects Next's readonly NODE_ENV declaration; client logging tests
 also restore the actual pre-test environment. Full `tsc -p apps/web/tsconfig.json

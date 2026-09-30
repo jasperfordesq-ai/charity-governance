@@ -553,6 +553,7 @@ model Organisation {
   complianceApprovalSnapshots ComplianceApprovalSnapshot[]
   documents                   Document[]
   retentionPolicyRevisions    DataRetentionPolicyRevision[]
+  documentPurgeAuthorizations DocumentPurgeAuthorization[]
   deadlines                   Deadline[]
   conflictRecords             ConflictRecord[]
   riskRecords                 RiskRecord[]
@@ -1293,6 +1294,7 @@ model DataRetentionPolicyRevision {
   approvalEvidenceRef String?
   withdrawal          DataRetentionPolicyWithdrawal?
   removedDocuments    Document[]
+  purgeAuthorizations DocumentPurgeAuthorization[]
 
   @@unique([id, organisationId])
   @@unique([organisationId, recordClass, revision], map: "RetentionPolicy_org_class_revision_key")
@@ -1310,6 +1312,31 @@ model DataRetentionPolicyWithdrawal {
 
   @@unique([policyId, organisationId])
   @@index([organisationId, occurredAt, id])
+}
+
+// Authorization records a reviewed plan, not execution or provider absence.
+// Scalar document identity survives the later, separately guarded purge claim.
+model DocumentPurgeAuthorization {
+  id                 String @id @default(cuid())
+  organisationId     String
+  organisation       Organisation @relation(fields: [organisationId], references: [id], onDelete: Restrict)
+  documentId         String
+  documentRevision   DateTime
+  policyId           String
+  policy             DataRetentionPolicyRevision @relation(fields: [policyId, organisationId], references: [id, organisationId], onDelete: Restrict)
+  actorUserId        String
+  evidenceRef        String
+  reason             String
+  storagePath        String
+  provider           String
+  sha256             String
+  fileSize           Int
+  recoveryUntil      DateTime
+  dispositionPlan    Json
+  authorizedAt       DateTime @default(now())
+
+  @@unique([id, organisationId])
+  @@index([organisationId, documentId, authorizedAt])
 }
 
 model Document {

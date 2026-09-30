@@ -31,6 +31,29 @@ purge/hold races, user-interface behavior or provider/backup disposal.
 
 ## Observed starting point
 
+Purge authorization persistence checkpoint: `DocumentPurgeAuthorization` is an
+immutable Owner decision binding tenant, document revision, policy, provider,
+path, hash, size and saved recovery deadline. It requires a six-store plan
+(primary, versions, Confluence, exports, audit, backups) with a controlled
+evidence reference for each proposed disposal, approved retention or
+non-applicability. These are plans, never observations of absence. Approval
+can precede the recovery deadline; execution must still wait for both retention
+and recovery expiry. Replacement current policies are permitted without changing
+the saved recovery deadline. The database locks the active Owner, document and
+policy and rejects active/held documents, wrong-object binding and withdrawn
+policies. No endpoint, claim, worker consumption or live activation exists yet.
+Authorization does not relax the existing hard-delete guard and does not prevent
+restoration; a later claim must revalidate revision, holds, current policy,
+authority and deadlines atomically. Authorization withdrawal and claim/outbox
+integration are still required before exposing a purge workflow.
+
+Real PostgreSQL upgrade proof passes active-record, foreign-Owner, wrong-path,
+incomplete-plan, invented-absence, held-record and immutable-history refusals,
+then proves that an accepted authorization still cannot hard-delete the document
+or create a cleanup job and does not prevent restoration. Existing removal-race
+tests also pass; disposable teardown succeeds. Schema validation and all 51
+model-inventory/reset-safety tests pass. This is R3 persistence progress only.
+
 Latest retirement/race checkpoint: the obsolete immediate-delete service and
 its private retirement helpers are gone. Tests for that removed entry point
 were retired; cleanup worker, publication worker and current recovery tests

@@ -141,6 +141,27 @@ test('retention policy and recovery-state upgrade preserve documents and enforce
     sql(`UPDATE "Document" SET "deletedAt"=NULL,"deletedById"=NULL,"removedFromRevision"=NULL,"removalEvidenceRef"=NULL,"recoveryPolicyId"=NULL,"recoveryUntil"=NULL,"recoverySha256"=NULL WHERE id='retained-doc';`);
     assert.equal(sql(`SELECT count(*) FROM "Document" WHERE id='retained-doc' AND "recoverySha256" IS NULL AND "deletedAt" IS NULL;`), '1');
     const fingerprintRemoval = remove('fingerprint').replace('SET "deletedAt"', `SET "recoverySha256"='${'a'.repeat(64)}', "deletedAt"`);
+    sql(readFileSync(`${migrations}/20260930040000_document_purge_authorization/migration.sql`, 'utf8'));
+    const plan = Object.fromEntries(['PRIMARY','VERSIONS','CONFLUENCE','EXPORTS','AUDIT','BACKUPS'].map(area =>
+      [area, { disposition: area === 'PRIMARY' ? 'DISPOSE' : 'RETAIN_APPROVED', evidenceRef: `PLAN-${area}-001` }]));
+    const authorize = (id, actor = 'owner-a', dispositionPlan = plan, pathExpression = '"fileUrl"') => `INSERT INTO "DocumentPurgeAuthorization"
+      (id,"organisationId","documentId","documentRevision","policyId","actorUserId","evidenceRef",reason,"storagePath",provider,sha256,"fileSize","recoveryUntil","dispositionPlan")
+      SELECT '${id}',"organisationId",id,"updatedAt",'fingerprint','${actor}','PURGE-AUTH-001','Synthetic disposal plan for test evidence',${pathExpression},"storageProvider","recoverySha256","fileSize","recoveryUntil",'${JSON.stringify(dispositionPlan)}'::jsonb FROM "Document" WHERE id='retained-doc';`;
+    sql(authorize('active'), /unheld removed draft/);
+    sql(fingerprintRemoval);
+    sql(authorize('foreign', 'owner-b'), /active charity owner/);
+    sql(authorize('wrong-object', 'owner-a', plan, "'retention-a/other.pdf'"), /exact retained revision and object/);
+    sql(authorize('missing-stores', 'owner-a', { PRIMARY: plan.PRIMARY }), /all six stores/);
+    sql(authorize('invented-absence', 'owner-a', { ...plan, VERSIONS: { disposition: 'VERIFIED_ABSENT', evidenceRef: 'PLAN-001' } }), /disposition and controlled evidence/);
+    sql(`UPDATE "Document" SET "deletionHold"=true WHERE id='retained-doc';`);
+    sql(authorize('held'), /unheld removed draft/);
+    sql(`UPDATE "Document" SET "deletionHold"=false WHERE id='retained-doc';`);
+    sql(authorize('authorized'));
+    sql(`UPDATE "DocumentPurgeAuthorization" SET reason='Rewrite approval after authorization' WHERE id='authorized';`, /append-only/);
+    sql(`DELETE FROM "DocumentPurgeAuthorization" WHERE id='authorized';`, /append-only/);
+    sql(`DELETE FROM "Document" WHERE id='retained-doc';`, /authorized purge transition/);
+    assert.equal(sql(`SELECT count(*) FROM "DocumentPurgeAuthorization"; SELECT count(*) FROM "DocumentStorageDeletion";`), '1\n0');
+    sql(`UPDATE "Document" SET "deletedAt"=NULL,"deletedById"=NULL,"removedFromRevision"=NULL,"removalEvidenceRef"=NULL,"recoveryPolicyId"=NULL,"recoveryUntil"=NULL,"recoverySha256"=NULL WHERE id='retained-doc';`);
     for (const race of ['hold', 'withdrawal']) {
       const mutation = race === 'hold'
         ? `UPDATE "Document" SET "deletionHold"=true WHERE id='retained-doc';`
