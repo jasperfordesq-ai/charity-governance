@@ -1,5 +1,32 @@
 # CharityPilot Agent Continuation Handoff
 
+> **Verified private VM release, 2026-09-30 22:57 Dublin:** source
+> `674be7107220acdf8335e107dbb1aa7234f249d8` runs on blue. Exact CI
+> 36780803672 and E2E 36780803674 succeeded (239 browser tests); the migration
+> gate reported 0 pending, blocked or warned changes. API/web/scheduler and DB
+> are healthy, previous green `2f4ffbf9` is stopped and rollbackable, and only
+> Caddy publishes the loopback port. All 120 existing backup files stayed
+> identical; two new sets were copied off the VM and verified by hash and
+> manifest. Supported isolated restore passed (139 migrations, 63 documents,
+> 22 risks, 22 governing acts). Signed-in Owner read-only checks reached
+> Registers and Security & Data; nine historical replay events and scoped C1
+> remain. The ordinary complaint-hold API guard is deployed but independent
+> recovery remains inactive. Direct SQL/other writer coverage, independent
+> provider custody, host-loss reopening, policy decisions, real role acceptance
+> and DPO sign-off remain open. Private evidence:
+> `.charitypilot-private/release-674be710-acceptance.md`.
+
+> **Private P01/P02 decision preparation:** the March Data Protection Policy,
+> March Privacy Notice and circulated Privacy Notice V2 were checked against
+> exact verified backup bytes and retained CWR-2026-11 evidence. March versions
+> are proposed SUPERSEDED and V2 proposed CURRENT/RESTRICTED; the circulated
+> Privacy Notice V2 still shows two required corrections before publication.
+> Eight of 63 worksheet rows have source evidence, seven have a proposal and
+> all 63 remain PENDING. No live document or policy setting was changed.
+
+> The following 22:30 release and source-only guard notes are historical
+> checkpoints retained for the sequence of work.
+
 > **Verified private VM release, 2026-09-30 22:30 Dublin:** source
 > `2f4ffbf92a71b886a8daf9fa31bddad44f1fb69c` runs on green. Exact CI
 > 36778029710 and E2E 36778029677 succeeded (239 browser tests); migration
@@ -14,12 +41,13 @@
 > policy decisions, real role acceptance and DPO sign-off remain open. Private
 > evidence: `.charitypilot-private/release-2f4ffbf9-acceptance.md`.
 
-> **Subsequent source-only DPO-05 hardening:** the ordinary complaint hold API
+> **Historical source-only DPO-05 checkpoint before 674be710:** the ordinary complaint hold API
 > now refuses a hold change if an append-only independent recovery binding is
 > present for that charity. It checks the active Admin/Owner first and runs
 > under the charity lock at ReadCommitted. Focused and real PostgreSQL protocol
 > tests cover the refusal. This does not yet gate every database writer or
-> activate independent recovery; it is not in the verified `2f4ffbf9` image.
+> activate independent recovery; it was not in the verified `2f4ffbf9` image
+> and is now deployed in `674be710`.
 
 > The following 22:05 `6687cc47` release and source-only `2f4ffbf9` notes
 > are historical checkpoints retained for the sequence of work.
