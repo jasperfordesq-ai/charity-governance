@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import axios from 'axios';
-import { api } from './api';
+import { api, logoutSession } from './api';
 
 // Regression guard for the single-flight token refresh: when several requests
 // 401 at once (e.g. a dashboard firing parallel GETs after the access token
@@ -38,6 +38,20 @@ async function withNavigatorLocks<T>(locks: unknown, run: () => Promise<T>): Pro
 }
 
 const testLocks = { request: async <T>(_name: string, callback: () => Promise<T>) => callback() };
+
+test('logout rejection never refreshes or retries the credential being revoked', async () => {
+  let renewals = 0;
+  let requests = 0;
+  axios.defaults.adapter = async (config) => { renewals += 1; return ok(config) as never; };
+  api.defaults.adapter = async (config) => {
+    requests += 1;
+    assert.equal(config.url, '/auth/logout');
+    return fail401(config);
+  };
+  await assert.rejects(logoutSession());
+  assert.equal(requests, 1);
+  assert.equal(renewals, 0);
+});
 
 test('concurrent 401s trigger exactly one token refresh (single-flight)', async () => {
   let refreshCount = 0;

@@ -7,6 +7,7 @@ import {
   injectResetToken,
   injectVerifyToken,
   isEmailVerified,
+  withDb,
 } from '../helpers/db';
 import { gotoWithDevServerRetry } from '../helpers/navigation';
 
@@ -51,6 +52,87 @@ async function fillResetPasswordForm(page: Page, password: string): Promise<void
  * the REAL /verify-email page + endpoint.
  */
 test.describe('Authentication', () => {
+  test('dashboard sign-out failure stays visible and can be retried', async ({ ownerPage }) => {
+    await gotoWithDevServerRetry(ownerPage, '/dashboard');
+    await ownerPage.route('**/api/v1/auth/logout', (route) => route.abort('failed'));
+    const logoutButton = ownerPage.getByRole('button', { name: 'Logout', exact: true });
+    await logoutButton.click();
+    await expect(ownerPage.getByRole('alert').filter({ hasText: 'Sign-out could not be confirmed.' }))
+      .toHaveText('Sign-out could not be confirmed. Please try again.');
+    await expect(ownerPage).toHaveURL(/\/dashboard$/);
+    await expect(logoutButton).toBeEnabled();
+    await ownerPage.unroute('**/api/v1/auth/logout');
+    await logoutButton.click();
+    await expect(ownerPage).toHaveURL(/\/login(?:\?|$)/);
+  });
+
+  test('idle sign-out waits for cookie clearance before navigating', async ({ ownerPage }) => {
+    await ownerPage.clock.install();
+    await gotoWithDevServerRetry(ownerPage, '/dashboard');
+    await expect(ownerPage.getByRole('button', { name: 'Logout', exact: true })).toBeVisible();
+    let release!: () => void;
+    let received!: () => void;
+    const held = new Promise<void>((resolve) => { release = resolve; });
+    const arrived = new Promise<void>((resolve) => { received = resolve; });
+    await ownerPage.route('**/api/v1/auth/logout', async (route) => {
+      received();
+      await held;
+      await route.continue();
+    });
+    await ownerPage.clock.runFor(14 * 60 * 1000);
+    await arrived;
+    try {
+      await expect(ownerPage).toHaveURL(/\/dashboard$/);
+      await expect(ownerPage.getByRole('button', { name: 'Sign out', exact: true })).toBeDisabled();
+    } finally {
+      release();
+    }
+    await expect(ownerPage).toHaveURL(/\/login(?:\?|$)/);
+    expect((await ownerPage.context().cookies()).filter((cookie) =>
+      ['charitypilot_access', 'charitypilot_refresh'].includes(cookie.name))).toEqual([]);
+  });
+
+  test('dashboard sign-out waits for cookie clearance before navigating', async ({ ownerPage, owner }) => {
+    await gotoWithDevServerRetry(ownerPage, '/dashboard');
+    const logoutButton = ownerPage.getByRole('button', { name: 'Logout', exact: true });
+    await expect(logoutButton).toBeVisible();
+    let release!: () => void;
+    let received!: () => void;
+    const held = new Promise<void>((resolve) => { release = resolve; });
+    const arrived = new Promise<void>((resolve) => { received = resolve; });
+    let refreshes = 0;
+    ownerPage.on('request', (request) => {
+      if (new URL(request.url()).pathname === '/api/v1/auth/refresh') refreshes += 1;
+    });
+    await ownerPage.route('**/api/v1/auth/logout', async (route) => {
+      received();
+      await held;
+      await route.continue();
+    });
+    try {
+      await logoutButton.click();
+      await arrived;
+      await expect(ownerPage.getByRole('button', { name: /Logout$/ })).toBeDisabled();
+      await expect(ownerPage).toHaveURL(/\/dashboard$/);
+      expect(refreshes).toBe(0);
+    } finally {
+      release();
+    }
+    await expect(ownerPage).toHaveURL(/\/login(?:\?|$)/);
+    await expect(ownerPage.getByRole('heading', { name: 'Welcome back' })).toBeVisible();
+    const authCookies = (await ownerPage.context().cookies()).filter((cookie) =>
+      ['charitypilot_access', 'charitypilot_refresh'].includes(cookie.name));
+    expect(authCookies).toEqual([]);
+    const replayCount = await withDb(async (client) => {
+      const result = await client.query<{ count: number }>(
+        'SELECT count(*)::int AS count FROM "SecurityAuditEvent" WHERE "organisationId" = $1 AND "type" = $2',
+        [owner.organisationId, 'SESSION_REPLAY_DETECTED'],
+      );
+      return result.rows[0].count;
+    });
+    expect(replayCount).toBe(0);
+  });
+
   test('register, verify email, then log in to the dashboard', async ({ page }) => {
     const email = uniqueEmail('auth');
 

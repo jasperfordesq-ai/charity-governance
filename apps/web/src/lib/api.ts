@@ -126,6 +126,12 @@ export const api = axios.create({
   withCredentials: true,
 });
 
+// Logout must never renew the credential it is trying to revoke. Callers wait
+// for this response (including cookie clearance) before leaving the page.
+export async function logoutSession(): Promise<void> {
+  await api.post('/auth/logout', {}, { skipAuthRefresh: true, skipAuthRedirect: true });
+}
+
 api.interceptors.response.use(
   (response) => {
     // Only the single-field transport wrapper is unwrapped. Cursor and other

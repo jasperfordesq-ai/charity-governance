@@ -2,6 +2,17 @@
 
 Last updated: 2026-09-30
 
+DPO-02 logout ordering repair: dashboard navigation and idle expiry previously
+started logout without waiting for the response that clears cookies. Both now
+wait; logout never triggers refresh interception, and failed sign-out retains a
+visible retry instead of claiming success. The delayed-response browser test
+fails against the previous implementation. Three corrected Chromium journeys
+pass: delayed dashboard logout, network-failure retry and idle expiry. The
+dashboard test verifies cleared cookies and no synthetic-charity replay event.
+Web unit tests (543), web/E2E TypeScript and edited-file lint pass. This is local
+proof of a reproduced defect, not attribution of all historical replay alerts;
+exact hosted release and live observation remain required.
+
 Hosted follow-up: f9857ed6 CI 36702789366 failed the web audit-summary test,
 which assumed there could be no remaining decorative-page findings. The
 refreshed audit flags Minute Book. The assertion now follows the recorded

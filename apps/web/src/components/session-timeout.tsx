@@ -3,7 +3,7 @@
 import { useEffect, useState, useRef, useCallback } from 'react';
 import { Modal, ModalContent, ModalHeader, ModalBody } from '@heroui/react';
 import { ModalFormActions } from '@/components/ui/modal-form-actions';
-import { api, refreshSession } from '@/lib/api';
+import { logoutSession, refreshSession } from '@/lib/api';
 import { SessionRefreshLockUnavailableError } from '@/lib/session-refresh-lock';
 import { Clock } from 'lucide-react';
 
@@ -14,12 +14,31 @@ export function SessionTimeout() {
   const [showWarning, setShowWarning] = useState(false);
   const [countdown, setCountdown] = useState(120);
   const [isExtending, setIsExtending] = useState(false);
+  const [isSigningOut, setIsSigningOut] = useState(false);
+  const [signOutError, setSignOutError] = useState('');
+  const signingOut = useRef(false);
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const countdownRef = useRef<ReturnType<typeof setInterval> | null>(null);
   // Mirrors showWarning for the activity listener so the main effect does not
   // need showWarning as a dependency (which made it tear down its own countdown
   // the moment the warning appeared, so it never counted down or logged out).
   const showWarningRef = useRef(false);
+
+  const handleSignOut = useCallback(async () => {
+    if (signingOut.current) return;
+    signingOut.current = true;
+    setIsSigningOut(true);
+    setSignOutError('');
+    try {
+      await logoutSession();
+      window.location.href = '/login';
+    } catch {
+      setSignOutError('Sign-out could not be confirmed. Please try again.');
+    } finally {
+      signingOut.current = false;
+      setIsSigningOut(false);
+    }
+  }, []);
 
   const resetTimer = useCallback(() => {
     setShowWarning(false);
@@ -36,16 +55,15 @@ export function SessionTimeout() {
         setCountdown((prev) => {
           if (prev <= 1) {
             if (countdownRef.current) clearInterval(countdownRef.current);
-            // Session expired - redirect to login.
-            void api.post('/auth/logout', {}).catch(() => undefined);
-            window.location.href = '/login';
+            // Wait for revocation and cookie clearance before navigation.
+            void handleSignOut();
             return 0;
           }
           return prev - 1;
         });
       }, 1000);
     }, SESSION_TIMEOUT - WARNING_BEFORE);
-  }, []);
+  }, [handleSignOut]);
 
   useEffect(() => {
     resetTimer();
@@ -77,11 +95,6 @@ export function SessionTimeout() {
     resetTimer();
   };
 
-  const handleSignOut = async () => {
-    await api.post('/auth/logout', {}).catch(() => undefined);
-    window.location.href = '/login';
-  };
-
   if (!showWarning) return null;
 
   return (
@@ -89,6 +102,7 @@ export function SessionTimeout() {
       <ModalContent>
         <ModalHeader>Session Expiring Soon</ModalHeader>
         <ModalBody>
+          {signOutError ? <p role="alert" className="text-sm text-red-700 dark:text-red-300">{signOutError}</p> : null}
           <div className="text-center" role="status" aria-live="polite">
             <div className="w-16 h-16 rounded-lg bg-amber-50 dark:bg-amber-500/10 flex items-center justify-center mx-auto mb-4">
               <Clock className="w-8 h-8 text-amber-500 dark:text-amber-300" strokeWidth={1.5} aria-hidden="true" />
@@ -109,7 +123,7 @@ export function SessionTimeout() {
           submitLabel="Stay signed in"
           onCancel={handleSignOut}
           onSubmit={handleExtend}
-          submitting={isExtending}
+          submitting={isExtending || isSigningOut}
         />
       </ModalContent>
     </Modal>

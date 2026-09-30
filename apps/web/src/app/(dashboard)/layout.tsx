@@ -162,6 +162,8 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   const router = useRouter();
   const pathname = usePathname();
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [isSigningOut, setIsSigningOut] = useState(false);
+  const [signOutError, setSignOutError] = useState('');
   const [isDesktopNav, setIsDesktopNav] = useState(false);
   const menuButtonRef = useRef<HTMLButtonElement>(null);
   const sidebarRef = useRef<HTMLElement>(null);
@@ -445,9 +447,19 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
               // (light 4.4:1 #c20e4d on the danger-100 tint, dark 4.34:1). Darken it in light
               // and brighten it in dark to clear 4.5:1.
               className="!text-[#a10b48] dark:!text-[#ff8fb3]"
-              onPress={() => {
-                logout();
-                router.replace('/login');
+              isDisabled={isSigningOut}
+              isLoading={isSigningOut}
+              onPress={async () => {
+                setIsSigningOut(true);
+                setSignOutError('');
+                try {
+                  await logout();
+                  router.replace('/login');
+                } catch {
+                  setSignOutError('Sign-out could not be confirmed. Please try again.');
+                } finally {
+                  setIsSigningOut(false);
+                }
               }}
             >
               <LogOut className="w-4 h-4" strokeWidth={2} aria-hidden="true" />
@@ -459,6 +471,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
         {/* Page content */}
         <main id="dashboard-content" className="flex-1 p-4 sm:p-6 lg:p-8 overflow-auto">
           <Breadcrumbs />
+          {signOutError ? <p role="alert" className="mb-4 text-sm text-red-700 dark:text-red-300">{signOutError}</p> : null}
           {children}
         </main>
         <KeyboardShortcuts />

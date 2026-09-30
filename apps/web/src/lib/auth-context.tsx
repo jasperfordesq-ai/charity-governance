@@ -1,7 +1,7 @@
 'use client';
 
 import { createContext, useContext, useEffect, useState, useCallback, type ReactNode } from 'react';
-import { api } from './api';
+import { api, logoutSession } from './api';
 import type { UserResponse } from '@charitypilot/shared';
 
 interface AuthContextType {
@@ -61,11 +61,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   };
 
   const logout = async () => {
-    try {
-      await api.post('/auth/logout', {});
-    } finally {
-      setUser(null);
-    }
+    await logoutSession();
+    setUser(null);
   };
 
   return (
