@@ -2,6 +2,39 @@
 
 Last updated: 2026-09-30
 
+## Verified deployment — 30 September 2026
+
+Private runtime e39edbe8f220c9118d248ab7d92d95a603ba1cbb is live on green
+since 13:49:34.968 UTC (14:49 Irish time). Exact CI 36722795524 and E2E
+36722795397 succeeded; all 238 browser tests passed. The four migrations
+1500/1600/1700/1800 passed the gate with zero blocked, four warnings and no
+override. Candidate/front-door smoke, runtime health and exact scheduler
+identity passed. Previous blue e5e988a3 is stopped and retained for rollback.
+Only Caddy publishes 127.0.0.1:8080; the local Docker boundary was re-proved.
+
+Complaint holds, Owner disposal authorization/withdrawal/claim, immutable
+receipts, per-scope copy evidence and complaint-aware restore reconciliation
+are now deployed. Signed-in Owner read-only acceptance reached Registers and
+the fully loaded complaint-disposal panel, showing no disposal reviews. No
+live retention policy, complaint purge or copy observation was created.
+
+Cutover backup 2026-09-30T13-48-44-971Z and post-migration backup
+2026-09-30T13-50-38-535Z have off-host copies with all three file hashes
+verified against the host; dump/archive hashes also match their manifests.
+The supported isolated restore drill passed with 129 migrations, 63 documents,
+22 risks and 22 governing acts. Live complaint/policy/purge ledgers are empty;
+populated destructive-workflow proof comes from isolated tests. This drill
+is not authority to reopen a restored application after host loss.
+
+Later approved changes to copy dispositions, independent durable purge
+authority, supported recovery reopening, remaining classes/stores, real
+record/audience decisions, historical replay attribution, role-specific live
+acceptance and DPO/controller approval remain open. This is bounded private
+release evidence, not public-launch or formal DPO sign-off.
+
+The implementation checkpoints below are historical. Their source-only and
+pending-deployment wording is superseded by the verified release above.
+
 Complaint copy-evidence dashboard checkpoint (source only): shared evidence
 controls now map complaint scopes/endpoints explicitly while retaining the
 document workflow. Owner history supports new scope observations, follow-up
