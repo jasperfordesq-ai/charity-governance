@@ -25,6 +25,29 @@ purge/hold races, user-interface behavior or provider/backup disposal.
 
 ## Observed starting point
 
+Latest policy administration checkpoint: `/documents/policy-revisions` provides
+browser-only bounded history and immutable proposal/approval creation for
+VAULT_DRAFT; `/:id/withdraw` records Owner withdrawal with reason/evidence.
+Service checks use the active same-charity actor, not just the request's role.
+Each approval records exact terms and evidence in a new revision and withdraws
+previous unwithdrawn approvals in the same transaction. Proposals never activate
+rules. Approval/withdrawal take the organisation and actor locks consistently,
+then policy locks shared with removal. Existing recovery deadlines are unchanged.
+
+The UI exposes individual-review, permanent-retention and days-from-creation
+rules; no days are prefilled. The Owner sees exact terms, supersession behavior,
+an evidence field and an authority acknowledgement before approval. This records
+authority asserted by the Owner; it does not independently validate the evidence
+or constitute DPO/legal approval. Other classes remain R4 work.
+
+The expanded managed browser test passed proposal, approval, retained removal,
+replacement approval, unchanged retained deadline, ordinary access denial,
+identical-byte restoration and explicit withdrawal. Production build/typecheck
+passed; the restore screenshot was inspected in its stable viewport. Withdrawal
+lock ordering was strengthened after that browser build; API build and 74 focused
+tests pass on final source. A real database concurrency test remains required.
+No live migration, policy activation or deployment occurred.
+
 Latest UI checkpoint: the Documents page now offers an Admin-only Deleted Items
 panel with bounded pagination, deadlines, hold status, refresh, reasoned restore,
 error handling and restricted-sharing notice. It resets the pagination cursor

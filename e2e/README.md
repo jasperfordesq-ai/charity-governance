@@ -17,7 +17,7 @@ monorepo, so Playwright never enters the API/web production installs or images.
 | `tests/compliance.spec.ts` | record a governance standard's status (auto-saved) -> board sign-off on the Export page; pending standard edits trigger the in-app navigation confirmation |
 | `tests/conditional-obligations.spec.ts` | save organisation conditional triggers -> verify profile-triggered Documents, Deadlines, and Regulator prompts appear |
 | `tests/documents.spec.ts` | upload a document -> download it and verify the bytes |
-| `tests/document-recovery.spec.ts` | synthetic approved policy -> upload -> retained removal -> ordinary detail/download denial -> Deleted Items -> restore -> identical downloaded bytes and retained audit; disposable stack only |
+| `tests/document-recovery.spec.ts` | policy proposal/approval UI -> upload -> retained removal -> replacement approval preserving the recovery deadline -> ordinary detail/download denial -> Deleted Items -> restore identical bytes and retained audit -> policy withdrawal; disposable stack only |
 | `tests/integrations-confluence.spec.ts` | Confluence connector against the in-stack fake Atlassian: disclosure gate -> signed-state callback -> space choice -> a reviewed Vault publication destination, including an in-flight destination change held by PostgreSQL, refusal and fresh reapproval; plus a forged state refused, and no token material on observed connector responses |
 | `tests/dashboard-navigation.spec.ts` | mobile dashboard sidebar opens, moves focus into navigation, closes with Escape, restores focus, and removes closed links from tab order |
 | `tests/deadlines-team.spec.ts` | create a deadline -> mark it complete; team invite -> accept -> join the workspace |

@@ -8,13 +8,24 @@ import { gotoWithDevServerRetry } from '../helpers/navigation';
 test('a draft enters Deleted Items and restores with identical bytes and retained audit', async ({ owner, ownerPage, browserOriginFence }) => {
   test.skip(IS_DEPLOYED_QA, 'Synthetic policy requires the runner-owned disposable database.');
   const name = `Recovery proof ${Date.now()}`;
-  const policyId = `recovery-policy-${Date.now()}`;
   const sample = path.resolve(__dirname, '../fixtures/sample-document.txt');
-  await withDb(client => client.query(`INSERT INTO "DataRetentionPolicyRevision"
-    (id,"organisationId","recordClass",revision,state,"retentionMode","recoveryDays","createdById","approvedById","approvedAt","approvalEvidenceRef")
-    VALUES ($1,$2,'VAULT_DRAFT',1,'APPROVED','REVIEW_REQUIRED',30,$3,$3,CURRENT_TIMESTAMP,'SYNTHETIC-POLICY-001')`,
-  [policyId, owner.organisationId, owner.userId]));
   await gotoWithDevServerRetry(ownerPage, '/documents');
+  const policies = ownerPage.getByRole('region', { name: 'Draft retention policies' });
+  await reliableFill(policies.getByLabel('Recovery days after removal'), '30');
+  const proposal = ownerPage.waitForResponse(response => response.url().endsWith('/documents/policy-revisions') && response.request().method() === 'POST');
+  await policies.getByRole('button', { name: 'Save proposal' }).click();
+  expect((await proposal).status()).toBe(201);
+  const approve = async (evidence: string) => {
+    await policies.getByRole('button', { name: 'Review approval' }).click();
+    await reliableFill(ownerPage.getByLabel('Policy approval evidence reference'), evidence);
+    await ownerPage.getByRole('checkbox', { name: /I have authority to approve these exact terms/ }).check();
+    const response = ownerPage.waitForResponse(item => item.url().endsWith('/documents/policy-revisions') && item.request().method() === 'POST');
+    await ownerPage.getByRole('button', { name: 'Approve and replace earlier approvals' }).click();
+    const result = await response;
+    expect(result.status()).toBe(201);
+    return (await result.json()).data.id as string;
+  };
+  const policyId = await approve('SYNTHETIC-POLICY-001');
   await ownerPage.getByRole('button', { name: 'Upload Document' }).click();
   await reliableFill(ownerPage.getByLabel('Document Name'), name);
   await ownerPage.locator('#document-upload-file').setInputFiles(sample);
@@ -32,11 +43,17 @@ test('a draft enters Deleted Items and restores with identical bytes and retaine
   await ownerPage.getByRole('button', { name: 'Move to Deleted Items', exact: true }).click();
   expect((await removal).status()).toBe(200);
   await expect(row).toHaveCount(0);
-  const retained = await withDb(client => client.query(`SELECT "deletedAt","recoverySha256" FROM "Document" WHERE id=$1`, [id]));
+  const retained = await withDb(client => client.query(`SELECT "deletedAt","recoverySha256","recoveryUntil" FROM "Document" WHERE id=$1`, [id]));
   expect(retained.rows[0].deletedAt).toBeTruthy();
   expect(retained.rows[0].recoverySha256).toMatch(/^[a-f0-9]{64}$/);
   const jobs = await withDb(client => client.query(`SELECT id FROM "DocumentStorageDeletion" WHERE "sourceDocumentId"=$1`, [id]));
   expect(jobs.rowCount).toBe(0);
+  await reliableFill(policies.getByLabel('Recovery days after removal'), '45');
+  const replacementId = await approve('SYNTHETIC-POLICY-002');
+  const withdrawal = await withDb(client => client.query(`SELECT "evidenceRef" FROM "DataRetentionPolicyWithdrawal" WHERE "policyId"=$1`, [policyId]));
+  expect(withdrawal.rows[0].evidenceRef).toBe('SYNTHETIC-POLICY-002');
+  const deadline = await withDb(client => client.query(`SELECT "recoveryUntil" FROM "Document" WHERE id=$1`, [id]));
+  expect(deadline.rows[0].recoveryUntil).toEqual(retained.rows[0].recoveryUntil);
   // Owner ordinary detail/download are denied while the record is retained.
   for (const suffix of ['', '/download']) {
     const response = await ownerPage.request.get(`${browserOriginFence.apiOrigin}/api/v1/documents/${id}${suffix}`);
@@ -60,4 +77,12 @@ test('a draft enters Deleted Items and restores with identical bytes and retaine
   expect(state.rows[0]).toEqual({ deletedAt: null, visibility: 'RESTRICTED', externalPublicationApproved: false });
   const audit = await withDb(client => client.query(`SELECT kind FROM "DocumentControlAudit" WHERE "documentId"=$1 AND kind IN ('RECORD_REMOVE','RECORD_RESTORE') ORDER BY "occurredAt"`, [id]));
   expect(audit.rows.map(row => row.kind)).toEqual(['RECORD_REMOVE', 'RECORD_RESTORE']);
+  await policies.getByRole('button', { name: 'Load policy history' }).click();
+  const current = policies.getByRole('listitem').filter({ hasText: 'Revision 3: Approved' });
+  await current.getByRole('button', { name: 'Review withdrawal' }).click();
+  await reliableFill(ownerPage.getByLabel('Withdrawal evidence reference'), 'SYNTHETIC-WITHDRAW-001');
+  await reliableFill(ownerPage.getByLabel('Reason for policy withdrawal'), 'Withdraw the policy after this synthetic recovery rehearsal.');
+  const withdrawn = ownerPage.waitForResponse(response => response.url().endsWith(`/policy-revisions/${replacementId}/withdraw`) && response.request().method() === 'POST');
+  await ownerPage.getByRole('button', { name: 'Withdraw policy', exact: true }).click();
+  expect((await withdrawn).status()).toBe(201);
 });

@@ -2,12 +2,13 @@ import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import { createHash } from 'node:crypto';
 import { DocumentService } from '../../services/document.service.js';
 import { DocumentRecoveryService } from '../../services/document-recovery.service.js';
+import { RetentionPolicyService } from '../../services/retention-policy.service.js';
 import { StorageService } from '../../services/storage.service.js';
 import { authGuard } from '../../middleware/auth.js';
 import { requireSessionLevel, requireWebSession } from '../../middleware/session-level.js';
 import { requireActionApproval } from '../../middleware/action-approval.js';
 import { subscriptionGuard } from '../../middleware/subscription.js';
-import { requireAdmin } from '../../middleware/roles.js';
+import { requireAdmin, requireOwner } from '../../middleware/roles.js';
 import { uploadDocumentSchema, updateDocumentSchema, linkStandardSchema } from '@charitypilot/shared';
 import { AppError, handleError } from '../../utils/errors.js';
 import {
@@ -122,9 +123,39 @@ export async function documentRoutes(app: FastifyInstance) {
   const storageService = new StorageService(createPrismaOrganisationStorageResolver(app.prisma));
   const recovery = new DocumentRecoveryService(app.prisma,
     (organisationId, path, provider) => storageService.downloadFile(organisationId, path, provider));
+  const policies = new RetentionPolicyService(app.prisma);
 
   app.addHook('onRequest', authGuard);
   app.addHook('onRequest', subscriptionGuard);
+
+  app.get('/policy-revisions', { preHandler: [requireAdmin, requireWebSession] }, async (request, reply) => {
+    try {
+      const { before } = z.object({ before: z.coerce.number().int().positive().optional() }).strict().parse(request.query);
+      return sendSuccess(reply, await policies.list(request.user.organisationId, before));
+    } catch (error) {
+      if (error instanceof ZodError) return reply.status(400).send({ code: 'VALIDATION_ERROR', error: 'Validation failed', details: error.errors });
+      return handleError(reply, error);
+    }
+  });
+  app.post('/policy-revisions', { preHandler: [requireAdmin, requireWebSession] }, async (request, reply) => {
+    try {
+      return sendCreated(reply, await policies.create(request.user.organisationId, request.user.userId, request.body));
+    } catch (error) {
+      if (error instanceof ZodError) return reply.status(400).send({ code: 'VALIDATION_ERROR', error: 'Validation failed', details: error.errors });
+      return handleError(reply, error);
+    }
+  });
+  app.post<{ Params: { id: string } }>('/policy-revisions/:id/withdraw', {
+    preHandler: [requireOwner, requireWebSession],
+  }, async (request, reply) => {
+    try {
+      return sendCreated(reply, await policies.withdraw(request.user.organisationId, request.user.userId,
+        storageDeletionIdSchema.parse(request.params.id), request.body));
+    } catch (error) {
+      if (error instanceof ZodError) return reply.status(400).send({ code: 'VALIDATION_ERROR', error: 'Validation failed', details: error.errors });
+      return handleError(reply, error);
+    }
+  });
 
   app.get('/recovery-policies', { preHandler: [requireAdmin, requireWebSession] }, async (request, reply) => {
     const policies = await app.prisma.dataRetentionPolicyRevision.findMany({ where: {

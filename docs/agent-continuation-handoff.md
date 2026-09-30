@@ -2,6 +2,21 @@
 
 Last updated: 2026-09-30
 
+Draft-policy administration is now implemented locally: browser Admin/Owner can
+record immutable proposals; only the active Owner can approve or withdraw with
+controlled evidence. Approval allocates a new revision and atomically withdraws
+older approvals of VAULT_DRAFT. Existing removed-item deadlines are untouched.
+The UI previews exact terms and requires the Owner's authority acknowledgement.
+No live policy was activated. The expanded disposable browser journey passed
+proposal, approval, replacement, unchanged recovery deadline, restored exact bytes
+and explicit withdrawal. The new viewport screenshot was inspected successfully.
+After that run, withdrawal adopted the same organisation/actor lock ordering as
+approval; API build and all 74 policy/recovery/route tests pass on final source.
+Real-database concurrent approval/withdrawal/removal still needs explicit proof.
+Next retire unused hard-delete code/tests, adapt old DPO browser journeys, add
+persisted negative/race proof, then implement R3 purge and R4 downstream/other
+record classes before deployment and live acceptance.
+
 Deleted Items/restore UI now exists and the real disposable Chromium journey
 `tests/document-recovery.spec.ts` passes through upload, policy-bound removal,
 retained PostgreSQL record/hash, zero cleanup jobs, Owner ordinary detail/download

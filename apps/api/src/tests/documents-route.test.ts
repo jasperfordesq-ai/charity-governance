@@ -1830,7 +1830,7 @@ test('Admin connector cannot read dashboard-only Vault control and deletion hist
   try {
     for (const path of [
       '/replacement-candidates/doc-1', '/confluence-mirrors?ids=doc-1',
-      '/control-audit', '/storage-deletions/history', '/storage-deletions/dead-letter', '/deleted', '/recovery-policies',
+      '/control-audit', '/storage-deletions/history', '/storage-deletions/dead-letter', '/deleted', '/recovery-policies', '/policy-revisions',
     ]) {
       const response = await app.inject({ method: 'GET', url: path, headers: { authorization: authHeader } });
       assert.equal(response.statusCode, 403, path);
@@ -1847,7 +1847,7 @@ test('Admin connector cannot directly retry a publication or requeue a storage d
     }) },
   } as never);
   try {
-    for (const path of ['/doc-1/publication/retry', '/storage-deletions/deletion-1/requeue', '/doc-1/restore']) {
+    for (const path of ['/doc-1/publication/retry', '/storage-deletions/deletion-1/requeue', '/doc-1/restore', '/policy-revisions']) {
       const response = await app.inject({ method: 'POST', url: path, headers: { authorization: authHeader } });
       assert.equal(response.statusCode, 403, path);
       assert.equal(response.json().code, 'WEB_SESSION_REQUIRED');
