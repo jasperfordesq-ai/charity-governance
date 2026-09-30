@@ -4,6 +4,17 @@ Last updated: 2026-09-30
 
 ## Recovery authority development and corrected release status
 
+The inactive recovery reader now joins full journal/current-head verification
+to exact encrypted preparation bytes through `readPublishedComplaintPreparation`.
+The new `COMPLAINT_PREPARATION_V1` kind explicitly binds `factsDigest` to the
+envelope SHA-256; older generic kinds are not interpreted as this payload, and
+older readers reject the new kind. Missing/replaced envelopes and a head revision
+change during decryption refuse the read. This is evidence retrieval only, not
+writer reservation, execution fencing, replay application or permission to reopen.
+No production caller or provider has been activated. Preserve the separate trusted
+checkpoint and provider contracts; never source the expected digest solely from a
+restored local database or recreate a missing published envelope.
+
 Hosted verification for the inactive recovery foundation at
 4b7eae1edfe16bf168069b9b45b7a9b992d6671a passed: CI 36742905676 and E2E
 36742905671 (238 browser tests). It is not deployed or a completed independent

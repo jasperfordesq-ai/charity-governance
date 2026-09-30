@@ -18,7 +18,8 @@ export interface AuthorityHeadSource {
 
 const identity = z.string().regex(/^[A-Za-z0-9_-]{1,120}$/);
 const digest = z.string().regex(/^[a-f0-9]{64}$/);
-const kinds = z.enum(['DISPOSAL_INTENT', 'DISPOSAL_RESULT', 'PRESERVATION_CHANGE', 'CONTROL_CHANGE']);
+const kinds = z.enum(['DISPOSAL_INTENT', 'DISPOSAL_RESULT', 'PRESERVATION_CHANGE', 'CONTROL_CHANGE',
+  'COMPLAINT_PREPARATION_V1']);
 const bindingSchema = z.object({ installationId: identity, organisationId: identity }).strict();
 const checkpointFields = {
   generation: z.number().int().nonnegative().max(10000), digest: digest.nullable(),
@@ -185,8 +186,26 @@ export class RecoveryAuthorityJournal {
    * writer may advance immediately afterwards: callers still need action fencing.
    * No claim of freshness is valid without the HeadSource provider contract. */
   async inspectCurrent(source: AuthorityHeadSource) {
+    const { rows, revision } = await this.currentHistory(source);
+    return { generation: rows.length, digest: rows.at(-1)?.digest ?? null,
+      actionAuthorized: false as const, revision };
+  }
+
+  /** Obtain an immutable entry only after full current-history verification.
+   * The caller must interpret factsDigest using the entry's explicit protocol;
+   * format 1 does not itself specify an encrypted payload or permit execution. */
+  async readPublishedEntry(operationId: string, kind: z.infer<typeof kinds>, source: AuthorityHeadSource) {
+    identity.parse(operationId); kinds.parse(kind);
+    const { rows, revision } = await this.currentHistory(source);
+    const entry = rows.find(row => row.operationId === operationId && row.kind === kind);
+    if (!entry) throw new Error('Requested recovery entry is not published');
+    return { entry: { ...entry }, revision, actionAuthorized: false as const };
+  }
+
+  private async currentHistory(source: AuthorityHeadSource) {
     const before = await this.readCurrentHead(source);
-    const observed = await this.inspect();
+    const rows = await this.history();
+    const observed = { generation: rows.length, digest: rows.at(-1)?.digest ?? null };
     if (observed.generation !== before.generation || observed.digest !== before.digest) {
       throw new Error('Recovery authority history does not match its current head');
     }
@@ -194,7 +213,7 @@ export class RecoveryAuthorityJournal {
     if (after.revision !== before.revision || after.generation !== before.generation || after.digest !== before.digest) {
       throw new Error('Recovery authority current head changed during verification');
     }
-    return { ...observed, revision: after.revision };
+    return { rows, revision: after.revision };
   }
 
   private receipt(entry: Entry, replayed: boolean) {

@@ -39,6 +39,33 @@ function publisherFixture(options?: { appendVerification: 'FULL' | 'VERIFIED_PRE
   return { ...f, publisher, loseHeadAck() { loseAck = true; }, version: () => version };
 }
 
+test('published entry lookup verifies the whole current history and exact operation kind', async () => {
+  const f = publisherFixture();
+  await f.journal.appendPublished(intent, f.publisher);
+  const observed = await f.journal.readPublishedEntry(intent.operationId, intent.kind, f.publisher);
+  assert.equal(observed.entry.factsDigest, intent.factsDigest);
+  assert.equal(observed.entry.organisationId, binding.organisationId);
+  assert.equal(observed.actionAuthorized, false);
+  await assert.rejects(() => f.journal.readPublishedEntry('missing', intent.kind, f.publisher), /not published/);
+  await assert.rejects(() => f.journal.readPublishedEntry(intent.operationId, 'DISPOSAL_RESULT', f.publisher), /not published/);
+  observed.entry.factsDigest = 'b'.repeat(64);
+  assert.equal((await f.journal.readPublishedEntry(intent.operationId, intent.kind, f.publisher)).entry.factsDigest, intent.factsDigest);
+  await f.journal.append({ ...intent, operationId: 'unpublished', expectedGeneration: 1, expectedDigest: observed.entry.digest });
+  await assert.rejects(() => f.journal.readPublishedEntry(intent.operationId, intent.kind, f.publisher), /does not match/);
+});
+
+test('published entry lookup refuses a changing head and deleted history', async () => {
+  const f = publisherFixture();
+  await f.journal.appendPublished(intent, f.publisher);
+  const original = f.publisher.readHead;
+  let reads = 0;
+  f.publisher.readHead = async () => ({ ...await original(), revision: `changed-${++reads}` });
+  await assert.rejects(() => f.journal.readPublishedEntry(intent.operationId, intent.kind, f.publisher), /changed/);
+  f.publisher.readHead = original;
+  f.rows.clear();
+  await assert.rejects(() => f.journal.readPublishedEntry(intent.operationId, intent.kind, f.publisher), /does not match/);
+});
+
 test('published append retries a committed head after acknowledgement loss without republishing', async () => {
   const f = publisherFixture(); f.loseHeadAck();
   const publish = () => f.journal.appendPublished( intent, f.publisher);
