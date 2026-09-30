@@ -31,6 +31,26 @@ purge/hold races, user-interface behavior or provider/backup disposal.
 
 ## Observed starting point
 
+Application API checkpoint: browser Owner can POST `/documents/purge-authorizations`
+with document ID/revision, policy, six-store plan, reason/evidence and explicit
+authority confirmation; POST `/:authorizationId/withdraw` records cancellation;
+POST `/:authorizationId/claim` requires `confirmPermanentPurge: true`. Browser
+Owner/Admin can GET that history with required documentId and a scoped cursor.
+These paths inherit document authentication/subscription checks and reject
+connectors. Mutations also require ADMIN session access and recheck the active
+Owner inside the locked transaction. Review output excludes storage paths,
+fingerprints and transaction IDs. A claim retry returns the existing receipt.
+
+The service reads pinned bytes and compares size/SHA-256 before authorization
+and before a new claim. This detects a changed file at the check, not a guarantee
+against a provider mutation after the read; object/version handling still needs
+provider integration proof. Database guards remain final execution authority;
+concurrent guard refusal returns a bounded review-conflict message. Focused
+service and route tests cover plan validation, actor/tenant refusal, changed
+bytes, history bounds, retries and role/channel gates. They use a database
+double; the separate real PostgreSQL tests prove database transitions. Combined
+persisted API/browser/worker proof and dashboard controls remain outstanding.
+
 Atomic purge claim checkpoint: `DocumentPurgeClaim` now creates the primary
 storage outbox job, appends RECORD_DELETE with PRIMARY_PURGE_PENDING and removes
 the recoverable Document in one transaction. The database rechecks active Owner,

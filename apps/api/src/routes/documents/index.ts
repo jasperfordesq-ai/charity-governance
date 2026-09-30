@@ -3,6 +3,8 @@ import { createHash } from 'node:crypto';
 import { DocumentService } from '../../services/document.service.js';
 import { DocumentRecoveryService } from '../../services/document-recovery.service.js';
 import { RetentionPolicyService } from '../../services/retention-policy.service.js';
+import { DocumentPurgeService } from '../../services/document-purge.service.js';
+import { registerDocumentPurgeRoutes } from './purge.js';
 import { StorageService } from '../../services/storage.service.js';
 import { authGuard } from '../../middleware/auth.js';
 import { requireSessionLevel, requireWebSession } from '../../middleware/session-level.js';
@@ -127,6 +129,8 @@ export async function documentRoutes(app: FastifyInstance) {
 
   app.addHook('onRequest', authGuard);
   app.addHook('onRequest', subscriptionGuard);
+  registerDocumentPurgeRoutes(app, new DocumentPurgeService(app.prisma,
+    (organisationId, path, provider) => storageService.downloadFile(organisationId, path, provider)));
 
   app.get('/policy-revisions', { preHandler: [requireAdmin, requireWebSession] }, async (request, reply) => {
     try {

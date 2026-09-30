@@ -1831,6 +1831,7 @@ test('Admin connector cannot read dashboard-only Vault control and deletion hist
     for (const path of [
       '/replacement-candidates/doc-1', '/confluence-mirrors?ids=doc-1',
       '/control-audit', '/storage-deletions/history', '/storage-deletions/dead-letter', '/deleted', '/recovery-policies', '/policy-revisions',
+      '/purge-authorizations?documentId=doc-1',
     ]) {
       const response = await app.inject({ method: 'GET', url: path, headers: { authorization: authHeader } });
       assert.equal(response.statusCode, 403, path);

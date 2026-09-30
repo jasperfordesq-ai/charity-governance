@@ -1,0 +1,119 @@
+import { createHash, randomUUID } from 'node:crypto';
+import type { Prisma, PrismaClient } from '@prisma/client';
+import { z } from 'zod';
+import { AppError } from '../utils/errors.js';
+import { retentionWithdrawalInput } from './retention-policy.service.js';
+
+const id = z.string().min(1).max(200).regex(/^[A-Za-z0-9_-]+$/);
+const store = z.object({ disposition: z.enum(['DISPOSE', 'RETAIN_APPROVED', 'NOT_APPLICABLE']),
+  evidenceRef: z.string().regex(/^[A-Z0-9][A-Z0-9-]{2,119}$/) }).strict();
+export const purgeAuthorizationInput = retentionWithdrawalInput.extend({
+  documentId: id, policyId: id, expectedUpdatedAt: z.string().datetime({ offset: true }),
+  authorityConfirmed: z.literal(true),
+  dispositionPlan: z.object({ PRIMARY: store.extend({ disposition: z.literal('DISPOSE') }),
+    VERSIONS: store, CONFLUENCE: store, EXPORTS: store, AUDIT: store, BACKUPS: store }).strict(),
+}).strict();
+export const purgeClaimInput = z.object({ confirmPermanentPurge: z.literal(true) }).strict();
+export const purgeHistoryInput = z.object({ documentId: id, before: id.optional() }).strict();
+export const purgeId = id;
+
+// Never return provider paths, fingerprints or PostgreSQL transaction IDs.
+const review = { id: true, documentId: true, documentRevision: true, policyId: true,
+  actorUserId: true, evidenceRef: true, reason: true, recoveryUntil: true,
+  dispositionPlan: true, authorizedAt: true, withdrawal: true,
+  claim: { select: { id: true, deletionId: true, claimedAt: true,
+    deletion: { select: { state: true, processedAt: true, activeObjectAbsentAt: true } } } } } as const;
+type ReadFile = (organisationId: string, path: string, provider: string) => Promise<Buffer>;
+
+export class DocumentPurgeService {
+  constructor(private readonly prisma: PrismaClient, private readonly readFile: ReadFile) {}
+
+  private async owner(tx: Prisma.TransactionClient, organisationId: string, actorUserId: string) {
+    await tx.$queryRaw`SELECT id FROM "Organisation" WHERE id=${organisationId} FOR UPDATE`;
+    await tx.$queryRaw`SELECT id FROM "User" WHERE id=${actorUserId} AND "organisationId"=${organisationId} FOR UPDATE`;
+    const actor = await tx.user.findFirst({ where: { id: actorUserId, organisationId, role: 'OWNER', lifecycleStatus: 'ACTIVE' }, select: { id: true } });
+    if (!actor) throw new AppError(403, 'PURGE_OWNER_REQUIRED', 'The active charity Owner must review this disposal decision.');
+  }
+
+  private async transaction<T>(callback: (tx: Prisma.TransactionClient) => Promise<T>): Promise<T> {
+    try { return await this.prisma.$transaction(callback, { timeout: 90000 }); }
+    catch (error) {
+      // Database guards remain authoritative when a concurrent change wins.
+      if (error && typeof error === 'object' && 'code' in error
+        && ['P2002', 'P2004', 'P2010', 'P2034'].includes(String(error.code))) {
+        throw new AppError(409, 'PURGE_REVIEW_CHANGED', 'Disposal could not proceed. Refresh the record, policy, holds and authorization before reviewing again.');
+      }
+      throw error;
+    }
+  }
+
+  private async verifyBytes(organisationId: string, doc: { fileUrl: string; storageProvider: string | null; fileSize: number; recoverySha256: string | null }) {
+    if (!doc.recoverySha256 || !['local', 'supabase'].includes(doc.storageProvider ?? '')) {
+      throw new AppError(409, 'PURGE_FILE_UNVERIFIED', 'The retained file has no verified storage identity.');
+    }
+    const bytes = await this.readFile(organisationId, doc.fileUrl, doc.storageProvider!);
+    if (bytes.length !== doc.fileSize || createHash('sha256').update(bytes).digest('hex') !== doc.recoverySha256) {
+      throw new AppError(409, 'PURGE_FILE_CHANGED', 'The stored bytes differ from the removed file. Investigate before disposal.');
+    }
+  }
+
+  async list(organisationId: string, raw: unknown) {
+    const { documentId, before } = purgeHistoryInput.parse(raw);
+    const anchor = before ? await this.prisma.documentPurgeAuthorization.findFirst({ where: { id: before, organisationId, documentId }, select: { id: true, authorizedAt: true } }) : null;
+    if (before && !anchor) throw new AppError(404, 'PURGE_AUTHORIZATION_NOT_FOUND', 'Authorization cursor not found');
+    const rows = await this.prisma.documentPurgeAuthorization.findMany({ where: { organisationId, documentId,
+      ...(anchor ? { OR: [{ authorizedAt: { lt: anchor.authorizedAt } }, { authorizedAt: anchor.authorizedAt, id: { lt: anchor.id } }] } : {}) },
+      select: review, orderBy: [{ authorizedAt: 'desc' }, { id: 'desc' }], take: 51 });
+    return { items: rows.slice(0, 50), nextCursor: rows.length > 50 ? rows[49]!.id : null };
+  }
+
+  async authorize(organisationId: string, actorUserId: string, raw: unknown) {
+    const input = purgeAuthorizationInput.parse(raw);
+    return this.transaction(async tx => {
+      await this.owner(tx, organisationId, actorUserId);
+      await tx.$queryRaw`SELECT id FROM "Document" WHERE id=${input.documentId} AND "organisationId"=${organisationId} FOR UPDATE`;
+      const doc = await tx.document.findFirst({ where: { id: input.documentId, organisationId, deletedAt: { not: null } } });
+      if (!doc) throw new AppError(404, 'DOCUMENT_NOT_FOUND', 'Deleted document not found');
+      if (doc.updatedAt.getTime() !== new Date(input.expectedUpdatedAt).getTime() || doc.deletionHold) {
+        throw new AppError(409, 'PURGE_DOCUMENT_CHANGED', 'Refresh this document and review its hold before authorizing disposal.');
+      }
+      await this.verifyBytes(organisationId, doc);
+      return tx.documentPurgeAuthorization.create({ data: { organisationId, documentId: doc.id,
+        documentRevision: doc.updatedAt, policyId: input.policyId, actorUserId, evidenceRef: input.evidenceRef,
+        reason: input.reason, storagePath: doc.fileUrl, provider: doc.storageProvider!, sha256: doc.recoverySha256!,
+        fileSize: doc.fileSize, recoveryUntil: doc.recoveryUntil!, dispositionPlan: input.dispositionPlan }, select: review });
+    });
+  }
+
+  async withdraw(organisationId: string, actorUserId: string, authorizationId: string, raw: unknown) {
+    const input = retentionWithdrawalInput.parse(raw);
+    return this.transaction(async tx => {
+      await this.owner(tx, organisationId, actorUserId);
+      await tx.$queryRaw`SELECT id FROM "DocumentPurgeAuthorization" WHERE id=${authorizationId} AND "organisationId"=${organisationId} FOR UPDATE`;
+      const auth = await tx.documentPurgeAuthorization.findFirst({ where: { id: authorizationId, organisationId }, select: review });
+      if (!auth) throw new AppError(404, 'PURGE_AUTHORIZATION_NOT_FOUND', 'Authorization not found');
+      if (auth.claim || auth.withdrawal) throw new AppError(409, 'PURGE_CANNOT_WITHDRAW', 'This authorization is already withdrawn or disposal has been claimed.');
+      return tx.documentPurgeAuthorizationWithdrawal.create({ data: { organisationId, authorizationId, actorUserId, ...input } });
+    });
+  }
+
+  async claim(organisationId: string, actorUserId: string, authorizationId: string, raw: unknown) {
+    purgeClaimInput.parse(raw);
+    return this.transaction(async tx => {
+      await this.owner(tx, organisationId, actorUserId);
+      await tx.$queryRaw`SELECT id FROM "DocumentPurgeAuthorization" WHERE id=${authorizationId} AND "organisationId"=${organisationId} FOR UPDATE`;
+      const auth = await tx.documentPurgeAuthorization.findFirst({ where: { id: authorizationId, organisationId }, include: { withdrawal: true, claim: true } });
+      if (!auth) throw new AppError(404, 'PURGE_AUTHORIZATION_NOT_FOUND', 'Authorization not found');
+      if (auth.withdrawal) throw new AppError(409, 'PURGE_AUTHORIZATION_WITHDRAWN', 'This disposal authorization was withdrawn.');
+      if (auth.actorUserId !== actorUserId) throw new AppError(409, 'PURGE_OWNER_CHANGED', 'The current Owner must record a new disposal authorization.');
+      // Retries report the existing claim; they never create another job.
+      if (auth.claim) return { id: auth.claim.id, deletionId: auth.claim.deletionId, claimedAt: auth.claim.claimedAt };
+      await tx.$queryRaw`SELECT id FROM "Document" WHERE id=${auth.documentId} AND "organisationId"=${organisationId} FOR UPDATE`;
+      const doc = await tx.document.findFirst({ where: { id: auth.documentId, organisationId, deletedAt: { not: null } } });
+      if (!doc) throw new AppError(409, 'PURGE_DOCUMENT_CHANGED', 'The document is no longer in Deleted Items.');
+      await this.verifyBytes(organisationId, doc);
+      return tx.documentPurgeClaim.create({ data: { organisationId, authorizationId, actorUserId,
+        documentId: auth.documentId, deletionId: randomUUID() }, select: { id: true, deletionId: true, claimedAt: true } });
+    });
+  }
+}

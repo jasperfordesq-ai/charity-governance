@@ -2,6 +2,17 @@
 
 Last updated: 2026-09-30
 
+R3 application service/API now exposes private bounded purge authorization
+history and browser Owner-only authorize/withdraw/claim actions. Explicit plan
+and execution confirmations, current Owner locks, tenant/revision binding and
+pinned-byte hash checks precede new authority/claims; retries return one existing
+receipt. Paths/fingerprints/transaction IDs are excluded from review responses.
+API build and focused service/route tests pass. These tests use a DB double;
+separate PostgreSQL proof is not yet a combined HTTP/provider journey. Next
+dashboard review controls and real isolated end-to-end authorization, refusal,
+cancellation, expiry/claim/worker-byte proof. Provider mutation after the hash
+read and downstream version/Confluence/export/backup handling remain open.
+
 R3 atomic database claim/outbox now checks Owner, unwithdrawn exact authorization,
 revision/object, current policy, recovery/retention expiry, holds and links before
 creating one pinned primary cleanup job, retained audit and Document removal in
