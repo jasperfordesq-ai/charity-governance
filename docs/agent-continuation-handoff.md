@@ -32,6 +32,15 @@ operation, and rejects a head behind the separately trusted checkpoint. It does
 not create an initial head. Successful receipts still cannot authorize actions.
 Real provider integration, durable custody and fencing remain required.
 
+The S3 intent-object adapter is now implemented for explicit credentials, an
+Ireland endpoint, expected bucket owner and a configured KMS key. It uses
+create-only conditional writes and bounded current-version reads. Its tests
+include SDK request serialization/signing through an isolated HTTP handler.
+No S3 resource has been provisioned or live-tested. The S3 head adapter remains
+unimplemented: ETag conditional writes must not be confused with version-ID
+conditions. Provisioning, bucket policy/retention, independent key custody,
+head protocol and end-to-end recovery acceptance still gate activation.
+
 Before integration, implement fresh independent authority, protected replay
 facts, provider durability/permissions, action fencing and supported recovery
 reconciliation. The bounded sequential prototype must not be presented as the
