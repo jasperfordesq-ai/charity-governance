@@ -2,6 +2,19 @@
 
 Last updated: 2026-09-30
 
+R3 dashboard review and persisted browser handoff pass. The six-store form has
+explicit Owner confirmation; cancellation and permanent primary disposal are
+separate reviews, and history remains browsable after purge. Real disposable
+Chromium proves upload/removal, authorization, early refusal, cancellation,
+synthetic expiry/new approval, one pending cleanup job, idempotent retry and
+history after reload. Runner exits 0 and history screenshot was inspected.
+The stack has no cleanup worker; physical bytes are NOT yet proven removed.
+Next verified isolated worker integration, retry/timeout/two-worker and external
+copy/backup evidence. Final API build/79 tests, full web/E2E typechecks and UI lint
+pass. Fixed selector naming and actual Prisma P0001 error translation. An earlier
+generic navigation error had no captured cause and did not recur; preserve that
+observation without claiming its root cause resolved. No deployment occurred.
+
 R3 application service/API now exposes private bounded purge authorization
 history and browser Owner-only authorize/withdraw/claim actions. Explicit plan
 and execution confirmations, current Owner locks, tenant/revision binding and

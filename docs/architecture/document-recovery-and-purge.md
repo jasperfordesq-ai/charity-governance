@@ -31,11 +31,35 @@ purge/hold races, user-interface behavior or provider/backup disposal.
 
 ## Observed starting point
 
+Dashboard checkpoint: Deleted Items now opens a six-store disposition form with
+no preselected outcomes, approved policy selection, controlled evidence, reason
+and an explicit Owner confirmation. Each retained authorization offers separate
+cancellation and irreversible primary-disposal review. History is independently
+browsable after the document disappears, distinguishes plans/queued work/primary
+absence and never calls the whole case erased. Owner-only mutations remain
+enforced by the API; Admin history remains available.
+
+`tests/document-purge.spec.ts` passes in the managed disposable stack: actual
+upload/removal UI, six-store authorization, early claim 409, cancellation,
+synthetic expiry, new authorization, atomic claim, one pending job, idempotent
+retry and history after reload. Runner exits 0; the rendered history screenshot
+was inspected. The stack has no cleanup worker: this is a queued-handoff proof,
+not physical-byte disposal. Expiry is aged only in the guarded disposable DB.
+Full frontend and E2E typechecks, edited UI lint, API build and 79 focused API
+tests pass. Initial runs exposed ambiguous selector labels and a real Prisma
+UnknownRequestError translation gap for P0001 trigger refusals; both were fixed.
+One intermediate navigation hit the generic application error screen without
+captured cause; it did not recur in the final journey, which captures page errors
+and includes the final reload. Do not claim a root cause or closure for that
+isolated observation. Next connect a verified disposable cleanup worker and prove
+physical bytes, retry/timeout/two-worker behavior and downstream accounting.
+
 Application API checkpoint: browser Owner can POST `/documents/purge-authorizations`
 with document ID/revision, policy, six-store plan, reason/evidence and explicit
 authority confirmation; POST `/:authorizationId/withdraw` records cancellation;
 POST `/:authorizationId/claim` requires `confirmPermanentPurge: true`. Browser
-Owner/Admin can GET that history with required documentId and a scoped cursor.
+Owner/Admin can GET that history across their charity or filter by documentId,
+with a tenant-scoped cursor. History remains available after the record is purged.
 These paths inherit document authentication/subscription checks and reject
 connectors. Mutations also require ADMIN session access and recheck the active
 Owner inside the locked transaction. Review output excludes storage paths,

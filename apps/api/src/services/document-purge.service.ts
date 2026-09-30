@@ -14,7 +14,7 @@ export const purgeAuthorizationInput = retentionWithdrawalInput.extend({
     VERSIONS: store, CONFLUENCE: store, EXPORTS: store, AUDIT: store, BACKUPS: store }).strict(),
 }).strict();
 export const purgeClaimInput = z.object({ confirmPermanentPurge: z.literal(true) }).strict();
-export const purgeHistoryInput = z.object({ documentId: id, before: id.optional() }).strict();
+export const purgeHistoryInput = z.object({ documentId: id.optional(), before: id.optional() }).strict();
 export const purgeId = id;
 
 // Never return provider paths, fingerprints or PostgreSQL transaction IDs.
@@ -38,6 +38,16 @@ export class DocumentPurgeService {
   private async transaction<T>(callback: (tx: Prisma.TransactionClient) => Promise<T>): Promise<T> {
     try { return await this.prisma.$transaction(callback, { timeout: 90000 }); }
     catch (error) {
+      // PostgreSQL RAISE EXCEPTION (P0001) arrives as an unknown-request error,
+      // not P2004, with this Prisma engine. Translate only named purge guards.
+      if (error instanceof Error && error.name === 'PrismaClientUnknownRequestError') {
+        if (error.message.includes('Purge claim must wait for retention and recovery expiry')) {
+          throw new AppError(409, 'PURGE_NOT_DUE', 'The approved retention and recovery periods must both expire before primary disposal.');
+        }
+        if (/Purge (?:authorization (?:requires|must bind|not found)|claim (?:requires|cannot reuse)|withdrawal requires|has been claimed)/.test(error.message)) {
+          throw new AppError(409, 'PURGE_REVIEW_CHANGED', 'Disposal could not proceed. Refresh the record, policy, holds and authorization before reviewing again.');
+        }
+      }
       // Database guards remain authoritative when a concurrent change wins.
       if (error && typeof error === 'object' && 'code' in error
         && ['P2002', 'P2004', 'P2010', 'P2034'].includes(String(error.code))) {

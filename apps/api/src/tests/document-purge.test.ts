@@ -97,12 +97,27 @@ test('database race refusal is a review conflict rather than raw database output
     (error: any) => error.statusCode === 409 && !error.message.includes('sensitive database details'));
 });
 
+test('real Prisma trigger error shape reports an expiry refusal without masking unrelated failures', async () => {
+  const { service, state } = fixture(); await service.authorize('org-a', 'owner-a', input);
+  const failure = (message: string) => Object.assign(new Error(message), { name: 'PrismaClientUnknownRequestError' });
+  state.databaseFailure = failure('Database error: Purge claim must wait for retention and recovery expiry');
+  await assert.rejects(service.claim('org-a', 'owner-a', 'auth-a', { confirmPermanentPurge: true }), { statusCode: 409, code: 'PURGE_NOT_DUE' });
+  state.databaseFailure = failure('Database error: Purge claim requires an unheld removed draft');
+  await assert.rejects(service.claim('org-a', 'owner-a', 'auth-a', { confirmPermanentPurge: true }), { statusCode: 409, code: 'PURGE_REVIEW_CHANGED' });
+  state.databaseFailure = failure('Unexpected database engine failure');
+  await assert.rejects(service.claim('org-a', 'owner-a', 'auth-a', { confirmPermanentPurge: true }), state.databaseFailure);
+});
+
 test('history is tenant/document scoped, bounded and omits physical object identity', async () => {
   const { service, state } = fixture(); await service.list('org-a', { documentId: 'doc-a' });
   assert.deepEqual(state.listArgs.where, { organisationId: 'org-a', documentId: 'doc-a' });
   assert.equal(state.listArgs.take, 51);
   for (const field of ['storagePath', 'sha256', 'provider', 'transactionId']) assert.equal(state.listArgs.select[field], undefined);
   await assert.rejects(service.list('org-a', { documentId: 'doc-a', before: 'foreign-cursor' }), { statusCode: 404 });
+  await service.list('org-a', {});
+  assert.deepEqual(state.listArgs.where, { organisationId: 'org-a', documentId: undefined });
+  state.auth = { id: 'foreign-auth', organisationId: 'org-b' };
+  await assert.rejects(service.list('org-a', { before: 'foreign-auth' }), { statusCode: 404 });
 });
 
 test('purge routes restrict mutations to Owner web sessions and history to administrators', async () => {

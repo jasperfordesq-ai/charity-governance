@@ -6,6 +6,7 @@ import { api } from '@/lib/api';
 import { apiErrorMessage, isApiForbiddenError } from '@/lib/errors';
 import { statusPanelClassName } from '@/components/ui/status';
 import { ConfirmActionModal } from '@/components/ui/confirm-action-modal';
+import { DocumentPurgeReview } from './document-purge-review';
 
 type DeletedDocument = {
   id: string; name: string; deletedAt: string; recoveryUntil: string;
@@ -22,6 +23,7 @@ export function DocumentDeletedItems({ onRestored }: { onRestored: () => Promise
   const [restoreError, setRestoreError] = useState('');
   const [notice, setNotice] = useState('');
   const [selected, setSelected] = useState<DeletedDocument | null>(null);
+  const [disposalDocument, setDisposalDocument] = useState<DeletedDocument | null>(null);
   const [reason, setReason] = useState('');
   const pending = useRef(false);
   const mounted = useRef(true);
@@ -92,9 +94,12 @@ export function DocumentDeletedItems({ onRestored }: { onRestored: () => Promise
           <p>{item.deletionHold ? 'Deletion hold active — restoration preserves it.' : 'No deletion hold recorded.'}</p>
           <Button className="mt-2" size="sm" variant="flat" isDisabled={busy || restoring}
             onPress={() => { setSelected(item); setReason(''); setRestoreError(''); }}>Review restoration</Button>
+          <Button className="ml-2 mt-2" size="sm" variant="flat" isDisabled={busy || restoring}
+            onPress={() => setDisposalDocument(item)}>Review disposal plan</Button>
         </li>)}
       </ul> : null}
       {cursor ? <Button className="mt-3" size="sm" variant="flat" onPress={() => load(true)} isDisabled={busy || restoring}>Load older removed documents</Button> : null}
+      <DocumentPurgeReview document={disposalDocument} onClaimed={async () => { setDisposalDocument(null); await load(); }} />
       <ConfirmActionModal isOpen={selected !== null} onOpenChange={open => { if (!open && !restoring) setSelected(null); }}
         ariaLabel="Restore retained document" title="Restore document" confirmLabel="Restore with restricted access"
         confirmColor="primary" confirming={restoring} confirmDisabled={Array.from(reason.trim()).length < 10 || Array.from(reason.trim()).length > 500}
