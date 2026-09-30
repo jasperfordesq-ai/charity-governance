@@ -1,19 +1,32 @@
 # CharityPilot Agent Continuation Handoff
 
-> DPO-05 interrupted cancellation completion (source only): an internal helper
-> resumes an already committed cancellation using the same writer. A preparation
+> **Verified private VM release, 2026-09-30 22:05 Dublin:** source
+> `6687cc4736c786d4812e322ff4fbca2a8cc0e93d` runs on blue. Exact CI
+> 36775042860 and E2E 36775042630 succeeded (239 browser tests); the two
+> migrations had no blocked or warned changes. API/web are healthy, previous
+> green is stopped and rollbackable, all 108 pre-existing backup files remain
+> identical, two new backup sets were copied and verified, and isolated
+> restore passed with 139 migrations and 63 documents. Signed-in Owner
+> read-only navigation reached Security & Data and Registers. The new complaint
+> hold/cancellation recovery services are deployed but inactive. Independent
+> provider custody, all-writer fencing, total-host-loss reconciliation, policy
+> decisions and DPO acceptance remain open. Private evidence:
+> `.charitypilot-private/release-6687cc47-acceptance.md`.
+
+> DPO-05 interrupted cancellation completion (deployed inactive path): an
+> internal helper resumes an already committed cancellation using the same writer. A preparation
 > head permits preserving/publishing that exact receipt; a terminal head goes
 > directly through the committed release verifier. Missing published bytes are
 > never regenerated. This does not replay restored records, create cancellation
 > decisions, execute disposal, transfer writer authority or activate the provider.
 
 
-> DPO-05 cancellation release (source only): a dedicated
+> DPO-05 cancellation release (deployed inactive path): a dedicated
 > service compares the authenticated published cancellation with its exact
 > committed database receipt and current writer before conditional reservation
-> release. No timeout clearing or takeover is permitted. This remains inactive
-> source work, verified by local API/database/protocol tests; live deployment,
-> independent custody, recovery replay and the
+> release. No timeout clearing or takeover is permitted. This path is
+> deployed but inactive, verified by local API/database/protocol tests; independent custody, recovery
+> replay and the
 > original DPO acceptance requirements remain separate and incomplete.
 
 
@@ -21,8 +34,8 @@
 > envelopes and create-only storage now bind operation kind, scope and source.
 > Typed terminal journal entries follow the exact primary/hold preparation and
 > exclude a later outcome for the same operation. Published readers verify full
-> current history and exact payload bytes. Reservations remain occupied; release,
-> recovery replay, all-writer/provider custody and original acceptance remain open.
+> current history and exact payload bytes. Publication retains reservations
+> until separate committed release; recovery replay, all-writer/provider custody and original acceptance remain open.
 
 
 > DPO-05 cancellation composition: an inactive service authenticates the exact
