@@ -1,5 +1,6 @@
 import { expect, type Locator, type Page } from '@playwright/test';
 import { withDb } from './db';
+import { localDateTimeValue } from './local-date-time';
 
 export async function reviewCopyAuthority(page: Page, copies: Locator, latestReference: string) {
   await copies.getByRole('listitem').filter({ hasText: latestReference }).getByRole('button', { name: 'Record a later observation' }).click();
@@ -13,10 +14,7 @@ export async function reviewCopyAuthority(page: Page, copies: Locator, latestRef
   await authority.getByLabel('Copy hold review reference', { exact: true }).fill('SYNTHETIC-HOLD-REVIEW-001');
   const localTime = async (offset: number) => {
     const clock = await withDb(client => client.query(`SELECT to_char(timezone('UTC',clock_timestamp()), 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"') AS now`));
-    return page.evaluate(({ now, offset }) => {
-      const date = new Date(new Date(now).getTime() + offset);
-      return new Date(date.getTime() - date.getTimezoneOffset() * 60000).toISOString().slice(0, 23);
-    }, { now: clock.rows[0].now as string, offset });
+    return page.evaluate(localDateTimeValue, { now: clock.rows[0].now as string, offset });
   };
   await authority.getByLabel('Copy authority expiry', { exact: true }).fill(await localTime(86400000));
   const record = authority.getByRole('button', { name: 'Record scoped copy authority', exact: true });
