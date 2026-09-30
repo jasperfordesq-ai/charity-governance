@@ -1,5 +1,14 @@
 # CharityPilot Agent Continuation Handoff
 
+> **Hold writer identity topology, 2026-10-01:** The private blue-green
+> stack gives DB and API the same env file; Prisma uses one `DATABASE_URL`,
+> and deploy preflight equates its user with `POSTGRES_USER`. Current
+> migrations have no privilege separation. A trusted executor role would
+> require coordinated deployment and migration changes; a signed attestation
+> would require a key outside the ordinary API/database writer. A trigger
+> trusting the present connection role or a shared secret is forgeable.
+> Neither boundary is implemented. See the private hold writer-gate analysis.
+
 > **Original CWR-2026-11 reply check, 2026-09-30:** Work Gmail thread
 > `1a0c32a545331eaa` contains the corrected six-document circulation
 > and Catherine, Sridevi and Jasper's 21 September agreements. The three
