@@ -1,4 +1,4 @@
-import { test, expect } from '@playwright/test';
+import { test, expect } from '../fixtures';
 import { localDateTimeValue } from '../helpers/local-date-time';
 
 test('copy evidence times fill native controls without losing milliseconds', async ({ page }) => {
