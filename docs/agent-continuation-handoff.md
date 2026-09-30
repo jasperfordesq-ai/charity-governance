@@ -2,6 +2,23 @@
 
 Last updated: 2026-09-30
 
+## Backup preservation guard - 30 September 2026 (source only)
+
+Inspection found age-only recursive deletion of backup sets after deploy and
+standalone backup, independent of approved terms or preservation holds. A real
+filesystem test reproduced loss of an aged synthetic set. Both commands now
+preserve all sets and report the count needing age review; fourteen days is only
+a review reminder. No disposal permission or retention term is inferred. All 118
+deployment/backup tests pass, including byte-preservation checks through both
+command paths. Evidence: private backup-preservation-red.log and
+backup-preservation-green.log. No live backup was changed by these tests.
+
+The next release must include this guard together with 289e61f9's restored
+document-control comparison. Exact hosted checks and deployment remain pending.
+Capacity monitoring, approved backup disposal with current holds, independent
+durable authority and supported recovery reopening remain open. Do not deploy
+the intermediate restore-only candidate as the final remediation release.
+
 ## Verified release and next restore guard - 30 September 2026
 
 Release 5f02c28ea016805c4988976fbe03a7da93486623 passed exact CI

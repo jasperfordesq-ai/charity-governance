@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, utimesSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
@@ -168,6 +168,27 @@ function baseDeps({ stateDir, targetCommit = TARGET_COMMIT, appliedMigrations = 
     },
   };
 }
+
+test('backup and deploy preserve aged recovery sets without disposal authority', async () => {
+  const runDeploy = await loadDeployRunner();
+  for (const command of ['backup', 'deploy']) {
+    const stateDir = makeFixtureDir('bluegreen-preserve-backups-');
+    try {
+      const envPath = join(stateDir, 'bluegreen.env');
+      writeEnvFile(envPath);
+      seedMigrationsDir(stateDir, TARGET_COMMIT, []);
+      const oldDir = join(stateDir, 'backups', 'old-recovery-set');
+      mkdirSync(oldDir, { recursive: true });
+      writeFileSync(join(oldDir, 'database.dump'), 'synthetic retained evidence');
+      utimesSync(oldDir, new Date('2020-01-01'), new Date('2020-01-01'));
+      const { deps } = baseDeps({ stateDir });
+      const outcome = await runDeploy([command, '--env-file', envPath, '--state-dir', stateDir], deps);
+      assert.equal(outcome.status, 0, outcome.stderr);
+      assert.equal(readFileSync(join(oldDir, 'database.dump'), 'utf8'), 'synthetic retained evidence');
+      assert.match(outcome.stdout, /1 backup set.*review.*no backups deleted/i);
+    } finally { rmSync(stateDir, { recursive: true, force: true }); }
+  }
+});
 
 test('deploy: phase order is exactly the spec sequence (first deploy, no destructive migrations)', async () => {
   const runDeploy = await loadDeployRunner();

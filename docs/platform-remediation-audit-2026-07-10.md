@@ -1,5 +1,11 @@
 # CharityPilot Full-Platform Remediation Audit
 
+> DPO-05 backup preservation, 2026-09-30: reproduced age-only deletion after
+> backup/deploy. Removed automatic disposal; both commands preserve sets and
+> report age-review counts. All 118 backup/deployment tests pass locally.
+> Capacity review and separately authorized backup disposal remain required;
+> this guard is not expiry compliance, independent authority or recovery reopening.
+
 > DPO release checkpoint, 2026-09-30: exact 5f02c28e CI and 238 browser tests
 > passed; private-host deployment, backup hashes, restore rehearsal and bounded
 > signed-in Owner checks passed. This supersedes earlier source-only statements

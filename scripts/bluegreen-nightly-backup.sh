@@ -3,8 +3,8 @@
 # CharityPilot private VM — nightly backup via the blue-green engine.
 #
 # Runs `bluegreen:backup` (row census + pg_dump -Fc + documents tar + sha256
-# manifest under .bluegreen/state/backups/<stamp>, 14-day retention pruned by
-# the engine itself) and logs the outcome. Replaces the appliance-era
+# manifest under .bluegreen/state/backups/<stamp>, preserving older sets and
+# reporting age review without deletion) and logs the outcome. Replaces the appliance-era
 # ~/bin/charitypilot-backup.sh — `--install-cron` removes that entry.
 #
 # Install/replace the cron entry:  bash scripts/bluegreen-nightly-backup.sh --install-cron

@@ -439,7 +439,8 @@ something else is wrong — read the finding rather than the flag.
 deploy) and takes a live row census, a `pg_dump -Fc` of the compose `db`
 service, a tar of the documents volume, and a sha256 manifest of every
 artifact — to a dated directory under the state directory's `backups/`,
-then prunes anything older than 14 days. A deploy runs this same backup
+then reports backup sets older than 14 days for review without deleting them.
+A deploy runs this same backup
 automatically at phase 2, before migrations, unless `--skip-backup` is
 passed (refused under `NODE_ENV=production`, see Preconditions).
 
@@ -490,9 +491,14 @@ widen it deliberately, per-invocation, never as a new silent default.
 Leave it at `0` for a backup taken while genuinely quiesced (e.g. a manual
 pre-maintenance backup).
 
-**Retention:** 14 days, pruned after every deploy and after every
-standalone `backup` call. Best-effort — a pruning failure never aborts a
-completed deploy or backup.
+**Backup preservation:** deployment and standalone `backup` never delete older
+recovery sets automatically. Fourteen days is an age-review reminder, not an
+approved retention term or disposal authority. Review capacity regularly; retained
+sets continue consuming disk space. Before separate disposal, establish approved
+terms, preservation holds, remaining recovery coverage and authority for every
+affected copy. The engine does not yet provide that authorized disposal workflow.
+Do not substitute a scheduled filesystem age-delete command. This preservation
+guard does not itself satisfy eventual erasure or backup-expiry obligations.
 
 ## Cutting the private VM over from the appliance
 
@@ -951,7 +957,7 @@ The error-log case was never covered by that reassurance either.
 `charitypilot-backup.sh` entry in the same edit (idempotent). It runs
 `bluegreen:backup` against `~/charity-governance/.bluegreen/private-vm.env`
 and logs to `~/charitypilot-bluegreen-backup.log`. Backups stay on the VM
-under `.bluegreen/state/backups/` (14-day retention, pruned by the engine);
+under `.bluegreen/state/backups/` (preserved; age review is reported by the engine);
 copy the newest set off-host after any deploy and at least weekly:
 
 ```powershell

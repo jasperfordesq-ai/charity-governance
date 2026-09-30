@@ -134,7 +134,8 @@ export function databaseIdentity(fileEnv) {
   };
 }
 const DEFAULT_KEEP_RELEASES = 3;
-const DEFAULT_BACKUP_RETENTION_DAYS = 14;
+// Review reminder only; age is not disposal authority or a retention policy.
+const BACKUP_REVIEW_AGE_DAYS = 14;
 const DUMP_ARTIFACT_NAME = 'database.dump';
 const DOCUMENTS_ARTIFACT_NAME = 'documents.tar';
 const MANIFEST_ARTIFACT_NAME = 'manifest.json';
@@ -963,9 +964,9 @@ function collectReleases(stateDir) {
     });
 }
 
-function pruneBackups(stateDir, referenceDate) {
+function backupReviewNotice(stateDir, referenceDate) {
   const backupsDir = join(stateDir, 'backups');
-  if (!existsSync(backupsDir)) return;
+  if (!existsSync(backupsDir)) return 'Backup preservation: no backups deleted.\n';
   const entries = readdirSync(backupsDir, { withFileTypes: true })
     .filter((entry) => entry.isDirectory())
     .map((entry) => {
@@ -977,14 +978,9 @@ function pruneBackups(stateDir, referenceDate) {
       }
       return { name: entry.name, mtime };
     });
-  const doomed = retentionPlan(entries, DEFAULT_BACKUP_RETENTION_DAYS, referenceDate);
-  for (const name of doomed) {
-    try {
-      rmSync(join(backupsDir, name), { recursive: true, force: true });
-    } catch {
-      // Best-effort retention pruning; never abort a completed deploy over it.
-    }
-  }
+  const reviewCount = retentionPlan(entries, BACKUP_REVIEW_AGE_DAYS, referenceDate).length;
+  return `Backup preservation: ${reviewCount} backup set(s) need age review; no backups deleted. ` +
+    'Review approved retention, preservation holds and recovery coverage before separately authorized disposal.\n';
 }
 
 function latestBackupDir(stateDir) {
@@ -1758,13 +1754,13 @@ async function executeDeploy(deps) {
     writeDeployStatus(resolvedStateDir, 'retire', 'no previous colour to retire (first deploy)');
   }
 
-  // Phase 15: record (state was already written above, right after
-  // public smoke succeeded — see the I2 note; this phase now only prunes
-  // retained backups).
-  writeDeployStatus(resolvedStateDir, 'record', 'state already recorded after public smoke; pruning backups');
-  pruneBackups(resolvedStateDir, now());
+  // Phase 15: state was already written above, right after
+  // public smoke succeeded — see the I2 note. Backup age only prompts review;
+  // neither deployment nor creating a backup authorizes destroying older sets.
+  writeDeployStatus(resolvedStateDir, 'record', 'state already recorded after public smoke; preserving backups for review');
+  const backupNotice = backupReviewNotice(resolvedStateDir, now());
 
-  return result(0, `${gateNotices}Blue-green deploy completed: ${target} is now live at ${targetCommit}.\n`);
+  return result(0, `${gateNotices}Blue-green deploy completed: ${target} is now live at ${targetCommit}.\n${backupNotice}`);
 }
 
 // ---------------------------------------------------------------------------
@@ -2054,8 +2050,7 @@ async function executeBackupCommand(deps) {
     now,
   });
 
-  pruneBackups(resolvedStateDir, now());
-  return result(0, `Backup created at ${plan.dir}\n`);
+  return result(0, `Backup created at ${plan.dir}\n${backupReviewNotice(resolvedStateDir, now())}`);
 }
 
 async function executeRestoreDrillCommand(deps) {
