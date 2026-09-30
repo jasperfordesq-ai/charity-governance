@@ -2,7 +2,26 @@
 
 Last updated: 2026-09-30
 
-2026-09-30 private-host discovery and release preparation: the current tenant,
+2026-09-30 authorised private-host release: blue/green switched hOUR Timebank
+CLG to `321a0c8434eb3b3bd5abbe1e4209dd950dd01bff` at 06:58 UTC after
+57 migrations with zero blocked by the gate, its automatic pre-migration
+backup, candidate smoke and public smoke. API and web are healthy, the
+scheduler is running, the front-door health check is HTTP 200 and the prior
+green version remains rollbackable. A clean Linux install and 1,096
+production-check tests passed; the production dependency audit is clear. The
+exact pre-deploy backup was copied off-host with matching hashes. A signed-in
+Owner visit found the new Governance Audit, Security & Data and Data Requests
+pages, all 63 Vault records restricted and unreviewed (including the statutory
+directors/secretary register), the 22-act Minute Book and unchanged seven
+historical replay events. The C1 risk remains open with its stale wording;
+its original verification receipt has not been found. See the gitignored
+private roadmap and acceptance audit for restricted findings and limits.
+This is a private-host release and bounded read-only acceptance, not formal
+DPO approval or public-production launch evidence. Member classification,
+external-report audience, retention/hold/recovery/purge rules, historical
+replay attribution and Nikita's first-pass review remain open.
+
+2026-09-30 pre-release discovery and preparation snapshot: the current tenant,
 deployed commit and historical replay/C1 records were inspected under an
 authorised read-only session. Restricted details and evidence limits are in
 the gitignored private roadmap and incident note. The original C1 closure
@@ -15,17 +34,17 @@ removed. The offline blue/green gate found zero blocked migrations and warned
 about index builds and constraint validation. Local build, lint and 180
 production-check assertions pass; the broad Windows tooling suite still has
 two host-specific Bash/ACL failures, to be checked on the Linux release host.
-Jasper authorised deployment; the source remains unreleased at this checkpoint.
+Jasper authorised deployment; the source was unreleased at that checkpoint.
 The rehearsal does not prove concurrent live writes, external-provider state
 or DPO acceptance.
 
-The latest Nikita acceptance recheck finds local implementations for the named
-source controls and four dashboard locations, with live verification still
-unproved. The exact reviewed tenant and historical replay/C1 records remain
-unidentified; the March retention schedule is not an approved CharityPilot
-class-to-disposal mapping. The private roadmap gives the six-point evidence
-ledger. Do not infer a live correction, provider purge or DPO sign-off from
-the local suite.
+The pre-release Nikita acceptance recheck found local implementations for the
+named source controls and four dashboard locations. The private-host Owner
+visit above supplies bounded live confirmation of those locations and records;
+Nikita's own account walkthrough is still pending. The March retention
+schedule is not an approved CharityPilot class-to-disposal mapping. The
+private roadmap gives the six-point evidence ledger. Do not infer a provider
+purge or DPO sign-off from the local suite or private-host visit.
 
 2026-09-30 DPO connector exclusion audit: browser action-approval list/grant
 and Confluence authorization/space setup now require web sessions at the API.
