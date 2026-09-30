@@ -1,5 +1,17 @@
 # CharityPilot Full-Platform Remediation Audit
 
+> **March approval drafts source review, 2026-09-30:** both exact DOCX files
+> match the post-release backup manifest. The board-meeting draft has blank
+> execution fields; the 25-item written draft conditions its effect on email
+> confirmations not embedded in that file. The separately retained March
+> correspondence supports a 31-document adoption. Two live standard 3.4
+> links to the drafts are not execution proof. Private worksheet proposals
+> are Board/HISTORICAL/RESTRICTED, pending controller/current-revision checks.
+> Seventeen of 63 rows have source evidence, 15 have some proposal, 48 have
+> none, all 63 PENDING. No live metadata changed. Private evidence:
+> `.charitypilot-private/unexecuted-approval-source-review-2026-09-30.md`.
+
+
 > **Five legacy text stubs reviewed, 2026-09-30 23:15 Dublin:** exact backup
 > bytes and hashes match for all five. Four cite full September PDFs present
 > with matching hashes; private P01/P02 proposals link them as restricted

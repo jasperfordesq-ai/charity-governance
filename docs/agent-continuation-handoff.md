@@ -1,5 +1,18 @@
 # CharityPilot Agent Continuation Handoff
 
+> **March approval drafts source review, 2026-09-30:** two exact DOCX files
+> match the verified post-release backup. The board-meeting instrument has
+> blank execution fields; the written instrument lists 25 and conditions its
+> effect on director email confirmations absent from that file. Neither is
+> the separately evidenced 31-document WR-2026-03-21 adoption. The live Owner
+> Vault links both drafts to standard 3.4; those links do not prove execution.
+> The private P01/P02 worksheet proposes Board/HISTORICAL/RESTRICTED pending
+> controller review and current live revision. Seventeen of 63 rows have
+> source evidence, 15 have some proposal, 48 have none, all 63 PENDING. No
+> live metadata changed. Private evidence:
+> `.charitypilot-private/unexecuted-approval-source-review-2026-09-30.md`.
+
+
 > **Five legacy text stubs reviewed, 2026-09-30 23:15 Dublin:** all five
 > `ZZ SUPERSEDED STUB` files match exact verified post-release backup bytes.
 > Four cite full September PDFs present in the backup with matching hashes;
