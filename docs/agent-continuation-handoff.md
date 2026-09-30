@@ -2,6 +2,24 @@
 
 Last updated: 2026-09-30
 
+## Recovery protocol composition verification
+
+The disposable production-migration complaint test now runs
+`scripts/complaint-recovery-protocol-proof.mjs`: real Prisma/PostgreSQL capture,
+reservation, authenticated preparation publication, atomic claim/outcome,
+reconnection, authenticated outcome publication and exact release retry after
+a lost acknowledgement. The local run passed without failures or skips.
+Encryption is real; S3/KMS transport is synthetic and proves no provider custody.
+
+This is test-only integration of the inactive recovery components. Ordinary
+deletion paths still lack mandatory independent-publication enforcement at the
+database boundary. Next work must enforce exact preparation/operation/writer
+identity in the claim transaction, preserve current dependency guards, and prove
+that bypassing the service cannot bypass an activated gate. Do not activate or
+claim server-loss readiness from this test. Hosted checks, deployment, real
+provider acceptance, replacement isolation and the original DPO acceptance
+requirements remain separate gates.
+
 ## Current recovery publication checkpoint
 
 The private release receipt `release-6afddb4f-acceptance.md` records deployment

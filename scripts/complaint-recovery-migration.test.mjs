@@ -333,6 +333,11 @@ test('complaint recovery migration preserves records and enforces reviewed remov
         restore:`UPDATE "ComplaintRecord" SET "removedAt"=NULL,"removalId"=NULL WHERE id='${id}';`,
       };
     }
+    raceFixture('recovery-protocol');
+    const protocolProof = spawnSync(process.execPath, ['--import', 'tsx', 'scripts/complaint-recovery-protocol-proof.mjs'],
+      { cwd: fileURLToPath(new URL('../', import.meta.url)), input: captureUrl, encoding: 'utf8', timeout: 40000 });
+    assert.equal(protocolProof.status, 0, protocolProof.stderr);
+    assert.equal(protocolProof.stdout.trim(), 'complaint-recovery-protocol-composition-verified');
     for(const protection of ['hold','withdraw']) {
       const protectedId=`${protection}-first`;
       const protectedCase=raceFixture(protectedId);
