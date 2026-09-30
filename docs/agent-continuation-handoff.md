@@ -1,5 +1,15 @@
 # CharityPilot Agent Continuation Handoff
 
+> **Sensitive register source review, 2026-09-30:** exact verified backup
+> bytes of the Register of Interests/Declaration Form include named trustees'
+> financial and related-party conflicts. The private P01/P02 worksheet
+> proposes Company Secretary ownership and RESTRICTED audience; lifecycle and
+> replacement are left for adoption/signed-return/current-source review. The
+> file's own permanent-retention statement is not accepted as application
+> policy. Nine of 63 rows now have source evidence, eight have a proposal and
+> all 63 remain PENDING. No live metadata changed. Private evidence:
+> `.charitypilot-private/interests-register-source-review-2026-09-30.md`.
+
 > **Privacy Notice provenance follow-up, 2026-09-30:** the circulated V2 PDF
 > retained in the Vault is an earlier uncorrected snapshot. A signed-in
 > read-only check of Confluence page 2326571 showed current page V10 (22

@@ -1,5 +1,15 @@
 # CharityPilot Full-Platform Remediation Audit
 
+> **Sensitive register source review, 2026-09-30:** exact verified backup
+> bytes of the Register of Interests/Declaration Form contain named trustees'
+> financial and related-party conflicts. The private P01/P02 worksheet
+> proposes Company Secretary ownership and RESTRICTED audience; lifecycle and
+> replacement await adoption, signed-return and current-source review. The
+> file's own permanent-retention statement is not application policy approval.
+> Nine of 63 rows have source evidence, eight have a proposal and all 63 remain
+> PENDING. No live metadata changed. Private evidence:
+> `.charitypilot-private/interests-register-source-review-2026-09-30.md`.
+
 > **Privacy Notice provenance follow-up, 2026-09-30:** the circulated V2 PDF
 > retained in the Vault is an earlier uncorrected snapshot. Signed-in
 > Confluence page 2326571 V10 (22 September) and the directly inspected public
