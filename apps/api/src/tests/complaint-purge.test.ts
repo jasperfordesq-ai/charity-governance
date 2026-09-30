@@ -30,6 +30,11 @@ function fixture() {
       f.writes.push(data);return {id:'receipt',claimedAt:new Date(input.recoveryUntil),complaintId:data.complaintId};
     }},
     complaintPurgeAuthorizationWithdrawal:{create:async({data}:any)=>{f.writes.push(data);return data;}},
+    complaintPurgeDispositionEvent:{
+      create:async({data}:any)=>{if(f.error)throw f.error;f.writes.push(data);return data;},
+      findFirst:async({where}:any)=>{assert.equal(where.organisationId,'org');assert.equal(where.authorizationId,'auth');return null;},
+      findMany:async(args:any)=>{f.reads.push(args);return f.rows;},
+    },
   };
   return {f,service:new ComplaintPurgeService({$transaction:async(work:any)=>work(tx)} as never)};
 }
@@ -96,4 +101,39 @@ test('review history is Owner-only, scoped, bounded and excludes transaction ide
   f.owner=false;
   await assert.rejects(service.list('org','actor',{}));
   assert.equal(f.reads.length,2);
+});
+const observation={area:'BACKUPS',scopeRef:'BACKUP-SET-001',revision:1,status:'RETAINED_APPROVED',
+  evidenceRef:'COPY-EVIDENCE-001',reason:'Reviewed the retained backup scope',observedAt:'2026-09-30T10:00:00Z',
+  nextReviewAt:'2026-10-30T10:00:00Z',evidenceReviewed:true};
+test('copy observations require confirmation, scoped claim and active Owner without another primary write',async()=>{
+  const {f,service}=fixture();
+  await assert.rejects(service.recordDisposition('org','actor','auth',observation));
+  f.auth.claim={id:'claim'};
+  for(const extra of [{area:'PRIMARY'},{actorUserId:'spoof'},{evidenceReviewed:false},{revision:0},
+    {nextReviewAt:null},{observedAt:'invalid'},{scopeRef:'private@example.invalid'}]) {
+    await assert.rejects(service.recordDisposition('org','actor','auth',{...observation,...extra}));
+  }
+  assert.equal(f.writes.length,0);
+  await service.recordDisposition('org','actor','auth',observation);
+  assert.equal(f.writes[0].organisationId,'org');assert.equal(f.writes[0].authorizationId,'auth');
+  assert.equal(f.writes[0].actorUserId,'actor');assert.ok(f.writes[0].observedAt instanceof Date);
+  assert.equal(f.writes[0].evidenceReviewed,undefined);assert.equal(f.writes.length,1);
+  f.owner=false;
+  await assert.rejects(service.recordDisposition('org','actor','auth',observation));
+});
+test('copy history is bounded within authorization and rejects foreign cursors',async()=>{
+  const {f,service}=fixture();f.rows=Array.from({length:51},(_,i)=>({id:`copy-${i}`}));
+  const page=await service.listDispositions('org','actor','auth',{});
+  assert.equal(page.items.length,50);assert.equal(page.nextCursor,'copy-49');
+  assert.deepEqual(f.reads[0].where,{organisationId:'org',authorizationId:'auth'});
+  await assert.rejects(service.listDispositions('org','actor','auth',{before:'foreign'}));
+  f.auth=null;await assert.rejects(service.listDispositions('org','actor','auth',{}));
+  assert.equal(f.reads.length,1);
+});
+test('copy evidence conflicts return safe review guidance',async()=>{
+  const {f,service}=fixture();f.auth.claim={id:'claim'};
+  f.error=new Error('Complaint purge disposition revision changed SECRET');f.error.name='PrismaClientUnknownRequestError';
+  await assert.rejects(service.recordDisposition('org','actor','auth',observation),(error:any)=>{
+    assert.equal(error.statusCode,409);assert.doesNotMatch(error.message,/SECRET/);return true;
+  });
 });

@@ -157,6 +157,10 @@ export const EXCLUDED_MUTATIONS: readonly ExcludedMutation[] = [
     reason: 'Permanent complaint disposal requires separate human Owner confirmation in the dashboard.',
   },
   {
+    route: 'POST /api/v1/governance-registers/complaints/purge-authorizations/:id/dispositions',
+    reason: 'A human Owner must review evidence before recording a scoped copy-disposition observation.',
+  },
+  {
     route: 'POST /api/v1/governance-registers/risks/:id/control-verifications',
     reason: 'A dated control-verification claim or withdrawal must be made after a person checks the cited evidence in the Registers screen; the connector must not assert verification.',
   },

@@ -2,6 +2,20 @@
 
 Last updated: 2026-09-30
 
+Complaint copy-evidence API checkpoint (source only): Owner browser GET/POST
+disposition routes now expose scoped, paginated history and append-only reviewed
+observations. Writes require ADMIN session level, active charity Owner and a
+primary disposal claim; strict input excludes primary disposition, spoofed actor
+fields and unconfirmed evidence. Retained/unresolved statuses require follow-up
+dates. Database guards remain authoritative for times, revisions and approved
+plan consistency; conflicts return safe review guidance. No deletion is
+dispatched by copy observations, and no aggregate erasure claim is returned.
+Initial focused tests failed for missing methods; implementation passed 42
+API/route tests, 408 MCP tests (two Windows skips) and API build. Private logs:
+complaint-copy-api-{red,green,mcp,build}.log. Dashboard observation controls,
+synthetic browser proof, separately reviewed later disposition changes, exact
+hosted gates and deployment/live acceptance remain. Runtime remains e5e988a3.
+
 Complaint copy-disposition persistence checkpoint (source only): migration 1800
 adds immutable per-scope observations for snapshots, exports, audit/evidence,
 backups and other copies. The primary deletion result remains its separate

@@ -152,6 +152,10 @@ export const EXCLUDED_ROUTES: readonly ExcludedRoute[] = [
     reason: 'Complaint disposal reviews and receipts require the active Owner in the dashboard.',
   },
   {
+    path: '/api/v1/governance-registers/complaints/purge-authorizations/:id/dispositions',
+    reason: 'Scoped complaint copy evidence requires active Owner review in the dashboard.',
+  },
+  {
     path: '/api/v1/governance-registers/complaints/:id/holds',
     reason: 'Complaint hold evidence and history require human administrator review in the dashboard.',
   },

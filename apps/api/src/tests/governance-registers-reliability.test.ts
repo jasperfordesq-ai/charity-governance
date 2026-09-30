@@ -1228,8 +1228,10 @@ test('complaint purge routes require Owner browser access and elevated writes be
         ['POST','/complaints/complaint-1/purge-authorizations'],
         ['POST','/complaints/purge-authorizations/auth-1/withdraw'],
         ['POST','/complaints/purge-authorizations/auth-1/claim'],
+        ['POST','/complaints/purge-authorizations/auth-1/dispositions'],
       ];
       if(scenario.accessLevel==='ADMIN') paths.push(['GET','/complaints/purge-authorizations']);
+      if(scenario.accessLevel==='ADMIN') paths.push(['GET','/complaints/purge-authorizations/auth-1/dispositions']);
       for(const [method,path] of paths) {
         const response=await app.inject({method,url:`${PREFIX}${path}`,headers:{authorization:tokenFor(scenario.role)},payload:method==='POST'?{}:undefined});
         assert.equal(response.statusCode,403,`${scenario.role}/${scenario.clientKind}/${scenario.accessLevel}: ${path}`);

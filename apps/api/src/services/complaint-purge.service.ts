@@ -15,6 +15,18 @@ export const complaintPurgeAuthorizationInput=retentionWithdrawalInput.extend({
     SNAPSHOTS:area,EXPORTS:area,AUDIT:area,BACKUPS:area,OTHER_COPIES:area}).strict(),
 }).strict();
 const claimInput=z.object({confirmPermanentPurge:z.literal(true)}).strict();
+export const complaintDispositionInput=retentionWithdrawalInput.extend({
+  area:z.enum(['SNAPSHOTS','EXPORTS','AUDIT','BACKUPS','OTHER_COPIES']),
+  scopeRef:z.string().regex(/^[A-Z0-9][A-Z0-9-]{2,119}$/),revision:z.number().int().positive().max(2147483647),
+  status:z.enum(['NEEDS_REVIEW','PENDING_DISPOSAL','FAILED','VERIFIED_ABSENT','RETAINED_APPROVED','NOT_APPLICABLE']),
+  observedAt:z.string().datetime({offset:true}),nextReviewAt:z.string().datetime({offset:true}).nullable(),
+  evidenceReviewed:z.literal(true),
+}).strict().superRefine((value,ctx)=>{
+  if(['NEEDS_REVIEW','PENDING_DISPOSAL','FAILED','RETAINED_APPROVED'].includes(value.status)&&!value.nextReviewAt)
+    ctx.addIssue({code:z.ZodIssueCode.custom,path:['nextReviewAt'],message:'Retained or unresolved copies require a follow-up review date.'});
+});
+const observationReview={id:true,authorizationId:true,area:true,scopeRef:true,revision:true,status:true,
+  actorUserId:true,evidenceRef:true,reason:true,observedAt:true,nextReviewAt:true,occurredAt:true} as const;
 const receipt={id:true,complaintId:true,claimedAt:true} as const;
 const review={id:true,complaintId:true,recordRevision:true,holdRevision:true,removalId:true,
   policyId:true,actorUserId:true,recoveryUntil:true,dispositionPlan:true,evidenceRef:true,
@@ -33,6 +45,9 @@ export class ComplaintPurgeService {
   private async transaction<T>(work:(tx:Prisma.TransactionClient)=>Promise<T>):Promise<T> {
     try {return await this.prisma.$transaction(work);}
     catch(error) {
+      if(error instanceof Error&&error.name==='PrismaClientUnknownRequestError'&&error.message.includes('Complaint purge disposition')) {
+        throw new AppError(409,'COMPLAINT_DISPOSITION_REVIEW_CHANGED','Refresh the copy history and review the approved plan, observation time and follow-up date.');
+      }
       if(error instanceof Error && error.name==='PrismaClientUnknownRequestError'
         && /Complaint purge (?:claim|authorization|withdrawal)|Claimed complaint disposal/.test(error.message)) {
         throw new AppError(409,'COMPLAINT_PURGE_REVIEW_CHANGED','Refresh the complaint, policy, hold and disposal review. Retention and the original recovery period must expire before permanent disposal.');
@@ -42,6 +57,36 @@ export class ComplaintPurgeService {
       }
       throw error;
     }
+  }
+
+  async listDispositions(organisationId:string,actorUserId:string,authorizationId:string,raw:unknown) {
+    id.parse(authorizationId);const {before}=z.object({before:id.optional()}).strict().parse(raw);
+    return this.transaction(async tx=>{
+      await this.owner(tx,organisationId,actorUserId);
+      const auth=await tx.complaintPurgeAuthorization.findFirst({where:{id:authorizationId,organisationId},select:{id:true}});
+      if(!auth)throw new AppError(404,'COMPLAINT_PURGE_NOT_FOUND','Disposal review not found.');
+      const anchor=before?await tx.complaintPurgeDispositionEvent.findFirst({where:{id:before,organisationId,authorizationId},select:{id:true,occurredAt:true}}):null;
+      if(before&&!anchor)throw new AppError(404,'COMPLAINT_DISPOSITION_NOT_FOUND','Copy evidence cursor not found.');
+      const rows=await tx.complaintPurgeDispositionEvent.findMany({where:{organisationId,authorizationId,
+        ...(anchor?{OR:[{occurredAt:{lt:anchor.occurredAt}},{occurredAt:anchor.occurredAt,id:{lt:anchor.id}}]}:{})},
+        select:observationReview,orderBy:[{occurredAt:'desc'},{id:'desc'}],take:51});
+      return {items:rows.slice(0,50),nextCursor:rows.length>50?rows[49]!.id:null};
+    });
+  }
+
+  async recordDisposition(organisationId:string,actorUserId:string,authorizationId:string,raw:unknown) {
+    id.parse(authorizationId);
+    const {evidenceReviewed:_confirmed,observedAt,nextReviewAt,...input}=complaintDispositionInput.parse(raw);
+    return this.transaction(async tx=>{
+      await this.owner(tx,organisationId,actorUserId);
+      await tx.$queryRaw`SELECT id FROM "ComplaintPurgeAuthorization" WHERE id=${authorizationId} AND "organisationId"=${organisationId} FOR UPDATE`;
+      const auth=await tx.complaintPurgeAuthorization.findFirst({where:{id:authorizationId,organisationId},select:{id:true,claim:{select:{id:true}}}});
+      if(!auth)throw new AppError(404,'COMPLAINT_PURGE_NOT_FOUND','Disposal review not found.');
+      if(!auth.claim)throw new AppError(409,'COMPLAINT_PURGE_NOT_CLAIMED','Record copy evidence against a completed primary disposal receipt.');
+      // These observations never dispatch deletion or assert aggregate erasure.
+      return tx.complaintPurgeDispositionEvent.create({data:{...input,organisationId,actorUserId,authorizationId,
+        observedAt:new Date(observedAt),nextReviewAt:nextReviewAt?new Date(nextReviewAt):null},select:observationReview});
+    });
   }
 
   async list(organisationId:string,actorUserId:string,raw:unknown) {

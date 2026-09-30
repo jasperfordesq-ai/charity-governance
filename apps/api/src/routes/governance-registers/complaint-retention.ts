@@ -26,6 +26,14 @@ export function registerComplaintRetentionRoutes(app: FastifyInstance) {
   const recovery = new ComplaintRecoveryService(app.prisma);
   const holds = new ComplaintHoldService(app.prisma);
   const purge = new ComplaintPurgeService(app.prisma);
+  app.get<{ Params: { id: string } }>('/complaints/purge-authorizations/:id/dispositions', { preHandler: [requireOwner, webOnly] }, async (request, reply) => {
+    try { return sendSuccess(reply, await purge.listDispositions(request.user.organisationId, request.user.userId, request.params.id, request.query)); }
+    catch (error) { return failure(reply, error); }
+  });
+  app.post<{ Params: { id: string } }>('/complaints/purge-authorizations/:id/dispositions', { preHandler: [requireOwner, webOnly, requireSessionLevel('ADMIN')] }, async (request, reply) => {
+    try { return sendCreated(reply, await purge.recordDisposition(request.user.organisationId, request.user.userId, request.params.id, request.body)); }
+    catch (error) { return failure(reply, error); }
+  });
   app.get('/complaints/purge-authorizations', { preHandler: [requireOwner, webOnly] }, async (request, reply) => {
     try { return sendSuccess(reply, await purge.list(request.user.organisationId, request.user.userId, request.query)); }
     catch (error) { return failure(reply, error); }
