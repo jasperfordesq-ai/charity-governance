@@ -9,12 +9,24 @@ export interface AuthorityObjectStore {
   create(key: string, body: string): Promise<boolean>;
 }
 
+/** Must read the live, authenticated independent head without caches or fallback
+ * to a backup/checkpoint. Revision is the provider's non-reused version identity.
+ * A stable read is an observation, never a lock or disposal/reopen authorization. */
+export interface AuthorityHeadSource {
+  readHead(): Promise<unknown>;
+}
+
 const identity = z.string().regex(/^[A-Za-z0-9_-]{1,120}$/);
 const digest = z.string().regex(/^[a-f0-9]{64}$/);
 const kinds = z.enum(['DISPOSAL_INTENT', 'DISPOSAL_RESULT', 'PRESERVATION_CHANGE', 'CONTROL_CHANGE']);
 const bindingSchema = z.object({ installationId: identity, organisationId: identity }).strict();
-const checkpointSchema = bindingSchema.extend({
+const checkpointFields = {
   generation: z.number().int().nonnegative().max(10000), digest: digest.nullable(),
+};
+const checkpointSchema = bindingSchema.extend(checkpointFields)
+  .strict().refine(v => (v.generation === 0) === (v.digest === null));
+const headSchema = bindingSchema.extend({ ...checkpointFields,
+  revision: z.string().min(1).max(1024).regex(/^[\x21-\x7e]+$/),
 }).strict().refine(v => (v.generation === 0) === (v.digest === null));
 export type AuthorityCheckpoint = z.infer<typeof checkpointSchema>;
 const inputSchema = z.object({ operationId: identity, kind: kinds, factsDigest: digest,
@@ -88,6 +100,34 @@ export class RecoveryAuthorityJournal {
   async inspect() {
     const rows = await this.history(); const head = rows.at(-1);
     return { generation: rows.length, digest: head?.digest ?? null, actionAuthorized: false as const };
+  }
+
+  private async readCurrentHead(source: AuthorityHeadSource) {
+    let raw: unknown;
+    try { raw = await source.readHead(); }
+    catch { throw new Error('Recovery authority current head is unavailable'); }
+    const result = headSchema.safeParse(raw);
+    if (!result.success || result.data.installationId !== this.binding.installationId ||
+      result.data.organisationId !== this.binding.organisationId) {
+      throw new Error('Invalid recovery authority current head');
+    }
+    return result.data;
+  }
+
+  /** Verifies complete observed history against two live head reads. Another
+   * writer may advance immediately afterwards: callers still need action fencing.
+   * No claim of freshness is valid without the HeadSource provider contract. */
+  async inspectCurrent(source: AuthorityHeadSource) {
+    const before = await this.readCurrentHead(source);
+    const observed = await this.inspect();
+    if (observed.generation !== before.generation || observed.digest !== before.digest) {
+      throw new Error('Recovery authority history does not match its current head');
+    }
+    const after = await this.readCurrentHead(source);
+    if (after.revision !== before.revision || after.generation !== before.generation || after.digest !== before.digest) {
+      throw new Error('Recovery authority current head changed during verification');
+    }
+    return { ...observed, revision: after.revision };
   }
 
   private receipt(entry: Entry, replayed: boolean) {

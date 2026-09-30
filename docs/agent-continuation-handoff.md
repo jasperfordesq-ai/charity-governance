@@ -18,6 +18,13 @@ reads and writes refuse history shorter than that checkpoint or with a different
 digest at that generation. This detects loss or replacement of known history,
 not truncation after an old checkpoint. Receipts never authorize actions.
 
+The separate `inspectCurrent` operation also requires a live independent head
+source: it compares complete observed history with two validated head reads and
+refuses a changing revision, missing head or unpublished journal suffix. Its
+provider contract requires authenticated uncached reads and non-reused revisions.
+This is an observation only: publishing/fencing is not implemented, and another
+writer can advance immediately afterwards. Do not use it as an execution permit.
+
 Before integration, implement fresh independent authority, protected replay
 facts, provider durability/permissions, action fencing and supported recovery
 reconciliation. The bounded sequential prototype must not be presented as the
