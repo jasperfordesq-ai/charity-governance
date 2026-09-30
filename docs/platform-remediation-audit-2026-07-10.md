@@ -13,6 +13,12 @@
 > decisions and DPO acceptance remain open. Private evidence:
 > `.charitypilot-private/release-6687cc47-acceptance.md`.
 
+> DPO-05 post-release source work: a same-writer completion helper reads an
+> already committed primary-disposal or hold outcome, verifies its exact
+> published preparation and current control, and completes publication/release
+> without executing the original action again. Local API, PostgreSQL and real
+> protocol checks pass; hosted gates remain pending. It is not in verified 6687.
+
 > DPO-05 interrupted cancellation completion (deployed inactive path): an
 > internal helper resumes an already committed cancellation using the same writer. A preparation
 > head permits preserving/publishing that exact receipt; a terminal head goes

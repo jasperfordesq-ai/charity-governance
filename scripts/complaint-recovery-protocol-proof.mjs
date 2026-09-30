@@ -1,3 +1,4 @@
+import { resumeCommittedComplaintOutcome } from '../apps/api/src/services/resume-committed-complaint-outcome.ts';
 import { resumeCommittedCancellation } from '../apps/api/src/services/resume-committed-cancellation.ts';
 import { releaseCommittedCancellationOperation } from '../apps/api/src/services/release-cancellation-recovery-operation.ts';
 import { preserveCancellation } from '../apps/api/src/services/cancellation-envelope.ts';
@@ -96,7 +97,9 @@ try {
   const published = await publishVerifiedComplaintPreparation(journal, store, { writerId: 'host-a',
     preparationDigest: capture.digest, expectedGeneration: 0, expectedDigest: null }, context, keys, store);
   const release = () => releaseCommittedComplaintOperation(prisma, journal, store, 'host-a', context, keys, store);
+  const resumeOutcome = () => resumeCommittedComplaintOutcome(prisma, journal, store, 'host-a', 'PRIMARY', context, keys, store);
   await assert.rejects(release); // No published committed outcome yet.
+  await assert.rejects(resumeOutcome, /unavailable/); // No committed outcome; no action is replayed.
   assert.notEqual((await store.readControl()).activeOperation, null);
   const executionData = { preparationId: capture.id, writerId: 'host-a', generation: published.generation,
     entryDigest: published.digest, envelopeDigest: envelope.digest, controlRevision: (await store.readControl()).revision };
@@ -138,13 +141,19 @@ try {
   assert.equal((await execute()).replayed, true);
   await prisma.$disconnect(); // Evidence must survive reconnection, not process-local cache.
   const outcome = await readCommittedComplaintOutcome(prisma, { ...binding, operationId: context.operationId });
-  await preserveRecoveryOutcome(outcome.body, context, keys, store);
-  await publishVerifiedComplaintOutcome(journal, store, { writerId: 'host-a', preparationDigest: capture.digest,
+  await assert.rejects(resumeCommittedComplaintOutcome(prisma, journal, store, 'old-host', 'PRIMARY', context, keys, store), /writer or operation mismatch/);
+  loseHeadAck = true;
+  await assert.rejects(resumeOutcome, /unknown/); // Terminal publication committed, acknowledgement lost.
+  const primaryPreserved = await preserveRecoveryOutcome(outcome.body, context, keys, store);
+  assert.equal(primaryPreserved.replayed, true);
+  const republished = await publishVerifiedComplaintOutcome(journal, store, { writerId: 'host-a', preparationDigest: capture.digest,
     preparationGeneration: published.generation, preparationEntryDigest: published.digest,
     preparationEnvelopeDigest: envelope.digest }, context, keys, store);
+  assert.equal(republished.replayed, true);
   loseHeadAck = true;
-  await assert.rejects(release, /unknown/);
-  assert.deepEqual(await release(), { released: true, replayed: true, actionAuthorized: false });
+  await assert.rejects(resumeOutcome, /unknown/); // Release committed, acknowledgement lost.
+  await prisma.$disconnect();
+  assert.deepEqual(await resumeOutcome(), { released: true, replayed: true, actionAuthorized: false });
   const final = await store.readControl();
   assert.equal(final.activeOperation, null); assert.equal(final.generation, 2);
   assert.equal(await prisma.complaintRecord.count({ where: { id: 'recovery-protocol' } }), 0);
@@ -251,11 +260,13 @@ try {
   const hs = new S3AuthorityObjectStore({ ...config, ...hb }, credentials, client);
   const hj = new RecoveryAuthorityJournal(hs, hb, hi);
   const releaseHold = () => releaseCommittedHoldOperation(prisma, hj, hs, 'host-b', hc, keys, hs);
+  const resumeHoldOutcome = () => resumeCommittedComplaintOutcome(prisma, hj, hs, 'host-b', 'HOLD', hc, keys, hs);
   const executeHold = () => executePublishedComplaintHold(prisma, hj, hs, 'host-b', hc, keys, hs);
   await assert.rejects(executeHold, /writer or operation/);
   await reserveRecoveryOperation({ ...hb, writerId: 'host-b', writerEpoch: 1, operationId: hc.operationId,
     preparationDigest: hp.digest, expectedGeneration: 0, expectedDigest: null }, hs);
   await assert.rejects(executeHold); // No authenticated published payload yet.
+  await assert.rejects(resumeHoldOutcome, /unavailable/);
   const heldPreparation = await preserveHoldPreparation(hpRow.facts, hc, keys, hs);
   const publishedHoldPreparation = await publishVerifiedHoldPreparation(hj, hs, { writerId: 'host-b', preparationDigest: hp.digest,
     expectedGeneration: 0, expectedDigest: null }, hc, keys, hs);
@@ -276,18 +287,20 @@ try {
   assert.deepEqual(await executeHold(), { ...result, replayed: true });
   assert.equal(await prisma.complaintHoldEvent.count({ where: { complaintId: 'published-hold-complaint' } }), 1);
   assert.equal((await hs.readControl()).activeOperation.operationId, hc.operationId);
+  await assert.rejects(releaseHold, /not published/);
   const committedHold = await readCommittedComplaintHoldOutcome(prisma, {
     ...hb, operationId: hc.operationId });
+  await assert.rejects(resumeCommittedComplaintOutcome(prisma, hj, hs, 'old-host', 'HOLD', hc, keys, hs), /writer or operation mismatch/);
+  loseHeadAck = true;
+  await assert.rejects(resumeHoldOutcome, /unknown/);
   const preservedHold = await preserveHoldOutcome(committedHold.body, hc, keys, hs);
   assert.equal((await preserveHoldOutcome(committedHold.body, hc, keys, hs)).digest, preservedHold.digest);
   assert.equal((await readVerifiedHoldOutcome(preservedHold.digest, hc, keys, hs)).body, committedHold.body);
   const holdOutcomeRequest = { writerId: 'host-b', preparationDigest: hp.digest,
     preparationGeneration: publishedHoldPreparation.generation, preparationEntryDigest: publishedHoldPreparation.digest,
     preparationEnvelopeDigest: heldPreparation.digest };
-  await assert.rejects(releaseHold, /not published/);
   const publishedHoldOutcome = await publishVerifiedHoldOutcome(hj, hs, holdOutcomeRequest, hc, keys, hs);
-  assert.equal(publishedHoldOutcome.headPublished, true);
-  assert.equal((await publishVerifiedHoldOutcome(hj, hs, holdOutcomeRequest, hc, keys, hs)).replayed, true);
+  assert.equal(publishedHoldOutcome.replayed, true);
   const holdHeadSource = { async readHead() {
     const { installationId, organisationId, generation, digest, revision } = await hs.readControl();
     return { installationId, organisationId, generation, digest, revision };
@@ -299,9 +312,9 @@ try {
   // Synthetic provider only: no live custody or activation is implied.
   assert.equal((await hs.readControl()).activeOperation.operationId, hc.operationId);
   loseHeadAck = true;
-  await assert.rejects(releaseHold, /unknown/);
+  await assert.rejects(resumeHoldOutcome, /unknown/);
   await prisma.$disconnect();
-  assert.deepEqual(await releaseHold(), { released: true, replayed: true, actionAuthorized: false });
+  assert.deepEqual(await resumeHoldOutcome(), { released: true, replayed: true, actionAuthorized: false });
   const releasedHoldControl = await hs.readControl();
   assert.equal(releasedHoldControl.activeOperation, null);
   assert.equal(releasedHoldControl.digest, publishedHoldOutcome.digest);
