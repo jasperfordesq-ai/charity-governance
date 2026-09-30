@@ -453,6 +453,23 @@ and every extracted document) re-hashes clean. It fails loudly and tears
 the scratch container down either way, capturing `docker logs` first on
 any failure for diagnostics.
 
+**Purge-history acceptance:** the drill also compares the restored retention
+policy revisions, withdrawals, purge authorizations, claims, disposition
+history and claimed cleanup jobs against fresh read-only snapshots from the
+configured live database. Missing schema or unreadable authority fails closed.
+It refuses restored claimed documents or local archive files whose storage-key
+hashes match a current purge claim, including claims still awaiting cleanup.
+It rereads current authority after comparison to detect intervening changes.
+An older backup may therefore restore correctly yet fail this acceptance gate;
+do not bypass the comparison or treat that failure as authority to reopen it.
+
+A successful drill explicitly returns `applicationReopenAuthorized: false`.
+It neither reconciles external copies nor supplies independent durable purge
+authority after loss of the live host. Supported recovery reopening and that
+separate authority remain unresolved work; keep a real restored application
+closed until those requirements are satisfied. The pre-migration backup is a
+preserved recovery artifact, not proof that the new purge-history gate passed.
+
 **The row-census race, honestly stated:** in this engine's phase order,
 backup runs *before* the deploy quiesces the scheduler/job singletons —
 the app is still live-serving writes while the backup runs. The row

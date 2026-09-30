@@ -51,42 +51,53 @@ async function fillResetPasswordForm(page: Page, password: string): Promise<void
  * stored sha256-hashed, so we inject a known token via the DB and then drive
  * the REAL /verify-email page + endpoint.
  */
+// Block the real logout transaction inside the disposable database. Requests
+// still pass through the installed browser-origin fence without extra routes.
+async function withHeldLogout(organisationId: string, check: () => Promise<void>): Promise<void> {
+  await withDb(async (client) => {
+    await client.query('BEGIN');
+    try {
+      await client.query('SELECT "id" FROM "Organisation" WHERE "id" = $1 FOR UPDATE', [organisationId]);
+      await check();
+    } finally {
+      await client.query('ROLLBACK');
+    }
+  });
+}
+
 test.describe('Authentication', () => {
   test('dashboard sign-out failure stays visible and can be retried', async ({ ownerPage }) => {
+    const pageErrors: string[] = [];
+    ownerPage.on('pageerror', (error) => pageErrors.push(error.message));
     await gotoWithDevServerRetry(ownerPage, '/dashboard');
-    await ownerPage.route('**/api/v1/auth/logout', (route) => route.abort('failed'));
     const logoutButton = ownerPage.getByRole('button', { name: 'Logout', exact: true });
+    await expect(logoutButton).toBeVisible();
+    // Let the initial document/navigation and workspace reads settle before
+    // taking the context offline; this case targets logout, not page loading.
+    await ownerPage.waitForLoadState('networkidle');
+    await ownerPage.context().setOffline(true);
     await logoutButton.click();
     await expect(ownerPage.getByRole('alert').filter({ hasText: 'Sign-out could not be confirmed.' }))
       .toHaveText('Sign-out could not be confirmed. Please try again.');
     await expect(ownerPage).toHaveURL(/\/dashboard$/);
     await expect(logoutButton).toBeEnabled();
-    await ownerPage.unroute('**/api/v1/auth/logout');
+    await ownerPage.context().setOffline(false);
     await logoutButton.click();
     await expect(ownerPage).toHaveURL(/\/login(?:\?|$)/);
+    expect(pageErrors).toEqual([]);
   });
 
-  test('idle sign-out waits for cookie clearance before navigating', async ({ ownerPage }) => {
+  test('idle sign-out waits for cookie clearance before navigating', async ({ ownerPage, owner }) => {
     await ownerPage.clock.install();
     await gotoWithDevServerRetry(ownerPage, '/dashboard');
     await expect(ownerPage.getByRole('button', { name: 'Logout', exact: true })).toBeVisible();
-    let release!: () => void;
-    let received!: () => void;
-    const held = new Promise<void>((resolve) => { release = resolve; });
-    const arrived = new Promise<void>((resolve) => { received = resolve; });
-    await ownerPage.route('**/api/v1/auth/logout', async (route) => {
-      received();
-      await held;
-      await route.continue();
-    });
-    await ownerPage.clock.runFor(14 * 60 * 1000);
-    await arrived;
-    try {
+    await withHeldLogout(owner.organisationId, async () => {
+      const arrived = ownerPage.waitForRequest((request) => new URL(request.url()).pathname === '/api/v1/auth/logout');
+      await ownerPage.clock.runFor(14 * 60 * 1000);
+      await arrived;
       await expect(ownerPage).toHaveURL(/\/dashboard$/);
       await expect(ownerPage.getByRole('button', { name: 'Sign out', exact: true })).toBeDisabled();
-    } finally {
-      release();
-    }
+    });
     await expect(ownerPage).toHaveURL(/\/login(?:\?|$)/);
     expect((await ownerPage.context().cookies()).filter((cookie) =>
       ['charitypilot_access', 'charitypilot_refresh'].includes(cookie.name))).toEqual([]);
@@ -96,28 +107,18 @@ test.describe('Authentication', () => {
     await gotoWithDevServerRetry(ownerPage, '/dashboard');
     const logoutButton = ownerPage.getByRole('button', { name: 'Logout', exact: true });
     await expect(logoutButton).toBeVisible();
-    let release!: () => void;
-    let received!: () => void;
-    const held = new Promise<void>((resolve) => { release = resolve; });
-    const arrived = new Promise<void>((resolve) => { received = resolve; });
     let refreshes = 0;
     ownerPage.on('request', (request) => {
       if (new URL(request.url()).pathname === '/api/v1/auth/refresh') refreshes += 1;
     });
-    await ownerPage.route('**/api/v1/auth/logout', async (route) => {
-      received();
-      await held;
-      await route.continue();
-    });
-    try {
+    await withHeldLogout(owner.organisationId, async () => {
+      const arrived = ownerPage.waitForRequest((request) => new URL(request.url()).pathname === '/api/v1/auth/logout');
       await logoutButton.click();
       await arrived;
       await expect(ownerPage.getByRole('button', { name: /Logout$/ })).toBeDisabled();
       await expect(ownerPage).toHaveURL(/\/dashboard$/);
       expect(refreshes).toBe(0);
-    } finally {
-      release();
-    }
+    });
     await expect(ownerPage).toHaveURL(/\/login(?:\?|$)/);
     await expect(ownerPage.getByRole('heading', { name: 'Welcome back' })).toBeVisible();
     const authCookies = (await ownerPage.context().cookies()).filter((cookie) =>

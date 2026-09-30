@@ -2,6 +2,20 @@
 
 Last updated: 2026-09-30
 
+Logout release-gate correction: 60b07ed9 CI 36704289527 and E2E 36704289606
+failed the isolated-runner contract because the new browser tests installed
+request handlers over the origin fence. The earlier three-test pass below is
+superseded for release acceptance. Replacement delayed-logout checks hold the
+synthetic organisation database row and pass through the unchanged fence;
+both dashboard and idle checks pass, as do all 116 runner contract tests.
+Offline diagnostics exposed the Logout button's lazily loaded ripple animation:
+its failed chunk download triggered a reload without a connection. Disabling
+that button's ripple preserves the visible retry. All three replacement
+Chromium journeys now pass (including no page errors on offline retry), along
+with E2E TypeScript and edited-file lint. Exact successor hosted checks and
+deployment remain required. The recovery runbook also records the current
+purge-history comparison and its explicit refusal to authorize reopening.
+
 Reliability ledger follow-up: 2e2267be CI 36703357729 passed the test step but
 found eight stale guarantee links. Their claims still described immediate
 document deletion/cleanup and broad Member deadline reads. Existing IDs now

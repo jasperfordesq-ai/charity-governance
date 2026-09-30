@@ -449,6 +449,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
               className="!text-[#a10b48] dark:!text-[#ff8fb3]"
               isDisabled={isSigningOut}
               isLoading={isSigningOut}
+              disableRipple
               onPress={async () => {
                 setIsSigningOut(true);
                 setSignOutError('');
