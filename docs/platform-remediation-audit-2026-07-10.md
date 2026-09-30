@@ -1,5 +1,17 @@
 # CharityPilot Full-Platform Remediation Audit
 
+> **Five legacy text stubs reviewed, 2026-09-30 23:15 Dublin:** exact backup
+> bytes and hashes match for all five. Four cite full September PDFs present
+> with matching hashes; private P01/P02 proposals link them as restricted
+> superseded renderings, pending controller acceptance. The March Governance
+> Policy Index stub has no claimed March DOCX in the 63-file backup. The
+> different August index has a blank approval block and is not a proved
+> replacement. A `safe to delete` narrative gives no disposal authority.
+> Fifteen of 63 rows have source evidence, 13 have some proposal, 50 have none,
+> and all 63 remain PENDING. No live record changed. Private evidence:
+> `.charitypilot-private/text-stub-source-review-2026-09-30.md`.
+
+
 > **Volunteer template source review, 2026-09-30:** exact verified backup PDF
 > is a blank three-page Volunteer Register and Induction Record. CWR-2026-11
 > Resolution 3 adopts the circulated form and assigns the Company Secretary,

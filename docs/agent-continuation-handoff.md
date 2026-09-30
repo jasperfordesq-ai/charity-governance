@@ -1,5 +1,18 @@
 # CharityPilot Agent Continuation Handoff
 
+> **Five legacy text stubs reviewed, 2026-09-30 23:15 Dublin:** all five
+> `ZZ SUPERSEDED STUB` files match exact verified post-release backup bytes.
+> Four cite full September PDFs present in the backup with matching hashes;
+> their private worksheet rows propose SUPERSEDED/RESTRICTED and exact
+> successors. The March Governance Policy Index stub has no claimed real
+> March DOCX in the 63-file backup; an August index with a blank approval
+> block is a separate source, not a proven replacement. `safe to delete` is
+> not disposal authority. Fifteen of 63 worksheet rows now carry source
+> evidence, 13 have some proposal, 50 have none, and all 63 are PENDING.
+> No live metadata changed. Private evidence:
+> `.charitypilot-private/text-stub-source-review-2026-09-30.md`.
+
+
 > **Volunteer template source review, 2026-09-30:** the exact three-page PDF
 > matches a verified backup entry and is blank. CWR-2026-11 Resolution 3 adopts
 > the circulated Volunteer Register and Induction Record and assigns the
