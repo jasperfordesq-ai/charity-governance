@@ -187,6 +187,7 @@ const DISPOSABLE_DATABASE_RESET_TABLES = Object.freeze([
   "ComplaintRecoveryPreparation",
   "ComplaintRecoveryExecution",
   "ComplaintRecoveryEnforcement",
+  "ComplaintHoldRecoveryOutcome",
   "ComplaintHoldRecoveryPreparation",
   "ComplaintCopyHoldEvent",
   "ComplaintCopyDispositionAuthority",
