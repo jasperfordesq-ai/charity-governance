@@ -5,6 +5,23 @@ import { prepareComplaintRecoveryFacts, type ComplaintRecoveryFacts } from './co
 
 const identity = z.string().regex(/^[A-Za-z0-9_-]{1,160}$/);
 const requestSchema = z.object({ organisationId: identity, installationId: identity, operationId: identity }).strict();
+const outcomeSchema = z.object({ format: z.literal(1), action: z.literal('COMPLAINT_PRIMARY_PURGE_COMMITTED'),
+  ...requestSchema.shape, writerEpoch: z.number().int().positive().max(2147483647),
+  preparationSourceRevision: z.string().regex(/^[a-f0-9]{40}$/), preparationId: identity,
+  preparationDigest: z.string().regex(/^[a-f0-9]{64}$/), outcomeId: identity, claimId: identity,
+  authorizationId: identity, complaintId: identity, actorUserId: identity,
+  transactionId: z.string().regex(/^[1-9][0-9]{0,18}$/)
+    .refine(v => /^[1-9][0-9]{0,18}$/.test(v) && BigInt(v) <= 9223372036854775807n),
+  claimedAt: z.string().datetime(), recordedAt: z.string().datetime(),
+}).strict().refine(v => Date.parse(v.recordedAt) >= Date.parse(v.claimedAt));
+
+/** Typed serialization only. The caller must separately prove database provenance. */
+export function prepareComplaintOutcomeFacts(raw: unknown) {
+  const parsed = outcomeSchema.safeParse(raw);
+  if (!parsed.success) throw new Error('Invalid complaint outcome facts');
+  const body = JSON.stringify(parsed.data);
+  return { body, digest: createHash('sha256').update(body, 'utf8').digest('hex'), actionAuthorized: false as const };
+}
 
 /** Internal evidence reader, not an API or execution permit. Use the ordinary
  * committed database connection, never an in-flight claim transaction. Remote
@@ -35,11 +52,10 @@ export async function readCommittedComplaintOutcome(prisma: PrismaClient, raw: u
     || row.recordedAt.getTime() < c.claimedAt.getTime()) {
     throw new Error('Committed complaint recovery outcome binding mismatch');
   }
-  const body = JSON.stringify({ format: 1, action: 'COMPLAINT_PRIMARY_PURGE_COMMITTED',
+  return prepareComplaintOutcomeFacts({ format: 1, action: 'COMPLAINT_PRIMARY_PURGE_COMMITTED',
     ...request, writerEpoch: p.writerEpoch, preparationSourceRevision: facts.sourceRevision,
     preparationId: identity.parse(p.id), preparationDigest: p.factsDigest, outcomeId: identity.parse(row.id),
     claimId: identity.parse(c.id), authorizationId: identity.parse(c.authorizationId), complaintId: identity.parse(c.complaintId),
     actorUserId: identity.parse(c.actorUserId), transactionId: row.transactionId.toString(),
     claimedAt: c.claimedAt.toISOString(), recordedAt: row.recordedAt.toISOString() });
-  return { body, digest: createHash('sha256').update(body, 'utf8').digest('hex'), actionAuthorized: false as const };
 }

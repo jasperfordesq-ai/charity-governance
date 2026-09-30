@@ -4,6 +4,7 @@ import { GetObjectCommand, PutObjectCommand, S3Client, type S3ClientConfig } fro
 import { z } from 'zod';
 import type { AuthorityObjectStore, AuthorityHeadPublisher, AuthorityCheckpoint } from './recovery-authority-journal.js';
 import { inspectRecoveryPreparationEnvelope } from './recovery-preparation-envelope.js';
+import { inspectRecoveryOutcomeEnvelope } from './recovery-outcome-envelope.js';
 import { validateRecoveryControlValue, type RecoveryControlStore, type RecoveryControlValue } from './recovery-operation-reservation.js';
 
 const identity = z.string().regex(/^[A-Za-z0-9_-]{1,120}$/);
@@ -153,6 +154,30 @@ export class S3AuthorityObjectStore implements AuthorityObjectStore, AuthorityHe
     const request = this.replayRequest(operationId);
     this.checkReplay(operationId, envelope);
     return this.writeObject(request, envelope, { IfNoneMatch: '*' }, 65536);
+  }
+
+  private outcomeRequest(operationId: string) {
+    const request = this.replayRequest(operationId); // Same validated binding and separate payload key.
+    return { ...request, Key: `outcomes/${this.config.installationId}/${this.config.organisationId}/${operationId}.json` };
+  }
+
+  private checkOutcome(operationId: string, envelope: string) {
+    const context = inspectRecoveryOutcomeEnvelope(envelope);
+    if (context.installationId !== this.config.installationId || context.organisationId !== this.config.organisationId
+      || context.operationId !== operationId || context.keyId !== this.config.replayKeyArn) {
+      throw new Error('Recovery outcome envelope scope mismatch');
+    }
+  }
+
+  async readOutcome(operationId: string) {
+    const object = await this.readObject(this.outcomeRequest(operationId), undefined, 32768);
+    if (!object) return null;
+    this.checkOutcome(operationId, object.body); return object.body;
+  }
+
+  async createOutcome(operationId: string, envelope: string) {
+    const request = this.outcomeRequest(operationId); this.checkOutcome(operationId, envelope);
+    return this.writeObject(request, envelope, { IfNoneMatch: '*' }, 32768);
   }
 
   private headRequest() {
