@@ -25,6 +25,7 @@ import { publishVerifiedComplaintOutcome } from '../apps/api/src/services/publis
 import { releaseCommittedComplaintOperation } from '../apps/api/src/services/release-complaint-recovery-operation.ts';
 import { executePublishedComplaintOperation } from '../apps/api/src/services/execute-published-complaint-operation.ts';
 import { ComplaintHoldRecoveryPreparationStore } from '../apps/api/src/services/complaint-hold-recovery-preparation-store.ts';
+import { ComplaintHoldService } from '../apps/api/src/services/complaint-hold.service.ts';
 import { readCommittedComplaintHoldOutcome } from '../apps/api/src/services/complaint-hold-recovery-outcome.ts';
 import { executePublishedComplaintHold } from '../apps/api/src/services/execute-published-complaint-hold.ts';
 import { preserveHoldPreparation } from '../apps/api/src/services/hold-recovery-envelope.ts';
@@ -272,6 +273,11 @@ try {
     expectedGeneration: 0, expectedDigest: null }, hc, keys, hs);
   await assert.rejects(executeHold, /bound to this writer/);
   await prisma.complaintRecoveryEnforcement.create({ data: { ...hb, writerId: 'host-b', writerEpoch: 1 } });
+  await assert.rejects(new ComplaintHoldService(prisma).change('b', 'published-hold-complaint', 'admin-b', {
+    expectedRecordRevision: 1, expectedHoldRevision: 0, held: true,
+    evidenceRef: 'ORDINARY-HOLD-REFUSED-001', reason: 'Synthetic direct hold must use recovery authority',
+  }), error => error?.code === 'COMPLAINT_HOLD_RECOVERY_REQUIRED');
+  assert.equal(await prisma.complaintHoldEvent.count({ where: { complaintId: 'published-hold-complaint' } }), 0);
   await assert.rejects(executePublishedComplaintHold(prisma, hj, hs, 'old-host', hc, keys, hs), /writer or operation/);
   let holdControlReads = 0;
   const changingControl = { async readControl() {

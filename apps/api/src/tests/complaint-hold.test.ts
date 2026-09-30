@@ -3,11 +3,15 @@ import test from 'node:test';
 import { ComplaintHoldService, complaintHoldInput } from '../services/complaint-hold.service.js';
 
 function fixture() {
-  const f = { actor: true, record: { revision: 4 } as any, latest: null as any,
+  const f = { actor: true, enforced: false, record: { revision: 4 } as any, latest: null as any,
     rows: [] as any[], writes: [] as any[] };
   const scoped = (where: any) => assert.deepEqual(where,{ organisationId:'org',complaintId:'complaint' });
   const tx = {
     $queryRaw: async () => [],
+    complaintRecoveryEnforcement: { findUnique: async ({where}: any) => {
+      assert.deepEqual(where,{organisationId:'org'});
+      return f.enforced ? {id:'binding'} : null;
+    } },
     user: { findFirst: async ({where}: any) => {
       assert.deepEqual(where,{id:'actor',organisationId:'org',lifecycleStatus:'ACTIVE',role:{in:['OWNER','ADMIN']}});
       return f.actor ? {id:'actor'} : null;
@@ -50,6 +54,16 @@ test('hold changes reject unauthorized, missing, stale, unchanged and spoofed re
   for(const extra of [{organisationId:'foreign'},{actorUserId:'foreign'},{expectedHoldRevision:2147483647},{reason:'bad\ncontrol'},{evidenceRef:'private@example.invalid'}]) {
     assert.equal(complaintHoldInput.safeParse({...input,...extra}).success,false);
   }
+});
+test('ordinary hold changes refuse an enforced recovery charity before writing',async()=>{
+  const {f,service}=fixture(); f.enforced=true;
+  await assert.rejects(service.change('org','complaint','actor',input),
+    (error:any)=>error?.code==='COMPLAINT_HOLD_RECOVERY_REQUIRED');
+  assert.equal(f.writes.length,0);
+  f.actor=false;
+  await assert.rejects(service.change('org','complaint','actor',input),
+    (error:any)=>error?.code==='COMPLAINT_HOLD_FORBIDDEN');
+  assert.equal(f.writes.length,0);
 });
 test('paged hold history keeps current state separate from older observations',async()=>{
   const {f,service}=fixture(); f.latest={revision:60,held:true};

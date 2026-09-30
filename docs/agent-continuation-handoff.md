@@ -14,6 +14,13 @@
 > policy decisions, real role acceptance and DPO sign-off remain open. Private
 > evidence: `.charitypilot-private/release-2f4ffbf9-acceptance.md`.
 
+> **Subsequent source-only DPO-05 hardening:** the ordinary complaint hold API
+> now refuses a hold change if an append-only independent recovery binding is
+> present for that charity. It checks the active Admin/Owner first and runs
+> under the charity lock at ReadCommitted. Focused and real PostgreSQL protocol
+> tests cover the refusal. This does not yet gate every database writer or
+> activate independent recovery; it is not in the verified `2f4ffbf9` image.
+
 > The following 22:05 `6687cc47` release and source-only `2f4ffbf9` notes
 > are historical checkpoints retained for the sequence of work.
 

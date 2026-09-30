@@ -40,6 +40,12 @@ export class ComplaintHoldService {
       const actor = await tx.user.findFirst({ where: { id: actorUserId, organisationId,
         lifecycleStatus: 'ACTIVE', role: { in: ['OWNER','ADMIN'] } }, select: { id: true } });
       if (!actor) throw new AppError(403, 'COMPLAINT_HOLD_FORBIDDEN', 'An active charity administrator is required.');
+      // Once independent recovery enforcement is bound to this charity, the
+      // ordinary endpoint cannot create an unjournaled preservation decision.
+      // The binding is append-only and the charity lock serializes activation.
+      const enforcement = await tx.complaintRecoveryEnforcement.findUnique({ where: { organisationId }, select: { id: true } });
+      if (enforcement) throw new AppError(409, 'COMPLAINT_HOLD_RECOVERY_REQUIRED',
+        'This charity requires an independently recorded hold decision.');
       const complaint = await tx.complaintRecord.findFirst({ where: { id: complaintId, organisationId }, select: { revision: true } });
       if (!complaint) throw new AppError(404, 'COMPLAINT_NOT_FOUND', 'Complaint record not found');
       const previous = await tx.complaintHoldEvent.findFirst({ where: { organisationId, complaintId },
@@ -53,6 +59,6 @@ export class ComplaintHoldService {
       return tx.complaintHoldEvent.create({ data: { organisationId, complaintId, actorUserId,
         revision: input.expectedHoldRevision+1, recordRevision: complaint.revision, held: input.held,
         evidenceRef: input.evidenceRef, reason: input.reason }, select: review });
-    });
+    }, { isolationLevel: 'ReadCommitted' });
   }
 }
