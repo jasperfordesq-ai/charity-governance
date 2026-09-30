@@ -4,6 +4,20 @@ Last updated: 2026-09-30
 
 ## Inactive complaint database execution gate
 
+The next preservation-writer slice adds `ComplaintHoldRecoveryPreparation` and
+`ComplaintHoldRecoveryPreparationStore.capture`. It records a typed, immutable
+apply/release candidate with the exact preceding hold, under charity/record/actor
+locks and current Admin/Owner authority. Retry returns the original decision;
+changed operation meaning is refused. No hold changes or independent publication
+occur during capture. The schema excludes complaint narrative and the database
+checks the prior event, current revisions, identity and digest. Both restore and
+reset inventories include it. Local evidence is recorded in the private hold
+preparation logs: API2,523, PostgreSQL5, inventory/reset/restore57 and the full
+production-migration integration passed without failures or skips. Next work
+must bind encrypted independent publication to hold
+execution/outcome and recovery replay; this candidate store does not close the
+preservation-history gap or permit live activation.
+
 Migration `20260930234500_complaint_recovery_execution` adds a durable, immutable
 charity/installation/writer binding and transaction-bound execution receipts.
 There is no supported activation, disable or writer-replacement command. With a

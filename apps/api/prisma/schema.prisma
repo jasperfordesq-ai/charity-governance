@@ -510,6 +510,7 @@ enum IntegrationStatus {
 
 model Organisation {
   complaintRecoveryEnforcement ComplaintRecoveryEnforcement?
+  complaintHoldRecoveryPreparations ComplaintHoldRecoveryPreparation[]
   id                                      String                      @id @default(cuid())
   name                                    String
   rcnNumber                               String?
@@ -1963,6 +1964,23 @@ model ComplaintPurgeAuthorization {
 
   copyHolds ComplaintCopyHoldEvent[]
 
+}
+
+// Candidate preservation facts only. Does not create/release a hold.
+model ComplaintHoldRecoveryPreparation {
+  id String @id @default(cuid())
+  organisationId String
+  complaintId String
+  actorUserId String
+  installationId String
+  operationId String
+  writerEpoch Int
+  facts String @db.Text
+  factsDigest String
+  recordedAt DateTime @default(now())
+  organisation Organisation @relation(fields: [organisationId], references: [id], onDelete: Restrict)
+
+  @@unique([organisationId, operationId])
 }
 
 // Candidate facts only. No preparation grants claim, disposal or reopen authority.

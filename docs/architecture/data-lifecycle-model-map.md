@@ -16,7 +16,7 @@ group when its migration is introduced.
 - organisation-auth: `Organisation`, `OrganisationIntegration`, `IntegrationCredential`, `IntegrationSecretControl`, `User`, `UserSecondFactor`, `UserSecondFactorRecoveryCode`, `AuthSession`, `BillingAuthorityGrant`, `SecurityAuditEvent`, `ClientActivityEvent`, `AuthActionApproval`, `AuthActionApprovalAudit`, `ConnectorIdempotencyRecord`, `PasswordRecoveryRequest`, `AuthRecoveryRateLimitBucket`, `AuthRecoveryControl`, `AuthRecoveryRetiredSecret`, `AuthSecurityEmailOutbox`
 - reference-compliance: `GovernancePrinciple`, `GovernanceStandard`, `ComplianceRecord`, `ComplianceSignoff`, `ComplianceApprovalSnapshot`, `ComplianceAuditEvent`, `ComplianceReportPreparationAudit`
 - documents-storage: `Document`, `DocumentUploadIntent`, `DocumentControlAudit`, `DocumentVisibilityAudit`, `DocumentDownloadPreparationAudit`, `ConfluenceReference`, `DocumentStandardLink`, `DocumentStorageDeletion`, `DocumentStorageDeletionRecovery`, `DocumentStorageDeletionAttempt`, `DocumentPublication`
-- registers-controls: `BoardMember`, `ConflictRecord`, `RiskRecord`, `RiskChangeAudit`, `RiskControlVerification`, `RiskControlVerificationCounter`, `ComplaintRecord`, `ComplaintResolutionEvidence`, `ComplaintRemoval`, `ComplaintHoldEvent`, `ComplaintPurgeAuthorization`, `ComplaintPurgeAuthorizationWithdrawal`, `ComplaintPurgeClaim`, `ComplaintRecoveryPreparation`, `ComplaintRecoveryOutcome`, `ComplaintRecoveryEnforcement`, `ComplaintRecoveryExecution`, `ComplaintPurgeDispositionEvent`, `ComplaintCopyDispositionAuthority`, `ComplaintCopyHoldEvent`, `GovernanceRegisterChangeAudit`, `OrganisationChangeAudit`, `FundraisingRecord`, `AnnualReportReadiness`, `FinancialControlReview`, `Member`
+- registers-controls: `BoardMember`, `ConflictRecord`, `RiskRecord`, `RiskChangeAudit`, `RiskControlVerification`, `RiskControlVerificationCounter`, `ComplaintRecord`, `ComplaintResolutionEvidence`, `ComplaintRemoval`, `ComplaintHoldEvent`, `ComplaintPurgeAuthorization`, `ComplaintPurgeAuthorizationWithdrawal`, `ComplaintPurgeClaim`, `ComplaintRecoveryPreparation`, `ComplaintRecoveryOutcome`, `ComplaintRecoveryEnforcement`, `ComplaintRecoveryExecution`, `ComplaintHoldRecoveryPreparation`, `ComplaintPurgeDispositionEvent`, `ComplaintCopyDispositionAuthority`, `ComplaintCopyHoldEvent`, `GovernanceRegisterChangeAudit`, `OrganisationChangeAudit`, `FundraisingRecord`, `AnnualReportReadiness`, `FinancialControlReview`, `Member`
 - calendar-minutes: `Deadline`, `DeadlineChangeAudit`, `DeadlineReminderLog`, `DeadlineReminderAudit`, `GoverningAct`, `Resolution`, `GoverningActVoid`, `MinuteBookChangeAudit`
 - team-billing: `TeamInvite`, `Subscription`, `BillingCheckoutAttempt`, `StripeWebhookEvent`
 - data-requests: `DataLifecycleRequest`, `DataLifecycleStorageLink`, `DataLifecycleStorageLinkWithdrawal`, `DataLifecycleDocumentLink`, `DataLifecycleDocumentLinkWithdrawal`, `DataLifecycleReviewEvent`, `DataLifecycleTargetEvent`, `DataLifecycleResponseEvent`, `DataLifecycleCoverageEvent`, `DataRetentionPolicyRevision`, `DataRetentionPolicyWithdrawal`, `DocumentPurgeAuthorization`, `DocumentPurgeAuthorizationWithdrawal`, `DocumentPurgeClaim`, `DocumentPurgeDispositionEvent`, `DocumentCopyDispositionAuthority`, `DocumentCopyHoldEvent`
@@ -75,3 +75,12 @@ and both models are included in restore comparison. A restored binding or stored
 receipt alone proves neither current independent authority nor permission to
 reopen. Retention and custody decisions remain pending; no permanent retention
 policy is implied by these technical integrity requirements.
+
+`ComplaintHoldRecoveryPreparation` preserves an immutable candidate apply/release
+decision, exact preceding hold evidence, actor and source revisions. It excludes
+the complaint narrative and does not itself change a hold. Capture requires a
+current Admin or Owner and fresh complaint/hold revisions under charity locking.
+The model is included in restore comparison and disposable reset inventory.
+Reasons and actor references still require retention/custody approval before
+external publication. Encryption/publication, execution and recovery replay for
+this action remain unfinished; a preparation is not proof of an applied hold.

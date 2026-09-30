@@ -15,6 +15,7 @@ import { preserveRecoveryOutcome } from '../apps/api/src/services/recovery-outco
 import { publishVerifiedComplaintOutcome } from '../apps/api/src/services/publish-verified-complaint-outcome.ts';
 import { releaseCommittedComplaintOperation } from '../apps/api/src/services/release-complaint-recovery-operation.ts';
 import { executePublishedComplaintOperation } from '../apps/api/src/services/execute-published-complaint-operation.ts';
+import { ComplaintHoldRecoveryPreparationStore } from '../apps/api/src/services/complaint-hold-recovery-preparation-store.ts';
 
 // Disposable fixture only: real PostgreSQL and crypto, synthetic S3/KMS transport.
 // This proves the complaint gate, not provider custody or all-writer fencing.
@@ -151,6 +152,32 @@ try {
   assert.equal(await prisma.complaintRecord.count({ where: { id: 'recovery-stale' } }), 1);
   assert.equal(await prisma.complaintRecoveryExecution.count({ where: { preparationId: stale.id } }), 0);
   assert.equal((await store.readControl()).activeOperation.operationId, staleContext.operationId);
+  const holdPreparations = new ComplaintHoldRecoveryPreparationStore(prisma);
+  const holdInput = { installationId: binding.installationId, operationId: 'hold-release-operation', writerEpoch: 1,
+    sourceRevision: context.sourceRevision, expectedRecordRevision: 2, expectedHoldRevision: 1, held: false,
+    evidenceRef: 'RELEASE-REVIEW-001', reason: 'Synthetic release review for recovery' };
+  await assert.rejects(holdPreparations.capture('a', 'recovery-stale', 'member-a', holdInput), /administrator/);
+  const holdCapture = await holdPreparations.capture('a', 'recovery-stale', 'ordinary-admin', holdInput);
+  assert.equal(holdCapture.actionAuthorized, false);
+  assert.equal((await holdPreparations.capture('a', 'recovery-stale', 'ordinary-admin', holdInput)).id, holdCapture.id);
+  await assert.rejects(holdPreparations.capture('a', 'recovery-stale', 'ordinary-admin', { ...holdInput, reason: 'Different review must not replace original' }), /identity changed/);
+  const holdRow = await prisma.complaintHoldRecoveryPreparation.findUniqueOrThrow({ where: { id: holdCapture.id } });
+  await assert.rejects(holdPreparations.capture('b', 'recovery-stale', 'admin-b', holdInput), /dependencies changed/);
+  await assert.rejects(holdPreparations.capture('a', 'recovery-stale', 'ordinary-admin', {
+    ...holdInput, operationId: 'stale-hold-preparation', expectedHoldRevision: 0 }), /dependencies changed/);
+  await assert.rejects(prisma.complaintHoldRecoveryPreparation.create({ data: {
+    ...holdRow, id: 'forged-hold-digest', factsDigest: '0'.repeat(64) } }), /identity or dependency mismatch/);
+  const changedPrevious = JSON.parse(holdRow.facts);
+  changedPrevious.previousHold.reason = 'Substituted previous evidence';
+  const changedBody = JSON.stringify(changedPrevious);
+  await assert.rejects(prisma.complaintHoldRecoveryPreparation.create({ data: {
+    ...holdRow, id: 'forged-previous-hold', facts: changedBody,
+    factsDigest: createHash('sha256').update(changedBody).digest('hex') } }), /previous decision mismatch/);
+  assert.equal(JSON.parse(holdRow.facts).previousHold.held, true);
+  assert.equal(JSON.parse(holdRow.facts).decision.held, false);
+  assert.equal(await prisma.complaintHoldEvent.count({ where: { complaintId: 'recovery-stale' } }), 1);
+  await assert.rejects(prisma.complaintHoldRecoveryPreparation.update({ where: { id: holdCapture.id }, data: { factsDigest: '0'.repeat(64) } }), /append-only/);
+  await assert.rejects(prisma.complaintHoldRecoveryPreparation.delete({ where: { id: holdCapture.id } }), /append-only/);
   process.stdout.write('complaint-recovery-protocol-composition-verified');
 } finally {
   for (const value of retainedKeys.values()) value.key.fill(0);
