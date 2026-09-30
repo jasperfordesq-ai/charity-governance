@@ -3500,5 +3500,13 @@ Before declaring repo-side completion:
 
 The final report must list verified items, commit SHAs, CI runs, test evidence,
 remaining external blockers and owners, and an explicit confirmation that no
-provider evidence, legal approval, pentest result, recovery proof, release
-binding, or signoff was fabricated.
+ provider evidence, legal approval, pentest result, recovery proof, release
+ binding, or signoff was fabricated.
+
+> **Nikita document review update, 2026-09-30:** Four year-specific accounts
+> PDFs match the verified backup manifest. The private worksheet now has
+> 25/63 source-evidenced rows, 24 with some proposal and 39 without; all
+> decisions remain PENDING. The `CRO-filed` title claims were not independently
+> verified against filing receipts or exact public copies. No live document,
+> audience, retention or publication state changed. See the private
+> `abridged-accounts-source-review-2026-09-30.md`.

@@ -1,5 +1,15 @@
 # CharityPilot Agent Continuation Handoff
 
+> **Annual-accounts exact-source review, 2026-09-30:** FY2021, FY2022,
+> FY2024 and FY2025 PDFs in the verified backup each match manifest hashes.
+> They cover distinct year-end periods. Vault `CRO-filed` labels and exact
+> public copies remain unverified. The private worksheet proposes Board and
+> RESTRICTED for all four, HISTORICAL for FY2021/2022/2024, and leaves FY2025
+> lifecycle open. No publication or retention decision was made. Counts:
+> 25/63 source evidenced, 24 with some proposal, 39 with none, all PENDING.
+> No live metadata changed. Private evidence:
+> `.charitypilot-private/abridged-accounts-source-review-2026-09-30.md`.
+
 > **Trustee master-template source review, 2026-09-30:** exact backup
 > Induction Pack and separate Code of Conduct Declaration matched manifest
 > hashes. The March approval email names the pack as item 20 and its
