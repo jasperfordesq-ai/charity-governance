@@ -60,9 +60,46 @@ test('Owner reviews and withdraws complaint disposal then explicitly purges only
   await expect(panel.getByText(/This does not establish erasure of retained copies/)).toBeVisible();
   await expect(page.getByRole('region',{name:'Recoverable complaints'}).getByText('Synthetic expired complaint',{exact:true})).toHaveCount(0);
   await page.reload();await expect(panel.getByText(/This does not establish erasure of retained copies/)).toBeVisible();
+  const copies=panel.getByRole('region',{name:'Copy and backup evidence'});
+  await copies.getByRole('button',{name:'Load copy evidence',exact:true}).click();
+  await expect(copies.getByText('No downstream observations recorded.')).toBeVisible();
+  await copies.getByLabel('Evidence storage location',{exact:true}).selectOption('BACKUPS');
+  await reliableFill(copies.getByLabel('Copy or inventory scope reference'),'SYNTHETIC-BACKUP-SET');
+  async function observe(status:string,reference:string) {
+    await copies.getByLabel('Reviewed copy outcome',{exact:true}).selectOption(status);
+    await reliableFill(copies.getByLabel('Copy observation evidence reference',{exact:true}),reference);
+    await reliableFill(copies.getByLabel('Reason for copy observation',{exact:true}),'Reviewed the synthetic backup inventory and custody evidence.');
+    const clock=await withDb(client=>client.query(`SELECT to_char(timezone('UTC',clock_timestamp()), 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"') AS now`));
+    const dates=await page.evaluate((serverTime:string)=>{
+      const local=(date:Date)=>{
+        const input=document.createElement('input');input.type='datetime-local';input.step='0.001';
+        input.value=new Date(date.getTime()-date.getTimezoneOffset()*60000).toISOString().slice(0,23);
+        if(new Date(input.value).getTime()!==date.getTime())throw new Error('Observation precision lost');
+        return input.value;
+      };
+      return {observed:local(new Date(serverTime)),followup:local(new Date(new Date(serverTime).getTime()+86400000))};
+    },clock.rows[0].now);
+    await copies.getByLabel('Copy observation time',{exact:true}).fill(dates.observed);
+    await copies.getByLabel('Copy follow-up time',{exact:true}).fill(dates.followup);
+    await copies.getByRole('checkbox',{name:'I reviewed the evidence for this exact scope and outcome.'}).check();
+    const saved=page.waitForResponse(response=>response.url().endsWith('/dispositions')&&response.request().method()==='POST');
+    await copies.getByRole('button',{name:'Record copy observation',exact:true}).click();
+    expect((await saved).status()).toBe(201);
+  }
+  await observe('RETAINED_APPROVED','SYNTHETIC-COPY-OBSERVATION-001');
+  const observation=(reference:string)=>copies.getByRole('listitem').filter({hasText:reference});
+  await expect(observation('SYNTHETIC-COPY-OBSERVATION-001')).toContainText('Retained with approved authority');
+  await observation('SYNTHETIC-COPY-OBSERVATION-001').getByRole('button',{name:'Record a later observation'}).click();
+  await expect(copies.getByLabel('Copy or inventory scope reference')).toBeDisabled();
+  await observe('NEEDS_REVIEW','SYNTHETIC-COPY-OBSERVATION-002');
+  await expect(observation('SYNTHETIC-COPY-OBSERVATION-001')).toContainText('Historical observation');
+  await page.reload();await copies.getByRole('button',{name:'Load copy evidence',exact:true}).click();
+  await expect(observation('SYNTHETIC-COPY-OBSERVATION-002')).toContainText('Revision 2');
   await withDb(async client=>{
     expect((await client.query('SELECT count(*)::int AS count FROM "ComplaintRecord" WHERE id=$1',[id])).rows[0].count).toBe(0);
     expect((await client.query('SELECT "actorUserId" FROM "ComplaintPurgeClaim" WHERE "complaintId"=$1',[id])).rows).toEqual([{actorUserId:owner.userId}]);
     expect((await client.query('SELECT count(*)::int AS count FROM "ComplaintPurgeAuthorization" WHERE "complaintId"=$1',[id])).rows[0].count).toBe(2);
+    expect((await client.query(`SELECT e.revision,e.status,e."actorUserId" FROM "ComplaintPurgeDispositionEvent" e JOIN "ComplaintPurgeAuthorization" a ON a.id=e."authorizationId" WHERE a."complaintId"=$1 ORDER BY e.revision`,[id])).rows)
+      .toEqual([{revision:1,status:'RETAINED_APPROVED',actorUserId:owner.userId},{revision:2,status:'NEEDS_REVIEW',actorUserId:owner.userId}]);
   });
 });

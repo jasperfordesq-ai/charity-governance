@@ -2,6 +2,20 @@
 
 Last updated: 2026-09-30
 
+Complaint copy-evidence dashboard checkpoint (source only): shared evidence
+controls now map complaint scopes/endpoints explicitly while retaining the
+document workflow. Owner history supports new scope observations, follow-up
+dates and append-only later observations without claiming aggregate erasure.
+Isolated Chromium passed both journeys on first attempt: complaint 14.9s,
+document regression 21.4s, total 37.8s; runner 83685 exited 0. Complaint proof
+includes retained-backup evidence, revision-two reopening, historical revision
+preservation, reload, exact actor and primary absence. Document proof preserves
+its separate primary deletion-job state. Web/E2E type checks and edited-file
+lint passed. Evidence: private complaint-copy-browser.log. All local handles
+are terminal. Later changes to approved copy dispositions, exact hosted gates,
+deployment/live acceptance, independent durable restore authority and broader
+DPO scope remain open. Runtime remains e5e988a3; no live data changed.
+
 Complaint copy-evidence API checkpoint (source only): Owner browser GET/POST
 disposition routes now expose scoped, paginated history and append-only reviewed
 observations. Writes require ADMIN session level, active charity Owner and a

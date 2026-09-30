@@ -6,6 +6,7 @@ import { api } from '@/lib/api';
 import { useAuth } from '@/lib/auth-context';
 import { apiErrorMessage } from '@/lib/errors';
 import { ConfirmActionModal } from '@/components/ui/confirm-action-modal';
+import { ComplaintDispositionEvidence } from '../documents/document-disposition-evidence';
 
 const base='/governance-registers/complaints';
 const areas=['PRIMARY','SNAPSHOTS','EXPORTS','AUDIT','BACKUPS','OTHER_COPIES'] as const;
@@ -131,6 +132,7 @@ function OwnerComplaintPurgePanel({onDisposed}:{onDisposed:()=>void}) {
         :item.withdrawal?<p>Withdrawn: {item.withdrawal.evidenceRef} — {item.withdrawal.reason}</p>
           :<><Button isDisabled={busy} onPress={()=>review({kind:'withdraw',authorization:item})}>Review withdrawal of {item.evidenceRef}</Button>
             <Button color="danger" isDisabled={busy} onPress={()=>review({kind:'claim',authorization:item})}>Review permanent disposal of {item.evidenceRef}</Button></>}
+      {item.claim?<ComplaintDispositionEvidence authorizationId={item.id} plan={item.dispositionPlan} isOwner={true}/>:null}
     </li>)}</ol>
     {history.nextCursor?<Button isDisabled={busy} onPress={()=>void older('history')}>Load older complaint disposal reviews</Button>:null}
     <ConfirmActionModal isOpen={action!==null} onOpenChange={open=>{if(!open&&!busy)setAction(null);}}

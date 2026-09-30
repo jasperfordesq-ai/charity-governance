@@ -5,19 +5,28 @@ import { Button, Checkbox, Input, Textarea } from '@heroui/react';
 import { api } from '@/lib/api';
 import { apiErrorMessage, isApiForbiddenError } from '@/lib/errors';
 
-const areas = { VERSIONS: 'Provider versions', CONFLUENCE: 'Confluence copies', EXPORTS: 'Recipient exports', AUDIT: 'Audit records', BACKUPS: 'Backups' };
-type Area = keyof typeof areas;
+const documentAreas = { VERSIONS: 'Provider versions', CONFLUENCE: 'Confluence copies', EXPORTS: 'Recipient exports', AUDIT: 'Audit records', BACKUPS: 'Backups' };
+const complaintAreas = { SNAPSHOTS: 'Approved report snapshots', EXPORTS: 'Recipient exports', AUDIT: 'Audit and retained evidence', BACKUPS: 'Backups', OTHER_COPIES: 'Other copies and attachments' };
+type Area = keyof typeof documentAreas | keyof typeof complaintAreas;
 const statuses = { NEEDS_REVIEW: 'Needs review', PENDING_DISPOSAL: 'Disposal pending', FAILED: 'Disposal failed', VERIFIED_ABSENT: 'Absence verified by reviewer', RETAINED_APPROVED: 'Retained with approved authority', NOT_APPLICABLE: 'Not applicable to this scope' };
 type Status = keyof typeof statuses;
 type Observation = { id: string; area: Area; scopeRef: string; revision: number; status: Status;
   evidenceRef: string; reason: string; observedAt: string; nextReviewAt: string | null; occurredAt: string };
-type Plan = Record<Area, { disposition: string; evidenceRef: string }>;
+type Plan = Partial<Record<Area, { disposition: string; evidenceRef: string }>>;
+type Props = { authorizationId: string; plan: Plan; isOwner: boolean };
 const validRef = (value: string) => /^[A-Z0-9][A-Z0-9-]{2,119}$/.test(value);
 const dateValid = (value: string) => value !== '' && Number.isFinite(new Date(value).getTime());
 const followUp = (status: string) => ['NEEDS_REVIEW', 'PENDING_DISPOSAL', 'FAILED', 'RETAINED_APPROVED'].includes(status);
 const fresh = () => ({ area: '' as Area | '', scopeRef: '', revision: 1, status: '' as Status | '', evidenceRef: '', reason: '', observedAt: '', nextReviewAt: '' });
 
-export function DocumentDispositionEvidence({ authorizationId, plan, isOwner }: { authorizationId: string; plan: Plan; isOwner: boolean }) {
+export function DocumentDispositionEvidence(props: Props) {
+  return <DispositionEvidence {...props} kind="document" />;
+}
+export function ComplaintDispositionEvidence(props: Props) {
+  return <DispositionEvidence {...props} kind="complaint" />;
+}
+function DispositionEvidence({ authorizationId, plan, isOwner, kind }: Props & {kind:'document'|'complaint'}) {
+  const areas: Partial<Record<Area,string>> = kind==='complaint'?complaintAreas:documentAreas;
   const [rows, setRows] = useState<Observation[] | null>(null);
   const [cursor, setCursor] = useState<string | null>(null);
   const [checkedAt, setCheckedAt] = useState(0);
@@ -28,7 +37,8 @@ export function DocumentDispositionEvidence({ authorizationId, plan, isOwner }: 
   const [error, setError] = useState('');
   const [notice, setNotice] = useState('');
   const pending = useRef(false);
-  const path = `/documents/purge-authorizations/${encodeURIComponent(authorizationId)}/dispositions`;
+  const prefix=kind==='complaint'?'/governance-registers/complaints':'/documents';
+  const path = `${prefix}/purge-authorizations/${encodeURIComponent(authorizationId)}/dispositions`;
   const history = async (older = false) => {
     const { data } = await api.get<{ items: Observation[]; nextCursor: string | null }>(`${path}${older && cursor ? `?before=${encodeURIComponent(cursor)}` : ''}`);
     setRows(current => older ? [...(current ?? []), ...data.items.filter(row => !current?.some(item => item.id === row.id))] : data.items);
@@ -43,7 +53,7 @@ export function DocumentDispositionEvidence({ authorizationId, plan, isOwner }: 
       setError(apiErrorMessage(cause, 'Copy evidence could not be loaded.'));
     } finally { pending.current = false; setBusy(false); }
   };
-  const planned = form.area ? plan[form.area].disposition : '';
+  const planned = form.area ? plan[form.area]?.disposition ?? '' : '';
   const allowed = (status: Status) => status === 'NEEDS_REVIEW' || status === 'FAILED' ||
     (['PENDING_DISPOSAL', 'VERIFIED_ABSENT'].includes(status) && planned === 'DISPOSE') ||
     (status === 'RETAINED_APPROVED' && planned === 'RETAIN_APPROVED') || (status === 'NOT_APPLICABLE' && planned === 'NOT_APPLICABLE');
