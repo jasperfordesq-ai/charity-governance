@@ -3552,3 +3552,12 @@ remaining external blockers and owners, and an explicit confirmation that no
 > Private worksheet now has 53/63 source-evidenced rows, 52 with proposals
 > and 11 without, all PENDING. No live approval, lifecycle or access change.
 > See private `two-added-march-policies-source-review-2026-09-30.md`.
+
+> **Nikita corporate-record source review, 2026-09-30:** Certificate,
+> Constitution and Revenue enquiry PDFs match the verified backup. The
+> Constitution's current filed text remains unverified; the conditional
+> 2022 Revenue exchange is not a current exemption certificate. Private
+> worksheet now has 56/63 source-evidenced rows, 55 with proposals and
+> eight without; all PENDING. No live document, tax, approval or audience
+> state changed. See private
+> `three-corporate-records-source-review-2026-09-30.md`.

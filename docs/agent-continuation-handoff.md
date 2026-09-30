@@ -1,5 +1,15 @@
 # CharityPilot Agent Continuation Handoff
 
+> **Three corporate records, 2026-09-30:** exact certificate,
+> Constitution and Revenue enquiry PDFs match backup hashes. The
+> Constitution is an image-only 44-page scan with current filed amendments
+> unchecked. The Revenue file is a conditional 2022 ROS reply, not proof
+> of current exemption. Private worksheet proposes Board/RESTRICTED for
+> all, HISTORICAL dated evidence for certificate and enquiry, and leaves
+> Constitution lifecycle open. Counts: 56/63 source evidenced, 55 with
+> some proposal, eight with none, all PENDING. No live change. Private
+> evidence: `.charitypilot-private/three-corporate-records-source-review-2026-09-30.md`.
+
 > **Two added March policies, 2026-09-30:** the retained original email
 > chain starts with 29 documents, records Sridevi's Asset Management and
 > Dissolution gap, Jasper's two added PDFs and later director replies for
