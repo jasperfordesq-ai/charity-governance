@@ -1520,7 +1520,7 @@ test('ordinary DELETE retains the draft and refuses missing policy, stale revisi
   StorageService.prototype.downloadFile = async () => Buffer.from('test');
   StorageService.prototype.deleteFile = async () => { destructiveCalls++; throw new Error('Unexpected file deletion'); };
   try {
-    for (const scenario of ['success', 'policy', 'stale', 'hold', 'standard', 'citation', 'replacement', 'audit', 'current']) {
+    for (const scenario of ['success', 'policy', 'competing-policy', 'stale', 'hold', 'standard', 'citation', 'replacement', 'audit', 'current']) {
       let doc: Record<string, any> = { id: 'doc-1', organisationId: 'org-1', fileUrl: 'org-1/draft.pdf',
         fileSize: 4, storageProvider: 'local', lifecycleStatus: scenario === 'current' ? 'CURRENT' : 'DRAFT',
         deletionHold: scenario === 'hold', deletedAt: null, updatedAt: new Date(recoveryPayload.expectedUpdatedAt),
@@ -1538,8 +1538,18 @@ test('ordinary DELETE retains the draft and refuses missing policy, stale revisi
         },
         documentStandardLink: { findFirst: async () => scenario === 'standard' ? { id: 'link' } : null },
         confluenceReference: { findFirst: async () => scenario === 'citation' ? { id: 'citation' } : null },
-        dataRetentionPolicyRevision: { findFirst: async () => scenario === 'policy' ? null : {
-          id: 'policy-1', retentionMode: 'REVIEW_REQUIRED', recoveryDays: 30 } },
+        dataRetentionPolicyRevision: { findFirst: async ({ where }: any) => {
+          assert.equal(where.organisationId, 'org-1');
+          assert.equal(where.recordClass, 'VAULT_DRAFT');
+          assert.equal(where.state, 'APPROVED');
+          assert.deepEqual(where.withdrawal, { is: null });
+          if (typeof where.id === 'object') {
+            assert.deepEqual(where.id, { not: 'policy-1' });
+            return scenario === 'competing-policy' ? { id: 'policy-2' } : null;
+          }
+          assert.equal(where.id, 'policy-1');
+          return scenario === 'policy' ? null : { id: 'policy-1', retentionMode: 'REVIEW_REQUIRED', recoveryDays: 30 };
+        } },
         documentStorageDeletion: { create: async () => { destructiveCalls++; throw new Error('Unexpected cleanup job'); } },
         documentControlAudit: { create: async ({ data }: any) => {
           if (scenario === 'audit') throw new Error('Audit unavailable');

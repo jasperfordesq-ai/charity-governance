@@ -1007,7 +1007,13 @@ test('DELETE /:id rejects and performs no side effects for a document belonging 
     subscription: activeSubscription(),
     user: { ...authModels().user, findFirst: async () => ({ id: 'user-1' }) },
     $queryRaw: async (...args) => {
-      assert.deepEqual(args.slice(1), ['foreign-doc', 'org-1']);
+      const query = (args[0] as TemplateStringsArray).join('');
+      if (query.includes('FROM "Organisation"')) {
+        assert.deepEqual(args.slice(1), ['org-1']);
+      } else {
+        assert.match(query, /FROM "Document"/);
+        assert.deepEqual(args.slice(1), ['foreign-doc', 'org-1']);
+      }
       return [];
     },
     document: {

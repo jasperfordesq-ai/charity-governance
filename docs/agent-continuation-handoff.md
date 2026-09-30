@@ -2,6 +2,19 @@
 
 Last updated: 2026-09-30
 
+## Release gate fixture repair - 30 September 2026 (verification running)
+
+Broader CI exposed two stale removal mocks after the policy ambiguity guard:
+one still expected the document lock before the organisation lock; one returned
+the selected policy for the competing-policy query. Both reproduced locally.
+The fixtures now assert the scoped lock/query contracts, and the route scenarios
+include a competing approval refusal. All 102 tests in the two affected files
+pass. No application guard or expected refusal was weakened.
+
+Evidence: private release-ci-failed.log, removal-fixtures-red.log and
+removal-fixtures-green.log. The full API test command is now running; exact new
+CI/E2E acceptance and deployment remain pending. Runtime remains e39edbe8.
+
 ## Admin copy preservation navigation - 30 September 2026 (source only)
 
 Documents and Registers now include copy preservation administration for existing
