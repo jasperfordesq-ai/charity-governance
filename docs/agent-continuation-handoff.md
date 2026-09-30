@@ -2,6 +2,22 @@
 
 Last updated: 2026-09-30
 
+## Current recovery publication checkpoint
+
+The private release receipt `release-6afddb4f-acceptance.md` records deployment
+and bounded acceptance of 6afddb4f, superseding the older source-only and d31
+release statements below. Independent recovery remains inactive and incomplete.
+
+The local `publishVerifiedComplaintPreparation` integration authenticates and
+decrypts existing candidate bytes, checks their canonical facts against the
+exact reservation, rechecks the control after decryption, and publishes the
+ciphertext digest through the reserved journal path. It never recreates missing
+bytes or grants execution authority. Five focused publication tests pass,
+including lost acknowledgement and rejection of re-encrypted replacement bytes.
+Local suite results are recorded in the private roadmap; hosted verification
+and deployment of this follow-up remain separate gates. Outcome/release,
+database enforcement, provider activation and full host-loss acceptance remain.
+
 ## Inactive recovery reservation acquisition
 
 `recovery-operation-reservation.ts` adds acquisition against a strict format-2
@@ -3884,3 +3900,9 @@ leaves the object unchanged. Build and16 combined/provider/envelope tests pass.
 Backing provider state is synthetic, so this does not prove live AWS custody or
 VM-loss recovery. Hosted CI36749194751/E2E36749194762 passed for cb6b31b7's earlier
 capture repair; they do not verify the newer KMS/envelope changes. No deployment.
+
+## Verified preparation publication integration — local, 30 September 2026
+
+Added publish-verified-complaint-preparation.ts. It validates exact reservation and envelope context, reads existing immutable candidate bytes without a creation fallback, authenticates/decrypts them, compares the canonical facts SHA-256 with the reservation, rechecks the entire control and revision after decryption, then invokes reserved journal publication with the ciphertext digest. Exact retries retain the original journal binding; missing published bytes are not regenerated. It returns no execution authority.
+
+API TypeScript build and four focused publication tests passed, including real encryption/decryption, missing and corrupt bytes, different reserved facts, control changes during decryption, retry retention and the existing lost-publication-acknowledgement case. This addition is local only; live release remains 6afddb4f. No production caller/provider is activated. Remaining: immutable outcome/release protocol, database guards covering all writers, independent provider/custody activation and full host-loss acceptance. See source tests publish-verified-complaint-preparation.test.ts and reserved-recovery-publication.test.ts.
