@@ -401,7 +401,7 @@ test('complaint recovery migration preserves records and enforces reviewed remov
       if(database==='old_complaint_restore') {
         assert.throws(()=>assertPurgeRestoreLedger(authority,snapshot),error=>{
           assert.equal(error.code,'PURGE_RESTORE_RECONCILIATION_REQUIRED');
-          for(const table of ['ComplaintHoldEvent','ComplaintRemoval','ComplaintResolutionEvidence','ComplaintRecoveryState','ComplaintPurgeAuthorization','ComplaintPurgeAuthorizationWithdrawal','ComplaintPurgeClaim','ComplaintPurgeDispositionEvent','ComplaintCopyDispositionAuthority','ComplaintCopyHoldEvent']) {
+          for(const table of ['ComplaintRecoveryPreparation','ComplaintHoldEvent','ComplaintRemoval','ComplaintResolutionEvidence','ComplaintRecoveryState','ComplaintPurgeAuthorization','ComplaintPurgeAuthorizationWithdrawal','ComplaintPurgeClaim','ComplaintPurgeDispositionEvent','ComplaintCopyDispositionAuthority','ComplaintCopyHoldEvent']) {
             assert.ok(error.report.differences.some(item=>item.table===table && (item.missing || item.changed)),table);
           }
           return true;

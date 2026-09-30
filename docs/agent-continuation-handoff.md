@@ -3733,3 +3733,26 @@ fields. Seven focused tests and the API build pass. A regression corrects handli
 of withdrawn resolution evidence under REVIEW_REQUIRED; it remains ineligible as
 an AFTER_ANCHOR starting date. These are synthetic local checks, not live policy,
 provider, persistence, fencing or full-recovery acceptance.
+
+### Durable complaint preparation storage under verification
+
+A new inactive ComplaintRecoveryPreparation table and internal store preserve
+validated candidate facts under a unique charity/operation identity. The table
+checks bound identity/digest and active Owner/unclaimed review, rejects update or
+delete, and dispatches no work. The store checks active Owner even on exact retries
+and refuses changed bytes. Preparations are now included in restore comparisons
+and disposable-test reset inventory. The isolated PostgreSQL fixture proves
+current-backup preservation and missing-history refusal for an older backup,
+plus insert/digest/role/immutability guards. Eight focused tests, six restore
+comparison tests and API compilation pass. The broader API suite is still running.
+These local database facts are plaintext like their source rows, not external
+replay envelopes. No route, claim or worker calls this store. Capture freshness,
+external encryption/custody, durable reservation, execution guards and approved
+field retention are still required before live use. No migration was deployed.
+
+The durable preparation storage verification has now completed: 2,477 API tests,
+four real PostgreSQL migration tests and 88 inventory/reset/backup tests passed.
+The lifecycle model map now explicitly includes the preparation and its unresolved
+retention boundary. Earlier running-suite notes are superseded by these local
+results. Fresh capture, external encryption/reservation and claim guards remain
+unfinished; no production migration or activation has occurred.

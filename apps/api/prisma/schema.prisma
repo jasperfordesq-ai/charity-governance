@@ -1953,6 +1953,7 @@ model ComplaintPurgeAuthorization {
   authorizedAt    DateTime @default(now())
   withdrawal      ComplaintPurgeAuthorizationWithdrawal?
   claim           ComplaintPurgeClaim?
+  recoveryPreparations ComplaintRecoveryPreparation[]
   dispositions    ComplaintPurgeDispositionEvent[]
 
   @@unique([id, organisationId])
@@ -1961,6 +1962,24 @@ model ComplaintPurgeAuthorization {
 
   copyHolds ComplaintCopyHoldEvent[]
 
+}
+
+// Candidate facts only. No preparation grants claim, disposal or reopen authority.
+model ComplaintRecoveryPreparation {
+  id              String @id @default(cuid())
+  organisationId  String
+  installationId  String
+  operationId     String
+  writerEpoch     Int
+  authorizationId String
+  actorUserId     String
+  facts           String @db.Text
+  factsDigest     String
+  recordedAt      DateTime @default(now())
+  authorization ComplaintPurgeAuthorization @relation(fields: [authorizationId, organisationId], references: [id, organisationId], onDelete: Restrict)
+
+  @@unique([organisationId, operationId])
+  @@index([organisationId, recordedAt, id])
 }
 
 model ComplaintPurgeClaim {

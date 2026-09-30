@@ -7,7 +7,7 @@ export function proveComplaintRecoveryPreparation(sql, authorizationId) {
   assert.match(authorizationId, /^[a-z-]+$/);
   const body = sql(`SELECT json_build_object(
     'format',1,'action','COMPLAINT_PURGE_PREPARATION','installationId','synthetic-install',
-    'organisationId',a."organisationId",'operationId','synthetic-operation','writerEpoch',1,
+    'organisationId',a."organisationId",'operationId','synthetic-'||a.id,'writerEpoch',1,
     'actorUserId',a."actorUserId",'preparedAt',timezone('UTC',clock_timestamp()),'sourceRevision',repeat('a',40),
     'complaint',json_build_object('id',c.id,'organisationId',c."organisationId",'revision',c.revision,
       'status',c.status,'removedAt',c."removedAt",'removalId',c."removalId",'reviewedByBoard',c."reviewedByBoard",'boardMinuteReference',c."boardMinuteReference"),
@@ -44,8 +44,21 @@ export function proveComplaintRecoveryPreparation(sql, authorizationId) {
     assert.deepEqual(JSON.parse(result.body),value);
     value.complaint.summary='Synthetic subject narrative';
     assert.throws(()=>prepareComplaintRecoveryFacts(value));
-    process.stdout.write('verified');
+    process.stdout.write(JSON.stringify(result));
   `], { cwd: fileURLToPath(new URL('../', import.meta.url)), input: JSON.stringify(value), encoding: 'utf8', timeout: 30000 });
   assert.equal(runner.status, 0, runner.stderr);
-  assert.equal(runner.stdout, 'verified');
+  const prepared = JSON.parse(runner.stdout);
+  const hex = Buffer.from(prepared.body, 'utf8').toString('hex');
+  const insert = (operation, actor = value.actorUserId, digest = prepared.digest) => `INSERT INTO "ComplaintRecoveryPreparation"
+    (id,"organisationId","installationId","operationId","writerEpoch","authorizationId","actorUserId",facts,"factsDigest")
+    VALUES ('${operation}','a','synthetic-install','${value.operationId}',1,'${authorizationId}','${actor}',
+      convert_from(decode('${hex}','hex'),'UTF8'),'${digest}');`;
+  sql(insert(`bad-${authorizationId}`, 'member-a'), /active charity Owner/);
+  sql(insert(`digest-${authorizationId}`, value.actorUserId, '0'.repeat(64)), /digest mismatch/);
+  sql(insert(`prepared-${authorizationId}`));
+  sql(insert(`duplicate-${authorizationId}`), /unique constraint/);
+  sql(`UPDATE "ComplaintRecoveryPreparation" SET "factsDigest"=repeat('0',64);`, /append-only/);
+  sql(`DELETE FROM "ComplaintRecoveryPreparation";`, /append-only/);
+  assert.equal(sql(`SELECT "factsDigest" FROM "ComplaintRecoveryPreparation" WHERE id='prepared-${authorizationId}';`), prepared.digest);
+  assert.equal(sql(`SELECT count(*) FROM "ComplaintPurgeClaim" WHERE "authorizationId"='${authorizationId}';`), '0');
 }

@@ -76,6 +76,8 @@ const schema = z.object({ format: z.literal(1), action: z.literal('COMPLAINT_PUR
     || (p.retentionMode === 'AFTER_ANCHOR' && !v.resolution)) fail('Missing resolution dependency');
 });
 
+export type ComplaintRecoveryFacts = z.infer<typeof schema>;
+
 /** Produces bounded canonical candidate bytes only. Does not persist, encrypt,
  * publish, prove current policy/hold status, reserve an epoch, or authorize a claim. */
 export function prepareComplaintRecoveryFacts(raw: unknown) {

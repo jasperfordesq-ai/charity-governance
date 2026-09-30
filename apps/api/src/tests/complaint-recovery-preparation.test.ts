@@ -1,6 +1,8 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { prepareComplaintRecoveryFacts } from '../services/complaint-recovery-preparation.js';
+import { ComplaintRecoveryPreparationStore } from '../services/complaint-recovery-preparation-store.js';
+import type { PrismaClient } from '@prisma/client';
 
 function fixture() {
   const organisationId = 'charity', stamp = '2026-09-01T00:00:00.000Z';
@@ -104,4 +106,32 @@ test('a later disposal policy preserves the distinct original removal policy', (
   assert.equal(facts.policy.id, 'later-policy');
   input.removalPolicy.id = 'missing-original';
   assert.throws(() => prepareComplaintRecoveryFacts(input));
+});
+
+test('durable store retries preserve original bytes and refuse a changed operation or revoked actor', async () => {
+  let saved: Record<string, unknown> | null = null; let creates = 0; let activeOwner = true;
+  const tx = {
+    $queryRaw: async () => [],
+    user: { findFirst: async () => activeOwner ? { id: 'owner' } : null },
+    complaintRecoveryPreparation: {
+      findUnique: async () => saved,
+      create: async ({ data }: { data: Record<string, unknown> }) => {
+        creates++; saved = { ...data, id: 'saved-preparation' }; return saved;
+      },
+    },
+  };
+  const client = { $transaction: async (work: (value: typeof tx) => unknown) => work(tx) } as unknown as PrismaClient;
+  const store = new ComplaintRecoveryPreparationStore(client);
+  const input = fixture();
+  const first = await store.persist('charity', 'owner', input);
+  assert.equal(first.actionAuthorized, false); assert.equal(first.replayed, false);
+  // A new service instance sees the prior durable-store result, not process cache.
+  const retry = await new ComplaintRecoveryPreparationStore(client).persist('charity', 'owner', input);
+  assert.equal(retry.id, first.id); assert.equal(retry.replayed, true); assert.equal(creates, 1);
+  input.authorization.reason = 'Changed facts must not replace the original';
+  await assert.rejects(() => store.persist('charity', 'owner', input), /different preparation facts/);
+  await assert.rejects(() => store.persist('foreign', 'owner', fixture()), /scope mismatch/);
+  activeOwner = false;
+  await assert.rejects(() => store.persist('charity', 'owner', fixture()), /active charity Owner/);
+  assert.equal(creates, 1);
 });
