@@ -1,5 +1,16 @@
 # CharityPilot Agent Continuation Handoff
 
+> **63-row source-reference milestone, 2026-09-30:** all private document
+> worksheet rows now have some source evidence reference, 62 have some
+> proposal, and every decision remains PENDING. The Document Retention
+> Schedule deliberately has no proposal pending policy reconciliation.
+> Last three source PDFs (Facebook Privacy V1, Facebook Safety/Moderation
+> V1 and Related Party Transactions V1.0) match backup hashes; retained
+> CWR-2026-11 evidence names their adoption after pre-adoption labels.
+> Evidence strength varies; current live bytes, roles, publication and
+> DPO/controller acceptance remain open. No live change. Private evidence:
+> `.charitypilot-private/three-september-adopted-pdfs-source-review-2026-09-30.md`.
+
 > **Three corporate records, 2026-09-30:** exact certificate,
 > Constitution and Revenue enquiry PDFs match backup hashes. The
 > Constitution is an image-only 44-page scan with current filed amendments

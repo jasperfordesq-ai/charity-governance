@@ -3561,3 +3561,12 @@ remaining external blockers and owners, and an explicit confirmation that no
 > eight without; all PENDING. No live document, tax, approval or audience
 > state changed. See private
 > `three-corporate-records-source-review-2026-09-30.md`.
+
+> **Nikita 63-document worksheet milestone, 2026-09-30:** Every row now
+> has some source evidence reference; 62 have some proposal and the
+> retention schedule deliberately has none pending policy reconciliation.
+> All 63 review decisions remain PENDING. The final three exact September
+> PDFs match backup hashes and retained CWR-2026-11 evidence names their
+> later adoption. This is not live-byte, publication, audience, retention
+> or DPO/controller acceptance. No live metadata changed. See private
+> `three-september-adopted-pdfs-source-review-2026-09-30.md`.
