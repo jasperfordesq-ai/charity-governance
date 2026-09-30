@@ -1,5 +1,16 @@
 # CharityPilot Agent Continuation Handoff
 
+> **Restricted runtime feasibility, 2026-10-01:** source now supports an
+> optional separate blue-green app env file for API/web/jobs while DB and
+> migration retain the owner file. Rendered Compose and deployment tests
+> pass (108). The full disposable PostgreSQL complaint protocol also
+> exercises a separate non-superuser runtime login against the completed
+> migration set: it cannot insert recovery outcomes, assume the owner role,
+> disable the hold trigger or insert a direct post-binding hold. These are
+> source/test proofs, not a provisioned VM role or accepted independent
+> recovery boundary. Do not activate enforcement. Private details:
+> `.charitypilot-private/complaint-hold-writer-gate-analysis-2026-09-30.md`.
+
 > **Private VM release, 2026-10-01 00:22 Dublin:** Exact CI
 > `36789520000` and E2E `36789520093` passed on `8d4a0058`; guarded
 > blue-green cutover made that revision live on green, retaining

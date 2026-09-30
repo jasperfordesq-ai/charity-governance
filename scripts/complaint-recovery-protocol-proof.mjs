@@ -34,7 +34,8 @@ import { preserveHoldOutcome, readVerifiedHoldOutcome } from '../apps/api/src/se
 
 // Disposable fixture only: real PostgreSQL and crypto, synthetic S3/KMS transport.
 // This proves the complaint gate, not provider custody or all-writer fencing.
-const prisma = new PrismaClient({ datasources: { db: { url: readFileSync(0, 'utf8').trim() } } });
+const adminDatabaseUrl = readFileSync(0, 'utf8').trim();
+const prisma = new PrismaClient({ datasources: { db: { url: adminDatabaseUrl } } });
 const retainedKeys = new Map();
 try {
   const binding = { installationId: 'protocol-install', organisationId: 'a' };
@@ -48,6 +49,36 @@ try {
     recordRevision: 2, held: true, actorUserId: 'admin-a',
     evidenceRef: 'DIRECT-HOLD-DENIED-001', reason: 'Direct hold after recovery binding',
   } }), /same-transaction recovery outcome/);
+  // Exercise a separate real PostgreSQL login under the complete migrated
+  // schema. The runtime role can still write ordinary application rows, but
+  // must not be able to forge the off-host outcome that admits a bound hold.
+  await prisma.$executeRawUnsafe("CREATE ROLE cp_protocol_runtime LOGIN NOINHERIT PASSWORD 'synthetic-runtime-proof'");
+  await prisma.$executeRawUnsafe('GRANT CONNECT ON DATABASE postgres TO cp_protocol_runtime');
+  await prisma.$executeRawUnsafe('GRANT USAGE ON SCHEMA public TO cp_protocol_runtime');
+  await prisma.$executeRawUnsafe('GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA public TO cp_protocol_runtime');
+  await prisma.$executeRawUnsafe('GRANT USAGE ON ALL SEQUENCES IN SCHEMA public TO cp_protocol_runtime');
+  await prisma.$executeRawUnsafe(`REVOKE INSERT, UPDATE, DELETE ON
+    "ComplaintHoldRecoveryOutcome", "ComplaintRecoveryEnforcement",
+    "ComplaintRecoveryExecution", "ComplaintRecoveryOutcome",
+    "ComplaintRecoveryCancellation" FROM cp_protocol_runtime`);
+  const runtimeUrl = new URL(adminDatabaseUrl);
+  runtimeUrl.username = 'cp_protocol_runtime';
+  runtimeUrl.password = 'synthetic-runtime-proof';
+  const runtime = new PrismaClient({ datasources: { db: { url: runtimeUrl.toString() } } });
+  try {
+    await assert.rejects(runtime.$executeRawUnsafe(`INSERT INTO "ComplaintHoldRecoveryOutcome"
+      (id,"preparationId","holdEventId","transactionId") VALUES
+      ('forged-outcome','missing','forged-event',txid_current())`), /permission denied/);
+    await assert.rejects(runtime.$executeRawUnsafe('SET ROLE postgres'), /permission denied/);
+    await assert.rejects(runtime.$executeRawUnsafe('ALTER TABLE "ComplaintHoldEvent" DISABLE TRIGGER "ComplaintHoldEvent_recovery_gate"'), /must be owner/);
+    await assert.rejects(runtime.complaintHoldEvent.create({ data: {
+      organisationId: 'a', complaintId: 'recovery-protocol', revision: 1,
+      recordRevision: 2, held: true, actorUserId: 'admin-a',
+      evidenceRef: 'RUNTIME-DIRECT-DENIED-001', reason: 'Restricted runtime direct hold',
+    } }), /same-transaction recovery outcome/);
+  } finally {
+    await runtime.$disconnect();
+  }
   await assert.rejects(prisma.complaintPurgeClaim.create({ data: { organisationId: 'a', actorUserId: 'admin-a',
     authorizationId: 'recovery-protocol-authority', complaintId: 'recovery-protocol' } }), /recovery execution/);
   const capture = await new ComplaintRecoveryPreparationStore(prisma).capture('a', 'admin-a', {
