@@ -1,5 +1,23 @@
 # CharityPilot Full-Platform Remediation Audit
 
+> **Verified private VM release, 2026-09-30 22:30 Dublin:** source
+> `2f4ffbf92a71b886a8daf9fa31bddad44f1fb69c` runs on green. Exact CI
+> 36778029710 and E2E 36778029677 succeeded (239 browser tests); migration
+> gate reported 0 pending, blocked or warned changes. API/web/scheduler are
+> healthy, prior blue `6687cc47` is stopped and rollbackable, and only Caddy
+> publishes the loopback port. All 114 existing backup files stayed identical;
+> two new sets were copied off the VM and verified by hash. Supported isolated
+> restore passed (139 migrations, 63 documents, 22 risks, 22 governing acts).
+> Signed-in Owner read-only checks reached Security & Data and Registers.
+> Committed primary/hold outcome resumption is deployed but inactive. The
+> independent provider, all-writer coverage, supported host-loss reopening,
+> policy decisions, real role acceptance and DPO sign-off remain open. Private
+> evidence: `.charitypilot-private/release-2f4ffbf9-acceptance.md`.
+
+> The following 22:05 `6687cc47` release and source-only `2f4ffbf9` notes
+> are historical checkpoints retained for the sequence of work.
+
+
 > **Verified private VM release, 2026-09-30 22:05 Dublin:** source
 > `6687cc4736c786d4812e322ff4fbca2a8cc0e93d` runs on blue. Exact CI
 > 36775042860 and E2E 36775042630 succeeded (239 browser tests); the two
