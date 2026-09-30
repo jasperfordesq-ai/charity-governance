@@ -457,6 +457,12 @@ any failure for diagnostics.
 policy revisions, withdrawals, purge authorizations, claims, disposition
 history and claimed cleanup jobs against fresh read-only snapshots from the
 configured live database. Missing schema or unreadable authority fails closed.
+Surviving document rows are compared by database-generated hashes, including
+holds, removal/recovery state, reviewed bytes, access controls and publication
+decisions. Raw document fields are not emitted in the comparison inventory.
+A changed document is a refusal even when its ID and purge history still match;
+ordinary metadata edits can also require a fresh backup and rehearsal. Complaint
+recovery pointers are compared separately alongside their retained decision history.
 It refuses restored claimed documents or local archive files whose storage-key
 hashes match a current purge claim, including claims still awaiting cleanup.
 It rereads current authority after comparison to detect intervening changes.

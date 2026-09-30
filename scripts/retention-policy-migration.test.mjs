@@ -376,6 +376,29 @@ test('retention policy and recovery-state upgrade preserve documents and enforce
     const reconciled = assertPurgeRestoreLedger(authority, currentRestored);
     assert.equal(reconciled.databaseLedgerMatches, true);
     assert.equal(reconciled.objectAndExternalCopyReconciliationRequired, true);
+    // A faithful ledger can coexist with stale mutable document controls.
+    // Rewind only the isolated restored database, never the authority source.
+    for (const change of [
+      `"deletionHold"=NOT "deletionHold"`,
+      `"deletedAt"=NULL,"recoverySha256"=NULL,"deletedById"=NULL,"removedFromRevision"=NULL,
+        "removalEvidenceRef"=NULL,"recoveryUntil"=NULL,"recoveryPolicyId"=NULL`,
+      `"recoveryUntil"="recoveryUntil"+INTERVAL '1 day'`,
+      `"visibility"='MEMBER_VISIBLE',"lifecycleStatus"='CURRENT',
+        "contentAccessClass"='MEMBER_SUITABLE',"memberReviewedSha256"=repeat('a',64),
+        "deletedAt"=NULL,"recoverySha256"=NULL,"deletedById"=NULL,"removedFromRevision"=NULL,
+        "removalEvidenceRef"=NULL,"recoveryUntil"=NULL,"recoveryPolicyId"=NULL`,
+    ]) {
+      const staleControls = JSON.parse(restoredSql('current_restore', `BEGIN;
+        ALTER TABLE "Document" DISABLE TRIGGER USER;
+        UPDATE "Document" SET ${change} WHERE id='policy-conflict-doc';
+        ${PURGE_RESTORE_SNAPSHOT_SQL}
+        ROLLBACK;`));
+      assert.throws(() => assertPurgeRestoreLedger(authority, staleControls), error => {
+        assert.equal(error.code, 'PURGE_RESTORE_RECONCILIATION_REQUIRED');
+        assert.ok(error.report.differences.some(item => item.table === 'DocumentRecoveryState' && item.changed === 1));
+        return true;
+      }, `restored document control drift was accepted: ${change}`);
+    }
   } finally {
     for (const item of sessions) if (item.child.exitCode === null) item.child.stdin.end('ROLLBACK;\n');
     const removed = docker(['rm', '--force', '--volumes', container]);

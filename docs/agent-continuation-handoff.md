@@ -2,6 +2,27 @@
 
 Last updated: 2026-09-30
 
+## Verified release and next restore guard - 30 September 2026
+
+Release 5f02c28ea016805c4988976fbe03a7da93486623 passed exact CI
+36733408484 and E2E 36733408468 (238 tests) and is deployed on the private
+review host. Runtime, local-only host publication, off-host backup hashes and
+the supported restore drill passed. Signed-in Owner read-only checks loaded
+the new audit feeds and empty document/complaint copy policy and claim histories.
+No real policies, holds or disposal decisions were created. Private receipts
+and the original six-finding acceptance table remain in the ignored review pack.
+This supersedes older source-only release statuses below, not their limitations.
+
+A further restore gap was reproduced in an isolated PostgreSQL restore:
+changing a surviving document's hold was accepted when purge history matched.
+The comparison now includes full surviving document row hashes, covering
+recovery and visibility controls without returning raw fields. All 44 focused
+tests pass, including actual PostgreSQL restore drift for hold, active/removed
+state, recovery deadline and Member visibility, plus orchestrator refusal and
+cleanup. Evidence: private document-restore-controls-verified.log (runner 67734,
+exit 0). This additional guard is not yet deployed. Independent durable
+authority, supported host-loss reopening and broader original DPO scope remain open.
+
 ## Release gate fixture repair - 30 September 2026 (verification running)
 
 Broader CI exposed two stale removal mocks after the policy ambiguity guard:

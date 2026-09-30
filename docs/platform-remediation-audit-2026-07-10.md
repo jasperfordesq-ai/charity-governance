@@ -1,5 +1,15 @@
 # CharityPilot Full-Platform Remediation Audit
 
+> DPO release checkpoint, 2026-09-30: exact 5f02c28e CI and 238 browser tests
+> passed; private-host deployment, backup hashes, restore rehearsal and bounded
+> signed-in Owner checks passed. This supersedes earlier source-only statements
+> for that release. A newly reproduced surviving-document restore-control gap
+> is repaired locally with full row hash comparison; 44 tests pass, including
+> actual restored PostgreSQL control drift and restore-command refusal/cleanup.
+> This follow-up still awaits exact CI and deployment.
+> Independent durable recovery authority, other stores/classes, real policy
+> approval and original privacy acceptance remain unresolved.
+
 > DPO-05 Admin preservation navigation, 2026-09-30: metadata-only scope
 > discovery now links committed claims to existing hold controls in both
 > dashboards. Separate Admin browser journeys pass; Owner authority remains

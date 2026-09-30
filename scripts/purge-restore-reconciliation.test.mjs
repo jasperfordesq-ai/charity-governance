@@ -70,6 +70,7 @@ test('malformed or incomplete evidence fails closed', () => {
     s => { delete s.tables.DocumentPurgeDispositionEvent; },
     s => { delete s.tables.ComplaintHoldEvent; },
     s => { delete s.tables.ComplaintRecoveryState; },
+    s => { delete s.tables.DocumentRecoveryState; },
     s => { s.capturedAt = 'not-a-date'; },
     s => { s.capturedAt = '2026-02-30T10:00:00.000Z'; },
   ]) {

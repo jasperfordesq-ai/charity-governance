@@ -21,9 +21,14 @@ entries.push(`SELECT 'ClaimedPrimaryJobs' AS name, COALESCE(jsonb_agg(jsonb_buil
 // Recovery pointers are mutable; matching append-only decisions alone would
 // miss an older backup restoring a removed complaint to ordinary active views.
 entries.push(`SELECT 'ComplaintRecoveryState' AS name, COALESCE(jsonb_agg(jsonb_build_object('id',t.id,'sha256',${digest(`jsonb_build_object('id',t.id,'organisationId',t."organisationId",'revision',t.revision,'removedAt',t."removedAt",'removalId',t."removalId")`)}) ORDER BY t.id),'[]'::jsonb) AS rows FROM "ComplaintRecord" t`);
+// Surviving documents can have newer holds, removal/recovery state, reviewed
+// bytes or access restrictions without a purge claim. Compare full row hashes
+// so restoration cannot silently rewind those controls. No document content,
+// storage path or evidence reference leaves the database in this inventory.
+entries.push(`SELECT 'DocumentRecoveryState' AS name, COALESCE(jsonb_agg(jsonb_build_object('id',t.id,'sha256',${digest('to_jsonb(t)')}) ORDER BY t.id),'[]'::jsonb) AS rows FROM "Document" t`);
 entries.push(`SELECT 'ComplaintPrimaryConflicts' AS name, COALESCE(jsonb_agg(jsonb_build_object('id',c.id,'sha256',${digest('to_jsonb(c)')}) ORDER BY c.id),'[]'::jsonb) AS rows
  FROM "ComplaintPurgeClaim" c JOIN "ComplaintRecord" r ON r.id=c."complaintId" AND r."organisationId"=c."organisationId"`);
-export const PURGE_RESTORE_TABLES = Object.freeze([...tables, 'ClaimedPrimaryJobs', 'ComplaintRecoveryState', 'ComplaintPrimaryConflicts']);
+export const PURGE_RESTORE_TABLES = Object.freeze([...tables, 'ClaimedPrimaryJobs', 'ComplaintRecoveryState', 'DocumentRecoveryState', 'ComplaintPrimaryConflicts']);
 // Object keys are hashed in PostgreSQL so raw storage paths are not returned.
 // Any claimed local object still present requires quarantine/reconciliation,
 // including a pending deletion; byte changes at the same key do not excuse it.
