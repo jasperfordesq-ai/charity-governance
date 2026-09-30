@@ -688,7 +688,7 @@ test("waitForDrillReadiness timeout carries the LAST probe's error, not an earli
 
 test('runRestoreDrill refuses stale, unreadable, changed authority or claimed archive files and cleans up', async () => {
   const { runRestoreDrill } = await loadBackupModule();
-  for (const scenario of ['stale', 'unreadable', 'changed', 'claimed-file']) {
+  for (const scenario of ['stale', 'unreadable', 'changed', 'claimed-file', 'complaint-hold', 'complaint-recovery']) {
     const stateDir = makeTempDir('charitypilot-purge-drill-');
     try {
       const { plan, documentEntries } = writeFixtureBackup(stateDir);
@@ -705,6 +705,8 @@ test('runRestoreDrill refuses stale, unreadable, changed authority or claimed ar
           if ((scenario === 'stale' && live) || (scenario === 'changed' && liveReads === 2)) {
             snapshot.tables.DocumentPurgeDispositionEvent.push({ id: 'later-review', sha256: 'a'.repeat(64) });
           }
+          if (scenario === 'complaint-hold' && live) snapshot.tables.ComplaintHoldEvent.push({id:'hold-after-backup',sha256:'a'.repeat(64)});
+          if (scenario === 'complaint-recovery' && live) snapshot.tables.ComplaintRecoveryState.push({id:'removed-after-backup',sha256:'b'.repeat(64)});
           return snapshot;
         },
       });

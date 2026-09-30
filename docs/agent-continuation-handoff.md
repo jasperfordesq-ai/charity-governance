@@ -2,6 +2,18 @@
 
 Last updated: 2026-09-30
 
+Complaint-aware restore reconciliation increment: the current-authority snapshot
+now hashes complaint resolution, removal and hold ledgers plus current complaint
+revision/recovery pointers. This refuses an old restore that loses hold decisions
+or reactivates removed records even when append-only history alone would match.
+Raw narratives, evidence references and reasons remain inside PostgreSQL.
+Missing complaint inventories fail closed. The real complaint migration proof
+now dumps/restores old and current populated databases: old history/state is
+refused and the current copy matches. This is bounded same-host authority proof,
+not independently durable authority or permission to reopen after host loss.
+Exact successor hosted gates, private deployment and live restore drill remain
+required. Continue complaint purge authorization/claim and broader R4 scope.
+
 Complaint hold application checkpoint: browser-only Owner/Admin hold history and
 state-change routes are implemented, with Admin session level for writes, active
 actor checks, charity/record/actor locks and exact record/hold revisions. Active

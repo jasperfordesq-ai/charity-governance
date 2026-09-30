@@ -62,6 +62,8 @@ test('malformed or incomplete evidence fails closed', () => {
     s => { s.tables.DocumentPurgeClaim.push(s.tables.DocumentPurgeClaim[0]); },
     s => { s.tables.DocumentPurgeClaim[0].sha256 = 'invalid'; },
     s => { delete s.tables.DocumentPurgeDispositionEvent; },
+    s => { delete s.tables.ComplaintHoldEvent; },
+    s => { delete s.tables.ComplaintRecoveryState; },
     s => { s.capturedAt = 'not-a-date'; },
     s => { s.capturedAt = '2026-02-30T10:00:00.000Z'; },
   ]) {

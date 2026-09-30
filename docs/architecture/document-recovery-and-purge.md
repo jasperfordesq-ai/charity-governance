@@ -9,6 +9,17 @@ approved-policy and disposal acceptance remain open. R4 other record classes/sto
 authority, supported recovery reopening and R5 acceptance remain open. Older
 checkpoints below describe the state when recorded, not the current API surface.
 
+Complaint restore extension (local, not yet deployed): current-authority
+reconciliation includes hashes of resolution evidence, removal authority and
+hold events, plus each complaint's identity, revision and recovery pointers.
+Comparing pointers prevents an older backup from silently reactivating a removed
+record while retaining the same decision history. The snapshot returns hashes,
+not case narratives/reasons/references. Missing tables/inventories or any changed,
+missing or unexpected decision/state fail closed. The supported restore drill
+uses this comparison before and after its isolated restoration. This still needs
+a reachable current authority database and does not solve independent authority
+after host loss or authorize application reopening.
+
 ### Complaint resolution evidence: persistence checkpoint
 
 Administrative-hold persistence increment: `ComplaintHoldEvent` retains each

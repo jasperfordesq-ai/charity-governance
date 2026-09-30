@@ -5,6 +5,7 @@ import { readFileSync, readdirSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { test } from 'node:test';
 import { validateLocalDockerEndpoint } from './personal-server-docker-boundary.mjs';
+import { PURGE_RESTORE_SNAPSHOT_SQL, assertPurgeRestoreLedger } from './purge-restore-reconciliation.mjs';
 
 const migrations = fileURLToPath(new URL('../apps/api/prisma/migrations/', import.meta.url));
 const target = '20260930130000_complaint_recoverable_state';
@@ -67,6 +68,8 @@ test('complaint recovery migration preserves records and enforces reviewed remov
     sql(decision('wrong-class','admin-a','vault'), /approved complaint policy/);
     sql(decision('stale','admin-a','policy',2), /current closed complaint/);
     sql(decision('no-anchor','admin-a','policy',1,'NULL'), /current resolution evidence/);
+    const oldBackup = docker(['exec',container,'pg_dump','-U','postgres','--no-owner','--no-privileges','postgres']);
+    assert.equal(oldBackup.status,0,oldBackup.stderr);
     const hold = (id, revision, held, actor='admin-a', recordRevision=1, organisation='a') =>
       `INSERT INTO "ComplaintHoldEvent" (id,"organisationId","complaintId",revision,"recordRevision",held,"actorUserId","evidenceRef",reason)
        VALUES ('${id}','${organisation}','complaint',${revision},${recordRevision},${held},'${actor}','HOLD-001','Reviewed synthetic administrative hold');`;
@@ -157,6 +160,28 @@ test('complaint recovery migration preserves records and enforces reviewed remov
       UPDATE "ComplaintRemoval" SET "recoveryUntil"=timezone('UTC',now())-INTERVAL '1 second' WHERE id='expired-removal';
       ALTER TABLE "ComplaintRemoval" ENABLE TRIGGER "ComplaintRemoval_append_only";`);
     sql(`UPDATE "ComplaintRecord" SET "removalId"=NULL,"removedAt"=NULL WHERE id='expired';`, /recovery window expired/);
+    const authority = JSON.parse(sql(PURGE_RESTORE_SNAPSHOT_SQL));
+    assert.doesNotMatch(JSON.stringify(authority), /Private original narrative|Reviewed synthetic administrative hold|HOLD-001/);
+    const currentBackup = docker(['exec',container,'pg_dump','-U','postgres','--no-owner','--no-privileges','postgres']);
+    assert.equal(currentBackup.status,0,currentBackup.stderr);
+    for (const [database,backup] of [['old_complaint_restore',oldBackup],['current_complaint_restore',currentBackup]]) {
+      const created = docker(['exec',container,'createdb','-U','postgres',database]);
+      assert.equal(created.status,0,created.stderr);
+      const restored = docker(['exec','-i',container,'psql','-U','postgres','-d',database,'-v','ON_ERROR_STOP=1','-q'],backup.stdout);
+      assert.equal(restored.status,0,restored.stderr);
+      const captured = docker(['exec','-i',container,'psql','-U','postgres','-d',database,'-v','ON_ERROR_STOP=1','-Atq'],PURGE_RESTORE_SNAPSHOT_SQL);
+      assert.equal(captured.status,0,captured.stderr);
+      const snapshot = JSON.parse(captured.stdout);
+      if(database==='old_complaint_restore') {
+        assert.throws(()=>assertPurgeRestoreLedger(authority,snapshot),error=>{
+          assert.equal(error.code,'PURGE_RESTORE_RECONCILIATION_REQUIRED');
+          for(const table of ['ComplaintHoldEvent','ComplaintRemoval','ComplaintResolutionEvidence','ComplaintRecoveryState']) {
+            assert.ok(error.report.differences.some(item=>item.table===table && (item.missing || item.changed)),table);
+          }
+          return true;
+        });
+      } else assert.equal(assertPurgeRestoreLedger(authority,snapshot).databaseLedgerMatches,true);
+    }
   } finally {
     const removed = docker(['rm', '--force', '--volumes', container]);
     assert.equal(removed.status, 0, removed.stderr);

@@ -7,12 +7,16 @@ const tables = [
   'DataRetentionPolicyRevision', 'DataRetentionPolicyWithdrawal',
   'DocumentPurgeAuthorization', 'DocumentPurgeAuthorizationWithdrawal',
   'DocumentPurgeClaim', 'DocumentPurgeDispositionEvent',
+  'ComplaintResolutionEvidence', 'ComplaintRemoval', 'ComplaintHoldEvent',
 ];
 const digest = expression => `encode(sha256(convert_to((${expression})::text,'UTF8')),'hex')`;
 const entries = tables.map(name => `SELECT '${name}' AS name, COALESCE(jsonb_agg(jsonb_build_object('id',t.id,'sha256',${digest('to_jsonb(t)')}) ORDER BY t.id),'[]'::jsonb) AS rows FROM "${name}" t`);
 entries.push(`SELECT 'ClaimedPrimaryJobs' AS name, COALESCE(jsonb_agg(jsonb_build_object('id',t.id,'sha256',${digest('to_jsonb(t)')}) ORDER BY t.id),'[]'::jsonb) AS rows
  FROM "DocumentStorageDeletion" t JOIN "DocumentPurgeClaim" c ON c."deletionId"=t.id AND c."organisationId"=t."organisationId"`);
-export const PURGE_RESTORE_TABLES = Object.freeze([...tables, 'ClaimedPrimaryJobs']);
+// Recovery pointers are mutable; matching append-only decisions alone would
+// miss an older backup restoring a removed complaint to ordinary active views.
+entries.push(`SELECT 'ComplaintRecoveryState' AS name, COALESCE(jsonb_agg(jsonb_build_object('id',t.id,'sha256',${digest(`jsonb_build_object('id',t.id,'organisationId',t."organisationId",'revision',t.revision,'removedAt',t."removedAt",'removalId',t."removalId")`)}) ORDER BY t.id),'[]'::jsonb) AS rows FROM "ComplaintRecord" t`);
+export const PURGE_RESTORE_TABLES = Object.freeze([...tables, 'ClaimedPrimaryJobs', 'ComplaintRecoveryState']);
 // Object keys are hashed in PostgreSQL so raw storage paths are not returned.
 // Any claimed local object still present requires quarantine/reconciliation,
 // including a pending deletion; byte changes at the same key do not excuse it.

@@ -322,6 +322,9 @@ test('retention policy and recovery-state upgrade preserve documents and enforce
     assert.equal(sql(`SELECT string_agg(status,',' ORDER BY revision) FROM "DocumentPurgeDispositionEvent" WHERE area='VERSIONS';`), 'VERIFIED_ABSENT,NEEDS_REVIEW');
     assert.equal(sql(`SELECT row_to_json(j)::text FROM "DocumentStorageDeletion" j WHERE id='job-final-claim';`), jobBefore,
       'review evidence must not dispatch, complete, redirect or alter primary cleanup');
+    for (const name of names.filter(name => name > '20260930070000_document_purge_disposition')) {
+      sql(readFileSync(`${migrations}/${name}/migration.sql`, 'utf8'));
+    }
     const authority = JSON.parse(sql(PURGE_RESTORE_SNAPSHOT_SQL));
     const localKeys = JSON.parse(sql(PURGE_RESTORE_LOCAL_OBJECTS_SQL));
     assert.equal(localKeys.length, 1);
@@ -337,7 +340,9 @@ test('retention policy and recovery-state upgrade preserve documents and enforce
       assert.equal(docker(['exec', container, 'createdb', '-U', 'postgres', database]).status, 0);
     }
     restoredSql('old_restore', oldBackup.stdout);
-    restoredSql('old_restore', readFileSync(`${migrations}/20260930070000_document_purge_disposition/migration.sql`, 'utf8'));
+    for (const name of names.filter(name => name >= '20260930070000_document_purge_disposition')) {
+      restoredSql('old_restore', readFileSync(`${migrations}/${name}/migration.sql`, 'utf8'));
+    }
     const oldRestored = JSON.parse(restoredSql('old_restore', PURGE_RESTORE_SNAPSHOT_SQL));
     assert.throws(() => assertPurgeRestoreLedger(authority, oldRestored), error => {
       assert.equal(error.code, 'PURGE_RESTORE_RECONCILIATION_REQUIRED');
