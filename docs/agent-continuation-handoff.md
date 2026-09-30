@@ -2,6 +2,21 @@
 
 Last updated: 2026-09-30
 
+Local Docker startup follow-up: 6671d6fd CI 36705637183 passed the main tests,
+reliability ledger and PostgreSQL backup/restore, then its smoke API exited.
+A disposable PostgreSQL/application reproduction identified the demo seed's
+missing required deadline-audit actor. It now passes the seeded Owner ID and
+preserves an existing sample risk instead of overwriting its reviewed state on
+restart. First and repeat seed through all 123 migrations pass, retaining four
+starter documents and four same-charity deadline audit entries. Seed TypeScript
+checking is now part of the API test command; 45 local-stack and 116 runner
+contract tests pass. No live host was changed. Exact successor gates remain.
+
+6671d6fd E2E 36705637418 completed successfully: 233 passed and three flaky
+tests passed on retry (purge observation timestamp input, document history
+pagination, and retained case linkage after removal). These are recorded
+follow-ups, not a clean first-attempt result or successor/deployed evidence.
+
 Logout release-gate correction: 60b07ed9 CI 36704289527 and E2E 36704289606
 failed the isolated-runner contract because the new browser tests installed
 request handlers over the origin fence. The earlier three-test pass below is

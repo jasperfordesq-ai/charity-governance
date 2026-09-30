@@ -32,6 +32,7 @@ export const BUILD_CONTEXT_MANIFEST = Object.freeze([
   { path: "tsconfig.base.json", type: "file" },
   { path: "apps/api/package.json", type: "file" },
   { path: "apps/api/tsconfig.json", type: "file" },
+  { path: "apps/api/tsconfig.seed.json", type: "file" },
   { path: "apps/api/prisma.config.ts", type: "file" },
   { path: "apps/api/src", type: "directory", allowedExtensions: [".ts"] },
   {

@@ -1,8 +1,12 @@
 # Document recovery and purge implementation contract
 
-Status: implementation in progress, 30 September 2026. R1 policy persistence
-and removal state are implemented locally; R2-R5 remain open. Other data
-classes and downstream stores remain in the full data-lifecycle scope.
+Status: implementation and acceptance in progress, 30 September 2026. Local
+proof now covers policy administration, recoverable Vault removal and exact-byte
+restore, reviewed purge claims, the local primary-file worker and downstream
+evidence history. These R1-R3 capabilities still require exact-release deployment
+and live acceptance. R4 other record classes/stores, independently durable purge
+authority, supported recovery reopening and R5 acceptance remain open. Older
+checkpoints below describe the state when recorded, not the current API surface.
 
 Read the checkpoints below as dated implementation history, newest first within
 Observed starting point. Statements about missing routes/UI in older checkpoints

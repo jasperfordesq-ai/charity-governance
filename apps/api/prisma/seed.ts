@@ -1,4 +1,4 @@
-import { PrismaClient } from '@prisma/client';
+import { PrismaClient, type CharitablePurpose } from '@prisma/client';
 import bcrypt from 'bcryptjs';
 import { mkdir, writeFile } from 'node:fs/promises';
 import { dirname, resolve, sep } from 'node:path';
@@ -216,7 +216,7 @@ async function seedDemoWorkspace(config: EnabledLocalAdminSeedConfig) {
     legalForm: 'CLG' as const,
     legalFormConfirmedAt: new Date('2026-07-10T00:00:00.000Z'),
     complexity: 'COMPLEX' as const,
-    charitablePurpose: ['COMMUNITY_BENEFIT', 'EDUCATION'] as const,
+    charitablePurpose: ['COMMUNITY_BENEFIT', 'EDUCATION'] satisfies CharitablePurpose[],
     financialYearEnd,
     registeredAddress: '1 Governance Square, Dublin 2',
     contactEmail: 'governance@example.org',
@@ -363,7 +363,7 @@ async function seedDemoWorkspace(config: EnabledLocalAdminSeedConfig) {
   });
 
   await prisma.$transaction(async (tx) => {
-    await new DeadlineService(tx).reconcileGeneratedDeadlines(organisation.id);
+    await new DeadlineService(tx).reconcileGeneratedDeadlines(organisation.id, user.id);
   });
 
   await upsertDeadline(organisation.id, {
@@ -478,9 +478,9 @@ async function seedDemoWorkspace(config: EnabledLocalAdminSeedConfig) {
     status: 'MONITORING' as const,
     boardMinuteReference: 'BM-2026-03-12-04',
   };
-  if (existingRisk) {
-    await prisma.riskRecord.update({ where: { id: existingRisk.id }, data: riskData });
-  } else {
+  // A repeat development startup must not overwrite a reviewed risk or bypass
+  // its revision/audit workflow. The sample risk is only created when absent.
+  if (!existingRisk) {
     await prisma.riskRecord.create({ data: riskData });
   }
 
