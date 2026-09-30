@@ -11,7 +11,7 @@ const publication = { operationId: reservation.operationId, writerId: reservatio
   writerEpoch: reservation.writerEpoch, preparationDigest: reservation.preparationDigest,
   envelopeDigest: 'b'.repeat(64), expectedGeneration: 0, expectedDigest: null };
 function fixture() {
-  const rows = new Map<string, string>(); let version = 0, loseAck = false;
+  const rows = new Map<string, string>(); let version = 0, loseAck = false, loseEntryAck = false;
   let control: RecoveryControlValue & { revision: string } = { format: 2, ...initial,
     writerId: 'host-a', writerEpoch: 1, activeOperation: null, revision: 'version-0' };
   const store: RecoveryControlStore = {
@@ -24,9 +24,11 @@ function fixture() {
     },
   };
   const journal = new RecoveryAuthorityJournal({ async read(key) { return rows.get(key) ?? null; },
-    async create(key, body) { if (rows.has(key)) return false; rows.set(key, body); return true; },
+    async create(key, body) { if (rows.has(key)) return false; rows.set(key, body);
+      if (loseEntryAck) { loseEntryAck = false; throw new Error('lost entry acknowledgement'); } return true; },
   }, binding, initial);
-  return { journal, store, rows, current: () => control, loseAck: () => { loseAck = true; } };
+  return { journal, store, rows, current: () => control, loseAck: () => { loseAck = true; },
+    loseEntryAck: () => { loseEntryAck = true; } };
 }
 
 test('complaint publication requires the same reservation and keeps it occupied after journal publication', async () => {
@@ -44,6 +46,36 @@ test('complaint publication requires the same reservation and keeps it occupied 
   assert.equal((await f.journal.appendReservedComplaintPreparation(publication, f.store)).replayed, true);
   await assert.rejects(() => reserveRecoveryOperation({ ...reservation, operationId: 'other',
     expectedGeneration: 1, expectedDigest: receipt.digest }, f.store), /occupied/);
+});
+
+test('reserved outcome follows the exact preparation and preserves reservation across both acknowledgement failures', async () => {
+  for (const boundary of ['entry', 'head']) {
+    const f = fixture(); await reserveRecoveryOperation(reservation, f.store);
+    const prep = await f.journal.appendReservedComplaintPreparation(publication, f.store);
+    const outcome = { operationId: reservation.operationId, writerId: reservation.writerId,
+      writerEpoch: reservation.writerEpoch, preparationDigest: reservation.preparationDigest,
+      preparationGeneration: prep.generation, preparationEntryDigest: prep.digest,
+      preparationEnvelopeDigest: publication.envelopeDigest, outcomeEnvelopeDigest: 'c'.repeat(64) };
+    if (boundary === 'entry') f.loseEntryAck(); else f.loseAck();
+    await assert.rejects(() => f.journal.appendReservedComplaintOutcome(outcome, f.store), /unknown/);
+    const bytes = [...f.rows.values()];
+    const result = await f.journal.appendReservedComplaintOutcome(outcome, f.store);
+    assert.equal(result.headPublished, true); assert.equal(result.actionAuthorized, false);
+    assert.equal(f.current().generation, 2); assert.equal(f.current().activeOperation?.operationId, reservation.operationId);
+    assert.deepEqual([...f.rows.values()], bytes);
+    assert.equal((await f.journal.inspect()).generation, 2);
+    await assert.rejects(() => f.journal.appendReservedComplaintOutcome({ ...outcome, outcomeEnvelopeDigest: 'd'.repeat(64) }, f.store), /different facts/);
+    await assert.rejects(() => f.journal.appendReservedComplaintOutcome({ ...outcome, preparationEnvelopeDigest: 'd'.repeat(64) }, f.store), /exact published preparation/);
+    await assert.rejects(() => f.journal.appendReservedComplaintOutcome({ ...outcome, writerEpoch: 2 }, f.store), /reservation/);
+    assert.equal(f.rows.size, 2);
+  }
+});
+
+test('orphan outcomes are rejected before immutable journal writes', async () => {
+  const f = fixture();
+  await assert.rejects(() => f.journal.append({ operationId: 'operation', kind: 'COMPLAINT_OUTCOME_V1',
+    factsDigest: 'a'.repeat(64), expectedGeneration: 0, expectedDigest: null }), /immediately follow/);
+  assert.equal(f.rows.size, 0);
 });
 
 test('unknown control publication resumes exact journal bytes and refuses changed payload or stale writer', async () => {

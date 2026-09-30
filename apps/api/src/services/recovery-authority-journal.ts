@@ -20,7 +20,7 @@ export interface AuthorityHeadSource {
 const identity = z.string().regex(/^[A-Za-z0-9_-]{1,120}$/);
 const digest = z.string().regex(/^[a-f0-9]{64}$/);
 const kinds = z.enum(['DISPOSAL_INTENT', 'DISPOSAL_RESULT', 'PRESERVATION_CHANGE', 'CONTROL_CHANGE',
-  'COMPLAINT_PREPARATION_V1']);
+  'COMPLAINT_PREPARATION_V1', 'COMPLAINT_OUTCOME_V1']);
 const bindingSchema = z.object({ installationId: identity, organisationId: identity }).strict();
 const checkpointFields = {
   generation: z.number().int().nonnegative().max(10000), digest: digest.nullable(),
@@ -149,9 +149,13 @@ export class RecoveryAuthorityJournal {
       let entry: Entry;
       try { entry = entrySchema.parse(JSON.parse(body)); }
       catch { throw new Error('Invalid recovery authority entry'); }
+      const followsPreparation = entry.kind === 'COMPLAINT_OUTCOME_V1'
+        && rows.at(-1)?.kind === 'COMPLAINT_PREPARATION_V1'
+        && rows.at(-1)?.operationId === entry.operationId;
       if (entry.installationId !== this.binding.installationId || entry.organisationId !== this.binding.organisationId ||
         entry.generation !== generation || entry.previousDigest !== (rows.at(-1)?.digest ?? null) ||
-        entry.digest !== hash(unsigned(entry)) || operations.has(entry.operationId)) {
+        entry.digest !== hash(unsigned(entry)) || (operations.has(entry.operationId) && !followsPreparation)
+        || (entry.kind === 'COMPLAINT_OUTCOME_V1' && !followsPreparation)) {
         throw new Error('Invalid recovery authority binding or chain');
       }
       if (generation === this.checkpoint.generation && entry.digest !== this.checkpoint.digest) {
@@ -222,7 +226,8 @@ export class RecoveryAuthorityJournal {
   }
 
   private prior(rows: Entry[], input: Input) {
-    const previous = rows.find(row => row.operationId === input.operationId);
+    const previous = rows.find(row => row.operationId === input.operationId
+      && (input.kind !== 'COMPLAINT_OUTCOME_V1' || row.kind !== 'COMPLAINT_PREPARATION_V1'));
     if (previous && (previous.kind !== input.kind || previous.factsDigest !== input.factsDigest ||
       previous.generation !== input.expectedGeneration + 1 || previous.previousDigest !== input.expectedDigest)) {
       throw new Error('Recovery operation identity was already used for different facts.');
@@ -290,6 +295,36 @@ export class RecoveryAuthorityJournal {
       envelopeDigest: digest, expectedGeneration: z.number().int().nonnegative().max(9999),
       expectedDigest: digest.nullable(),
     }).strict().refine(v => (v.expectedGeneration === 0) === (v.expectedDigest === null)).parse(raw);
+    const publisher = await this.complaintPublisher(request, control);
+    return this.appendPublished({ operationId: request.operationId, kind: 'COMPLAINT_PREPARATION_V1',
+      factsDigest: request.envelopeDigest, expectedGeneration: request.expectedGeneration,
+      expectedDigest: request.expectedDigest }, publisher);
+  }
+
+  /** Caller must authenticate both envelopes and verify their exact facts before
+   * supplying these digests. Publication keeps the reservation occupied. */
+  async appendReservedComplaintOutcome(raw: unknown, control: RecoveryControlStore) {
+    const request = z.object({ operationId: identity, writerId: identity,
+      writerEpoch: z.number().int().positive().max(2147483647), preparationDigest: digest,
+      preparationEnvelopeDigest: digest, preparationEntryDigest: digest,
+      preparationGeneration: z.number().int().positive().max(9999), outcomeEnvelopeDigest: digest,
+    }).strict().parse(raw);
+    const publisher = await this.complaintPublisher(request, control);
+    const before = await this.readCurrentHead(publisher), rows = await this.history();
+    this.headMatchesHistory(before, rows);
+    const preparation = rows[request.preparationGeneration - 1];
+    if (!preparation || preparation.kind !== 'COMPLAINT_PREPARATION_V1'
+      || preparation.operationId !== request.operationId || preparation.digest !== request.preparationEntryDigest
+      || preparation.factsDigest !== request.preparationEnvelopeDigest || before.generation < preparation.generation) {
+      throw new Error('Recovery outcome requires the exact published preparation');
+    }
+    return this.appendPublished({ operationId: request.operationId, kind: 'COMPLAINT_OUTCOME_V1',
+      factsDigest: request.outcomeEnvelopeDigest, expectedGeneration: preparation.generation,
+      expectedDigest: preparation.digest }, publisher);
+  }
+
+  private async complaintPublisher(request: { writerId: string; writerEpoch: number;
+    operationId: string; preparationDigest: string }, control: RecoveryControlStore): Promise<AuthorityHeadPublisher> {
     const current = async () => {
       const value = validateRecoveryControl(await control.readControl());
       if (value.installationId !== this.binding.installationId || value.organisationId !== this.binding.organisationId
@@ -314,9 +349,7 @@ export class RecoveryAuthorityJournal {
         return control.compareAndSwapControl(revision, { ...value, ...next });
       },
     };
-    return this.appendPublished({ operationId: request.operationId, kind: 'COMPLAINT_PREPARATION_V1',
-      factsDigest: request.envelopeDigest, expectedGeneration: request.expectedGeneration,
-      expectedDigest: request.expectedDigest }, publisher);
+    return publisher;
   }
 
   private async appendIntent(raw: Input, reusePrefix: boolean) {
@@ -325,6 +358,10 @@ export class RecoveryAuthorityJournal {
     if (previous) return this.receipt(previous, true);
     if (input.expectedGeneration !== rows.length || input.expectedDigest !== (rows.at(-1)?.digest ?? null)) {
       throw new Error('Recovery authority generation changed; review current decisions.');
+    }
+    if (input.kind === 'COMPLAINT_OUTCOME_V1' && (rows.at(-1)?.kind !== 'COMPLAINT_PREPARATION_V1'
+      || rows.at(-1)?.operationId !== input.operationId)) {
+      throw new Error('Recovery outcome must immediately follow its original preparation');
     }
     const facts = { format: 1 as const, ...this.binding, generation: rows.length + 1,
       previousDigest: input.expectedDigest, operationId: input.operationId, kind: input.kind, factsDigest: input.factsDigest };
