@@ -1,5 +1,16 @@
 # CharityPilot Full-Platform Remediation Audit
 
+> **August Governance Policy Index exact-source review, 2026-09-30:** the
+> manifest-matched DOCX has 27 entries, omits two March-adopted policies,
+> and retains blank Board approval date/signature fields. The live Owner
+> Vault calls it unadopted. It cannot stand in for the March 31-document
+> adoption schedule. Private proposal is Company Secretary/DRAFT/RESTRICTED
+> pending Board/current-source review. Nineteen of 63 rows have source
+> evidence, 18 have some proposal, 45 have none, all 63 PENDING. No live
+> change. Private evidence:
+> `.charitypilot-private/august-index-source-review-2026-09-30.md`.
+
+
 > **March Governance Policy Index source found, 2026-09-30:** retained
 > approval email attachment and external Policies DOCX have identical
 > extracted main-document text. The signed-in Owner Vault shows all 63

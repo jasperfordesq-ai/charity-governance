@@ -1,5 +1,16 @@
 # CharityPilot Agent Continuation Handoff
 
+> **August Governance Policy Index exact-source review, 2026-09-30:** the
+> verified 17,412-byte backup DOCX has 27 entries, omits the Asset Management
+> and Dissolution Policies, and has blank Board approval fields. The live
+> Owner Vault calls it unadopted. It is not the March adopted 31-document
+> schedule or a proven successor to the March Index. Private worksheet
+> proposes Company Secretary/DRAFT/RESTRICTED pending Board/current-source
+> review. Nineteen of 63 rows have source evidence, 18 have some proposal,
+> 45 have none, all 63 PENDING. No live change. Private evidence:
+> `.charitypilot-private/august-index-source-review-2026-09-30.md`.
+
+
 > **March Governance Policy Index source found, 2026-09-30:** the retained
 > 21 March approval email and external Policies folder each hold a March
 > Index DOCX with identical extracted main-document body tokens, despite
