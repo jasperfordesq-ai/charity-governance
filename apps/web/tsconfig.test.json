@@ -13,6 +13,7 @@
     "sourceMap": false
   },
   "include": [
+    "src/lib/copy-hold-review.test.ts",
     "src/lib/api.ts",
     "src/lib/api.test.ts",
     "src/lib/session-refresh-lock.test.ts",

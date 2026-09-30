@@ -1,5 +1,10 @@
 # CharityPilot Full-Platform Remediation Audit
 
+> DPO-05 preservation dashboard, 2026-09-30: Owner copy-observation forms
+> now support scoped hold/release review with complete history and confirmation.
+> Both compiled isolated browser journeys pass; Admin dashboard access, copy
+> authority forms, release and wider acceptance remain outstanding.
+
 > DPO-05 copy audit integration, 2026-09-30: six restricted metadata feeds
 > now cover both families of copy authority, preservation holds and observations.
 > API tests, build, web types and targeted lint pass; browser/deployment proof,

@@ -1,3 +1,4 @@
+import { reviewCopyPreservation } from '../helpers/copy-preservation';
 import { test, expect, reliableFill, uniqueEmail, TEST_PASSWORD } from '../fixtures';
 import { IS_DEPLOYED_QA } from '../env';
 import { createAuthenticatedStorageState, createVerifiedOwner, withDb } from '../helpers/db';
@@ -91,6 +92,7 @@ test('Owner reviews and withdraws complaint disposal then explicitly purges only
   await expect(observation('SYNTHETIC-COPY-OBSERVATION-001')).toContainText('Retained with approved authority');
   await observation('SYNTHETIC-COPY-OBSERVATION-001').getByRole('button',{name:'Record a later observation'}).click();
   await expect(copies.getByLabel('Copy or inventory scope reference')).toBeDisabled();
+  await reviewCopyPreservation(copies);
   await observe('NEEDS_REVIEW','SYNTHETIC-COPY-OBSERVATION-002');
   await expect(observation('SYNTHETIC-COPY-OBSERVATION-001')).toContainText('Historical observation');
   await page.reload();await copies.getByRole('button',{name:'Load copy evidence',exact:true}).click();

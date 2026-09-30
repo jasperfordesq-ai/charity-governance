@@ -2,6 +2,7 @@
 
 import { useRef, useState } from 'react';
 import { Button, Checkbox, Input, Textarea } from '@heroui/react';
+import { CopyPreservationReview } from './copy-preservation-review';
 import { api } from '@/lib/api';
 import { apiErrorMessage, isApiForbiddenError } from '@/lib/errors';
 
@@ -110,6 +111,10 @@ function DispositionEvidence({ authorizationId, plan, isOwner, kind }: Props & {
       <Checkbox isSelected={confirmed} onValueChange={setConfirmed} isDisabled={busy}>I reviewed the evidence for this exact scope and outcome.</Checkbox>
       <div className="flex flex-wrap gap-2"><Button size="sm" isDisabled={busy || !valid || !confirmed} onPress={save}>Record copy observation</Button>
         {correcting ? <Button size="sm" variant="flat" isDisabled={busy} onPress={() => { setForm(fresh()); setCorrecting(false); setConfirmed(false); }}>Start a new scope</Button> : null}</div>
+      {form.area && validRef(form.scopeRef) ? <CopyPreservationReview
+        key={`${authorizationId}:${form.area}:${form.scopeRef}:${form.revision}`}
+        kind={kind} authorizationId={authorizationId} area={form.area} scopeRef={form.scopeRef}
+        observationRevision={form.revision - 1} /> : null}
     </div> : null}
   </section>;
 }

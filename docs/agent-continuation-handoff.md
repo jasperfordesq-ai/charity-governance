@@ -2,6 +2,24 @@
 
 Last updated: 2026-09-30
 
+## Scoped copy preservation dashboard - 30 September 2026 (source only)
+
+The document and complaint copy-observation forms now provide preservation
+history and exact-scope hold/release review. A changed scope or observation
+remounts review state; the complete paginated hold history is required before
+submission. Evidence changes clear confirmation. Every submission, including an
+uncertain response, invalidates the loaded revision before another attempt.
+Release explicitly does not approve deletion or revive earlier copy authority.
+The existing parent screens currently expose this workflow to the Owner;
+Admin dashboard access and copy-authority review forms remain outstanding.
+
+The scope-selection test, web/E2E type checks and targeted lint pass. Both
+isolated Chromium journeys pass (39.5s total): each family records/releases a
+hold, retains both decisions and clears confirmation when evidence changes.
+The compiled disposable stack passed its readiness gates. Evidence: private
+copy-hold-ui-browser.log. All handles are terminal. Runtime remains e39edbe8;
+these are synthetic local checks, not live charity acceptance or deployment.
+
 ## Copy review audit integration - 30 September 2026 (source only)
 
 Governance Audit now exposes six metadata-only feeds: document and complaint

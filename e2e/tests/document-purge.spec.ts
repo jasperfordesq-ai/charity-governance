@@ -1,3 +1,4 @@
+import { reviewCopyPreservation } from '../helpers/copy-preservation';
 import path from 'node:path';
 import { test, expect, reliableFill } from '../fixtures';
 import { IS_DEPLOYED_QA } from '../env';
@@ -146,6 +147,7 @@ test('Owner reviews, cancels and executes primary disposal with retained history
   await expect(observation('SYNTHETIC-BACKUP-RECEIPT-001')).toContainText('Retained with approved authority');
   await observation('SYNTHETIC-BACKUP-RECEIPT-001').getByRole('button', { name: 'Record a later observation' }).click();
   await expect(copies.getByLabel('Copy or inventory scope reference')).toBeDisabled();
+  await reviewCopyPreservation(copies);
   await copies.getByLabel('Reviewed copy outcome', { exact: true }).selectOption('NEEDS_REVIEW');
   await fillObservation('SYNTHETIC-BACKUP-REOPEN-002');
   await expect(observation('SYNTHETIC-BACKUP-REOPEN-002')).toContainText('Revision 2');
