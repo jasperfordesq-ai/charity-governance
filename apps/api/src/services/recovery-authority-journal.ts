@@ -29,6 +29,12 @@ const headSchema = bindingSchema.extend({ ...checkpointFields,
   revision: z.string().min(1).max(1024).regex(/^[\x21-\x7e]+$/),
 }).strict().refine(v => (v.generation === 0) === (v.digest === null));
 export type AuthorityCheckpoint = z.infer<typeof checkpointSchema>;
+/** Replace an existing head only if its revision still matches. This must be a
+ * provider-atomic conditional write, with a new revision on every success.
+ * Provisioning the initial head is a separate explicitly authorized operation. */
+export interface AuthorityHeadPublisher extends AuthorityHeadSource {
+  compareAndSwap(expectedRevision: string, next: AuthorityCheckpoint): Promise<boolean>;
+}
 const inputSchema = z.object({ operationId: identity, kind: kinds, factsDigest: digest,
   expectedGeneration: z.number().int().nonnegative().max(9999), expectedDigest: digest.nullable(),
 }).strict().refine(v => (v.expectedGeneration === 0) === (v.expectedDigest === null));
@@ -111,6 +117,10 @@ export class RecoveryAuthorityJournal {
       result.data.organisationId !== this.binding.organisationId) {
       throw new Error('Invalid recovery authority current head');
     }
+    if (result.data.generation < this.checkpoint.generation ||
+      (result.data.generation === this.checkpoint.generation && result.data.digest !== this.checkpoint.digest)) {
+      throw new Error('Recovery authority current head contradicts its trusted checkpoint');
+    }
     return result.data;
   }
 
@@ -141,6 +151,51 @@ export class RecoveryAuthorityJournal {
       throw new Error('Recovery operation identity was already used for different facts.');
     }
     return previous;
+  }
+
+  private headMatchesHistory(head: AuthorityCheckpoint, rows: Entry[]) {
+    if (head.generation > rows.length ||
+      head.digest !== (head.generation === 0 ? null : rows[head.generation - 1]?.digest)) {
+      throw new Error('Recovery authority history does not match its current head');
+    }
+  }
+
+  /** Publishes one exact intent, resuming either interrupted durable boundary.
+   * A head receipt still cannot authorize action: later holds need fencing. */
+  async appendPublished(raw: Input, publisher: AuthorityHeadPublisher) {
+    const input = inputSchema.parse(raw);
+    const before = await this.readCurrentHead(publisher);
+    const rows = await this.history();
+    this.headMatchesHistory(before, rows);
+    const previous = this.prior(rows, input);
+    if (previous && previous.generation <= before.generation) {
+      return { ...this.receipt(previous, true), headPublished: true as const };
+    }
+    if (before.generation !== input.expectedGeneration || before.digest !== input.expectedDigest) {
+      throw new Error('Recovery authority generation changed; review current decisions.');
+    }
+    if (rows.length > before.generation && (!previous || rows.length !== previous.generation)) {
+      throw new Error('Recovery authority has unresolved pending history; reconcile the exact operation.');
+    }
+    const receipt = await this.append(input);
+    const next = { ...this.binding, generation: receipt.generation, digest: receipt.digest };
+    let published: boolean;
+    try { published = await publisher.compareAndSwap(before.revision, next); }
+    catch { throw new Error('Recovery publication outcome is unknown; retry the same operation identity.'); }
+    let after: z.infer<typeof headSchema>;
+    try {
+      after = await this.readCurrentHead(publisher);
+      const currentRows = await this.history();
+      this.headMatchesHistory(after, currentRows);
+      if (currentRows[receipt.generation - 1]?.digest !== receipt.digest) {
+        throw new Error('Intent changed');
+      }
+    } catch { throw new Error('Recovery publication outcome is unknown; retry the same operation identity.'); }
+    if (after.generation < receipt.generation || after.revision === before.revision) {
+      if (!published) throw new Error('Recovery authority generation changed; review current decisions.');
+      throw new Error('Recovery publication outcome is unknown; retry the same operation identity.');
+    }
+    return { ...receipt, headPublished: true as const };
   }
 
   async append(raw: Input) {

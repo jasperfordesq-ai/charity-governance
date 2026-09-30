@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { RecoveryAuthorityJournal, type AuthorityObjectStore } from '../services/recovery-authority-journal.js';
+import { RecoveryAuthorityJournal, type AuthorityObjectStore, type AuthorityCheckpoint } from '../services/recovery-authority-journal.js';
 
 const binding = { installationId: 'install-a', organisationId: 'charity-a' };
 const initializationCheckpoint = { ...binding, generation: 0, digest: null };
@@ -22,6 +22,78 @@ function fixture() {
 }
 const intent = { operationId: 'operation-a', kind: 'DISPOSAL_INTENT' as const,
   factsDigest: 'a'.repeat(64), expectedGeneration: 0, expectedDigest: null };
+
+function publisherFixture() {
+  const f = fixture();
+  let head = { ...initializationCheckpoint, digest: null as string | null, revision: 'version-0' };
+  let version = 0; let loseAck = false;
+  const publisher = {
+    async readHead() { return { ...head }; },
+    async compareAndSwap(revision: string, next: AuthorityCheckpoint) {
+      if (head.revision !== revision) return false;
+      head = { ...next, revision: `version-${++version}` };
+      if (loseAck) { loseAck = false; throw new Error('lost head acknowledgement'); }
+      return true;
+    },
+  };
+  return { ...f, publisher, loseHeadAck() { loseAck = true; }, version: () => version };
+}
+
+test('published append retries a committed head after acknowledgement loss without republishing', async () => {
+  const f = publisherFixture(); f.loseHeadAck();
+  const publish = () => f.journal.appendPublished( intent, f.publisher);
+  await assert.rejects(publish, /outcome is unknown/);
+  const receipt = await publish();
+  assert.equal(receipt.headPublished, true); assert.equal(receipt.actionAuthorized, false);
+  assert.equal(receipt.replayed, true); assert.equal(f.version(), 1); assert.equal(f.rows.size, 1);
+});
+
+test('published append recovers an intent stored before a crash without creating a second entry', async () => {
+  const f = publisherFixture(); f.loseNextAck();
+  const publish = () => f.journal.appendPublished( intent, f.publisher);
+  await assert.rejects(publish, /outcome is unknown/);
+  assert.equal(f.version(), 0); assert.equal(f.rows.size, 1);
+  await assert.rejects(async () => f.journal.appendPublished(
+    { ...intent, operationId: 'replacement' }, f.publisher), /pending/);
+  const receipt = await publish();
+  assert.equal(receipt.headPublished, true); assert.equal(f.version(), 1); assert.equal(f.rows.size, 1);
+});
+
+test('competing published appends cannot publish two intents at the same predecessor', async () => {
+  const f = publisherFixture();
+  const results = await Promise.allSettled([intent, { ...intent, operationId: 'rival' }].map(input =>
+    f.journal.appendPublished( input, f.publisher)));
+  assert.equal(results.filter(r => r.status === 'fulfilled').length, 1);
+  assert.equal(f.version(), 1); assert.equal(f.rows.size, 1);
+});
+
+test('an old head behind the trusted checkpoint cannot acknowledge even an older operation', async () => {
+  const f = publisherFixture(); const first = await f.journal.appendPublished(intent, f.publisher);
+  const oldHead = await f.publisher.readHead();
+  const second = await f.journal.appendPublished({ ...intent, operationId: 'new-hold',
+    expectedGeneration: first.generation, expectedDigest: first.digest }, f.publisher);
+  const recovered = new RecoveryAuthorityJournal(f.store, binding,
+    { ...binding, generation: second.generation, digest: second.digest });
+  f.publisher.readHead = async () => oldHead;
+  await assert.rejects(() => recovered.appendPublished(intent, f.publisher), /checkpoint/);
+});
+
+test('publication acknowledgement without an observable head advance remains unknown', async () => {
+  const f = publisherFixture();
+  f.publisher.compareAndSwap = async () => true;
+  await assert.rejects(() => f.journal.appendPublished(intent, f.publisher), /outcome is unknown/);
+  assert.equal(f.rows.size, 1); assert.equal(f.version(), 0);
+});
+
+test('retries after subsequent published decisions retain the original operation identity', async () => {
+  const f = publisherFixture(); const first = await f.journal.appendPublished(intent, f.publisher);
+  await f.journal.appendPublished({ ...intent, operationId: 'later-preservation', kind: 'PRESERVATION_CHANGE',
+    expectedGeneration: first.generation, expectedDigest: first.digest }, f.publisher);
+  const retry = await f.journal.appendPublished(intent, f.publisher);
+  assert.equal(retry.generation, 1); assert.equal(retry.replayed, true);
+  assert.equal(f.version(), 2); assert.equal(f.rows.size, 2);
+  await assert.rejects(() => f.journal.appendPublished({ ...intent, factsDigest: 'c'.repeat(64) }, f.publisher), /operation identity/);
+});
 
 test('journal records an ordered intent without issuing disposal or reopening permission', async () => {
   const { journal } = fixture();

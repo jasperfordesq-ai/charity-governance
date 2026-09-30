@@ -22,8 +22,15 @@ The separate `inspectCurrent` operation also requires a live independent head
 source: it compares complete observed history with two validated head reads and
 refuses a changing revision, missing head or unpublished journal suffix. Its
 provider contract requires authenticated uncached reads and non-reused revisions.
-This is an observation only: publishing/fencing is not implemented, and another
+This is an observation only: action fencing is not implemented, and another
 writer can advance immediately afterwards. Do not use it as an execution permit.
+
+The subsequent local `appendPublished` protocol adds conditional head publication
+through an abstract provider contract. It resumes the exact operation after loss
+of either object-write or head-write acknowledgement, refuses a different pending
+operation, and rejects a head behind the separately trusted checkpoint. It does
+not create an initial head. Successful receipts still cannot authorize actions.
+Real provider integration, durable custody and fencing remain required.
 
 Before integration, implement fresh independent authority, protected replay
 facts, provider durability/permissions, action fencing and supported recovery
