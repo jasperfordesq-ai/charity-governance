@@ -1,5 +1,6 @@
 import { mkdtempSync, readFileSync, writeFileSync, existsSync } from 'node:fs';
 import { createHash } from 'node:crypto';
+import { execFileSync } from 'node:child_process';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { test, expect } from '@playwright/test';
@@ -93,6 +94,17 @@ test.describe('MCP connector lifecycle', () => {
       { credentialFile: credentialFileFor('lifecycle') },
     );
     expect(result.code).toBe(0);
+    if (API_BASE_URL === 'http://127.0.0.1:3302' && result.stdout.includes('Could not safely coordinate session renewal')) {
+      // Capture immediately: a later artifact collector can miss TIME_WAIT.
+      // No retry, port release or token fallback is performed here.
+      let diagnostic = JSON.stringify({ unavailable: true });
+      try {
+        diagnostic = execFileSync(process.execPath,
+          [join(__dirname, '../../../scripts/e2e-connector-refresh-diagnostics.mjs')],
+          { encoding: 'utf8', timeout: 3000, maxBuffer: 16384, stdio: ['ignore', 'pipe', 'ignore'] });
+      } catch { /* Preserve the original assertion failure. */ }
+      await test.info().attach('refresh-lock-diagnostics', { body: diagnostic, contentType: 'application/json' });
+    }
     expect(result.stdout).toContain(fixture.owner.email);
     expect(result.stdout).toContain('MCP Harness Charity');
   });
