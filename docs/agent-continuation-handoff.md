@@ -1,5 +1,14 @@
 # CharityPilot Agent Continuation Handoff
 
+> **Original CWR-2026-11 reply check, 2026-09-30:** Work Gmail thread
+> `1a0c32a545331eaa` contains the corrected six-document circulation
+> and Catherine, Sridevi and Jasper's 21 September agreements. The three
+> September Facebook/Related Party attachment names and lengths match
+> their verified Vault PDFs; attachment bytes were not rehashed from Gmail.
+> Later publication/pinning and revisions remain unverified. No mailbox
+> write occurred. Private evidence:
+> `.charitypilot-private/three-september-adopted-pdfs-source-review-2026-09-30.md`.
+
 > **Hold publication identity boundary, 2026-09-30:** current outcome SQL
 > applies a prepared hold atomically but its row has no authenticated
 > publication receipt. Adding a same-transaction event/outcome join or
