@@ -3756,3 +3756,17 @@ The lifecycle model map now explicitly includes the preparation and its unresolv
 retention boundary. Earlier running-suite notes are superseded by these local
 results. Fresh capture, external encryption/reservation and claim guards remain
 unfinished; no production migration or activation has occurred.
+
+### Fresh complaint preparation capture implemented locally
+
+The internal preparation store now captures explicitly selected complaint decision
+rows and persists them in one Serializable transaction with charity/Owner locks.
+It refuses withdrawn/claimed reviews and changed or ambiguous current policies.
+Retries validate the existing exact binding/digest and return original preparation;
+they do not silently recapture newer facts. The public raw-facts persistence method
+was removed. Nine focused tests and API compilation pass. These new capture tests
+use a transaction double; prior real PostgreSQL proofs cover the format/storage
+migration, not the newly added Prisma capture path or its concurrency schedules.
+Actual Prisma/PostgreSQL capture and race acceptance remain required. No route,
+claim or worker uses this store; external epoch reservation/encryption and live
+field-purpose approval remain open.
