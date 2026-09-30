@@ -333,11 +333,6 @@ test('complaint recovery migration preserves records and enforces reviewed remov
         restore:`UPDATE "ComplaintRecord" SET "removedAt"=NULL,"removalId"=NULL WHERE id='${id}';`,
       };
     }
-    raceFixture('recovery-protocol');
-    const protocolProof = spawnSync(process.execPath, ['--import', 'tsx', 'scripts/complaint-recovery-protocol-proof.mjs'],
-      { cwd: fileURLToPath(new URL('../', import.meta.url)), input: captureUrl, encoding: 'utf8', timeout: 40000 });
-    assert.equal(protocolProof.status, 0, protocolProof.stderr);
-    assert.equal(protocolProof.stdout.trim(), 'complaint-recovery-protocol-composition-verified');
     for(const protection of ['hold','withdraw']) {
       const protectedId=`${protection}-first`;
       const protectedCase=raceFixture(protectedId);
@@ -371,6 +366,12 @@ test('complaint recovery migration preserves records and enforces reviewed remov
     assert.equal(sql(`SELECT count(*) FROM "ComplaintRecord" WHERE id='owner-changed';`),'1');
     sql(`BEGIN; UPDATE "User" SET role='ADMIN' WHERE id='ordinary-admin';
       UPDATE "User" SET role='OWNER' WHERE id='admin-a'; COMMIT;`);
+    raceFixture('recovery-protocol');
+    raceFixture('recovery-stale');
+    const protocolProof = spawnSync(process.execPath, ['--import', 'tsx', 'scripts/complaint-recovery-protocol-proof.mjs'],
+      { cwd: fileURLToPath(new URL('../', import.meta.url)), input: captureUrl, encoding: 'utf8', timeout: 40000 });
+    assert.equal(protocolProof.status, 0, protocolProof.stderr);
+    assert.equal(protocolProof.stdout.trim(), 'complaint-recovery-protocol-composition-verified');
     const disposition=(id,overrides={})=>{
       const value={organisation:'a',authorization:'fresh-purge',actor:'admin-a',area:'BACKUPS',revision:1,
         status:'RETAINED_APPROVED',observed:"timezone('UTC',clock_timestamp())",next:"timezone('UTC',now())+INTERVAL '30 days'",...overrides};

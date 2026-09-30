@@ -16,7 +16,7 @@ group when its migration is introduced.
 - organisation-auth: `Organisation`, `OrganisationIntegration`, `IntegrationCredential`, `IntegrationSecretControl`, `User`, `UserSecondFactor`, `UserSecondFactorRecoveryCode`, `AuthSession`, `BillingAuthorityGrant`, `SecurityAuditEvent`, `ClientActivityEvent`, `AuthActionApproval`, `AuthActionApprovalAudit`, `ConnectorIdempotencyRecord`, `PasswordRecoveryRequest`, `AuthRecoveryRateLimitBucket`, `AuthRecoveryControl`, `AuthRecoveryRetiredSecret`, `AuthSecurityEmailOutbox`
 - reference-compliance: `GovernancePrinciple`, `GovernanceStandard`, `ComplianceRecord`, `ComplianceSignoff`, `ComplianceApprovalSnapshot`, `ComplianceAuditEvent`, `ComplianceReportPreparationAudit`
 - documents-storage: `Document`, `DocumentUploadIntent`, `DocumentControlAudit`, `DocumentVisibilityAudit`, `DocumentDownloadPreparationAudit`, `ConfluenceReference`, `DocumentStandardLink`, `DocumentStorageDeletion`, `DocumentStorageDeletionRecovery`, `DocumentStorageDeletionAttempt`, `DocumentPublication`
-- registers-controls: `BoardMember`, `ConflictRecord`, `RiskRecord`, `RiskChangeAudit`, `RiskControlVerification`, `RiskControlVerificationCounter`, `ComplaintRecord`, `ComplaintResolutionEvidence`, `ComplaintRemoval`, `ComplaintHoldEvent`, `ComplaintPurgeAuthorization`, `ComplaintPurgeAuthorizationWithdrawal`, `ComplaintPurgeClaim`, `ComplaintRecoveryPreparation`, `ComplaintRecoveryOutcome`, `ComplaintPurgeDispositionEvent`, `ComplaintCopyDispositionAuthority`, `ComplaintCopyHoldEvent`, `GovernanceRegisterChangeAudit`, `OrganisationChangeAudit`, `FundraisingRecord`, `AnnualReportReadiness`, `FinancialControlReview`, `Member`
+- registers-controls: `BoardMember`, `ConflictRecord`, `RiskRecord`, `RiskChangeAudit`, `RiskControlVerification`, `RiskControlVerificationCounter`, `ComplaintRecord`, `ComplaintResolutionEvidence`, `ComplaintRemoval`, `ComplaintHoldEvent`, `ComplaintPurgeAuthorization`, `ComplaintPurgeAuthorizationWithdrawal`, `ComplaintPurgeClaim`, `ComplaintRecoveryPreparation`, `ComplaintRecoveryOutcome`, `ComplaintRecoveryEnforcement`, `ComplaintRecoveryExecution`, `ComplaintPurgeDispositionEvent`, `ComplaintCopyDispositionAuthority`, `ComplaintCopyHoldEvent`, `GovernanceRegisterChangeAudit`, `OrganisationChangeAudit`, `FundraisingRecord`, `AnnualReportReadiness`, `FinancialControlReview`, `Member`
 - calendar-minutes: `Deadline`, `DeadlineChangeAudit`, `DeadlineReminderLog`, `DeadlineReminderAudit`, `GoverningAct`, `Resolution`, `GoverningActVoid`, `MinuteBookChangeAudit`
 - team-billing: `TeamInvite`, `Subscription`, `BillingCheckoutAttempt`, `StripeWebhookEvent`
 - data-requests: `DataLifecycleRequest`, `DataLifecycleStorageLink`, `DataLifecycleStorageLinkWithdrawal`, `DataLifecycleDocumentLink`, `DataLifecycleDocumentLinkWithdrawal`, `DataLifecycleReviewEvent`, `DataLifecycleTargetEvent`, `DataLifecycleResponseEvent`, `DataLifecycleCoverageEvent`, `DataRetentionPolicyRevision`, `DataRetentionPolicyWithdrawal`, `DocumentPurgeAuthorization`, `DocumentPurgeAuthorizationWithdrawal`, `DocumentPurgeClaim`, `DocumentPurgeDispositionEvent`, `DocumentCopyDispositionAuthority`, `DocumentCopyHoldEvent`
@@ -63,3 +63,15 @@ related decision evidence. It is append-only and covered by restore comparison.
 No live workflow currently writes it. Retention/custody decisions, independent
 outcome publication, execution fencing and reservation release remain incomplete;
 its presence does not prove disposal of copies or permission to reopen a restore.
+
+`ComplaintRecoveryEnforcement` retains the unique charity/installation/writer
+binding used by the inactive complaint execution gate. It cannot be removed or
+changed through ordinary writes. Application rollback must leave it in place;
+activation and replacement are unsupported until the wider recovery gates pass.
+`ComplaintRecoveryExecution` records the exact preparation, observed publication
+digests/revision, writer and transaction identity. Its deferred database constraint
+requires a matching claim and outcome in that same transaction. It is append-only
+and both models are included in restore comparison. A restored binding or stored
+receipt alone proves neither current independent authority nor permission to
+reopen. Retention and custody decisions remain pending; no permanent retention
+policy is implied by these technical integrity requirements.

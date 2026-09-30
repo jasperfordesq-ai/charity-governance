@@ -2,7 +2,33 @@
 
 Last updated: 2026-09-30
 
-## Recovery protocol composition verification
+## Inactive complaint database execution gate
+
+Migration `20260930234500_complaint_recovery_execution` adds a durable, immutable
+charity/installation/writer binding and transaction-bound execution receipts.
+There is no supported activation, disable or writer-replacement command. With a
+binding present, old service code and direct claims require a matching execution
+in the same transaction; a deferred constraint requires the matching outcome.
+Existing Owner, policy, hold, removal and retention guards remain in force.
+Application rollback must preserve this binding and fail closed.
+
+`executePublishedComplaintOperation` authenticates the current reserved published
+preparation before opening a bounded local transaction. The transaction binds
+the exact local preparation and enforced writer, then commits execution, claim
+and outcome together. Provider IO stays outside database locks. Both new models
+participate in restore comparison. This is inactive complaint-primary support,
+not full all-writer protection, external-provider acceptance or permission to
+reopen after server loss. No live provider or user-facing path is activated.
+
+Local build, 2,519 API tests, five PostgreSQL checks, 57 inventory/reset/restore
+checks and the initial complete guarded-protocol test passed. An expanded
+protocol test also passed with Owner/hold/withdrawal changes between receipt
+and claim. Final evidence is recorded privately. Hosted gates
+and deployment remain separate. Next: durable preservation writer coverage,
+document/worker/copy paths, approved custody, replacement isolation and the
+original DPO acceptance requirements.
+
+## Recovery protocol composition verification (earlier checkpoint)
 
 The disposable production-migration complaint test now runs
 `scripts/complaint-recovery-protocol-proof.mjs`: real Prisma/PostgreSQL capture,

@@ -1,5 +1,14 @@
 # CharityPilot Full-Platform Remediation Audit
 
+> DPO-05 source checkpoint, 2026-09-30: inactive complaint execution enforcement
+> now binds a durable charity/writer identity to a same-transaction execution,
+> claim and outcome. Real PostgreSQL tests cover direct-claim refusal, rollback
+> without outcome, stale holds, Owner/withdrawal changes and exact retry. Local
+> API2519 and PostgreSQL5 checks passed. No live activation or deployment is
+> implied. All preservation writers, other record/worker/copy paths, approved
+> provider custody, replacement isolation and original DPO acceptance remain
+> unresolved; this does not close DPO-05 or public-production readiness.
+
 > DPO-05 release-status correction, 2026-09-30: the private release receipt
 > records d31ac597 deployed after exact CI 36737004873 and E2E 36737004807
 > passed (238 tests), followed by restore rehearsal and off-host hash checks.

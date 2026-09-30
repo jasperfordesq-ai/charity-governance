@@ -14,15 +14,21 @@ import { readCommittedComplaintOutcome } from '../apps/api/src/services/complain
 import { preserveRecoveryOutcome } from '../apps/api/src/services/recovery-outcome-envelope.ts';
 import { publishVerifiedComplaintOutcome } from '../apps/api/src/services/publish-verified-complaint-outcome.ts';
 import { releaseCommittedComplaintOperation } from '../apps/api/src/services/release-complaint-recovery-operation.ts';
+import { executePublishedComplaintOperation } from '../apps/api/src/services/execute-published-complaint-operation.ts';
 
 // Disposable fixture only: real PostgreSQL and crypto, synthetic S3/KMS transport.
-// This proves composition, not provider custody or database execution fencing.
+// This proves the complaint gate, not provider custody or all-writer fencing.
 const prisma = new PrismaClient({ datasources: { db: { url: readFileSync(0, 'utf8').trim() } } });
 const retainedKeys = new Map();
 try {
   const binding = { installationId: 'protocol-install', organisationId: 'a' };
   const context = { ...binding, operationId: 'protocol-operation', writerEpoch: 1, sourceRevision: 'a'.repeat(40),
     keyId: 'arn:aws:kms:eu-west-1:123456789012:key/11111111-1111-4111-8111-111111111111' };
+  // Synthetic activation only. Production has no supported activation path yet.
+  await prisma.$executeRaw`INSERT INTO "ComplaintRecoveryEnforcement"
+    (id,"organisationId","installationId","writerId","writerEpoch") VALUES ('protocol','a','protocol-install','host-a',1)`;
+  await assert.rejects(prisma.complaintPurgeClaim.create({ data: { organisationId: 'a', actorUserId: 'admin-a',
+    authorizationId: 'recovery-protocol-authority', complaintId: 'recovery-protocol' } }), /recovery execution/);
   const capture = await new ComplaintRecoveryPreparationStore(prisma).capture('a', 'admin-a', {
     installationId: binding.installationId, operationId: context.operationId, writerEpoch: 1,
     authorizationId: 'recovery-protocol-authority', sourceRevision: context.sourceRevision });
@@ -78,11 +84,44 @@ try {
   const release = () => releaseCommittedComplaintOperation(prisma, journal, store, 'host-a', context, keys, store);
   await assert.rejects(release); // No published committed outcome yet.
   assert.notEqual((await store.readControl()).activeOperation, null);
-  await prisma.$transaction(async tx => {
-    const claim = await tx.complaintPurgeClaim.create({ data: { organisationId: 'a', actorUserId: 'admin-a',
+  const executionData = { preparationId: capture.id, writerId: 'host-a', generation: published.generation,
+    entryDigest: published.digest, envelopeDigest: envelope.digest, controlRevision: (await store.readControl()).revision };
+  await assert.rejects(prisma.complaintRecoveryExecution.create({ data: executionData }), /atomic claim and outcome/);
+  await assert.rejects(prisma.complaintRecoveryExecution.create({ data: { ...executionData, writerId: 'old-host' } }), /exact enforced writer/);
+  await assert.rejects(prisma.$transaction(async tx => {
+    await tx.complaintRecoveryExecution.create({ data: executionData });
+    await tx.complaintPurgeClaim.create({ data: { organisationId: 'a', actorUserId: 'admin-a',
       authorizationId: 'recovery-protocol-authority', complaintId: 'recovery-protocol' } });
-    await tx.complaintRecoveryOutcome.create({ data: { preparationId: capture.id, claimId: claim.id } });
-  });
+    // Intentionally omit the outcome: commit must roll deletion and audit back.
+  }), /atomic claim and outcome/);
+  for (const change of ['owner', 'hold', 'withdraw']) {
+    await assert.rejects(prisma.$transaction(async tx => {
+      await tx.complaintRecoveryExecution.create({ data: executionData });
+      if (change === 'owner') {
+        await tx.user.update({ where: { id: 'admin-a' }, data: { role: 'ADMIN' } });
+        await tx.user.update({ where: { id: 'ordinary-admin' }, data: { role: 'OWNER' } });
+      } else if (change === 'hold') {
+        await tx.complaintHoldEvent.create({ data: { organisationId: 'a', complaintId: 'recovery-protocol',
+          revision: 1, recordRevision: 2, held: true, actorUserId: 'admin-a', evidenceRef: 'EXECUTION-HOLD-001',
+          reason: 'Preserve before the claim' } });
+      } else {
+        await tx.complaintPurgeAuthorizationWithdrawal.create({ data: { organisationId: 'a',
+          authorizationId: 'recovery-protocol-authority', actorUserId: 'admin-a', evidenceRef: 'EXECUTION-WITHDRAW-001',
+          reason: 'Withdraw before the claim' } });
+      }
+      await tx.complaintPurgeClaim.create({ data: { organisationId: 'a', actorUserId: 'admin-a',
+        authorizationId: 'recovery-protocol-authority', complaintId: 'recovery-protocol' } });
+    }), change === 'owner' ? /active charity Owner/ : change === 'hold' ? /recovery execution/ : /unwithdrawn Owner authority/);
+  }
+  assert.equal(await prisma.complaintRecoveryExecution.count(), 0);
+  assert.equal(await prisma.complaintRecord.count({ where: { id: 'recovery-protocol' } }), 1);
+  assert.equal(await prisma.governanceRegisterChangeAudit.count({ where: { recordId: 'recovery-protocol', action: 'DELETE' } }), 0);
+  await assert.rejects(prisma.complaintRecoveryEnforcement.delete({ where: { organisationId: 'a' } }), /cannot be removed/);
+  await assert.rejects(prisma.complaintRecoveryEnforcement.update({ where: { organisationId: 'a' }, data: { writerEpoch: 2 } }), /cannot be removed/);
+  const execute = () => executePublishedComplaintOperation(prisma, journal, store, 'host-a', context, keys, store);
+  await assert.rejects(executePublishedComplaintOperation(prisma, journal, store, 'old-host', context, keys, store), /writer or operation mismatch/);
+  assert.equal((await execute()).replayed, false);
+  assert.equal((await execute()).replayed, true);
   await prisma.$disconnect(); // Evidence must survive reconnection, not process-local cache.
   const outcome = await readCommittedComplaintOutcome(prisma, { ...binding, operationId: context.operationId });
   await preserveRecoveryOutcome(outcome.body, context, keys, store);
@@ -96,6 +135,22 @@ try {
   assert.equal(final.activeOperation, null); assert.equal(final.generation, 2);
   assert.equal(await prisma.complaintRecord.count({ where: { id: 'recovery-protocol' } }), 0);
   assert.equal(await prisma.complaintPurgeClaim.count({ where: { complaintId: 'recovery-protocol' } }), 1);
+  const staleContext = { ...context, operationId: 'stale-operation' };
+  const stale = await new ComplaintRecoveryPreparationStore(prisma).capture('a', 'admin-a', {
+    installationId: binding.installationId, operationId: staleContext.operationId, writerEpoch: 1,
+    authorizationId: 'recovery-stale-authority', sourceRevision: context.sourceRevision });
+  const stalePreparation = await prisma.complaintRecoveryPreparation.findUniqueOrThrow({ where: { id: stale.id } });
+  await reserveRecoveryOperation({ ...binding, writerId: 'host-a', writerEpoch: 1, operationId: staleContext.operationId,
+    preparationDigest: stale.digest, expectedGeneration: final.generation, expectedDigest: final.digest }, store);
+  await preserveRecoveryPreparation(stalePreparation.facts, staleContext, keys, store);
+  await publishVerifiedComplaintPreparation(journal, store, { writerId: 'host-a', preparationDigest: stale.digest,
+    expectedGeneration: final.generation, expectedDigest: final.digest }, staleContext, keys, store);
+  await prisma.complaintHoldEvent.create({ data: { organisationId: 'a', complaintId: 'recovery-stale', revision: 1,
+    recordRevision: 2, held: true, actorUserId: 'admin-a', evidenceRef: 'LATER-HOLD-001', reason: 'Preserve after publication' } });
+  await assert.rejects(executePublishedComplaintOperation(prisma, journal, store, 'host-a', staleContext, keys, store), /dependencies changed/);
+  assert.equal(await prisma.complaintRecord.count({ where: { id: 'recovery-stale' } }), 1);
+  assert.equal(await prisma.complaintRecoveryExecution.count({ where: { preparationId: stale.id } }), 0);
+  assert.equal((await store.readControl()).activeOperation.operationId, staleContext.operationId);
   process.stdout.write('complaint-recovery-protocol-composition-verified');
 } finally {
   for (const value of retainedKeys.values()) value.key.fill(0);
