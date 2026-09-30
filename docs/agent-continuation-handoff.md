@@ -2,6 +2,16 @@
 
 Last updated: 2026-09-30
 
+Connector inventory follow-up: 41c00edf CI 36707087273 passed the previously
+failing local Docker smoke, then found missing route and field classifications
+in the MCP coverage ledger. Recovery/policy/purge administration is now explicitly
+excluded with human-review reasons, matching existing API web-session guards;
+eight new Document fields are classified as withheld by the connector privacy
+filter. The inventory also names sibling-file purge reads and dynamically
+registered claim/withdraw actions. No connector tool or access was added.
+All408 runnable connector tests pass locally; two POSIX/symlink tests are skipped
+on Windows and remain required in Linux CI. Exact successor checks are pending.
+
 Browser retry follow-up: the three 6671d6fd retries were traced to fixture/input
 behavior. The exact-count history test shared a worker charity, inheriting seven
 earlier rows and leaving 202 future-dated rows ahead of later removal events.

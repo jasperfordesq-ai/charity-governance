@@ -197,7 +197,9 @@ export const WITHHELD_FIELDS: Record<ModelName, readonly string[]> = {
   // Replacement lineage can identify a restricted successor document.
   // Content classification and storage custody are internal access/deletion
   // controls, not fields for a generic connector projection.
-  Document: ['description', 'fileUrl', 'owner', 'boardMinuteReference', 'approvedByResolutionId', 'uploadedById', 'supersededByDocumentId', 'deletionHold', 'storageProvider', 'contentAccessClass', 'externalPublicationSiteId', 'externalPublicationSpaceId'],
+  Document: ['description', 'fileUrl', 'owner', 'boardMinuteReference', 'approvedByResolutionId', 'uploadedById', 'supersededByDocumentId', 'deletionHold', 'storageProvider', 'contentAccessClass', 'externalPublicationSiteId', 'externalPublicationSpaceId',
+    'memberReviewedSha256', 'deletedAt', 'recoverySha256', 'deletedById',
+    'removedFromRevision', 'removalEvidenceRef', 'recoveryUntil', 'recoveryPolicyId'],
   Resolution: ['text', 'abstentions', 'conflictRecordId'],
   GovernancePrinciple: [],
   GovernanceStandard: [],

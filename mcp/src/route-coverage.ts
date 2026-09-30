@@ -21,6 +21,28 @@ export interface ExcludedRoute {
 
 export const EXCLUDED_ROUTES: readonly ExcludedRoute[] = [
   {
+    path: '/api/v1/documents/deleted',
+    reason: 'Deleted-item review is restricted to human Owner/Admin browser sessions; trashed records must not reappear through connector reads.',
+  },
+  {
+    path: '/api/v1/documents/policy-revisions',
+    reason: 'Retention proposals and approval evidence require human review in the policy dashboard.',
+  },
+  {
+    path: '/api/v1/documents/recovery-policies',
+    reason: 'Selecting an approved recovery policy is part of the human removal workflow, not a connector capability.',
+  },
+  {
+    path: '/api/v1/documents/purge-authorizations',
+    reason: 'Reviewed disposal plans and authority history belong in the browser-only administration workflow.',
+    notInGroupIndex: true,
+  },
+  {
+    path: '/api/v1/documents/purge-authorizations/:id/dispositions',
+    reason: 'Scoped disposal observations and controlled evidence are reviewed in the browser dashboard, not disclosed through the connector.',
+    notInGroupIndex: true,
+  },
+  {
     path: '/api/v1/auth/second-factor',
     reason: 'Personal account authenticator status belongs in the signed-in human dashboard.',
     notInGroupIndex: true,

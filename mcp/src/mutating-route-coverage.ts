@@ -27,6 +27,36 @@ export interface ExcludedMutation {
 
 export const EXCLUDED_MUTATIONS: readonly ExcludedMutation[] = [
   {
+    route: 'POST /api/v1/documents/:id/restore',
+    reason: 'Restoration requires a human browser review of the current item, recovery deadline, reason and exact bytes.',
+  },
+  {
+    route: 'POST /api/v1/documents/policy-revisions',
+    reason: 'Retention proposal and approval facts require a human to review controlled policy evidence; approval is Owner-only.',
+  },
+  {
+    route: 'POST /api/v1/documents/policy-revisions/:id/withdraw',
+    reason: 'Withdrawing retention authority is an Owner browser decision with reviewed evidence and a recorded reason.',
+  },
+  {
+    route: 'POST /api/v1/documents/purge-authorizations',
+    reason: 'A six-store disposal plan requires explicit Owner browser review and exact-object authority.',
+  },
+  {
+    route: 'POST /api/v1/documents/purge-authorizations/:id/withdraw',
+    reason: 'Cancelling disposal authority requires the Owner browser workflow and is refused after an irreversible claim.',
+    notInGroupIndex: true,
+  },
+  {
+    route: 'POST /api/v1/documents/purge-authorizations/:id/claim',
+    reason: 'The irreversible purge claim requires explicit human Owner confirmation and current eligibility checks in the browser.',
+    notInGroupIndex: true,
+  },
+  {
+    route: 'POST /api/v1/documents/purge-authorizations/:id/dispositions',
+    reason: 'Copy and backup outcomes require human review of scope-specific evidence; a connector must not assert erasure.',
+  },
+  {
     route: 'POST /api/v1/auth/change-password',
     reason: 'Changes a human account credential after current-password and optional authenticator proof. The AI connector cannot administer its own human account.',
     notInGroupIndex: true,
