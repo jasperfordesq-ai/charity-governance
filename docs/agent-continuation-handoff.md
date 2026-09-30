@@ -2,6 +2,29 @@
 
 Last updated: 2026-09-30
 
+## Atomic local preservation outcomes
+
+Private release 24e9ca03 is deployed with bounded runtime, backup, restore and
+Owner-navigation acceptance; the private release receipt records exact evidence.
+Independent recovery remains inactive and incomplete.
+
+The next source change adds `ComplaintHoldRecoveryOutcome`: insertion applies
+the original prepared hold and records its outcome in one PostgreSQL transaction.
+The ordinary hold guard rechecks current charity administrator authority and
+record/revision state. The outcome guard additionally checks the exact preceding
+hold and supplies its own event ID, transaction ID and timestamp. Rollback or an
+outcome constraint failure leaves no hold transition. Outcomes are append-only.
+The committed evidence reader verifies the original preparation and every hold
+decision field, emitting a minimal receipt without reasons or evidence text.
+
+This is an inactive internal primitive, with no route or ordinary service caller.
+It does not verify remote publication or enforce the independent writer; that
+execution gate, encrypted outcome publication, safe reservation cancellation,
+release/replay and other preservation writers remain required before activation.
+Do not treat a local outcome as independent custody or reopening authority.
+Current source verification is recorded in the private hold-outcome logs; hosted
+gates and deployment must be evidenced separately for the resulting revision.
+
 ## Inactive complaint database execution gate
 
 The next preservation-writer slice adds `ComplaintHoldRecoveryPreparation` and

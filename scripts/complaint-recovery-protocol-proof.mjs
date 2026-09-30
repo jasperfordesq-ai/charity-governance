@@ -16,6 +16,7 @@ import { publishVerifiedComplaintOutcome } from '../apps/api/src/services/publis
 import { releaseCommittedComplaintOperation } from '../apps/api/src/services/release-complaint-recovery-operation.ts';
 import { executePublishedComplaintOperation } from '../apps/api/src/services/execute-published-complaint-operation.ts';
 import { ComplaintHoldRecoveryPreparationStore } from '../apps/api/src/services/complaint-hold-recovery-preparation-store.ts';
+import { readCommittedComplaintHoldOutcome } from '../apps/api/src/services/complaint-hold-recovery-outcome.ts';
 
 // Disposable fixture only: real PostgreSQL and crypto, synthetic S3/KMS transport.
 // This proves the complaint gate, not provider custody or all-writer fencing.
@@ -178,6 +179,49 @@ try {
   assert.equal(await prisma.complaintHoldEvent.count({ where: { complaintId: 'recovery-stale' } }), 1);
   await assert.rejects(prisma.complaintHoldRecoveryPreparation.update({ where: { id: holdCapture.id }, data: { factsDigest: '0'.repeat(64) } }), /append-only/);
   await assert.rejects(prisma.complaintHoldRecoveryPreparation.delete({ where: { id: holdCapture.id } }), /append-only/);
+  // An outcome must apply exactly the captured hold and commit both records.
+  await assert.rejects(prisma.complaintHoldRecoveryOutcome.create({ data: {
+    preparationId: 'missing-preparation' } }), /original preparation/);
+  const capturedDecision = JSON.parse(holdRow.facts).decision;
+  await assert.rejects(prisma.$transaction(async tx => {
+    await tx.complaintHoldRecoveryOutcome.create({ data: { preparationId: holdCapture.id } });
+    throw new Error('synthetic rollback');
+  }), /synthetic rollback/);
+  assert.equal(await prisma.complaintHoldEvent.count({ where: { id: capturedDecision.id } }), 0);
+  assert.equal(await prisma.complaintHoldRecoveryOutcome.count(), 0);
+  await prisma.user.update({ where: { id: 'ordinary-admin' }, data: { role: 'MEMBER' } });
+  await assert.rejects(prisma.complaintHoldRecoveryOutcome.create({ data: { preparationId: holdCapture.id } }), /administrator/);
+  await prisma.user.update({ where: { id: 'ordinary-admin' }, data: { role: 'ADMIN' } });
+  const staleHoldCapture = await holdPreparations.capture('a', 'recovery-stale', 'ordinary-admin', {
+    ...holdInput, operationId: 'stale-release-candidate' });
+  const holdOutcome = await prisma.complaintHoldRecoveryOutcome.create({ data: {
+    preparationId: holdCapture.id, holdEventId: 'substituted-id', transactionId: 1n, recordedAt: new Date('2000-01-01') } });
+  const appliedHold = await prisma.complaintHoldEvent.findUniqueOrThrow({ where: { id: capturedDecision.id } });
+  for (const [key, value] of Object.entries(capturedDecision)) assert.deepEqual(appliedHold[key], value);
+  assert.equal(holdOutcome.holdEventId, appliedHold.id);
+  assert.ok(holdOutcome.transactionId > 1n);
+  assert.ok(holdOutcome.recordedAt >= appliedHold.occurredAt);
+  const holdReceipt = await readCommittedComplaintHoldOutcome(prisma, {
+    organisationId: 'a', installationId: holdInput.installationId, operationId: holdInput.operationId });
+  assert.equal(holdReceipt.actionAuthorized, false);
+  assert.equal(JSON.parse(holdReceipt.body).held, false);
+  assert.equal(JSON.parse(holdReceipt.body).preparationDigest, holdCapture.digest);
+  assert.equal(holdReceipt.body.includes(capturedDecision.reason), false);
+  assert.equal(holdReceipt.body.includes(capturedDecision.evidenceRef), false);
+  await assert.rejects(prisma.complaintHoldRecoveryOutcome.create({ data: { preparationId: holdCapture.id } }));
+  assert.equal(await prisma.complaintHoldEvent.count({ where: { complaintId: 'recovery-stale' } }), 2);
+  await assert.rejects(prisma.complaintHoldRecoveryOutcome.update({ where: { id: holdOutcome.id }, data: { transactionId: 1n } }), /append-only/);
+  await assert.rejects(prisma.complaintHoldRecoveryOutcome.delete({ where: { id: holdOutcome.id } }), /append-only/);
+  await assert.rejects(prisma.complaintHoldRecoveryOutcome.create({ data: { preparationId: staleHoldCapture.id } }), /previous decision changed/);
+  const applyCapture = await holdPreparations.capture('a', 'recovery-stale', 'ordinary-admin', {
+    ...holdInput, operationId: 'apply-preservation-again', expectedHoldRevision: 2, held: true });
+  // A constraint failure on the outcome occurs after the trigger inserted the
+  // hold. PostgreSQL must roll that hold back with the rejected outcome.
+  await assert.rejects(prisma.complaintHoldRecoveryOutcome.create({ data: { id: holdOutcome.id, preparationId: applyCapture.id } }));
+  assert.equal(await prisma.complaintHoldEvent.count({ where: { complaintId: 'recovery-stale' } }), 2);
+  await prisma.complaintHoldRecoveryOutcome.create({ data: { preparationId: applyCapture.id } });
+  assert.equal((await prisma.complaintHoldEvent.findFirstOrThrow({ where: { complaintId: 'recovery-stale' },
+    orderBy: { revision: 'desc' } })).held, true);
   process.stdout.write('complaint-recovery-protocol-composition-verified');
 } finally {
   for (const value of retainedKeys.values()) value.key.fill(0);

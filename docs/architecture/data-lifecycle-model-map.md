@@ -16,7 +16,7 @@ group when its migration is introduced.
 - organisation-auth: `Organisation`, `OrganisationIntegration`, `IntegrationCredential`, `IntegrationSecretControl`, `User`, `UserSecondFactor`, `UserSecondFactorRecoveryCode`, `AuthSession`, `BillingAuthorityGrant`, `SecurityAuditEvent`, `ClientActivityEvent`, `AuthActionApproval`, `AuthActionApprovalAudit`, `ConnectorIdempotencyRecord`, `PasswordRecoveryRequest`, `AuthRecoveryRateLimitBucket`, `AuthRecoveryControl`, `AuthRecoveryRetiredSecret`, `AuthSecurityEmailOutbox`
 - reference-compliance: `GovernancePrinciple`, `GovernanceStandard`, `ComplianceRecord`, `ComplianceSignoff`, `ComplianceApprovalSnapshot`, `ComplianceAuditEvent`, `ComplianceReportPreparationAudit`
 - documents-storage: `Document`, `DocumentUploadIntent`, `DocumentControlAudit`, `DocumentVisibilityAudit`, `DocumentDownloadPreparationAudit`, `ConfluenceReference`, `DocumentStandardLink`, `DocumentStorageDeletion`, `DocumentStorageDeletionRecovery`, `DocumentStorageDeletionAttempt`, `DocumentPublication`
-- registers-controls: `BoardMember`, `ConflictRecord`, `RiskRecord`, `RiskChangeAudit`, `RiskControlVerification`, `RiskControlVerificationCounter`, `ComplaintRecord`, `ComplaintResolutionEvidence`, `ComplaintRemoval`, `ComplaintHoldEvent`, `ComplaintPurgeAuthorization`, `ComplaintPurgeAuthorizationWithdrawal`, `ComplaintPurgeClaim`, `ComplaintRecoveryPreparation`, `ComplaintRecoveryOutcome`, `ComplaintRecoveryEnforcement`, `ComplaintRecoveryExecution`, `ComplaintHoldRecoveryPreparation`, `ComplaintPurgeDispositionEvent`, `ComplaintCopyDispositionAuthority`, `ComplaintCopyHoldEvent`, `GovernanceRegisterChangeAudit`, `OrganisationChangeAudit`, `FundraisingRecord`, `AnnualReportReadiness`, `FinancialControlReview`, `Member`
+- registers-controls: `BoardMember`, `ConflictRecord`, `RiskRecord`, `RiskChangeAudit`, `RiskControlVerification`, `RiskControlVerificationCounter`, `ComplaintRecord`, `ComplaintResolutionEvidence`, `ComplaintRemoval`, `ComplaintHoldEvent`, `ComplaintPurgeAuthorization`, `ComplaintPurgeAuthorizationWithdrawal`, `ComplaintPurgeClaim`, `ComplaintRecoveryPreparation`, `ComplaintRecoveryOutcome`, `ComplaintRecoveryEnforcement`, `ComplaintRecoveryExecution`, `ComplaintHoldRecoveryPreparation`, `ComplaintHoldRecoveryOutcome`, `ComplaintPurgeDispositionEvent`, `ComplaintCopyDispositionAuthority`, `ComplaintCopyHoldEvent`, `GovernanceRegisterChangeAudit`, `OrganisationChangeAudit`, `FundraisingRecord`, `AnnualReportReadiness`, `FinancialControlReview`, `Member`
 - calendar-minutes: `Deadline`, `DeadlineChangeAudit`, `DeadlineReminderLog`, `DeadlineReminderAudit`, `GoverningAct`, `Resolution`, `GoverningActVoid`, `MinuteBookChangeAudit`
 - team-billing: `TeamInvite`, `Subscription`, `BillingCheckoutAttempt`, `StripeWebhookEvent`
 - data-requests: `DataLifecycleRequest`, `DataLifecycleStorageLink`, `DataLifecycleStorageLinkWithdrawal`, `DataLifecycleDocumentLink`, `DataLifecycleDocumentLinkWithdrawal`, `DataLifecycleReviewEvent`, `DataLifecycleTargetEvent`, `DataLifecycleResponseEvent`, `DataLifecycleCoverageEvent`, `DataRetentionPolicyRevision`, `DataRetentionPolicyWithdrawal`, `DocumentPurgeAuthorization`, `DocumentPurgeAuthorizationWithdrawal`, `DocumentPurgeClaim`, `DocumentPurgeDispositionEvent`, `DocumentCopyDispositionAuthority`, `DocumentCopyHoldEvent`
@@ -84,3 +84,12 @@ The model is included in restore comparison and disposable reset inventory.
 Reasons and actor references still require retention/custody approval before
 external publication. Encryption/publication, execution and recovery replay for
 this action remain unfinished; a preparation is not proof of an applied hold.
+
+`ComplaintHoldRecoveryOutcome` applies the exact prepared transition and records
+its outcome in one local transaction. Its trigger invokes the ordinary hold
+guards, rechecks the exact preceding decision and sets the event ID, transaction
+ID and time itself. Failed insertion rolls back the hold; outcomes are immutable.
+The committed reader binds every decision field but omits free-text reasons from
+its minimal receipt. This inactive internal primitive is not a remote execution
+gate: independent publication, reservation handling, all-writer enforcement and
+replay remain required. No normal hold caller or activation path uses it yet.

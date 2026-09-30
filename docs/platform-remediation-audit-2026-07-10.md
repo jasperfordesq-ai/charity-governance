@@ -1,5 +1,14 @@
 # CharityPilot Full-Platform Remediation Audit
 
+> DPO-05 source checkpoint, 2026-09-30: atomic local hold outcomes now pair the
+> exact prepared transition with an append-only receipt in one database
+> transaction. Current authority, previous hold and complaint revision are
+> rechecked. Failed outcomes roll back the transition. The minimal committed
+> reader verifies provenance bindings and omits free-text reasons. This inactive
+> internal primitive is not independent publication or all-writer enforcement;
+> execution fencing, cancellation/replay, other classes/stores and original DPO
+> acceptance remain open. Exact hosted/deployment evidence is still separate.
+
 > DPO-05 source checkpoint, 2026-09-30: inactive complaint execution enforcement
 > now binds a durable charity/writer identity to a same-transaction execution,
 > claim and outcome. Real PostgreSQL tests cover direct-claim refusal, rollback

@@ -1908,6 +1908,7 @@ model ComplaintHoldEvent {
   evidenceRef    String
   reason         String
   occurredAt     DateTime @default(now())
+  recoveryOutcome ComplaintHoldRecoveryOutcome?
 
   @@unique([organisationId, complaintId, revision])
   @@index([organisationId, occurredAt, id], map: "ComplaintHoldEvent_history_idx")
@@ -1979,8 +1980,20 @@ model ComplaintHoldRecoveryPreparation {
   factsDigest String
   recordedAt DateTime @default(now())
   organisation Organisation @relation(fields: [organisationId], references: [id], onDelete: Restrict)
+  outcome ComplaintHoldRecoveryOutcome?
 
   @@unique([organisationId, operationId])
+}
+
+// Inactive local atomic hold transition. Independent publication is separate.
+model ComplaintHoldRecoveryOutcome {
+  id String @id @default(cuid())
+  preparationId String @unique
+  preparation ComplaintHoldRecoveryPreparation @relation(fields: [preparationId], references: [id], onDelete: Restrict)
+  holdEventId String @unique @default(dbgenerated())
+  holdEvent ComplaintHoldEvent @relation(fields: [holdEventId], references: [id], onDelete: Restrict)
+  transactionId BigInt @default(dbgenerated("txid_current()"))
+  recordedAt DateTime @default(now())
 }
 
 // Candidate facts only. No preparation grants claim, disposal or reopen authority.
