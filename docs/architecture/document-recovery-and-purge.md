@@ -25,6 +25,21 @@ purge/hold races, user-interface behavior or provider/backup disposal.
 
 ## Observed starting point
 
+Latest retirement/race checkpoint: the obsolete immediate-delete service and
+its private retirement helpers are gone. Tests for that removed entry point
+were retired; cleanup worker, publication worker and current recovery tests
+remain (191 focused tests and API build pass). The two adapted DPO browser
+journeys pass case-link preservation and RECORD_REMOVE in Governance Audit with
+zero cleanup receipts. Rebuild the actual purge-to-case-storage-job journey in
+R3; this checkpoint does not prove that future workflow.
+
+The PostgreSQL proof now starts independent sessions and waits until
+pg_stat_activity reports the removal blocked on a lock. When the other session
+commits either a deletion hold or a policy withdrawal, removal is rejected;
+the active document and zero cleanup jobs are verified. Sessions and container
+are cleaned up. These are hold-versus-removal and withdrawal-versus-removal
+proofs only, not approval-versus-withdrawal or restore-versus-purge proofs.
+
 Latest policy administration checkpoint: `/documents/policy-revisions` provides
 browser-only bounded history and immutable proposal/approval creation for
 VAULT_DRAFT; `/:id/withdraw` records Owner withdrawal with reason/evidence.

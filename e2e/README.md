@@ -25,7 +25,7 @@ monorepo, so Playwright never enters the API/web production installs or images.
 | `tests/tenant-isolation.spec.ts` | an unknown/foreign principle id renders a clean not-found, never leaked content |
 | `tests/auth-session.spec.ts` | an unauthenticated visit to a protected route -> `/login?next=`; an expired/cleared session -> login |
 | `tests/authz.spec.ts` | a MEMBER gets read-only governance routes without privileged mutation affordances; a live Admin demotion fails closed in place |
-| `tests/dpo-review-navigation.spec.ts` | Owner and Member review navigation, a synthetic case-to-live-Vault link retained after draft removal, and a Vault upload/delete whose committed local-storage deletion outcome and absence receipt appear in Governance Audit |
+| `tests/dpo-review-navigation.spec.ts` | Owner and Member review navigation, a synthetic case-to-Vault link retained after recoverable removal, and RECORD_REMOVE in Governance Audit with no premature cleanup receipt; actual purge-to-storage-job lineage remains a separate R3 acceptance journey |
 | `tests/dpo-mfa-last-code.spec.ts` | Synthetic Owner authenticator setup, last recovery-code browser sign-in, same-family recovery audit, different-family denial and password-proved blank-code removal against disposable PostgreSQL |
 | `tests/validation.spec.ts` | register blocks a long-but-weak password inline and sends no guaranteed-400 request |
 | `tests/accessibility.spec.ts` | axe - 0 serious/critical WCAG 2.1 AA violations on every key page, light + dark |

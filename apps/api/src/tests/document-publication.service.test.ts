@@ -1123,17 +1123,14 @@ test('the page is written to the row with publishedAt still null, mid-attempt', 
 });
 
 // ---------------------------------------------------------------------------
-// The owner's 2026-09-19 ruling, the worker's half: a document deleted while
-// this attempt was still inside Confluence's HTTP call, with no database
-// write issued yet for `document.service.ts`'s `retireConfluencePublication`
-// to block on. Both of that method's passes see `pageId` still null and can
-// only park the row -- exactly the state the fixture below starts from -- so
-// closing the race is this module's job, the moment it records the page.
+// Historical immediate-deletion jobs can have an in-flight Confluence call
+// with no recorded page yet. The former deletion path parked such rows;
+// recovery no longer creates them, but the worker must still handle existing
+// jobs when their remote page is recorded after the document has gone.
 // ---------------------------------------------------------------------------
 
 test('a worker that records a page and then finds its document gone retires the row, not stranding it PENDING', async () => {
-  // Standing in for the row `retireConfluencePublication`'s park branch would
-  // have left behind: a claim held (an attempt is in flight -- the only way a
+  // Standing in for a historical parked row: a claim held (an attempt is in flight -- the only way a
   // page can appear at all), pageId still null, pushed past the retry
   // ceiling. None of that is in `attachPublicationPage`'s own WHERE clause
   // (id, state, processedAt, publishedAt, claimedAt), so it succeeds despite

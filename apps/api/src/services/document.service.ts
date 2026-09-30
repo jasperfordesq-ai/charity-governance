@@ -12,7 +12,7 @@ import {
   type ConfluencePublishTarget,
   type PublishTargetClient,
 } from './confluence-publish-target.service.js';
-import { DOCUMENT_PUBLICATION_MAX_ATTEMPTS, publicationErasureTarget } from './document-publication.service.js';
+import { publicationErasureTarget } from './document-publication.service.js';
 import { parseConfluenceErasureTarget } from './confluence-erasure-target.js';
 
 /**
@@ -306,19 +306,13 @@ function deletionRecoveryDelegate(prisma: unknown): DocumentStorageDeletionRecov
 }
 
 // ---------------------------------------------------------------------------
-// Confluence publication: enqueue on upload, retire on delete
+// Confluence publication: enqueue and requeue approved current documents
 // ---------------------------------------------------------------------------
 
 /**
- * The narrow slice of `DocumentPublication` this file touches. It never writes
- * any of the location columns and never reads `spaceId`, `pageTitle` or
- * `publishedAt` — those belong to the publish worker (Task 6) alone.
- *
- * It does *read* `cloudId`, `pageId` and `attachmentId`, because retiring a
- * publication has to leave the row addressable: those three columns are the
- * only record of where the Confluence copy is, and an explicit, separately
- * authorised erasure will need them. Nothing here interprets or acts on them
- * beyond deciding whether a page exists to keep addressable.
+ * The narrow enqueue/requeue delegate. Publication custody and retirement are
+ * handled by the publication worker. Recoverable removal retains the document
+ * and never invokes the former immediate-delete retirement path.
  */
 type DocumentPublicationCreateClient = {
   documentPublication: {
@@ -344,31 +338,9 @@ type DocumentPublicationCreateClient = {
   $transaction?: <T>(callback: (tx: DocumentPublicationCreateClient) => Promise<T>) => Promise<T>;
 };
 
-type ConfluencePublicationRow = {
-  id: string;
-  cloudId: string | null;
-  pageId: string | null;
-  attachmentId: string | null;
-  attempts: number;
-  state: string;
-  claimedAt: Date | null;
-};
-
 function publicationDelegate(prisma: unknown) {
   return (prisma as DocumentPublicationCreateClient).documentPublication;
 }
-
-/**
- * Far enough in the future that no plausible change to
- * `DOCUMENT_PUBLICATION_MAX_ATTEMPTS` could ever make a cancelled row due for
- * another attempt. Belt-and-suspenders alongside pushing `attempts` past the
- * current ceiling — see {@link DocumentService.retireConfluencePublication}.
- */
-const CANCELLED_PUBLICATION_NEXT_ATTEMPT_AT = new Date('9999-12-31T00:00:00.000Z');
-
-const RETIRED_PUBLICATION_MESSAGE =
-  'The document was deleted in CharityPilot. The Confluence page was deliberately left in place; ' +
-  'destroying it is a separate, explicitly authorised erasure.';
 
 // Failures that no number of retries can clear, and the terminal reason each
 // one dead-letters with. `PROVIDER_NOT_ERASABLE` covers several spellings of
@@ -1471,302 +1443,6 @@ export class DocumentService {
       } });
       return { ...updated, storageProviderVerified: true as const };
     });
-  }
-
-  async remove(organisationId: string, id: string, actorUserId: string, reason: string): Promise<{ storagePath: string; storageDeletionId: string; provider: string }> {
-    const result = await this.prisma.$transaction(async (tx) => {
-      const doc = await tx.document.findFirst({
-        where: { deletedAt: null, id, organisationId },
-        include: {
-          standardLinks: { select: { id: true }, take: 1 },
-          confluenceReferences: { select: { id: true }, take: 1 },
-        },
-      });
-
-      if (!doc) {
-        throw new AppError(404, 'DOCUMENT_NOT_FOUND', 'Document not found');
-      }
-      if (doc.deletionHold) {
-        throw new AppError(409, 'DOCUMENT_DELETION_HOLD', 'This document has a deletion hold. Review and release the hold before deleting it.');
-      }
-      if (doc.lifecycleStatus !== 'DRAFT') {
-        throw new AppError(409, 'DOCUMENT_RETENTION_REVIEW_REQUIRED', 'Only documents classified as drafts can be removed through the ordinary Vault delete action. Review the retention and erasure decision for other records.');
-      }
-      if (doc.standardLinks?.length || doc.confluenceReferences?.length) {
-        throw new AppError(409, 'DOCUMENT_LINKED_EVIDENCE_REVIEW_REQUIRED',
-          'This draft has a standard link or a cited Confluence page. Review and remove those links separately before deleting the document.');
-      }
-      // An old document without a matching attached upload reservation has
-      // unknown custody. Refuse to claim its bytes were deleted from whatever
-      // provider the charity happens to use today.
-      if (!doc.storageProvider) {
-        throw new AppError(409, 'DOCUMENT_STORAGE_PROVIDER_UNVERIFIED', 'This document needs a storage-provider review before deletion.');
-      }
-      const provider = doc.storageProvider;
-
-      const deletion = await deletionDelegate(tx).create({
-        data: {
-          organisationId,
-          storagePath: doc.fileUrl,
-          sourceDocumentId: id,
-          provider,
-        },
-      });
-
-      try {
-        await tx.document.delete({ where: { deletedAt: null, id, organisationId, deletionHold: false,
-          lifecycleStatus: 'DRAFT', standardLinks: { none: {} }, confluenceReferences: { none: {} } } });
-      } catch (error) {
-        if (typeof error === 'object' && error !== null && 'code' in error && error.code === 'P2025') {
-          throw new AppError(409, 'DOCUMENT_DELETE_CONFLICT', 'Document changed or was removed. Refresh before deleting it.');
-        }
-        if (typeof error === 'object' && error !== null && 'code' in error
-          && (error.code === 'P2004' || error.code === 'P2010')
-          && /Document_linked_evidence_delete_guard|Linked document evidence requires separate review/
-            .test(`${JSON.stringify('meta' in error ? error.meta : '')} ${'message' in error ? String(error.message) : ''}`)) {
-          throw new AppError(409, 'DOCUMENT_LINKED_EVIDENCE_REVIEW_REQUIRED',
-            'This draft gained a standard link or cited page while deletion was being prepared. Review those links and try again.');
-        }
-        if (typeof error === 'object' && error !== null && 'code' in error && error.code === 'P2003') {
-          throw new AppError(409, 'DOCUMENT_REPLACEMENT_IN_USE', 'This document is the recorded replacement for historical evidence. Review those links before removal.');
-        }
-        throw error;
-      }
-      await tx.documentControlAudit.create({ data: {
-        organisationId, documentId: id, actorUserId, kind: 'RECORD_DELETE',
-        previous: 'DOCUMENT_PRESENT', next: 'DATABASE_RECORD_REMOVED',
-        reason,
-      } });
-
-      return { storagePath: doc.fileUrl, storageDeletionId: deletion.id, provider };
-    });
-
-    // Deliberately outside the transaction, and deliberately best-effort — both
-    // for the same reason. Under the owner's ruling of 2026-09-19 an ordinary
-    // deletion removes our record and our reference and leaves the Confluence
-    // page standing, so nothing about the page is at risk if this fails: the
-    // page is being kept either way. What is left here is bookkeeping, and
-    // bookkeeping must never fail a user's deletion. (Before that ruling this
-    // call had to run *inside* the transaction, because a missed row meant a
-    // page nobody could find and nobody could erase.)
-    await this.retireConfluencePublication(id, result.storagePath);
-
-    return result;
-  }
-
-  /**
-   * Reads this document's Confluence publication row **under a row lock**, so
-   * that whatever it returns is still true at COMMIT.
-   *
-   * Without the lock the delete path and the publish worker were unordered:
-   * the delete sampled `pageId` with a plain `findFirst`, and the worker wrote
-   * `pageId` from its own transaction (`attachPublicationPage`) whenever it
-   * liked. A page created inside that window got no `confluence` erasure row —
-   * a page in a charity's Confluence that nothing can find and nothing will
-   * erase, which is the exact outcome this pipeline exists to prevent.
-   *
-   * `FOR UPDATE` closes it from both sides, and both sides matter:
-   *
-   * - A worker that has **not** claimed this row yet cannot claim it while the
-   *   lock is held: `claimPendingPublications` claims with `FOR UPDATE SKIP
-   *   LOCKED`, so it skips this row entirely and never reaches `createPage`.
-   * - A worker that **has** claimed it and is mid-attempt cannot commit
-   *   `attachPublicationPage` while the lock is held — that write blocks until
-   *   this transaction ends, so the value read here is the value that is still
-   *   true when the decision taken from it commits.
-   *
-   * Same claim mechanics as `claimPendingStorageDeletions` and
-   * `claimPendingPublications`: raw SQL when the client can issue it, and the
-   * delegate as the fallback for a client that cannot (a test double). The
-   * fallback cannot lock, which is why it is a fallback and not the path
-   * production takes.
-   *
-   * **A worker between `createPage` and `recordPage` when this lock is
-   * taken** has issued no database write yet, so nothing is blocked on this
-   * lock and this read cannot see the page it is about to create. Neither can
-   * the second locked look in
-   * {@link DocumentService.retireConfluencePublication}: both of its passes
-   * see `pageId` still null, so they can only park the row, leaving
-   * `claimedAt` untouched. The worker's write then lands, moments later, on a
-   * row this method has already finished with — **silently**, not as the
-   * worker's own `claimLost`: `attachPublicationPage`'s own WHERE clause
-   * checks `id`, `state`, `processedAt`, `publishedAt` and `claimedAt`, none
-   * of which the park branch changed, so the write matches and succeeds.
-   *
-   * **That case is closed, but not by a lock — and not here.**
-   * `document-publication.service.ts`'s `retirePublicationIfDocumentGone`
-   * runs immediately after that write succeeds, the only moment anything
-   * holds both facts a retire needs at once: the page just recorded, and the
-   * document's absence. This method's lock still earns its keep in a
-   * narrower case: a worker whose write was **already** issued and blocked on
-   * this very lock (past `createPage`, into its own `UPDATE`) when the first
-   * pass took it. That write lands the instant the lock releases, and the
-   * second pass sees it — which is the case the two-pass shape of
-   * `retireConfluencePublication` exists for.
-   */
-  private async lockConfluencePublication(
-    tx: unknown,
-    documentId: string,
-    select: Record<string, boolean>,
-  ): Promise<ConfluencePublicationRow | null> {
-    const client = tx as DocumentPublicationCreateClient;
-
-    if (client.$queryRaw) {
-      const locked = await client.$queryRaw<ConfluencePublicationRow[]>`
-        SELECT "id", "cloudId", "pageId", "attachmentId", "attempts", "state", "claimedAt"
-        FROM "DocumentPublication"
-        WHERE "documentId" = ${documentId}
-          AND "provider" = 'confluence'
-        FOR UPDATE
-      `;
-      return locked[0] ?? null;
-    }
-
-    return publicationDelegate(tx).findFirst({
-      where: { documentId, provider: 'confluence' },
-      select,
-    });
-  }
-
-  /**
-   * Settles a Confluence publication whose document has just been deleted.
-   *
-   * Two jobs, and only the first changed with the owner's ruling:
-   *
-   * - **Stop the retry loop.** Left alone, a worker keeps trying to publish a
-   *   document `readDocument` can no longer find, burning all five attempts and
-   *   dead-lettering as MAX_ATTEMPTS_EXHAUSTED — noise that trains an operator
-   *   to ignore alerts, for an entirely ordinary user action.
-   * - **Keep the page addressable.** A row naming a page is retired, never
-   *   deleted and never erased. Its identifiers are the only thing that can
-   *   still address that page, and an explicit erasure will need them.
-   *
-   * The three cases, and why each is safe:
-   *
-   * - **no page id, nothing in flight** — safe in the ordinary case: nothing
-   *   exists in the charity's site and nothing is about to, because the lock
-   *   is what a would-be claimer skips. The row is deleted outright.
-   *   **One ordering defeats that:** an attempt's `createPage` succeeds but
-   *   the response arrives after `runBoundedPublication`'s per-attempt
-   *   timeout has already won, so `recordPublicationFailure` commits this
-   *   row with `pageId: null` and `claimedAt: null` while the page exists in
-   *   Confluence. The attempt then continues and calls `attachPublicationPage`,
-   *   which no longer matches a row with `claimedAt: null` and updates zero
-   *   rows — the page is never recorded. While the document still exists, a
-   *   retry is self-healing: create-or-adopt's `findPageByTitle` step finds
-   *   that page by title and adopts it. But once the document is deleted
-   *   before that retry runs, this branch deletes the row believing nothing
-   *   exists, and that self-healing path is no longer reachable — the page is
-   *   orphaned in Confluence with nothing naming it (no row, no `pageId`, no
-   *   content property, since the property is written last) until a reconcile
-   *   job exists to find it.
-   * - **no page id, an attempt in flight** — that attempt may be between
-   *   `createPage` and `recordPage` right now. Deleting the row would risk a
-   *   write landing on it later that matches nothing, leaving a real page
-   *   with no record of it anywhere, so the row is parked instead. The
-   *   second pass below only catches the page id if the attempt's own write
-   *   was **already** blocked on this lock when the first pass took it — the
-   *   far more common case, the attempt still inside Confluence's `createPage`
-   *   call with no write issued yet, is closed by the worker itself: see
-   *   `document-publication.service.ts`'s `retirePublicationIfDocumentGone`.
-   * - **a page id is recorded** — retire it.
-   *
-   * **Residual, deliberately accepted — the unrecorded attachment.** A
-   * different gap from the one above: this one survives even after the
-   * worker's own post-record check, because that check runs *before* the
-   * attachment is uploaded, not after. Retiring clears `claimedAt`, so an
-   * attempt that had recorded its page but not yet its attachment loses its
-   * claim and reports it (`claimLost`) rather than finishing. The attachment it
-   * uploaded is then in Confluence without this row naming it, and a later
-   * erasure will not look for it. That is the incompleteness the connect
-   * disclosure already states — "an attachment CharityPilot did not record is
-   * never looked for" — and under the ruling it is no longer dangerous: nothing
-   * is being destroyed, so an unrecorded attachment is an incomplete proof
-   * rather than an unerasable orphan.
-   */
-  private async retireConfluencePublication(documentId: string, storagePath: string): Promise<void> {
-    /** Returns whether an attempt was still in flight — the one case a single pass cannot decide. */
-    const settle = async (tx: unknown): Promise<boolean> => {
-      const publication = await this.lockConfluencePublication(tx, documentId, {
-        id: true,
-        cloudId: true,
-        pageId: true,
-        attachmentId: true,
-        attempts: true,
-        state: true,
-        claimedAt: true,
-      });
-      if (publication === null) return false;
-
-      if (publication.pageId === null) {
-        if (publication.claimedAt === null) {
-          await publicationDelegate(tx).deleteMany({
-            where: { id: publication.id, pageId: null },
-          });
-          return false;
-        }
-
-        if (publication.state === 'PENDING') {
-          await publicationDelegate(tx).updateMany({
-            where: { id: publication.id, state: 'PENDING' },
-            data: {
-              attempts: Math.max(publication.attempts, DOCUMENT_PUBLICATION_MAX_ATTEMPTS),
-              nextAttemptAt: CANCELLED_PUBLICATION_NEXT_ATTEMPT_AT,
-              lastError: RETIRED_PUBLICATION_MESSAGE,
-            },
-          });
-        }
-        return true;
-      }
-
-      // No `state` guard on the where clause: the row is held under FOR UPDATE,
-      // so the value just read is still true at this write. Retiring a row that
-      // is already RETIRED is a no-op in practice (the document can only be
-      // deleted once) and harmless if it happens.
-      //
-      // `pageId: { not: null }` *is* kept, though — the same belt-and-braces
-      // the delete branch above keeps its `pageId: null` for. `FOR UPDATE`
-      // makes it redundant on the raw-SQL path, but `lockConfluencePublication`
-      // degrades to an unlocked `findFirst` for a client that cannot issue
-      // one (a test double), and for that fallback this is the only thing
-      // between a page id read a moment ago and retiring a row that has since
-      // lost it.
-      await publicationDelegate(tx).updateMany({
-        where: { id: publication.id, pageId: { not: null } },
-        data: {
-          state: 'RETIRED',
-          retiredAt: this.now(),
-          retiredStoragePath: storagePath,
-          nextAttemptAt: null,
-          claimedAt: null,
-          alertClaimToken: null,
-          alertClaimedAt: null,
-          lastError: RETIRED_PUBLICATION_MESSAGE,
-        },
-      });
-
-      return false;
-    };
-
-    try {
-      const client = this.prisma as unknown as DocumentPublicationCreateClient;
-      const pass = async (): Promise<boolean> =>
-        client.$transaction ? client.$transaction(settle) : settle(this.prisma);
-
-      // At most two passes, never a loop. When the attempt's own write was
-      // already blocked on the first pass's lock, it lands the instant that
-      // pass commits, and the second pass sees the page id and retires it.
-      // When nothing was blocked yet — the attempt still inside its HTTP call
-      // — the second pass finds pageId still null too and the row stays
-      // parked; that case is closed instead by the worker's own post-record
-      // check in document-publication.service.ts.
-      if (await pass()) await pass();
-    } catch (error) {
-      console.error(
-        `[document-publication] Could not retire the Confluence publication for deleted document ${documentId}.`,
-        error,
-      );
-    }
   }
 
   async markStorageDeletionProcessed(id: string, claimedAt: Date | null = null, activeObjectAbsentAt?: Date): Promise<boolean> {

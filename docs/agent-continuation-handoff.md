@@ -2,6 +2,20 @@
 
 Last updated: 2026-09-30
 
+Obsolete DocumentService.remove and its private immediate-delete Confluence
+retirement subtree are removed. Their obsolete test helpers/assertions were
+retired; live cleanup-worker and publication-worker coverage remains and 191
+focused tests pass with the API build. Both older DPO browser scenarios now
+exercise retained removal: case association survives and Governance Audit shows
+RECORD_REMOVE without a storage cleanup receipt. Both passed on the managed
+disposable stack, with runner exit 0. Storage-job linkage after an actual purge
+still needs its R3 journey; the old hard-delete journey is no substitute.
+The PostgreSQL migration proof now uses competing sessions and observes actual
+lock waits: a committed hold or policy withdrawal causes the waiting removal to
+fail, preserving the active row and zero cleanup jobs. Test and teardown pass.
+Next build R3 explicit purge authority/claim/outbox and the restore/hold/purge
+races, retain downstream disposition accounting, and complete R4/R5.
+
 Draft-policy administration is now implemented locally: browser Admin/Owner can
 record immutable proposals; only the active Owner can approve or withdraw with
 controlled evidence. Approval allocates a new revision and atomically withdraws

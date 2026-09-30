@@ -4,6 +4,7 @@ import { test, expect, reliableFill, uniqueEmail } from '../fixtures';
 import { IS_DEPLOYED_QA } from '../env';
 import { createAuthenticatedStorageState, createVerifiedMember, withDb } from '../helpers/db';
 import { gotoWithDevServerRetry } from '../helpers/navigation';
+import { approveSyntheticDraftRecoveryPolicy } from '../helpers/draft-recovery-policy';
 
 const SAMPLE_FILE = path.resolve(__dirname, '../fixtures/sample-document.txt');
 
@@ -672,6 +673,7 @@ test.describe('DPO review navigation', () => {
   test('an Owner can link a live Vault document to a case and retain the link after draft removal', async ({ owner, ownerPage }) => {
     test.setTimeout(120_000);
     await gotoWithDevServerRetry(ownerPage, '/documents');
+    const recoveryPolicyId = await approveSyntheticDraftRecoveryPolicy(ownerPage);
     const documentName = `DPO case lineage ${Date.now()}`;
     await ownerPage.getByRole('button', { name: /Upload document/i }).click();
     await reliableFill(ownerPage.getByLabel('Document name'), documentName);
@@ -716,20 +718,23 @@ test.describe('DPO review navigation', () => {
     await gotoWithDevServerRetry(ownerPage, '/documents');
     const row = ownerPage.getByRole('article').filter({ hasText: documentName });
     await row.getByRole('button', { name: `Delete ${documentName}` }).click();
-    await expect(ownerPage.getByRole('heading', { name: 'Remove document from vault' })).toBeVisible();
+    await expect(ownerPage.getByRole('heading', { name: 'Move document to Deleted Items' })).toBeVisible();
+    await ownerPage.getByLabel('Approved recovery policy').selectOption(recoveryPolicyId);
+    await reliableFill(ownerPage.getByLabel('Removal authority reference'), 'SYNTHETIC-CASE-REMOVAL');
     await reliableFill(ownerPage.getByLabel('Reason for removing this draft'),
       'The synthetic draft was uploaded for the case journey and can be removed.');
     const removed = ownerPage.waitForResponse((response) =>
       response.url().endsWith(`/api/v1/documents/${documentId}`) && response.request().method() === 'DELETE');
-    await ownerPage.getByRole('button', { name: 'Remove from vault' }).click();
-    expect((await removed).status()).toBe(204);
+    await ownerPage.getByRole('button', { name: 'Move to Deleted Items', exact: true }).click();
+    expect((await removed).status()).toBe(200);
     const remaining = await withDb((client) => client.query(
-      `SELECT "id" FROM "Document" WHERE "id" = $1 AND "organisationId" = $2`,
+      `SELECT "id", "deletedAt" FROM "Document" WHERE "id" = $1 AND "organisationId" = $2`,
       [documentId, owner.organisationId],
     ));
-    assert.equal(remaining.rows.length, 0);
+    assert.equal(remaining.rows.length, 1);
+    assert.ok(remaining.rows[0].deletedAt);
     await ownerPage.getByRole('button', { name: 'Load history' }).click();
-    await expect(ownerPage.getByRole('listitem').filter({ hasText: 'RECORD_DELETE:' })
+    await expect(ownerPage.getByRole('listitem').filter({ hasText: 'RECORD_REMOVE:' })
       .getByText('The synthetic draft was uploaded for the case journey and can be removed.')).toBeVisible();
 
     await gotoWithDevServerRetry(ownerPage, '/data-lifecycle');
@@ -901,155 +906,38 @@ test.describe('DPO review navigation', () => {
     await expect(row.getByRole('button', { name: `Delete ${documentName}` })).toBeDisabled();
   });
 
-  test('an Owner sees a committed storage deletion outcome in Governance Audit', async ({ owner, ownerPage }) => {
+  test('an Owner sees recoverable removal in Governance Audit without a cleanup receipt', async ({ owner, ownerPage }) => {
     test.setTimeout(120_000);
     await gotoWithDevServerRetry(ownerPage, '/documents');
-    await expect(ownerPage.getByRole('heading', { name: 'Document Vault', exact: true })).toBeVisible();
-    const documentName = `DPO deletion audit ${Date.now()}`;
+    const policyId = await approveSyntheticDraftRecoveryPolicy(ownerPage);
+    const name = `DPO retained audit ${Date.now()}`;
     await ownerPage.getByRole('button', { name: /Upload document/i }).click();
-    await reliableFill(ownerPage.getByLabel('Document name'), documentName);
+    await reliableFill(ownerPage.getByLabel('Document name'), name);
     await ownerPage.locator('#document-upload-file').setInputFiles(SAMPLE_FILE);
-    const uploaded = ownerPage.waitForResponse((response) =>
-      /\/api\/v1\/documents$/.test(response.url()) && response.request().method() === 'POST');
+    const uploaded = ownerPage.waitForResponse(response => /\/api\/v1\/documents$/.test(response.url()) && response.request().method() === 'POST');
     await ownerPage.getByRole('button', { name: 'Upload', exact: true }).click();
     const uploadResponse = await uploaded;
     expect(uploadResponse.status()).toBe(201);
-    const uploadPayload = (await uploadResponse.json()) as { data?: { id?: string } };
-    const documentId = uploadPayload.data?.id;
-    if (!documentId) throw new Error('The uploaded document has no server-issued ID');
-    const row = ownerPage.getByRole('article').filter({ hasText: documentName });
-    await expect(row.getByRole('button', { name: `Delete ${documentName}` })).toBeEnabled();
-
-    await assert.rejects(() => withDb((client) => client.query(
-      `INSERT INTO "DocumentStorageDeletion"
-        ("id", "organisationId", "storagePath", "sourceDocumentId", "provider")
-       VALUES ($1, $2, $3, $4, 'local')`,
-      [`forged-source-${Date.now()}`, owner.organisationId,
-        `${owner.organisationId}/different-object.txt`, documentId],
-    )), /code=P0001/);
-
-    await row.getByRole('button', { name: `Delete ${documentName}` }).click();
-    await expect(ownerPage.getByRole('heading', { name: 'Remove document from vault' })).toBeVisible();
-    await reliableFill(ownerPage.getByLabel('Reason for removing this draft'),
-      'The synthetic draft served the source-lineage check and can be removed.');
-    const removed = ownerPage.waitForResponse((response) =>
-      response.url().endsWith(`/api/v1/documents/${documentId}`) && response.request().method() === 'DELETE');
-    await ownerPage.getByRole('button', { name: 'Remove from vault' }).click();
-    expect((await removed).status()).toBe(204);
-    const deletionId = await withDb(async (client) => {
-      const result = await client.query<{ id: string; sourceDocumentId: string | null }>(
-        `SELECT deletion."id", deletion."sourceDocumentId"
-           FROM "DocumentStorageDeletion" deletion
-           JOIN "DocumentUploadIntent" intent
-             ON intent."organisationId" = deletion."organisationId"
-            AND intent."storagePath" = deletion."storagePath"
-          WHERE intent."documentId" = $1
-            AND deletion."organisationId" = $2
-          ORDER BY deletion."createdAt" DESC
-          LIMIT 1`,
-        [documentId, owner.organisationId],
-      );
-      if (result.rows.length !== 1) throw new Error('The removed document has no matching storage-deletion job');
-      assert.equal(result.rows[0].sourceDocumentId, documentId);
-      return result.rows[0].id;
-    });
-    await assert.rejects(() => withDb((client) => client.query(
-      `UPDATE "DocumentStorageDeletion" SET "sourceDocumentId" = NULL WHERE "id" = $1`,
-      [deletionId],
-    )), /code=P0001/);
-
+    const documentId = (await uploadResponse.json()).data.id as string;
+    const row = ownerPage.getByRole('article').filter({ hasText: name });
+    await row.getByRole('button', { name: `Delete ${name}` }).click();
+    await ownerPage.getByLabel('Approved recovery policy').selectOption(policyId);
+    await reliableFill(ownerPage.getByLabel('Removal authority reference'), 'SYNTHETIC-AUDIT-REMOVAL');
+    await reliableFill(ownerPage.getByLabel('Reason for removing this draft'), 'The synthetic draft is retained for the audit rehearsal.');
+    const removed = ownerPage.waitForResponse(response => response.url().endsWith(`/documents/${documentId}`) && response.request().method() === 'DELETE');
+    await ownerPage.getByRole('button', { name: 'Move to Deleted Items', exact: true }).click();
+    expect((await removed).status()).toBe(200);
+    const jobs = await withDb(client => client.query(`SELECT id FROM "DocumentStorageDeletion" WHERE "sourceDocumentId"=$1`, [documentId]));
+    expect(jobs.rowCount).toBe(0);
+    const auditRead = ownerPage.waitForResponse(response => response.url().includes('/governance-audit/document-controls') && response.request().method() === 'GET');
     await gotoWithDevServerRetry(ownerPage, '/governance-audit');
-    const attempts = ownerPage.locator('section').filter({
-      has: ownerPage.getByRole('heading', { name: 'Storage deletion attempt outcomes' }),
-    });
-    const processedAttempt = attempts.locator('li').filter({
-      hasText: `PROCESSED · deletion ${deletionId} · attempt 1`,
-    });
-    await expect(processedAttempt).toHaveCount(1);
-    await expect(processedAttempt.getByText(/Active primary object observed absent/)).toBeVisible();
-
-    await gotoWithDevServerRetry(ownerPage, '/data-lifecycle');
-    const caseReference = `CASE-${Date.now()}-STORAGE`;
-    await reliableFill(ownerPage.getByLabel('Opaque case reference'), caseReference);
-    await ownerPage.getByLabel('Data area').selectOption('DOCUMENT');
-    const recorded = ownerPage.waitForResponse((response) =>
-      /\/api\/v1\/data-lifecycle\/requests$/.test(response.url()) && response.request().method() === 'POST');
-    await ownerPage.getByRole('button', { name: 'Record request' }).click();
-    const intakeResponse = await recorded;
-    expect(intakeResponse.status()).toBe(201);
-    const intakePayload = (await intakeResponse.json()) as { data?: { id?: string } };
-    const caseId = intakePayload.data?.id;
-    if (!caseId) throw new Error('The data request has no server-issued ID');
-    await reliableFill(ownerPage.getByLabel('Find by case reference'), caseReference);
-    await ownerPage.getByRole('button', { name: 'Find request' }).click();
-    await expect(ownerPage.getByRole('heading', { name: `Review ${caseReference}` })).toBeVisible();
-    await reliableFill(ownerPage.getByLabel('Find jobs by source document ID'), documentId);
-    const foundJobs = ownerPage.waitForResponse((response) =>
-      /\/api\/v1\/data-lifecycle\/storage-deletions\/by-source\?/.test(response.url())
-      && response.request().method() === 'GET');
-    await ownerPage.getByRole('button', { name: 'Find jobs' }).click();
-    const foundResponse = await foundJobs;
-    expect(foundResponse.status()).toBe(200);
-    const foundPayload = await foundResponse.json() as { data?: { items?: Array<Record<string, unknown>> } };
-    expect(foundPayload.data?.items?.[0]?.id).toBe(deletionId);
-    expect(foundPayload.data?.items?.[0]?.sourceDocumentId).toBe(documentId);
-    expect(JSON.stringify(foundPayload)).not.toMatch(/storagePath|lastError|fileUrl/);
-    const foundJob = ownerPage.locator('li').filter({ has: ownerPage.getByText(deletionId, { exact: true }) });
-    await expect(foundJob.getByText(/PROCESSED/)).toBeVisible();
-    await foundJob.getByRole('button', { name: 'Use job ID' }).click();
-    await expect(ownerPage.getByLabel('Storage deletion job ID')).toHaveValue(deletionId);
-    await reliableFill(ownerPage.getByLabel('Reason for linking', { exact: true }), 'Checked the synthetic case against the storage-deletion audit.');
-    const linked = ownerPage.waitForResponse((response) =>
-      /\/api\/v1\/data-lifecycle\/requests\/[^/]+\/storage-links$/.test(response.url())
-      && response.request().method() === 'POST');
-    await ownerPage.getByRole('button', { name: 'Link storage job' }).click();
-    expect((await linked).status()).toBe(201);
-    const caseJob = ownerPage.locator('li').filter({ has: ownerPage.getByText(deletionId, { exact: true }) });
-    await expect(caseJob.getByText(/PROCESSED/)).toBeVisible();
-    await expect(caseJob.getByText(`Source Vault document ID recorded at removal: ${documentId}.`, { exact: false })).toBeVisible();
-    await expect(caseJob.getByText(/Active primary object observed absent/)).toBeVisible();
-
-    await assert.rejects(() => withDb((client) => client.query(
-      `INSERT INTO "DataLifecycleStorageLink"
-        ("id", "organisationId", "requestId", "deletionId", "actorUserId", "reason")
-       VALUES ($1, $2, $3, $4, $5, $6)`,
-      [`foreign-link-${Date.now()}`, 'another-charity', caseId, 'other-deletion', owner.userId,
-        'A forged association from another charity.'],
-    )), /code=23503/);
-    await assert.rejects(() => withDb((client) => client.query(
-      `UPDATE "DataLifecycleStorageLink" SET "reason" = 'Changed after recording'
-       WHERE "requestId" = $1 AND "deletionId" = $2`,
-      [caseId, deletionId],
-    )), /code=P0001/);
-
-    await caseJob.getByRole('button', { name: 'Withdraw association' }).click();
-    await reliableFill(caseJob.getByLabel(`Reason for withdrawing ${deletionId}`),
-      'The synthetic case association was recorded for correction testing.');
-    const withdrawn = ownerPage.waitForResponse((response) =>
-      /\/api\/v1\/data-lifecycle\/requests\/[^/]+\/storage-links\/[^/]+\/withdraw$/.test(response.url())
-      && response.request().method() === 'POST');
-    await caseJob.getByRole('button', { name: 'Record withdrawal' }).click();
-    expect((await withdrawn).status()).toBe(201);
-    await expect(caseJob.getByText(/Withdrawn association/)).toBeVisible();
-    await expect(caseJob.getByText(/The synthetic case association was recorded/)).toBeVisible();
-    await expect(caseJob.getByRole('button', { name: 'Withdraw association' })).toHaveCount(0);
-    const withdrawalId = await withDb(async (client) => {
-      const result = await client.query<{ id: string }>(
-        `SELECT withdrawal."id" FROM "DataLifecycleStorageLinkWithdrawal" withdrawal
-           JOIN "DataLifecycleStorageLink" link ON link."id" = withdrawal."linkId"
-          WHERE link."requestId" = $1 AND link."deletionId" = $2
-            AND withdrawal."organisationId" = $3`,
-        [caseId, deletionId, owner.organisationId],
-      );
-      if (result.rows.length !== 1) throw new Error('The withdrawal was not retained');
-      return result.rows[0].id;
-    });
-    await assert.rejects(() => withDb((client) => client.query(
-      `UPDATE "DataLifecycleStorageLinkWithdrawal" SET "reason" = 'Changed after recording' WHERE "id" = $1`,
-      [withdrawalId],
-    )), /code=P0001/);
+    const auditResponse = await auditRead;
+    expect(auditResponse.status()).toBe(200);
+    const payload = await auditResponse.json();
+    expect(payload.data.some((event: { documentId: string; kind: string }) => event.documentId === documentId && event.kind === 'RECORD_REMOVE')).toBe(true);
+    const controls = ownerPage.locator('section').filter({ has: ownerPage.getByRole('heading', { name: 'Document changes and controls' }) });
+    await expect(controls.getByText(new RegExp(`RECORD_REMOVE.*${documentId}`))).toBeVisible();
   });
-
   test('an Owner can page past new data-request intake without losing older cases', async ({ owner, ownerPage }) => {
     test.setTimeout(120_000);
     const batch = Date.now().toString();

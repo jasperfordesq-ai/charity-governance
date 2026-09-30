@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { spawnSync } from 'node:child_process';
+import { spawn, spawnSync } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
 import { readFileSync, readdirSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
@@ -34,6 +34,32 @@ test('retention policy and recovery-state upgrade preserve documents and enforce
       assert.match(result.stderr, rejectPattern);
     } else assert.equal(result.status, 0, result.stderr);
     return result.stdout.trim();
+  }
+  const sessions = [];
+  function session(label, statement, keepOpen = false) {
+    const child = spawn('docker', ['--host', endpoint.Host, 'exec', '--env', `PGAPPNAME=${label}`, '-i', container,
+      'psql', '-h', '127.0.0.1', '-U', 'postgres', '-v', 'ON_ERROR_STOP=1', '-Atq'], { stdio: ['pipe', 'pipe', 'pipe'] });
+    let stdout = ''; let stderr = '';
+    child.stdout.on('data', chunk => { stdout += chunk; });
+    child.stderr.on('data', chunk => { stderr += chunk; });
+    const timeout = setTimeout(() => child.kill(), 20000);
+    const done = new Promise(resolve => {
+      child.on('error', error => { stderr += String(error); });
+      child.on('close', code => { clearTimeout(timeout); resolve({ code, stdout, stderr }); });
+    });
+    child.stdin.on('error', () => {});
+    if (keepOpen) child.stdin.write(`${statement}\n`); else child.stdin.end(statement);
+    const item = { child, done, output: () => stdout };
+    sessions.push(item);
+    return item;
+  }
+  async function until(check, message) {
+    const deadline = Date.now() + 10000;
+    while (Date.now() < deadline) {
+      if (check()) return;
+      await new Promise(resolve => setTimeout(resolve, 25));
+    }
+    assert.fail(message);
   }
   try {
     let ready = false;
@@ -114,11 +140,31 @@ test('retention policy and recovery-state upgrade preserve documents and enforce
     sql(`UPDATE "Document" SET "recoverySha256"='${'b'.repeat(64)}' WHERE id='retained-doc';`, /cannot be rewritten/);
     sql(`UPDATE "Document" SET "deletedAt"=NULL,"deletedById"=NULL,"removedFromRevision"=NULL,"removalEvidenceRef"=NULL,"recoveryPolicyId"=NULL,"recoveryUntil"=NULL,"recoverySha256"=NULL WHERE id='retained-doc';`);
     assert.equal(sql(`SELECT count(*) FROM "Document" WHERE id='retained-doc' AND "recoverySha256" IS NULL AND "deletedAt" IS NULL;`), '1');
+    const fingerprintRemoval = remove('fingerprint').replace('SET "deletedAt"', `SET "recoverySha256"='${'a'.repeat(64)}', "deletedAt"`);
+    for (const race of ['hold', 'withdrawal']) {
+      const mutation = race === 'hold'
+        ? `UPDATE "Document" SET "deletionHold"=true WHERE id='retained-doc';`
+        : withdrawal('concurrent-withdrawal', 'retention-a', 'fingerprint');
+      const holder = session(`recovery-holder-${race}`, `BEGIN; ${mutation} SELECT 'BARRIER';`, true);
+      await until(() => holder.output().includes('BARRIER'), 'guard transaction did not reach its barrier');
+      const blocked = session(`recovery-blocked-${race}`, fingerprintRemoval);
+      await until(() => sql(`SELECT count(*) FROM pg_stat_activity WHERE application_name='recovery-blocked-${race}' AND wait_event_type='Lock';`) === '1',
+        'removal did not wait on the competing row lock');
+      holder.child.stdin.end('COMMIT;\n');
+      assert.equal((await holder.done).code, 0);
+      const result = await blocked.done;
+      assert.notEqual(result.code, 0, `${race} race accepted removal`);
+      assert.match(result.stderr, race === 'hold' ? /hold or linked evidence review/ : /approved current draft recovery policy/);
+      assert.equal(sql(`SELECT count(*) FROM "Document" WHERE id='retained-doc' AND "deletedAt" IS NULL; SELECT count(*) FROM "DocumentStorageDeletion";`), '1\n0');
+      if (race === 'hold') sql(`UPDATE "Document" SET "deletionHold"=false WHERE id='retained-doc';`);
+    }
   } finally {
+    for (const item of sessions) if (item.child.exitCode === null) item.child.stdin.end('ROLLBACK;\n');
     const removed = docker(['rm', '--force', '--volumes', container]);
     assert.equal(removed.status, 0, removed.stderr);
     const residue = docker(['ps', '--all', '--filter', `id=${container}`, '--format', '{{.ID}}']);
     assert.equal(residue.status, 0, residue.stderr);
     assert.equal(residue.stdout.trim(), '', 'disposable database remains');
+    await Promise.all(sessions.map(item => item.done));
   }
 });
