@@ -1,5 +1,16 @@
 # CharityPilot Agent Continuation Handoff
 
+> **Disposable hold-role proof, 2026-10-01:** All 139 migrations applied to
+> local PostgreSQL 16.4. Independent non-superuser login roles proved the
+> ordinary role can be denied hold-outcome INSERT and cannot assume the
+> executor role or disable its trigger. The executor passed the table
+> privilege check and reached the existing preparation guard. Ordinary
+> hold INSERT needs UPDATE privilege on lock-bearing Organisation,
+> ComplaintRecord and User tables; SELECT alone fails at `FOR UPDATE`.
+> This is a bounded role feasibility result, not full app compatibility,
+> independent publication, deployment or activation. Private proof:
+> `.charitypilot-private/hold-role-proof-result-2026-10-01.md`.
+
 > **Hold writer identity topology, 2026-10-01:** The private blue-green
 > stack gives DB and API the same env file; Prisma uses one `DATABASE_URL`,
 > and deploy preflight equates its user with `POSTGRES_USER`. Current
