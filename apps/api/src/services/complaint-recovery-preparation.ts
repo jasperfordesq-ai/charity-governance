@@ -19,8 +19,8 @@ const removal = z.object({ ...scoped, complaintId: id, recordRevision: revision,
   ...provenance, policyId: id, resolutionEvidenceId: id.nullable(), occurredAt: time, recoveryUntil: time,
 }).strict();
 const resolution = z.object({ ...scoped, complaintId: id, revision, recordRevision: revision,
-  ...provenance, state: z.literal('RECORDED'), resolvedAt: time, occurredAt: time,
-}).strict();
+  ...provenance, state: z.enum(['RECORDED', 'WITHDRAWN']), resolvedAt: time.nullable(), occurredAt: time,
+}).strict().refine(v => (v.state === 'RECORDED') === (v.resolvedAt !== null));
 const hold = z.object({ ...scoped, complaintId: id, revision, recordRevision: revision,
   ...provenance, held: z.literal(false), occurredAt: time,
 }).strict();
@@ -67,8 +67,11 @@ const schema = z.object({ format: z.literal(1), action: z.literal('COMPLAINT_PUR
     fail('Inconsistent policy terms');
   }
   if (v.resolution && (v.resolution.complaintId !== c.id
-    || v.resolution.recordRevision !== r.recordRevision)) fail('Mismatched resolution dependency');
-  if (v.removalResolution && (v.removalResolution.id !== r.resolutionEvidenceId || v.removalResolution.complaintId !== c.id || v.removalResolution.recordRevision !== r.recordRevision)) fail('Mismatched original resolution dependency');
+    || (p.retentionMode === 'AFTER_ANCHOR' && (v.resolution.recordRevision !== r.recordRevision
+      || v.resolution.state !== 'RECORDED')))) fail('Mismatched resolution dependency');
+  if (v.removalResolution && (v.removalResolution.id !== r.resolutionEvidenceId
+    || v.removalResolution.complaintId !== c.id || v.removalResolution.recordRevision !== r.recordRevision
+    || v.removalResolution.state !== 'RECORDED')) fail('Mismatched original resolution dependency');
   if ((r.resolutionEvidenceId !== null) !== (v.removalResolution !== null)
     || (p.retentionMode === 'AFTER_ANCHOR' && !v.resolution)) fail('Missing resolution dependency');
 });

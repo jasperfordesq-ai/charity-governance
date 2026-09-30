@@ -84,6 +84,17 @@ test('one dependency identity cannot carry conflicting facts', () => {
   assert.throws(() => prepareComplaintRecoveryFacts(input));
 });
 
+test('review-only disposal preserves withdrawn resolution evidence without treating it as a timed anchor', () => {
+  const input = fixture();
+  input.resolution = { id: 'withdrawn', organisationId: 'charity', complaintId: 'complaint', revision: 2,
+    recordRevision: 1, actorUserId: 'owner', evidenceRef: 'WITHDRAW-1', reason: 'Synthetic resolution withdrawal',
+    state: 'WITHDRAWN', resolvedAt: null, occurredAt: '2026-08-01T00:00:00.000Z' };
+  assert.equal(JSON.parse(prepareComplaintRecoveryFacts(input).body).resolution.state, 'WITHDRAWN');
+  input.policy.id = 'timed-policy'; input.authorization.policyId = 'timed-policy';
+  input.policy.retentionMode = 'AFTER_ANCHOR'; input.policy.retentionAnchor = 'RESOLVED_AT'; input.policy.retentionDays = 10;
+  assert.throws(() => prepareComplaintRecoveryFacts(input));
+});
+
 test('a later disposal policy preserves the distinct original removal policy', () => {
   const input = fixture();
   input.policy.id = 'later-policy'; input.policy.revision = 2;

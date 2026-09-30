@@ -1,5 +1,6 @@
 import { proveCopyBinding } from './copy-binding-proof.mjs';
 import { proveCopyAuthority } from './copy-authority-proof.mjs';
+import { proveComplaintRecoveryPreparation } from './complaint-recovery-preparation-proof.mjs';
 import assert from 'node:assert/strict';
 import { spawn, spawnSync } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
@@ -220,6 +221,7 @@ test('complaint recovery migration preserves records and enforces reviewed remov
       `INSERT INTO "ComplaintPurgeClaim" (id,"organisationId","authorizationId","complaintId","actorUserId")
        VALUES ('${id}','a','${authorization}','${complaint}','${actor}');`;
     sql(claim('early','timed-authorization','timed-review'),/wait for recovery expiry/);
+    proveComplaintRecoveryPreparation(sql, 'timed-authorization');
     sql(claim('withdrawn','reviewed-purge'),/unwithdrawn Owner authority/);
     sql(`INSERT INTO "DataRetentionPolicyWithdrawal" (id,"organisationId","policyId","actorUserId",reason,"evidenceRef")
       VALUES ('timed-policy-withdrawn','a','timed-review-policy','admin-a','Replace synthetic timed policy','WITHDRAW-004');
@@ -234,6 +236,7 @@ test('complaint recovery migration preserves records and enforces reviewed remov
       VALUES ('claim-hold-release','a','expired',4,2,false,'admin-a','CLAIM-HOLD-002','Release hold after separate review');`);
     sql(claim('stale-hold-claim','before-new-hold'),/unchanged unheld revision/);
     sql(authorize('fresh-purge',{holdRevision:4,policy:'final-review-policy'}));
+    proveComplaintRecoveryPreparation(sql, 'fresh-purge');
     sql(claim('wrong-owner','fresh-purge','expired','ordinary-admin'),/matching unwithdrawn Owner authority/);
     // A later transaction failure must roll back the claim, delete and audit.
     sql(`BEGIN; ${claim('rolled-back')} SELECT 1/0; COMMIT;`,/division by zero/);

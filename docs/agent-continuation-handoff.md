@@ -3724,3 +3724,12 @@ nor authorizes a claim. Reason/actor retention still needs the prepared policy
 decision before live export. Durable preparation, reservation, database guards,
 full decision history and reconciliation integration remain required. This is
 not a deployed recovery feature or independent authority acceptance.
+
+The complaint preparation format now also passes source-driven checks against
+actual records created by the isolated PostgreSQL migration fixture: timed
+retention and later-policy disposal with a released hold. The fixture imports the
+TypeScript source in a separate process and explicitly excludes complaint subject
+fields. Seven focused tests and the API build pass. A regression corrects handling
+of withdrawn resolution evidence under REVIEW_REQUIRED; it remains ineligible as
+an AFTER_ANCHOR starting date. These are synthetic local checks, not live policy,
+provider, persistence, fencing or full-recovery acceptance.
