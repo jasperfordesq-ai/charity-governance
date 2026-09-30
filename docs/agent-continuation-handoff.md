@@ -2,6 +2,29 @@
 
 Last updated: 2026-09-30
 
+## Recovery authority development and corrected release status
+
+The private release receipt records d31ac597d6af47e307921edb1990353cf10eb618
+deployed on 30 September at 15:43 UTC after CI 36737004873 and E2E
+36737004807 passed (238 browser tests). It includes both the surviving-document
+restore comparison and backup preservation guard described below. Post-release
+restore rehearsal and off-host backup hash checks passed. This supersedes their
+earlier source-only status, but does not authorize host-loss reopening.
+
+Independent recovery authority is still under development. The new journal
+primitive is not connected to production actions. It requires an explicitly
+supplied, charity/installation-bound checkpoint from separate trusted custody;
+reads and writes refuse history shorter than that checkpoint or with a different
+digest at that generation. This detects loss or replacement of known history,
+not truncation after an old checkpoint. Receipts never authorize actions.
+
+Before integration, implement fresh independent authority, protected replay
+facts, provider durability/permissions, action fencing and supported recovery
+reconciliation. The bounded sequential prototype must not be presented as the
+complete store protocol or used as permission to reopen. No paid storage or
+retention terms have been activated. Full original DPO scope remains open;
+private proposal and review pack retain the decisions and evidence.
+
 ## Backup preservation guard - 30 September 2026 (source only)
 
 Inspection found age-only recursive deletion of backup sets after deploy and

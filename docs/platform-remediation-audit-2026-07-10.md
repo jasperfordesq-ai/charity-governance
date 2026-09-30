@@ -1,5 +1,14 @@
 # CharityPilot Full-Platform Remediation Audit
 
+> DPO-05 release-status correction, 2026-09-30: the private release receipt
+> records d31ac597 deployed after exact CI 36737004873 and E2E 36737004807
+> passed (238 tests), followed by restore rehearsal and off-host hash checks.
+> Both backup preservation and surviving-document restore comparison are in
+> that release. Earlier source-only notes below are historical. Independent
+> recovery authority remains incomplete: local journal/checkpoint development
+> is not wired into disposal or reopening, and cannot prove latest-history
+> freshness. Policy, real-role/privacy acceptance and wider lifecycle gaps remain.
+
 > DPO-05 backup preservation, 2026-09-30: reproduced age-only deletion after
 > backup/deploy. Removed automatic disposal; both commands preserve sets and
 > report age-review counts. All 118 backup/deployment tests pass locally.
