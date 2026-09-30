@@ -1,5 +1,17 @@
 # CharityPilot Agent Continuation Handoff
 
+> **Five March governance documents, exact main-body review,
+> 2026-09-30:** the retained March approval email names Child Safeguarding,
+> Complaints & Feedback, Conflict of Interest, Safeguarding and the March
+> Risk Register. Each matching verified backup Vault DOCX has identical
+> extracted main-body tokens to its email attachment, although binary
+> hashes differ. Later revisions and operational control performance are
+> unchecked. Private worksheet proposes Board/RESTRICTED for all,
+> CURRENT adopted March text for four policy/statement files, HISTORICAL
+> for the dated risk snapshot. Counts: 33/63 source evidenced, 32 with
+> some proposal, 31 with none, all PENDING. No live change. Evidence:
+> `.charitypilot-private/march-five-policy-source-review-2026-09-30.md`.
+
 > **Three Board minutes exact-source review, 2026-09-30:** March, July and
 > August 2026 DOCX files match verified backup hashes. July and August source
 > copies explicitly say DRAFT; the August draft records approval of July,

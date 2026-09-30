@@ -3518,3 +3518,11 @@ remaining external blockers and owners, and an explicit confirmation that no
 > 28/63 source-evidenced rows, 27 with some proposal and 36 without; all
 > PENDING. No live minute, approval, audience or report state changed.
 > See private `board-minutes-source-review-2026-09-30.md`.
+
+> **Nikita source review update, 2026-09-30:** Five named March governance
+> documents in the verified Vault backup have exact main-body token matches
+> to the retained approval-email attachments. The DOCX binaries differ;
+> later revisions and operational performance are unverified. Private
+> worksheet now has 33/63 source-evidenced rows, 32 with proposals and
+> 31 without; all PENDING. No live lifecycle, audience, risk or standards
+> status changed. See private `march-five-policy-source-review-2026-09-30.md`.
