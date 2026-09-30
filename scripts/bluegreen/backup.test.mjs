@@ -5,7 +5,7 @@ import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { test } from 'node:test';
-import { PURGE_RESTORE_TABLES, PURGE_RESTORE_SNAPSHOT_SQL } from '../purge-restore-reconciliation.mjs';
+import { PURGE_RESTORE_TABLES, PURGE_RESTORE_SNAPSHOT_SQL, PURGE_RESTORE_LOCAL_OBJECTS_SQL } from '../purge-restore-reconciliation.mjs';
 
 const scriptsDir = dirname(fileURLToPath(import.meta.url));
 const backupScriptPath = join(scriptsDir, 'backup.mjs');
@@ -527,6 +527,7 @@ function makeDrillRecordingRunCommand({
   rowCensusStdout = 'Organisation=3\nUser=5\n',
   documentHashStdout,
   failOn = null,
+  localKeys = [],
   history = () => ({ format: 1, capturedAt: '2026-09-30T10:00:00.000Z',
     tables: Object.fromEntries(PURGE_RESTORE_TABLES.map(table => [table, []])), claims: [], documents: [] }),
 }) {
@@ -557,6 +558,7 @@ function makeDrillRecordingRunCommand({
     if (command.includes(PURGE_RESTORE_SNAPSHOT_SQL)) {
       return { stdout: JSON.stringify(history(command, calls)) };
     }
+    if (command.includes(PURGE_RESTORE_LOCAL_OBJECTS_SQL)) return { stdout: JSON.stringify(localKeys) };
     if (line.includes('tar -xf') || line.includes('mkdir -p /drill-documents')) {
       return { stdout: documentHashStdout };
     }
@@ -571,7 +573,7 @@ function makeDrillRecordingRunCommand({
 function assertNeverTouchesLiveDb(calls) {
   for (const { command } of calls) {
     const line = commandLine(command);
-    if (command.includes('compose') && command.includes(PURGE_RESTORE_SNAPSHOT_SQL)) {
+    if (command.includes('compose') && (command.includes(PURGE_RESTORE_SNAPSHOT_SQL) || command.includes(PURGE_RESTORE_LOCAL_OBJECTS_SQL))) {
       assert.ok(command.includes('psql'));
       assert.ok(command.includes('db'));
       continue; // The exact SELECT-only current-authority query is permitted.
@@ -684,14 +686,15 @@ test("waitForDrillReadiness timeout carries the LAST probe's error, not an earli
   assert.equal(callCount(), 120);
 });
 
-test('runRestoreDrill refuses stale, unreadable and concurrently changed purge authority and cleans up', async () => {
+test('runRestoreDrill refuses stale, unreadable, changed authority or claimed archive files and cleans up', async () => {
   const { runRestoreDrill } = await loadBackupModule();
-  for (const scenario of ['stale', 'unreadable', 'changed']) {
+  for (const scenario of ['stale', 'unreadable', 'changed', 'claimed-file']) {
     const stateDir = makeTempDir('charitypilot-purge-drill-');
     try {
       const { plan, documentEntries } = writeFixtureBackup(stateDir);
       let liveReads = 0;
       const { runCommand, calls } = makeDrillRecordingRunCommand({
+        localKeys: scenario === 'claimed-file' ? [sha256Hex(Buffer.from('org/doc.pdf'))] : [],
         documentHashStdout: documentEntries.map(e => `${e.sha256}\t${e.bytes}\t${e.path}`).join('\n'),
         history(command) {
           const live = command.includes('compose');
@@ -706,7 +709,7 @@ test('runRestoreDrill refuses stale, unreadable and concurrently changed purge a
         },
       });
       await assert.rejects(() => runRestoreDrill({ runCommand, stateDir, plan, sleep: async () => {} }),
-        scenario === 'unreadable' ? /requires readable/ : /purge history differs/);
+        scenario === 'unreadable' ? /requires readable/ : scenario === 'claimed-file' ? /contains claimed local objects/ : /purge history differs/);
       assert.equal(teardownCallsOf(calls).length, 1);
       assert.equal(logsCallsOf(calls).length, 1);
       assertNeverTouchesLiveDb(calls);

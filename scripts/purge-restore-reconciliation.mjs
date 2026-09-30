@@ -1,4 +1,6 @@
-// Database-only reconciliation. Callers must independently authenticate the
+import { createHash } from 'node:crypto';
+
+// Callers must independently authenticate the
 // current authority source and isolated restored target. Never obtain both
 // sides from one old backup or interpret this result as permission to reopen.
 const tables = [
@@ -11,6 +13,39 @@ const entries = tables.map(name => `SELECT '${name}' AS name, COALESCE(jsonb_agg
 entries.push(`SELECT 'ClaimedPrimaryJobs' AS name, COALESCE(jsonb_agg(jsonb_build_object('id',t.id,'sha256',${digest('to_jsonb(t)')}) ORDER BY t.id),'[]'::jsonb) AS rows
  FROM "DocumentStorageDeletion" t JOIN "DocumentPurgeClaim" c ON c."deletionId"=t.id AND c."organisationId"=t."organisationId"`);
 export const PURGE_RESTORE_TABLES = Object.freeze([...tables, 'ClaimedPrimaryJobs']);
+// Object keys are hashed in PostgreSQL so raw storage paths are not returned.
+// Any claimed local object still present requires quarantine/reconciliation,
+// including a pending deletion; byte changes at the same key do not excuse it.
+export const PURGE_RESTORE_LOCAL_OBJECTS_SQL = `SELECT COALESCE(jsonb_agg(DISTINCT ${digest('t."storagePath"')}),'[]'::jsonb)
+ FROM "DocumentStorageDeletion" t JOIN "DocumentPurgeClaim" c
+ ON c."deletionId"=t.id AND c."organisationId"=t."organisationId" WHERE t.provider='local';`;
+
+export function assertNoClaimedLocalObjects(pathHashes, restoredEntries) {
+  if (!Array.isArray(pathHashes) || pathHashes.some(hash => typeof hash !== 'string' || !/^[a-f0-9]{64}$/.test(hash)) ||
+    new Set(pathHashes).size !== pathHashes.length || !Array.isArray(restoredEntries)) {
+    throw new Error('Invalid purge restore local-object inventory');
+  }
+  const claimed = new Set(pathHashes);
+  const seen = new Set();
+  let conflicts = 0;
+  for (const entry of restoredEntries) {
+    const path = entry?.path;
+    if (typeof path !== 'string' || !path || path.startsWith('/') || path.includes('\\') ||
+      path.split('/').some(part => !part || part === '.' || part === '..') || /[\u0000-\u001f\u007f]/.test(path) || seen.has(path)) {
+      throw new Error('Invalid purge restore local-object path');
+    }
+    seen.add(path);
+    if (claimed.has(createHash('sha256').update(path, 'utf8').digest('hex'))) conflicts++;
+  }
+  if (conflicts) {
+    const error = new Error('Restored archive contains claimed local objects; keep restored files quarantined.');
+    error.code = 'PURGE_RESTORE_LOCAL_OBJECTS_PRESENT';
+    error.conflicts = conflicts;
+    throw error;
+  }
+  return { checkedLocalObjects: restoredEntries.length, claimedLocalKeys: claimed.size,
+    claimedLocalObjectsPresent: 0, externalCopyReconciliationRequired: true };
+}
 // One statement uses one MVCC snapshot. Hashes cover entire records, including
 // authority, policy, object fingerprint, outcome and deadlines. Raw paths,
 // reasons and evidence content never leave PostgreSQL in this result.

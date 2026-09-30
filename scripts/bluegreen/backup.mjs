@@ -74,7 +74,8 @@ import { basename, dirname, join } from 'node:path';
 
 import { DEFAULT_POSTGRES_IMAGE } from '../postgres-backup.mjs';
 import { DOCUMENT_ARCHIVE_IMAGE } from '../personal-server.mjs';
-import { PURGE_RESTORE_SNAPSHOT_SQL, assertPurgeRestoreLedger } from '../purge-restore-reconciliation.mjs';
+import { PURGE_RESTORE_SNAPSHOT_SQL, PURGE_RESTORE_LOCAL_OBJECTS_SQL,
+  assertPurgeRestoreLedger, assertNoClaimedLocalObjects } from '../purge-restore-reconciliation.mjs';
 
 const DEFAULT_DATABASE_NAME = 'charitypilot';
 const DEFAULT_DATABASE_USER = 'charitypilot';
@@ -789,11 +790,14 @@ export async function runRestoreDrill(ctx) {
     restoredHistoryCommand[restoredHistoryCommand.length - 1] = PURGE_RESTORE_SNAPSHOT_SQL;
     const restoredHistory = await readHistory(restoredHistoryCommand);
     const purgeReconciliation = assertPurgeRestoreLedger(authority, restoredHistory);
+    const localKeysCommand = [...liveHistoryCommand];
+    localKeysCommand[localKeysCommand.length - 1] = PURGE_RESTORE_LOCAL_OBJECTS_SQL;
+    const localObjectReconciliation = assertNoClaimedLocalObjects(await readHistory(localKeysCommand), restoredDocumentEntries);
     // Detect authority changes during comparison. This bounded observation is
     // not a lock or permission to reopen an application after a real restore.
     assertPurgeRestoreLedger(authority, await readHistory(liveHistoryCommand));
     return { ok: true, rowCensus: restoredRowCensus, manifestVerification,
-      purgeReconciliation, applicationReopenAuthorized: false };
+      purgeReconciliation, localObjectReconciliation, applicationReopenAuthorized: false };
   } catch (error) {
     try {
       await ctx.runCommand(drillLogsCommand(containerName), { env });

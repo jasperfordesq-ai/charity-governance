@@ -5,7 +5,7 @@ import { readFileSync, readdirSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { test } from 'node:test';
 import { validateLocalDockerEndpoint } from './personal-server-docker-boundary.mjs';
-import { PURGE_RESTORE_SNAPSHOT_SQL, assertPurgeRestoreLedger } from './purge-restore-reconciliation.mjs';
+import { PURGE_RESTORE_SNAPSHOT_SQL, PURGE_RESTORE_LOCAL_OBJECTS_SQL, assertNoClaimedLocalObjects, assertPurgeRestoreLedger } from './purge-restore-reconciliation.mjs';
 
 const migrations = fileURLToPath(new URL('../apps/api/prisma/migrations/', import.meta.url));
 const target = '20260930010000_retention_policy_revisions';
@@ -323,6 +323,11 @@ test('retention policy and recovery-state upgrade preserve documents and enforce
     assert.equal(sql(`SELECT row_to_json(j)::text FROM "DocumentStorageDeletion" j WHERE id='job-final-claim';`), jobBefore,
       'review evidence must not dispatch, complete, redirect or alter primary cleanup');
     const authority = JSON.parse(sql(PURGE_RESTORE_SNAPSHOT_SQL));
+    const localKeys = JSON.parse(sql(PURGE_RESTORE_LOCAL_OBJECTS_SQL));
+    assert.equal(localKeys.length, 1);
+    assert.throws(() => assertNoClaimedLocalObjects(localKeys, [{ path: 'retention-a/file.pdf' }]),
+      { code: 'PURGE_RESTORE_LOCAL_OBJECTS_PRESENT' });
+    assert.equal(assertNoClaimedLocalObjects(localKeys, [{ path: 'retention-b/file.pdf' }]).claimedLocalObjectsPresent, 0);
     function restoredSql(database, statement) {
       const result = docker(['exec', '-i', container, 'psql', '-U', 'postgres', '-d', database, '-v', 'ON_ERROR_STOP=1', '-Atq'], statement);
       assert.equal(result.status, 0, result.stderr);

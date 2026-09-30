@@ -470,6 +470,16 @@ separately supervised compatibility/migration procedure; no automatic fallback
 to an empty ledger or raw restore is permitted. An unavailable live authority
 also prevents this drill from passing.
 
+The drill additionally compares the extracted regular-file inventory with
+SHA-256 hashes of local storage keys from current purge claims. A matching key
+refuses the drill even if its bytes differ or primary cleanup is still pending.
+No raw claimed path is returned by the database query or conflict report.
+Ambiguous/traversing paths and duplicate archive entries fail validation.
+This is a bounded regular-file inventory check, not proof about remote objects,
+alternate filesystem links or external copies. It never deletes restored files
+or rewrites the approved backup. A retained backup may legitimately fail this
+check and require a separately authorized isolated reconciliation procedure.
+
 This is not an application recovery/reopen gate. The
 recovery controller must independently establish the current authority, keep
 the target inaccessible, account for writes since capture and reconcile actual

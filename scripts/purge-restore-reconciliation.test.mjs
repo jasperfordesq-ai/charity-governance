@@ -1,5 +1,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
+import { createHash } from 'node:crypto';
+import { assertNoClaimedLocalObjects } from './purge-restore-reconciliation.mjs';
 import { PURGE_RESTORE_TABLES, reconcilePurgeRestore, assertPurgeRestoreLedger } from './purge-restore-reconciliation.mjs';
 
 function snapshot() {
@@ -9,6 +11,17 @@ function snapshot() {
     claims: [{ organisationId: 'charity-a', documentId: 'removed-document' }], documents: [],
   };
 }
+
+test('restored local files cannot reintroduce claimed keys even with changed bytes', () => {
+  const hash = createHash('sha256').update('charity-a/file.pdf').digest('hex');
+  assert.throws(() => assertNoClaimedLocalObjects([hash], [{ path: 'charity-a/file.pdf', sha256: 'different' }]),
+    { code: 'PURGE_RESTORE_LOCAL_OBJECTS_PRESENT' });
+  assert.equal(assertNoClaimedLocalObjects([hash], [{ path: 'charity-b/file.pdf' }]).claimedLocalObjectsPresent, 0);
+  for (const path of ['../file', '/file', 'a//b', 'a/./b', 'a\\b', 'a\nb']) {
+    assert.throws(() => assertNoClaimedLocalObjects([], [{ path }]));
+  }
+  assert.throws(() => assertNoClaimedLocalObjects([hash, hash], []));
+});
 
 test('matching database history still requires file and external-copy reconciliation', () => {
   const result = assertPurgeRestoreLedger(snapshot(), snapshot());

@@ -2,6 +2,13 @@
 
 Last updated: 2026-09-30
 
+Restore archive follow-up: the bluegreen drill now checks extracted regular
+files against hashed current claimed local-storage keys. Matching paths fail
+even if bytes differ or primary cleanup is pending. Path ambiguity and duplicate
+entries fail validation. Tests cover conflict cleanup and charity-path scope;
+remote copies and alternate filesystem links are outside this bounded check.
+No destructive reconciliation is performed and no reopen approval is issued.
+
 Restore-drill integration checkpoint: bluegreen/backup.mjs now invokes purge
 reconciliation after artifact verification. It obtains current history with a
 SELECT-only query to the configured live database, compares the disposable
