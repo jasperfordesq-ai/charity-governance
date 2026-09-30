@@ -2,6 +2,31 @@
 
 Last updated: 2026-09-30
 
+## Scoped copy authority dashboard - 30 September 2026 (source only)
+
+Owners can now load complete scoped authority/hold histories and copy-policy
+history from the existing document and complaint observation forms. Exactly one
+unwithdrawn approved copy policy is required. The form records explicit scope,
+observation, predecessor and hold revisions, separate retention/hold evidence,
+reason, expiry and a reviewed creation anchor for timed policies. It supports
+withdrawal without grant fields. Changing evidence clears confirmation; every
+submission invalidates review state, including uncertain responses.
+
+An explicit selection attaches current scoped authority to a later observation
+and changes the available outcomes to its reviewed disposition. The database
+still rechecks ownership, policy, retention, holds, chronology and expiry.
+Loading/refreshing review clears the selected observation authority. This UI
+is not provider erasure or aggregate-erasure proof.
+
+Two scope/policy selection unit tests pass. Web/E2E type checks and targeted lint
+pass. Both compiled isolated Chromium journeys pass (58.4s), including copy
+policy proposal/approval/withdrawal, hold/release, a retained scope reauthorized
+for disposal, an explicitly bound absence observation, and authority withdrawal.
+Evidence: private copy-authority-ui-browser.log. Session 76759 is terminal exit 0.
+Runtime remains e39edbe8; no live business record or policy changed. Admin
+preservation navigation, remaining lifecycle audit coverage, exact release and
+live acceptance plus the original broader DPO requirements remain open.
+
 ## Copy retention policy dashboard - 30 September 2026 (source only)
 
 Documents and Registers now expose separate DOCUMENT_COPY and COMPLAINT_COPY

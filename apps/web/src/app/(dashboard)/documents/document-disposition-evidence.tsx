@@ -2,6 +2,8 @@
 
 import { useRef, useState } from 'react';
 import { Button, Checkbox, Input, Textarea } from '@heroui/react';
+import { CopyAuthorityReview } from './copy-authority-review';
+import type { CopyAuthority } from '@/lib/copy-authority-review';
 import { CopyPreservationReview } from './copy-preservation-review';
 import { api } from '@/lib/api';
 import { apiErrorMessage, isApiForbiddenError } from '@/lib/errors';
@@ -28,6 +30,7 @@ export function ComplaintDispositionEvidence(props: Props) {
 }
 function DispositionEvidence({ authorizationId, plan, isOwner, kind }: Props & {kind:'document'|'complaint'}) {
   const areas: Partial<Record<Area,string>> = kind==='complaint'?complaintAreas:documentAreas;
+  const [authority, setAuthority] = useState<CopyAuthority | null>(null);
   const [rows, setRows] = useState<Observation[] | null>(null);
   const [cursor, setCursor] = useState<string | null>(null);
   const [checkedAt, setCheckedAt] = useState(0);
@@ -47,14 +50,15 @@ function DispositionEvidence({ authorizationId, plan, isOwner, kind }: Props & {
   };
   const load = async (older = false) => {
     if (pending.current) return;
-    pending.current = true; setBusy(true); setError('');
+    pending.current = true; setBusy(true); setError(''); setAuthority(null); setConfirmed(false);
     try { await history(older); }
     catch (cause) {
       if (isApiForbiddenError(cause)) { setRows(null); setCursor(null); setForm(fresh()); setConfirmed(false); }
       setError(apiErrorMessage(cause, 'Copy evidence could not be loaded.'));
     } finally { pending.current = false; setBusy(false); }
   };
-  const planned = form.area ? plan[form.area]?.disposition ?? '' : '';
+  const selectedAuthority = authority?.area === form.area && authority.scopeRef === form.scopeRef ? authority : null;
+  const planned = selectedAuthority?.disposition ?? (form.area ? plan[form.area]?.disposition ?? '' : '');
   const allowed = (status: Status) => status === 'NEEDS_REVIEW' || status === 'FAILED' ||
     (['PENDING_DISPOSAL', 'VERIFIED_ABSENT'].includes(status) && planned === 'DISPOSE') ||
     (status === 'RETAINED_APPROVED' && planned === 'RETAIN_APPROVED') || (status === 'NOT_APPLICABLE' && planned === 'NOT_APPLICABLE');
@@ -65,9 +69,9 @@ function DispositionEvidence({ authorizationId, plan, isOwner, kind }: Props & {
     if (!isOwner || pending.current || !valid || !confirmed) return;
     pending.current = true; setBusy(true); setError(''); setNotice('');
     try {
-      await api.post(path, { ...form, reason: form.reason.trim(), observedAt: new Date(form.observedAt).toISOString(),
+      await api.post(path, { ...form, ...(selectedAuthority ? { copyAuthorityId: selectedAuthority.id } : {}), reason: form.reason.trim(), observedAt: new Date(form.observedAt).toISOString(),
         nextReviewAt: form.nextReviewAt ? new Date(form.nextReviewAt).toISOString() : null, evidenceReviewed: true });
-      setForm(fresh()); setCorrecting(false); setConfirmed(false);
+      setForm(fresh()); setAuthority(null); setCorrecting(false); setConfirmed(false);
       setNotice('Scoped evidence recorded. No files were erased by this action.');
       try { await history(); } catch { setRows(null); setError('Evidence was saved, but history could not refresh. Load copy evidence before another entry.'); }
     } catch (cause) {
@@ -89,7 +93,7 @@ function DispositionEvidence({ authorizationId, plan, isOwner, kind }: Props & {
       <p>Observed: {new Date(row.observedAt).toLocaleString('en-IE')}. Recorded: {new Date(row.occurredAt).toLocaleString('en-IE')}.</p>
       {row.nextReviewAt ? <p>Follow-up: {new Date(row.nextReviewAt).toLocaleString('en-IE')}{new Date(row.nextReviewAt).getTime() <= checkedAt ? ' — overdue when loaded; review required' : ''}</p> : null}
       {isOwner && !rows.some(other => other.area === row.area && other.scopeRef === row.scopeRef && other.revision > row.revision) ? <Button size="sm" className="mt-2" variant="flat" isDisabled={busy} onPress={() => {
-        setForm({ ...fresh(), area: row.area, scopeRef: row.scopeRef, revision: row.revision + 1 }); setCorrecting(true); setConfirmed(false); setError(''); setNotice('');
+        setForm({ ...fresh(), area: row.area, scopeRef: row.scopeRef, revision: row.revision + 1 }); setCorrecting(true); setAuthority(null); setConfirmed(false); setError(''); setNotice('');
       }}>Record a later observation</Button> : null}
     </li>)}</ul> : null}
     {cursor ? <Button size="sm" className="mt-2" isDisabled={busy} onPress={() => load(true)}>Load older copy evidence</Button> : null}
@@ -104,13 +108,18 @@ function DispositionEvidence({ authorizationId, plan, isOwner, kind }: Props & {
         onChange={event => setForm(current => ({ ...current, status: event.target.value as Status }))}>
         <option value="">Choose an evidenced outcome</option>{(Object.keys(statuses) as Status[]).filter(allowed).map(value => <option key={value} value={value}>{statuses[value]}</option>)}
       </select></label>
+      {selectedAuthority ? <p>Observation will cite copy authority revision {selectedAuthority.revision} ({selectedAuthority.evidenceRef}).</p> : null}
       <Input label="Copy observation evidence reference" value={form.evidenceRef} maxLength={120} isDisabled={busy} onValueChange={value => setForm(current => ({ ...current, evidenceRef: value }))} />
       <Textarea label="Reason for copy observation" value={form.reason} maxLength={500} isDisabled={busy} onValueChange={value => setForm(current => ({ ...current, reason: value }))} />
       <label className="block">Observation time (your local time)<input aria-label="Copy observation time" type="datetime-local" step="0.001" className="mt-1 block rounded border p-2" value={form.observedAt} disabled={busy} onChange={event => setForm(current => ({ ...current, observedAt: event.target.value }))} /></label>
       <label className="block">Follow-up review time (required for unresolved or retained copies)<input aria-label="Copy follow-up time" type="datetime-local" step="0.001" className="mt-1 block rounded border p-2" value={form.nextReviewAt} disabled={busy} onChange={event => setForm(current => ({ ...current, nextReviewAt: event.target.value }))} /></label>
       <Checkbox isSelected={confirmed} onValueChange={setConfirmed} isDisabled={busy}>I reviewed the evidence for this exact scope and outcome.</Checkbox>
       <div className="flex flex-wrap gap-2"><Button size="sm" isDisabled={busy || !valid || !confirmed} onPress={save}>Record copy observation</Button>
-        {correcting ? <Button size="sm" variant="flat" isDisabled={busy} onPress={() => { setForm(fresh()); setCorrecting(false); setConfirmed(false); }}>Start a new scope</Button> : null}</div>
+        {correcting ? <Button size="sm" variant="flat" isDisabled={busy} onPress={() => { setForm(fresh()); setAuthority(null); setCorrecting(false); setConfirmed(false); }}>Start a new scope</Button> : null}</div>
+      {correcting && form.area && validRef(form.scopeRef) ? <CopyAuthorityReview
+        key={`authority:${authorizationId}:${form.area}:${form.scopeRef}:${form.revision}`}
+        kind={kind} authorizationId={authorizationId} area={form.area} scopeRef={form.scopeRef}
+        observationRevision={form.revision - 1} onSelect={value => { setAuthority(value); setConfirmed(false); setForm(current => ({ ...current, status: '' })); }} /> : null}
       {form.area && validRef(form.scopeRef) ? <CopyPreservationReview
         key={`${authorizationId}:${form.area}:${form.scopeRef}:${form.revision}`}
         kind={kind} authorizationId={authorizationId} area={form.area} scopeRef={form.scopeRef}

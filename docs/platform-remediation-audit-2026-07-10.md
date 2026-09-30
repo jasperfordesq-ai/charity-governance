@@ -1,5 +1,11 @@
 # CharityPilot Full-Platform Remediation Audit
 
+> DPO-05 scoped authority dashboard, 2026-09-30: Owner review/withdrawal
+> forms now bind current policies and scope revisions, and later observations
+> can explicitly cite the reviewed authority. Both compiled isolated journeys
+> pass. Admin preservation navigation, further audit coverage, deployment and
+> full live acceptance remain outstanding; this is not provider erasure proof.
+
 > DPO-05 copy policy dashboard, 2026-09-30: separate copy-class proposal,
 > approval and withdrawal controls are wired into Documents and Registers.
 > Both compiled isolated browser journeys pass; scoped authority forms, Admin

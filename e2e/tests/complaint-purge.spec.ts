@@ -1,3 +1,4 @@
+import { reviewCopyAuthority } from '../helpers/copy-authority';
 import { reviewCopyPolicy } from '../helpers/copy-policy';
 import { reviewCopyPreservation } from '../helpers/copy-preservation';
 import { test, expect, reliableFill, uniqueEmail, TEST_PASSWORD } from '../fixtures';
@@ -105,5 +106,6 @@ test('Owner reviews and withdraws complaint disposal then explicitly purges only
     expect((await client.query(`SELECT e.revision,e.status,e."actorUserId" FROM "ComplaintPurgeDispositionEvent" e JOIN "ComplaintPurgeAuthorization" a ON a.id=e."authorizationId" WHERE a."complaintId"=$1 ORDER BY e.revision`,[id])).rows)
       .toEqual([{revision:1,status:'RETAINED_APPROVED',actorUserId:owner.userId},{revision:2,status:'NEEDS_REVIEW',actorUserId:owner.userId}]);
   });
-  await reviewCopyPolicy(page, 'Complaint');
+  await reviewCopyPolicy(page, 'Complaint', true);
+  await reviewCopyAuthority(page, copies, 'SYNTHETIC-COPY-OBSERVATION-002');
 });
