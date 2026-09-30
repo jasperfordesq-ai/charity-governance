@@ -2,6 +2,17 @@
 
 Last updated: 2026-09-30
 
+Recovery R1 policy persistence is now implemented locally in migration
+`20260930010000_retention_policy_revisions`: immutable proposals/approvals and
+separate withdrawal facts, same-charity active actor checks, complete approval
+evidence and bounded explicit periods. No tenant policy is seeded or activated.
+The new `test:retention-policy` command upgrades disposable PostgreSQL 16
+through the previous history and tests this migration with preserved document
+and upload-intent rows; it passes with teardown. Schema validation, API build
+and 51 model-map/reset-safety checks pass. Removal state, policy API/UI, true
+trash/restore, purge and deployment remain open. See the recovery contract;
+this does not close DPO-05 or authorize disposal.
+
 The revised Nikita goal is active: finish, deploy and verify technical
 remediation, prepare policy decisions and provide an evidence/acceptance pack.
 The private `nikita-review-pack-2026-09-30.md` now contains nine proposed

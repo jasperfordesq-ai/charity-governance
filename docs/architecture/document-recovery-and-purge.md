@@ -1,8 +1,27 @@
 # Document recovery and purge implementation contract
 
-Status: implementation specification, 30 September 2026. Not implemented by
-this document. Completes part of DPO-05; other data classes and downstream
-stores remain in the full data-lifecycle scope.
+Status: implementation in progress, 30 September 2026. R1 policy persistence
+is implemented locally; removal state and R2-R5 remain open. Other data
+classes and downstream stores remain in the full data-lifecycle scope.
+
+Policy persistence checkpoint: immutable `DataRetentionPolicyRevision` rows
+record DRAFT or APPROVED proposals with a class, revision, retention mode and
+recovery days. Approval requires complete evidence facts and a currently
+active Owner of the same charity; creation permits active Owner/Admin.
+Withdrawal is a separate immutable fact requiring the active Owner and locks
+the policy row. No policy is seeded, no route exposes approval yet and no
+expiry worker consumes these rows. These actor checks do not independently
+verify the cited policy evidence. Class identifiers and day bounds are storage
+validation, not legal classification or recommended durations. Approval of a
+draft will create a new revision rather than rewriting the original.
+
+`npm run test:retention-policy` applies the preceding migration history in a
+disposable local PostgreSQL 16 container, preserves a document/upload fixture,
+applies the new migration and verifies scoped actors, complete policy facts,
+immutable history and withdrawal. The test passes with container removal.
+API build, schema validation and 51 model-map/reset-safety checks also pass.
+The migration is not deployed. This checkpoint does not prove recovery,
+purge/hold races, user-interface behavior or provider/backup disposal.
 
 ## Observed starting point
 
