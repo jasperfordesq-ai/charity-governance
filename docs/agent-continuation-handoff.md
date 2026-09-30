@@ -1,5 +1,15 @@
 # CharityPilot Agent Continuation Handoff
 
+> **1 October 00:40 Dublin source/checkpoint:** The private VM remains on
+> verified `8d4a0058`. Latest pushed source is `e1b09a26`, which repairs
+> the disposable role proof's security-scan failure on `8a74c178` and adds
+> validation of an optional app runtime role name. Local security scan,
+> 82 blue-green deployment tests and full 140-migration complaint protocol
+> pass. Exact hosted checks on `e1b09a26` are still required; its role path
+> is not configured on the VM. The requested post-23:15 update to Nikita was
+> sent at 00:39 Dublin, confirmed in Sent. Private details and message ID
+> are in `.charitypilot-private/RESUME-HERE.md`.
+
 > **Restricted runtime feasibility, 2026-10-01:** source now supports an
 > optional separate blue-green app env file for API/web/jobs while DB and
 > migration retain the owner file. Rendered Compose and deployment tests
