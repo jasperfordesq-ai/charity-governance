@@ -5,6 +5,7 @@ import { z } from 'zod';
 import type { AuthorityObjectStore, AuthorityHeadPublisher, AuthorityCheckpoint } from './recovery-authority-journal.js';
 import { validateRecoveryAuthorityEntry } from './recovery-authority-journal.js';
 import { inspectRecoveryPreparationEnvelope } from './recovery-preparation-envelope.js';
+import { inspectHoldPreparationEnvelope } from './hold-recovery-envelope.js';
 import { inspectRecoveryOutcomeEnvelope } from './recovery-outcome-envelope.js';
 import { validateRecoveryControlValue, type RecoveryControlStore, type RecoveryControlValue } from './recovery-operation-reservation.js';
 
@@ -178,6 +179,30 @@ export class S3AuthorityObjectStore implements AuthorityObjectStore, AuthorityHe
 
   async createOutcome(operationId: string, envelope: string) {
     const request = this.outcomeRequest(operationId); this.checkOutcome(operationId, envelope);
+    return this.writeObject(request, envelope, { IfNoneMatch: '*' }, 32768);
+  }
+
+  private holdPreparationRequest(operationId: string) {
+    const request = this.replayRequest(operationId);
+    return { ...request, Key: `hold-preparations/${this.config.installationId}/${this.config.organisationId}/${operationId}.json` };
+  }
+
+  private checkHoldPreparation(operationId: string, envelope: string) {
+    const context = inspectHoldPreparationEnvelope(envelope);
+    if (context.installationId !== this.config.installationId || context.organisationId !== this.config.organisationId
+      || context.operationId !== operationId || context.keyId !== this.config.replayKeyArn) {
+      throw new Error('Hold preparation envelope scope mismatch');
+    }
+  }
+
+  async readHoldPreparation(operationId: string) {
+    const object = await this.readObject(this.holdPreparationRequest(operationId), undefined, 32768);
+    if (!object) return null;
+    this.checkHoldPreparation(operationId, object.body); return object.body;
+  }
+
+  async createHoldPreparation(operationId: string, envelope: string) {
+    const request = this.holdPreparationRequest(operationId); this.checkHoldPreparation(operationId, envelope);
     return this.writeObject(request, envelope, { IfNoneMatch: '*' }, 32768);
   }
 

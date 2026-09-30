@@ -13,10 +13,26 @@ occur during capture. The schema excludes complaint narrative and the database
 checks the prior event, current revisions, identity and digest. Both restore and
 reset inventories include it. Local evidence is recorded in the private hold
 preparation logs: API2,523, PostgreSQL5, inventory/reset/restore57 and the full
-production-migration integration passed without failures or skips. Next work
-must bind encrypted independent publication to hold
-execution/outcome and recovery replay; this candidate store does not close the
-preservation-history gap or permit live activation.
+production-migration integration passed without failures or skips.
+
+The follow-up hold envelope has its own authenticated payload kind and bounded
+`hold-preparations/` object namespace. Publication decrypts the original candidate,
+checks its reserved facts and unchanged writer/epoch/control, then records
+`COMPLAINT_HOLD_PREPARATION_V1` through the existing reserved journal protocol.
+Older readers reject this new kind. The published reader verifies full current
+history and exact ciphertext, with no recreation fallback for missing bytes.
+Candidate storage, journal-entry and head acknowledgement losses resume exact
+bytes and operation identity. These are synthetic-provider tests, not AWS custody
+acceptance. All receipts still grant no action permission; the reservation stays
+occupied. Hold execution/outcome, safe cancellation of stale disposal reservations
+and recovery replay remain required before activation. The original role/file,
+report, replay-event, C1 and policy acceptance requirements remain open.
+
+Hold-publication verification: API2,525 and separate PostgreSQL5 tests passed
+with no failures/skips. SDK transport is synthetic. Keep the resulting revision
+steady for exact hosted CI/E2E and supported deployment review before starting
+another source slice. Deployment must keep recovery activation off; independent
+provider custody and complete execution/replay are not supplied by this release.
 
 Migration `20260930234500_complaint_recovery_execution` adds a durable, immutable
 charity/installation/writer binding and transaction-bound execution receipts.
