@@ -243,7 +243,13 @@ test.describe('Confluence connector', () => {
       externalPublicationSiteId: destination.siteId, externalPublicationSpaceId: destination.spaceId });
   });
 
-  test('no token material reaches the browser in observed connector responses', async ({ ownerPage }) => {
+  test('no token material reaches the browser in observed connector responses', async ({ newFencedContext }) => {
+    test.setTimeout(120_000);
+    const owner = await createVerifiedOwner({ email: uniqueEmail('confluence-disclosure'), password: TEST_PASSWORD,
+      name: 'Disclosure Owner', organisationName: 'Isolated Disclosure Charity' });
+    const storageState = await createAuthenticatedStorageState({ ...owner, role: 'OWNER' });
+    const context = await newFencedContext({ storageState });
+    const ownerPage = await context.newPage();
     const bodies: string[] = [];
     ownerPage.on('response', (response) => {
       if (!CONFLUENCE_API.test(response.url())) return;
@@ -257,21 +263,33 @@ test.describe('Confluence connector', () => {
       /\/confluence\/status$/.test(response.url()) && response.request().method() === 'GET');
     await gotoWithDevServerRetry(ownerPage, '/integrations');
     expect((await status).status()).toBe(200);
-    if (await ownerPage.getByRole('button', { name: 'Connect Confluence' }).count()) {
-      const authorize = ownerPage.waitForResponse((response) =>
-        /\/confluence\/authorize$/.test(response.url()) && response.request().method() === 'GET');
-      await ownerPage.getByRole('button', { name: 'Connect Confluence' }).click();
-      expect((await authorize).status()).toBe(200);
-      await expect(ownerPage.getByRole('button', { name: /continue to Atlassian/i })).toBeVisible();
-    } else {
-      const spaces = ownerPage.waitForResponse((response) =>
-        /\/confluence\/spaces/.test(response.url()) && response.request().method() === 'GET');
-      await ownerPage.getByRole('button', { name: /Change the space/i }).click();
-      expect((await spaces).status()).toBe(200);
-    }
+    // Exercise both disconnected and connected responses deterministically.
+    // A connected account can lack a selected space; it need not offer Change.
+    await expect(ownerPage.getByRole('button', { name: 'Connect Confluence' })).toBeVisible();
+    const authorize = ownerPage.waitForResponse((response) =>
+      /\/confluence\/authorize$/.test(response.url()) && response.request().method() === 'GET');
+    await ownerPage.getByRole('button', { name: 'Connect Confluence' }).click();
+    expect((await authorize).status()).toBe(200);
+    const continueButton = ownerPage.getByRole('button', { name: /continue to Atlassian/i });
+    await expect(continueButton).toBeVisible();
+    const authorizationUrl = await continueButton.getAttribute('href');
+    expect(authorizationUrl).toBeTruthy();
+    const state = new URL(authorizationUrl!).searchParams.get('state');
+    expect(state).toBeTruthy();
+    const callback = ownerPage.waitForResponse((response) =>
+      /\/confluence\/callback$/.test(response.url()) && response.request().method() === 'POST');
+    await gotoWithDevServerRetry(ownerPage,
+      `/integrations/confluence/callback?code=fake-authorization-code&state=${encodeURIComponent(state!)}`);
+    expect((await callback).status()).toBe(200);
+    await gotoWithDevServerRetry(ownerPage, '/integrations');
+    await expect(ownerPage.getByRole('button', { name: /Choose a space/i })).toBeVisible();
+    const spaces = ownerPage.waitForResponse((response) =>
+      /\/confluence\/spaces/.test(response.url()) && response.request().method() === 'GET');
+    await ownerPage.getByRole('button', { name: /Choose a space/i }).click();
+    expect((await spaces).status()).toBe(200);
 
-    await expect.poll(() => bodies.length, { message: 'both connector responses must be captured' })
-      .toBeGreaterThanOrEqual(2);
+    await expect.poll(() => bodies.length, { message: 'status, authorize, callback and spaces responses must be captured' })
+      .toBeGreaterThanOrEqual(5);
     for (const body of bodies) {
       const lowered = body.toLowerCase();
       // The API's own unit tests pin this by allow-list; this is the same rule

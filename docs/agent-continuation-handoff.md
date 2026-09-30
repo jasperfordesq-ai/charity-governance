@@ -2,6 +2,28 @@
 
 Last updated: 2026-09-30
 
+Private deployment checkpoint: 442eb788920bb79b021eaef668c1a97af3bf81ce is live
+on the existing private host from 11:44:52 UTC. Exact CI and E2E succeeded;
+E2E recorded234 first-pass and two retry passes. Eight migrations passed the
+unchanged migration gate; candidate/front-door checks and runtime health pass.
+Pre/post-migration backups have matching off-host copies and the supported
+post-migration isolated restore drill passed. The previous321a0c84 runtime is
+retained for rollback. The live purge ledger is empty: this drill does not
+prove recovery of populated purge history or authorize reopening after host
+loss. Owner browser checks confirm the22-act Minute Book, governance audit,
+empty recovery/policy lists and nine existing replay events. No live policy,
+classification, report approval or deletion was performed. Broader record
+classes, independently durable purge authority and recovery reopening remain
+technical scope; policy decisions and role-specific acceptance remain open.
+
+The two442eb788 retry cases are repaired locally: register history now owns its
+charity; the token-disclosure journey owns its integration and explicitly tests
+disconnected and connected-without-a-space states. It no longer assumes that
+every connected account offers Change the space. Both complete spec files pass
+together,24 first-attempt journeys (1.2m), managed runner exit0. TypeScript and
+all116 runner contracts pass. This follow-up changes tests only, not runtime
+behavior; exact successor hosted results are not yet available.
+
 Further browser isolation checkpoint: 5b0e7c66 E2E completed with234 first-pass
 tests and two retry passes. Compliance pagination inherited six earlier audit
 rows; the Confluence connection journey inherited an existing integration.

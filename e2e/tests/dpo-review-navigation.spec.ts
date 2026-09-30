@@ -112,8 +112,13 @@ test.describe('DPO review navigation', () => {
       .getByText('Synthetic verification before the risk changed')).toBeVisible();
   });
 
-  test('an Owner can page older sensitive register changes without exposing their values', async ({ owner, ownerPage }) => {
+  test('an Owner can page older sensitive register changes without exposing their values', async ({ newFencedContext }) => {
     test.setTimeout(120_000);
+    const owner = await createVerifiedOwner({ email: uniqueEmail('register-history'), password: TEST_PASSWORD,
+      name: 'Register History Owner', organisationName: 'Isolated Register History Charity' });
+    const storageState = await createAuthenticatedStorageState({ ...owner, role: 'OWNER' });
+    const context = await newFencedContext({ storageState });
+    const ownerPage = await context.newPage();
     const stamp = Date.now();
     await withDb(async (client) => {
       await client.query(
