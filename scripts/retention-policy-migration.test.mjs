@@ -5,6 +5,7 @@ import { readFileSync, readdirSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { test } from 'node:test';
 import { validateLocalDockerEndpoint } from './personal-server-docker-boundary.mjs';
+import { PURGE_RESTORE_SNAPSHOT_SQL, assertPurgeRestoreLedger } from './purge-restore-reconciliation.mjs';
 
 const migrations = fileURLToPath(new URL('../apps/api/prisma/migrations/', import.meta.url));
 const target = '20260930010000_retention_policy_revisions';
@@ -261,6 +262,10 @@ test('retention policy and recovery-state upgrade preserve documents and enforce
       assert.equal(sql(`SELECT count(*) FROM "DocumentPurgeClaim"; SELECT count(*) FROM "DocumentStorageDeletion"; SELECT count(*) FROM "Document" WHERE id='retained-doc';`), '0\n0\n1');
       if (guard === 'hold') sql(`UPDATE "Document" SET "deletionHold"=false WHERE id='retained-doc';`);
     }
+    // Keep an actual pre-claim backup to prove that faithful restoration can
+    // still resurrect a document whose purge was authorized after the backup.
+    const oldBackup = docker(['exec', container, 'pg_dump', '-U', 'postgres', '--no-owner', '--no-privileges', 'postgres']);
+    assert.equal(oldBackup.status, 0, oldBackup.stderr);
     const claiming = session('purge-claim-holder', `BEGIN; ${claim('final-claim')} SELECT 'BARRIER';`, true);
     await until(() => claiming.output().includes('BARRIER'), 'purge claim did not reach its barrier');
     const duplicateClaim = session('purge-claim-duplicate', claim('duplicate-claim'));
@@ -317,6 +322,31 @@ test('retention policy and recovery-state upgrade preserve documents and enforce
     assert.equal(sql(`SELECT string_agg(status,',' ORDER BY revision) FROM "DocumentPurgeDispositionEvent" WHERE area='VERSIONS';`), 'VERIFIED_ABSENT,NEEDS_REVIEW');
     assert.equal(sql(`SELECT row_to_json(j)::text FROM "DocumentStorageDeletion" j WHERE id='job-final-claim';`), jobBefore,
       'review evidence must not dispatch, complete, redirect or alter primary cleanup');
+    const authority = JSON.parse(sql(PURGE_RESTORE_SNAPSHOT_SQL));
+    function restoredSql(database, statement) {
+      const result = docker(['exec', '-i', container, 'psql', '-U', 'postgres', '-d', database, '-v', 'ON_ERROR_STOP=1', '-Atq'], statement);
+      assert.equal(result.status, 0, result.stderr);
+      return result.stdout.trim();
+    }
+    for (const database of ['old_restore', 'current_restore']) {
+      assert.equal(docker(['exec', container, 'createdb', '-U', 'postgres', database]).status, 0);
+    }
+    restoredSql('old_restore', oldBackup.stdout);
+    restoredSql('old_restore', readFileSync(`${migrations}/20260930070000_document_purge_disposition/migration.sql`, 'utf8'));
+    const oldRestored = JSON.parse(restoredSql('old_restore', PURGE_RESTORE_SNAPSHOT_SQL));
+    assert.throws(() => assertPurgeRestoreLedger(authority, oldRestored), error => {
+      assert.equal(error.code, 'PURGE_RESTORE_RECONCILIATION_REQUIRED');
+      assert.equal(error.report.resurrectedDocuments, 1);
+      assert.ok(error.report.differences.some(item => item.table === 'DocumentPurgeClaim' && item.missing === 1));
+      return true;
+    });
+    const currentBackup = docker(['exec', container, 'pg_dump', '-U', 'postgres', '--no-owner', '--no-privileges', 'postgres']);
+    assert.equal(currentBackup.status, 0, currentBackup.stderr);
+    restoredSql('current_restore', currentBackup.stdout);
+    const currentRestored = JSON.parse(restoredSql('current_restore', PURGE_RESTORE_SNAPSHOT_SQL));
+    const reconciled = assertPurgeRestoreLedger(authority, currentRestored);
+    assert.equal(reconciled.databaseLedgerMatches, true);
+    assert.equal(reconciled.objectAndExternalCopyReconciliationRequired, true);
   } finally {
     for (const item of sessions) if (item.child.exitCode === null) item.child.stdin.end('ROLLBACK;\n');
     const removed = docker(['rm', '--force', '--volumes', container]);

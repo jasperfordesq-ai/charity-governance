@@ -2,6 +2,21 @@
 
 Last updated: 2026-09-30
 
+Backup reconciliation checkpoint, 30 September: the new database comparison
+primitive rejects missing/changed/unexpected purge history and reappearing
+claimed documents. Four focused tests and the populated PostgreSQL migration
+proof pass. That proof restores actual pre-claim and current pg_dump backups
+into separate disposable databases: the older restore resurrects a document
+and is rejected; the current restore matches the database ledger. Objects and
+external copies still require reconciliation. This is local proof only.
+
+Next: wire independently authenticated current authority into recovery paths,
+preserve durable authority independently of old backups, handle concurrent
+source changes, and check restored files/copies before reopening. The existing
+bluegreen/backup.mjs runRestoreDrill currently verifies artifact fidelity and
+row counts only; it does not invoke this primitive. Do not claim the live
+recovery safeguard is enforced yet. No live host profile was changed.
+
 Dashboard downstream-evidence checkpoint, 30 September 2026: each claimed
 disposal decision now exposes copy/backup history and an Owner form for a named
 scope. Plan-compatible outcomes, evidence, observation time, required follow-up

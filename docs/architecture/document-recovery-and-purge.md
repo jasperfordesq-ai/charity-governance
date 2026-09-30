@@ -445,6 +445,30 @@ this specification itself.
 
 ## Scoped downstream evidence API
 
+### Backup reconciliation proof (30 September 2026)
+
+`scripts/purge-restore-reconciliation.mjs` compares a current authoritative
+database snapshot against an isolated restored database. A single PostgreSQL
+statement hashes complete policy, withdrawal, purge authorization, claim,
+claimed-job and disposition records. Missing, altered or unexpected history,
+claim-scope differences and reappearing claimed documents refuse reconciliation.
+Diagnostics contain counts, not file paths, reasons or evidence content.
+
+The populated PostgreSQL migration test now takes actual pre-claim and current
+`pg_dump` backups and restores them into separate disposable databases. The
+older backup reintroduces the document and is rejected; the current backup
+matches. Four focused tests cover altered/missing/extra history, charity scope,
+conflicting source records and malformed evidence. All passed locally.
+
+This is a tested comparison primitive, not an integrated recovery gate. The
+recovery controller must independently establish the current authority, keep
+the target inaccessible, account for writes since capture and reconcile actual
+objects and external copies before reopening. Reading both inputs from the
+same old backup is invalid. If the latest authority is unavailable, this proof
+cannot establish safe recovery. Integration with supported recovery procedures,
+durable independent authority and file/copy reconciliation remain outstanding.
+No deployment or live recovery acceptance is claimed by these tests.
+
 `GET /documents/purge-authorizations/:id/dispositions` returns up to 50 newest
 review observations with a same-authorization `before` cursor. Only Owner/Admin
 web sessions may read it. Paths, file hashes and raw provider errors are omitted.
