@@ -161,6 +161,30 @@ test('retention policy and recovery-state upgrade preserve documents and enforce
     sql(`DELETE FROM "DocumentPurgeAuthorization" WHERE id='authorized';`, /append-only/);
     sql(`DELETE FROM "Document" WHERE id='retained-doc';`, /authorized purge transition/);
     assert.equal(sql(`SELECT count(*) FROM "DocumentPurgeAuthorization"; SELECT count(*) FROM "DocumentStorageDeletion";`), '1\n0');
+    sql(readFileSync(`${migrations}/20260930050000_document_purge_withdrawal/migration.sql`, 'utf8'));
+    assert.equal(sql(`SELECT count(*) FROM pg_constraint WHERE conrelid IN ('"DocumentPurgeAuthorization"'::regclass,'"DocumentPurgeAuthorizationWithdrawal"'::regclass) AND contype='f' AND confupdtype='c';`), '3');
+    assert.equal(sql(`SELECT count(*) FROM pg_indexes WHERE indexname IN ('DocumentPurgeAuthorization_organisationId_documentId_author_idx','DocumentPurgeAuthorizationWithdrawal_organisationId_occurre_idx','DocumentPurgeAuthorizationWithdrawal_authorizationId_organi_key');`), '3');
+    const withdrawPurge = (id, org = 'retention-a', actor = 'owner-a') => `INSERT INTO "DocumentPurgeAuthorizationWithdrawal"
+      (id,"organisationId","authorizationId","actorUserId",reason,"evidenceRef") VALUES
+      ('${id}','${org}','authorized','${actor}','Cancel the synthetic disposal decision','PURGE-WITHDRAW-001');`;
+    sql(withdrawPurge('foreign-owner', 'retention-a', 'owner-b'), /active charity owner/);
+    sql(withdrawPurge('foreign-auth', 'retention-b', 'owner-b'), /not found in this charity/);
+    sql(`INSERT INTO "User" (id,email,name,"passwordHash",role,"organisationId","updatedAt") VALUES
+      ('admin-a','retention-admin@example.invalid','Synthetic Admin','fixture-password-hash','ADMIN','retention-a',CURRENT_TIMESTAMP);`);
+    sql(withdrawPurge('admin', 'retention-a', 'admin-a'), /active charity owner/);
+    const withdrawing = session('purge-withdraw-holder', `BEGIN; ${withdrawPurge('withdrawn-purge')} SELECT 'BARRIER';`, true);
+    await until(() => withdrawing.output().includes('BARRIER'), 'purge withdrawal did not reach its barrier');
+    const duplicateWithdrawal = session('purge-withdraw-duplicate', withdrawPurge('duplicate-purge'));
+    await until(() => sql(`SELECT count(*) FROM pg_stat_activity WHERE application_name='purge-withdraw-duplicate' AND wait_event_type='Lock';`) === '1',
+      'duplicate purge withdrawal did not serialize');
+    withdrawing.child.stdin.end('COMMIT;\n');
+    assert.equal((await withdrawing.done).code, 0);
+    const duplicateResult = await duplicateWithdrawal.done;
+    assert.notEqual(duplicateResult.code, 0);
+    assert.match(duplicateResult.stderr, /unique constraint/);
+    sql(`UPDATE "DocumentPurgeAuthorizationWithdrawal" SET reason='Rewrite cancellation after the event';`, /append-only/);
+    sql(`DELETE FROM "DocumentPurgeAuthorizationWithdrawal";`, /append-only/);
+    assert.equal(sql(`SELECT count(*) FROM "DocumentPurgeAuthorizationWithdrawal"; SELECT count(*) FROM "DocumentStorageDeletion"; SELECT count(*) FROM "Document" WHERE id='retained-doc' AND "deletedAt" IS NOT NULL;`), '1\n0\n1');
     sql(`UPDATE "Document" SET "deletedAt"=NULL,"deletedById"=NULL,"removedFromRevision"=NULL,"removalEvidenceRef"=NULL,"recoveryPolicyId"=NULL,"recoveryUntil"=NULL,"recoverySha256"=NULL WHERE id='retained-doc';`);
     for (const race of ['hold', 'withdrawal']) {
       const mutation = race === 'hold'

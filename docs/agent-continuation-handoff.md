@@ -2,6 +2,16 @@
 
 Last updated: 2026-09-30
 
+R3 withdrawal persistence is added: separate immutable Owner cancellation of a
+purge authorization, same-charity/active-role checks, evidence and database time.
+Two real PostgreSQL sessions prove duplicate withdrawal serialization; invalid
+actors and rewritten history are rejected and no cleanup job is created. No
+route or worker consumer exists. Next the atomic claim/outbox must lock the same
+authorization, reject withdrawn authority, recheck document/policy/actor/holds
+and both expiry boundaries, and reject withdrawal after irreversible claim.
+The unpublished authorization migration was aligned to generated Prisma index
+names and foreign-key update actions; no live migration was edited or deployed.
+
 R3 authorization persistence now binds an immutable Owner decision to the exact
 retained document revision/object, current policy and six-store disposition plan.
 Database upgrade/negative proof and teardown pass; schema validation and all 51

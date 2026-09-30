@@ -2,7 +2,7 @@ BEGIN;
 -- A reviewed plan alone never releases the retained Document or queues cleanup.
 CREATE TABLE "DocumentPurgeAuthorization" (
   "id" TEXT PRIMARY KEY,
-  "organisationId" TEXT NOT NULL REFERENCES "Organisation"("id") ON DELETE RESTRICT,
+  "organisationId" TEXT NOT NULL REFERENCES "Organisation"("id") ON DELETE RESTRICT ON UPDATE CASCADE,
   "documentId" TEXT NOT NULL,
   "documentRevision" TIMESTAMP(3) NOT NULL,
   "policyId" TEXT NOT NULL,
@@ -16,10 +16,10 @@ CREATE TABLE "DocumentPurgeAuthorization" (
   "recoveryUntil" TIMESTAMP(3) NOT NULL,
   "dispositionPlan" JSONB NOT NULL,
   "authorizedAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
-  FOREIGN KEY ("policyId","organisationId") REFERENCES "DataRetentionPolicyRevision"("id","organisationId") ON DELETE RESTRICT,
+  FOREIGN KEY ("policyId","organisationId") REFERENCES "DataRetentionPolicyRevision"("id","organisationId") ON DELETE RESTRICT ON UPDATE CASCADE,
   UNIQUE ("id","organisationId")
 );
-CREATE INDEX "DocumentPurgeAuthorization_organisationId_documentId_authoriz_idx"
+CREATE INDEX "DocumentPurgeAuthorization_organisationId_documentId_author_idx"
   ON "DocumentPurgeAuthorization"("organisationId","documentId","authorizedAt");
 
 CREATE FUNCTION "DocumentPurgeAuthorization_guard_fn"() RETURNS trigger AS $$

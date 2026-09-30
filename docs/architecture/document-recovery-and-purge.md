@@ -31,6 +31,24 @@ purge/hold races, user-interface behavior or provider/backup disposal.
 
 ## Observed starting point
 
+Purge withdrawal persistence checkpoint: the active same-charity Owner can be
+recorded as withdrawing an authorization through a separate immutable fact with
+reason, evidence reference and database time. The database serializes on the
+organisation/actor and authorization; duplicate withdrawals cannot create two
+facts. A future claim must lock the same authorization, reject withdrawal and
+make withdrawal refuse once disposal has crossed the irreversible claim point.
+That claim does not exist yet. There is no application route or worker consumer.
+Withdrawal preserves both the authorization and retained document; it queues
+nothing. Real PostgreSQL proof rejects foreign Owner/charity and Admin actors,
+serializes two requests to one withdrawal, rejects history rewriting/deletion
+and preserves the removed file record and zero cleanup jobs. Restore remains
+available. The original test's attempted sole-Owner demotion was correctly
+refused by the existing ownership guard; a separate Admin fixture tests denial.
+
+The unpublished purge authorization migration's index naming and ON UPDATE
+actions were aligned with the Prisma-generated schema before deployment. The
+upgrade proof asserts the new FK actions and index identities explicitly.
+
 Purge authorization persistence checkpoint: `DocumentPurgeAuthorization` is an
 immutable Owner decision binding tenant, document revision, policy, provider,
 path, hash, size and saved recovery deadline. It requires a six-store plan
