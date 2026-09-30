@@ -16,6 +16,7 @@ export const complaintPurgeAuthorizationInput=retentionWithdrawalInput.extend({
 }).strict();
 const claimInput=z.object({confirmPermanentPurge:z.literal(true)}).strict();
 export const complaintDispositionInput=retentionWithdrawalInput.extend({
+  copyAuthorityId:id.nullable().optional(),
   area:z.enum(['SNAPSHOTS','EXPORTS','AUDIT','BACKUPS','OTHER_COPIES']),
   scopeRef:z.string().regex(/^[A-Z0-9][A-Z0-9-]{2,119}$/),revision:z.number().int().positive().max(2147483647),
   status:z.enum(['NEEDS_REVIEW','PENDING_DISPOSAL','FAILED','VERIFIED_ABSENT','RETAINED_APPROVED','NOT_APPLICABLE']),
@@ -26,7 +27,7 @@ export const complaintDispositionInput=retentionWithdrawalInput.extend({
     ctx.addIssue({code:z.ZodIssueCode.custom,path:['nextReviewAt'],message:'Retained or unresolved copies require a follow-up review date.'});
 });
 const observationReview={id:true,authorizationId:true,area:true,scopeRef:true,revision:true,status:true,
-  actorUserId:true,evidenceRef:true,reason:true,observedAt:true,nextReviewAt:true,occurredAt:true} as const;
+  actorUserId:true,evidenceRef:true,reason:true,observedAt:true,nextReviewAt:true,occurredAt:true,copyAuthorityId:true} as const;
 const receipt={id:true,complaintId:true,claimedAt:true} as const;
 const review={id:true,complaintId:true,recordRevision:true,holdRevision:true,removalId:true,
   policyId:true,actorUserId:true,recoveryUntil:true,dispositionPlan:true,evidenceRef:true,
@@ -45,8 +46,8 @@ export class ComplaintPurgeService {
   private async transaction<T>(work:(tx:Prisma.TransactionClient)=>Promise<T>):Promise<T> {
     try {return await this.prisma.$transaction(work);}
     catch(error) {
-      if(error instanceof Error&&error.name==='PrismaClientUnknownRequestError'&&error.message.includes('Complaint purge disposition')) {
-        throw new AppError(409,'COMPLAINT_DISPOSITION_REVIEW_CHANGED','Refresh the copy history and review the approved plan, observation time and follow-up date.');
+      if(error instanceof Error&&error.name==='PrismaClientUnknownRequestError'&&(error.message.includes('Complaint purge disposition')||/Copy (?:observation|review|retention)|Permanent copy retention|Untimed copy policy/.test(error.message))) {
+        throw new AppError(409,'COMPLAINT_DISPOSITION_REVIEW_CHANGED','Refresh the copy history and review its current authority, policy, hold, expiry, observation time and follow-up date.');
       }
       if(error instanceof Error && error.name==='PrismaClientUnknownRequestError'
         && /Complaint purge (?:claim|authorization|withdrawal)|Claimed complaint disposal/.test(error.message)) {

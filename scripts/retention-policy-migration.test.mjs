@@ -1,3 +1,4 @@
+import { proveCopyBinding } from './copy-binding-proof.mjs';
 import { proveCopyAuthority } from './copy-authority-proof.mjs';
 import assert from 'node:assert/strict';
 import { spawn, spawnSync } from 'node:child_process';
@@ -327,6 +328,11 @@ test('retention policy and recovery-state upgrade preserve documents and enforce
       sql(readFileSync(`${migrations}/${name}/migration.sql`, 'utf8'));
     }
     proveCopyAuthority(sql, {kind:'Document',organisation:'retention-a',actor:'owner-a',foreignActor:'owner-b',authorization:'expired-authorization',scope:'BACKUP-SET-001',observationRevision:1});
+    // The earlier primary-retention scenario deliberately left two approvals.
+    // New original-plan copy evidence must reject that ambiguity until reviewed.
+    sql(evidence('ambiguous-original-plan',{area:'BACKUPS',scope:'AMBIGUOUS-POLICY',status:'RETAINED_APPROVED',nextReview:"CURRENT_TIMESTAMP+INTERVAL '1 day'"}),/current original-plan policy/);
+    sql(withdrawal('future-retention-withdrawn','retention-a','future-retention'));
+    await proveCopyBinding(sql,{kind:'Document',organisation:'retention-a',actor:'owner-a',authorization:'expired-authorization'});
     const authority = JSON.parse(sql(PURGE_RESTORE_SNAPSHOT_SQL));
     const localKeys = JSON.parse(sql(PURGE_RESTORE_LOCAL_OBJECTS_SQL));
     assert.equal(localKeys.length, 1);
@@ -349,8 +355,8 @@ test('retention policy and recovery-state upgrade preserve documents and enforce
     assert.throws(() => assertPurgeRestoreLedger(authority, oldRestored), error => {
       assert.equal(error.code, 'PURGE_RESTORE_RECONCILIATION_REQUIRED');
       assert.equal(error.report.resurrectedDocuments, 1);
-      assert.ok(error.report.differences.some(item => item.table === 'DocumentCopyHoldEvent' && item.missing === 5));
-      assert.ok(error.report.differences.some(item => item.table === 'DocumentCopyDispositionAuthority' && item.missing === 3));
+      assert.ok(error.report.differences.some(item => item.table === 'DocumentCopyHoldEvent' && item.missing === 7));
+      assert.ok(error.report.differences.some(item => item.table === 'DocumentCopyDispositionAuthority' && item.missing === 11));
       assert.ok(error.report.differences.some(item => item.table === 'DocumentPurgeClaim' && item.missing === 1));
       return true;
     });

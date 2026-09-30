@@ -4,13 +4,15 @@ import assert from 'node:assert/strict';
 export function proveCopyAuthority(sql, {kind, organisation, actor, foreignActor, authorization, scope, observationRevision}) {
   const table = `${kind}CopyDispositionAuthority`;
   assert.equal(sql(`SELECT count(*) FROM pg_constraint WHERE conname IN ('${kind}CopyAuthority_authorization_fkey','${kind}CopyAuthority_scope_revision_key');`),'2');
+  sql(`INSERT INTO "DataRetentionPolicyRevision" (id,"organisationId","recordClass",revision,state,"retentionMode","recoveryDays","createdById","approvedById","approvedAt","approvalEvidenceRef")
+    VALUES ('copy-policy','${organisation}','${kind.toUpperCase()}_COPY',1,'APPROVED','REVIEW_REQUIRED',30,'${actor}','${actor}',now(),'COPY-POLICY-001');`);
   let expectedHoldRevision=0;
   const review = (id, overrides={}) => {
     const v={organisation,actor,authorization,scope,revision:1,previous:'NULL',observationRevision,
       holdRevision:expectedHoldRevision,state:'AUTHORIZED',disposition:"'DISPOSE'",retention:"'RETENTION-REVIEW-001'",hold:"'HOLD-REVIEW-001'",
       expires:"timezone('UTC',clock_timestamp())+INTERVAL '1 day'",...overrides};
-    return `INSERT INTO "${table}" (id,"organisationId","authorizationId",area,"scopeRef",revision,"previousId","observationRevision",state,disposition,"actorUserId","evidenceRef",reason,"retentionEvidenceRef","holdEvidenceRef","validUntil","holdRevision")
-      VALUES ('${id}','${v.organisation}','${v.authorization}','BACKUPS','${v.scope}',${v.revision},${v.previous},${v.observationRevision},'${v.state}',${v.disposition},'${v.actor}','AUTHORITY-001','Reviewed synthetic scoped copy decision',${v.retention},${v.hold},${v.expires},${v.holdRevision});`;
+    return `INSERT INTO "${table}" (id,"organisationId","authorizationId",area,"scopeRef",revision,"previousId","observationRevision",state,disposition,"actorUserId","evidenceRef",reason,"retentionEvidenceRef","holdEvidenceRef","validUntil","holdRevision","policyId")
+      VALUES ('${id}','${v.organisation}','${v.authorization}','BACKUPS','${v.scope}',${v.revision},${v.previous},${v.observationRevision},'${v.state}',${v.disposition},'${v.actor}','AUTHORITY-001','Reviewed synthetic scoped copy decision',${v.retention},${v.hold},${v.expires},${v.holdRevision},${v.state==='WITHDRAWN'?'NULL':"'copy-policy'"});`;
   };
   const holdTable=`${kind}CopyHoldEvent`;
   const hold=(id, overrides={})=>{
@@ -59,7 +61,7 @@ export function proveCopyAuthority(sql, {kind, organisation, actor, foreignActor
   // Persistence alone must not silently activate amended authority. Binding
   // observations to the new review and current policy/hold gates is separate.
   sql(`INSERT INTO "${kind}PurgeDispositionEvent" (id,"organisationId","authorizationId",area,"scopeRef",revision,status,"actorUserId","evidenceRef",reason,"observedAt")
-    VALUES ('not-implicitly-absent','${organisation}','${authorization}','BACKUPS','${scope}',${observationRevision+1},'VERIFIED_ABSENT','${actor}','COPY-001','Synthetic absence without bound authority',timezone('UTC',clock_timestamp()));`,/cannot contradict/);
+    VALUES ('not-implicitly-absent','${organisation}','${authorization}','BACKUPS','${scope}',${observationRevision+1},'VERIFIED_ABSENT','${actor}','COPY-001','Synthetic absence without bound authority',timezone('UTC',clock_timestamp()));`,/requires explicit current scoped authority/);
   assert.equal(sql(`SELECT string_agg(state,',' ORDER BY revision) FROM "${table}";`),'AUTHORIZED,WITHDRAWN,AUTHORIZED');
   assert.equal(sql(`SELECT "dispositionPlan"->'BACKUPS'->>'disposition' FROM "${kind}PurgeAuthorization" WHERE id='${authorization}';`),'RETAIN_APPROVED');
   return { review, table, hold };

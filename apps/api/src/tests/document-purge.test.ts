@@ -196,3 +196,20 @@ test('downstream history paginates within one charity and authorization without 
   await assert.rejects(service.listDispositions('org-a', 'auth-a', { before: 'foreign-cursor' }), { statusCode: 404 });
   for (const field of ['storagePath', 'sha256', 'provider', 'transactionId']) assert.equal(state.dispositionArgs.select[field], undefined);
 });
+
+
+test('copy observations preserve explicit authority and safely report changed copy controls',async()=>{
+  const {state,service}=fixture();state.auth={id:'auth-a',organisationId:'org-a',claim:{id:'claim-a'}};
+  await service.recordDisposition('org-a','owner-a','auth-a',{...disposition,copyAuthorityId:'scoped-authority'});
+  assert.equal(state.writes.at(-1).copyAuthorityId,'scoped-authority');
+  await assert.rejects(service.recordDisposition('org-a','owner-a','auth-a',{...disposition,copyAuthorityId:'https://private.example/authority'}));
+  for(const message of ['Copy observation requires current unheld scope revision SECRET',
+    'Copy review requires one current approved copy policy SECRET',
+    'Permanent copy retention requires approved retention SECRET',
+    'Copy retention has not expired SECRET']) {
+    state.databaseFailure=Object.assign(new Error(message),{name:'PrismaClientUnknownRequestError'});
+    await assert.rejects(service.recordDisposition('org-a','owner-a','auth-a',{...disposition,copyAuthorityId:'scoped-authority'}),(error:any)=>{
+      assert.equal(error.statusCode,409);assert.doesNotMatch(error.message,/SECRET/);return true;
+    });
+  }
+});

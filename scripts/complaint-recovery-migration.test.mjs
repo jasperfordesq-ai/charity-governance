@@ -1,3 +1,4 @@
+import { proveCopyBinding } from './copy-binding-proof.mjs';
 import { proveCopyAuthority } from './copy-authority-proof.mjs';
 import assert from 'node:assert/strict';
 import { spawn, spawnSync } from 'node:child_process';
@@ -381,6 +382,7 @@ test('complaint recovery migration preserves records and enforces reviewed remov
       scopedAuthority.hold('hold-after-review',{revision:7}));
     assert.equal(sql(`SELECT "holdRevision" FROM "ComplaintCopyDispositionAuthority" WHERE id='review-before-hold';`),'6');
     assert.equal(sql(`SELECT held FROM "ComplaintCopyHoldEvent" WHERE id='hold-after-review';`),'t');
+    await proveCopyBinding(sql,{kind:'Complaint',organisation:'a',actor:'admin-a',authorization:'fresh-purge'},orderedRace);
     const authority = JSON.parse(sql(PURGE_RESTORE_SNAPSHOT_SQL));
     assert.doesNotMatch(JSON.stringify(authority), /Private original narrative|Reviewed synthetic administrative hold|HOLD-001/);
     const currentBackup = docker(['exec',container,'pg_dump','-U','postgres','--no-owner','--no-privileges','postgres']);

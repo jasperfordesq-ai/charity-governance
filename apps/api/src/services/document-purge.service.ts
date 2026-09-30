@@ -17,6 +17,7 @@ export const purgeClaimInput = z.object({ confirmPermanentPurge: z.literal(true)
 export const purgeHistoryInput = z.object({ documentId: id.optional(), before: id.optional() }).strict();
 export const purgeId = id;
 export const purgeDispositionInput = retentionWithdrawalInput.extend({
+  copyAuthorityId: id.nullable().optional(),
   area: z.enum(['VERSIONS', 'CONFLUENCE', 'EXPORTS', 'AUDIT', 'BACKUPS']),
   scopeRef: z.string().regex(/^[A-Z0-9][A-Z0-9-]{2,119}$/),
   revision: z.number().int().min(1).max(2147483647),
@@ -32,7 +33,7 @@ export const purgeDispositionInput = retentionWithdrawalInput.extend({
 const dispositionHistoryInput = z.object({ before: id.optional() }).strict();
 const dispositionReview = { id: true, authorizationId: true, area: true, scopeRef: true,
   revision: true, status: true, actorUserId: true, evidenceRef: true, reason: true,
-  observedAt: true, nextReviewAt: true, occurredAt: true } as const;
+  observedAt: true, nextReviewAt: true, occurredAt: true, copyAuthorityId: true } as const;
 
 
 // Never return provider paths, fingerprints or PostgreSQL transaction IDs.
@@ -65,8 +66,8 @@ export class DocumentPurgeService {
         if (error.message.includes('Purge disposition observation must be between claim and recording')) {
           throw new AppError(409, 'PURGE_OBSERVATION_TIME_INVALID', 'The observation time must be after the primary disposal claim and no later than the server time. Check the date, local time and device clock.');
         }
-        if (error.message.includes('Purge disposition')) {
-          throw new AppError(409, 'PURGE_DISPOSITION_REVIEW_CHANGED', 'Refresh the scoped evidence history and review the approved plan, observation and follow-up dates.');
+        if (error.message.includes('Purge disposition') || /Copy (?:observation|review|retention)|Permanent copy retention|Untimed copy policy/.test(error.message)) {
+          throw new AppError(409, 'PURGE_DISPOSITION_REVIEW_CHANGED', 'Refresh the scoped evidence and review its current authority, policy, hold, expiry, observation and follow-up dates.');
         }
         if (/Purge (?:authorization (?:requires|must bind|not found)|claim (?:requires|cannot reuse)|withdrawal requires|has been claimed)/.test(error.message)) {
           throw new AppError(409, 'PURGE_REVIEW_CHANGED', 'Disposal could not proceed. Refresh the record, policy, holds and authorization before reviewing again.');

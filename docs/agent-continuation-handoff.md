@@ -2,6 +2,43 @@
 
 Last updated: 2026-09-30
 
+## Copy policy and observation binding - 30 September 2026 (source only)
+
+Migration 2100 binds later document/complaint copy authority to a separately
+approved DOCUMENT_COPY or COMPLAINT_COPY policy. Timed rules require a reviewed
+copy-creation anchor and elapsed retention; permanent rules permit retention,
+not disposal. Policy creation/withdrawal serialize with review consumers.
+No policy is seeded or approved by this migration.
+
+Observations can reference an exact current scoped authority. The database
+rechecks its scope, active Owner, expiry, policy and unheld revision; evidence
+cannot predate that authority. Withdrawal/expiry cannot silently reactivate the
+original plan. Original-plan final observations also require that original
+policy to remain current. NEEDS_REVIEW/FAILED facts remain recordable without
+claiming a new disposal permission. Existing observations retain their original
+binding; no evidence is retroactively attached to a newer decision.
+
+Document and complaint observation APIs accept and return the controlled
+copyAuthorityId, and translate these database refusals into safe review guidance.
+Creating/reviewing copy policies, authorities and holds through restricted API/UI,
+metadata audit integration, real browser journeys, hosted gates and deployment
+remain next. External evidence and supplied anchor dates still require reviewer
+verification; this does not independently prove provider disposal or all copies
+absent. Runtime remains e39edbe8; migrations 1900/2000/2100 are not deployed.
+
+Binding evidence: complaint PostgreSQL proof passed in 65.27s (the complaint
+result in copy-binding-database-final.log); final document proof passed in
+61.86s in copy-binding-document-final.log after explicitly resolving the
+fixture's ambiguous approvals. Coverage includes policy withdrawal racing an
+observation, hold racing an observation, release requiring a fresh review,
+expiry, no fallback after withdrawal, scoped binding/chronology, timed and
+permanent policy checks, original-policy withdrawal and populated restore.
+All 27 focused API tests and 94 supporting restore/model/reset/backup tests
+pass; Prisma validation/generation and API build pass. Pending migrations
+1900/2000/2100 pass the static gate: zero blocked, three warnings, no override.
+API evidence: copy-binding-api-{red,green}.log; build-final/unit/gate receipts
+use the copy-binding prefix. All local handles are terminal. No live changes.
+
 ## Scoped copy preservation - 30 September 2026 (source only)
 
 Migration 2000 adds immutable document/complaint copy-hold histories under the

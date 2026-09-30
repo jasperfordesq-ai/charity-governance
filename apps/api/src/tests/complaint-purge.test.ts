@@ -137,3 +137,20 @@ test('copy evidence conflicts return safe review guidance',async()=>{
     assert.equal(error.statusCode,409);assert.doesNotMatch(error.message,/SECRET/);return true;
   });
 });
+
+
+test('copy observations preserve explicit authority and safely report changed copy controls',async()=>{
+  const {f,service}=fixture();f.auth.claim={id:'claim'};
+  await service.recordDisposition('org','actor','auth',{...observation,copyAuthorityId:'scoped-authority'});
+  assert.equal(f.writes.at(-1).copyAuthorityId,'scoped-authority');
+  await assert.rejects(service.recordDisposition('org','actor','auth',{...observation,copyAuthorityId:'https://private.example/authority'}));
+  for(const message of ['Copy observation requires current unheld scope revision SECRET',
+    'Copy review requires one current approved copy policy SECRET',
+    'Permanent copy retention requires approved retention SECRET',
+    'Copy retention has not expired SECRET']) {
+    f.error=Object.assign(new Error(message),{name:'PrismaClientUnknownRequestError'});
+    await assert.rejects(service.recordDisposition('org','actor','auth',{...observation,copyAuthorityId:'scoped-authority'}),(error:any)=>{
+      assert.equal(error.statusCode,409);assert.doesNotMatch(error.message,/SECRET/);return true;
+    });
+  }
+});

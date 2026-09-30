@@ -1300,6 +1300,10 @@ model DataRetentionPolicyRevision {
 
   @@unique([id, organisationId])
   @@unique([organisationId, recordClass, revision], map: "RetentionPolicy_org_class_revision_key")
+  documentCopyAuthorities DocumentCopyDispositionAuthority[]
+
+  complaintCopyAuthorities ComplaintCopyDispositionAuthority[]
+
 }
 
 model DataRetentionPolicyWithdrawal {
@@ -1369,6 +1373,9 @@ model DocumentPurgeDispositionEvent {
 
   @@unique([authorizationId, area, scopeRef, revision], map: "PurgeDisposition_scope_revision_key")
   @@index([organisationId, authorizationId, occurredAt, id], map: "PurgeDisposition_history_idx")
+  copyAuthorityId String?
+  copyAuthority DocumentCopyDispositionAuthority? @relation(fields: [copyAuthorityId], references: [id], onDelete: Restrict, map: "DocumentCopyObservation_authority_fkey")
+
 }
 
 model DocumentPurgeAuthorizationWithdrawal {
@@ -1988,6 +1995,9 @@ model ComplaintPurgeDispositionEvent {
 
   @@unique([authorizationId, area, scopeRef, revision], map: "ComplaintPurgeDisposition_scope_revision_key")
   @@index([organisationId, authorizationId, occurredAt, id], map: "ComplaintPurgeDisposition_history_idx")
+  copyAuthorityId String?
+  copyAuthority ComplaintCopyDispositionAuthority? @relation(fields: [copyAuthorityId], references: [id], onDelete: Restrict, map: "ComplaintCopyObservation_authority_fkey")
+
 }
 
 model ComplaintPurgeAuthorizationWithdrawal {
@@ -2775,6 +2785,11 @@ model DocumentCopyDispositionAuthority {
   @@index([organisationId, authorizationId, occurredAt, id], map: "DocumentCopyDispositionAuthority_history_idx")
   holdRevision Int @default(0)
 
+  policyId String?
+  policy DataRetentionPolicyRevision? @relation(fields: [policyId, organisationId], references: [id, organisationId], onDelete: Restrict, map: "DocumentCopyAuthority_policy_fkey")
+  retentionAnchorAt DateTime?
+  observations DocumentPurgeDispositionEvent[]
+
 }
 
 // Scoped later review history; does not change original primary authority.
@@ -2800,6 +2815,11 @@ model ComplaintCopyDispositionAuthority {
   @@unique([authorizationId, area, scopeRef, revision], map: "ComplaintCopyAuthority_scope_revision_key")
   @@index([organisationId, authorizationId, occurredAt, id], map: "ComplaintCopyDispositionAuthority_history_idx")
   holdRevision Int @default(0)
+
+  policyId String?
+  policy DataRetentionPolicyRevision? @relation(fields: [policyId, organisationId], references: [id, organisationId], onDelete: Restrict, map: "ComplaintCopyAuthority_policy_fkey")
+  retentionAnchorAt DateTime?
+  observations ComplaintPurgeDispositionEvent[]
 
 }
 
