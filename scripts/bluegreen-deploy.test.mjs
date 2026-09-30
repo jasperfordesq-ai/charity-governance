@@ -2080,6 +2080,62 @@ test('separate app env requires a distinct runtime database role and no owner va
   rmSync(dir, { recursive: true, force: true });
 });
 
+test('optional app credential is refused before backup when the database role is privileged', async () => {
+  const runDeploy = await loadDeployRunner();
+  const stateDir = makeFixtureDir('bluegreen-runtime-role-');
+  try {
+    const envPath = join(stateDir, 'owner.env');
+    const appPath = join(stateDir, 'app.env');
+    writeFileSync(appPath, 'DATABASE_URL=postgresql://runtime:runtime-password@db:5432/charitypilot\n');
+    writeEnvFile(envPath, { BLUEGREEN_APP_ENV_FILE: appPath });
+    seedMigrationsDir(stateDir, TARGET_COMMIT, []);
+    const { runCommand, calls } = makeFakeRunCommand({ overrides(command) {
+      if (command.includes('psql') && command.some((part) => part.includes('SELECT CASE WHEN EXISTS'))) {
+        return { stdout: 'unsafe\n' };
+      }
+      return undefined;
+    } });
+    let backups = 0;
+    const outcome = await runDeploy(['deploy', '--env-file', envPath, '--state-dir', stateDir], {
+      runCommand,
+      runBackupImpl: async () => { backups++; return {}; },
+      runRestoreDrillImpl: async () => ({}),
+    });
+    assert.equal(outcome.status, 1);
+    assert.match(outcome.stderr, /application database role has owner-level or protected recovery-table privileges/);
+    assert.equal(backups, 0);
+    assert.ok(calls.some((call) => call.command.some((part) => part.includes('ComplaintHoldRecoveryOutcome'))));
+  } finally { rmSync(stateDir, { recursive: true, force: true }); }
+});
+
+test('optional app credential is rechecked after migrations before candidate startup', async () => {
+  const runDeploy = await loadDeployRunner();
+  const stateDir = makeFixtureDir('bluegreen-runtime-role-migration-');
+  try {
+    const envPath = join(stateDir, 'owner.env');
+    const appPath = join(stateDir, 'app.env');
+    writeFileSync(appPath, 'DATABASE_URL=postgresql://runtime:runtime-password@db:5432/charitypilot\n');
+    writeEnvFile(envPath, { BLUEGREEN_APP_ENV_FILE: appPath });
+    seedMigrationsDir(stateDir, TARGET_COMMIT, []);
+    let checks = 0;
+    const { runCommand, calls } = makeFakeRunCommand({ overrides(command) {
+      if (command.includes('psql') && command.some((part) => part.includes('SELECT CASE WHEN EXISTS'))) {
+        return { stdout: ++checks === 1 ? 'safe\n' : 'unsafe\n' };
+      }
+      return undefined;
+    } });
+    const outcome = await runDeploy(['deploy', '--env-file', envPath, '--state-dir', stateDir], {
+      runCommand,
+      runBackupImpl: async () => ({ backupDir: join(stateDir, 'backups', 'x') }),
+      runRestoreDrillImpl: async () => ({}),
+    });
+    assert.equal(outcome.status, 1);
+    assert.equal(checks, 2);
+    assert.match(outcome.stderr, /refused after migration/);
+    assert.ok(!calls.some((call) => call.command.includes('api-blue') && call.command.includes('up')));
+  } finally { rmSync(stateDir, { recursive: true, force: true }); }
+});
+
 test('P3-1: the standalone backup subcommand passes the env file database identity to runBackup', async () => {
   const runDeploy = await loadDeployRunner();
   const stateDir = makeFixtureDir('bluegreen-db-identity-backup-subcommand-');

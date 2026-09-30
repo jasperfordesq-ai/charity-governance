@@ -45,8 +45,14 @@ Until that report exists, this engine has not run against a real VM.
   contain no `POSTGRES_*` or migration variables. Preflight rejects an
   absent, reused or malformed file before deploy. The database and migrate
   services continue to use the owner env. This is an opt-in credential
-  transport seam only: it does not provision the restricted role, grants,
-  trusted executor, independent provider or emergency hold path. Do not
+  transport seam. When configured, deployment queries the local PostgreSQL catalogue
+  before backup and again after migrations. It refuses a missing,
+  owner-capable or protected-recovery-table-writing app role before candidate
+  startup. The second check catches grants added by migrations. A refusal
+  leaves the old colour serving and restores its scheduler where applicable.
+  This check does not provision the restricted role or grants, validate all
+  application routes, or create a trusted executor, independent provider
+  or emergency hold path. Do not
   enable recovery enforcement on the strength of this setting alone.
 - **`DATABASE_URL`** must resolve to hostname `db` exactly (the compose
   `db` service) — preflight rejects any other host.

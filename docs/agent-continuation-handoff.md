@@ -1,5 +1,15 @@
 # CharityPilot Agent Continuation Handoff
 
+> **1 October 00:57 Dublin, source only:** Opt-in blue-green app credentials
+> now receive a read-only PostgreSQL role/privilege check before backup and
+> after migration; unsafe privilege grants refuse deployment before candidate
+> startup. The focused 84-test deploy suite and local security scan pass.
+> A disposable PostgreSQL role check accepted a restricted login and rejected
+> superuser and protected-table INSERT grants. No VM role was provisioned;
+> live release remains `8d4a0058`. This is a deployment guard, not recovery
+> activation or all-writer acceptance. Private evidence and next gates are
+> in `.charitypilot-private/ROADMAP.md`.
+
 > **1 October 00:52 Dublin hosted result:** Exact CI `36792206222` and
 > E2E `36792206256` both succeeded on source commit `e1b09a26`. The
 > prior `8a74c178` CI failure remains in the record. The private VM still

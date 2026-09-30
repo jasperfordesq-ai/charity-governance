@@ -969,6 +969,45 @@ async function fetchAppliedMigrationNames(run, deployEnv, identity) {
   return parsePsqlList(appliedResult.stdout);
 }
 
+// The opt-in app URL must not silently point at another owner-capable login.
+// Run this through the already-started local db before taking a backup or
+// quiescing jobs. The role name is restricted to a simple identifier by
+// preflight, and rechecked here before inserting it into a SQL literal.
+export async function verifyAppRuntimeRole(run, deployEnv, fileEnv) {
+  if (!fileEnv.BLUEGREEN_APP_ENV_FILE) return true;
+  const appEnv = parseEnvFile(fileEnv.BLUEGREEN_APP_ENV_FILE);
+  const role = decodeURIComponent(new URL(appEnv.DATABASE_URL).username);
+  if (!/^[a-z_][a-z0-9_]{0,62}$/u.test(role)) return false;
+  const sql = `SELECT CASE WHEN EXISTS (
+    SELECT 1 FROM pg_roles r WHERE r.rolname = '${role}'
+      AND r.rolcanlogin AND NOT r.rolsuper AND NOT r.rolcreaterole
+      AND NOT r.rolcreatedb AND NOT r.rolbypassrls
+      AND NOT pg_has_role(r.oid, (SELECT oid FROM pg_roles WHERE rolname = current_user), 'MEMBER')
+      AND NOT has_schema_privilege(r.oid, 'public', 'CREATE')
+      AND NOT EXISTS (
+        SELECT 1 FROM pg_roles privileged
+        WHERE (privileged.rolsuper OR privileged.rolcreaterole OR privileged.rolbypassrls)
+          AND pg_has_role(r.oid, privileged.oid, 'MEMBER')
+      )
+      AND NOT EXISTS (
+        SELECT 1 FROM (VALUES
+          ('ComplaintRecoveryEnforcement'), ('ComplaintHoldRecoveryOutcome'),
+          ('ComplaintRecoveryExecution'), ('ComplaintRecoveryOutcome'),
+          ('ComplaintRecoveryCancellation')) AS protected(name)
+        WHERE to_regclass(format('public.%I', protected.name)) IS NULL
+           OR has_table_privilege(r.oid, to_regclass(format('public.%I', protected.name)), 'INSERT')
+           OR has_table_privilege(r.oid, to_regclass(format('public.%I', protected.name)), 'UPDATE')
+           OR has_table_privilege(r.oid, to_regclass(format('public.%I', protected.name)), 'DELETE')
+           OR has_table_privilege(r.oid, to_regclass(format('public.%I', protected.name)), 'TRUNCATE')
+           OR has_table_privilege(r.oid, to_regclass(format('public.%I', protected.name)), 'TRIGGER')
+      )
+  ) THEN 'safe' ELSE 'unsafe' END`;
+  const identity = databaseIdentity(fileEnv);
+  const check = await run([...composePrefix(), 'exec', '-T', 'db', 'psql',
+    '-U', identity.databaseUser, '-d', identity.databaseName, '-tA', '-c', sql], deployEnv);
+  return (check.stdout ?? '').trim() === 'safe';
+}
+
 function readMigrationBatch(migrationsDir, names) {
   return names.map((name) => {
     let sql;
@@ -1353,6 +1392,17 @@ async function executeDeploy(deps) {
   }
   if (!dbWasAlreadyRunning && !dbPriorStateUnknown) dbGuard.stoppable = true;
 
+  if (fileEnv.BLUEGREEN_APP_ENV_FILE) {
+    writeDeployStatus(resolvedStateDir, 'runtime-role', 'checking restricted application database role');
+    try {
+      if (!await verifyAppRuntimeRole(run, deployEnv, fileEnv)) {
+        return result(1, '', `Blue-green deploy refused: application database role has owner-level or protected recovery-table privileges.${await stopDbOnAbort()}\n`);
+      }
+    } catch (error) {
+      return result(1, '', `Blue-green deploy refused: application database role could not be verified: ${redact(error)}.${await stopDbOnAbort()}\n`);
+    }
+  }
+
   // Phase 2: backup
   writeDeployStatus(resolvedStateDir, 'backup', options.skipBackup ? 'skipped' : 'starting pre-migration backup');
   if (!options.skipBackup) {
@@ -1496,6 +1546,28 @@ async function executeDeploy(deps) {
       gateNotices,
       `Blue-green deploy failed: migration failed: ${redact(error)}. Jobs were restarted on the old tag (${oldCommit ?? 'none'}); the old colour was never touched and remains serving.${await stopDbOnAbort()}\n`,
     );
+  }
+
+  // Recheck after migrations: a newly applied grant must not make the
+  // candidate's app login owner-capable between preflight and startup.
+  if (fileEnv.BLUEGREEN_APP_ENV_FILE) {
+    try {
+      if (!await verifyAppRuntimeRole(run, deployEnv, fileEnv)) {
+        throw new Error('application database role has owner-level or protected recovery-table privileges');
+      }
+    } catch (error) {
+      let recoveryNote = '';
+      if (oldColor) {
+        try {
+          await run([...composePrefix(), 'up', '-d', '--wait', 'scheduler'], envFor(oldCommit ?? UNBUILT_TAG));
+          recoveryNote = ' Jobs were restarted on the previous release.';
+        } catch (restartError) {
+          recoveryNote = ` Restarting jobs also failed: ${redact(restartError)}.`;
+        }
+      }
+      return result(1, gateNotices,
+        `Blue-green deploy refused after migration: ${redact(error)}. Candidate services were not started.${recoveryNote}${await stopDbOnAbort()}\n`);
+    }
   }
 
   // Phase 9: up (named services only — never implicitly touches scheduler)
