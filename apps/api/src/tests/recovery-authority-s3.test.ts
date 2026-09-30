@@ -224,3 +224,15 @@ test('a stalled S3 response body is aborted within the operation deadline', { ti
     assert.equal(body.destroyed, true);
   } finally { clearTimeout(watchdog); body.destroy(); }
 });
+
+test('caller cancellation prevents a new S3 request and destroys an in-flight body', async () => {
+  const cancelled = new AbortController(); cancelled.abort(); let requests = 0;
+  const unused = fixture(async () => { requests++; return {}; });
+  await assert.rejects(() => unused.read(key, cancelled.signal), /read failed/);
+  assert.equal(requests, 0);
+  const controller = new AbortController();
+  const body = new Readable({ read() { controller.abort(); } });
+  const active = fixture(async () => ({ ...metadata, ContentLength: 2, Body: body }));
+  await assert.rejects(() => active.read(key, controller.signal), /read failed/);
+  assert.equal(body.destroyed, true);
+});

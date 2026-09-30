@@ -4,6 +4,12 @@ Last updated: 2026-09-30
 
 ## Recovery authority development and corrected release status
 
+Hosted verification for the inactive recovery foundation at
+4b7eae1edfe16bf168069b9b45b7a9b992d6671a passed: CI 36742905676 and E2E
+36742905671 (238 browser tests). It is not deployed or a completed independent
+recovery capability. The subsequent aggregate scan-deadline change has separate
+local verification; do not attribute that change to the earlier hosted result.
+
 The private release receipt records d31ac597d6af47e307921edb1990353cf10eb618
 deployed on 30 September at 15:43 UTC after CI 36737004873 and E2E
 36737004807 passed (238 browser tests). It includes both the surviving-document
@@ -43,6 +49,10 @@ privileged out-of-band replay remains a custody/policy threat. Missing heads do
 not initialize automatically. Combined synthetic journal/adapter restart tests
 cover lost publication acknowledgement. Explicit operation deadlines include
 response streaming; the SDK warning-only timeout default is overridden.
+Each full journal scan also has a 30-second deadline, propagated to S3 reads.
+Cancellation cannot be interpreted as an absent object or empty history. This
+bounds each scan, not the full multi-phase publication or a database transaction;
+it does not replace the durable mutation fence or justify holding locks remotely.
 No S3 resource has been provisioned or live-tested. Provisioning, bucket
 policy/retention, independent key custody, fencing and end-to-end recovery
 acceptance still gate activation.

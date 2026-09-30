@@ -58,22 +58,24 @@ export class S3AuthorityObjectStore implements AuthorityObjectStore, AuthorityHe
       value.ServerSideEncryption === 'aws:kms' && value.SSEKMSKeyId === this.config.kmsKeyArn);
   }
 
-  async read(key: string): Promise<string | null> {
-    return (await this.readObject(this.request(key)))?.body ?? null;
+  async read(key: string, signal?: AbortSignal): Promise<string | null> {
+    return (await this.readObject(this.request(key), signal))?.body ?? null;
   }
 
-  private async readObject(request: { Bucket: string; Key: string; ExpectedBucketOwner: string }) {
+  private async readObject(request: { Bucket: string; Key: string; ExpectedBucketOwner: string }, callerSignal?: AbortSignal) {
     let body: Readable | undefined;
     let responseReceived = false;
     const deadline = operationDeadline();
+    const signal = callerSignal ? AbortSignal.any([callerSignal, deadline.signal]) : deadline.signal;
     const abortBody = () => { body?.destroy(new Error('Recovery storage deadline exceeded')); };
-    deadline.signal.addEventListener('abort', abortBody, { once: true });
+    signal.addEventListener('abort', abortBody, { once: true });
     try {
+      if (signal.aborted) throw new Error('Recovery storage read cancelled');
       const response = await this.client.send(new GetObjectCommand({ ...request, ChecksumMode: 'ENABLED' }),
-        { abortSignal: deadline.signal });
+        { abortSignal: signal });
       responseReceived = true;
       if (response.Body instanceof Readable) body = response.Body;
-      if (deadline.signal.aborted) throw new Error('Recovery storage deadline exceeded');
+      if (signal.aborted) throw new Error('Recovery storage deadline exceeded');
       if (!body || response.DeleteMarker || !this.validMetadata(response) ||
         !Number.isInteger(response.ContentLength) || response.ContentLength! < 0 || response.ContentLength! > 4096) {
         throw new Error('Invalid object metadata');
@@ -94,7 +96,7 @@ export class S3AuthorityObjectStore implements AuthorityObjectStore, AuthorityHe
         parsed.data.$metadata?.httpStatusCode === 404) return null;
       throw new Error('Recovery S3 read failed');
     } finally {
-      deadline.dispose(); deadline.signal.removeEventListener('abort', abortBody); body?.destroy();
+      deadline.dispose(); signal.removeEventListener('abort', abortBody); body?.destroy();
     }
   }
 

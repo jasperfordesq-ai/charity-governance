@@ -253,3 +253,28 @@ test('unpublished journal suffixes and loss of the second head read refuse verif
     return head;
   } }), /unavailable/);
 });
+
+test('the whole journal scan has a deadline even if a store never settles its read', async t => {
+  t.mock.timers.enable({ apis: ['setTimeout', 'Date'] });
+  const f = fixture(); let reads = 0; let signal: AbortSignal | undefined;
+  f.store.read = (_key: string, suppliedSignal?: AbortSignal) => {
+    reads++; signal = suppliedSignal;
+    return new Promise<string | null>(() => {});
+  };
+  const result = assert.rejects(() => f.journal.inspect(), /verification deadline/);
+  t.mock.timers.tick(30001);
+  await result;
+  assert.equal(reads, 1);
+  assert.equal(signal?.aborted, true);
+});
+
+test('a store resolving absence during cancellation cannot turn expiry into a verified empty journal', async t => {
+  t.mock.timers.enable({ apis: ['setTimeout'] });
+  const f = fixture();
+  f.store.read = (_key, signal) => new Promise(resolve => {
+    signal!.addEventListener('abort', () => resolve(null), { once: true });
+  });
+  const refusal = assert.rejects(() => f.journal.inspect(), /verification deadline/);
+  t.mock.timers.tick(30001);
+  await refusal;
+});

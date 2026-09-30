@@ -5,7 +5,7 @@ import { z } from 'zod';
  * create-if-absent writes. Never implement create as read-then-overwrite.
  * Provider durability, independent custody and retention are separate gates. */
 export interface AuthorityObjectStore {
-  read(key: string): Promise<string | null>;
+  read(key: string, signal?: AbortSignal): Promise<string | null>;
   create(key: string, body: string): Promise<boolean>;
 }
 
@@ -74,11 +74,28 @@ export class RecoveryAuthorityJournal {
   }
 
   private async history(): Promise<Entry[]> {
+    const controller = new AbortController();
+    let timer: ReturnType<typeof setTimeout>;
+    const expired = new Promise<never>((_resolve, reject) => {
+      timer = setTimeout(() => {
+        controller.abort();
+        reject(new Error('Recovery authority verification deadline exceeded'));
+      }, 30000);
+    });
+    try { return await this.scanHistory(controller.signal, expired); }
+    finally { clearTimeout(timer!); controller.abort(); }
+  }
+
+  private async scanHistory(signal: AbortSignal, expired: Promise<never>): Promise<Entry[]> {
     const rows: Entry[] = []; const operations = new Set<string>();
     for (let generation = 1; generation <= 10001; generation++) {
       let body: string | null;
-      try { body = await this.store.read(this.key(generation)); }
-      catch { throw new Error('Recovery authority is unavailable; keep dependent actions closed.'); }
+      try { body = await Promise.race([this.store.read(this.key(generation), signal), expired]); }
+      catch {
+        if (signal.aborted) throw new Error('Recovery authority verification deadline exceeded');
+        throw new Error('Recovery authority is unavailable; keep dependent actions closed.');
+      }
+      if (signal.aborted) throw new Error('Recovery authority verification deadline exceeded');
       if (body === null) {
         if (rows.length < this.checkpoint.generation) {
           throw new Error('Recovery authority history is shorter than its trusted checkpoint');
