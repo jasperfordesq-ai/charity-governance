@@ -1,5 +1,16 @@
 # CharityPilot Full-Platform Remediation Audit
 
+> **Independent hold recovery gate recheck, 2026-09-30 23:30 Dublin:**
+> ordinary API hold changes refuse an active enforcement binding, but the
+> database hold-event trigger is not yet bound to independent publication.
+> The internal published-hold helper has no supported Owner/Admin workflow,
+> and the outcome row lacks a durable writer/publication receipt. Do not
+> activate the binding or claim all-writer/host-loss readiness. The private
+> analysis records the ordered implementation and verification gates. No
+> code, migration, provider or live setting changed by this review. Private
+> evidence: `.charitypilot-private/complaint-hold-writer-gate-analysis-2026-09-30.md`.
+
+
 > **August Governance Policy Index exact-source review, 2026-09-30:** the
 > manifest-matched DOCX has 27 entries, omits two March-adopted policies,
 > and retains blank Board approval date/signature fields. The live Owner

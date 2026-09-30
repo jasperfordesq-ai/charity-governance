@@ -1,5 +1,18 @@
 # CharityPilot Agent Continuation Handoff
 
+> **Independent hold recovery gate recheck, 2026-09-30 23:30 Dublin:** the
+> released ordinary hold service refuses changes once an enforcement binding
+> exists, but the database hold-event trigger still lacks an enforced
+> publication binding. The published-hold executor is internal with no
+> supported Owner/Admin route; binding enforcement now would block ordinary
+> preservation changes. The outcome row does not carry a durable
+> writer/publication receipt, so a deferred same-transaction join alone is
+> insufficient. The private writer-gate analysis gives the ordered
+> receipt/constraint/workflow/test/provider path. No migration, provider or
+> live activation occurred. Private evidence:
+> `.charitypilot-private/complaint-hold-writer-gate-analysis-2026-09-30.md`.
+
+
 > **August Governance Policy Index exact-source review, 2026-09-30:** the
 > verified 17,412-byte backup DOCX has 27 entries, omits the Asset Management
 > and Dissolution Policies, and has blank Board approval fields. The live
