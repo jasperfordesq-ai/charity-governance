@@ -4,6 +4,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { test, expect } from '@playwright/test';
 import { API_BASE_URL } from '../../playwright.config';
+import { loginViaUi } from '../../fixtures';
 import { withDb } from '../../helpers/db';
 import {
   assertConnectorBuilt,
@@ -28,8 +29,8 @@ import {
  * stubs fetch, so this is the only place the sign-in, refresh rotation,
  * personal-data gate and tenant scoping are exercised end to end.
  *
- * No browser is used. The spec spawns the built connector over stdio and
- * speaks the same JSON-RPC an AI client speaks.
+ * The spec spawns the built connector over stdio and speaks the same JSON-RPC
+ * an AI client speaks. Browser-only approvals additionally use the real UI.
  */
 test.describe.configure({ mode: 'serial' });
 
@@ -466,12 +467,17 @@ test.describe('Tenant isolation', () => {
 
 test.describe('Roles', () => {
   for (const role of ['admin', 'member'] as const) {
-    test(`a ${role} reads every tool, and the closed gate still withholds`, async () => {
+    test(`a ${role} follows read-tool role boundaries, and the closed gate still withholds`, async () => {
       const credentialFile = await connectAs(role, fixture[role]);
       const connector = await openConnector({ apiUrl: API_BASE_URL, credentialFile });
       try {
         for (const name of READ_TOOLS) {
           const result = await callTool(connector.client, name);
+          if (role === 'member' && (name === 'approval_readiness' || name === 'governing_acts')) {
+            expect(result.isError, `${name} must deny Member access`).toBe(true);
+            expect(result.text).toMatch(/FORBIDDEN/);
+            continue;
+          }
           expect(result.isError, `${name} failed for ${role}: ${result.text}`).toBe(false);
         }
         const board = await callTool(connector.client, 'board_register');
@@ -1535,11 +1541,11 @@ test.describe('Connector writes and approval', () => {
     }
   });
 
-  test('an approval can be granted from the web realm, for the person with no terminal', async () => {
+  test('an approval can be granted from the web realm, for the person with no terminal', async ({ page }) => {
     // A trustee running a desktop AI client has no terminal to type at, so the
     // web application grants the same approvals through its own route. Both
-    // routes call one service: what protects a grant is the password, not the
-    // channel it arrives on.
+    // routes call one service, but browser approval requires a genuine web
+    // session as well as fresh password confirmation.
     let secondRiskId = '';
     const connector = await openConnector({
       apiUrl: API_BASE_URL,
@@ -1573,25 +1579,32 @@ test.describe('Connector writes and approval', () => {
       credentialFile: adminCredentialFile,
     });
 
-    // No connector client header: this is the browser realm's own route.
-    const listed = await fetch(`${API_BASE_URL}/api/v1/auth/approvals`, {
+    // Omitting the connector header cannot turn its token into a web session.
+    const denied = await fetch(`${API_BASE_URL}/api/v1/auth/approvals`, {
       headers: { authorization: `Bearer ${token}` },
     });
-    expect(listed.status).toBe(200);
+    expect(denied.status).toBe(403);
+
+    await loginViaUi(page, fixture.writer.email, fixture.writer.password);
+    const listing = page.waitForResponse(response =>
+      response.url().endsWith('/api/v1/auth/approvals') && response.request().method() === 'GET');
+    await page.goto('/approvals');
+    const listed = await listing;
+    expect(listed.status()).toBe(200);
     const rows = ((await listed.json()) as { data: Array<Record<string, unknown>> }).data;
     const waiting = rows.find((row) => row['resourceId'] === secondRiskId);
     expect(waiting, 'the pending approval is listed for the person who must grant it').toBeTruthy();
     expect(String(waiting!['summary'])).toContain('Second risk');
 
-    const granted = await fetch(
-      `${API_BASE_URL}/api/v1/auth/approvals/${String(waiting!['approvalId'])}/grant`,
-      {
-        method: 'POST',
-        headers: { 'content-type': 'application/json', authorization: `Bearer ${token}` },
-        body: JSON.stringify({ password: fixture.writer.password }),
-      },
-    );
-    expect(granted.status, 'the web realm grants it').toBe(200);
+    const approvalRow = page.getByRole('listitem').filter({ hasText: secondRiskId });
+    await approvalRow.getByRole('button', { name: 'Approve', exact: true }).click();
+    await approvalRow.getByLabel('Your password', { exact: true }).fill(fixture.writer.password);
+    const granting = page.waitForResponse(response =>
+      response.url().endsWith(`/auth/approvals/${String(waiting!['approvalId'])}/grant`)
+      && response.request().method() === 'POST');
+    await approvalRow.getByRole('button', { name: 'Approve this action', exact: true }).click();
+    expect((await granting).status(), 'the web realm grants it').toBe(200);
+    await expect(page.getByText(/Ask the assistant to try the action again/)).toBeVisible();
 
     const after = await openConnector({
       apiUrl: API_BASE_URL,
@@ -1812,9 +1825,26 @@ test.describe('Connector documents', () => {
   });
 
   test('the document comes back byte for byte, and its contents stay off the wire', async () => {
-    const connector = await openConnector({
+    const withheld = await openConnector({
       apiUrl: API_BASE_URL,
       credentialFile: fileCredentialFile,
+      downloadDir,
+    });
+    try {
+      const refused = await callTool(withheld.client, 'document_download', {
+        id: uploadedId,
+        reason: 'Verifying the whole-file personal-data boundary',
+      });
+      expect(refused.isError).toBe(true);
+      expect(refused.text).toMatch(/personal-data gate open/);
+    } finally {
+      await withheld.close();
+    }
+    const downloadCredential = await connectAs('document-download-full', fixture.admin, 'write', 'full');
+    const connector = await openConnector({
+      apiUrl: API_BASE_URL,
+      credentialFile: downloadCredential,
+      allowPersonalData: true,
       downloadDir,
     });
     try {

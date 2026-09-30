@@ -2,6 +2,20 @@
 
 Last updated: 2026-09-30
 
+Browser gate repair: login and retention-help contrast now passes the actual
+light/dark accessibility checks. Connector expectations now enforce Member
+denial for approval readiness and unclassified Minute Book reads, and withheld
+whole-file download refusal before a FULL/write authorised byte comparison.
+The real browser approval journey exposed and fixed ApprovalsPage's duplicate
+response-envelope unwrapping, which hid pending approvals. All 68 connector
+tests now pass in the managed disposable stack, including UI password approval
+and subsequent connector consumption; runner exit 0. No live change yet.
+
+Remaining release blocker: CI 36698825672 at 78009bac now seeds the backup
+sentinel successfully, but snapshot-bound proof refuses the PostgreSQL sequence
+behind RiskControlVerification.sequence. Preserve audit ordering and backup
+consistency when resolving this compatibility issue; do not bypass the guard.
+
 Backup gate follow-up: CI 36698387739 for 86b5433d failed while seeding its
 synthetic restore sentinel, before backup began. Its PENDING-to-PROCESSED
 local-storage fixture omitted the activeObjectAbsentAt receipt required by

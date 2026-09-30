@@ -85,6 +85,7 @@ export function DocumentRetentionPolicies() {
       </select></label>
       {mode === 'AFTER_ANCHOR' ? <Input type="number" label="Minimum retention days" value={retention} onValueChange={setRetention} min={1} max={36525} isDisabled={busy} /> : null}
       <Input type="number" label="Recovery days after removal" value={recovery} onValueChange={setRecovery} min={1} max={3650} isDisabled={busy}
+        classNames={{ description: '!text-gray-700 dark:!text-gray-300' }}
         description="A permanent-retention rule still prohibits removal regardless of this recovery value." />
     </div>
     <div className="mt-3 flex flex-wrap gap-2">

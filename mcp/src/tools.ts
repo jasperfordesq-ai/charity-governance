@@ -216,7 +216,7 @@ const READ_TOOLS: readonly ToolDefinition[] = [
   },
   {
     name: 'approval_readiness',
-    description: 'Whether the charity is ready for board approval of its compliance return.',
+    description: 'Whether the charity is ready for board approval of its compliance return. Owner/Admin only because readiness includes evidence and organisation facts.',
     path: '/api/v1/compliance/approval-readiness',
     noRecordsBecause: 'Standard identifiers, codes and statuses; no records about anyone.',
   },

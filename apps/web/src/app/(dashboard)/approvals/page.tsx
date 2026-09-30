@@ -71,7 +71,7 @@ export default function ApprovalsPage() {
     setLoadError('');
     try {
       const response = await api.get('/auth/approvals');
-      setPending((response.data?.data ?? []) as PendingApproval[]);
+      setPending((response.data ?? []) as PendingApproval[]);
     } catch (err) {
       logClientError('Failed to load pending approvals', err);
       setLoadError(apiErrorMessage(err, 'Pending approvals could not be loaded.'));

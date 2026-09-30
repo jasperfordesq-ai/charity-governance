@@ -132,6 +132,7 @@ export default function LoginPage() {
 
               <Input
                 label="Authenticator or recovery code"
+                classNames={{ description: '!text-gray-700 dark:!text-gray-300' }}
                 type="password"
                 description={factorPrompt ? 'This account requires a code. Use the six digits from your authenticator or one saved recovery code.' : 'Enter a code if you have enabled two-step sign-in.'}
                 value={secondFactor}
