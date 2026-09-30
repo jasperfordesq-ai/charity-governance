@@ -1,5 +1,15 @@
 # CharityPilot Full-Platform Remediation Audit
 
+> **Volunteer template source review, 2026-09-30:** exact verified backup PDF
+> is a blank three-page Volunteer Register and Induction Record. CWR-2026-11
+> Resolution 3 adopts the circulated form and assigns the Company Secretary,
+> while leaving standard 3.2 open until the register is populated. The P01/P02
+> worksheet proposes CURRENT **template** / RESTRICTED, not completed
+> induction or a populated register. Former-volunteer retention remains
+> unresolved. Ten of 63 rows have source evidence, nine have a proposal and
+> all 63 remain PENDING. Private evidence:
+> `.charitypilot-private/volunteer-register-source-review-2026-09-30.md`.
+
 > **Sensitive register source review, 2026-09-30:** exact verified backup
 > bytes of the Register of Interests/Declaration Form contain named trustees'
 > financial and related-party conflicts. The private P01/P02 worksheet

@@ -1,5 +1,15 @@
 # CharityPilot Agent Continuation Handoff
 
+> **Volunteer template source review, 2026-09-30:** the exact three-page PDF
+> matches a verified backup entry and is blank. CWR-2026-11 Resolution 3 adopts
+> the circulated Volunteer Register and Induction Record and assigns the
+> Company Secretary; it says standard 3.2 stays open until the register is
+> populated. The P01/P02 worksheet proposes CURRENT **template** / RESTRICTED,
+> not operational completion. Former-volunteer retention and any populated
+> record remain to check. Ten of 63 rows have source evidence, nine have a
+> proposal and all 63 remain PENDING. Private evidence:
+> `.charitypilot-private/volunteer-register-source-review-2026-09-30.md`.
+
 > **Sensitive register source review, 2026-09-30:** exact verified backup
 > bytes of the Register of Interests/Declaration Form include named trustees'
 > financial and related-party conflicts. The private P01/P02 worksheet
