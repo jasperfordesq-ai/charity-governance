@@ -11,6 +11,7 @@ import { DocumentStorageProviderModal } from './document-storage-provider-modal'
 import { DocumentVisibilityModal } from './document-visibility-modal';
 import { DocumentControlModal } from './document-control-modal';
 import { DocumentControlHistory } from './document-control-history';
+import { DocumentDeletedItems } from './document-deleted-items';
 import { DocumentStorageDeletionReview } from './document-storage-deletion-review';
 import { DocumentEvidencePackPanel } from './document-evidence-pack-panel';
 import { DocumentListPanel } from './document-list-panel';
@@ -224,6 +225,7 @@ export default function DocumentsPage() {
       />
 
       {canManage ? <DocumentControlHistory /> : null}
+      {canManage ? <DocumentDeletedItems onRestored={() => fetchDocuments(true)} /> : null}
       {canManage ? <DocumentStorageDeletionReview /> : null}
 
       <DocumentUploadModal

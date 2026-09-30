@@ -25,6 +25,27 @@ purge/hold races, user-interface behavior or provider/backup disposal.
 
 ## Observed starting point
 
+Latest UI checkpoint: the Documents page now offers an Admin-only Deleted Items
+panel with bounded pagination, deadlines, hold status, refresh, reasoned restore,
+error handling and restricted-sharing notice. It resets the pagination cursor
+after restoration because a restored anchor is no longer in Deleted Items.
+
+The managed disposable runner passed `tests/document-recovery.spec.ts` using real
+PostgreSQL, compiled web/API, local file storage and Chromium. It proves upload,
+approved synthetic-policy removal, retained row/hash, zero cleanup jobs, Owner
+ordinary detail/download denial, panel listing, restoration, identical downloaded
+bytes, restricted sharing and removal/restore audit. The first run found a panel
+response-unwrapping defect; the fixed second run passed with runner exit 0.
+Application typecheck (275 files) and the isolated production build/typecheck
+passed. A screenshot was inspected, but its capture occurred during modal
+animation; capture settings now disable animations and limit the viewport for
+future runs. Do not claim a completed visual/accessibility review from it.
+
+The policy was inserted only into the runner-owned synthetic database. Policy
+administration, real-database negative/race coverage, old hard-delete code/test
+retirement, adapted older DPO browser journeys and R3-R5 remain open. This is
+not deployed acceptance and does not close DPO-05.
+
 Latest ordinary-removal checkpoint: DELETE now invokes the recovery service with
 a policy ID, controlled removal evidence reference and expected revision. It is
 web-admin only and never invokes provider deletion or cleanup creation. The

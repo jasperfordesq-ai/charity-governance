@@ -2,6 +2,19 @@
 
 Last updated: 2026-09-30
 
+Deleted Items/restore UI now exists and the real disposable Chromium journey
+`tests/document-recovery.spec.ts` passes through upload, policy-bound removal,
+retained PostgreSQL record/hash, zero cleanup jobs, Owner ordinary detail/download
+404, Deleted Items listing, restoration, identical downloaded bytes, restricted
+visibility and both audit events. Runner exit 0 followed the successful test.
+The initial run exposed an API-client response-unwrapping mismatch in the new
+panel; fixed and rerun successfully. The isolated production build/typecheck also
+passed. This is synthetic local-stack evidence, not live charity acceptance.
+Next: policy administration, retire the old unused hard-delete service and adapt
+the two older DPO browser journeys that still expect hard deletion; broaden
+persisted proof to missing/changed bytes, role/tenant denial and races; then purge,
+other stores, approved activation, deployment and live review.
+
 Ordinary Vault DELETE now calls DocumentRecoveryService.remove, requires an Admin
 web session, current revision, approved policy and removal evidence reference,
 and returns the retained removal result without a cleanup job. The dialog loads
