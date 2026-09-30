@@ -70,12 +70,13 @@ import {
   openSync,
   readdirSync,
   readFileSync,
+  realpathSync,
   renameSync,
   rmSync,
   statSync,
   writeFileSync,
 } from 'node:fs';
-import { dirname, join, resolve } from 'node:path';
+import { dirname, isAbsolute, join, resolve } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 
 import { redactProductionDeployTranscript } from './production-deploy-preflight.mjs';
@@ -364,6 +365,42 @@ export function preflightIssues({ fileEnv, resolvedEnvFilePath }) {
     }
   } catch {
     // An unparseable DATABASE_URL is already reported by the hostname check above.
+  }
+
+  // Restricted-runtime mode keeps the database owner URL in the deployment
+  // file for db/migrate while API, web and jobs receive a separate env file.
+  // The file is opt-in so existing private and hosted installations keep
+  // their current behavior until credentials and grants are provisioned.
+  const appEnvPath = fileEnv.BLUEGREEN_APP_ENV_FILE || '';
+  if (appEnvPath) {
+    if (isAbsolute(appEnvPath) && resolve(appEnvPath) === resolve(resolvedEnvFilePath)) {
+      issues.push('BLUEGREEN_APP_ENV_FILE must be separate from the database owner env file');
+    } else if (!isAbsolute(appEnvPath) || !existsSync(appEnvPath) || !statSync(appEnvPath).isFile()) {
+      issues.push('BLUEGREEN_APP_ENV_FILE must name an existing absolute file');
+    } else if (existsSync(resolvedEnvFilePath) &&
+      (realpathSync(appEnvPath) === realpathSync(resolvedEnvFilePath) ||
+        (statSync(appEnvPath).dev === statSync(resolvedEnvFilePath).dev &&
+          statSync(appEnvPath).ino === statSync(resolvedEnvFilePath).ino))) {
+      issues.push('BLUEGREEN_APP_ENV_FILE must not alias the database owner env file');
+    } else {
+      const appEnv = parseEnvFile(appEnvPath);
+      if (Object.keys(appEnv).some((key) => key.startsWith('POSTGRES_')) || 'MIGRATION_DATABASE_URL' in appEnv) {
+        issues.push('BLUEGREEN_APP_ENV_FILE must not contain database owner or migration variables');
+      }
+      try {
+        const appUrl = new URL(appEnv.DATABASE_URL ?? '');
+        const adminUrl = new URL(fileEnv.DATABASE_URL ?? '');
+        if (appUrl.hostname !== 'db' || decodeURIComponent(appUrl.pathname) !== decodeURIComponent(adminUrl.pathname)) {
+          issues.push('BLUEGREEN_APP_ENV_FILE DATABASE_URL must target the same compose database');
+        }
+        if (!appUrl.username || !appUrl.password || decodeURIComponent(appUrl.username) === identity.databaseUser ||
+          decodeURIComponent(appUrl.password) === decodeURIComponent(adminUrl.password)) {
+          issues.push('BLUEGREEN_APP_ENV_FILE DATABASE_URL must use a distinct restricted role with a password');
+        }
+      } catch {
+        issues.push('BLUEGREEN_APP_ENV_FILE must contain a valid DATABASE_URL');
+      }
+    }
   }
 
   const declaredEnvFile = fileEnv.BLUEGREEN_ENV_FILE ?? '';
@@ -661,6 +698,7 @@ function baseComposeEnv({ processEnv, resolvedEnvFilePath, fileEnv, blueTag, gre
   return {
     ...processEnv,
     BLUEGREEN_ENV_FILE: resolvedEnvFilePath,
+    BLUEGREEN_APP_ENV_FILE: fileEnv.BLUEGREEN_APP_ENV_FILE || '',
     BLUEGREEN_BLUE_TAG: blueTag,
     BLUEGREEN_GREEN_TAG: greenTag,
     BLUEGREEN_ACTIVE_TAG: activeTag,

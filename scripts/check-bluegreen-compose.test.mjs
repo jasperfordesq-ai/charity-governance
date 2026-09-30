@@ -232,14 +232,15 @@ test('the one-shot migrate runner builds the migration-runner target and never m
   assert.doesNotMatch(migrate, /^\s*ports:/m);
 });
 
-test('every service needing runtime configuration reads it from the deployment env file', () => {
+test('database owner env stays on db/migrate while app services accept a separate runtime env', () => {
+  for (const service of ['db', 'migrate']) {
+    assert.match(serviceSection(service), /env_file: \$\{BLUEGREEN_ENV_FILE:\?/);
+  }
   for (const service of [
-    'db',
     'api-blue',
     'api-green',
     'web-blue',
     'web-green',
-    'migrate',
     'scheduler',
     'deadline-reminders',
     'document-storage-cleanup',
@@ -247,8 +248,8 @@ test('every service needing runtime configuration reads it from the deployment e
   ]) {
     assert.match(
       serviceSection(service),
-      /env_file: \$\{BLUEGREEN_ENV_FILE:\?/,
-      `${service} must read env_file from BLUEGREEN_ENV_FILE`,
+      /env_file: \$\{BLUEGREEN_APP_ENV_FILE:-\$\{BLUEGREEN_ENV_FILE:\?[^}]+\}\}/,
+      `${service} must use the distinct app env when configured`,
     );
   }
 });
@@ -473,6 +474,24 @@ test('docker compose config renders a valid effective model for both colour prof
   // proving the env_file interpolation worked end to end.
   assert.match(baseResult.stdout, /POSTGRES_DB: charitypilot/);
   assert.match(baseResult.stdout, /image: charitypilot-bluegreen-migrations:scratch-blue-commit/);
+
+  const appEnvFile = join(scratchDir, 'app.env');
+  writeFileSync(appEnvFile, 'DATABASE_URL=postgresql://runtime:runtime-password@db:5432/charitypilot\n');
+  const splitResult = spawnSync(
+    'docker',
+    ['compose', '-f', 'compose.bluegreen.yml', '-p', 'charitypilot-bluegreen', '--profile', 'blue', '--profile', 'green', 'config', '--format', 'json'],
+    { cwd: repoRoot, encoding: 'utf8', env: { ...env, BLUEGREEN_APP_ENV_FILE: appEnvFile }, timeout: DOCKER_COMPOSE_CONFIG_TIMEOUT_MS },
+  );
+  assert.equal(splitResult.status, 0, splitResult.stderr || 'split-env compose config failed');
+  const split = JSON.parse(splitResult.stdout).services;
+  assert.equal(split.db.environment.DATABASE_URL, 'postgresql://charitypilot:scratch-password@db:5432/charitypilot');
+  assert.equal(split.migrate.environment.DATABASE_URL, split.db.environment.DATABASE_URL);
+  for (const service of ['api-blue', 'api-green', 'web-blue', 'web-green', 'scheduler',
+    'deadline-reminders', 'document-storage-cleanup', 'auth-recovery-secret-rotation']) {
+    assert.equal(split[service].environment.DATABASE_URL, 'postgresql://runtime:runtime-password@db:5432/charitypilot');
+    assert.equal(split[service].environment.POSTGRES_PASSWORD, undefined,
+      `${service} must not receive the database owner password`);
+  }
 
   const blueResult = spawnSync(
     'docker',

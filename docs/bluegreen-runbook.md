@@ -32,13 +32,22 @@ Until that report exists, this engine has not run against a real VM.
   smoke tests that hit the front door from outside any container). A
   missing one now fails the phase-1 preflight by name instead of
   surfacing as an opaque error deep into the run.
-- **One env file, self-consistent.** Every container reads application
-  config from a single file via `env_file: ${BLUEGREEN_ENV_FILE:?...}`
-  (`compose.bluegreen.yml`'s header comment). That same file must declare
+- **Deployment env, self-consistent.** The database and migration runner
+  read `BLUEGREEN_ENV_FILE`. By default API, web and jobs use it too. The
+  same file must declare
   `BLUEGREEN_ENV_FILE` pointing at its own resolved path — the engine's
   preflight (`preflightIssues` in `scripts/bluegreen-deploy.mjs`) rejects a
   mismatch before anything runs, so a stale or copy-pasted env file can
   never be used by accident.
+- **Optional restricted runtime env.** `BLUEGREEN_APP_ENV_FILE` may name a
+  separate absolute file for API, web and jobs. Its `DATABASE_URL` must
+  target the same `db` database with a different role and password; it must
+  contain no `POSTGRES_*` or migration variables. Preflight rejects an
+  absent, reused or malformed file before deploy. The database and migrate
+  services continue to use the owner env. This is an opt-in credential
+  transport seam only: it does not provision the restricted role, grants,
+  trusted executor, independent provider or emergency hold path. Do not
+  enable recovery enforcement on the strength of this setting alone.
 - **`DATABASE_URL`** must resolve to hostname `db` exactly (the compose
   `db` service) — preflight rejects any other host.
 - **`READINESS_API_KEY`** must be set (candidate- and public-smoke both

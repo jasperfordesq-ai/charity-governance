@@ -2043,6 +2043,39 @@ test('P3-1: preflightIssues rejects a DATABASE_URL whose database or user disagr
   );
 });
 
+test('separate app env requires a distinct runtime database role and no owner variables', async () => {
+  const { preflightIssues } = await loadDeployModule();
+  const dir = makeFixtureDir('bluegreen-app-env-');
+  const ownerPath = join(dir, 'owner.env');
+  const appPath = join(dir, 'app.env');
+  const owner = {
+    ...PREFLIGHT_BASE,
+    BLUEGREEN_ENV_FILE: ownerPath,
+    BLUEGREEN_APP_ENV_FILE: appPath,
+    POSTGRES_DB: 'charitypilot',
+    POSTGRES_USER: 'charitypilot',
+    DATABASE_URL: 'postgresql://charitypilot:owner-password@db:5432/charitypilot',
+  };
+  writeFileSync(appPath, 'DATABASE_URL=postgresql://runtime:runtime-password@db:5432/charitypilot\n');
+  assert.deepEqual(preflightIssues({ fileEnv: owner, resolvedEnvFilePath: ownerPath }), []);
+
+  writeFileSync(appPath, 'DATABASE_URL=postgresql://charitypilot:owner-password@db:5432/charitypilot\n');
+  assert.ok(preflightIssues({ fileEnv: owner, resolvedEnvFilePath: ownerPath })
+    .some((issue) => issue.includes('distinct restricted role')));
+
+  writeFileSync(appPath, 'DATABASE_URL=postgresql://runtime:owner-password@db:5432/charitypilot\n');
+  assert.ok(preflightIssues({ fileEnv: owner, resolvedEnvFilePath: ownerPath })
+    .some((issue) => issue.includes('distinct restricted role')));
+
+  writeFileSync(appPath, 'DATABASE_URL=postgresql://runtime:runtime-password@db:5432/other\nPOSTGRES_PASSWORD=leak\n');
+  const unsafe = preflightIssues({ fileEnv: owner, resolvedEnvFilePath: ownerPath });
+  assert.ok(unsafe.some((issue) => issue.includes('same compose database')));
+  assert.ok(unsafe.some((issue) => issue.includes('owner or migration variables')));
+  assert.ok(preflightIssues({ fileEnv: { ...owner, BLUEGREEN_APP_ENV_FILE: ownerPath }, resolvedEnvFilePath: ownerPath })
+    .some((issue) => issue.includes('must be separate')));
+  rmSync(dir, { recursive: true, force: true });
+});
+
 test('P3-1: the standalone backup subcommand passes the env file database identity to runBackup', async () => {
   const runDeploy = await loadDeployRunner();
   const stateDir = makeFixtureDir('bluegreen-db-identity-backup-subcommand-');

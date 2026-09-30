@@ -29,11 +29,11 @@
 # so that a cutover changes running processes, never the underlying data.
 #
 # Every service that needs application configuration reads it from
-# `env_file: ${BLUEGREEN_ENV_FILE:?...}`, a single file supplied by whichever
-# deployment (hosted, private VM, local dev cycle) is invoking the engine.
-# This file intentionally carries none of this compose file's own topology
-# decisions (deployment mode, tenancy, provider axis, ...) so the same
-# compose file works unmodified across deployment targets.
+# The database and migration runner use BLUEGREEN_ENV_FILE. An optional
+# BLUEGREEN_APP_ENV_FILE supplies only application runtime configuration to
+# API, web and jobs, so a restricted runtime database credential need not
+# expose the database owner password to those containers. Without it, existing
+# deployments continue to use BLUEGREEN_ENV_FILE for all services.
 # =============================================================================
 
 name: charitypilot-bluegreen
@@ -94,7 +94,7 @@ services:
       args:
         CHARITYPILOT_BUILD_COMMIT: ${BLUEGREEN_BLUE_TAG:?Set BLUEGREEN_BLUE_TAG to the blue colour's built commit}
     restart: unless-stopped
-    env_file: ${BLUEGREEN_ENV_FILE:?Set BLUEGREEN_ENV_FILE to the deployment's env file}
+    env_file: ${BLUEGREEN_APP_ENV_FILE:-${BLUEGREEN_ENV_FILE:?Set BLUEGREEN_ENV_FILE to the deployment's env file}}
     environment:
       NODE_ENV: production
       PORT: "3002"
@@ -136,7 +136,7 @@ services:
       args:
         CHARITYPILOT_BUILD_COMMIT: ${BLUEGREEN_GREEN_TAG:?Set BLUEGREEN_GREEN_TAG to the green colour's built commit}
     restart: unless-stopped
-    env_file: ${BLUEGREEN_ENV_FILE:?Set BLUEGREEN_ENV_FILE to the deployment's env file}
+    env_file: ${BLUEGREEN_APP_ENV_FILE:-${BLUEGREEN_ENV_FILE:?Set BLUEGREEN_ENV_FILE to the deployment's env file}}
     environment:
       NODE_ENV: production
       PORT: "3002"
@@ -186,7 +186,7 @@ services:
     depends_on:
       api-blue:
         condition: service_healthy
-    env_file: ${BLUEGREEN_ENV_FILE:?Set BLUEGREEN_ENV_FILE to the deployment's env file}
+    env_file: ${BLUEGREEN_APP_ENV_FILE:-${BLUEGREEN_ENV_FILE:?Set BLUEGREEN_ENV_FILE to the deployment's env file}}
     environment:
       NODE_ENV: production
       PORT: "3003"
@@ -245,7 +245,7 @@ services:
     depends_on:
       api-green:
         condition: service_healthy
-    env_file: ${BLUEGREEN_ENV_FILE:?Set BLUEGREEN_ENV_FILE to the deployment's env file}
+    env_file: ${BLUEGREEN_APP_ENV_FILE:-${BLUEGREEN_ENV_FILE:?Set BLUEGREEN_ENV_FILE to the deployment's env file}}
     environment:
       NODE_ENV: production
       PORT: "3003"
@@ -311,7 +311,7 @@ services:
     command: ["node", "dist/jobs/production-scheduler.js"]
     stop_grace_period: 60s
     restart: unless-stopped
-    env_file: ${BLUEGREEN_ENV_FILE:?Set BLUEGREEN_ENV_FILE to the deployment's env file}
+    env_file: ${BLUEGREEN_APP_ENV_FILE:-${BLUEGREEN_ENV_FILE:?Set BLUEGREEN_ENV_FILE to the deployment's env file}}
     environment:
       NODE_ENV: production
     depends_on:
@@ -330,7 +330,7 @@ services:
     pull_policy: never
     command: ["node", "dist/jobs/send-deadline-reminders.js"]
     restart: "no"
-    env_file: ${BLUEGREEN_ENV_FILE:?Set BLUEGREEN_ENV_FILE to the deployment's env file}
+    env_file: ${BLUEGREEN_APP_ENV_FILE:-${BLUEGREEN_ENV_FILE:?Set BLUEGREEN_ENV_FILE to the deployment's env file}}
     environment:
       NODE_ENV: production
     depends_on:
@@ -349,7 +349,7 @@ services:
     pull_policy: never
     command: ["node", "dist/jobs/cleanup-document-storage.js"]
     restart: "no"
-    env_file: ${BLUEGREEN_ENV_FILE:?Set BLUEGREEN_ENV_FILE to the deployment's env file}
+    env_file: ${BLUEGREEN_APP_ENV_FILE:-${BLUEGREEN_ENV_FILE:?Set BLUEGREEN_ENV_FILE to the deployment's env file}}
     environment:
       NODE_ENV: production
     depends_on:
@@ -368,7 +368,7 @@ services:
     pull_policy: never
     command: ["node", "dist/jobs/rotate-auth-recovery-secret.js"]
     restart: "no"
-    env_file: ${BLUEGREEN_ENV_FILE:?Set BLUEGREEN_ENV_FILE to the deployment's env file}
+    env_file: ${BLUEGREEN_APP_ENV_FILE:-${BLUEGREEN_ENV_FILE:?Set BLUEGREEN_ENV_FILE to the deployment's env file}}
     environment:
       NODE_ENV: production
     depends_on:
