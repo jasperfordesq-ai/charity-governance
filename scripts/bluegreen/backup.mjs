@@ -74,6 +74,7 @@ import { basename, dirname, join } from 'node:path';
 
 import { DEFAULT_POSTGRES_IMAGE } from '../postgres-backup.mjs';
 import { DOCUMENT_ARCHIVE_IMAGE } from '../personal-server.mjs';
+import { PURGE_RESTORE_SNAPSHOT_SQL, assertPurgeRestoreLedger } from '../purge-restore-reconciliation.mjs';
 
 const DEFAULT_DATABASE_NAME = 'charitypilot';
 const DEFAULT_DATABASE_USER = 'charitypilot';
@@ -773,7 +774,26 @@ export async function runRestoreDrill(ctx) {
       );
     }
 
-    return { ok: true, rowCensus: restoredRowCensus, manifestVerification };
+    // Read current authority from the configured live database, never from the
+    // backup manifest. These are SELECT-only queries; all restore writes stay
+    // confined to the disposable container. Missing schema/authority fails.
+    const liveHistoryCommand = liveRowCensusCommand(ctx);
+    liveHistoryCommand[liveHistoryCommand.length - 1] = PURGE_RESTORE_SNAPSHOT_SQL;
+    const readHistory = async command => {
+      const output = await ctx.runCommand(command, { env });
+      try { return JSON.parse(output?.stdout); }
+      catch { throw new Error('Restore drill requires readable current and restored purge history'); }
+    };
+    const authority = await readHistory(liveHistoryCommand);
+    const restoredHistoryCommand = drillRowCensusCommand(containerName);
+    restoredHistoryCommand[restoredHistoryCommand.length - 1] = PURGE_RESTORE_SNAPSHOT_SQL;
+    const restoredHistory = await readHistory(restoredHistoryCommand);
+    const purgeReconciliation = assertPurgeRestoreLedger(authority, restoredHistory);
+    // Detect authority changes during comparison. This bounded observation is
+    // not a lock or permission to reopen an application after a real restore.
+    assertPurgeRestoreLedger(authority, await readHistory(liveHistoryCommand));
+    return { ok: true, rowCensus: restoredRowCensus, manifestVerification,
+      purgeReconciliation, applicationReopenAuthorized: false };
   } catch (error) {
     try {
       await ctx.runCommand(drillLogsCommand(containerName), { env });

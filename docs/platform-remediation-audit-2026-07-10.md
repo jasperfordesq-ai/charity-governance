@@ -1,5 +1,14 @@
 # CharityPilot Full-Platform Remediation Audit
 
+> DPO-05 restore-drill comparison, 2026-09-30: bluegreen restore drills now
+> compare current live purge authority with the isolated restored database,
+> then recapture authority to detect changes. Stale, unreadable or changed
+> history fails with cleanup. All 117 backup/deployment tests pass locally.
+> The real PostgreSQL backup/restore comparison proof also passed separately.
+> Live integrated verification, actual file/copy reconciliation, independently
+> durable authority and supported personal-server recovery integration remain
+> open. Passing a drill does not authorize reopening restored application data.
+
 > DPO-05 downstream-evidence dashboard, 2026-09-30: Owner scoped observations
 > and append-only corrections now have UI controls. Isolated Chromium proves
 > retained-backup evidence, reopening review, history after reload and no

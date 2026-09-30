@@ -2094,7 +2094,8 @@ async function executeRestoreDrillCommand(deps) {
     plan,
   });
 
-  return result(0, `Restore drill against ${backupDir} passed: ${JSON.stringify(drillResult.rowCensus)}\n`);
+  return result(0, `Restore drill against ${backupDir} passed: ${JSON.stringify(drillResult.rowCensus)}\n` +
+    'This drill does not authorize reopening a restored application; current file and external-copy reconciliation is still required.\n');
 }
 
 // ---------------------------------------------------------------------------

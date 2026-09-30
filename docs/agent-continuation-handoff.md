@@ -2,6 +2,18 @@
 
 Last updated: 2026-09-30
 
+Restore-drill integration checkpoint: bluegreen/backup.mjs now invokes purge
+reconciliation after artifact verification. It obtains current history with a
+SELECT-only query to the configured live database, compares the disposable
+restore, and recaptures authority to detect intervening changes. Missing schema,
+unreadable authority and mismatches fail the drill with existing cleanup. The
+117 backup/deployment tests pass, including stale/unreadable/changed-authority
+refusals. The command explicitly denies application-reopen authority.
+These are local orchestration tests plus the earlier real database primitive
+proof; an integrated live drill has not run. Actual file/copy reconciliation,
+independent durable authority after host loss and personal-server recovery
+integration remain open. No private-host recovery entry point was altered.
+
 Backup reconciliation checkpoint, 30 September: the new database comparison
 primitive rejects missing/changed/unexpected purge history and reappearing
 claimed documents. Four focused tests and the populated PostgreSQL migration
@@ -13,8 +25,8 @@ external copies still require reconciliation. This is local proof only.
 Next: wire independently authenticated current authority into recovery paths,
 preserve durable authority independently of old backups, handle concurrent
 source changes, and check restored files/copies before reopening. The existing
-bluegreen/backup.mjs runRestoreDrill currently verifies artifact fidelity and
-row counts only; it does not invoke this primitive. Do not claim the live
+bluegreen/backup.mjs runRestoreDrill at this earlier checkpoint verified artifact
+fidelity and row counts only (superseded by the integration above). Do not claim the live
 recovery safeguard is enforced yet. No live host profile was changed.
 
 Dashboard downstream-evidence checkpoint, 30 September 2026: each claimed

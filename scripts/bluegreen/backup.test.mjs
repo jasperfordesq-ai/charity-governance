@@ -5,6 +5,7 @@ import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { test } from 'node:test';
+import { PURGE_RESTORE_TABLES, PURGE_RESTORE_SNAPSHOT_SQL } from '../purge-restore-reconciliation.mjs';
 
 const scriptsDir = dirname(fileURLToPath(import.meta.url));
 const backupScriptPath = join(scriptsDir, 'backup.mjs');
@@ -526,6 +527,8 @@ function makeDrillRecordingRunCommand({
   rowCensusStdout = 'Organisation=3\nUser=5\n',
   documentHashStdout,
   failOn = null,
+  history = () => ({ format: 1, capturedAt: '2026-09-30T10:00:00.000Z',
+    tables: Object.fromEntries(PURGE_RESTORE_TABLES.map(table => [table, []])), claims: [], documents: [] }),
 }) {
   const calls = [];
   const runCommand = async (command, options = {}) => {
@@ -551,6 +554,9 @@ function makeDrillRecordingRunCommand({
     if (line.includes('psql') && line.includes('query_to_xml')) {
       return { stdout: rowCensusStdout };
     }
+    if (command.includes(PURGE_RESTORE_SNAPSHOT_SQL)) {
+      return { stdout: JSON.stringify(history(command, calls)) };
+    }
     if (line.includes('tar -xf') || line.includes('mkdir -p /drill-documents')) {
       return { stdout: documentHashStdout };
     }
@@ -565,6 +571,11 @@ function makeDrillRecordingRunCommand({
 function assertNeverTouchesLiveDb(calls) {
   for (const { command } of calls) {
     const line = commandLine(command);
+    if (command.includes('compose') && command.includes(PURGE_RESTORE_SNAPSHOT_SQL)) {
+      assert.ok(command.includes('psql'));
+      assert.ok(command.includes('db'));
+      continue; // The exact SELECT-only current-authority query is permitted.
+    }
     assert.ok(!command.includes('compose'), `drill command must never use docker compose: ${line}`);
     assert.ok(!command.includes('db'), `drill command must never target the live db service: ${line}`);
     assert.ok(!line.includes('compose.bluegreen.yml'), 'drill command must never reference the bluegreen compose file');
@@ -673,6 +684,37 @@ test("waitForDrillReadiness timeout carries the LAST probe's error, not an earli
   assert.equal(callCount(), 120);
 });
 
+test('runRestoreDrill refuses stale, unreadable and concurrently changed purge authority and cleans up', async () => {
+  const { runRestoreDrill } = await loadBackupModule();
+  for (const scenario of ['stale', 'unreadable', 'changed']) {
+    const stateDir = makeTempDir('charitypilot-purge-drill-');
+    try {
+      const { plan, documentEntries } = writeFixtureBackup(stateDir);
+      let liveReads = 0;
+      const { runCommand, calls } = makeDrillRecordingRunCommand({
+        documentHashStdout: documentEntries.map(e => `${e.sha256}\t${e.bytes}\t${e.path}`).join('\n'),
+        history(command) {
+          const live = command.includes('compose');
+          if (live) liveReads++;
+          if (scenario === 'unreadable' && live) return undefined;
+          const snapshot = { format: 1, capturedAt: '2026-09-30T10:00:00.000Z',
+            tables: Object.fromEntries(PURGE_RESTORE_TABLES.map(table => [table, []])), claims: [], documents: [] };
+          if ((scenario === 'stale' && live) || (scenario === 'changed' && liveReads === 2)) {
+            snapshot.tables.DocumentPurgeDispositionEvent.push({ id: 'later-review', sha256: 'a'.repeat(64) });
+          }
+          return snapshot;
+        },
+      });
+      await assert.rejects(() => runRestoreDrill({ runCommand, stateDir, plan, sleep: async () => {} }),
+        scenario === 'unreadable' ? /requires readable/ : /purge history differs/);
+      assert.equal(teardownCallsOf(calls).length, 1);
+      assert.equal(logsCallsOf(calls).length, 1);
+      assertNeverTouchesLiveDb(calls);
+      if (scenario === 'changed') assert.equal(liveReads, 2);
+    } finally { rmSync(stateDir, { recursive: true, force: true }); }
+  }
+});
+
 test('runRestoreDrill restores into a throwaway container, never the live db, and passes clean', async () => {
   const { runRestoreDrill } = await loadBackupModule();
   const stateDir = makeTempDir('charitypilot-bluegreen-drill-test-');
@@ -694,6 +736,9 @@ test('runRestoreDrill restores into a throwaway container, never the live db, an
     const result = await runRestoreDrill(ctx);
 
     assert.equal(result.ok, true);
+    assert.equal(result.purgeReconciliation.databaseLedgerMatches, true);
+    assert.equal(result.purgeReconciliation.objectAndExternalCopyReconciliationRequired, true);
+    assert.equal(result.applicationReopenAuthorized, false);
     assert.deepEqual(result.rowCensus, { Organisation: 3, User: 5 });
     assert.deepEqual(result.manifestVerification, { ok: true, missing: [], mismatched: [], extra: [] });
 

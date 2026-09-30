@@ -460,7 +460,17 @@ older backup reintroduces the document and is rejected; the current backup
 matches. Four focused tests cover altered/missing/extra history, charity scope,
 conflicting source records and malformed evidence. All passed locally.
 
-This is a tested comparison primitive, not an integrated recovery gate. The
+The bluegreen restore drill now invokes this comparison after artifact checks,
+reading authority directly from the configured live database and recapturing it
+after comparison. Missing history/schema or changing authority fails the drill.
+The 117 backup/deployment tests cover orchestration and failure cleanup; the
+earlier populated database proof covers the actual SQL and restored records.
+A live integrated drill has not been run. A pre-schema backup requires a
+separately supervised compatibility/migration procedure; no automatic fallback
+to an empty ledger or raw restore is permitted. An unavailable live authority
+also prevents this drill from passing.
+
+This is not an application recovery/reopen gate. The
 recovery controller must independently establish the current authority, keep
 the target inaccessible, account for writes since capture and reconcile actual
 objects and external copies before reopening. Reading both inputs from the
