@@ -45,7 +45,7 @@ function routeDirectoriesByPrefix(): Map<string, string> {
 }
 
 /**
- * Every GET route registered in a group's index.ts, as a full path.
+ * GET routes in each group's index and directly invoked sibling registrars.
  *
  * The pattern has to tolerate three things the API really does: a generic
  * between `get` and its arguments (`app.get<{ Params: ... }>(`), registration
@@ -56,11 +56,26 @@ const GET_REGISTRATION = /\b\w+\.get(?:<[^>]*>)?\(\s*['"]([^'"]*)['"]/g;
 
 function discoverGetRoutes(): string[] {
   const found: string[] = [];
+  function sources(file: string, visited = new Set<string>()): string[] {
+    if (visited.has(file)) return [];
+    visited.add(file);
+    const source = readFileSync(file, 'utf8');
+    const result = [source];
+    // Follow direct sibling registrars on the same Fastify scope. Nested
+    // registrations with their own prefix need separate prefix handling.
+    for (const imported of source.matchAll(/import\s*\{([^}]+)\}\s*from\s*'\.\/([a-z-]+)\.js'/g)) {
+      const invoked = imported[1]!.split(',').map(name => name.trim())
+        .some(name => new RegExp(`\\b${name}\\(app\\s*[,)]`).test(source));
+      if (invoked) result.push(...sources(resolve(dirname(file), `${imported[2]}.ts`), visited));
+    }
+    return result;
+  }
   for (const [prefix, directory] of routeDirectoriesByPrefix()) {
-    const source = readFileSync(resolve(API_SRC, 'routes', directory, 'index.ts'), 'utf8');
-    for (const match of source.matchAll(GET_REGISTRATION)) {
-      const subPath = match[1]!;
-      found.push(subPath === '/' ? prefix : `${prefix}${subPath}`);
+    for (const source of sources(resolve(API_SRC, 'routes', directory, 'index.ts'))) {
+      for (const match of source.matchAll(GET_REGISTRATION)) {
+        const subPath = match[1]!;
+        found.push(subPath === '/' ? prefix : `${prefix}${subPath}`);
+      }
     }
   }
   return [...new Set(found)].sort();

@@ -11,14 +11,22 @@ import { ConfirmActionModal } from '@/components/ui/confirm-action-modal';
 type Terms = { retentionMode: 'REVIEW_REQUIRED' | 'PERMANENT' | 'AFTER_ANCHOR'; retentionDays: number | null; recoveryDays: number };
 type Revision = Terms & { id: string; revision: number; state: 'DRAFT' | 'APPROVED';
   approvedAt: string | null; approvalEvidenceRef: string | null; withdrawal: { reason: string; evidenceRef: string } | null };
-function describe(terms: Terms) {
+function describe(terms: Terms, anchor = 'document creation') {
   const retention = terms.retentionMode === 'PERMANENT' ? 'Permanent retention: removal is prohibited.'
-    : terms.retentionMode === 'AFTER_ANCHOR' ? `Retain for ${terms.retentionDays} days from document creation before reviewing removal.`
+    : terms.retentionMode === 'AFTER_ANCHOR' ? `Retain for ${terms.retentionDays} days from ${anchor} before reviewing removal.`
     : 'Each removal requires a recorded, individual review decision.';
   return `${retention} Recovery window after authorised removal: ${terms.recoveryDays} days.`;
 }
 
 export function DocumentRetentionPolicies() {
+  return <RetentionPolicies recordClass="VAULT_DRAFT" />;
+}
+
+export function RetentionPolicies({ recordClass }: { recordClass: 'VAULT_DRAFT' | 'COMPLAINT' }) {
+  const complaint = recordClass === 'COMPLAINT';
+  const endpoint = complaint ? '/governance-registers/complaints/policy-revisions' : '/documents/policy-revisions';
+  const title = complaint ? 'Complaint retention policies' : 'Draft retention policies';
+  const anchor = complaint ? 'reviewed complaint resolution' : 'document creation';
   const { user } = useAuth();
   const isOwner = user?.role === 'OWNER';
   const [rows, setRows] = useState<Revision[] | null>(null);
@@ -44,7 +52,7 @@ export function DocumentRetentionPolicies() {
     if (pending.current || (older && !before)) return;
     pending.current = true; setBusy(true); setError('');
     try {
-      const { data } = await api.get<{ items: Revision[]; nextBefore: number | null }>(`/documents/policy-revisions${older ? `?before=${before}` : ''}`);
+      const { data } = await api.get<{ items: Revision[]; nextBefore: number | null }>(`${endpoint}${older ? `?before=${before}` : ''}`);
       setRows(current => older ? [...(current ?? []), ...data.items] : data.items);
       setBefore(data.nextBefore);
     } catch (cause) { setError(apiErrorMessage(cause, 'Policy history could not be loaded.')); }
@@ -54,7 +62,7 @@ export function DocumentRetentionPolicies() {
     if (pending.current || (approved ? !isOwner || !review || !confirmed || !validEvidence : !valid)) return;
     pending.current = true; setBusy(true); setError(''); setNotice('');
     try {
-      await api.post('/documents/policy-revisions', approved
+      await api.post(endpoint, approved
         ? { ...review, state: 'APPROVED', authorityConfirmed: true, approvalEvidenceRef: evidence }
         : { ...terms, state: 'DRAFT' });
       setReview(null); setRows(null); setBefore(null);
@@ -66,21 +74,21 @@ export function DocumentRetentionPolicies() {
     if (pending.current || !isOwner || !withdraw || !validEvidence || Array.from(reason.trim()).length < 10) return;
     pending.current = true; setBusy(true); setError(''); setNotice('');
     try {
-      await api.post(`/documents/policy-revisions/${encodeURIComponent(withdraw.id)}/withdraw`, { evidenceRef: evidence, reason: reason.trim() });
+      await api.post(`${endpoint}/${encodeURIComponent(withdraw.id)}/withdraw`, { evidenceRef: evidence, reason: reason.trim() });
       setWithdraw(null); setRows(null); setBefore(null);
       setNotice('Policy withdrawn. It cannot authorise new removals; existing recovery deadlines are unchanged.');
     } catch (cause) { setError(apiErrorMessage(cause, 'Policy could not be withdrawn.')); }
     finally { pending.current = false; setBusy(false); }
   };
 
-  return <section className={statusPanelClassName('neutral', 'p-5')} aria-label="Draft retention policies">
-    <h2 className="font-semibold">Draft retention policies</h2>
-    <p className="text-sm">These rules apply only to unheld Vault drafts without linked evidence. Recovery days are separate from retention obligations. Record the charity’s approved rules; no period is supplied automatically. Other record classes and permanent erasure need separate review.</p>
+  return <section className={statusPanelClassName('neutral', 'p-5')} aria-label={title}>
+    <h2 className="font-semibold">{title}</h2>
+    <p className="text-sm">{complaint ? 'These rules apply only to complaints. Timed rules require reviewed resolution evidence that still matches the closed complaint. Complaint recovery and permanent erasure controls are still being implemented.' : 'These rules apply only to unheld Vault drafts without linked evidence.'} Recovery days are separate from retention obligations. Record the charity’s approved rules; no period is supplied automatically. Other record classes and permanent erasure need separate review.</p>
     <div className="mt-4 grid gap-3 sm:grid-cols-2">
       <label className="text-sm">Retention rule<select className="mt-1 block w-full rounded border p-2" value={mode} disabled={busy}
         onChange={event => setMode(event.target.value as Terms['retentionMode'])}>
         <option value="REVIEW_REQUIRED">Individual removal review required</option>
-        <option value="AFTER_ANCHOR">Minimum days from document creation</option>
+        <option value="AFTER_ANCHOR">Minimum days from {anchor}</option>
         <option value="PERMANENT">Permanent retention — no removal</option>
       </select></label>
       {mode === 'AFTER_ANCHOR' ? <Input type="number" label="Minimum retention days" value={retention} onValueChange={setRetention} min={1} max={36525} isDisabled={busy} /> : null}
@@ -98,7 +106,7 @@ export function DocumentRetentionPolicies() {
     {rows?.length === 0 ? <p className="mt-3 text-sm">No policy revisions recorded.</p> : null}
     {rows?.length ? <ol className="mt-4 space-y-3">{rows.map(row => <li key={row.id} className="rounded border p-3 text-sm">
       <h3 className="font-medium">Revision {row.revision}: {row.withdrawal ? 'Withdrawn' : row.state === 'APPROVED' ? 'Approved' : 'Proposal'}</h3>
-      <p>{describe(row)}</p>
+      <p>{describe(row, anchor)}</p>
       {row.approvalEvidenceRef ? <p>Approval evidence: {row.approvalEvidenceRef}</p> : null}
       {row.withdrawal ? <p>Withdrawal: {row.withdrawal.reason} Evidence: {row.withdrawal.evidenceRef}</p> : null}
       <div className="mt-2 flex flex-wrap gap-2">
@@ -109,10 +117,10 @@ export function DocumentRetentionPolicies() {
     </li>)}</ol> : null}
     {before ? <Button className="mt-3" size="sm" variant="flat" isDisabled={busy} onPress={() => load(true)}>Load older policies</Button> : null}
     <ConfirmActionModal isOpen={review !== null} onOpenChange={open => { if (!open && !busy) setReview(null); }}
-      title="Approve draft retention policy" confirmLabel="Approve and replace earlier approvals" confirming={busy}
+      title={complaint ? 'Approve complaint retention policy' : 'Approve draft retention policy'} confirmLabel="Approve and replace earlier approvals" confirming={busy}
       confirmDisabled={!isOwner || !confirmed || !validEvidence} onConfirm={() => save(true)}>
-      <p>{review ? describe(review) : ''}</p>
-      <p className="mt-2">This becomes available for new removals and withdraws earlier approvals. Existing removed records keep their recorded deadlines. This does not authorise permanent erasure.</p>
+      <p>{review ? describe(review, anchor) : ''}</p>
+      <p className="mt-2">{complaint ? 'This becomes the current complaint assessment policy; recoverable removal is not yet available.' : 'This becomes available for new removals.'} It withdraws earlier approvals for this record class. Existing removed records keep their recorded deadlines. This does not authorise permanent erasure.</p>
       <Input className="mt-3" label="Policy approval evidence reference" value={evidence} onValueChange={setEvidence} maxLength={120} isDisabled={busy}
         description="Capital letters, numbers and hyphens, for example POLICY-001." />
       <Checkbox className="mt-3" isSelected={confirmed} onValueChange={setConfirmed} isDisabled={busy}>I have authority to approve these exact terms and the cited evidence records that decision.</Checkbox>

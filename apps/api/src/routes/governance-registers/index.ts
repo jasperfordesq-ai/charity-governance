@@ -32,6 +32,7 @@ import { requireAdmin } from '../../middleware/roles.js';
 import { GovernanceRegisterService } from '../../services/governance-register.service.js';
 import { handleError } from '../../utils/errors.js';
 import { sendCreated, sendNoContent, sendSuccess } from '../../utils/response.js';
+import { registerComplaintRetentionRoutes } from './complaint-retention.js';
 
 function validationError(reply: FastifyReply, err: ZodError) {
   return reply.status(400).send({ error: 'Validation failed', code: 'VALIDATION_ERROR', details: err.errors });
@@ -118,6 +119,7 @@ export async function governanceRegisterRoutes(app: FastifyInstance) {
   app.addHook('onRequest', authGuard);
   app.addHook('onRequest', subscriptionGuard);
   app.addHook('preHandler', requireCompletePlan);
+  registerComplaintRetentionRoutes(app);
 
   // The summary includes counts of restricted conflicts and complaints.
   app.get('/summary', { preHandler: [requireAdmin] }, async (request, reply) => {

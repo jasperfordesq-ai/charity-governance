@@ -121,6 +121,14 @@ export const EXCLUDED_MUTATIONS: readonly ExcludedMutation[] = [
     reason: 'Correcting a case-to-Vault association requires a human reason and preserved history.',
   },
   {
+    route: 'POST /api/v1/governance-registers/complaints/policy-revisions',
+    reason: 'A human must review complaint retention terms and approval authority in the dashboard.',
+  },
+  {
+    route: 'POST /api/v1/governance-registers/complaints/policy-revisions/:id/withdraw',
+    reason: 'Withdrawing complaint retention authority requires the active Owner in the dashboard.',
+  },
+  {
     route: 'POST /api/v1/governance-registers/complaints/:id/resolution-evidence',
     reason: 'Recording or withdrawing complaint resolution evidence requires human review in the dashboard.',
   },

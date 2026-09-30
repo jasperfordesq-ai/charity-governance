@@ -23,13 +23,15 @@ export const retentionWithdrawalInput = z.object({
     && !/[\u0000-\u001f\u007f-\u009f]/.test(value), 'Give a reason of 10–500 characters without control characters'),
 }).strict();
 
-/** VAULT_DRAFT is the first supported administration class; no default policy is installed. */
+export type RetentionRecordClass = 'VAULT_DRAFT' | 'COMPLAINT';
+
+/** Class is chosen by the server route, never by a submitted policy body. */
 export class RetentionPolicyService {
-  constructor(private readonly prisma: PrismaClient) {}
+  constructor(private readonly prisma: PrismaClient, private readonly recordClass: RetentionRecordClass = 'VAULT_DRAFT') {}
 
   async list(organisationId: string, before?: number) {
     const rows = await this.prisma.dataRetentionPolicyRevision.findMany({ where: {
-      organisationId, recordClass: 'VAULT_DRAFT', ...(before ? { revision: { lt: before } } : {}),
+      organisationId, recordClass: this.recordClass, ...(before ? { revision: { lt: before } } : {}),
     }, include: { withdrawal: true }, orderBy: { revision: 'desc' }, take: 51 });
     return { items: rows.slice(0, 50), nextBefore: rows.length > 50 ? rows[49]!.revision : null };
   }
@@ -44,13 +46,13 @@ export class RetentionPolicyService {
         role: { in: input.state === 'APPROVED' ? ['OWNER'] : ['OWNER', 'ADMIN'] } }, select: { id: true } });
       if (!actor) throw new AppError(403, 'RETENTION_POLICY_AUTHORITY_REQUIRED',
         input.state === 'APPROVED' ? 'Only the active charity Owner can approve a policy.' : 'An active charity administrator is required.');
-      const latest = await tx.dataRetentionPolicyRevision.findFirst({ where: { organisationId, recordClass: 'VAULT_DRAFT' },
+      const latest = await tx.dataRetentionPolicyRevision.findFirst({ where: { organisationId, recordClass: this.recordClass },
         orderBy: { revision: 'desc' }, select: { revision: true } });
       const revision = (latest?.revision ?? 0) + 1;
       const [clock] = await tx.$queryRaw<Array<{ now: Date }>>`SELECT timezone('UTC', statement_timestamp())::timestamp(3) AS now`;
       if (input.state === 'APPROVED') {
         const previous = await tx.$queryRaw<Array<{ id: string }>>`SELECT p.id FROM "DataRetentionPolicyRevision" p
-          WHERE p."organisationId"=${organisationId} AND p."recordClass"='VAULT_DRAFT' AND p.state='APPROVED'
+          WHERE p."organisationId"=${organisationId} AND p."recordClass"=${this.recordClass} AND p.state='APPROVED'
           AND NOT EXISTS (SELECT 1 FROM "DataRetentionPolicyWithdrawal" w WHERE w."policyId"=p.id)
           ORDER BY p.revision FOR UPDATE OF p`;
         for (const prior of previous) await tx.dataRetentionPolicyWithdrawal.create({ data: {
@@ -60,8 +62,9 @@ export class RetentionPolicyService {
         } });
       }
       return tx.dataRetentionPolicyRevision.create({ data: {
-        organisationId, recordClass: 'VAULT_DRAFT', revision, state: input.state,
-        retentionMode: input.retentionMode, retentionAnchor: input.retentionMode === 'AFTER_ANCHOR' ? 'CREATED_AT' : null,
+        organisationId, recordClass: this.recordClass, revision, state: input.state,
+        retentionMode: input.retentionMode, retentionAnchor: input.retentionMode === 'AFTER_ANCHOR'
+          ? this.recordClass === 'COMPLAINT' ? 'RESOLVED_AT' : 'CREATED_AT' : null,
         retentionDays: input.retentionDays, recoveryDays: input.recoveryDays, createdById: actorUserId,
         ...(input.state === 'APPROVED' ? { approvedById: actorUserId, approvedAt: clock!.now,
           approvalEvidenceRef: input.approvalEvidenceRef } : {}),
@@ -79,7 +82,7 @@ export class RetentionPolicyService {
       await tx.$queryRaw`SELECT id FROM "DataRetentionPolicyRevision" WHERE id=${policyId}
         AND "organisationId"=${organisationId} FOR UPDATE`;
       const policy = await tx.dataRetentionPolicyRevision.findFirst({ where: { id: policyId, organisationId,
-        recordClass: 'VAULT_DRAFT', state: 'APPROVED' }, include: { withdrawal: true } });
+        recordClass: this.recordClass, state: 'APPROVED' }, include: { withdrawal: true } });
       if (!policy) throw new AppError(404, 'RETENTION_POLICY_NOT_FOUND', 'Approved policy not found');
       if (policy.withdrawal) throw new AppError(409, 'RETENTION_POLICY_WITHDRAWN', 'This policy is already withdrawn. Refresh its history.');
       const actor = await tx.user.findFirst({ where: { id: actorUserId, organisationId,

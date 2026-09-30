@@ -647,17 +647,11 @@ export class GovernanceRegisterService {
     });
   }
 
-  async removeComplaint(organisationId: string, id: string, actorUserId: string) {
-    await this.prisma.$transaction(async (tx) => {
-      await lockOrganisationForUpdate(tx, organisationId);
-      const existing = await tx.complaintRecord.findFirst({ where: { id, organisationId }, select: { id: true, status: true } });
-      if (!existing) throw new AppError(404, 'COMPLAINT_NOT_FOUND', 'Complaint record not found');
-      await tx.complaintRecord.delete({ where: { id } });
-      await this.recordRegisterChange(tx, {
-        organisationId, recordKind: 'COMPLAINT', recordId: id, actorUserId, action: 'DELETE',
-        previousStatus: existing.status, nextStatus: null, changedFields: [],
-      });
-    });
+  async removeComplaint(_organisationId: string, _id: string, _actorUserId: string) {
+    // This legacy path had no recovery window or retention-policy checks.
+    // Do not let new approved policies coexist with a destructive bypass.
+    throw new AppError(409, 'COMPLAINT_RECOVERY_REQUIRED',
+      'Permanent complaint deletion is unavailable. Policy-bound recoverable removal must be completed first.');
   }
 
   listFundraising(organisationId: string) {

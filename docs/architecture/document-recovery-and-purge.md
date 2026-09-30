@@ -11,6 +11,17 @@ checkpoints below describe the state when recorded, not the current API surface.
 
 ### Complaint resolution evidence: persistence checkpoint
 
+Current extension: complaints have a separate COMPLAINT policy administration
+surface. Timed rules use RESOLVED_AT; Vault approvals and withdrawals remain
+isolated. The restricted assessment checks one active approved policy, closure
+and the latest resolution evidence bound to the current complaint revision.
+It returns a dated assessment, not removal authority; any later removal must
+repeat all checks transactionally. No retention period is inferred or seeded.
+The old immediate complaint deletion service now refuses requests until
+policy-bound recoverable removal exists. This guard prevents an API bypass;
+it is not recovery, erasure, or a database-operator access restriction.
+Complaint recoverable removal, restore and purge remain implementation work.
+
 R4 begins with explicit resolution evidence, because a complaint's generic
 `updatedAt` is not its resolution date. `ComplaintResolutionEvidence` preserves
 revisioned RECORDED/WITHDRAWN observations, a controlled evidence reference,
@@ -41,7 +52,7 @@ requires a fresh review. The panel retains corrections and withdrawals, labels
 stale evidence after edits, and pages history in batches of 50. Connector access
 is explicitly excluded. Local API checks cover scope, access, dates and stale
 submissions; browser concurrency acceptance is recorded separately in the
-continuation handoff. Policy consumption, recoverable complaint removal, purge,
+continuation handoff. Transactional removal policy enforcement, recoverable complaint removal, purge,
 and deployment remain required. Governance Audit includes a metadata-only
 resolution feed; controlled case references and review reasons stay in the
 restricted complaint review. This does

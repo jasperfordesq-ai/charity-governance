@@ -3,7 +3,7 @@ import { test } from 'node:test';
 import { RegisterStatus } from '@charitypilot/shared';
 import { GovernanceRegisterService } from '../services/governance-register.service.js';
 
-test('complaint create, edit and delete append actor-bound metadata without copying narratives', async () => {
+test('complaint create and edit retain actor metadata; legacy deletion cannot bypass recovery policy', async () => {
   const time = new Date('2026-09-28T10:00:00.000Z');
   let row: Record<string, unknown> | null = null;
   const audits: Array<Record<string, unknown>> = [];
@@ -27,13 +27,12 @@ test('complaint create, edit and delete append actor-bound metadata without copy
 
   await service.createComplaint('org-1', { receivedDate: '2026-09-01', summary: 'Person and sensitive narrative' }, 'actor-1');
   await service.updateComplaint('org-1', 'complaint-1', { status: RegisterStatus.CLOSED, summary: 'Changed private account' }, time.toISOString(), 'actor-2');
-  await service.removeComplaint('org-1', 'complaint-1', 'actor-3');
+  await assert.rejects(service.removeComplaint('org-1', 'complaint-1', 'actor-3'), /recoverable removal/);
 
-  assert.equal(row, null);
+  assert.notEqual(row, null);
   assert.deepEqual(audits.map(({ recordKind, action, actorUserId, previousStatus, nextStatus }) => ({ recordKind, action, actorUserId, previousStatus, nextStatus })), [
     { recordKind: 'COMPLAINT', action: 'CREATE', actorUserId: 'actor-1', previousStatus: null, nextStatus: 'OPEN' },
     { recordKind: 'COMPLAINT', action: 'UPDATE', actorUserId: 'actor-2', previousStatus: 'OPEN', nextStatus: 'CLOSED' },
-    { recordKind: 'COMPLAINT', action: 'DELETE', actorUserId: 'actor-3', previousStatus: 'CLOSED', nextStatus: null },
   ]);
   assert.deepEqual(audits[1].changedFields, ['status', 'summary']);
   assert.doesNotMatch(JSON.stringify(audits), /Person and sensitive narrative|Changed private account/);

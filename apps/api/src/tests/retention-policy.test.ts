@@ -17,7 +17,7 @@ function fixture() {
       if (sql.includes('statement_timestamp')) return [{ now: new Date('2026-09-30T12:00:00Z') }];
       locks.push(sql);
       if (sql.includes('SELECT p.id')) return rows.filter(row => row.organisationId === values[0]
-        && row.state === 'APPROVED' && !withdrawals.some(w => w.policyId === row.id)).map(row => ({ id: row.id }));
+        && row.recordClass === values[1] && row.state === 'APPROVED' && !withdrawals.some(w => w.policyId === row.id)).map(row => ({ id: row.id }));
       return [{ id: 'locked' }];
     },
     user: { findFirst: async ({ where }: any) => where.organisationId === 'org-a'
@@ -25,7 +25,7 @@ function fixture() {
     dataRetentionPolicyRevision: {
       findFirst: async ({ where }: any) => {
         const row = [...rows].reverse().find(row => row.organisationId === where.organisationId
-          && (!where.id || row.id === where.id) && (!where.state || row.state === where.state));
+          && row.recordClass === where.recordClass && (!where.id || row.id === where.id) && (!where.state || row.state === where.state));
         return row ? { ...row, withdrawal: withdrawals.find(w => w.policyId === row.id) ?? null } : null;
       },
       create: async ({ data }: any) => {
@@ -41,7 +41,7 @@ function fixture() {
     const savedRows = rows.slice(); const savedWithdrawals = withdrawals.slice();
     try { return await callback(tx); } catch (error) { rows = savedRows; withdrawals = savedWithdrawals; throw error; }
   } } as unknown as PrismaClient;
-  return { service: new RetentionPolicyService(prisma), locks,
+  return { service: new RetentionPolicyService(prisma), complaints: new RetentionPolicyService(prisma, 'COMPLAINT'), locks,
     get rows() { return rows; }, get withdrawals() { return withdrawals; },
     setRole: (next: string) => { role = next; }, fail: () => { failCreate = true; } };
 }
@@ -106,4 +106,20 @@ test('approval cannot omit authority or evidence, and periods cannot be silently
   }
   assert.equal(f.rows.length, 0);
   assert.equal(f.locks.length, 0);
+});
+
+test('complaint approvals use resolution anchors and cannot replace or withdraw Vault policy', async () => {
+  const f = fixture();
+  await f.service.create('org-a', 'actor-a', approved);
+  const timed = { ...approved, retentionMode: 'AFTER_ANCHOR', retentionDays: 365 };
+  await f.complaints.create('org-a', 'actor-a', timed);
+  await f.complaints.create('org-a', 'actor-a', { ...timed, retentionDays: 730 });
+  assert.deepEqual(f.rows.map(row => [row.recordClass, row.revision, row.retentionAnchor]), [
+    ['VAULT_DRAFT', 1, null], ['COMPLAINT', 1, 'RESOLVED_AT'], ['COMPLAINT', 2, 'RESOLVED_AT'],
+  ]);
+  assert.deepEqual(f.withdrawals.map(row => row.policyId), ['policy-2']);
+  await assert.rejects(f.complaints.withdraw('org-a', 'actor-a', 'policy-1', {
+    evidenceRef: 'WITHDRAW-001', reason: 'This belongs to a different record class.',
+  }), (error: any) => error.statusCode === 404);
+  assert.deepEqual(f.withdrawals.map(row => row.policyId), ['policy-2']);
 });

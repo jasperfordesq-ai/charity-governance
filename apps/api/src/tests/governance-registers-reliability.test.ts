@@ -69,6 +69,8 @@ test('Members cannot read sensitive registers or their summary through list or d
       '/change-audit',
       '/complaints/sensitive-record',
       '/complaints/sensitive-record/resolution-evidence',
+      '/complaints/policy-revisions',
+      '/complaints/sensitive-record/retention-assessment',
     ]) {
       const response = await app.inject({ method: 'GET', url: `${PREFIX}${path}`, headers: { authorization: tokenFor('MEMBER') } });
       assert.equal(response.statusCode, 403, path);
@@ -98,6 +100,9 @@ test('Admin connector cannot directly read excluded control histories or record 
       ['POST', '/risks/risk-1/control-verifications'],
       ['GET', '/complaints/complaint-1/resolution-evidence'],
       ['POST', '/complaints/complaint-1/resolution-evidence'],
+      ['GET', '/complaints/policy-revisions'],
+      ['POST', '/complaints/policy-revisions'],
+      ['GET', '/complaints/complaint-1/retention-assessment'],
     ]) {
       const response = await app.inject({ method: method as 'GET' | 'POST',
         url: `${PREFIX}${path}`, headers: { authorization: tokenFor('ADMIN') } });

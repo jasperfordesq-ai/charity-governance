@@ -17,6 +17,7 @@ import { RegisterRecordsPanel } from './register-record-lists';
 import { RegisterRecordModal } from './register-record-modal';
 import { RiskControlEvidencePanel } from './risk-control-evidence-panel';
 import { ComplaintResolutionPanel } from './complaint-resolution-panel';
+import { RetentionPolicies } from '../documents/document-retention-policies';
 import { RegisterChangeAudit } from './register-change-audit';
 import { useRegistersWorkflow } from './use-registers-workflow';
 
@@ -189,6 +190,7 @@ export default function RegistersPage() {
           </AppSection>
           {canManage ? <RiskControlEvidencePanel risks={allRisks} /> : null}
           {canManage ? <ComplaintResolutionPanel complaints={complaintsForSelectedYear} /> : null}
+          {canManage ? <RetentionPolicies recordClass="COMPLAINT" /> : null}
           {canManage ? <RegisterChangeAudit /> : null}
         </>
       )}

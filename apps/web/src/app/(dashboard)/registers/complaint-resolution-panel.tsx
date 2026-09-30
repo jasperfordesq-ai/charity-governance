@@ -12,6 +12,16 @@ type Evidence = {
 };
 type History = { items: Evidence[]; nextBeforeRevision: number | null };
 type ReviewedComplaint = ComplaintRecordResponse & { revision: number };
+type RetentionAssessment = { state: string; assessedAt: string; retentionUntil: string | null; removalAuthorized: false };
+const assessmentLabels: Record<string, string> = {
+  POLICY_REVIEW_REQUIRED: 'A current approved complaint policy is required.',
+  PERMANENT_RETENTION: 'The policy requires permanent retention.',
+  COMPLAINT_OPEN: 'The complaint must be closed before removal can be reviewed.',
+  INDIVIDUAL_REVIEW_REQUIRED: 'The policy requires an individual removal review.',
+  RESOLUTION_REVIEW_REQUIRED: 'Current resolution evidence must be reviewed first.',
+  RETENTION_NOT_REACHED: 'The approved minimum retention period has not elapsed.',
+  READY_FOR_REMOVAL_REVIEW: 'The minimum retention period has elapsed; removal still requires review.',
+};
 
 export function ComplaintResolutionPanel({ complaints }: { complaints: ComplaintRecordResponse[] }) {
   const [id, setId] = useState('');
@@ -33,6 +43,7 @@ export function ComplaintResolutionPanel({ complaints }: { complaints: Complaint
 function ComplaintResolutionReview({ id }: { id: string }) {
   const [complaint, setComplaint] = useState<ReviewedComplaint | null>(null);
   const [history, setHistory] = useState<History | null>(null);
+  const [assessment, setAssessment] = useState<RetentionAssessment | null>(null);
   const [resolvedAt, setResolvedAt] = useState('');
   const [evidenceRef, setEvidenceRef] = useState('');
   const [reason, setReason] = useState('');
@@ -44,11 +55,12 @@ function ComplaintResolutionReview({ id }: { id: string }) {
 
   const load = useCallback(async () => {
     const serial = ++request.current;
-    setBusy(true); setError(''); setComplaint(null); setHistory(null);
+    setBusy(true); setError(''); setComplaint(null); setHistory(null); setAssessment(null);
     try {
-      const [record, evidence] = await Promise.all([api.get(root), api.get(`${root}/resolution-evidence`)]);
+      const [record, evidence, retention] = await Promise.all([api.get(root), api.get(`${root}/resolution-evidence`), api.get(`${root}/retention-assessment`)]);
       if (serial !== request.current) return;
       setComplaint(record.data as ReviewedComplaint); setHistory(evidence.data as History);
+      setAssessment(retention.data as RetentionAssessment);
     } catch (cause) {
       if (serial === request.current) setError(apiErrorMessage(cause, 'The complaint review could not be loaded.'));
     } finally { if (serial === request.current) setBusy(false); }
@@ -109,6 +121,11 @@ function ComplaintResolutionReview({ id }: { id: string }) {
     {complaint && history ? <>
       <p>{complaint.summary}</p>
       <p>Status: {complaint.status}. {current ? 'Resolution evidence matches this version.' : 'No current resolution evidence applies to this version.'}</p>
+      {assessment ? <div aria-label="Complaint retention assessment">
+        <p>{assessmentLabels[assessment.state] ?? 'Retention requires further review.'}</p>
+        {assessment.retentionUntil ? <p>Minimum retention ends: {new Date(assessment.retentionUntil).toLocaleString()}</p> : null}
+        <p>Assessed {new Date(assessment.assessedAt).toLocaleString()}. This assessment does not authorise removal. Reload after policy or record changes.</p>
+      </div> : null}
       <Input label="Resolution time (your local time)" type="datetime-local" value={resolvedAt} onValueChange={setResolvedAt} isDisabled={busy || complaint.status !== 'CLOSED'} />
       <Input label="Controlled resolution evidence reference" description="Use an opaque reference with uppercase letters, digits and hyphens; do not enter names or case details." value={evidenceRef} onValueChange={setEvidenceRef} isDisabled={busy} maxLength={120} />
       <Textarea label="Resolution review reason" description="Explain the review or correction without copying personal complaint details. At least 10 characters." value={reason} onValueChange={setReason} isDisabled={busy} maxLength={500} />

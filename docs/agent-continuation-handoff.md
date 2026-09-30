@@ -2,6 +2,23 @@
 
 Last updated: 2026-09-30
 
+Complaint policy/assessment checkpoint: the policy service now separates
+COMPLAINT from VAULT_DRAFT, with RESOLVED_AT as the complaint timed anchor.
+Browser-only administration permits Admin proposals and Owner approval or
+withdrawal. A read-only assessment requires one current approved class policy
+and the latest matching resolution evidence; it never authorizes removal.
+Registers exposes policy history/administration and assessment. Legacy immediate
+complaint deletion is refused with COMPLAINT_RECOVERY_REQUIRED until recoverable
+removal is implemented, so new policies cannot coexist with that API bypass.
+Forty-two focused API tests pass, including class isolation and deletion refusal.
+The two isolated Chromium journeys pass first-attempt (complaint assessment and
+existing exact-byte Vault recovery); runner exit 0. The deletion guard was added
+after that browser image was built and is covered by the focused API tests.
+MCP checks pass (408 runnable, two Windows skips); web/E2E types and edited web
+lint pass. Hosted successor gates and deployment remain pending. Next implement
+policy-bound recoverable complaint removal/restore, then purge; retain the
+broader R4 stores, independent purge authority and recovery-reopening scope.
+
 Complaint resolution review increment: Owner/Admin browser-only history and
 submission routes, a Registers review panel and a metadata-only Governance Audit
 feed are implemented locally. Both record and evidence revisions are checked
