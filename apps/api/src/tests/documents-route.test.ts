@@ -7,6 +7,8 @@ import test from 'node:test';
 
 process.env.JWT_SECRET = process.env.JWT_SECRET ?? 'documents-route-test-secret';
 const deletionPayload = { reason: 'The draft was uploaded in error and is no longer required.' };
+const recoveryPayload = { ...deletionPayload, policyId: 'policy-1', evidenceRef: 'REMOVAL-001',
+  expectedUpdatedAt: '2026-09-30T12:00:00.000Z' };
 
 const [
   { default: Fastify },
@@ -27,7 +29,8 @@ const [
 
 type PrismaMock = {
   authSession?: { findFirst: () => Promise<{ id: string } | null> };
-  user?: { findUnique: () => Promise<{ id: string; organisationId: string; role: 'ADMIN' | 'MEMBER'; emailVerified: boolean } | null> };
+  user?: { findUnique: () => Promise<{ id: string; organisationId: string; role: 'ADMIN' | 'MEMBER'; emailVerified: boolean } | null>;
+    findFirst?: (args: unknown) => Promise<unknown> };
   $transaction?: (callback: (tx: PrismaMock) => Promise<unknown>) => Promise<unknown>;
   $queryRaw?: (strings: TemplateStringsArray, ...values: unknown[]) => Promise<unknown[]>;
   subscription: { findUnique: () => Promise<{ status: string; trialEndsAt: Date | null; plan?: string }> };
@@ -103,7 +106,8 @@ const authHeader = `Bearer ${signAccessToken({
 function authModels() {
   return {
     authSession: { findFirst: async () => ({ id: 'session-1' }) },
-    user: { findUnique: async () => ({ id: 'user-1', organisationId: 'org-1', role: 'ADMIN' as const, emailVerified: true }) },
+    user: { findUnique: async () => ({ id: 'user-1', organisationId: 'org-1', role: 'ADMIN' as const, emailVerified: true }),
+      findFirst: async () => ({ id: 'user-1' }) },
   };
 }
 
@@ -238,7 +242,8 @@ test('removed documents are denied through ordinary detail, download and delete 
     const reads: Record<string, unknown>[] = [];
     const app = await buildDocumentsApp({
       subscription: subscription(),
-      user: { findUnique: async () => ({ id: 'user-1', organisationId: 'org-1', role, emailVerified: true }) },
+      user: { findUnique: async () => ({ id: 'user-1', organisationId: 'org-1', role, emailVerified: true }),
+        findFirst: async () => ({ id: 'user-1' }) },
       organisation: { findUniqueOrThrow: async () => ({ complexity: 'SIMPLE' }) },
       document: { findFirst: async (args) => {
         const where = (args as { where: Record<string, unknown> }).where;
@@ -256,7 +261,7 @@ test('removed documents are denied through ordinary detail, download and delete 
         assert.equal(response.json().code, 'DOCUMENT_NOT_FOUND');
       }
       if (role === 'ADMIN') {
-        const response = await app.inject({ method: 'DELETE', url: '/removed', headers: { authorization }, payload: deletionPayload });
+        const response = await app.inject({ method: 'DELETE', url: '/removed', headers: { authorization }, payload: recoveryPayload });
         assert.equal(response.statusCode, 404);
       }
       assert.equal(reads.length, role === 'ADMIN' ? 3 : 2);
@@ -1069,11 +1074,12 @@ test('ordinary Vault deletion refuses a legacy document with unverified storage 
     document: { findFirst: async () => ({
       id: 'doc-legacy', organisationId: 'org-1', fileUrl: 'org-1/legacy.pdf',
       storageProvider: null, lifecycleStatus: 'DRAFT', deletionHold: false,
+      updatedAt: new Date(recoveryPayload.expectedUpdatedAt),
     }) },
     documentStorageDeletion: { create: async () => { queued = true; return { id: 'unused' }; } },
   });
   try {
-    const response = await app.inject({ method: 'DELETE', url: '/doc-legacy', headers: { authorization: authHeader }, payload: deletionPayload });
+    const response = await app.inject({ method: 'DELETE', url: '/doc-legacy', headers: { authorization: authHeader }, payload: recoveryPayload });
     assert.equal(response.statusCode, 409);
     assert.equal(response.json().code, 'DOCUMENT_STORAGE_PROVIDER_UNVERIFIED');
     assert.equal(queued, false);
@@ -1494,7 +1500,7 @@ test('document deletion requires a bounded reason before reading or changing a r
     document: { findFirst: async () => { reads += 1; return null; } },
   });
   try {
-    for (const payload of [undefined, { reason: 'short' }, { reason: 'x'.repeat(501) },
+    for (const payload of [undefined, deletionPayload, { reason: 'short' }, { reason: 'x'.repeat(501) },
       { reason: 'Unsupported\u0085control in reason' }]) {
       const response = await app.inject({
         method: 'DELETE', url: '/doc-1', headers: { authorization: authHeader }, payload,
@@ -1506,82 +1512,76 @@ test('document deletion requires a bounded reason before reading or changing a r
   } finally { await app.close(); }
 });
 
-test('document delete removes storage after deleting the database record', { concurrency: false }, async () => {
-  const originalDeleteFile = StorageService.prototype.deleteFile;
-  let order = 0;
-  let storageDeleteOrder = 0;
-  let databaseDeleteOrder = 0;
-  let outboxCreateOrder = 0;
-  let outboxSource: Record<string, unknown> | null = null;
-  let outboxProcessedOrder = 0;
-  const outboxProcessedData: Array<Record<string, unknown>> = [];
-  let storageDeleteArgs: string[] = [];
-  let removalAudit: Record<string, unknown> | null = null;
 
-  StorageService.prototype.deleteFile = async (organisationId: string, storagePath: string, _signal?: AbortSignal, provider?: string) => {
-    storageDeleteArgs = [organisationId, storagePath, provider ?? ''];
-    storageDeleteOrder = ++order;
-    return new Date();
-  };
-
-  const app = await buildDocumentsApp({
-    subscription: subscription(),
-    document: {
-      findFirst: async () => ({ id: 'doc-1', organisationId: 'org-1', fileUrl: 'org-1/policy.pdf', storageProvider: 'supabase', lifecycleStatus: 'DRAFT' }),
-      delete: async (args: unknown) => {
-        assert.deepEqual((args as { where: unknown }).where, { deletedAt: null, id: 'doc-1', organisationId: 'org-1', deletionHold: false,
-          lifecycleStatus: 'DRAFT', standardLinks: { none: {} }, confluenceReferences: { none: {} } });
-        databaseDeleteOrder = ++order;
-        return { id: 'doc-1' };
-      },
-    },
-    documentStorageDeletion: {
-      create: async (args: unknown) => {
-        outboxCreateOrder = ++order;
-        outboxSource = (args as { data: Record<string, unknown> }).data;
-        return { id: 'deletion-1' };
-      },
-      updateMany: async (args: unknown) => {
-        outboxProcessedOrder = ++order;
-        outboxProcessedData.push((args as { data: Record<string, unknown> }).data);
-        return { count: 1 };
-      },
-    },
-    documentControlAudit: { create: async (args: unknown) => {
-      assert.equal(databaseDeleteOrder, 2);
-      assert.equal(storageDeleteOrder, 0, 'the record-removal audit precedes provider cleanup');
-      removalAudit = (args as { data: Record<string, unknown> }).data;
-      return { id: 'delete-audit-1' };
-    } },
-  });
-
+test('ordinary DELETE retains the draft and refuses missing policy, stale revision, holds, links and failed audit', async () => {
+  const originalDownload = StorageService.prototype.downloadFile;
+  const originalDelete = StorageService.prototype.deleteFile;
+  let destructiveCalls = 0;
+  StorageService.prototype.downloadFile = async () => Buffer.from('test');
+  StorageService.prototype.deleteFile = async () => { destructiveCalls++; throw new Error('Unexpected file deletion'); };
   try {
-    const response = await app.inject({
-      method: 'DELETE',
-      url: '/doc-1',
-      headers: { authorization: authHeader },
-      payload: deletionPayload,
-    });
+    for (const scenario of ['success', 'policy', 'stale', 'hold', 'standard', 'citation', 'replacement', 'audit', 'current']) {
+      let doc: Record<string, any> = { id: 'doc-1', organisationId: 'org-1', fileUrl: 'org-1/draft.pdf',
+        fileSize: 4, storageProvider: 'local', lifecycleStatus: scenario === 'current' ? 'CURRENT' : 'DRAFT',
+        deletionHold: scenario === 'hold', deletedAt: null, updatedAt: new Date(recoveryPayload.expectedUpdatedAt),
+        createdAt: new Date(recoveryPayload.expectedUpdatedAt) };
+      const audits: Record<string, unknown>[] = [];
+      const mock: any = {
+        subscription: subscription(),
+        $queryRaw: async (strings: TemplateStringsArray) => strings.join('').includes('statement_timestamp')
+          ? [{ now: new Date('2026-09-30T12:01:00Z') }] : [{ id: 'locked' }],
+        document: {
+          findFirst: async ({ where }: any) => where.supersededByDocumentId
+            ? scenario === 'replacement' ? { id: 'predecessor' } : null : { ...doc },
+          update: async ({ data }: any) => { doc = { ...doc, ...data }; return { ...doc }; },
+          delete: async () => { destructiveCalls++; throw new Error('Unexpected record deletion'); },
+        },
+        documentStandardLink: { findFirst: async () => scenario === 'standard' ? { id: 'link' } : null },
+        confluenceReference: { findFirst: async () => scenario === 'citation' ? { id: 'citation' } : null },
+        dataRetentionPolicyRevision: { findFirst: async () => scenario === 'policy' ? null : {
+          id: 'policy-1', retentionMode: 'REVIEW_REQUIRED', recoveryDays: 30 } },
+        documentStorageDeletion: { create: async () => { destructiveCalls++; throw new Error('Unexpected cleanup job'); } },
+        documentControlAudit: { create: async ({ data }: any) => {
+          if (scenario === 'audit') throw new Error('Audit unavailable');
+          audits.push(data); return data;
+        } },
+      };
+      mock.$transaction = async (callback: (tx: any) => Promise<unknown>) => {
+        const old = { ...doc };
+        try { return await callback({ ...authModels(), ...mock }); }
+        catch (error) { doc = old; throw error; }
+      };
+      const app = await buildDocumentsApp(mock);
+      try {
+        const response = await app.inject({ method: 'DELETE', url: '/doc-1', headers: { authorization: authHeader },
+          payload: { ...recoveryPayload, ...(scenario === 'stale' ? { expectedUpdatedAt: '2026-09-29T12:00:00Z' } : {}) } });
+        assert.equal(response.statusCode, scenario === 'success' ? 200 : scenario === 'audit' ? 500 : 409, scenario);
+        assert.equal(destructiveCalls, 0, scenario);
+        if (scenario === 'success') {
+          assert.equal(doc.id, 'doc-1');
+          assert.equal(doc.deletedAt.toISOString(), '2026-09-30T12:01:00.000Z');
+          assert.equal(doc.visibility, 'RESTRICTED');
+          assert.match(doc.recoverySha256, /^[a-f0-9]{64}$/);
+          assert.equal(audits[0]?.kind, 'RECORD_REMOVE');
+        } else {
+          assert.equal(doc.deletedAt, null, scenario);
+          assert.equal(audits.length, 0, scenario);
+        }
+      } finally { await app.close(); }
+    }
+  } finally { StorageService.prototype.downloadFile = originalDownload; StorageService.prototype.deleteFile = originalDelete; }
+});
 
-    assert.equal(response.statusCode, 204);
-    assert.deepEqual(storageDeleteArgs, ['org-1', 'org-1/policy.pdf', 'supabase']);
-    assert.equal(outboxCreateOrder, 1);
-    assert.deepEqual(outboxSource, {
-      organisationId: 'org-1', storagePath: 'org-1/policy.pdf', sourceDocumentId: 'doc-1', provider: 'supabase',
-    });
-    assert.equal(databaseDeleteOrder, 2);
-    assert.equal(storageDeleteOrder, 3);
-    assert.equal(outboxProcessedOrder, 4);
-    assert.equal(outboxProcessedData[0]?.activeObjectAbsentAt instanceof Date, true);
-    assert.deepEqual(removalAudit, {
-      organisationId: 'org-1', documentId: 'doc-1', actorUserId: 'user-1', kind: 'RECORD_DELETE',
-      previous: 'DOCUMENT_PRESENT', next: 'DATABASE_RECORD_REMOVED',
-      reason: deletionPayload.reason,
-    });
-  } finally {
-    StorageService.prototype.deleteFile = originalDeleteFile;
-    await app.close();
-  }
+test('connector cannot use ordinary DELETE even with a complete removal request', async () => {
+  const app = await buildDocumentsApp({ subscription: subscription(), document: {},
+    authSession: { findFirst: async () => ({ id: 'session-1', clientKind: 'MCP_CONNECTOR', accessLevel: 'ADMIN', dataScope: 'FULL' }) },
+  } as never);
+  try {
+    const response = await app.inject({ method: 'DELETE', url: '/doc-1',
+      headers: { authorization: authHeader }, payload: recoveryPayload });
+    assert.equal(response.statusCode, 403);
+    assert.equal(response.json().code, 'WEB_SESSION_REQUIRED');
+  } finally { await app.close(); }
 });
 
 test('only an Admin can place or release a document deletion hold with an audited reason', async () => {
@@ -1675,309 +1675,15 @@ test('connector sessions cannot change deletion holds or verify a written file p
   } finally { await app.close(); }
 });
 
-test('a held document cannot create a storage deletion job or reach provider cleanup', { concurrency: false }, async () => {
-  const originalDeleteFile = StorageService.prototype.deleteFile;
-  let storageDeleteCalled = false;
-  let outboxCreated = false;
-  let recordDeleted = false;
-  StorageService.prototype.deleteFile = async () => { storageDeleteCalled = true; return new Date(); };
-  const app = await buildDocumentsApp({
-    subscription: subscription(),
-    document: {
-      findFirst: async () => ({ id: 'doc-1', organisationId: 'org-1', fileUrl: 'org-1/policy.pdf', lifecycleStatus: 'DRAFT', deletionHold: true }),
-      delete: async () => { recordDeleted = true; return { id: 'doc-1' }; },
-    },
-    documentStorageDeletion: { create: async () => { outboxCreated = true; return { id: 'deletion-1' }; } },
-  });
-  try {
-    const response = await app.inject({ method: 'DELETE', url: '/doc-1', headers: { authorization: authHeader }, payload: deletionPayload });
-    assert.equal(response.statusCode, 409);
-    assert.equal(response.json().code, 'DOCUMENT_DELETION_HOLD');
-    assert.equal(outboxCreated, false);
-    assert.equal(recordDeleted, false);
-    assert.equal(storageDeleteCalled, false);
-  } finally { StorageService.prototype.deleteFile = originalDeleteFile; await app.close(); }
-});
 
-test('ordinary draft deletion refuses linked standards and cited pages before queueing cleanup', async () => {
-  let linked: 'standard' | 'citation' = 'standard';
-  let queued = false;
-  let deleted = false;
-  const app = await buildDocumentsApp({
-    subscription: subscription(),
-    document: {
-      findFirst: async () => ({
-        id: 'doc-1', organisationId: 'org-1', fileUrl: 'org-1/draft.pdf',
-        storageProvider: 'supabase', lifecycleStatus: 'DRAFT', deletionHold: false,
-        standardLinks: linked === 'standard' ? [{ id: 'link-1' }] : [],
-        confluenceReferences: linked === 'citation' ? [{ id: 'citation-1' }] : [],
-      }),
-      delete: async () => { deleted = true; return { id: 'doc-1' }; },
-    },
-    documentStorageDeletion: { create: async () => { queued = true; return { id: 'deletion-1' }; } },
-  });
-  try {
-    for (linked of ['standard', 'citation'] as const) {
-      const response = await app.inject({ method: 'DELETE', url: '/doc-1',
-        headers: { authorization: authHeader }, payload: deletionPayload });
-      assert.equal(response.statusCode, 409, linked);
-      assert.equal(response.json().code, 'DOCUMENT_LINKED_EVIDENCE_REVIEW_REQUIRED', linked);
-    }
-    assert.equal(queued, false);
-    assert.equal(deleted, false);
-  } finally { await app.close(); }
-});
 
-test('a link added during draft deletion returns review conflict without provider cleanup', { concurrency: false }, async () => {
-  const originalDeleteFile = StorageService.prototype.deleteFile;
-  let storageDeleted = false;
-  StorageService.prototype.deleteFile = async () => { storageDeleted = true; return new Date(); };
-  const app = await buildDocumentsApp({
-    subscription: subscription(),
-    document: {
-      findFirst: async () => ({ id: 'doc-1', organisationId: 'org-1', fileUrl: 'org-1/draft.pdf',
-        storageProvider: 'supabase', lifecycleStatus: 'DRAFT', deletionHold: false,
-        standardLinks: [], confluenceReferences: [] }),
-      delete: async () => { throw Object.assign(new Error('Linked document evidence requires separate review'),
-        { code: 'P2004', meta: { constraint: 'Document_linked_evidence_delete_guard' } }); },
-    },
-    documentStorageDeletion: { create: async () => ({ id: 'deletion-1' }) },
-  });
-  try {
-    const response = await app.inject({ method: 'DELETE', url: '/doc-1',
-      headers: { authorization: authHeader }, payload: deletionPayload });
-    assert.equal(response.statusCode, 409);
-    assert.equal(response.json().code, 'DOCUMENT_LINKED_EVIDENCE_REVIEW_REQUIRED');
-    assert.equal(storageDeleted, false);
-  } finally { StorageService.prototype.deleteFile = originalDeleteFile; await app.close(); }
-});
 
-test('ordinary deletion retains every non-draft lifecycle state without provider cleanup', { concurrency: false }, async () => {
-  const originalDeleteFile = StorageService.prototype.deleteFile;
-  let status = 'UNREVIEWED';
-  let outboxCreated = false;
-  let recordDeleted = false;
-  let storageDeleteCalled = false;
-  StorageService.prototype.deleteFile = async () => { storageDeleteCalled = true; return new Date(); };
-  const app = await buildDocumentsApp({
-    subscription: subscription(),
-    document: {
-      findFirst: async () => ({ id: 'doc-1', organisationId: 'org-1', fileUrl: 'org-1/policy.pdf', lifecycleStatus: status, deletionHold: false }),
-      delete: async () => { recordDeleted = true; return { id: 'doc-1' }; },
-    },
-    documentStorageDeletion: { create: async () => { outboxCreated = true; return { id: 'deletion-1' }; } },
-  });
-  try {
-    for (status of ['UNREVIEWED', 'CURRENT', 'SUPERSEDED', 'RETIRED', 'HISTORICAL']) {
-      const response = await app.inject({ method: 'DELETE', url: '/doc-1', headers: { authorization: authHeader }, payload: deletionPayload });
-      assert.equal(response.statusCode, 409, status);
-      assert.equal(response.json().code, 'DOCUMENT_RETENTION_REVIEW_REQUIRED', status);
-    }
-    assert.equal(outboxCreated, false);
-    assert.equal(recordDeleted, false);
-    assert.equal(storageDeleteCalled, false);
-  } finally { StorageService.prototype.deleteFile = originalDeleteFile; await app.close(); }
-});
 
-test('a deletion hold placed during delete prevents cleanup and the transaction fails closed', { concurrency: false }, async () => {
-  const originalDeleteFile = StorageService.prototype.deleteFile;
-  let storageDeleteCalled = false;
-  let auditCalled = false;
-  StorageService.prototype.deleteFile = async () => { storageDeleteCalled = true; return new Date(); };
-  const app = await buildDocumentsApp({
-    subscription: subscription(),
-    document: {
-      findFirst: async () => ({ id: 'doc-1', organisationId: 'org-1', fileUrl: 'org-1/policy.pdf', storageProvider: 'supabase', lifecycleStatus: 'DRAFT', deletionHold: false }),
-      delete: async (args: unknown) => {
-        assert.deepEqual((args as { where: unknown }).where, { deletedAt: null, id: 'doc-1', organisationId: 'org-1', deletionHold: false,
-          lifecycleStatus: 'DRAFT', standardLinks: { none: {} }, confluenceReferences: { none: {} } });
-        throw Object.assign(new Error('hold changed concurrently'), { code: 'P2025' });
-      },
-    },
-    documentStorageDeletion: { create: async () => ({ id: 'deletion-1' }) },
-    documentControlAudit: { create: async () => { auditCalled = true; return { id: 'audit-1' }; } },
-  });
-  try {
-    const response = await app.inject({ method: 'DELETE', url: '/doc-1', headers: { authorization: authHeader }, payload: deletionPayload });
-    assert.equal(response.statusCode, 409);
-    assert.equal(response.json().code, 'DOCUMENT_DELETE_CONFLICT');
-    assert.equal(auditCalled, false);
-    assert.equal(storageDeleteCalled, false);
-  } finally { StorageService.prototype.deleteFile = originalDeleteFile; await app.close(); }
-});
 
-test('a referenced replacement cannot be deleted or sent to provider cleanup', { concurrency: false }, async () => {
-  const originalDeleteFile = StorageService.prototype.deleteFile;
-  let storageDeleteCalled = false;
-  let removalAudited = false;
-  StorageService.prototype.deleteFile = async () => { storageDeleteCalled = true; return new Date(); };
-  const app = await buildDocumentsApp({
-    subscription: subscription(),
-    document: {
-      findFirst: async () => ({ id: 'doc-2', organisationId: 'org-1', fileUrl: 'org-1/replacement.pdf', storageProvider: 'supabase', lifecycleStatus: 'DRAFT' }),
-      delete: async () => { throw Object.assign(new Error('foreign key restrict'), { code: 'P2003' }); },
-    },
-    documentStorageDeletion: { create: async () => ({ id: 'deletion-1' }) },
-    documentControlAudit: { create: async () => { removalAudited = true; return { id: 'audit-1' }; } },
-  });
-  try {
-    const response = await app.inject({ method: 'DELETE', url: '/doc-2', headers: { authorization: authHeader }, payload: deletionPayload });
-    assert.equal(response.statusCode, 409);
-    assert.equal(response.json().code, 'DOCUMENT_REPLACEMENT_IN_USE');
-    assert.equal(storageDeleteCalled, false);
-    assert.equal(removalAudited, false);
-  } finally { StorageService.prototype.deleteFile = originalDeleteFile; await app.close(); }
-});
 
-test('document delete does not remove storage when database deletion fails', { concurrency: false }, async () => {
-  const originalDeleteFile = StorageService.prototype.deleteFile;
-  let storageDeleteCalled = false;
 
-  StorageService.prototype.deleteFile = async () => {
-    storageDeleteCalled = true;
-    return new Date();
-  };
 
-  const app = await buildDocumentsApp({
-    subscription: subscription(),
-    document: {
-      findFirst: async () => ({ id: 'doc-1', organisationId: 'org-1', fileUrl: 'org-1/policy.pdf', storageProvider: 'supabase', lifecycleStatus: 'DRAFT' }),
-      delete: async () => {
-        throw new Error('database unavailable');
-      },
-    },
-    documentStorageDeletion: {
-      create: async () => ({ id: 'deletion-1' }),
-      updateMany: async () => {
-        throw new Error('outbox should not be processed');
-      },
-    },
-  });
 
-  try {
-    const response = await app.inject({
-      method: 'DELETE',
-      url: '/doc-1',
-      headers: { authorization: authHeader },
-      payload: deletionPayload,
-    });
-
-    assert.equal(response.statusCode, 500);
-    assert.equal(storageDeleteCalled, false);
-  } finally {
-    StorageService.prototype.deleteFile = originalDeleteFile;
-    await app.close();
-  }
-});
-
-test('document record deletion refuses provider cleanup when its audit write fails', { concurrency: false }, async () => {
-  const originalDeleteFile = StorageService.prototype.deleteFile;
-  let storageDeleteCalled = false;
-  StorageService.prototype.deleteFile = async () => { storageDeleteCalled = true; return new Date(); };
-  const app = await buildDocumentsApp({
-    subscription: subscription(),
-    document: {
-      findFirst: async () => ({ id: 'doc-1', organisationId: 'org-1', fileUrl: 'org-1/policy.pdf', storageProvider: 'supabase', lifecycleStatus: 'DRAFT' }),
-      delete: async () => ({ id: 'doc-1' }),
-    },
-    documentStorageDeletion: { create: async () => ({ id: 'deletion-1' }) },
-    documentControlAudit: { create: async () => { throw new Error('audit unavailable'); } },
-  });
-  try {
-    const response = await app.inject({ method: 'DELETE', url: '/doc-1', headers: { authorization: authHeader }, payload: deletionPayload });
-    assert.equal(response.statusCode, 500);
-    assert.equal(storageDeleteCalled, false);
-  } finally {
-    StorageService.prototype.deleteFile = originalDeleteFile;
-    await app.close();
-  }
-});
-
-test('document delete reports success when post-delete storage cleanup fails', { concurrency: false }, async () => {
-  const originalDeleteFile = StorageService.prototype.deleteFile;
-  let databaseDeleteCalled = false;
-  const outboxUpdates: unknown[] = [];
-
-  StorageService.prototype.deleteFile = async () => {
-    throw Object.assign(
-      new Error('storage unavailable for ops@example.org at org-1/policy.pdf?token=secret-token'),
-      { code: 'StorageApiError', status: 503 },
-    );
-  };
-
-  const app = await buildDocumentsApp({
-    subscription: subscription(),
-    document: {
-      findFirst: async () => ({ id: 'doc-1', organisationId: 'org-1', fileUrl: 'org-1/policy.pdf', storageProvider: 'supabase', lifecycleStatus: 'DRAFT' }),
-      delete: async () => {
-        databaseDeleteCalled = true;
-        return { id: 'doc-1' };
-      },
-    },
-    documentStorageDeletion: {
-      create: async () => ({ id: 'deletion-1' }),
-      findFirst: async () => ({
-        id: 'deletion-1',
-        state: 'PENDING',
-        attempts: 0,
-        claimedAt: null,
-      }),
-      updateMany: async (args: unknown) => {
-        outboxUpdates.push(args);
-        return { count: 1 };
-      },
-    },
-  });
-
-  try {
-    const response = await app.inject({
-      method: 'DELETE',
-      url: '/doc-1',
-      headers: { authorization: authHeader },
-      payload: deletionPayload,
-    });
-
-    assert.equal(response.statusCode, 204);
-    assert.equal(databaseDeleteCalled, true);
-    const lastError = (outboxUpdates[0] as { data: { lastError: string } }).data.lastError;
-    assert.match(lastError, /name=Error/);
-    assert.match(lastError, /code=StorageApiError/);
-    assert.match(lastError, /status=503/);
-    assert.match(lastError, /\[email\]/);
-    assert.match(lastError, /\[storage-path\]/);
-    assert.doesNotMatch(lastError, /ops@example\.org/);
-    assert.doesNotMatch(lastError, /secret-token/);
-    assert.equal((outboxUpdates[0] as { where: { state: string } }).where.state, 'PENDING');
-    assert.deepEqual((outboxUpdates[0] as { data: Record<string, unknown> }).data, {
-      state: 'PENDING',
-      attempts: 1,
-      lastError,
-      lastAttemptAt: (outboxUpdates[0] as { data: { lastAttemptAt: Date } }).data.lastAttemptAt,
-      nextAttemptAt: (outboxUpdates[0] as { data: { nextAttemptAt: Date } }).data.nextAttemptAt,
-      claimedAt: null,
-      deadLetteredAt: null,
-      terminalReason: null,
-      alertClaimToken: null,
-      alertClaimedAt: null,
-      alertedAt: null,
-    });
-    assert.ok((outboxUpdates[0] as { data: { lastAttemptAt: Date } }).data.lastAttemptAt instanceof Date);
-    assert.ok((outboxUpdates[0] as { data: { nextAttemptAt: Date } }).data.nextAttemptAt instanceof Date);
-  } finally {
-    StorageService.prototype.deleteFile = originalDeleteFile;
-    await app.close();
-  }
-});
-
-// The regression test for the per-organisation wiring itself. Every other
-// fixture in this file resolves to `documentStorageProvider: null`, which is
-// behaviourally identical to passing no resolver at all — so deleting
-// `createPrismaOrganisationStorageResolver(app.prisma)` from
-// routes/documents/index.ts leaves them all green. This one does not: the
-// deployment default is Supabase (DOCUMENT_STORAGE_DRIVER unset) and only the
-// organisation row says `local`, so the bytes can only land on disk if the
-// resolver is wired, its answer reaches StorageService's storage branch, and
-// the provider it names is the one that writes.
 test('an organisation pinned to local storage has its uploaded bytes written to the local root', { concurrency: false }, async () => {
   const previousDriver = process.env.DOCUMENT_STORAGE_DRIVER;
   const previousRoot = process.env.LOCAL_FILE_STORAGE_DIR;
@@ -2124,7 +1830,7 @@ test('Admin connector cannot read dashboard-only Vault control and deletion hist
   try {
     for (const path of [
       '/replacement-candidates/doc-1', '/confluence-mirrors?ids=doc-1',
-      '/control-audit', '/storage-deletions/history', '/storage-deletions/dead-letter', '/deleted',
+      '/control-audit', '/storage-deletions/history', '/storage-deletions/dead-letter', '/deleted', '/recovery-policies',
     ]) {
       const response = await app.inject({ method: 'GET', url: path, headers: { authorization: authHeader } });
       assert.equal(response.statusCode, 403, path);

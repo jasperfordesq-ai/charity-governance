@@ -17,7 +17,6 @@ import {
 import { confluencePublishTargetForOrganisation, confluenceSiteIdFromConfig,
   readConfluencePublishTarget } from '../../services/confluence-publish-target.service.js';
 import { sendCreated, sendNoContent, sendSuccess } from '../../utils/response.js';
-import { formatProviderError } from '../../utils/provider-errors.js';
 import { createPrismaOrganisationStorageResolver } from '../../services/document-storage-resolution.js';
 import { z, ZodError } from 'zod';
 import {
@@ -126,6 +125,16 @@ export async function documentRoutes(app: FastifyInstance) {
 
   app.addHook('onRequest', authGuard);
   app.addHook('onRequest', subscriptionGuard);
+
+  app.get('/recovery-policies', { preHandler: [requireAdmin, requireWebSession] }, async (request, reply) => {
+    const policies = await app.prisma.dataRetentionPolicyRevision.findMany({ where: {
+      organisationId: request.user.organisationId, recordClass: 'VAULT_DRAFT', state: 'APPROVED',
+      retentionMode: { not: 'PERMANENT' }, withdrawal: { is: null },
+    }, select: { id: true, revision: true, recoveryDays: true, retentionMode: true,
+      retentionAnchor: true, retentionDays: true, approvalEvidenceRef: true },
+    orderBy: { revision: 'desc' }, take: 100 });
+    return sendSuccess(reply, policies);
+  });
 
   app.get('/deleted', { preHandler: [requireAdmin, requireWebSession] }, async (request, reply) => {
     try {
@@ -811,30 +820,18 @@ export async function documentRoutes(app: FastifyInstance) {
     }
   });
 
-  app.delete<{ Params: { id: string } }>('/:id', { preHandler: [requireSessionLevel('ADMIN'), requireAdmin, requireActionApproval()] }, async (request, reply) => {
+  app.delete<{ Params: { id: string } }>('/:id', { preHandler: [requireSessionLevel('ADMIN'), requireAdmin, requireWebSession] }, async (request, reply) => {
     try {
-      const { reason } = deleteDocumentSchema.parse(request.body);
-      const deleted = await service.remove(request.user.organisationId, request.params.id, request.user.userId, reason);
-      try {
-        const activeObjectAbsentAt = await storageService.deleteFile(
-          request.user.organisationId, deleted.storagePath, undefined, deleted.provider,
-        );
-        await service.markStorageDeletionProcessed(deleted.storageDeletionId, null, activeObjectAbsentAt);
-      } catch (cleanupError) {
-        try {
-          await service.recordStorageDeletionFailure(deleted.storageDeletionId, cleanupError);
-        } catch (outboxError) {
-          request.log.error(
-            { providerError: formatProviderError(outboxError) },
-            'Failed to update document storage cleanup retry record',
-          );
-        }
-        request.log.error(
-          { providerError: formatProviderError(cleanupError) },
-          'Failed to clean up document storage after database delete succeeded',
-        );
-      }
-      return sendNoContent(reply);
+      const body = deleteDocumentSchema.extend({
+        expectedUpdatedAt: z.string().datetime({ offset: true }),
+        policyId: storageDeletionIdSchema,
+        evidenceRef: z.string().regex(/^[A-Z0-9][A-Z0-9-]{2,119}$/),
+      }).parse(request.body);
+      const removed = await recovery.remove({ organisationId: request.user.organisationId,
+        documentId: request.params.id, actorUserId: request.user.userId,
+        reason: body.reason, policyId: body.policyId, evidenceRef: body.evidenceRef,
+        expectedUpdatedAt: new Date(body.expectedUpdatedAt) });
+      return sendSuccess(reply, removed);
     } catch (err) {
       if (err instanceof ZodError) {
         return reply.status(400).send({ error: 'Validation failed', code: 'VALIDATION_ERROR', details: err.errors });

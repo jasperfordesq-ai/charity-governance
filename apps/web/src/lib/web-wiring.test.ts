@@ -1625,9 +1625,10 @@ test('documents delete modal is extracted from the oversized route file', () => 
   assert.match(modalSrc, /ConfirmActionModal/);
   assert.doesNotMatch(modalSrc, /ModalHeader/);
   assert.match(modalSrc, /ariaLabel="Confirm destructive action"/);
-  assert.match(modalSrc, /Linked standards and cited Confluence pages must be reviewed and unlinked first/);
-  assert.match(modalSrc, /CharityPilot cannot restore a deleted item/);
-  assert.match(modalSrc, /File cleanup is tracked separately and may need retries/);
+  assert.match(modalSrc, /Holds and evidence links must be reviewed first/);
+  assert.match(modalSrc, /record and file remain recoverable for the approved window/);
+  assert.match(modalSrc, /No draft-removal policy has been approved/);
+  assert.doesNotMatch(modalSrc, /CharityPilot cannot restore a deleted item/);
   assert.match(confirmModal, /ariaLabel = 'Confirm action'/);
   assert.match(confirmModal, /secondaryLabel/);
 });

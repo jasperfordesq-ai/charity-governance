@@ -2,6 +2,19 @@
 
 Last updated: 2026-09-30
 
+Ordinary Vault DELETE now calls DocumentRecoveryService.remove, requires an Admin
+web session, current revision, approved policy and removal evidence reference,
+and returns the retained removal result without a cleanup job. The dialog loads
+approved unwithdrawn draft policies and requires explicit selection; none are
+seeded or activated. The old DocumentService.remove implementation remains
+uncalled by production routes and should be removed with its obsolete direct
+tests before release. Next: policy administration and Deleted Items/restore UI,
+browser verification and real persisted HTTP/race tests, then controlled purge.
+API build and 69 recovery/route tests pass; 178 frontend wiring tests and the
+274-file application typecheck pass. Full frontend typecheck fails in unchanged
+tests that assign readonly NODE_ENV; record/fix this gate before release. No
+browser proof or deployment was performed for this checkpoint.
+
 Latest recovery checkpoint: a new DocumentRecoveryService implements policy-bound
 retained removal and fingerprint-checked restoration with audit. Deleted Items
 and restore endpoints require an Admin/Owner web session. Migration

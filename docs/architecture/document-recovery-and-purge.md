@@ -25,6 +25,24 @@ purge/hold races, user-interface behavior or provider/backup disposal.
 
 ## Observed starting point
 
+Latest ordinary-removal checkpoint: DELETE now invokes the recovery service with
+a policy ID, controlled removal evidence reference and expected revision. It is
+web-admin only and never invokes provider deletion or cleanup creation. The
+dialog loads scoped approved/unwithdrawn VAULT_DRAFT policies, requires selection
+and cannot proceed without one. None are seeded. Response changes from 204 to
+200 with retained-item metadata. Old reason-only requests receive 400; connectors
+receive 403. Existing cleanup workers still handle previously authorized jobs.
+
+The obsolete immediate-delete service method remains only for existing direct
+tests and needs removal before release. Ten route tests asserting the former
+deletion behavior were replaced with the new retained-removal matrix, covering
+policy, stale revision, holds, standard/citation/replacement links, lifecycle,
+audit failure rollback and zero destructive calls. Current verification: API
+build and 69 recovery/route tests pass; 178 frontend wiring tests and a bounded
+application typecheck (274 files excluding tests) pass. Full frontend typecheck
+fails on unchanged tests assigning readonly NODE_ENV. No browser journey or
+deployment is claimed; policy administration and Deleted Items/restore UI remain.
+
 Recovery-service checkpoint: `DocumentRecoveryService` implements transactional
 policy-bound removal without cleanup and fingerprint-checked restoration. It
 locks the document and policy, checks the expected revision and active actor,

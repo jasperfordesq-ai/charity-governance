@@ -558,16 +558,18 @@ export function useDocumentsWorkflow() {
     }
   };
 
-  const handleDelete = async () => {
-    if (!deleteDocId || !canManage || Array.from(deleteReason.trim()).length < 10) return;
+  const handleDelete = async (policyId: string, evidenceRef: string) => {
+    if (!selectedDeleteDoc || !canManage || Array.from(deleteReason.trim()).length < 10) return;
     setDeleting(true);
     try {
-      await api.delete(`/documents/${encodeURIComponent(deleteDocId)}`, { data: { reason: deleteReason.trim() } });
+      await api.delete(`/documents/${encodeURIComponent(selectedDeleteDoc.id)}`, { data: {
+        reason: deleteReason.trim(), expectedUpdatedAt: selectedDeleteDoc.updatedAt, policyId, evidenceRef,
+      } });
       setDocuments((prev) => prev.filter((d) => d.id !== deleteDocId));
       deleteModal.onClose();
       setDeleteDocId(null);
       setDeleteReason('');
-      toast('Document removed from the vault. Storage cleanup is tracked separately.');
+      toast('Document moved to Deleted Items. Its file is retained for recovery.');
     } catch (err) {
       if (await reconcileForbiddenMutation(err)) return;
       logClientError('Delete failed', err);
