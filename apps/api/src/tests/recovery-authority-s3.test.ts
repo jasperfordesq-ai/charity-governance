@@ -18,6 +18,18 @@ function fixture(handler: (command: unknown) => Promise<unknown>) {
 }
 const metadata = { VersionId: 'version-1', ServerSideEncryption: 'aws:kms', SSEKMSKeyId: config.kmsKeyArn };
 
+test('S3 timeout cannot be reported as object absence by a late provider error', async t => {
+  t.mock.timers.enable({ apis: ['setTimeout'] });
+  const store = fixture(async command => new Promise((_resolve, reject) => {
+    setTimeout(() => reject(command instanceof GetObjectCommand
+      ? { name: 'NoSuchKey', $metadata: { httpStatusCode: 404 } } : { $metadata: { httpStatusCode: 412 } }), 16000);
+  }));
+  const refusal = assert.rejects(() => store.read(key), /read failed/);
+  const writeRefusal = assert.rejects(() => store.create(key, '{}'), /unknown/);
+  t.mock.timers.tick(16001);
+  await Promise.all([refusal, writeRefusal]);
+});
+
 test('S3 intents use conditional creation, expected owner, KMS and explicit integrity checksum', async () => {
   const store = fixture(async command => {
     assert.ok(command instanceof PutObjectCommand);

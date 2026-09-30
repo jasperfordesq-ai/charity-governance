@@ -3,14 +3,17 @@ import { Readable } from 'node:stream';
 import { GetObjectCommand, PutObjectCommand, S3Client, type S3ClientConfig } from '@aws-sdk/client-s3';
 import { z } from 'zod';
 import type { AuthorityObjectStore, AuthorityHeadPublisher, AuthorityCheckpoint } from './recovery-authority-journal.js';
+import { inspectRecoveryPreparationEnvelope } from './recovery-preparation-envelope.js';
 
 const identity = z.string().regex(/^[A-Za-z0-9_-]{1,120}$/);
 const configuration = z.object({
   bucket: z.string().min(3).max(63).regex(/^[a-z0-9][a-z0-9-]+[a-z0-9]$/),
   accountId: z.string().regex(/^\d{12}$/),
   kmsKeyArn: z.string().regex(/^arn:aws:kms:eu-west-1:\d{12}:key\/[a-f0-9-]{36}$/),
+  replayKeyArn: z.string().regex(/^arn:aws:kms:eu-west-1:\d{12}:key\/[a-f0-9-]{36}$/).optional(),
   installationId: identity, organisationId: identity,
-}).strict().refine(c => c.kmsKeyArn.split(':')[4] === c.accountId);
+}).strict().refine(c => c.kmsKeyArn.split(':')[4] === c.accountId && (!c.replayKeyArn
+  || (c.replayKeyArn.split(':')[4] === c.accountId && c.replayKeyArn !== c.kmsKeyArn)));
 type Configuration = z.infer<typeof configuration>;
 const errorMetadata = z.object({ name: z.string().optional(),
   $metadata: z.object({ httpStatusCode: z.number().optional() }).optional() });
@@ -62,7 +65,7 @@ export class S3AuthorityObjectStore implements AuthorityObjectStore, AuthorityHe
     return (await this.readObject(this.request(key), signal))?.body ?? null;
   }
 
-  private async readObject(request: { Bucket: string; Key: string; ExpectedBucketOwner: string }, callerSignal?: AbortSignal) {
+  private async readObject(request: { Bucket: string; Key: string; ExpectedBucketOwner: string }, callerSignal?: AbortSignal, maxBytes = 4096) {
     let body: Readable | undefined;
     let responseReceived = false;
     const deadline = operationDeadline();
@@ -77,14 +80,14 @@ export class S3AuthorityObjectStore implements AuthorityObjectStore, AuthorityHe
       if (response.Body instanceof Readable) body = response.Body;
       if (signal.aborted) throw new Error('Recovery storage deadline exceeded');
       if (!body || response.DeleteMarker || !this.validMetadata(response) ||
-        !Number.isInteger(response.ContentLength) || response.ContentLength! < 0 || response.ContentLength! > 4096) {
+        !Number.isInteger(response.ContentLength) || response.ContentLength! < 0 || response.ContentLength! > maxBytes) {
         throw new Error('Invalid object metadata');
       }
       const chunks: Buffer[] = []; let length = 0;
       for await (const chunk of body) {
         if (!(chunk instanceof Uint8Array)) throw new Error('Invalid body stream');
         length += chunk.byteLength;
-        if (length > 4096) throw new Error('Object exceeds limit');
+        if (length > maxBytes) throw new Error('Object exceeds limit');
         chunks.push(Buffer.from(chunk));
       }
       if (length !== response.ContentLength) throw new Error('Incomplete object');
@@ -92,7 +95,7 @@ export class S3AuthorityObjectStore implements AuthorityObjectStore, AuthorityHe
         etag: response.ETag, versionId: response.VersionId! };
     } catch (error) {
       const parsed = errorMetadata.safeParse(error);
-      if (!responseReceived && parsed.success && parsed.data.name === 'NoSuchKey' &&
+      if (!signal.aborted && !responseReceived && parsed.success && parsed.data.name === 'NoSuchKey' &&
         parsed.data.$metadata?.httpStatusCode === 404) return null;
       throw new Error('Recovery S3 read failed');
     } finally {
@@ -105,8 +108,8 @@ export class S3AuthorityObjectStore implements AuthorityObjectStore, AuthorityHe
   }
 
   private async writeObject(request: { Bucket: string; Key: string; ExpectedBucketOwner: string }, body: string,
-    condition: { IfNoneMatch: '*' } | { IfMatch: string }) {
-    if (typeof body !== 'string' || Buffer.byteLength(body, 'utf8') > 4096) throw new Error('Invalid recovery object size');
+    condition: { IfNoneMatch: '*' } | { IfMatch: string }, maxBytes = 4096) {
+    if (typeof body !== 'string' || Buffer.byteLength(body, 'utf8') > maxBytes) throw new Error('Invalid recovery object size');
     const deadline = operationDeadline();
     try {
       const response = await this.client.send(new PutObjectCommand({ ...request, Body: body,
@@ -118,9 +121,37 @@ export class S3AuthorityObjectStore implements AuthorityObjectStore, AuthorityHe
       return true;
     } catch (error) {
       const parsed = errorMetadata.safeParse(error);
-      if (parsed.success && parsed.data.$metadata?.httpStatusCode === 412) return false;
+      if (!deadline.signal.aborted && parsed.success && parsed.data.$metadata?.httpStatusCode === 412) return false;
       throw new Error('Recovery S3 write outcome is unknown');
     } finally { deadline.dispose(); }
+  }
+
+  private replayRequest(operationId: string) {
+    if (!this.config.replayKeyArn) throw new Error('Recovery replay storage is not configured');
+    z.string().regex(/^[A-Za-z0-9_-]{1,160}$/).parse(operationId);
+    return { Bucket: this.config.bucket, ExpectedBucketOwner: this.config.accountId,
+      Key: `replay/${this.config.installationId}/${this.config.organisationId}/${operationId}.json` };
+  }
+
+  private checkReplay(operationId: string, envelope: string) {
+    const context = inspectRecoveryPreparationEnvelope(envelope);
+    if (context.installationId !== this.config.installationId || context.organisationId !== this.config.organisationId
+      || context.operationId !== operationId || context.keyId !== this.config.replayKeyArn) {
+      throw new Error('Recovery replay envelope scope mismatch');
+    }
+  }
+
+  async readReplay(operationId: string) {
+    const object = await this.readObject(this.replayRequest(operationId), undefined, 65536);
+    if (!object) return null;
+    this.checkReplay(operationId, object.body);
+    return object.body;
+  }
+
+  async createReplay(operationId: string, envelope: string) {
+    const request = this.replayRequest(operationId);
+    this.checkReplay(operationId, envelope);
+    return this.writeObject(request, envelope, { IfNoneMatch: '*' }, 65536);
   }
 
   private headRequest() {

@@ -26,6 +26,46 @@ export interface RecoveryDataKeys {
   unwrap(wrappedKey: string, context: RecoveryEnvelopeContext): Promise<{ key: Buffer; keyId: string }>;
 }
 
+/** Structural inspection only; authenticated opening is still required. */
+export function inspectRecoveryPreparationEnvelope(body: string) {
+  try {
+    if (Buffer.byteLength(body, 'utf8') > 65536) throw new Error('oversized');
+    const value = envelopeSchema.parse(JSON.parse(body));
+    // Reject ignored duplicate JSON keys and extra representations that could
+    // smuggle plaintext alongside otherwise valid encrypted fields.
+    if (JSON.stringify(value) !== body) throw new Error('noncanonical');
+    return value.context;
+  } catch { throw new Error('Invalid recovery preparation envelope'); }
+}
+
+export interface RecoveryEnvelopeObjects {
+  readReplay(operationId: string): Promise<string | null>;
+  /** Atomic create-if-absent; false means an existing immutable object won. */
+  createReplay(operationId: string, envelope: string): Promise<boolean>;
+}
+
+/** Publish only a candidate blob, never an intent/head or execution permission.
+ * Unknown writes require retrying this operation, not changing its identity. */
+export async function preserveRecoveryPreparation(body: string, context: RecoveryEnvelopeContext,
+  keys: RecoveryDataKeys, store: RecoveryEnvelopeObjects) {
+  try {
+    context = contextSchema.parse(context);
+    requireFacts(body, context);
+    let envelope = await store.readReplay(context.operationId);
+    let replayed = envelope !== null;
+    if (envelope === null) {
+      const candidate = await sealRecoveryPreparation(body, context, keys);
+      replayed = !(await store.createReplay(context.operationId, candidate.envelope));
+      // Read the winning bytes even after a conditional conflict. Never return
+      // the local candidate's digest unless those are the actual stored bytes.
+      envelope = await store.readReplay(context.operationId);
+    }
+    if (envelope === null || (await openRecoveryPreparation(envelope, context, keys)).body !== body) throw new Error('conflict');
+    return { digest: createHash('sha256').update(envelope, 'utf8').digest('hex'), replayed,
+      actionAuthorized: false as const };
+  } catch { throw new Error('Recovery envelope preservation is unresolved; retry the same operation identity'); }
+}
+
 function secretContext(context: RecoveryEnvelopeContext, wrappedKey: string) {
   return { organisationId: context.organisationId, provider: 'charitypilot-recovery-envelope-v1',
     kind: JSON.stringify({ format: 1, kind: 'COMPLAINT_RECOVERY_PREPARATION', context, wrappedKey }) };
@@ -64,6 +104,7 @@ export async function openRecoveryPreparation(envelope: string, rawContext: Reco
     if (Buffer.byteLength(envelope, 'utf8') > 65536) throw new Error('oversized');
     const context = contextSchema.parse(rawContext);
     const value = envelopeSchema.parse(JSON.parse(envelope));
+    if (JSON.stringify(value) !== envelope) throw new Error('noncanonical');
     if (JSON.stringify(value.context) !== JSON.stringify(context) || value.sealed.generation !== context.writerEpoch) throw new Error('binding');
     const result = await keys.unwrap(value.wrappedKey, context);
     key = result.key;

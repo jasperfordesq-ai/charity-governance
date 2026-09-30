@@ -3800,3 +3800,24 @@ envelope persistence and exact retry reconciliation remain required because fres
 encryption changes bytes. No journal publication or production caller uses this
 module. Provider deadlines/custody, field-retention approval, execution fencing and
 recovery acceptance remain open.
+
+### Immutable candidate-envelope retry path, under verification
+
+Envelope preservation now rereads the winning create-only object and returns its
+actual digest; existing envelopes must decrypt to the exact original candidate
+facts. Lost acknowledgement retries do not reseal. A separately enabled S3 replay
+namespace has a 64KiB budget and distinct same-account replay key identity. Intent
+and head limits remain4KiB. Nine focused envelope/storage tests pass, including
+mock SDK round-trip; the complete API suite is still running. No live provider,
+policy approval, journal publication or execution fence is supplied by this slice.
+
+Envelope preservation passed the full local API run (2,487 tests and four real
+PostgreSQL migration tests). Subsequent review added canonical envelope JSON
+validation and refusal of late missing-object/precondition responses after S3
+operation expiry. The latter has a reproduced red regression. These final guards
+have separate focused verification; do not attribute them to the preceding full
+suite. No external key provider, live storage policy or execution fencing exists.
+
+Final envelope build and 57 focused preparation/crypto/S3 tests passed, including
+both later review guards. This is local evidence only. The original ciphertext
+preservation helper and replay namespace remain inactive and non-authorizing.
