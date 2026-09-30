@@ -1,5 +1,15 @@
 # CharityPilot Agent Continuation Handoff
 
+> **Fourteen further March governance documents, 2026-09-30:** the retained
+> adoption email explicitly names fourteen more files whose manifest-verified
+> Vault DOCX main bodies match their email attachments token for token.
+> Binaries differ; later revisions and actual audience are unchecked.
+> Private worksheet proposes Board/CURRENT adopted March text/RESTRICTED
+> for these exact copies only. The comparison log now covers nineteen
+> matches. Counts: 47/63 source evidenced, 46 with some proposal, 17 with
+> none, all PENDING. No live change. Private evidence:
+> `.charitypilot-private/march-fourteen-policy-source-review-2026-09-30.md`.
+
 > **Five March governance documents, exact main-body review,
 > 2026-09-30:** the retained March approval email names Child Safeguarding,
 > Complaints & Feedback, Conflict of Interest, Safeguarding and the March

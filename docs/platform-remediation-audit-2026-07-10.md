@@ -3526,3 +3526,12 @@ remaining external blockers and owners, and an explicit confirmation that no
 > worksheet now has 33/63 source-evidenced rows, 32 with proposals and
 > 31 without; all PENDING. No live lifecycle, audience, risk or standards
 > status changed. See private `march-five-policy-source-review-2026-09-30.md`.
+
+> **Nikita source review update, 2026-09-30:** Fourteen further named March
+> policy-suite files in the verified Vault backup match retained email
+> attachments in extracted main-body tokens. Binary identity, later
+> revisions and operational implementation are unverified. The private
+> worksheet now has 47/63 source-evidenced rows, 46 with some proposal
+> and 17 without; all decisions remain PENDING. No live lifecycle, access,
+> approval or retention state changed. See private
+> `march-fourteen-policy-source-review-2026-09-30.md`.
