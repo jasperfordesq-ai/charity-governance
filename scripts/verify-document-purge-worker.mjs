@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import { randomUUID } from 'node:crypto';
 import { setTimeout as delay } from 'node:timers/promises';
-import { PrismaClient } from '@prisma/client';
+import { Prisma, PrismaClient } from '@prisma/client';
 import safety from '../e2e/helpers/database-safety.cjs';
 import { DocumentService } from '../apps/api/src/services/document.service.ts';
 import { DocumentRecoveryService } from '../apps/api/src/services/document-recovery.service.ts';
@@ -31,7 +31,8 @@ const prisma = new PrismaClient({ datasourceUrl: url.toString() });
 const otherPrisma = new PrismaClient({ datasourceUrl: url.toString() });
 try {
   for (const client of [prisma, otherPrisma]) {
-    const [identity] = await client.$queryRawUnsafe(safety.DATABASE_IDENTITY_SQL);
+    // Trusted, fixed repository query; never constructed from runtime input.
+    const [identity] = await client.$queryRaw(Prisma.raw(safety.DATABASE_IDENTITY_SQL));
     safety.assertDatabaseIdentity(identity, { isRemote: false, expectedServerPort: 5432, instanceId });
   }
   assert.equal(await prisma.documentStorageDeletion.count(), 0, 'worker proof requires an empty job queue');
@@ -60,9 +61,9 @@ try {
     assert.deepEqual(await read(organisationId, file.storagePath, 'local'), bytes);
     // Only this identity-verified disposable fixture advances removal dates.
     await prisma.$transaction(async tx => {
-      await tx.$executeRawUnsafe('ALTER TABLE "Document" DISABLE TRIGGER "Document_recovery_state_guard"');
+      await tx.$executeRaw`ALTER TABLE "Document" DISABLE TRIGGER "Document_recovery_state_guard"`;
       await tx.$executeRaw`UPDATE "Document" SET "deletedAt"="deletedAt"-INTERVAL '31 days',"recoveryUntil"="recoveryUntil"-INTERVAL '31 days' WHERE id=${doc.id} AND "organisationId"=${organisationId}`;
-      await tx.$executeRawUnsafe('ALTER TABLE "Document" ENABLE TRIGGER "Document_recovery_state_guard"');
+      await tx.$executeRaw`ALTER TABLE "Document" ENABLE TRIGGER "Document_recovery_state_guard"`;
     });
     const current = await prisma.document.findUniqueOrThrow({ where: { id: doc.id } });
     const dispositionPlan = Object.fromEntries(['PRIMARY','VERSIONS','CONFLUENCE','EXPORTS','AUDIT','BACKUPS'].map(area =>

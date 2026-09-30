@@ -2,6 +2,17 @@
 
 Last updated: 2026-09-30
 
+CI security follow-up: the synthetic worker proof uses tagged constant DDL and
+the trusted repository identity SQL through Prisma's supported query API.
+Integration control-character expressions now use explicit Unicode escapes;
+the same 65 control-code-point boundaries are covered by a new API test.
+Secret/SAST/control-byte scans and API build pass. The actual isolated worker
+proof passes again (including the real five-minute retry) and the Owner purge
+Chromium journey passes; managed runner exit 0. The regular production-check
+suite now includes the purge/restore tests: 1,101 pass, zero fail, two platform
+skips. These correct the failed security gate for candidate 486dcd4c; a revised
+candidate still needs exact-SHA CI/E2E and deployment/live acceptance.
+
 Release gate repair: Windows recovery-manifest ACL publication failed when a
 Node child inherited the bundled PowerShell edition's module search path.
 Both ACL setup and verification now explicitly import the Security module from
