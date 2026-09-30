@@ -2,6 +2,14 @@
 
 Last updated: 2026-09-30
 
+Audit-ordering backup compatibility candidate: the integer cursor now uses a
+transactional database-default allocator. Populated upgrade/down/upgrade keeps
+historical rows and high-water ordering; append-only, concurrent allocation,
+rollback and snapshot visibility pass in managed PostgreSQL (two tests, exit 0).
+All 50 disposable database safety tests pass. See
+`docs/architecture/risk-verification-ordering.md`. The backup guard is unchanged;
+exact-candidate CI backup/restore proof and deployment remain outstanding.
+
 Browser gate repair: login and retention-help contrast now passes the actual
 light/dark accessibility checks. Connector expectations now enforce Member
 denial for approval readiness and unclassified Minute Book reads, and withheld

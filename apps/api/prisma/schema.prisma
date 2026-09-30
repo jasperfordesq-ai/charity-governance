@@ -1828,11 +1828,17 @@ model RiskChangeAudit {
   @@index([organisationId, riskId, occurredAt])
 }
 
+// Migration-owned allocator; captured transactionally with the evidence rows.
+model RiskControlVerificationCounter {
+  id    Int @id
+  value Int
+}
+
 // A verification is evidence recorded by a named actor, not an automatic
 // declaration that a control passed. Revocation is another immutable event.
 model RiskControlVerification {
   id                String   @id @default(cuid())
-  sequence          Int      @unique @default(autoincrement())
+  sequence          Int      @unique @default(dbgenerated("\"RiskControlVerification_next_order\"()"))
   organisationId    String
   riskId            String
   actorUserId       String

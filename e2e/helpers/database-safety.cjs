@@ -93,6 +93,7 @@ const PRESERVED_PUBLIC_TABLES = Object.freeze([
   "GovernanceStandard",
   "AuthRecoveryControl",
   "AuthRecoveryRetiredSecret",
+  "RiskControlVerificationCounter",
   "_prisma_migrations",
 ]);
 
