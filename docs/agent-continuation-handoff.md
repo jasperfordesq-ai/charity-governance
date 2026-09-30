@@ -1,5 +1,13 @@
 # CharityPilot Agent Continuation Handoff
 
+> **1 October 00:52 Dublin hosted result:** Exact CI `36792206222` and
+> E2E `36792206256` both succeeded on source commit `e1b09a26`. The
+> prior `8a74c178` CI failure remains in the record. The private VM still
+> runs verified `8d4a0058`; optional restricted runtime credentials are
+> unconfigured and independent recovery is inactive. This is source
+> validation, not a release or DPO acceptance. Private checkpoint:
+> `.charitypilot-private/RESUME-HERE.md`.
+
 > **1 October 00:40 Dublin source/checkpoint:** The private VM remains on
 > verified `8d4a0058`. Latest pushed source is `e1b09a26`, which repairs
 > the disposable role proof's security-scan failure on `8a74c178` and adds
