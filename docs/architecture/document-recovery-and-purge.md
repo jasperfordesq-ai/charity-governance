@@ -31,6 +31,27 @@ purge/hold races, user-interface behavior or provider/backup disposal.
 
 ## Observed starting point
 
+Atomic purge claim checkpoint: `DocumentPurgeClaim` now creates the primary
+storage outbox job, appends RECORD_DELETE with PRIMARY_PURGE_PENDING and removes
+the recoverable Document in one transaction. The database rechecks active Owner,
+matching unwithdrawn authorization, exact revision/object, current policy,
+recovery and retention expiry, holds and evidence links under shared locks.
+It reads time after waiting for locks; purge eligibility includes the exact
+expiry instant. No application route invokes this yet. A committed claim is
+the cancellation boundary: withdrawal then refuses to promise recall, restore
+has no record to reopen, and even audited corrected-path recovery cannot redirect
+the primary job. Existing provider/request/source identity guards remain.
+
+The real PostgreSQL proof covers early recovery/retention refusal, stale binding,
+wrong actor, held records, transaction rollback, competing claims producing one
+job, and holds/cancellation/restoration winning while a claim waits on a lock.
+Its expiry fixtures are aged only in the disposable database with a named trigger
+temporarily disabled, then reenabled before authorization/claim; there is no
+production clock override. This does not prove physical-byte disposal, the
+application API/UI, a two-worker provider race or downstream disposition. Next
+wire reviewed authorization/withdrawal/claim endpoints and UI, prove exact bytes
+and worker failures/retry, and retain Confluence/version/export/backup evidence.
+
 Purge withdrawal persistence checkpoint: the active same-charity Owner can be
 recorded as withdrawing an authorization through a separate immutable fact with
 reason, evidence reference and database time. The database serializes on the

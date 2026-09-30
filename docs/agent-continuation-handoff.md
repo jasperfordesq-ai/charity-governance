@@ -2,6 +2,17 @@
 
 Last updated: 2026-09-30
 
+R3 atomic database claim/outbox now checks Owner, unwithdrawn exact authorization,
+revision/object, current policy, recovery/retention expiry, holds and links before
+creating one pinned primary cleanup job, retained audit and Document removal in
+one transaction. Claim commit prevents cancellation/restore and path redirection.
+No API/UI consumer or deployment exists yet. Real PostgreSQL proof covers
+rollback, duplicate claims and claim races against hold/cancellation/restoration;
+expiry fixtures are explicitly aged in the disposable database, not production.
+Next API/UI authorization and claim workflow, actual provider-byte/retry/timeout
+proof, retained downstream-copy dispositions and R4/R5. A pending primary job
+is not proof of erasure or DPO acceptance.
+
 R3 withdrawal persistence is added: separate immutable Owner cancellation of a
 purge authorization, same-charity/active-role checks, evidence and database time.
 Two real PostgreSQL sessions prove duplicate withdrawal serialization; invalid

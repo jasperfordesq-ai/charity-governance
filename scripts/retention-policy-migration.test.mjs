@@ -203,6 +203,81 @@ test('retention policy and recovery-state upgrade preserve documents and enforce
       assert.equal(sql(`SELECT count(*) FROM "Document" WHERE id='retained-doc' AND "deletedAt" IS NULL; SELECT count(*) FROM "DocumentStorageDeletion";`), '1\n0');
       if (race === 'hold') sql(`UPDATE "Document" SET "deletionHold"=false WHERE id='retained-doc';`);
     }
+    sql(readFileSync(`${migrations}/20260930060000_document_purge_claim/migration.sql`, 'utf8'));
+    sql(`${insert('purge-current', ',"state","approvedById","approvedAt","approvalEvidenceRef"')} VALUES ('purge-current','retention-a','VAULT_DRAFT',5,'REVIEW_REQUIRED',30,'owner-a','APPROVED','owner-a',CURRENT_TIMESTAMP,'POLICY-APPROVAL-005');`);
+    sql(fingerprintRemoval.replace("'fingerprint'", "'purge-current'"));
+    const authorizePurge = id => authorize(id).replace("'fingerprint'", "'purge-current'");
+    const claim = (id, auth = 'expired-authorization', actor = 'owner-a') => `INSERT INTO "DocumentPurgeClaim"
+      (id,"organisationId","authorizationId","documentId","deletionId","actorUserId") VALUES
+      ('${id}','retention-a','${auth}','retained-doc','job-${id}','${actor}');`;
+    sql(authorizePurge('unexpired-authorization'));
+    sql(claim('too-early', 'unexpired-authorization'), /retention and recovery expiry/);
+    sql(claim('withdrawn', 'authorized'), /unwithdrawn Owner authority/);
+    const restoring = session('purge-restore-holder', `BEGIN;
+      UPDATE "Document" SET "deletedAt"=NULL,"deletedById"=NULL,"removedFromRevision"=NULL,"removalEvidenceRef"=NULL,"recoveryPolicyId"=NULL,"recoveryUntil"=NULL,"recoverySha256"=NULL,"updatedAt"=timezone('UTC',statement_timestamp()) WHERE id='retained-doc';
+      SELECT 'BARRIER';`, true);
+    await until(() => restoring.output().includes('BARRIER'), 'restore did not reach its barrier');
+    const afterRestore = session('purge-after-restore', claim('restore-loser', 'unexpired-authorization'));
+    await until(() => sql(`SELECT count(*) FROM pg_stat_activity WHERE application_name='purge-after-restore' AND wait_event_type='Lock';`) === '1',
+      'purge did not wait for restoration');
+    restoring.child.stdin.end('COMMIT;\n');
+    assert.equal((await restoring.done).code, 0);
+    const restoreRace = await afterRestore.done;
+    assert.notEqual(restoreRace.code, 0);
+    assert.match(restoreRace.stderr, /unheld removed draft/);
+    assert.equal(sql(`SELECT count(*) FROM "Document" WHERE id='retained-doc' AND "deletedAt" IS NULL; SELECT count(*) FROM "DocumentStorageDeletion";`), '1\n0');
+    sql(fingerprintRemoval.replace("'fingerprint'", "'purge-current'"));
+    // Advance only this disposable fixture's removal dates; production has no
+    // clock override. Constraints stay enabled; normal mutations cannot age it.
+    sql(`BEGIN; ALTER TABLE "Document" DISABLE TRIGGER "Document_recovery_state_guard";
+      UPDATE "Document" SET "deletedAt"="deletedAt"-INTERVAL '31 days',"recoveryUntil"="recoveryUntil"-INTERVAL '31 days' WHERE id='retained-doc';
+      ALTER TABLE "Document" ENABLE TRIGGER "Document_recovery_state_guard"; COMMIT;`);
+    sql(claim('changed-deadline', 'unexpired-authorization'), /authorized revision and object/);
+    sql(authorizePurge('expired-authorization'));
+    sql(`${insert('future-retention', ',"state","approvedById","approvedAt","approvalEvidenceRef","retentionAnchor","retentionDays"')} VALUES ('future-retention','retention-a','VAULT_DRAFT',6,'AFTER_ANCHOR',30,'owner-a','APPROVED','owner-a',CURRENT_TIMESTAMP,'POLICY-APPROVAL-006','CREATED_AT',365);`);
+    sql(authorize('retention-not-due').replace("'fingerprint'", "'future-retention'"));
+    sql(claim('retention-loser', 'retention-not-due'), /retention and recovery expiry/);
+    sql(claim('foreign-actor', 'expired-authorization', 'owner-b'), /active charity owner/);
+    sql(`UPDATE "Document" SET "deletionHold"=true WHERE id='retained-doc';`);
+    sql(claim('held-claim'), /unheld removed draft/);
+    sql(`UPDATE "Document" SET "deletionHold"=false WHERE id='retained-doc';`);
+    sql(`BEGIN; ${claim('rollback-claim')} ROLLBACK;`);
+    assert.equal(sql(`SELECT count(*) FROM "DocumentPurgeClaim"; SELECT count(*) FROM "DocumentStorageDeletion"; SELECT count(*) FROM "Document" WHERE id='retained-doc';`), '0\n0\n1');
+    for (const guard of ['hold', 'cancellation']) {
+      const authId = `race-${guard}-authorization`;
+      sql(authorizePurge(authId));
+      const mutation = guard === 'hold' ? `UPDATE "Document" SET "deletionHold"=true WHERE id='retained-doc';`
+        : withdrawPurge('race-cancellation').replace("'authorized'", `'${authId}'`);
+      const holder = session(`purge-guard-${guard}`, `BEGIN; ${mutation} SELECT 'BARRIER';`, true);
+      await until(() => holder.output().includes('BARRIER'), 'purge guard did not reach its barrier');
+      const waiting = session(`purge-waiting-${guard}`, claim(`blocked-${guard}`, authId));
+      await until(() => sql(`SELECT count(*) FROM pg_stat_activity WHERE application_name='purge-waiting-${guard}' AND wait_event_type='Lock';`) === '1',
+        'purge did not wait for its competing guard');
+      holder.child.stdin.end('COMMIT;\n');
+      assert.equal((await holder.done).code, 0);
+      const result = await waiting.done;
+      assert.notEqual(result.code, 0);
+      assert.match(result.stderr, guard === 'hold' ? /unheld removed draft/ : /unwithdrawn Owner authority/);
+      assert.equal(sql(`SELECT count(*) FROM "DocumentPurgeClaim"; SELECT count(*) FROM "DocumentStorageDeletion"; SELECT count(*) FROM "Document" WHERE id='retained-doc';`), '0\n0\n1');
+      if (guard === 'hold') sql(`UPDATE "Document" SET "deletionHold"=false WHERE id='retained-doc';`);
+    }
+    const claiming = session('purge-claim-holder', `BEGIN; ${claim('final-claim')} SELECT 'BARRIER';`, true);
+    await until(() => claiming.output().includes('BARRIER'), 'purge claim did not reach its barrier');
+    const duplicateClaim = session('purge-claim-duplicate', claim('duplicate-claim'));
+    await until(() => sql(`SELECT count(*) FROM pg_stat_activity WHERE application_name='purge-claim-duplicate' AND wait_event_type='Lock';`) === '1',
+      'duplicate purge claim did not serialize');
+    claiming.child.stdin.end('COMMIT;\n');
+    assert.equal((await claiming.done).code, 0);
+    const duplicateClaimResult = await duplicateClaim.done;
+    assert.notEqual(duplicateClaimResult.code, 0);
+    assert.match(duplicateClaimResult.stderr, /unheld removed draft|unique constraint/);
+    assert.equal(sql(`SELECT count(*) FROM "DocumentPurgeClaim"; SELECT count(*) FROM "DocumentStorageDeletion"; SELECT count(*) FROM "Document" WHERE id='retained-doc';`), '1\n1\n0');
+    assert.equal(sql(`SELECT provider || ':' || "storagePath" || ':' || "sourceDocumentId" || ':' || state FROM "DocumentStorageDeletion" WHERE id='job-final-claim';`), 'local:retention-a/file.pdf:retained-doc:PENDING');
+    assert.equal(sql(`SELECT next FROM "DocumentControlAudit" WHERE id='final-claim';`), 'PRIMARY_PURGE_PENDING');
+    sql(withdrawPurge('too-late').replace("'authorized'", "'expired-authorization'"), /cannot recall storage dispatch/);
+    sql(`UPDATE "DocumentPurgeClaim" SET "actorUserId"='owner-b';`, /append-only/);
+    sql(`DELETE FROM "DocumentPurgeClaim";`, /append-only/);
+    sql(`UPDATE "DocumentStorageDeletion" SET "storagePath"='retention-a/other.pdf' WHERE id='job-final-claim';`, /cannot redirect|identity is immutable/);
   } finally {
     for (const item of sessions) if (item.child.exitCode === null) item.child.stdin.end('ROLLBACK;\n');
     const removed = docker(['rm', '--force', '--volumes', container]);

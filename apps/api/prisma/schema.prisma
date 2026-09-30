@@ -1335,6 +1335,7 @@ model DocumentPurgeAuthorization {
   dispositionPlan    Json
   authorizedAt       DateTime @default(now())
   withdrawal         DocumentPurgeAuthorizationWithdrawal?
+  claim              DocumentPurgeClaim?
 
   @@unique([id, organisationId])
   @@index([organisationId, documentId, authorizedAt])
@@ -1352,6 +1353,23 @@ model DocumentPurgeAuthorizationWithdrawal {
 
   @@unique([authorizationId, organisationId])
   @@index([organisationId, occurredAt, id])
+}
+
+model DocumentPurgeClaim {
+  id              String @id @default(cuid())
+  organisationId  String
+  authorizationId String @unique
+  authorization   DocumentPurgeAuthorization @relation(fields: [authorizationId, organisationId], references: [id, organisationId], onDelete: Restrict)
+  documentId      String @unique
+  deletionId      String @unique
+  deletion        DocumentStorageDeletion @relation(fields: [deletionId, organisationId], references: [id, organisationId], onDelete: Restrict)
+  actorUserId     String
+  transactionId   BigInt @default(dbgenerated("txid_current()"))
+  claimedAt       DateTime @default(now())
+
+  @@unique([authorizationId, organisationId])
+  @@unique([deletionId, organisationId])
+  @@index([organisationId, claimedAt, id])
 }
 
 model Document {
@@ -1569,6 +1587,7 @@ model DocumentStorageDeletion {
   recoveries              DocumentStorageDeletionRecovery[]
   attemptEvents           DocumentStorageDeletionAttempt[]
   dataLifecycleLinks      DataLifecycleStorageLink[]
+  purgeClaim              DocumentPurgeClaim?
 
   @@unique([id, organisationId])
   @@index([organisationId])

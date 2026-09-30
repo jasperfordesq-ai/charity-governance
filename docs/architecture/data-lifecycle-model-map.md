@@ -19,7 +19,7 @@ group when its migration is introduced.
 - registers-controls: `BoardMember`, `ConflictRecord`, `RiskRecord`, `RiskChangeAudit`, `RiskControlVerification`, `ComplaintRecord`, `GovernanceRegisterChangeAudit`, `OrganisationChangeAudit`, `FundraisingRecord`, `AnnualReportReadiness`, `FinancialControlReview`, `Member`
 - calendar-minutes: `Deadline`, `DeadlineChangeAudit`, `DeadlineReminderLog`, `DeadlineReminderAudit`, `GoverningAct`, `Resolution`, `GoverningActVoid`, `MinuteBookChangeAudit`
 - team-billing: `TeamInvite`, `Subscription`, `BillingCheckoutAttempt`, `StripeWebhookEvent`
-- data-requests: `DataLifecycleRequest`, `DataLifecycleStorageLink`, `DataLifecycleStorageLinkWithdrawal`, `DataLifecycleDocumentLink`, `DataLifecycleDocumentLinkWithdrawal`, `DataLifecycleReviewEvent`, `DataLifecycleTargetEvent`, `DataLifecycleResponseEvent`, `DataLifecycleCoverageEvent`, `DataRetentionPolicyRevision`, `DataRetentionPolicyWithdrawal`, `DocumentPurgeAuthorization`, `DocumentPurgeAuthorizationWithdrawal`
+- data-requests: `DataLifecycleRequest`, `DataLifecycleStorageLink`, `DataLifecycleStorageLinkWithdrawal`, `DataLifecycleDocumentLink`, `DataLifecycleDocumentLinkWithdrawal`, `DataLifecycleReviewEvent`, `DataLifecycleTargetEvent`, `DataLifecycleResponseEvent`, `DataLifecycleCoverageEvent`, `DataRetentionPolicyRevision`, `DataRetentionPolicyWithdrawal`, `DocumentPurgeAuthorization`, `DocumentPurgeAuthorizationWithdrawal`, `DocumentPurgeClaim`
 - platform-operators: `PlatformOperator`, `PlatformOperatorRecoveryCode`, `PlatformOperatorSession`, `OperatorActionApproval`
 <!-- MODEL_INVENTORY_END -->
 
