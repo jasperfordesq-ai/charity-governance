@@ -2,6 +2,22 @@
 
 Last updated: 2026-09-30
 
+2026-09-30 resumed live evidence: two 28 September replay alerts correlate in
+the retained former API logs with logout, a rejected session check and a
+rejected refresh milliseconds later. That sequence fits the former web
+proxy's post-logout refresh path, which the deployed release removed; the old
+logs lack a session-family link and the other five events remain unattributed.
+Separately, NEXUS commit `33d8b492515293315051cbc219eff3c91b3440ae`
+removed registrant names and email addresses from admin signup notices on
+2 May. Two delivered notices to Jasper dated 8 August and 12 September omit
+those fields. The live C1 risk was edited to record this bounded verification
+and its date while preserving the open risk and unknowns about other
+recipients, communities, locales, historical exposure and DPO acceptance.
+The ordinary notice still carries an authenticated profile URL with a numeric
+user ID. The original separate closure receipt was not found. Restricted
+evidence and precise limits are in the gitignored private roadmap and replay
+note; this is neither a universal control verification nor a breach finding.
+
 2026-09-30 authorised private-host release: blue/green switched hOUR Timebank
 CLG to `321a0c8434eb3b3bd5abbe1e4209dd950dd01bff` at 06:58 UTC after
 57 migrations with zero blocked by the gate, its automatic pre-migration
@@ -13,8 +29,9 @@ exact pre-deploy backup was copied off-host with matching hashes. A signed-in
 Owner visit found the new Governance Audit, Security & Data and Data Requests
 pages, all 63 Vault records restricted and unreviewed (including the statutory
 directors/secretary register), the 22-act Minute Book and unchanged seven
-historical replay events. The C1 risk remains open with its stale wording;
-its original verification receipt has not been found. See the gitignored
+historical replay events. At this initial post-release visit, the C1 risk
+still carried stale wording; the later bounded correction is recorded above.
+Its original verification receipt has not been found. See the gitignored
 private roadmap and acceptance audit for restricted findings and limits.
 This is a private-host release and bounded read-only acceptance, not formal
 DPO approval or public-production launch evidence. Member classification,
