@@ -1,9 +1,8 @@
-import { test, expect } from '@playwright/test';
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { randomUUID } from 'node:crypto';
 import { withDb, createVerifiedOwner } from '../helpers/db';
-import { TEST_PASSWORD, uniqueEmail } from '../fixtures';
+import { test, expect, TEST_PASSWORD, uniqueEmail } from '../fixtures';
 import { IS_DEPLOYED_QA } from '../env';
 
 test.describe('Transactional risk evidence ordering', () => {
