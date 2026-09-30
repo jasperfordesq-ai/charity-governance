@@ -60,7 +60,7 @@ export default function PrincipleDetailPage() {
             {principle.description}{' '}
             {canManageRecords
               ? 'Changes auto-save after 800ms.'
-              : 'Records are view-only for Members; an Owner or Admin can make changes.'}{' '}
+              : 'Members can review statuses. Detailed evidence requires an Owner or Admin.'}{' '}
             Evidence prompts are review aids and not legal advice.
           </>
         )}

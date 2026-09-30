@@ -96,9 +96,10 @@ test("list scopes members and invites to the caller's organisation", async () =>
   assert.equal(seen.invites, 'org_1', 'teamInvite.findMany must be scoped to the caller organisation');
 });
 
-test('MEMBER team lists omit invite rows and every member active-session count', async () => {
+test('MEMBER team lists restrict rows to active accounts and omit contact and verification fields', async () => {
   let inviteRead = false;
   let sessionCountRead = false;
+  let memberQuery: Record<string, unknown> | undefined;
   let rawCall = 0;
   const tx = {
     $queryRaw: async () => {
@@ -108,7 +109,9 @@ test('MEMBER team lists omit invite rows and every member active-session count',
         : [{ id: 'member-self', role: 'MEMBER', lifecycleStatus: 'ACTIVE' }];
     },
     user: {
-      findMany: async () => [
+      findMany: async (query: Record<string, unknown>) => {
+        memberQuery = query;
+        return [
         {
           id: 'member-self', email: 'member@example.org', name: 'Member', role: 'MEMBER' as const,
           emailVerified: true, lifecycleStatus: 'ACTIVE' as const, membershipVersion: 2,
@@ -121,7 +124,8 @@ test('MEMBER team lists omit invite rows and every member active-session count',
           membershipChangedAt: new Date('2026-07-11T01:00:00.000Z'),
           createdAt: new Date('2025-01-01T00:00:00.000Z'),
         },
-      ],
+        ];
+      },
     },
     authSession: {
       groupBy: async () => {
@@ -144,8 +148,12 @@ test('MEMBER team lists omit invite rows and every member active-session count',
 
   assert.equal(inviteRead, false);
   assert.equal(sessionCountRead, false);
+  assert.deepEqual(memberQuery?.where, { organisationId: 'org_1', lifecycleStatus: 'ACTIVE' });
+  assert.equal((memberQuery?.select as Record<string, unknown>).email, false);
+  assert.equal((memberQuery?.select as Record<string, unknown>).emailVerified, false);
   assert.deepEqual(result.invites, []);
   assert.equal(result.members.some((member) => 'activeSessionCount' in member), false);
+  assert.equal(result.members.every((member) => member.email === null && member.emailVerified === null), true);
 });
 
 test('ADMIN team lists expose counts only for self and MEMBER targets using the live role', async () => {
@@ -347,7 +355,7 @@ test('revoke rejects an already-accepted invite', async () => {
 
 // ── team-plan-gating-11 ──
 
-async function buildTeamApp(subscription: unknown = activeSubscription()) {
+async function buildTeamApp(subscription: unknown = activeSubscription(), clientKind?: 'WEB' | 'MCP_CONNECTOR') {
   const app = Fastify({ logger: false });
   let rawCall = 0;
   const tx = {
@@ -363,6 +371,9 @@ async function buildTeamApp(subscription: unknown = activeSubscription()) {
   };
   app.decorate('prisma', {
     ...authModels('OWNER', subscription),
+    ...(clientKind ? { authSession: { findFirst: async () => ({
+      id: 'sess-1', clientKind, accessLevel: 'ADMIN',
+    }) } } : {}),
     teamInvite: {
       findUnique: async () => null,
       findMany: async () => [],
@@ -383,6 +394,52 @@ async function buildTeamApp(subscription: unknown = activeSubscription()) {
   await app.register(teamRoutes);
   return app;
 }
+
+test('Owner connector cannot read replay diagnostics through the direct API', async () => {
+  const app = await buildTeamApp(activeSubscription(), 'MCP_CONNECTOR');
+  try {
+    const response = await app.inject({ method: 'GET', url: '/replay-diagnostics',
+      headers: { authorization: tokenFor('OWNER') } });
+    assert.equal(response.statusCode, 403);
+    assert.equal(response.json().code, 'WEB_SESSION_REQUIRED');
+  } finally { await app.close(); }
+});
+
+test('Owner connector cannot fetch an invite credential or transfer ownership by direct API call', async () => {
+  const app = await buildTeamApp(activeSubscription(), 'MCP_CONNECTOR');
+  try {
+    for (const path of ['/invites/invite-1/link', '/ownership/transfer']) {
+      const response = await app.inject({ method: 'POST', url: path,
+        headers: { authorization: tokenFor('OWNER') } });
+      assert.equal(response.statusCode, 403, path);
+      assert.equal(response.json().code, 'WEB_SESSION_REQUIRED');
+    }
+  } finally { await app.close(); }
+});
+
+test('replay diagnostic paging rejects malformed cursors before an audit read', async () => {
+  const app = await buildTeamApp();
+  try {
+    const response = await app.inject({
+      method: 'GET', url: '/replay-diagnostics?before=other%2Fevent',
+      headers: { authorization: tokenFor('OWNER') },
+    });
+    assert.equal(response.statusCode, 400);
+    assert.equal(response.json().code, 'VALIDATION_ERROR');
+  } finally { await app.close(); }
+});
+
+test('security audit paging rejects malformed cursors before an audit read', async () => {
+  const app = await buildTeamApp();
+  try {
+    const response = await app.inject({
+      method: 'GET', url: '/security-audit?before=other%2Fevent',
+      headers: { authorization: tokenFor('OWNER') },
+    });
+    assert.equal(response.statusCode, 400);
+    assert.equal(response.json().code, 'VALIDATION_ERROR');
+  } finally { await app.close(); }
+});
 
 test('team security reads remain available while new invitations require an active subscription', async () => {
   const app = await buildTeamApp(null);

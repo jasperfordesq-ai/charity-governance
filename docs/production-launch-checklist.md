@@ -305,10 +305,12 @@ Evidence:
 
 - [ ] Privacy policy is approved for production with policy version, effective date, and privacy approver recorded outside git.
 - [ ] Terms or service agreement is approved for production with terms version and effective date recorded outside git.
-- [ ] Data retention policy is approved for production with retention schedule and deletion workflow evidence.
+- [ ] Data retention policy is approved for production with a per-class retention schedule and deletion workflow evidence. Review `docs/architecture/data-lifecycle-model-map.md` for current Prisma-model coverage, and separately inventory object storage, integrations, logs, exports, providers and backups; the source map alone does not approve periods, recovery windows or purge.
+- [ ] The 2026-09-28 DPO demo feedback in the controlled private roadmap is dispositioned with live evidence: Member access to sensitive records and exports (including register/compliance projections, Minute Book restrictions, deadline filtering and organisation-profile redaction), repeated session-replay events, document lifecycle and replacement lineage, minimised external reporting, application retention/recovery/purge, and corrected C1 control verification. Record Nikita's subsequent first-pass review separately from formal production sign-off.
+- [ ] Every DPO migration in the promoted release is applied and tested on the approved target through its supported release path; `/governance-audit`, `/security-data`, `/data-lifecycle` and Member/Owner/Admin journeys are verified there. Record the exact release commit, migration list and target evidence. Local builds and route tests alone do not satisfy this gate.
 - [ ] Support and data deletion contact path is published with published URL and support mailbox evidence.
 - [ ] Solicitor, governance, and privacy review confirms the production wording remains review-ready, source-cited, and clear that CharityPilot is not a substitute for legal advice, with named reviewers and review date recorded outside git.
-- [ ] Machine-readable launch evidence includes the approved privacy policy, terms/service agreement, data-retention policy, support/data-deletion contact, and `legalAndCompliance.checks.solicitor-governance-privacy-review` evidence with version/date/reviewer details.
+- [ ] Machine-readable launch evidence includes the approved privacy policy, terms/service agreement, data-retention policy, the 2026-09-28 DPO feedback disposition for the reviewed tenant and release commit, support/data-deletion contact, and `legalAndCompliance.checks.solicitor-governance-privacy-review` evidence with version/date/reviewer details. The DPO disposition is `legalAndCompliance.checks.dpo-feedback-disposition`; a completed keyword-shaped ledger still needs its cited live evidence and reviewer judgement.
 
 Evidence:
 

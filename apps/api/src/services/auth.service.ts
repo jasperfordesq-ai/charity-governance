@@ -10,12 +10,13 @@ import {
   rotateSessionTokens,
 } from './session-tokens.js';
 import type { SessionPosture } from './session-tokens.js';
-import { publicOrganisationSelect } from '../utils/public-dtos.js';
+import { memberOrganisationSelect, memberOrganisationSource, publicOrganisationSelect } from '../utils/public-dtos.js';
 import {
   PasswordRecoveryService,
   mapPasswordRecoveryInfrastructureError,
   type PasswordRecoveryRequestContext,
 } from './password-recovery.service.js';
+import type { OfferedSecondFactor } from './user-second-factor.service.js';
 
 interface RegisterData {
   email: string;
@@ -27,6 +28,8 @@ interface RegisterData {
 interface LoginData {
   email: string;
   password: string;
+  code?: string;
+  recoveryCode?: string;
 }
 
 const SALT_ROUNDS = 12;
@@ -82,6 +85,17 @@ export class AuthService {
   ) {
     this.emailService = emailService ?? new EmailService();
     this.passwordRecoveryService = passwordRecoveryService ?? new PasswordRecoveryService(prisma);
+  }
+
+  async changePassword(userId: string, organisationId: string,
+    currentPassword: string, newPassword: string, offered: OfferedSecondFactor,
+    sessionId: string, sessionFamilyId: string, requestId?: string): Promise<void> {
+    try {
+      await this.passwordRecoveryService.changePassword(userId, organisationId,
+        currentPassword, newPassword, offered, sessionId, sessionFamilyId, requestId);
+    } catch (error) {
+      throw mapPasswordRecoveryInfrastructureError(error);
+    }
   }
 
   async register(data: RegisterData) {
@@ -174,10 +188,7 @@ export class AuthService {
         lifecycleStatus: true,
         organisationId: true,
         organisation: {
-          select: {
-            ...publicOrganisationSelect,
-            lifecycleStatus: true,
-          },
+          select: { lifecycleStatus: true },
         },
       },
     });
@@ -220,17 +231,21 @@ export class AuthService {
       throw new AppError(403, 'ORGANISATION_UNAVAILABLE', 'This organisation is not available. Contact support.');
     }
 
+    const publicUser = await this.getMe(user.id, user.role);
+
     // Bind issuance to the exact bcrypt credential checked above. The session
     // transaction rechecks it while holding the principal lock shared with
     // password-reset serialization, so an old password can never mint a live
     // session after a reset has committed.
-    const tokens = await issueLoginSessionTokens(this.prisma, user, posture);
+    const tokens = await issueLoginSessionTokens(this.prisma, user, posture, {
+      code: data.code, recoveryCode: data.recoveryCode,
+    });
 
-    return { user, ...tokens };
+    return { user: publicUser, ...tokens };
   }
 
-  async refresh(refreshToken: string, expectedClientKind?: SessionPosture['clientKind']) {
-    return rotateSessionTokens(this.prisma, refreshToken, expectedClientKind);
+  async refresh(refreshToken: string, expectedClientKind?: SessionPosture['clientKind'], requestId?: string) {
+    return rotateSessionTokens(this.prisma, refreshToken, expectedClientKind, requestId);
   }
 
   async logout(refreshToken: string) {
@@ -238,9 +253,18 @@ export class AuthService {
     return { message: 'Signed out successfully.' };
   }
 
-  async getMe(userId: string) {
-    const user = await this.prisma.user.findUnique({
+  async getMe(userId: string, expectedRole?: 'OWNER' | 'ADMIN' | 'MEMBER') {
+    const role = expectedRole ?? (await this.prisma.user.findUnique({
       where: { id: userId },
+      select: { role: true },
+    }))?.role;
+
+    if (!role) {
+      throw new AppError(404, 'USER_NOT_FOUND', 'User not found');
+    }
+
+    const user = await this.prisma.user.findUnique({
+      where: { id: userId, role },
       select: {
         id: true,
         email: true,
@@ -251,18 +275,20 @@ export class AuthService {
         lifecycleStatus: true,
         organisation: {
           select: {
-            ...publicOrganisationSelect,
+            ...(role === 'MEMBER' ? memberOrganisationSelect : publicOrganisationSelect),
             lifecycleStatus: true,
           },
         },
       },
     });
 
-    if (!user || !hasActiveLifecycle(user)) {
+    if (!user || user.role !== role || !hasActiveLifecycle(user)) {
       throw new AppError(404, 'USER_NOT_FOUND', 'User not found');
     }
 
-    return user;
+    return role === 'MEMBER'
+      ? { ...user, organisation: memberOrganisationSource(user.organisation) }
+      : user;
   }
 
   async forgotPassword(email: string, context: PasswordRecoveryRequestContext) {

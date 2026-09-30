@@ -5,6 +5,7 @@ import test from 'node:test';
 import {
   chooseConfluencePublishSpace,
   confluencePublishTargetForOrganisation,
+  lockedConfluencePublishTargetForOrganisation,
   confluenceSiteIdFromConfig,
   readConfluencePublishTarget,
   type PublishTargetRow,
@@ -72,7 +73,11 @@ function makeStore(rows: Row[]) {
         const match = stored.find(
           (r) =>
             (args.where.id === undefined || r.id === args.where.id) &&
-            (args.where.organisationId === undefined || r.organisationId === args.where.organisationId),
+            (args.where.organisationId === undefined || r.organisationId === args.where.organisationId) &&
+            (args.where.status === undefined || r.status === args.where.status) &&
+            (args.where.config === undefined ||
+              (args.where.config as { path: string[]; equals: string }).path.join('.') === 'siteId' &&
+              r.config?.siteId === (args.where.config as { equals: string }).equals),
         );
         if (!match) return { count: 0 };
         Object.assign(match, args.data);
@@ -249,7 +254,26 @@ test('the write names the requesting organisation as well as the integration row
     lists(GOVERNANCE),
   );
 
-  assert.deepEqual(store.calls.updateMany, [{ id: 'integration-a', organisationId: 'org-a' }]);
+  assert.deepEqual(store.calls.updateMany, [{
+    id: 'integration-a', organisationId: 'org-a', status: 'CONNECTED',
+    config: { path: ['siteId'], equals: 'site-1' },
+  }]);
+});
+
+test('a site changed during the provider listing cannot receive the stale publish choice', async () => {
+  const store = makeStore([row()]);
+  await assert.rejects(
+    chooseConfluencePublishSpace(
+      store.client,
+      { integrationId: 'integration-a', organisationId: 'org-a', cloudId: 'site-1', spaceId: 'space-gov' },
+      async () => {
+        store.stored[0]!.config = { siteId: 'site-2' };
+        return { spaces: [GOVERNANCE] };
+      },
+    ),
+    (error: unknown) => error instanceof AppError && error.code === 'CONFLUENCE_SITE_CHANGED',
+  );
+  assert.equal(store.stored[0]!.publishSpaceId, null);
 });
 
 test('choosing a space records the site it belongs to, not merely the space', async () => {
@@ -359,6 +383,23 @@ test('a connected organisation that has chosen a space has a publish destination
     spaceName: 'Governance',
     publishingModel: DEFAULT_PUBLISHING_MODEL,
   });
+});
+
+test('approval target read locks the tenant integration row through the document transaction', async () => {
+  let query = '';
+  const tx = {
+    $queryRaw: async (strings: TemplateStringsArray, organisationId: string) => {
+      query = strings.join('?');
+      assert.equal(organisationId, 'org-a');
+      return [{ ...chosen(), status: 'CONNECTED' }];
+    },
+  };
+  const target = await lockedConfluencePublishTargetForOrganisation(tx as never, 'org-a');
+  assert.equal(target?.spaceId, 'space-gov');
+  assert.match(query, /FROM "OrganisationIntegration"/);
+  assert.match(query, /"organisationId" = \?/);
+  assert.match(query, /"provider" = 'CONFLUENCE'/);
+  assert.match(query, /FOR SHARE/);
 });
 
 test('a connected organisation with no chosen space has NO publish destination, so nothing may enqueue', async () => {

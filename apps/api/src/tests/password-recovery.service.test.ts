@@ -16,6 +16,7 @@ const {
   authRecoverySecretFingerprint,
   createPasswordRecoveryTokenMaterial,
 } = await import('../services/password-recovery-crypto.js');
+const { default: bcrypt } = await import('bcryptjs');
 
 const NOW = new Date('2026-07-11T15:00:00.000Z');
 const USER = {
@@ -34,6 +35,101 @@ const CONTROL_ROW = {
   activeSecretFingerprint: authRecoverySecretFingerprint(process.env.AUTH_RECOVERY_SECRET),
   retiredSecretFingerprint: null,
 };
+
+test('signed-in password change ends sessions, invalidates recovery links and records an event', async () => {
+  const oldHash = await bcrypt.hash('CurrentPassword1', 4);
+  const mutations: string[] = [];
+  let audit: Record<string, unknown> | null = null;
+  let nextHash = '';
+  let rawCall = 0;
+  const tx = {
+    $queryRaw: async () => {
+      rawCall += 1;
+      if (rawCall === 1) return [CONTROL_ROW];
+      if (rawCall === 2) return [{ id: 'org-1', lifecycleStatus: 'ACTIVE' }];
+      if (rawCall === 3) return [{ ...USER, passwordHash: oldHash }];
+      if (rawCall === 4 || rawCall === 5) return [];
+      if (rawCall === 6) return [{ id: 'session-1' }];
+      if (rawCall === 7) return [{ now: NOW }];
+      throw new Error(`Unexpected password-change query ${rawCall}`);
+    },
+    passwordRecoveryRequest: { updateMany: async () => {
+      mutations.push('recovery'); return { count: 2 };
+    } },
+    user: { updateMany: async ({ data }: { data: { passwordHash: string } }) => {
+      mutations.push('user'); nextHash = data.passwordHash; return { count: 1 };
+    } },
+    authSession: { updateMany: async () => {
+      mutations.push('sessions'); return { count: 3 };
+    } },
+    securityAuditEvent: { create: async ({ data }: { data: Record<string, unknown> }) => {
+      mutations.push('audit'); audit = data;
+    } },
+  };
+  const prisma = {
+    user: { findFirst: async () => ({ passwordHash: oldHash }) },
+    $transaction: async (work: (client: typeof tx) => Promise<unknown>) => work(tx),
+  };
+  await new PasswordRecoveryService(prisma as never).changePassword('user-1', 'org-1',
+    'CurrentPassword1', 'DifferentPassword2', {}, 'session-1',
+    'a44f8784-f454-4ddf-8985-b829bad774e8', 'request-1');
+  assert.deepEqual(mutations, ['recovery', 'user', 'sessions', 'audit']);
+  assert.equal(await bcrypt.compare('DifferentPassword2', nextHash), true);
+  assert.equal((audit as unknown as { context: { eventKind: string } }).context.eventKind, 'PASSWORD_CHANGED');
+  assert.equal(Object.hasOwn(audit as unknown as object, 'subjectSessionId'), false);
+  assert.equal(JSON.stringify(audit).includes('CurrentPassword1'), false);
+  assert.equal(JSON.stringify(audit).includes('DifferentPassword2'), false);
+});
+
+test('signed-in password change refuses a credential replaced while bcrypt was running', async () => {
+  const oldHash = await bcrypt.hash('CurrentPassword1', 4);
+  let mutations = 0;
+  let rawCall = 0;
+  const tx = {
+    $queryRaw: async () => {
+      rawCall += 1;
+      if (rawCall === 1) return [CONTROL_ROW];
+      if (rawCall === 2) return [{ id: 'org-1', lifecycleStatus: 'ACTIVE' }];
+      return [{ ...USER, passwordHash: 'newer-concurrent-hash' }];
+    },
+    user: { updateMany: async () => { mutations += 1; } },
+  };
+  const prisma = {
+    user: { findFirst: async () => ({ passwordHash: oldHash }) },
+    $transaction: async (work: (client: typeof tx) => Promise<unknown>) => work(tx),
+  };
+  await assert.rejects(() => new PasswordRecoveryService(prisma as never).changePassword(
+    'user-1', 'org-1', 'CurrentPassword1', 'DifferentPassword2', {}, 'session-1',
+    'a44f8784-f454-4ddf-8985-b829bad774e8'),
+  (error: unknown) => (error as { code?: string }).code === 'INVALID_CREDENTIALS');
+  assert.equal(mutations, 0);
+});
+
+test('signed-in password change refuses a session revoked after the request guard', async () => {
+  const oldHash = await bcrypt.hash('CurrentPassword1', 4);
+  let mutations = 0;
+  let rawCall = 0;
+  const tx = {
+    $queryRaw: async () => {
+      rawCall += 1;
+      if (rawCall === 1) return [CONTROL_ROW];
+      if (rawCall === 2) return [{ id: 'org-1', lifecycleStatus: 'ACTIVE' }];
+      if (rawCall === 3) return [{ ...USER, passwordHash: oldHash }];
+      return [];
+    },
+    user: { updateMany: async () => { mutations += 1; } },
+  };
+  const prisma = {
+    user: { findFirst: async () => ({ passwordHash: oldHash }) },
+    $transaction: async (work: (client: typeof tx) => Promise<unknown>) => work(tx),
+  };
+  await assert.rejects(() => new PasswordRecoveryService(prisma as never).changePassword(
+    'user-1', 'org-1', 'CurrentPassword1', 'DifferentPassword2', {}, 'revoked-session',
+    'a44f8784-f454-4ddf-8985-b829bad774e8'),
+  (error: unknown) => (error as { code?: string }).code === 'UNAUTHORIZED');
+  assert.equal(rawCall, 6);
+  assert.equal(mutations, 0);
+});
 
 function deterministicTiming(targetDurationMs = 450, elapsedMs = 75) {
   let nowCall = 0;

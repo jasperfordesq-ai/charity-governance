@@ -90,7 +90,7 @@ export const LOCAL_CONTRACT = Object.freeze({
   databaseName: "charitypilot_e2e_disposable",
   databaseUser: "charitypilot_e2e_runner",
   databaseHost: "127.0.0.1",
-  databasePort: 55434,
+  databasePort: 3354,
   databaseServerPort: 5432,
   databaseSchema: "public",
   applicationName: "charitypilot-e2e-reset",
@@ -138,6 +138,7 @@ const FORBIDDEN_AMBIENT_LOCAL_KEYS = Object.freeze([
   "E2E_JWT_SECRET",
   "E2E_OWNER_JWT_SECRET",
   "E2E_AUTH_RECOVERY_SECRET",
+  "E2E_INTEGRATION_ENCRYPTION_KEY",
   "E2E_READINESS_API_KEY",
   "E2E_AUTH_COOKIE_DOMAIN",
   "E2E_APP_IMAGE",
@@ -239,6 +240,8 @@ export function createLocalRunIdentity(overrides = {}) {
   const ownerJwtSecret = overrides.ownerJwtSecret ?? generatedSecret(48);
   const authRecoverySecret =
     overrides.authRecoverySecret ?? generatedSecret(32);
+  const integrationEncryptionKey =
+    overrides.integrationEncryptionKey ?? randomBytes(32).toString("hex");
   const readinessKey = overrides.readinessKey ?? generatedSecret(32);
   const encodedPassword = encodeURIComponent(runnerPassword);
   const databaseUrl =
@@ -261,6 +264,7 @@ export function createLocalRunIdentity(overrides = {}) {
     jwtSecret,
     ownerJwtSecret,
     authRecoverySecret,
+    integrationEncryptionKey,
     readinessKey,
     databaseUrl,
     composeEnv: {
@@ -270,6 +274,7 @@ export function createLocalRunIdentity(overrides = {}) {
       E2E_JWT_SECRET: jwtSecret,
       E2E_OWNER_JWT_SECRET: ownerJwtSecret,
       E2E_AUTH_RECOVERY_SECRET: authRecoverySecret,
+      E2E_INTEGRATION_ENCRYPTION_KEY: integrationEncryptionKey,
       E2E_READINESS_API_KEY: readinessKey,
       E2E_APP_IMAGE: `${projectName}-app:local`,
       E2E_DATABASE_IMAGE: `${projectName}-database:local`,
@@ -303,6 +308,7 @@ export function createLocalRunIdentity(overrides = {}) {
       jwtSecret,
       ownerJwtSecret,
       authRecoverySecret,
+      integrationEncryptionKey,
       readinessKey,
       databaseUrl,
     ],
@@ -691,12 +697,12 @@ export async function captureRunningContainerAttestation(
     .split(/\r?\n/u)
     .filter((value) => value !== "");
   if (
-    containerIds.length !== 4 ||
-    new Set(containerIds).size !== 4 ||
+    containerIds.length !== 5 ||
+    new Set(containerIds).size !== 5 ||
     containerIds.some((value) => !/^[0-9a-f]{12,64}$/u.test(value))
   ) {
     throw new Error(
-      "Docker did not report exactly four runner-owned service containers; runtime attestation failed closed.",
+      "Docker did not report exactly five runner-owned service containers; runtime attestation failed closed.",
     );
   }
   const inspected = await runCommand(
@@ -753,7 +759,7 @@ function assertExactGatewayPorts(service) {
   const expected = new Map([
     [3302, 3302],
     [3303, 3303],
-    [55434, 55434],
+    [3354, 3354],
   ]);
   if (!Array.isArray(service.ports) || service.ports.length !== expected.size) {
     throw new Error(
@@ -833,6 +839,7 @@ export function expectedLocalServiceEnvironments(identity) {
       JWT_SECRET: composeEnv.E2E_JWT_SECRET,
       OWNER_JWT_SECRET: composeEnv.E2E_OWNER_JWT_SECRET,
       AUTH_RECOVERY_SECRET: composeEnv.E2E_AUTH_RECOVERY_SECRET,
+      INTEGRATION_ENCRYPTION_KEY: composeEnv.E2E_INTEGRATION_ENCRYPTION_KEY,
       LOCAL_FILE_STORAGE_DIR: "/var/lib/charitypilot-e2e-documents",
       NEXT_TELEMETRY_DISABLED: "1",
       NODE_ENV: "development",
@@ -1072,7 +1079,7 @@ const EXPECTED_HEALTHCHECKS = Object.freeze({
       "CMD",
       "node",
       "-e",
-      "const fs=require('node:fs');const listeners=new Set(fs.readFileSync('/proc/net/tcp','utf8').trim().split('\\n').slice(1).filter(line=>line.trim().split(/\\s+/)[3]==='0A').map(line=>line.trim().split(/\\s+/)[1]));process.exit(['00000000:D88A','00000000:0CE6','00000000:0CE7'].every(listener=>listeners.has(listener))?0:1)",
+      "const fs=require('node:fs');const listeners=new Set(fs.readFileSync('/proc/net/tcp','utf8').trim().split('\\n').slice(1).filter(line=>line.trim().split(/\\s+/)[3]==='0A').map(line=>line.trim().split(/\\s+/)[1]));process.exit(['00000000:0D1A','00000000:0CE6','00000000:0CE7'].every(listener=>listeners.has(listener))?0:1)",
     ]),
     interval: "3s",
     timeout: "3s",

@@ -63,7 +63,7 @@ export declare const DATABASE_SAFETY_CONTRACT: Readonly<{
   resetConfirmation: string;
   remoteResetOverride: string;
   databaseHost: "127.0.0.1";
-  databasePort: 55434;
+  databasePort: 3354;
   databaseName: "charitypilot_e2e_disposable";
   databaseUser: "charitypilot_e2e_runner";
   databaseSchema: "public";

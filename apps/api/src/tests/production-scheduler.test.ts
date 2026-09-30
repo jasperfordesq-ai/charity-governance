@@ -6,8 +6,10 @@ import {
   productionSchedulerConfigFromEnv,
   runAuthEmailDelivery,
   runDeadlineReminders,
+  runDocumentReconcile,
   runDocumentStorageCleanup,
   runProductionSchedulerOnce,
+  runRiskControlReviewScan,
   startRecurringJob,
   waitForRecurringJobsToStop,
 } from '../jobs/production-scheduler.js';
@@ -33,6 +35,50 @@ const ORIGINAL_ENV = { ...process.env };
  * real calls inside a test about deadline reminders.
  */
 const SCHEDULER_PRISMA = emptyIntegrationEstate();
+
+test('local orphan retirement still runs when the remote tenant listing fails', async () => {
+  const reconcileRunner = recordingReconcileRunner();
+  const alerts: ErrorAlertPayload[] = [];
+  const failed = await runDocumentReconcile({
+    prisma: { organisationIntegration: { findMany: async () => { throw new Error('tenant listing unavailable'); } } } as never,
+    publicationService: reconcileRunner.runner,
+    reconcile: unreachableReconciler,
+    tenantsPerRun: 10,
+    pagesPerRun: 50,
+    minPageAgeMs: 0,
+    logger: { info() {}, error() {} },
+    alertSender: async (payload) => { alerts.push(payload); },
+  });
+  assert.equal(failed, true);
+  assert.equal(reconcileRunner.calls.orphanSweeps, 1);
+  assert.equal(alerts.length, 1);
+  assert.equal(alerts[0].code, 'DOCUMENT_RECONCILE_FAILED');
+});
+
+test('a failed local orphan sweep alerts but does not skip the remote pass', async () => {
+  let tenantListings = 0;
+  const alerts: ErrorAlertPayload[] = [];
+  const logs: string[] = [];
+  const failed = await runDocumentReconcile({
+    prisma: { organisationIntegration: {
+      findMany: async () => { tenantListings += 1; return []; },
+    } } as never,
+    publicationService: {
+      ...recordingReconcileRunner().runner,
+      retireOrphanedPublications: async () => { throw new Error('local database unavailable'); },
+    },
+    reconcile: unreachableReconciler,
+    tenantsPerRun: 10,
+    pagesPerRun: 50,
+    minPageAgeMs: 0,
+    logger: { info(message) { logs.push(message); }, error(message) { logs.push(message); } },
+    alertSender: async (payload) => { alerts.push(payload); },
+  });
+  assert.equal(failed, true);
+  assert.equal(tenantListings, 2, 'tenant selection and dormancy inspection still ran');
+  assert.equal(alerts.length, 1);
+  assert.ok(logs.some((message) => message.includes('Orphan retirement failed')));
+});
 
 const API_SRC = join(process.cwd(), 'src');
 
@@ -63,6 +109,7 @@ test('productionSchedulerConfigFromEnv resolves scheduler intervals and cleanup 
     AUTH_DELIVERY_BATCH_SIZE: '11',
     AUTH_DELIVERY_CLEANUP_BATCH_SIZE: '222',
     AUTH_DELIVERY_STALE_SENDING_MS: '45000',
+    RISK_CONTROL_REVIEW_INTERVAL_MS: '7200000',
     PRODUCTION_SCHEDULER_SHUTDOWN_TIMEOUT_MS: '15000',
     PRODUCTION_SCHEDULER_RUN_ONCE: 'true',
   });
@@ -81,6 +128,7 @@ test('productionSchedulerConfigFromEnv resolves scheduler intervals and cleanup 
     authDeliveryBatchSize: 11,
     authDeliveryCleanupBatchSize: 222,
     authDeliveryStaleSendingMs: 45000,
+    riskControlReviewIntervalMs: 7200000,
     shutdownTimeoutMs: 15000,
     runOnce: true,
   });
@@ -101,6 +149,7 @@ test('productionSchedulerConfigFromEnv falls back to safe defaults for invalid n
     AUTH_DELIVERY_BATCH_SIZE: '101',
     AUTH_DELIVERY_CLEANUP_BATCH_SIZE: '2',
     AUTH_DELIVERY_STALE_SENDING_MS: '999999',
+    RISK_CONTROL_REVIEW_INTERVAL_MS: '1000',
     PRODUCTION_SCHEDULER_SHUTDOWN_TIMEOUT_MS: '60000',
   });
 
@@ -118,9 +167,37 @@ test('productionSchedulerConfigFromEnv falls back to safe defaults for invalid n
     authDeliveryBatchSize: 25,
     authDeliveryCleanupBatchSize: 500,
     authDeliveryStaleSendingMs: 60 * 1000,
+    riskControlReviewIntervalMs: 24 * 60 * 60 * 1000,
     shutdownTimeoutMs: 45 * 1000,
     runOnce: false,
   });
+});
+
+test('risk control review scan logs only an aggregate and alerts on query failure', async () => {
+  const logs: string[] = [];
+  const alerts: ErrorAlertPayload[] = [];
+  const logger = {
+    info(message: string) { logs.push(message); },
+    error(message: string) { logs.push(message); },
+  };
+  const success = await runRiskControlReviewScan({
+    riskControlReviewService: { async countStaleClaims() { return 3; } },
+    logger,
+    alertSender: async payload => { alerts.push(payload); },
+  });
+  assert.equal(success, false);
+  assert.match(logs[0], /Claims requiring review: 3/);
+  assert.equal(alerts.length, 0);
+
+  const failure = await runRiskControlReviewScan({
+    riskControlReviewService: { async countStaleClaims() { throw new Error('fixture failure'); } },
+    logger,
+    alertSender: async payload => { alerts.push(payload); },
+  });
+  assert.equal(failure, true);
+  assert.equal(alerts.length, 1);
+  assert.equal(alerts[0].code, 'RISK_CONTROL_REVIEW_SCAN_FAILED');
+  assert.equal(alerts[0].url, '/jobs/risk-control-review');
 });
 
 test('recurring job stop waits for an in-flight provider run and prevents rescheduling', async () => {
@@ -216,7 +293,7 @@ test('production notification services use logger contracts instead of direct co
 
 test('runProductionSchedulerOnce runs reminders and document cleanup without overlapping API startup', async () => {
   const events: string[] = [];
-  const deleted: Array<{ organisationId: string; storagePath: string }> = [];
+  const deleted: Array<{ organisationId: string; storagePath: string; provider?: string }> = [];
   const downloaded: Array<{ organisationId: string; storagePath: string }> = [];
   const deadlineService = {
     async sendDueReminders() {
@@ -224,8 +301,9 @@ test('runProductionSchedulerOnce runs reminders and document cleanup without ove
     },
   };
   const storageService = {
-    async deleteFile(organisationId: string, storagePath: string) {
-      deleted.push({ organisationId, storagePath });
+    async deleteFile(organisationId: string, storagePath: string, _signal?: AbortSignal, provider?: string) {
+      deleted.push({ organisationId, storagePath, provider });
+      return new Date();
     },
     async downloadFile(organisationId: string, storagePath: string) {
       downloaded.push({ organisationId, storagePath });
@@ -233,12 +311,19 @@ test('runProductionSchedulerOnce runs reminders and document cleanup without ove
     },
   };
   const documentService = {
+    async reconcileStaleUploadIntents(limit: number) {
+      events.push(`upload-intents:${limit}`);
+      return { attached: 0, queued: 0, failed: 0 };
+    },
     async retryPendingStorageDeletions(dispatch: ErasureDispatcher, limit: number) {
       events.push(`document-cleanup:${limit}`);
       const erase = dispatch('supabase');
       assert.ok(erase, 'the scheduler must register a supabase eraser');
       await erase({ organisationId: 'org-1', storagePath: 'org-1/policy.pdf', targetRef: null });
-      return { processed: 1, failed: 0 };
+      const eraseLocal = dispatch('local');
+      assert.ok(eraseLocal, 'the scheduler must register a local eraser');
+      await eraseLocal({ organisationId: 'org-1', storagePath: 'org-1/local.pdf', targetRef: null });
+      return { processed: 2, failed: 0 };
     },
   };
   const logs: string[] = [];
@@ -272,6 +357,12 @@ test('runProductionSchedulerOnce runs reminders and document cleanup without ove
         };
       },
     },
+    riskControlReviewService: {
+      async countStaleClaims() {
+        events.push('risk-control-review');
+        return 2;
+      },
+    },
     prisma: SCHEDULER_PRISMA,
     reconcile: unreachableReconciler,
     documentStorageCleanupLimit: 7,
@@ -295,22 +386,29 @@ test('runProductionSchedulerOnce runs reminders and document cleanup without ove
   assert.deepEqual(events, [
     'deadline-reminders',
     'document-cleanup:7',
+    'upload-intents:7',
     'document-publication:9',
     'auth-delivery:11:222:45000',
+    'risk-control-review',
   ]);
-  assert.deepEqual(deleted, [{ organisationId: 'org-1', storagePath: 'org-1/policy.pdf' }]);
+  assert.deepEqual(deleted, [
+    { organisationId: 'org-1', storagePath: 'org-1/policy.pdf', provider: 'supabase' },
+    { organisationId: 'org-1', storagePath: 'org-1/local.pdf', provider: 'local' },
+  ]);
   assert.deepEqual(result, {
     deadlineRemindersFailed: false,
     documentStorageCleanupFailed: false,
     documentPublicationFailed: false,
     documentReconcileFailed: false,
     authEmailDeliveryFailed: false,
+    riskControlReviewFailed: false,
   });
   assert.ok(logs.some((message) => message.includes('Deadline reminders run completed')));
   assert.ok(logs.some((message) => message.includes('Document storage cleanup run completed')));
   assert.ok(logs.some((message) => message.includes('Document publication run completed')));
   assert.ok(logs.some((message) => message.includes('Document reconcile run completed')));
   assert.ok(logs.some((message) => message.includes('Authentication email delivery run completed')));
+  assert.ok(logs.some((message) => message.includes('Claims requiring review: 2')));
 
   // The reconcile pass is registered, not merely tolerated. An empty estate
   // means no tenant is claimed, but the orphan sweep is not per-tenant and must
@@ -543,6 +641,7 @@ test('runDocumentStorageCleanup sends a sanitized operational alert when storage
   const logs: Array<{ message: string; error?: unknown }> = [];
   const failed = await runDocumentStorageCleanup({
     documentService: {
+      async reconcileStaleUploadIntents() { return { attached: 0, queued: 0, failed: 0 }; },
       async retryPendingStorageDeletions() {
         throw new Error('Supabase failed token=raw-token user@example.org org-1/private-policy.pdf');
       },
@@ -592,6 +691,7 @@ test('runDocumentStorageCleanup sends one actionable alert and acknowledges clai
   const acknowledgements: unknown[] = [];
   const failed = await runDocumentStorageCleanup({
     documentService: {
+      async reconcileStaleUploadIntents() { return { attached: 0, queued: 0, failed: 0 }; },
       async retryPendingStorageDeletions() {
         return {
           processed: 3,
@@ -605,7 +705,7 @@ test('runDocumentStorageCleanup sends one actionable alert and acknowledges clai
       async releaseDeadLetterAlertClaim() { assert.fail('successful alert must not release its claim'); },
     },
     storageService: {
-      async deleteFile() {},
+      async deleteFile() { return new Date(); },
     },
     prisma: SCHEDULER_PRISMA,
     documentStorageCleanupLimit: 7,
@@ -632,6 +732,7 @@ test('transient document storage retries do not alert or fail the scheduler run'
   const alerts: ErrorAlertPayload[] = [];
   const failed = await runDocumentStorageCleanup({
     documentService: {
+      async reconcileStaleUploadIntents() { return { attached: 0, queued: 0, failed: 0 }; },
       async retryPendingStorageDeletions() {
         return {
           processed: 0,
@@ -642,7 +743,7 @@ test('transient document storage retries do not alert or fail the scheduler run'
         };
       },
     },
-    storageService: { async deleteFile() {} },
+    storageService: { async deleteFile() { return new Date(); } },
     prisma: SCHEDULER_PRISMA,
     documentStorageCleanupLimit: 7,
     logger: { info() {}, error() {} },
@@ -652,10 +753,31 @@ test('transient document storage retries do not alert or fail the scheduler run'
   assert.deepEqual(alerts, []);
 });
 
+test('failed upload-intent reconciliation alerts by count and fails the cleanup run', async () => {
+  const alerts: ErrorAlertPayload[] = [];
+  const failed = await runDocumentStorageCleanup({
+    documentService: {
+      async retryPendingStorageDeletions() { return { processed: 0, failed: 0 }; },
+      async reconcileStaleUploadIntents() { return { attached: 0, queued: 0, failed: 2 }; },
+    },
+    storageService: { async deleteFile() { return new Date(); } },
+    prisma: SCHEDULER_PRISMA,
+    documentStorageCleanupLimit: 7,
+    logger: { info() {}, error() {} },
+    alertSender: async (payload) => { alerts.push(payload); },
+  });
+  assert.equal(failed, true);
+  assert.equal(alerts.length, 1);
+  assert.equal(alerts[0].code, 'DOCUMENT_UPLOAD_INTENT_RECONCILE_FAILED');
+  assert.equal(alerts[0].affectedCount, 2);
+  assert.equal(JSON.stringify(alerts[0]).includes('org-'), false);
+});
+
 test('failed dead-letter alert delivery releases the claim for a later scheduler run', async () => {
   const released: unknown[] = [];
   const failed = await runDocumentStorageCleanup({
     documentService: {
+      async reconcileStaleUploadIntents() { return { attached: 0, queued: 0, failed: 0 }; },
       async retryPendingStorageDeletions() {
         return {
           processed: 0,
@@ -668,7 +790,7 @@ test('failed dead-letter alert delivery releases the claim for a later scheduler
       async markDeadLetterAlertSent() { assert.fail('failed alert must not be acknowledged'); },
       async releaseDeadLetterAlertClaim(claim) { released.push(claim); return 1; },
     },
-    storageService: { async deleteFile() {} },
+    storageService: { async deleteFile() { return new Date(); } },
     prisma: SCHEDULER_PRISMA,
     documentStorageCleanupLimit: 7,
     logger: { info() {}, error() {} },

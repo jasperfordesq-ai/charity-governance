@@ -171,7 +171,7 @@ to five of them for a while, so a test now refuses it.
 | `board_register` | `/api/v1/board-members` | page, pageSize | `BoardMember` | — |
 | `governing_acts` | `/api/v1/governing-acts` | year, kind, status | `GoverningAct` | Complete plan |
 | `governing_acts_voids` | `/api/v1/governing-acts/voids` | — | `GoverningActVoid` | Complete plan |
-| `board_submissions` | `/api/v1/governing-acts/board-submissions` | — | mixed (`boardSubmissions`) | Complete plan |
+| `board_submissions` | `/api/v1/governing-acts/board-submissions` | — | mixed (`boardSubmissions`) | Complete plan; Owner/Admin only |
 | `registers_summary` | `/api/v1/governance-registers/summary` | — | no records | Complete plan |
 | `conflicts_list` | `/api/v1/governance-registers/conflicts` | — | `ConflictRecord` | Complete plan |
 | `risks_list` | `/api/v1/governance-registers/risks` | — | `RiskRecord` | Complete plan |
@@ -184,10 +184,17 @@ to five of them for a while, so a test now refuses it.
 | `document` | `/api/v1/documents/:id` | **id** (required) | `Document` | — |
 | `team_list` | `/api/v1/team` | — | mixed (`team`) | — |
 | `team_sessions_list` | `/api/v1/team/members/:id/sessions` | **id** (required) | mixed (`teamSessions`) | Owner/admin |
-| `security_audit` | `/api/v1/team/security-audit` | — | mixed (`securityAudit`) | Owner/admin |
+| `security_audit` | `/api/v1/team/security-audit` | before (optional `nextCursor`) | mixed (`securityAudit`), 50 per page | Owner/admin |
 | `deadlines_reminder_history` | `/api/v1/deadlines/reminder-history` | page, pageSize, status | mixed (`reminderHistory`) | Owner/admin |
 | `billing_status` | `/api/v1/billing/status` | — | no records | — |
 | `confluence_status` | `/api/v1/integrations/confluence/status` | — | no records | Owner/admin |
+| `confluence_publications` | `/api/v1/integrations/confluence/publications` | before (optional `nextCursor`) | mixed (`confluencePublications`), 50 retained retired references per page | Owner/admin |
+
+Document replacement candidate search and replacement lineage are Admin dashboard controls. The connector does not expose the candidate route or `supersededByDocumentId`; a successor could identify a restricted file even when the older document is visible to a Member.
+
+Member deadline reads and search show current-rule generated obligations only. Custom deadlines and legacy calculated records may retain administrator-authored titles, so Owner/Admin review them until their audience is classified. The API applies this rule to lists, history, direct records, dashboard summaries, activity and search.
+
+Member organisation responses omit registered address, contact email, contact phone and conditional obligation facts, including in authenticated user responses. A small charity's registered address may be a trustee's home address. Owners and Admins retain the full profile.
 
 ### The write tools
 
@@ -254,7 +261,7 @@ which is refused, not the one that closes a risk off.
 
 Every mutating route the API has is either one of these tools or an entry in
 `src/mutating-route-coverage.ts` with the reason it is left out, and a test
-requires it. Forty-one routes are excluded that way: the browser sign-in realm,
+requires it. Excluded routes include the browser sign-in realm,
 team membership and ownership, billing, the Confluence routes, the platform
 operator realm, and the connector's own sign-in — which must never be a tool,
 because an agent that could approve its own actions would make approval
@@ -337,7 +344,7 @@ the API's own route prefixes:
 | `registers` | Conflicts, risks, complaints, fundraising, annual report, financial controls, members |
 | `documents` | Evidence documents, including upload and download when enabled |
 | `team` | Who has access |
-| `integrations` | Confluence status |
+| `integrations` | Confluence status and retained retired-publication references |
 
 `session_info` is offered whatever the groups. A tool outside the enabled
 groups is refused if called with `TOOL_DISABLED`, naming the group it is in.
@@ -365,6 +372,8 @@ gate would release anyway, so asking for one cannot reach a withheld one, and
 the pagination figures always come back.
 
 ## The personal-data gate
+
+If your charity account has two-step sign-in enabled, `connect` asks for an authenticator or saved recovery code after the password is accepted. The code is used for that sign-in only and is not stored as a connector credential. You may provide `--code` or `--recovery-code` for a non-interactive local test, but command-line arguments can be visible to other processes; use the terminal prompt for a real account.
 
 By default, the connector answers governance questions without sending
 personal data to your AI model provider.
@@ -555,6 +564,14 @@ token used for API calls lives in memory only, for the lifetime of the
 process, and is never written anywhere. There is no config file, no `.env`,
 and no on-disk cache of anything the API returns.
 
+When more than one connector process uses the same credential, refresh takes a
+short-lived, user/origin/realm-specific lock on `127.0.0.1` before reading the
+stored token. The loopback listener accepts no credential data and is released
+after the replacement token is saved. If that local port cannot be acquired
+within ten seconds, renewal stops before using the token and asks you to try
+again. All connector processes sharing a credential must use a version with
+this coordination; an older process can still race a newer one.
+
 ## Access levels
 
 You pick one when you sign in, with `--access-level`, and it is recorded on the
@@ -578,13 +595,13 @@ The data scope is chosen the same way and at the same moment, with
 session therefore carries three things decided by whoever typed the password:
 which client it belongs to, how much it may do, and how much it may see.
 
-## Approving something that cannot be undone
+## Approving a destructive action
 
 Removals need more than an administrator-level session. When one is attempted,
 the API refuses it and hands back a summary and an identifier:
 
 ```
-Permanently delete risk "Flood damage to the hall"
+Remove risk "Flood damage to the hall" from active records; audit and backup copies may remain
 
 CharityPilot will not do this until you approve it yourself. In your own
 terminal, run:
@@ -631,8 +648,16 @@ read the credentials in its configuration.
 
 A download writes the file and reports the path. It never returns the contents:
 the personal-data gate can filter a record, but a PDF of board minutes is either
-handed over whole or not at all, so keeping the bytes out of the model's context
-is the control that remains.
+handed over whole or not at all. Whole-file downloads require both a named
+download directory and a connector session with at least write access connected
+with `--data-scope full`; the API enforces both before reading storage and
+rechecks them before sending bytes.
+
+The full Compliance Record export includes unredacted governance and personal
+details. Its `report_export` tool has the same full-scope requirement; the API
+also refuses a full report when the session's personal-data scope is withheld.
+The minimised approved-snapshot output remains a review draft and is not an
+authorised disclosure or filing.
 
 ## Everything a change does is recorded
 
@@ -705,6 +730,9 @@ it anywhere else and the connector refuses to start.
 registers, documents, deadlines and the Governance Code. Each hit names the
 kind of record, the field that matched, the text around the match, and a
 reference like `charitypilot://governing-act/abc123`.
+Member-role searches omit Minute Book acts and resolutions while their contents
+await sensitivity classification. The underlying read tools also require
+Owner/Admin; a connector cannot use a search reference to bypass that rule.
 
 `fetch` reads the record behind one of those references. It is a router: it
 turns the reference into the ordinary tool call for that kind of record, so

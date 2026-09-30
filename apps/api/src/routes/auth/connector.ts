@@ -2,10 +2,11 @@ import type { FastifyInstance } from "fastify";
 import { z, ZodError } from "zod";
 import { AuthService } from "../../services/auth.service.js";
 import { authGuard } from "../../middleware/auth.js";
+import { requireAdmin } from "../../middleware/roles.js";
 import { AppError, handleError } from "../../utils/errors.js";
 import { publicUser } from "../../utils/public-dtos.js";
 import { assertNonBrowserClient } from "../../utils/non-browser-client.js";
-import { grantApproval } from "../../services/action-approval.service.js";
+import { grantApproval, recordApprovalRefusal } from "../../services/action-approval.service.js";
 import {
   bodyIdentifierRateLimit,
   refreshTokenRateLimit,
@@ -59,6 +60,8 @@ const connectorLoginSchema = z.object({
   // property of the session rather than of the process that started it.
   dataScope: z.enum(DATA_SCOPES).optional(),
   deviceLabel: z.string().trim().min(1).max(120).optional(),
+  code: z.string().trim().regex(/^\d{6}$/).optional(),
+  recoveryCode: z.string().trim().min(1).max(32).optional(),
 });
 
 const connectorApproveSchema = z.object({
@@ -101,7 +104,8 @@ export async function connectorAuthRoutes(app: FastifyInstance) {
         const body = connectorLoginSchema.parse(request.body);
         const dataScope = body.dataScope ?? "WITHHELD";
         const result = await authService.login(
-          { email: body.email, password: body.password },
+          { email: body.email, password: body.password,
+            code: body.code, recoveryCode: body.recoveryCode },
           {
             // Never from the body: the route decides what kind of client this is.
             clientKind: "MCP_CONNECTOR",
@@ -159,6 +163,7 @@ export async function connectorAuthRoutes(app: FastifyInstance) {
         const result = await authService.refresh(
           body.refreshToken,
           "MCP_CONNECTOR",
+          request.id,
         );
 
         return reply.send({
@@ -208,7 +213,7 @@ export async function connectorAuthRoutes(app: FastifyInstance) {
    */
   app.post(
     "/approve",
-    { preHandler: [authGuard], config: { rateLimit: refreshTokenRateLimit(10) } },
+    { preHandler: [authGuard, requireAdmin], config: { rateLimit: refreshTokenRateLimit(10) } },
     async (request, reply) => {
       try {
         const body = connectorApproveSchema.parse(request.body);
@@ -225,6 +230,7 @@ export async function connectorAuthRoutes(app: FastifyInstance) {
         });
 
         if (!granted) {
+          await recordApprovalRefusal(app.prisma, request.user, 'MCP_CONNECTOR');
           throw new AppError(
             401,
             "APPROVAL_REFUSED",
@@ -256,7 +262,7 @@ export async function connectorAuthRoutes(app: FastifyInstance) {
    */
   app.get(
     "/approvals/:id",
-    { preHandler: [authGuard] },
+    { preHandler: [authGuard, requireAdmin] },
     async (request, reply) => {
       try {
         const id = z.string().min(1).max(64).parse((request.params as { id?: unknown }).id);

@@ -8,6 +8,7 @@ import { ReviewWarningState } from '@/components/ui/states';
 import { statusPanelClassName } from '@/components/ui/status';
 import { EvidenceReadiness } from '@/components/governance/evidence-readiness';
 import { CompliancePrincipleList } from './compliance-principle-list';
+import { ComplianceAudit } from './compliance-audit';
 import { IRISH_COMPLIANCE_MATRIX } from '@charitypilot/shared';
 import { useAuth } from '@/lib/auth-context';
 import { canManageGovernance } from '@/lib/governance-permissions';
@@ -144,6 +145,7 @@ export default function CompliancePage() {
         onExpandedIdChange={setExpandedId}
         onRetry={fetchData}
       />
+      {canManageRecords ? <ComplianceAudit key={year} year={year} /> : null}
     </AppPage>
   );
 }

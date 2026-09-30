@@ -121,17 +121,101 @@ function emptyOrganisation() {
 
 async function buildApp(prismaOverrides: Record<string, unknown>) {
   const app = Fastify({ logger: false });
-  app.decorate('prisma', prismaOverrides as never);
+  app.decorate('prisma', {
+    complianceReportPreparationAudit: { create: async () => ({ id: 'audit-1' }) },
+    ...prismaOverrides,
+  } as never);
   await app.register(exportRoutes);
   return app;
 }
 
+test('full working and approved export routes deny Members before reading report data', async () => {
+  let readAttempted = false;
+  const app = await buildApp({
+    ...authModels('org-1', 'MEMBER'),
+    subscription: { findUnique: async () => activeComplete() },
+    organisation: {
+      findUniqueOrThrow: async () => {
+        readAttempted = true;
+        throw new Error('report data must not be read');
+      },
+    },
+  });
+  try {
+    for (const path of [
+      '/compliance-record?year=2026',
+      '/compliance-report?year=2026',
+      '/compliance-report?year=2026&version=approved',
+    ]) {
+      const response = await app.inject({ method: 'GET', url: path, headers: { authorization: tokenFor('org-1', 'MEMBER') } });
+      assert.equal(response.statusCode, 403, path);
+      assert.equal(response.json().code, 'FORBIDDEN', path);
+    }
+    assert.equal(readAttempted, false);
+  } finally {
+    await app.close();
+  }
+});
+
+test('internal report routes deny a connector session with personal data withheld', async () => {
+  let reportReads = 0;
+  const app = await buildApp({
+    ...authModels(),
+    authSession: { findFirst: async () => ({
+      id: 'session-1', clientKind: 'MCP_CONNECTOR', accessLevel: 'ADMIN', dataScope: 'WITHHELD',
+    }) },
+    subscription: { findUnique: async () => activeComplete() },
+    organisation: { findUniqueOrThrow: async () => { reportReads += 1; return emptyOrganisation(); } },
+    complianceApprovalSnapshot: { findFirst: async () => { reportReads += 1; return null; } },
+  });
+  try {
+    for (const path of [
+      '/compliance-record?year=2026',
+      '/compliance-report?year=2026',
+      '/compliance-report?year=2026&version=approved',
+    ]) {
+      const response = await app.inject({ method: 'GET', url: path,
+        headers: { authorization: tokenFor() } });
+      assert.equal(response.statusCode, 403, path);
+      assert.equal(response.json().code, 'PERSONAL_DATA_SCOPE_REQUIRED', path);
+    }
+    assert.equal(reportReads, 0);
+  } finally { await app.close(); }
+});
+
+test('read-only connector cannot download either report variant through the API', async () => {
+  let reportReads = 0;
+  const app = await buildApp({
+    ...authModels(),
+    authSession: { findFirst: async () => ({
+      id: 'session-1', clientKind: 'MCP_CONNECTOR', accessLevel: 'READ', dataScope: 'FULL',
+    }) },
+    subscription: { findUnique: async () => activeComplete() },
+    organisation: { findUniqueOrThrow: async () => { reportReads += 1; return {}; } },
+    complianceApprovalSnapshot: { findFirst: async () => { reportReads += 1; return null; } },
+  });
+  try {
+    for (const path of [
+      '/compliance-report?year=2026',
+      '/compliance-report?year=2026&version=approved&audience=minimised',
+    ]) {
+      const response = await app.inject({ method: 'GET', url: path,
+        headers: { authorization: tokenFor() } });
+      assert.equal(response.statusCode, 403, path);
+      assert.equal(response.json().code, 'SESSION_LEVEL_TOO_LOW', path);
+    }
+    assert.equal(reportReads, 0);
+  } finally { await app.close(); }
+});
+
 test('Complete plan exports include governance registers', async () => {
+  let auditWrite: unknown;
   const app = await buildApp({
     ...authModels(),
     subscription: { findUnique: async () => activeComplete() },
     organisation: emptyOrganisation(),
     ...emptyComplianceReads(),
+    complianceReportPreparationAudit: { create: async (args: unknown) => { auditWrite = args; return { id: 'audit-1' }; } },
     conflictRecord: {
       findMany: async () => [
         {
@@ -154,6 +238,11 @@ test('Complete plan exports include governance registers', async () => {
     });
 
     assert.equal(response.statusCode, 200);
+    assert.deepEqual(auditWrite, { data: {
+      organisationId: 'org-1', reportingYear: 2026,
+      actorUserId: 'user-1', approvalSnapshotId: undefined,
+      reportVersion: 'current', audience: 'internal',
+    } });
     assert.match(response.body, /Governance registers/);
     assert.match(response.body, /Visible trustee/);
     assert.match(response.body, /Annual Report deadline basis/);
@@ -167,6 +256,56 @@ test('Complete plan exports include governance registers', async () => {
   } finally {
     await app.close();
   }
+});
+
+test('full report is withheld if its access audit cannot be persisted', async () => {
+  const app = await buildApp({
+    ...authModels(),
+    subscription: { findUnique: async () => activeEssentials() },
+    organisation: emptyOrganisation(),
+    ...emptyComplianceReads(),
+    complianceReportPreparationAudit: { create: async () => { throw new Error('audit store unavailable'); } },
+  });
+  try {
+    const response = await app.inject({
+      method: 'GET', url: '/compliance-report?year=2026',
+      headers: { authorization: tokenFor() },
+    });
+    assert.equal(response.statusCode, 500);
+    assert.doesNotMatch(response.body, /Compliance Record|Governance registers/);
+  } finally { await app.close(); }
+});
+
+test('working report is withheld when its session loses report access during assembly', async () => {
+  let sessionReads = 0;
+  let auditWrites = 0;
+  let finalWhere: unknown;
+  const app = await buildApp({
+    ...authModels(),
+    authSession: { findFirst: async ({ where }: { where: unknown }) => {
+      sessionReads += 1;
+      if (sessionReads === 2) { finalWhere = where; return null; }
+      return { id: 'session-1' };
+    } },
+    subscription: { findUnique: async () => activeEssentials() },
+    organisation: emptyOrganisation(),
+    ...emptyComplianceReads(),
+    complianceReportPreparationAudit: { create: async () => { auditWrites += 1; return {}; } },
+  });
+  try {
+    const response = await app.inject({
+      method: 'GET', url: '/compliance-report?year=2026',
+      headers: { authorization: tokenFor() },
+    });
+    assert.equal(response.statusCode, 401);
+    assert.equal(response.json().code, 'UNAUTHORIZED');
+    assert.equal(sessionReads, 2);
+    assert.equal(auditWrites, 0);
+    assert.doesNotMatch(response.body, /Compliance Record|Example Charity/);
+    assert.deepEqual((finalWhere as { user?: { is?: { role?: unknown } } }).user?.is?.role,
+      { in: ['OWNER', 'ADMIN'] });
+    assert.equal((finalWhere as { dataScope?: string }).dataScope, 'FULL');
+  } finally { await app.close(); }
 });
 
 test('export rejects organisation with no subscription', async () => {

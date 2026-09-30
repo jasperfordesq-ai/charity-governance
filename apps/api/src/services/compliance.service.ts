@@ -58,6 +58,25 @@ type RecordState = {
 
 const SERIALIZABLE_RETRY_LIMIT = 3;
 
+const memberComplianceRecordSelect = {
+  id: true, organisationId: true, standardId: true,
+  reportingYear: true, status: true, revision: true, updatedAt: true,
+  standard: { include: { principle: true } },
+} satisfies Prisma.ComplianceRecordSelect;
+
+const memberComplianceRecordDetailSelect = {
+  ...memberComplianceRecordSelect,
+  standard: true,
+} satisfies Prisma.ComplianceRecordSelect;
+
+const memberSignoffSelect = {
+  id: true, organisationId: true, reportingYear: true, status: true,
+  boardMeetingDate: true, approvedAt: true, revision: true,
+  approvalSequence: true, currentApprovalSnapshotId: true,
+  currentApprovalSnapshot: { select: { evidenceHash: true } },
+  invalidatedAt: true, invalidationReason: true, updatedAt: true,
+} satisfies Prisma.ComplianceSignoffSelect;
+
 type MissingComplianceExplanationStatus = 'NOT_APPLICABLE' | 'EXPLAIN';
 
 export type ComplianceApprovalReadiness = ComplianceApprovalReadinessResponse;
@@ -492,6 +511,19 @@ export class ComplianceService {
     return records;
   }
 
+  async getMemberRecords(organisationId: string, year: number) {
+    const scope = await this.getOrganisationComplianceScope(organisationId);
+    return this.prisma.complianceRecord.findMany({
+      where: {
+        organisationId,
+        reportingYear: year,
+        standard: standardsWhere(scope),
+      },
+      select: memberComplianceRecordSelect,
+      orderBy: { standard: { sortOrder: 'asc' } },
+    });
+  }
+
   private async buildApprovalEvidenceState(
     organisationId: string,
     reportingYear: number,
@@ -648,7 +680,7 @@ export class ComplianceService {
   private async getCurrentEvidenceHashForSignoff(
     organisationId: string,
     reportingYear: number,
-    signoff: Pick<ComplianceSignoffWithSnapshot, 'status' | 'currentApprovalSnapshot'> | null,
+    signoff: { status: string; currentApprovalSnapshot: { evidenceHash: string } | null } | null,
     client: PrismaClient | ComplianceTransaction,
   ): Promise<string | null> {
     if (signoff?.status !== 'APPROVED' || !signoff.currentApprovalSnapshot) {
@@ -695,6 +727,28 @@ export class ComplianceService {
       updatedById: null,
       updatedBy: null,
       createdAt: null,
+      updatedAt: null,
+    };
+  }
+
+  async getMemberRecord(organisationId: string, standardId: string, year: number) {
+    const standard = await this.ensureStandardIncludedInPlan(organisationId, standardId);
+    const record = await this.prisma.complianceRecord.findUnique({
+      where: {
+        organisationId_standardId_reportingYear: {
+          organisationId, standardId, reportingYear: year,
+        },
+      },
+      select: memberComplianceRecordDetailSelect,
+    });
+    return record ?? {
+      id: null,
+      organisationId,
+      standardId,
+      standard,
+      reportingYear: year,
+      status: 'NOT_STARTED' as const,
+      revision: 0,
       updatedAt: null,
     };
   }
@@ -890,6 +944,46 @@ export class ComplianceService {
       latestApproval,
       currentEvidenceHash,
     );
+  }
+
+  async getMemberSignoff(organisationId: string, reportingYear: number): Promise<ComplianceSignoffResponse> {
+    const signoff = await this.prisma.complianceSignoff.findUnique({
+      where: { organisationId_reportingYear: { organisationId, reportingYear } },
+      select: memberSignoffSelect,
+    });
+    const currentEvidenceHash = await this.getCurrentEvidenceHashForSignoff(
+      organisationId, reportingYear, signoff, this.prisma,
+    );
+    const approvalCurrent = Boolean(
+      signoff?.status === 'APPROVED'
+      && signoff.currentApprovalSnapshotId
+      && signoff.currentApprovalSnapshot
+      && currentEvidenceHash
+      && signoff.currentApprovalSnapshot.evidenceHash === currentEvidenceHash,
+    );
+    return {
+      id: signoff?.id ?? null,
+      organisationId,
+      reportingYear,
+      status: signoff ? signoff.status as ComplianceSignoffStatus : ComplianceSignoffStatus.DRAFT,
+      boardMeetingDate: signoff?.boardMeetingDate?.toISOString() ?? null,
+      minuteReference: null,
+      approvedByName: null,
+      approvedByRole: null,
+      approvalNotes: null,
+      approvedAt: signoff?.approvedAt?.toISOString() ?? null,
+      revision: signoff?.revision ?? 0,
+      approvalSequence: signoff?.approvalSequence ?? 0,
+      approvalCurrent,
+      currentApprovalSnapshotId: null,
+      currentApproval: null,
+      latestApproval: null,
+      invalidatedAt: signoff?.invalidatedAt?.toISOString() ?? null,
+      invalidationReason: signoff?.invalidationReason ?? null,
+      invalidatedById: null,
+      updatedById: null,
+      updatedAt: signoff?.updatedAt.toISOString() ?? null,
+    };
   }
 
   async upsertSignoff(
@@ -1180,6 +1274,7 @@ export class ComplianceService {
 
     const records = await this.prisma.complianceRecord.findMany({
       where: { organisationId, reportingYear: year },
+      select: { standardId: true, status: true },
     });
 
     const recordMap = new Map(records.map((r) => [r.standardId, r]));

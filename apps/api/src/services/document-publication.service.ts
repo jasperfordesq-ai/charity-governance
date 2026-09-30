@@ -152,6 +152,7 @@ export type DocumentPublicationState = 'PENDING' | 'DEAD_LETTER' | 'PROCESSED' |
  */
 export type DocumentPublicationTerminalReason =
   | 'MAX_ATTEMPTS_EXHAUSTED'
+  | 'PERMANENT_APPROVAL_REQUIRED'
   | 'PERMANENT_CONNECTION_UNAVAILABLE'
   | 'PERMANENT_PERMISSION_DENIED'
   | 'PERMANENT_CONFLICT_UNRESOLVED'
@@ -354,6 +355,7 @@ export type Publisher = (attempt: PublicationAttempt) => Promise<PublicationOutc
  * nothing about the stored connection.
  */
 const PERMANENT_PUBLICATION_TERMINAL_REASONS: Record<string, DocumentPublicationTerminalReason> = {
+  DOCUMENT_PUBLICATION_NOT_APPROVED: 'PERMANENT_APPROVAL_REQUIRED',
   // No connection to publish through, and no destination to publish into.
   // Retrying acquires neither; a human reconnects or chooses a space.
   CONFLUENCE_NOT_CONNECTED: 'PERMANENT_CONNECTION_UNAVAILABLE',
@@ -368,6 +370,7 @@ const PERMANENT_PUBLICATION_TERMINAL_REASONS: Record<string, DocumentPublication
   CONFLUENCE_PAGE_TITLE_AMBIGUOUS: 'PERMANENT_CONFLICT_UNRESOLVED',
   // The row names a page on a site this charity is no longer connected to.
   CONFLUENCE_PUBLISH_SITE_CHANGED: 'PERMANENT_CONFLICT_UNRESOLVED',
+  CONFLUENCE_PUBLISH_SPACE_CHANGED: 'PERMANENT_CONFLICT_UNRESOLVED',
   CONFLUENCE_CONTENT_PROPERTY_TOO_LARGE: 'PERMANENT_CONTENT_PROPERTY_REJECTED',
   CONFLUENCE_CONTENT_PROPERTY_INVALID: 'PERMANENT_CONTENT_PROPERTY_REJECTED',
   // The erasure parser refused the target this publish was about to record.
@@ -431,6 +434,13 @@ function siteChanged(recordedCloudId: string, currentCloudId: string): AppError 
       'must erase or adopt the original page first.',
     { recordedCloudId, currentCloudId },
   );
+}
+
+function spaceChanged(recordedSpaceId: string | null, currentSpaceId: string): AppError {
+  return new AppError(409, 'CONFLUENCE_PUBLISH_SPACE_CHANGED',
+    'This document already has a recorded Confluence page in a different or unverified space. ' +
+    'Review that page before publishing to the newly selected space; the existing page has not been overwritten.',
+    { recordedSpaceId, currentSpaceId });
 }
 
 /**
@@ -502,16 +512,6 @@ function claimLost(publicationId: string): AppError {
     'DOCUMENT_PUBLICATION_CLAIM_LOST',
     'This publication is no longer claimed by this attempt, so nothing further was uploaded.',
     { publicationId },
-  );
-}
-
-/** The document this publication names is gone. Transient; see the module header. */
-function documentMissing(documentId: string): AppError {
-  return new AppError(
-    404,
-    'DOCUMENT_NOT_FOUND',
-    `Document ${documentId} no longer exists, so there is nothing to publish.`,
-    { documentId },
   );
 }
 
@@ -618,7 +618,8 @@ export type ConfluencePublishConnect = (input: {
 type DocumentReadClient = {
   document: {
     findFirst(args: {
-      where: { id: string; organisationId: string };
+      where: { id: string; organisationId: string; lifecycleStatus: 'CURRENT'; externalPublicationApproved: true;
+        externalPublicationSiteId?: string; externalPublicationSpaceId?: string };
       select: Record<string, boolean>;
     }): Promise<Record<string, unknown> | null>;
   };
@@ -679,7 +680,7 @@ function defaultReadDocument(
     // Scoped on the organisation as well as the id: a publication row names a
     // tenant, and a document id alone must never reach another charity's row.
     const doc = await prisma.document.findFirst({
-      where: { id: documentId, organisationId },
+      where: { id: documentId, organisationId, lifecycleStatus: 'CURRENT', externalPublicationApproved: true },
       select: {
         id: true,
         name: true,
@@ -691,9 +692,13 @@ function defaultReadDocument(
         nextReviewDate: true,
         fileUrl: true,
         mimeType: true,
+        lifecycleStatus: true,
+        externalPublicationApproved: true,
       },
     });
-    if (doc === null) throw documentMissing(documentId);
+    if (doc === null || doc.lifecycleStatus !== 'CURRENT' || doc.externalPublicationApproved !== true) {
+      throw new AppError(409, 'DOCUMENT_PUBLICATION_NOT_APPROVED', 'Document is not current and explicitly approved for Confluence publication.');
+    }
 
     return {
       id: String(doc.id),
@@ -783,6 +788,17 @@ export function createConfluencePublisher(deps: ConfluencePublisherDeps): Publis
   const readDocument = deps.readDocument ?? defaultReadDocument(deps);
   const operations: ConfluencePublishOperations = { ...DEFAULT_OPERATIONS, ...deps.operations };
   const downloadFile = deps.downloadFile;
+  const assertStillApproved = async (organisationId: string, documentId: string, target: ConfluencePublishTarget) => {
+    if (!deps.prisma) return; // Pure publisher tests inject every dependency; production supplies Prisma.
+    const approved = await deps.prisma.document.findFirst({
+      where: { id: documentId, organisationId, lifecycleStatus: 'CURRENT', externalPublicationApproved: true,
+        externalPublicationSiteId: target.cloudId, externalPublicationSpaceId: target.spaceId },
+      select: { id: true },
+    });
+    if (!approved) {
+      throw new AppError(409, 'DOCUMENT_PUBLICATION_NOT_APPROVED', 'Publication approval was withdrawn before the file could be sent.');
+    }
+  };
 
   return async ({ row, signal, recordPage }: PublicationAttempt): Promise<PublicationOutcome> => {
     assertNotAborted(signal);
@@ -803,8 +819,12 @@ export function createConfluencePublisher(deps: ConfluencePublisherDeps): Publis
     if (row.cloudId !== null && row.cloudId !== target.cloudId) {
       throw siteChanged(row.cloudId, target.cloudId);
     }
+    if (row.pageId !== null && row.spaceId !== target.spaceId) {
+      throw spaceChanged(row.spaceId, target.spaceId);
+    }
 
     assertNotAborted(signal);
+    await assertStillApproved(row.organisationId, row.documentId, target);
     const doc = await readDocument({ organisationId: row.organisationId, documentId: row.documentId });
     // The publishing model travels with the destination: where documents go and
     // what they look like when they arrive are one decision, and a publisher
@@ -820,6 +840,8 @@ export function createConfluencePublisher(deps: ConfluencePublisherDeps): Publis
       if (isConnectionUnusable(error)) throw notConnected(row.organisationId, error);
       throw error;
     }
+
+    await assertStillApproved(row.organisationId, row.documentId, target);
 
     const page = await resolvePage({ client, operations, row, target, doc, title, signal });
 
@@ -873,6 +895,7 @@ export function createConfluencePublisher(deps: ConfluencePublisherDeps): Publis
     const bytes = await downloadFile(row.organisationId, doc.storagePath);
 
     assertNotAborted(signal);
+    await assertStillApproved(row.organisationId, row.documentId, target);
     let attachment: ConfluenceAttachment;
     try {
       attachment = await operations.uploadAttachment(client, {
@@ -1780,7 +1803,9 @@ export class DocumentPublicationService {
    * worker-side `retirePublicationIfDocumentGone` catches the mid-attempt case.
    * Between them sits a row whose `Document` disappeared while nothing held a
    * claim on it: no publisher will ever look at it again, so nothing will ever
-   * retire it, and it would sit PENDING for ever pointing at a real page.
+   * retire it, and it would sit in its prior publish state for ever pointing
+   * at a real page. This also covers a dead-lettered publication with a page
+   * ID: failure of publishing does not mean the remote page is absent.
    *
    * A row with a `pageId` becomes RETIRED, because the page exists and the
    * identifiers are the only thing that can still address it — the owner's
@@ -1791,33 +1816,38 @@ export class DocumentPublicationService {
    * the sort of thing a DPO is right to ask about.
    */
   async retireOrphanedPublications(limit = 100): Promise<{ retired: number; deleted: number }> {
-    const bounded = Math.max(1, Math.floor(limit));
-    const candidates = await publicationDelegate(this.prisma).findMany({
-      where: { state: { in: ['PENDING', 'PROCESSED'] }, claimedAt: null },
-      orderBy: [{ createdAt: 'asc' }],
-      take: bounded,
-    });
+    const bounded = Math.min(100, Math.max(1, Number.isInteger(limit) ? limit : 100));
+    // Select orphans before applying the bound. Limiting all publications first
+    // repeatedly returns the same older live rows and can starve a later
+    // orphan indefinitely once a charity has more than one batch of pages.
+    const candidates = await this.prisma.$queryRaw<Array<{
+      id: string;
+      documentId: string;
+      organisationId: string;
+      pageId: string | null;
+    }>>`
+      SELECT p."id", p."documentId", p."organisationId", p."pageId"
+      FROM "DocumentPublication" AS p
+      WHERE p."state" IN ('PENDING', 'PROCESSED', 'DEAD_LETTER')
+        AND p."claimedAt" IS NULL
+        AND NOT EXISTS (
+          SELECT 1 FROM "Document" AS d
+          WHERE d."id" = p."documentId"
+            AND d."organisationId" = p."organisationId"
+        )
+      ORDER BY p."createdAt" ASC, p."id" ASC
+      LIMIT ${bounded}
+    `;
 
     let retired = 0;
     let deleted = 0;
 
     for (const candidate of candidates) {
-      const row = candidate as unknown as {
-        id: string;
-        documentId: string;
-        organisationId: string;
-        pageId: string | null;
-      };
-
-      const doc = await this.prisma.document.findFirst({
-        where: { id: row.documentId, organisationId: row.organisationId },
-        select: { id: true },
-      });
-      if (doc !== null) continue;
+      const row = candidate;
 
       if (row.pageId === null) {
         const removed = await publicationDelegate(this.prisma).deleteMany({
-          where: { id: row.id, pageId: null, claimedAt: null },
+          where: { id: row.id, pageId: null, claimedAt: null, state: { in: ['PENDING', 'PROCESSED', 'DEAD_LETTER'] } },
         });
         deleted += removed.count;
         continue;
@@ -1828,7 +1858,7 @@ export class DocumentPublicationService {
         // publisher may have claimed this row in the time between the two, and
         // retiring a row mid-attempt is exactly the race
         // `retirePublicationIfDocumentGone` exists to handle properly.
-        where: { id: row.id, claimedAt: null, state: { in: ['PENDING', 'PROCESSED'] } },
+        where: { id: row.id, claimedAt: null, state: { in: ['PENDING', 'PROCESSED', 'DEAD_LETTER'] } },
         data: {
           state: 'RETIRED',
           retiredAt: this.now(),

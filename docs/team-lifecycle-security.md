@@ -17,8 +17,11 @@ organisation, and exact session are active.
   team workflow.
 - `OWNER` is unique per organisation and must be active. `ADMIN` can manage
   ordinary members; only the current owner can manage admins, change roles, or
-  transfer ownership. `MEMBER` is a view/download role for governance records
-  and has no governance-write or administrative team authority.
+  transfer ownership. `MEMBER` has read access only to the permitted status,
+  ordinary trustee and explicitly Member-visible document views. Sensitive
+  registers, complaints, conflicts, full reports and unclassified documents
+  remain Owner/Admin-only; Members have no governance-write or team-management
+  authority. Actual content and audience classification still need review.
 
 The database increments `membershipVersion` whenever role, lifecycle status, or
 organisation membership changes. Every mutation carries the version the
@@ -87,6 +90,29 @@ invalid-invite response so tenant, account, and capacity state are not disclosed
 through a public token endpoint.
 
 ## Password recovery integrity
+
+Personal two-step sign-in has a last-code recovery path: a browser session
+created with the user's final recovery code can remove that factor with the
+account password and no further code for 15 minutes. The removal route checks
+the `SECOND_FACTOR_RECOVERY_USED` audit event for the same user, charity and
+session family; another family is refused. Migration
+`20260929240000_recovery_use_session_subject` permits that event to carry its
+family ID while retaining the other security-event constraints. A disposable
+PostgreSQL/Chromium journey verified last-code sign-in, the same-family audit,
+different-family denial and removal. This does not provide recovery when both
+the authenticator and saved codes are gone or prove a deployed account.
+
+A signed-in user of any charity role can change their own password from
+Security & Data. The browser route requires the current password and, when
+enrolled, an authenticator or unused recovery code. It rechecks the password
+hash under the organisation/user locks and the exact live session after hashing the replacement; a
+concurrent reset or change cannot leave a newly issued session alive. In the
+same transaction it consumes the second-factor proof, terminates outstanding
+recovery links, replaces the password, revokes all sessions and appends a
+metadata-only `PASSWORD_CHANGED` security event. The response clears browser
+cookies and sends the user to sign-in. This is a local source control; an
+actual account journey and provider delivery remain to be checked after
+deployment.
 
 Public password recovery is enumeration-neutral and asynchronous. Syntactically
 valid requests consume durable, keyed-HMAC identifier and network budgets even

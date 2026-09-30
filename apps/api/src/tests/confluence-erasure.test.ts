@@ -441,9 +441,60 @@ for (const file of DISPATCHER_ENTRY_POINTS) {
         'Confluence must not have displaced it',
     );
   });
+
+  test(`${file} registers a provider-pinned local eraser`, () => {
+    assert.match(
+      entryPointSource(file),
+      /createErasureDispatcher\(\{[\s\S]*?\blocal:\s*createSupabaseEraser\([\s\S]*?deleteFile\(organisationId, storagePath, signal, 'local'\)/,
+      `${file} must retry local storage deletion rows against the local provider`,
+    );
+  });
 }
 
 // ---------------------------------------------------------------------------
+// A queued target must still belong to the charity's retired publication and
+// must not point to a document that exists when the worker reaches it.
+
+for (const [label, options, sourceDocumentId] of [
+  ['missing publication link', { linkedPublication: false }, 'doc-1'],
+  ['duplicate publication link', { duplicatePublicationLink: true }, 'doc-1'],
+  ['mismatched source document', { publicationDocumentId: 'other-doc' }, 'doc-1'],
+  ['changed publication target', { publicationPageId: 'another-page' }, 'doc-1'],
+  ['live local document', { liveDocument: true }, 'doc-1'],
+] as const) {
+  test(`queued Confluence erasure refuses a ${label} before provider I/O`, async () => {
+    const mock = buildFallbackPrisma(pendingRecord({ provider: 'confluence', sourceDocumentId }), options);
+    const service = new DocumentService(mock.prisma as never, () => NOW);
+    let providerCalls = 0;
+
+    const result = await service.retryPendingStorageDeletions(
+      createErasureDispatcher({ confluence: async () => { providerCalls += 1; } }),
+      10,
+    );
+
+    assert.equal(providerCalls, 0);
+    assert.equal(result.processed, 0);
+    assert.equal(result.retryScheduled, 1);
+    assert.equal(mock.row().state, 'PENDING');
+    assert.equal(mock.row().attempts, 1);
+  });
+}
+
+test('queued Confluence erasure may reach provider I/O only after its source recheck passes', async () => {
+  const mock = buildFallbackPrisma(pendingRecord({ provider: 'confluence', sourceDocumentId: 'doc-1' }));
+  const service = new DocumentService(mock.prisma as never, () => NOW);
+  let providerCalls = 0;
+
+  const result = await service.retryPendingStorageDeletions(
+    createErasureDispatcher({ confluence: async () => { providerCalls += 1; } }),
+    10,
+  );
+
+  assert.equal(providerCalls, 1);
+  assert.equal(result.processed, 1);
+  assert.equal(mock.row().state, 'PROCESSED');
+});
+
 // The permanent-failure predicate, exercised through the engine that uses it.
 //
 // `isPermanentStorageDeletionFailure` is module-private in document.service.ts

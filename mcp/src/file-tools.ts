@@ -87,7 +87,7 @@ export const FILE_TOOLS: readonly FileToolDefinition[] = [
     description:
       'Save a stored document to the directory the connector was given, and report '
       + 'where it was written. The file itself is never returned, because a stored '
-      + 'document cannot be filtered the way a record can.',
+      + 'document cannot be filtered the way a record can. Requires a full personal-data session.',
     level: 'write',
     requires: 'downloadDir',
     // A download writes a file onto the operator's machine, so it is not
@@ -115,7 +115,7 @@ export const FILE_TOOLS: readonly FileToolDefinition[] = [
       'Save the charity’s compliance report for a year, as the web application exports it, '
       + 'into the directory the connector was given, and report where it was written. The '
       + 'report itself is never returned: it is the widest payload the API has, carrying the '
-      + 'whole profile and every register.',
+      + 'whole profile and every register. Requires a full personal-data session.',
     level: 'write',
     requires: 'downloadDir',
     annotations: {

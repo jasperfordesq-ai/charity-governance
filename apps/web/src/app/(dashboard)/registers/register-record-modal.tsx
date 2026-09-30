@@ -14,6 +14,7 @@ import {
 
 export function RegisterRecordModal({
   modalType,
+  editingRisk,
   closeModal,
   form,
   updateForm,
@@ -24,6 +25,7 @@ export function RegisterRecordModal({
   canManage,
 }: {
   modalType: RegisterType | null;
+  editingRisk: boolean;
   closeModal: () => void;
   form: Record<string, string | number | boolean>;
   updateForm: (key: string, value: string | number | boolean) => void;
@@ -36,7 +38,7 @@ export function RegisterRecordModal({
   return (
     <Modal isOpen={Boolean(modalType && canManage)} onOpenChange={(open) => !open && closeModal()} size="2xl" scrollBehavior="inside">
       <ModalContent>
-        <ModalHeader>{modalType ? modalTitle(modalType) : 'Add register record'}</ModalHeader>
+        <ModalHeader>{editingRisk ? 'Edit risk record' : modalType ? modalTitle(modalType) : 'Add register record'}</ModalHeader>
         <ModalBody className="gap-5">
           <ValidationSummary errors={formError ? [formError] : []} />
           {modalType === 'conflict' && <ConflictForm form={form} updateForm={updateForm} />}
@@ -53,7 +55,7 @@ export function RegisterRecordModal({
           submitting={saving}
           submitDisabled={!canManage || Boolean(formDisabledReason) || saving}
           submitAriaDescribedBy="register-disabled-hint"
-          submitLabel="Save record"
+          submitLabel={editingRisk ? 'Save risk changes' : 'Save record'}
         />
       </ModalContent>
     </Modal>

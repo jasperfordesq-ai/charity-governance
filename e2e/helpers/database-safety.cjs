@@ -9,7 +9,7 @@ const DATABASE_SAFETY_CONTRACT = Object.freeze({
   remoteResetOverride:
     "I_UNDERSTAND_REMOTE_RESET_DELETES_ONLY_A_PROVEN_CHARITYPILOT_DISPOSABLE_E2E_DATABASE",
   databaseHost: "127.0.0.1",
-  databasePort: 55434,
+  databasePort: 3354,
   databaseName: "charitypilot_e2e_disposable",
   databaseUser: "charitypilot_e2e_runner",
   databaseSchema: "public",
@@ -98,7 +98,10 @@ const PRESERVED_PUBLIC_TABLES = Object.freeze([
 
 const DISPOSABLE_DATABASE_RESET_TABLES = Object.freeze([
   "Organisation",
+  "OrganisationChangeAudit",
   "User",
+  "UserSecondFactor",
+  "UserSecondFactorRecoveryCode",
   "AuthSession",
   "PasswordRecoveryRequest",
   "AuthRecoveryRateLimitBucket",
@@ -108,6 +111,7 @@ const DISPOSABLE_DATABASE_RESET_TABLES = Object.freeze([
   "ComplianceSignoff",
   "ComplianceApprovalSnapshot",
   "ComplianceAuditEvent",
+  "ComplianceReportPreparationAudit",
   "SecurityAuditEvent",
   // What a non-browser client did. It has no foreign key to "AuthSession" —
   // the record must outlive the session that made it — so the AuthSession
@@ -116,6 +120,7 @@ const DISPOSABLE_DATABASE_RESET_TABLES = Object.freeze([
   // Approvals for destructive actions. Like the activity record, it has no
   // foreign key to "AuthSession", so the AuthSession truncate does not clear it.
   "AuthActionApproval",
+  "AuthActionApprovalAudit",
   // Idempotency claims for connector creates. Keyed on the user rather than on
   // the session, so the AuthSession truncate does not clear these either. A
   // claim left behind would make the next suite's first create with the same
@@ -125,10 +130,16 @@ const DISPOSABLE_DATABASE_RESET_TABLES = Object.freeze([
   "Member",
   "GoverningAct",
   "GoverningActVoid",
+  "MinuteBookChangeAudit",
   "Resolution",
   "Document",
+  "DocumentControlAudit",
+  "DocumentVisibilityAudit",
+  "DocumentDownloadPreparationAudit",
+  "DocumentUploadIntent",
   "DocumentStandardLink",
   "DocumentStorageDeletion",
+  "DocumentStorageDeletionAttempt",
   "DocumentStorageDeletionRecovery",
   // The publish outbox row. It deliberately has no foreign key to Document, so
   // it is not cleared by the Document truncate above and has to be listed in
@@ -148,17 +159,23 @@ const DISPOSABLE_DATABASE_RESET_TABLES = Object.freeze([
   // Preserving it would instead carry one suite's key fingerprint into the next
   // and trip INTEGRATION_KEY_MISMATCH, so it truncates.
   "OrganisationIntegration",
+  "ConfluenceReference",
   "IntegrationCredential",
   "IntegrationSecretControl",
   "ConflictRecord",
   "RiskRecord",
+  "RiskChangeAudit",
+  "RiskControlVerification",
+  "GovernanceRegisterChangeAudit",
   "ComplaintRecord",
   "FundraisingRecord",
   "AnnualReportReadiness",
   "FinancialControlReview",
   "Deadline",
+  "DeadlineChangeAudit",
   "TeamInvite",
   "DeadlineReminderLog",
+  "DeadlineReminderAudit",
   "Subscription",
   "BillingCheckoutAttempt",
   "StripeWebhookEvent",
@@ -166,6 +183,15 @@ const DISPOSABLE_DATABASE_RESET_TABLES = Object.freeze([
   "PlatformOperator",
   "PlatformOperatorSession",
   "OperatorActionApproval",
+  "DataLifecycleRequest",
+  "DataLifecycleReviewEvent",
+  "DataLifecycleTargetEvent",
+  "DataLifecycleResponseEvent",
+  "DataLifecycleCoverageEvent",
+  "DataLifecycleStorageLink",
+  "DataLifecycleStorageLinkWithdrawal",
+  "DataLifecycleDocumentLink",
+  "DataLifecycleDocumentLinkWithdrawal",
 ]);
 
 const PUBLIC_TABLE_INVENTORY_SQL = `

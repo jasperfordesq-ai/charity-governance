@@ -1,6 +1,6 @@
 import {
+  AuthSessionRevocationReason,
   Prisma,
-  type AuthSessionRevocationReason,
   type PrismaClient,
   type SecurityAuditEventType,
   type UserLifecycleStatus,
@@ -98,17 +98,21 @@ function publicSecurityAuditType(event: {
   type: SecurityAuditEventType;
   actorKind: string;
   context: Prisma.JsonValue | null;
-}): SecurityAuditEventType | 'PASSWORD_RESET_COMPLETED' {
+}): SecurityAuditEventType | 'PASSWORD_RESET_COMPLETED' | 'PASSWORD_CHANGED' {
   const context = event.context;
   if (
     event.type !== 'ALL_SESSIONS_REVOKED' ||
     !context ||
     Array.isArray(context) ||
-    typeof context !== 'object' ||
-    context.eventKind !== 'PASSWORD_RESET_COMPLETED'
+    typeof context !== 'object'
   ) {
     return event.type;
   }
+
+  if (context.eventKind === 'PASSWORD_CHANGED' && event.actorKind === 'USER') {
+    return 'PASSWORD_CHANGED';
+  }
+  if (context.eventKind !== 'PASSWORD_RESET_COMPLETED') return event.type;
 
   const trustedSelfService =
     event.actorKind === 'SYSTEM' && context.method === 'PASSWORD_RECOVERY_LINK';
@@ -822,7 +826,7 @@ export class TeamLifecycleService {
     });
   }
 
-  async listSecurityAudit(organisationId: string, actorId: string) {
+  async listSecurityAudit(organisationId: string, actorId: string, beforeEventId?: string) {
     return this.prisma.$transaction(async (tx) => {
       await lockOrganisation(tx, organisationId);
       const users = await lockUsers(tx, organisationId, [actorId]);
@@ -835,11 +839,25 @@ export class TeamLifecycleService {
         throw new AppError(403, 'FORBIDDEN', 'Your role cannot view the security audit');
       }
 
+      const cursor = beforeEventId ? await tx.securityAuditEvent.findFirst({
+        where: { id: beforeEventId, organisationId },
+        select: { id: true, occurredAt: true },
+      }) : null;
+      if (beforeEventId && !cursor) {
+        throw new AppError(404, 'SECURITY_AUDIT_CURSOR_NOT_FOUND', 'Security audit cursor not found');
+      }
       const events = await tx.securityAuditEvent.findMany({
-        where: { organisationId },
+        where: {
+          organisationId,
+          ...(cursor ? { OR: [
+            { occurredAt: { lt: cursor.occurredAt } },
+            { occurredAt: cursor.occurredAt, id: { lt: cursor.id } },
+          ] } : {}),
+        },
         orderBy: [{ occurredAt: 'desc' }, { id: 'desc' }],
-        take: 20,
+        take: 51,
         select: {
+          id: true,
           type: true,
           actorKind: true,
           actorLabel: true,
@@ -849,13 +867,78 @@ export class TeamLifecycleService {
           occurredAt: true,
         },
       });
-      return events.map((event) => ({
+      const visible = events.slice(0, 50);
+      return { data: visible.map((event) => ({
         type: publicSecurityAuditType(event),
         actorLabel: event.actorLabel,
         subjectLabel: event.subjectLabel,
         reason: event.reason,
         occurredAt: event.occurredAt.toISOString(),
-      }));
+      })), nextCursor: events.length > 50 ? visible[visible.length - 1].id : null };
+    });
+  }
+
+  async listReplayDiagnostics(organisationId: string, actorId: string, beforeEventId?: string) {
+    return this.prisma.$transaction(async (tx) => {
+      await lockOrganisation(tx, organisationId);
+      const users = await lockUsers(tx, organisationId, [actorId]);
+      const actor = users.get(actorId);
+      if (!actor || actor.lifecycleStatus !== 'ACTIVE' || (actor.role !== 'OWNER' && actor.role !== 'ADMIN')) {
+        throw new AppError(403, 'FORBIDDEN', 'Your role cannot inspect session replay events');
+      }
+
+      const cursor = beforeEventId ? await tx.securityAuditEvent.findFirst({
+        where: { id: beforeEventId, organisationId, type: 'SESSION_REPLAY_DETECTED' },
+        select: { id: true, occurredAt: true },
+      }) : null;
+      if (beforeEventId && !cursor) {
+        throw new AppError(404, 'REPLAY_EVENT_NOT_FOUND', 'Replay event cursor not found');
+      }
+      const events = await tx.securityAuditEvent.findMany({
+        where: {
+          organisationId, type: 'SESSION_REPLAY_DETECTED',
+          ...(cursor ? { OR: [
+            { occurredAt: { lt: cursor.occurredAt } },
+            { occurredAt: cursor.occurredAt, id: { lt: cursor.id } },
+          ] } : {}),
+        },
+        orderBy: [{ occurredAt: 'desc' }, { id: 'desc' }],
+        take: 51,
+        select: { id: true, occurredAt: true, subjectSessionId: true, context: true },
+      });
+      const visible = events.slice(0, 50);
+      return { data: visible.map((event) => {
+        const context = event.context && !Array.isArray(event.context) && typeof event.context === 'object'
+          ? event.context : null;
+        const requestId = typeof context?.requestId === 'string' && /^[A-Za-z0-9._:-]{1,128}$/.test(context.requestId)
+          ? context.requestId : null;
+        return {
+          eventId: event.id,
+          occurredAt: event.occurredAt.toISOString(),
+          familyFingerprint: event.subjectSessionId && UUID_PATTERN.test(event.subjectSessionId)
+            ? crypto.createHash('sha256').update(event.subjectSessionId).digest('hex').slice(0, 12).toUpperCase()
+            : null,
+          clientKind: context?.clientKind === 'WEB' || context?.clientKind === 'MCP_CONNECTOR'
+            ? context.clientKind : null,
+          accessLevel: context?.accessLevel === 'READ' || context?.accessLevel === 'WRITE' || context?.accessLevel === 'ADMIN'
+            ? context.accessLevel : null,
+          requestId,
+          previousRevocationReason: typeof context?.previousRevocationReason === 'string'
+            && Object.values(AuthSessionRevocationReason).includes(context.previousRevocationReason as AuthSessionRevocationReason)
+            ? context.previousRevocationReason : null,
+          presentedSessionRevokedAt: typeof context?.presentedSessionRevokedAt === 'string'
+            && /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/.test(context.presentedSessionRevokedAt)
+            && Number.isFinite(Date.parse(context.presentedSessionRevokedAt))
+            ? context.presentedSessionRevokedAt : null,
+          presentedSessionFingerprint: typeof context?.presentedSessionFingerprint === 'string'
+            && /^[A-F0-9]{12}$/.test(context.presentedSessionFingerprint)
+            ? context.presentedSessionFingerprint : null,
+          newlyQuarantinedSessionCount: typeof context?.newlyQuarantinedSessionCount === 'number'
+            && Number.isSafeInteger(context.newlyQuarantinedSessionCount)
+            && context.newlyQuarantinedSessionCount >= 0
+            ? context.newlyQuarantinedSessionCount : null,
+        };
+      }), nextCursor: events.length > 50 ? visible[visible.length - 1].id : null };
     });
   }
 }

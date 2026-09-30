@@ -2,8 +2,9 @@
 
 import { useDocumentTitle } from '@/lib/use-title';
 import { Button } from '@heroui/react';
-import { AppPage } from '@/components/ui/app-page';
-import { ErrorState, LoadingState } from '@/components/ui/states';
+import { AppPage, AppSection } from '@/components/ui/app-page';
+import { ErrorState, LoadingState, PermissionHint } from '@/components/ui/states';
+import { useAuth } from '@/lib/auth-context';
 import { OrganisationComplexityModal } from './organisation-complexity-modal';
 import { OrganisationProfileForm } from './organisation-profile-form';
 import { OrganisationSetupSummary } from './organisation-setup-summary';
@@ -11,6 +12,7 @@ import { useOrganisationWorkflow } from './use-organisation-workflow';
 
 export default function OrganisationPage() {
   useDocumentTitle('Organisation');
+  const { user } = useAuth();
   const {
     canManage,
     charitablePurpose,
@@ -102,6 +104,22 @@ export default function OrganisationPage() {
           )}
           variant="page"
         />
+      </AppPage>
+    );
+  }
+
+  if (user?.role === 'MEMBER') {
+    return (
+      <AppPage eyebrow="Operational setup" title="Organisation Profile" description="Your charity's basic governance profile.">
+        <PermissionHint>Owners and administrators review contact details, the registered address and conditional obligation facts.</PermissionHint>
+        <AppSection title="Organisation details">
+          <dl className="grid gap-3 text-sm">
+            <div><dt className="font-medium">Name</dt><dd>{org.name}</dd></div>
+            <div><dt className="font-medium">Registered charity number</dt><dd>{org.rcnNumber ?? 'Not recorded'}</dd></div>
+            <div><dt className="font-medium">Legal form</dt><dd>{org.legalForm ?? 'Not recorded'}</dd></div>
+            <div><dt className="font-medium">Financial year end</dt><dd>{org.financialYearEnd ?? 'Not recorded'}</dd></div>
+          </dl>
+        </AppSection>
       </AppPage>
     );
   }

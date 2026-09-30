@@ -346,6 +346,93 @@ test('refresh rotation rejects unknown and expired refresh tokens without mintin
 
 // ── x-auth-session-auth-session-11: login persists hashed refresh token ──
 
+test('Member login and account reads omit private organisation columns at the database boundary', async () => {
+  const passwordHash = bcrypt.hashSync('GoodPass1', 12);
+  const selects: Array<Record<string, unknown>> = [];
+  const prisma = {
+    user: {
+      findUnique: async ({ select }: { select: Record<string, unknown> }) => {
+        selects.push(select);
+        if (Object.keys(select).length === 1 && select.role === true) return { role: 'MEMBER' };
+        const orgSelect = (select.organisation as { select: Record<string, boolean> }).select;
+        const organisation = Object.fromEntries(
+          Object.entries(publicOrganisation()).filter(([key]) => orgSelect[key] === true),
+        );
+        return {
+          id: 'u1', email: 'member@example.org', name: 'Member One', passwordHash,
+          role: 'MEMBER', emailVerified: true, lifecycleStatus: 'ACTIVE',
+          organisationId: 'org-1', organisation,
+        };
+      },
+    },
+    $transaction: async (callback: (tx: unknown) => Promise<unknown>) => callback({
+      $queryRaw: async () => [{
+        id: 'u1', organisationId: 'org-1', role: 'MEMBER', passwordHash,
+        userLifecycleStatus: 'ACTIVE', organisationLifecycleStatus: 'ACTIVE',
+      }],
+      authSession: { create: async () => ({ id: 's1' }) },
+    }),
+  };
+  const service = new AuthService(prisma as never, {} as never);
+  const login = await service.login({ email: 'member@example.org', password: 'GoodPass1' });
+  const account = await service.getMe('u1');
+
+  assert.equal(selects.length, 4);
+  assert.deepEqual((selects[0].organisation as { select: Record<string, boolean> }).select,
+    { lifecycleStatus: true });
+  for (const select of [selects[1], selects[3]]) {
+    const org = (select.organisation as { select: Record<string, boolean> }).select;
+    for (const field of ['registeredAddress', 'contactEmail', 'contactPhone', 'conditionalObligationProfile']) {
+      assert.notEqual(org[field], true, `${field} must not be fetched for Members`);
+    }
+  }
+  assert.equal(login.user.organisation.registeredAddress, null);
+  assert.equal(account.organisation.contactEmail, null);
+});
+
+test('account read fails closed if the role changes after the narrow role lookup', async () => {
+  let reads = 0;
+  const prisma = {
+    user: {
+      findUnique: async ({ where }: { where: { id: string; role?: string } }) => {
+        reads += 1;
+        if (reads === 1) return { role: 'ADMIN' };
+        assert.equal(where.role, 'ADMIN');
+        return null;
+      },
+    },
+  };
+  const service = new AuthService(prisma as never, {} as never);
+  await assert.rejects(
+    () => service.getMe('u1'),
+    (error: unknown) => error instanceof AppError && error.code === 'USER_NOT_FOUND',
+  );
+  assert.equal(reads, 2);
+});
+
+test('Admin account read retains the full organisation selection', async () => {
+  let organisationSelect: Record<string, boolean> | undefined;
+  const prisma = {
+    user: {
+      findUnique: async ({ select }: { select: Record<string, unknown> }) => {
+        if (select.role === true && Object.keys(select).length === 1) return { role: 'ADMIN' };
+        organisationSelect = (select.organisation as { select: Record<string, boolean> }).select;
+        return {
+          id: 'u1', email: 'admin@example.org', name: 'Admin One', role: 'ADMIN',
+          emailVerified: true, lifecycleStatus: 'ACTIVE', organisationId: 'org-1',
+          organisation: publicOrganisation(),
+        };
+      },
+    },
+  };
+  const service = new AuthService(prisma as never, {} as never);
+  const account = await service.getMe('u1');
+  for (const field of ['registeredAddress', 'contactEmail', 'contactPhone', 'conditionalObligationProfile']) {
+    assert.equal(organisationSelect?.[field], true);
+  }
+  assert.equal(account.role, 'ADMIN');
+});
+
 test('login issues tokens and persists a session with the hashed refresh token on valid credentials', async () => {
   const passwordHash = bcrypt.hashSync('GoodPass1', 12);
   let storedHash = '';
@@ -443,6 +530,33 @@ test('login rejects neutrally when the verified password hash changes before loc
       error.statusCode === 401 &&
       error.code === 'INVALID_CREDENTIALS' &&
       error.message === 'Invalid email or password',
+  );
+  assert.equal(sessionCreated, false);
+});
+
+test('login rejects a role change between public profile read and locked session issuance', async () => {
+  const passwordHash = bcrypt.hashSync('GoodPass1', 12);
+  let sessionCreated = false;
+  const prisma = {
+    user: {
+      findUnique: async () => ({
+        id: 'u1', email: 'admin@example.org', name: 'Admin One', passwordHash,
+        role: 'ADMIN', emailVerified: true, lifecycleStatus: 'ACTIVE',
+        organisationId: 'org-1', organisation: publicOrganisation(),
+      }),
+    },
+    $transaction: async (callback: (tx: unknown) => Promise<unknown>) => callback({
+      $queryRaw: async () => [{
+        id: 'u1', organisationId: 'org-1', role: 'MEMBER', passwordHash,
+        userLifecycleStatus: 'ACTIVE', organisationLifecycleStatus: 'ACTIVE',
+      }],
+      authSession: { create: async () => { sessionCreated = true; return { id: 's1' }; } },
+    }),
+  };
+  const service = new AuthService(prisma as never, {} as never);
+  await assert.rejects(
+    () => service.login({ email: 'admin@example.org', password: 'GoodPass1' }),
+    (error: unknown) => error instanceof AppError && error.code === 'INVALID_CREDENTIALS',
   );
   assert.equal(sessionCreated, false);
 });

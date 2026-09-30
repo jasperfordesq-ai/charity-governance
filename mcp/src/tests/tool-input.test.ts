@@ -1,8 +1,28 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { buildPath, inputSchemaFor, type ParamSpec } from '../tool-input.js';
+import { TOOLS } from '../tools.js';
 
 const PAGED: readonly ParamSpec[] = [{ kind: 'page' }, { kind: 'pageSize' }];
+
+test('optional audit cursor is advertised and validated before request construction', () => {
+  const params: readonly ParamSpec[] = [{ kind: 'cursor', name: 'before' }];
+  assert.deepEqual((inputSchemaFor(params) as { required?: string[] }).required, undefined);
+  assert.equal(buildPath('/api/v1/team/security-audit', params, {}), '/api/v1/team/security-audit');
+  assert.equal(buildPath('/api/v1/team/security-audit', params, { before: 'event-003' }),
+    '/api/v1/team/security-audit?before=event-003');
+  assert.throws(() => buildPath('/api/v1/team/security-audit', params, { before: '../other' }), /page cursor/);
+});
+
+test('Confluence retired-reference tool exposes the next-page cursor without claiming provider state', () => {
+  const tool = TOOLS.find((candidate) => candidate.name === 'confluence_publications');
+  assert.ok(tool);
+  assert.match(tool.description, /retained CharityPilot references/i);
+  assert.match(tool.description, /does not prove/i);
+  assert.deepEqual(buildPath(tool.path, tool.params ?? [], { before: 'pub-2' }),
+    '/api/v1/integrations/confluence/publications?before=pub-2');
+  assert.throws(() => buildPath(tool.path, tool.params ?? [], { before: '../foreign' }), /page cursor/);
+});
 
 test('a tool with no params ignores nothing — an argument it did not declare is refused', () => {
   assert.equal(buildPath('/api/v1/dashboard', [], {}), '/api/v1/dashboard');

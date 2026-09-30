@@ -57,6 +57,26 @@ export enum DocumentCategory {
   OTHER = "OTHER",
 }
 
+export enum DocumentVisibility {
+  RESTRICTED = "RESTRICTED",
+  MEMBER_VISIBLE = "MEMBER_VISIBLE",
+}
+
+export enum DocumentContentAccessClass {
+  UNASSESSED = "UNASSESSED",
+  MEMBER_SUITABLE = "MEMBER_SUITABLE",
+  RESTRICTED_SENSITIVE = "RESTRICTED_SENSITIVE",
+}
+
+export enum DocumentLifecycleStatus {
+  UNREVIEWED = "UNREVIEWED",
+  DRAFT = "DRAFT",
+  CURRENT = "CURRENT",
+  SUPERSEDED = "SUPERSEDED",
+  RETIRED = "RETIRED",
+  HISTORICAL = "HISTORICAL",
+}
+
 export enum RegisterStatus {
   OPEN = "OPEN",
   MONITORING = "MONITORING",

@@ -25,6 +25,8 @@ export const registerSchema = z.object({
 export const loginSchema = z.object({
   email: accountEmailSchema,
   password: withBcryptPasswordByteLimit(z.string().min(1, 'Password is required')),
+  code: z.string().trim().regex(/^\d{6}$/).optional(),
+  recoveryCode: z.string().trim().min(1).max(32).optional(),
 });
 
 export const refreshSchema = z.object({
@@ -46,6 +48,13 @@ export const resetPasswordSchema = z.object({
       .regex(/[a-z]/, 'Password must contain at least one lowercase letter')
       .regex(/[0-9]/, 'Password must contain at least one number'),
   ),
+});
+
+export const changePasswordSchema = z.object({
+  currentPassword: loginSchema.shape.password,
+  newPassword: resetPasswordSchema.shape.password,
+  code: loginSchema.shape.code,
+  recoveryCode: loginSchema.shape.recoveryCode,
 });
 
 export const verifyEmailSchema = z.object({

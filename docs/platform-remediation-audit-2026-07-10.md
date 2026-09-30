@@ -1,6 +1,1018 @@
 # CharityPilot Full-Platform Remediation Audit
 
-Last updated: 2026-07-12
+> DPO connector exclusion follow-up, 2026-09-30: one-time invitation-link
+> retrieval, charity ownership transfer and billing checkout/portal starts
+> now require a web session at the API, including legacy billing aliases.
+> API build, 38 focused Team/billing tests and 15 connector route-contract
+> tests pass locally. Live grants, provider behavior and DPO review are open.
+
+> DPO connector mutation boundary, 2026-09-30: direct Admin connector
+> sessions are now refused by the API for browser-only Confluence callback,
+> setup, citation, erasure and disconnect actions, plus Vault publication
+> retry and failed storage-deletion requeue. This enforces existing connector
+> tool exclusions at the server. API build and 181 focused route tests pass.
+> External-provider deletion, live tenant behavior and DPO review are open.
+
+> DPO browser approval and Confluence setup boundary, 2026-09-30: direct
+> Admin connector sessions now cannot list or grant browser action approvals
+> or fetch the Confluence authorization URL/live setup spaces. Terminal
+> connector approvals remain separate. API build, 97 approval/integration
+> tests and 22 connector approval tests pass. The private connector boundary
+> map distinguishes intentional file/session/terminal tools from dashboard
+> exclusions. Nikita's grants, provider state and DPO review are unverified.
+
+> DPO-01/03/05 Vault and Confluence review reads, 2026-09-30: replacement,
+> mirror, document-control and storage-deletion review endpoints and recorded
+> external-copy/citation inventories now require a web session at the API.
+> This prevents direct Admin connector reads of dashboard-only data. The
+> separately gated document-download tool remains. API build and 165 focused
+> route tests pass; live pages, audiences, purge and Nikita's tenant remain
+> unverified.
+
+> DPO-02/06 detailed-history channel guard, 2026-09-30: organisation,
+> deadline, Minute Book and compliance change histories and replay
+> diagnostics now require a web session at the API. This blocks a direct
+> Admin connector request even though those tools were already excluded.
+> API build and 107 focused route tests pass. The permitted Team Security
+> Audit tool is unchanged. Historical incident/C1 and live-tenant proof remain
+> open.
+
+> DPO-06 application-audit boundary, 2026-09-30: risk/register control
+> histories and verification writes, plus all Governance Audit feeds, now
+> deny direct Admin connector requests at the API. This enforces their
+> dashboard-only tool exclusion; web Owner/Admin access remains. API build
+> and 135 focused route tests pass. Later 2026-09-30 passes checked the
+> named Vault, Confluence and approval exclusions; C1/live-host evidence
+> remains open.
+
+> DPO-01/05 controlled-route channel guard, 2026-09-30: document hold and
+> written-provider verification, plus every data-request case route, now
+> refuse a direct Admin connector session before the controlled read or write.
+> Web Owner/Admin routes remain available. API build and 90 focused route
+> tests pass. This enforces the existing connector-tool exclusion at the API;
+> it is not evidence of human review, legal disposition or Nikita's tenant.
+
+> DPO-01 connector decision guard, 2026-09-30: the document PATCH API refuses
+> visibility, content suitability, lifecycle and publication-approval changes
+> from an MCP connector session, including a direct call outside its
+> metadata-only tool. Metadata edits still work. The API build and 68 route
+> tests pass locally. An interactive web session is not evidence of actual
+> human inspection, and Nikita's deployed tenant remains unverified.
+
+> DPO-01 current-checkout Member boundary, 2026-09-30: the guarded isolated
+> PostgreSQL/API/production-web/Chromium authorization journey passes 1/1
+> with runner exit 0. It denies direct detail and download for a restricted
+> Vault file, downloads an expressly reviewed file, and keeps Board,
+> Compliance and Registers read-only to a Member. This is synthetic local
+> evidence, not actual content review or proof on Nikita's deployed tenant.
+
+> DPO accumulated local verification, 2026-09-30: the compiled non-migration
+> API suite passes 2,357/2,357 with local Docker access, four separately named
+> real PostgreSQL migration suites pass 4/4, and the compiled web suite passes
+> 542/542 using a private test-only Windows account-lookup preload. Two stale
+> web source assertions were aligned with the current Member release and
+> draft-delete wording. Earlier host-dependent broad-suite failures are
+> historical checkpoints, not current failing checks. This does not close
+> actual-file review, hosted verification, retention decisions or DPO review.
+
+> DPO-01 Vault inventory navigation, 2026-09-30: the Documents dashboard now
+> exposes older pages beyond its former first 50 files and marks evidence
+> counts partial until all pages are loaded. A disposable Owner browser journey
+> reached the oldest of 52 synthetic restricted files even after a newer file
+> was added between pages. The tenant-bound cursor preserved the older page;
+> the count mismatch prompted a refresh. This supports actual-file review but
+> does not perform classification, hold a fixed live snapshot through every
+> concurrent edit, or verify Nikita's tenant.
+
+> DPO-01 reviewer-download receipt, 2026-09-30: migrations 50-51 bind a new
+> `MEMBER_SUITABLE` assessment to an earlier authenticated download preparation
+> by the same actor for the same revision and SHA-256. The populated
+> 64-baseline/51-DPO upgrade, 101 focused API tests and rendered refusal-then-
+> release journey pass locally. An earlier disposable attempt caught the
+> concurrent-index transaction issue; the split migration passed cleanly.
+> Server preparation does not prove client receipt or human inspection. Real
+> file review, hosted verification and DPO acceptance remain open.
+
+> DPO-01 rendered release proof, 2026-09-29: the isolated Owner/Member
+> Chromium journey passes 1/1 after the strict disposable database reset
+> inventory was updated for the earlier `DeadlineReminderAudit` model. Its
+> 50 safety tests pass and runner cleanup exits 0. The journey covers a new
+> test file's reviewed release, Member download and a restricted comparison;
+> real content, hosted version and DPO acceptance remain unverified.
+
+> DPO-01 reviewed-byte release, 2026-09-29: migration 49 requires a valid
+> fingerprint for new/updated Member-visible rows while preserving legacy rows
+> for re-review. The API fingerprints server-read bytes at Owner/Admin
+> assessment, hides unhashed rows from Member paths and checks current size
+> and SHA-256 before Member download. The populated 64-baseline/49-DPO
+> PostgreSQL rehearsal, 116 focused API tests and production web build pass
+> locally. Human full-file review, real legacy inventory, hosted verification
+> and DPO acceptance remain open.
+
+> DPO-01 written-provider Member gate, 2026-09-29: migration 48 refuses new
+> or updated Member-visible files without a known written provider, while
+> Member API paths hide legacy unknown-provider rows. Assessment itself now
+> waits for custody verification. A populated 64-baseline/48-DPO PostgreSQL
+> rehearsal, API build and 162 focused tests pass locally. The `NOT VALID`
+> constraint awaits actual legacy-row review; provider bytes and hosted proof
+> remain unverified.
+
+> DPO-01 recorded-file identity guard, 2026-09-29: migration 47 prevents a
+> direct database change of storage path, provider, size, MIME type or version
+> from retaining `MEMBER_SUITABLE`. A populated 64-baseline/47-DPO PostgreSQL
+> rehearsal and blue-green SQL gate pass locally. Same-path provider byte
+> integrity, real file review, deployed proof and DPO acceptance remain open.
+
+> DPO-01 assessment freshness, 2026-09-29: editing a reviewed Vault card now
+> withdraws its Member-suitable assessment and any Member access in the same
+> transaction, with restricted history. Migration 45 refuses direct metadata
+> changes that preserve the old assessment. Populated PostgreSQL, authenticated
+> Admin PATCH and subsequent Member denial pass locally. Real file review and
+> hosted proof remain open.
+
+
+> DPO-01 Vault content assessment, 2026-09-29: Member document reads now
+> require an expressly reviewed `MEMBER_SUITABLE` class as well as visibility
+> and lifecycle. Migration 45 leaves existing rows `UNASSESSED`; the API hides
+> legacy visible rows and a `NOT VALID` constraint refuses unsafe new/updated
+> rows. A populated PostgreSQL upgrade and focused API and Owner/Member browser
+> journeys pass locally. Actual file classification, any prior exposure,
+> Confluence permissions, reviewed-tenant proof and DPO acceptance remain open.
+
+
+> DPO-03/05 linked-evidence deletion guard, 2026-09-29: ordinary draft DELETE
+> refuses current standard links or cited charity-managed Confluence pages
+> before storage cleanup, and a new database trigger blocks direct row deletion
+> while either link remains. A populated PostgreSQL 16 upgrade applied 64
+> baseline plus 44 DPO migrations, refused both direct deletions and preserved
+> the links, with gated cleanup exit 0. API build, 131 focused tests and 71
+> migration-gate tests and a focused unlinked-draft Owner browser journey
+> pass. Human link review, deleted-item restoration,
+> approved retention and provider/backup purge remain open under P0-08.
+
+> DPO-05/06 reasoned draft deletion, 2026-09-29: ordinary Vault DELETE now
+> requires a bounded administrator reason and writes it to retained restricted
+> document history in the record-removal transaction. The dashboard and
+> connector supply that reason. API/web builds, E2E TypeScript, 129 focused
+> API tests, 397 connector passes with four skips and two disposable Owner
+> browser journeys pass locally. This improves deletion accountability; P0-08
+> still needs an approved recovery period, actual deleted-item restoration,
+> per-class retention, provider/backup purge and reviewed-tenant evidence.
+
+> DPO-05/06 source-area audit continuation, 2026-09-29: Governance Audit now pages data-request coverage decisions as restricted metadata, with charity-bound cursors and Member denial. Reasons and controlled-archive references stay in the case history. Connector coverage explicitly excludes the case reads and human assessment write. API/web builds, E2E TypeScript, 15 focused audit tests, the disposable Owner browser journey and connector suite (397 passed, four skipped) pass locally. P0-08 still needs approved retention, deleted-item recovery, provider/backup purge and live tenant proof.
+
+> DPO-02 no-Web-Locks replay guard, 2026-09-29: the browser refresh
+> coordinator now refuses to spend a single-use token when cross-tab locking
+> is unavailable and a current-session probe still returns 401. Protected-page
+> renewal and timeout extension direct to login with a clear explanation;
+> genuine server replay quarantine is unchanged. Web build, 56 compiled tests,
+> E2E TypeScript and all five disposable Chromium replay cases pass. This does
+> not explain Nikita's historical events or verify her deployment; the P0
+> investigation remains open.
+
+> DPO-05 data-source coverage review, 2026-09-29: Data Requests now lists
+> eight source areas as unreviewed until an Admin records a reasoned,
+> append-only assessment. The three outcomes record scope review only, not
+> deletion or case completion. Migration 43 enforces tenant/case binding and
+> immutable events. API/web builds, 20 focused API tests and a representative
+> 64-baseline/43-DPO populated PostgreSQL upgrade and focused disposable Owner
+> browser journey pass. Approved retention,
+> full subject-data matching, deleted-item restore, provider purge and backup
+> expiry remain open under P0-08.
+
+> DPO-02 web-worker replay prevention, 2026-09-29: the protected-page proxy
+> validates `/auth/me` but no longer spends a refresh token in a web worker.
+> On 401 with a refresh cookie it redirects to the no-store `/session-renew`
+> page, where the browser's shared lock and current-session probe perform
+> renewal. A four-case disposable replay browser suite passes, including
+> an expired page, two tabs, invalid-cookie denial and deliberate spent-token
+> quarantine. This does
+> not identify Nikita's historical event cause, prove her deployed topology,
+> or cover browsers without Web Locks. The P0 investigation remains open.
+
+> DPO-05 actual-response evidence, 2026-09-29: Admins can now record,
+> correct or withdraw an actual data-request response sent time with an
+> opaque controlled-archive evidence reference and append-only case history.
+> Governance Audit pages only response-change metadata. A focused Owner
+> browser journey and the combined 19-case DPO suite pass locally; a populated
+> 64-baseline/42-DPO migration rehearsal preserves unknown legacy responses as
+> null and refuses a pre-receipt date. This does not prove delivery, calculate
+> a retention expiry, authorise deletion, approve a policy or verify Nikita's
+> tenant. P0-08 remains open.
+
+> DPO-06 register action history, 2026-09-29: the Admin API and Registers
+> page now page retained conflict, complaint, fundraising and risk record
+> changes beyond 100. Focused API tests and a disposable Owner browser
+> journey across 52 synthetic rows pass locally; the combined DPO browser
+> suite passes 19/19. Historical gaps and Nikita's reviewed tenant remain
+> unverified.
+
+> DPO-06 compliance detail history, 2026-09-29: the restricted Compliance
+> page and API now page detailed decisions past 100 within a charity and
+> reporting year. Focused API tests and a disposable Owner browser journey
+> across 52 synthetic rows pass locally. The reviewed tenant and actual C1
+> evidence remain unknown.
+
+> DPO-06 Minute Book detail history, 2026-09-29: Owner/Admin now have
+> tenant-bound paging past 100 detailed governing-act and resolution changes,
+> with collapsed before/after records on `/minute-book`. Focused API tests
+> and a disposable Owner browser journey across 52 rows pass locally.
+> Earlier actions are not backfilled; the reviewed tenant is unverified.
+
+> DPO-06 risk detail history, 2026-09-29: the Admin risk-audit API and
+> Registers panel now page retained detailed changes past 100 with a
+> charity-bound cursor. The panel also correctly displays control-review
+> attention and a selected risk's retained claims from API responses.
+> Focused API tests and a disposable Owner browser journey pass, including
+> a synthetic stale C1 claim and 52 change rows. Nikita's original C1
+> closure evidence and reviewed tenant remain unverified.
+
+> DPO-05 held-document guard, 2026-09-29: the ordinary Vault delete already
+> checked a reasoned administrative hold. Migration
+> `20260929390000_document_deletion_hold_delete_guard` also refuses a direct
+> database DELETE while that hold is set. A populated 64-baseline/41-DPO
+> upgrade and a disposable Owner browser/database journey passed locally.
+> This does not approve a retention period or legal hold, restore an item,
+> prove permanent purge or verify Nikita's reviewed tenant. P0-08 remains open.
+
+> DPO-03 citation review, 2026-09-29: Admin Integrations now has a paged,
+> read-only inventory of current charity-managed Confluence citations,
+> separate from CharityPilot-published pages. It displays recorded page and
+> cited version alongside linked Vault lifecycle/visibility. API/web/MCP
+> builds, 103 focused API tests and three disposable browser journeys pass.
+> The later linked-evidence guard requires unciting before Vault deletion;
+> unciting removes the current row and the control audit lacks its full
+> target snapshot, so historical external-reference retention still
+> needs a controller decision. No current provider audience was verified.
+
+> DPO-03 recorded-target review, 2026-09-29: Owner/Admin Integrations now
+> displays saved Confluence site, space and page IDs on both copy lists and
+> compares the non-retired page with the document's saved publication
+> approval target. Missing retired site/page IDs prevent the UI erasure
+> request. The connector withholds provider IDs when its personal-data gate
+> is closed. API/web/MCP builds, 102 focused API tests, connector suite,
+> edited web lint, E2E TypeScript and two disposable browser journeys pass.
+> This remains local reference evidence, not a live audience or purge check.
+
+> DPO-03 recorded-copy inventory, 2026-09-29: Admin Integrations adds a
+> separate paged read of recorded non-retired Confluence pages, joined to
+> same-charity current Vault lifecycle and publication approval. Missing,
+> non-CURRENT or unapproved documents receive a review warning; there is no
+> erase action from this list. API/web builds, 93 focused API tests, edited
+> web lint, E2E TypeScript and a corrected disposable PostgreSQL/Chromium
+> journey pass. It is not a live provider scan or proof of page audience,
+> existence or purge; Nikita's tenant remains unknown.
+
+> DPO-03/05 connector follow-up, 2026-09-29: the retired-copy MCP read now
+> supports all 50-row pages and preserves the next cursor inside the API's
+> wrapped response when the personal-data gate is closed. It calls these
+> retained local references, not proof of live or purged Confluence pages.
+> Response-target controls remain in the human Admin case review, and new
+> document destination IDs are withheld from the connector. MCP build and
+> tests pass locally (397 passed, 4 skipped); the actual tenant and provider
+> remain unverified.
+
+> DPO-03/05 retired-copy administration, 2026-09-29: the Admin Integrations
+> page now surfaces the existing separate Confluence erasure request for a
+> retained `RETIRED` publication, with a reason and typed confirmation. The
+> tenant-scoped listing is cursor paged past its former silent 200-row cap.
+> API/web builds, 91 focused integration tests and a disposable PostgreSQL/
+> Chromium Owner journey pass. The synthetic request recorded a linked
+> deletion job; it proves neither provider purge nor the policy authority
+> for any actual page. Non-retired external copies and the reviewed tenant
+> remain unverified. No migration was added.
+
+> DPO-05 response-target control, 2026-09-29: migration 40 adds an optional
+> case-specific date with reasoned append-only change/withdrawal history.
+> The Admin case page surfaces past entered targets separately from the
+> received-date queue; Governance Audit shows target-change metadata without
+> reasons. No deadline is calculated and no old case is assigned one. API/web
+> builds, 30 focused API tests, a disposable PostgreSQL/Chromium Owner journey
+> and the populated 64-baseline/40-DPO upgrade pass. The target neither
+> authorises erasure nor closes the open approved-schedule, recovery, full
+> purge, C1 evidence and reviewed-tenant gates.
+
+> DPO-03 concurrent destination evidence, 2026-09-29: the approval transaction
+> now locks the selected Confluence integration row. A disposable browser and
+> PostgreSQL test held a concurrent space change open, observed the approval
+> query waiting, then committed the change. The API returned 409 and saved no
+> approval; a fresh review against the restored selection passed. API build,
+> 111 focused tests, E2E TypeScript and gated teardown pass. This does not
+> inspect Nikita's tenant, provider permissions or existing remote copies.
+
+
+> DPO-03 isolated browser evidence, 2026-09-29: all three connector Chromium
+> journeys pass against the disposable PostgreSQL/API/web stack and fake
+> Atlassian. The extended Vault journey verifies a stale destination is
+> refused with no stored approval, then a fresh review binds the exact
+> selected site/space. The runner supplies a per-run integration encryption
+> key; its 40 contract tests, static validation and E2E TypeScript pass. This
+> does not verify Nikita's tenant, actual space permissions or remote copies.
+
+
+> DPO-03 reviewed-destination handoff, 2026-09-29: the Admin Vault dialog
+> displays a freshly read selected Confluence site and space and submits their
+> exact IDs with the reasoned approval. The API requires those IDs and rejects
+> a changed or unavailable target before any document write or approval audit.
+> The dialog also refuses approval when a recorded page's stored site/space
+> differs from the current target, pending review of that older copy;
+> the worker retains its post-approval binding check. Shared 57, focused API
+> 106, broad API 2,321 (two host-dependent checks excluded) and focused web 50
+> tests pass with API/web builds, web test TypeScript and edited web lint.
+> This is local source evidence, not verification of Nikita's tenant, the
+> selected space's audience, existing copies or DPO acceptance.
+
+
+> DPO-wide local verification follow-up, 2026-09-29: a stale Confluence
+> erasure target-reference fixture was corrected to the canonical shape. A
+> broad API run passes 2,320 tests with the separate real-PostgreSQL
+> publication-table check and a host-sensitive Windows child-process check
+> excluded by name. Migration 39 has independent disposable PostgreSQL
+> rehearsal evidence. This is not an unrestricted full gate or live review.
+
+
+> DPO-03 destination-bound approval, 2026-09-29: local source now binds each
+> reasoned Confluence publication approval to the selected site and space,
+> audits changes, and checks that binding at queue, retry and worker boundaries.
+> A recorded page in another site or space blocks reuse until its copy is
+> reviewed. Migration 39 withdraws legacy unbound approvals with a system
+> event; existing remote pages are untouched and the Vault warns when a
+> recorded page remains without approval. A disposable PostgreSQL upgrade
+> through all 39 DPO migrations, 192 focused API tests, 50 focused web tests,
+> builds, web test TypeScript and edited-file lint pass. Migration lint has no
+> block and one validating-CHECK lock warning. Coordinate cutover because an
+> overlapping old API may attempt an unbound approval that the new constraint
+> rejects. Live tenant, provider audience, remote copies and DPO acceptance
+> remain unverified; do not mark DPO-03 or public-production review closed.
+
+
+> DPO-03 previous-site and disconnected-copy display, 2026-09-29: the mirror
+> response distinguishes a recorded page on another Confluence site, an
+> inactive connection, or an unverified page site from an absent page link. Retained site facts after
+> disconnect cannot create an active link. The Vault warns about either case,
+> does not show cached visible state as current health, and withholds retry pending
+> review. The Admin retry route rejects inactive destinations and recorded
+> pages on another site before queueing; the worker retains its independent
+> different-site guard. API/web builds, 70 focused API and 48 focused web tests, web test TypeScript
+> and edited web-file lint pass locally; web tests used the existing gitignored
+> Windows `tsx` fallback. No live tenant/provider or DPO approval was checked.
+> At that checkpoint the publication-approval boolean was not tied to a
+> reviewed Confluence site/space. The newer destination-binding entry above
+> addresses this source-level gap; deployment and live review remain open.
+
+> DPO-03 recorded-page response correction, 2026-09-29: a page URL can be null
+> because the Confluence site address is unavailable even when a page ID is
+> recorded. The Admin mirror response now exposes a page-recorded boolean,
+> without a separate raw page-ID field (a valid URL includes the ID). The browser treats missing old-response evidence as unknown
+> and keeps pending/failed/historical wording accurate without claiming
+> external absence. Page links also require the publication site ID to match
+> the current connection, preventing a link that combines an old page ID with
+> a newly connected site's address. The Admin route test checks matching and
+> reconnected sites and Member denial. API/web production builds, 68 focused
+> API mirror/route tests (14 service tests), 47 web mirror/copy tests, web test
+> TypeScript and edited web-file lint pass locally. The API workspace lacks an
+> ESLint config; its build and focused tests pass. The
+> web tests needed the existing gitignored workaround for this host's
+> pre-assertion `tsx` user-info ENOMEM. This supersedes the earlier URL-based
+> source claim, not live remote/tenant verification or provider purge.
+
+> DPO-03 partial Confluence copy display, 2026-09-29: a stopped or pending
+> publication can already have a recorded external page reference. The Vault
+> now distinguishes that case from an attempt without a recorded page and
+> avoids claiming the copy is absent. Non-CURRENT files retain a separate
+> external-review cue and cannot be republished without current approval.
+> Test TypeScript, 32 focused mirror-copy tests and edited-file lint pass.
+> This is local wording based on the recorded reference, not a live Confluence
+> check, tenant classification or withdrawal/purge proof.
+
+> DPO-01 Vault download source recheck, 2026-09-29: the authenticated byte
+> proxy now confirms after provider I/O that the current tenant record still
+> names the storage path and written provider just read. A changed source
+> returns 409 without bytes or a preparation-audit event. API build and 34
+> focused document-reliability tests pass, including path/provider race cases.
+> This is source-level proof, not provider/tenant verification; legacy null
+> providers still need custody review, and a later change remains a bounded
+> race.
+
+> DPO reviewed-host follow-up, 2026-09-29: the September access correspondence
+> identifies the private host where Nikita signed in to review the then-deployed
+> demo. A fresh visit reached only its public landing page, with no authenticated
+> CharityPilot session; the earlier unsigned health response gave no tenant or
+> build identity. A historical VM row count is not evidence of the reviewed
+> tenant. Jasper does not know that tenant/environment or where the C1 closure
+> evidence is kept. C1 reconciliation and the historical replay-event cause
+> remain unverified; no live record was accessed or changed.
+
+> DPO-04/06 evidence follow-up, 2026-09-29: a source review found the
+> minimised approved-snapshot renderer still matches the private field
+> matrix; the existing export test checks omission of internal narratives,
+> approver particulars and snapshot identifiers. No disclosure policy or
+> export behavior changed. Bounded work-mailbox, Atlassian Rovo and Linear
+> searches found the 28 September DPO thread and unrelated general records,
+> not dated C1 admin-email closure evidence. This does not prove absence or
+> identify the reviewed tenant. C1 status remains unchanged pending its
+> original evidence and current risk revision.
+
+> DPO-06 local evidence search follow-up, 2026-09-30: text extraction from
+> 288 local Word files and 241 PDFs in the controlled Timebank Ireland folder
+> found a generic March C1 risk row but no dated admin-email closure receipt.
+> Seven PDFs could not be extracted. This does not cover mail, image-only
+> content or Nikita's tenant; the live C1 claim remains unchanged.
+
+> DPO-02 proxy/browser refresh handoff, 2026-09-29: a proxy rotation can
+> update shared cookies without advancing the browser's refresh stamp. The
+> browser now probes `/auth/me` under its Web Lock when a reactive retry sees
+> no newer stamp, including when the unchanged stamp is non-null, and reuses a current
+> session without submitting a spent token. Two regression cases, 23 focused
+> tests, test TypeScript, edited-file lint and the production web build pass.
+> Server replay quarantine remains intact. This narrows sequential timing;
+> simultaneous proxy/browser refresh, proactive renewal without shared
+> storage, multi-process proxy behavior and Nikita's historical cause are
+> unverified. No deployment or incident disposition follows.
+
+> DPO-05 queued deletion identity, 2026-09-29: migration 38 rejects updates
+> to a deletion job's ID, provider, JSON target, reason and requesting actor.
+> A disposable populated PostgreSQL 16 upgrade through all 38 DPO migrations
+> rejected each direct identity edit and exercised audited corrected-path
+> dead-letter recovery. Changing the linked retired
+> publication's page ID then caused a retry with zero fake-provider calls;
+> restoring it allowed processing. The runner removed its loopback-only
+> container, and 71 migration-gate tests pass. This supersedes the earlier
+> 37-migration maximum. It is not Atlassian deletion, versions/backup purge,
+> approved withdrawal, deployment or reviewed-tenant evidence.
+
+> DPO-05 queued-target integrity, 2026-09-29: the Confluence worker now checks
+> that the queued cloud, page and attachment IDs match the uniquely linked,
+> same-charity retired publication before provider I/O. A changed target
+> records a retry without a provider call. API build and 246 related tests pass
+> with one Windows host-dependent subprocess test excluded. A disposable
+> populated PostgreSQL 16 upgrade through all 37 DPO migrations exercised a
+> changed queued page ID (retry, zero fake-provider calls) and restored target
+> (processed, one fake-provider call); Admin audit reflected both attempts.
+> The container was removed and an independent local-engine listing found no
+> remainder. This supersedes older no-PostgreSQL-worker/245-test notes below.
+> Atlassian, provider versions/backups, approved withdrawal, deployment and
+> the reviewed tenant remain unverified.
+
+> DPO-05 Confluence source-ID correction, 2026-09-29: migration 37 extends
+> the source-document trigger so a post-deletion Confluence job may carry its
+> original ID only after a same-charity retired publication is stamped with
+> the exact deletion ID and path. Ordinary local/Supabase jobs still require
+> the live document/path at insertion. The request stamp, job and actor audit
+> remain transactional. API build, 185 focused tests and migration lint pass.
+> A populated disposable PostgreSQL 16 upgrade through all 37 DPO migrations
+> passed request refusal for a live document, valid linked insertion, forged
+> job rejection and worker refusal/eligibility around a reappearing document.
+> The container was removed. Atlassian, backups, policy-approved withdrawal,
+> the reviewed tenant and deployment remain unverified.
+
+> DPO-01/03 migration-36 rehearsal, 2026-09-29: a disposable PostgreSQL 16
+> populated upgrade applied 64 baseline and all 36 DPO migrations. It
+> preserved a synthetic legacy `DRAFT`/`MEMBER_VISIBLE` row under the
+> `NOT VALID` guard while refusing a new row and an update with that unsafe pair.
+> Prisma reported up to date; the container was removed and an independent
+> local-engine listing found no remainder. Older migration-36-unrun notes are
+> superseded. Nikita's tenant, real document classification and production
+> upgrade remain unverified.
+
+> DPO-05 queued erasure recheck, 2026-09-29: explicit Confluence deletion jobs
+> now retain the source document ID. Before provider I/O, the cleanup worker
+> verifies exactly one charity-scoped `RETIRED` publication link, source-ID agreement
+> where present, and absence of a live local document. Legacy null-ID jobs
+> still require the unique publication link. API build and 245 related tests pass
+> excluding one Windows `tsx` subprocess test that fails before assertions on
+> host `uv_os_get_passwd` ENOMEM. The source-ID path has since passed disposable PostgreSQL; Atlassian and reviewed-tenant
+> proof remain open, as do withdrawal policy and actual purge evidence.
+
+> DPO-05 erasure live-document fence, 2026-09-29: the explicit Confluence
+> erasure request refuses a `RETIRED` publication if the charity's local
+> document still exists. The 409 path leaves no deletion job or request audit.
+> API build and 99 focused fake-datastore tests pass. A later disposable PostgreSQL
+> rehearsal passed; Atlassian and the reviewed tenant remain unverified; a policy-approved
+> withdrawal and hold design for formerly published live files is still open.
+
+> DPO-01/03 draft visibility correction, 2026-09-29: working DRAFT files can
+> no longer be newly released to Members. Member list, detail, download,
+> search and dashboard activity also withhold legacy visible drafts, with a
+> post-storage-I/O download recheck. The Admin Vault disables the release;
+> migration 36 adds a `NOT VALID` CHECK for new and updated database rows.
+> API/web builds, 112 focused API tests, edited UI lint and the migration
+> gate pass locally. A subsequent disposable PostgreSQL rehearsal passed, but
+> the reviewed tenant, legacy rows and actual file audiences remain unreviewed.
+
+> DPO-05/06 erasure audit correction, 2026-09-29: an explicit Confluence
+> erasure request now commits its queued deletion, publication stamp and
+> actor-bound request event in one transaction. Failure to write the event
+> rolls back the request. API build and 97 focused tests pass using
+> rollback-aware fakes; PostgreSQL, Atlassian and the reviewed tenant are
+> unverified. The request is still reachable only for a RETIRED publication
+> after its CharityPilot document is deleted, while ordinary Vault deletion
+> is DRAFT-only. A reviewed path for formerly published live documents and
+> provider-copy disposition remains an open DPO-05 issue.
+
+> DPO web-suite follow-up, 2026-09-29: the ordinary Windows command still
+> fails before web assertions on this sandbox's `tsx`/`os.userInfo()` ENOMEM.
+> A gitignored test-only preload handles that exact host error without app
+> changes. Five stale wiring assertions were updated to check the present
+> Member-facing compliance/organisation/delete wording and Admin-only register
+> summaries. Test TypeScript and the full compiled suite pass 539/539 under
+> that preload. This is not normal-runner, deployed browser or DPO-tenant proof.
+
+> DPO-01/05 connector classification, 2026-09-29: the schema-drift test found
+> newly added `Document.storageProvider` absent from the connector's field
+> policy. It is now withheld from generic closed-personal-data projections;
+> a projection test and the full connector suite pass (395 tests, four platform
+> skips). This leaves Admin custody controls intact and does not verify the
+> reviewed tenant or classify document contents.
+
+> DPO source-regression check, 2026-09-29: a fresh production build passes all
+> three packages. The broad API run found that the new Confluence environment
+> audit event was absent from the shared event union and that two report tests
+> had stale fake databases without the required preparation-audit writer.
+> Both are corrected; nine focused tests pass. On repetition, the API suite
+> passes 2,300/2,302, with only sandbox Docker `EPERM` and host `tsx` startup
+> ENOMEM failures. Excluding those exact host-dependent cases yields
+> 2,300/2,300; the full suite is not green on this host. The root production
+> check passes 1,090 tests with two skips and two separate host failures in
+> Windows ACL restriction and Docker-on-PATH proof. No live-tenant or public
+> production assurance is inferred from this build and bounded test evidence.
+
+> DPO-05 legacy storage custody review, 2026-09-29: Owner/Admin can check an
+> unverified Vault key against both active providers. Both stores must answer,
+> only one may have the key, and its byte size must match the document row.
+> The provider and actor-bound `STORAGE_PROVIDER` audit event commit together
+> under a revision check; every ambiguous or unavailable check leaves deletion
+> blocked. Migration 35, API/web builds, 167 focused API tests, 11 connector
+> route-coverage tests and the disposable PostgreSQL 16 upgrade through 64
+> baseline plus 35 DPO migrations pass locally. A targeted isolated Chromium
+> journey confirms the unverified UI and fail-closed local-only provider check.
+> This is point-in-time active
+> object evidence, not a byte-identity check, historical upload proof,
+> deleted-item restore, version/backup purge, policy approval or live-tenant
+> verification.
+
+> DPO-05 written Vault provider, 2026-09-29: new files carry the provider that
+> actually received their bytes; migration 34 backfills only exact attached
+> reservations, leaving unmatched legacy files unverified. The provider is
+> immutable once known and an intent cannot attach with a contradictory value.
+> Downloads and ordinary draft deletion use the pinned provider; unknown
+> legacy custody blocks deletion before a false cleanup claim. API build,
+> Prisma validation, 163 focused tests and 71 migration-gate tests pass. The
+> first sandboxed Docker attempt returned `EPERM`; an authorised local-pipe
+> retry passed a disposable PostgreSQL 16 upgrade with all 34 DPO migrations,
+> exact provider backfill, unmatched-null preservation and both guards. This
+> is not deleted-item restore, final purge,
+> policy approval or live-tenant evidence.
+
+> DPO-02 no-Web-Locks reactive fallback, 2026-09-29: after a 401, the web
+> client now probes the current session before using a refresh token when Web
+> Locks are unavailable. A sequential retry after another tab's rotation
+> reuses the current cookies; a failed probe cannot present the token. Eight
+> focused tests, test TypeScript, edited-file lint and production web build
+> pass. Simultaneous tabs without Web Locks remain a race; historical replay
+> cause and deployed-tenant proof remain open. This turn's source/commit search
+> yielded no C1 admin-email closure evidence, so C1 status is unchanged.
+
+> DPO-06 Confluence publish-target integrity, 2026-09-29: the provider space
+> check now completes before a database transaction writes the target and
+> actor-bound audit event together. The update requires the connection to
+> remain on the validated site. API build and 109 focused tests pass, including
+> a simulated site switch and audit-write rollback. Real PostgreSQL and
+> Nikita-tenant verification remain open; no earlier target changes are
+> backfilled.
+
+> DPO-06 Confluence citation history, 2026-09-29: citation add/remove now
+> appends an actor-bound, metadata-only document-control event transactionally
+> with the reference change. It carries opaque document/reference IDs, not
+> page title, URL or content. Migration 33 permits the new constrained kind;
+> 33 DPO migrations are in this checkout. API/web builds and 23 focused tests
+> pass; migration lint warns about the validating CHECK window without a block.
+> PostgreSQL migration and live tenant proof remain unavailable; prior citation
+> changes were not reconstructed.
+
+> DPO-02 browser storage fallback, 2026-09-29: after a 401, the Web Locks
+> refresh coordinator now probes `/auth/me` under the lock if the shared
+> rotation stamp is unavailable. A current session skips another refresh;
+> probe failure does not present a possibly rotated token. Six focused tests,
+> test TypeScript, web build and lint pass locally. The compiled tests passed
+> directly with Node after this host's optional `tsx` preload failed with
+> ENOMEM. Web Locks absence, multi-process behavior and Nikita's historical
+> replay events still need separate evidence.
+
+> DPO-06 Confluence declaration audit, 2026-09-29: the Owner/Admin plan and
+> residency declaration write now appends an actor-bound security event in the
+> same transaction. Its `RECORDED`/`CLEARED` action omits the declared values;
+> Governance Audit includes the metadata and its UI identifies the event.
+> This was DPO migrations 31-32, bringing that checkpoint to 32 DPO migrations.
+> API/web builds and 101 focused tests pass. Migration lint has one expected
+> validation-window warning on the revised subject check. No real PostgreSQL
+> migration, deployed-tenant inspection, historical backfill or C1 closure was
+> proved by this slice. The disposable migration rehearsal stopped at the
+> local Docker Desktop Linux named pipe with `EPERM` before creating a fixture.
+
+> DPO-05/06 case overview minimisation, 2026-09-29: the separate Admin
+> `/data-lifecycle/audit` recent feed no longer fetches `evidenceRef` across
+> cases; individual controlled case history still returns it with the reason.
+> API build and 14 focused intake tests pass. This is response minimisation,
+> not deletion, live review or approved retention. A fresh renderer check found
+> no extra dynamic field in the minimised Compliance Record outside the private
+> disclosure matrix; recipient-specific approval remains open.
+
+> DPO-01/06 overview projection, 2026-09-29: the four remaining whole-row
+> Governance Audit feeds (organisation, deadlines, registers, reports) now
+> select named metadata fields. The shared direct-feed contract requires a
+> projection and its 17-feed route test checks for one; the merged case-link
+> feed already uses explicit selections. API build and 12 focused archive
+> tests pass. Future schema fields cannot surface there by default. This is
+> source-level minimisation, not live tenant, erasure or DPO sign-off proof.
+
+> DPO-01/06 overview minimisation, 2026-09-29: the Admin Governance Audit
+> feed no longer selects the free-text compliance reason or data-request
+> evidence reference for its expandable cross-domain JSON view. Restricted
+> record histories still carry them. API build and 12 focused archive tests
+> pass. This does not erase stored values or prove live-tenant behaviour.
+> Automatic approval review rejected a read-only browser open of the
+> historically mentioned private Tailscale host because the actual reviewed
+> environment/tenant is unconfirmed and private data could be exposed. The
+> local Tailscale status pipe also denied access. Do not bypass the rejection;
+> live replay/C1 review needs an expressly authorised target.
+
+> DPO-05 schema coverage, 2026-09-29: the data lifecycle model map names all
+> 70 current Prisma models in eight groups and a production-check test requires
+> exact coverage as the schema changes. This is a source inventory, not an
+> approved retention schedule or a deleted-item restore/purge control. Vault
+> draft deletion still removes its row and queues primary-byte cleanup; the
+> deletion-job recovery path cannot restore it. Off-schema stores, legal holds,
+> recovery period, provider versions and backups remain policy/proof gaps.
+> The new map test and 15 launch-status tests pass. The full production-check
+> run on this shell has 1,090 passes, two skips and two host-dependent failures
+> (owner-only Windows ACL publication; live PATH check with Docker unavailable).
+> The full gate remains unverified until both pass on a capable host.
+
+> DPO public-production evidence gate, 2026-09-29: the launch evidence
+> contract requires a 90th check for disposition of Nikita's feedback against
+> the reviewed tenant and exact promoted commit, covering six findings, four
+> interface locations, first-pass review and remaining actions. Missing or
+> wrong-commit evidence fails the validator. The checklist now requires all
+> DPO migrations in the promoted release, currently 33 source migrations.
+> Launch-evidence, launch-status and preflight suites pass locally (80 tests
+> with one platform skip, 21 and 180 respectively). This is a source gate,
+> not live migration, provider proof or formal DPO production sign-off.
+
+> DPO-05/06 deletion-overview minimisation, 2026-09-29: the Admin Governance
+> Audit no longer selects free-text Confluence erasure reasons from storage
+> deletion jobs. API build and 12 archive tests pass; the saved reason remains
+> in its controlled record. A separate source check found a fixed seven-day
+> cleanup of eligible authentication-email delivery evidence. It is a narrow
+> existing operational rule, not approval of whole-application retention or
+> proof of provider/log/backup purge. See the private lifecycle inventory.
+
+> DPO-06 integration audit navigation, 2026-09-29: Governance Audit now pages
+> eight named Confluence/security event types using tenant- and type-bound
+> cursors and a metadata-only selection. The response omits site URLs, names,
+> reasons and context. API/web builds, 12 archive tests and an isolated
+> PostgreSQL/Chromium Owner journey pass with gated teardown. Older or failed
+> best-effort audit writes are not reconstructed; an erasure-request row is not
+> provider-purge evidence. Nikita's reviewed tenant remains unidentified.
+
+> DPO-05/06 case-evidence audit feed, 2026-09-29: Admin Governance Audit now
+> merges tenant-bound metadata for Vault/job case links and withdrawals into
+> one stable 50-row cursor feed. It excludes reasons, paths and provider errors;
+> detailed reasons remain in the controlled case view. API build, 11 focused
+> archive tests, E2E TypeScript and an isolated PostgreSQL/Chromium Owner
+> journey pass with gated teardown. This uses existing migrations 25/30 and
+> supplies no live tenant, erasure, recovery or approved-retention proof.
+
+> DPO-05 case-to-live-Vault lineage, 2026-09-29: A controlled Owner/Admin
+> reviewer can append a reasoned link from a data request to an exact live
+> Vault document ID and later withdraw the association without rewriting it.
+> Migration 30 verifies tenant and live row at insertion and keeps the opaque
+> ID after an eligible draft is removed; the MCP connector excludes these
+> routes. API/web/MCP builds, 14 intake tests, 11 route-coverage tests,
+> 115 isolated-runner safety checks, a populated 30-migration PostgreSQL
+> upgrade and two isolated Chromium Owner journeys pass. The migration gate
+> has no block and one new-table index warning. This is evidence linkage,
+> not a subject match, erasure decision, deleted-item recovery, provider/backup
+> purge or live DPO review. The private roadmap has the exact limits.
+
+> DPO-04 disclosure boundary, 2026-09-29: a private field-by-field matrix now
+> records the minimised approved-snapshot draft's exact dynamic fields,
+> omitted internal details and outstanding recipient decisions. API build and
+> 26 focused export tests pass; the source review found no further renderer
+> field leak. Aggregate inference, policy approval, downloaded copies and live
+> tenant verification remain open. See the gitignored
+> `.charitypilot-private/report-disclosure-matrix.md` before changing the
+> report audience or claiming it is regulator-ready.
+
+> DPO-05 source-job discovery, 2026-09-29: Admin Data Requests can now search
+> technical deletion jobs by exact source Vault document ID and choose one for
+> the existing reasoned case-link action. The lookup is tenant-bound and
+> cursor-paged, excludes paths/provider errors, and cannot find legacy jobs
+> with no recorded source. Migration 29 uses a concurrent partial index.
+> API/MCP builds, 12 case tests, five connector coverage tests, edited web
+> lint, E2E TypeScript, blue-green gate, isolated PostgreSQL/Chromium Owner
+> journey and representative 29-migration populated upgrade pass. Subject
+> matching, policy, full purge and Nikita's live tenant remain unresolved.
+
+> DPO-02 replay-timing evidence, 2026-09-29: future replay audit events now
+> record the presented session's previous revocation time. The restricted
+> diagnostics validates and shows it beside request and family correlation
+> facts; historical events remain without it. Shared/API builds, 50 focused
+> auth/team tests, edited web lint and E2E TypeScript pass. An isolated
+> PostgreSQL/Chromium replay journey confirmed the database event and restricted
+> Owner display, with gated teardown. A short delay alone cannot classify
+> the cause. Nikita's event/log correlation and deployed proof remain open.
+
+> DPO-05 source-document lineage, 2026-09-29: migration 28 adds an optional,
+> immutable source-document ID to storage-deletion jobs. New ordinary Vault
+> draft deletions record it in the same transaction as row removal; a database
+> guard checks the charity and exact path at insertion. The Admin Data Request
+> case view displays the ID on a linked job. Legacy and orphan jobs stay null.
+> API build, 59 focused tests, edited web lint, E2E TypeScript, blue-green
+> gate and an isolated PostgreSQL/Chromium deletion-and-case journey pass.
+> A representative populated-data upgrade through 64 baseline and all 28
+> DPO migrations passes with two retained legacy documents; production-scale
+> data shapes and lock time remain unverified.
+> This is source lineage, not subject identification or full erasure proof;
+> policy, recovery, replicas/backups, live tenant and DPO review remain open.
+
+> DPO-02 protected-page validation burst control, 2026-09-29: Concurrent
+> Next.js requests sharing an auth credential and origin now share only a
+> pending `/auth/me` call in one process. Completed checks are not cached;
+> subsequent requests still reach the API and revocation/replay controls.
+> The focused proxy suite passes 24/24, edited lint and the production web
+> build pass, and all five DPO review journeys pass against disposable
+> PostgreSQL/Chromium with gated teardown. Earlier combined runs hit an auth
+> 503 before a long browser test was split; the later pass does not establish
+> the cause of those errors or of Nikita's historical replay events. The
+> reviewed live tenant and cross-process behavior remain unverified.
+
+> DPO-01/03 unreviewed-file release guard, 2026-09-29: The Admin Vault now
+> disables Member release of an `UNREVIEWED` document and explains the required
+> lifecycle classification. The API refuses the same transition. Migration 27
+> adds a `NOT VALID` database CHECK that enforces new and updated rows without
+> claiming older rows comply; an existing unreviewed/visible row needs review
+> and classification or restriction before an update. The API build, 48 route
+> tests, edited UI lint, E2E TypeScript and static migration gate pass. The
+> focused isolated PostgreSQL/Chromium Owner journey passes, including the
+> disabled button and direct database CHECK denial; gated teardown exited 0.
+> The earlier combined navigation suite hit an authentication-service 503 on
+> reload twice and is not a clean suite result for this edit.
+> Actual file contents, Nikita's tenant, approved audience and live rollout
+> remain unverified.
+
+> DPO-01 legacy-read follow-on, 2026-09-29: Member Vault list, detail and
+> download, Search and dashboard activity now exclude `UNREVIEWED` documents
+> even if a retained row says `MEMBER_VISIBLE`. Download checks lifecycle again
+> after storage I/O; its session-role check treats such a row as restricted.
+> API build and 106 focused document/search/dashboard tests pass. This is a
+> source boundary, not a classification of legacy rows, a retrospective access
+> finding or deployed-tenant evidence. External Confluence copies need their
+> own audience review.
+
+> DPO recovery-family boundary: a disposable PostgreSQL/Chromium rerun
+> refused blank-code MFA removal from a different synthetic session family
+> with 401 and left the factor enrolled; the recovery-authenticated family
+> then removed it successfully. The gated runner exited 0.
+
+> DPO authentication recovery, 2026-09-29: A disposable PostgreSQL/Chromium
+> browser journey used the final recovery code to sign in, verified its
+> session-family audit event, and removed MFA with the password and blank code
+> from that family. The run found and fixed an invalid empty-code UI request
+> and a database CHECK that rejected family-bearing recovery-use events.
+> Migration 26 permits that event's optional family ID while preserving the
+> other event constraints. The corrected journey and gated teardown pass.
+> The blue-green gate warns of an existing-row CHECK validation; live tenant,
+> role-wide enforcement and DPO approval remain open.
+
+> DPO-05 case-to-deletion evidence, 2026-09-29: Owner/Admin Data Requests can
+> link an existing same-charity storage-deletion job to an unresolved case with
+> actor and reason, then withdraw a mistaken link with a separate immutable
+> reason while retaining both records. Composite database foreign keys enforce
+> the charity boundary. The case feed omits paths and provider errors and
+> labels job status as technical evidence, not an erasure verdict. Migration 25,
+> local builds and focused tests pass; all four DPO review journeys pass
+> together against disposable PostgreSQL/Chromium after a separate queue-test
+> boundary assertion was corrected. The gated runner exited 0. The blue-green gate
+> warns about a non-concurrent index on existing deletion rows. Policy,
+> versions/backups, live deployment and Nikita's tenant remain unresolved.
+
+> DPO-05 case lookup, 2026-09-29: Owner/Admin Data Requests can now open a
+> case by exact opaque archive reference through a tenant-scoped API lookup.
+> Member access and personal-identifier inputs are refused. Eight focused
+> intake tests, API/production web builds, E2E TypeScript and edited-page lint
+> pass; a disposable PostgreSQL/Chromium Owner journey opened a case outside
+> page one by reference. This does not approve or perform erasure.
+
+> DPO-05 intake queue paging, 2026-09-29: The Admin Data Requests list now
+> uses a tenant-bound `(receivedAt, id)` cursor instead of offset pages. A
+> new case cannot shift older cases out of the next page; the web deduplicates
+> appended rows and rejects stale in-flight pages after refresh. API and
+> production web builds, seven intake tests, edited-page lint and E2E TypeScript
+> pass locally. An isolated Chromium Owner journey reached two older cases after
+> a 53rd was inserted into disposable PostgreSQL between pages; the runner
+> exited successfully. This does not implement erasure, recovery, retention or
+> live-tenant proof.
+
+> DPO-01/06 audit overview minimisation, 2026-09-29: The Admin Governance Audit
+> feed now selects event metadata for Minute Book, document control/visibility,
+> risk, control verification and compliance changes rather than loading full
+> before/after snapshots or narrative reasons into the cross-domain overview.
+> Detailed record histories remain available to authorised reviewers. API build
+> and 10 focused archive tests pass locally; this does not erase retained rows,
+> verify C1 or establish deployed-tenant behavior.
+
+> DPO-06 review-list refresh, 2026-09-29: The Registers risk-control panel now
+> refreshes its attention list after a verification, withdrawal or parent risk
+> revision reload, and discards older in-flight responses. Edited-page lint and
+> the production web build pass. This fixes locally stale UI state; it does not
+> verify C1's closure.
+
+> DPO review navigation rerun, 2026-09-29: All three isolated Chromium Owner/Member
+> journeys pass together, including the uploaded-draft storage-deletion audit
+> outcome; gated teardown exits successfully. The earlier transient
+> authentication-unavailable page did not recur. This is local synthetic proof,
+> not verification on Nikita's reviewed host or a replay-event diagnosis.
+
+> DPO-05 connector copy follow-up, 2026-09-29: Six MCP removal tool
+> descriptions, its missing-reason error and README approval example now
+> describe active-record removal without claiming permanent erasure. The MCP
+> build and 61 focused tool/session tests pass. Audit and backup copies may
+> remain; disposal mechanics and P0-08 status are unchanged.
+
+> DPO rendered deletion-audit follow-up, 2026-09-29: A focused isolated
+> Chromium Owner journey uploaded a synthetic draft, removed it through
+> the Vault, and showed the matching committed storage-deletion outcome
+> and active-object absence receipt on Governance Audit. The test uses
+> the retained upload intent to correlate the separate document and
+> deletion-job IDs; E2E TypeScript and gated teardown pass. This is a
+> local provider/tenant fixture, not deployed or backup-purge proof.
+
+> DPO deletion-attempt audit follow-up, 2026-09-29: Migration 24 captures
+> pending-deletion retry, dead-letter and completion outcomes as separate
+> append-only database events, exposed through a tenant-scoped Owner/Admin
+> Governance Audit feed without storage paths or provider errors. A populated
+> disposable PostgreSQL 16 upgrade, API and web builds, nine focused audit
+> tests and reset-safety checks pass locally. Earlier attempts are not
+> backfilled; an event does not establish provider-version or backup purge.
+
+> DPO failed-cleanup administration, 2026-09-29: The Owner/Admin dead-letter
+> queue now pages retained failed deletion jobs instead of stopping at 100.
+> Documents exposes eligible jobs with a reasoned, typed-confirmation retry
+> using the existing recovery action. API/web builds, 13 route tests with
+> 203 jobs and a disposable PostgreSQL/Chromium Owner journey with 52 jobs,
+> a committed retry and gated teardown pass. A retry can later delete the
+> recorded target; it is not deleted-item restoration or purge proof.
+
+> DPO document history follow-up, 2026-09-29: The detailed Owner/Admin
+> Documents change-history feed now pages the retained control and visibility
+> events 50 at a time instead of stopping at 100. A tenant-bound cursor and
+> stable cross-table order preserve tied timestamps. API/web builds, 35 focused
+> API tests including a 202-event fixture, edited UI lint and E2E TypeScript
+> pass locally. A disposable PostgreSQL/Chromium Owner journey loaded all five
+> pages in the rendered Documents UI and passed gated teardown (exit 0).
+> This does not reconstruct pre-audit changes or verify Nikita's deployment.
+
+> DPO deletion-history follow-up, 2026-09-29: The detailed Owner/Admin
+> storage-deletion history API now pages 50 retained jobs at a time with a
+> charity-bound cursor instead of silently stopping at 100. API build and 57
+> focused route tests, including a 202-job fixture and Member/foreign-cursor
+> checks, pass locally. This is review navigation, not deleted-item recovery
+> or permanent provider/version/backup purge evidence.
+
+> DPO deletion audit follow-up, 2026-09-29: The existing retained
+> storage-deletion recovery decisions are now visible as a paged,
+> tenant-bound Owner/Admin Governance Audit feed with sensitive paths,
+> reasons, operator identity and nonce excluded. The deletion queue
+> feed describes current status; it does not record each worker attempt.
+> This is local source work, not proof of provider purge, a deployed
+> tenant, deleted-item restoration or approved retention policy.
+
+> DPO stale-upload cleanup follow-up, 2026-09-29: Repeated failure of the
+> oldest upload reservations can no longer starve later orphaned objects.
+> Migration 23 records a guarded reconcile-attempt timestamp; the worker
+> orders less recently attempted reservations first and retains failures for
+> retry. API build, Prisma validation, 40 focused tests and a populated
+> PostgreSQL 16 upgrade/service rehearsal pass. The blue-green gate warns
+> about a non-concurrent index on an existing table. No deployed scheduler,
+> provider purge, backup expiry or approved retention policy is proved.
+
+> DPO Confluence scheduler follow-up, 2026-09-29: Local orphan-publication
+> retirement now runs before remote reconciliation, so a tenant-listing or
+> provider failure cannot skip that local recovery step. Sweep failure alerts
+> separately and does not suppress the remote pass. API build and 120 focused
+> tests pass; Nikita's scheduler and Confluence provider remain unverified.
+
+> DPO Confluence discoverability follow-up, 2026-09-29: The scheduler's
+> orphan-publication sweep now filters for a missing CharityPilot document
+> before bounding the batch and includes failed publications with a recorded
+> Confluence page. This prevents older live publications from indefinitely
+> hiding a later stranded page after immediate retirement failed. API build,
+> 118 focused tests and a disposable PostgreSQL 16 query proof pass. The
+> scheduler and provider remain unverified on Nikita's unknown deployment;
+> no external page was erased or retention decision made.
+
+> DPO replay follow-up, 2026-09-29: In an isolated local Chromium run, two tabs
+> sharing one synthetic Owner session recovered after their access cookie became
+> invalid with exactly one browser refresh request and no replay event in the
+> disposable tenant. The runner's 115 safety checks and gated teardown passed.
+> This covers one ordinary browser timing, not every interleaving or the cause
+> of Nikita's observed events. Her deployed event/log correlation remains open.
+
+> DPO Member Vault follow-up, 2026-09-29: A local isolated Chromium journey now
+> proves a synthetic Member can list/download a deliberately released file while
+> a second file left at the `RESTRICTED` default is absent from the Member list.
+> The web API client also preserves all metadata beside `data`, preventing a
+> paged replay/governance audit response from being silently unwrapped into an
+> array; 13 focused client tests and the targeted browser journey pass. This
+> is neither real-content classification nor deployed-tenant verification;
+> the DPO and public-production gates remain open.
+
+> DPO Vault file-scope follow-up, 2026-09-29: A connector with personal data
+> withheld can no longer request whole-file Vault downloads. The connector
+> hides/refuses the file tool, and the API checks the session scope before
+> storage access and again after provider I/O. A read-only connector is also
+> denied by the API even if it calls the GET endpoint directly. Local builds and focused tests
+> pass. Existing document contents still need controller classification and
+> the reviewed deployment remains unverified.
+
+> DPO report-access follow-up, 2026-09-29: Full working and approved reports
+> now require a `FULL` personal-data session as well as Owner/Admin role;
+> the connector's full-report file tool is hidden and refused when its gate is
+> closed. Direct API calls from read-only connectors are also denied. Both
+> report variants recheck the live role and session after
+> generation, before audit and HTML delivery. API/connector builds and focused
+> suites pass locally. The minimised draft still needs audience/field approval,
+> and no reviewed-tenant or browser proof exists.
+
+> DPO retention-source correction, 2026-09-29: The March 2026 hOUR Timebank
+> Document Retention Schedule was attached to the 21 March governance-suite
+> email. The complete eight-message thread includes Sridevi's express approval
+> of all 31 documents and Jasper's confirmation that the resolutions passed.
+> Jasper's earlier 30 August email saying assent was missing was corrected by
+> his later [version 3 verification](https://docs.google.com/document/d/1v6nyLUsa-Rf1q2HUkeJsK6KwXQD_Z2cG6ja4_0Ejnvw/edit),
+> which identified a truncated Gmail preview. The private roadmap records the
+> message IDs and schedule categories. The schedule's seven-year former-member
+> entry differs from CharityPilot's former one-year `retentionDeleteAt`; local
+> source no longer derives or exposes that date, while stored values await
+> reconciliation. The later Data Protection Policy V2 discussion calls for
+> category-specific justification. A controller-approved current-policy map,
+> exceptions, recovery and purge evidence remain open; no automatic expiry
+> follows from this historical approval evidence.
+
+> DPO Vault-access audit follow-up, 2026-09-29: A successful authenticated
+> download now needs a metadata-only, append-only preparation event after the
+> post-storage session and document/Member-visibility checks. Failed audit
+> writes withhold bytes. Governance Audit exposes the tenant-scoped event to
+> Owner/Admin. The twenty-second DPO migration, focused tests, web/API builds
+> and a populated disposable PostgreSQL 16 upgrade pass locally. This records
+> preparation, not client receipt, and is not live-tenant or retention proof.
+
+> DPO evidence-location follow-up, 2026-09-29: Prior work correspondence gives
+> a private-host/charity lead for Nikita's dashboard, but her 28 September
+> review did not confirm that host, tenant or deployed revision. Narrow work
+> mailbox and connected Drive searches did not locate a dated C1 admin-email
+> verification or a CharityPilot-approved retention schedule. A subsequent
+> connected Confluence search found a requirement to maintain a schedule, but
+> no adopted schedule or C1 closure artifact. No live record
+> or policy status was changed; search scope and the lead are in the private
+> roadmap.
+
+> DPO authentication-settings navigation, 2026-09-29: Security & Data now
+> directs every charity role to its own Team session inventory and revocation
+> control, alongside personal MFA and password change. Charity-wide audit and
+> data controls stay Owner/Admin-only. This navigation has local source/build
+> proof but no Nikita-tenant browser proof.
+
+> DPO password-control verification, 2026-09-29: A populated disposable
+> PostgreSQL 16 upgrade through all 21 DPO migrations exercised the real
+> Fastify Member password-change route. Its first run caught an audit-row
+> session-subject constraint violation; the corrected event passed with
+> cookie clearing, old-session denial, recovery-link termination, two session
+> revocations and a `PASSWORD_CHANGED` Team audit result. The fixture was
+> removed. This is local proof, not a live tenant or rendered-browser check.
+
+> DPO password-control follow-up, 2026-09-29: Every signed-in charity role can
+> change its own password in Security & Data after current-password and, when
+> enrolled, second-factor proof. The locked transaction invalidates recovery
+> links and sessions and writes a metadata-only security event, displayed as
+> `PASSWORD_CHANGED`. The connector cannot invoke this human credential route.
+> Local builds and focused tests pass; no live browser or Nikita-tenant proof
+> exists. The older recovery-only note below describes an earlier checkpoint.
+
+> DPO follow-up, 2026-09-29: Report rendering now writes a metadata-only row in the separate append-only report-preparation audit before returning working, approved or minimised-review HTML; audit failure withholds the report. The Admin Governance Audit labels these events. The twenty-first DPO migration, 28 focused export/archive tests and a populated disposable PostgreSQL 16 upgrade with append-only event check pass locally. The event proves preparation for delivery, not receipt or disclosure approval. Older exports and Nikita's live tenant remain unverified. Member role guidance no longer promises broad governance-record downloads.
+
+> DPO follow-up, 2026-09-29: Future session-replay events record a one-way presented-session-row fingerprint and active-session quarantine count. The Admin diagnostics view allowlists and explains both; older rows have null values. Shared/API/web builds and 50 focused auth/Team tests pass locally. Matching fingerprints correlate repeat presentation of one spent row but do not decide whether Nikita's events were a client race or token theft. Her historical events and deployed logs remain uninspected.
+
+> DPO navigation follow-up, 2026-09-29: Security & Data now shows each charity role its own password-recovery link beside personal authenticator controls. The Owner/Admin administration map remains role gated. This uses the existing recovery flow and is not a new password-change endpoint or a live journey check.
+
+> DPO follow-up, 2026-09-29: The local Team Security & Ownership Audit now pages through retained events 50 at a time with a tenant-bound, stable timestamp/ID cursor and current Owner/Admin checks. The connector accepts the cursor and preserves its personal-data gate on the paged response. Shared/API/web/connector builds, edited-page lint, focused lifecycle tests, the connector suite and a disposable PostgreSQL 16 upgrade through all 20 DPO migrations pass. This makes older retained events reviewable; it is not a live tenant check, replay-cause finding, retention decision or production sign-off.
+
+> DPO follow-up, 2026-09-29: Browser and connector attempts to grant a human action approval that are refused now write a tenant-scoped security event with account, channel and time only. The offered ID, password and specific failure cause are omitted; the response remains opaque. Two new migrations update the enum and subject constraint. Focused tests and a populated disposable PostgreSQL 16 upgrade through all 20 DPO migrations pass. This records future attempts after deployment, not earlier attempts or Nikita's unknown live tenant.
+
+> DPO follow-up, 2026-09-29: The local Admin Governance Audit includes tenant-scoped, append-only human connector approval request, renewal, grant and use events with server-derived record IDs for correlation. The eighteenth DPO migration backfills retained approval timestamps and installs database triggers for future transitions. Backfilled events are labelled and leave original expiry unknown. A disposable PostgreSQL 16 upgrade, transition/immutability checks and Admin/Member API checks passed; the fixture was removed. Approval summaries, digests and session-family IDs stay out of the overview. Refusal attempts are in the separate Team security audit; historical renewals and a complete cross-domain application audit remain outside this feed. This is local evidence, not deployed or DPO sign-off.
+
+Last updated: 2026-09-29 (DPO follow-up; historical baseline retains its stated date)
 
 This is the authoritative, human-maintained remediation ledger for the full
 CharityPilot audit completed on 2026-07-10. It is intentionally separate from
@@ -11,6 +1023,331 @@ The objective is to fix every confirmed repository-side defect, gap, misleading
 claim, accessibility issue, security concern, reliability weakness, and
 operational deficiency recorded here, while keeping genuine production,
 provider, legal, security-review, and human-signoff work explicit.
+
+## 2026-09-28 onward: DPO follow-up to this historical audit
+
+A disposable PostgreSQL 16 DPO-01 rehearsal now uses real Fastify routes, Prisma and signed browser/MCP-connector sessions against synthetic statutory-member, complaint and document records. Member requests were denied for statutory members, complaints, conflicts, full export and restricted document detail/download; Vault lists omitted restricted documents. Admin requests read seeded restricted records, an explicitly visible fixture file appeared to Members, and a database role demotion defeated an old Admin token. This is local API/database evidence, not actual file or tenant inspection, a rendered browser/full connector CLI journey or production access certification.
+
+The DPO-06 scheduler now scans latest active verified risk-control claims daily for unknown or changed risk revisions, logging only an aggregate count. The existing Admin Registers attention list supplies tenant-scoped records for review. A scan failure alerts through the sanitized scheduler path and fails run-once. The cadence is bounded from one hour to seven days in production config/preflight. API build, 27 focused scheduler/observability tests, all 180 production-preflight tests and a disposable PostgreSQL query rehearsal pass locally. This does not reconcile C1's missing admin-email closure evidence or verify Nikita's live tenant or scheduler deployment.
+
+Current migration evidence (2026-09-29): all 81 repository migrations, including the 17 DPO migrations, applied successfully to an empty, loopback-only disposable PostgreSQL 16 database; Prisma reported the schema up to date. The container was stopped/removed and absence was verified. The earlier dated "unapplied" statements below describe their then-current checkpoints, not this clean-database proof. This clean-database run alone leaves populated-data upgrade and DPO trigger behavior untested; providers, deployment and Nikita's tenant lack evidence from either run. No full-platform or DPO sign-off follows from these checks.
+
+A second disposable run deployed the 64 pre-DPO migrations, seeded an organisation/Owner and two synthetic legacy documents, then applied the 17 DPO migrations. Both documents retained restricted/unreviewed/unapproved/unheld defaults; database checks rejected unsafe publication and forged upload-intent transitions while accepting a matching attachment. Schema status and container cleanup passed. This is representative upgrade/trigger proof, not a full populated production rehearsal or live-host evidence. The repeatable harness is in the private, Git-ignored roadmap area.
+
+The latest DPO-05 local follow-on bounds local and Supabase provider writes after upload reservation (five-minute default, 30-minute maximum) below the one-hour orphan-reconciliation age. A stalled Supabase request is aborted. The connector and human action-approval descriptions also no longer promise immediate permanent Vault-file or Confluence purge. API/MCP builds, 30 focused storage/upload-intent tests, nine action-summary tests, 391 connector passes with four platform skips, and 179 production preflight tests pass locally. The upload-intent migration and real provider behavior remain unverified; this does not supply a retention period, deleted-item recovery or backup purge.
+
+The local DPO authentication slice adds opt-in TOTP for charity accounts with one-time recovery codes. Setup requires the account password, activation requires a current code, and activation/removal revoke existing sessions. Browser and connector login verify the factor after the password but before issuing a session, under the locked principal transaction; accepted TOTP counters and recovery codes are single-use. Invalid code attempts share an account-wide five-attempt, 15-minute budget after password proof. The personal setting is visible to every charity role, while charity-wide security controls remain Owner/Admin-only. Security audit events record activation, removal and recovery use without secrets. The sixteenth and seventeenth DPO migrations create factor storage and widen the audit subject constraint; both remain unapplied to PostgreSQL. API/MCP and production web builds, Prisma validation, 2,246 broad API tests with environment-only Docker/child-process checks excluded, and 391 connector tests with four platform skips pass locally. This does not set a role-wide MFA requirement, decide recovery authority when both authenticator and codes are lost, prove a live deployment or close P1-07. `JWT_SECRET` rotation requires a recovery/re-enrolment plan for sealed TOTP secrets.
+
+The latest DPO-01 source check closed an approval-summary read gap after role demotion. Browser pending approvals and grants, plus connector approval previews and grants, now require the database-derived current Owner/Admin role; a demoted Member cannot read an old summary naming a restricted record. API build, 34 focused tests, 2,236 broad API tests and 389 connector tests (four platform skips) pass locally. This is not a deployed Member journey or a retrospective account of summaries already viewed.
+
+The latest DPO-05 source slice persists a provider-pinned upload reservation before writing document bytes. Document creation and attachment of that reservation are transactional. The recurring and standalone cleanup jobs reconcile reservations older than one hour: a live same-tenant document is preserved; an orphan is queued for provider-pinned deletion atomically, with failed queue attempts left retryable and alerted by count. The deletion worker checks for a live document again before erasure. API build, Prisma schema validation, 101 focused tests and 2,235 broad API tests pass locally, with Docker-backed PostgreSQL checks and a local child-process ENOMEM check excluded. The fifteenth DPO migration remains unapplied; no PostgreSQL trigger, live provider, deleted-item recovery, backup purge or approved retention schedule has been verified.
+
+Member login, `/auth/me` and invite acceptance now avoid fetching four private organisation fields for Member accounts. Login reads organisation lifecycle first, then uses a role-matched public-user query before a locked password and role check for session issuance; the account read resolves the current role before choosing a database selection. Owner/Admin profile data remains available. The API build and 48 focused auth/team tests pass locally. This resolves a source-query minimisation gap, not the controller's Member audience decision or a live tenant verification. No DPO or production gate is closed by it.
+
+The private DPO-01 source map at `.charitypilot-private/member-read-surface-inventory.md` now covers the registered API read families, Member projections, Owner/Admin gates, connector boundaries and outstanding audience decisions. It is a source inventory, not a live tenant or content inspection. The Vault's profile-triggered evidence prompt also checks `CURRENT` lifecycle status directly before counting a linked file, so historical links cannot satisfy it if a future caller passes a mixed list. The production web build and edited lint pass locally; the controller classification and deployed Member journey remain open.
+
+An Admin-only, tenant-scoped `/governance-registers/risks/control-review-attention` route now pages through the latest active claim for each control whose captured risk revision is unknown or differs from the current risk. The Registers page loads this list on entry and offers refresh and further pages; withdrawn controls are omitted. The connector excludes the route and withholds revision and deletion-hold fields. API and production web builds, 50 focused register tests, 389 connector tests with four platform skips, Prisma validation and edited web lint pass locally. This is an on-page review check, not scheduled scanning, C1 evidence reconciliation or a control-effectiveness verdict. The fourteenth DPO migration has not run on PostgreSQL; live tenant behavior remains unverified.
+
+New control claims now record the integer revision of the tenant-scoped risk seen by the verifier; each risk edit advances that revision. The Admin per-risk history asks for reassessment when the latest active verification for a control predates the current risk, and flags older active claims whose revision cannot be known. Withdrawn and superseded claims remain in history without an active cue. The fourteenth DPO migration guards revision transitions and new claim capture but remains unapplied to PostgreSQL. Local API build, 49 focused register tests, production web build, three compiled cue tests, Prisma validation and edited web lint pass. This does not establish C1 closure, assess the original evidence or provide a periodic check; the reviewed tenant and closure artifact remain unidentified.
+
+Ordinary Vault deletion now rejects `UNREVIEWED`, `CURRENT`, `SUPERSEDED`,
+`RETIRED` and `HISTORICAL` evidence before it creates a cleanup job; only an
+unheld `DRAFT` can use the existing delete path. The final database delete
+rechecks lifecycle and hold together. The Admin Vault disables Delete for
+retained or unreviewed records and points to retention review. This interim
+preservation gate has 103 passing focused document route/storage/reliability
+tests and an API build. It does not implement a controller-approved purge,
+restore window, or historical-document disposition. The migrations and live
+tenant remain unverified.
+
+New local/Supabase primary-storage delete attempts check active-path absence
+after the provider call. Supabase requires an authenticated HEAD 404; present,
+malformed, failed and timed-out reads enter the existing retry/dead-letter
+path. A guarded nullable `activeObjectAbsentAt` receipt now distinguishes new
+processed local/Supabase observations from old processed and Confluence rows.
+The thirteenth DPO migration remains unapplied. The 102 focused
+document/storage tests, 31 erasure/scheduler tests, five archive tests,
+13 adjacent reliability tests,
+Prisma validation and API build pass locally. This is no proof of old rows,
+object versions, backups, a recovery window or live provider behaviour.
+
+The Admin Registers screen now pages through retained verification claims for
+one risk, with an optional exact control-reference filter. Tenant, risk and
+filter-bound cursors make older C1 claims inspectable without relying on the
+charity-wide latest-100 list. The 23-test register route suite, API/MCP and
+production web builds, edited web lint and connector route coverage pass
+locally. The original C1 closure evidence and reviewed live tenant remain
+unknown; the new path does not establish whether C1 is verified, and its DPO
+migration remains unapplied.
+
+Governance Audit now pages through eleven retained domain histories via an
+Owner/Admin-only archive route. Tenant-bound cursors and deterministic ordering
+allow older records to be reviewed without unbounded queries. Deletion paths
+and free-text data-request reasons stay out of the overview. Five focused API
+tests, API/MCP and production web builds, edited web lint and connector route
+coverage pass locally. This is not a legacy backfill or a complete audit of
+every application mutation; the DPO migrations remain unapplied.
+
+Future replay audit events now preserve the presented token row's prior
+revocation reason in restricted context. The Admin diagnostic allowlists and
+shows the reason, which helps distinguish a previously rotated, logged-out or
+already-quarantined token. It does not prove why the token was presented or
+alter older events. Focused tests and shared/API builds pass locally; Nikita's
+live events remain uninspected.
+
+The Admin-only replay diagnostic now includes the immutable event ID alongside
+the existing safe correlation fields and pages through older retained events
+50 at a time with a tenant-bound timestamp/ID cursor. Focused service tests
+confirm role denial, narrow selection and stable paging; shared/API/web builds
+pass. Nikita's event cause and exact tenant remain unverified.
+
+A 2026-09-29 DPO-05 local slice adds an administrative deletion hold to
+documents. Owner/Admin may place or release it with a reason and expected
+revision; the change is actor-audited. Ordinary Vault deletion checks the hold
+and conditionally deletes only an unheld record, including when placement
+races deletion. Focused route tests, Prisma validation and API/MCP/production
+web builds pass locally. The twelfth DPO migration is unapplied. This control
+does not define a legal hold, retention period, restoration window or full
+erasure policy, and it does not gate separate Confluence erasure or existing
+storage-cleanup work. No PostgreSQL or live-tenant proof exists.
+
+The Member Team read now returns active accounts only and withholds other
+account holders' email and verification fields at the query boundary; the
+response uses null placeholders and the screen explains the limited view.
+Owner/Admin management access is unchanged. Shared/API/MCP and production web
+builds, 16 focused Team API tests, 20 compiled Team UI/permission tests, 52
+connector tests and edited web lint pass locally. This is not a complete
+Member access review or deployed-role verification.
+
+Member risk and fundraising list/detail queries now select only the fields
+needed by their existing limited responses; full Owner/Admin reads are
+unchanged. Annual-readiness and financial-control Member queries likewise
+select only the visible status, flag and date fields. The 22-test register
+route suite checks field selection, tenant scope and withheld response text;
+the 25-test service suite and API build pass. The wider classification and
+live Member access review remain open.
+
+Search delegates now select only IDs and fields allowed for matching or title
+display in the caller's scope. This prevents a Member search from loading
+hidden trustee, document or deadline columns even when the response had already
+withheld them. The 16-test search route suite applies and verifies the database
+field selection; the API build passes. Live role checks and controller
+classification remain open.
+
+Member compliance record list/detail queries now select only the existing
+standard/status/revision view without loading evidence narratives or editor
+relations. Member sign-off reads now select visible metadata and the current
+snapshot evidence hash without approver particulars or the latest historical
+snapshot. The live evidence hash is still computed internally when approved,
+preserving `approvalCurrent`; Owner/Admin reads remain complete. The 21-test
+compliance suite, seven export-snapshot tests and API build pass. Live and
+controller review remain open.
+
+The later document lifecycle follow-on adds a database trigger that allows a
+new standard link only while the document is `CURRENT`, serialising insertion
+with lifecycle changes. Existing links persist as historical evidence after a
+status change. The API reports a concurrent refusal as a conflict; 40 focused
+route tests and the API build pass locally. This eleventh DPO migration is
+unapplied and has no PostgreSQL or hosted proof.
+
+The Vault now flags a recorded Confluence copy on a non-current document for
+separate review, rather than using a green published badge. It does not claim
+that a lifecycle change withdrew the external page. Failed jobs on non-current
+files no longer offer a retry that the API will refuse. Thirty-one focused
+copy tests, edited-file lint and the production web build pass locally; actual
+Confluence withdrawal and hosted verification remain open.
+
+The Board approval mutation now rejects empty changes and skips the database
+write and `BOARD_APPROVAL` audit event for a repeated identical value. A newly
+selected resolution still needs approved Minute Book evidence. Shared/API builds
+and 36 focused governing-act tests pass locally; deployed behavior and older
+audit rows remain unverified.
+
+Governance Audit now includes a recent Admin-only, tenant-scoped data-request
+review feed with no free-text case reasons in its overview. Individual case
+history retains the reason for controlled review. Focused access tests,
+connector route-coverage tests, API/MCP and production web builds pass locally.
+The intake migration is unapplied and this feed is not a retention or purge
+control.
+
+Current local follow-on: organisation profile edits now append a metadata-only,
+actor-bound audit event in the edit transaction. An Admin-only, tenant-scoped
+feed appears in Governance Audit. This adds an eighth unapplied DPO migration;
+it does not backfill older edits or complete the application-wide audit.
+Statutory Members register create/edit actions also append metadata-only events
+to the existing register feed; a ninth unapplied migration permits their kind.
+Interactive deadline create/edit/complete/archive actions now have a separate
+metadata-only, actor-bound Admin audit feed. Organisation-profile edits that
+regenerate the calendar also append actor-bound `GENERATE` and `SUPERSEDE`
+entries for changed occurrences in the same transaction. Its tenth migration
+is unapplied; reminder delivery remains in separate operational history.
+
+This 2026-07-10 ledger remains the full-platform baseline. Nikita Serkevich's
+later demo feedback is recorded in the local gitignored
+`.charitypilot-private/ROADMAP.md` (obtain the private handoff if absent). It
+adds six open privacy/control work items: sensitive-record Member access,
+session-replay investigation, structural document lifecycle, minimised report
+exports, application-wide retention/erasure, and reconciliation of stale C1
+verification evidence. The 2026-09-28 local implementation slice adds
+Owner/Admin-only full exports and conflict/complaint reads, plus a default
+restricted document visibility field with Member filtering and a reasoned audit
+of visibility changes. It has not been migrated or verified on a live host.
+Other personal-data surfaces, external Confluence publication, and the eventual
+classification policy still require review. The live replay events and C1
+record were not inspected.
+The subsequent local source slice adds reasoned document lifecycle transitions,
+a separately approved Confluence publication gate and recent document-control
+history. Existing Confluence copies remain to be inventoried and managed. It
+also adds a minimised Compliance Record **draft** from a verified approved
+snapshot; audience and field disclosure require DPO/owner review. Focused tests
+pass, but both migrations, managed browser flows and live tenant behavior are
+unverified. Application-wide retention/recovery/purge and the cross-domain
+governance audit trail remain open.
+The 2026-09-29 export follow-on removes the internal snapshot ID/hash from the
+minimised draft and sets no-store/nosniff response headers for both report
+variants. The API build and seven focused snapshot-export tests pass locally;
+this does not approve an external disclosure or prove live cache behavior.
+The Admin Data Requests case view now pages through retained intake/triage
+events beyond its former 100-row cap, with a tenant-and-case-bound cursor.
+API and production web builds and six focused lifecycle tests pass locally;
+this does not resolve application retention, recovery or purge.
+Member BoardMember list/detail now select only ordinary trustee evidence, and
+Search applies Member field scope, excludes conflict/complaint/risk/fundraising hits, and filters
+document hits by visibility. These are local source/test results, not a live
+personal-data exposure assessment.
+The Member dashboard activity feed now omits compliance editor and document
+uploader IDs/names and does not fetch those relations for Member requests.
+The focused dashboard/search suites pass 26/26; live exposure remains untested.
+Member-visible document list/detail now withhold unreviewed description,
+owner, board-minute reference and uploader ID at selection and response;
+Member search matches only the visible document name. Download still requires
+current authorisation. Focused document/search tests pass 41/41; controller
+classification and live access evidence remain open.
+The separate statutory membership register's GET also exposed postal
+addresses and former members to signed-in Members. It is now restricted to
+Owner/Admin at the API boundary, with a focused Member-denial test. A reviewed
+register-by-register classification and live tenant check remain open.
+Another local source slice now limits Member reads of risk/fundraising, annual
+readiness, financial controls and compliance records/sign-off to explicit
+status/flag/date projections. Arbitrary titles and narratives, names, minute
+references and editor/approver details are withheld; the web screens describe
+that limited view. Owner/Admin reads remain complete. API build and 41 focused
+route tests passed, but classification and live exposure review remain open.
+The removed Minute Book record feed is now Owner/Admin-only because it includes
+historic titles, removal reasons and remover emails; the Member screen does not
+request it. Current act and resolution list/detail reads are also Owner/Admin-only
+as an interim rule; Member search and navigation omit them. Final audience and
+field classification and live review remain open. The governing-act/search
+suites passed 50 focused tests locally.
+The Board-submissions route is also Owner/Admin-only because it includes
+resolution text and approval particulars. It now selects only documents with
+`CURRENT` lifecycle status, so superseded or unreviewed files cannot appear as
+current Board evidence. The 33-test governing-acts suite checks Member denial
+before a document read and the current-only query. Current act/resolution reads
+are now restricted to Owner/Admin; classification and live review remain open.
+New Minute Book act/resolution create and update writes now record actor-bound
+before/after snapshots atomically with each edit. The append-only table feeds
+an Owner/Admin-only, tenant-scoped recent list in Governance Audit, and the
+MCP connector excludes that feed. The 32-test route suite, API build and Prisma
+schema validation passed locally. Document board-approval link/assertion
+changes now also write actor-bound previous/next states to the document-control
+history in the same transaction. The unapplied lifecycle migration includes
+that new event kind. This fourth migration is unapplied and legacy edits are
+not backfilled; other application changes still need audit coverage.
+Ordinary document metadata edits now also leave actor-bound field names and
+revision timestamps in the same append-only history, without copying free-text
+content or storage paths. Uploads record the actor and restricted draft state
+atomically with document creation; an audit-write failure fails the upload and
+enters the storage cleanup path. Document DELETE also records the actor and
+database-record removal in the same transaction, before provider cleanup; this
+does not attest byte or Confluence erasure. The metadata write is guarded
+against a concurrent revision. Governance-standard link and unlink now add
+actor-bound events in the mutation transaction, with no event for a repeated
+no-op unlink. The 32-test local document route and 32-test storage-cleanup
+suites cover the events and relevant failure paths. Legacy changes and other
+application domains remain outside a complete audit.
+A fifth local migration adds an Admin-only erasure/retention request intake and
+triage queue with immutable intake facts, append-only review events and a
+tenant-bound event foreign key. The `/data-lifecycle` screen accepts only an
+opaque external case reference, a data area and received time, then records
+unresolved review states with actor/reason/evidence reference. It cannot mark
+erasure complete. A private source inventory maps major database, object,
+integration, export, log and backup classes. Four focused route tests, API
+build, Prisma validation, edited web lint and connector tests passed. No
+retention policy, deletion/recovery/purge action or live verification exists.
+The MCP connector relies on the API read boundary. Its tool descriptions,
+route exclusions and document field policy were updated for these DPO controls;
+the local connector contract suite passed (388, with four platform skips).
+Browser tabs now coordinate refresh with Web Locks where supported; the live
+replay events still need restricted event correlation.
+The server proxy now shares only an in-flight refresh within one process for
+the same credential header and origin, keyed by a digest. Completed rotations
+are not cached, so later reuse reaches API replay quarantine. The compiled
+proxy suite passed 23/23. This does not cover multiple web processes or prove
+the cause of Nikita's historical events.
+Future replay audit events also capture the server request ID for log
+correlation, without token material; the 27-test auth-isolation suite passed.
+Earlier events and their cause remain unverified. Risk changes and dated
+control claims now have separate append-only histories, and an Admin-only
+`/governance-audit` page presents recent document, risk, control, compliance
+and storage-deletion histories with links to the Minute Book and Team security
+log. The route and UI work passed focused local tests/build; it has not been
+migrated or checked on Nikita's instance. These histories are bounded and do
+not cover all legacy actions. C1 verification has not been changed without its
+dated source evidence. At that checkpoint all five DPO migrations were unapplied; application-wide
+retention, recovery and purge remain open.
+The control-verification path now locks the tenant-scoped risk before examining
+its latest claim; a database-assigned append sequence orders claims even when
+their timestamps tie. Focused register tests and the API build pass locally.
+This remains an unapplied source change, not C1 closure or live concurrency proof.
+A sixth local DPO-03 migration adds a tenant-bound optional successor link for
+superseded documents. New supersession requires a different current document in
+the same category and tenant, with an atomic replacement audit event. An Admin
+can search candidates and see lineage in the Vault. Member responses and the
+connector withhold the successor ID because it could identify a restricted
+file; the database foreign key blocks deletion of a referenced replacement.
+The API and still-unapplied sixth migration now also prevent later category
+edits from breaking a recorded replacement relationship; the migration's
+row-locking trigger awaits PostgreSQL execution and concurrency proof.
+Legacy superseded rows are not assigned invented successors. Focused document
+API suites passed 92/92; the broad API suite passed 2166 tests with Docker
+and sandbox-failing child-process proofs excluded, while the connector suite
+passed 388 with four platform skips. Prisma/schema, build and edited web lint
+checks passed locally. None of the six DPO migrations has run against PostgreSQL;
+browser, hosted, classification and DPO review remain open.
+Another local DPO-01 read pass restricts custom and legacy calculated deadline
+titles for Members across list, history, direct reads, Search, dashboard and
+activity. Members retain current-rule generated deadlines; Owner/Admin retain
+the full calendar. Focused API tests passed 35/35 and the broader API suite
+passed 2168 tests with Docker-backed and sandbox-failing child-process proofs
+excluded. The connector suite passed 388 with four platform skips. The Member
+view states its limit. Controller classification and live/browser checks remain
+open, and the six DPO migrations are still unapplied.
+Member organisation-profile and authenticated-user responses now omit registered
+address, contact email/phone and conditional obligation facts, since the address
+may be a trustee home. The Member page shows only basic details and explains the
+limited view; Owner/Admin retain the full profile. Focused organisation/auth
+tests passed 34/34. The profile route omits these fields at database selection;
+auth/user loading still selects them internally before response projection.
+No live/browser privacy proof exists.
+An Owner/Admin-only `/security-data` page now provides a direct map to tenant
+sessions, security events, password recovery, governance history, data-request
+triage, document/storage deletion and Confluence copy management. It identifies
+tenant MFA settings, approved application-wide retention enforcement, legal
+holds, deleted-item recovery and permanent-purge administration as pending.
+Edited web lint passed; live access and all missing controls remain unverified.
+A later local DPO-02 slice adds an Owner/Admin replay-diagnostics view with a
+bounded request ID, client kind, time and one-way family fingerprint; it does
+not establish the cause of the historical replay events. A seventh DPO source
+migration adds append-only, metadata-only trustee, conflict, complaint and fundraising
+create/edit/delete history, plus annual-report and financial-control create/edit
+history, shown in Governance Audit without copying personal details or narratives. Focused
+service/route tests, schema validation and builds passed locally. All seven DPO
+migrations remain unapplied to PostgreSQL, and historical actions are not
+backfilled. The live tenant, C1 evidence and
+retention policy remain unidentified.
+Her email is expressly **not** production sign-off. Do not close P0-08, privacy
+review, or any strict launch gate on this intake alone.
 
 ## Baseline Verdict and Current Launch Snapshot
 
@@ -975,6 +2312,18 @@ approval remain unresolved. These require product, business, professional, or
 external-provider decisions and evidence; they must not be inferred from passing
 repository tests.
 
+2026-09-29 local DPO-05 truth follow-up: destructive connector approval prompts
+for six governance/deadline record types now describe active-record removal and
+possible retained audit/backup copies. The Minute Book removal UI discloses its
+retained full snapshot, actor email and reason without promising a permanent
+retention period. The Confluence connection disclosure describes remote
+delete/purge as an attempt and limits a current-page 404 check to that endpoint,
+not versions or backups. API builds and 46 focused approval/connector plus 87
+integration-route tests pass; edited Minute Book lint passes. This improves the
+accuracy of future prompts and disclosures only. P0-08 remains `IN_PROGRESS`:
+no controller-approved record schedule, full application erasure, backup-expiry
+proof, reviewed-tenant validation or DPO sign-off follows from these changes.
+
 ### P0-09 - Executed browser assurance and repository/release protections
 
 Status: `IN_PROGRESS`
@@ -1296,7 +2645,7 @@ P1-07A repository remediation on 2026-07-12:
 
 Remaining under the parent P1-07 item:
 
-- MFA policy and implementation suitable for privileged users;
+- review and enforcement policy for the locally implemented opt-in charity-user MFA, plus live migration and browser/connector verification;
 - breached-password source and outage/fail-open/fail-closed policy; and
 - the remaining reviewed account/ownership-recovery policy and human authority
   decisions. P1-07A must not be used to claim those product decisions are closed.

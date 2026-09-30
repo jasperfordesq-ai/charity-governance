@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
+import { createHash } from 'node:crypto';
 
 process.env.JWT_SECRET = process.env.JWT_SECRET ?? 'test-jwt-secret-with-enough-entropy';
 process.env.JWT_EXPIRY = '1h';
@@ -1105,7 +1106,7 @@ test('conflict records reject board members from another organisation on create'
   const service = new GovernanceRegisterService(prisma as never);
 
   await assert.rejects(
-    () => service.createConflict('org-1', conflictData('board-other-org')),
+    () => service.createConflict('org-1', conflictData('board-other-org'), 'actor-1'),
     (error: unknown) => error instanceof AppError && error.statusCode === 404 && error.code === 'BOARD_MEMBER_NOT_FOUND',
   );
   assert.equal(createCalled, false);
@@ -1138,7 +1139,7 @@ test('conflict records reject board members from another organisation on update'
   const service = new GovernanceRegisterService(prisma as never);
 
   await assert.rejects(
-    () => service.updateConflict('org-1', 'conflict-1', { boardMemberId: 'board-other-org' }),
+    () => service.updateConflict('org-1', 'conflict-1', { boardMemberId: 'board-other-org' }, undefined, 'actor-1'),
     (error: unknown) => error instanceof AppError && error.statusCode === 404 && error.code === 'BOARD_MEMBER_NOT_FOUND',
   );
   assert.equal(updateCalled, false);
@@ -1180,8 +1181,10 @@ test('refresh token replay revokes active sessions for the affected user', async
   let transactionCommitted = false;
   let revokedWhere: Record<string, unknown> | undefined;
   let revokedData: Record<string, unknown> | undefined;
-  let auditedReplay: Record<string, unknown> | undefined;
+  const auditedReplays: Record<string, unknown>[] = [];
+  let quarantineAttempts = 0;
   const future = new Date(Date.now() + 60_000);
+  const revokedAt = new Date('2026-09-28T14:00:00.000Z');
   const familyId = '00000000-0000-4000-8000-000000000021';
   const tx = {
     $queryRaw: async () => [{
@@ -1194,14 +1197,18 @@ test('refresh token replay revokes active sessions for the affected user', async
       refreshTokenHash: hashOpaqueToken('replayed-refresh-token'),
       familyId,
       familyCreatedAt: new Date(Date.now() - 60_000),
+      clientKind: 'WEB',
+      accessLevel: 'ADMIN',
       expiresAt: future,
-      revokedAt: new Date(Date.now() - 1000),
+      revokedAt,
+      revocationReason: 'ROTATED',
     }],
     authSession: {
       updateMany: async ({ where, data }: { where: Record<string, unknown>; data: Record<string, unknown> }) => {
         revokedWhere = where;
         revokedData = data;
-        return { count: 1 };
+        quarantineAttempts += 1;
+        return { count: quarantineAttempts === 1 ? 1 : 0 };
       },
       create: async () => {
         throw new Error('replacement session should not be created for replayed refresh tokens');
@@ -1209,7 +1216,7 @@ test('refresh token replay revokes active sessions for the affected user', async
     },
     securityAuditEvent: {
       create: async ({ data }: { data: Record<string, unknown> }) => {
-        auditedReplay = data;
+        auditedReplays.push(data);
         return { id: 'audit-1' };
       },
     },
@@ -1228,7 +1235,11 @@ test('refresh token replay revokes active sessions for the affected user', async
   };
 
   await assert.rejects(
-    () => rotateSessionTokens(prisma as never, 'replayed-refresh-token'),
+    () => rotateSessionTokens(prisma as never, 'replayed-refresh-token', undefined, 'request-123'),
+    (error: unknown) => error instanceof AppError && error.statusCode === 401 && error.code === 'INVALID_REFRESH_TOKEN',
+  );
+  await assert.rejects(
+    () => rotateSessionTokens(prisma as never, 'replayed-refresh-token', undefined, 'request-456'),
     (error: unknown) => error instanceof AppError && error.statusCode === 401 && error.code === 'INVALID_REFRESH_TOKEN',
   );
   assert.equal(transactionCommitted, true);
@@ -1239,10 +1250,23 @@ test('refresh token replay revokes active sessions for the affected user', async
 
   // The quarantine used to be silent, which made the one event most worth
   // hearing about the one event nobody heard.
-  assert.equal(auditedReplay?.type, 'SESSION_REPLAY_DETECTED');
-  assert.equal(auditedReplay?.actorKind, 'SYSTEM', 'no human did this');
-  assert.equal(auditedReplay?.subjectUserId, 'user-1');
-  assert.equal(auditedReplay?.organisationId, 'org-1');
+  assert.equal(auditedReplays.length, 2);
+  assert.equal(auditedReplays[0].type, 'SESSION_REPLAY_DETECTED');
+  assert.equal(auditedReplays[0].actorKind, 'SYSTEM', 'no human did this');
+  assert.equal(auditedReplays[0].subjectUserId, 'user-1');
+  assert.equal(auditedReplays[0].organisationId, 'org-1');
+  assert.deepEqual(auditedReplays[0].context, {
+    clientKind: 'WEB', accessLevel: 'ADMIN', requestId: 'request-123', previousRevocationReason: 'ROTATED',
+    presentedSessionRevokedAt: revokedAt.toISOString(),
+    presentedSessionFingerprint: createHash('sha256').update('old-session').digest('hex').slice(0, 12).toUpperCase(),
+    newlyQuarantinedSessionCount: 1,
+  });
+  assert.deepEqual(auditedReplays[1].context, {
+    clientKind: 'WEB', accessLevel: 'ADMIN', requestId: 'request-456', previousRevocationReason: 'ROTATED',
+    presentedSessionRevokedAt: revokedAt.toISOString(),
+    presentedSessionFingerprint: createHash('sha256').update('old-session').digest('hex').slice(0, 12).toUpperCase(),
+    newlyQuarantinedSessionCount: 0,
+  });
 });
 
 test('resetPassword consumes the reset token atomically before revoking sessions', async () => {

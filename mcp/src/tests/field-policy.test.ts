@@ -28,6 +28,20 @@ test('safe board-member fields survive', () => {
   assert.equal(out.conductSigned, true);
 });
 
+test('a withheld connector session cannot recover a shared document minute reference', () => {
+  const document = { id: 'document-1', name: 'Shared policy', boardMinuteReference: 'PRIVATE-MINUTE-27',
+    approvedByResolutionId: 'private-resolution-id',
+    owner: 'Private owner', description: 'Private description', uploadedById: 'private-uploader',
+    storageProvider: 'supabase', externalPublicationSiteId: 'site-1',
+    externalPublicationSpaceId: 'space-1' };
+  const withheld = applyFieldPolicy('Document', document, false) as Record<string, unknown>;
+  assert.equal(withheld.name, 'Shared policy');
+  for (const field of ['boardMinuteReference', 'approvedByResolutionId', 'owner', 'description', 'uploadedById', 'storageProvider', 'externalPublicationSiteId', 'externalPublicationSpaceId']) {
+    assert.equal(field in withheld, false, `${field} must be withheld`);
+  }
+  assert.deepEqual(applyFieldPolicy('Document', document, true), document);
+});
+
 test('the gate returns everything when allowed', () => {
   assert.deepEqual(applyFieldPolicy('BoardMember', TRUSTEE, true), TRUSTEE);
 });
@@ -452,6 +466,36 @@ test('securityAudit keeps that something happened and when, and nothing else', (
 
 test('securityAudit releases the labels when the gate is open', () => {
   assert.deepEqual(applyShapePolicy('securityAudit', [AUDIT_ROW], true), [AUDIT_ROW]);
+});
+
+test('securityAudit preserves the page cursor while withholding personal prose', () => {
+  const envelope = { data: [AUDIT_ROW], nextCursor: 'event-003' };
+  assert.deepEqual(applyShapePolicy('securityAudit', envelope, false), {
+    data: [{ type: 'MEMBER_SUSPENDED', occurredAt: '2026-09-02T00:00:00.000Z' }],
+    nextCursor: 'event-003',
+  });
+  assert.deepEqual(applyShapePolicy('securityAudit', envelope, true), envelope);
+});
+
+test('Confluence retired references keep the API wrapper and cursor under the closed gate', () => {
+  const response = {
+    data: {
+      publications: [{ id: 'pub-2', documentId: 'doc-2', pageTitle: 'Retired policy',
+        retiredAt: '2026-09-28T00:00:00.000Z', erasureRequested: false,
+        recordedSiteId: 'provider-site-id', recordedSpaceId: 'provider-space-id',
+        recordedPageId: 'provider-page-id', privateFutureField: 'must not escape' }],
+      nextCursor: 'pub-2',
+      privateFutureField: 'must not escape',
+    },
+  };
+  assert.deepEqual(applyShapePolicy('confluencePublications', response, false), {
+    data: {
+      publications: [{ id: 'pub-2', documentId: 'doc-2', pageTitle: 'Retired policy',
+        retiredAt: '2026-09-28T00:00:00.000Z', erasureRequested: false }],
+      nextCursor: 'pub-2',
+    },
+  });
+  assert.deepEqual(applyShapePolicy('confluencePublications', response, true), response);
 });
 
 const REMINDER_ROW = {

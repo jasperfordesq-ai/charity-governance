@@ -58,6 +58,486 @@ async function buildApp(
   return app;
 }
 
+test('Members cannot read sensitive registers or their summary through list or detail routes', async () => {
+  const app = await buildApp({}, 'MEMBER');
+  try {
+    for (const path of [
+      '/summary?year=2026',
+      '/conflicts',
+      '/conflicts/sensitive-record',
+      '/complaints',
+      '/change-audit',
+      '/complaints/sensitive-record',
+    ]) {
+      const response = await app.inject({ method: 'GET', url: `${PREFIX}${path}`, headers: { authorization: tokenFor('MEMBER') } });
+      assert.equal(response.statusCode, 403, path);
+      assert.equal(response.json().code, 'FORBIDDEN', path);
+    }
+  } finally {
+    await app.close();
+  }
+});
+
+test('Admin connector cannot directly read excluded control histories or record verification', async () => {
+  let reads = 0;
+  const app = await buildApp({
+    authSession: { findFirst: async () => ({
+      id: 'sess-1', clientKind: 'MCP_CONNECTOR', accessLevel: 'ADMIN', dataScope: 'FULL',
+    }) },
+    riskChangeAudit: { findMany: async () => { reads += 1; return []; } },
+    riskControlVerification: { findMany: async () => { reads += 1; return []; } },
+  });
+  try {
+    for (const [method, path] of [
+      ['GET', '/risks/audit'],
+      ['GET', '/risks/control-verifications'],
+      ['GET', '/risks/control-review-attention'],
+      ['GET', '/risks/risk-1/control-verifications'],
+      ['GET', '/change-audit'],
+      ['POST', '/risks/risk-1/control-verifications'],
+    ]) {
+      const response = await app.inject({ method: method as 'GET' | 'POST',
+        url: `${PREFIX}${path}`, headers: { authorization: tokenFor('ADMIN') } });
+      assert.equal(response.statusCode, 403, path);
+      assert.equal(response.json().code, 'WEB_SESSION_REQUIRED');
+    }
+    assert.equal(reads, 0);
+  } finally { await app.close(); }
+});
+
+test('register action history is tenant-scoped and limited to Owner/Admin', async () => {
+  const reads: unknown[] = [];
+  const models = { governanceRegisterChangeAudit: { findMany: async (args: unknown) => { reads.push(args); return []; } } };
+  const member = await buildApp(models, 'MEMBER');
+  try {
+    const response = await member.inject({ method: 'GET', url: `${PREFIX}/change-audit`, headers: { authorization: tokenFor('MEMBER') } });
+    assert.equal(response.statusCode, 403);
+    assert.equal(reads.length, 0);
+  } finally { await member.close(); }
+  const admin = await buildApp(models);
+  try {
+    const response = await admin.inject({ method: 'GET', url: `${PREFIX}/change-audit`, headers: { authorization: tokenFor('ADMIN') } });
+    assert.equal(response.statusCode, 200);
+    assert.deepEqual(response.json().data, { items: [], nextCursor: null });
+    assert.deepEqual(reads, [{
+      where: { organisationId: 'org-1' },
+      orderBy: [{ occurredAt: 'desc' }, { id: 'desc' }], take: 51,
+    }]);
+  } finally { await admin.close(); }
+});
+
+test('detailed register changes page past 100 tied-time events within one charity', async () => {
+  const occurredAt = new Date('2026-09-29T10:00:00.000Z');
+  const events = Array.from({ length: 202 }, (_, index) => ({
+    id: `register-audit-${String(index).padStart(3, '0')}`, organisationId: 'org-1',
+    recordKind: 'COMPLAINT', recordId: 'complaint-1', action: 'UPDATE', occurredAt,
+  }));
+  events.push({ id: 'foreign-register-audit', organisationId: 'org-2',
+    recordKind: 'COMPLAINT', recordId: 'foreign-complaint', action: 'UPDATE', occurredAt });
+  const reads: Array<{ where: Record<string, unknown>; take: number; orderBy: unknown }> = [];
+  const models = { governanceRegisterChangeAudit: {
+    findFirst: async ({ where }: { where: { id: string; organisationId: string } }) =>
+      events.find((event) => event.id === where.id && event.organisationId === where.organisationId) ?? null,
+    findMany: async (args: { where: Record<string, unknown>; take: number; orderBy: unknown }) => {
+      reads.push(args);
+      const anchor = (args.where.OR as Array<Record<string, unknown>> | undefined)?.[1]?.id as { lt: string } | undefined;
+      return events.filter((event) => event.organisationId === args.where.organisationId &&
+        (!anchor || event.id < anchor.lt)).sort((a, b) => b.id.localeCompare(a.id)).slice(0, args.take);
+    },
+  } };
+  const admin = await buildApp(models);
+  try {
+    const collected: string[] = [];
+    let before: string | null = null;
+    do {
+      const response: Awaited<ReturnType<typeof admin.inject>> = await admin.inject({ method: 'GET',
+        url: `${PREFIX}/change-audit${before ? `?before=${before}` : ''}`,
+        headers: { authorization: tokenFor('ADMIN') } });
+      assert.equal(response.statusCode, 200);
+      const page = response.json().data as { items: Array<{ id: string }>; nextCursor: string | null };
+      collected.push(...page.items.map((event) => event.id));
+      before = page.nextCursor;
+    } while (before);
+    assert.equal(collected.length, 202);
+    assert.equal(new Set(collected).size, 202);
+    assert.equal(reads.length, 5);
+    assert.ok(reads.every((read) => read.take === 51 && read.where.organisationId === 'org-1'));
+    assert.deepEqual(reads[0].orderBy, [{ occurredAt: 'desc' }, { id: 'desc' }]);
+    const foreign = await admin.inject({ method: 'GET', url: `${PREFIX}/change-audit?before=foreign-register-audit`,
+      headers: { authorization: tokenFor('ADMIN') } });
+    assert.equal(foreign.statusCode, 404);
+    const invalid = await admin.inject({ method: 'GET', url: `${PREFIX}/change-audit?before=bad%40cursor`,
+      headers: { authorization: tokenFor('ADMIN') } });
+    assert.equal(invalid.statusCode, 400);
+    assert.equal(reads.length, 5);
+  } finally { await admin.close(); }
+});
+
+test('Member register reads retain governance status but omit personal and free-text fields', async () => {
+  const now = new Date('2026-09-28T10:00:00.000Z');
+  const risk = { id: 'risk-1', organisationId: 'org-1', title: 'Private trustee risk', category: 'GOVERNANCE',
+    description: 'private risk description', likelihood: 3, impact: 4,
+    mitigation: 'private mitigation', owner: 'Private person', reviewDate: now,
+    status: 'OPEN', boardMinuteReference: 'Private minute 1', createdAt: now, updatedAt: now };
+  const fundraising = { id: 'fund-1', organisationId: 'org-1', name: 'Private donor appeal',
+    activityType: 'Appeal', startDate: now, endDate: null, publicFacing: true,
+    thirdPartyFundraiser: 'Private fundraiser', controls: 'private controls',
+    complaintsReceived: false, reviewOutcome: 'private review', status: 'OPEN',
+    boardMinuteReference: 'Private minute 2', createdAt: now, updatedAt: now };
+  const annual = { id: 'annual-1', organisationId: 'org-1', reportingYear: 2026,
+    activitiesNarrative: 'private activities', publicBenefitStatement: 'private benefit',
+    beneficiariesSummary: 'private beneficiaries', financialStatementsApproved: true,
+    annualReportUploaded: false, trusteeDetailsReviewed: true, fundraisingReviewed: true,
+    complaintsReviewed: false, boardApprovalDate: null, filingStatus: 'NOT_STARTED',
+    filedDate: null, notes: 'private annual note', updatedAt: now };
+  const financial = { id: 'financial-1', organisationId: 'org-1', reportingYear: 2026,
+    bankReconciliationsReviewed: true, dualAuthorisation: true, budgetApproved: true,
+    managementAccountsReviewed: true, reservesReviewed: false,
+    restrictedFundsReviewed: false, assetsInsuranceReviewed: false,
+    payrollControlsReviewed: false, fundraisingControlsReviewed: false,
+    reviewedBy: 'Private reviewer', reviewDate: now, minuteReference: 'Private minute 3',
+    actions: 'private financial actions', updatedAt: now };
+  const registerReads: Array<{ kind: string; args: { where: Record<string, unknown>; select?: Record<string, boolean> } }> = [];
+  const readinessReads: Array<{ kind: string; args: { where: Record<string, unknown>; select?: Record<string, boolean> } }> = [];
+  const models = {
+    riskRecord: {
+      findMany: async (args: { where: Record<string, unknown>; select?: Record<string, boolean> }) => {
+        registerReads.push({ kind: 'risk-list', args }); return [risk];
+      },
+      findFirst: async (args: { where: Record<string, unknown>; select?: Record<string, boolean> }) => {
+        registerReads.push({ kind: 'risk-detail', args }); return risk;
+      },
+    },
+    fundraisingRecord: {
+      findMany: async (args: { where: Record<string, unknown>; select?: Record<string, boolean> }) => {
+        registerReads.push({ kind: 'fundraising-list', args }); return [fundraising];
+      },
+      findFirst: async (args: { where: Record<string, unknown>; select?: Record<string, boolean> }) => {
+        registerReads.push({ kind: 'fundraising-detail', args }); return fundraising;
+      },
+    },
+    annualReportReadiness: { findUnique: async (args: { where: Record<string, unknown>; select?: Record<string, boolean> }) => {
+      readinessReads.push({ kind: 'annual', args }); return annual;
+    } },
+    financialControlReview: { findUnique: async (args: { where: Record<string, unknown>; select?: Record<string, boolean> }) => {
+      readinessReads.push({ kind: 'financial', args }); return financial;
+    } },
+  };
+  const paths = ['/risks', '/risks/risk-1', '/fundraising', '/fundraising/fund-1',
+    '/annual-report?year=2026', '/financial-controls?year=2026'];
+  for (const role of ['MEMBER', 'ADMIN'] as const) {
+    registerReads.length = 0;
+    readinessReads.length = 0;
+    const app = await buildApp(models, role);
+    try {
+      for (const path of paths) {
+        const result = await app.inject({ method: 'GET', url: `${PREFIX}${path}`, headers: { authorization: tokenFor(role) } });
+        assert.equal(result.statusCode, 200, path);
+        const body = result.body;
+        assert.match(body, /risk-1|fund-1|financialStatementsApproved|bankReconciliationsReviewed/, path);
+        if (role === 'MEMBER') {
+          assert.doesNotMatch(body, /Private person|Private fundraiser|Private reviewer|private /i, path);
+        } else if (path.startsWith('/risks') || path.startsWith('/fundraising') || path.startsWith('/annual') || path.startsWith('/financial')) {
+          assert.match(body, /Private|private/, path);
+        }
+      }
+      assert.deepEqual(registerReads.map((read) => read.kind), [
+        'risk-list', 'risk-detail', 'fundraising-list', 'fundraising-detail',
+      ]);
+      for (const { kind, args } of registerReads) {
+        assert.equal(args.where.organisationId, 'org-1');
+        if (kind.endsWith('detail')) assert.equal(args.where.id, kind.startsWith('risk') ? 'risk-1' : 'fund-1');
+        if (role === 'MEMBER') {
+          assert.ok(args.select, `${kind} must select only the Member field set`);
+          for (const field of kind.startsWith('risk')
+            ? ['title', 'description', 'mitigation', 'owner', 'boardMinuteReference']
+            : ['name', 'thirdPartyFundraiser', 'controls', 'reviewOutcome', 'boardMinuteReference']) {
+            assert.equal(args.select[field], undefined, `${kind} must not load ${field}`);
+          }
+        } else {
+          assert.equal(args.select, undefined, `${kind} Admin read must remain complete`);
+        }
+      }
+      assert.deepEqual(readinessReads.map((read) => read.kind), ['annual', 'financial']);
+      for (const { kind, args } of readinessReads) {
+        assert.deepEqual(args.where, {
+          organisationId_reportingYear: { organisationId: 'org-1', reportingYear: 2026 },
+        });
+        if (role === 'MEMBER') {
+          assert.ok(args.select, `${kind} must select only the Member field set`);
+          for (const field of kind === 'annual'
+            ? ['activitiesNarrative', 'publicBenefitStatement', 'beneficiariesSummary', 'notes']
+            : ['reviewedBy', 'minuteReference', 'actions']) {
+            assert.equal(args.select[field], undefined, `${kind} must not load ${field}`);
+          }
+        } else {
+          assert.equal(args.select, undefined, `${kind} Admin read must remain complete`);
+        }
+      }
+    } finally { await app.close(); }
+  }
+});
+
+test('risk change history and control evidence are scoped and unavailable to Members', async () => {
+  const readWhere: unknown[] = [];
+  const models = {
+    riskChangeAudit: { findMany: async (args: { where: unknown }) => { readWhere.push(args.where); return []; } },
+    riskControlVerification: { findMany: async (args: { where: unknown }) => { readWhere.push(args.where); return []; } },
+  };
+  const memberApp = await buildApp(models, 'MEMBER');
+  try {
+    for (const path of ['/risks/audit', '/risks/control-verifications']) {
+      const response = await memberApp.inject({ method: 'GET', url: `${PREFIX}${path}`, headers: { authorization: tokenFor('MEMBER') } });
+      assert.equal(response.statusCode, 403);
+    }
+    assert.equal(readWhere.length, 0);
+  } finally { await memberApp.close(); }
+  const adminApp = await buildApp(models, 'ADMIN');
+  try {
+    for (const path of ['/risks/audit', '/risks/control-verifications']) {
+      const response = await adminApp.inject({ method: 'GET', url: `${PREFIX}${path}`, headers: { authorization: tokenFor('ADMIN') } });
+      assert.equal(response.statusCode, 200);
+    }
+    assert.deepEqual(readWhere, [{ organisationId: 'org-1' }, { organisationId: 'org-1' }]);
+  } finally { await adminApp.close(); }
+});
+
+test('detailed risk changes page past 100 tied-time events without crossing a charity cursor', async () => {
+  const occurredAt = new Date('2026-09-29T10:00:00.000Z');
+  const events = Array.from({ length: 202 }, (_, index) => ({
+    id: `risk-audit-${String(index).padStart(3, '0')}`, organisationId: 'org-1', riskId: 'risk-1',
+    action: 'UPDATE', occurredAt,
+  }));
+  events.push({ id: 'foreign-risk-audit', organisationId: 'org-2', riskId: 'foreign-risk',
+    action: 'UPDATE', occurredAt });
+  const reads: Array<{ where: Record<string, unknown>; take: number; orderBy: unknown }> = [];
+  const models = {
+    riskChangeAudit: {
+      findFirst: async ({ where }: { where: { id: string; organisationId: string } }) =>
+        events.find((event) => event.id === where.id && event.organisationId === where.organisationId) ?? null,
+      findMany: async (args: { where: Record<string, unknown>; take: number; orderBy: unknown }) => {
+        reads.push(args);
+        const anchor = (args.where.OR as Array<Record<string, unknown>> | undefined)?.[1]?.id as { lt: string } | undefined;
+        return events.filter((event) => event.organisationId === args.where.organisationId &&
+          (!anchor || event.id < anchor.lt)).sort((a, b) => b.id.localeCompare(a.id)).slice(0, args.take);
+      },
+    },
+  };
+  const member = await buildApp(models, 'MEMBER');
+  try {
+    const denied = await member.inject({ method: 'GET', url: `${PREFIX}/risks/audit?before=risk-audit-100`,
+      headers: { authorization: tokenFor('MEMBER') } });
+    assert.equal(denied.statusCode, 403);
+    assert.equal(reads.length, 0);
+  } finally { await member.close(); }
+
+  const admin = await buildApp(models);
+  try {
+    const collected: string[] = [];
+    let before: string | null = null;
+    do {
+      const response: Awaited<ReturnType<typeof admin.inject>> = await admin.inject({ method: 'GET',
+        url: `${PREFIX}/risks/audit${before ? `?before=${before}` : ''}`,
+        headers: { authorization: tokenFor('ADMIN') } });
+      assert.equal(response.statusCode, 200);
+      const page = response.json().data as { items: Array<{ id: string }>; nextCursor: string | null };
+      collected.push(...page.items.map((event) => event.id));
+      before = page.nextCursor;
+    } while (before);
+    assert.equal(collected.length, 202);
+    assert.equal(new Set(collected).size, 202);
+    assert.equal(reads.length, 5);
+    assert.ok(reads.every((read) => read.take === 51 && read.where.organisationId === 'org-1'));
+    assert.deepEqual(reads[0].orderBy, [{ occurredAt: 'desc' }, { id: 'desc' }]);
+    const foreign = await admin.inject({ method: 'GET', url: `${PREFIX}/risks/audit?before=foreign-risk-audit`,
+      headers: { authorization: tokenFor('ADMIN') } });
+    assert.equal(foreign.statusCode, 404);
+    const invalid = await admin.inject({ method: 'GET', url: `${PREFIX}/risks/audit?before=bad%40cursor`,
+      headers: { authorization: tokenFor('ADMIN') } });
+    assert.equal(invalid.statusCode, 400);
+    assert.equal(reads.length, 5);
+  } finally { await admin.close(); }
+});
+
+test('risk-specific control history pages all retained claims without crossing risk or tenant boundaries', async () => {
+  const reads: Array<{ where: Record<string, unknown>; take?: number }> = [];
+  const events = Array.from({ length: 52 }, (_, index) => ({
+    id: `claim-${index}`, organisationId: 'org-1', riskId: 'risk-1', sequence: 52 - index,
+    state: 'VERIFIED', controlReference: index === 0 ? 'C2' : 'C1', occurredAt: new Date('2026-09-29T10:00:00.000Z'),
+  }));
+  const models = {
+    riskRecord: { findFirst: async ({ where }: { where: { id: string; organisationId: string } }) =>
+      where.id === 'risk-1' && where.organisationId === 'org-1'
+        ? { id: 'risk-1', revision: 4 } : null },
+    riskControlVerification: {
+      findFirst: async ({ where }: { where: { id: string; riskId: string; organisationId: string; controlReference?: string } }) =>
+        events.find((event) => event.id === where.id && event.riskId === where.riskId &&
+          event.organisationId === where.organisationId && (!where.controlReference || event.controlReference === where.controlReference)) ?? null,
+      findMany: async (args: { where: { organisationId: string; riskId: string; controlReference?: string; sequence?: { lt: number } }; take: number }) => {
+        reads.push(args);
+        return events.filter((event) => event.organisationId === args.where.organisationId &&
+          event.riskId === args.where.riskId && (!args.where.controlReference || event.controlReference === args.where.controlReference) &&
+          (!args.where.sequence || event.sequence < args.where.sequence.lt))
+          .slice(0, args.take);
+      },
+    },
+  };
+  const member = await buildApp(models, 'MEMBER');
+  try {
+    const response = await member.inject({ method: 'GET', url: `${PREFIX}/risks/risk-1/control-verifications`, headers: { authorization: tokenFor('MEMBER') } });
+    assert.equal(response.statusCode, 403);
+    assert.equal(reads.length, 0);
+  } finally { await member.close(); }
+
+  const admin = await buildApp(models);
+  try {
+    const first = await admin.inject({ method: 'GET', url: `${PREFIX}/risks/risk-1/control-verifications`, headers: { authorization: tokenFor('ADMIN') } });
+    assert.equal(first.statusCode, 200);
+    assert.equal(first.json().data.riskRevision, 4);
+    assert.equal(first.json().data.events.length, 50);
+    assert.equal(first.json().data.nextCursor, 'claim-49');
+    const older = await admin.inject({ method: 'GET', url: `${PREFIX}/risks/risk-1/control-verifications?before=claim-49`, headers: { authorization: tokenFor('ADMIN') } });
+    assert.equal(older.statusCode, 200);
+    assert.deepEqual(older.json().data.events.map((event: { id: string }) => event.id), ['claim-50', 'claim-51']);
+    assert.equal(older.json().data.nextCursor, null);
+    assert.deepEqual(reads.map((args) => args.where), [
+      { organisationId: 'org-1', riskId: 'risk-1' },
+      { organisationId: 'org-1', riskId: 'risk-1', sequence: { lt: 3 } },
+    ]);
+
+    const filtered = await admin.inject({ method: 'GET', url: `${PREFIX}/risks/risk-1/control-verifications?controlReference=C1`, headers: { authorization: tokenFor('ADMIN') } });
+    assert.equal(filtered.statusCode, 200);
+    assert.equal(filtered.json().data.events.length, 50);
+    assert.equal(filtered.json().data.events[0].id, 'claim-1');
+    assert.equal(filtered.json().data.nextCursor, 'claim-50');
+    const filteredOlder = await admin.inject({ method: 'GET', url: `${PREFIX}/risks/risk-1/control-verifications?controlReference=C1&before=claim-50`, headers: { authorization: tokenFor('ADMIN') } });
+    assert.equal(filteredOlder.statusCode, 200);
+    assert.deepEqual(filteredOlder.json().data.events.map((event: { id: string }) => event.id), ['claim-51']);
+    assert.deepEqual(reads.slice(2).map((args) => args.where), [
+      { organisationId: 'org-1', riskId: 'risk-1', controlReference: 'C1' },
+      { organisationId: 'org-1', riskId: 'risk-1', controlReference: 'C1', sequence: { lt: 2 } },
+    ]);
+
+    const wrongRisk = await admin.inject({ method: 'GET', url: `${PREFIX}/risks/risk-2/control-verifications?before=claim-49`, headers: { authorization: tokenFor('ADMIN') } });
+    assert.equal(wrongRisk.statusCode, 404);
+    const wrongCursor = await admin.inject({ method: 'GET', url: `${PREFIX}/risks/risk-1/control-verifications?before=other-tenant`, headers: { authorization: tokenFor('ADMIN') } });
+    assert.equal(wrongCursor.statusCode, 404);
+    const wrongReference = await admin.inject({ method: 'GET', url: `${PREFIX}/risks/risk-1/control-verifications?controlReference=other&before=claim-49`, headers: { authorization: tokenFor('ADMIN') } });
+    assert.equal(wrongReference.statusCode, 404);
+    const malformed = await admin.inject({ method: 'GET', url: `${PREFIX}/risks/risk-1/control-verifications?before=%20`, headers: { authorization: tokenFor('ADMIN') } });
+    assert.equal(malformed.statusCode, 400);
+    assert.equal(reads.length, 4);
+  } finally { await admin.close(); }
+});
+
+test('charity-wide control review attention is Admin-only, tenant-scoped and paged', async () => {
+  const queries: Array<{ sql: string; values: unknown[] }> = [];
+  const rows = Array.from({ length: 51 }, (_, index) => ({
+    claimId: `claim-${index}`, riskId: `risk-${index}`, controlReference: `C${index}`,
+    riskRevision: index === 0 ? null : 1, currentRiskRevision: 2,
+  }));
+  const models = {
+    riskControlVerification: {
+      findFirst: async ({ where }: { where: { id: string; organisationId: string } }) =>
+        where.id === 'claim-49' && where.organisationId === 'org-1'
+          ? { riskId: 'risk-49', controlReference: 'C49' } : null,
+    },
+    $queryRaw: async (strings: TemplateStringsArray, ...values: unknown[]) => {
+      queries.push({ sql: strings.join('?'), values });
+      return values[2] === null ? rows : [rows[50]];
+    },
+  };
+  const member = await buildApp(models, 'MEMBER');
+  try {
+    const response = await member.inject({
+      method: 'GET', url: `${PREFIX}/risks/control-review-attention`,
+      headers: { authorization: tokenFor('MEMBER') },
+    });
+    assert.equal(response.statusCode, 403);
+    assert.equal(queries.length, 0);
+  } finally { await member.close(); }
+
+  const admin = await buildApp(models);
+  try {
+    const first = await admin.inject({
+      method: 'GET', url: `${PREFIX}/risks/control-review-attention`,
+      headers: { authorization: tokenFor('ADMIN') },
+    });
+    assert.equal(first.statusCode, 200);
+    assert.equal(first.json().data.items.length, 50);
+    assert.equal(first.json().data.nextCursor, 'claim-49');
+    assert.match(queries[0].sql, /DISTINCT ON \(v\."riskId", v\."controlReference"\)/);
+    assert.match(queries[0].sql, /v\."organisationId" = \?/);
+    assert.match(queries[0].sql, /risk\."organisationId" = \?/);
+    assert.match(queries[0].sql, /latest\."state" = 'VERIFIED'/);
+    assert.match(queries[0].sql, /IS DISTINCT FROM risk\."revision"/);
+    assert.deepEqual(queries[0].values.slice(0, 2), ['org-1', 'org-1']);
+
+    const next = await admin.inject({
+      method: 'GET', url: `${PREFIX}/risks/control-review-attention?after=claim-49`,
+      headers: { authorization: tokenFor('ADMIN') },
+    });
+    assert.equal(next.statusCode, 200);
+    assert.deepEqual(next.json().data.items.map((row: { claimId: string }) => row.claimId), ['claim-50']);
+    assert.equal(next.json().data.nextCursor, null);
+    assert.deepEqual(queries[1].values, ['org-1', 'org-1', 'risk-49', 'risk-49', 'C49']);
+
+    const wrongTenant = await admin.inject({
+      method: 'GET', url: `${PREFIX}/risks/control-review-attention?after=other-tenant`,
+      headers: { authorization: tokenFor('ADMIN') },
+    });
+    assert.equal(wrongTenant.statusCode, 404);
+    assert.equal(queries.length, 2);
+    const malformed = await admin.inject({
+      method: 'GET', url: `${PREFIX}/risks/control-review-attention?after=%20`,
+      headers: { authorization: tokenFor('ADMIN') },
+    });
+    assert.equal(malformed.statusCode, 400);
+  } finally { await admin.close(); }
+});
+
+test('a verified risk control requires dated evidence and records the authenticated actor', async () => {
+  const writes: unknown[] = [];
+  const transaction = {
+    $queryRaw: async () => [{ id: 'risk-1', revision: 3 }],
+    riskControlVerification: {
+      create: async (args: unknown) => { writes.push(args); return { id: 'verification-1' }; },
+    },
+  };
+  const app = await buildApp({
+    ...transaction,
+    $transaction: async (callback: (tx: typeof transaction) => Promise<unknown>) => callback(transaction),
+  });
+  try {
+    const invalid = await app.inject({
+      method: 'POST', url: `${PREFIX}/risks/risk-1/control-verifications`,
+      headers: { authorization: tokenFor('ADMIN') },
+      payload: { state: 'VERIFIED', controlReference: 'admin-email', reason: 'Checked the fix against the release.' },
+    });
+    assert.equal(invalid.statusCode, 400);
+    assert.equal(writes.length, 0);
+    const recorded = await app.inject({
+      method: 'POST', url: `${PREFIX}/risks/risk-1/control-verifications`,
+      headers: { authorization: tokenFor('ADMIN') },
+      payload: {
+        state: 'VERIFIED', controlReference: 'admin-email',
+        verifiedAt: '2026-09-20T12:00:00.000Z', evidenceReference: 'controlled-evidence-42',
+        affectedRelease: 'release-42', reason: 'Verified on the affected release using retained evidence.',
+      },
+    });
+    assert.equal(recorded.statusCode, 201);
+    assert.deepEqual((writes[0] as { data: { organisationId: string; actorUserId: string; riskId: string } }).data,
+      {
+        organisationId: 'org-1', riskId: 'risk-1', actorUserId: 'u1',
+        controlReference: 'admin-email', state: 'VERIFIED',
+        verifiedAt: new Date('2026-09-20T12:00:00.000Z'),
+        riskRevision: 3,
+        evidenceReference: 'controlled-evidence-42', affectedRelease: 'release-42',
+        reason: 'Verified on the affected release using retained evidence.',
+      });
+  } finally { await app.close(); }
+});
+
 // A write-spy helper: records that it was called and returns a benign row.
 function spy(): { called: boolean; fn: (...a: unknown[]) => Promise<unknown> } {
   const state = { called: false, fn: async (..._a: unknown[]) => ({ id: 'x' }) };
@@ -111,7 +591,7 @@ function buildService() {
           updatedAt: new Date('2026-01-01T00:00:00.000Z'),
         };
       }
-      return { organisationId: a.create.organisationId, reportingYear: a.create.reportingYear };
+      return { id: 'financial-1', organisationId: a.create.organisationId, reportingYear: a.create.reportingYear };
     },
   });
   const transaction = {
@@ -121,6 +601,7 @@ function buildService() {
     fundraisingRecord: registerModel('fundraisingRecord'),
     annualReportReadiness: upsertModel('annualReportReadiness'),
     financialControlReview: upsertModel('financialControlReview'),
+    governanceRegisterChangeAudit: { create: async (args: unknown) => { calls.push({ name: 'governanceRegisterChangeAudit.create', args }); return { id: 'audit-1' }; } },
     $queryRaw: async (...args: unknown[]) => {
       calls.push({ name: '$queryRaw', args });
       return [{ id: 'org_1' }];
@@ -156,7 +637,7 @@ test('annual report readiness reads and upserts are scoped to organisationId_rep
   const { service, calls } = buildService();
 
   await service.getAnnualReportReadiness('org_1', 2026);
-  await service.upsertAnnualReportReadiness('org_1', { reportingYear: 2026 } as never);
+  await service.upsertAnnualReportReadiness('org_1', { reportingYear: 2026 } as never, 'actor-1');
 
   const read = calls.find((c) => c.name === 'annualReportReadiness.findUnique');
   assert.ok(read);
@@ -177,7 +658,7 @@ test('financial control review reads and upserts are scoped to organisationId_re
   const { service, calls } = buildService();
 
   await service.getFinancialControlReview('org_1', 2026);
-  await service.upsertFinancialControlReview('org_1', { reportingYear: 2026 } as never);
+  await service.upsertFinancialControlReview('org_1', { reportingYear: 2026 } as never, 'actor-1');
 
   const read = calls.find((c) => c.name === 'financialControlReview.findUnique');
   assert.ok(read);
@@ -444,7 +925,14 @@ test('a MEMBER cannot upsert annual report or financial controls (requireAdmin)'
 
 test('an ADMIN may create register records (requireAdmin allows ADMIN)', async () => {
   const create = spy();
-  const app = await buildApp({ riskRecord: { create: create.fn } }, 'ADMIN');
+  const transaction = {
+    riskRecord: { create: create.fn },
+    riskChangeAudit: { create: spy().fn },
+  };
+  const app = await buildApp({
+    ...transaction,
+    $transaction: async (callback: (tx: typeof transaction) => Promise<unknown>) => callback(transaction),
+  }, 'ADMIN');
   try {
     const res = await app.inject({
       method: 'POST',

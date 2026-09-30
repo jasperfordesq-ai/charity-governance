@@ -2,10 +2,12 @@
 
 import { Button, Select, SelectItem } from '@heroui/react';
 import { useDocumentTitle } from '@/lib/use-title';
+import { useAuth } from '@/lib/auth-context';
 import { AppPage, AppSection } from '@/components/ui/app-page';
 import { primaryActionButtonClassName } from '@/components/ui/action-button';
 import { ErrorState, LoadingState, PermissionHint } from '@/components/ui/states';
 import { MinuteBookList } from './minute-book-list';
+import { MinuteBookAudit } from './minute-book-audit';
 import { ActModal, VoidModal } from './minute-book-modals';
 import {
   GOVERNING_ACT_KINDS,
@@ -17,6 +19,7 @@ import {
 
 export default function MinuteBookPage() {
   useDocumentTitle('Minute Book');
+  const { isLoading: authLoading } = useAuth();
   const {
     acts,
     visibleActs,
@@ -47,6 +50,14 @@ export default function MinuteBookPage() {
     confirmVoid,
     refresh,
   } = useMinuteBookWorkflow();
+
+  if (!authLoading && !canManage) {
+    return (
+      <AppPage eyebrow="Governance" title="Minute Book" description="Governing acts and written resolutions.">
+        <PermissionHint>Owners and administrators can review the Minute Book while its records await sensitivity classification.</PermissionHint>
+      </AppPage>
+    );
+  }
 
   return (
     <AppPage
@@ -165,9 +176,9 @@ export default function MinuteBookPage() {
             />
           </AppSection>
 
-          <AppSection
+          {canManage ? <AppSection
             title={`Removed records (${voids.length})`}
-            description="Governing acts deleted from the book. The snapshot, who removed it and why are kept permanently."
+            description="Governing acts removed from the active book. The snapshot, who removed it and why remain in the restricted audit history; no automatic expiry is set."
           >
             {voids.length === 0 ? (
               <p className="rounded-lg border border-dashed border-default-300 p-6 text-center text-sm text-default-500">
@@ -195,7 +206,8 @@ export default function MinuteBookPage() {
                 ))}
               </ul>
             )}
-          </AppSection>
+          </AppSection> : null}
+          {canManage ? <MinuteBookAudit /> : null}
         </>
       )}
 

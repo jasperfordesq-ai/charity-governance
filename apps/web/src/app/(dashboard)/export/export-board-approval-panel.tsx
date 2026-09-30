@@ -208,7 +208,7 @@ export function ExportBoardApprovalPanel({
             if (canManageSignoff) setSignoffForm((prev) => ({ ...prev, boardMeetingDate: value }));
           }}
         />
-        <Input
+        {canManageSignoff ? <><Input
           label="Minute reference"
           placeholder="e.g. Board minutes 24 Oct 2026, item 6"
           isReadOnly={!canManageSignoff}
@@ -245,7 +245,7 @@ export function ExportBoardApprovalPanel({
           }}
           minRows={2}
           className="md:col-span-2"
-        />
+        /></> : <p className="text-sm text-gray-600 dark:text-gray-300">Approval particulars require an Owner or Admin.</p>}
       </div>
     </Card>
   );

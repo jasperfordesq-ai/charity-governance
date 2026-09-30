@@ -1,5 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
+import { readdirSync } from 'node:fs';
+import { join } from 'node:path';
 import { isProtectedAppPath, renewsItsOwnSession } from './protected-routes';
 
 test('matches dashboard application routes that require an auth cookie', () => {
@@ -12,10 +14,25 @@ test('matches dashboard application routes that require an auth cookie', () => {
   assert.equal(isProtectedAppPath('/integrations/confluence/callback'), true);
 });
 
+test('every dashboard route group has the server auth boundary', () => {
+  const dashboard = join(process.cwd(), 'src', 'app', '(dashboard)');
+  for (const entry of readdirSync(dashboard, { withFileTypes: true })) {
+    if (!entry.isDirectory()) continue;
+    assert.equal(
+      isProtectedAppPath(`/${entry.name}`),
+      true,
+      `/${entry.name} is under the dashboard layout and must pass the protected proxy`,
+    );
+  }
+});
+
 test('matches encoded dashboard application routes before Next normalisation', () => {
   assert.equal(isProtectedAppPath('/dashboard%2Fsettings'), true);
   assert.equal(isProtectedAppPath('/compliance%2Fstandard-1'), true);
   assert.equal(isProtectedAppPath('/documents%5Creports'), true);
+  assert.equal(isProtectedAppPath('/governance-audit%2Fdocument-controls'), true);
+  assert.equal(isProtectedAppPath('/security-data'), true);
+  assert.equal(isProtectedAppPath('/data-lifecycle'), true);
 });
 
 test('does not match public, auth, or similarly named routes', () => {
@@ -24,6 +41,9 @@ test('does not match public, auth, or similarly named routes', () => {
   assert.equal(isProtectedAppPath('/reset-password?token=secret'), false);
   assert.equal(isProtectedAppPath('/dashboard-public'), false);
   assert.equal(isProtectedAppPath('/documents-public'), false);
+  assert.equal(isProtectedAppPath('/governance-audit-public'), false);
+  assert.equal(isProtectedAppPath('/security-data-public'), false);
+  assert.equal(isProtectedAppPath('/data-lifecycle-public'), false);
 });
 
 // ── renewsItsOwnSession: EXACT match, not a prefix ─────────────────────────

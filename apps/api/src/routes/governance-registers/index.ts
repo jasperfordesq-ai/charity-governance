@@ -1,5 +1,5 @@
-import type { FastifyInstance, FastifyReply } from 'fastify';
-import { ZodError } from 'zod';
+import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
+import { ZodError, z } from 'zod';
 import {
   complianceQuerySchema,
   createComplaintRecordSchema,
@@ -37,10 +37,66 @@ function validationError(reply: FastifyReply, err: ZodError) {
   return reply.status(400).send({ error: 'Validation failed', code: 'VALIDATION_ERROR', details: err.errors });
 }
 
+async function requireControlReviewWebSession(request: FastifyRequest, reply: FastifyReply) {
+  if (request.authSession.clientKind !== 'WEB') {
+    return reply.status(403).send({ error: 'Review control evidence in the dashboard.', code: 'WEB_SESSION_REQUIRED' });
+  }
+}
+
 function reportingYear(query: unknown): number {
   const { year } = complianceQuerySchema.parse(query);
   return year ?? new Date().getFullYear();
 }
+
+// Member responses are deliberately assembled from safe fields rather than
+// spreading a Prisma row. A future free-text column cannot leak by accident.
+function memberRisk(row: Awaited<ReturnType<GovernanceRegisterService['listMemberRisks']>>[number]) {
+  return {
+    id: row.id, organisationId: row.organisationId, title: '',
+    category: row.category, description: '', likelihood: row.likelihood,
+    impact: row.impact, mitigation: '', owner: null,
+    reviewDate: row.reviewDate, status: row.status,
+    boardMinuteReference: null,
+    createdAt: row.createdAt, updatedAt: row.updatedAt,
+  };
+}
+
+function memberFundraising(row: Awaited<ReturnType<GovernanceRegisterService['listMemberFundraising']>>[number]) {
+  return {
+    id: row.id, organisationId: row.organisationId, name: '',
+    activityType: row.activityType, startDate: row.startDate, endDate: row.endDate,
+    publicFacing: row.publicFacing, thirdPartyFundraiser: null, controls: null,
+    complaintsReceived: row.complaintsReceived, reviewOutcome: null,
+    status: row.status, boardMinuteReference: null,
+    createdAt: row.createdAt, updatedAt: row.updatedAt,
+  };
+}
+
+const riskControlCommon = {
+  controlReference: z.string().trim().min(2).max(120),
+  affectedRelease: z.string().trim().min(1).max(200).optional(),
+  reason: z.string().trim().min(10).max(500),
+};
+const riskControlVerificationSchema = z.discriminatedUnion('state', [
+  z.object({ state: z.literal('VERIFIED'), ...riskControlCommon,
+    verifiedAt: z.string().datetime({ offset: true }).refine(
+      (value) => Date.parse(value) <= Date.now(), 'Verification time cannot be in the future',
+    ),
+    evidenceReference: z.string().trim().min(3).max(500),
+  }),
+  z.object({ state: z.literal('WITHDRAWN'), ...riskControlCommon }),
+]);
+const riskControlHistoryQuerySchema = z.object({
+  before: z.string().min(1).max(160).regex(/^[A-Za-z0-9_-]+$/).optional(),
+  controlReference: z.string().trim().min(2).max(120).optional(),
+}).strict();
+const riskControlAttentionQuerySchema = z.object({
+  after: z.string().min(1).max(160).regex(/^[A-Za-z0-9_-]+$/).optional(),
+}).strict();
+const riskAuditQuerySchema = z.object({
+  before: z.string().min(1).max(160).regex(/^[A-Za-z0-9_-]+$/).optional(),
+}).strict();
+const registerAuditQuerySchema = riskAuditQuerySchema;
 
 export async function governanceRegisterRoutes(app: FastifyInstance) {
   const service = new GovernanceRegisterService(app.prisma);
@@ -49,7 +105,8 @@ export async function governanceRegisterRoutes(app: FastifyInstance) {
   app.addHook('onRequest', subscriptionGuard);
   app.addHook('preHandler', requireCompletePlan);
 
-  app.get('/summary', async (request, reply) => {
+  // The summary includes counts of restricted conflicts and complaints.
+  app.get('/summary', { preHandler: [requireAdmin] }, async (request, reply) => {
     try {
       const year = reportingYear(request.query);
       return sendSuccess(reply, await service.summary(request.user.organisationId, year));
@@ -59,7 +116,7 @@ export async function governanceRegisterRoutes(app: FastifyInstance) {
     }
   });
 
-  app.get('/conflicts', async (request, reply) => {
+  app.get('/conflicts', { preHandler: [requireAdmin] }, async (request, reply) => {
     try {
       return sendSuccess(reply, await service.listConflicts(request.user.organisationId));
     } catch (err) {
@@ -67,7 +124,7 @@ export async function governanceRegisterRoutes(app: FastifyInstance) {
     }
   });
 
-  app.get<{ Params: { id: string } }>('/conflicts/:id', async (request, reply) => {
+  app.get<{ Params: { id: string } }>('/conflicts/:id', { preHandler: [requireAdmin] }, async (request, reply) => {
     try {
       return sendSuccess(
         reply,
@@ -80,7 +137,7 @@ export async function governanceRegisterRoutes(app: FastifyInstance) {
   app.post('/conflicts', { preHandler: [requireAdmin] }, async (request, reply) => {
     try {
       const data = createConflictRecordSchema.parse(request.body) as CreateConflictRecordRequest;
-      return sendCreated(reply, await service.createConflict(request.user.organisationId, data));
+      return sendCreated(reply, await service.createConflict(request.user.organisationId, data, request.user.userId));
     } catch (err) {
       if (err instanceof ZodError) return validationError(reply, err);
       return handleError(reply, err);
@@ -90,7 +147,7 @@ export async function governanceRegisterRoutes(app: FastifyInstance) {
   app.patch<{ Params: { id: string } }>('/conflicts/:id', { preHandler: [requireAdmin] }, async (request, reply) => {
     try {
       const { expectedUpdatedAt, ...data } = updateConflictRecordSchema.parse(request.body) as UpdateConflictRecordRequest & { expectedUpdatedAt?: string };
-      return sendSuccess(reply, await service.updateConflict(request.user.organisationId, request.params.id, data, expectedUpdatedAt));
+      return sendSuccess(reply, await service.updateConflict(request.user.organisationId, request.params.id, data, expectedUpdatedAt, request.user.userId));
     } catch (err) {
       if (err instanceof ZodError) return validationError(reply, err);
       return handleError(reply, err);
@@ -99,7 +156,7 @@ export async function governanceRegisterRoutes(app: FastifyInstance) {
 
   app.delete<{ Params: { id: string } }>('/conflicts/:id', { preHandler: [requireSessionLevel('ADMIN'), requireAdmin, requireActionApproval()] }, async (request, reply) => {
     try {
-      await service.removeConflict(request.user.organisationId, request.params.id);
+      await service.removeConflict(request.user.organisationId, request.params.id, request.user.userId);
       return sendNoContent(reply);
     } catch (err) {
       return handleError(reply, err);
@@ -108,18 +165,76 @@ export async function governanceRegisterRoutes(app: FastifyInstance) {
 
   app.get('/risks', async (request, reply) => {
     try {
+      if (request.user.role === 'MEMBER') {
+        const rows = await service.listMemberRisks(request.user.organisationId);
+        return sendSuccess(reply, rows.map(memberRisk));
+      }
       return sendSuccess(reply, await service.listRisks(request.user.organisationId));
     } catch (err) {
       return handleError(reply, err);
     }
   });
 
+  app.get('/risks/audit', { preHandler: [requireAdmin, requireControlReviewWebSession] }, async (request, reply) => {
+    try {
+      const { before } = riskAuditQuerySchema.parse(request.query);
+      return sendSuccess(reply, await service.listRiskAudit(request.user.organisationId, before));
+    } catch (err) {
+      if (err instanceof ZodError) return validationError(reply, err);
+      return handleError(reply, err);
+    }
+  });
+
+  app.get('/risks/control-verifications', { preHandler: [requireAdmin, requireControlReviewWebSession] }, async (request, reply) => {
+    try {
+      return sendSuccess(reply, await service.listRiskControlVerifications(request.user.organisationId));
+    } catch (err) {
+      return handleError(reply, err);
+    }
+  });
+
+  app.get('/risks/control-review-attention', { preHandler: [requireAdmin, requireControlReviewWebSession] }, async (request, reply) => {
+    try {
+      const { after } = riskControlAttentionQuerySchema.parse(request.query);
+      return sendSuccess(reply, await service.listRiskControlReviewAttention(request.user.organisationId, after));
+    } catch (err) {
+      if (err instanceof ZodError) return validationError(reply, err);
+      return handleError(reply, err);
+    }
+  });
+
+  app.get<{ Params: { id: string } }>('/risks/:id/control-verifications', { preHandler: [requireAdmin, requireControlReviewWebSession] }, async (request, reply) => {
+    try {
+      const { before, controlReference } = riskControlHistoryQuerySchema.parse(request.query);
+      return sendSuccess(reply, await service.listRiskControlHistory(
+        request.user.organisationId, request.params.id, before, controlReference,
+      ));
+    } catch (err) {
+      if (err instanceof ZodError) return validationError(reply, err);
+      return handleError(reply, err);
+    }
+  });
+
+  app.post<{ Params: { id: string } }>('/risks/:id/control-verifications', { preHandler: [requireAdmin, requireControlReviewWebSession] }, async (request, reply) => {
+    try {
+      const data = riskControlVerificationSchema.parse(request.body);
+      return sendCreated(reply, await service.recordRiskControlVerification({
+        ...data, organisationId: request.user.organisationId, riskId: request.params.id,
+        actorUserId: request.user.userId,
+      }));
+    } catch (err) {
+      if (err instanceof ZodError) return validationError(reply, err);
+      return handleError(reply, err);
+    }
+  });
+
   app.get<{ Params: { id: string } }>('/risks/:id', async (request, reply) => {
     try {
-      return sendSuccess(
-        reply,
-        await service.getRecord('risk', request.user.organisationId, request.params.id),
-      );
+      if (request.user.role === 'MEMBER') {
+        const row = await service.getMemberRisk(request.user.organisationId, request.params.id);
+        return sendSuccess(reply, memberRisk(row));
+      }
+      return sendSuccess(reply, await service.getRecord('risk', request.user.organisationId, request.params.id));
     } catch (err) {
       return handleError(reply, err);
     }
@@ -127,7 +242,7 @@ export async function governanceRegisterRoutes(app: FastifyInstance) {
   app.post('/risks', { preHandler: [requireAdmin] }, async (request, reply) => {
     try {
       const data = createRiskRecordSchema.parse(request.body) as CreateRiskRecordRequest;
-      return sendCreated(reply, await service.createRisk(request.user.organisationId, data));
+      return sendCreated(reply, await service.createRisk(request.user.organisationId, data, request.user.userId));
     } catch (err) {
       if (err instanceof ZodError) return validationError(reply, err);
       return handleError(reply, err);
@@ -137,7 +252,7 @@ export async function governanceRegisterRoutes(app: FastifyInstance) {
   app.patch<{ Params: { id: string } }>('/risks/:id', { preHandler: [requireAdmin] }, async (request, reply) => {
     try {
       const { expectedUpdatedAt, ...data } = updateRiskRecordSchema.parse(request.body) as UpdateRiskRecordRequest & { expectedUpdatedAt?: string };
-      return sendSuccess(reply, await service.updateRisk(request.user.organisationId, request.params.id, data, expectedUpdatedAt));
+      return sendSuccess(reply, await service.updateRisk(request.user.organisationId, request.params.id, data, expectedUpdatedAt, request.user.userId));
     } catch (err) {
       if (err instanceof ZodError) return validationError(reply, err);
       return handleError(reply, err);
@@ -146,14 +261,14 @@ export async function governanceRegisterRoutes(app: FastifyInstance) {
 
   app.delete<{ Params: { id: string } }>('/risks/:id', { preHandler: [requireSessionLevel('ADMIN'), requireAdmin, requireActionApproval()] }, async (request, reply) => {
     try {
-      await service.removeRisk(request.user.organisationId, request.params.id);
+      await service.removeRisk(request.user.organisationId, request.params.id, request.user.userId);
       return sendNoContent(reply);
     } catch (err) {
       return handleError(reply, err);
     }
   });
 
-  app.get('/complaints', async (request, reply) => {
+  app.get('/complaints', { preHandler: [requireAdmin] }, async (request, reply) => {
     try {
       return sendSuccess(reply, await service.listComplaints(request.user.organisationId));
     } catch (err) {
@@ -161,7 +276,17 @@ export async function governanceRegisterRoutes(app: FastifyInstance) {
     }
   });
 
-  app.get<{ Params: { id: string } }>('/complaints/:id', async (request, reply) => {
+  app.get('/change-audit', { preHandler: [requireAdmin, requireControlReviewWebSession] }, async (request, reply) => {
+    try {
+      const { before } = registerAuditQuerySchema.parse(request.query);
+      return sendSuccess(reply, await service.listRegisterAudit(request.user.organisationId, before));
+    } catch (err) {
+      if (err instanceof ZodError) return validationError(reply, err);
+      return handleError(reply, err);
+    }
+  });
+
+  app.get<{ Params: { id: string } }>('/complaints/:id', { preHandler: [requireAdmin] }, async (request, reply) => {
     try {
       return sendSuccess(
         reply,
@@ -174,7 +299,7 @@ export async function governanceRegisterRoutes(app: FastifyInstance) {
   app.post('/complaints', { preHandler: [requireAdmin] }, async (request, reply) => {
     try {
       const data = createComplaintRecordSchema.parse(request.body) as CreateComplaintRecordRequest;
-      return sendCreated(reply, await service.createComplaint(request.user.organisationId, data));
+      return sendCreated(reply, await service.createComplaint(request.user.organisationId, data, request.user.userId));
     } catch (err) {
       if (err instanceof ZodError) return validationError(reply, err);
       return handleError(reply, err);
@@ -184,7 +309,7 @@ export async function governanceRegisterRoutes(app: FastifyInstance) {
   app.patch<{ Params: { id: string } }>('/complaints/:id', { preHandler: [requireAdmin] }, async (request, reply) => {
     try {
       const { expectedUpdatedAt, ...data } = updateComplaintRecordSchema.parse(request.body) as UpdateComplaintRecordRequest & { expectedUpdatedAt?: string };
-      return sendSuccess(reply, await service.updateComplaint(request.user.organisationId, request.params.id, data, expectedUpdatedAt));
+      return sendSuccess(reply, await service.updateComplaint(request.user.organisationId, request.params.id, data, expectedUpdatedAt, request.user.userId));
     } catch (err) {
       if (err instanceof ZodError) return validationError(reply, err);
       return handleError(reply, err);
@@ -193,7 +318,7 @@ export async function governanceRegisterRoutes(app: FastifyInstance) {
 
   app.delete<{ Params: { id: string } }>('/complaints/:id', { preHandler: [requireSessionLevel('ADMIN'), requireAdmin, requireActionApproval()] }, async (request, reply) => {
     try {
-      await service.removeComplaint(request.user.organisationId, request.params.id);
+      await service.removeComplaint(request.user.organisationId, request.params.id, request.user.userId);
       return sendNoContent(reply);
     } catch (err) {
       return handleError(reply, err);
@@ -202,6 +327,10 @@ export async function governanceRegisterRoutes(app: FastifyInstance) {
 
   app.get('/fundraising', async (request, reply) => {
     try {
+      if (request.user.role === 'MEMBER') {
+        const rows = await service.listMemberFundraising(request.user.organisationId);
+        return sendSuccess(reply, rows.map(memberFundraising));
+      }
       return sendSuccess(reply, await service.listFundraising(request.user.organisationId));
     } catch (err) {
       return handleError(reply, err);
@@ -210,10 +339,11 @@ export async function governanceRegisterRoutes(app: FastifyInstance) {
 
   app.get<{ Params: { id: string } }>('/fundraising/:id', async (request, reply) => {
     try {
-      return sendSuccess(
-        reply,
-        await service.getRecord('fundraising', request.user.organisationId, request.params.id),
-      );
+      if (request.user.role === 'MEMBER') {
+        const row = await service.getMemberFundraising(request.user.organisationId, request.params.id);
+        return sendSuccess(reply, memberFundraising(row));
+      }
+      return sendSuccess(reply, await service.getRecord('fundraising', request.user.organisationId, request.params.id));
     } catch (err) {
       return handleError(reply, err);
     }
@@ -221,7 +351,7 @@ export async function governanceRegisterRoutes(app: FastifyInstance) {
   app.post('/fundraising', { preHandler: [requireAdmin] }, async (request, reply) => {
     try {
       const data = createFundraisingRecordSchema.parse(request.body) as CreateFundraisingRecordRequest;
-      return sendCreated(reply, await service.createFundraising(request.user.organisationId, data));
+      return sendCreated(reply, await service.createFundraising(request.user.organisationId, data, request.user.userId));
     } catch (err) {
       if (err instanceof ZodError) return validationError(reply, err);
       return handleError(reply, err);
@@ -231,7 +361,7 @@ export async function governanceRegisterRoutes(app: FastifyInstance) {
   app.patch<{ Params: { id: string } }>('/fundraising/:id', { preHandler: [requireAdmin] }, async (request, reply) => {
     try {
       const { expectedUpdatedAt, ...data } = updateFundraisingRecordSchema.parse(request.body) as UpdateFundraisingRecordRequest & { expectedUpdatedAt?: string };
-      return sendSuccess(reply, await service.updateFundraising(request.user.organisationId, request.params.id, data, expectedUpdatedAt));
+      return sendSuccess(reply, await service.updateFundraising(request.user.organisationId, request.params.id, data, expectedUpdatedAt, request.user.userId));
     } catch (err) {
       if (err instanceof ZodError) return validationError(reply, err);
       return handleError(reply, err);
@@ -240,7 +370,7 @@ export async function governanceRegisterRoutes(app: FastifyInstance) {
 
   app.delete<{ Params: { id: string } }>('/fundraising/:id', { preHandler: [requireSessionLevel('ADMIN'), requireAdmin, requireActionApproval()] }, async (request, reply) => {
     try {
-      await service.removeFundraising(request.user.organisationId, request.params.id);
+      await service.removeFundraising(request.user.organisationId, request.params.id, request.user.userId);
       return sendNoContent(reply);
     } catch (err) {
       return handleError(reply, err);
@@ -250,7 +380,9 @@ export async function governanceRegisterRoutes(app: FastifyInstance) {
   app.get('/annual-report', async (request, reply) => {
     try {
       const year = reportingYear(request.query);
-      return sendSuccess(reply, await service.getAnnualReportReadiness(request.user.organisationId, year));
+      return sendSuccess(reply, request.user.role === 'MEMBER'
+        ? await service.getMemberAnnualReportReadiness(request.user.organisationId, year)
+        : await service.getAnnualReportReadiness(request.user.organisationId, year));
     } catch (err) {
       if (err instanceof ZodError) return validationError(reply, err);
       return handleError(reply, err);
@@ -260,7 +392,7 @@ export async function governanceRegisterRoutes(app: FastifyInstance) {
   app.put('/annual-report', { preHandler: [requireAdmin] }, async (request, reply) => {
     try {
       const data = upsertAnnualReportReadinessSchema.parse(request.body) as UpsertAnnualReportReadinessRequest;
-      return sendSuccess(reply, await service.upsertAnnualReportReadiness(request.user.organisationId, data));
+      return sendSuccess(reply, await service.upsertAnnualReportReadiness(request.user.organisationId, data, request.user.userId));
     } catch (err) {
       if (err instanceof ZodError) return validationError(reply, err);
       return handleError(reply, err);
@@ -270,7 +402,9 @@ export async function governanceRegisterRoutes(app: FastifyInstance) {
   app.get('/financial-controls', async (request, reply) => {
     try {
       const year = reportingYear(request.query);
-      return sendSuccess(reply, await service.getFinancialControlReview(request.user.organisationId, year));
+      return sendSuccess(reply, request.user.role === 'MEMBER'
+        ? await service.getMemberFinancialControlReview(request.user.organisationId, year)
+        : await service.getFinancialControlReview(request.user.organisationId, year));
     } catch (err) {
       if (err instanceof ZodError) return validationError(reply, err);
       return handleError(reply, err);
@@ -280,7 +414,7 @@ export async function governanceRegisterRoutes(app: FastifyInstance) {
   app.put('/financial-controls', { preHandler: [requireAdmin] }, async (request, reply) => {
     try {
       const data = upsertFinancialControlReviewSchema.parse(request.body) as UpsertFinancialControlReviewRequest;
-      return sendSuccess(reply, await service.upsertFinancialControlReview(request.user.organisationId, data));
+      return sendSuccess(reply, await service.upsertFinancialControlReview(request.user.organisationId, data, request.user.userId));
     } catch (err) {
       if (err instanceof ZodError) return validationError(reply, err);
       return handleError(reply, err);

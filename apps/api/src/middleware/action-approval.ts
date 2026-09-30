@@ -28,7 +28,7 @@ export const APPROVAL_TTL_MS = 5 * 60 * 1000;
 export function summarise(method: string, routePattern: string): string {
   const verb =
     method === "DELETE"
-      ? "Permanently delete"
+      ? "Delete from active records"
       : method === "PATCH" || method === "PUT"
         ? "Change"
         : "Carry out";

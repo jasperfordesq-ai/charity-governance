@@ -2,6 +2,7 @@ import type { CredentialStore } from './credentials.js';
 import type { AccessLevel, DataScope, Realm } from './config.js';
 import { registerSecret } from './redact.js';
 import { CONNECTOR_VERSION } from './version.js';
+import { withConnectorRefreshLock } from './refresh-coordination.js';
 
 /**
  * Identifies this as the connector rather than a browser.
@@ -18,6 +19,22 @@ export class NotConnectedError extends Error {
   constructor(message = 'Not connected. Run: charitypilot-mcp connect') {
     super(message);
     this.name = 'NotConnectedError';
+  }
+}
+
+export class SecondFactorRequiredError extends Error {
+  readonly code = 'SECOND_FACTOR_REQUIRED';
+  constructor(message: string) {
+    super(message);
+    this.name = 'SecondFactorRequiredError';
+  }
+}
+
+export class SecondFactorRateLimitedError extends Error {
+  readonly code = 'SECOND_FACTOR_RATE_LIMITED';
+  constructor(message: string) {
+    super(message);
+    this.name = 'SecondFactorRateLimitedError';
   }
 }
 
@@ -70,9 +87,9 @@ interface SessionOptions {
   dataScope?: DataScope;
   fetchImpl?: typeof fetch;
   realm?: Realm;
-  /** Operator realm only: the authenticator code, typed once at connect. */
+  /** The account authenticator code, typed once at connect. */
   code?: string | undefined;
-  /** Operator realm only: a recovery code, when the authenticator is gone. */
+  /** A recovery code, when the account authenticator is gone. */
   recoveryCode?: string | undefined;
 }
 
@@ -120,7 +137,7 @@ export class Session {
     return this.#identity;
   }
 
-  async login(email: string, password: string): Promise<SessionIdentity> {
+  async login(email: string, password: string, offered?: { code?: string; recoveryCode?: string }): Promise<SessionIdentity> {
     const response = await this.#post(`${this.#prefix}/login`, {
       email,
       password,
@@ -129,12 +146,9 @@ export class Session {
       // operator realm has no data scope because it has no personal data to
       // scope, and it requires the second factor because a credential an
       // agent holds, which can close a charity, may not rest on a password.
-      ...(this.#realm === 'operator'
-        ? {
-            ...(this.#code ? { code: this.#code } : {}),
-            ...(this.#recoveryCode ? { recoveryCode: this.#recoveryCode } : {}),
-          }
-        : { dataScope: this.#dataScope.toUpperCase() }),
+      ...((offered?.code ?? this.#code) ? { code: offered?.code ?? this.#code } : {}),
+      ...((offered?.recoveryCode ?? this.#recoveryCode) ? { recoveryCode: offered?.recoveryCode ?? this.#recoveryCode } : {}),
+      ...(this.#realm === 'operator' ? {} : { dataScope: this.#dataScope.toUpperCase() }),
     });
     if (!response.ok) {
       // A 403 here says nothing about whether the credentials are correct: it
@@ -160,7 +174,7 @@ export class Session {
         if (body.code === 'DATA_SCOPE_FORBIDDEN' && typeof body.error === 'string') {
           throw new Error(body.error);
         }
-        // The operator realm's own after-the-password refusal: the account has
+      // The operator realm's own after-the-password refusal: the account has
         // no authenticator, and a connector session may not rest on a password
         // alone. Reporting it as a broken host would send somebody looking in
         // entirely the wrong place for a message that already says what to do.
@@ -181,6 +195,14 @@ export class Session {
         );
       }
       if (response.status === 429) {
+        try {
+          const body = (await response.clone().json()) as { code?: unknown; error?: unknown };
+          if (body.code === 'SECOND_FACTOR_RATE_LIMITED' && typeof body.error === 'string') {
+            throw new SecondFactorRateLimitedError(body.error);
+          }
+        } catch (error) {
+          if (error instanceof SecondFactorRateLimitedError) throw error;
+        }
         // Saying "check the email address and password" here is actively
         // harmful: the credentials were never looked at, the route limits
         // attempts per email address, and a person who retypes a correct
@@ -208,7 +230,7 @@ export class Session {
           body = {};
         }
         if (body.code === 'SECOND_FACTOR_REQUIRED' && typeof body.error === 'string') {
-          throw new Error(body.error);
+          throw new SecondFactorRequiredError(body.error);
         }
       }
       throw new Error('Sign-in failed. Check the email address and password.');
@@ -277,8 +299,30 @@ export class Session {
   }
 
   async #refreshAccessToken(): Promise<string> {
+    // Separate connector processes share one keyring entry. Take the OS-owned
+    // loopback mutex before reading its single-use token and keep it through
+    // replacement persistence; per-instance single-flight alone is insufficient.
+    return withConnectorRefreshLock(this.#baseUrl, this.#realm, () => this.#refreshAccessTokenLocked());
+  }
+
+  async #refreshAccessTokenLocked(): Promise<string> {
     const refreshToken = this.#store.read();
     if (!refreshToken) throw new NotConnectedError();
+
+    const endConsumedRefresh = (message: string): never => {
+      this.#accessToken = null;
+      this.#identity = null;
+      try {
+        // Another connector process may already have replaced this credential.
+        // Never remove a successor that we did not use in this request.
+        if (this.#store.read() === refreshToken) this.#store.clear();
+      } catch (cause) {
+        throw new NotConnectedError(
+          `Session ended, and the stored credential could not be removed: ${(cause as Error).message}`,
+        );
+      }
+      throw new NotConnectedError(message);
+    };
 
     const response = await this.#post(`${this.#prefix}/refresh`, { refreshToken });
     if (!response.ok) {
@@ -295,30 +339,27 @@ export class Session {
             + 'The stored credential has been kept — try again.',
         );
       }
-      try {
-        this.#store.clear();
-      } catch (cause) {
-        throw new NotConnectedError(
-          `Session ended, and the stored credential could not be removed: ${(cause as Error).message}`,
-        );
-      }
-      this.#accessToken = null;
-      this.#identity = null;
-      throw new NotConnectedError('Session ended. Run: charitypilot-mcp connect');
+      endConsumedRefresh('Session ended. Run: charitypilot-mcp connect');
     }
-    this.#absorbTokens((await response.json()) as ConnectorTokens);
-
-    if (!this.#accessToken) {
-      try {
-        this.#store.clear();
-      } catch (cause) {
-        throw new NotConnectedError(
-          `Session ended, and the stored credential could not be removed: ${(cause as Error).message}`,
-        );
-      }
-      throw new NotConnectedError('Session ended. Run: charitypilot-mcp connect');
+    let payload: unknown;
+    try {
+      payload = await response.json();
+    } catch {
+      return endConsumedRefresh('Session renewal returned an unreadable response. Sign in again.');
     }
-    return this.#accessToken;
+    if (!payload || typeof payload !== 'object'
+      || !('accessToken' in payload) || typeof payload.accessToken !== 'string' || !payload.accessToken
+      || !('refreshToken' in payload) || typeof payload.refreshToken !== 'string' || !payload.refreshToken) {
+      return endConsumedRefresh('Session renewal did not return both replacement tokens. Sign in again.');
+    }
+    try {
+      // Persist the rotated credential before exposing its access token. If
+      // persistence fails, the old single-use token must not be offered again.
+      this.#absorbTokens(payload as ConnectorTokens);
+    } catch {
+      return endConsumedRefresh('Session renewal could not save its replacement credential. Sign in again.');
+    }
+    return this.#accessToken!;
   }
 
   /** Drop the cached access token so the next call refreshes. */
@@ -481,16 +522,15 @@ export class Session {
   #absorbTokens(payload: ConnectorTokens): boolean {
     const access = payload.accessToken;
     const refresh = payload.refreshToken;
+    if (refresh) {
+      this.#store.write(refresh);
+      registerSecret(refresh);
+    }
     if (access) {
       this.#accessToken = access;
       registerSecret(access);
     }
-    if (refresh) {
-      this.#store.write(refresh);
-      registerSecret(refresh);
-      return true;
-    }
-    return false;
+    return Boolean(refresh);
   }
 
   #post(path: string, body: unknown): Promise<Response> {

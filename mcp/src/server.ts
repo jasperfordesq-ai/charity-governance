@@ -78,10 +78,11 @@ function fileToolEnabled(
  */
 function availableFileTools(
   level: AccessLevel,
-  config: Partial<Pick<ConnectorConfig, 'uploadRoot' | 'downloadDir'>>,
+  config: Partial<Pick<ConnectorConfig, 'uploadRoot' | 'downloadDir' | 'allowPersonalData'>>,
 ): readonly FileToolDefinition[] {
   return FILE_TOOLS.filter((tool) => {
     if (FILE_RANK[level] < FILE_RANK[tool.level]) return false;
+    if ((tool.name === 'report_export' || tool.name === 'document_download') && !config.allowPersonalData) return false;
     return fileToolEnabled(tool, config);
   });
 }
@@ -249,21 +250,25 @@ export async function startServer(
     const fileTool = FILE_TOOLS.find((t) => t.name === name);
     if (fileTool) {
       assertInToolsets(name, FILE_TOOL_GROUP, config.toolsets);
-      const current = await level();
-      if (FILE_RANK[current] < FILE_RANK[fileTool.level]) {
+      const held = await posture();
+      if (FILE_RANK[held.accessLevel] < FILE_RANK[fileTool.level]) {
         throw new ConnectorError(
           'SESSION_LEVEL_TOO_LOW',
-          refusalFor(current, { ...fileTool, path: '' }),
+          refusalFor(held.accessLevel, { ...fileTool, path: '' }),
           { action: 'reconnect' },
         );
+      }
+      if ((fileTool.name === 'report_export' || fileTool.name === 'document_download') && !held.allowPersonalData) {
+        throw new ConnectorError('PERSONAL_DATA_SCOPE_REQUIRED',
+          'Whole-file downloads require a session with the personal-data gate open.');
       }
       if (!fileToolEnabled(fileTool, config)) {
         throw new ConnectorError('TOOL_DISABLED', unavailableBecause(fileTool));
       }
       return runFileTool(fileTool, client, config, args);
-      // A file tool moves whole files, which the field policy cannot filter,
-      // so the scope has nothing to say about it: a document is handed over
-      // or it is not, and the directory setting is what decides.
+      // A file tool moves whole files, which the field policy cannot redact.
+      // Downloads are therefore unavailable with personal data withheld.
+      // Upload tools retain their separate document and directory gates.
     }
 
     const tool = TOOLS.find((t) => t.name === name);

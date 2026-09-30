@@ -27,6 +27,38 @@ import { CHARITYPILOT_PROPERTY_KEY, publicationTitle } from '../services/conflue
 
 const NOW = new Date('2026-09-19T12:00:00.000Z');
 
+test('orphan retirement filters missing documents before limiting the batch', async () => {
+  let query = '';
+  let limit: unknown;
+  const updates: unknown[] = [];
+  const prisma = {
+    $queryRaw: async (parts: TemplateStringsArray, requestedLimit: unknown) => {
+      query = parts.join('?');
+      limit = requestedLimit;
+      return [{ id: 'later-orphan', documentId: 'deleted-document', organisationId: 'org-1', pageId: 'page-1' }];
+    },
+    documentPublication: {
+      findMany: () => { throw new Error('an all-publications first page would starve later orphans'); },
+      updateMany: async (args: unknown) => { updates.push(args); return { count: 1 }; },
+    },
+  };
+  const service = new DocumentPublicationService(prisma as never, () => NOW);
+  const result = await service.retireOrphanedPublications(1);
+
+  assert.match(query, /NOT EXISTS\s*\(\s*SELECT 1 FROM "Document"/);
+  assert.match(query, /'DEAD_LETTER'/, 'a failed publish can still have a real remote page');
+  assert.ok(query.indexOf('NOT EXISTS') < query.indexOf('LIMIT'), 'filter missing documents before the batch limit');
+  assert.equal(limit, 1);
+  assert.deepEqual(result, { retired: 1, deleted: 0 });
+  assert.deepEqual(updates, [{
+    where: { id: 'later-orphan', claimedAt: null, state: { in: ['PENDING', 'PROCESSED', 'DEAD_LETTER'] } },
+    data: {
+      state: 'RETIRED', retiredAt: NOW, nextAttemptAt: null, claimedAt: null,
+      alertClaimToken: null, alertClaimedAt: null,
+    },
+  }]);
+});
+
 /** Stands in for a live client. No test in this file lets a real request out. */
 const CLIENT = {
   request: async () => {
@@ -329,6 +361,56 @@ function appError(error: unknown): AppError {
 // The happy path, and the order every other test is a deviation from
 // ---------------------------------------------------------------------------
 
+test('the production document reader refuses an unreviewed or unapproved file before Confluence I/O', async () => {
+  const calls: string[] = [];
+  const deps = spyDeps(calls);
+  delete deps.readDocument;
+  deps.prisma = {
+    document: {
+      findFirst: async (args: { where: Record<string, unknown> }) => {
+        assert.equal(args.where.lifecycleStatus, 'CURRENT');
+        assert.equal(args.where.externalPublicationApproved, true);
+        return { ...DOC, fileUrl: 'org-1/policy.pdf', lifecycleStatus: 'DRAFT', externalPublicationApproved: false };
+      },
+    },
+  } as never;
+  const error = appError(await captureRejection(runPublisher(deps)));
+  assert.equal(error.code, 'DOCUMENT_PUBLICATION_NOT_APPROVED');
+  assert.deepEqual(calls, ['readTarget']);
+});
+
+test('a publication cannot reach Confluence when approval names a different site or space', async () => {
+  const calls: string[] = [];
+  const deps = spyDeps(calls);
+  deps.prisma = {
+    document: { findFirst: async (args: { where: Record<string, unknown> }) => {
+      assert.equal(args.where.externalPublicationSiteId, 'cloud-1');
+      assert.equal(args.where.externalPublicationSpaceId, 'space-1');
+      return null;
+    } },
+  } as never;
+  const error = appError(await captureRejection(runPublisher(deps)));
+  assert.equal(error.code, 'DOCUMENT_PUBLICATION_NOT_APPROVED');
+  assert.deepEqual(calls, ['readTarget']);
+});
+
+test('withdrawn publication approval stops attachment upload after storage I/O', async () => {
+  const calls: string[] = [];
+  const deps = spyDeps(calls);
+  let approvalReads = 0;
+  deps.prisma = {
+    document: { findFirst: async () => {
+      approvalReads += 1;
+      return approvalReads <= 2 ? { id: DOC.id } : null;
+    } },
+  } as never;
+  const error = appError(await captureRejection(runPublisher(deps)));
+  assert.equal(error.code, 'DOCUMENT_PUBLICATION_NOT_APPROVED');
+  assert.equal(approvalReads, 3);
+  assert.equal(calls.includes('downloadFile'), true);
+  assert.equal(calls.some((call) => call.startsWith('uploadAttachment:')), false);
+});
+
 test('a publication creates the page, records it, attaches the file, then writes the property', async () => {
   const calls: string[] = [];
   const outcome = await runPublisher(spyDeps(calls), {
@@ -403,7 +485,7 @@ test('an existing page with this title is adopted and createPage is never called
 test('a page id the row already records is adopted without any lookup', async () => {
   const calls: string[] = [];
   const outcome = await runPublisher(spyDeps(calls), {
-    row: publicationRow({ cloudId: 'cloud-1', pageId: 'page-1', pageTitle: TITLE }),
+    row: publicationRow({ cloudId: 'cloud-1', spaceId: 'space-1', pageId: 'page-1', pageTitle: TITLE }),
   });
 
   assert.equal(outcome.pageId, 'page-1');
@@ -761,6 +843,20 @@ test('a row recorded on another site is never republished over', async () => {
     false,
     'republishing would strand the first page with nothing recording where it is',
   );
+});
+
+test('a row recorded in another space on the same site is never republished over', async () => {
+  const calls: string[] = [];
+  await assert.rejects(
+    () => runPublisher(spyDeps(calls), {
+      row: publicationRow({ cloudId: 'cloud-1', spaceId: 'old-space', pageId: 'page-1' }),
+    }),
+    (error: unknown) => {
+      assert.equal(appError(error).code, 'CONFLUENCE_PUBLISH_SPACE_CHANGED');
+      return true;
+    },
+  );
+  assert.equal(calls.includes('connect'), false);
 });
 
 test('a claim lost mid-attempt stops the sequence before the upload', async () => {
@@ -1159,6 +1255,12 @@ for (const [label, thrown, expectedState, expectedReason] of [
     'PERMANENT_CONFLICT_UNRESOLVED',
   ],
   [
+    'a page recorded in another space',
+    new AppError(409, 'CONFLUENCE_PUBLISH_SPACE_CHANGED', 'x'),
+    'DEAD_LETTER',
+    'PERMANENT_CONFLICT_UNRESOLVED',
+  ],
+  [
     'an over-ceiling content property',
     new AppError(400, 'CONFLUENCE_CONTENT_PROPERTY_TOO_LARGE', 'x'),
     'DEAD_LETTER',
@@ -1463,7 +1565,7 @@ test('a non-numeric or negative Retry-After is ignored rather than trusted', () 
 test('a re-queued row whose title has changed rewrites the page, and reports the new title', async () => {
   const calls: string[] = [];
   const outcome = await runPublisher(spyDeps(calls), {
-    row: publicationRow({ pageId: 'page-1', pageTitle: 'The Old Name', reason: 'METADATA' }),
+    row: publicationRow({ spaceId: 'space-1', pageId: 'page-1', pageTitle: 'The Old Name', reason: 'METADATA' }),
   });
 
   // The version is READ immediately before the write. Confluence requires
@@ -1481,7 +1583,7 @@ test('a re-queued row whose title has changed rewrites the page, and reports the
 test('a re-queue whose title is unchanged does not publish a new page version', async () => {
   const calls: string[] = [];
   await runPublisher(spyDeps(calls), {
-    row: publicationRow({ pageId: 'page-1', pageTitle: TITLE, reason: 'METADATA' }),
+    row: publicationRow({ spaceId: 'space-1', pageId: 'page-1', pageTitle: TITLE, reason: 'METADATA' }),
   });
 
   // A no-op updatePage would still bump the page version, filling a charity's
@@ -1523,7 +1625,7 @@ test('a version conflict on the refresh is re-read and retried exactly once', as
         },
       },
     }),
-    { row: publicationRow({ pageId: 'page-1', pageTitle: 'The Old Name', reason: 'METADATA' }) },
+    { row: publicationRow({ spaceId: 'space-1', pageId: 'page-1', pageTitle: 'The Old Name', reason: 'METADATA' }) },
   );
 
   assert.equal(updates, 2, 'the conflict must be retried');
@@ -1552,7 +1654,7 @@ test('a second version conflict is not retried again', async () => {
             },
           },
         }),
-        { row: publicationRow({ pageId: 'page-1', pageTitle: 'The Old Name', reason: 'METADATA' }) },
+        { row: publicationRow({ spaceId: 'space-1', pageId: 'page-1', pageTitle: 'The Old Name', reason: 'METADATA' }) },
       ),
     ),
   );
@@ -1571,7 +1673,7 @@ test('a page that has vanished from Confluence is not recreated by a refresh', a
     await captureRejection(
       runPublisher(
         spyDeps(calls, { operations: { getPage: async () => null } }),
-        { row: publicationRow({ pageId: 'page-1', pageTitle: 'The Old Name', reason: 'METADATA' }) },
+        { row: publicationRow({ spaceId: 'space-1', pageId: 'page-1', pageTitle: 'The Old Name', reason: 'METADATA' }) },
       ),
     ),
   );

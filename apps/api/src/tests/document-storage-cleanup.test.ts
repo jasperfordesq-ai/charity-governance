@@ -16,8 +16,10 @@ import {
   supabaseDispatcher,
 } from './document-storage-deletion-fixtures.js';
 import { DOCUMENT_PUBLICATION_MAX_ATTEMPTS } from '../services/document-publication.service.js';
+import { createErasureDispatcher } from '../services/document-erasure.js';
 
 const NOW = new Date('2026-07-11T12:00:00.000Z');
+const DELETE_REASON = 'The draft was uploaded in error and is no longer required.';
 
 type OrganisationStorageRow = {
   documentStorageProvider: string | null;
@@ -27,6 +29,7 @@ type OrganisationStorageRow = {
 function buildEnqueueCapturingPrisma(
   created: Array<Record<string, unknown>>,
   organisation: OrganisationStorageRow | null = { documentStorageProvider: 'supabase' },
+  writtenProvider = 'supabase',
 ) {
   const client = {
     organisation: {
@@ -36,7 +39,7 @@ function buildEnqueueCapturingPrisma(
           : null,
     },
     document: {
-      findFirst: async () => ({ id: 'doc-1', organisationId: 'org-1', fileUrl: 'org-1/policy.pdf' }),
+      findFirst: async () => ({ id: 'doc-1', organisationId: 'org-1', fileUrl: 'org-1/policy.pdf', storageProvider: writtenProvider, lifecycleStatus: 'DRAFT' }),
       delete: async () => ({ id: 'doc-1' }),
     },
     documentStorageDeletion: {
@@ -45,6 +48,7 @@ function buildEnqueueCapturingPrisma(
         return { id: 'deletion-1' };
       },
     },
+    documentControlAudit: { create: async () => ({ id: 'delete-audit-1' }) },
     documentStorageDeletionRecovery: { create: async () => ({ id: 'recovery-1' }) },
     // `remove()` also cancels a queued Confluence publication now (Task 7).
     // These tests are about the Supabase enqueue only, so there is never one
@@ -57,12 +61,13 @@ function buildEnqueueCapturingPrisma(
 
 async function enqueuedDeletionData(
   organisation: OrganisationStorageRow | null,
+  writtenProvider = 'supabase',
 ): Promise<Record<string, unknown>> {
   const created: Array<Record<string, unknown>> = [];
-  const prisma = buildEnqueueCapturingPrisma(created, organisation);
+  const prisma = buildEnqueueCapturingPrisma(created, organisation, writtenProvider);
   const service = new DocumentService(prisma as never, () => NOW);
 
-  await service.remove('org-1', 'doc-1');
+  await service.remove('org-1', 'doc-1', 'user-1', DELETE_REASON);
 
   assert.equal(created.length, 1);
   return created[0];
@@ -75,6 +80,7 @@ test('retryPendingStorageDeletions claims, deletes, and idempotently finalizes a
 
   const result = await service.retryPendingStorageDeletions(supabaseDispatcher(async (organisationId, storagePath) => {
     deleted.push({ organisationId, storagePath });
+    return NOW;
   }));
 
   assert.deepEqual(result, {
@@ -117,6 +123,7 @@ test('retryPendingStorageDeletions claims, deletes, and idempotently finalizes a
 
   const secondResult = await service.retryPendingStorageDeletions(supabaseDispatcher(async (organisationId, storagePath) => {
     deleted.push({ organisationId, storagePath });
+    return NOW;
   }));
   assert.deepEqual(secondResult, {
     processed: 0,
@@ -126,6 +133,73 @@ test('retryPendingStorageDeletions claims, deletes, and idempotently finalizes a
     deadLetterAlert: null,
   });
   assert.deepEqual(deleted, [{ organisationId: 'org-1', storagePath: 'org-1/policy.pdf' }]);
+});
+
+test('a primary-storage absence observation is bound to the processed outbox row', async () => {
+  const mock = buildFallbackPrisma(pendingRecord());
+  const verifiedAt = new Date('2026-07-11T11:59:58.000Z');
+  const service = new DocumentService(mock.prisma as never, () => NOW);
+
+  const result = await service.retryPendingStorageDeletions(
+    supabaseDispatcher(async () => verifiedAt),
+  );
+
+  assert.equal(result.processed, 1);
+  assert.equal(mock.row().state, 'PROCESSED');
+  assert.equal(mock.row().activeObjectAbsentAt?.getTime(), verifiedAt.getTime());
+  assert.equal(mock.row().processedAt?.getTime(), NOW.getTime());
+});
+
+test('a primary-storage eraser without an absence observation stays pending for retry', async () => {
+  const mock = buildFallbackPrisma(pendingRecord());
+  const service = new DocumentService(mock.prisma as never, () => NOW);
+
+  const result = await service.retryPendingStorageDeletions(
+    createErasureDispatcher({ supabase: async () => undefined }),
+  );
+
+  assert.equal(result.processed, 0);
+  assert.equal(result.retryScheduled, 1);
+  assert.equal(mock.row().state, 'PENDING');
+  assert.equal(mock.row().activeObjectAbsentAt, null);
+  assert.equal(mock.row().processedAt, null);
+  assert.match(mock.row().lastError ?? '', /STORAGE_DELETE_UNVERIFIED/);
+});
+
+test('cleanup never erases bytes still referenced by a live document', async () => {
+  const mock = buildFallbackPrisma(pendingRecord());
+  let eraserCalled = false;
+  mock.prisma.document.findFirst = async (args: unknown) => {
+    assert.deepEqual((args as { where: unknown }).where, {
+      organisationId: 'org-1', fileUrl: 'org-1/policy.pdf',
+    });
+    return { id: 'live-document' };
+  };
+  const service = new DocumentService(mock.prisma as never, () => NOW);
+
+  const result = await service.retryPendingStorageDeletions(
+    supabaseDispatcher(async () => { eraserCalled = true; return NOW; }),
+  );
+
+  assert.equal(eraserCalled, false);
+  assert.equal(result.retryScheduled, 1);
+  assert.equal(mock.row().state, 'PENDING');
+  assert.match(mock.row().lastError ?? '', /STORAGE_TARGET_STILL_REFERENCED/);
+});
+
+test('cleanup defers erasure when the live-reference check is unavailable', async () => {
+  const mock = buildFallbackPrisma(pendingRecord());
+  let eraserCalled = false;
+  mock.prisma.document.findFirst = async () => { throw new Error('document read unavailable'); };
+  const service = new DocumentService(mock.prisma as never, () => NOW);
+
+  const result = await service.retryPendingStorageDeletions(
+    supabaseDispatcher(async () => { eraserCalled = true; return NOW; }),
+  );
+
+  assert.equal(eraserCalled, false);
+  assert.equal(result.retryScheduled, 1);
+  assert.equal(mock.row().state, 'PENDING');
 });
 
 test('Postgres claim query selects only due bounded pending rows with skip-locked ownership', async () => {
@@ -142,6 +216,7 @@ test('Postgres claim query selects only due bounded pending rows with skip-locke
       }
       return [];
     },
+    document: { findFirst: async () => null },
     documentStorageDeletion: {
       updateMany: async (args: unknown) => {
         updates.push(args);
@@ -152,7 +227,7 @@ test('Postgres claim query selects only due bounded pending rows with skip-locke
   };
   const service = new DocumentService(prisma as never, () => NOW);
 
-  const result = await service.retryPendingStorageDeletions(supabaseDispatcher(async () => undefined), 10);
+  const result = await service.retryPendingStorageDeletions(supabaseDispatcher(async () => NOW), 10);
 
   const pendingQuery = queries.find(({ sql }) => sql.includes('"state" = \'PENDING\''));
   assert.ok(pendingQuery);
@@ -278,6 +353,7 @@ test('a hung provider deletion is aborted, recorded once, and cannot finalize la
           resolve();
         }, 60);
       });
+      return NOW;
     }),
   );
 
@@ -316,7 +392,7 @@ test('maximum sequential claim batch is derived below the stale lease boundary',
     documentStorageDeletionRecovery: { create: async () => ({ id: 'unused' }) },
   };
   const service = new DocumentService(prisma as never, () => NOW);
-  await service.retryPendingStorageDeletions(supabaseDispatcher(async () => undefined), 1000);
+  await service.retryPendingStorageDeletions(supabaseDispatcher(async () => NOW), 1000);
   assert.equal(take, DOCUMENT_STORAGE_DELETION_MAX_CLAIM_BATCH);
 });
 
@@ -327,32 +403,29 @@ test('an enqueued deletion names the supabase provider with no target reference'
   assert.equal(data.targetRef ?? null, null);
 });
 
-test('an enqueued deletion for a local organisation names the local provider, not supabase', async () => {
-  const data = await enqueuedDeletionData({ documentStorageProvider: 'local' });
+test('an enqueued deletion uses the written local provider even when the current preference is supabase', async () => {
+  const data = await enqueuedDeletionData({ documentStorageProvider: 'supabase' }, 'local');
 
   assert.equal(
     data.provider,
     'local',
-    'a local organisation must not enqueue a row labelled supabase; Task 2 dispatches on this value',
+    'the queued eraser must use the provider that received the bytes',
   );
   assert.equal(data.targetRef ?? null, null);
 });
 
-test('an organisation with no recorded provider falls back to the deployment default', async () => {
-  // Both halves pin DOCUMENT_STORAGE_DRIVER rather than reading whatever the
-  // suite happens to leave in the environment, so this asserts the fallback and
-  // not an ambient coincidence.
+test('a document keeps its written provider when the deployment default changes', async () => {
   const previous = process.env.DOCUMENT_STORAGE_DRIVER;
   const withDriver = async (driver: string | undefined) => {
     if (driver === undefined) delete process.env.DOCUMENT_STORAGE_DRIVER;
     else process.env.DOCUMENT_STORAGE_DRIVER = driver;
-    const data = await enqueuedDeletionData({ documentStorageProvider: null });
+    const data = await enqueuedDeletionData({ documentStorageProvider: null }, 'local');
     return data.provider;
   };
 
   try {
     assert.equal(await withDriver('local'), 'local');
-    assert.equal(await withDriver(undefined), 'supabase');
+    assert.equal(await withDriver(undefined), 'local');
   } finally {
     if (previous === undefined) delete process.env.DOCUMENT_STORAGE_DRIVER;
     else process.env.DOCUMENT_STORAGE_DRIVER = previous;
@@ -370,7 +443,7 @@ test('a document whose organisation names an unerasable provider can still be de
     const data = await enqueuedDeletionData({
       documentStorageProvider: provider,
       documentStorageAlphaOptIn: false,
-    });
+    }, provider);
     assert.equal(data.provider, provider);
   }
 });
@@ -435,10 +508,11 @@ function buildPublicationCancelPrisma(publication: PublicationFixture | null) {
       findUnique: async () => ({ documentStorageProvider: 'supabase', documentStorageAlphaOptIn: false }),
     },
     document: {
-      findFirst: async () => ({ id: 'doc-1', organisationId: 'org-1', fileUrl: 'org-1/policy.pdf' }),
+      findFirst: async () => ({ id: 'doc-1', organisationId: 'org-1', fileUrl: 'org-1/policy.pdf', storageProvider: 'supabase', lifecycleStatus: 'DRAFT' }),
       delete: async () => ({ id: 'doc-1' }),
     },
     documentStorageDeletion: { create: async () => ({ id: 'deletion-1' }) },
+    documentControlAudit: { create: async () => ({ id: 'delete-audit-1' }) },
     documentPublication,
     $transaction: async <T>(callback: (tx: unknown) => Promise<T>) => callback(client),
   };
@@ -450,7 +524,7 @@ test('deleting a document with no queued Confluence publication leaves nothing t
   const mock = buildPublicationCancelPrisma(null);
   const service = new DocumentService(mock.prisma as never, () => NOW);
 
-  await service.remove('org-1', 'doc-1');
+  await service.remove('org-1', 'doc-1', 'user-1', DELETE_REASON);
 
   assert.equal(mock.updates.length, 0);
   assert.equal(mock.deletes.length, 0);
@@ -465,7 +539,7 @@ test('a publication with no pageId is cancelled outright when its document is de
   });
   const service = new DocumentService(mock.prisma as never, () => NOW);
 
-  await service.remove('org-1', 'doc-1');
+  await service.remove('org-1', 'doc-1', 'user-1', DELETE_REASON);
 
   assert.equal(mock.row(), null, 'nothing was ever created in Confluence, so the row is deleted outright');
   assert.equal(mock.deletes.length, 1);
@@ -486,7 +560,7 @@ test('a publication that already has a pageId is retired, not erased, when its d
   });
   const service = new DocumentService(mock.prisma as never, () => NOW);
 
-  await service.remove('org-1', 'doc-1');
+  await service.remove('org-1', 'doc-1', 'user-1', DELETE_REASON);
 
   const row = mock.row();
   assert.notEqual(row, null, 'a publication that named a Confluence page must never be deleted');
@@ -516,7 +590,7 @@ test('deleting a document retires an already dead-lettered publication too, once
   });
   const service = new DocumentService(mock.prisma as never, () => NOW);
 
-  await service.remove('org-1', 'doc-1');
+  await service.remove('org-1', 'doc-1', 'user-1', DELETE_REASON);
 
   assert.equal(mock.deletes.length, 0, 'a row naming a page is never deleted outright');
   const row = mock.row();
@@ -548,8 +622,9 @@ test('a Confluence publication retirement failure never fails the document delet
 
   try {
     const service = new DocumentService(mock.prisma as never, () => NOW);
-    const result = await service.remove('org-1', 'doc-1');
+    const result = await service.remove('org-1', 'doc-1', 'user-1', DELETE_REASON);
     assert.equal(result.storageDeletionId, 'deletion-1');
+    assert.equal(result.provider, 'supabase');
   } finally {
     console.error = originalConsoleError;
   }
@@ -597,7 +672,7 @@ function buildDualErasurePrisma(publication: PublishedPublicationFixture | null)
       findUnique: async () => ({ documentStorageProvider: 'supabase', documentStorageAlphaOptIn: false }),
     },
     document: {
-      findFirst: async () => ({ id: 'doc-1', organisationId: 'org-1', fileUrl: 'org-1/policy.pdf' }),
+      findFirst: async () => ({ id: 'doc-1', organisationId: 'org-1', fileUrl: 'org-1/policy.pdf', storageProvider: 'supabase', lifecycleStatus: 'DRAFT' }),
       delete: async () => {
         documentDeleted = true;
         return { id: 'doc-1' };
@@ -609,6 +684,7 @@ function buildDualErasurePrisma(publication: PublishedPublicationFixture | null)
         return { id: `deletion-${created.length}` };
       },
     },
+    documentControlAudit: { create: async () => ({ id: 'delete-audit-1' }) },
     documentPublication: {
       // `applyPrismaSelect` is what stops this double inventing a row shape: a
       // field the production `select` asks for and the fixture does not define
@@ -630,7 +706,7 @@ test('deleting a mirrored document erases the Irish copy and leaves the Confluen
   );
   const service = new DocumentService(mock.prisma as never, () => NOW);
 
-  await service.remove('org-1', 'doc-1');
+  await service.remove('org-1', 'doc-1', 'user-1', DELETE_REASON);
 
   assert.equal(mock.created.length, 1, 'exactly one erasure row: the Supabase copy');
   assert.equal(mock.created[0].provider, 'supabase');
@@ -645,7 +721,7 @@ test('a document that was never published to Confluence enqueues only the Supaba
   const mock = buildDualErasurePrisma(null);
   const service = new DocumentService(mock.prisma as never, () => NOW);
 
-  await service.remove('org-1', 'doc-1');
+  await service.remove('org-1', 'doc-1', 'user-1', DELETE_REASON);
 
   assert.equal(mock.created.length, 1);
   assert.equal(mock.created[0].provider, 'supabase');
@@ -660,7 +736,7 @@ test('a publication that never recorded a pageId enqueues only the Supabase row'
   );
   const service = new DocumentService(mock.prisma as never, () => NOW);
 
-  await service.remove('org-1', 'doc-1');
+  await service.remove('org-1', 'doc-1', 'user-1', DELETE_REASON);
 
   assert.equal(mock.created.length, 1);
   assert.equal(mock.created[0].provider, 'supabase');
@@ -685,7 +761,7 @@ for (const [situation, overrides] of unprocessedButPaged) {
     const mock = buildDualErasurePrisma(publishedPublication(overrides));
     const service = new DocumentService(mock.prisma as never, () => NOW);
 
-    await service.remove('org-1', 'doc-1');
+    await service.remove('org-1', 'doc-1', 'user-1', DELETE_REASON);
 
     assert.equal(mock.created.length, 1, 'only the Supabase copy is ever erased on an ordinary deletion');
     assert.equal(mock.created[0].provider, 'supabase');
@@ -770,7 +846,7 @@ function buildDeleteWindowPrisma(moment: DeleteWindowMoment) {
       findUnique: async () => ({ documentStorageProvider: 'supabase', documentStorageAlphaOptIn: false }),
     },
     document: {
-      findFirst: async () => ({ id: 'doc-1', organisationId: 'org-1', fileUrl: 'org-1/policy.pdf' }),
+      findFirst: async () => ({ id: 'doc-1', organisationId: 'org-1', fileUrl: 'org-1/policy.pdf', storageProvider: 'supabase', lifecycleStatus: 'DRAFT' }),
       delete: async () => ({ id: 'doc-1' }),
     },
     documentStorageDeletion: {
@@ -779,6 +855,7 @@ function buildDeleteWindowPrisma(moment: DeleteWindowMoment) {
         return { id: 'deletion-' + String(created.length) };
       },
     },
+    documentControlAudit: { create: async () => ({ id: 'delete-audit-1' }) },
     documentPublication: {
       findFirst: async () => {
         throw new Error(
@@ -840,7 +917,7 @@ for (const moment of [
     const mock = buildDeleteWindowPrisma(moment);
     const service = new DocumentService(mock.prisma as never, () => NOW);
 
-    await service.remove('org-1', 'doc-1');
+    await service.remove('org-1', 'doc-1', 'user-1', DELETE_REASON);
 
     // True whichever side of the lock the race lands on: retirement never
     // creates a `confluence` erasure row, so a page recorded mid-race is
@@ -861,7 +938,7 @@ test('a page recorded before the second locked read is retired, not left danglin
   const mock = buildDeleteWindowPrisma('after-the-delete-transaction-read');
   const service = new DocumentService(mock.prisma as never, () => NOW);
 
-  await service.remove('org-1', 'doc-1');
+  await service.remove('org-1', 'doc-1', 'user-1', DELETE_REASON);
 
   const row = mock.publication();
   assert.notEqual(row, null);
@@ -882,7 +959,7 @@ test('a publication holding a live claim is never destroyed out from under the a
   const mock = buildDeleteWindowPrisma('after-the-cancellation-read');
   const service = new DocumentService(mock.prisma as never, () => NOW);
 
-  await service.remove('org-1', 'doc-1');
+  await service.remove('org-1', 'doc-1', 'user-1', DELETE_REASON);
 
   const row = mock.publication();
   assert.notEqual(row, null, 'the row naming the page must not be deleted while an attempt is in flight');
@@ -911,7 +988,7 @@ test('a page id recorded between the retirement read and its delete is not destr
       findUnique: async () => ({ documentStorageProvider: 'supabase', documentStorageAlphaOptIn: false }),
     },
     document: {
-      findFirst: async () => ({ id: 'doc-1', organisationId: 'org-1', fileUrl: 'org-1/policy.pdf' }),
+      findFirst: async () => ({ id: 'doc-1', organisationId: 'org-1', fileUrl: 'org-1/policy.pdf', storageProvider: 'supabase', lifecycleStatus: 'DRAFT' }),
       delete: async () => ({ id: 'doc-1' }),
     },
     documentStorageDeletion: {
@@ -920,6 +997,7 @@ test('a page id recorded between the retirement read and its delete is not destr
         return { id: 'deletion-' + String(created.length) };
       },
     },
+    documentControlAudit: { create: async () => ({ id: 'delete-audit-1' }) },
     documentPublication: {
       findFirst: async (args: { where: Record<string, unknown>; select?: Record<string, unknown> }) => {
         const snapshot = publication === null ? null : applyPrismaSelect(publication, args);
@@ -945,7 +1023,7 @@ test('a page id recorded between the retirement read and its delete is not destr
 
   const service = new DocumentService(client as never, () => NOW);
 
-  await service.remove('org-1', 'doc-1');
+  await service.remove('org-1', 'doc-1', 'user-1', DELETE_REASON);
 
   assert.notEqual(publication, null, 'the only record of where the page is must survive retirement');
   assert.equal(publication!.pageId, 'page-1');
@@ -967,7 +1045,7 @@ test('a failed read of the publication row no longer fails the document deletion
   // is bookkeeping about a page that is being left in place either way, so its
   // failure is logged and swallowed — unlike the old erasure enqueue, which
   // held the deletion hostage because a missed row meant an unerasable orphan.
-  await service.remove('org-1', 'doc-1');
+  await service.remove('org-1', 'doc-1', 'user-1', DELETE_REASON);
 });
 
 test('a late rejection from a timed-out storage deletion attempt is observed rather than left unhandled', async () => {
@@ -990,7 +1068,7 @@ test('a late rejection from a timed-out storage deletion attempt is observed rat
     const result = await service.retryPendingStorageDeletions(
       supabaseDispatcher(
         () =>
-          new Promise<void>((_resolve, reject) => {
+          new Promise<Date>((_resolve, reject) => {
             setTimeout(() => reject(new Error('the provider failed, long after the deadline')), 60);
           }),
       ),

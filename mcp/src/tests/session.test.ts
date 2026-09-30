@@ -62,6 +62,28 @@ test('login posts to the connector route, not the browser one', async () => {
   assert.deepEqual(seen, ['https://example.test/api/v1/auth/connector/login']);
 });
 
+test('a charity connector can retry a password-proven second-factor challenge without storing the code', async () => {
+  const store = createMemoryStore();
+  const bodies: Array<Record<string, unknown>> = [];
+  const session = new Session({
+    baseUrl: 'https://example.test', store,
+    fetchImpl: async (_input, init) => {
+      bodies.push(JSON.parse(String(init?.body)));
+      return bodies.length === 1
+        ? new Response(JSON.stringify({ code: 'SECOND_FACTOR_REQUIRED', error: 'Enter a code.' }), {
+          status: 401, headers: { 'content-type': 'application/json' },
+        })
+        : jsonWithTokens(LOGIN_BODY, { accessToken: 'access2', refreshToken: 'refresh2' });
+    },
+  });
+  await assert.rejects(() => session.login('a@b.ie', 'pw'), (error: unknown) =>
+    (error as { code?: string }).code === 'SECOND_FACTOR_REQUIRED');
+  assert.equal(store.read(), null);
+  await session.login('a@b.ie', 'pw', { recoveryCode: 'ABCDEF-234567' });
+  assert.equal(bodies[1]?.recoveryCode, 'ABCDEF-234567');
+  assert.equal(store.read(), 'refresh2');
+});
+
 test('login asks for the access level it was configured with', async () => {
   const bodies: unknown[] = [];
   for (const level of ['read', 'write', 'admin'] as const) {
@@ -282,6 +304,72 @@ test('a rejected refresh clears the store and reports NOT_CONNECTED', async () =
   assert.equal(store.read(), null, 'a dead refresh token must not be left behind');
 });
 
+test('a rejected refresh does not erase a successor credential written by another client', async () => {
+  const store = createMemoryStore('spent');
+  const session = new Session({
+    baseUrl: 'https://example.test', store,
+    fetchImpl: async () => {
+      store.write('successor');
+      return new Response('{}', { status: 401 });
+    },
+  });
+  await assert.rejects(() => session.accessToken(), NotConnectedError);
+  assert.equal(store.read(), 'successor');
+});
+
+test('a successful refresh without both replacement tokens clears the spent credential', async () => {
+  for (const payload of [
+    { accessToken: 'access2' },
+    { refreshToken: 'refresh2' },
+    { accessToken: '', refreshToken: 'refresh2' },
+  ]) {
+    const store = createMemoryStore('spent');
+    let calls = 0;
+    const session = new Session({
+      baseUrl: 'https://example.test', store,
+      fetchImpl: async () => {
+        calls++;
+        return new Response(JSON.stringify(payload), { status: 200 });
+      },
+    });
+    await assert.rejects(() => session.accessToken(), NotConnectedError);
+    assert.equal(store.read(), null);
+    await assert.rejects(() => session.accessToken(), NotConnectedError);
+    assert.equal(calls, 1, 'a malformed success must not cause reuse of a spent token');
+  }
+});
+
+test('an unreadable successful refresh clears the spent credential', async () => {
+  const store = createMemoryStore('spent');
+  const session = new Session({
+    baseUrl: 'https://example.test', store,
+    fetchImpl: async () => new Response('{', { status: 200 }),
+  });
+  await assert.rejects(() => session.accessToken(), NotConnectedError);
+  assert.equal(store.read(), null);
+});
+
+test('a rotated credential that cannot be persisted is cleared before another refresh', async () => {
+  let value: string | null = 'spent';
+  let calls = 0;
+  const session = new Session({
+    baseUrl: 'https://example.test',
+    store: {
+      read: () => value,
+      write: () => { throw new Error('fixture keyring refusal'); },
+      clear: () => { value = null; },
+    },
+    fetchImpl: async () => {
+      calls++;
+      return jsonWithTokens({}, { accessToken: 'access2', refreshToken: 'refresh2' });
+    },
+  });
+  await assert.rejects(() => session.accessToken(), NotConnectedError);
+  assert.equal(value, null);
+  await assert.rejects(() => session.accessToken(), NotConnectedError);
+  assert.equal(calls, 1);
+});
+
 test('a 500 on refresh keeps the credential instead of logging the user out', async () => {
   const store = createMemoryStore('refresh1');
   const session = new Session({
@@ -331,6 +419,26 @@ test('concurrent callers share one refresh instead of racing to spend the token'
   assert.equal(b, 'access1');
   assert.equal(c, 'access1');
   assert.equal(store.read(), 'refresh2');
+});
+
+test('separate connector sessions using one credential do not present the same token twice', async () => {
+  const store = createMemoryStore('refresh1');
+  const offered: string[] = [];
+  const fetchImpl: typeof fetch = async (_input, init) => {
+    const token = (JSON.parse(String(init?.body)) as { refreshToken: string }).refreshToken;
+    assert.equal(token, store.read(), 'each refresh must read the shared credential under the lock');
+    offered.push(token);
+    await new Promise((resolve) => setTimeout(resolve, 25));
+    return jsonWithTokens({}, {
+      accessToken: `access${offered.length}`,
+      refreshToken: `refresh${offered.length + 1}`,
+    });
+  };
+  const first = new Session({ baseUrl: 'https://shared-connector-fixture.test', store, fetchImpl });
+  const second = new Session({ baseUrl: 'https://shared-connector-fixture.test', store, fetchImpl });
+  await Promise.all([first.accessToken(), second.accessToken()]);
+  assert.deepEqual(offered, ['refresh1', 'refresh2']);
+  assert.equal(store.read(), 'refresh3');
 });
 
 test('tokens are registered for redaction so later errors cannot leak them', async () => {
@@ -408,6 +516,18 @@ test('a 429 says the attempts ran out, not that the password is wrong', async ()
     return true;
   });
   assert.equal(store.read(), null);
+});
+
+test('a shared second-factor limit reports its longer wait without prompting for another code', async () => {
+  const session = new Session({
+    baseUrl: 'https://example.test', store: createMemoryStore(),
+    fetchImpl: async () => new Response(JSON.stringify({
+      code: 'SECOND_FACTOR_RATE_LIMITED',
+      error: 'Too many code attempts. Wait 15 minutes before trying again.',
+    }), { status: 429, headers: { 'content-type': 'application/json' } }),
+  });
+  await assert.rejects(() => session.login('a@b.ie', 'pw', { code: '123456' }),
+    (error: unknown) => (error as { code?: string }).code === 'SECOND_FACTOR_RATE_LIMITED');
 });
 
 test('a role refused the data scope is told that, not that the host is wrong', async () => {

@@ -4,10 +4,11 @@ import { test } from 'node:test';
 // Set every env var the imported modules read at import/construction time, BEFORE imports.
 process.env.JWT_SECRET = process.env.JWT_SECRET ?? 'organisation-route-test-secret';
 
-const [{ default: Fastify }, { organisationRoutes }, { signAccessToken }] = await Promise.all([
+const [{ default: Fastify }, { organisationRoutes }, { signAccessToken }, { publicUser }] = await Promise.all([
   import('fastify'),
   import('../routes/organisations/index.js'),
   import('../utils/jwt.js'),
+  import('../utils/public-dtos.js'),
 ]);
 
 type Role = 'OWNER' | 'ADMIN' | 'MEMBER';
@@ -109,6 +110,7 @@ async function buildApp(
   const app = Fastify({ logger: false });
   const prisma = {
     ...authModels(role, subscription),
+    organisationChangeAudit: { create: async () => ({}) },
     ...prismaOverrides,
   } as Record<string, unknown>;
   prisma.$queryRaw = async () => [{ id: 'org-1' }];
@@ -117,6 +119,20 @@ async function buildApp(
   await app.register(organisationRoutes);
   return app;
 }
+
+test('Admin connector cannot read organisation edit history through the direct API', async () => {
+  let reads = 0;
+  const app = await buildApp({
+    authSession: { findFirst: async () => ({ id: 'sess-1', clientKind: 'MCP_CONNECTOR', accessLevel: 'ADMIN' }) },
+    organisationChangeAudit: { findMany: async () => { reads += 1; return []; } },
+  });
+  try {
+    const response = await app.inject({ method: 'GET', url: '/audit', headers: { authorization: tokenFor('ADMIN') } });
+    assert.equal(response.statusCode, 403);
+    assert.equal(response.json().code, 'WEB_SESSION_REQUIRED');
+    assert.equal(reads, 0);
+  } finally { await app.close(); }
+});
 
 // ── tenant isolation / field allow-list ──
 
@@ -135,6 +151,54 @@ test('GET / returns only the public organisation field allow-list', async () => 
   } finally {
     await app.close();
   }
+});
+
+test('Member organisation profile omits address, contact details and conditional facts', async () => {
+  const record = { ...fullOrgRecord(), registeredAddress: 'PRIVATE_HOME_ADDRESS',
+    contactEmail: 'PRIVATE_CONTACT_EMAIL', contactPhone: 'PRIVATE_CONTACT_PHONE',
+    conditionalObligationProfile: conditionalProfile };
+  let memberSelect: Record<string, boolean> | undefined;
+  const app = await buildApp({ organisation: { findUnique: async (args: { select: Record<string, boolean> }) => {
+    memberSelect = args.select;
+    return record;
+  } } }, 'MEMBER');
+  try {
+    const res = await app.inject({ method: 'GET', url: '/', headers: { authorization: tokenFor('MEMBER') } });
+    assert.equal(res.statusCode, 200);
+    assert.equal(/PRIVATE_/u.test(res.body), false);
+    assert.equal(res.json().data.registeredAddress, null);
+    assert.equal(res.json().data.contactEmail, null);
+    assert.equal(res.json().data.contactPhone, null);
+    assert.equal(res.json().data.conditionalObligationProfile, null);
+    for (const field of ['registeredAddress', 'contactEmail', 'contactPhone', 'conditionalObligationProfile']) {
+      assert.equal(memberSelect?.[field], false, `Member database read must omit ${field}`);
+    }
+  } finally {
+    await app.close();
+  }
+  const admin = await buildApp({ organisation: { findUnique: async () => record } }, 'ADMIN');
+  try {
+    const res = await admin.inject({ method: 'GET', url: '/', headers: { authorization: tokenFor('ADMIN') } });
+    assert.equal(res.statusCode, 200);
+    assert.equal(res.json().data.registeredAddress, 'PRIVATE_HOME_ADDRESS');
+    assert.deepEqual(res.json().data.conditionalObligationProfile, conditionalProfile);
+  } finally {
+    await admin.close();
+  }
+});
+
+test('auth and invitation user DTO uses the same Member organisation boundary', () => {
+  const organisation = { ...fullOrgRecord(), registeredAddress: 'PRIVATE_HOME_ADDRESS',
+    contactEmail: 'PRIVATE_CONTACT_EMAIL', contactPhone: 'PRIVATE_CONTACT_PHONE',
+    conditionalObligationProfile: conditionalProfile };
+  const member = publicUser({ id: 'u1', email: 'member@example.ie', name: 'Member',
+    role: 'MEMBER', emailVerified: true, organisationId: 'org-1', organisation } as never);
+  assert.equal(/PRIVATE_/u.test(JSON.stringify(member)), false);
+  assert.equal(member.organisation.registeredAddress, null);
+  assert.equal(member.organisation.conditionalObligationProfile, null);
+  const admin = publicUser({ id: 'u2', email: 'admin@example.ie', name: 'Admin',
+    role: 'ADMIN', emailVerified: true, organisationId: 'org-1', organisation } as never);
+  assert.equal(admin.organisation.registeredAddress, 'PRIVATE_HOME_ADDRESS');
 });
 
 // ── authz boundary ──
@@ -165,6 +229,35 @@ test('a MEMBER cannot PATCH the organisation (requireAdmin)', async () => {
     assert.equal(updateCalled, false, 'organisation.update must not run for a MEMBER');
   } finally {
     await app.close();
+  }
+});
+
+test('organisation audit is Admin-only and tenant-scoped', async () => {
+  let reads = 0;
+  const audit = { findMany: async (args: { where: { organisationId: string }; take: number }) => {
+    reads += 1;
+    assert.deepEqual(args.where, { organisationId: 'org-1' });
+    assert.equal(args.take, 100);
+    return [{ id: 'audit-1', organisationId: 'org-1', actorUserId: 'u1',
+      submittedFields: ['name'], previousUpdatedAt: new Date(EXPECTED_UPDATED_AT),
+      nextUpdatedAt: new Date('2026-01-02T00:00:00.000Z'), occurredAt: new Date('2026-01-02T00:00:00.000Z') }];
+  } };
+  const member = await buildApp({ organisationChangeAudit: audit }, 'MEMBER');
+  try {
+    const res = await member.inject({ method: 'GET', url: '/audit', headers: { authorization: tokenFor('MEMBER') } });
+    assert.equal(res.statusCode, 403);
+    assert.equal(reads, 0);
+  } finally {
+    await member.close();
+  }
+  const admin = await buildApp({ organisationChangeAudit: audit }, 'ADMIN');
+  try {
+    const res = await admin.inject({ method: 'GET', url: '/audit', headers: { authorization: tokenFor('ADMIN') } });
+    assert.equal(res.statusCode, 200);
+    assert.equal(reads, 1);
+    assert.deepEqual(res.json().data[0].submittedFields, ['name']);
+  } finally {
+    await admin.close();
   }
 });
 

@@ -44,7 +44,7 @@ const LOOKUPS: Record<string, Lookup> = {
       where: { id: idOf(params), organisationId },
       select: { name: true, role: true },
     });
-    return row ? `Permanently delete board member ${quoted(row.name)} (${row.role})` : null;
+    return row ? `Remove board member ${quoted(row.name)} (${row.role}) from active records; audit and backup copies may remain` : null;
   },
   "DELETE /api/v1/governance-registers/conflicts/:id": async (prisma, organisationId, params) => {
     const row = await prisma.conflictRecord.findFirst({
@@ -52,7 +52,7 @@ const LOOKUPS: Record<string, Lookup> = {
       select: { dateDeclared: true, status: true },
     });
     return row
-      ? `Permanently delete the conflict of interest declared ${day(row.dateDeclared)} (${row.status})`
+      ? `Remove the conflict of interest declared ${day(row.dateDeclared)} (${row.status}) from active records; audit and backup copies may remain`
       : null;
   },
   "DELETE /api/v1/governance-registers/risks/:id": async (prisma, organisationId, params) => {
@@ -60,7 +60,7 @@ const LOOKUPS: Record<string, Lookup> = {
       where: { id: idOf(params), organisationId },
       select: { title: true },
     });
-    return row ? `Permanently delete risk ${quoted(row.title)}` : null;
+    return row ? `Remove risk ${quoted(row.title)} from active records; audit and backup copies may remain` : null;
   },
   "DELETE /api/v1/governance-registers/complaints/:id": async (prisma, organisationId, params) => {
     const row = await prisma.complaintRecord.findFirst({
@@ -68,7 +68,7 @@ const LOOKUPS: Record<string, Lookup> = {
       select: { receivedDate: true, status: true },
     });
     return row
-      ? `Permanently delete the complaint received ${day(row.receivedDate)} (${row.status})`
+      ? `Remove the complaint received ${day(row.receivedDate)} (${row.status}) from active records; audit and backup copies may remain`
       : null;
   },
   "DELETE /api/v1/governance-registers/fundraising/:id": async (prisma, organisationId, params) => {
@@ -76,14 +76,14 @@ const LOOKUPS: Record<string, Lookup> = {
       where: { id: idOf(params), organisationId },
       select: { name: true },
     });
-    return row ? `Permanently delete fundraising activity ${quoted(row.name)}` : null;
+    return row ? `Remove fundraising activity ${quoted(row.name)} from active records; audit and backup copies may remain` : null;
   },
   "DELETE /api/v1/deadlines/:id": async (prisma, organisationId, params) => {
     const row = await prisma.deadline.findFirst({
       where: { id: idOf(params), organisationId },
       select: { title: true, dueDate: true },
     });
-    return row ? `Permanently delete deadline ${quoted(row.title)} due ${day(row.dueDate)}` : null;
+    return row ? `Remove deadline ${quoted(row.title)} due ${day(row.dueDate)} from active records; audit and backup copies may remain` : null;
   },
   "DELETE /api/v1/documents/:id": async (prisma, organisationId, params) => {
     const row = await prisma.document.findFirst({
@@ -91,7 +91,7 @@ const LOOKUPS: Record<string, Lookup> = {
       select: { name: true, category: true },
     });
     return row
-      ? `Permanently delete document ${quoted(row.name)} (${row.category}) and its stored file`
+      ? `Remove document ${quoted(row.name)} (${row.category}) from the Vault if it is an unheld draft; stored-file cleanup is tracked separately and Confluence copies remain`
       : null;
   },
   "DELETE /api/v1/documents/:id/standards/:standardId": async (prisma, organisationId, params) => {
@@ -133,7 +133,7 @@ const LOOKUPS: Record<string, Lookup> = {
       select: { pageTitle: true, documentId: true },
     });
     return row
-      ? `Permanently erase the Confluence page ${quoted(row.pageTitle)} for deleted document ${row.documentId}`
+      ? `Request erasure of the Confluence page ${quoted(row.pageTitle)} for deleted document ${row.documentId}; purge may require separate administrator review`
       : null;
   },
 };
@@ -163,7 +163,11 @@ export async function describeAction(
     }
   }
 
-  const generic = summarise(method, routePattern);
+  const generic = method.toUpperCase() === "DELETE" && routePattern === "/api/v1/documents/:id"
+    ? "Remove an eligible draft document from the Vault; stored-file cleanup is tracked separately"
+    : method.toUpperCase() === "POST" && routePattern === "/api/v1/integrations/confluence/publications/:publicationId/erase"
+      ? "Request erasure of a Confluence publication; purge may require administrator review"
+      : summarise(method, routePattern);
   return {
     summary: named ?? (resourceId ? `${generic}: record ${resourceId}` : generic),
     resourceId,

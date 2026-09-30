@@ -16,7 +16,10 @@ export async function memberRoutes(app: FastifyInstance) {
   app.addHook('onRequest', requireCompletePlan);
 
   // GET /api/v1/members?includeFormer=true
-  app.get('/', async (request, reply) => {
+  // The statutory membership register includes postal addresses and former
+  // members. Until its audience is classified, only governance admins may
+  // read it; a minimal trustee view elsewhere does not authorize this record.
+  app.get('/', { preHandler: requireAdmin }, async (request, reply) => {
     try {
       const { includeFormer } = request.query as { includeFormer?: string };
       const members = await service.list(
@@ -33,7 +36,7 @@ export async function memberRoutes(app: FastifyInstance) {
   app.post('/', { preHandler: requireAdmin }, async (request, reply) => {
     try {
       const input = createMemberSchema.parse(request.body);
-      const member = await service.create(request.user.organisationId, input);
+      const member = await service.create(request.user.organisationId, input, request.user.userId);
       return reply.status(201).send(member);
     } catch (err) {
       if (err instanceof ZodError) {
@@ -48,7 +51,7 @@ export async function memberRoutes(app: FastifyInstance) {
     try {
       const { id } = request.params as { id: string };
       const input = updateMemberSchema.parse(request.body);
-      const member = await service.update(request.user.organisationId, id, input);
+      const member = await service.update(request.user.organisationId, id, input, request.user.userId);
       return reply.send(member);
     } catch (err) {
       if (err instanceof ZodError) {

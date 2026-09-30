@@ -61,6 +61,7 @@ function buildService(options: {
   organisation?: ReturnType<typeof organisation>;
   updateManyCount?: number;
   updateError?: unknown;
+  auditError?: unknown;
   /** Active rows in the Register of Members. 0 means the register is empty, so
    *  the calendar falls back to the hand-entered Organisation.memberCount. */
   activeMemberCount?: number;
@@ -129,8 +130,18 @@ function buildService(options: {
         return options.reminderRows?.length ?? 0;
       },
     },
+    deadlineChangeAudit: {
+      create: async (args: unknown) => {
+        calls.push({ name: 'deadlineChangeAudit.create', args });
+        if (options.auditError) throw options.auditError;
+        return {};
+      },
+    },
   };
-  return { service: new DeadlineService(prisma as never), calls };
+  return { service: new DeadlineService({
+    ...prisma,
+    $transaction: async (callback: (tx: typeof prisma) => Promise<unknown>) => callback(prisma),
+  } as never), calls };
 }
 
 test('list returns current non-archived rows with exact civil dates', async () => {
@@ -219,13 +230,41 @@ test('create scopes a manual deadline, preserves stable profile rule identity, a
     title: 'Safeguarding review',
     dueDate: '2026-09-30',
     profileRuleKey: 'worksWithChildrenOrVulnerableAdults',
-  } as never);
+  } as never, 'actor-1');
 
   const data = calls.find((call) => call.name === 'deadline.create')?.args.data;
   assert.equal(data.organisationId, 'org-1');
   assert.equal(data.profileRuleKey, 'worksWithChildrenOrVulnerableAdults');
   assert.deepEqual(data.reminderDays, [30, 14, 7]);
   assert.equal(result.dueDate, '2026-09-30');
+  const audit = calls.find((call) => call.name === 'deadlineChangeAudit.create')?.args.data;
+  assert.equal(audit.organisationId, 'org-1');
+  assert.equal(audit.deadlineId, result.id);
+  assert.equal(audit.actorUserId, 'actor-1');
+  assert.equal(audit.action, 'CREATE');
+  assert.equal(audit.nextState, 'OPEN');
+  assert.doesNotMatch(JSON.stringify(audit), /Safeguarding review/);
+});
+
+test('calendar changes append metadata-only state history and fail closed on audit failure', async () => {
+  const { service, calls } = buildService();
+  await service.update('org-1', 'deadline-1', {
+    expectedUpdatedAt: EXPECTED_UPDATED_AT, title: 'PRIVATE_NEW_TITLE', isComplete: true,
+  }, 'actor-1');
+  await service.remove('org-1', 'deadline-1', EXPECTED_UPDATED_AT, 'actor-1');
+  const events = calls.filter((call) => call.name === 'deadlineChangeAudit.create')
+    .map((call) => call.args.data as Record<string, unknown>);
+  assert.deepEqual(events.map((event) => [event.action, event.previousState, event.nextState]), [
+    ['COMPLETE', 'OPEN', 'COMPLETE'], ['ARCHIVE', 'OPEN', 'ARCHIVED'],
+  ]);
+  assert.deepEqual(events[0].changedFields, ['completedDate', 'isComplete', 'title']);
+  assert.equal(events[0].actorUserId, 'actor-1');
+  assert.doesNotMatch(JSON.stringify(events), /PRIVATE_NEW_TITLE/);
+
+  const failed = buildService({ auditError: new Error('audit unavailable') });
+  await assert.rejects(() => failed.service.create('org-1', {
+    title: 'PRIVATE_NEW_TITLE', dueDate: '2026-09-30',
+  }, 'actor-1'), /audit unavailable/);
 });
 
 test('cross-tenant updates and deletes fail before mutation', async () => {
@@ -234,11 +273,11 @@ test('cross-tenant updates and deletes fail before mutation', async () => {
     () => service.update('org-attacker', 'other-org-deadline', {
       expectedUpdatedAt: EXPECTED_UPDATED_AT,
       title: 'Hijacked',
-    }),
+    }, 'actor-1'),
     (error: unknown) => (error as { code?: string }).code === 'DEADLINE_NOT_FOUND',
   );
   await assert.rejects(
-    () => service.remove('org-attacker', 'other-org-deadline', EXPECTED_UPDATED_AT),
+    () => service.remove('org-attacker', 'other-org-deadline', EXPECTED_UPDATED_AT, 'actor-1'),
     (error: unknown) => (error as { code?: string }).code === 'DEADLINE_NOT_FOUND',
   );
   assert.equal(calls.some((call) => call.name === 'deadline.updateMany'), false);
@@ -250,8 +289,8 @@ test('manual deadlines remain editable and delete becomes a history-preserving a
     expectedUpdatedAt: EXPECTED_UPDATED_AT,
     dueDate: '2026-07-31',
     isComplete: true,
-  });
-  await service.remove('org-1', 'deadline-1', EXPECTED_UPDATED_AT);
+  }, 'actor-1');
+  await service.remove('org-1', 'deadline-1', EXPECTED_UPDATED_AT, 'actor-1');
 
   const updates = calls.filter((call) => call.name === 'deadline.updateMany');
   assert.equal(updates[0].args.data.dueDate.toISOString(), '2026-07-31T00:00:00.000Z');
@@ -269,8 +308,8 @@ test('deadline optimistic versions accept an equivalent offset instant for updat
   await service.update('org-1', 'deadline-1', {
     expectedUpdatedAt: equivalentOffset,
     title: 'Offset-safe edit',
-  });
-  await service.remove('org-1', 'deadline-1', equivalentOffset);
+  }, 'actor-1');
+  await service.remove('org-1', 'deadline-1', equivalentOffset, 'actor-1');
 
   const writes = calls.filter((call) => call.name === 'deadline.updateMany');
   assert.equal(writes.length, 2);
@@ -288,7 +327,7 @@ test('manual reschedule and reopen advance reminder occurrence identity while co
   await first.service.update('org-1', completed.id, {
     expectedUpdatedAt: EXPECTED_UPDATED_AT,
     isComplete: false,
-  });
+  }, 'actor-1');
   const reopen = first.calls.find((call) => call.name === 'deadline.updateMany');
   assert.deepEqual(reopen?.args.data.scheduleVersion, { increment: 1 });
   assert.equal(reopen?.args.data.completedDate, null);
@@ -297,7 +336,7 @@ test('manual reschedule and reopen advance reminder occurrence identity while co
   await second.service.update('org-1', 'deadline-1', {
     expectedUpdatedAt: EXPECTED_UPDATED_AT,
     title: 'Renamed board review',
-  });
+  }, 'actor-1');
   const rename = second.calls.find((call) => call.name === 'deadline.updateMany');
   assert.equal(rename?.args.data.scheduleVersion, undefined);
 
@@ -305,7 +344,7 @@ test('manual reschedule and reopen advance reminder occurrence identity while co
   await third.service.update('org-1', 'deadline-1', {
     expectedUpdatedAt: EXPECTED_UPDATED_AT,
     description: 'Copy-only clarification',
-  });
+  }, 'actor-1');
   const description = third.calls.find((call) => call.name === 'deadline.updateMany');
   assert.equal(description?.args.data.scheduleVersion, undefined);
 
@@ -313,7 +352,7 @@ test('manual reschedule and reopen advance reminder occurrence identity while co
   await fourth.service.update('org-1', 'deadline-1', {
     expectedUpdatedAt: EXPECTED_UPDATED_AT,
     reminderDays: [30, 14, 7, 1],
-  });
+  }, 'actor-1');
   const windows = fourth.calls.find((call) => call.name === 'deadline.updateMany');
   assert.equal(windows?.args.data.scheduleVersion, undefined);
 });
@@ -330,7 +369,7 @@ test('reopening an older profile review returns a stable conflict when a newer o
   });
 
   await assert.rejects(
-    () => service.update('org-1', older.id, { expectedUpdatedAt: EXPECTED_UPDATED_AT, isComplete: false }),
+    () => service.update('org-1', older.id, { expectedUpdatedAt: EXPECTED_UPDATED_AT, isComplete: false }, 'actor-1'),
     (error: unknown) => (error as { code?: string }).code === 'PROFILE_REVIEW_ALREADY_SCHEDULED',
   );
 });
@@ -347,9 +386,9 @@ test('generated deadlines reject edits, reopen, and delete but permit one atomic
   const { service, calls } = buildService({ found: generated });
 
   for (const action of [
-    () => service.update('org-1', generated.id, { expectedUpdatedAt: EXPECTED_UPDATED_AT, title: 'Changed' }),
-    () => service.update('org-1', generated.id, { expectedUpdatedAt: EXPECTED_UPDATED_AT, isComplete: false }),
-    () => service.remove('org-1', generated.id, EXPECTED_UPDATED_AT),
+    () => service.update('org-1', generated.id, { expectedUpdatedAt: EXPECTED_UPDATED_AT, title: 'Changed' }, 'actor-1'),
+    () => service.update('org-1', generated.id, { expectedUpdatedAt: EXPECTED_UPDATED_AT, isComplete: false }, 'actor-1'),
+    () => service.remove('org-1', generated.id, EXPECTED_UPDATED_AT, 'actor-1'),
   ]) {
     await assert.rejects(action, (error: unknown) =>
       (error as { code?: string }).code === 'GENERATED_DEADLINE_IMMUTABLE');
@@ -358,7 +397,7 @@ test('generated deadlines reject edits, reopen, and delete but permit one atomic
   const completed = await service.update('org-1', generated.id, {
     expectedUpdatedAt: EXPECTED_UPDATED_AT,
     isComplete: true,
-  });
+  }, 'actor-1');
   assert.equal(completed.isComplete, true);
   const atomic = calls.find((call) => call.name === 'deadline.updateMany');
   assert.deepEqual(atomic?.args.where, {
@@ -379,7 +418,7 @@ test('manual completion preserves its original instant and rejects stale admin w
   await idempotent.service.update('org-1', completed.id, {
     expectedUpdatedAt: EXPECTED_UPDATED_AT,
     isComplete: true,
-  });
+  }, 'actor-1');
   const completionWrite = idempotent.calls.find((call) => call.name === 'deadline.updateMany');
   assert.equal(completionWrite?.args.data.completedDate, undefined);
 
@@ -390,7 +429,7 @@ test('manual completion preserves its original instant and rejects stale admin w
     () => stale.service.update('org-1', 'deadline-1', {
       expectedUpdatedAt: EXPECTED_UPDATED_AT,
       dueDate: '2026-08-31',
-    }),
+    }, 'actor-1'),
     (error: unknown) => (error as { code?: string }).code === 'DEADLINE_UPDATE_CONFLICT',
   );
   assert.equal(stale.calls.some((call) => call.name === 'deadline.updateMany'), false);
@@ -416,9 +455,10 @@ test('unchanged completed generated occurrence is never reopened or rewritten', 
     generatedRows: [current],
   });
 
-  await service.reconcileGeneratedDeadlines('org-1');
+  await service.reconcileGeneratedDeadlines('org-1', 'actor-1');
   assert.equal(calls.some((call) => call.name === 'deadline.update'), false);
   assert.equal(calls.some((call) => call.name === 'deadline.create'), false);
+  assert.equal(calls.some((call) => call.name === 'deadlineChangeAudit.create'), false);
 });
 
 test('changed source inputs supersede history and create a new incomplete successor version', async () => {
@@ -437,7 +477,7 @@ test('changed source inputs supersede history and create a new incomplete succes
     generatedRows: [current],
   });
 
-  await service.reconcileGeneratedDeadlines('org-1');
+  await service.reconcileGeneratedDeadlines('org-1', 'actor-1');
   const updates = calls.filter((call) => call.name === 'deadline.update');
   const create = calls.find((call) => call.name === 'deadline.create');
   assert.equal(updates[0].args.data.supersessionReason, 'RECURRENCE_ADVANCED');
@@ -446,6 +486,31 @@ test('changed source inputs supersede history and create a new incomplete succes
   assert.equal(create?.args.data.completedDate, null);
   assert.equal(create?.args.data.dueDate.toISOString(), '2027-06-30T00:00:00.000Z');
   assert.equal(updates[1].args.data.supersededById, create?.args.data.id ?? `created-${calls.indexOf(create!) + 1}`);
+  const audits = calls.filter((call) => call.name === 'deadlineChangeAudit.create').map((call) => call.args.data);
+  assert.deepEqual(audits.map((audit) => audit.action), ['SUPERSEDE', 'GENERATE']);
+  assert.ok(audits.every((audit) => audit.actorUserId === 'actor-1' && audit.organisationId === 'org-1'));
+  assert.equal(audits[0].deadlineId, current.id);
+  assert.equal(audits[1].deadlineId, create?.args.data.id ?? `created-${calls.indexOf(create!) + 1}`);
+});
+
+test('new generated deadlines retain an actor-bound action and reject failed audit writes', async () => {
+  const options = { organisation: organisation({ financialYearEnd: new Date('2026-08-31T00:00:00.000Z') }) };
+  const created = buildService(options);
+  await created.service.reconcileGeneratedDeadlines('org-1', 'profile-editor');
+  const generated = created.calls.filter((call) => call.name === 'deadline.create');
+  const audits = created.calls.filter((call) => call.name === 'deadlineChangeAudit.create');
+  assert.ok(generated.length > 0);
+  assert.equal(audits.length, generated.length);
+  assert.ok(audits.every((call) => call.args.data.action === 'GENERATE'
+    && call.args.data.actorUserId === 'profile-editor'
+    && call.args.data.previousState === null
+    && call.args.data.nextState === 'OPEN'));
+
+  const failed = buildService({ ...options, auditError: new Error('audit unavailable') });
+  await assert.rejects(
+    failed.service.reconcileGeneratedDeadlines('org-1', 'profile-editor'),
+    /audit unavailable/,
+  );
 });
 
 test('removed or unconfirmed inputs supersede the current generated row without deleting history', async () => {
@@ -459,9 +524,12 @@ test('removed or unconfirmed inputs supersede the current generated row without 
   });
   const { service, calls } = buildService({ generatedRows: [current] });
 
-  await service.reconcileGeneratedDeadlines('org-1');
+  await service.reconcileGeneratedDeadlines('org-1', 'actor-1');
   const update = calls.find((call) => call.name === 'deadline.update');
   assert.equal(update?.args.data.supersessionReason, 'INPUT_REMOVED');
   assert.ok(update?.args.data.supersededAt instanceof Date);
   assert.equal(calls.some((call) => call.name === 'deadline.create'), false);
+  const audit = calls.find((call) => call.name === 'deadlineChangeAudit.create')?.args.data;
+  assert.equal(audit.action, 'SUPERSEDE');
+  assert.deepEqual(audit.changedFields, ['supersededAt', 'supersessionReason']);
 });

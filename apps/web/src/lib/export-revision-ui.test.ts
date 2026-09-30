@@ -69,6 +69,9 @@ test('persisted approval drives report status and current and retained exports a
   assert.doesNotMatch(page, /signoffStatusLabels\[signoffForm\.status\]/);
   assert.match(controls, /Generate Compliance Report \(working copy\)/);
   assert.match(controls, /Open latest approved snapshot/);
+  assert.match(controls, /Open minimised draft for audience review/);
+  assert.match(workflow, /handleExport\('approved', signoff\?\.latestApproval\?\.id, 'minimised'\)/);
+  assert.match(workflow, /audience,/);
   assert.match(controls, /latestApproval\.snapshotHash/);
 });
 
@@ -91,10 +94,14 @@ test('dirty sign-off edits block year and SPA navigation until explicitly discar
   assert.match(page, /<ExportNavigationConfirmModal/);
 });
 
-test('member exports stay available while sign-off editing and dirty navigation fail closed', () => {
+test('internal report is gated while sign-off editing and dirty navigation fail closed', () => {
   const workflow = exportSource('use-export-workflow.ts');
   const panel = exportSource('export-board-approval-panel.tsx');
   const controls = exportSource('export-controls-panel.tsx');
+  const page = exportSource('page.tsx');
+
+  assert.match(page, /if \(!canManageGovernance\(user\?\.role\)\)/);
+  assert.match(page, /return <InternalExportPage \/>/);
 
   assert.match(workflow, /const roleCanManageSignoff = canManageGovernance\(user\?\.role\)/);
   assert.match(workflow, /const canManageSignoff = roleCanManageSignoff && !signoffEditingRevoked/);

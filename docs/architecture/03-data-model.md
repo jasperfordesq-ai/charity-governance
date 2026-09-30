@@ -53,6 +53,7 @@ All enums are declared at the top of the schema.
 | `BillingAuthorityGrantReleaseReason` | provider not-issued/revoked/terminal, elapsed Checkout safe-release time, restricted operator attestation | `BillingAuthorityGrant.releaseReason` |
 | `DocumentCategory` | `CONSTITUTION`, `POLICY`, `BOARD_MINUTES`, `FINANCIAL_STATEMENT`, `INSURANCE`, `ANNUAL_REPORT`, `RISK_REGISTER`, `CODE_OF_CONDUCT`, `STRATEGIC_PLAN`, `OTHER` | `Document.category` |
 | `DocumentStorageDeletionState` | `PENDING`, `DEAD_LETTER`, `PROCESSED` | `DocumentStorageDeletion.state` |
+| `DocumentUploadIntentState` | `RESERVED`, `ATTACHED`, `CLEANUP_PENDING` | `DocumentUploadIntent.state` |
 | `DocumentStorageDeletionTerminalReason` | `MAX_ATTEMPTS_EXHAUSTED`, `PERMANENT_STORAGE_PATH_REJECTED` | `DocumentStorageDeletion.terminalReason` |
 | `DocumentStorageDeletionRecoveryActorType` | `TENANT_USER`, `PLATFORM_OPERATOR` | `DocumentStorageDeletionRecovery.actorType` |
 | `DocumentStorageDeletionRecoveryDisposition` | unchanged/corrected-path requeue or externally evidenced completion | `DocumentStorageDeletionRecovery.disposition` |
@@ -65,7 +66,7 @@ All enums are declared at the top of the schema.
 | `UserLifecycleStatus` | `ACTIVE`, `SUSPENDED`, `REMOVED` | `User.lifecycleStatus` |
 | `AuthSessionRevocationReason` | logout, rotation/reuse/expiry, password/member/ownership/admin/user revocation reasons | `AuthSession.revocationReason` |
 | `SecurityAuditActorKind` | `USER`, `SUPPORT`, `SYSTEM` | `SecurityAuditEvent.actorKind` |
-| `SecurityAuditEventType` | unchanged member/invite/role/ownership/session transitions | `SecurityAuditEvent.type`; reset completion is stored compatibly as truthful `ALL_SESSIONS_REVOKED` plus trusted immutable context and projected as the virtual API label `PASSWORD_RESET_COMPLETED` |
+| `SecurityAuditEventType` | member, invitation, ownership, session, second-factor and refused action-approval transitions | `SecurityAuditEvent.type`; reset completion is stored compatibly as truthful `ALL_SESSIONS_REVOKED` plus trusted immutable context and projected as the virtual API label `PASSWORD_RESET_COMPLETED` |
 | `PasswordRecoverySource` | `SELF_SERVICE_EMAIL`, `LEGACY_USER_SLOT`, `PERSONAL_SERVER_OPERATOR`, `OWNER_PROVISIONED` | `PasswordRecoveryRequest.source` |
 | `PasswordRecoveryDeliveryState` | `SUPPRESSED`, `PENDING`, `SENDING`, `ACCEPTED`, `REJECTED`, `UNCERTAIN` | `PasswordRecoveryRequest.deliveryState` |
 | `PasswordRecoverySuppressionReason` | no eligible account, durable rate limit, outstanding-link limit | `PasswordRecoveryRequest.suppressionReason` |
@@ -86,14 +87,17 @@ All enums are declared at the top of the schema.
 | --- | --- | --- |
 | **Org-scoped** (carry `organisationId` FK to `Organisation`) | `User`, `ComplianceRecord`, `ComplianceSignoff`, `ComplianceApprovalSnapshot`, `BoardMember`, `Document`, `ConflictRecord`, `RiskRecord`, `ComplaintRecord`, `FundraisingRecord`, `AnnualReportReadiness`, `FinancialControlReview`, `Deadline`, `TeamInvite`, `DeadlineReminderLog`, `Subscription`, `BillingCheckoutAttempt`, `BillingAuthorityGrant`, `SecurityAuditEvent`, targeted `PasswordRecoveryRequest`, `AuthSecurityEmailOutbox` | `organisationId` |
 | **Global reference data** (shared across all tenants, no `organisationId`) | `GovernancePrinciple`, `GovernanceStandard` | none — read-only catalogue |
-| **Keyed differently** | `AuthSession` (by `userId`), suppressed `PasswordRecoveryRequest` and `AuthRecoveryRateLimitBucket` (keyed-HMAC subjects only), singleton `AuthRecoveryControl`, append-only `AuthRecoveryRetiredSecret`, `DocumentStandardLink` (by `documentId`/`standardId`), `DocumentStorageDeletion` and `ComplianceAuditEvent` (retain tenant identifiers as scalar history), `StripeWebhookEvent` (global, by Stripe event `id`) | see notes |
+| **Keyed differently** | `AuthSession` (by `userId`), suppressed `PasswordRecoveryRequest` and `AuthRecoveryRateLimitBucket` (keyed-HMAC subjects only), singleton `AuthRecoveryControl`, append-only `AuthRecoveryRetiredSecret`, `DocumentStandardLink` (by `documentId`/`standardId`), `DocumentUploadIntent`, `DocumentStorageDeletion`, `DocumentStorageDeletionAttempt` and `ComplianceAuditEvent` (retain tenant identifiers as scalar history), `StripeWebhookEvent` (global, by Stripe event `id`) | see notes |
 
 Notes on the differently-keyed models:
 
 - **`AuthSession`** (`apps/api/prisma/schema.prisma:178-191`) belongs to a `User`, not directly to an `Organisation`; tenancy is reached transitively through `User.organisationId`.
+- **`UserSecondFactor` and `UserSecondFactorRecoveryCode`** belong to a `User` and inherit its charity scope. The TOTP secret is encrypted under a domain-separated key derived from `JWT_SECRET`; a signing-key rotation requires account re-enrolment or recovery-code use. The factor row holds a locked, account-wide five-attempt budget for each 15-minute window, so changing IP addresses does not reset TOTP guesses. A recovery-code sign-in records its session family in the security audit; that active browser family may remove MFA with the account password for 15 minutes even if it spent the last code. Activation and removal revoke existing sessions.
 - **`DocumentStandardLink`** (`apps/api/prisma/schema.prisma:315-323`) is a join table between an (org-scoped) `Document` and a (global) `GovernanceStandard`; it inherits tenancy from its `Document`.
 - **`DocumentStorageDeletion`** (`apps/api/prisma/schema.prisma:325-339`) stores `organisationId` as a plain string column with no relation back to `Organisation` — it is a background deletion queue keyed by `storagePath`, so the row can outlive the parent organisation row.
-- **`ComplianceAuditEvent`** stores organisation, actor and entity identifiers as scalar historical facts rather than cascading relations. Removing a user must not erase who changed governance evidence. Retention and eventual erasure policy still require external privacy/legal approval before production use.
+- **`DocumentStorageDeletionAttempt`** is append-only outcome history linked to its durable deletion row. A database trigger writes it in the same transaction as a retry, dead-letter or completion transition; direct inserts and later update/delete are rejected. It stores tenant, provider, deletion reference, attempt number, outcome and limited completion/terminal metadata, without a storage path or provider error text. Earlier attempts are not backfilled.
+- **`DocumentUploadIntent`** stores its tenant, path and provider as immutable scalar history. It has no cascading `Document` relation because a failed upload may never create a document, and the intent must survive later document removal.
+- **`ComplianceAuditEvent`** and **`ComplianceReportPreparationAudit`** store organisation, actor and entity identifiers as scalar historical facts rather than cascading relations. Removing a user must not erase who changed governance evidence or prepared a report. Retention and eventual erasure policy still require external privacy/legal approval before production use.
 - **`StripeWebhookEvent`** (`apps/api/prisma/schema.prisma:581-588`) is entirely global; its `id` is the Stripe event ID and the row exists purely for webhook idempotency.
 - **`BillingAuthorityGrant`** uses composite tenant/actor and actor/session foreign
   keys. It is append-only after release and has a partial unique index allowing
@@ -213,7 +217,7 @@ Immutable team-security and governance evidence.
 | Field | Type | Notes |
 | --- | --- | --- |
 | `organisationId` | `String` | tenant root; included in composite actor/subject relations |
-| `type` | `SecurityAuditEventType` | invite, member, role, ownership, or session event |
+| `type` | `SecurityAuditEventType` | invite, member, role, ownership, session or refused action-approval event |
 | `actorKind` | `SecurityAuditActorKind` | user, restricted support operator, or system |
 | `actorUserId`, `actorLabel` | nullable id plus bounded label | support/system events do not fabricate a user |
 | `subjectUserId`, `subjectSessionId` | nullable identifiers | affected membership or session family where applicable |
@@ -223,6 +227,29 @@ Immutable team-security and governance evidence.
 Insert checks enforce actor-kind consistency and tenant-safe actor/subject
 relations. Update and delete triggers always reject; UI responses use a
 privacy-minimised projection rather than exposing raw evidence identifiers.
+
+For `ACTION_APPROVAL_REFUSED`, the subject is the authenticated account. The
+event stores only tenant, account, channel and time; it omits the attempted
+approval ID, password, summary and precise refusal cause. Both browser and
+connector grant routes return the same opaque refusal.
+
+### AuthActionApproval and AuthActionApprovalAudit
+
+`AuthActionApproval` is a short-lived, single-use capability bound to one
+connector session family and exact request digest. It is mutable only for
+pending renewal, grant and consumption; database guards prevent rewriting
+its identity or completed transitions. `AuthActionApprovalAudit` is an
+append-only, tenant-bound record of request, renewal, grant and use captured
+by database triggers. A use attests that the request passed the approval
+gate, not that the underlying operation succeeded.
+
+The approval-audit migration backfills request, grant and use times from
+retained capability rows. These inferred events carry `backfilled = true`
+and null original expiry because a pending capability may have been renewed.
+Historical renewals and refusals cannot be derived from those rows. The
+Admin Governance Audit selects only actor, approval/record IDs, route,
+method, kind, known expiry, provenance and event time; it does not expose the
+approval summary, request digest or session family.
 
 ### PasswordRecoveryRequest
 
@@ -375,11 +402,21 @@ governance data remains a named external privacy/legal decision.
 ### ComplianceAuditEvent
 
 Append-only history for record baselines, creates/updates, signoff baselines,
-approval grants, approval invalidations, and unbound legacy approvals. Events
-retain before/after revision snapshots, actor identity, relevant entity IDs,
-reason and occurrence time. Unique record/signoff revision keys prevent two
+approval grants, approval invalidations and unbound legacy approvals. Events
+retain applicable before/after revision snapshots, actor identity,
+entity IDs, reason and occurrence time. Unique record/signoff revision keys prevent two
 events from claiming the same entity revision, and a database trigger rejects
 `UPDATE` and `DELETE`.
+
+### ComplianceReportPreparationAudit
+
+A separate, append-only table records a report prepared before HTTP delivery.
+It stores tenant, actor, reporting year, working/approved version, internal or
+minimised-review audience and an approved snapshot ID when applicable. It does
+not store the report body or evidence. Database checks constrain valid
+version/audience/snapshot combinations, and a trigger rejects `UPDATE` and
+`DELETE`. Keeping this table separate avoids a new compliance-event enum label
+that the previous application version would have to decode during cutover.
 
 ### BoardMember
 `apps/api/prisma/schema.prisma:266-286`
@@ -417,6 +454,30 @@ Has-many `conflictRecords`. Index `@@index([organisationId])` (`apps/api/prisma/
 
 Has-many `standardLinks`. Index `@@index([organisationId])` (`apps/api/prisma/schema.prisma:312`).
 
+Migration `20260929250000_unreviewed_member_visibility_guard` adds a CHECK that
+rejects new or updated documents with `visibility = MEMBER_VISIBLE` and
+`lifecycleStatus = UNREVIEWED`. The API applies the same rule before a visibility
+decision. The constraint is `NOT VALID`: it enforces future writes without
+claiming that legacy rows have been classified. An existing row in that state
+must be classified or restricted before another update to it. Validate the
+constraint only after the tenant's files and audiences have been reviewed; a
+lifecycle label alone does not establish permission to share file contents.
+Member list, detail and download queries, search and dashboard activity also
+exclude `UNREVIEWED` documents even if a pre-existing row is already marked
+`MEMBER_VISIBLE`. Download repeats this check after object retrieval. These
+query gates protect reads while the legacy rows await controller review; they
+do not alter the retained visibility or lifecycle data.
+
+Migration `20260929340000_draft_member_visibility_guard` applies the same
+fail-closed approach to working drafts. Its separate `NOT VALID` CHECK rejects
+new or updated `DRAFT`/`MEMBER_VISIBLE` rows, while Member list, detail,
+download, search and activity omit pre-existing rows in that combination.
+The API refuses release of a draft and rechecks lifecycle after download I/O;
+the Admin Vault disables the release action with an explanation. Existing
+violating rows are not reclassified or validated by this migration and need
+individual controller review. Other classified lifecycle states can still
+carry an explicit reasoned Member visibility decision.
+
 ### DocumentStandardLink
 `apps/api/prisma/schema.prisma:315-323` — many-to-many join between `Document` and `GovernanceStandard`.
 
@@ -427,6 +488,14 @@ Has-many `standardLinks`. Index `@@index([organisationId])` (`apps/api/prisma/sc
 | `standardId` | `String` | FK → `GovernanceStandard` |
 
 Constraint `@@unique([documentId, standardId])` (`apps/api/prisma/schema.prisma:322`) prevents duplicate links. Deleting a `Document` cascades its links.
+
+### DocumentDownloadPreparationAudit
+
+The `20260929200000_document_download_prepared_audit` migration adds a separate append-only record after an authenticated Vault download has passed its post-storage checks and before HTTP delivery. It stores `organisationId`, `documentId`, `actorUserId`, the visibility at preparation and `occurredAt`. It has no relation to `Document`, so deleting an eligible draft does not erase the access history. It stores no file bytes, name, storage path or session token. Owner/Admin can read a tenant-scoped paged overview; the event does not prove client receipt, and its retention period remains subject to the approved schedule. A populated disposable PostgreSQL 16 rehearsal verified the migration and append-only trigger; no live tenant was migrated.
+
+### DocumentUploadIntent
+
+An upload reserves an organisation-scoped object key and its provider before writing bytes. The row starts `RESERVED`; a successful document transaction changes it to `ATTACHED` with `documentId`. A stale orphan is moved to `CLEANUP_PENDING` with `cleanupDeletionId` in the same transaction that creates the provider-pinned `DocumentStorageDeletion`. `lastReconcileAttemptAt` records an unsuccessful or in-progress cleanup attempt while the row stays `RESERVED`; the worker checks unattempted and less recently attempted rows first so a failing oldest batch cannot starve later objects. A database trigger blocks deletion, identity changes, forged initial attempts and unlinked state transitions, while permitting only an attempt stamp on a still-reserved row. The unique tenant/path key prevents two reservations for one object. The `20260929130000_document_upload_intent` and `20260929210000_upload_intent_reconcile_attempt` migrations, guarded-stamp checks and a real cleanup-service transition passed a populated disposable PostgreSQL 16 upgrade; real provider and reviewed-tenant behavior remain unverified.
 
 ### DocumentStorageDeletion
 `apps/api/prisma/schema.prisma:325-339` — background queue for deleting orphaned storage objects.
@@ -441,6 +510,16 @@ Constraint `@@unique([documentId, standardId])` (`apps/api/prisma/schema.prisma:
 | `claimedAt`, `processedAt` | `DateTime?` | worker claim / completion markers |
 
 Indexes: `@@index([organisationId])`, `@@index([processedAt, createdAt])`, `@@index([processedAt, claimedAt, createdAt])` (`apps/api/prisma/schema.prisma:336-338`). The composite indexes support the deletion worker scanning for unprocessed / unclaimed jobs in order.
+
+Migration `20260929220000_storage_deletion_attempt_audit` adds `DocumentStorageDeletionAttempt` with tenant/time and deletion/time indexes. It records each new retry, dead-letter and completion outcome at the database transition. The mutable queue row still carries current state and cumulative failed-attempt count; the event table records later individual outcomes. Its `activeObjectAbsentAt` field is populated only when the primary storage completion supplied that observation. It is not proof of object-version or backup purge.
+
+Migration `20260929230000_data_lifecycle_storage_link` adds `DataLifecycleStorageLink` to connect an unresolved `DataLifecycleRequest` with an existing deletion job through composite charity-bound foreign keys. It records the reviewer, time and reason without changing either record's status. `DataLifecycleStorageLinkWithdrawal` records a one-time correction; both tables are append-only, so the original link stays visible as withdrawn evidence. The Admin case view exposes only current technical job metadata, not paths or provider errors. A processed job is not a complete erasure verdict. The migration passed a disposable PostgreSQL 16 and Chromium Owner journey; production-scale index lock time and Nikita's live tenant remain unverified.
+
+Migration `20260929260000_storage_deletion_source_document` adds nullable `DocumentStorageDeletion.sourceDocumentId`. Ordinary Vault draft removal writes the source ID on its deletion outbox job in the same transaction that deletes the `Document` row. A `BEFORE INSERT OR UPDATE` trigger requires a non-null inserted ID to match a live document of the same organisation at the exact storage path and rejects later changes to the ID. It is a scalar rather than a foreign key because the source row is removed in that transaction. Old-version writers, existing jobs, stale-upload cleanup and Confluence jobs can keep it null; there is no inferred backfill. The Data Request case feed and Owner/Admin view show the ID when a job is linked to a case. An ID alone does not prove that deletion committed for a job inserted through a privileged database path, identify the person concerned, or prove removal of versions, replicas, exports or backups. The static blue-green gate and a disposable PostgreSQL/Chromium route passed, including forged-ID and update refusal. A representative populated-data rehearsal also passed 64 baseline and all 28 DPO migrations with two retained legacy documents; it does not cover production data shapes or scale. Live migration and Nikita's tenant remain unverified.
+
+Migration `20260929270000_storage_deletion_source_lookup` creates a concurrent partial index on `DocumentStorageDeletion(organisationId, sourceDocumentId, createdAt DESC, id DESC)` where the source ID is non-null. The Owner/Admin Data Request API uses that exact tenant/source key and a tenant/source-bound cursor to page through job metadata without fetching paths or provider error text. The case page can choose a returned job ID, but linking still requires a separate reasoned write; a source ID does not identify the requester or prove full erasure. Legacy null-source jobs have no searchable lineage. The blue-green gate, an isolated PostgreSQL/Chromium search-and-link journey and a representative populated upgrade through all 29 DPO migrations pass. Production-scale index build time and the reviewed tenant remain unverified.
+
+Migration `20260929390000_document_deletion_hold_delete_guard` adds a `BEFORE DELETE` guard on `Document`: PostgreSQL refuses row removal while `deletionHold` is true, including a direct database write outside the Owner/Admin API. The ordinary Vault API already requires a reason to place or release the hold and conditionally deletes only unheld drafts. This database guard does not decide legal-hold authority or a retention period, and it does not govern storage versions, exports or backups. A populated 64-baseline/41-DPO migration rehearsal and a disposable Owner browser/database journey passed locally; Nikita's deployed tenant remains unchecked.
 
 ### ConflictRecord
 `apps/api/prisma/schema.prisma:341-363` — conflict-of-interest register.

@@ -809,6 +809,15 @@ function evidenceEntry(areaId, checkId) {
     ].join(' ');
   }
 
+  if (areaId === 'legalAndCompliance' && checkId === 'dpo-feedback-disposition') {
+    entry.description = [
+      `2026-09-28 dpo feedback disposition for the reviewed tenant and release commit ${commitSha}.`,
+      'member sensitive-record access, session replay, document lifecycle, minimised report,',
+      'application retention, recovery and purge, and c1 control were reviewed.',
+      'The four interface locations and first-pass dpo review are recorded with remaining actions outside git.',
+    ].join(' ');
+  }
+
   if (areaId === 'legalAndCompliance' && checkId === 'support-deletion-contact') {
     entry.description = 'support contact and data deletion contact published for production users at the published URL with support mailbox evidence.';
   }
@@ -1445,7 +1454,7 @@ test('production launch evidence validator accepts complete dated external evide
     assert.equal(result.status, 0, result.stderr);
     assert.match(result.stdout, /Production launch evidence passed/);
     assert.match(result.stdout, /11 area\(s\)/);
-    assert.match(result.stdout, /89 check\(s\)/);
+    assert.match(result.stdout, /90 check\(s\)/);
   } finally {
     rmSync(tempDir, { recursive: true, force: true });
   }
@@ -1510,8 +1519,8 @@ test('production launch evidence validator renders machine-readable JSON status'
     assert.equal(failurePayload.incompleteCheckCount, 1);
     assert.deepEqual(failurePayload.progress, {
       checklistChecks: {
-        completed: 88,
-        total: 89,
+        completed: 89,
+        total: 90,
         percentage: 98.9,
       },
       finalSignoffRoles: {
@@ -1531,8 +1540,8 @@ test('production launch evidence validator renders machine-readable JSON status'
     assert.deepEqual(successPayload.issues, []);
     assert.deepEqual(successPayload.progress, {
       checklistChecks: {
-        completed: 89,
-        total: 89,
+        completed: 90,
+        total: 90,
         percentage: 100,
       },
       finalSignoffRoles: {
@@ -3654,6 +3663,7 @@ test('production launch evidence validator requires concrete legal and policy ap
   evidence.areas.legalAndCompliance.checks['privacy-policy-approved'].evidence = [genericEvidence];
   evidence.areas.legalAndCompliance.checks['terms-approved'].evidence = [genericEvidence];
   evidence.areas.legalAndCompliance.checks['retention-policy-approved'].evidence = [genericEvidence];
+  evidence.areas.legalAndCompliance.checks['dpo-feedback-disposition'].evidence = [genericEvidence];
   evidence.areas.legalAndCompliance.checks['support-deletion-contact'].evidence = [genericEvidence];
   evidence.areas.legalAndCompliance.checks['solicitor-governance-privacy-review'].evidence = [genericEvidence];
   const { tempDir, evidencePath } = writeEvidenceFile(evidence);
@@ -3672,6 +3682,9 @@ test('production launch evidence validator requires concrete legal and policy ap
     assert.match(result.stderr, /areas\.legalAndCompliance\.checks\.retention-policy-approved\.evidence must include data retention policy/);
     assert.match(result.stderr, /areas\.legalAndCompliance\.checks\.retention-policy-approved\.evidence must include retention schedule/);
     assert.match(result.stderr, /areas\.legalAndCompliance\.checks\.retention-policy-approved\.evidence must include deletion workflow/);
+    assert.match(result.stderr, /areas\.legalAndCompliance\.checks\.dpo-feedback-disposition\.evidence must include 2026-09-28 dpo feedback/);
+    assert.match(result.stderr, /areas\.legalAndCompliance\.checks\.dpo-feedback-disposition\.evidence must include session replay/);
+    assert.match(result.stderr, /areas\.legalAndCompliance\.checks\.dpo-feedback-disposition\.evidence must include c1 control/);
     assert.match(result.stderr, /areas\.legalAndCompliance\.checks\.support-deletion-contact\.evidence must include data deletion contact/);
     assert.match(result.stderr, /areas\.legalAndCompliance\.checks\.support-deletion-contact\.evidence must include published URL/);
     assert.match(result.stderr, /areas\.legalAndCompliance\.checks\.support-deletion-contact\.evidence must include support mailbox/);
@@ -3681,6 +3694,37 @@ test('production launch evidence validator requires concrete legal and policy ap
     assert.match(result.stderr, /areas\.legalAndCompliance\.checks\.solicitor-governance-privacy-review\.evidence must include named privacy reviewer/);
     assert.match(result.stderr, /areas\.legalAndCompliance\.checks\.solicitor-governance-privacy-review\.evidence must include review date/);
     assert.match(result.stderr, /areas\.legalAndCompliance\.checks\.solicitor-governance-privacy-review\.evidence must include not a substitute for legal advice/);
+  } finally {
+    rmSync(tempDir, { recursive: true, force: true });
+  }
+});
+
+test('production launch evidence cannot omit the DPO feedback disposition', async () => {
+  const { REQUIRED_LAUNCH_AREAS, runProductionLaunchEvidenceFromArgs } = await loadEvidenceRunner();
+  const evidence = completeEvidence(REQUIRED_LAUNCH_AREAS);
+  delete evidence.areas.legalAndCompliance.checks['dpo-feedback-disposition'];
+  const { tempDir, evidencePath } = writeEvidenceFile(evidence);
+
+  try {
+    const result = runProductionLaunchEvidenceFromArgs(['--evidence-file', evidencePath]);
+    assert.equal(result.status, 1);
+    assert.match(result.stderr, /legalAndCompliance\.checks\.dpo-feedback-disposition is required/);
+  } finally {
+    rmSync(tempDir, { recursive: true, force: true });
+  }
+});
+
+test('DPO feedback disposition must name the promoted release commit', async () => {
+  const { REQUIRED_LAUNCH_AREAS, runProductionLaunchEvidenceFromArgs } = await loadEvidenceRunner();
+  const evidence = completeEvidence(REQUIRED_LAUNCH_AREAS);
+  const dpo = evidence.areas.legalAndCompliance.checks['dpo-feedback-disposition'].evidence[0];
+  dpo.description = dpo.description.replace(commitSha, 'c'.repeat(40));
+  const { tempDir, evidencePath } = writeEvidenceFile(evidence);
+
+  try {
+    const result = runProductionLaunchEvidenceFromArgs(['--evidence-file', evidencePath]);
+    assert.equal(result.status, 1);
+    assert.match(result.stderr, /legalAndCompliance\.checks\.dpo-feedback-disposition\.evidence must include release\.commitSha/);
   } finally {
     rmSync(tempDir, { recursive: true, force: true });
   }
@@ -4034,6 +4078,11 @@ test('production launch evidence template covers every required area and final s
       ),
     );
     assert.ok(
+      template.areas.legalAndCompliance.checks['dpo-feedback-disposition'].requiredEvidenceHints.includes(
+        'C1 control',
+      ),
+    );
+    assert.ok(
       template.areas.browserQa.checks['accessibility-coverage'].requiredEvidenceHints.includes(
         'npm run test:e2e -- tests/accessibility.spec.ts',
       ),
@@ -4120,7 +4169,7 @@ test('production launch evidence template covers every required area and final s
     const result = runProductionLaunchEvidenceFromArgs(['--evidence-file', evidencePath]);
 
     assert.equal(result.status, 1);
-    assert.match(result.stderr, /Checklist checks complete: 0 \/ 89 \(0% complete\)/);
+    assert.match(result.stderr, /Checklist checks complete: 0 \/ 90 \(0% complete\)/);
     assert.match(result.stderr, /Final approval roles approved: 0 \/ 5 \(0% complete\)/);
     assert.match(
       result.stderr,

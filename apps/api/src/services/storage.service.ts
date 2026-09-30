@@ -16,6 +16,8 @@ const LOCAL_STORAGE_DRIVER = 'local';
 const SUPABASE_STORAGE_DRIVER = 'supabase';
 const DEFAULT_LOCAL_STORAGE_DIR = '.charitypilot-local-storage/documents';
 const MAX_DOCUMENT_DOWNLOAD_BYTES = 10 * 1024 * 1024;
+const DEFAULT_STORAGE_UPLOAD_TIMEOUT_MS = 5 * 60_000;
+const MAX_STORAGE_UPLOAD_TIMEOUT_MS = 30 * 60_000;
 const DEFAULT_STORAGE_DOWNLOAD_TIMEOUT_MS = 10_000;
 const DEFAULT_STORAGE_DELETE_TIMEOUT_MS = 5_000;
 const MAX_STORAGE_DELETE_TIMEOUT_MS = 8_000;
@@ -42,6 +44,13 @@ function downloadTimeoutMs(): number {
   return Number.isInteger(configured) && configured >= 100 && configured <= 60_000
     ? configured
     : DEFAULT_STORAGE_DOWNLOAD_TIMEOUT_MS;
+}
+
+function uploadTimeoutMs(): number {
+  const configured = Number(process.env.STORAGE_UPLOAD_TIMEOUT_MS);
+  return Number.isInteger(configured) && configured >= 100 && configured <= MAX_STORAGE_UPLOAD_TIMEOUT_MS
+    ? configured
+    : DEFAULT_STORAGE_UPLOAD_TIMEOUT_MS;
 }
 
 export function storageDeleteTimeoutMs(): number {
@@ -233,28 +242,41 @@ export class StorageService {
     filename: string,
     buffer: Buffer,
     mimeType: string,
-  ): Promise<{ storagePath: string }> {
+    beforeWrite?: (prepared: { storagePath: string; provider: string }) => Promise<void>,
+  ): Promise<{ storagePath: string; provider?: string }> {
     const sanitised = sanitiseFilename(filename);
     const storagePath = `${organisationId}/${Date.now()}-${randomUUID()}-${sanitised}`;
+    const provider = await this.providerFor(organisationId, 'write');
+    this.assertProviderServable(provider, 'STORAGE_UPLOAD_PROVIDER_UNSUPPORTED');
+    // Fail before reserving an object key when the selected remote backend
+    // cannot even be constructed from this deployment's configuration.
+    const timeoutMs = uploadTimeoutMs();
+    const supabase = provider === LOCAL_STORAGE_DRIVER ? null : getSupabaseClient({ operationTimeoutMs: timeoutMs });
 
-    if ((await this.providerFor(organisationId, 'write')) === LOCAL_STORAGE_DRIVER) {
+    // The caller can durably reserve this exact key/provider before any bytes
+    // are written. If reservation fails, there is no object to reconcile.
+    await beforeWrite?.({ storagePath, provider });
+
+    // Keep every provider write bounded well inside the one-hour reservation
+    // reconciliation window. A stalled upload must not still be writing when
+    // the cleanup worker considers its reserved path orphaned.
+    if (provider === LOCAL_STORAGE_DRIVER) {
       const filePath = localFilePath(storagePath);
       await mkdir(dirname(filePath), { recursive: true });
-      await writeFile(filePath, buffer);
-      return { storagePath };
+      await withOperationTimeout(writeFile(filePath, buffer, { signal: AbortSignal.timeout(timeoutMs) }), timeoutMs);
+      return { storagePath, provider };
     }
 
-    const supabase = getSupabaseClient();
-
-    const { error } = await supabase.storage
-      .from(getBucketName())
-      .upload(storagePath, buffer, { contentType: mimeType, upsert: false });
-
-    if (error) {
-      throw new AppError(500, 'STORAGE_UPLOAD_FAILED', STORAGE_OPERATION_FAILED_MESSAGE);
+    try {
+      const { error } = await withOperationTimeout(supabase!.storage
+        .from(getBucketName())
+        .upload(storagePath, buffer, { contentType: mimeType, upsert: false }), timeoutMs);
+      if (!error) return { storagePath, provider };
+    } catch {
+      // A timeout or transport exception has the same externally safe result
+      // as a provider error; the durable reservation handles uncertain bytes.
     }
-
-    return { storagePath };
+    throw new AppError(500, 'STORAGE_UPLOAD_FAILED', STORAGE_OPERATION_FAILED_MESSAGE);
   }
 
   private async readLocalResolved(guardedPath: string): Promise<Buffer> {
@@ -292,10 +314,10 @@ export class StorageService {
     return this.readLocalResolved(guardedPath);
   }
 
-  async downloadFile(organisationId: string, storagePath: string): Promise<Buffer> {
+  async downloadFile(organisationId: string, storagePath: string, uploadedProvider?: string): Promise<Buffer> {
     const guardedPath = assertOrganisationStoragePath(organisationId, storagePath);
 
-    const readProvider = await this.providerFor(organisationId, 'read');
+    const readProvider = uploadedProvider ?? await this.providerFor(organisationId, 'read');
     if (readProvider === LOCAL_STORAGE_DRIVER) {
       return this.readLocalResolved(guardedPath);
     }
@@ -329,33 +351,93 @@ export class StorageService {
     }
   }
 
-  async deleteFile(organisationId: string, storagePath: string, signal?: AbortSignal): Promise<void> {
+  /** Read-only custody check for a legacy Vault key. An unavailable provider
+   * is an error, never evidence that its object is absent. */
+  async inspectActiveObject(
+    organisationId: string,
+    storagePath: string,
+    provider: 'local' | 'supabase',
+  ): Promise<{ present: boolean; size: number | null }> {
+    const guardedPath = assertOrganisationStoragePath(organisationId, storagePath);
+    if (provider === LOCAL_STORAGE_DRIVER) {
+      try {
+        const file = await withOperationTimeout(stat(localFilePath(guardedPath)), downloadTimeoutMs());
+        if (!file.isFile()) throw new AppError(409, 'STORAGE_CUSTODY_NOT_FILE', 'Storage object is not a file');
+        return { present: true, size: file.size };
+      } catch (error) {
+        if (isMissingFileError(error)) return { present: false, size: null };
+        if (error instanceof AppError) throw error;
+        throw new AppError(503, 'STORAGE_CUSTODY_CHECK_UNAVAILABLE', STORAGE_UNAVAILABLE_MESSAGE);
+      }
+    }
+
+    const timeoutMs = downloadTimeoutMs();
+    let result: { data: boolean; error: { status?: number } | null };
+    try {
+      result = await withOperationTimeout(
+        getSupabaseClient({ operationTimeoutMs: timeoutMs }).storage.from(getBucketName()).exists(guardedPath),
+        timeoutMs + 250,
+      );
+    } catch (error) {
+      if (error instanceof AppError) throw error;
+      throw new AppError(503, 'STORAGE_CUSTODY_CHECK_UNAVAILABLE', STORAGE_UNAVAILABLE_MESSAGE);
+    }
+    if (result.data === false && result.error?.status === 404) return { present: false, size: null };
+    if (result.data !== true || result.error) {
+      throw new AppError(503, 'STORAGE_CUSTODY_CHECK_UNAVAILABLE', STORAGE_UNAVAILABLE_MESSAGE);
+    }
+    const bytes = await this.downloadFile(organisationId, guardedPath, SUPABASE_STORAGE_DRIVER);
+    return { present: true, size: bytes.length };
+  }
+
+  async deleteFile(
+    organisationId: string,
+    storagePath: string,
+    signal?: AbortSignal,
+    uploadedProvider?: string,
+  ): Promise<Date> {
     const guardedPath = assertOrganisationStoragePath(organisationId, storagePath);
 
     if (signal?.aborted) {
       throw new AppError(500, 'STORAGE_DELETE_FAILED', STORAGE_OPERATION_FAILED_MESSAGE);
     }
 
-    const provider = await this.providerFor(organisationId, 'delete');
+    // A failed document create has an upload receipt with the exact provider
+    // used for those bytes. Its cleanup must not follow a changed tenant
+    // preference and accidentally verify absence at another provider.
+    const provider = uploadedProvider ?? await this.providerFor(organisationId, 'delete');
 
     if (signal?.aborted) {
       throw new AppError(500, 'STORAGE_DELETE_FAILED', STORAGE_OPERATION_FAILED_MESSAGE);
     }
 
     if (provider === LOCAL_STORAGE_DRIVER) {
+      const filePath = localFilePath(guardedPath);
       try {
-        await withOperationTimeout(unlink(localFilePath(guardedPath)), storageDeleteTimeoutMs());
+        await withOperationTimeout(unlink(filePath), storageDeleteTimeoutMs());
       } catch (error) {
         if (!isMissingFileError(error)) {
           throw new AppError(500, 'STORAGE_DELETE_FAILED', STORAGE_OPERATION_FAILED_MESSAGE);
         }
       }
-      return;
+      // A successful unlink call is not itself an absence check. Do not let
+      // the outbox say PROCESSED if the active local path still exists.
+      try {
+        await withOperationTimeout(stat(filePath), storageDeleteTimeoutMs());
+        throw new AppError(500, 'STORAGE_DELETE_UNVERIFIED', STORAGE_OPERATION_FAILED_MESSAGE);
+      } catch (error) {
+        if (!isMissingFileError(error)) {
+          if (error instanceof AppError) throw error;
+          throw new AppError(500, 'STORAGE_DELETE_UNVERIFIED', STORAGE_OPERATION_FAILED_MESSAGE);
+        }
+      }
+      return new Date();
     }
 
     this.assertProviderServable(provider, 'STORAGE_DELETE_PROVIDER_UNSUPPORTED');
 
     const timeoutMs = storageDeleteTimeoutMs();
+    const startedAt = Date.now();
     const { error } = await withOperationTimeout(
       getSupabaseClient({ operationTimeoutMs: timeoutMs, operationSignal: signal })
         .storage
@@ -367,5 +449,25 @@ export class StorageService {
     if (error) {
       throw new AppError(500, 'STORAGE_DELETE_FAILED', STORAGE_OPERATION_FAILED_MESSAGE);
     }
+
+    // The remove API can acknowledge a request before absence is observable.
+    // A 400, transport failure or auth error must not be mistaken for "missing";
+    // this SDK's exists() returns false with a 404 StorageError for an absent
+    // active object. Versioned copies and backups need separate evidence.
+    const remainingMs = Math.max(1, timeoutMs - (Date.now() - startedAt));
+    let absence: { data: boolean; error: { status?: number } | null };
+    try {
+      absence = await withOperationTimeout(
+        getSupabaseClient({ operationTimeoutMs: remainingMs, operationSignal: signal })
+          .storage.from(getBucketName()).exists(guardedPath),
+        remainingMs + 250,
+      );
+    } catch {
+      throw new AppError(500, 'STORAGE_DELETE_UNVERIFIED', STORAGE_OPERATION_FAILED_MESSAGE);
+    }
+    if (absence.data !== false || absence.error?.status !== 404) {
+      throw new AppError(500, 'STORAGE_DELETE_UNVERIFIED', STORAGE_OPERATION_FAILED_MESSAGE);
+    }
+    return new Date();
   }
 }

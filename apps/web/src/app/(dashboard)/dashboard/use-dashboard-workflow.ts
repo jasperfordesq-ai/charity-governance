@@ -53,11 +53,15 @@ export function useDashboardWorkflow() {
       setDeadlines(currentDeadlines);
       setSignoff(signoffRes.data);
 
-      try {
-        const readinessRes = await api.get(`/compliance/approval-readiness?year=${currentYear}`);
-        setApprovalReadiness(readinessRes.data);
-      } catch (readinessErr) {
-        logClientError('Failed to load approval readiness', readinessErr);
+      if (canManage) {
+        try {
+          const readinessRes = await api.get(`/compliance/approval-readiness?year=${currentYear}`);
+          setApprovalReadiness(readinessRes.data);
+        } catch (readinessErr) {
+          logClientError('Failed to load approval readiness', readinessErr);
+          setApprovalReadiness(null);
+        }
+      } else {
         setApprovalReadiness(null);
       }
 
@@ -100,13 +104,17 @@ export function useDashboardWorkflow() {
 
       setBoardAlerts(alerts);
 
-      try {
-        const registerRes = await api.get(`/governance-registers/summary?year=${currentYear}`);
-        setRegisterSummary(registerRes.data);
-      } catch (registerErr) {
-        if (!isPlanFeatureUnavailable(registerErr)) {
-          logClientError('Failed to load governance register summary', registerErr);
+      if (canManage) {
+        try {
+          const registerRes = await api.get(`/governance-registers/summary?year=${currentYear}`);
+          setRegisterSummary(registerRes.data);
+        } catch (registerErr) {
+          if (!isPlanFeatureUnavailable(registerErr)) {
+            logClientError('Failed to load governance register summary', registerErr);
+          }
+          setRegisterSummary(null);
         }
+      } else {
         setRegisterSummary(null);
       }
     } catch (err) {
@@ -119,7 +127,7 @@ export function useDashboardWorkflow() {
     } finally {
       setLoading(false);
     }
-  }, [currentYear]);
+  }, [canManage, currentYear]);
 
   useEffect(() => {
     void fetchDashboard();

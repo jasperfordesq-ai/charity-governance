@@ -1,5 +1,5 @@
 import type { FastifyInstance, FastifyReply } from 'fastify';
-import { ZodError } from 'zod';
+import { z, ZodError } from 'zod';
 import {
   createGoverningActSchema,
   updateGoverningActSchema,
@@ -15,7 +15,7 @@ import {
   type VoidGoverningActRequest,
 } from '@charitypilot/shared';
 import { authGuard } from '../../middleware/auth.js';
-import { requireSessionLevel } from '../../middleware/session-level.js';
+import { requireSessionLevel, requireWebSession } from '../../middleware/session-level.js';
 import { requireActionApproval } from '../../middleware/action-approval.js';
 import { subscriptionGuard } from '../../middleware/subscription.js';
 import { requireCompletePlan } from '../../middleware/plan.js';
@@ -32,6 +32,10 @@ function validationError(reply: FastifyReply, err: ZodError) {
   });
 }
 
+const minuteBookAuditQuerySchema = z.object({
+  before: z.string().min(1).max(160).regex(/^[A-Za-z0-9_-]+$/).optional(),
+}).strict();
+
 export async function governingActRoutes(app: FastifyInstance) {
   const service = new GoverningActService(app.prisma);
 
@@ -41,7 +45,7 @@ export async function governingActRoutes(app: FastifyInstance) {
 
   // ── Governing Acts ──────────────────────────────────────────────────────────
 
-  app.get('/', async (request, reply) => {
+  app.get('/', { preHandler: [requireAdmin] }, async (request, reply) => {
     try {
       const query = governingActQuerySchema.parse(request.query);
       return sendSuccess(reply, await service.list(request.user.organisationId, query));
@@ -54,7 +58,17 @@ export async function governingActRoutes(app: FastifyInstance) {
   // Declared before the parametric routes it shares a prefix with only for
   // readability: Fastify matches a static segment ahead of a parametric one
   // whatever the registration order, so `/voids` is never read as an id.
-  app.get<{ Params: { id: string } }>('/:id', async (request, reply) => {
+  app.get('/audit', { preHandler: [requireAdmin, requireWebSession] }, async (request, reply) => {
+    try {
+      const { before } = minuteBookAuditQuerySchema.parse(request.query);
+      return sendSuccess(reply, await service.listChanges(request.user.organisationId, before));
+    } catch (err) {
+      if (err instanceof ZodError) return validationError(reply, err);
+      return handleError(reply, err);
+    }
+  });
+
+  app.get<{ Params: { id: string } }>('/:id', { preHandler: [requireAdmin] }, async (request, reply) => {
     try {
       return sendSuccess(reply, await service.getById(request.user.organisationId, request.params.id));
     } catch (err) {
@@ -65,7 +79,7 @@ export async function governingActRoutes(app: FastifyInstance) {
   app.post('/', { preHandler: [requireAdmin] }, async (request, reply) => {
     try {
       const data = createGoverningActSchema.parse(request.body) as CreateGoverningActRequest;
-      return sendCreated(reply, await service.create(request.user.organisationId, data));
+      return sendCreated(reply, await service.create(request.user.organisationId, data, request.user.userId));
     } catch (err) {
       if (err instanceof ZodError) return validationError(reply, err);
       return handleError(reply, err);
@@ -75,7 +89,7 @@ export async function governingActRoutes(app: FastifyInstance) {
   app.patch<{ Params: { id: string } }>('/:id', { preHandler: [requireAdmin] }, async (request, reply) => {
     try {
       const data = updateGoverningActSchema.parse(request.body) as UpdateGoverningActRequest;
-      return sendSuccess(reply, await service.update(request.user.organisationId, request.params.id, data));
+      return sendSuccess(reply, await service.update(request.user.organisationId, request.params.id, data, request.user.userId));
     } catch (err) {
       if (err instanceof ZodError) return validationError(reply, err);
       return handleError(reply, err);
@@ -84,7 +98,7 @@ export async function governingActRoutes(app: FastifyInstance) {
 
   // ── Resolutions ───────────────────────────────────────────────────────────
 
-  app.get<{ Params: { id: string } }>('/resolutions/:id', async (request, reply) => {
+  app.get<{ Params: { id: string } }>('/resolutions/:id', { preHandler: [requireAdmin] }, async (request, reply) => {
     try {
       return sendSuccess(
         reply,
@@ -103,7 +117,7 @@ export async function governingActRoutes(app: FastifyInstance) {
         const data = createResolutionSchema.parse(request.body) as CreateResolutionRequest;
         return sendCreated(
           reply,
-          await service.createResolution(request.user.organisationId, request.params.id, data),
+          await service.createResolution(request.user.organisationId, request.params.id, data, request.user.userId),
         );
       } catch (err) {
         if (err instanceof ZodError) return validationError(reply, err);
@@ -120,7 +134,7 @@ export async function governingActRoutes(app: FastifyInstance) {
         const data = updateResolutionSchema.parse(request.body) as UpdateResolutionRequest;
         return sendSuccess(
           reply,
-          await service.updateResolution(request.user.organisationId, request.params.id, data),
+        await service.updateResolution(request.user.organisationId, request.params.id, data, request.user.userId),
         );
       } catch (err) {
         if (err instanceof ZodError) return validationError(reply, err);
@@ -132,7 +146,7 @@ export async function governingActRoutes(app: FastifyInstance) {
   // ── Void (permanent removal, audited) ───────────────────────────────────────
 
   // Static path first so it is never captured by /:id.
-  app.get('/voids', async (request, reply) => {
+  app.get('/voids', { preHandler: [requireAdmin] }, async (request, reply) => {
     try {
       return sendSuccess(reply, await service.listVoids(request.user.organisationId));
     } catch (err) {
@@ -155,9 +169,9 @@ export async function governingActRoutes(app: FastifyInstance) {
 
   // ── Board Submissions ───────────────────────────────────────────────────────
 
-  app.get('/board-submissions', async (request, reply) => {
+  app.get('/board-submissions', { preHandler: [requireAdmin] }, async (request, reply) => {
     try {
-      return sendSuccess(reply, await service.getBoardSubmissions(request.user.organisationId));
+      return sendSuccess(reply, await service.getBoardSubmissions(request.user.organisationId, request.user.role));
     } catch (err) {
       return handleError(reply, err);
     }
@@ -177,6 +191,7 @@ export async function governingActRoutes(app: FastifyInstance) {
           data.approvedByResolutionId,
           data.approvalAsserted,
           data.expectedUpdatedAt,
+          request.user.userId,
         );
         return sendSuccess(reply, { ok: true });
       } catch (err) {

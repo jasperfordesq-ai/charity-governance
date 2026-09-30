@@ -114,11 +114,14 @@ export const SAFE_FIELDS: Record<ModelName, readonly string[]> = {
   ],
   // `name` is governance evidence and is how a document is referred to. `owner` is
   // a person, `description` is free text, and `fileUrl` is the storage path, which
-  // encodes the original filename and must never leave the API.
+  // encodes the original filename and must never leave the API. A shared file
+  // does not itself grant access to the separate Minute Book reference or its
+  // resolution identifier.
   Document: [
     'id', 'organisationId', 'name', 'category', 'fileSize', 'mimeType',
-    'version', 'approvedDate', 'nextReviewDate', 'boardMinuteReference',
-    'approvalAsserted', 'approvedByResolutionId', 'createdAt', 'updatedAt',
+    'version', 'approvedDate', 'nextReviewDate',
+    'approvalAsserted', 'visibility',
+    'lifecycleStatus', 'externalPublicationApproved', 'createdAt', 'updatedAt',
   ],
   // conflictRecordId is withheld for the same reason as ConflictRecord.boardMemberId:
   // it is the join that reconstructs who declared a conflict.
@@ -175,7 +178,9 @@ export const WITHHELD_FIELDS: Record<ModelName, readonly string[]> = {
   // that can carry anything, including the kind of personal detail the other
   // withheld fields exist to hold back.
   GoverningAct: ['notes'],
-  RiskRecord: ['description', 'mitigation', 'owner'],
+  // Risk revision is an internal evidence-review control, not part of the
+  // general connector's risk summary.
+  RiskRecord: ['description', 'mitigation', 'owner', 'revision'],
   FundraisingRecord: ['thirdPartyFundraiser', 'controls', 'reviewOutcome'],
   FinancialControlReview: ['reviewedBy', 'actions'],
   AnnualReportReadiness: [
@@ -189,7 +194,10 @@ export const WITHHELD_FIELDS: Record<ModelName, readonly string[]> = {
   Deadline: [
     'description', 'generationSource', 'generationInputs', 'supersessionReason',
   ],
-  Document: ['description', 'fileUrl', 'owner', 'uploadedById'],
+  // Replacement lineage can identify a restricted successor document.
+  // Content classification and storage custody are internal access/deletion
+  // controls, not fields for a generic connector projection.
+  Document: ['description', 'fileUrl', 'owner', 'boardMinuteReference', 'approvedByResolutionId', 'uploadedById', 'supersededByDocumentId', 'deletionHold', 'storageProvider', 'contentAccessClass', 'externalPublicationSiteId', 'externalPublicationSpaceId'],
   Resolution: ['text', 'abstentions', 'conflictRecordId'],
   GovernancePrinciple: [],
   GovernanceStandard: [],
@@ -513,6 +521,13 @@ function filterTeamSessions(value: unknown): unknown {
  * value goes and what remains is that an event of some kind happened, and when.
  */
 function filterSecurityAudit(value: unknown): unknown {
+  const envelope = asRecord(value);
+  if (envelope && Array.isArray(envelope.data)) {
+    return {
+      data: mapArray(envelope.data, (row) => pick(row, ['type', 'occurredAt'])),
+      nextCursor: typeof envelope.nextCursor === 'string' ? envelope.nextCursor : null,
+    };
+  }
   return mapArray(value, (row) => pick(row, ['type', 'occurredAt']));
 }
 
@@ -579,8 +594,8 @@ function filterSearch(value: unknown): unknown {
 }
 
 /**
- * Pages left standing in a charity’s Confluence after the documents they
- * mirrored were deleted here.
+ * Retained references to retired Confluence publications. The local row does
+ * not establish whether a page is still live or has been purged remotely.
  *
  * Every key is already safe — identifiers, a page title, a date and a flag,
  * with a document’s name being safe on the Document policy too. This exists
@@ -592,10 +607,15 @@ const PUBLICATION_FIELDS = [
 ] as const;
 
 function filterConfluencePublications(value: unknown): unknown {
-  const envelope = asRecord(value);
-  if (!envelope) return value;
+  const wrapper = asRecord(value);
+  if (!wrapper) return value;
+  const envelope = asRecord(wrapper.data);
+  if (!envelope) return { data: { publications: [], nextCursor: null } };
   return {
-    publications: mapArray(envelope.publications, (row) => pick(row, PUBLICATION_FIELDS)),
+    data: {
+      publications: mapArray(envelope.publications, (row) => pick(row, PUBLICATION_FIELDS)),
+      nextCursor: typeof envelope.nextCursor === 'string' ? envelope.nextCursor : null,
+    },
   };
 }
 

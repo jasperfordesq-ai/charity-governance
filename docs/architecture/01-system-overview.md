@@ -28,7 +28,7 @@ The three runtime processes are the web app, the API, and PostgreSQL. Default po
 
 Those ports are the persistent development defaults only. Destructive
 Playwright does not reuse them: `scripts/run-isolated-e2e.mjs` owns standalone
-`compose.e2e.yml`, with fixed loopback ports `3302`, `3303`, and `55434`, a
+`compose.e2e.yml`, with fixed loopback ports `3302`, `3303`, and `3354`, a
 positive allow-list image context, a UUID-bound PostgreSQL marker, an internal
 bridge, tmpfs database/document storage, and a baked production web build in a
 read-only image, with no host mount or persistent volume. Database, API, and
@@ -86,7 +86,7 @@ The Next.js layer resolves the API base URL through two distinct paths in `apps/
 - **Browser-facing requests** use `getApiBaseUrl()`, driven by `NEXT_PUBLIC_API_URL` (`apps/web/src/lib/api-config.ts:10-28`). In production this must be an `https://` origin-only URL on the approved `charitypilot.ie` host (`apps/web/src/lib/api-config.ts:42-63`); in local Docker it is `http://localhost:3002` (`compose.local.yml:106`).
 - **Server-side requests inside the web container** use `getServerApiBaseUrl()`, which prefers `CHARITYPILOT_INTERNAL_API_URL` and otherwise falls back to the public URL (`apps/web/src/lib/api-config.ts:30-40`). Locally this is set to the in-network service address `http://api:3002` (`compose.local.yml:107`), so the proxy reaches the API container directly over the Docker bridge network rather than via the host-published port.
 
-The server-side caller is the web proxy in `apps/web/src/proxy.ts`. For protected app paths it forwards the auth cookies to the API's `/api/v1/auth/me` endpoint to validate the session, and on a stale access token attempts `/api/v1/auth/refresh`, propagating any rotated `Set-Cookie` headers back to the browser (`apps/web/src/proxy.ts:48-90`, `apps/web/src/proxy.ts:194-204`). The proxy also injects a per-request nonce and Content-Security-Policy and redirects unauthenticated users to `/login` (`apps/web/src/proxy.ts:176-205`). Its matcher excludes `api`, `_next` and static assets (`apps/web/src/proxy.ts:207-211`).
+The server-side caller is the web proxy in `apps/web/src/proxy.ts`. For protected app paths it forwards the auth cookies to the API's `/api/v1/auth/me` endpoint to validate the session. On a stale access token with a refresh cookie, it redirects to the public `/session-renew` page without rendering protected content or presenting that single-use token. The browser renews through the shared cross-tab lock, then returns to the sanitized protected path; a missing refresh cookie goes to `/login`. The proxy also injects a per-request nonce and Content-Security-Policy. Its matcher excludes `api`, `_next` and static assets. API replay detection and family quarantine remain in force for a token presented twice.
 
 ## External integrations
 
@@ -184,7 +184,7 @@ flowchart TD
     Browser -->|"HTTPS: NEXT_PUBLIC_API_URL"| Routes
     Browser -->|"HTTPS: page requests"| WebUI
     WebUI --> Proxy
-    Proxy -->|"server-side: CHARITYPILOT_INTERNAL_API_URL (http://api:3002), validate session /auth/me, /auth/refresh"| Routes
+    Proxy -->|"server-side: CHARITYPILOT_INTERNAL_API_URL (http://api:3002), validate session /auth/me"| Routes
 
     Routes --> Services
     Services -->|"SQL via Prisma client"| DB

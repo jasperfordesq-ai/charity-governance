@@ -12,7 +12,7 @@ import { useDocumentTitle } from '@/lib/use-title';
 import { AppPage } from '@/components/ui/app-page';
 import { InlineStatus, SaveStatusIndicator } from '@/components/ui/states';
 import { StatusChip } from '@/components/ui/status';
-import type { SecurityAuditEventResponse, TeamResponse, TeamMemberResponse } from '@charitypilot/shared';
+import type { TeamResponse, TeamMemberResponse } from '@charitypilot/shared';
 import { normalizeTeamGovernanceReason, UserRole } from '@charitypilot/shared';
 import { TeamInvitesPanel } from './team-invites-panel';
 import { TeamMembersPanel } from './team-members-panel';
@@ -22,6 +22,7 @@ import { TeamSessionsModal } from './team-sessions-modal';
 import { TeamSecurityAuditPanel } from './team-security-audit-panel';
 import { actionContent, apiErrorCode, replaceWithLoginAfterServerRevocation, type GovernanceAction } from './team-page-helpers';
 import { useTeamSessions } from './use-team-sessions';
+import { useTeamSecurityAudit } from './use-team-security-audit';
 
 export default function TeamPage() {
   useDocumentTitle('Team');
@@ -40,21 +41,18 @@ export default function TeamPage() {
   const [governanceConfirmation, setGovernanceConfirmation] = useState('');
   const [governanceSaving, setGovernanceSaving] = useState(false);
   const [governanceError, setGovernanceError] = useState<string | null>(null);
-  const [securityEvents, setSecurityEvents] = useState<SecurityAuditEventResponse[]>([]);
-  const [securityLoading, setSecurityLoading] = useState(false);
-  const [securityError, setSecurityError] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [manualInviteUrl, setManualInviteUrl] = useState<string | null>(null);
   const [teamUnavailable, setTeamUnavailable] = useState(false);
   const teamRequestId = useRef(0);
-  const securityRequestId = useRef(0);
   const [governanceActorRole, setGovernanceActorRole] = useState<string | null>(null);
 
   // AuthContext can lag a database role change. Never authorize from
   // `user?.role === UserRole.OWNER || user?.role === UserRole.ADMIN`; the
   // freshly loaded membership below is the fail-closed UI authority.
   const effectiveRole = resolveCanonicalTeamRole(user?.id, team?.members);
+  const securityAudit = useTeamSecurityAudit(effectiveRole);
   const permissionUser = user && effectiveRole ? { ...user, role: effectiveRole } : null;
   const canInvite = canInviteMembers(effectiveRole);
   const managementDisabled = loading || teamUnavailable || !team || !effectiveRole;
@@ -107,35 +105,9 @@ export default function TeamPage() {
     }
   }, []);
 
-  const fetchSecurityAudit = useCallback(async () => {
-    const requestId = ++securityRequestId.current;
-    if (effectiveRole !== UserRole.OWNER && effectiveRole !== UserRole.ADMIN) {
-      setSecurityEvents([]);
-      setSecurityError(null);
-      return;
-    }
-    setSecurityLoading(true);
-    setSecurityError(null);
-    try {
-      const { data } = await api.get<SecurityAuditEventResponse[]>('/team/security-audit');
-      if (requestId !== securityRequestId.current) return;
-      setSecurityEvents(data);
-    } catch (err) {
-      if (requestId !== securityRequestId.current) return;
-      logClientError('Failed to load team security audit', err);
-      setSecurityError(apiErrorMessage(err, 'The security audit could not be loaded.'));
-    } finally {
-      if (requestId === securityRequestId.current) setSecurityLoading(false);
-    }
-  }, [effectiveRole]);
-
   useEffect(() => {
     void fetchTeam();
   }, [fetchTeam]);
-
-  useEffect(() => {
-    void fetchSecurityAudit();
-  }, [fetchSecurityAudit]);
 
   useEffect(() => {
     if (!allowedInviteRoles.includes(role)) {
@@ -288,7 +260,7 @@ export default function TeamPage() {
       setGovernanceAction(null);
       setGovernanceReason('');
       setGovernanceConfirmation('');
-      await Promise.all([fetchTeam(), fetchSecurityAudit()]);
+      await Promise.all([fetchTeam(), securityAudit.refresh()]);
     } catch (err: unknown) {
       if (apiErrorCode(err) === 'MEMBERSHIP_VERSION_CONFLICT') {
         setGovernanceActorRole(null);
@@ -331,7 +303,7 @@ export default function TeamPage() {
     teamAvailable: Boolean(team) && !teamUnavailable && Boolean(effectiveRole),
     accessRefreshing: loading,
     fetchTeam,
-    fetchSecurityAudit,
+    fetchSecurityAudit: securityAudit.refresh,
     redirectAfterServerRevocation,
     setMessage,
     setError,
@@ -404,10 +376,14 @@ export default function TeamPage() {
 
       {(effectiveRole === UserRole.OWNER || effectiveRole === UserRole.ADMIN) ? (
         <TeamSecurityAuditPanel
-          events={securityEvents}
-          loading={securityLoading}
-          error={securityError}
-          onRetry={fetchSecurityAudit}
+          events={securityAudit.events}
+          loading={securityAudit.loading}
+          error={securityAudit.error}
+          onRetry={securityAudit.refresh}
+          nextCursor={securityAudit.nextCursor}
+          loadingOlder={securityAudit.loadingOlder}
+          olderError={securityAudit.olderError}
+          onLoadOlder={securityAudit.loadOlder}
         />
       ) : null}
 

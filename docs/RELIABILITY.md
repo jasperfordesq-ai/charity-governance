@@ -12,21 +12,13 @@ Playwright rows require a separate managed E2E result bound to the relevant SHA.
 
 ## At a glance
 
-Generated: 2026-09-20 - Source of truth: [`docs/reliability/guarantees.json`](reliability/guarantees.json)
+Generated: 2026-09-29 - Source of truth: [`docs/reliability/guarantees.json`](reliability/guarantees.json)
 
 | Surface | covered | partial | gap | n/a | Total |
 |---|---|---|---|---|---|
 | API | 396 | 0 | 0 | 14 | 410 |
 | Web | 113 | 0 | 0 | 6 | 119 |
 | **Total** | **509** | **0** | **0** | **20** | **529** |
-
-**API suite:** 2173 passing, 0 failing. **Web suite:** 497 passing, 0 failing. **E2E linkage:** 123 Playwright titles found; not executed by this command.
-
-**Executed E2E result:** NOT VERIFIED BY THIS COMMAND. Use a successful managed E2E workflow or `npm run test:e2e` result bound to the relevant SHA.
-
-**Linkage:** 509/509 covered guarantees verified against a passing/linked test.
-
-**Linkage check: COMPLETE**
 
 ## How to verify
 
@@ -640,7 +632,7 @@ _58 guarantees - covered 58_
 | Auth & session integrity | Sensitive-auth links prefer the fragment token over a query token. | covered | `prefers fragment tokens over query tokens for sensitive auth links`<br/><sub>lib/url-security.test.ts</sub> |
 | Auth & session integrity | Removing a sensitive token query parameter preserves the other (safe) URL parts. | covered | `removes sensitive token query parameters while preserving safe URL parts`<br/><sub>lib/url-security.test.ts</sub> |
 | Auth & session integrity | When a sensitive token was the only query parameter, the leftover "?" marker is removed too. | covered | `removes the query marker when sensitive parameters were the only query parameters`<br/><sub>lib/url-security.test.ts</sub> |
-| Auth & session integrity | The server-side protected-route check forwards the deployed web Origin the API origin guard requires when it refreshes a session at the edge. | covered | `server-side protected route refresh sends the deployed web Origin required by the API origin guard`<br/><sub>proxy.test.ts</sub> |
+| Auth & session integrity | An expired protected-page request redirects to browser renewal without a web worker presenting the single-use refresh token. | covered | `expired protected page requests hand renewal to the browser without spending a refresh token`<br/><sub>proxy.test.ts</sub> |
 | Auth & session integrity | An expired/cleared session on a protected route is redirected to login rather than flashing stale data or crashing. | covered | `an expired/cleared session is redirected to login, not left on a protected page` <sup>e2e</sup><br/><sub>tests/auth-session.spec.ts</sub> |
 | Auth & session integrity | With NEXT_PUBLIC_CHARITYPILOT_CANONICAL_API_ORIGIN unset, the hosted origin https://api.charitypilot.ie is still accepted byte-identically in production. | covered | `with the canonical-API-origin override unset, the hosted origin is accepted byte-identically`<br/><sub>lib/api-config.test.ts</sub> |
 | Auth & session integrity | An empty-string NEXT_PUBLIC_CHARITYPILOT_CANONICAL_API_ORIGIN counts as unset (P1 convention), so the hosted-only canonical check still applies rather than being bypassed by an empty override. | covered | `an empty-string canonical-API-origin override behaves as unset (P1 convention)`<br/><sub>lib/api-config.test.ts</sub> |

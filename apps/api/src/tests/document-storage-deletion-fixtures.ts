@@ -63,9 +63,10 @@ export function applyPrismaSelect<T extends Record<string, unknown>>(
 export type DocumentStorageDeletionRow = {
   id: string;
   organisationId: string;
+  sourceDocumentId: string | null;
   storagePath: string;
   provider: string;
-  targetRef: string | null;
+  targetRef: unknown | null;
   state: string;
   attempts: number;
   claimedAt: Date | null;
@@ -78,13 +79,15 @@ export type DocumentStorageDeletionRow = {
   lastError: string | null;
   lastAttemptAt: Date | null;
   processedAt: Date | null;
+  activeObjectAbsentAt: Date | null;
   createdAt: Date;
 };
 
 export function pendingRecord(overrides: Record<string, unknown> = {}): DocumentStorageDeletionRow {
-  return {
+  const row = {
     id: 'deletion-1',
     organisationId: 'org-1',
+    sourceDocumentId: null,
     storagePath: 'org-1/policy.pdf',
     provider: 'supabase',
     targetRef: null,
@@ -100,9 +103,14 @@ export function pendingRecord(overrides: Record<string, unknown> = {}): Document
     lastError: null,
     lastAttemptAt: null,
     processedAt: null,
+    activeObjectAbsentAt: null,
     createdAt: new Date('2026-07-11T10:00:00.000Z'),
     ...overrides,
   } as DocumentStorageDeletionRow;
+  if (row.provider === 'confluence' && !Object.hasOwn(overrides, 'targetRef')) {
+    row.targetRef = { kind: 'confluence', cloudId: 'cloud-1', pageId: 'p1', attachmentIds: [] };
+  }
+  return row;
 }
 
 /**
@@ -123,7 +131,13 @@ export function deadLetterRecord(overrides: Record<string, unknown> = {}): Docum
   });
 }
 
-export function buildFallbackPrisma(initial: ReturnType<typeof pendingRecord>) {
+export function buildFallbackPrisma(initial: ReturnType<typeof pendingRecord>, options: {
+  linkedPublication?: boolean;
+  liveDocument?: boolean;
+  publicationDocumentId?: string;
+  duplicatePublicationLink?: boolean;
+  publicationPageId?: string;
+} = {}) {
   let row = { ...initial };
   const finds: Array<{
     where: Record<string, unknown>;
@@ -171,6 +185,25 @@ export function buildFallbackPrisma(initial: ReturnType<typeof pendingRecord>) {
   };
   return {
     prisma: {
+      document: {
+        findFirst: async (args: { where: Record<string, unknown> }): Promise<{ id: string } | null> =>
+          options.liveDocument && args.where.id === (row.sourceDocumentId ?? 'doc-1') && args.where.organisationId === row.organisationId
+            ? { id: String(args.where.id) }
+            : null,
+      },
+      documentPublication: {
+        findMany: async (args: { where: Record<string, unknown>; take?: number }) =>
+          row.provider === 'confluence' && options.linkedPublication !== false
+            && args.where.organisationId === row.organisationId && args.where.erasureDeletionId === row.id
+            && args.where.provider === 'confluence' && args.where.state === 'RETIRED'
+            ? Array.from({ length: options.duplicatePublicationLink ? 2 : 1 }, () => ({
+              documentId: options.publicationDocumentId ?? row.sourceDocumentId ?? 'doc-1',
+              cloudId: 'cloud-1',
+              pageId: options.publicationPageId ?? 'p1',
+              attachmentId: null,
+            })).slice(0, args.take)
+            : [],
+      },
       documentStorageDeletion: delegate,
       documentStorageDeletionRecovery: { create: async () => ({ id: 'recovery-1' }) },
     },
@@ -185,7 +218,7 @@ export function buildFallbackPrisma(initial: ReturnType<typeof pendingRecord>) {
  * still goes through the real dispatcher and the real Supabase adapter.
  */
 export function supabaseDispatcher(
-  deleteFile: (organisationId: string, storagePath: string, signal?: AbortSignal) => Promise<void>,
+  deleteFile: (organisationId: string, storagePath: string, signal?: AbortSignal) => Promise<Date>,
 ): ErasureDispatcher {
   return createErasureDispatcher({ supabase: createSupabaseEraser(deleteFile) });
 }

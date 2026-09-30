@@ -142,6 +142,7 @@ export const REQUIRED_LAUNCH_AREAS = [
       ['privacy-policy-approved', 'privacy policy approved'],
       ['terms-approved', 'terms or service agreement approved'],
       ['retention-policy-approved', 'data retention policy approved'],
+      ['dpo-feedback-disposition', '2026-09-28 DPO feedback disposition recorded'],
       ['support-deletion-contact', 'support and data deletion contact path published'],
       ['solicitor-governance-privacy-review', 'solicitor, governance, and privacy review completed'],
     ],
@@ -3001,6 +3002,20 @@ function validateCheckSpecificEvidence(
         'retention schedule',
         'deletion workflow',
       ],
+      'dpo-feedback-disposition': [
+        '2026-09-28 dpo feedback',
+        'reviewed tenant',
+        'release commit',
+        'member sensitive-record access',
+        'session replay',
+        'document lifecycle',
+        'minimised report',
+        'application retention, recovery and purge',
+        'c1 control',
+        'four interface locations',
+        'first-pass dpo review',
+        'remaining actions',
+      ],
       'support-deletion-contact': ['support contact', 'data deletion contact', 'published', 'published URL', 'support mailbox'],
       'solicitor-governance-privacy-review': [
         'solicitor review',
@@ -3020,6 +3035,10 @@ function validateCheckSpecificEvidence(
       if (!text.includes(marker)) {
         issues.push(`${checkPath}.evidence must include ${marker}`);
       }
+    }
+    if (checkId === 'dpo-feedback-disposition' && typeof release?.commitSha === 'string') {
+      requireEvidenceText(text, release.commitSha,
+        `${checkPath}.evidence must include release.commitSha`, issues);
     }
   }
 

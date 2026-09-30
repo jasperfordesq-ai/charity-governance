@@ -138,6 +138,28 @@ export function verifyTotp(
   return matched;
 }
 
+/** Return the exact accepted counter so one time step cannot authenticate twice. */
+export function matchingTotpStep(
+  secretBase32: string,
+  code: string,
+  atMs = Date.now(),
+): number | null {
+  const cleaned = code.replace(/\s+/g, '');
+  if (!/^\d{6}$/.test(cleaned)) return null;
+  let secret: Buffer;
+  try { secret = fromBase32(secretBase32); } catch { return null; }
+  if (secret.length === 0) return null;
+  const step = Math.floor(atMs / 1000 / PERIOD_SECONDS);
+  const offered = Buffer.from(cleaned, 'utf8');
+  let matched: number | null = null;
+  for (let drift = -DRIFT_STEPS; drift <= DRIFT_STEPS; drift += 1) {
+    const candidate = step + drift;
+    const expected = Buffer.from(hotp(secret, candidate), 'utf8');
+    if (timingSafeEqual(expected, offered)) matched = candidate;
+  }
+  return matched;
+}
+
 /**
  * The URI an authenticator application reads from a QR code.
  *

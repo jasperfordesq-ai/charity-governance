@@ -3,7 +3,8 @@
 import { useEffect, useState, useRef, useCallback } from 'react';
 import { Modal, ModalContent, ModalHeader, ModalBody } from '@heroui/react';
 import { ModalFormActions } from '@/components/ui/modal-form-actions';
-import { api } from '@/lib/api';
+import { api, refreshSession } from '@/lib/api';
+import { SessionRefreshLockUnavailableError } from '@/lib/session-refresh-lock';
 import { Clock } from 'lucide-react';
 
 const SESSION_TIMEOUT = 14 * 60 * 1000; // 14 minutes (token lasts 15m)
@@ -65,10 +66,10 @@ export function SessionTimeout() {
   const handleExtend = async () => {
     setIsExtending(true);
     try {
-      await api.post('/auth/refresh', {});
-    } catch {
-      // If refresh fails, redirect
-      window.location.href = '/login';
+      await refreshSession();
+    } catch (cause) {
+      window.location.href = cause instanceof SessionRefreshLockUnavailableError
+        ? '/login?session=renewal-unavailable' : '/login';
       return;
     } finally {
       setIsExtending(false);

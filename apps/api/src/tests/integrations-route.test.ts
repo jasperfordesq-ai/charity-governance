@@ -85,6 +85,7 @@ type PublicationRow = {
   provider: string;
   state: string;
   cloudId: string | null;
+  spaceId: string | null;
   pageId: string | null;
   attachmentId: string | null;
   pageTitle: string | null;
@@ -92,6 +93,15 @@ type PublicationRow = {
   retiredStoragePath: string | null;
   erasureRequestedAt: Date | null;
   erasureDeletionId: string | null;
+  publishedAt?: Date | null;
+  remoteState?: string | null;
+  lastReconciledAt?: Date | null;
+};
+
+type ReferenceRow = {
+  id: string; organisationId: string; documentId: string; cloudId: string;
+  pageId: string; pageTitle: string; pageVersion: number; citedAt: Date;
+  pageUrl?: string; citedById?: string;
 };
 
 type Calls = {
@@ -101,12 +111,19 @@ type Calls = {
   credentialDeleteMany: unknown[];
 };
 
-function makeStore(rows: IntegrationRow[], publications: PublicationRow[] = []) {
+function makeStore(rows: IntegrationRow[], publications: PublicationRow[] = [], references: ReferenceRow[] = []) {
   const integrations = new Map(rows.map((row) => [row.id, { ...row }]));
   const credentials: CredentialRow[] = [];
   const publicationRows = new Map(publications.map((row) => [row.id, { ...row }]));
+  const referenceRows = new Map(references.map((row) => [row.id, { ...row }]));
   const deletions: Array<Record<string, unknown>> = [];
   const auditEvents: Array<Record<string, unknown>> = [];
+  const failAuditTypes = new Set<string>();
+  const liveDocuments = new Set<string>();
+  const documentDetails = new Map<string, { id: string; organisationId: string; name: string;
+    lifecycleStatus: string; externalPublicationApproved: boolean;
+    externalPublicationSiteId: string | null; externalPublicationSpaceId: string | null;
+    visibility?: string }>();
   // One member, so `integrationAuditActor` has a name to resolve. Tests that
   // care about the degraded path empty this array.
   const users: Array<{ id: string; organisationId: string; name: string; email: string }> = [
@@ -126,7 +143,14 @@ function makeStore(rows: IntegrationRow[], publications: PublicationRow[] = []) 
   // `state`, `erasureDeletionId: null`) is exact-match, so this is enough to
   // reproduce Prisma's filtering faithfully for these tests.
   function publicationMatches(row: PublicationRow, where: Record<string, unknown>): boolean {
-    return Object.entries(where).every(([key, value]) => (row as unknown as Record<string, unknown>)[key] === value);
+    return Object.entries(where).every(([key, value]) => {
+      const actual = (row as unknown as Record<string, unknown>)[key];
+      if (key === 'id' && value && typeof value === 'object' && 'lt' in value) {
+        return typeof actual === 'string' && actual < String(value.lt);
+      }
+      if (value && typeof value === 'object' && 'not' in value) return actual !== value.not;
+      return actual === value;
+    });
   }
 
   function find(where: Record<string, unknown>): IntegrationRow | undefined {
@@ -193,6 +217,12 @@ function makeStore(rows: IntegrationRow[], publications: PublicationRow[] = []) 
         calls.integrationUpdateMany.push(args.where);
         const row = find(args.where);
         if (!row) return { count: 0 };
+        if (args.where.status !== undefined && row.status !== args.where.status) return { count: 0 };
+        if (args.where.config !== undefined) {
+          const site = args.where.config as { path?: unknown; equals?: unknown };
+          if (!Array.isArray(site.path) || site.path.join('.') !== 'siteId'
+            || (row.config as { siteId?: unknown } | null)?.siteId !== site.equals) return { count: 0 };
+        }
         Object.assign(row, args.data);
         return { count: 1 };
       },
@@ -238,6 +268,13 @@ function makeStore(rows: IntegrationRow[], publications: PublicationRow[] = []) 
     subscription: {
       findUnique: async () => null,
     },
+    document: {
+      findFirst: async (args: { where: { id: string; organisationId: string } }) =>
+        liveDocuments.has(`${args.where.organisationId}:${args.where.id}`) ? { id: args.where.id } : null,
+      findMany: async (args: { where: { organisationId: string; id: { in: string[] } } }) =>
+        [...documentDetails.values()].filter((row) => row.organisationId === args.where.organisationId
+          && args.where.id.in.includes(row.id)),
+    },
     documentPublication: {
       findMany: async (args: {
         where: Record<string, unknown>;
@@ -252,9 +289,10 @@ function makeStore(rows: IntegrationRow[], publications: PublicationRow[] = []) 
           matched = [...matched].sort((a, b) => {
             const av = (a as unknown as Record<string, unknown>)[orderKey];
             const bv = (b as unknown as Record<string, unknown>)[orderKey];
-            const at = av instanceof Date ? av.getTime() : 0;
-            const bt = bv instanceof Date ? bv.getTime() : 0;
-            return (at - bt) * direction;
+            const comparison = typeof av === 'string' && typeof bv === 'string'
+              ? av.localeCompare(bv)
+              : (av instanceof Date ? av.getTime() : 0) - (bv instanceof Date ? bv.getTime() : 0);
+            return comparison * direction;
           });
         }
         if (typeof args.take === 'number') matched = matched.slice(0, args.take);
@@ -277,9 +315,23 @@ function makeStore(rows: IntegrationRow[], publications: PublicationRow[] = []) 
         return { count: hits.length };
       },
     },
+    confluenceReference: {
+      findFirst: async (args: { where: { id: string; organisationId: string } }) => {
+        const row = referenceRows.get(args.where.id);
+        return row?.organisationId === args.where.organisationId ? { id: row.id } : null;
+      },
+      findMany: async (args: { where: { organisationId: string; id?: { lt: string } };
+        orderBy?: Record<string, 'asc' | 'desc'>; take?: number }) => {
+        let matched = [...referenceRows.values()].filter((row) => row.organisationId === args.where.organisationId
+          && (!args.where.id || row.id < args.where.id.lt));
+        if (args.orderBy?.id === 'desc') matched = matched.sort((a, b) => b.id.localeCompare(a.id));
+        if (typeof args.take === 'number') matched = matched.slice(0, args.take);
+        return matched;
+      },
+    },
     documentStorageDeletion: {
       create: async (args: { data: Record<string, unknown> }) => {
-        const id = `deletion-${nextDeletionId++}`;
+        const id = typeof args.data.id === 'string' ? args.data.id : `deletion-${nextDeletionId++}`;
         deletions.push({ id, ...args.data });
         return { id };
       },
@@ -297,11 +349,30 @@ function makeStore(rows: IntegrationRow[], publications: PublicationRow[] = []) 
     },
     securityAuditEvent: {
       create: async (args: { data: Record<string, unknown> }) => {
+        if (failAuditTypes.has(String(args.data.type))) throw new Error('Synthetic audit write failure');
         auditEvents.push(args.data);
         return { id: `audit-${auditEvents.length}` };
       },
     },
-    $transaction: async <T>(run: (tx: unknown) => Promise<T>): Promise<T> => run(client),
+    $transaction: async <T>(run: (tx: unknown) => Promise<T>): Promise<T> => {
+      const before = structuredClone([...integrations]);
+      const beforePublications = structuredClone([...publicationRows]);
+      const beforeDeletions = deletions.length;
+      const beforeDeletionId = nextDeletionId;
+      const auditCount = auditEvents.length;
+      try {
+        return await run(client);
+      } catch (error) {
+        integrations.clear();
+        for (const [id, row] of before) integrations.set(id, row);
+        publicationRows.clear();
+        for (const [id, row] of beforePublications) publicationRows.set(id, row);
+        deletions.length = beforeDeletions;
+        nextDeletionId = beforeDeletionId;
+        auditEvents.length = auditCount;
+        throw error;
+      }
+    },
   };
 
   return {
@@ -310,8 +381,12 @@ function makeStore(rows: IntegrationRow[], publications: PublicationRow[] = []) 
     integrations,
     credentials,
     publications: publicationRows,
+    references: referenceRows,
     deletions,
     auditEvents,
+    failAuditTypes,
+    liveDocuments,
+    documentDetails,
     users,
   };
 }
@@ -382,6 +457,7 @@ type BuildOptions = {
   rows?: IntegrationRow[];
   /** Retired `DocumentPublication` rows, for the erasure workflow's two routes. */
   publications?: PublicationRow[];
+  references?: ReferenceRow[];
   actor?: Actor;
   exchangeAuthorizationCode?: unknown;
   listAccessibleResources?: unknown;
@@ -394,7 +470,7 @@ type BuildOptions = {
 
 async function buildApp(options: BuildOptions = {}) {
   const actor = options.actor ?? ORG_A_ADMIN;
-  const store = makeStore(options.rows ?? [], options.publications ?? []);
+  const store = makeStore(options.rows ?? [], options.publications ?? [], options.references ?? []);
   const app = Fastify(
     options.logStream
       ? {
@@ -429,6 +505,60 @@ async function buildApp(options: BuildOptions = {}) {
   } as never);
   return { app, store, actor };
 }
+
+test('Admin connector cannot read dashboard-only external copy inventories by direct API call', async () => {
+  const actor: Actor = { ...ORG_A_ADMIN, clientKind: 'MCP_CONNECTOR', accessLevel: 'ADMIN' };
+  const { app } = await buildApp({ actor });
+  try {
+    for (const path of [
+      '/confluence/copy-inventory', '/confluence/reference-inventory',
+      '/confluence/references/doc-1',
+    ]) {
+      const response = await app.inject({ method: 'GET', url: path,
+        headers: { authorization: bearer(actor) } });
+      assert.equal(response.statusCode, 403, path);
+      assert.equal(response.json().code, 'WEB_SESSION_REQUIRED');
+    }
+  } finally { await app.close(); }
+});
+
+test('Admin connector cannot start browser Confluence authorization or list live setup spaces', async () => {
+  const actor: Actor = { ...ORG_A_ADMIN, clientKind: 'MCP_CONNECTOR', accessLevel: 'ADMIN' };
+  const { app, store } = await buildApp({ actor, rows: [connectedRow()] });
+  try {
+    for (const path of ['/confluence/authorize', '/confluence/spaces']) {
+      const response = await app.inject({ method: 'GET', url: path,
+        headers: { authorization: bearer(actor) } });
+      assert.equal(response.statusCode, 403, path);
+      assert.equal(response.json().code, 'WEB_SESSION_REQUIRED');
+    }
+    assert.equal(store.calls.integrationFindUnique.length, 0);
+  } finally { await app.close(); }
+});
+
+test('Admin connector cannot call browser-only Confluence mutations directly', async () => {
+  const actor: Actor = { ...ORG_A_ADMIN, clientKind: 'MCP_CONNECTOR', accessLevel: 'ADMIN' };
+  const { app, store } = await buildApp({
+    actor,
+    rows: [{ ...connectedRow(), grantedScopes: [...CONFLUENCE_REQUIRED_ERASURE_SCOPES] }],
+  });
+  try {
+    for (const [method, url] of [
+      ['POST', '/confluence/callback'],
+      ['PUT', '/confluence/publish-space'],
+      ['POST', '/confluence/publications/publication-1/erase'],
+      ['POST', '/confluence/references/doc-1'],
+      ['DELETE', '/confluence/references/by-id/reference-1'],
+      ['PUT', '/confluence/declared-environment'],
+      ['DELETE', '/confluence'],
+    ] as const) {
+      const response = await app.inject({ method, url, headers: { authorization: bearer(actor) } });
+      assert.equal(response.statusCode, 403, `${method} ${url}: ${response.body}`);
+      assert.equal(response.json().code, 'WEB_SESSION_REQUIRED');
+    }
+    assert.equal(store.calls.integrationFindUnique.length, 0);
+  } finally { await app.close(); }
+});
 
 function connectedRow(overrides: Partial<IntegrationRow> = {}): IntegrationRow {
   return {
@@ -1858,6 +1988,13 @@ test('the disclosure says an ordinary deletion leaves the Confluence page in pla
   assert.match(erasure, /separate|explicit/i);
 });
 
+test('the disclosure limits Confluence erasure proof to the current page endpoint', () => {
+  const erasure = CONFLUENCE_CONNECT_DISCLOSURE.erasure.join(' ');
+  assert.match(erasure, /attempts to delete and then purge/i);
+  assert.match(erasure, /current page endpoint returns 404/i);
+  assert.match(erasure, /does not prove erasure of versions or backups/i);
+});
+
 test('the disclosure never claims CharityPilot revoked anything at Atlassian', async () => {
   const text = disclosureText(CONFLUENCE_CONNECT_DISCLOSURE);
 
@@ -1905,6 +2042,7 @@ function retiredPublicationRow(overrides: Partial<PublicationRow> = {}): Publica
     provider: 'confluence',
     state: 'RETIRED',
     cloudId: 'cloud-1',
+    spaceId: 'space-1',
     pageId: 'page-1',
     attachmentId: 'att-1',
     pageTitle: 'Board minutes 2026-08',
@@ -1912,6 +2050,9 @@ function retiredPublicationRow(overrides: Partial<PublicationRow> = {}): Publica
     retiredStoragePath: 'org-a/board-minutes.pdf',
     erasureRequestedAt: null,
     erasureDeletionId: null,
+    publishedAt: null,
+    remoteState: null,
+    lastReconciledAt: null,
     ...overrides,
   };
 }
@@ -1957,15 +2098,54 @@ test('the publications listing returns exactly the allow-listed shape', async ()
     'erasureRequested',
     'id',
     'pageTitle',
+    'recordedPageId',
+    'recordedSiteId',
+    'recordedSpaceId',
     'retiredAt',
   ]);
   assert.deepEqual(data.publications[0], {
     id: 'publication-1',
     documentId: 'document-1',
     pageTitle: 'Board minutes 2026-08',
+    recordedSiteId: 'cloud-1',
+    recordedSpaceId: 'space-1',
+    recordedPageId: 'page-1',
     retiredAt: '2026-09-19T09:00:00.000Z',
     erasureRequested: false,
   });
+});
+
+test('retired publication review pages past the former cap with tenant-bound cursors', async () => {
+  const publications = Array.from({ length: 202 }, (_, index) => retiredPublicationRow({
+    id: `publication-${String(index + 1).padStart(3, '0')}`,
+    pageTitle: `Synthetic page ${index + 1}`,
+  }));
+  publications.push(retiredPublicationRow({ id: 'foreign-cursor', organisationId: 'org-b' }));
+  const { app } = await buildApp({ publications });
+  const first = await app.inject({ method: 'GET', url: '/confluence/publications',
+    headers: { authorization: bearer(ORG_A_ADMIN) } });
+  assert.equal(first.statusCode, 200, first.body);
+  assert.equal(first.json().data.publications.length, 50);
+  assert.equal(first.json().data.nextCursor, 'publication-153');
+  const seen = first.json().data.publications.map((row: { id: string }) => row.id);
+  let cursor: string | null = first.json().data.nextCursor;
+  while (cursor) {
+    const page = await app.inject({ method: 'GET', url: `/confluence/publications?before=${cursor}`,
+      headers: { authorization: bearer(ORG_A_ADMIN) } });
+    assert.equal(page.statusCode, 200, page.body);
+    seen.push(...page.json().data.publications.map((row: { id: string }) => row.id));
+    cursor = page.json().data.nextCursor;
+  }
+  assert.equal(seen.length, 202);
+  assert.equal(new Set(seen).size, 202);
+  assert.equal(seen.at(-1), 'publication-001');
+  const foreign = await app.inject({ method: 'GET', url: '/confluence/publications?before=foreign-cursor',
+    headers: { authorization: bearer(ORG_A_ADMIN) } });
+  assert.equal(foreign.statusCode, 404);
+  const invalid = await app.inject({ method: 'GET', url: '/confluence/publications?before=person%40example.org',
+    headers: { authorization: bearer(ORG_A_ADMIN) } });
+  assert.equal(invalid.statusCode, 400);
+  assert.doesNotMatch(first.body, /foreign-cursor/);
 });
 
 // ────────────────────────────────────────────────────────────────────────────
@@ -1992,6 +2172,115 @@ test('a member cannot request a Confluence erasure', async () => {
   });
 
   assert.equal(response.statusCode, 403, response.body);
+});
+
+test('a member cannot list retired Confluence publication references', async () => {
+  const { app } = await buildApp({ publications: [retiredPublicationRow()], actor: ORG_A_MEMBER });
+  const response = await app.inject({ method: 'GET', url: '/confluence/publications',
+    headers: { authorization: bearer(ORG_A_MEMBER) } });
+  assert.equal(response.statusCode, 403, response.body);
+});
+
+test('other-copy inventory pages tenant records and flags a non-current linked document', async () => {
+  const publications = Array.from({ length: 52 }, (_, index) => retiredPublicationRow({
+    id: `copy-${String(index + 1).padStart(3, '0')}`, documentId: `document-${index + 1}`,
+    state: 'PROCESSED', retiredAt: null, pageTitle: `Recorded page ${index + 1}`,
+    publishedAt: new Date('2026-09-20T10:00:00.000Z'),
+  }));
+  publications.push(retiredPublicationRow({ id: 'foreign-copy', organisationId: 'org-b', state: 'PROCESSED',
+    pageTitle: 'Foreign confidential copy' }));
+  publications.push(retiredPublicationRow({ id: 'retired-copy', pageTitle: 'Retired page' }));
+  publications.push(retiredPublicationRow({ id: 'unpublished-copy', state: 'PENDING', pageId: null }));
+  const { app, store } = await buildApp({ publications });
+  store.documentDetails.set('document-52', { id: 'document-52', organisationId: 'org-a',
+    name: 'Superseded policy', lifecycleStatus: 'SUPERSEDED', externalPublicationApproved: false,
+    externalPublicationSiteId: null, externalPublicationSpaceId: null });
+  store.documentDetails.set('document-51', { id: 'document-51', organisationId: 'org-b',
+    name: 'Foreign document', lifecycleStatus: 'CURRENT', externalPublicationApproved: true,
+    externalPublicationSiteId: 'cloud-1', externalPublicationSpaceId: 'space-1' });
+  store.documentDetails.set('document-50', { id: 'document-50', organisationId: 'org-a',
+    name: 'Current policy', lifecycleStatus: 'CURRENT', externalPublicationApproved: true,
+    externalPublicationSiteId: 'cloud-1', externalPublicationSpaceId: 'other-space' });
+  const first = await app.inject({ method: 'GET', url: '/confluence/copy-inventory',
+    headers: { authorization: bearer(ORG_A_ADMIN) } });
+  assert.equal(first.statusCode, 200, first.body);
+  assert.equal(first.json().data.copies.length, 50);
+  assert.equal(first.json().data.nextCursor, 'copy-003');
+  assert.deepEqual(first.json().data.copies[0], {
+    id: 'copy-052', documentId: 'document-52', pageTitle: 'Recorded page 52',
+    publicationState: 'PROCESSED', publishedAt: '2026-09-20T10:00:00.000Z',
+    recordedSiteId: 'cloud-1', recordedSpaceId: 'space-1', recordedPageId: 'page-1',
+    lastObservedRemoteState: null, lastObservedAt: null, documentName: 'Superseded policy',
+    documentLifecycle: 'SUPERSEDED', publicationApproved: false, approvalMatchesRecordedPage: null,
+  });
+  assert.equal(first.json().data.copies[1].documentName, null, 'foreign tenant document is not joined');
+  assert.equal(first.json().data.copies[2].approvalMatchesRecordedPage, false,
+    'approval for a different space is visible for review');
+  const next = await app.inject({ method: 'GET',
+    url: `/confluence/copy-inventory?before=${first.json().data.nextCursor}`,
+    headers: { authorization: bearer(ORG_A_ADMIN) } });
+  assert.equal(next.statusCode, 200, next.body);
+  assert.equal(next.json().data.copies.length, 2);
+  assert.equal(next.json().data.nextCursor, null);
+  assert.doesNotMatch(first.body + next.body, /Foreign confidential copy|Retired page|unpublished-copy|Foreign document/);
+  const foreign = await app.inject({ method: 'GET', url: '/confluence/copy-inventory?before=foreign-copy',
+    headers: { authorization: bearer(ORG_A_ADMIN) } });
+  assert.equal(foreign.statusCode, 404);
+  const { app: memberApp } = await buildApp({ actor: ORG_A_MEMBER, publications });
+  const member = await memberApp.inject({ method: 'GET', url: '/confluence/copy-inventory',
+    headers: { authorization: bearer(ORG_A_MEMBER) } });
+  assert.equal(member.statusCode, 403);
+});
+
+test('charity-managed citation inventory pages only this tenant without exposing actor or URL', async () => {
+  const citedAt = new Date('2026-09-24T09:00:00.000Z');
+  const references: ReferenceRow[] = Array.from({ length: 52 }, (_, index) => ({
+    id: `citation-${String(index + 1).padStart(3, '0')}`,
+    organisationId: 'org-a', documentId: `document-${index + 1}`,
+    cloudId: 'charity-cloud', pageId: `charity-page-${index + 1}`,
+    pageTitle: `Charity evidence ${index + 1}`, pageVersion: 7, citedAt,
+    pageUrl: 'https://private.example/wiki/page', citedById: 'private-actor',
+  }));
+  references.push({ ...references[0]!, id: 'foreign-citation', organisationId: 'org-b',
+    pageTitle: 'Foreign cited page' });
+  const { app, store } = await buildApp({ references });
+  store.documentDetails.set('document-52', { id: 'document-52', organisationId: 'org-a',
+    name: 'Reviewed policy', lifecycleStatus: 'SUPERSEDED', visibility: 'RESTRICTED',
+    externalPublicationApproved: false, externalPublicationSiteId: null, externalPublicationSpaceId: null });
+  store.documentDetails.set('document-51', { id: 'document-51', organisationId: 'org-b',
+    name: 'Foreign linked document', lifecycleStatus: 'CURRENT', visibility: 'MEMBER_VISIBLE',
+    externalPublicationApproved: false, externalPublicationSiteId: null, externalPublicationSpaceId: null });
+  const first = await app.inject({ method: 'GET', url: '/confluence/reference-inventory',
+    headers: { authorization: bearer(ORG_A_ADMIN) } });
+  assert.equal(first.statusCode, 200, first.body);
+  assert.equal(first.json().data.references.length, 50);
+  assert.equal(first.json().data.nextCursor, 'citation-003');
+  assert.deepEqual(first.json().data.references[0], {
+    id: 'citation-052', documentId: 'document-52', recordedSiteId: 'charity-cloud',
+    recordedPageId: 'charity-page-52', recordedTitle: 'Charity evidence 52',
+    citedVersion: 7, citedAt: citedAt.toISOString(), documentName: 'Reviewed policy',
+    documentLifecycle: 'SUPERSEDED', documentVisibility: 'RESTRICTED',
+  });
+  assert.equal(first.json().data.references[1].documentName, null,
+    'a document belonging to another tenant is not joined');
+  const second = await app.inject({ method: 'GET',
+    url: `/confluence/reference-inventory?before=${first.json().data.nextCursor}`,
+    headers: { authorization: bearer(ORG_A_ADMIN) } });
+  assert.equal(second.statusCode, 200, second.body);
+  assert.equal(second.json().data.references.length, 2);
+  assert.equal(second.json().data.nextCursor, null);
+  assert.doesNotMatch(first.body + second.body,
+    /private-actor|private\.example|Foreign cited page|Foreign linked document/);
+  const foreign = await app.inject({ method: 'GET', url: '/confluence/reference-inventory?before=foreign-citation',
+    headers: { authorization: bearer(ORG_A_ADMIN) } });
+  assert.equal(foreign.statusCode, 404);
+  const invalid = await app.inject({ method: 'GET', url: '/confluence/reference-inventory?before=bad%40cursor',
+    headers: { authorization: bearer(ORG_A_ADMIN) } });
+  assert.equal(invalid.statusCode, 400);
+  const { app: memberApp } = await buildApp({ actor: ORG_A_MEMBER, references });
+  const member = await memberApp.inject({ method: 'GET', url: '/confluence/reference-inventory',
+    headers: { authorization: bearer(ORG_A_MEMBER) } });
+  assert.equal(member.statusCode, 403);
 });
 
 test('an erasure is refused when the connection never granted the delete scopes', async () => {
@@ -2136,7 +2425,7 @@ test('a WRITE-level session cannot request a Confluence erasure, however trusted
   assert.equal(JSON.parse(response.body).code, 'SESSION_LEVEL_TOO_LOW');
 });
 
-test('a connector session needs a typed approval before it can request a Confluence erasure', async () => {
+test('a connector session cannot request a Confluence erasure', async () => {
   const CONNECTOR_ADMIN: Actor = { ...ORG_A_ADMIN, clientKind: 'MCP_CONNECTOR' };
   const { app } = await buildApp({
     rows: [{ ...connectedRow(), grantedScopes: [...CONFLUENCE_REQUIRED_ERASURE_SCOPES] }],
@@ -2150,8 +2439,8 @@ test('a connector session needs a typed approval before it can request a Conflue
     payload: { reason: 'Data subject erasure request 2026-41', confirmation: 'ERASE CONFLUENCE COPY' },
   });
 
-  assert.equal(response.statusCode, 428, response.body);
-  assert.equal(JSON.parse(response.body).code, 'APPROVAL_REQUIRED');
+  assert.equal(response.statusCode, 403, response.body);
+  assert.equal(JSON.parse(response.body).code, 'WEB_SESSION_REQUIRED');
 });
 
 // ────────────────────────────────────────────────────────────────────────────
@@ -2194,6 +2483,27 @@ test('a charity with no subscription can still request a Confluence erasure', as
 
   assert.equal(response.statusCode, 200, response.body);
   assert.equal(typeof JSON.parse(response.body).data.storageDeletionId, 'string');
+});
+
+test('a retired label cannot queue Confluence erasure while the local document remains live', async () => {
+  const { app, store } = await buildApp({
+    rows: [{ ...connectedRow(), grantedScopes: [...CONFLUENCE_REQUIRED_ERASURE_SCOPES] }],
+    publications: [retiredPublicationRow()],
+  });
+  store.liveDocuments.add('org-a:document-1');
+
+  const response = await app.inject({
+    method: 'POST',
+    url: '/confluence/publications/publication-1/erase',
+    headers: { authorization: bearer(ORG_A_ADMIN) },
+    payload: { reason: 'Data subject erasure request 2026-41', confirmation: 'ERASE CONFLUENCE COPY' },
+  });
+
+  assert.equal(response.statusCode, 409, response.body);
+  assert.equal(JSON.parse(response.body).code, 'CONFLUENCE_DOCUMENT_STILL_PRESENT');
+  assert.equal(store.deletions.length, 0);
+  assert.equal(store.publications.get('publication-1')?.erasureDeletionId, null);
+  assert.equal(auditOfType(store, 'CONFLUENCE_ERASURE_REQUESTED').length, 0);
 });
 
 
@@ -2320,6 +2630,41 @@ test('choosing a publish space records the destination, with the site it belongs
   assert.equal(context.cloudId, 'site-1');
 });
 
+test('a site switch during space listing rejects the stale target without a success audit', async () => {
+  restoreKey();
+  let switchSite = () => {};
+  const listed = fetchListing(LISTED_GOVERNANCE);
+  const { app, store } = await buildApp({
+    rows: [connectedRow()],
+    confluenceFetch: async () => { switchSite(); return listed(); },
+  });
+  store.credentials.push(sealedAccessTokenRow('integration-a', 'org-a'));
+  switchSite = () => {
+    const row = store.integrations.get('integration-a');
+    if (row) row.config = { ...row.config, siteId: 'site-2' };
+  };
+
+  const response = await putPublishSpace(app, ORG_A_ADMIN, { spaceId: 'space-gov' });
+  assert.equal(response.statusCode, 409, response.body);
+  assert.equal(store.integrations.get('integration-a')?.publishSpaceId, null);
+  assert.equal(auditOfType(store, 'INTEGRATION_PUBLISH_TARGET_CHANGED').length, 0);
+});
+
+test('a publish-target audit failure rolls the local choice back', async () => {
+  restoreKey();
+  const { app, store } = await buildApp({
+    rows: [connectedRow()],
+    confluenceFetch: fetchListing(LISTED_GOVERNANCE),
+  });
+  store.credentials.push(sealedAccessTokenRow('integration-a', 'org-a'));
+  store.failAuditTypes.add('INTEGRATION_PUBLISH_TARGET_CHANGED');
+
+  const response = await putPublishSpace(app, ORG_A_ADMIN, { spaceId: 'space-gov' });
+  assert.equal(response.statusCode, 500, response.body);
+  assert.equal(store.integrations.get('integration-a')?.publishSpaceId, null);
+  assert.equal(auditOfType(store, 'INTEGRATION_PUBLISH_TARGET_CHANGED').length, 0);
+});
+
 test('requesting an erasure records that it was ASKED FOR, with the reason given', async () => {
   const { app, store } = await buildApp({
     rows: [{ ...connectedRow(), grantedScopes: [...CONFLUENCE_REQUIRED_ERASURE_SCOPES] }],
@@ -2342,8 +2687,8 @@ test('requesting an erasure records that it was ASKED FOR, with the reason given
   assert.equal(typeof (events[0].context as Record<string, unknown>).storageDeletionId, 'string');
 });
 
-test('an erasure whose audit row cannot be written is reported as a failure', async () => {
-  const { app } = await buildApp({
+test('an erasure whose audit row cannot be written leaves no queued deletion', async () => {
+  const { app, store } = await buildApp({
     rows: [{ ...connectedRow(), grantedScopes: [...CONFLUENCE_REQUIRED_ERASURE_SCOPES] }],
     publications: [retiredPublicationRow()],
   });
@@ -2360,6 +2705,9 @@ test('an erasure whose audit row cannot be written is reported as a failure', as
   // is the most consequential thing this connector does, and the record that
   // somebody asked for it is part of what the charity is owed.
   assert.equal(response.statusCode, 500, response.body);
+  assert.equal(store.deletions.length, 0);
+  assert.equal(store.publications.get('publication-1')?.erasureDeletionId, null);
+  assert.equal(auditOfType(store, 'CONFLUENCE_ERASURE_REQUESTED').length, 0);
 });
 
 test('no audit row this plugin writes carries token material', async () => {
@@ -2432,6 +2780,12 @@ test('a declaration is recorded with who made it and when', async () => {
   // Who said so is part of the record. A residency claim with nobody's name
   // against it is not something a DPO can follow up.
   assert.equal((saved as unknown as Record<string, unknown>).declaredById, 'user-a');
+  const declarationEvents = auditOfType(store, 'INTEGRATION_ENVIRONMENT_DECLARED');
+  assert.equal(declarationEvents.length, 1);
+  assert.equal(declarationEvents[0].actorUserId, 'user-a');
+  assert.equal(declarationEvents[0].subjectUserId, undefined);
+  assert.deepEqual(declarationEvents[0].context, { action: 'RECORDED' });
+  assert.doesNotMatch(JSON.stringify(declarationEvents[0]), /Premium|EU \(Ireland\)/);
 });
 
 test('the declaration is NOT written to config, which a reconnect overwrites', async () => {
@@ -2465,6 +2819,10 @@ test('clearing a declaration clears the attribution with it', async () => {
   // attribution would be worse than no record.
   assert.equal(saved.declaredAt, null);
   assert.equal(saved.declaredById, null);
+  assert.deepEqual(
+    auditOfType(store, 'INTEGRATION_ENVIRONMENT_DECLARED').map((event) => event.context),
+    [{ action: 'RECORDED' }, { action: 'CLEARED' }],
+  );
 });
 
 test('a declaration longer than the column allows is refused as a 400, not a 500', async () => {

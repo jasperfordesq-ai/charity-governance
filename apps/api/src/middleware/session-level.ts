@@ -35,3 +35,13 @@ export function requireSessionLevel(minimum: AccessLevel) {
     }
   };
 }
+
+/** Dashboard-only review data must not be available through a direct connector API call. */
+export async function requireWebSession(request: FastifyRequest, reply: FastifyReply): Promise<void> {
+  if (request.authSession.clientKind !== 'WEB') {
+    return reply.status(403).send({
+      error: 'Review this information in the dashboard.',
+      code: 'WEB_SESSION_REQUIRED',
+    });
+  }
+}

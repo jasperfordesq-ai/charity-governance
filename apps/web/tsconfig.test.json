@@ -15,6 +15,7 @@
   "include": [
     "src/lib/api.ts",
     "src/lib/api.test.ts",
+    "src/lib/session-refresh-lock.test.ts",
     "src/lib/confluence-callback.ts",
     "src/lib/confluence-callback.test.ts",
     "src/lib/confluence-callback-page.ts",
@@ -64,6 +65,8 @@
     "src/lib/governance-permissions.ts",
     "src/lib/governance-permissions.test.ts",
     "src/lib/governance-role-affordances.test.ts",
+    "src/lib/risk-review-attention.test.ts",
+    "src/app/(dashboard)/registers/risk-claim-revision.test.ts",
     "src/lib/governance-secondary-role-affordances.test.ts",
     "src/lib/governance-form-invariants.ts",
     "src/lib/governance-form-invariants.test.ts",

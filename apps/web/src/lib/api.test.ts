@@ -27,11 +27,31 @@ function fail401(config: unknown): never {
   throw error;
 }
 
+async function withNavigatorLocks<T>(locks: unknown, run: () => Promise<T>): Promise<T> {
+  const previous = Object.getOwnPropertyDescriptor(globalThis, 'navigator');
+  Object.defineProperty(globalThis, 'navigator', { configurable: true, value: { locks } });
+  try { return await run(); }
+  finally {
+    if (previous) Object.defineProperty(globalThis, 'navigator', previous);
+    else Reflect.deleteProperty(globalThis, 'navigator');
+  }
+}
+
+const testLocks = { request: async <T>(_name: string, callback: () => Promise<T>) => callback() };
+
 test('concurrent 401s trigger exactly one token refresh (single-flight)', async () => {
   let refreshCount = 0;
 
-  // The default axios instance handles the /auth/refresh POST.
+  let probeCount = 0;
+  // The default axios instance handles both the current-session probe and the
+  // refresh POST. Count them separately: treating a probe as a refresh would
+  // let this regression test pass while no token was actually rotated.
   axios.defaults.adapter = async (config) => {
+    if (config.url?.endsWith('/auth/me')) {
+      probeCount += 1;
+      return { ...ok(config), status: refreshCount ? 200 : 401 } as never;
+    }
+    assert.ok(config.url?.endsWith('/auth/refresh'));
     refreshCount += 1;
     return ok(config) as never;
   };
@@ -43,13 +63,12 @@ test('concurrent 401s trigger exactly one token refresh (single-flight)', async 
     return fail401(cfg);
   };
 
-  const responses = await Promise.all([
-    api.get('/board-members'),
-    api.get('/deadlines'),
-    api.get('/compliance/summary'),
-    api.get('/documents'),
-  ]);
+  const responses = await withNavigatorLocks(testLocks, () => Promise.all([
+    api.get('/board-members'), api.get('/deadlines'),
+    api.get('/compliance/summary'), api.get('/documents'),
+  ]));
 
+  assert.equal(probeCount, 1);
   assert.equal(refreshCount, 1, 'all concurrent 401s must share a single refresh call');
   for (const r of responses) assert.equal(r.status, 200);
 });
@@ -57,15 +76,17 @@ test('concurrent 401s trigger exactly one token refresh (single-flight)', async 
 test('a request that still 401s after a refresh is rejected (no infinite retry loop)', async () => {
   let refreshCount = 0;
   axios.defaults.adapter = async (config) => {
+    if (config.url?.endsWith('/auth/me')) return { ...ok(config), status: 401 } as never;
+    assert.ok(config.url?.endsWith('/auth/refresh'));
     refreshCount += 1;
     return ok(config) as never; // refresh "succeeds"
   };
   api.defaults.adapter = async (config) => fail401(config); // but requests keep 401ing
 
-  await assert.rejects(
+  await withNavigatorLocks(testLocks, () => assert.rejects(
     () => api.get('/board-members', { skipAuthRedirect: true }),
     (err: unknown) => (err as { response?: { status?: number } })?.response?.status === 401,
-  );
+  ));
   // Exactly one refresh attempt, then give up — no infinite refresh/retry loop.
   assert.equal(refreshCount, 1);
 });
@@ -73,14 +94,19 @@ test('a request that still 401s after a refresh is rejected (no infinite retry l
 test('refreshes the session once then retries the original request on a 401', async () => {
   let refreshCount = 0;
   let attempts = 0;
-  axios.defaults.adapter = async (config) => { refreshCount += 1; return ok(config) as never; };
+  axios.defaults.adapter = async (config) => {
+    if (config.url?.endsWith('/auth/me')) return { ...ok(config), status: 401 } as never;
+    assert.ok(config.url?.endsWith('/auth/refresh'));
+    refreshCount += 1;
+    return ok(config) as never;
+  };
   api.defaults.adapter = async (config) => {
     attempts += 1;
     const cfg = config as Cfg;
     return cfg._retry ? (ok(cfg) as never) : fail401(cfg);
   };
 
-  const res = await api.get('/auth/me');
+  const res = await withNavigatorLocks(testLocks, () => api.get('/auth/me'));
   assert.equal(res.status, 200, 'the retried request succeeds transparently after a refresh');
   assert.equal(refreshCount, 1, 'exactly one refresh');
   assert.equal(attempts, 2, 'the original request is attempted once, then retried once');
@@ -123,6 +149,26 @@ test('leaves a paginated { data, total, page } envelope intact', async () => {
   assert.deepEqual(res.data.data, [{ id: 1 }, { id: 2 }]);
 });
 
+test('leaves a cursor-paginated { data, nextCursor } envelope intact', async () => {
+  api.defaults.adapter = async (config) => ({
+    data: { data: [{ eventId: 'event_1' }], nextCursor: 'event_1' },
+    status: 200, statusText: 'OK', headers: {}, config,
+  }) as never;
+
+  const res = await api.get('/team/replay-diagnostics');
+  assert.deepEqual(res.data, { data: [{ eventId: 'event_1' }], nextCursor: 'event_1' });
+});
+
+test('preserves unfamiliar response metadata beside data', async () => {
+  api.defaults.adapter = async (config) => ({
+    data: { data: [{ eventId: 'event_1' }], hasMore: true },
+    status: 200, statusText: 'OK', headers: {}, config,
+  }) as never;
+
+  const res = await api.get('/governance-audit');
+  assert.deepEqual(res.data, { data: [{ eventId: 'event_1' }], hasMore: true });
+});
+
 // ── the 401 interceptor's own login redirect ────────────────────────────────
 //
 // `redirectToLoginOnProtectedRoute` is the THIRD place that builds
@@ -148,7 +194,7 @@ type FakeWindow = { location: { origin: string; pathname: string; search: string
  * `location.href` the interceptor assigns. Returns whatever it navigated to,
  * or null if it deliberately stayed put.
  */
-async function navigationFrom(pathname: string, search: string): Promise<string | null> {
+async function navigationFrom(pathname: string, search: string, alreadyRetried = true): Promise<string | null> {
   const assigned: string[] = [];
   const globals = globalThis as unknown as { window?: FakeWindow };
   const originalWindow = globals.window;
@@ -168,9 +214,9 @@ async function navigationFrom(pathname: string, search: string): Promise<string 
   };
 
   try {
-    // `_retry: true` takes the interceptor straight to its second 401 branch,
-    // the one that redirects, without needing the refresh to be stubbed.
-    await assert.rejects(api.get('/anything', { _retry: true }));
+    // Most callers exercise the second 401 branch. A no-lock test below lets
+    // the interceptor attempt its reactive renewal first.
+    await assert.rejects(api.get('/anything', { _retry: alreadyRetried }));
   } finally {
     if (originalWindow === undefined) delete globals.window;
     else globals.window = originalWindow;
@@ -190,6 +236,21 @@ test('a 401 on a protected route still redirects to login with a usable next', a
     `/login?next=${encodeURIComponent('/documents?view=board')}`,
     'the redirect must survive, and must still carry where the visitor was going',
   );
+});
+
+test('without Web Locks an expired 401 redirects to sign-in without a refresh POST', async () => {
+  let refreshCount = 0;
+  axios.defaults.adapter = async (config) => {
+    if (config.url?.endsWith('/auth/me')) return { ...ok(config), status: 401 } as never;
+    if (config.url?.endsWith('/auth/refresh')) refreshCount += 1;
+    return ok(config) as never;
+  };
+  api.defaults.adapter = async (config) => fail401(config);
+  const destination = await withNavigatorLocks(undefined, () =>
+    navigationFrom('/documents', '?view=board', false));
+  assert.equal(destination,
+    `/login?next=${encodeURIComponent('/documents?view=board')}&session=renewal-unavailable`);
+  assert.equal(refreshCount, 0);
 });
 
 test('a 401 on the Confluence callback never redirects, and never leaks the code', async () => {

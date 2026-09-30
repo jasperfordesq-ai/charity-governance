@@ -5,17 +5,19 @@ import { EvidenceChip, StatusChip, statusPanelClassName } from '@/components/ui/
 export function DocumentEvidencePackPanel({
   documentCounts,
   missingEvidenceCount,
+  partial,
 }: {
   documentCounts: Record<string, number>;
   missingEvidenceCount: number;
+  partial: boolean;
 }) {
   return (
     <AppSection
       title="Evidence pack"
-      description="Use these prompts as a practical checklist for the documents trustees usually expect to see before annual review."
+      description={partial ? 'These counts cover loaded files only. Load older documents before treating missing areas as gaps.' : 'Use these prompts as a practical checklist for the documents trustees usually expect to see before annual review.'}
       actions={(
         <StatusChip tone={missingEvidenceCount === 0 ? 'success' : 'warning'}>
-          {missingEvidenceCount === 0 ? 'Checklist covered' : `${missingEvidenceCount} evidence areas missing`}
+          {partial ? 'Partial Vault view' : missingEvidenceCount === 0 ? 'Checklist covered' : `${missingEvidenceCount} evidence areas missing`}
         </StatusChip>
       )}
     >
@@ -29,8 +31,8 @@ export function DocumentEvidencePackPanel({
                   <h3 className="text-sm font-semibold text-gray-950 dark:text-gray-50">{item.title}</h3>
                   <p className="mt-1 text-xs text-teal-dark dark:text-teal-bright">Standards {item.standards}</p>
                 </div>
-                <EvidenceChip status={count > 0 ? 'ready' : 'missing'}>
-                  {count > 0 ? `${count} file${count === 1 ? '' : 's'}` : 'Needed'}
+                <EvidenceChip status={count > 0 ? 'ready' : partial ? 'partial' : 'missing'}>
+                  {count > 0 ? `${count} file${count === 1 ? '' : 's'}` : partial ? 'Not in loaded files' : 'Needed'}
                 </EvidenceChip>
               </div>
             </div>

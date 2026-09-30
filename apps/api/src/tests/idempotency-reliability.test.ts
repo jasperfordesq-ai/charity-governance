@@ -402,6 +402,7 @@ test('claim query reclaims rows whose claim is older than the stale window', asy
           }]
         : [];
     },
+    document: { findFirst: async () => null },
     documentStorageDeletion: {
       updateMany: async () => ({ count: 1 }),
     },
@@ -410,7 +411,7 @@ test('claim query reclaims rows whose claim is older than the stale window', asy
   const service = new DocumentService(prisma as never);
 
   const result = await service.retryPendingStorageDeletions(
-    createErasureDispatcher({ supabase: createSupabaseEraser(async () => undefined) }),
+    createErasureDispatcher({ supabase: createSupabaseEraser(async () => new Date()) }),
     10,
   );
 

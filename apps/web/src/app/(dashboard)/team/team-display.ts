@@ -16,7 +16,7 @@ export const ROLE_META: Record<UserRole, { label: string; description: string; t
   },
   [UserRole.MEMBER]: {
     label: 'Member',
-    description: 'Can view governance records, deadlines, registers, and available documents, but cannot change them.',
+    description: 'Can view permitted governance records, deadlines, risk and fundraising registers, and available documents, but cannot change them. Full reports, conflicts and complaints require an Owner or Admin.',
     tone: 'neutral',
   },
 };

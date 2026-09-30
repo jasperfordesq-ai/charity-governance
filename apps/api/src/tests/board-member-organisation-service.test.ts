@@ -17,6 +17,7 @@ function boardPrisma(opts: {
   createError?: unknown;
   updateError?: unknown;
   deleteError?: unknown;
+  auditError?: unknown;
 } = {}) {
   const calls: Call[] = [];
   const found = opts.found ?? true;
@@ -60,6 +61,13 @@ function boardPrisma(opts: {
         return { count: 1 };
       },
     },
+    governanceRegisterChangeAudit: {
+      create: async (args: unknown) => {
+        calls.push({ name: 'governanceRegisterChangeAudit.create', args });
+        if (opts.auditError) throw opts.auditError;
+        return { id: 'audit-1' };
+      },
+    },
     $queryRaw: async (...args: unknown[]) => {
       calls.push({ name: '$queryRaw', args });
       return [{ id: 'org_1' }];
@@ -78,7 +86,7 @@ function boardPrisma(opts: {
 test('board member update rejects a member from another organisation', async () => {
   const { service, calls } = boardPrisma({ found: false });
   await assert.rejects(
-    () => service.update('org_attacker', 'bm_other', { name: 'X' } as never),
+    () => service.update('org_attacker', 'bm_other', { name: 'X' } as never, undefined, 'actor-1'),
     (e: unknown) => codeOf(e) === 'BOARD_MEMBER_NOT_FOUND',
   );
   assert.equal(calls.some((c) => c.name === 'boardMember.update'), false);
@@ -87,7 +95,7 @@ test('board member update rejects a member from another organisation', async () 
 test('board member remove rejects a member from another organisation', async () => {
   const { service, calls } = boardPrisma({ found: false });
   await assert.rejects(
-    () => service.remove('org_attacker', 'bm_other'),
+    () => service.remove('org_attacker', 'bm_other', 'actor-1'),
     (e: unknown) => codeOf(e) === 'BOARD_MEMBER_NOT_FOUND',
   );
   assert.equal(calls.some((c) => c.name === 'boardMember.delete'), false);
@@ -96,14 +104,36 @@ test('board member remove rejects a member from another organisation', async () 
 
 test('board member create scopes to the organisation', async () => {
   const { service, calls } = boardPrisma();
-  await service.create('org_1', { name: 'Mary', role: 'Chair', appointedDate: '2026-01-01' } as never);
+  await service.create('org_1', { name: 'Mary', role: 'Chair', appointedDate: '2026-01-01' } as never, 'actor-1');
   const create = calls.find((c) => c.name === 'boardMember.create');
   assert.equal((create?.args as { data: { organisationId: string } }).data.organisationId, 'org_1');
 });
 
+test('trustee changes record actor and field names without copying personal details', async () => {
+  const { service, calls } = boardPrisma();
+  await service.create('org_1', { name: 'Private Trustee', role: 'Chair', appointedDate: '2026-01-01', residentialAddress: 'Private home' } as never, 'actor-create');
+  await service.update('org_1', 'bm1', { name: 'Changed private name', residentialAddress: 'Changed private home' }, undefined, 'actor-update');
+  await service.remove('org_1', 'bm1', 'actor-delete');
+  const events = calls.filter((call) => call.name === 'governanceRegisterChangeAudit.create')
+    .map((call) => (call.args as { data: Record<string, unknown> }).data);
+  assert.deepEqual(events.map(({ recordKind, action, actorUserId, changedFields }) => ({ recordKind, action, actorUserId, changedFields })), [
+    { recordKind: 'TRUSTEE', action: 'CREATE', actorUserId: 'actor-create', changedFields: ['name', 'role', 'appointedDate', 'residentialAddress'] },
+    { recordKind: 'TRUSTEE', action: 'UPDATE', actorUserId: 'actor-update', changedFields: ['name', 'residentialAddress'] },
+    { recordKind: 'TRUSTEE', action: 'DELETE', actorUserId: 'actor-delete', changedFields: [] },
+  ]);
+  assert.doesNotMatch(JSON.stringify(events), /Private Trustee|Private home|Changed private name|Changed private home/);
+});
+
+test('trustee mutations do not report success when the audit write fails', async () => {
+  const { service } = boardPrisma({ auditError: new Error('audit unavailable') });
+  await assert.rejects(service.create('org_1', { name: 'Private Trustee', role: 'Chair', appointedDate: '2026-01-01' } as never, 'actor-1'), /audit unavailable/);
+  await assert.rejects(service.update('org_1', 'bm1', { name: 'Changed name' }, undefined, 'actor-1'), /audit unavailable/);
+  await assert.rejects(service.remove('org_1', 'bm1', 'actor-1'), /audit unavailable/);
+});
+
 test('board member update normalises optional date fields (clear vs leave-untouched)', async () => {
   const { service, calls } = boardPrisma();
-  await service.update('org_1', 'bm1', { termEndDate: '', name: 'Renamed' } as never);
+  await service.update('org_1', 'bm1', { termEndDate: '', name: 'Renamed' } as never, undefined, 'actor-1');
   const data = (calls.find((c) => c.name === 'boardMember.update')?.args as { data: Record<string, unknown> }).data;
   assert.equal(data.termEndDate, null, 'an explicit empty termEndDate clears it');
   assert.equal(data.conductSignedDate, undefined, 'an untouched date field is left undefined');
@@ -122,7 +152,7 @@ test('board member update validates the merged persisted and patch state', async
   });
 
   await assert.rejects(
-    () => service.update('org_1', 'bm1', { termEndDate: '2026-02-28' } as never),
+    () => service.update('org_1', 'bm1', { termEndDate: '2026-02-28' } as never, undefined, 'actor-1'),
     (error: unknown) =>
       codeOf(error) === 'VALIDATION_ERROR' &&
       (error as { statusCode?: number }).statusCode === 400,
@@ -143,7 +173,7 @@ test('board member update rejects a boolean/date contradiction assembled across 
   });
 
   await assert.rejects(
-    () => service.update('org_1', 'bm1', { conductSigned: false } as never),
+    () => service.update('org_1', 'bm1', { conductSigned: false } as never, undefined, 'actor-1'),
     (error: unknown) => codeOf(error) === 'VALIDATION_ERROR',
   );
   assert.equal(calls.some((call) => call.name === 'boardMember.update'), false);
@@ -151,7 +181,7 @@ test('board member update rejects a boolean/date contradiction assembled across 
 
 test('board member removal detaches only same-organisation conflicts before deleting in one transaction', async () => {
   const { service, calls } = boardPrisma();
-  await service.remove('org_1', 'bm1');
+  await service.remove('org_1', 'bm1', 'actor-1');
 
   assert.deepEqual(
     (calls.find((call) => call.name === 'conflictRecord.updateMany')?.args as { where: unknown; data: unknown }),
@@ -178,7 +208,7 @@ test('board member removal detaches only same-organisation conflicts before dele
 test('board member update maps a raced P2025 to BOARD_MEMBER_NOT_FOUND', async () => {
   const { service } = boardPrisma({ updateError: { code: 'P2025' } });
   await assert.rejects(
-    () => service.update('org_1', 'bm1', { name: 'Changed' }),
+    () => service.update('org_1', 'bm1', { name: 'Changed' }, undefined, 'actor-1'),
     (error: unknown) =>
       codeOf(error) === 'BOARD_MEMBER_NOT_FOUND' &&
       (error as { statusCode?: number }).statusCode === 404,
@@ -191,7 +221,7 @@ test('board member removal maps only the composite reference race to a retryable
     meta: { field_name: 'ConflictRecord_boardMemberId_organisationId_fkey (index)' },
   };
   await assert.rejects(
-    () => boardPrisma({ deleteError: compositeRace }).service.remove('org_1', 'bm1'),
+    () => boardPrisma({ deleteError: compositeRace }).service.remove('org_1', 'bm1', 'actor-1'),
     (error: unknown) =>
       codeOf(error) === 'BOARD_MEMBER_STATE_CONFLICT' &&
       (error as { statusCode?: number; message?: string }).statusCode === 409 &&
@@ -200,7 +230,7 @@ test('board member removal maps only the composite reference race to a retryable
 
   const unknown = { code: 'P2003', meta: { field_name: 'Some_other_fkey (index)' } };
   await assert.rejects(
-    () => boardPrisma({ deleteError: unknown }).service.remove('org_1', 'bm1'),
+    () => boardPrisma({ deleteError: unknown }).service.remove('org_1', 'bm1', 'actor-1'),
     (error: unknown) => error === unknown,
   );
 });
@@ -208,7 +238,7 @@ test('board member removal maps only the composite reference race to a retryable
 test('board member double-delete race returns the existing not-found contract', async () => {
   const { service } = boardPrisma({ deleteError: { code: 'P2025' } });
   await assert.rejects(
-    () => service.remove('org_1', 'bm1'),
+    () => service.remove('org_1', 'bm1', 'actor-1'),
     (error: unknown) => codeOf(error) === 'BOARD_MEMBER_NOT_FOUND',
   );
 });
@@ -240,6 +270,9 @@ function orgPrisma(opts: { org?: Record<string, unknown> | null; updateResult?: 
         };
       },
     },
+    organisationChangeAudit: {
+      create: async (args: unknown) => { calls.push({ name: 'organisationChangeAudit.create', args }); return {}; },
+    },
     // Register of Members: empty, so the calendar falls back to memberCount.
     member: {
       count: async (args: unknown) => { calls.push({ name: 'member.count', args }); return 0; },
@@ -270,7 +303,7 @@ test('updateOrganisation regenerates auto-deadlines when the financial year end 
   await service.updateOrganisation('org_1', {
     expectedUpdatedAt: '2026-01-01T00:00:00.000Z',
     financialYearEnd: '2026-12-31',
-  } as never);
+  } as never, 'actor-1');
   assert.ok(
     calls.some((c) => c.name === 'organisation.findUniqueOrThrow'),
     'auto-deadline regeneration (which re-reads the org) must run when financialYearEnd changes',
@@ -282,7 +315,7 @@ test('updateOrganisation does not regenerate auto-deadlines for unrelated edits'
   await service.updateOrganisation('org_1', {
     expectedUpdatedAt: '2026-01-01T00:00:00.000Z',
     contactEmail: 'info@charity.ie',
-  } as never);
+  } as never, 'actor-1');
   assert.equal(
     calls.some((c) => c.name === 'organisation.findUniqueOrThrow'),
     false,

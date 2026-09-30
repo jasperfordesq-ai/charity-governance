@@ -412,6 +412,119 @@ step of a real connection — after a charity administrator had already granted
 access. The same rule is mirrored in `scripts/check-production.mjs`, whose
 `REQUIRED` list deliberately does **not** name either variable.
 
+### Data-lifecycle request intake and its boundary
+
+The Admin-only `/api/v1/data-lifecycle/requests` routes and `/data-lifecycle`
+dashboard accept an opaque external case reference, request kind, data area and
+received time. Review transitions preserve the actor, previous/next unresolved
+state, reason and optional opaque evidence reference in an append-only table.
+The intake fields are immutable, and the event foreign key includes the
+organisation ID. The case archive holding identity and correspondence remains
+outside this queue. No request state means that any data has been deleted,
+recovered or permanently purged. This queue is available without a paid
+subscription so a lapsed subscription cannot block request assessment.
+
+The source inventory and outstanding policy inputs are in the gitignored
+`.charitypilot-private/data-lifecycle-inventory.md`. A controller-approved
+per-class schedule, legal holds, recovery window, response deadlines, provider
+and backup expiry, and end-to-end proof are required before any automatic
+retention or completed-erasure state can be added. The intake migration passed
+a disposable PostgreSQL 16 upgrade but was not deployed to Nikita's dashboard.
+
+### Paged governance audit archive
+
+The Owner/Admin-only `/api/v1/governance-audit/:feed` route serves the retained
+organisation, deadline, Minute Book, document-control, document-visibility,
+risk, register, control-verification, compliance, storage-deletion and
+data-request histories and human connector approval transitions in pages of 50. The feed name is an allowlist, each
+query includes the authenticated organisation, and an older-page cursor must
+resolve in the same tenant and feed. Timestamp/ID ordering resolves equal-time
+events; control verifications use their database sequence. Storage-deletion
+overview rows omit paths and provider error text, and data-request overview
+rows omit free-text case reasons. The MCP connector excludes the route.
+The existing domain-specific latest-100 endpoints remain available to their
+screens. Paging reaches only retained rows from when each audit began; it
+cannot recover legacy changes or establish complete application coverage.
+
+Approval requests, pending renewals, grants and uses have a separate
+`AuthActionApprovalAudit` table populated by database triggers; the mutable
+`AuthActionApproval` row remains the short-lived authorisation capability.
+The migration reconstructs request/grant/use events from retained timestamps,
+marks them as backfilled and leaves the original expiry unknown. The overview
+keeps route, actor, server-derived record ID and event time, while withholding
+summary, digest and session family. A use means the approval gate passed;
+ domain or connector activity history supplies the action outcome. The
+ Owner/Admin Governance Audit pages recorded connector change attempts by
+ method, matched route, status and request ID, withholding session IDs and
+ supplied reasons; unmatched literal paths are masked. Browser and
+connector grant refusals instead write a self-subject `SecurityAuditEvent`
+with account, channel and time, excluding the offered approval ID, password
+and specific cause. They appear in the separate Team security audit. These
+mechanisms begin after their migrations; past refused attempts cannot be
+reconstructed.
+
+The Team Security & Ownership Audit API returns 50 retained events per page
+in descending event-time and ID order. The optional `before` cursor must
+resolve inside the same organisation after a current Owner/Admin check.
+Responses project the recorded actor, subject, reason and time without raw
+context; only the next-page cursor exposes an opaque event ID. The dashboard
+and connector can request older pages, and the connector's closed personal-data
+gate removes actor, subject and reason from each returned row.
+
+Future `SESSION_REPLAY_DETECTED` rows include a truncated SHA-256 fingerprint of
+the presented session row ID and the number of active rows revoked by that
+observation. Admin replay diagnostics validates and projects these fields,
+returning null for older rows. Equal fingerprints establish that one spent
+session row was presented more than once; the fields do not establish why or
+expose the refresh token, token hash or raw session ID.
+
+The Admin-only `/api/v1/governance-registers/risks/:id/control-verifications`
+read pages through the retained claims for one existing risk, optionally
+filtered by an exact control reference. The cursor resolves inside the same
+organisation, risk and filter, and the unique database sequence orders claims.
+The Registers screen uses this for C1 evidence review; its separate
+charity-wide list still shows only the most recent 100 claims. Neither view
+infers whether a cited fix was effective or retrieves pre-migration evidence.
+
+### Document change history
+
+The Admin-only `/api/v1/documents/control-audit` feed combines visibility and
+document-control events in 50-row pages. Its `before` cursor resolves to a
+retained row in the current charity and orders tied timestamps by source and
+event ID; a missing or other-charity anchor fails. The Documents screen can
+load older pages without dropping earlier entries. Metadata PATCH now
+writes an actor-bound `METADATA` event in the same transaction as its guarded
+document update. An `UPLOAD` event records actor and restricted draft state
+atomically with document creation. These events store edited field names or
+state, not document descriptions, owner text or storage paths. Visibility,
+lifecycle, publication and board-approval decisions have their own event kinds.
+`RECORD_DELETE` records the actor and database-record removal in the same
+transaction as the storage-deletion outbox entry. It does not attest that a
+provider deleted bytes or a Confluence copy. Governance-standard link/unlink
+mutations also record actor, document and standard identifiers in the same
+transaction; a no-op unlink does not invent an event. The underlying migration
+passed a disposable PostgreSQL 16 upgrade; this is not a legacy backfill, live
+deployment or complete application audit.
+
+An additional Admin-controlled `deletionHold` flag defaults to false. A
+reasoned, revision-guarded place/release action appends `DELETION_HOLD` to the
+document-control audit in the same transaction. Ordinary Vault DELETE accepts
+only `DRAFT` documents without a hold. It conditionally checks both facts on
+the delete write, closing races with lifecycle changes and hold placement
+before the storage-cleanup outbox can commit. `UNREVIEWED`, `CURRENT`,
+`SUPERSEDED`, `RETIRED` and `HISTORICAL` evidence cannot use ordinary deletion.
+An unreviewed file can be classified as a draft with an audited reason; no
+separate authorised retention/erasure path exists for retained evidence. This is a
+per-document administrative pause, not a legal-hold finding or approved
+retention schedule. It does not gate separate Confluence erasure or existing
+cleanup work. Its twelfth DPO migration passed a disposable PostgreSQL 16
+upgrade but was not deployed to the reviewed tenant.
+
+The Board-submissions read is Owner/Admin-only because it can include full
+resolution text. It selects only documents classified `CURRENT`; the Vault
+retains other lifecycle states for review and history. This source boundary
+still needs migration and live-role verification.
+
 ### What document erasure can and cannot prove
 
 **Read this before answering a data subject's erasure request.** The owner
@@ -429,18 +542,37 @@ optional `targetRef`; `document-erasure.ts` dispatches the row to the eraser
 registered for that provider; a provider with no eraser dead-letters on the
 first attempt as `PROVIDER_NOT_ERASABLE` rather than retrying, because retrying
 cannot acquire a backend. `document.service.ts` holds the map from error code
-to terminal reason. Deleting a document always creates the `supabase` row
-through this pipeline. It no longer creates a `confluence` row as a side
+to terminal reason. Deleting a document creates a row for its resolved primary
+storage provider through this pipeline. It no longer creates a `confluence` row as a side
 effect of that delete — a `confluence` row is created only by the explicit
 erasure endpoint described in *"What to tell a data subject"* below, and only
 against a publication that has already reached the `RETIRED` state.
 
-#### Supabase: erasure is provable
+If uploaded bytes outlive a failed document create, the route enqueues a delayed
+primary-storage cleanup row using the provider recorded by the upload. The
+worker checks that no live document in the same tenant references the object
+path before erasing it. Both cleanup entry points register pinned local and
+Supabase erasers. Failure of both the document create and the cleanup-queue
+write still needs operational reconciliation; this path is not a deleted-item
+recovery or backup-purge control.
 
-Where the authoritative copy is the object in Supabase, deletion is a delete
-against a store CharityPilot controls, through a pipeline built to prove it:
-claim, bounded retry, dead-letter, and a recovery ledger. Nothing about that
-guarantee depends on a third party's permission model.
+#### Primary storage: active-object absence is checked
+
+For new attempts, the local-storage eraser checks that the path is absent after
+unlink. The Supabase eraser checks the active object with an authenticated
+`HEAD` after the remove request and accepts only its 404 result. An object
+still present, a 400 response, a permission or transport error, or a timed-out
+check fails the attempt so the outbox retries or dead-letters it; a successful
+remove request alone cannot mark it processed. This establishes absence of the
+active primary object at that check, not destruction of object versions,
+replicas, exports or backups. A nullable `activeObjectAbsentAt` receipt is
+written with the `PROCESSED` transition for new local/Supabase attempts; old
+processed rows retain null, as do other providers. The thirteenth DPO
+migration adds this field and a transition guard that requires the receipt on
+new primary-storage completions while leaving legacy processed rows nullable;
+it passed a disposable PostgreSQL 16 upgrade. Live
+provider, version and backup checks remain necessary for an end-to-end erasure
+claim.
 
 #### Confluence: erasure is best-effort, bounded by permissions the charity holds
 
@@ -504,8 +636,11 @@ as a defect that has been fixed.
 
 #### What to tell a data subject
 
-**An ordinary deletion erases the Supabase copy and leaves the Confluence page
-in place.** `remove()` in `document.service.ts` no longer enqueues a
+**An authorised draft deletion removes the Vault record, tracks primary-byte
+cleanup separately, and leaves any Confluence page in place.** The storage
+deletion outbox retries failures; the successful active-object readback is
+recorded separately and does not prove version or backup purge. `remove()` in
+`document.service.ts` no longer enqueues a
 `confluence` erasure row at all. Instead, a `DocumentPublication` that named a
 page moves to a fourth state, `RETIRED` (`retiredAt`, `retiredStoragePath`),
 rather than being erased or left dangling: `cloudId`, `pageId` and
@@ -532,7 +667,12 @@ typed confirmation `ERASE CONFLUENCE COPY`; it refuses with
 `delete:page:confluence` and `delete:attachment:confluence`.
 `GET /api/v1/integrations/confluence/publications` lists the retired
 publications an administrator can act on — without it, nothing would name a
-publication once its document is gone. Restricting erasure to a retired
+publication once its document is gone. It pages 50 at a time with a
+same-charity `before` cursor and is available on the Integrations dashboard
+even if the current connection is unavailable. The dashboard requires a
+per-copy reason and typed confirmation before calling the existing erasure
+route, then displays the queued technical job ID without claiming provider
+purge. Restricting erasure to a retired
 publication is deliberate: it makes destroying a Confluence page a two-step
 action (delete the document, then erase the copy) and stops an administrator
 destroying the page a *live* document still points at.
@@ -544,10 +684,10 @@ dead-lettering later.
 
 **What may now be said, and what may not.**
 
-- The Supabase copy is erased by an ordinary deletion, and that is
-  **provable**: a delete against a store CharityPilot controls, through a
-  pipeline built to prove it — claim, bounded retry, dead-letter, recovery
-  ledger.
+- A draft's primary object is deleted through a tracked, retryable pipeline.
+  A processed new local/Supabase row records an active-object absence check;
+  a pending or dead-letter row does not. Versions, exports and backups need
+  their own evidence before claiming permanent erasure.
 - The Confluence page is **not touched by an ordinary deletion.** It stays
   live, under the charity's own Confluence permissions, until an administrator
   explicitly requests its erasure against the retired publication.

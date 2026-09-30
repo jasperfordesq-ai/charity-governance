@@ -49,24 +49,24 @@ Everything not under a protected prefix (marketing pages, auth pages, the home p
 
 ## Edge Proxy and Middleware (`proxy.ts`)
 
-In Next.js 16 the middleware entry is `apps/web/src/proxy.ts`, exporting `proxy(request)` plus a `config.matcher` (`apps/web/src/proxy.ts:176-211`). The matcher runs on every request except `api`, `_next`, `favicon.ico`, `robots.txt`, and `sitemap.xml` (`apps/web/src/proxy.ts:208-210`).
+In Next.js 16 the middleware entry is `apps/web/src/proxy.ts`, exporting `proxy(request)` plus a `config.matcher`. The matcher runs on every request except `api`, `_next`, `favicon.ico`, `robots.txt`, and `sitemap.xml`.
 
 ### Per-request work
 
-For each matched request `proxy` (`apps/web/src/proxy.ts:176-205`):
+For each matched request `proxy`:
 
 1. Mints a per-request CSP nonce (`btoa(crypto.randomUUID())`, `apps/web/src/proxy.ts:115-117`) and builds a Content-Security-Policy via `createContentSecurityPolicy` (`apps/web/src/lib/content-security-policy.ts:36-63`).
-2. If the path is a sensitive auth path (`/reset-password`, `/verify-email`, `/accept-invite`) and carries a `?token=` query param, it issues a redirect that moves the token out of the query string and into the URL fragment, then attaches `Referrer-Policy: no-referrer` and no-cache headers (`apps/web/src/proxy.ts:147-163`, `apps/web/src/proxy.ts:9`). This keeps single-use tokens out of server logs and the `Referer` header.
-3. For public paths it sets the CSP request/response headers (and the extra sensitive-auth headers where applicable) and continues (`apps/web/src/proxy.ts:183-188`).
+2. If the path is a sensitive auth path (`/reset-password`, `/verify-email`, `/accept-invite`) and carries a `?token=` query param, it issues a redirect that moves the token out of the query string and into the URL fragment, then attaches `Referrer-Policy: no-referrer` and no-cache headers. The renewal page `/session-renew` receives those same sensitive-page headers. This keeps single-use tokens out of server logs and the `Referer` header.
+3. For public paths it sets the CSP request/response headers (and the extra sensitive-auth headers where applicable) and continues.
 4. For protected paths it enforces authentication before rendering.
 
 ### Server-side session validation for protected routes
 
-When the path is protected, the proxy gates rendering (`apps/web/src/proxy.ts:190-204`):
+When the path is protected, the proxy gates rendering:
 
 - If neither `charitypilot_access` nor `charitypilot_refresh` cookie is present, it redirects straight to `/login?next=<path+search>` (`apps/web/src/proxy.ts:11-13`, `apps/web/src/proxy.ts:165-174`).
-- Otherwise it calls `validateProtectedAuthSession` (`apps/web/src/proxy.ts:41-90`): it forwards the auth cookies to the API `GET /api/v1/auth/me`. On `200` the session is valid. On failure, if a refresh cookie exists, it tries `POST /api/v1/auth/refresh` (sending the deployed web `Origin` so the API's origin guard passes — `apps/web/src/proxy.ts:70-81`) and, on success, captures the rotated `Set-Cookie` headers to forward back to the browser (`apps/web/src/proxy.ts:83-89`, `apps/web/src/proxy.ts:140-145`).
-- If still unauthenticated, it redirects to `/login` preserving `next`.
+- Otherwise it forwards the auth cookies to the API `GET /api/v1/auth/me`. Only an exact `200` validates the protected request. A `401` with a refresh cookie redirects to the public `/session-renew?next=...` page; the proxy never presents a refresh token. The browser uses its shared cross-tab lock, verifies `/auth/me`, then returns to the sanitized protected destination.
+- A `401` without a refresh cookie redirects to `/login` preserving a sanitized `next`. Other API or transport failures keep the protected page closed and return a no-store `503`. The Confluence callback remains a special self-renewing path so its live authorization code is never copied into a redirect.
 
 The upstream API base URL for these server-to-server calls is resolved by `getServerApiBaseUrl`, which prefers `CHARITYPILOT_INTERNAL_API_URL` — the same-origin/internal API address — falling back to the public `getApiBaseUrl` (`apps/web/src/lib/api-config.ts:30-40`, used at `apps/web/src/proxy.ts:25-31`).
 
@@ -86,11 +86,13 @@ flowchart TD
   HasCookie -->|"no"| Login["Redirect to /login?next=..."]
   HasCookie -->|"yes"| MeCheck["Server fetch API /auth/me<br/>(via CHARITYPILOT_INTERNAL_API_URL)"]
   MeCheck -->|"200 OK"| Render["NextResponse.next<br/>+ CSP + no-store"]
-  MeCheck -->|"401 + refresh cookie"| RefreshSrv["Server POST /auth/refresh<br/>(Origin set)"]
-  RefreshSrv -->|"ok"| ForwardCookies["Forward rotated Set-Cookie<br/>then render"]
-  RefreshSrv -->|"fail"| Login
+  MeCheck -->|"401 + refresh cookie"| Renew["Redirect to /session-renew<br/>with sanitized next"]
+  Renew --> BrowserRefresh["Browser lock + API refresh<br/>then /auth/me proof"]
+  BrowserRefresh -->|"valid, retry page"| MeCheck
+  BrowserRefresh -->|"invalid"| Login
+  MeCheck -->|"401, no refresh cookie"| Login
+  MeCheck -->|"other failure"| Unavailable["No-store 503"]
   Render --> AppRoute["(dashboard) route renders"]
-  ForwardCookies --> AppRoute
   Pass --> PublicRoute["(marketing)/(auth) route renders"]
   AppRoute --> ClientAPI["Client axios -> API /api/v1/*"]
 ```
@@ -128,6 +130,15 @@ A response interceptor also unwraps the API's `{ data: ... }` envelope for non-p
 The `(dashboard)` layout consumes `useAuth` and performs a second, client-side guard: while `isLoading` it shows a spinner, and once resolved it redirects to `/login?next=<path+search>` when there is no user, or to `/verify-email` when the user's email is unverified (`apps/web/src/app/(dashboard)/layout.tsx:124-181`). This complements (does not replace) the server-side proxy gate.
 
 ### Single-flight refresh
+
+Across browser tabs, reactive refreshes and `/session-renew` use a Web Lock.
+The retry checks `/auth/me` under the lock before sending a refresh token; a
+successful probe reuses newly rotated cookies. The Next.js proxy validates
+protected pages but never rotates a token, so separate web server processes
+cannot themselves race to present the same browser cookie. The API still
+quarantines a family when a spent token is presented again. Browser contexts
+without Web Locks, copied cookie jars, and Nikita's historical events need
+separate investigation and evidence.
 
 When an access token expires mid-page, several in-flight requests can `401` simultaneously. Because the backend rotates the single-use refresh token and detects reuse, firing one refresh per `401` would present the same rotated token repeatedly and get the whole session revoked. The client therefore shares **one** in-flight refresh across all concurrent `401`s (`apps/web/src/lib/api.ts:31-49`):
 

@@ -46,6 +46,9 @@ import {
   type ConnectView,
 } from '@/lib/integration-status';
 import { ExternalLink } from 'lucide-react';
+import { RetiredConfluenceCopies } from './retired-confluence-copies';
+import { OtherConfluenceCopies } from './other-confluence-copies';
+import { CitedConfluenceReferences } from './cited-confluence-references';
 
 const EMPTY_STATUS: ConfluenceStatusResponse = {
   provider: 'CONFLUENCE',
@@ -324,6 +327,10 @@ export default function IntegrationsPage() {
       )}
 
       {connectError ? <InlineStatus tone="danger">{connectError}</InlineStatus> : null}
+
+      <RetiredConfluenceCopies />
+      <OtherConfluenceCopies />
+      <CitedConfluenceReferences />
 
       {connectView ? (
         <AppSection title="Before you connect">

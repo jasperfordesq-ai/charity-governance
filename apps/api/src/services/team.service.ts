@@ -4,7 +4,12 @@ import bcrypt from 'bcryptjs';
 import { AppError } from '../utils/errors.js';
 import { EmailService } from './email.service.js';
 import { hashOpaqueToken, issueSessionTokensInTransaction } from './session-tokens.js';
-import { publicOrganisationSelect, type PublicOrganisationSource } from '../utils/public-dtos.js';
+import {
+  memberOrganisationSelect,
+  memberOrganisationSource,
+  publicOrganisationSelect,
+  type PublicOrganisationSource,
+} from '../utils/public-dtos.js';
 import { hasSubscriptionAccess } from '../utils/subscription-access.js';
 import { emailDeliveryMode, manualInviteUrl } from '../utils/deployment-profile.js';
 
@@ -280,14 +285,16 @@ export class TeamService {
       }
 
       const members = await tx.user.findMany({
-        where: { organisationId },
+        where: actor.role === 'MEMBER'
+          ? { organisationId, lifecycleStatus: 'ACTIVE' }
+          : { organisationId },
         orderBy: [{ role: 'asc' }, { createdAt: 'asc' }],
         select: {
           id: true,
-          email: true,
+          email: actor.role !== 'MEMBER',
           name: true,
           role: true,
-          emailVerified: true,
+          emailVerified: actor.role !== 'MEMBER',
           lifecycleStatus: true,
           membershipVersion: true,
           membershipChangedAt: true,
@@ -332,6 +339,8 @@ export class TeamService {
         members: members.map((member) => {
           const response = {
             ...member,
+            email: actor.role === 'MEMBER' ? null : member.email,
+            emailVerified: actor.role === 'MEMBER' ? null : member.emailVerified,
             lifecycleStatus: member.lifecycleStatus ?? 'ACTIVE',
             membershipVersion: member.membershipVersion ?? 1,
             membershipChangedAt: (member.membershipChangedAt ?? member.createdAt).toISOString(),
@@ -790,7 +799,9 @@ export class TeamService {
             role: true,
             emailVerified: true,
             organisationId: true,
-            organisation: { select: publicOrganisationSelect },
+            organisation: {
+              select: invite.role === 'MEMBER' ? memberOrganisationSelect : publicOrganisationSelect,
+            },
           },
         });
 
@@ -799,7 +810,12 @@ export class TeamService {
           created,
         );
 
-        return { user: created, tokens };
+        return {
+          user: invite.role === 'MEMBER'
+            ? { ...created, organisation: memberOrganisationSource(created.organisation) }
+            : created,
+          tokens,
+        };
       });
     } catch (err) {
       if (isUniqueConstraintError(err)) {

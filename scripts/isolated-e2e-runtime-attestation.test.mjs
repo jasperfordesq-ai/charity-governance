@@ -83,7 +83,7 @@ const FAKE_ATLASSIAN_ENV = Object.freeze([...GATEWAY_ENV, 'NODE_ENV=development'
 const PORTS = Object.freeze({
   '3302/tcp': Object.freeze([{ HostIp: '127.0.0.1', HostPort: '3302' }]),
   '3303/tcp': Object.freeze([{ HostIp: '127.0.0.1', HostPort: '3303' }]),
-  '55434/tcp': Object.freeze([{ HostIp: '127.0.0.1', HostPort: '55434' }]),
+  '3354/tcp': Object.freeze([{ HostIp: '127.0.0.1', HostPort: '3354' }]),
 });
 const TMPFS = Object.freeze({
   api: Object.freeze({
@@ -515,7 +515,7 @@ test('rejects every host publication except the three exact gateway loopback TCP
     service(records, 'gateway').NetworkSettings.Ports['3303/tcp'][0].HostIp = '::';
   }, 'IPv6 wildcard binding');
   rejectsRuntime((records) => {
-    service(records, 'gateway').HostConfig.PortBindings['55434/tcp'][0].HostPort = '5432';
+    service(records, 'gateway').HostConfig.PortBindings['3354/tcp'][0].HostPort = '5432';
   }, 'wrong host port');
   rejectsRuntime((records) => {
     delete service(records, 'gateway').NetworkSettings.Ports['3302/tcp'];

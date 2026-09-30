@@ -12,9 +12,11 @@ export function ExportControlsPanel({
   approvalUnavailable,
   exportingApproved,
   exportingCurrent,
+  exportingMinimised,
   latestApproval,
   onExportApproved,
   onExportCurrent,
+  onExportMinimised,
   onYearChange,
   readinessBlockerCodes,
   readinessBlockerCount,
@@ -26,9 +28,11 @@ export function ExportControlsPanel({
   approvalUnavailable: boolean;
   exportingApproved: boolean;
   exportingCurrent: boolean;
+  exportingMinimised: boolean;
   latestApproval: ComplianceApprovalSnapshotSummary | null;
   onExportApproved: () => void;
   onExportCurrent: () => void;
+  onExportMinimised: () => void;
   onYearChange: (year: number) => void;
   readinessBlockerCodes: string[];
   readinessBlockerCount: number;
@@ -71,10 +75,17 @@ export function ExportControlsPanel({
               Open latest approved snapshot
             </Button>
           ) : null}
+          {latestApproval ? (
+            <Button size="lg" variant="flat" onPress={onExportMinimised} isLoading={exportingMinimised}>
+              <Download className="w-5 h-5 mr-2" aria-hidden="true" />
+              Open minimised draft for audience review
+            </Button>
+          ) : null}
         </div>
         <p className="mt-4 text-sm leading-6 text-gray-600 dark:text-gray-300">
           The working report reflects current records and may be unapproved. An approved snapshot is an immutable copy retained from
           the recorded board approval, even if later edits require reapproval.
+          {' '}The minimised draft contains only organisation identity, approval date and aggregate status counts. Review its audience and fields before disclosure.
         </p>
         {latestApproval ? (
           <p className="mt-2 text-xs leading-5 text-gray-500 dark:text-gray-400">

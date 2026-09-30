@@ -125,7 +125,7 @@ test('fixed production routes and limits are immutable and exact', () => {
     {
       name: 'database',
       listenHost: '0.0.0.0',
-      listenPort: 55434,
+      listenPort: 3354,
       upstreamHost: 'db.charitypilot-e2e.invalid.',
       upstreamPort: 5432,
     },

@@ -15,7 +15,7 @@ type TeamAccessMember = {
   role: string;
   lifecycleStatus: string;
   membershipVersion: number;
-  emailVerified?: boolean;
+  emailVerified?: boolean | null;
 };
 
 type TeamAccessInvite = {
@@ -88,7 +88,7 @@ export function canManageMemberSessions(
 export function canTransferOwnership(
   actorRole: string | null | undefined,
   actorId: string | null | undefined,
-  member: { role: string; id: string; lifecycleStatus?: string; emailVerified?: boolean },
+  member: { role: string; id: string; lifecycleStatus?: string; emailVerified?: boolean | null },
 ): boolean {
   return (
     actorRole === 'OWNER' &&

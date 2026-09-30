@@ -23,9 +23,11 @@ const AUTH_COOKIE_NAMES = [
 const REFRESH_COOKIE_NAME = "charitypilot_refresh";
 const PROTECTED_RESPONSE_CACHE_CONTROL = "no-store, no-cache, must-revalidate";
 const AUTH_VALIDATION_TIMEOUT_MS = 5_000;
+const inFlightProtectedAuthValidations = new Map<string, Promise<Response | null>>();
 const DEFAULT_AUTH_RETRY_AFTER = "5";
 const MAX_AUTH_RETRY_AFTER_SECONDS = 300;
 const SENSITIVE_AUTH_PATHS = new Set([
+  "/session-renew",
   "/reset-password",
   "/verify-email",
   "/accept-invite",
@@ -34,20 +36,9 @@ const SENSITIVE_AUTH_PATHS = new Set([
 const ISOLATED_E2E_MODE = "local-disposable";
 
 type ProtectedAuthSession =
-  | { state: "authenticated"; setCookieHeaders: string[] }
-  | { state: "unauthenticated"; setCookieHeaders: string[] }
-  | { state: "unavailable"; setCookieHeaders: []; retryAfter: string };
-
-type ParsedSetCookie = {
-  raw: string;
-  name: string;
-  value: string;
-  attributes: Map<string, string | true>;
-};
-
-const COOKIE_NAME_PATTERN = /^[!#$%&'*+\-.^_`|~0-9A-Za-z]+$/;
-const COOKIE_VALUE_PATTERN = /^[\x21\x23-\x2B\x2D-\x3A\x3C-\x5B\x5D-\x7E]*$/;
-const COOKIE_HEADER_CONTROL_PATTERN = /[\u0000-\u001F\u007F]/;
+  | { state: "authenticated" }
+  | { state: "unauthenticated" }
+  | { state: "unavailable"; retryAfter: string };
 
 function unavailableAuthSession(response?: Response): ProtectedAuthSession {
   const rawRetryAfter = response?.headers.get("retry-after")?.trim() ?? "";
@@ -61,7 +52,7 @@ function unavailableAuthSession(response?: Response): ProtectedAuthSession {
       ? String(retryAfterSeconds)
       : DEFAULT_AUTH_RETRY_AFTER;
 
-  return { state: "unavailable", setCookieHeaders: [], retryAfter };
+  return { state: "unavailable", retryAfter };
 }
 
 function hasAuthSessionCookie(request: NextRequest): boolean {
@@ -119,250 +110,55 @@ function externalRequestUrl(request: NextRequest): URL {
   return externalUrl;
 }
 
-function isSetCookieBoundary(header: string, commaIndex: number): boolean {
-  const remainder = header.slice(commaIndex + 1);
-  return /^\s*[!#$%&'*+\-.^_`|~0-9A-Za-z]+=/.test(remainder);
-}
-
-function splitCombinedSetCookieHeader(header: string): string[] | null {
-  if (!header || COOKIE_HEADER_CONTROL_PATTERN.test(header)) return null;
-
-  const cookies: string[] = [];
-  let start = 0;
-  let inQuotes = false;
-  let escaped = false;
-
-  for (let index = 0; index < header.length; index += 1) {
-    const character = header[index];
-    if (inQuotes && character === "\\" && !escaped) {
-      escaped = true;
-      continue;
-    }
-    if (character === '"' && !escaped) {
-      inQuotes = !inQuotes;
-    }
-    escaped = false;
-
-    if (character === "," && !inQuotes && isSetCookieBoundary(header, index)) {
-      const cookie = header.slice(start, index).trim();
-      if (!cookie) return null;
-      cookies.push(cookie);
-      start = index + 1;
-    }
-  }
-
-  if (inQuotes) return null;
-  const finalCookie = header.slice(start).trim();
-  if (!finalCookie) return null;
-  cookies.push(finalCookie);
-  return cookies;
-}
-
-function setCookieHeaders(headers: Headers): string[] | null {
-  const getSetCookie = (headers as Headers & { getSetCookie?: () => string[] })
-    .getSetCookie;
-  if (typeof getSetCookie === "function") {
-    // Each entry is already one Set-Cookie field. Re-splitting it would let a
-    // quoted value containing `, charitypilot_refresh=` fabricate a second
-    // authentication cookie.
-    return getSetCookie.call(headers).map((header) => header.trim());
-  }
-
-  const setCookie = headers.get("set-cookie");
-  return setCookie ? splitCombinedSetCookieHeader(setCookie) : [];
-}
-
-function parseSetCookieHeader(header: string): ParsedSetCookie | null {
-  if (
-    !header ||
-    COOKIE_HEADER_CONTROL_PATTERN.test(header) ||
-    header.includes('"') ||
-    header.includes("\\")
-  ) {
-    return null;
-  }
-
-  const [nameValue, ...attributeParts] = header.split(";");
-  const equalsIndex = nameValue?.indexOf("=") ?? -1;
-  if (equalsIndex <= 0) return null;
-
-  const rawName = nameValue.slice(0, equalsIndex);
-  const rawValue = nameValue.slice(equalsIndex + 1);
-  const name = rawName.trim();
-  const value = rawValue.trim();
-  if (
-    rawName !== name ||
-    rawValue !== value ||
-    !COOKIE_NAME_PATTERN.test(name) ||
-    !COOKIE_VALUE_PATTERN.test(value)
-  ) {
-    return null;
-  }
-
-  const attributes = new Map<string, string | true>();
-  for (const rawAttribute of attributeParts) {
-    const attribute = rawAttribute.trim();
-    if (!attribute) continue;
-
-    const attributeEqualsIndex = attribute.indexOf("=");
-    const attributeName = (
-      attributeEqualsIndex === -1
-        ? attribute
-        : attribute.slice(0, attributeEqualsIndex)
-    )
-      .trim()
-      .toLowerCase();
-    if (
-      !COOKIE_NAME_PATTERN.test(attributeName) ||
-      attributes.has(attributeName)
-    ) {
-      return null;
-    }
-
-    attributes.set(
-      attributeName,
-      attributeEqualsIndex === -1
-        ? true
-        : attribute.slice(attributeEqualsIndex + 1).trim(),
-    );
-  }
-
-  return { raw: header, name, value, attributes };
-}
-
-function hasExpectedAuthCookieScope(cookie: ParsedSetCookie): boolean {
-  const sameSite = cookie.attributes.get("samesite");
-  const personalServer = isPersonalServerProduction({
-    NODE_ENV: process.env.NODE_ENV,
-    NEXT_PUBLIC_CHARITYPILOT_DEPLOYMENT_MODE:
-      process.env.NEXT_PUBLIC_CHARITYPILOT_DEPLOYMENT_MODE,
-  });
-  const secureRequired = process.env.NODE_ENV === "production" &&
-    process.env.NEXT_PUBLIC_CHARITYPILOT_E2E_MODE !== ISOLATED_E2E_MODE &&
-    (!personalServer || process.env.NEXT_PUBLIC_API_URL?.startsWith("https://"));
-
-  return (
-    cookie.attributes.get("path") === "/" &&
-    cookie.attributes.get("httponly") === true &&
-    typeof sameSite === "string" &&
-    sameSite.toLowerCase() === "lax" &&
-    (!secureRequired || cookie.attributes.get("secure") === true)
-  );
-}
-
-function validatedAuthCookieHeaders(
-  headers: Headers,
-  mode: "rotation" | "deletion",
-): string[] | null {
-  const cookieHeaders = setCookieHeaders(headers);
-  if (!cookieHeaders) return null;
-  const parsedHeaders = cookieHeaders.map(parseSetCookieHeader);
-  if (parsedHeaders.some((cookie) => cookie === null)) return null;
-  const validParsedHeaders = parsedHeaders as ParsedSetCookie[];
-  const selectedCookies = AUTH_COOKIE_NAMES.map((cookieName) =>
-    validParsedHeaders.filter((cookie) => cookie.name === cookieName),
-  );
-
-  if (selectedCookies.some((cookies) => cookies.length !== 1)) return null;
-
-  const authCookies: ParsedSetCookie[] = [];
-  for (const [cookie] of selectedCookies) {
-    if (!cookie || !hasExpectedAuthCookieScope(cookie)) return null;
-    authCookies.push(cookie);
-  }
-
-  const valid = authCookies.every((cookie) => {
-    const maxAge = cookie.attributes.get("max-age");
-    if (typeof maxAge !== "string" || !/^\d+$/.test(maxAge)) return false;
-
-    if (mode === "deletion") {
-      return cookie.value === "" && maxAge === "0";
-    }
-
-    return cookie.value.length > 0 && Number(maxAge) > 0;
-  });
-
-  return valid ? authCookies.map((cookie) => cookie.raw) : null;
-}
-
 async function validateProtectedAuthSession(
   request: NextRequest,
 ): Promise<ProtectedAuthSession> {
   const cookieHeader = protectedAuthCookieHeader(request);
-  if (!cookieHeader) return { state: "unauthenticated", setCookieHeaders: [] };
+  if (!cookieHeader) return { state: "unauthenticated" };
 
   const authUrl = createApiAuthUrl("/api/v1/auth/me");
   if (!authUrl) return unavailableAuthSession();
 
+  let validationKey: string;
   try {
-    const response = await fetch(authUrl, {
+    const keyBytes = new TextEncoder().encode(
+      `${authUrl.href}\n${request.nextUrl.origin}\n${cookieHeader}`,
+    );
+    const digest = await crypto.subtle.digest("SHA-256", keyBytes);
+    validationKey = Array.from(new Uint8Array(digest), (byte) =>
+      byte.toString(16).padStart(2, "0"),
+    ).join("");
+  } catch {
+    return unavailableAuthSession();
+  }
+
+  let validation = inFlightProtectedAuthValidations.get(validationKey);
+  if (!validation) {
+    validation = fetch(authUrl, {
       headers: { Cookie: cookieHeader },
       cache: "no-store",
       redirect: "manual",
       signal: AbortSignal.timeout(AUTH_VALIDATION_TIMEOUT_MS),
+    }).catch(() => null);
+    inFlightProtectedAuthValidations.set(validationKey, validation);
+    const pending = validation;
+    void pending.then(() => {
+      if (inFlightProtectedAuthValidations.get(validationKey) === pending) {
+        inFlightProtectedAuthValidations.delete(validationKey);
+      }
     });
-
-    if (response.status === 200) {
-      return { state: "authenticated", setCookieHeaders: [] };
-    }
-    if (response.status !== 401) return unavailableAuthSession(response);
-  } catch {
-    return unavailableAuthSession();
   }
 
-  // Only a definitive credential rejection may enter refresh or login. A
-  // throttle, upstream outage, or deployment mismatch must fail closed without
-  // misrepresenting a valid user as logged out.
-  if (!request.cookies.get(REFRESH_COOKIE_NAME)?.value) {
-    return { state: "unauthenticated", setCookieHeaders: [] };
+  const response = await validation;
+  if (!response) return unavailableAuthSession();
+  if (response.status === 200) {
+    return { state: "authenticated" };
   }
+  if (response.status !== 401) return unavailableAuthSession(response);
 
-  const refreshUrl = createApiAuthUrl("/api/v1/auth/refresh");
-  if (!refreshUrl) return unavailableAuthSession();
-
-  const refreshOrigin = personalServerPublicOrigin() ?? request.nextUrl.origin;
-
-  try {
-    const response = await fetch(refreshUrl, {
-      method: "POST",
-      headers: {
-        Cookie: cookieHeader,
-        "Content-Type": "application/json",
-        Origin: refreshOrigin,
-      },
-      body: "{}",
-      cache: "no-store",
-      redirect: "manual",
-      signal: AbortSignal.timeout(AUTH_VALIDATION_TIMEOUT_MS),
-    });
-
-    if (response.status === 200) {
-      const rotatedCookieHeaders = validatedAuthCookieHeaders(
-        response.headers,
-        "rotation",
-      );
-      if (!rotatedCookieHeaders) return unavailableAuthSession(response);
-
-      return {
-        state: "authenticated",
-        setCookieHeaders: rotatedCookieHeaders,
-      };
-    }
-
-    if (response.status === 401) {
-      const deletedCookieHeaders = validatedAuthCookieHeaders(
-        response.headers,
-        "deletion",
-      );
-      return deletedCookieHeaders
-        ? { state: "unauthenticated", setCookieHeaders: deletedCookieHeaders }
-        : unavailableAuthSession(response);
-    }
-
-    return unavailableAuthSession(response);
-  } catch {
-    return unavailableAuthSession();
-  }
+  // Only a definitive 401 may enter browser renewal or login. Throttling,
+  // outage and deployment mismatch remain fail-closed 503 outcomes.
+  return { state: "unauthenticated" };
 }
 
 function addProtectedNoCacheHeaders(response: NextResponse): NextResponse {
@@ -447,16 +243,6 @@ function addContentSecurityPolicy(
   return response;
 }
 
-function addSetCookieHeaders(
-  response: NextResponse,
-  headers: string[],
-): NextResponse {
-  for (const header of headers) {
-    response.headers.append("Set-Cookie", header);
-  }
-  return response;
-}
-
 function redirectSensitiveQueryToken(
   request: NextRequest,
   csp: string,
@@ -486,7 +272,6 @@ function redirectSensitiveQueryToken(
 function redirectToLogin(
   request: NextRequest,
   csp: string,
-  setCookieHeaders: string[] = [],
 ): NextResponse {
   const { pathname, search } = request.nextUrl;
   const loginUrl = externalRequestUrl(request);
@@ -501,16 +286,25 @@ function redirectToLogin(
   // with the dashboard layout, which builds the same redirect client-side.
   loginUrl.searchParams.set("next", safeNextValue(pathname, search));
 
-  const response = addSetCookieHeaders(
-    NextResponse.redirect(loginUrl),
-    setCookieHeaders,
-  );
+  const response = NextResponse.redirect(loginUrl);
   return addContentSecurityPolicy(addProtectedNoCacheHeaders(response), csp);
+}
+
+function redirectToSessionRenew(request: NextRequest, csp: string): NextResponse {
+  const { pathname, search } = request.nextUrl;
+  const renewalUrl = externalRequestUrl(request);
+  renewalUrl.pathname = "/session-renew";
+  renewalUrl.search = "";
+  renewalUrl.searchParams.set("next", safeNextValue(pathname, search));
+  return addContentSecurityPolicy(
+    addSensitiveAuthHeaders(NextResponse.redirect(renewalUrl)),
+    csp,
+  );
 }
 
 /**
  * Render a protected route: the CSP request headers, the protected no-store
- * headers, and whatever `Set-Cookie` the server-side refresh produced.
+ * headers. Session rotation happens only in the browser renewal flow.
  *
  * Reached on the ordinary authenticated path and — see
  * SELF_RENEWING_PROTECTED_PATHS in lib/protected-routes.ts — instead of a
@@ -521,7 +315,6 @@ function protectedPassThrough(
   request: NextRequest,
   nonce: string,
   csp: string,
-  setCookieHeaders: string[] = [],
 ): NextResponse {
   const requestHeaders = createCspRequestHeaders(request, nonce, csp);
   const response = addContentSecurityPolicy(
@@ -530,7 +323,7 @@ function protectedPassThrough(
     ),
     csp,
   );
-  return addSetCookieHeaders(response, setCookieHeaders);
+  return response;
 }
 
 function authenticationUnavailable(
@@ -620,16 +413,19 @@ export async function proxy(request: NextRequest) {
     return authenticationUnavailable(csp, authSession.retryAfter);
   }
   if (authSession.state === "unauthenticated") {
-    // Same reason, one step later: the refresh was attempted and definitively
-    // rejected, and its cookie deletions are still forwarded — but the page,
-    // not `/login`, is the one that gets to report that.
+    // The callback handles its own browser renewal and may carry a live
+    // one-use code. Never put that code into a redirect URL.
     if (renewsItsOwnSession(pathname)) {
-      return protectedPassThrough(request, nonce, csp, authSession.setCookieHeaders);
+      return protectedPassThrough(request, nonce, csp);
     }
-    return redirectToLogin(request, csp, authSession.setCookieHeaders);
+    // A page request may run in any web worker. Never rotate the browser's
+    // single-use token here: the browser renewal route uses a cross-tab lock.
+    return request.cookies.get(REFRESH_COOKIE_NAME)?.value
+      ? redirectToSessionRenew(request, csp)
+      : redirectToLogin(request, csp);
   }
 
-  return protectedPassThrough(request, nonce, csp, authSession.setCookieHeaders);
+  return protectedPassThrough(request, nonce, csp);
 }
 
 export const config = {

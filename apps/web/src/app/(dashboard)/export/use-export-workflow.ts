@@ -31,6 +31,7 @@ const approvalUnavailableMessage =
 type ReadinessState = 'loading' | 'available' | 'unavailable';
 type SignoffSaveState = 'idle' | 'saving' | 'saved' | 'error';
 type ExportVersion = 'current' | 'approved';
+type ExportAudience = 'internal' | 'minimised';
 
 const apiErrorCode = (error: unknown) =>
   (error as { response?: { data?: { code?: string } } })?.response?.data?.code;
@@ -59,7 +60,7 @@ export function useExportWorkflow() {
   const [signoffConflictRefreshFailed, setSignoffConflictRefreshFailed] = useState(false);
   const [navigationConfirmOpen, setNavigationConfirmOpen] = useState(false);
   const [pendingNavigationHref, setPendingNavigationHref] = useState('/dashboard');
-  const [exportingVersion, setExportingVersion] = useState<ExportVersion | null>(null);
+  const [exportingVersion, setExportingVersion] = useState<string | null>(null);
   const [signoffEditingRevoked, setSignoffEditingRevoked] = useState(false);
   const canManageSignoff = roleCanManageSignoff && !signoffEditingRevoked;
   const loadRequestSeq = useRef(0);
@@ -329,14 +330,14 @@ export function useExportWorkflow() {
     }
   };
 
-  const handleExport = async (version: ExportVersion, snapshotId?: string) => {
+  const handleExport = async (version: ExportVersion, snapshotId?: string, audience: ExportAudience = 'internal') => {
     if (exportInFlight.current) return;
     if (version === 'approved' && !snapshotId) {
       toast('No retained approved snapshot is available for this reporting year.');
       return;
     }
     exportInFlight.current = true;
-    setExportingVersion(version);
+    setExportingVersion(`${version}:${audience}`);
     try {
       const result = await openAuthenticatedReport({
         openPopup: () => window.open('', '_blank'),
@@ -345,6 +346,7 @@ export function useExportWorkflow() {
             params: {
               year,
               version,
+              audience,
               ...(snapshotId ? { snapshotId } : {}),
             },
             responseType: 'blob',
@@ -531,11 +533,13 @@ export function useExportWorkflow() {
     conditionalReviewItems,
     discardSignoffChanges,
     displayedSignoffSaveState,
-    exportingApproved: exportingVersion === 'approved',
-    exportingCurrent: exportingVersion === 'current',
+    exportingApproved: exportingVersion === 'approved:internal',
+    exportingCurrent: exportingVersion === 'current:internal',
+    exportingMinimised: exportingVersion === 'approved:minimised',
     fetchSummary,
     handleExportApproved: () => handleExport('approved', signoff?.latestApproval?.id),
     handleExportCurrent: () => handleExport('current'),
+    handleExportMinimised: () => handleExport('approved', signoff?.latestApproval?.id, 'minimised'),
     handleSaveSignoff,
     latestApproval: signoff?.latestApproval ?? null,
     loading,

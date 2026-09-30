@@ -29,7 +29,7 @@ test('Board hides member mutations and reconciles a stale role without leaving t
   assert.match(modal, /submitDisabled=\{Boolean\(formDisabledReason\) \|\| saving \|\| accessDisabled\}/);
 });
 
-test('Documents keep authenticated downloads while hiding and guarding every member mutation', () => {
+test('Documents show access decisions to administrators while guarding every member mutation', () => {
   const page = dashboard('documents', 'page.tsx');
   const workflow = dashboard('documents', 'use-documents-workflow.ts');
   const list = dashboard('documents', 'document-list-panel.tsx');
@@ -61,6 +61,10 @@ test('Documents keep authenticated downloads while hiding and guarding every mem
   assert.match(list, /\{canManage \? <Button[\s\S]*?Link standard/);
   assert.match(list, /\{canManage \? <Button[\s\S]*?Delete/);
   assert.match(list, /onPress=\{\(\) => handleDownload\(doc\)\}/);
+  assert.match(list, /\{canManage \? <StatusChip tone=\{memberCanRead\(doc\) \? 'success' : 'warning'\}/);
+  assert.match(list, /doc\.visibility === 'MEMBER_VISIBLE' && doc\.contentAccessClass === 'MEMBER_SUITABLE'/);
+  assert.match(list, /Review access for \$\{doc\.name\}/);
+  assert.match(workflow, /visibilityReason: visibilityReason\.trim\(\)/);
 });
 
 test('Dashboard gives members review language while preserving legitimate navigation', () => {

@@ -54,7 +54,7 @@ export const PROMPTS: readonly PromptDefinition[] = [
       + '- deadlines_list, for what is due or overdue\n'
       + '- registers_summary, then conflicts_list, risks_list and complaints_list for anything '
       + 'open or past its review date\n'
-      + '- board_submissions, for documents the board has not approved\n'
+      + '- board_submissions if your role is Owner/Admin, for current documents the board has not approved\n'
       + '- board_register, for trustees whose term is ending or whose induction or code of '
       + 'conduct is outstanding\n\n'
       + 'Then tell me, in order of how soon it matters: what is overdue, what is at risk of '
@@ -77,7 +77,7 @@ export const PROMPTS: readonly PromptDefinition[] = [
     build: (args) =>
       `Help me prepare the board meeting on ${args['meeting_date'] ?? 'the next board meeting'}.\n\n`
       + 'Read first: deadlines_list for anything falling due before the meeting after next; '
-      + 'board_submissions for documents awaiting board approval; conflicts_list and risks_list '
+      + 'board_submissions (Owner/Admin only) for current documents awaiting board approval; conflicts_list and risks_list '
       + 'for anything due for review; compliance_summary for standards still outstanding; and '
       + 'governing_acts for what the last meeting resolved, so nothing is carried twice.\n\n'
       + 'Then draft an agenda with a line per item saying why it is on it and what decision is '

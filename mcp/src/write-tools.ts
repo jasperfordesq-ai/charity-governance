@@ -337,7 +337,7 @@ export const WRITE_TOOLS: readonly ToolDefinition[] = [
   /* --- destructive: each asks a person before it happens ------------------ */
   {
     name: 'board_member_delete',
-    description: 'Permanently remove an entry from the board register.' + APPROVAL_NOTE,
+    description: 'Remove an entry from the active board register; audit and backup copies may remain.' + APPROVAL_NOTE,
     path: '/api/v1/board-members/:id',
     method: 'DELETE',
     level: 'admin',
@@ -348,7 +348,7 @@ export const WRITE_TOOLS: readonly ToolDefinition[] = [
   {
     name: 'conflict_delete',
     description:
-      'Permanently remove an entry from the conflicts of interest register.' + APPROVAL_NOTE,
+      'Remove an entry from the active conflicts of interest register; audit and backup copies may remain.' + APPROVAL_NOTE,
     path: '/api/v1/governance-registers/conflicts/:id',
     method: 'DELETE',
     level: 'admin',
@@ -358,7 +358,7 @@ export const WRITE_TOOLS: readonly ToolDefinition[] = [
   },
   {
     name: 'risk_delete',
-    description: 'Permanently remove an entry from the risk register.' + APPROVAL_NOTE,
+    description: 'Remove an entry from the active risk register; audit and backup copies may remain.' + APPROVAL_NOTE,
     path: '/api/v1/governance-registers/risks/:id',
     method: 'DELETE',
     level: 'admin',
@@ -368,7 +368,7 @@ export const WRITE_TOOLS: readonly ToolDefinition[] = [
   },
   {
     name: 'complaint_delete',
-    description: 'Permanently remove an entry from the complaints register.' + APPROVAL_NOTE,
+    description: 'Remove an entry from the active complaints register; audit and backup copies may remain.' + APPROVAL_NOTE,
     path: '/api/v1/governance-registers/complaints/:id',
     method: 'DELETE',
     level: 'admin',
@@ -378,7 +378,7 @@ export const WRITE_TOOLS: readonly ToolDefinition[] = [
   },
   {
     name: 'fundraising_delete',
-    description: 'Permanently remove an entry from the fundraising register.' + APPROVAL_NOTE,
+    description: 'Remove an entry from the active fundraising register; audit and backup copies may remain.' + APPROVAL_NOTE,
     path: '/api/v1/governance-registers/fundraising/:id',
     method: 'DELETE',
     level: 'admin',
@@ -658,7 +658,7 @@ export const WRITE_TOOLS: readonly ToolDefinition[] = [
   /* --- further removals, each asking a person before it happens ------------ */
   {
     name: 'deadline_delete',
-    description: 'Permanently remove a deadline from the calendar.' + APPROVAL_NOTE,
+    description: 'Remove a deadline from the active calendar; audit and backup copies may remain.' + APPROVAL_NOTE,
     path: '/api/v1/deadlines/:id',
     method: 'DELETE',
     level: 'admin',
@@ -669,13 +669,15 @@ export const WRITE_TOOLS: readonly ToolDefinition[] = [
   {
     name: 'document_delete',
     description:
-      'Permanently remove a document and its stored file.' + APPROVAL_NOTE,
+      'Remove an unheld draft document from the Vault. Stored-file cleanup is tracked separately; Confluence copies require separate review.' + APPROVAL_NOTE,
     path: '/api/v1/documents/:id',
     method: 'DELETE',
     level: 'admin',
     destructive: true,
     params: [{ kind: 'id', name: 'id' }],
     noRecordsBecause: 'Returns a confirmation, not a record.',
+    body: [{ kind: 'string', name: 'reason', min: 10, max: 500, required: true,
+      describe: 'Why this draft can be removed. Recorded in the restricted document audit.' }],
   },
   {
     name: 'document_unlink_standard',

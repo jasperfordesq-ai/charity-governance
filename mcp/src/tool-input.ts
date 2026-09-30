@@ -19,6 +19,8 @@ export type ParamSpec =
   | { kind: 'enum'; name: string; values: readonly string[] }
   | { kind: 'flag'; name: string }
   | { kind: 'id'; name: string }
+  /** Optional opaque page cursor returned by a preceding response. */
+  | { kind: 'cursor'; name: string }
   /** Free text the caller writes, bounded and required. */
   | { kind: 'text'; name: string; max: number; describe: string }
   /** Several of a fixed set at once, sent as one comma-separated value. */
@@ -93,6 +95,13 @@ export function inputSchemaFor(params: readonly ParamSpec[]): object {
           description: 'Identifier as returned by the matching list tool.',
         };
         required.push(name);
+        break;
+      case 'cursor':
+        properties[name] = {
+          type: 'string',
+          pattern: '^[A-Za-z0-9_-]{1,160}$',
+          description: 'Opaque nextCursor from a preceding page.',
+        };
         break;
       case 'text':
         properties[name] = {
@@ -180,6 +189,12 @@ export function buildPath(
     if (value === undefined) continue;
 
     switch (spec.kind) {
+      case 'cursor':
+        if (typeof value !== 'string' || !ID_PATTERN.test(value)) {
+          throw new Error(`${name} must be a page cursor of letters, digits, hyphens or underscores.`);
+        }
+        query.push(`${name}=${encodeURIComponent(value)}`);
+        break;
       case 'page':
         query.push(`page=${integerIn(name, value, 1, Number.MAX_SAFE_INTEGER)}`);
         break;

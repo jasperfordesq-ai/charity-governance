@@ -2,9 +2,12 @@ import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
 import { z, ZodError } from "zod";
 import { AuthService } from "../../services/auth.service.js";
 import { authGuard, authIdentityGuard } from "../../middleware/auth.js";
+import { requireAdmin } from "../../middleware/roles.js";
+import { requireWebSession as requireDashboardWebSession } from "../../middleware/session-level.js";
 import {
   grantApproval,
   listPendingApprovals,
+  recordApprovalRefusal,
 } from "../../services/action-approval.service.js";
 import {
   registerSchema,
@@ -12,6 +15,7 @@ import {
   refreshSchema,
   forgotPasswordSchema,
   resetPasswordSchema,
+  changePasswordSchema,
   verifyEmailSchema,
 } from "@charitypilot/shared";
 import { AppError, handleError } from "../../utils/errors.js";
@@ -29,9 +33,30 @@ import {
   refreshTokenRateLimit,
 } from "../../utils/identifier-rate-limit.js";
 import { isRegistrationOpen, emailDeliveryMode } from "../../utils/deployment-profile.js";
+import {
+  beginUserSecondFactor,
+  completeUserSecondFactor,
+  removeUserSecondFactor,
+  userSecondFactorState,
+} from "../../services/user-second-factor.service.js";
 
 /** Password attempts a minute on the approvals page, per credential. */
 const APPROVAL_GRANT_MAX_PER_MINUTE = 10;
+const factorProofSchema = z.object({
+  code: z.string().trim().regex(/^\d{6}$/).optional(),
+  recoveryCode: z.string().trim().min(1).max(32).optional(),
+}).refine((value) => !!value.code || !!value.recoveryCode);
+const factorPasswordSchema = z.object({ password: loginSchema.shape.password });
+const factorRemovalSchema = z.object({
+  password: loginSchema.shape.password,
+  code: z.string().trim().regex(/^\d{6}$/).optional(),
+  recoveryCode: z.string().trim().min(1).max(32).optional(),
+});
+async function requireWebSession(request: FastifyRequest, reply: FastifyReply) {
+  if (request.authSession.clientKind !== 'WEB') {
+    return reply.status(403).send({ error: 'Use the account security page.', code: 'WEB_SESSION_REQUIRED' });
+  }
+}
 
 function formatZodError(error: ZodError) {
   return {
@@ -60,6 +85,69 @@ export async function authRoutes(app: FastifyInstance) {
   const checkAuthMeCoarseIpRateLimit = app.hasDecorator("createRateLimit")
     ? app.createRateLimit(authMeCoarseIpRateLimit())
     : null;
+
+  app.get('/second-factor', { preHandler: [authGuard, requireWebSession] }, async (request, reply) => {
+    try { return reply.header('Cache-Control', 'no-store').send(await userSecondFactorState(app.prisma, request.user.userId)); }
+    catch (err) { return handleError(reply, err); }
+  });
+
+  app.post('/second-factor/begin', {
+    preHandler: [authGuard, requireWebSession], config: { rateLimit: authCredentialRateLimit(5) },
+  }, async (request, reply) => {
+    try {
+      const body = factorPasswordSchema.parse(request.body);
+      return reply.header('Cache-Control', 'no-store').send(await beginUserSecondFactor(app.prisma, request.user.userId, body.password));
+    } catch (err) {
+      if (err instanceof ZodError) return reply.status(400).send(formatZodError(err));
+      return handleError(reply, err);
+    }
+  });
+
+  app.post('/second-factor/complete', {
+    preHandler: [authGuard, requireWebSession], config: { rateLimit: authCredentialRateLimit(5) },
+  }, async (request, reply) => {
+    try {
+      const body = factorProofSchema.parse(request.body);
+      if (!body.code) throw new AppError(400, 'VALIDATION_ERROR', 'An authenticator code is required.');
+      const result = await completeUserSecondFactor(app.prisma, request.user.userId, body.code);
+      clearAuthCookies(reply);
+      return reply.header('Cache-Control', 'no-store').send(result);
+    } catch (err) {
+      if (err instanceof ZodError) return reply.status(400).send(formatZodError(err));
+      return handleError(reply, err);
+    }
+  });
+
+  app.post('/second-factor/remove', {
+    preHandler: [authGuard, requireWebSession], config: { rateLimit: authCredentialRateLimit(5) },
+  }, async (request, reply) => {
+    try {
+      const body = factorRemovalSchema.parse(request.body);
+      await removeUserSecondFactor(app.prisma, request.user.userId, body.password, body,
+        request.authSession.familyId);
+      clearAuthCookies(reply);
+      return reply.send({ ok: true });
+    } catch (err) {
+      if (err instanceof ZodError) return reply.status(400).send(formatZodError(err));
+      return handleError(reply, err);
+    }
+  });
+
+  app.post('/change-password', {
+    preHandler: [authGuard, requireWebSession], config: { rateLimit: authCredentialRateLimit(3) },
+  }, async (request, reply) => {
+    try {
+      const body = changePasswordSchema.parse(request.body);
+      await authService.changePassword(request.user.userId, request.user.organisationId,
+        body.currentPassword, body.newPassword, body, request.authSession.id,
+        request.authSession.familyId, request.id);
+      clearAuthCookies(reply);
+      return reply.header('Cache-Control', 'no-store').send({ ok: true });
+    } catch (err) {
+      if (err instanceof ZodError) return reply.status(400).send(formatZodError(err));
+      return handleError(reply, err);
+    }
+  });
 
   app.post(
     "/register",
@@ -124,7 +212,7 @@ export async function authRoutes(app: FastifyInstance) {
         // cookie the connector never had. The connector route refuses a web
         // token for the mirror-image reason; a credential stolen from one
         // channel must be useless in the other.
-        const result = await authService.refresh(refreshToken, "WEB");
+        const result = await authService.refresh(refreshToken, "WEB", request.id);
         setAuthCookies(reply, result);
 
         return reply.send({ ok: true });
@@ -309,7 +397,7 @@ export async function authRoutes(app: FastifyInstance) {
    * protection, and re-asks for the password here exactly as the terminal
    * does. Both call one service, so the rule cannot drift between them.
    */
-  app.get("/approvals", { preHandler: [authGuard] }, async (request, reply) => {
+  app.get("/approvals", { preHandler: [authGuard, requireAdmin, requireDashboardWebSession] }, async (request, reply) => {
     try {
       const pending = await listPendingApprovals(app.prisma, {
         userId: request.user.userId,
@@ -324,7 +412,7 @@ export async function authRoutes(app: FastifyInstance) {
   app.post(
     "/approvals/:id/grant",
     {
-      preHandler: [authGuard],
+      preHandler: [authGuard, requireAdmin, requireDashboardWebSession],
       // Keyed on the caller's own credential: password attempts here must not
       // be spendable against somebody else, and must not share the bucket the
       // rest of their session uses.
@@ -345,6 +433,7 @@ export async function authRoutes(app: FastifyInstance) {
         });
 
         if (!granted) {
+          await recordApprovalRefusal(app.prisma, request.user, 'WEB');
           // The same opaque refusal the terminal gets: nothing here says
           // whether the identifier existed, belonged to somebody else, or had
           // already been granted.

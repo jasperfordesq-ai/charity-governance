@@ -153,7 +153,7 @@ test("accepts only the canonical local disposable configuration", () => {
   assert.equal(config.executionMode, "local-disposable");
   assert.equal(config.isRemote, false);
   assert.equal(config.host, "127.0.0.1");
-  assert.equal(config.port, 55434);
+  assert.equal(config.port, 3354);
   assert.equal(config.databaseName, "charitypilot_e2e_disposable");
   assert.equal(config.user, "charitypilot_e2e_runner");
   assert.equal(config.schema, "public");
@@ -635,6 +635,8 @@ test("TypeScript database helpers retain P0-04 tables and route every direct con
     DISPOSABLE_DATABASE_RESET_TABLES.includes("ComplianceApprovalSnapshot"),
   );
   assert.ok(DISPOSABLE_DATABASE_RESET_TABLES.includes("ComplianceAuditEvent"));
+  assert.ok(DISPOSABLE_DATABASE_RESET_TABLES.includes("ComplianceReportPreparationAudit"));
+  assert.ok(DISPOSABLE_DATABASE_RESET_TABLES.includes("DocumentDownloadPreparationAudit"));
   assert.ok(DISPOSABLE_DATABASE_RESET_TABLES.includes("SecurityAuditEvent"));
   assert.ok(DISPOSABLE_DATABASE_RESET_TABLES.includes("PasswordRecoveryRequest"));
   assert.ok(DISPOSABLE_DATABASE_RESET_TABLES.includes("AuthRecoveryRateLimitBucket"));
@@ -642,6 +644,12 @@ test("TypeScript database helpers retain P0-04 tables and route every direct con
   assert.ok(
     DISPOSABLE_DATABASE_RESET_TABLES.includes("DocumentStorageDeletionRecovery"),
   );
+  assert.ok(DISPOSABLE_DATABASE_RESET_TABLES.includes("DocumentStorageDeletionAttempt"));
+  assert.ok(DISPOSABLE_DATABASE_RESET_TABLES.includes("DataLifecycleStorageLink"));
+  assert.ok(DISPOSABLE_DATABASE_RESET_TABLES.includes("DataLifecycleTargetEvent"));
+  assert.ok(DISPOSABLE_DATABASE_RESET_TABLES.includes("DataLifecycleStorageLinkWithdrawal"));
+  assert.ok(DISPOSABLE_DATABASE_RESET_TABLES.includes("DataLifecycleDocumentLink"));
+  assert.ok(DISPOSABLE_DATABASE_RESET_TABLES.includes("DataLifecycleDocumentLinkWithdrawal"));
   assert.ok(
     DISPOSABLE_DATABASE_RESET_TABLES.includes("BillingCheckoutAttempt"),
   );
@@ -1095,7 +1103,7 @@ test("rejects every connected identity mismatch", () => {
     { server_address: "8.8.8.8" },
     { server_address: "::ffff:808:808" },
     { server_address: null },
-    { server_port: 55434 },
+    { server_port: 3354 },
     { application_name: "psql" },
     { database_comment: "almost-right" },
     { marker_count: 0 },

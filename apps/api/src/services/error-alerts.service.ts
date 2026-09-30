@@ -29,10 +29,12 @@ export type OperationalErrorAlertInput = {
     | 'document-storage-cleanup'
     | 'document-publication'
     | 'document-reconcile'
-    | 'auth-email-delivery';
+    | 'auth-email-delivery'
+    | 'risk-control-review';
   code:
     | 'DEADLINE_REMINDERS_FAILED'
     | 'DOCUMENT_STORAGE_CLEANUP_FAILED'
+    | 'DOCUMENT_UPLOAD_INTENT_RECONCILE_FAILED'
     | 'DOCUMENT_STORAGE_DELETION_DEAD_LETTERED'
     | 'DOCUMENT_PUBLICATION_FAILED'
     | 'DOCUMENT_PUBLICATION_DEAD_LETTERED'
@@ -41,7 +43,8 @@ export type OperationalErrorAlertInput = {
     // the next run picks them up — so offering a dead-letter queue to review
     // would send somebody looking for a queue that does not exist.
     | 'DOCUMENT_RECONCILE_FAILED'
-    | 'AUTH_EMAIL_DELIVERY_FAILED';
+    | 'AUTH_EMAIL_DELIVERY_FAILED'
+    | 'RISK_CONTROL_REVIEW_SCAN_FAILED';
   error: unknown;
   affectedCount?: number;
 };
@@ -115,6 +118,8 @@ export function buildOperationalErrorAlertPayload(input: OperationalErrorAlertIn
           affectedCount: input.affectedCount ?? 0,
           action: 'REVIEW_DOCUMENT_STORAGE_DEAD_LETTERS' as const,
         }
+      : input.code === 'DOCUMENT_UPLOAD_INTENT_RECONCILE_FAILED'
+      ? { affectedCount: input.affectedCount ?? 0 }
       : input.code === 'DOCUMENT_PUBLICATION_DEAD_LETTERED'
       ? {
           affectedCount: input.affectedCount ?? 0,

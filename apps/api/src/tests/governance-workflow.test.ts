@@ -127,10 +127,11 @@ test('clearing organisation profile dates supersedes generated deadlines without
         return {};
       },
     },
+    deadlineChangeAudit: { create: async () => ({}) },
   };
   const service = new DeadlineService(prisma as never);
 
-  await service.reconcileGeneratedDeadlines('org-1');
+  await service.reconcileGeneratedDeadlines('org-1', 'actor-1');
 
   assert.equal(updates.length, 1);
   assert.deepEqual(updates[0], {
@@ -271,7 +272,7 @@ test('Essentials document metadata excludes additional-standard links', async ()
   };
   const service = new DocumentService(prisma as never);
 
-  const documents = await service.list('org-1');
+  const documents = await service.list('org-1', 1, 50, 'OWNER');
 
   assert.deepEqual(documents.data[0]?.standardLinks, [
     { standardId: 'standard-core', standardCode: '1.1' },

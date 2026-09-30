@@ -12,7 +12,7 @@ import {
 const LOCAL_STARTUP_HINT =
   'CharityPilot destructive E2E requires the managed isolated disposable runner. ' +
   'The fixed local endpoints are web http://127.0.0.1:3303, API http://127.0.0.1:3302, ' +
-  'and PostgreSQL 127.0.0.1:55434; the personal development stack is never a valid reset target.';
+  'and PostgreSQL 127.0.0.1:3354; the personal development stack is never a valid reset target.';
 const DEPLOYED_STARTUP_HINT =
   'CharityPilot deployed QA expects E2E_DEPLOYED_QA=true plus E2E_WEB_URL, E2E_API_URL, E2E_OWNER_EMAIL, and E2E_OWNER_PASSWORD for an approved non-sensitive test workspace.';
 const STACK_READINESS_TIMEOUT_MS = 180_000;

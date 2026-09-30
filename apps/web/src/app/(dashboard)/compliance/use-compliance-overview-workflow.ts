@@ -8,6 +8,8 @@ import { api } from '@/lib/api';
 import { approvalReadinessSummary, countApprovalReadinessBlockers } from '@/lib/approval-readiness';
 import { logClientError } from '@/lib/client-logger';
 import { apiErrorMessage } from '@/lib/errors';
+import { useAuth } from '@/lib/auth-context';
+import { canManageGovernance } from '@/lib/governance-permissions';
 
 type ApprovalReadiness = ComplianceApprovalReadinessResponse;
 
@@ -18,6 +20,8 @@ export function scoreColour(pct: number): 'success' | 'warning' | 'danger' {
 }
 
 export function useComplianceOverviewWorkflow() {
+  const { user } = useAuth();
+  const canManage = canManageGovernance(user?.role);
   const currentYear = new Date().getFullYear();
   const [year, setYear] = useState<number>(currentYear);
   const [principles, setPrinciples] = useState<GovernancePrincipleResponse[]>([]);
@@ -41,11 +45,15 @@ export function useComplianceOverviewWorkflow() {
       setPrinciples(principlesRes.data?.data ?? principlesRes.data ?? []);
       setSummary(summaryRes.data);
 
-      try {
-        const readinessRes = await api.get(`/compliance/approval-readiness?year=${year}`);
-        setApprovalReadiness(readinessRes.data);
-      } catch (readinessErr) {
-        logClientError('Failed to load approval readiness', readinessErr);
+      if (canManage) {
+        try {
+          const readinessRes = await api.get(`/compliance/approval-readiness?year=${year}`);
+          setApprovalReadiness(readinessRes.data);
+        } catch (readinessErr) {
+          logClientError('Failed to load approval readiness', readinessErr);
+          setApprovalReadiness(null);
+        }
+      } else {
         setApprovalReadiness(null);
       }
     } catch (err) {
@@ -58,7 +66,7 @@ export function useComplianceOverviewWorkflow() {
     } finally {
       setLoading(false);
     }
-  }, [year]);
+  }, [canManage, year]);
 
   useEffect(() => {
     fetchData();

@@ -7,6 +7,11 @@ import { primaryActionButtonClassName } from '@/components/ui/action-button';
 import { AppPage } from '@/components/ui/app-page';
 import { SaveStatusIndicator } from '@/components/ui/states';
 import { DocumentDeleteModal } from './document-delete-modal';
+import { DocumentStorageProviderModal } from './document-storage-provider-modal';
+import { DocumentVisibilityModal } from './document-visibility-modal';
+import { DocumentControlModal } from './document-control-modal';
+import { DocumentControlHistory } from './document-control-history';
+import { DocumentStorageDeletionReview } from './document-storage-deletion-review';
 import { DocumentEvidencePackPanel } from './document-evidence-pack-panel';
 import { DocumentListPanel } from './document-list-panel';
 import { DocumentLinkModal } from './document-link-modal';
@@ -24,15 +29,54 @@ export default function DocumentsPage() {
     conditionalObligationPrompts,
     conditionalProfile,
     confirmDelete,
+    confirmVisibility,
+    confirmDocumentControl,
+    controlModal,
+    controlKind,
+    controlTarget,
+    controlReason,
+    publicationReviewMirror,
+    publicationReviewLoading,
+    publicationReviewError,
+    replacementDocumentId,
+    replacementSearch,
+    replacementCandidates,
+    replacementHasMore,
+    replacementLoading,
+    replacementError,
+    setReplacementDocumentId,
+    setReplacementSearch,
+    searchReplacementCandidates,
+    loadMoreReplacementCandidates,
+    controlError,
+    savingControl,
+    selectedControlDoc,
+    setControlTarget,
+    setControlReason,
+    openDocumentControl,
+    documentLifecycleNext,
     deleteModal,
     deleting,
+    deleteReason,
+    setDeleteReason,
+    providerModal,
+    selectedProviderDoc,
+    verifyingProvider,
+    openProviderReview,
+    verifyProvider,
     documentCounts,
     documents,
+    documentTotal,
+    documentHasMore,
+    documentListChanged,
     downloadDocId,
     mirrors,
     retryMirrorPublication,
     retryingMirror,
     fetchDocuments,
+    loadMoreDocuments,
+    loadingMoreDocuments,
+    loadMoreDocumentsError,
     fetchOrganisationProfile,
     handleDelete,
     handleDownload,
@@ -50,9 +94,11 @@ export default function DocumentsPage() {
     missingEvidenceCount,
     missingSignalCount,
     openLinkModal,
+    openVisibilityModal,
     organisationProfileError,
     resetUploadForm,
     selectedDeleteDoc,
+    selectedVisibilityDoc,
     selectedLinkDoc,
     setLinkStandardId,
     setUploadApprovedDate,
@@ -64,9 +110,11 @@ export default function DocumentsPage() {
     setUploadName,
     setUploadNextReviewDate,
     setUploadOwner,
+    setVisibilityReason,
     signalCoverage,
     standards,
     standardsError,
+    savingVisibility,
     unlinkingStandard,
     uploadApprovedDate,
     uploadCategory,
@@ -80,10 +128,15 @@ export default function DocumentsPage() {
     uploadName,
     uploadNextReviewDate,
     uploadOwner,
+    visibilityError,
+    visibilityModal,
+    visibilityReason,
+    visibilityAssessment,
+    setVisibilityAssessment,
   } = useDocumentsWorkflow();
   const documentDataReady = !loading && !loadError;
   const documentMutationStatus: 'idle' | 'saving' | 'saved' | 'error' =
-    uploading || deleting || linkingStandard || Boolean(unlinkingStandard) ? 'saving' : 'idle';
+    uploading || deleting || verifyingProvider || linkingStandard || Boolean(unlinkingStandard) ? 'saving' : 'idle';
 
   return (
     <AppPage
@@ -108,6 +161,8 @@ export default function DocumentsPage() {
       {documentDataReady && (
         <DocumentSummaryPanel
           documentsCount={documents.length}
+          documentTotal={documentTotal}
+          partial={documentHasMore || documentListChanged}
           linkedStandardsCount={linkedStandardsCount}
           missingEvidenceCount={missingEvidenceCount}
         />
@@ -117,6 +172,7 @@ export default function DocumentsPage() {
         <DocumentEvidencePackPanel
           documentCounts={documentCounts}
           missingEvidenceCount={missingEvidenceCount}
+          partial={documentHasMore || documentListChanged}
         />
       )}
 
@@ -134,12 +190,19 @@ export default function DocumentsPage() {
         <DocumentOperationalSignalsPanel
           missingSignalCount={missingSignalCount}
           signalCoverage={signalCoverage}
+          partial={documentHasMore || documentListChanged}
         />
       )}
 
       <DocumentListPanel
         canManage={canManage}
         documents={documents}
+        documentTotal={documentTotal}
+        hasMore={documentHasMore}
+        listChanged={documentListChanged}
+        loadingMore={loadingMoreDocuments}
+        loadMoreError={loadMoreDocumentsError}
+        onLoadMore={loadMoreDocuments}
         loading={loading}
         loadError={loadError}
         onRetry={() => fetchDocuments(true)}
@@ -152,10 +215,16 @@ export default function DocumentsPage() {
         unlinkingStandard={unlinkingStandard}
         handleUnlinkStandard={handleUnlinkStandard}
         confirmDelete={confirmDelete}
+        openVisibilityModal={openVisibilityModal}
+        openDocumentControl={openDocumentControl}
+        openProviderReview={openProviderReview}
         mirrors={mirrors}
         retryMirrorPublication={retryMirrorPublication}
         retryingMirror={retryingMirror}
       />
+
+      {canManage ? <DocumentControlHistory /> : null}
+      {canManage ? <DocumentStorageDeletionReview /> : null}
 
       <DocumentUploadModal
         isOpen={canManage && uploadModal.isOpen}
@@ -190,7 +259,61 @@ export default function DocumentsPage() {
         onOpenChange={deleteModal.onOpenChange}
         selectedDeleteDoc={selectedDeleteDoc}
         deleting={deleting}
+        reason={deleteReason}
+        onReasonChange={setDeleteReason}
         handleDelete={handleDelete}
+      />
+
+      <DocumentStorageProviderModal
+        isOpen={canManage && providerModal.isOpen}
+        onOpenChange={providerModal.onOpenChange}
+        document={selectedProviderDoc}
+        verifying={verifyingProvider}
+        onConfirm={verifyProvider}
+      />
+
+      <DocumentVisibilityModal
+        isOpen={canManage && visibilityModal.isOpen}
+        onOpenChange={visibilityModal.onOpenChange}
+        document={selectedVisibilityDoc}
+        reason={visibilityReason}
+        setReason={setVisibilityReason}
+        assessment={visibilityAssessment}
+        setAssessment={setVisibilityAssessment}
+        error={visibilityError}
+        saving={savingVisibility}
+        onConfirm={confirmVisibility}
+      />
+
+      <DocumentControlModal
+        isOpen={canManage && controlModal.isOpen}
+        onOpenChange={controlModal.onOpenChange}
+        document={selectedControlDoc}
+        approvalNeedsReview={Boolean(selectedControlDoc?.externalPublicationApproved &&
+          publicationReviewMirror?.approvalDestinationCurrent === false &&
+          publicationReviewMirror.pageRecorded === false)}
+        publicationMirror={publicationReviewMirror}
+        publicationReviewLoading={publicationReviewLoading}
+        publicationReviewError={publicationReviewError}
+        kind={controlKind}
+        target={controlTarget}
+        setTarget={setControlTarget}
+        nextStatuses={documentLifecycleNext[selectedControlDoc?.lifecycleStatus ?? ''] ?? []}
+        reason={controlReason}
+        replacementDocumentId={replacementDocumentId}
+        setReplacementDocumentId={setReplacementDocumentId}
+        replacementSearch={replacementSearch}
+        setReplacementSearch={setReplacementSearch}
+        replacementCandidates={replacementCandidates}
+        replacementHasMore={replacementHasMore}
+        replacementLoading={replacementLoading}
+        replacementError={replacementError}
+        onSearchReplacements={searchReplacementCandidates}
+        onLoadMoreReplacements={loadMoreReplacementCandidates}
+        setReason={setControlReason}
+        error={controlError}
+        saving={savingControl}
+        onConfirm={confirmDocumentControl}
       />
 
       <DocumentLinkModal

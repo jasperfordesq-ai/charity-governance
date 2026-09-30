@@ -3,6 +3,12 @@
 *Last updated: 2026-07-12. This is the human-friendly companion to the dense
 `docs/production-launch-checklist.md`. Read this one first.*
 
+> 2026-09-29 DPO continuation: the public-production evidence contract now has
+> 90 checks, including a disposition of Nikita's feedback for the exact tenant
+> and release. The 9 / 89 and 18 / 121 figures below are the dated July
+> checkpoint, not current launch progress; use `npm run launch:status` for the
+> current count. The personal-server profile has its own separate runbooks.
+
 > **Not sure where you are?** Run `npm run launch:status` any time - it inspects
 > your local setup and tells you the single next action to take.
 > For CI, handoff notes, or an operations dashboard, run
@@ -43,7 +49,8 @@ Local browser QA has current 2026-07-09 evidence from focused responsive route c
 because localhost cannot prove DNS, TLS, cookies, CORS, storage downloads, or
 live provider integration.
 The machine-readable launch evidence file must also pass all
-89 machine-readable launch evidence checks, including the GitHub production
+90 machine-readable launch evidence checks, including the DPO feedback
+disposition, GitHub production
 environment and secret-store preflights, recovery-key rotation, isolated
 authentication-email worker/anomaly-alert rehearsal, distinct deployed recovery
 and post-reset Resend delivery, and deployed accessibility

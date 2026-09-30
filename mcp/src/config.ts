@@ -158,9 +158,9 @@ export interface ConnectorConfig {
   dataScope?: DataScope | undefined;
   /** Which credential realm this invocation belongs to. */
   realm: Realm;
-  /** The authenticator code, for an operator connect. Typed once, at connect. */
+  /** The authenticator code for an enrolled account. Typed once, at connect. */
   code?: string | undefined;
-  /** A recovery code, for the operator whose authenticator is gone. */
+  /** A recovery code for an enrolled account without its authenticator. */
   recoveryCode?: string | undefined;
 }
 

@@ -82,8 +82,50 @@ test.describe('Authorization (UI)', () => {
       await ownerPage.getByRole('button', { name: 'Upload', exact: true }).click();
       expect((await documentPost).status()).toBe(201);
       await expect(ownerPage.getByText(documentName).first()).toBeVisible();
+      const ownerDocumentRow = ownerPage.getByRole('article').filter({ hasText: documentName });
+      await ownerDocumentRow.getByRole('button', { name: `Classify ${documentName}` }).click();
+      await ownerPage.getByLabel('New lifecycle status').selectOption('CURRENT');
+      await reliableFill(ownerPage.getByLabel('Reason for this decision'), 'Reviewed the file as current test governance evidence.');
+      await ownerPage.getByRole('button', { name: 'Save status' }).click();
+      await expect(ownerDocumentRow.getByText('CURRENT', { exact: true })).toBeVisible();
+      const ownerReviewDownload = ownerPage.waitForResponse(
+        (response) => /\/api\/v1\/documents\/[^/]+\/download$/.test(response.url()) && response.request().method() === 'GET',
+      );
+      await ownerDocumentRow.getByRole('button', { name: `Download ${documentName}` }).click();
+      expect((await ownerReviewDownload).status()).toBe(200);
+      await ownerDocumentRow.getByRole('button', { name: `Review access for ${documentName}` }).click();
+      await ownerPage.getByLabel('Content assessment').selectOption('MEMBER_SUITABLE');
+      await reliableFill(ownerPage.getByLabel('Reason for this access decision'), 'Reviewed test evidence for Member access.');
+      const visibilityPatch = ownerPage.waitForResponse(
+        (response) => /\/api\/v1\/documents\/[^/]+$/.test(response.url()) && response.request().method() === 'PATCH',
+      );
+      await ownerPage.getByRole('button', { name: 'Allow Members' }).click();
+      expect((await visibilityPatch).status()).toBe(200);
+      await expect(ownerDocumentRow.getByText('Member release configured')).toBeVisible();
 
-      return { documentName, trusteeName };
+      const restrictedDocumentName = `Restricted Member evidence ${Date.now()}`;
+      await ownerPage.getByRole('button', { name: /Upload document/i }).click();
+      await reliableFill(ownerPage.getByLabel('Document name'), restrictedDocumentName);
+      await ownerPage.locator('#document-upload-file').setInputFiles(SAMPLE_FILE);
+      const restrictedDocumentPost = ownerPage.waitForResponse(
+        (response) => /\/api\/v1\/documents$/.test(response.url()) && response.request().method() === 'POST',
+      );
+      await ownerPage.getByRole('button', { name: 'Upload', exact: true }).click();
+      const restrictedUpload = await restrictedDocumentPost;
+      expect(restrictedUpload.status()).toBe(201);
+      const restrictedPayload = (await restrictedUpload.json()) as { data?: { id?: string } };
+      const restrictedDocumentId = restrictedPayload.data?.id;
+      expect(restrictedDocumentId).toBeTruthy();
+      const restrictedOwnerRow = ownerPage.getByRole('article').filter({ hasText: restrictedDocumentName });
+      await expect(restrictedOwnerRow.getByText('Restricted', { exact: true })).toBeVisible();
+
+      return {
+        documentName,
+        restrictedDocumentName,
+        restrictedDocumentId: restrictedDocumentId!,
+        apiOrigin: new URL(restrictedUpload.url()).origin,
+        trusteeName,
+      };
     }, { timeout: 180_000 });
 
     let memberContext = await newFencedContext({
@@ -135,7 +177,7 @@ test.describe('Authorization (UI)', () => {
       ).toHaveCount(0);
       await expect(
         memberPage
-          .getByText(/members have read-only access to governance records/i)
+          .getByText(/Can view permitted governance records/i)
           .first(),
       ).toBeVisible();
       await expect(
@@ -163,6 +205,19 @@ test.describe('Authorization (UI)', () => {
       await expect(memberPage.getByRole('button', { name: 'Upload first document' })).toHaveCount(0);
       const documentRow = memberPage.getByRole('article').filter({ hasText: seededRecords.documentName });
       await expect(documentRow).toBeVisible();
+      await expect(memberPage.getByRole('article').filter({ hasText: seededRecords.restrictedDocumentName })).toHaveCount(0);
+      const restrictedStatuses = await memberPage.evaluate(async ({ apiOrigin, documentId }) => {
+        const statuses: number[] = [];
+        for (const suffix of ['', '/download']) {
+          const response = await fetch(`${apiOrigin}/api/v1/documents/${documentId}${suffix}`, {
+            credentials: 'include',
+          });
+          await response.arrayBuffer();
+          statuses.push(response.status);
+        }
+        return statuses;
+      }, { apiOrigin: seededRecords.apiOrigin, documentId: seededRecords.restrictedDocumentId });
+      expect(restrictedStatuses).toEqual([404, 404]);
       await expect(documentRow.getByRole('button', { name: /Link .* to a standard/i })).toHaveCount(0);
       await expect(documentRow.getByRole('button', { name: /Delete /i })).toHaveCount(0);
 
@@ -187,17 +242,23 @@ test.describe('Authorization (UI)', () => {
       await expect(memberPage.getByRole('button', { name: 'Edit records' })).toHaveCount(0);
       await viewRecords.first().click();
       await expect(memberPage.getByText('View only').first()).toBeVisible({ timeout: 30_000 });
-      await expect(memberPage.getByLabel('Action Taken').first()).not.toBeEditable();
+      await expect(memberPage.getByText('Detailed evidence and explanations require an Owner or Admin.').first()).toBeVisible();
+      await expect(memberPage.getByLabel('Action Taken')).toHaveCount(0);
+      await expect(memberPage.getByLabel('Evidence', { exact: true })).toHaveCount(0);
     });
 
     await test.step('review Complete-plan registers without record or readiness mutations', async () => {
       await gotoWithDevServerRetry(memberPage, '/registers');
       await expect(memberPage.getByRole('heading', { name: 'Governance Registers', exact: true })).toBeVisible({ timeout: 30_000 });
-      await expect(memberPage.getByText(/You have read-only access/i).first()).toBeVisible({ timeout: 30_000 });
+      await expect(memberPage.getByText(/Conflict and complaint records require an Owner or Admin/)).toBeVisible();
+      await expect(memberPage.getByText('Conflicts register')).toHaveCount(0);
+      await expect(memberPage.getByText('Complaints register')).toHaveCount(0);
+      await expect(memberPage.getByText(/Draft narratives and notes require an Owner or Admin/i)).toBeVisible({ timeout: 30_000 });
       await expect(memberPage.getByRole('button', { name: /^Add (conflict|risk|complaint|activity)$/ })).toHaveCount(0);
       await expect(memberPage.getByRole('button', { name: /Save Annual Report readiness/i })).toHaveCount(0);
       await expect(memberPage.getByRole('button', { name: /Save controls review/i })).toHaveCount(0);
-      await expect(memberPage.getByLabel('Activities narrative')).not.toBeEditable();
+      await expect(memberPage.getByLabel('Activities narrative')).toHaveCount(0);
+      await expect(memberPage.getByLabel('Board approval date')).not.toBeEditable();
     });
 
     await test.step('review deadlines without calendar mutations or reminder-delivery audit data', async () => {
@@ -212,17 +273,19 @@ test.describe('Authorization (UI)', () => {
     await test.step('review the organisation profile without editable state', async () => {
       await gotoWithDevServerRetry(memberPage, '/organisation');
       await expect(memberPage.getByRole('heading', { name: 'Organisation Profile', exact: true })).toBeVisible({ timeout: 30_000 });
-      await expect(memberPage.getByLabel('Organisation name')).not.toBeEditable();
+      await expect(memberPage.locator('main dd').filter({ hasText: 'Shared E2E Charity' })).toBeVisible();
+      await expect(memberPage.getByLabel('Organisation name')).toHaveCount(0);
       await expect(memberPage.getByRole('button', { name: 'Save profile' })).toHaveCount(0);
-      await expect(memberPage.getByText(/Organisation profile changes are available to owners and administrators/i)).toBeVisible();
+      await expect(memberPage.getByText(/Owners and administrators review contact details, the registered address and conditional obligation facts/i)).toBeVisible();
     });
 
-    await test.step('review export and board sign-off without approval mutations', async () => {
+    await test.step('keep the full internal export and board sign-off out of Member access', async () => {
       await gotoWithDevServerRetry(memberPage, '/export');
       await expect(memberPage.getByRole('heading', { name: 'Export Compliance Report', exact: true })).toBeVisible({ timeout: 30_000 });
-      await expect(memberPage.getByText('View only').first()).toBeVisible({ timeout: 30_000 });
+      await expect(memberPage.getByText(/The full internal report is available to owners and administrators/)).toBeVisible();
+      await expect(memberPage.getByRole('button', { name: /Generate Compliance Report/ })).toHaveCount(0);
       await expect(memberPage.getByRole('button', { name: 'Save sign-off' })).toHaveCount(0);
-      await expect(memberPage.getByLabel('Board meeting date')).not.toBeEditable();
+      await expect(memberPage.getByLabel('Board meeting date')).toHaveCount(0);
     });
 
     await expect.poll(() => privilegedMutationRequests, {

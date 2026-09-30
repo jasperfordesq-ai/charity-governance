@@ -15,12 +15,20 @@ import { assertUnchanged } from '../utils/optimistic-concurrency.js';
 export class BoardMemberService {
   constructor(private prisma: PrismaClient) {}
 
-  async list(organisationId: string, page = 1, pageSize = 50) {
+  private readonly memberViewSelect = {
+    id: true, organisationId: true, name: true, role: true,
+    appointedDate: true, termEndDate: true, isActive: true,
+    conductSigned: true, conductSignedDate: true,
+    inductionCompleted: true, inductionDate: true,
+  } as const;
+
+  async list(organisationId: string, page = 1, pageSize = 50, viewerRole: 'OWNER' | 'ADMIN' | 'MEMBER' = 'MEMBER') {
     const skip = (page - 1) * pageSize;
     const [data, total] = await Promise.all([
       this.prisma.boardMember.findMany({
         where: { organisationId },
         orderBy: [{ isActive: 'desc' }, { appointedDate: 'desc' }],
+        ...(viewerRole === 'MEMBER' ? { select: this.memberViewSelect } : {}),
         skip,
         take: pageSize,
       }),
@@ -36,15 +44,18 @@ export class BoardMemberService {
    * conflict record or a resolution had to walk the register to resolve one
    * identifier it already held.
    */
-  async getById(organisationId: string, id: string) {
-    const member = await this.prisma.boardMember.findFirst({ where: { id, organisationId } });
+  async getById(organisationId: string, id: string, viewerRole: 'OWNER' | 'ADMIN' | 'MEMBER' = 'MEMBER') {
+    const member = await this.prisma.boardMember.findFirst({
+      where: { id, organisationId },
+      ...(viewerRole === 'MEMBER' ? { select: this.memberViewSelect } : {}),
+    });
     if (!member) {
       throw new AppError(404, 'BOARD_MEMBER_NOT_FOUND', 'Board member not found');
     }
     return member;
   }
 
-  async create(organisationId: string, data: CreateBoardMemberRequest) {
+  async create(organisationId: string, data: CreateBoardMemberRequest, actorUserId: string) {
     const createData = {
       organisationId,
       name: data.name,
@@ -64,14 +75,23 @@ export class BoardMemberService {
     };
 
     validateDomainCompleteState(validateBoardMemberCompleteState, createData);
-    return runDomainInvariantWrite(() => this.prisma.boardMember.create({ data: createData }));
+    return runDomainInvariantWrite(() => this.prisma.$transaction(async (transaction) => {
+      await lockOrganisationForUpdate(transaction, organisationId);
+      const row = await transaction.boardMember.create({ data: createData });
+      await transaction.governanceRegisterChangeAudit.create({ data: {
+        organisationId, recordKind: 'TRUSTEE', recordId: row.id, actorUserId,
+        action: 'CREATE', changedFields: Object.keys(data),
+      } });
+      return row;
+    }));
   }
 
   async update(
     organisationId: string,
     id: string,
     data: UpdateBoardMemberRequest,
-    expectedUpdatedAt?: string,
+    expectedUpdatedAt: string | undefined,
+    actorUserId: string,
   ) {
     return runDomainInvariantWrite(
       () => this.prisma.$transaction(async (transaction) => {
@@ -106,10 +126,16 @@ export class BoardMemberService {
           inductionDate: updateData.inductionDate === undefined ? member.inductionDate : updateData.inductionDate,
         });
 
-        return transaction.boardMember.update({
+        const row = await transaction.boardMember.update({
           where: { id },
           data: updateData,
         });
+        await transaction.governanceRegisterChangeAudit.create({ data: {
+          organisationId, recordKind: 'TRUSTEE', recordId: id, actorUserId,
+          action: 'UPDATE',
+          changedFields: Object.entries(data).filter(([, value]) => value !== undefined).map(([field]) => field),
+        } });
+        return row;
       }),
       {
         recordNotFound: {
@@ -120,7 +146,7 @@ export class BoardMemberService {
     );
   }
 
-  async remove(organisationId: string, id: string) {
+  async remove(organisationId: string, id: string, actorUserId: string) {
     await runDomainInvariantWrite(
       () => this.prisma.$transaction(async (transaction) => {
         await lockOrganisationForUpdate(transaction, organisationId);
@@ -138,6 +164,10 @@ export class BoardMemberService {
           data: { boardMemberId: null },
         });
         await transaction.boardMember.delete({ where: { id } });
+        await transaction.governanceRegisterChangeAudit.create({ data: {
+          organisationId, recordKind: 'TRUSTEE', recordId: id, actorUserId,
+          action: 'DELETE', changedFields: [],
+        } });
       }),
       {
         boardMemberForeignKeyFailure: 'delete-conflict',

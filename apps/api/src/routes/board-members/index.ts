@@ -23,6 +23,7 @@ export async function boardMemberRoutes(app: FastifyInstance) {
         request.user.organisationId,
         Math.max(1, parseInt(page ?? '1', 10) || 1),
         Math.min(100, Math.max(1, parseInt(pageSize ?? '50', 10) || 50)),
+        request.user.role,
       );
     } catch (err) {
       return handleError(reply, err);
@@ -31,7 +32,7 @@ export async function boardMemberRoutes(app: FastifyInstance) {
 
   app.get<{ Params: { id: string } }>('/:id', async (request, reply) => {
     try {
-      return sendSuccess(reply, await service.getById(request.user.organisationId, request.params.id));
+      return sendSuccess(reply, await service.getById(request.user.organisationId, request.params.id, request.user.role));
     } catch (err) {
       return handleError(reply, err);
     }
@@ -40,7 +41,7 @@ export async function boardMemberRoutes(app: FastifyInstance) {
   app.post('/', { preHandler: [requireAdmin] }, async (request, reply) => {
     try {
       const data = createBoardMemberSchema.parse(request.body);
-      const member = await service.create(request.user.organisationId, data);
+      const member = await service.create(request.user.organisationId, data, request.user.userId);
       return sendCreated(reply, member);
     } catch (err) {
       if (err instanceof ZodError) {
@@ -53,7 +54,7 @@ export async function boardMemberRoutes(app: FastifyInstance) {
   app.patch<{ Params: { id: string } }>('/:id', { preHandler: [requireAdmin] }, async (request, reply) => {
     try {
       const { expectedUpdatedAt, ...data } = updateBoardMemberSchema.parse(request.body);
-      return sendSuccess(reply, await service.update(request.user.organisationId, request.params.id, data, expectedUpdatedAt));
+      return sendSuccess(reply, await service.update(request.user.organisationId, request.params.id, data, expectedUpdatedAt, request.user.userId));
     } catch (err) {
       if (err instanceof ZodError) {
         return reply.status(400).send({ error: 'Validation failed', code: 'VALIDATION_ERROR', details: err.errors });
@@ -64,7 +65,7 @@ export async function boardMemberRoutes(app: FastifyInstance) {
 
   app.delete<{ Params: { id: string } }>('/:id', { preHandler: [requireSessionLevel('ADMIN'), requireAdmin, requireActionApproval()] }, async (request, reply) => {
     try {
-      await service.remove(request.user.organisationId, request.params.id);
+      await service.remove(request.user.organisationId, request.params.id, request.user.userId);
       return sendNoContent(reply);
     } catch (err) {
       return handleError(reply, err);

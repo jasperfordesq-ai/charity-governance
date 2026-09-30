@@ -173,7 +173,12 @@ test('the accepted types match the ones the API allows', () => {
     assert.ok(api.includes(`'${extension}'`), `${extension} is not in the API allowlist`);
   }
 
-  const apiMax = /DOCUMENT_UPLOAD_MAX_FILE_SIZE = (\d+) \* 1024 \* 1024/.exec(api);
+  const limits = readFileSync(
+    new URL('../../../apps/api/src/services/document-upload-limits.ts', import.meta.url),
+    'utf8',
+  );
+  assert.ok(api.includes("export { DOCUMENT_UPLOAD_MAX_FILE_SIZE }"), 'the route must use the shared service limit');
+  const apiMax = /DOCUMENT_UPLOAD_MAX_FILE_SIZE = (\d+) \* 1024 \* 1024/.exec(limits);
   assert.ok(apiMax, 'the API ceiling must be readable');
   assert.equal(
     UPLOAD_MAX_BYTES,

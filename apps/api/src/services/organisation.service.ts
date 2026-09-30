@@ -6,7 +6,7 @@ import {
 } from '@charitypilot/shared';
 import { AppError } from '../utils/errors.js';
 import { DeadlineService } from './deadline.service.js';
-import { publicOrganisation, publicOrganisationSelect } from '../utils/public-dtos.js';
+import { memberOrganisationSelect, publicMemberOrganisation, publicOrganisation, publicOrganisationSelect } from '../utils/public-dtos.js';
 import { nullableCivilDateFromPrisma, prismaDateFromCivil } from '../utils/civil-date.js';
 
 const CALENDAR_UPDATE_FIELDS = [
@@ -29,7 +29,15 @@ function isRetryableTransactionConflict(error: unknown) {
 export class OrganisationService {
   constructor(private prisma: PrismaClient) {}
 
-  async getOrganisation(organisationId: string) {
+  async getOrganisation(organisationId: string, viewerRole: 'OWNER' | 'ADMIN' | 'MEMBER' = 'OWNER') {
+    if (viewerRole === 'MEMBER') {
+      const memberOrg = await this.prisma.organisation.findUnique({
+        where: { id: organisationId },
+        select: memberOrganisationSelect,
+      });
+      if (!memberOrg) throw new AppError(404, 'ORG_NOT_FOUND', 'Organisation not found');
+      return publicMemberOrganisation(memberOrg);
+    }
     const org = await this.prisma.organisation.findUnique({
       where: { id: organisationId },
       select: publicOrganisationSelect,
@@ -42,7 +50,11 @@ export class OrganisationService {
     return publicOrganisation(org);
   }
 
-  async updateOrganisation(organisationId: string, data: UpdateOrganisationRequest) {
+  async updateOrganisation(organisationId: string, data: UpdateOrganisationRequest, actorUserId: string) {
+    const submittedFields = Object.keys(data).filter((field) => field !== 'expectedUpdatedAt').sort();
+    if (submittedFields.length === 0) {
+      throw new AppError(400, 'ORGANISATION_UPDATE_EMPTY', 'Choose a profile field to update.');
+    }
     const shouldRegenerateDeadlines = CALENDAR_UPDATE_FIELDS.some((field) => data[field] !== undefined);
     const {
       expectedUpdatedAt,
@@ -235,8 +247,16 @@ export class OrganisationService {
             select: publicOrganisationSelect,
           });
 
+          await tx.organisationChangeAudit.create({ data: {
+            organisationId,
+            actorUserId,
+            submittedFields,
+            previousUpdatedAt: current.updatedAt,
+            nextUpdatedAt: updated.updatedAt,
+          } });
+
           if (shouldRegenerateDeadlines) {
-            await new DeadlineService(tx).reconcileGeneratedDeadlines(organisationId);
+            await new DeadlineService(tx).reconcileGeneratedDeadlines(organisationId, actorUserId);
           }
 
           return updated;

@@ -7,6 +7,7 @@ import {
   MAX_ACCOUNT_EMAIL_LENGTH,
   registerSchema,
   resetPasswordSchema,
+  changePasswordSchema,
 } from '../schemas/auth.js';
 import {
   BCRYPT_PASSWORD_MAX_UTF8_BYTES,
@@ -39,6 +40,12 @@ const passwordSchemas: readonly PasswordSchemaCase[] = [
   {
     label: 'reset-password',
     parse: (password) => resetPasswordSchema.safeParse({ token: 'reset-token', password }),
+  },
+  {
+    label: 'change-password',
+    parse: (password) => changePasswordSchema.safeParse({
+      currentPassword: 'CurrentPassword1', newPassword: password,
+    }),
   },
   {
     label: 'accept-invite',

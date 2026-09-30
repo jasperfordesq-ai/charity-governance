@@ -7,6 +7,9 @@ import type {
   SubscriptionPlan,
   SubscriptionStatus,
   DocumentCategory,
+  DocumentVisibility,
+  DocumentContentAccessClass,
+  DocumentLifecycleStatus,
   RegisterStatus,
   ConflictStatus,
   RiskCategory,
@@ -102,10 +105,12 @@ export interface UserResponse {
 
 export interface TeamMemberResponse {
   id: string;
-  email: string;
+  /** Null in the basic MEMBER team view. */
+  email: string | null;
   name: string;
   role: UserRole;
-  emailVerified: boolean;
+  /** Null in the basic MEMBER team view. */
+  emailVerified: boolean | null;
   lifecycleStatus: UserLifecycleStatus;
   membershipVersion: number;
   membershipChangedAt: string;
@@ -148,6 +153,10 @@ export interface TeamSessionResponse {
  * will say so.
  */
 export type SecurityAuditEventType =
+  | 'ACTION_APPROVAL_REFUSED'
+  | 'SECOND_FACTOR_ENROLLED'
+  | 'SECOND_FACTOR_REMOVED'
+  | 'SECOND_FACTOR_RECOVERY_USED'
   | 'MEMBER_SUSPENDED'
   | 'MEMBER_REACTIVATED'
   | 'MEMBER_REMOVED'
@@ -167,16 +176,45 @@ export type SecurityAuditEventType =
   | 'INTEGRATION_SITE_SELECTED'
   | 'INTEGRATION_DISCONNECTED'
   | 'INTEGRATION_PUBLISH_TARGET_CHANGED'
+  | 'INTEGRATION_ENVIRONMENT_DECLARED'
   | 'INTEGRATION_REAUTHORISATION_REQUIRED'
   | 'DOCUMENT_PUBLICATION_DEAD_LETTERED'
   | 'CONFLUENCE_ERASURE_REQUESTED';
 
 export interface SecurityAuditEventResponse {
-  type: SecurityAuditEventType;
+  /** Password markers are trusted projections of stored ALL_SESSIONS_REVOKED rows. */
+  type: SecurityAuditEventType | 'PASSWORD_RESET_COMPLETED' | 'PASSWORD_CHANGED';
   actorLabel: string;
   subjectLabel: string;
   reason: string;
   occurredAt: string;
+}
+
+export interface SecurityAuditPageResponse {
+  data: SecurityAuditEventResponse[];
+  nextCursor: string | null;
+}
+
+export interface SessionReplayDiagnosticResponse {
+  eventId: string;
+  occurredAt: string;
+  familyFingerprint: string | null;
+  /** Equal values identify repeated presentations of one spent session row. */
+  presentedSessionFingerprint: string | null;
+  /** Number of active rows quarantined by this observation, absent on old events. */
+  newlyQuarantinedSessionCount: number | null;
+  clientKind: 'WEB' | 'MCP_CONNECTOR' | null;
+  accessLevel: 'READ' | 'WRITE' | 'ADMIN' | null;
+  requestId: string | null;
+  /** Allowlisted session revocation reason, absent on older events. */
+  previousRevocationReason: string | null;
+  /** When the presented session was previously revoked, absent on older events. */
+  presentedSessionRevokedAt: string | null;
+}
+
+export interface SessionReplayDiagnosticsPageResponse {
+  data: SessionReplayDiagnosticResponse[];
+  nextCursor: string | null;
 }
 
 export interface PasswordRecoveryAcceptedResponse {
@@ -585,7 +623,7 @@ export interface BoardMemberResponse {
   organisationId: string;
   name: string;
   role: string;
-  email: string | null;
+  email?: string | null;
   appointedDate: string;
   termEndDate: string | null;
   isActive: boolean;
@@ -593,11 +631,11 @@ export interface BoardMemberResponse {
   conductSignedDate: string | null;
   inductionCompleted: boolean;
   inductionDate: string | null;
-  dateOfBirth: string | null;
-  residentialAddress: string | null;
-  otherDirectorships: string | null;
-  formerNames: string | null;
-  appointmentKind: DirectorAppointmentKind | null;
+  dateOfBirth?: string | null;
+  residentialAddress?: string | null;
+  otherDirectorships?: string | null;
+  formerNames?: string | null;
+  appointmentKind?: DirectorAppointmentKind | null;
 }
 
 export interface CreateBoardMemberRequest {
@@ -643,6 +681,19 @@ export interface DocumentResponse {
   name: string;
   description: string | null;
   category: DocumentCategory;
+  visibility: DocumentVisibility;
+  /** Owner/Admin only. Existing files require a fresh content review. */
+  contentAccessClass?: DocumentContentAccessClass;
+  /** Owner/Admin only. A suitable assessment without this needs byte review again. */
+  memberByteReviewVerified?: boolean;
+  lifecycleStatus: DocumentLifecycleStatus;
+  /** Owner/Admin only. The successor is a separate reviewed document. */
+  supersededByDocumentId?: string | null;
+  externalPublicationApproved: boolean;
+  /** Owner/Admin only. Prevents the normal document delete pipeline. */
+  deletionHold?: boolean;
+  /** Owner/Admin only: whether the original byte provider has been verified. */
+  storageProviderVerified?: boolean;
   fileSize: number;
   mimeType: string;
   version: number;
@@ -664,6 +715,17 @@ export interface UpdateDocumentRequest {
   // assignable to a TypeScript enum, so a route would have to cast the very
   // value its schema just validated.
   category?: `${DocumentCategory}`;
+  visibility?: `${DocumentVisibility}`;
+  visibilityReason?: string;
+  contentAccessClass?: `${DocumentContentAccessClass}`;
+  contentAccessReason?: string;
+  lifecycleStatus?: `${DocumentLifecycleStatus}`;
+  replacementDocumentId?: string;
+  lifecycleReason?: string;
+  externalPublicationApproved?: boolean;
+  publicationApprovalReason?: string;
+  reviewedPublicationSiteId?: string;
+  reviewedPublicationSpaceId?: string;
   owner?: string | null;
   approvedDate?: string | null;
   nextReviewDate?: string | null;

@@ -134,6 +134,10 @@ export function usePrincipleDetailWorkflow() {
   }, [clearPrivilegedComplianceState, refreshUser]);
 
   const refreshApprovalReadiness = useCallback(async () => {
+    if (!canManageRecordsRef.current) {
+      setApprovalReadiness(null);
+      return;
+    }
     const requestSeq = ++readinessRequestSeq.current;
     try {
       const readinessRes = await api.get(`/compliance/approval-readiness?year=${currentYear}`);

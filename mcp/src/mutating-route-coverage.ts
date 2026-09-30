@@ -26,6 +26,90 @@ export interface ExcludedMutation {
 }
 
 export const EXCLUDED_MUTATIONS: readonly ExcludedMutation[] = [
+  {
+    route: 'POST /api/v1/auth/change-password',
+    reason: 'Changes a human account credential after current-password and optional authenticator proof. The AI connector cannot administer its own human account.',
+    notInGroupIndex: true,
+  },
+  {
+    route: 'POST /api/v1/auth/second-factor/begin',
+    reason: 'Returns a personal account authenticator secret. It must stay in the signed-in human dashboard.',
+    notInGroupIndex: true,
+  },
+  {
+    route: 'POST /api/v1/auth/second-factor/complete',
+    reason: 'Activates a personal second factor and returns one-time recovery codes to the account holder.',
+    notInGroupIndex: true,
+  },
+  {
+    route: 'POST /api/v1/auth/second-factor/remove',
+    reason: 'Removes an account protection after human password and code proof; an AI connector cannot do this.',
+    notInGroupIndex: true,
+  },
+  {
+    route: 'POST /api/v1/documents/:id/deletion-hold',
+    reason: 'Placing or releasing an administrative deletion hold requires a person to review the document and record a reason in the dashboard.',
+  },
+  {
+    route: 'POST /api/v1/documents/:id/verify-storage-provider',
+    reason: 'A browser-only custody check probes both private file stores and permanently pins the written provider before an old Vault file can be deleted.',
+  },
+  {
+    route: 'POST /api/v1/data-lifecycle/requests',
+    reason: 'Recording an erasure or retention request requires a human to check the original controlled correspondence and select the correct scope.',
+  },
+  {
+    route: 'POST /api/v1/data-lifecycle/requests/:id/triage',
+    reason: 'Changing a data-rights case assessment is a human evidence and policy decision, not a connector action.',
+  },
+  {
+    route: 'POST /api/v1/data-lifecycle/requests/:id/coverage',
+    reason: 'Assessing a data-rights case source area requires a person to inspect controlled evidence and record a reason in the Admin dashboard.',
+  },
+  {
+    route: 'POST /api/v1/data-lifecycle/requests/:id/response-target',
+    reason: 'Setting or withdrawing a response target requires a person to verify the controlled case correspondence and record evidence in the Admin dashboard.',
+  },
+  {
+    route: 'POST /api/v1/data-lifecycle/requests/:id/response-sent',
+    reason: 'Recording an actual response date requires a person to check the controlled correspondence and cite its evidence.',
+  },
+  {
+    route: 'POST /api/v1/data-lifecycle/requests/:id/storage-links',
+    reason: 'Associating a case with a deletion job requires a human to verify the case archive and the job reference.',
+  },
+  {
+    route: 'POST /api/v1/data-lifecycle/requests/:id/storage-links/:linkId/withdraw',
+    reason: 'Correcting a case-to-job association requires a human to record the evidence and reason in the dashboard.',
+  },
+  {
+    route: 'POST /api/v1/data-lifecycle/requests/:id/document-links',
+    reason: 'Associating a case with a live Vault document requires a human to verify the controlled case archive.',
+  },
+  {
+    route: 'POST /api/v1/data-lifecycle/requests/:id/document-links/:linkId/withdraw',
+    reason: 'Correcting a case-to-Vault association requires a human reason and preserved history.',
+  },
+  {
+    route: 'POST /api/v1/governance-registers/risks/:id/control-verifications',
+    reason: 'A dated control-verification claim or withdrawal must be made after a person checks the cited evidence in the Registers screen; the connector must not assert verification.',
+  },
+  {
+    route: 'POST /api/v1/documents/:id/publication/retry',
+    reason: 'Requeues an external Confluence publication and needs a person to inspect the current document and destination in the dashboard.',
+  },
+  {
+    route: 'POST /api/v1/integrations/confluence/references/:documentId',
+    reason: 'Creates a reference to an external Confluence page; it needs human review of the exact third-party target.',
+  },
+  {
+    route: 'DELETE /api/v1/integrations/confluence/references/by-id/:referenceId',
+    reason: 'Removes a governed external reference and must be reviewed in the integration dashboard.',
+  },
+  {
+    route: 'PUT /api/v1/integrations/confluence/declared-environment',
+    reason: 'Changes the operator-declared external integration environment; a connector cannot establish that environment safely.',
+  },
   /* --- the platform operator realm ------------------------------------- */
   {
     route: 'POST /api/v1/owner/auth/login',
@@ -136,9 +220,9 @@ export const EXCLUDED_MUTATIONS: readonly ExcludedMutation[] = [
   {
     route: 'DELETE /api/v1/integrations/confluence',
     reason:
-      'Disconnects Confluence, which deletes the mirrored pages. The owner has ruled that '
-      + 'CharityPilot must never delete from Confluence, and this route is never to be offered '
-      + 'here regardless of session level.',
+      'Disconnects Confluence and removes CharityPilot credentials; it does not delete '
+      + 'mirrored pages. This browser-only account decision is never offered as a connector '
+      + 'tool, regardless of session level.',
     notInGroupIndex: true,
   },
   {
@@ -146,7 +230,7 @@ export const EXCLUDED_MUTATIONS: readonly ExcludedMutation[] = [
     reason:
       'The only remaining way for CharityPilot to destroy a page in a charity’s own '
       + 'Confluence site. The owner ruled on 2026-09-19 that this must be a deliberate human '
-      + 'act, and the route already demands an administrator session, an approval and a typed '
+      + 'act, and the route demands a web administrator session and a typed '
       + 'confirmation phrase — a phrase only means something if a person types it. It is '
       + 'strictly more destructive than disconnecting Confluence, which is excluded above for '
       + 'the same reason.',

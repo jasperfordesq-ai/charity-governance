@@ -416,7 +416,7 @@ test('one-shot CLI failures emit only a bounded code and never echo database cre
   const result = spawnSync(
     process.execPath,
     [
-      '--import', 'tsx', entrypoint,
+      ...(extension === 'ts' ? ['--import', 'tsx'] : []), entrypoint,
       '--dry-run', '--confirm-production-database-authority',
       '--organisation-id', 'org-1', '--deletion-id', 'deletion-1',
       '--operator', 'Jane Recovery Operator',

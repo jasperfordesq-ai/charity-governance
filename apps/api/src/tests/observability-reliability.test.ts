@@ -270,6 +270,7 @@ test('runProductionSchedulerOnce fires no error alert when both jobs succeed', {
       async sendDueReminders() {},
     },
     documentService: {
+      async reconcileStaleUploadIntents() { return { attached: 0, queued: 0, failed: 0 }; },
       async retryPendingStorageDeletions() {
         return { processed: 2, failed: 0 };
       },
@@ -281,7 +282,7 @@ test('runProductionSchedulerOnce fires no error alert when both jobs succeed', {
       ...recordingReconcileRunner().runner,
     },
     storageService: {
-      async deleteFile() {},
+      async deleteFile() { return new Date(); },
       async downloadFile() {
         return new Uint8Array([1]);
       },
@@ -300,6 +301,7 @@ test('runProductionSchedulerOnce fires no error alert when both jobs succeed', {
         };
       },
     },
+    riskControlReviewService: { async countStaleClaims() { return 0; } },
     // The Confluence eraser reads a charity's connection through this, and so
     // do the publisher and the reconcile pass. The eraser and publisher are
     // never reached here; the reconcile pass is, so the estate is empty rather
@@ -328,6 +330,7 @@ test('runProductionSchedulerOnce fires no error alert when both jobs succeed', {
   assert.equal(result.documentStorageCleanupFailed, false);
   assert.equal(result.documentPublicationFailed, false);
   assert.equal(result.authEmailDeliveryFailed, false);
+  assert.equal(result.riskControlReviewFailed, false);
   assert.equal(alerts.length, 0);
 });
 

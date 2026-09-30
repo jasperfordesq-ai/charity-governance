@@ -109,10 +109,42 @@ enum DocumentCategory {
   OTHER
 }
 
+enum DocumentVisibility {
+  RESTRICTED
+  MEMBER_VISIBLE
+}
+
+enum DocumentContentAccessClass {
+  UNASSESSED
+  MEMBER_SUITABLE
+  RESTRICTED_SENSITIVE
+}
+
+enum DocumentLifecycleStatus {
+  UNREVIEWED
+  DRAFT
+  CURRENT
+  SUPERSEDED
+  RETIRED
+  HISTORICAL
+}
+
 enum DocumentStorageDeletionState {
   PENDING
   DEAD_LETTER
   PROCESSED
+}
+
+enum DocumentStorageDeletionAttemptOutcome {
+  RETRY_SCHEDULED
+  DEAD_LETTERED
+  PROCESSED
+}
+
+enum DocumentUploadIntentState {
+  RESERVED
+  ATTACHED
+  CLEANUP_PENDING
 }
 
 enum DocumentStorageDeletionTerminalReason {
@@ -151,6 +183,7 @@ enum DocumentPublicationState {
 // the first attempt because retrying cannot change the answer.
 enum DocumentPublicationTerminalReason {
   MAX_ATTEMPTS_EXHAUSTED
+  PERMANENT_APPROVAL_REQUIRED
   PERMANENT_CONNECTION_UNAVAILABLE
   PERMANENT_PERMISSION_DENIED
   PERMANENT_CONFLICT_UNRESOLVED
@@ -313,6 +346,10 @@ enum SecurityAuditActorKind {
 }
 
 enum SecurityAuditEventType {
+  ACTION_APPROVAL_REFUSED
+  SECOND_FACTOR_ENROLLED
+  SECOND_FACTOR_REMOVED
+  SECOND_FACTOR_RECOVERY_USED
   MEMBER_SUSPENDED
   MEMBER_REACTIVATED
   MEMBER_REMOVED
@@ -337,6 +374,7 @@ enum SecurityAuditEventType {
   INTEGRATION_SITE_SELECTED
   INTEGRATION_DISCONNECTED
   INTEGRATION_PUBLISH_TARGET_CHANGED
+  INTEGRATION_ENVIRONMENT_DECLARED
   // Both routes to the same condition: a grant Atlassian rejected, and one the
   // dormancy sweep let lapse. `reason` distinguishes them.
   INTEGRATION_REAUTHORISATION_REQUIRED
@@ -344,6 +382,13 @@ enum SecurityAuditEventType {
   // Requested, not performed: a purge that then fails must not remove the
   // record that it was asked for.
   CONFLUENCE_ERASURE_REQUESTED
+}
+
+enum AuthActionApprovalAuditKind {
+  REQUESTED
+  RENEWED
+  GRANTED
+  CONSUMED
 }
 
 enum PasswordRecoverySource {
@@ -689,6 +734,7 @@ model User {
   sentInvites                  TeamInvite[]                 @relation("InvitedBy")
   reminderLogs                 DeadlineReminderLog[]
   authSessions                 AuthSession[]
+  secondFactor                 UserSecondFactor?
   billingAuthorityGrants       BillingAuthorityGrant[]      @relation("BillingAuthorityActor")
   securityAuditEventsAsActor   SecurityAuditEvent[]         @relation("SecurityAuditActor")
   securityAuditEventsAsSubject SecurityAuditEvent[]         @relation("SecurityAuditSubject")
@@ -704,6 +750,34 @@ model User {
   @@unique([id, organisationId])
   @@index([organisationId])
   @@index([organisationId, lifecycleStatus, role, id])
+}
+
+/// A charity account's optional authenticator. The pending secret cannot be used
+/// for sign-in until the user proves a code and receives recovery codes.
+model UserSecondFactor {
+  userId         String   @id
+  user           User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  secret         Json
+  pendingAt      DateTime?
+  enrolledAt     DateTime?
+  lastUsedStep   Int?
+  failedAttempts Int      @default(0)
+  failedWindowAt DateTime?
+  blockedUntil   DateTime?
+  recoveryCodes  UserSecondFactorRecoveryCode[]
+  updatedAt      DateTime @updatedAt
+}
+
+model UserSecondFactorRecoveryCode {
+  id        String           @id @default(cuid())
+  userId    String
+  factor    UserSecondFactor @relation(fields: [userId], references: [userId], onDelete: Cascade)
+  codeHash  String
+  usedAt    DateTime?
+  createdAt DateTime         @default(now())
+
+  @@unique([userId, codeHash])
+  @@index([userId, usedAt])
 }
 
 model AuthSession {
@@ -839,10 +913,31 @@ model AuthActionApproval {
   expiresAt       DateTime
   approvedAt      DateTime?
   consumedAt      DateTime?
+  auditEvents     AuthActionApprovalAudit[]
 
   @@unique([id, organisationId])
   @@index([sessionFamilyId, requestDigest])
   @@index([expiresAt])
+}
+
+/// Database-captured transitions of a human connector approval. The approval
+/// row remains mutable as a single-use capability; this history does not.
+model AuthActionApprovalAudit {
+  id             String                      @id @default(cuid())
+  organisationId String
+  approvalId     String
+  approval       AuthActionApproval          @relation(fields: [approvalId, organisationId], references: [id, organisationId], onDelete: Restrict, onUpdate: Restrict)
+  kind           AuthActionApprovalAuditKind
+  actorUserId    String
+  method         String
+  routePattern   String
+  resourceId     String?
+  expiresAt      DateTime?
+  occurredAt     DateTime                    @default(now())
+  backfilled     Boolean                     @default(false)
+
+  @@index([organisationId, occurredAt, id])
+  @@index([approvalId, occurredAt, id])
 }
 
 /// One connector POST, remembered long enough to answer a retry with the same
@@ -1133,6 +1228,22 @@ model ComplianceAuditEvent {
   @@index([complianceRecordId, occurredAt])
 }
 
+/// Metadata-only record that a compliance report was prepared for HTTP
+/// delivery. Kept separate from ComplianceAuditEvent so the previous app
+/// version never has to decode a newly added enum label during cutover.
+model ComplianceReportPreparationAudit {
+  id                 String   @id @default(cuid())
+  organisationId     String
+  reportingYear      Int
+  actorUserId        String
+  reportVersion      String
+  audience           String
+  approvalSnapshotId String?
+  occurredAt         DateTime @default(now())
+
+  @@index([organisationId, occurredAt, id])
+}
+
 model BoardMember {
   id                 String                   @id @default(cuid())
   organisationId     String
@@ -1168,7 +1279,24 @@ model Document {
   name                   String
   description            String?
   category               DocumentCategory
+  visibility             DocumentVisibility @default(RESTRICTED)
+  contentAccessClass     DocumentContentAccessClass @default(UNASSESSED)
+  // SHA-256 of the exact bytes present when Member suitability was reviewed.
+  // Null means no byte-bound Member review; it is not returned to Members.
+  memberReviewedSha256   String?
+  lifecycleStatus        DocumentLifecycleStatus @default(UNREVIEWED)
+  supersededByDocumentId String?
+  supersededByDocument   Document? @relation("DocumentReplacement", fields: [supersededByDocumentId, organisationId], references: [id, organisationId], onDelete: Restrict, onUpdate: Cascade)
+  replacesDocuments      Document[] @relation("DocumentReplacement")
+  externalPublicationApproved Boolean @default(false)
+  // The exact destination reviewed with this approval. Both are null when unapproved.
+  externalPublicationSiteId String?
+  externalPublicationSpaceId String?
+  deletionHold           Boolean @default(false)
   fileUrl                String
+  // Provider recorded from the write, an exact attached reservation, or a
+  // guarded active-object review; null means legacy custody is unverified.
+  storageProvider        String?
   fileSize               Int
   mimeType               String
   version                Int              @default(1)
@@ -1193,6 +1321,82 @@ model Document {
   updatedAt DateTime @updatedAt
 
   @@index([organisationId])
+  @@unique([id, organisationId])
+  @@index([organisationId, visibility])
+  @@index([organisationId, lifecycleStatus])
+  @@index([organisationId, supersededByDocumentId])
+}
+
+// Written before bytes are uploaded. A failed or interrupted upload can be
+// reconciled without trusting the route's error outcome or a second DB write.
+// Historical intent rows remain after their document is later deleted.
+model DocumentUploadIntent {
+  id                String                    @id @default(cuid())
+  organisationId    String
+  storagePath       String
+  provider          String
+  state             DocumentUploadIntentState @default(RESERVED)
+  documentId        String?
+  cleanupDeletionId String?
+  // An unsuccessful reconciliation stays RESERVED but moves behind intents
+  // not yet attempted, so one broken reservation cannot starve later bytes.
+  lastReconcileAttemptAt DateTime?
+  createdAt         DateTime                  @default(now())
+  updatedAt         DateTime                  @updatedAt
+
+  @@unique([organisationId, storagePath])
+  @@index([state, createdAt, id])
+  @@index([state, lastReconcileAttemptAt, createdAt, id], map: "DocumentUploadIntent_reconcile_attempt_idx")
+  @@index([organisationId, state, createdAt])
+}
+
+model DocumentControlAudit {
+  id             String   @id @default(cuid())
+  organisationId String
+  documentId     String
+  actorUserId    String
+  kind           String
+  previous       String
+  next           String
+  reason         String
+  occurredAt     DateTime @default(now())
+
+  @@index([organisationId, documentId, occurredAt])
+}
+
+// Historical scalar facts survive document and user deletion. The migration
+// makes this table append-only at the database boundary.
+model DocumentVisibilityAudit {
+  id              String             @id @default(cuid())
+  organisationId  String
+  documentId      String
+  actorUserId     String
+  previous        DocumentVisibility
+  next            DocumentVisibility
+  reason          String
+  occurredAt      DateTime           @default(now())
+
+  @@index([organisationId, documentId, occurredAt])
+}
+
+/// Metadata-only record that an authenticated Vault download passed its
+/// post-storage access checks and was prepared for HTTP delivery. It does not
+/// establish that the client received or retained the bytes. Owner/Admin
+/// preparations may carry a restricted content digest and document revision
+/// to support a later Member-suitability decision by that same actor.
+model DocumentDownloadPreparationAudit {
+  id             String             @id @default(cuid())
+  organisationId String
+  documentId     String
+  actorUserId    String
+  visibility     DocumentVisibility
+  reviewSha256   String?
+  documentUpdatedAt DateTime?
+  occurredAt     DateTime           @default(now())
+
+  @@index([organisationId, occurredAt, id])
+  @@index([organisationId, documentId, occurredAt])
+  @@index([organisationId, documentId, actorUserId, documentUpdatedAt, reviewSha256], map: "DocumentDownloadPreparationAudit_review_receipt_idx")
 }
 
 // A page the charity already had, cited as evidence. Never created, never
@@ -1236,6 +1440,10 @@ model DocumentStorageDeletion {
   id                      String                                      @id @default(cuid())
   organisationId          String
   storagePath             String
+  // Scalar evidence captured before an ordinary Vault delete, or from the
+  // retired publication when an explicit Confluence erasure is requested.
+  // No FK: the source Document may already have been deleted.
+  sourceDocumentId        String?
   provider                String                                      @default("supabase")
   targetRef               Json?
   // Who asked for this destruction, and why. Null for the ordinary,
@@ -1258,6 +1466,9 @@ model DocumentStorageDeletion {
   alertClaimedAt          DateTime?
   alertedAt               DateTime?
   processedAt             DateTime?
+  // Null on legacy rows and non-primary providers. New local/Supabase rows
+  // receive this only when active-object absence was read back before finalise.
+  activeObjectAbsentAt    DateTime?
   lastRecoveryId          String?
   lastRecoveryNonce       String?
   lastRecoveryDisposition DocumentStorageDeletionRecoveryDisposition?
@@ -1265,7 +1476,10 @@ model DocumentStorageDeletion {
   createdAt               DateTime                                    @default(now())
   updatedAt               DateTime                                    @updatedAt
   recoveries              DocumentStorageDeletionRecovery[]
+  attemptEvents           DocumentStorageDeletionAttempt[]
+  dataLifecycleLinks      DataLifecycleStorageLink[]
 
+  @@unique([id, organisationId])
   @@index([organisationId])
   @@index([processedAt, createdAt])
   @@index([processedAt, claimedAt, createdAt])
@@ -1295,6 +1509,22 @@ model DocumentStorageDeletionRecovery {
 
   @@index([deletionId, createdAt])
   @@index([organisationId, createdAt])
+}
+
+model DocumentStorageDeletionAttempt {
+  id                   String                                @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  deletionId           String
+  deletion             DocumentStorageDeletion               @relation(fields: [deletionId], references: [id], onDelete: Restrict)
+  organisationId       String
+  provider             String
+  attemptNumber        Int
+  outcome              DocumentStorageDeletionAttemptOutcome
+  terminalReason       DocumentStorageDeletionTerminalReason?
+  activeObjectAbsentAt DateTime?
+  occurredAt           DateTime
+
+  @@index([organisationId, occurredAt, id])
+  @@index([deletionId, occurredAt])
 }
 
 // A record that a document was (or is queued to be) mirrored into a charity's
@@ -1439,12 +1669,52 @@ model RiskRecord {
   owner                String?
   reviewDate           DateTime?
   status               RegisterStatus @default(OPEN)
+  revision             Int            @default(1)
   boardMinuteReference String?
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
   @@index([organisationId])
+}
+
+// Historical risk edits survive deletion of the current register row.
+// Tenant-scoped read access is limited to Owner/Admin in the API.
+model RiskChangeAudit {
+  id             String   @id @default(cuid())
+  organisationId String
+  riskId         String
+  actorUserId    String?
+  action         String
+  beforeState    Json?
+  afterState     Json?
+  occurredAt     DateTime @default(now())
+
+  @@index([organisationId, occurredAt])
+  @@index([organisationId, riskId, occurredAt])
+}
+
+// A verification is evidence recorded by a named actor, not an automatic
+// declaration that a control passed. Revocation is another immutable event.
+model RiskControlVerification {
+  id                String   @id @default(cuid())
+  sequence          Int      @unique @default(autoincrement())
+  organisationId    String
+  riskId            String
+  actorUserId       String
+  controlReference  String
+  state             String
+  verifiedAt        DateTime?
+  // Null for historical claims created before revision capture was introduced.
+  riskRevision      Int?
+  evidenceReference String?
+  affectedRelease   String?
+  reason            String
+  occurredAt        DateTime @default(now())
+
+  @@index([organisationId, riskId, occurredAt])
+  @@index([organisationId, riskId, sequence])
+  @@index([organisationId, sequence])
 }
 
 model ComplaintRecord {
@@ -1464,6 +1734,38 @@ model ComplaintRecord {
   updatedAt DateTime @updatedAt
 
   @@index([organisationId])
+}
+
+// Metadata-only register history survives removal of sensitive live rows.
+// It intentionally does not copy narratives, names or free text.
+model GovernanceRegisterChangeAudit {
+  id             String   @id @default(cuid())
+  organisationId String
+  recordKind     String
+  recordId       String
+  actorUserId    String
+  action         String
+  previousStatus String?
+  nextStatus     String?
+  changedFields  String[]
+  occurredAt     DateTime @default(now())
+
+  @@index([organisationId, occurredAt])
+  @@index([organisationId, recordKind, recordId, occurredAt], map: "GovernanceRegisterChangeAudit_org_kind_record_occurredAt_idx")
+}
+
+// Metadata-only organisation profile history. Values such as a home address,
+// contact details and conditional obligation facts are never copied here.
+model OrganisationChangeAudit {
+  id                String   @id @default(cuid())
+  organisationId    String
+  actorUserId       String
+  submittedFields   String[]
+  previousUpdatedAt DateTime
+  nextUpdatedAt     DateTime
+  occurredAt        DateTime @default(now())
+
+  @@index([organisationId, occurredAt])
 }
 
 model FundraisingRecord {
@@ -1579,6 +1881,25 @@ model Deadline {
   @@index([dueDate, id])
 }
 
+// Actor-bound calendar history, independent of mutable/deletable deadline rows.
+// Titles, descriptions and generated profile snapshots are not copied here.
+model DeadlineChangeAudit {
+  id                String   @id @default(cuid())
+  organisationId    String
+  deadlineId        String
+  actorUserId       String
+  action            String
+  previousState     String?
+  nextState         String?
+  changedFields     String[]
+  previousUpdatedAt DateTime?
+  nextUpdatedAt     DateTime?
+  occurredAt        DateTime @default(now())
+
+  @@index([organisationId, occurredAt])
+  @@index([organisationId, deadlineId, occurredAt])
+}
+
 model TeamInvite {
   id             String       @id @default(cuid())
   organisationId String
@@ -1635,6 +1956,22 @@ model DeadlineReminderLog {
   @@index([userId])
   @@index([deadlineId, status])
   @@index([status, providerRequestStartedAt])
+}
+
+// Database-recorded reminder state transitions. No recipient, title, provider
+// message ID or error text is copied into this retained governance feed.
+model DeadlineReminderAudit {
+  id                    String                                 @id
+  organisationId        String
+  reminderId            String
+  deadlineId            String
+  previousStatus        DeadlineReminderStatus?
+  nextStatus            DeadlineReminderStatus
+  reconciliationOutcome DeadlineReminderReconciliationOutcome?
+  occurredAt            DateTime                               @default(now())
+
+  @@index([organisationId, occurredAt, id])
+  @@index([organisationId, reminderId, occurredAt, id])
 }
 
 model Subscription {
@@ -1738,6 +2075,8 @@ model Member {
   address           String?
   dateEntered       DateTime     @db.Date
   dateCeased        DateTime?    @db.Date
+  /// Legacy derived field. No approved CharityPilot period or purge job uses it.
+  /// The API withholds existing values pending controller-approved reconciliation.
   retentionDeleteAt DateTime?    @db.Date
 
   createdAt DateTime @default(now())
@@ -1781,6 +2120,221 @@ model GoverningActVoid {
 
   @@index([organisationId])
   @@index([organisationId, voidedAt])
+}
+
+// Append-only history for Minute Book edits. Snapshots are restricted to
+// Owner/Admin and survive subsequent changes or removal of the live record.
+model MinuteBookChangeAudit {
+  id             String   @id @default(cuid())
+  organisationId String
+  recordKind     String
+  recordId       String
+  action         String
+  actorUserId    String
+  beforeState    Json?
+  afterState     Json?
+  occurredAt     DateTime @default(now())
+
+  @@index([organisationId, occurredAt])
+  @@index([organisationId, recordKind, recordId, occurredAt])
+}
+
+enum DataLifecycleRequestKind {
+  ERASURE
+  RETENTION_REVIEW
+}
+
+enum DataLifecycleScope {
+  ACCOUNT
+  GOVERNANCE
+  DOCUMENT
+  INTEGRATION
+  ORGANISATION
+  OTHER
+}
+
+enum DataLifecycleReviewState {
+  OPEN
+  ASSESSING
+  DECISION_REQUIRED
+}
+
+enum DataLifecycleCoverageArea {
+  ACCOUNT_AUTH
+  GOVERNANCE_RECORDS
+  VAULT_FILES
+  EXTERNAL_COPIES
+  EXPORTS
+  AUDIT_LOGS
+  BACKUPS
+  BILLING_PROVIDER
+}
+
+enum DataLifecycleCoverageDisposition {
+  IN_SCOPE
+  NEEDS_FOLLOW_UP
+  NOT_APPLICABLE
+}
+
+// Intake and triage only. No state in this model asserts deletion or permits
+// automatic purge before a controller-approved per-class policy exists.
+model DataLifecycleRequest {
+  id             String                   @id @default(cuid())
+  organisationId String
+  caseReference  String
+  kind           DataLifecycleRequestKind
+  scope          DataLifecycleScope
+  receivedAt     DateTime
+  // Reviewer-entered operational target, not an inferred statutory deadline.
+  targetResponseAt DateTime?
+  // Recorded fact from controlled correspondence, not a case or erasure disposition.
+  responseSentAt DateTime?
+  reviewState    DataLifecycleReviewState @default(OPEN)
+  enteredById    String
+  createdAt      DateTime                 @default(now())
+  updatedAt      DateTime                 @updatedAt
+  events         DataLifecycleReviewEvent[]
+  targetEvents   DataLifecycleTargetEvent[]
+  responseEvents DataLifecycleResponseEvent[]
+  coverageEvents DataLifecycleCoverageEvent[]
+  storageLinks   DataLifecycleStorageLink[]
+  documentLinks  DataLifecycleDocumentLink[]
+
+  @@unique([id, organisationId])
+  @@unique([organisationId, caseReference])
+  @@index([organisationId, reviewState, receivedAt])
+  @@index([organisationId, targetResponseAt, id])
+}
+
+// A source-area assessment, never a deletion or completed-erasure claim.
+// Absence of an event means that area has not been reviewed for this case.
+model DataLifecycleCoverageEvent {
+  id             String                           @id @default(cuid())
+  organisationId String
+  requestId      String
+  request        DataLifecycleRequest             @relation(fields: [requestId, organisationId], references: [id, organisationId], onDelete: Restrict)
+  area           DataLifecycleCoverageArea
+  disposition    DataLifecycleCoverageDisposition
+  actorUserId    String
+  reason         String
+  evidenceRef    String?
+  occurredAt     DateTime                         @default(now())
+
+  @@index([organisationId, requestId, area, occurredAt, id])
+  @@index([organisationId, requestId, occurredAt, id])
+}
+
+// Every change to the manually entered target is reasoned and append-only.
+model DataLifecycleTargetEvent {
+  id               String               @id @default(cuid())
+  organisationId   String
+  requestId        String
+  request          DataLifecycleRequest @relation(fields: [requestId, organisationId], references: [id, organisationId], onDelete: Restrict)
+  actorUserId      String
+  previousTargetAt DateTime?
+  nextTargetAt     DateTime?
+  reason           String
+  evidenceRef      String?
+  occurredAt       DateTime             @default(now())
+
+  @@index([organisationId, requestId, occurredAt, id])
+}
+
+// Every correction to the recorded response-sent fact remains reviewable.
+// The event carries an opaque controlled-archive reference, not correspondence.
+model DataLifecycleResponseEvent {
+  id                 String               @id @default(cuid())
+  organisationId     String
+  requestId          String
+  request            DataLifecycleRequest @relation(fields: [requestId, organisationId], references: [id, organisationId], onDelete: Restrict)
+  actorUserId        String
+  previousResponseAt DateTime?
+  nextResponseAt     DateTime?
+  reason             String
+  evidenceRef        String?
+  occurredAt         DateTime             @default(now())
+
+  @@index([organisationId, requestId, occurredAt, id])
+}
+
+// A reviewer-associated technical deletion job. The linked queue outcome is
+// not a case disposition or proof of provider versions and backup erasure.
+model DataLifecycleStorageLink {
+  id             String                  @id @default(cuid())
+  organisationId String
+  requestId      String
+  request        DataLifecycleRequest    @relation(fields: [requestId, organisationId], references: [id, organisationId], onDelete: Restrict)
+  deletionId     String
+  deletion       DocumentStorageDeletion @relation(fields: [deletionId, organisationId], references: [id, organisationId], onDelete: Restrict)
+  actorUserId    String
+  reason         String
+  createdAt      DateTime                @default(now())
+  withdrawal     DataLifecycleStorageLinkWithdrawal?
+
+  @@unique([id, organisationId, requestId])
+  @@unique([requestId, deletionId])
+  @@index([organisationId, requestId, createdAt, id])
+}
+
+// A correction leaves the original reviewer association visible in history.
+model DataLifecycleStorageLinkWithdrawal {
+  id             String                   @id @default(cuid())
+  organisationId String
+  requestId      String
+  linkId         String                   @unique
+  link           DataLifecycleStorageLink @relation(fields: [linkId, organisationId, requestId], references: [id, organisationId, requestId], onDelete: Restrict)
+  actorUserId    String
+  reason         String
+  createdAt      DateTime                 @default(now())
+
+  @@unique([linkId, organisationId, requestId])
+}
+
+// A reviewed association with a live Vault document at the time of linking.
+// The ID remains after ordinary draft removal; it is not a data-subject match
+// or a disposition. A database insertion guard verifies the live tenant row.
+model DataLifecycleDocumentLink {
+  id             String                              @id @default(cuid())
+  organisationId String
+  requestId      String
+  request        DataLifecycleRequest                @relation(fields: [requestId, organisationId], references: [id, organisationId], onDelete: Restrict)
+  documentId     String
+  actorUserId    String
+  reason         String
+  createdAt      DateTime                            @default(now())
+  withdrawal     DataLifecycleDocumentLinkWithdrawal?
+
+  @@unique([id, organisationId, requestId])
+  @@unique([requestId, documentId])
+  @@index([organisationId, requestId, createdAt, id])
+}
+
+model DataLifecycleDocumentLinkWithdrawal {
+  id             String                    @id @default(cuid())
+  organisationId String
+  requestId      String
+  linkId         String                    @unique
+  link           DataLifecycleDocumentLink @relation(fields: [linkId, organisationId, requestId], references: [id, organisationId, requestId], onDelete: Restrict)
+  actorUserId    String
+  reason         String
+  createdAt      DateTime                  @default(now())
+
+  @@unique([linkId, organisationId, requestId])
+}
+
+model DataLifecycleReviewEvent {
+  id             String                    @id @default(cuid())
+  organisationId String
+  requestId      String
+  request        DataLifecycleRequest      @relation(fields: [requestId, organisationId], references: [id, organisationId], onDelete: Restrict)
+  actorUserId    String
+  previousState  DataLifecycleReviewState?
+  nextState      DataLifecycleReviewState
+  reason         String
+  evidenceRef    String?
+  occurredAt     DateTime                  @default(now())
+
+  @@index([organisationId, requestId, occurredAt])
 }
 
 enum OperatorLifecycleStatus {

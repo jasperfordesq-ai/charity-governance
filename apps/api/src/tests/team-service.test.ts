@@ -46,7 +46,7 @@ function buildAcceptService(opts: {
   } | null;
 }) {
   const created: Array<Record<string, unknown>> = [];
-  const state = { consumeCalls: 0 };
+  const state: { consumeCalls: number; organisationSelect?: Record<string, boolean> } = { consumeCalls: 0 };
   let rawCall = 0;
   const prisma = {
     teamInvite: {
@@ -86,8 +86,9 @@ function buildAcceptService(opts: {
         },
         user: {
           count: async () => 0,
-          create: async (args: { data: Record<string, unknown> }) => {
+          create: async (args: { data: Record<string, unknown>; select: { organisation: { select: Record<string, boolean> } } }) => {
             created.push(args.data);
+            state.organisationSelect = args.select.organisation.select;
             return {
               id: 'u_new',
               email: args.data.email,
@@ -152,6 +153,20 @@ test('acceptInvite binds the new user to the role and organisation from the INVI
   assert.equal(created[0].emailVerified, true);
   assert.equal((result as { user: { email: string } }).user.email, 'invitee@example.org');
   assert.ok((result as { accessToken?: string }).accessToken, 'session tokens are issued on success');
+});
+
+test('acceptInvite only fetches private organisation fields for an Admin invite', async () => {
+  for (const role of ['MEMBER', 'ADMIN']) {
+    const invite = {
+      id: 'inv_1', email: 'invitee@example.org', organisationId: 'org_1', role,
+      acceptedAt: null, revokedAt: null, expiresAt: futureDate(),
+    };
+    const { service, state } = buildAcceptService({ invite });
+    await service.acceptInvite({ token: 'x', name: 'New User', password: 'Password1' });
+    for (const field of ['registeredAddress', 'contactEmail', 'contactPhone', 'conditionalObligationProfile']) {
+      assert.equal(state.organisationSelect?.[field], role === 'ADMIN');
+    }
+  }
 });
 
 for (const subscriptionCase of [

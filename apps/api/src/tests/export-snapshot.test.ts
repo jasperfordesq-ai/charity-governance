@@ -129,6 +129,8 @@ function storedSnapshot(overrides: Record<string, unknown> = {}) {
 
 async function buildApprovedExportApp(
   findFirst: (args: unknown) => Promise<ReturnType<typeof storedSnapshot> | null>,
+  auditCreate: (args: unknown) => Promise<unknown> = async () => ({ id: 'audit-1' }),
+  sessionLookup: (args: unknown) => Promise<unknown> = async () => ({ id: 'session-1' }),
 ) {
   const app = Fastify({ logger: false });
   const forbiddenLiveRead = new Proxy(
@@ -136,7 +138,7 @@ async function buildApprovedExportApp(
     { get: () => async () => { throw new Error('approved export must not read live report data'); } },
   );
   app.decorate('prisma', {
-    authSession: { findFirst: async () => ({ id: 'session-1' }) },
+    authSession: { findFirst: sessionLookup },
     user: {
       findUnique: async () => ({
         id: 'user-1',
@@ -154,6 +156,7 @@ async function buildApprovedExportApp(
       }),
     },
     complianceApprovalSnapshot: { findFirst },
+    complianceReportPreparationAudit: { create: auditCreate },
     organisation: forbiddenLiveRead,
     governancePrinciple: forbiddenLiveRead,
     governanceStandard: forbiddenLiveRead,
@@ -172,10 +175,11 @@ async function buildApprovedExportApp(
 
 test('approved export selects the latest retained tenant snapshot and renders only verified snapshot evidence', async () => {
   let lookup: unknown;
+  let auditWrite: unknown;
   const app = await buildApprovedExportApp(async (args) => {
     lookup = args;
     return storedSnapshot();
-  });
+  }, async (args) => { auditWrite = args; return { id: 'audit-1' }; });
 
   try {
     const response = await app.inject({
@@ -185,6 +189,11 @@ test('approved export selects the latest retained tenant snapshot and renders on
     });
 
     assert.equal(response.statusCode, 200);
+    assert.deepEqual(auditWrite, { data: {
+      organisationId: 'org-1', reportingYear: 2026,
+      actorUserId: 'user-1', approvalSnapshotId: 'snapshot-<retained>',
+      reportVersion: 'approved', audience: 'internal',
+    } });
     assert.deepEqual(lookup, {
       where: { organisationId: 'org-1', reportingYear: 2026 },
       orderBy: { approvalSequence: 'desc' },
@@ -211,6 +220,76 @@ test('approved export selects the latest retained tenant snapshot and renders on
     assert.doesNotMatch(response.body, /SECRET INTERNAL NOTE MUST NOT RENDER/);
     assert.doesNotMatch(response.body, /<script>alert\(1\)<\/script>/);
     assert.match(String(response.headers['content-security-policy']), /default-src 'none'/);
+    assert.equal(response.headers['cache-control'], 'no-store');
+    assert.equal(response.headers['x-content-type-options'], 'nosniff');
+  } finally {
+    await app.close();
+  }
+});
+
+test('minimised export uses the verified approved snapshot and omits narrative and approver particulars', async () => {
+  let auditWrite: unknown;
+  const app = await buildApprovedExportApp(async () => storedSnapshot(),
+    async (args) => { auditWrite = args; return { id: 'audit-2' }; });
+  try {
+    const response = await app.inject({
+      method: 'GET',
+      url: '/compliance-report?year=2026&version=approved&audience=minimised',
+      headers: { authorization: authHeader },
+    });
+    assert.equal(response.statusCode, 200);
+    assert.deepEqual(auditWrite, { data: {
+      organisationId: 'org-1', reportingYear: 2026,
+      actorUserId: 'user-1', approvalSnapshotId: 'snapshot-<retained>',
+      reportVersion: 'approved', audience: 'minimised',
+    } });
+    assert.match(response.body, /Minimised Compliance Record draft/);
+    assert.match(response.body, /Snapshot Charity &lt;script&gt;alert\(1\)&lt;\/script&gt;/);
+    assert.match(response.body, /RCN &amp; 123/);
+    assert.match(response.body, /COMPLIANT<\/th><td>1/);
+    assert.match(String(response.headers['content-disposition']), /minimised-draft/);
+    assert.equal(response.headers['cache-control'], 'no-store');
+    for (const sensitive of [
+      'Trustees &lt;reviewed&gt;', 'Minute &amp; pack', 'SECRET INTERNAL NOTE',
+      'Chair &amp; Trustee', 'Admin &lt;User&gt;', 'BM &lt;4&gt;',
+      'Snapshot source', 'Governance &amp; purpose', 'hasVolunteers',
+      'snapshot-&lt;retained&gt;', 'Snapshot SHA-256',
+    ]) assert.equal(response.body.includes(sensitive), false, sensitive);
+  } finally {
+    await app.close();
+  }
+});
+
+test('approved snapshot is withheld after session revocation during snapshot verification', async () => {
+  let sessionReads = 0;
+  let auditWrites = 0;
+  const app = await buildApprovedExportApp(async () => storedSnapshot(),
+    async () => { auditWrites += 1; return {}; },
+    async () => (++sessionReads === 1 ? { id: 'session-1' } : null));
+  try {
+    const response = await app.inject({
+      method: 'GET',
+      url: '/compliance-report?year=2026&version=approved&audience=minimised',
+      headers: { authorization: authHeader },
+    });
+    assert.equal(response.statusCode, 401);
+    assert.equal(response.json().code, 'UNAUTHORIZED');
+    assert.equal(sessionReads, 2);
+    assert.equal(auditWrites, 0);
+    assert.doesNotMatch(response.body, /Snapshot Charity|Aggregate standard statuses/);
+  } finally { await app.close(); }
+});
+
+test('minimised export cannot render a mutable working report', async () => {
+  const app = await buildApprovedExportApp(async () => { throw new Error('snapshot lookup must not occur'); });
+  try {
+    const response = await app.inject({
+      method: 'GET',
+      url: '/compliance-report?year=2026&audience=minimised',
+      headers: { authorization: authHeader },
+    });
+    assert.equal(response.statusCode, 400);
+    assert.equal(response.json().code, 'MINIMISED_EXPORT_REQUIRES_APPROVAL');
   } finally {
     await app.close();
   }
@@ -373,6 +452,7 @@ test('current export rejects an apparently current signoff when live evidence ha
       }),
     },
     complianceApprovalSnapshot: { findFirst: async () => approvalSnapshot },
+    complianceReportPreparationAudit: { create: async () => ({ id: 'audit-1' }) },
   } as never);
   await app.register(exportRoutes);
 
@@ -386,6 +466,8 @@ test('current export rejects an apparently current signoff when live evidence ha
     assert.equal(response.statusCode, 200);
     assert.match(response.body, /Previous approval no longer applies to this report/);
     assert.match(response.body, /current evidence changed/i);
+    assert.equal(response.headers['cache-control'], 'no-store');
+    assert.equal(response.headers['x-content-type-options'], 'nosniff');
     assert.doesNotMatch(response.body, /<strong>Status:<\/strong> Approved<\/p>/);
   } finally {
     await app.close();

@@ -78,6 +78,13 @@ export const setDocumentApprovalSchema = z
     expectedUpdatedAt: z.string().datetime({ offset: true }),
   })
   .superRefine((value, ctx) => {
+    if (value.approvedByResolutionId === undefined && value.approvalAsserted === undefined) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['approvalAsserted'],
+        message: 'Choose a Board approval field to change.',
+      });
+    }
     // Enforce rule 1: no approval without a resolution. The only safe path
     // without a resolution is approvalAsserted=true (which the UI shows as
     // "asserted, not evidenced"). approvedByResolutionId=null without

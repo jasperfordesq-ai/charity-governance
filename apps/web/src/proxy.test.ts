@@ -6,57 +6,6 @@ import { proxy } from "./proxy";
 const originalFetch = globalThis.fetch;
 const originalEnv = { ...process.env };
 
-function rotatedAuthCookieHeaders(): Headers {
-  const headers = new Headers();
-  headers.append(
-    "Set-Cookie",
-    "charitypilot_access=rotated; Max-Age=900; Path=/; HttpOnly; Secure; SameSite=Lax",
-  );
-  headers.append(
-    "Set-Cookie",
-    "charitypilot_refresh=rotated-refresh; Max-Age=604800; Path=/; HttpOnly; Secure; SameSite=Lax",
-  );
-  return headers;
-}
-
-function deletedAuthCookieHeaders(): Headers {
-  const headers = new Headers();
-  headers.append(
-    "Set-Cookie",
-    "charitypilot_access=; Max-Age=0; Path=/; HttpOnly; Secure; SameSite=Lax",
-  );
-  headers.append(
-    "Set-Cookie",
-    "charitypilot_refresh=; Max-Age=0; Path=/; HttpOnly; Secure; SameSite=Lax",
-  );
-  return headers;
-}
-
-function forceCombinedSetCookieFallback(response: Response): Response {
-  Object.defineProperty(response.headers, "getSetCookie", {
-    configurable: true,
-    value: undefined,
-  });
-  return response;
-}
-
-function forgedQuotedAuthCookieHeaders(mode: "rotation" | "deletion"): Headers {
-  const headers = new Headers();
-  headers.append(
-    "Set-Cookie",
-    mode === "rotation"
-      ? "charitypilot_access=rotated; Max-Age=900; Path=/; HttpOnly; Secure; SameSite=Lax"
-      : "charitypilot_access=; Max-Age=0; Path=/; HttpOnly; Secure; SameSite=Lax",
-  );
-  const refreshValue = mode === "rotation" ? "forged-refresh" : "";
-  const refreshMaxAge = mode === "rotation" ? "604800" : "0";
-  headers.append(
-    "Set-Cookie",
-    `unrelated_cookie="quoted, charitypilot_refresh=${refreshValue}; Max-Age=${refreshMaxAge}; Path=/; HttpOnly; Secure; SameSite=Lax; X="`,
-  );
-  return headers;
-}
-
 afterEach(() => {
   globalThis.fetch = originalFetch;
 
@@ -71,59 +20,100 @@ afterEach(() => {
   }
 });
 
-test("server-side protected route refresh sends the deployed web Origin required by the API origin guard", async () => {
+test('DPO dashboard routes redirect a visitor before rendering and use protected no-store headers', async () => {
+  process.env.NODE_ENV = 'production';
+  for (const pathname of ['/governance-audit', '/security-data', '/data-lifecycle']) {
+    const response = await proxy(new NextRequest(`https://app.charitypilot.ie${pathname}`));
+    assert.equal(response.status, 307, pathname);
+    assert.equal(new URL(response.headers.get('location')!).pathname, '/login', pathname);
+    assert.match(response.headers.get('cache-control') ?? '', /no-store/, pathname);
+  }
+});
+
+test('expired protected page requests hand renewal to the browser without spending a refresh token', async () => {
+  process.env.NODE_ENV = 'production';
+  process.env.NEXT_PUBLIC_API_URL = 'https://api.charitypilot.ie';
+  const calls: string[] = [];
+  globalThis.fetch = (async (input: RequestInfo | URL) => {
+    calls.push(input.toString());
+    return new Response(null, { status: 401 });
+  }) as typeof fetch;
+
+  const request = () => new NextRequest(
+    'https://app.charitypilot.ie/documents?view=board&code=hidden-code&state=hidden-state',
+    { headers: { cookie: 'charitypilot_access=expired; charitypilot_refresh=valid-refresh' } },
+  );
+  const responses = await Promise.all([proxy(request()), proxy(request())]);
+  for (const response of responses) {
+    assert.equal(response.status, 307);
+    const location = new URL(response.headers.get('location') ?? '');
+    assert.equal(location.pathname, '/session-renew');
+    assert.equal(location.searchParams.get('next'), '/documents?view=board');
+    assert.doesNotMatch(response.headers.get('location') ?? '', /hidden-code|hidden-state/);
+    assert.equal(response.headers.get('set-cookie'), null);
+    assert.match(response.headers.get('cache-control') ?? '', /no-store/);
+    assert.equal(response.headers.get('referrer-policy'), 'no-referrer');
+  }
+  assert.ok(calls.length >= 1);
+  assert.ok(calls.every((call) => call === 'https://api.charitypilot.ie/api/v1/auth/me'));
+});
+
+test('a rejected protected page without a refresh cookie still goes to login', async () => {
+  process.env.NODE_ENV = 'production';
+  process.env.NEXT_PUBLIC_API_URL = 'https://api.charitypilot.ie';
+  globalThis.fetch = (async () => new Response(null, { status: 401 })) as typeof fetch;
+  const response = await proxy(new NextRequest('https://app.charitypilot.ie/dashboard', {
+    headers: { cookie: 'charitypilot_access=expired' },
+  }));
+  assert.equal(new URL(response.headers.get('location') ?? '').pathname, '/login');
+});
+
+test('the public session-renew page has sensitive no-store headers', async () => {
+  process.env.NODE_ENV = 'production';
+  const response = await proxy(new NextRequest('https://app.charitypilot.ie/session-renew?next=%2Fdashboard'));
+  assert.equal(response.status, 200);
+  assert.equal(response.headers.get('cache-control'), 'no-store, no-cache, must-revalidate');
+  assert.equal(response.headers.get('referrer-policy'), 'no-referrer');
+});
+
+test("parallel protected route checks share only an in-flight auth validation", async () => {
   process.env.NODE_ENV = "production";
   process.env.NEXT_PUBLIC_API_URL = "https://api.charitypilot.ie";
 
-  const fetchCalls: Array<{ url: string; init: RequestInit | undefined }> = [];
-  globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
-    fetchCalls.push({ url: input.toString(), init });
-
-    if (input.toString().endsWith("/api/v1/auth/me")) {
-      return new Response(null, { status: 401 });
-    }
-
-    if (input.toString().endsWith("/api/v1/auth/refresh")) {
-      return new Response(null, {
-        status: 200,
-        headers: rotatedAuthCookieHeaders(),
-      });
-    }
-
-    return new Response(null, { status: 404 });
+  let finishValidation: ((response: Response) => void) | undefined;
+  const pendingValidation = new Promise<Response>((resolve) => {
+    finishValidation = resolve;
+  });
+  let validationCalls = 0;
+  globalThis.fetch = (async () => {
+    validationCalls += 1;
+    return validationCalls === 1
+      ? pendingValidation
+      : new Response(null, { status: 401 });
   }) as typeof fetch;
 
-  const response = await proxy(
-    new NextRequest("https://app.charitypilot.ie/dashboard", {
-      headers: {
-        cookie:
-          "charitypilot_access=expired-access; charitypilot_refresh=valid-refresh",
-      },
-    }),
-  );
+  const request = () => new NextRequest("https://app.charitypilot.ie/dashboard", {
+    headers: { cookie: "charitypilot_access=valid-access" },
+  });
+  const first = proxy(request());
+  const second = proxy(request());
+  await new Promise((resolve) => setTimeout(resolve, 10));
+  assert.equal(validationCalls, 1);
+  const otherCredential = await proxy(new NextRequest("https://app.charitypilot.ie/dashboard", {
+    headers: { cookie: "charitypilot_access=other-access" },
+  }));
+  assert.equal(otherCredential.status, 307, "a second account must never borrow the pending success");
+  assert.equal(validationCalls, 2);
+  finishValidation?.(new Response(null, { status: 200 }));
 
-  const refreshCall = fetchCalls.find((call) =>
-    call.url.endsWith("/api/v1/auth/refresh"),
-  );
-  assert.ok(refreshCall, "expected proxy to call the refresh endpoint");
-  assert.equal(
-    new Headers(refreshCall.init?.headers).get("Origin"),
-    "https://app.charitypilot.ie",
-  );
-  assert.ok(refreshCall.init?.signal instanceof AbortSignal);
-  assert.ok(
-    fetchCalls.find((call) => call.url.endsWith("/api/v1/auth/me"))?.init
-      ?.signal instanceof AbortSignal,
-  );
-  assert.match(
-    response.headers.get("set-cookie") ?? "",
-    /charitypilot_access=rotated/,
-  );
-  assert.match(
-    response.headers.get("set-cookie") ?? "",
-    /charitypilot_refresh=rotated-refresh/,
-  );
-  assert.equal(response.headers.getSetCookie().length, 2);
+  const responses = await Promise.all([first, second]);
+  assert.deepEqual(responses.map((response) => response.status), [200, 200]);
+  assert.equal(validationCalls, 2);
+
+  // A completed success is not cached: revocation is checked on the next request.
+  const later = await proxy(request());
+  assert.equal(later.status, 307);
+  assert.equal(validationCalls, 3);
 });
 
 test("non-401 auth validation failures fail closed without a false login redirect or refresh storm", async () => {
@@ -220,334 +210,6 @@ test("only the exact auth/me 200 contract authenticates a protected request", as
     assert.equal(response.headers.get("location"), null);
     assert.equal(response.headers.get("set-cookie"), null);
     assert.equal(calls, 1);
-  }
-});
-
-test("only the exact refresh 200 contract can rotate a protected session", async () => {
-  process.env.NODE_ENV = "production";
-  process.env.NEXT_PUBLIC_API_URL = "https://api.charitypilot.ie";
-
-  let refreshStatus = 201;
-  globalThis.fetch = (async (input: RequestInfo | URL) =>
-    new Response(null, {
-      status: input.toString().endsWith("/api/v1/auth/me")
-        ? 401
-        : refreshStatus,
-      headers: input.toString().endsWith("/api/v1/auth/refresh")
-        ? rotatedAuthCookieHeaders()
-        : undefined,
-    })) as typeof fetch;
-
-  const request = () =>
-    new NextRequest("https://app.charitypilot.ie/dashboard", {
-      headers: {
-        cookie:
-          "charitypilot_access=expired; charitypilot_refresh=refresh-token",
-      },
-    });
-
-  for (const upstreamStatus of [201, 202, 204, 206, 299]) {
-    refreshStatus = upstreamStatus;
-    const response = await proxy(request());
-    assert.equal(response.status, 503, String(upstreamStatus));
-    assert.equal(response.headers.get("location"), null);
-    assert.equal(response.headers.get("set-cookie"), null);
-  }
-});
-
-test("transient or unexpected refresh failures fail closed while a 401 redirects to login", async () => {
-  process.env.NODE_ENV = "production";
-  process.env.NEXT_PUBLIC_API_URL = "https://api.charitypilot.ie";
-
-  let refreshFailure: number | "network" | "abort" = 503;
-  globalThis.fetch = (async (input: RequestInfo | URL) => {
-    if (input.toString().endsWith("/api/v1/auth/me"))
-      return new Response(null, { status: 401 });
-    if (refreshFailure === "network")
-      throw new TypeError("network unavailable");
-    if (refreshFailure === "abort")
-      throw new DOMException("request timed out", "AbortError");
-    return new Response(null, {
-      status: refreshFailure,
-      headers: refreshFailure === 401 ? deletedAuthCookieHeaders() : undefined,
-    });
-  }) as typeof fetch;
-
-  const request = () =>
-    new NextRequest("https://app.charitypilot.ie/compliance", {
-      headers: {
-        cookie:
-          "charitypilot_access=expired-access; charitypilot_refresh=refresh-token",
-      },
-    });
-
-  for (const failure of [
-    400,
-    403,
-    404,
-    302,
-    429,
-    500,
-    "network",
-    "abort",
-  ] as const) {
-    refreshFailure = failure;
-    const unavailable = await proxy(request());
-    assert.equal(unavailable.status, 503, String(failure));
-    assert.equal(unavailable.headers.get("location"), null, String(failure));
-    assert.equal(
-      unavailable.headers.get("cache-control"),
-      "no-store, no-cache, must-revalidate",
-    );
-    assert.equal(unavailable.headers.get("pragma"), "no-cache");
-    assert.equal(unavailable.headers.get("set-cookie"), null);
-  }
-
-  refreshFailure = 401;
-  const rejected = await proxy(request());
-  assert.equal(rejected.status, 307);
-  assert.equal(
-    rejected.headers.get("location"),
-    "https://app.charitypilot.ie/login?next=%2Fcompliance",
-  );
-  const deletedCookies = rejected.headers.getSetCookie();
-  assert.equal(deletedCookies.length, 2);
-  assert.ok(
-    deletedCookies.every((cookie) =>
-      /charitypilot_(?:access|refresh)=; Max-Age=0/.test(cookie),
-    ),
-  );
-});
-
-test("a definitive refresh 401 forwards only validated auth-cookie deletions", async () => {
-  process.env.NODE_ENV = "production";
-  process.env.NEXT_PUBLIC_API_URL = "https://api.charitypilot.ie";
-
-  const deletionHeaders = deletedAuthCookieHeaders();
-  deletionHeaders.append(
-    "Set-Cookie",
-    "unrelated_cookie=must-not-cross-the-proxy; Max-Age=60; Path=/",
-  );
-  globalThis.fetch = (async (input: RequestInfo | URL) =>
-    new Response(null, {
-      status: 401,
-      headers: input.toString().endsWith("/api/v1/auth/refresh")
-        ? deletionHeaders
-        : undefined,
-    })) as typeof fetch;
-
-  const response = await proxy(
-    new NextRequest("https://app.charitypilot.ie/compliance", {
-      headers: {
-        cookie: "charitypilot_access=expired; charitypilot_refresh=revoked",
-      },
-    }),
-  );
-
-  assert.equal(response.status, 307);
-  assert.equal(
-    response.headers.get("location"),
-    "https://app.charitypilot.ie/login?next=%2Fcompliance",
-  );
-  const forwardedCookies = response.headers.getSetCookie();
-  assert.equal(forwardedCookies.length, 2);
-  assert.ok(
-    forwardedCookies.some((cookie) =>
-      cookie.startsWith("charitypilot_access="),
-    ),
-  );
-  assert.ok(
-    forwardedCookies.some((cookie) =>
-      cookie.startsWith("charitypilot_refresh="),
-    ),
-  );
-  assert.ok(forwardedCookies.every((cookie) => /Max-Age=0/.test(cookie)));
-  assert.doesNotMatch(forwardedCookies.join("\n"), /unrelated_cookie/);
-});
-
-test("malformed deletion cookies and transient responses never cross the web boundary", async () => {
-  process.env.NODE_ENV = "production";
-  process.env.NEXT_PUBLIC_API_URL = "https://api.charitypilot.ie";
-
-  const malformedCases: Array<{ status: number; headers: Headers }> = [
-    {
-      status: 401,
-      headers: new Headers({
-        "Set-Cookie":
-          "charitypilot_access=; Max-Age=0; Path=/; HttpOnly; Secure; SameSite=Lax",
-      }),
-    },
-    { status: 401, headers: rotatedAuthCookieHeaders() },
-    {
-      status: 401,
-      headers: new Headers({
-        "Set-Cookie": [
-          "charitypilot_access=; Path=/; HttpOnly; Secure; SameSite=Lax",
-          "charitypilot_refresh=; Path=/; HttpOnly; Secure; SameSite=Lax",
-        ].join(", "),
-      }),
-    },
-    { status: 500, headers: deletedAuthCookieHeaders() },
-    { status: 429, headers: deletedAuthCookieHeaders() },
-  ];
-
-  for (const malformedCase of malformedCases) {
-    globalThis.fetch = (async (input: RequestInfo | URL) =>
-      new Response(null, {
-        status: input.toString().endsWith("/api/v1/auth/me")
-          ? 401
-          : malformedCase.status,
-        headers: input.toString().endsWith("/api/v1/auth/refresh")
-          ? malformedCase.headers
-          : undefined,
-      })) as typeof fetch;
-
-    const response = await proxy(
-      new NextRequest("https://app.charitypilot.ie/compliance", {
-        headers: {
-          cookie:
-            "charitypilot_access=expired; charitypilot_refresh=refresh-token",
-        },
-      }),
-    );
-
-    assert.equal(response.status, 503, String(malformedCase.status));
-    assert.equal(response.headers.get("location"), null);
-    assert.equal(response.headers.get("set-cookie"), null);
-  }
-});
-
-test("a 401 without a refresh cookie redirects without calling refresh", async () => {
-  process.env.NODE_ENV = "production";
-  process.env.NEXT_PUBLIC_API_URL = "https://api.charitypilot.ie";
-
-  const fetchCalls: string[] = [];
-  globalThis.fetch = (async (input: RequestInfo | URL) => {
-    fetchCalls.push(input.toString());
-    return new Response(null, { status: 401 });
-  }) as typeof fetch;
-
-  const response = await proxy(
-    new NextRequest("https://app.charitypilot.ie/compliance", {
-      headers: { cookie: "charitypilot_access=expired-access" },
-    }),
-  );
-
-  assert.equal(response.status, 307);
-  assert.deepEqual(fetchCalls, ["https://api.charitypilot.ie/api/v1/auth/me"]);
-});
-
-test("a successful refresh requires both valid nonempty rotated auth cookies", async () => {
-  process.env.NODE_ENV = "production";
-  process.env.NEXT_PUBLIC_API_URL = "https://api.charitypilot.ie";
-
-  for (const setCookie of [
-    null,
-    "charitypilot_access=rotated; Path=/; HttpOnly",
-    "charitypilot_refresh=rotated; Path=/; HttpOnly",
-    "unrelated_cookie=value; Path=/; HttpOnly",
-    [
-      "charitypilot_access=; Max-Age=0; Path=/; HttpOnly; Secure; SameSite=Lax",
-      "charitypilot_refresh=; Max-Age=0; Path=/; HttpOnly; Secure; SameSite=Lax",
-    ].join(", "),
-    [
-      "charitypilot_access=rotated; Path=/; HttpOnly; Secure; SameSite=Lax",
-      "charitypilot_refresh=rotated; Path=/; HttpOnly; Secure; SameSite=Lax",
-    ].join(", "),
-    [
-      "charitypilot_access=rotated; Max-Age=900; Path=/; HttpOnly; SameSite=Lax",
-      "charitypilot_refresh=rotated; Max-Age=604800; Path=/; HttpOnly; SameSite=Lax",
-    ].join(", "),
-  ]) {
-    globalThis.fetch = (async (input: RequestInfo | URL) =>
-      new Response(null, {
-        status: input.toString().endsWith("/api/v1/auth/me") ? 401 : 200,
-        headers: setCookie ? { "Set-Cookie": setCookie } : undefined,
-      })) as typeof fetch;
-
-    const response = await proxy(
-      new NextRequest("https://app.charitypilot.ie/compliance", {
-        headers: {
-          cookie:
-            "charitypilot_access=expired-access; charitypilot_refresh=refresh-token",
-        },
-      }),
-    );
-
-    assert.equal(response.status, 503, setCookie ?? "no cookie");
-    assert.equal(response.headers.get("location"), null);
-    assert.equal(response.headers.get("set-cookie"), null);
-  }
-});
-
-test("quoted unrelated cookies cannot fabricate auth rotation or deletion boundaries", async () => {
-  process.env.NODE_ENV = "production";
-  process.env.NEXT_PUBLIC_API_URL = "https://api.charitypilot.ie";
-
-  for (const mode of ["rotation", "deletion"] as const) {
-    for (const useFallback of [false, true]) {
-      globalThis.fetch = (async (input: RequestInfo | URL) => {
-        if (input.toString().endsWith("/api/v1/auth/me")) {
-          return new Response(null, { status: 401 });
-        }
-
-        const response = new Response(null, {
-          status: mode === "rotation" ? 200 : 401,
-          headers: forgedQuotedAuthCookieHeaders(mode),
-        });
-        return useFallback
-          ? forceCombinedSetCookieFallback(response)
-          : response;
-      }) as typeof fetch;
-
-      const response = await proxy(
-        new NextRequest("https://app.charitypilot.ie/compliance", {
-          headers: {
-            cookie:
-              "charitypilot_access=expired; charitypilot_refresh=refresh-token",
-          },
-        }),
-      );
-
-      assert.equal(response.status, 503, `${mode}/${useFallback}`);
-      assert.equal(response.headers.get("location"), null);
-      assert.equal(response.headers.get("set-cookie"), null);
-    }
-  }
-});
-
-test("combined Set-Cookie fallback accepts only the unambiguous auth contract", async () => {
-  process.env.NODE_ENV = "production";
-  process.env.NEXT_PUBLIC_API_URL = "https://api.charitypilot.ie";
-
-  for (const mode of ["rotation", "deletion"] as const) {
-    globalThis.fetch = (async (input: RequestInfo | URL) => {
-      if (input.toString().endsWith("/api/v1/auth/me")) {
-        return new Response(null, { status: 401 });
-      }
-
-      return forceCombinedSetCookieFallback(
-        new Response(null, {
-          status: mode === "rotation" ? 200 : 401,
-          headers:
-            mode === "rotation"
-              ? rotatedAuthCookieHeaders()
-              : deletedAuthCookieHeaders(),
-        }),
-      );
-    }) as typeof fetch;
-
-    const response = await proxy(
-      new NextRequest("https://app.charitypilot.ie/compliance", {
-        headers: {
-          cookie:
-            "charitypilot_access=expired; charitypilot_refresh=refresh-token",
-        },
-      }),
-    );
-
-    assert.equal(response.status, mode === "rotation" ? 200 : 307, mode);
-    assert.equal(response.headers.getSetCookie().length, 2);
   }
 });
 
@@ -677,7 +339,7 @@ test("personal-server production redirects public setup and billing entry points
   }
 });
 
-test("personal-server HTTPS uses the configured public origin across an internal HTTP proxy hop", async () => {
+test("personal-server HTTPS renewal uses the public origin across an internal HTTP proxy hop", async () => {
   process.env.NODE_ENV = "production";
   process.env.NEXT_PUBLIC_CHARITYPILOT_DEPLOYMENT_MODE = "personal-server";
   process.env.NEXT_PUBLIC_API_URL =
@@ -693,10 +355,7 @@ test("personal-server HTTPS uses the configured public origin across an internal
     if (input.toString().endsWith("/api/v1/auth/me")) {
       return new Response(null, { status: 401 });
     }
-    return new Response(null, {
-      status: 401,
-      headers: deletedAuthCookieHeaders(),
-    });
+    return new Response(null, { status: 401 });
   }) as typeof fetch;
 
   const response = await proxy(
@@ -712,14 +371,10 @@ test("personal-server HTTPS uses the configured public origin across an internal
 
   assert.deepEqual(fetchCalls, [
     { url: "http://api:3002/api/v1/auth/me", origin: null },
-    {
-      url: "http://api:3002/api/v1/auth/refresh",
-      origin: "https://charitypilot-board.example-tailnet.ts.net",
-    },
   ]);
   const redirect = new URL(response.headers.get("location") ?? "");
   assert.equal(redirect.origin, "https://charitypilot-board.example-tailnet.ts.net");
-  assert.equal(redirect.pathname, "/login");
+  assert.equal(redirect.pathname, "/session-renew");
   assert.equal(redirect.searchParams.get("next"), "/dashboard?view=board");
   const csp = response.headers.get("Content-Security-Policy") ?? "";
   assert.match(
@@ -866,17 +521,15 @@ test("the Confluence callback is never bounced to /login when no session cookie 
   assert.equal(wire.includes("/login"), false, wire);
 });
 
-test("the Confluence callback is never bounced to /login when the refresh is definitively rejected", async () => {
+test("the Confluence callback reaches its own renewal logic without server refresh", async () => {
   process.env.NODE_ENV = "production";
   process.env.NEXT_PUBLIC_API_URL = "https://api.charitypilot.ie";
 
-  globalThis.fetch = (async (input: RequestInfo | URL) =>
-    new Response(null, {
-      status: 401,
-      headers: input.toString().endsWith("/api/v1/auth/refresh")
-        ? deletedAuthCookieHeaders()
-        : undefined,
-    })) as typeof fetch;
+  const calls: string[] = [];
+  globalThis.fetch = (async (input: RequestInfo | URL) => {
+    calls.push(input.toString());
+    return new Response(null, { status: 401 });
+  }) as typeof fetch;
 
   const response = await proxy(
     callbackRequest(
@@ -887,9 +540,8 @@ test("the Confluence callback is never bounced to /login when the refresh is def
   assert.equal(response.headers.get("location"), null);
   assert.notEqual(response.status, 307);
   assert.equal(response.status, 200);
-  // The middleware still attempted the refresh and still forwards what it
-  // learned; only the redirect is withheld.
-  assert.equal(response.headers.getSetCookie().length, 2);
+  assert.deepEqual(calls, ['https://api.charitypilot.ie/api/v1/auth/me']);
+  assert.equal(response.headers.getSetCookie().length, 0);
 
   const wire = everythingOnTheWire(response);
   assert.equal(

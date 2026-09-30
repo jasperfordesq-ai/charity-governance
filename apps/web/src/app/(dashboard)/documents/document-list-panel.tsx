@@ -26,9 +26,20 @@ const formatFileSize = (bytes: number) => {
   return `${bytes} B`;
 };
 
+const memberCanRead = (doc: DocumentResponse) =>
+  doc.visibility === 'MEMBER_VISIBLE' && doc.contentAccessClass === 'MEMBER_SUITABLE' &&
+  doc.memberByteReviewVerified === true && doc.storageProviderVerified === true &&
+  doc.lifecycleStatus !== 'UNREVIEWED' && doc.lifecycleStatus !== 'DRAFT';
+
 export function DocumentListPanel({
   canManage,
   documents,
+  documentTotal,
+  hasMore,
+  listChanged,
+  loadingMore,
+  loadMoreError,
+  onLoadMore,
   loading,
   loadError,
   onRetry,
@@ -41,12 +52,21 @@ export function DocumentListPanel({
   unlinkingStandard,
   handleUnlinkStandard,
   confirmDelete,
+  openVisibilityModal,
+  openDocumentControl,
+  openProviderReview,
   mirrors,
   retryMirrorPublication,
   retryingMirror,
 }: {
   canManage: boolean;
   documents: DocumentResponse[];
+  documentTotal: number;
+  hasMore: boolean;
+  listChanged: boolean;
+  loadingMore: boolean;
+  loadMoreError: string;
+  onLoadMore: () => void | Promise<void>;
   loading: boolean;
   loadError: string;
   onRetry: () => void | Promise<void>;
@@ -59,6 +79,9 @@ export function DocumentListPanel({
   unlinkingStandard: string | null;
   handleUnlinkStandard: (docId: string, standardId: string) => void | Promise<void>;
   confirmDelete: (docId: string) => void;
+  openVisibilityModal: (docId: string) => void;
+  openDocumentControl: (docId: string, kind: 'lifecycle' | 'publication' | 'deletion-hold') => void;
+  openProviderReview: (docId: string) => void;
   /** Absent for a document whose mirror could not be read; the chip renders nothing. */
   mirrors: Map<string, ConfluenceMirror>;
   retryMirrorPublication: (docId: string) => void | Promise<void>;
@@ -121,8 +144,27 @@ export function DocumentListPanel({
                         <StatusChip tone="neutral">
                           {DOCUMENT_CATEGORY_LABELS[doc.category] ?? doc.category}
                         </StatusChip>
+                        {canManage ? <StatusChip tone={memberCanRead(doc) ? 'success' : 'warning'}>
+                          {memberCanRead(doc) ? 'Member release configured' : 'Restricted'}
+                        </StatusChip> : null}
+                        {canManage ? <StatusChip tone={doc.contentAccessClass === 'MEMBER_SUITABLE' && doc.memberByteReviewVerified === true ? 'success' : 'warning'}>
+                          {doc.contentAccessClass === 'MEMBER_SUITABLE' && doc.memberByteReviewVerified === true ? 'Content reviewed for Members' :
+                            doc.contentAccessClass === 'MEMBER_SUITABLE' ? 'Byte review required' :
+                            doc.contentAccessClass === 'RESTRICTED_SENSITIVE' ? 'Sensitive content' : 'Content unassessed'}
+                        </StatusChip> : null}
+                        <StatusChip tone={doc.lifecycleStatus === 'CURRENT' ? 'success' : 'neutral'}>{doc.lifecycleStatus}</StatusChip>
+                        {canManage && (doc.lifecycleStatus === 'SUPERSEDED' || (doc.lifecycleStatus === 'HISTORICAL' && doc.supersededByDocumentId)) ? <span className="text-xs text-default-600">
+                          {doc.supersededByDocumentId
+                            ? `Replaced by ${documents.find((candidate) => candidate.id === doc.supersededByDocumentId)?.name ?? doc.supersededByDocumentId}`
+                            : 'Replacement not recorded (legacy classification)'}
+                        </span> : null}
+                        {canManage && doc.externalPublicationApproved ? <StatusChip tone="warning">Confluence approved</StatusChip> : null}
+                        {canManage && doc.deletionHold ? <StatusChip tone="warning">Deletion hold</StatusChip> : null}
+                        {canManage && doc.storageProviderVerified === false ? <StatusChip tone="warning">Storage provider unverified</StatusChip> : null}
                       </div>
-                      {doc.description ? (
+                      {!canManage ? (
+                        <p className="mt-1 text-sm leading-6 text-gray-600 dark:text-gray-300">Additional document details are available to owners and administrators.</p>
+                      ) : doc.description ? (
                         <p className="mt-1 text-sm leading-6 text-gray-600 dark:text-gray-300">{doc.description}</p>
                       ) : (
                         <p className="mt-1 text-sm leading-6 text-gray-500 dark:text-gray-400">
@@ -130,18 +172,22 @@ export function DocumentListPanel({
                         </p>
                       )}
                       <dl className="mt-3 grid grid-cols-1 gap-2 text-xs text-gray-600 dark:text-gray-300 sm:grid-cols-2 lg:grid-cols-4">
-                        <div>
+                        {canManage ? <div>
+                          <dt className="font-medium text-gray-500 dark:text-gray-400">Vault record ID</dt>
+                          <dd className="break-all font-mono">{doc.id}</dd>
+                        </div> : null}
+                        {canManage ? <div>
                           <dt className="font-medium text-gray-500 dark:text-gray-400">Owner</dt>
                           <dd>{doc.owner || 'Unassigned'}</dd>
-                        </div>
+                        </div> : null}
                         <div>
                           <dt className="font-medium text-gray-500 dark:text-gray-400">Review date</dt>
                           <dd>{formatDate(doc.nextReviewDate)}</dd>
                         </div>
-                        <div>
+                        {canManage ? <div>
                           <dt className="font-medium text-gray-500 dark:text-gray-400">Minute reference</dt>
                           <dd>{doc.boardMinuteReference || 'Not recorded'}</dd>
-                        </div>
+                        </div> : null}
                         <div>
                           <dt className="font-medium text-gray-500 dark:text-gray-400">Uploaded</dt>
                           <dd>{formatDate(doc.createdAt)} ({formatFileSize(doc.fileSize)})</dd>
@@ -149,10 +195,17 @@ export function DocumentListPanel({
                       </dl>
                       <ConfluenceMirrorChip
                         mirror={mirrors.get(doc.id)}
+                        isCurrentDocument={doc.lifecycleStatus === 'CURRENT'}
+                        approvalNeedsReview={doc.externalPublicationApproved && mirrors.get(doc.id)?.approvalDestinationCurrent === false}
+                        approvalWithdrawnWithCopy={!doc.externalPublicationApproved &&
+                          (mirrors.get(doc.id)?.pageRecorded === true || mirrors.get(doc.id)?.publication === 'PUBLISHED')}
                         canManage={canManage}
                         retrying={retryingMirror === doc.id}
                         onRetry={() => retryMirrorPublication(doc.id)}
                       />
+                      {canManage && doc.lifecycleStatus !== 'DRAFT' ? <p className="mt-2 text-xs text-gray-600 dark:text-gray-300">
+                        Ordinary Vault deletion is limited to drafts. Classify unreviewed files first; retained evidence needs a separate retention and erasure decision.
+                      </p> : null}
                       <div className="mt-3 flex flex-wrap gap-2" aria-live="polite">
                         {(doc.standardLinks ?? []).length > 0 ? (
                           (doc.standardLinks ?? []).map((link) => {
@@ -196,6 +249,29 @@ export function DocumentListPanel({
                       {canManage ? <Button
                         size="sm"
                         variant="flat"
+                        aria-label={`Review access for ${doc.name}`}
+                        onPress={() => openVisibilityModal(doc.id)}
+                      >
+                        Access
+                      </Button> : null}
+                      {canManage && doc.lifecycleStatus !== 'HISTORICAL' ? <Button size="sm" variant="flat" aria-label={`Classify ${doc.name}`} onPress={() => openDocumentControl(doc.id, 'lifecycle')}>
+                        Lifecycle
+                      </Button> : null}
+                      {canManage && (doc.lifecycleStatus === 'CURRENT' || doc.externalPublicationApproved) ? <Button size="sm" variant="flat" aria-label={`Review Confluence publication for ${doc.name}`} onPress={() => openDocumentControl(doc.id, 'publication')}>
+                        {doc.externalPublicationApproved
+                          ? mirrors.get(doc.id)?.approvalDestinationCurrent === false && mirrors.get(doc.id)?.pageRecorded === false
+                            ? 'Reapprove destination' : 'Withdraw publication'
+                          : 'Approve publication'}
+                      </Button> : null}
+                      {canManage ? <Button size="sm" variant="flat" aria-label={`Review deletion hold for ${doc.name}`} onPress={() => openDocumentControl(doc.id, 'deletion-hold')}>
+                        {doc.deletionHold ? 'Release deletion hold' : 'Place deletion hold'}
+                      </Button> : null}
+                      {canManage && doc.storageProviderVerified === false ? <Button size="sm" variant="flat" aria-label={`Verify file storage for ${doc.name}`} onPress={() => openProviderReview(doc.id)}>
+                        Verify storage
+                      </Button> : null}
+                      {canManage && doc.lifecycleStatus === 'CURRENT' ? <Button
+                        size="sm"
+                        variant="flat"
                         aria-label={`Link ${doc.name} to a standard`}
                         onPress={() => openLinkModal(doc.id)}
                         isDisabled={linkingStandard || Boolean(unlinkingStandard)}
@@ -208,7 +284,7 @@ export function DocumentListPanel({
                         color="danger"
                         aria-label={`Delete ${doc.name}`}
                         onPress={() => confirmDelete(doc.id)}
-                        isDisabled={deleting || Boolean(downloadDocId)}
+                        isDisabled={deleting || Boolean(downloadDocId) || Boolean(doc.deletionHold) || doc.storageProviderVerified === false || doc.lifecycleStatus !== 'DRAFT'}
                       >
                         Delete
                       </Button> : null}
@@ -218,6 +294,21 @@ export function DocumentListPanel({
               ))}
             </div>
           </DataListItems>
+          <div className="space-y-2 border-t border-gray-200 px-4 py-3 text-sm dark:border-gray-800">
+            <p className="text-gray-600 dark:text-gray-300">
+              Showing {documents.length} of {documentTotal} documents.
+              {hasMore ? ' Load older files to continue the Vault review.' : ''}
+            </p>
+            {listChanged ? <ErrorState title="Vault changed during review" description="The loaded list no longer matches the current file count. Refresh before concluding that all files were reviewed." action={(
+              <Button size="sm" variant="flat" onPress={onRetry}>Refresh documents</Button>
+            )} /> : null}
+            {loadMoreError ? <ErrorState title="Older documents could not be loaded" description={loadMoreError} action={(
+              <Button size="sm" variant="flat" onPress={onLoadMore}>Try again</Button>
+            )} /> : null}
+            {hasMore ? <Button size="sm" variant="flat" onPress={onLoadMore} isLoading={loadingMore} isDisabled={loadingMore}>
+              Load older documents
+            </Button> : null}
+          </div>
         </div>
       )}
     </DataList>

@@ -66,6 +66,20 @@ async function buildApp(prismaOverrides: Record<string, unknown>, role: Role = '
   return app;
 }
 
+test('Owner connector cannot start a billing checkout or portal session by direct API call', async () => {
+  const app = await buildApp({ authSession: { findFirst: async () => ({
+    id: 'sess-1', clientKind: 'MCP_CONNECTOR', accessLevel: 'ADMIN',
+  }) } });
+  try {
+    for (const path of ['/billing/checkout', '/billing/create-checkout', '/billing/portal', '/billing/create-portal']) {
+      const response = await app.inject({ method: 'POST', url: path,
+        headers: { authorization: tokenFor('OWNER') } });
+      assert.equal(response.statusCode, 403, path);
+      assert.equal(response.json().code, 'WEB_SESSION_REQUIRED');
+    }
+  } finally { await app.close(); }
+});
+
 function checkoutLifecycleMocks() {
   let attempt: Record<string, unknown> | null = null;
   const subscription = { findUnique: async () => null };

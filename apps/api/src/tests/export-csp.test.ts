@@ -67,6 +67,7 @@ test('export HTML route sets a scoped CSP that allows its inline stylesheet', as
     complianceRecord: { findMany: async () => [] },
     complianceSignoff: { findUnique: async () => null },
     complianceApprovalSnapshot: { findFirst: async () => null },
+    complianceReportPreparationAudit: { create: async () => ({ id: 'report-audit-1' }) },
     conflictRecord: { findMany: async () => [] },
     riskRecord: { findMany: async () => [] },
     complaintRecord: { findMany: async () => [] },
@@ -189,6 +190,7 @@ test('Essentials exports do not include Complete-only governance registers', asy
     complianceRecord: { findMany: async () => [] },
     complianceSignoff: { findUnique: async () => null },
     complianceApprovalSnapshot: { findFirst: async () => null },
+    complianceReportPreparationAudit: { create: async () => ({ id: 'report-audit-1' }) },
     conflictRecord: {
       findMany: async () => {
         completeOnlyRegisterRead = true;

@@ -18,7 +18,7 @@ import {
   assertNonInteractiveConnectAllowed,
   assertApproveAllowed,
 } from './connect-input.js';
-import { Session } from './session.js';
+import { Session, SecondFactorRequiredError } from './session.js';
 import { startServer } from './server.js';
 import { ApiClient } from './client.js';
 import { redactSecrets } from './redact.js';
@@ -40,7 +40,7 @@ Commands (run these yourself, in a terminal):
                --access-level read|write|admin   (default: write)
                --data-scope withheld|full        (default: withheld)
                --email <address>
-               --code <digits>          The authenticator code (operator realm).
+               --code <digits>          The authenticator code for an enrolled account.
                --recovery-code <code>   Instead of --code, if it is lost.
   status       Who the stored credential resolves to, and the level the API holds.
   approve <id> Approve one action CharityPilot refused. Terminal only.
@@ -149,7 +149,18 @@ async function main(): Promise<void> {
     const password = config.passwordStdin
       ? await readPasswordFromStdin(stdin as AsyncIterable<Buffer>)
       : await prompt('Password (not shown): ', true);
-    const identity = await session.login(email, password);
+    let identity;
+    try {
+      identity = await session.login(email, password);
+    } catch (error) {
+      if (!(error instanceof SecondFactorRequiredError) || config.passwordStdin || !stdin.isTTY || config.code || config.recoveryCode) {
+        throw error;
+      }
+      stdout.write('This account needs its authenticator or a saved recovery code.\n');
+      const value = await prompt('Authenticator or recovery code (not shown): ', true);
+      identity = await session.login(email, password,
+        /^\d{6}$/.test(value) ? { code: value } : { recoveryCode: value });
+    }
     if (identity.realm === 'operator') {
       // What this credential cannot do is printed beside what it can, because
       // "platform operator" reads as "everything" and it deliberately is not.

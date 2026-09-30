@@ -48,7 +48,9 @@ export function TeamMembersPanel({
   return (
     <DataList
       title="Members"
-      description="Manage roles, membership access, and session families. Owner changes use the protected transfer workflow."
+      description={user?.role === UserRole.MEMBER
+        ? 'View active team members. Contact details, verification and former memberships are available to Owners and Admins.'
+        : 'Manage roles, membership access, and session families. Owner changes use the protected transfer workflow.'}
     >
       {loading ? (
         <LoadingState title="Loading team" description="Checking members and pending invites." />
@@ -71,6 +73,7 @@ export function TeamMembersPanel({
         <DataListItems>
           {team.members.map((member) => {
             const roleDisabledReason = roleEditDisabledReason(member);
+            const memberLabel = member.email ? `${member.name} (${member.email})` : member.name;
             return (
               <article key={member.id} className="p-4">
                 <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
@@ -80,9 +83,9 @@ export function TeamMembersPanel({
                       <StatusChip tone={ROLE_META[member.role].tone}>{ROLE_META[member.role].label}</StatusChip>
                       {member.lifecycleStatus === 'SUSPENDED' ? <ReviewFlag tone="needs-review">Suspended</ReviewFlag> : null}
                       {member.lifecycleStatus === 'REMOVED' ? <ReviewFlag tone="blocked">Removed</ReviewFlag> : null}
-                      {!member.emailVerified ? <ReviewFlag tone="needs-review">Email not verified</ReviewFlag> : null}
+                      {member.emailVerified === false ? <ReviewFlag tone="needs-review">Email not verified</ReviewFlag> : null}
                     </div>
-                    <p className="mt-1 break-words text-sm text-gray-600 dark:text-gray-300">{member.email}</p>
+                    {member.email ? <p className="mt-1 break-words text-sm text-gray-600 dark:text-gray-300">{member.email}</p> : null}
                     <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">Joined {formatDate(member.createdAt)}</p>
                     {member.activeSessionCount !== undefined ? (
                       <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
@@ -118,7 +121,7 @@ export function TeamMembersPanel({
                         size="sm"
                         variant="flat"
                         isDisabled={managementDisabled}
-                        aria-label={`Manage sessions for ${member.name} (${member.email})`}
+                        aria-label={`Manage sessions for ${memberLabel}`}
                         onPress={() => onViewSessions(member)}
                       >
                         Manage sessions
@@ -132,7 +135,7 @@ export function TeamMembersPanel({
                             color="warning"
                             variant="flat"
                             isDisabled={managementDisabled}
-                            aria-label={`Suspend ${member.name} (${member.email})`}
+                            aria-label={`Suspend ${memberLabel}`}
                             onPress={() => onLifecycleAction(member, 'suspend')}
                           >
                             Suspend
@@ -143,7 +146,7 @@ export function TeamMembersPanel({
                             color="primary"
                             variant="flat"
                             isDisabled={managementDisabled}
-                            aria-label={`Reactivate ${member.name} (${member.email})`}
+                            aria-label={`Reactivate ${memberLabel}`}
                             onPress={() => onLifecycleAction(member, 'reactivate')}
                           >
                             Reactivate
@@ -155,7 +158,7 @@ export function TeamMembersPanel({
                             color="danger"
                             variant="flat"
                             isDisabled={managementDisabled}
-                            aria-label={`Remove ${member.name} (${member.email})`}
+                            aria-label={`Remove ${memberLabel}`}
                             onPress={() => onLifecycleAction(member, 'remove')}
                           >
                             Remove
@@ -169,7 +172,7 @@ export function TeamMembersPanel({
                         color="danger"
                         variant="bordered"
                         isDisabled={managementDisabled}
-                        aria-label={`Transfer ownership to ${member.name} (${member.email})`}
+                        aria-label={`Transfer ownership to ${memberLabel}`}
                         onPress={() => onTransferOwnership(member)}
                       >
                         Transfer ownership

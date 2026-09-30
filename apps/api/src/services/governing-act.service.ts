@@ -17,6 +17,7 @@ import {
 import { AppError } from '../utils/errors.js';
 
 const toDate = (value?: string | null) => (value ? new Date(value) : null);
+const auditSnapshot = (value: unknown): Prisma.InputJsonValue => JSON.parse(JSON.stringify(value)) as Prisma.InputJsonValue;
 
 // Rule 2: minutes are not evidence until the governing act is APPROVED.
 const EVIDENCED_STATUSES: GoverningActStatus[] = ['APPROVED'];
@@ -132,11 +133,13 @@ export class GoverningActService {
     return act;
   }
 
-  async create(organisationId: string, data: CreateGoverningActRequest): Promise<GoverningAct> {
-    if (data.approvedAtActId) {
-      await this.requireGoverningAct(organisationId, data.approvedAtActId);
-    }
-    return this.prisma.governingAct.create({
+  async create(organisationId: string, data: CreateGoverningActRequest, actorUserId: string): Promise<GoverningAct> {
+    return this.prisma.$transaction(async (tx) => {
+      if (data.approvedAtActId) {
+        const approvingAct = await tx.governingAct.findFirst({ where: { id: data.approvedAtActId, organisationId } });
+        if (!approvingAct) throw govActNotFound();
+      }
+      const created = await tx.governingAct.create({
       data: {
         organisationId,
         kind: data.kind,
@@ -151,6 +154,12 @@ export class GoverningActService {
         notes: data.notes ?? null,
       },
       include: { resolutions: true },
+      });
+      await tx.minuteBookChangeAudit.create({ data: {
+        organisationId, recordKind: 'ACT', recordId: created.id, action: 'CREATE',
+        actorUserId, afterState: auditSnapshot(created),
+      } });
+      return created;
     });
   }
 
@@ -158,11 +167,13 @@ export class GoverningActService {
     organisationId: string,
     id: string,
     data: UpdateGoverningActRequest,
+    actorUserId: string,
   ): Promise<GoverningAct> {
     const { expectedUpdatedAt, ...changes } = data;
     const expectedInstant = new Date(expectedUpdatedAt);
 
-    const act = await this.prisma.governingAct.findFirst({ where: { id, organisationId } });
+    return this.prisma.$transaction(async (tx) => {
+    const act = await tx.governingAct.findFirst({ where: { id, organisationId }, include: { resolutions: true } });
     if (!act) throw govActNotFound();
     if (act.updatedAt.getTime() !== expectedInstant.getTime()) {
       throw new AppError(
@@ -173,10 +184,11 @@ export class GoverningActService {
     }
 
     if (changes.approvedAtActId) {
-      await this.requireGoverningAct(organisationId, changes.approvedAtActId);
+      const approvingAct = await tx.governingAct.findFirst({ where: { id: changes.approvedAtActId, organisationId } });
+      if (!approvingAct) throw govActNotFound();
     }
 
-    const updated = await this.prisma.governingAct.updateMany({
+    const updated = await tx.governingAct.updateMany({
       where: { id, organisationId, updatedAt: expectedInstant },
       data: {
         ...(changes.kind !== undefined ? { kind: changes.kind } : {}),
@@ -200,10 +212,16 @@ export class GoverningActService {
       );
     }
 
-    return (await this.prisma.governingAct.findFirst({
+    const result = (await tx.governingAct.findFirst({
       where: { id, organisationId },
       include: { resolutions: true },
     }))!;
+    await tx.minuteBookChangeAudit.create({ data: {
+      organisationId, recordKind: 'ACT', recordId: id, action: 'UPDATE', actorUserId,
+      beforeState: auditSnapshot(act), afterState: auditSnapshot(result),
+    } });
+    return result;
+    });
   }
 
   /**
@@ -228,9 +246,12 @@ export class GoverningActService {
     organisationId: string,
     governingActId: string,
     data: CreateResolutionRequest,
+    actorUserId: string,
   ): Promise<Resolution> {
-    await this.requireGoverningAct(organisationId, governingActId);
-    return this.prisma.resolution.create({
+    return this.prisma.$transaction(async (tx) => {
+      const act = await tx.governingAct.findFirst({ where: { id: governingActId, organisationId } });
+      if (!act) throw govActNotFound();
+      const created = await tx.resolution.create({
       data: {
         organisationId,
         governingActId,
@@ -240,6 +261,12 @@ export class GoverningActService {
         abstentions: data.abstentions ?? null,
         conflictRecordId: data.conflictRecordId ?? null,
       },
+      });
+      await tx.minuteBookChangeAudit.create({ data: {
+        organisationId, recordKind: 'RESOLUTION', recordId: created.id, action: 'CREATE',
+        actorUserId, afterState: auditSnapshot(created),
+      } });
+      return created;
     });
   }
 
@@ -247,11 +274,13 @@ export class GoverningActService {
     organisationId: string,
     resolutionId: string,
     data: UpdateResolutionRequest,
+    actorUserId: string,
   ): Promise<Resolution> {
     const { expectedUpdatedAt, ...changes } = data;
     const expectedInstant = new Date(expectedUpdatedAt);
 
-    const resolution = await this.prisma.resolution.findFirst({
+    return this.prisma.$transaction(async (tx) => {
+    const resolution = await tx.resolution.findFirst({
       where: { id: resolutionId, organisationId },
     });
     if (!resolution) throw resolutionNotFound();
@@ -263,7 +292,7 @@ export class GoverningActService {
       );
     }
 
-    const updated = await this.prisma.resolution.updateMany({
+    const updated = await tx.resolution.updateMany({
       where: { id: resolutionId, organisationId, updatedAt: expectedInstant },
       data: {
         ...(changes.text !== undefined ? { text: changes.text } : {}),
@@ -282,12 +311,42 @@ export class GoverningActService {
       );
     }
 
-    return (await this.prisma.resolution.findFirst({ where: { id: resolutionId, organisationId } }))!;
+    const result = (await tx.resolution.findFirst({ where: { id: resolutionId, organisationId } }))!;
+    await tx.minuteBookChangeAudit.create({ data: {
+      organisationId, recordKind: 'RESOLUTION', recordId: resolutionId, action: 'UPDATE', actorUserId,
+      beforeState: auditSnapshot(resolution), afterState: auditSnapshot(result),
+    } });
+    return result;
+    });
   }
 
-  async getBoardSubmissions(organisationId: string): Promise<BoardSubmissionsResponse> {
+  async listChanges(organisationId: string, before?: string) {
+    const anchor = before ? await this.prisma.minuteBookChangeAudit.findFirst({
+      where: { id: before, organisationId }, select: { id: true, occurredAt: true },
+    }) : null;
+    if (before && !anchor) {
+      throw new AppError(404, 'MINUTE_BOOK_AUDIT_CURSOR_NOT_FOUND', 'Minute Book change cursor not found');
+    }
+    const rows = await this.prisma.minuteBookChangeAudit.findMany({
+      where: { organisationId, ...(anchor ? { OR: [
+        { occurredAt: { lt: anchor.occurredAt } },
+        { occurredAt: anchor.occurredAt, id: { lt: anchor.id } },
+      ] } : {}) },
+      orderBy: [{ occurredAt: 'desc' }, { id: 'desc' }], take: 51,
+    });
+    const items = rows.slice(0, 50);
+    return { items, nextCursor: rows.length > 50 ? items.at(-1)!.id : null };
+  }
+
+  async getBoardSubmissions(organisationId: string, viewerRole: 'OWNER' | 'ADMIN' | 'MEMBER' = 'OWNER'): Promise<BoardSubmissionsResponse> {
     const documents = await this.prisma.document.findMany({
-      where: { organisationId },
+      // Historical, draft and unreviewed files remain in the Vault, but may
+      // never be presented as current board-submission evidence.
+      where: viewerRole === 'MEMBER'
+        ? { organisationId, lifecycleStatus: 'CURRENT', visibility: 'MEMBER_VISIBLE',
+          contentAccessClass: 'MEMBER_SUITABLE', memberReviewedSha256: { not: null },
+          storageProvider: { in: ['local', 'supabase'] } }
+        : { organisationId, lifecycleStatus: 'CURRENT' },
       include: {
         approvedByResolution: {
           include: {
@@ -355,10 +414,12 @@ export class GoverningActService {
     approvedByResolutionId: string | null | undefined,
     approvalAsserted: boolean | undefined,
     expectedUpdatedAt: string,
+    actorUserId: string,
   ): Promise<void> {
     const expectedInstant = new Date(expectedUpdatedAt);
 
-    const doc = await this.prisma.document.findFirst({ where: { id: documentId, organisationId } });
+    await this.prisma.$transaction(async (tx) => {
+    const doc = await tx.document.findFirst({ where: { id: documentId, organisationId } });
     if (!doc) throw new AppError(404, 'DOCUMENT_NOT_FOUND', 'Document not found');
     if (doc.updatedAt.getTime() !== expectedInstant.getTime()) {
       throw new AppError(
@@ -368,10 +429,14 @@ export class GoverningActService {
       );
     }
 
+    if (approvedByResolutionId === undefined && approvalAsserted === undefined) {
+      throw new AppError(400, 'DOCUMENT_APPROVAL_CHANGE_REQUIRED', 'Choose a Board approval field to change.');
+    }
+
     // Rule 1: require a resolution for any true approval.
     // approvalAsserted=true without a resolution is permitted (shows as "asserted, not evidenced").
     if (approvedByResolutionId) {
-      const resolution = await this.prisma.resolution.findFirst({
+      const resolution = await tx.resolution.findFirst({
         where: { id: approvedByResolutionId, organisationId },
         include: {
           governingAct: { select: { id: true, status: true, reference: true } },
@@ -391,7 +456,13 @@ export class GoverningActService {
       }
     }
 
-    const updated = await this.prisma.document.updateMany({
+    const nextResolutionId = approvedByResolutionId === undefined ? doc.approvedByResolutionId : approvedByResolutionId;
+    const nextApprovalAsserted = approvalAsserted === undefined ? doc.approvalAsserted : approvalAsserted;
+    if (nextResolutionId === doc.approvedByResolutionId && nextApprovalAsserted === doc.approvalAsserted) {
+      return;
+    }
+
+    const updated = await tx.document.updateMany({
       where: { id: documentId, organisationId, updatedAt: expectedInstant },
       data: {
         ...(approvedByResolutionId !== undefined ? { approvedByResolutionId } : {}),
@@ -409,11 +480,21 @@ export class GoverningActService {
         'This document changed since it was loaded. Refresh and review the latest values.',
       );
     }
+    await tx.documentControlAudit.create({ data: {
+      organisationId, documentId, actorUserId, kind: 'BOARD_APPROVAL',
+      previous: JSON.stringify({ approvedByResolutionId: doc.approvedByResolutionId, approvalAsserted: doc.approvalAsserted }),
+      next: JSON.stringify({
+        approvedByResolutionId: nextResolutionId,
+        approvalAsserted: nextApprovalAsserted,
+      }),
+      reason: 'Board approval evidence changed.',
+    } });
+    });
   }
 
   /**
-   * Permanently remove a governing act and its resolutions, retaining a full
-   * snapshot in the audit trail.
+   * Remove a governing act and its resolutions from the active Minute Book,
+   * retaining a full snapshot in the audit trail without an automatic expiry.
    *
    * Marking a false record SUPERSEDED is not enough: it still reads as an act
    * that genuinely occurred, and anyone scanning the minute book sees a real
@@ -592,9 +673,4 @@ export class GoverningActService {
     });
   }
 
-  private async requireGoverningAct(organisationId: string, id: string): Promise<GoverningAct> {
-    const act = await this.prisma.governingAct.findFirst({ where: { id, organisationId } });
-    if (!act) throw govActNotFound();
-    return act;
-  }
 }

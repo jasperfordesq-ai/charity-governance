@@ -649,6 +649,40 @@ test('production preflight accepts only the canonical storage deletion timeout r
   }
 });
 
+test('production preflight keeps upload timeout below orphan-reservation reconciliation age', () => {
+  for (const value of ['', '100', '300000', '1800000']) {
+    const issues = validateProductionEnvContent(
+      completeProductionEnv({ STORAGE_UPLOAD_TIMEOUT_MS: value }),
+      validRuntimeWebApiUrlEnv,
+    );
+    assert.equal(issues.some((issue) => issue.startsWith('STORAGE_UPLOAD_TIMEOUT_MS ')), false, value);
+  }
+  for (const value of ['99', '1800001', '0300000', '100.0', '+100', 'REPLACE_ME']) {
+    const issues = validateProductionEnvContent(
+      completeProductionEnv({ STORAGE_UPLOAD_TIMEOUT_MS: value }),
+      validRuntimeWebApiUrlEnv,
+    );
+    assert.ok(issues.includes('STORAGE_UPLOAD_TIMEOUT_MS must be a canonical integer from 100 to 1800000'), value);
+  }
+});
+
+test('production preflight bounds the risk-control review scan interval', () => {
+  for (const value of ['', '3600000', '86400000', '604800000']) {
+    const issues = validateProductionEnvContent(
+      completeProductionEnv({ RISK_CONTROL_REVIEW_INTERVAL_MS: value }),
+      validRuntimeWebApiUrlEnv,
+    );
+    assert.equal(issues.some((issue) => issue.startsWith('RISK_CONTROL_REVIEW_INTERVAL_MS ')), false, value);
+  }
+  for (const value of ['3599999', '604800001', '086400000', '1.0', 'REPLACE_ME']) {
+    const issues = validateProductionEnvContent(
+      completeProductionEnv({ RISK_CONTROL_REVIEW_INTERVAL_MS: value }),
+      validRuntimeWebApiUrlEnv,
+    );
+    assert.ok(issues.includes('RISK_CONTROL_REVIEW_INTERVAL_MS must be a canonical integer from 3600000 to 604800000'), value);
+  }
+});
+
 test('production preflight requires recovery-compatible PostgreSQL TLS and read-write targeting', () => {
   const invalidDatabaseUrls = [
     'postgresql://user:pass@db.charitypilot.ie:5432/charitypilot?sslmode=require&target_session_attrs=read-write',
@@ -773,6 +807,7 @@ test('production template and job containers wire document deletion recovery con
   const productionScheduler = composeServiceBlock(compose, 'production-scheduler');
   const documentStorageCleanup = composeServiceBlock(compose, 'document-storage-cleanup');
 
+  assert.match(template, /^STORAGE_UPLOAD_TIMEOUT_MS=300000$/m);
   assert.match(template, /^STORAGE_DELETE_TIMEOUT_MS=5000$/m);
   assert.match(
     template,
@@ -2903,6 +2938,7 @@ test('production Docker compose isolates maintenance migrations and keeps web aw
     /SECURITY_EMAIL_PROVIDER_TIMEOUT_MS:\s+\$\{SECURITY_EMAIL_PROVIDER_TIMEOUT_MS:-8000\}/,
   );
   assert.match(productionScheduler, /AUTH_DELIVERY_INTERVAL_MS:\s+\$\{AUTH_DELIVERY_INTERVAL_MS:-5000\}/);
+  assert.match(productionScheduler, /RISK_CONTROL_REVIEW_INTERVAL_MS:\s+\$\{RISK_CONTROL_REVIEW_INTERVAL_MS:-86400000\}/);
   assert.match(productionScheduler, /AUTH_DELIVERY_BATCH_SIZE:\s+\$\{AUTH_DELIVERY_BATCH_SIZE:-25\}/);
   assert.match(
     productionScheduler,
@@ -3425,7 +3461,7 @@ test('plain English launch guide names every final approval role', () => {
   assert.doesNotMatch(launchGuide, /prior full accessibility suite passed 25\/25 checks before `\/about` was added/);
   assert.doesNotMatch(launchGuide, /full accessibility suite must be rerun for the final release transcript/);
   assert.match(launchGuide, /deployed production QA remains a launch gate/i);
-  assert.match(launchGuide, /89 machine-readable launch evidence checks/);
+  assert.match(launchGuide, /90 machine-readable launch evidence checks/);
   assert.match(launchGuide, /AUTH_RECOVERY_SECRET/);
   assert.match(launchGuide, /CHARITYPILOT_DATABASE_COMPATIBILITY=p107a-password-recovery-v1/);
   assert.match(launchGuide, /browserQa\.checks\.accessibility-coverage/);
@@ -4448,9 +4484,9 @@ test('public API user and organisation responses omit internal provider and cred
 
   assert.match(
     authService,
-    /organisation:\s*\{\s*select:\s*\{\s*\.\.\.publicOrganisationSelect,\s*lifecycleStatus:\s*true/,
+    /organisation:\s*\{\s*select:\s*\{\s*\.\.\.\(role === 'MEMBER' \? memberOrganisationSelect : publicOrganisationSelect\),\s*lifecycleStatus:\s*true/,
   );
-  assert.match(teamService, /organisation:\s*\{\s*select:\s*publicOrganisationSelect\s*\}/);
+  assert.match(teamService, /organisation:\s*\{\s*select:\s*invite\.role === 'MEMBER' \? memberOrganisationSelect : publicOrganisationSelect/);
   assert.match(organisationService, /select:\s*publicOrganisationSelect/);
   assert.match(authRoutes, /publicUser\(result\.user\)/);
   assert.match(authRoutes, /publicUser\(user\)/);
@@ -4637,12 +4673,15 @@ test('web proxy preserves protected-route redirect and no-cache behavior', () =>
     const nextBuilders = [
       ...source.matchAll(/(?:set\(\s*["']next["'],|next=\$\{)[\s\S]{0,160}?\)/g),
     ].map((match) => match[0]);
-    assert.equal(nextBuilders.length, 1, `${name}: exactly one place builds a next value`);
-    assert.match(
-      nextBuilders[0],
-      /safeNextValue\(/,
-      `${name}: a next value must be built by the shared scrubber, never by hand`,
-    );
+    const expectedBuilders = name === 'apps/web/src/proxy.ts' ? 2 : 1;
+    assert.equal(nextBuilders.length, expectedBuilders, `${name}: expected login and renewal redirect builders`);
+    for (const builder of nextBuilders) {
+      assert.match(
+        builder,
+        /safeNextValue\(/,
+        `${name}: a next value must be built by the shared scrubber, never by hand`,
+      );
+    }
   }
   assert.match(layout, /from '@\/lib\/dashboard-session-gate'/);
   assert.match(redirectToLogin, /NextResponse\.redirect\(loginUrl\)/);
@@ -4666,7 +4705,7 @@ test('web proxy preserves protected-route redirect and no-cache behavior', () =>
     /NextResponse\.next/,
     'a protected route must never render through a bare NextResponse.next that skips the no-store headers',
   );
-  assert.match(protectedBranch, /return protectedPassThrough\(request, nonce, csp, authSession\.setCookieHeaders\)/);
+  assert.match(protectedBranch, /return protectedPassThrough\(request, nonce, csp\)/);
 
   // The Confluence callback renews the session itself, so it is let through
   // rather than redirected — a `/login?next=…` for that path would carry a
@@ -4715,38 +4754,31 @@ test('web proxy validates protected sessions with API auth authority before rend
   assert.match(proxy, /new URL\(pathname,\s*getServerApiBaseUrl\(\)\)/);
   assert.doesNotMatch(proxy, /process\.env\.NEXT_PUBLIC_API_URL\?\.trim\(\)\s*\|\|/);
   assert.match(proxy, /type ProtectedAuthSession\s*=/);
-  assert.match(proxy, /state:\s*["']authenticated["'];\s*setCookieHeaders:\s*string\[\]/);
-  assert.match(proxy, /state:\s*["']unauthenticated["'];\s*setCookieHeaders:\s*string\[\]/);
-  assert.match(proxy, /state:\s*["']unavailable["'];\s*setCookieHeaders:\s*\[\];\s*retryAfter:\s*string/);
+  assert.match(proxy, /state:\s*["']authenticated["']/);
+  assert.match(proxy, /state:\s*["']unauthenticated["']/);
+  assert.match(proxy, /state:\s*["']unavailable["'];\s*retryAfter:\s*string/);
   assert.match(proxy, /async function validateProtectedAuthSession\(/);
   assert.match(proxy, /\): Promise<ProtectedAuthSession> \{/);
   assert.match(proxy, /createApiAuthUrl\(["']\/api\/v1\/auth\/me["']\)/);
-  assert.match(proxy, /createApiAuthUrl\(["']\/api\/v1\/auth\/refresh["']\)/);
+  assert.doesNotMatch(proxy, /createApiAuthUrl\(["']\/api\/v1\/auth\/refresh["']\)/);
   assert.match(proxy, /fetch\(authUrl/);
-  assert.match(proxy, /fetch\(refreshUrl/);
+  assert.doesNotMatch(proxy, /fetch\(refreshUrl/);
   assert.match(proxy, /cache:\s*["']no-store["']/);
   assert.match(proxy, /redirect:\s*["']manual["']/);
   assert.equal(
     (proxy.match(/signal:\s*AbortSignal\.timeout\(AUTH_VALIDATION_TIMEOUT_MS\)/g) ?? []).length,
-    2,
-    'both auth authority requests must have a bounded timeout',
+    1,
+    'the read-only auth authority request must have a bounded timeout',
   );
   assert.match(proxy, /if \(response\.status !== 401\) return unavailableAuthSession\(response\)/);
   assert.equal(
     (proxy.match(/response\.status === 200/g) ?? []).length,
-    2,
-    'both auth authority responses must require exact HTTP 200',
+    1,
+    'the read-only auth authority response must require exact HTTP 200',
   );
   assert.doesNotMatch(proxy, /response\.ok/);
-  assert.match(proxy, /validatedAuthCookieHeaders\(\s*response\.headers,\s*["']rotation["']/);
-  assert.match(
-    proxy,
-    /response\.status === 401[\s\S]*?validatedAuthCookieHeaders\(\s*response\.headers,\s*["']deletion["']/,
-  );
-  assert.match(proxy, /getSetCookie\.call\(headers\)\.map/);
-  assert.doesNotMatch(proxy, /getSetCookie\.call\(headers\)\.flatMap/);
-  assert.match(proxy, /COOKIE_HEADER_CONTROL_PATTERN/);
-  assert.match(proxy, /selectedCookies\.some\(\(cookies\) => cookies\.length !== 1\)/);
+  assert.doesNotMatch(proxy, /getSetCookie\.call\(headers\)/);
+  assert.doesNotMatch(proxy, /COOKIE_HEADER_CONTROL_PATTERN/);
   assert.match(proxy, /status:\s*503/);
   assert.match(
     protectedBranch,
@@ -4754,17 +4786,16 @@ test('web proxy validates protected sessions with API auth authority before rend
   );
   assert.match(
     protectedBranch,
-    /authSession\.state === ["']unauthenticated["'][\s\S]*?redirectToLogin\(request, csp, authSession\.setCookieHeaders\)/,
+    /authSession\.state === ["']unauthenticated["'][\s\S]*?redirectToSessionRenew\(request, csp\)[\s\S]*?: redirectToLogin\(request, csp\)/,
   );
   assert.match(proxy, /protectedAuthCookieHeader\(request\)/);
   assert.match(proxy, /Cookie:\s*cookieHeader/);
-  assert.match(proxy, /return addSetCookieHeaders\(response, setCookieHeaders\)/);
-  assert.match(proxy, /return protectedPassThrough\(request, nonce, csp, authSession\.setCookieHeaders\)/);
+  assert.match(proxy, /return protectedPassThrough\(request, nonce, csp\)/);
   assert.ok(protectedBranch, 'protected proxy branch must still check missing auth cookies first');
   assert.match(protectedBranch, /await validateProtectedAuthSession\(request\)/);
   assert.ok(
     protectedBranch.indexOf('await validateProtectedAuthSession(request)') <
-      protectedBranch.indexOf('return protectedPassThrough(request, nonce, csp, authSession.setCookieHeaders)'),
+      protectedBranch.lastIndexOf('return protectedPassThrough(request, nonce, csp)'),
     'protected content must not render until the API auth session check succeeds',
   );
 });
@@ -4801,13 +4832,14 @@ test('document metadata responses do not expose internal storage object keys', (
   assert.doesNotMatch(documentResponse, /fileUrl/);
 
   assert.match(documentService, /function publicDocument/);
-  assert.match(documentService, /data\.map\(publicDocument\)/);
-  assert.match(documentService, /return publicDocument\(doc\)/);
+  assert.match(documentService, /data\.map\(\(doc\) => publicDocument\(doc\)\)/);
+  assert.match(documentService, /data\.map\(\(doc\) => publicDocument\(doc, true\)\)/);
+  assert.match(documentService, /return publicDocument\(doc(?:, true)?\)/);
   assert.match(documentService, /async getDownloadDescriptor/);
   assert.doesNotMatch(documentService, /return doc;\s*$/m);
   assert.match(
     documentRoutes,
-    /service\.getDownloadDescriptor\(\s*request\.user\.organisationId,\s*request\.params\.id,?\s*\)/,
+    /service\.getDownloadDescriptor\(\s*request\.user\.organisationId,\s*request\.params\.id,\s*request\.user\.role,?\s*\)/,
   );
   assert.match(documentRoutes, /storageService\.downloadFile\(/);
   assert.doesNotMatch(documentRoutes, /doc\.fileUrl/);
@@ -5733,6 +5765,11 @@ function requiredProductionEnvVariables() {
     ...[...body.matchAll(/'([A-Z][A-Z0-9_]{2,})'/g)].map((match) => match[1]),
     ...[...PRODUCTION_ENV_GUARD_VARIABLES.values()].flat(),
   ]);
+  // This loop rejects test-only endpoint overrides when present. Its quoted
+  // variable names are not inputs the production workflows must supply.
+  assert.match(body, /for \(const key of \['CHARITYPILOT_FAKE_ATLASSIAN', 'CHARITYPILOT_FAKE_ATLASSIAN_BASE_URL'\]\)/);
+  required.delete('CHARITYPILOT_FAKE_ATLASSIAN');
+  required.delete('CHARITYPILOT_FAKE_ATLASSIAN_BASE_URL');
   return [...required].sort();
 }
 

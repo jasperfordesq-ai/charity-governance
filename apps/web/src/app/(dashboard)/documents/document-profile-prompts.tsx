@@ -38,7 +38,9 @@ export function buildDocumentProfilePrompts(profile: ConditionalProfile | undefi
       );
       const linkedEvidenceCount = documents.reduce(
         (total, doc) =>
-          total + (doc.standardLinks ?? []).filter((link) => rule.standardCodes.includes(link.standardCode)).length,
+          total + (doc.lifecycleStatus === 'CURRENT'
+            ? (doc.standardLinks ?? []).filter((link) => rule.standardCodes.includes(link.standardCode)).length
+            : 0),
         0,
       );
 

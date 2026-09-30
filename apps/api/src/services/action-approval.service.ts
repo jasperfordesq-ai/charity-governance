@@ -30,6 +30,25 @@ export interface ApprovalCaller {
   organisationId: string;
 }
 
+/** A refusal never records the offered capability ID, password or reason. */
+export async function recordApprovalRefusal(
+  prisma: PrismaClient,
+  caller: ApprovalCaller,
+  clientKind: 'WEB' | 'MCP_CONNECTOR',
+): Promise<void> {
+  await prisma.securityAuditEvent.create({ data: {
+    organisationId: caller.organisationId,
+    type: 'ACTION_APPROVAL_REFUSED',
+    actorKind: 'USER',
+    actorUserId: caller.userId,
+    actorLabel: caller.userId,
+    subjectUserId: caller.userId,
+    subjectLabel: caller.userId,
+    reason: 'An action approval grant attempt was refused. The cause is intentionally undisclosed.',
+    context: { clientKind },
+  } });
+}
+
 export interface PendingApproval {
   approvalId: string;
   summary: string;

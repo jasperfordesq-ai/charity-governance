@@ -84,6 +84,19 @@ export const publicOrganisationSelect = {
   updatedAt: true,
 } satisfies Record<keyof PublicOrganisationSource, true>;
 
+export const memberOrganisationSelect = {
+  ...publicOrganisationSelect,
+  registeredAddress: false,
+  contactEmail: false,
+  contactPhone: false,
+  conditionalObligationProfile: false,
+} as const;
+
+export type MemberOrganisationSource = Omit<
+  PublicOrganisationSource,
+  'registeredAddress' | 'contactEmail' | 'contactPhone' | 'conditionalObligationProfile'
+>;
+
 export type PublicUserSource = {
   id: string;
   email: string;
@@ -132,6 +145,22 @@ export function publicOrganisation(organisation: PublicOrganisationSource): Publ
   };
 }
 
+export function publicMemberOrganisation(organisation: MemberOrganisationSource): PublicOrganisation {
+  // A small charity's registered address can be a trustee's home address.
+  // Build the same response shape without needing those fields in the source.
+  return publicOrganisation(memberOrganisationSource(organisation));
+}
+
+export function memberOrganisationSource(organisation: MemberOrganisationSource): PublicOrganisationSource {
+  return {
+    ...organisation,
+    registeredAddress: null,
+    contactEmail: null,
+    contactPhone: null,
+    conditionalObligationProfile: null,
+  };
+}
+
 export function publicUser(user: PublicUserSource) {
   return {
     id: user.id,
@@ -140,6 +169,8 @@ export function publicUser(user: PublicUserSource) {
     role: user.role,
     emailVerified: user.emailVerified,
     organisationId: user.organisationId,
-    organisation: publicOrganisation(user.organisation),
+    organisation: user.role === 'MEMBER'
+      ? publicMemberOrganisation(user.organisation)
+      : publicOrganisation(user.organisation),
   };
 }

@@ -55,6 +55,44 @@ test('board member list scopes findMany and count to the organisation', async ()
   assert.deepEqual((count?.args as { where: unknown }).where, { organisationId: 'org_1' });
 });
 
+test('Member board reads project only ordinary trustee evidence at the database boundary', async () => {
+  for (const role of ['MEMBER', 'ADMIN'] as const) {
+    const reads: Array<Record<string, unknown>> = [];
+    const app = Fastify({ logger: false });
+    app.decorate('prisma', {
+      ...authModels(role, activeSubscription()),
+      boardMember: {
+        findMany: async (args: Record<string, unknown>) => { reads.push(args); return []; },
+        count: async () => 0,
+        findFirst: async (args: Record<string, unknown>) => { reads.push(args); return { id: 'bm-1', name: 'A Trustee' }; },
+      },
+    } as never);
+    await app.register(boardMemberRoutes);
+    try {
+      const list = await app.inject({ method: 'GET', url: '/', headers: { authorization: tokenFor(role) } });
+      const detail = await app.inject({ method: 'GET', url: '/bm-1', headers: { authorization: tokenFor(role) } });
+      assert.equal(list.statusCode, 200);
+      assert.equal(detail.statusCode, 200);
+      assert.equal(reads.length, 2);
+      for (const read of reads) {
+        assert.deepEqual(read.where, read === reads[0] ? { organisationId: 'org-1' } : { id: 'bm-1', organisationId: 'org-1' });
+        if (role === 'MEMBER') {
+          const selected = read.select as Record<string, boolean>;
+          assert.equal(selected.name, true);
+          assert.equal(selected.conductSigned, true);
+          for (const sensitive of ['email', 'dateOfBirth', 'residentialAddress', 'otherDirectorships', 'formerNames', 'appointmentKind']) {
+            assert.equal(Object.hasOwn(selected, sensitive), false, sensitive);
+          }
+        } else {
+          assert.equal(read.select, undefined);
+        }
+      }
+    } finally {
+      await app.close();
+    }
+  }
+});
+
 // ── route-level harness for ids 7, 8, 9, 10 ──
 
 type WriteFlags = {

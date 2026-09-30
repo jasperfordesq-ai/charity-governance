@@ -337,8 +337,10 @@ test('organisation workflow state is extracted from the oversized route file', (
   const hookSrc = readFileSync(hookPath, 'utf8');
 
   assert.match(pageSrc, /useOrganisationWorkflow/);
+  assert.match(pageSrc, /if \(user\?\.role === 'MEMBER'\)/);
+  assert.match(pageSrc, /Owners and administrators review contact details, the registered address and conditional obligation facts/);
+  assert.match(hookSrc, /useAuth\(/);
   for (const pattern of [
-    /useAuth\(/,
     /const handleSave =/,
     /const handleComplexityChange =/,
     /const handlePurposeChange =/,
@@ -1623,7 +1625,9 @@ test('documents delete modal is extracted from the oversized route file', () => 
   assert.match(modalSrc, /ConfirmActionModal/);
   assert.doesNotMatch(modalSrc, /ModalHeader/);
   assert.match(modalSrc, /ariaLabel="Confirm destructive action"/);
-  assert.match(modalSrc, /This removes the file and its standard links/);
+  assert.match(modalSrc, /Linked standards and cited Confluence pages must be reviewed and unlinked first/);
+  assert.match(modalSrc, /CharityPilot cannot restore a deleted item/);
+  assert.match(modalSrc, /File cleanup is tracked separately and may need retries/);
   assert.match(confirmModal, /ariaLabel = 'Confirm action'/);
   assert.match(confirmModal, /secondaryLabel/);
 });
@@ -2330,7 +2334,8 @@ test('phase 6C registers keeps Complete gating and adds operational review-ready
   assert.match(src, /const canSaveAnnual = hasLoadedSelectedYear && annual\.reportingYear === year && !annualFilingDisabledReason;/);
   assert.match(src, /const canSaveFinancial = hasLoadedSelectedYear && financial\.reportingYear === year;/);
   assert.match(src, /setFinancial\(financialRes\.data \?\? emptyFinancial\(requestedYear\)\);[\r\n\s]*setLoadedRegistersYear\(requestedYear\);/);
-  assert.match(src, /\]\);[\r\n\s]*if \(!isLatestRegistersRequest\(requestSeq\)\) return;[\r\n\s]*setSummary\(summaryRes\.data\)/);
+  assert.match(src, /canManage \? api\.get\(`\/governance-registers\/summary\?year=\$\{requestedYear\}`\) : Promise\.resolve\(null\)/);
+  assert.match(src, /\]\);[\r\n\s]*if \(!isLatestRegistersRequest\(requestSeq\)\) return;[\r\n\s]*setSummary\(summaryRes\?\.data \?\? null\)/);
   assert.match(src, /if \(isPlanFeatureUnavailable\(err\)\) \{[\r\n\s]*if \(!isLatestRegistersRequest\(requestSeq\)\) return;[\r\n\s]*setLoadedRegistersYear\(null\);[\r\n\s]*setPlanUnavailable\(true\)/);
   assert.match(src, /\}[\r\n\s]*if \(!isLatestRegistersRequest\(requestSeq\)\) return;[\r\n\s]*setLoadedRegistersYear\(null\);[\r\n\s]*setSummary\(null\);[\r\n\s]*setConflicts\(\[\]\);[\r\n\s]*setRisks\(\[\]\);[\r\n\s]*setComplaints\(\[\]\);[\r\n\s]*setFundraising\(\[\]\);[\r\n\s]*setAnnual\(emptyAnnual\(requestedYear\)\);[\r\n\s]*setFinancial\(emptyFinancial\(requestedYear\)\);[\r\n\s]*logClientError\('Failed to load governance registers', err\);[\r\n\s]*setLoadError\('Governance registers could not be loaded/);
   assert.match(src, /finally \{[\r\n\s]*if \(isLatestRegistersRequest\(requestSeq\)\) \{[\r\n\s]*setLoading\(false\);[\r\n\s]*\}[\r\n\s]*\}/);
@@ -2345,7 +2350,7 @@ test('registers overview waits for the selected year to load before showing summ
   const pageSrc = dash('registers/page.tsx');
 
   assert.match(pageSrc, /const registersDataReady = !loading && !loadError && hasLoadedSelectedYear/);
-  assert.match(pageSrc, /\{registersDataReady && \(\s*<RegisterOverviewPanel/);
+  assert.match(pageSrc, /\{registersDataReady && canManage && \(\s*<RegisterOverviewPanel/);
   assert.match(pageSrc, /\) : !registersDataReady \? \(/);
 });
 

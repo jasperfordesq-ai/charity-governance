@@ -1,9 +1,11 @@
 'use client';
 
 import { useDocumentTitle } from '@/lib/use-title';
+import { useAuth } from '@/lib/auth-context';
+import { canManageGovernance } from '@/lib/governance-permissions';
 import { Button } from '@heroui/react';
 import { AppPage } from '@/components/ui/app-page';
-import { ErrorState, ReviewWarningState } from '@/components/ui/states';
+import { ErrorState, LoadingState, ReviewWarningState } from '@/components/ui/states';
 import { ComplianceSignoffStatus } from '@charitypilot/shared';
 import {
   ApprovalReadinessIssues,
@@ -24,6 +26,25 @@ const signoffStatusLabels = {
 
 export default function ExportPage() {
   useDocumentTitle('Export Report');
+  const { user, isLoading } = useAuth();
+  if (isLoading) {
+    return <LoadingState title="Checking report access" description="Checking your current governance role." />;
+  }
+  if (!canManageGovernance(user?.role)) {
+    return (
+      <AppPage
+        eyebrow="Internal report"
+        title="Export Compliance Report"
+        description="The full Compliance Record may contain trustee, conflict and governance details. Ask an owner or administrator for an approved copy suited to its audience."
+      >
+        <p className="text-sm text-gray-600 dark:text-gray-300">The full internal report is available to owners and administrators.</p>
+      </AppPage>
+    );
+  }
+  return <InternalExportPage />;
+}
+
+function InternalExportPage() {
   const {
     acknowledgeSignoffReview,
     approvalReadiness,
@@ -36,9 +57,11 @@ export default function ExportPage() {
     displayedSignoffSaveState,
     exportingApproved,
     exportingCurrent,
+    exportingMinimised,
     fetchSummary,
     handleExportApproved,
     handleExportCurrent,
+    handleExportMinimised,
     handleSaveSignoff,
     latestApproval,
     loading,
@@ -95,9 +118,11 @@ export default function ExportPage() {
           approvalUnavailable={approvalUnavailable}
           exportingApproved={exportingApproved}
           exportingCurrent={exportingCurrent}
+          exportingMinimised={exportingMinimised}
           latestApproval={latestApproval}
           onExportApproved={handleExportApproved}
           onExportCurrent={handleExportCurrent}
+          onExportMinimised={handleExportMinimised}
           onYearChange={requestYearChange}
           readinessBlockerCodes={readinessBlockerCodes}
           readinessBlockerCount={readinessBlockerCount}

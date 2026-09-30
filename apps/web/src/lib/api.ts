@@ -2,6 +2,7 @@ import axios from 'axios';
 import { getApiBaseUrl } from './api-config';
 import { isProtectedAppPath, renewsItsOwnSession } from './protected-routes';
 import { safeNextValue } from './url-security';
+import { coordinateSessionRefresh, SessionRefreshLockUnavailableError } from './session-refresh-lock';
 
 declare module 'axios' {
   export interface AxiosRequestConfig {
@@ -61,7 +62,7 @@ export const configuredApiOrigin: string | undefined = (() => {
  * convention, not a guarantee: one future call added without the flag would
  * reopen the leak silently. The checks below are what makes it structural.
  */
-function redirectToLoginOnProtectedRoute() {
+function redirectToLoginOnProtectedRoute(renewalUnavailable = false) {
   if (typeof window === 'undefined' || !isProtectedAppPath(window.location.pathname)) {
     return;
   }
@@ -73,6 +74,7 @@ function redirectToLoginOnProtectedRoute() {
     'next',
     safeNextValue(window.location.pathname, window.location.search),
   );
+  if (renewalUnavailable) loginUrl.searchParams.set('session', 'renewal-unavailable');
   window.location.href = `${loginUrl.pathname}${loginUrl.search}`;
 }
 
@@ -88,11 +90,29 @@ let refreshPromise: Promise<void> | null = null;
 // (see `confluence-callback.ts`) can renew the session *before* making that
 // request, rather than relying on this module's own reactive 401 handling —
 // which only refreshes after the first attempt has already been sent.
-export function refreshSession(): Promise<void> {
+export function refreshSession(afterUnauthorised = false): Promise<void> {
   if (!refreshPromise) {
-    refreshPromise = axios
-      .post(`${API_URL}/api/v1/auth/refresh`, {}, { withCredentials: true })
-      .then(() => undefined)
+    let storage: Storage | undefined;
+    try {
+      storage = typeof window === 'undefined' ? undefined : window.localStorage;
+    } catch {
+      // Browser privacy settings can make localStorage unavailable.
+    }
+    refreshPromise = coordinateSessionRefresh(
+      () => axios.post(`${API_URL}/api/v1/auth/refresh`, {}, { withCredentials: true }).then(() => undefined),
+      typeof navigator === 'undefined' ? undefined : navigator.locks,
+      storage,
+      undefined,
+      afterUnauthorised ? async () => {
+        // Use raw Axios: the shared response interceptor would otherwise
+        // recurse into refresh on the expected 401 from this probe.
+        const response = await axios.get(`${API_URL}/api/v1/auth/me`, {
+          withCredentials: true,
+          validateStatus: (status) => status === 200 || status === 401,
+        });
+        return response.status === 200;
+      } : undefined,
+    )
       .finally(() => {
         refreshPromise = null;
       });
@@ -108,12 +128,13 @@ export const api = axios.create({
 
 api.interceptors.response.use(
   (response) => {
+    // Only the single-field transport wrapper is unwrapped. Cursor and other
+    // metadata belong to the response, even when a page also has a `data` field.
     if (
       response.data &&
       typeof response.data === 'object' &&
-      'data' in response.data &&
-      !('total' in response.data) &&
-      !('page' in response.data)
+      Object.keys(response.data).length === 1 &&
+      'data' in response.data
     ) {
       response.data = response.data.data;
     }
@@ -131,11 +152,11 @@ api.interceptors.response.use(
       original._retry = true;
 
       try {
-        await refreshSession();
+        await refreshSession(true);
         return api(original);
-      } catch {
+      } catch (cause) {
         if (!original.skipAuthRedirect) {
-          redirectToLoginOnProtectedRoute();
+          redirectToLoginOnProtectedRoute(cause instanceof SessionRefreshLockUnavailableError);
         }
         return Promise.reject(error);
       }

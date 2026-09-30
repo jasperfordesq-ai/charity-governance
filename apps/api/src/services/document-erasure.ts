@@ -1,9 +1,10 @@
 /**
  * Provider-keyed erasure dispatch for the document-deletion pipeline.
  *
- * The pipeline exists so that erasure is *provable*: a row is only marked
- * PROCESSED once the bytes it names are gone. A single hardcoded deleter could
- * only ever prove that for one backend, so deletion is dispatched on the
+ * The pipeline tracks each provider's deletion result. For new local and
+ * Supabase attempts, PROCESSED can carry an active-object absence observation;
+ * it does not prove backup, version or replica purge. A single hardcoded deleter could
+ * only ever check one backend, so deletion is dispatched on the
  * provider the row was stamped with when it was enqueued.
  *
  * A provider with no registered eraser is not a transient failure. This
@@ -22,12 +23,15 @@ export type ErasureTarget = {
   targetRef: unknown | null;
 };
 
-export type Eraser = (target: ErasureTarget, signal?: AbortSignal) => Promise<void>;
+// A primary-storage eraser returns its observed active-object absence time.
+// Other providers may return void; a void result must never create a primary
+// absence receipt in the outbox.
+export type Eraser = (target: ErasureTarget, signal?: AbortSignal) => Promise<Date | void>;
 
 export type ErasureDispatcher = (provider: string) => Eraser | undefined;
 
 export function createSupabaseEraser(
-  deleteFile: (organisationId: string, storagePath: string, signal?: AbortSignal) => Promise<void>,
+  deleteFile: (organisationId: string, storagePath: string, signal?: AbortSignal) => Promise<Date>,
 ): Eraser {
   return (target, signal) => deleteFile(target.organisationId, target.storagePath, signal);
 }

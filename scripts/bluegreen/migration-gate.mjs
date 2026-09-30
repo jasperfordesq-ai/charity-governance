@@ -75,7 +75,7 @@ const WARNED = [
   // CONSTRAINT. Statement-bounded for the same reason as the BLOCKED rules
   // above: a NOT VALID in a *different* statement must not suppress this,
   // and a CHECK/FOREIGN KEY in a different statement must not trigger it.
-  ['validating-constraint', /\bADD\s+CONSTRAINT\b[^;]{0,200}?\b(?:CHECK|FOREIGN\s+KEY)\b(?![^;]{0,150}?\bNOT\s+VALID\b)/i],
+  ['validating-constraint', /\bADD\s+CONSTRAINT\b[^;]*?\b(?:CHECK|FOREIGN\s+KEY)\b(?![^;]*\bNOT\s+VALID\b)/i],
 ];
 
 // The gate's one proof-carrying exemption.

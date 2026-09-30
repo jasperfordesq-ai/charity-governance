@@ -155,9 +155,9 @@ export function VoidModal({
               </div>
 
               <p className="text-sm">
-                This deletes the act and its resolutions permanently. A full snapshot, your email
-                address and the reason below are kept in the audit trail — nothing is destroyed
-                silently.
+                This removes the act and its resolutions from the active Minute Book. A full snapshot,
+                your email address and the reason below remain in the restricted audit history.
+                No automatic expiry is set for that history.
               </p>
               <p className="text-sm text-default-600">
                 Use this for a record that should never have existed, such as a fabricated or
@@ -189,7 +189,7 @@ export function VoidModal({
             isLoading={saving}
             isDisabled={reason.trim().length < 20}
           >
-            Remove permanently
+            Remove from Minute Book
           </Button>
         </ModalFooter>
       </ModalContent>

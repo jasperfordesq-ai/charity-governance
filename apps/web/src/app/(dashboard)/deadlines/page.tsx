@@ -5,6 +5,8 @@ import { Button } from '@heroui/react';
 import { Plus } from 'lucide-react';
 import { AppPage } from '@/components/ui/app-page';
 import { primaryActionButtonClassName } from '@/components/ui/action-button';
+import { PermissionHint } from '@/components/ui/states';
+import { useAuth } from '@/lib/auth-context';
 import { DeadlineDeleteModal } from './deadline-delete-modal';
 import { DeadlineCompletionModal } from './deadline-completion-modal';
 import { DeadlineFormModal } from './deadline-form-modal';
@@ -17,6 +19,7 @@ import { useDeadlinesWorkflow } from './use-deadlines-workflow';
 
 export default function DeadlinesPage() {
   useDocumentTitle('Deadlines');
+  const { user } = useAuth();
   const {
     canManage,
     conditionalDeadlinePrompts,
@@ -90,6 +93,9 @@ export default function DeadlinesPage() {
         </Button>
       ) : undefined}
     >
+      {user?.role === 'MEMBER' ? (
+        <PermissionHint>Generated governance deadlines are visible here. Owners and administrators review custom deadlines and legacy calculated records while their contents await sensitivity classification.</PermissionHint>
+      ) : null}
       {deadlineDataReady && (
         <DeadlineOverviewPanels summary={summary} />
       )}

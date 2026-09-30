@@ -1,7 +1,7 @@
 import type { FastifyInstance } from 'fastify';
 import { DeadlineService } from '../../services/deadline.service.js';
 import { authGuard } from '../../middleware/auth.js';
-import { requireSessionLevel } from '../../middleware/session-level.js';
+import { requireSessionLevel, requireWebSession } from '../../middleware/session-level.js';
 import { requireActionApproval } from '../../middleware/action-approval.js';
 import { subscriptionGuard } from '../../middleware/subscription.js';
 import { requireAdmin } from '../../middleware/roles.js';
@@ -24,7 +24,7 @@ export async function deadlineRoutes(app: FastifyInstance) {
     try {
       const { page, pageSize } = request.query as { page?: string; pageSize?: string };
       const bounds = pagination({ page, pageSize });
-      return await service.list(request.user.organisationId, bounds.page, bounds.pageSize);
+      return await service.list(request.user.organisationId, bounds.page, bounds.pageSize, request.user.role);
     } catch (err) {
       return handleError(reply, err);
     }
@@ -34,7 +34,7 @@ export async function deadlineRoutes(app: FastifyInstance) {
     try {
       const { page, pageSize } = request.query as { page?: string; pageSize?: string };
       const bounds = pagination({ page, pageSize });
-      return await service.history(request.user.organisationId, bounds.page, bounds.pageSize);
+      return await service.history(request.user.organisationId, bounds.page, bounds.pageSize, request.user.role);
     } catch (err) {
       return handleError(reply, err);
     }
@@ -68,9 +68,22 @@ export async function deadlineRoutes(app: FastifyInstance) {
     }
   });
 
+  app.get('/audit', { preHandler: [requireAdmin, requireWebSession] }, async (request, reply) => {
+    try {
+      const events = await app.prisma.deadlineChangeAudit.findMany({
+        where: { organisationId: request.user.organisationId },
+        orderBy: [{ occurredAt: 'desc' }, { id: 'desc' }],
+        take: 100,
+      });
+      return sendSuccess(reply, events);
+    } catch (err) {
+      return handleError(reply, err);
+    }
+  });
+
   app.get<{ Params: { id: string } }>('/:id', async (request, reply) => {
     try {
-      return sendSuccess(reply, await service.getById(request.user.organisationId, request.params.id));
+      return sendSuccess(reply, await service.getById(request.user.organisationId, request.params.id, request.user.role));
     } catch (err) {
       return handleError(reply, err);
     }
@@ -79,7 +92,7 @@ export async function deadlineRoutes(app: FastifyInstance) {
   app.post('/', { preHandler: [requireAdmin] }, async (request, reply) => {
     try {
       const data = createDeadlineSchema.parse(request.body);
-      const deadline = await service.create(request.user.organisationId, data);
+      const deadline = await service.create(request.user.organisationId, data, request.user.userId);
       return sendCreated(reply, deadline);
     } catch (err) {
       if (err instanceof ZodError) {
@@ -92,7 +105,7 @@ export async function deadlineRoutes(app: FastifyInstance) {
   app.patch<{ Params: { id: string } }>('/:id', { preHandler: [requireAdmin] }, async (request, reply) => {
     try {
       const data = updateDeadlineSchema.parse(request.body);
-      return sendSuccess(reply, await service.update(request.user.organisationId, request.params.id, data));
+      return sendSuccess(reply, await service.update(request.user.organisationId, request.params.id, data, request.user.userId));
     } catch (err) {
       if (err instanceof ZodError) {
         return reply.status(400).send({ error: 'Validation failed', code: 'VALIDATION_ERROR', details: err.errors });
@@ -104,7 +117,7 @@ export async function deadlineRoutes(app: FastifyInstance) {
   app.delete<{ Params: { id: string } }>('/:id', { preHandler: [requireSessionLevel('ADMIN'), requireAdmin, requireActionApproval()] }, async (request, reply) => {
     try {
       const data = deleteDeadlineSchema.parse(request.body);
-      await service.remove(request.user.organisationId, request.params.id, data.expectedUpdatedAt);
+      await service.remove(request.user.organisationId, request.params.id, data.expectedUpdatedAt, request.user.userId);
       return sendNoContent(reply);
     } catch (err) {
       if (err instanceof ZodError) {

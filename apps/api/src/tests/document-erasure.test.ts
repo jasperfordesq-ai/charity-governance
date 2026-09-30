@@ -23,6 +23,7 @@ test('a supabase row is routed to the supabase eraser with its storage path', as
     provider === 'supabase'
       ? async (target) => {
           seen.push(target);
+          return NOW;
         }
       : undefined;
   const mock = buildFallbackPrisma(
@@ -50,7 +51,7 @@ test('a row carries its target reference to the eraser alongside the storage pat
     pendingRecord({
       provider: 'confluence',
       storagePath: 'org-1/minutes.pdf',
-      targetRef: { pageId: '12345', attachmentId: 'att-9' },
+      targetRef: { kind: 'confluence', cloudId: 'cloud-1', pageId: 'p1', attachmentIds: [] },
     }),
   );
   const service = new DocumentService(mock.prisma as never, () => NOW);
@@ -62,7 +63,7 @@ test('a row carries its target reference to the eraser alongside the storage pat
     {
       organisationId: 'org-1',
       storagePath: 'org-1/minutes.pdf',
-      targetRef: { pageId: '12345', attachmentId: 'att-9' },
+      targetRef: { kind: 'confluence', cloudId: 'cloud-1', pageId: 'p1', attachmentIds: [] },
     },
   ]);
 });
@@ -192,6 +193,7 @@ test('the supabase eraser unpacks the target into the positional deleteFile call
   const controller = new AbortController();
   const erase = createSupabaseEraser(async (organisationId, storagePath, signal) => {
     calls.push({ organisationId, storagePath, aborted: signal?.aborted ?? true });
+    return new Date();
   });
 
   await erase(

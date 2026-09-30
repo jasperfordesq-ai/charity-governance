@@ -7,7 +7,7 @@ import { handleError } from '../../utils/errors.js';
 import { sendSuccess } from '../../utils/response.js';
 import { todayInTimeZone } from '@charitypilot/shared';
 import { prismaDateFromCivil } from '../../utils/civil-date.js';
-import { publicDeadline } from '../../services/deadline.service.js';
+import { MEMBER_DEADLINE_FILTER, memberDeadlineSelect, publicDeadline, publicMemberDeadline } from '../../services/deadline.service.js';
 
 export async function dashboardRoutes(app: FastifyInstance) {
   app.addHook('onRequest', authGuard);
@@ -35,20 +35,26 @@ export async function dashboardRoutes(app: FastifyInstance) {
         app.prisma.deadline.findMany({
           where: {
             organisationId,
+            ...(request.user.role === 'MEMBER' ? MEMBER_DEADLINE_FILTER : {}),
             isComplete: false,
             supersededAt: null,
             archivedAt: null,
             dueDate: { gte: today },
           },
+          select: request.user.role === 'MEMBER' ? memberDeadlineSelect : undefined,
           orderBy: { dueDate: 'asc' },
           take: 5,
         }),
 
         app.prisma.boardMember.findMany({
           where: { organisationId },
+          select: {
+            id: true, name: true, conductSigned: true, inductionCompleted: true,
+            isActive: true, appointedDate: true,
+          },
         }),
 
-        activityService.getRecentActivity(organisationId, 10),
+        activityService.getRecentActivity(organisationId, 10, request.user.role),
       ]);
 
       // Build board alerts
@@ -89,7 +95,8 @@ export async function dashboardRoutes(app: FastifyInstance) {
 
       return sendSuccess(reply, {
         compliance,
-        upcomingDeadlines: upcomingDeadlines.map((deadline) => publicDeadline(deadline)),
+        upcomingDeadlines: upcomingDeadlines.map((deadline) => request.user.role === 'MEMBER'
+          ? publicMemberDeadline(deadline) : publicDeadline(deadline)),
         boardAlerts,
         recentActivity,
       });

@@ -30,8 +30,16 @@ function fakePrisma(options: { documentExists?: boolean; rows?: Array<Record<str
   const rows = options.rows ?? [];
   const created: Array<Record<string, unknown>> = [];
   const deletes: Array<Record<string, unknown>> = [];
+  const audits: Array<Record<string, unknown>> = [];
 
   const prisma = {
+    async $transaction<T>(callback: (tx: unknown) => Promise<T>) { return callback(prisma); },
+    documentControlAudit: {
+      async create(args: { data: Record<string, unknown> }) {
+        audits.push(args.data);
+        return args.data;
+      },
+    },
     document: {
       async findFirst(args: { where: Record<string, unknown> }) {
         if (options.documentExists === false) return null;
@@ -39,6 +47,9 @@ function fakePrisma(options: { documentExists?: boolean; rows?: Array<Record<str
       },
     },
     confluenceReference: {
+      async findFirst(args: { where: Record<string, unknown> }) {
+        return rows.find((row) => Object.entries(args.where).every(([key, value]) => row[key] === value)) ?? null;
+      },
       async findMany(args: { where: Record<string, unknown> }) {
         return rows.filter((row) =>
           Object.entries(args.where).every(([key, value]) => row[key] === value),
@@ -58,7 +69,7 @@ function fakePrisma(options: { documentExists?: boolean; rows?: Array<Record<str
     },
   } as never;
 
-  return { prisma, created, deletes };
+  return { prisma, created, deletes, audits };
 }
 
 const INPUT = {
@@ -83,6 +94,12 @@ test('citing a page records the version it was cited at', async () => {
   assert.equal(reference.pageTitle, 'Conflicts of Interest Policy');
   assert.equal(reference.citedAt, NOW.toISOString());
   assert.equal(fake.created[0].citedById, 'user-1');
+  assert.deepEqual(fake.audits[0], {
+    organisationId: 'org-1', documentId: 'doc-1', actorUserId: 'user-1',
+    kind: 'CONFLUENCE_REFERENCE', previous: 'UNLINKED', next: 'CITED:ref-1',
+    reason: 'Confluence page citation added.',
+  });
+  assert.doesNotMatch(JSON.stringify(fake.audits[0]), /Conflicts of Interest Policy|atlassian\.net|page-1/);
 });
 
 test('the page is READ before it is cited, and a page that is not there is refused', async () => {
@@ -100,6 +117,7 @@ test('the page is READ before it is cited, and a page that is not there is refus
   // A citation pointing at nothing would be discovered by whoever went looking
   // for the evidence, which is exactly the moment it must not fail.
   assert.deepEqual(fake.created, []);
+  assert.deepEqual(fake.audits, []);
 });
 
 test('a document belonging to another charity cannot be cited against', async () => {
@@ -170,16 +188,28 @@ test('citations are listed newest first and scoped to the organisation', async (
   assert.deepEqual(references.map((r) => r.id), ['a']);
 });
 
-test('removing a citation is scoped to the organisation', async () => {
-  const fake = fakePrisma({ rows: [] });
+test('removing a citation is scoped to the organisation and records the document change', async () => {
+  const fake = fakePrisma({ rows: [{ id: 'ref-1', organisationId: 'org-1', documentId: 'doc-1' }] });
+
+  const foreign = await removeConfluenceReference(fake.prisma, {
+    organisationId: 'org-2', referenceId: 'ref-1', actorUserId: 'user-2',
+  });
+  assert.equal(foreign, false);
+  assert.equal(fake.audits.length, 0);
 
   const removed = await removeConfluenceReference(fake.prisma, {
     organisationId: 'org-1',
     referenceId: 'ref-1',
+    actorUserId: 'user-1',
   });
 
-  assert.equal(removed, false);
-  assert.deepEqual(fake.deletes[0], { id: 'ref-1', organisationId: 'org-1' });
+  assert.equal(removed, true);
+  assert.deepEqual(fake.deletes[0], { id: 'ref-1', organisationId: 'org-1', documentId: 'doc-1' });
+  assert.deepEqual(fake.audits[0], {
+    organisationId: 'org-1', documentId: 'doc-1', actorUserId: 'user-1',
+    kind: 'CONFLUENCE_REFERENCE', previous: 'CITED:ref-1', next: 'UNLINKED',
+    reason: 'Confluence page citation removed; the page was not changed.',
+  });
 });
 
 // ---------------------------------------------------------------------------

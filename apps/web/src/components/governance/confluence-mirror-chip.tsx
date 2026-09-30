@@ -30,20 +30,26 @@ const TONES: Record<ReturnType<typeof describeConfluenceMirror>['tone'], StatusT
 
 export function ConfluenceMirrorChip({
   mirror,
+  isCurrentDocument,
+  approvalNeedsReview = false,
+  approvalWithdrawnWithCopy = false,
   canManage,
   onRetry,
   retrying,
 }: {
   /** Undefined means the mirror could not be read. Renders nothing. */
   mirror: ConfluenceMirror | undefined;
+  isCurrentDocument: boolean;
+  approvalNeedsReview?: boolean;
+  approvalWithdrawnWithCopy?: boolean;
   canManage: boolean;
   onRetry?: () => void | Promise<void>;
   retrying?: boolean;
 }) {
   if (mirror === undefined) return null;
 
-  const display = describeConfluenceMirror(mirror);
-  const showRetry = canManage && display.actionable && mirror.publication === 'FAILED' && onRetry;
+  const display = describeConfluenceMirror(mirror, isCurrentDocument, approvalNeedsReview, approvalWithdrawnWithCopy);
+  const showRetry = canManage && isCurrentDocument && display.actionable && mirror.publication === 'FAILED' && onRetry;
 
   return (
     <div className="mt-3 flex flex-wrap items-center gap-2">
@@ -51,6 +57,7 @@ export function ConfluenceMirrorChip({
         {display.label}
       </StatusChip>
       <span className="text-xs leading-5 text-gray-600 dark:text-gray-300">{display.detail}</span>
+      {display.historicalReview ? <span className="text-xs font-medium leading-5 text-amber-800 dark:text-amber-300">{display.historicalReview}</span> : null}
       {mirror.pageUrl ? (
         <a
           className="text-xs font-medium text-teal-dark underline dark:text-teal-bright"

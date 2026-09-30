@@ -54,6 +54,7 @@ const FIXED_IDENTITY = createLocalRunIdentity({
   runnerPassword: "runner-password-unique-value",
   jwtSecret: "jwt-secret-unique-value-with-enough-entropy",
   authRecoverySecret: "AAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8",
+  integrationEncryptionKey: "a".repeat(64),
   readinessKey: "readiness-key-unique-value-with-entropy",
 });
 
@@ -93,7 +94,7 @@ const FIXED_HEALTHCHECKS = {
       "CMD",
       "node",
       "-e",
-      "const fs=require('node:fs');const listeners=new Set(fs.readFileSync('/proc/net/tcp','utf8').trim().split('\\n').slice(1).filter(line=>line.trim().split(/\\s+/)[3]==='0A').map(line=>line.trim().split(/\\s+/)[1]));process.exit(['00000000:D88A','00000000:0CE6','00000000:0CE7'].every(listener=>listeners.has(listener))?0:1)",
+      "const fs=require('node:fs');const listeners=new Set(fs.readFileSync('/proc/net/tcp','utf8').trim().split('\\n').slice(1).filter(line=>line.trim().split(/\\s+/)[3]==='0A').map(line=>line.trim().split(/\\s+/)[1]));process.exit(['00000000:0D1A','00000000:0CE6','00000000:0CE7'].every(listener=>listeners.has(listener))?0:1)",
     ],
     interval: "3s",
     timeout: "3s",
@@ -247,8 +248,8 @@ function renderedCompose(projectName = FIXED_IDENTITY.projectName) {
         networks: { e2e: null, edge: null },
         ports: [
           {
-            target: 55434,
-            published: "55434",
+            target: 3354,
+            published: "3354",
             host_ip: "127.0.0.1",
             protocol: "tcp",
             mode: "ingress",
@@ -321,6 +322,15 @@ test("local run identity pins the disposable contract and creates no reusable cr
     identity.authRecoverySecret,
   );
   assert.notEqual(identity.authRecoverySecret, identity.jwtSecret);
+  assert.equal(
+    identity.composeEnv.E2E_INTEGRATION_ENCRYPTION_KEY,
+    identity.integrationEncryptionKey,
+  );
+  assert.equal(
+    expectedLocalServiceEnvironments(identity).api.INTEGRATION_ENCRYPTION_KEY,
+    identity.integrationEncryptionKey,
+  );
+  assert.match(identity.integrationEncryptionKey, /^[0-9a-f]{64}$/);
   assert.equal(identity.appImage, `${identity.projectName}-app:local`);
   assert.equal(
     identity.databaseImage,
@@ -336,7 +346,7 @@ test("local run identity pins the disposable contract and creates no reusable cr
   );
   assert.match(
     identity.databaseUrl,
-    /@127\.0\.0\.1:55434\/charitypilot_e2e_disposable\?/,
+    /@127\.0\.0\.1:3354\/charitypilot_e2e_disposable\?/,
   );
   assert.match(identity.databaseUrl, /schema=public/);
   assert.match(identity.databaseUrl, /application_name=charitypilot-e2e-reset/);
@@ -1286,7 +1296,7 @@ test("runtime inspect collectors use the pinned daemon and reject malformed evid
       {},
       { synthetic: "built" },
     ),
-    /exactly four runner-owned service containers/,
+    /exactly five runner-owned service containers/,
   );
   assert.equal(containerCommands.length, 1);
   assert.deepEqual(containerCommands[0].args, [
@@ -2209,6 +2219,16 @@ test("local runner refuses ambient reset authority", async () => {
 
   await assert.rejects(
     runIsolatedE2e(["--validate-only"], {
+      env: { E2E_INTEGRATION_ENCRYPTION_KEY: "b".repeat(64) },
+      identity: FIXED_IDENTITY,
+      portChecker: async () => {},
+      runCommand: async () => ({ code: 0, stdout: "{}", stderr: "" }),
+    }),
+    /does not accept ambient reset authority/,
+  );
+
+  await assert.rejects(
+    runIsolatedE2e(["--validate-only"], {
       env: { E2E_APP_IMAGE: "shared-or-attacker-controlled:latest" },
       identity: FIXED_IDENTITY,
       portChecker: async () => {},
@@ -2887,7 +2907,7 @@ test("standalone compose and bootstrap SQL contain the exact non-personal isolat
     compose,
     /Standalone only: never layer this file over compose\.yml or compose\.local\.yml/,
   );
-  assert.match(compose, /published: "55434"\s+host_ip: 127\.0\.0\.1/);
+  assert.match(compose, /published: "3354"\s+host_ip: 127\.0\.0\.1/);
   assert.match(compose, /published: "3302"/);
   assert.match(compose, /published: "3303"/);
   const dbCompose = compose.slice(
@@ -2926,7 +2946,7 @@ test("standalone compose and bootstrap SQL contain the exact non-personal isolat
   }
   assert.match(
     gatewayCompose,
-    /target: 55434[\s\S]*target: 3302[\s\S]*target: 3303/,
+    /target: 3354[\s\S]*target: 3302[\s\S]*target: 3303/,
   );
   assert.match(gatewayCompose, /networks:\s*\n\s+- e2e\s*\n\s+- edge/);
   assert.doesNotMatch(gatewayCompose, /aliases:/);
@@ -2937,7 +2957,7 @@ test("standalone compose and bootstrap SQL contain the exact non-personal isolat
   assert.match(gatewayCompose, /\/proc\/net\/tcp/);
   assert.match(
     gatewayCompose,
-    /00000000:D88A[\s\S]*00000000:0CE6[\s\S]*00000000:0CE7/,
+    /00000000:0D1A[\s\S]*00000000:0CE6[\s\S]*00000000:0CE7/,
   );
   assert.match(compose, /SEED_LOCAL_ADMIN: "false"/);
   assert.match(compose, /read_only: true/);

@@ -11,17 +11,19 @@ type OperationalSignal = {
 export function DocumentOperationalSignalsPanel({
   missingSignalCount,
   signalCoverage,
+  partial,
 }: {
   missingSignalCount: number;
   signalCoverage: OperationalSignal[];
+  partial: boolean;
 }) {
   return (
     <AppSection
       title="Operational register signals"
-      description="These checks look for named registers and policies in titles or descriptions, so upload names should be easy for trustees to scan."
+      description={partial ? 'These checks cover loaded files only. Load older documents before treating an absent signal as a gap.' : 'These checks look for named registers and policies in titles or descriptions, so upload names should be easy for trustees to scan.'}
       actions={(
         <StatusChip tone={missingSignalCount === 0 ? 'success' : 'warning'}>
-          {missingSignalCount === 0 ? 'Signals covered' : `${missingSignalCount} signals missing`}
+          {partial ? 'Partial Vault view' : missingSignalCount === 0 ? 'Signals covered' : `${missingSignalCount} signals missing`}
         </StatusChip>
       )}
     >
@@ -34,8 +36,8 @@ export function DocumentOperationalSignalsPanel({
                 <p className="mt-1 text-xs leading-5 text-gray-600 dark:text-gray-300">{item.why}</p>
                 <p className="mt-1 text-xs text-teal-dark dark:text-teal-bright">Standards {item.standards}</p>
               </div>
-              <EvidenceChip status={item.covered ? 'ready' : 'review'}>
-                {item.covered ? 'Found' : 'Review'}
+              <EvidenceChip status={item.covered ? 'ready' : partial ? 'partial' : 'review'}>
+                {item.covered ? 'Found' : partial ? 'Check older files' : 'Review'}
               </EvidenceChip>
             </div>
           </div>

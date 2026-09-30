@@ -53,30 +53,32 @@ export function AnnualReportCard({
   ].filter(Boolean).length;
   const percent = Math.round((completed / 10) * 100);
   return (
-    <div className={statusPanelClassName(percent >= 80 ? 'success' : 'warning', 'p-5 shadow-sm')}>
+    <div className={statusPanelClassName(canManage && percent >= 80 ? 'success' : 'warning', 'p-5 shadow-sm')}>
       <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
         <div>
           <div className="flex flex-wrap gap-2">
             <ReviewFlag tone="draft">Annual Report source check</ReviewFlag>
-            <EvidenceChip status={percent >= 80 ? 'ready' : 'review'}>{percent >= 80 ? 'Mostly ready' : 'Needs review'}</EvidenceChip>
+            <EvidenceChip status={canManage && percent >= 80 ? 'ready' : 'review'}>
+              {canManage ? (percent >= 80 ? 'Mostly ready' : 'Needs review') : 'Review flags only'}
+            </EvidenceChip>
           </div>
           <h3 className="mt-3 text-base font-semibold text-gray-950 dark:text-gray-50">Annual Report readiness</h3>
           <p className="mt-1 text-sm leading-6 text-gray-600 dark:text-gray-300">
             Activities, public benefit, finance, trustee details, and filing status for the annual return.
           </p>
         </div>
-        <StatusChip tone={percent >= 80 ? 'success' : 'warning'} size="md">{percent}%</StatusChip>
+        {canManage ? <StatusChip tone={percent >= 80 ? 'success' : 'warning'} size="md">{percent}%</StatusChip> : null}
       </div>
-      <Progress value={percent} color={percent >= 80 ? 'success' : 'warning'} className="mt-4" aria-label="Annual Report readiness" />
+      {canManage ? <Progress value={percent} color={percent >= 80 ? 'success' : 'warning'} className="mt-4" aria-label="Annual Report readiness" /> : null}
       <div className="mt-5 space-y-5">
         {!canManage ? (
-          <p className="text-sm text-gray-600 dark:text-gray-300">You have read-only access. Owners or administrators can update Annual Report readiness.</p>
+          <p className="text-sm text-gray-600 dark:text-gray-300">You can review filing status and board flags. Draft narratives and notes require an Owner or Admin.</p>
         ) : null}
-        <FieldGroup title="Narrative sources" description="Short, board-readable notes are enough here; keep the source file in the evidence vault.">
+        {canManage ? <FieldGroup title="Narrative sources" description="Short, board-readable notes are enough here; keep the source file in the evidence vault.">
           <Textarea label="Activities narrative" value={annual.activitiesNarrative ?? ''} minRows={2} isReadOnly={!canManage} onValueChange={(value) => setAnnual({ ...annual, activitiesNarrative: value })} />
           <Textarea label="Public benefit statement" value={annual.publicBenefitStatement ?? ''} minRows={2} isReadOnly={!canManage} onValueChange={(value) => setAnnual({ ...annual, publicBenefitStatement: value })} />
           <Textarea label="Beneficiaries / stakeholders" value={annual.beneficiariesSummary ?? ''} minRows={2} isReadOnly={!canManage} onValueChange={(value) => setAnnual({ ...annual, beneficiariesSummary: value })} />
-        </FieldGroup>
+        </FieldGroup> : null}
         <FieldGroup title="Board review flags">
           <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
             {checks.map(([key, label]) => (
@@ -103,7 +105,7 @@ export function AnnualReportCard({
               aria-describedby="annual-filing-evidence-hint"
               onValueChange={(value) => setAnnual({ ...annual, filedDate: value || null })}
             />
-            <Input label="Notes" value={annual.notes ?? ''} isReadOnly={!canManage} onValueChange={(value) => setAnnual({ ...annual, notes: value })} />
+            {canManage ? <Input label="Notes" value={annual.notes ?? ''} onValueChange={(value) => setAnnual({ ...annual, notes: value })} /> : null}
           </div>
           <FormHint id="annual-filing-evidence-hint" tone={saveDisabledReason ? 'warning' : 'neutral'}>
             {saveDisabledReason || 'A filed date is required only when the filing status is Filed.'}
@@ -158,9 +160,9 @@ export function FinancialControlsCard({
         <div>
           <div className="flex flex-wrap gap-2">
             <ReviewFlag tone="draft">Financial controls source check</ReviewFlag>
-            <EvidenceChip status={financial.minuteReference ? 'ready' : 'review'}>
+            {canManage ? <EvidenceChip status={financial.minuteReference ? 'ready' : 'review'}>
               {financial.minuteReference ? 'Minute linked' : 'Minute pending'}
-            </EvidenceChip>
+            </EvidenceChip> : null}
           </div>
           <h3 className="mt-3 text-base font-semibold text-gray-950 dark:text-gray-50">Financial controls review</h3>
           <p className="mt-1 text-sm leading-6 text-gray-600 dark:text-gray-300">
@@ -172,7 +174,7 @@ export function FinancialControlsCard({
       <Progress value={percent} color={percent >= 80 ? 'success' : 'warning'} className="mt-4" aria-label="Financial controls readiness" />
       <div className="mt-5 space-y-5">
         {!canManage ? (
-          <p className="text-sm text-gray-600 dark:text-gray-300">You have read-only access. Owners or administrators can update financial controls.</p>
+          <p className="text-sm text-gray-600 dark:text-gray-300">You can review the control flags and dates. Reviewer names, minute references and follow-up notes require an Owner or Admin.</p>
         ) : null}
         <FieldGroup title="Control checks" description="Tick only the controls the board has actually reviewed for this reporting year.">
           <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
@@ -183,10 +185,10 @@ export function FinancialControlsCard({
         </FieldGroup>
         <FieldGroup title="Review evidence">
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-            <Input label="Reviewed by" value={financial.reviewedBy ?? ''} isReadOnly={!canManage} onValueChange={(value) => setFinancial({ ...financial, reviewedBy: value })} />
+            {canManage ? <Input label="Reviewed by" value={financial.reviewedBy ?? ''} onValueChange={(value) => setFinancial({ ...financial, reviewedBy: value })} /> : null}
             <Input type="date" label="Review date" value={dateInput(financial.reviewDate)} isReadOnly={!canManage} onValueChange={(value) => setFinancial({ ...financial, reviewDate: value || null })} />
-            <Input label="Minute reference" value={financial.minuteReference ?? ''} isReadOnly={!canManage} onValueChange={(value) => setFinancial({ ...financial, minuteReference: value })} />
-            <Textarea label="Actions / follow-up" value={financial.actions ?? ''} minRows={2} isReadOnly={!canManage} onValueChange={(value) => setFinancial({ ...financial, actions: value })} />
+            {canManage ? <Input label="Minute reference" value={financial.minuteReference ?? ''} onValueChange={(value) => setFinancial({ ...financial, minuteReference: value })} /> : null}
+            {canManage ? <Textarea label="Actions / follow-up" value={financial.actions ?? ''} minRows={2} onValueChange={(value) => setFinancial({ ...financial, actions: value })} /> : null}
           </div>
         </FieldGroup>
         {canManage ? (

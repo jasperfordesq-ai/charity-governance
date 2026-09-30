@@ -94,6 +94,7 @@ async function buildApp(role: Role, overrides: Record<string, unknown> = {}) {
 
 test('admin dead-letter listing is tenant-scoped and never exposes storage paths', async () => {
   let query: unknown;
+  const legacyDiagnostic = 'unable to remove org-1/private-policy.pdf for trustee@example.org Bearer abc.def';
   const app = await buildApp('ADMIN', {
     documentStorageDeletion: {
       // Honours `select`, exactly as Prisma does: a field the service stops
@@ -102,7 +103,7 @@ test('admin dead-letter listing is tenant-scoped and never exposes storage paths
       // `select` stopped asking for it, and the mutation would stay green.
       findMany: async (args: { select?: Record<string, unknown> }) => {
         query = args;
-        return [applyPrismaSelect(DEAD_LETTER, args)];
+        return [applyPrismaSelect({ ...DEAD_LETTER, lastError: legacyDiagnostic }, args)];
       },
     },
   });
@@ -116,6 +117,11 @@ test('admin dead-letter listing is tenant-scoped and never exposes storage paths
     assert.match(JSON.stringify(query), /"organisationId":"org-1"/);
     assert.match(JSON.stringify(query), /"state":"DEAD_LETTER"/);
     assert.equal(response.body.includes('private-policy.pdf'), false);
+    assert.equal(response.body.includes('trustee@example.org'), false);
+    assert.equal(response.body.includes('abc.def'), false);
+    assert.match(response.json().data[0].lastError, /\[storage-path\]/);
+    assert.match(response.json().data[0].lastError, /\[email\]/);
+    assert.match(response.json().data[0].lastError, /Bearer \[redacted\]/);
     assert.equal(response.json().data[0].id, 'deletion-1');
     assert.equal(response.json().data[0].attempts, 5);
     assert.equal(response.json().data[0].provider, 'supabase');
@@ -155,6 +161,71 @@ test('a dead-letter listing says which provider each row belongs to', async () =
   } finally {
     await app.close();
   }
+});
+
+test('failed deletion queue pages every job in stable tenant-scoped order', async () => {
+  const deadLetteredAt = new Date('2026-09-29T10:00:00.000Z');
+  const createdAt = new Date('2026-09-28T10:00:00.000Z');
+  const rows = Array.from({ length: 203 }, (_, index) => ({ ...DEAD_LETTER,
+    id: `deletion-${String(index + 1).padStart(3, '0')}`,
+    organisationId: 'org-1', deadLetteredAt, createdAt,
+  }));
+  rows.push({ ...rows[0]!, id: 'foreign-deletion', organisationId: 'org-2' });
+  const reads: unknown[] = [];
+  const app = await buildApp('ADMIN', { documentStorageDeletion: {
+    findFirst: async (input: unknown) => {
+      const args = input as { where: { id: string; organisationId: string; state: string } };
+      const row = rows.find((item) => item.id === args.where.id
+        && item.organisationId === args.where.organisationId && item.state === args.where.state);
+      return row ? { id: row.id, deadLetteredAt: row.deadLetteredAt, createdAt: row.createdAt } : null;
+    },
+    findMany: async (input: unknown) => {
+      reads.push(input);
+      const args = input as { where: { organisationId: string; state: string;
+        OR?: Array<{ deadLetteredAt: Date | { gt: Date }; createdAt?: Date | { gt: Date };
+          id?: { gt: string } }> }; take: number; select: Record<string, boolean> };
+      return rows.filter((row) => row.organisationId === args.where.organisationId
+        && row.state === args.where.state
+        && (!args.where.OR || args.where.OR.some((condition) => {
+          if ('gt' in condition.deadLetteredAt) return row.deadLetteredAt > condition.deadLetteredAt.gt;
+          if (row.deadLetteredAt.getTime() !== condition.deadLetteredAt.getTime()) return false;
+          if (condition.createdAt && 'gt' in condition.createdAt) return row.createdAt > condition.createdAt.gt;
+          if (condition.createdAt && row.createdAt.getTime() !== condition.createdAt.getTime()) return false;
+          return !condition.id || row.id > condition.id.gt;
+        })))
+        .sort((a, b) => a.deadLetteredAt.getTime() - b.deadLetteredAt.getTime()
+          || a.createdAt.getTime() - b.createdAt.getTime() || a.id.localeCompare(b.id))
+        .slice(0, args.take).map((row) => applyPrismaSelect(row, args));
+    },
+  } });
+  try {
+    const seen: string[] = [];
+    let after: string | null = null;
+    for (let pageNumber = 0; pageNumber < 5; pageNumber += 1) {
+      const response: Awaited<ReturnType<typeof app.inject>> = await app.inject({ method: 'GET',
+        url: `/storage-deletions/dead-letter?limit=50${after ? `&after=${after}` : ''}`,
+        headers: { authorization: authorization('ADMIN') } });
+      assert.equal(response.statusCode, 200, response.body);
+      seen.push(...response.json().data.map((row: { id: string }) => row.id));
+      after = response.json().nextCursor;
+      if (pageNumber < 4) assert.ok(after);
+      else assert.equal(after, null);
+      assert.equal(response.body.includes('private-policy.pdf'), false);
+    }
+    assert.equal(seen.length, 203);
+    assert.equal(new Set(seen).size, 203);
+    assert.equal(seen[0], 'deletion-001');
+    assert.equal(seen.at(-1), 'deletion-203');
+    assert.equal(reads.length, 5);
+    assert.ok(reads.every((input) => (input as { where: { organisationId: string } }).where.organisationId === 'org-1'));
+    const foreign = await app.inject({ method: 'GET', url: '/storage-deletions/dead-letter?after=foreign-deletion',
+      headers: { authorization: authorization('ADMIN') } });
+    assert.equal(foreign.statusCode, 404);
+    const invalid = await app.inject({ method: 'GET', url: '/storage-deletions/dead-letter?after=bad%40cursor',
+      headers: { authorization: authorization('ADMIN') } });
+    assert.equal(invalid.statusCode, 400);
+    assert.equal(reads.length, 5);
+  } finally { await app.close(); }
 });
 
 test('members cannot list or requeue document storage dead letters', async () => {

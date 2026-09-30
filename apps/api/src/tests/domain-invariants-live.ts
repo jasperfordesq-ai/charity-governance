@@ -277,6 +277,7 @@ export async function runDomainInvariantsPrismaConcurrencyProof(
     const referenceFirst = referenceFirstService.createConflict(
       'org-concurrency',
       validConflict('board-reference-first'),
+      'actor-concurrency',
     );
     await referenceLockAcquired.promise;
 
@@ -284,7 +285,7 @@ export async function runDomainInvariantsPrismaConcurrencyProof(
     const deletionSecondService = new BoardMemberService(withOrganisationLockHooks(secondClient, {
       before: deletionAttempted.resolve,
     }));
-    const deletionSecondOutcome = deletionSecondService.remove('org-concurrency', 'board-reference-first')
+    const deletionSecondOutcome = deletionSecondService.remove('org-concurrency', 'board-reference-first', 'actor-concurrency')
       .then(() => ({ settled: true }), (error: unknown) => ({ settled: true, error }));
     await assertStillWaiting(deletionAttempted, deletionSecondOutcome);
     releaseReference.resolve();
@@ -310,7 +311,7 @@ export async function runDomainInvariantsPrismaConcurrencyProof(
       acquired: deletionLockAcquired.resolve,
       release: releaseDeletion.promise,
     }));
-    const deletionFirst = deletionFirstService.remove('org-concurrency', 'board-deletion-first');
+    const deletionFirst = deletionFirstService.remove('org-concurrency', 'board-deletion-first', 'actor-concurrency');
     await deletionLockAcquired.promise;
 
     const referenceAttempted = deferred();
@@ -320,6 +321,7 @@ export async function runDomainInvariantsPrismaConcurrencyProof(
     const referenceSecondOutcome = referenceSecondService.createConflict(
       'org-concurrency',
       validConflict('board-deletion-first'),
+      'actor-concurrency',
     ).then(
       () => ({ settled: true, error: null as unknown }),
       (error: unknown) => ({ settled: true, error }),

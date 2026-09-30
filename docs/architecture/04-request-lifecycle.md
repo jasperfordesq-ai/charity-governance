@@ -142,7 +142,15 @@ Refresh tokens are managed in `apps/api/src/services/session-tokens.ts` and pers
 
 ### Web client refresh behaviour
 
-The Next.js web client performs **single-flight refresh** — concurrent `401`s coalesce into one refresh call and then retry — so the API never sees a refresh stampede. The API side simply guarantees rotation is atomic and reuse is detected (above); the client-side queue/de-duplication is documented in [09-frontend.md](09-frontend.md) and is intentionally not detailed here.
+The Next.js web client coalesces concurrent `401`s in one browser context and
+uses Web Locks to coordinate reactive refreshes across supported tabs. A
+reactive retry probes the current session while holding that lock before it
+presents a single-use token. A protected page with stale access is redirected
+to `/session-renew`; the proxy does not rotate the token, so separate web
+server processes cannot race each other on that cookie. The API guarantees
+atomic rotation and quarantines a family on reuse. Browser environments
+without Web Locks need separate concurrency assessment; client coordination
+is described in [09-frontend.md](09-frontend.md).
 
 Public login, registration, forgot-password, and reset-password calls opt out of
 that refresh/redirect path. A public credential flow therefore cannot rotate an

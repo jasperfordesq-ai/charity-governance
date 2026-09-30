@@ -4,12 +4,22 @@ import { requestConfluenceErasure } from '../services/confluence-erasure-request
 
 const NOW = new Date('2026-09-20T12:00:00.000Z');
 
-function buildPrisma(publication: Record<string, unknown> | null) {
+function buildPrisma(publication: Record<string, unknown> | null, liveDocument = false) {
   const created: Array<Record<string, unknown>> = [];
   const updated: Array<Record<string, unknown>> = [];
+  const auditEvents: Array<Record<string, unknown>> = [];
+  let failAudit = false;
   let row = publication;
 
   const client = {
+    document: {
+      findFirst: async (args: { where: Record<string, unknown> }) => {
+        if (!liveDocument || row === null) return null;
+        return args.where.id === row.documentId && args.where.organisationId === row.organisationId
+          ? { id: row.documentId }
+          : null;
+      },
+    },
     documentPublication: {
       findFirst: async (args: { where: Record<string, unknown> }) => {
         if (row === null) return null;
@@ -29,18 +39,43 @@ function buildPrisma(publication: Record<string, unknown> | null) {
     documentStorageDeletion: {
       create: async (args: { data: Record<string, unknown> }) => {
         created.push(args.data);
-        return { id: 'deletion-9' };
+        return { id: args.data.id };
       },
     },
-    $transaction: async <T>(callback: (tx: unknown) => Promise<T>) => callback(client),
+    user: {
+      findFirst: async () => ({ name: 'Ada Trustee', email: 'ada@example.org' }),
+    },
+    securityAuditEvent: {
+      create: async (args: { data: Record<string, unknown> }) => {
+        if (failAudit) throw new Error('Synthetic audit write failure');
+        auditEvents.push(args.data);
+        return { id: 'audit-1' };
+      },
+    },
+    $transaction: async <T>(callback: (tx: unknown) => Promise<T>) => {
+      const beforeRow = row === null ? null : { ...row };
+      const beforeCreated = created.length;
+      const beforeUpdated = updated.length;
+      const beforeAudit = auditEvents.length;
+      try {
+        return await callback(client);
+      } catch (error) {
+        row = beforeRow;
+        created.length = beforeCreated;
+        updated.length = beforeUpdated;
+        auditEvents.length = beforeAudit;
+        throw error;
+      }
+    },
   };
 
-  return { prisma: client, created, updated, row: () => row };
+  return { prisma: client, created, updated, auditEvents, row: () => row, failAudit: () => { failAudit = true; } };
 }
 
 const RETIRED_ROW = {
   id: 'publication-1',
   organisationId: 'org-1',
+  documentId: 'doc-1',
   provider: 'confluence',
   state: 'RETIRED',
   cloudId: 'cloud-1',
@@ -62,9 +97,11 @@ test('an erasure request enqueues exactly the row the old delete path used to', 
     now: () => NOW,
   });
 
-  assert.equal(result.deletionId, 'deletion-9');
+  assert.match(result.deletionId, /^[0-9a-f-]{36}$/);
   assert.equal(mock.created.length, 1);
+  assert.equal(mock.created[0].id, result.deletionId);
   assert.equal(mock.created[0].provider, 'confluence');
+  assert.equal(mock.created[0].sourceDocumentId, 'doc-1');
   assert.equal(mock.created[0].storagePath, 'org-1/policy.pdf');
   assert.deepEqual(mock.created[0].targetRef, {
     kind: 'confluence',
@@ -77,12 +114,42 @@ test('an erasure request enqueues exactly the row the old delete path used to', 
   // a specific page, and why, must get an actual answer from this row.
   assert.equal(mock.created[0].reason, 'Data subject erasure request 2026-41');
   assert.equal(mock.created[0].requestedById, 'user-1');
+  assert.equal(mock.auditEvents.length, 1);
+  assert.equal(mock.auditEvents[0].type, 'CONFLUENCE_ERASURE_REQUESTED');
+  assert.equal(mock.auditEvents[0].actorUserId, 'user-1');
+  assert.equal(mock.auditEvents[0].actorLabel, 'Ada Trustee');
+  assert.deepEqual(mock.auditEvents[0].context, {
+    publicationId: 'publication-1',
+    storageDeletionId: result.deletionId,
+    provider: 'CONFLUENCE',
+  });
+});
+
+test('a failed audit insert rolls back the erasure request and publication stamp', async () => {
+  const mock = buildPrisma({ ...RETIRED_ROW });
+  mock.failAudit();
+
+  await assert.rejects(
+    requestConfluenceErasure(mock.prisma as never, {
+      organisationId: 'org-1',
+      publicationId: 'publication-1',
+      reason: 'Data subject erasure request 2026-41',
+      requestedById: 'user-1',
+      now: () => NOW,
+    }),
+    /Synthetic audit write failure/,
+  );
+
+  assert.equal(mock.created.length, 0);
+  assert.equal(mock.row()?.erasureDeletionId, null);
+  assert.equal(mock.row()?.erasureRequestedAt, null);
+  assert.equal(mock.auditEvents.length, 0);
 });
 
 test('the request is stamped on the publication so it cannot be made twice', async () => {
   const mock = buildPrisma({ ...RETIRED_ROW });
 
-  await requestConfluenceErasure(mock.prisma as never, {
+  const result = await requestConfluenceErasure(mock.prisma as never, {
     organisationId: 'org-1',
     publicationId: 'publication-1',
     reason: 'Data subject erasure request 2026-41',
@@ -90,7 +157,7 @@ test('the request is stamped on the publication so it cannot be made twice', asy
     now: () => NOW,
   });
 
-  assert.equal(mock.row()!.erasureDeletionId, 'deletion-9');
+  assert.equal(mock.row()!.erasureDeletionId, result.deletionId);
   assert.deepEqual(mock.row()!.erasureRequestedAt, NOW);
 });
 
@@ -124,6 +191,24 @@ test('a publication that is not retired cannot be erased', async () => {
     (error: { code?: string }) => error.code === 'CONFLUENCE_PUBLICATION_NOT_FOUND',
   );
   assert.equal(mock.created.length, 0, 'a live document must never have its page destroyed under it');
+});
+
+test('a retired label cannot erase the Confluence copy while its CharityPilot document remains live', async () => {
+  const mock = buildPrisma({ ...RETIRED_ROW }, true);
+
+  await assert.rejects(
+    requestConfluenceErasure(mock.prisma as never, {
+      organisationId: 'org-1',
+      publicationId: 'publication-1',
+      reason: 'Data subject erasure request 2026-41',
+      requestedById: 'user-1',
+      now: () => NOW,
+    }),
+    (error: { code?: string }) => error.code === 'CONFLUENCE_DOCUMENT_STILL_PRESENT',
+  );
+  assert.equal(mock.created.length, 0);
+  assert.equal(mock.row()?.erasureDeletionId, null);
+  assert.equal(mock.auditEvents.length, 0);
 });
 
 test('a malformed target is refused before any erasure row is written', async () => {
@@ -172,6 +257,9 @@ test('a winner that commits between this request\'s read and its own write is no
   const created: Array<Record<string, unknown>> = [];
 
   const client = {
+    document: {
+      findFirst: async () => null,
+    },
     documentPublication: {
       // Always reads the row as it stood when this request STARTED its
       // transaction — `erasureDeletionId: null` — exactly as a real
@@ -179,6 +267,8 @@ test('a winner that commits between this request\'s read and its own write is no
       // `updateMany` committed.
       findFirst: async () => ({ ...row }),
       updateMany: async (args: { where: Record<string, unknown>; data: Record<string, unknown> }) => {
+        // Another request commits after this one's read but before its write.
+        row.erasureDeletionId = 'deletion-1';
         if (Object.hasOwn(args.where, 'erasureDeletionId') && row.erasureDeletionId !== args.where.erasureDeletionId) {
           return { count: 0 };
         }
@@ -189,13 +279,7 @@ test('a winner that commits between this request\'s read and its own write is no
     documentStorageDeletion: {
       create: async (args: { data: Record<string, unknown> }) => {
         created.push(args.data);
-        // The side effect that models the race: another request's own
-        // findFirst-then-updateMany sequence completes and stamps the row
-        // BETWEEN this request's `findFirst` (already read, above) and its
-        // `updateMany` (below) — the exact window `erasureDeletionId: null`
-        // in that `updateMany`'s where clause exists to close.
-        row.erasureDeletionId = 'deletion-1';
-        return { id: 'deletion-9' };
+        return { id: args.data.id };
       },
     },
     $transaction: async <T>(callback: (tx: unknown) => Promise<T>) => callback(client),
@@ -217,4 +301,5 @@ test('a winner that commits between this request\'s read and its own write is no
     'deletion-1',
     "the winner's stamp must survive; the loser's updateMany must not overwrite it with its own id",
   );
+  assert.equal(created.length, 0, 'the losing request never queues its job');
 });

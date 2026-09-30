@@ -1,5 +1,11 @@
 # CharityPilot MCP connector: audit and improvement plan
 
+**2026-09-30 correction:** The historical statement below that disconnecting
+deletes mirrored Confluence pages was wrong. Disconnect removes CharityPilot's
+credential copy; recorded remote pages need separate review and erasure. The
+current API requires a web session for Confluence setup, disconnect and
+erasure decisions even when called directly with a connector token.
+
 Written 2026-09-20 against `master` at `fa0dd68`, after reading every source file in
 `mcp/`, the API code that enforces the connector's limits, the seven specs and plans
 under `docs/superpowers/`, the live suite, and the current Model Context Protocol
@@ -43,9 +49,10 @@ Everything below is a deliberate choice, not an oversight.
   the design before it is built, and it is blocked on the hosting move either
   way. The design recommends shipping it read-only first.
 - **Confluence setup tools.** Connecting, disconnecting and choosing a publish
-  space stay out of the connector. Disconnecting deletes mirrored pages, which
-  the owner's 2026-09-19 ruling forbids CharityPilot from doing, and choosing a
-  space is a decision made once while looking at a list of spaces.
+  space stay out of the connector. Connection requires the browser OAuth
+  consent flow; disconnect removes CharityPilot's credentials while leaving
+  recorded remote pages for separate review; choosing a space is a decision
+  made while looking at the live list of spaces.
 - **Erasing a Confluence page.** Excluded on the Confluence session’s own
   ruling: it is the last way CharityPilot can destroy a page in a charity’s
   site, and the typed confirmation phrase it demands only means something if a

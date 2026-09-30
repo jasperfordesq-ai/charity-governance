@@ -2,6 +2,12 @@
 
 Status marks reflect completed repository hardening work. Open items require real external evidence before CharityPilot can handle production charity data.
 
+> 2026-09-29 DPO continuation: the public-production machine-readable launch
+> ledger now requires 90 checks, including a separate disposition of Nikita's
+> 2026-09-28 feedback against the exact reviewed tenant and release. The older
+> 2026-07-12 count below is a historical checkpoint; run `npm run launch:status`
+> against current external evidence before reporting launch progress.
+
 > **New here / not sure what to do next?** Read [`docs/LAUNCH-GUIDE.md`](docs/LAUNCH-GUIDE.md)
 > first - it explains, in plain English, what is already done and the exact
 > human steps (accounts, hosting, legal, security review) that remain.

@@ -211,7 +211,13 @@ export function StandardEditorCard({
           ))}
         </Select>
 
-        <Textarea
+        {!canManageRecords ? (
+          <p className="text-sm text-gray-600 dark:text-gray-300">
+            You can review this standard’s status. Detailed evidence and explanations require an Owner or Admin.
+          </p>
+        ) : null}
+
+        {canManageRecords ? <><Textarea
           label="Action Taken"
           placeholder="Describe what your organisation has done to address this standard..."
           isReadOnly={!canManageRecords}
@@ -287,7 +293,7 @@ export function StandardEditorCard({
               label: 'text-red-600 dark:text-red-400',
             }}
           />
-        )}
+        )}</> : null}
       </div>
       <ConfirmActionModal
         isOpen={canManageRecords && reconcileOpen}

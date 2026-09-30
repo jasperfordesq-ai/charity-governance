@@ -54,6 +54,7 @@ function validationService(current: Record<string, unknown>) {
         return fullOrgRecord(current);
       },
     },
+    organisationChangeAudit: { create: async () => ({}) },
     deadline: {},
   };
   return {
@@ -85,6 +86,7 @@ test('updateOrganisation regenerates derived deadlines inside the same Prisma tr
         return fullOrgRecord({ financialYearEnd: new Date('2026-12-31T00:00:00.000Z') });
       },
     },
+    organisationChangeAudit: { create: async () => { calls.push('tx.organisationChangeAudit.create'); return {}; } },
     // Register of Members: empty, so the calendar falls back to memberCount.
     member: {
       count: async () => {
@@ -99,13 +101,14 @@ test('updateOrganisation regenerates derived deadlines inside the same Prisma tr
       },
       create: async () => {
         calls.push('tx.deadline.create');
-        return {};
+        return { id: 'generated-1', updatedAt: new Date(EXPECTED_UPDATED_AT) };
       },
       update: async () => {
         calls.push('tx.deadline.update');
         return {};
       },
     },
+    deadlineChangeAudit: { create: async () => { calls.push('tx.deadlineChangeAudit.create'); return {}; } },
   };
   const prisma = {
     $transaction: async (callback: (transaction: typeof tx) => Promise<unknown>) => {
@@ -118,7 +121,7 @@ test('updateOrganisation regenerates derived deadlines inside the same Prisma tr
   await service.updateOrganisation('org-1', {
     expectedUpdatedAt: EXPECTED_UPDATED_AT,
     financialYearEnd: '2026-12-31',
-  });
+  }, 'actor-1');
 
   assert.deepEqual(calls.slice(0, 4), [
     'prisma.$transaction',
@@ -129,6 +132,7 @@ test('updateOrganisation regenerates derived deadlines inside the same Prisma tr
   assert.ok(calls.includes('tx.organisation.findUniqueOrThrow'), 'calendar inputs must be read in the transaction');
   assert.ok(calls.includes('tx.deadline.findMany'), 'generated lifecycle lookup must use the transaction client');
   assert.ok(calls.includes('tx.deadline.create'), 'auto deadline writes must use the transaction client');
+  assert.ok(calls.includes('tx.deadlineChangeAudit.create'), 'generated deadline history must use the transaction client');
 });
 
 test('updateOrganisation skips deadline regeneration for non-date profile edits', async () => {
@@ -148,6 +152,7 @@ test('updateOrganisation skips deadline regeneration for non-date profile edits'
         return fullOrgRecord({ name: 'Renamed Charity' });
       },
     },
+    organisationChangeAudit: { create: async () => { calls.push('tx.organisationChangeAudit.create'); return {}; } },
     deadline: {},
   };
   const prisma = {
@@ -158,14 +163,49 @@ test('updateOrganisation skips deadline regeneration for non-date profile edits'
   };
   const service = new OrganisationService(prisma as never);
 
-  await service.updateOrganisation('org-1', { expectedUpdatedAt: EXPECTED_UPDATED_AT, name: 'Renamed Charity' });
+  await service.updateOrganisation('org-1', { expectedUpdatedAt: EXPECTED_UPDATED_AT, name: 'Renamed Charity' }, 'actor-1');
 
   assert.deepEqual(calls, [
     'prisma.$transaction',
     'tx.$queryRaw',
     'tx.organisation.findUnique',
     'tx.organisation.update',
+    'tx.organisationChangeAudit.create',
   ]);
+});
+
+test('profile edit history records actor and submitted fields without copying values', async () => {
+  let auditData: Record<string, unknown> | undefined;
+  const previous = fullOrgRecord({ registeredAddress: 'PRIVATE_OLD_ADDRESS' });
+  const next = fullOrgRecord({ registeredAddress: 'PRIVATE_NEW_ADDRESS',
+    updatedAt: new Date('2026-01-02T00:00:00.000Z') });
+  const tx = {
+    $queryRaw: async () => [{ id: 'org-1' }],
+    organisation: { findUnique: async () => previous, update: async () => next },
+    organisationChangeAudit: { create: async ({ data }: { data: Record<string, unknown> }) => {
+      auditData = data;
+      return {};
+    } },
+  };
+  const service = new OrganisationService({ $transaction: async (callback: (client: typeof tx) => Promise<unknown>) => callback(tx) } as never);
+  await service.updateOrganisation('org-1', { expectedUpdatedAt: EXPECTED_UPDATED_AT,
+    registeredAddress: 'PRIVATE_NEW_ADDRESS' }, 'actor-1');
+  assert.deepEqual(auditData, {
+    organisationId: 'org-1', actorUserId: 'actor-1', submittedFields: ['registeredAddress'],
+    previousUpdatedAt: previous.updatedAt, nextUpdatedAt: next.updatedAt,
+  });
+  assert.doesNotMatch(JSON.stringify(auditData), /PRIVATE_OLD_ADDRESS|PRIVATE_NEW_ADDRESS/);
+});
+
+test('profile edit fails when its audit cannot be appended', async () => {
+  const tx = {
+    $queryRaw: async () => [{ id: 'org-1' }],
+    organisation: { findUnique: async () => fullOrgRecord(), update: async () => fullOrgRecord({ name: 'Changed' }) },
+    organisationChangeAudit: { create: async () => { throw new Error('audit unavailable'); } },
+  };
+  const service = new OrganisationService({ $transaction: async (callback: (client: typeof tx) => Promise<unknown>) => callback(tx) } as never);
+  await assert.rejects(() => service.updateOrganisation('org-1', { expectedUpdatedAt: EXPECTED_UPDATED_AT,
+    name: 'Changed' }, 'actor-1'), /audit unavailable/);
 });
 
 test('organisation optimistic version accepts an equivalent offset instant', async () => {
@@ -173,7 +213,7 @@ test('organisation optimistic version accepts an equivalent offset instant', asy
   await harness.service.updateOrganisation('org-1', {
     expectedUpdatedAt: '2026-01-01T01:00:00.000+01:00',
     name: 'Offset-safe charity edit',
-  });
+  }, 'actor-1');
   assert.equal(harness.updateCalled(), true);
 });
 
@@ -196,6 +236,7 @@ test('updateOrganisation persists conditional obligation facts without regenerat
         return fullOrgRecord({ conditionalObligationProfile: conditionalProfile });
       },
     },
+    organisationChangeAudit: { create: async () => { calls.push('tx.organisationChangeAudit.create'); return {}; } },
     deadline: {
       findMany: async () => {
         calls.push('tx.deadline.findMany');
@@ -214,13 +255,14 @@ test('updateOrganisation persists conditional obligation facts without regenerat
   const result = await service.updateOrganisation('org-1', {
     expectedUpdatedAt: EXPECTED_UPDATED_AT,
     conditionalObligationProfile: conditionalProfile,
-  });
+  }, 'actor-1');
 
   assert.deepEqual(calls, [
     'prisma.$transaction',
     'tx.$queryRaw',
     'tx.organisation.findUnique',
     'tx.organisation.update',
+    'tx.organisationChangeAudit.create',
   ]);
   assert.deepEqual(updateData, { conditionalObligationProfile: conditionalProfile });
   assert.deepEqual(result.conditionalObligationProfile, conditionalProfile);
@@ -236,7 +278,7 @@ test('updateOrganisation returns a stable conflict after serializable retries ar
   } as never);
 
   await assert.rejects(
-    () => service.updateOrganisation('org-1', { expectedUpdatedAt: EXPECTED_UPDATED_AT, name: 'Concurrent edit' }),
+    () => service.updateOrganisation('org-1', { expectedUpdatedAt: EXPECTED_UPDATED_AT, name: 'Concurrent edit' }, 'actor-1'),
     (error: unknown) =>
       (error as { statusCode?: number; code?: string }).statusCode === 409 &&
       (error as { code?: string }).code === 'ORGANISATION_UPDATE_CONFLICT',
@@ -258,7 +300,7 @@ test('optimistic version binding rejects stale legal-form and CRO confirmations'
       () => harness.service.updateOrganisation('org-1', {
         expectedUpdatedAt: EXPECTED_UPDATED_AT,
         ...patch,
-      }),
+      }, 'actor-1'),
       (error: unknown) =>
         (error as { statusCode?: number; code?: string }).statusCode === 409 &&
         (error as { code?: string }).code === 'ORGANISATION_UPDATE_CONFLICT',
@@ -278,7 +320,7 @@ test('calendar evidence rejects impossible confirmation and future actual-event 
   ] as const) {
     const harness = validationService({ legalForm: null });
     await assert.rejects(
-      () => harness.service.updateOrganisation('org-1', { expectedUpdatedAt: EXPECTED_UPDATED_AT, ...body }),
+      () => harness.service.updateOrganisation('org-1', { expectedUpdatedAt: EXPECTED_UPDATED_AT, ...body }, 'actor-1'),
       (error: unknown) => (error as { code?: string }).code === expectedCode,
     );
     assert.equal(harness.updateCalled(), false);
@@ -293,7 +335,7 @@ test('calendar evidence cannot pre-date a recorded incorporation', async () => {
   ] as const) {
     const harness = validationService({ incorporationDate: new Date('2025-01-01T00:00:00.000Z') });
     await assert.rejects(
-      () => harness.service.updateOrganisation('org-1', { expectedUpdatedAt: EXPECTED_UPDATED_AT, ...body }),
+      () => harness.service.updateOrganisation('org-1', { expectedUpdatedAt: EXPECTED_UPDATED_AT, ...body }, 'actor-1'),
       (error: unknown) => (error as { code?: string }).code === expectedCode,
     );
     assert.equal(harness.updateCalled(), false);
@@ -334,6 +376,7 @@ test('revoking a calendar confirmation supersedes the affected generated occurre
       },
       findUniqueOrThrow: async () => unconfirmed,
     },
+    organisationChangeAudit: { create: async () => ({}) },
     member: { count: async () => 0 },
     deadline: {
       findMany: async () => [currentDeadline],
@@ -345,12 +388,13 @@ test('revoking a calendar confirmation supersedes the affected generated occurre
         throw new Error('unconfirmation must not create a replacement company occurrence');
       },
     },
+    deadlineChangeAudit: { create: async () => ({}) },
   };
   const service = new OrganisationService({
     $transaction: async (operation: (client: typeof tx) => Promise<unknown>) => operation(tx),
   } as never);
 
-  await service.updateOrganisation('org-1', { expectedUpdatedAt: EXPECTED_UPDATED_AT, confirmLegalForm: false });
+  await service.updateOrganisation('org-1', { expectedUpdatedAt: EXPECTED_UPDATED_AT, confirmLegalForm: false }, 'actor-1');
 
   assert.equal(superseded.length, 1);
   assert.equal(superseded[0].supersessionReason, 'INPUT_REMOVED');

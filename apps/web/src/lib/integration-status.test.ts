@@ -373,6 +373,25 @@ test('no sentence about a Confluence page ever says "deleted"', () => {
   }
 });
 
+test('a published copy of a non-current document is flagged for separate review', () => {
+  const mirror = { publication: 'PUBLISHED' as const, pageUrl: 'https://example.invalid/page', remote: null };
+  const current = describeConfluenceMirror(mirror);
+  const historical = describeConfluenceMirror(mirror, false);
+  assert.equal(current.label, 'Published');
+  assert.equal(historical.label, 'Historical copy recorded');
+  assert.equal(historical.tone, 'warning');
+  assert.match(historical.historicalReview ?? '', /not CURRENT.*manage that copy separately/);
+
+  const failedCopy = describeConfluenceMirror({ ...mirror, publication: 'FAILED' }, false);
+  assert.equal(failedCopy.actionable, false);
+  assert.match(failedCopy.detail, /cannot be retried/);
+  assert.match(failedCopy.detail, /page reference was recorded/);
+  assert.notEqual(failedCopy.label, 'Not published');
+  const failedWithoutPage = describeConfluenceMirror({ publication: 'FAILED', pageRecorded: false, pageUrl: null, remote: null }, false);
+  assert.equal(failedWithoutPage.actionable, false);
+  assert.match(failedWithoutPage.historicalReview ?? '', /new publication is not permitted/);
+});
+
 test('the copy guard reads the real strings, not an empty list', () => {
   // The canary for the guard above: a refactor that made `allMirrorCopy`
   // return nothing would leave it green over zero sentences.
@@ -461,11 +480,92 @@ test('a retired publication explains that the Confluence page was left alone', (
 });
 
 test('a failed publication tells an administrator there is something to do', () => {
-  const display = describeConfluenceMirror({ publication: 'FAILED', pageUrl: null, remote: null });
+  const display = describeConfluenceMirror({ publication: 'FAILED', pageRecorded: false, pageUrl: null, remote: null });
 
   assert.equal(display.tone, 'danger');
   assert.equal(display.actionable, true);
   assert.match(display.detail, /try again/);
+  assert.match(display.detail, /before CharityPilot recorded/);
+});
+
+test('a recorded page remains explicit when publishing stops before completion', () => {
+  const mirror = { publication: 'FAILED' as const, pageUrl: 'https://example.invalid/page', remote: null };
+  const display = describeConfluenceMirror(mirror);
+  assert.equal(display.label, 'Page reference recorded');
+  assert.match(display.detail, /did not finish/);
+  assert.match(display.detail, /external page and attachment/);
+  assert.equal(display.actionable, true);
+
+  const pending = describeConfluenceMirror({ ...mirror, publication: 'PENDING' });
+  assert.match(pending.detail, /page reference has been recorded/);
+  assert.match(pending.detail, /has not finished/);
+
+  const withoutSiteAddress = describeConfluenceMirror({ publication: 'FAILED', pageRecorded: true, pageUrl: null, remote: null });
+  assert.equal(withoutSiteAddress.label, 'Page reference recorded');
+  assert.match(withoutSiteAddress.detail, /page reference was recorded/);
+
+  const unknown = describeConfluenceMirror({ publication: 'FAILED', pageUrl: null, remote: null });
+  assert.match(unknown.detail, /cannot establish whether/);
+  assert.doesNotMatch(unknown.detail, /before CharityPilot recorded/);
+});
+
+test('a page on another Confluence site is not shown as a current healthy copy or retryable job', () => {
+  const oldSite = { pageRecorded: true, pageSiteMatchesConnection: false, pageUrl: null,
+    remote: { state: 'VISIBLE' as const, title: null, version: 2,
+      lastReconciledAt: '2026-09-27T10:00:00.000Z', reconcileError: null } };
+  const published = describeConfluenceMirror({ ...oldSite, publication: 'PUBLISHED' });
+  assert.equal(published.label, 'Page on another site');
+  assert.equal(published.tone, 'warning');
+  assert.match(published.detail, /different site.*current connection/);
+  assert.doesNotMatch(published.detail, /checked 2026-09-27/);
+
+  const failed = describeConfluenceMirror({ ...oldSite, publication: 'FAILED' });
+  assert.equal(failed.actionable, false);
+  assert.match(failed.detail, /reconcile the recorded page before retrying/);
+
+  const historical = describeConfluenceMirror({ ...oldSite, publication: 'FAILED' }, false);
+  assert.equal(historical.actionable, false);
+  assert.match(historical.historicalReview ?? '', /manage that copy on the original site/);
+  assert.match(historical.detail, /different site/);
+
+  const disconnected = describeConfluenceMirror({ ...oldSite, publication: 'PUBLISHED',
+    pageSiteMatchesConnection: null, connectionAvailable: false });
+  assert.equal(disconnected.label, 'Connection unavailable');
+  assert.equal(disconnected.tone, 'warning');
+  assert.match(disconnected.detail, /no active Confluence connection/);
+  const disconnectedHistorical = describeConfluenceMirror({ ...oldSite, publication: 'FAILED',
+    pageSiteMatchesConnection: null, connectionAvailable: false }, false);
+  assert.equal(disconnectedHistorical.actionable, false);
+  assert.match(disconnectedHistorical.historicalReview ?? '', /connection is inactive/);
+
+  const unknownSite = describeConfluenceMirror({ ...oldSite, publication: 'PUBLISHED',
+    pageSiteMatchesConnection: null, connectionAvailable: true });
+  assert.equal(unknownSite.label, 'Page site unverified');
+  assert.equal(unknownSite.actionable, false);
+  assert.match(unknownSite.detail, /cannot confirm.*currently connected site/);
+});
+
+test('a changed publication destination asks for reapproval and never offers retry', () => {
+  const mirror = { publication: 'PENDING' as const, pageRecorded: false, pageUrl: null, remote: null };
+  const display = describeConfluenceMirror(mirror, true, true);
+  assert.equal(display.label, 'Publication approval needs review');
+  assert.equal(display.tone, 'warning');
+  assert.equal(display.actionable, false);
+  assert.match(display.detail, /site or space.*not covered/);
+  const failed = describeConfluenceMirror({ ...mirror, publication: 'FAILED' }, true, true);
+  assert.equal(failed.actionable, false);
+  assert.equal(failed.label, 'Publication approval needs review');
+});
+
+test('a recorded page is not shown as healthy after publication approval is withdrawn', () => {
+  const display = describeConfluenceMirror({ publication: 'PUBLISHED', pageRecorded: true,
+    pageUrl: null, remote: { state: 'VISIBLE', title: null, version: 2,
+      lastReconciledAt: '2026-09-27T10:00:00.000Z', reconcileError: null } }, true, false, true);
+  assert.equal(display.label, 'Publication approval withdrawn');
+  assert.equal(display.tone, 'warning');
+  assert.equal(display.actionable, false);
+  assert.match(display.detail, /page reference remains.*no current publication approval/);
+  assert.doesNotMatch(display.detail, /page is gone\./);
 });
 
 test('a document never published says so without implying a page exists', () => {

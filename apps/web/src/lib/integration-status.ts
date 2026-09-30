@@ -383,6 +383,24 @@ export type ConfluencePublicationState =
 
 export type ConfluenceMirror = {
   publication: ConfluencePublicationState;
+  /** Null/omitted means the response cannot establish whether a page ID was recorded. */
+  pageRecorded?: boolean | null;
+  /** False means the recorded page belongs to a different site from this connection. */
+  pageSiteMatchesConnection?: boolean | null;
+  /** Whether the recorded page IDs belong to the selected publishing site and space. */
+  recordedPageMatchesDestination?: boolean | null;
+  /** False means no active Confluence connection is available for this page. */
+  connectionAvailable?: boolean | null;
+  /** False means an existing approval does not cover this active site and space. */
+  approvalDestinationCurrent?: boolean | null;
+  /** Exact active destination shown to an Admin before a publication decision. */
+  publishDestination?: {
+    siteId: string;
+    siteUrl: string | null;
+    spaceId: string;
+    spaceKey: string;
+    spaceName: string;
+  } | null;
   pageUrl: string | null;
   remote: {
     state: ConfluenceRemoteState;
@@ -401,6 +419,8 @@ export type MirrorDisplay = {
   tone: 'neutral' | 'positive' | 'warning' | 'danger';
   /** True when the charity can act: retry a failure, or look in their own trash. */
   actionable: boolean;
+  /** A former current document needs a separate review of any recorded copy. */
+  historicalReview?: string;
 };
 
 function checkedSuffix(lastReconciledAt: string | null): string {
@@ -412,6 +432,11 @@ function checkedSuffix(lastReconciledAt: string | null): string {
   return `, checked ${parsed.toISOString().slice(0, 10)}`;
 }
 
+function recordedPageState(mirror: ConfluenceMirror): boolean | null {
+  if (mirror.pageUrl !== null) return true;
+  return typeof mirror.pageRecorded === 'boolean' ? mirror.pageRecorded : null;
+}
+
 /**
  * What to show a trustee about the Confluence copy of one document.
  *
@@ -419,7 +444,7 @@ function checkedSuffix(lastReconciledAt: string | null): string {
  * create has no remote state worth describing, and describing one would imply
  * a page exists.
  */
-export function describeConfluenceMirror(mirror: ConfluenceMirror | null): MirrorDisplay {
+function describeConfluenceMirrorBase(mirror: ConfluenceMirror | null): MirrorDisplay {
   if (mirror === null || mirror.publication === 'NOT_PUBLISHED') {
     return {
       label: 'Not published',
@@ -430,20 +455,28 @@ export function describeConfluenceMirror(mirror: ConfluenceMirror | null): Mirro
   }
 
   if (mirror.publication === 'PENDING') {
+    const recorded = recordedPageState(mirror);
     return {
       label: 'Publishing',
-      detail: 'This document is queued to be published to Confluence.',
+      detail: recorded === true
+        ? 'A Confluence page reference has been recorded, but publishing has not finished. Do not rely on the external copy yet.'
+        : recorded === false
+          ? 'This document is queued to be published to Confluence; no page reference is recorded yet.'
+          : 'Publishing is queued or in progress, but this response cannot establish whether a Confluence page was recorded. Do not rely on the external copy yet.',
       tone: 'neutral',
       actionable: false,
     };
   }
 
   if (mirror.publication === 'FAILED') {
+    const recorded = recordedPageState(mirror);
     return {
-      label: 'Not published',
-      detail:
-        'Publishing this document to Confluence did not succeed and has stopped being retried. ' +
-        'An administrator can try again.',
+      label: recorded === true ? 'Page reference recorded' : 'Publishing stopped',
+      detail: recorded === true
+        ? 'A Confluence page reference was recorded, but publishing did not finish. Review the external page and attachment before retrying.'
+        : recorded === false
+          ? 'Publishing stopped before CharityPilot recorded a Confluence page. An administrator can investigate and try again.'
+          : 'Publishing stopped, but this response cannot establish whether a Confluence page was recorded. Review the external site before retrying.',
       tone: 'danger',
       actionable: true,
     };
@@ -523,6 +556,90 @@ export function describeConfluenceMirror(mirror: ConfluenceMirror | null): Mirro
   }
 }
 
+export function describeConfluenceMirror(mirror: ConfluenceMirror | null, isCurrentDocument = true,
+  approvalNeedsReview = false, approvalWithdrawnWithCopy = false): MirrorDisplay {
+  let display = describeConfluenceMirrorBase(mirror);
+  if (approvalWithdrawnWithCopy) {
+    display = {
+      label: 'Publication approval withdrawn',
+      detail: 'A Confluence page reference remains, but this document has no current publication approval. Review the external copy separately; its recorded state does not establish that the page is gone or safe to rely on.',
+      tone: 'warning',
+      actionable: false,
+    };
+  } else if (approvalNeedsReview) {
+    display = {
+      label: 'Publication approval needs review',
+      detail: 'The selected Confluence site or space is not covered by this document’s recorded approval. Review the destination and any existing copy, then record a reasoned approval for this destination before publication continues.',
+      tone: 'warning',
+      actionable: false,
+    };
+  } else if (mirror && recordedPageState(mirror) === true && mirror.connectionAvailable === false) {
+    display = {
+      label: 'Connection unavailable',
+      detail: 'A Confluence page reference is recorded, but this charity has no active Confluence connection. Review the page on its original site before relying on its current status or retrying publication.',
+      tone: 'warning',
+      actionable: false,
+    };
+  } else if (mirror && recordedPageState(mirror) === true && mirror.pageSiteMatchesConnection === false) {
+    const lead = mirror.publication === 'PENDING' ? 'Publishing has not finished. '
+      : mirror.publication === 'FAILED' ? 'Publishing stopped before completion. '
+        : mirror.publication === 'RETIRED' ? 'This document is no longer tracked for publication. ' : '';
+    const nextStep = mirror.publication === 'FAILED'
+      ? 'Review the original site and reconcile the recorded page before retrying publication.'
+      : 'Review the original site before relying on the copy; this connection does not establish its current status.';
+    display = {
+      label: 'Page on another site',
+      detail: `${lead}The recorded Confluence page belongs to a different site from the current connection. ${nextStep}`,
+      tone: 'warning',
+      actionable: false,
+    };
+  } else if (mirror && recordedPageState(mirror) === true && mirror.connectionAvailable === true
+    && mirror.pageSiteMatchesConnection === null) {
+    display = {
+      label: 'Page site unverified',
+      detail: 'A Confluence page reference is recorded, but CharityPilot cannot confirm that it belongs to the currently connected site. Review the original site before relying on the copy or retrying publication.',
+      tone: 'warning',
+      actionable: false,
+    };
+  }
+  if (isCurrentDocument || mirror === null ||
+    (mirror.publication === 'NOT_PUBLISHED' && mirror.pageUrl === null)) return display;
+
+  const recorded = recordedPageState(mirror);
+  const hasRecordedCopy = mirror.publication === 'PUBLISHED' || recorded === true;
+
+  return {
+    ...display,
+    label: display.label === 'Published' ? 'Historical copy recorded' : display.label,
+    tone: display.tone === 'positive' || display.tone === 'neutral' ? 'warning' : display.tone,
+    ...(mirror.publication === 'FAILED' && !approvalNeedsReview && !approvalWithdrawnWithCopy && mirror.connectionAvailable !== false && mirror.pageSiteMatchesConnection !== false
+      && !(recorded === true && mirror.connectionAvailable === true && mirror.pageSiteMatchesConnection === null) ? {
+      detail: recorded === true
+        ? 'A Confluence page reference was recorded, but publishing did not finish. This document is no longer CURRENT, so publication cannot be retried; review the external copy separately.'
+        : recorded === false
+          ? 'The last Confluence publishing attempt stopped before CharityPilot recorded a page. This document is no longer CURRENT, so publication cannot be retried.'
+          : 'The last Confluence publishing attempt stopped, but this response cannot establish whether a page was recorded. This document is no longer CURRENT, so publication cannot be retried; review the external site separately.',
+      actionable: false,
+    } : {}),
+    ...(mirror.publication === 'PENDING' ? {
+      detail: 'A publishing job is recorded for this non-current document. Review its final state before relying on the external copy.',
+    } : {}),
+    historicalReview: approvalNeedsReview
+      ? 'This document is not CURRENT in CharityPilot. A recorded Confluence approval no longer covers the selected destination; review any existing copy separately. A new publication is not permitted.'
+      : mirror.connectionAvailable === false
+      ? 'This document is not CURRENT in CharityPilot. A page reference remains while the Confluence connection is inactive; review and manage the copy on its original site. A new publication is not permitted.'
+      : mirror.pageSiteMatchesConnection === false
+      ? 'This document is not CURRENT in CharityPilot. Its recorded page belongs to another Confluence site; review and manage that copy on the original site. A new publication is not permitted.'
+      : recorded === true && mirror.connectionAvailable === true && mirror.pageSiteMatchesConnection === null
+        ? 'This document is not CURRENT in CharityPilot. The recorded page site cannot be confirmed against the connection; review the original site. A new publication is not permitted.'
+      : hasRecordedCopy
+      ? 'This document is not CURRENT in CharityPilot. A Confluence copy or page reference remains in the publication record; review its remote status and manage that copy separately.'
+      : recorded === null
+        ? 'This document is not CURRENT in CharityPilot. Page-reference status is unavailable; review the external site and recorded publishing job. A new publication is not permitted.'
+        : 'This document is not CURRENT in CharityPilot. Review the recorded publishing job; a new publication is not permitted.',
+  };
+}
+
 /** Every sentence this module can produce, for the copy guard to scan. */
 export function allMirrorCopy(): string[] {
   const states: ConfluenceRemoteState[] = ['VISIBLE', 'ARCHIVED', 'TRASHED', 'GONE', 'UNKNOWN'];
@@ -536,8 +653,26 @@ export function allMirrorCopy(): string[] {
 
   const copy: string[] = [];
   for (const publication of publications) {
-    const withoutRemote = describeConfluenceMirror({ publication, pageUrl: null, remote: null });
-    copy.push(withoutRemote.label, withoutRemote.detail);
+    for (const pageRecorded of [false, true, null]) {
+      for (const pageSiteMatchesConnection of [true, false, null]) {
+        for (const connectionAvailable of [true, false, null]) {
+          const withoutRemote = describeConfluenceMirror({ publication, pageRecorded, pageSiteMatchesConnection,
+            connectionAvailable, pageUrl: null, remote: null });
+          copy.push(withoutRemote.label, withoutRemote.detail);
+          const historicalWithoutLink = describeConfluenceMirror({ publication, pageRecorded, pageSiteMatchesConnection,
+            connectionAvailable, pageUrl: null, remote: null }, false);
+          copy.push(historicalWithoutLink.label, historicalWithoutLink.detail,
+            ...(historicalWithoutLink.historicalReview ? [historicalWithoutLink.historicalReview] : []));
+        }
+      }
+    }
+    const historical = describeConfluenceMirror({ publication, pageUrl: 'https://example.invalid/page', remote: null }, false);
+    copy.push(historical.label, historical.detail, ...(historical.historicalReview ? [historical.historicalReview] : []));
+    const staleApproval = describeConfluenceMirror({ publication, pageUrl: null, remote: null }, true, true);
+    copy.push(staleApproval.label, staleApproval.detail);
+    const withdrawnApproval = describeConfluenceMirror({ publication, pageRecorded: true,
+      pageUrl: null, remote: null }, true, false, true);
+    copy.push(withdrawnApproval.label, withdrawnApproval.detail);
     for (const state of states) {
       const display = describeConfluenceMirror({
         publication,

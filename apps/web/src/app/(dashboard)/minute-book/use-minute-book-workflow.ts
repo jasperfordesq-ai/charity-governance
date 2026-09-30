@@ -111,13 +111,19 @@ export function useMinuteBookWorkflow() {
   const [voidReason, setVoidReason] = useState('');
 
   const fetchAll = useCallback(async () => {
+    if (!canManage) {
+      setActs([]);
+      setVoids([]);
+      setLoading(false);
+      return;
+    }
     setLoading(true);
     setLoadError('');
     try {
       // No year parameter: the whole minute book, every year.
       const [actsRes, voidsRes] = await Promise.all([
         api.get('/governing-acts'),
-        api.get('/governing-acts/voids'),
+        canManage ? api.get('/governing-acts/voids') : Promise.resolve(null),
       ]);
       // The axios interceptor in lib/api.ts already unwraps { data: [...] },
       // so actsRes.data is normally the array itself and actsRes.data.data is
@@ -125,13 +131,13 @@ export function useMinuteBookWorkflow() {
       // empty while the API returns 200 with every record. Every other page in
       // the app uses this same three-step pattern; this one was missing it.
       setActs((actsRes.data?.data ?? actsRes.data ?? []) as GoverningAct[]);
-      setVoids((voidsRes.data?.data ?? voidsRes.data ?? []) as GoverningActVoidRecord[]);
+      setVoids((voidsRes?.data?.data ?? voidsRes?.data ?? []) as GoverningActVoidRecord[]);
     } catch (err) {
       setLoadError(messageFrom(err, 'The minute book could not be loaded.'));
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [canManage]);
 
   useEffect(() => {
     void fetchAll();

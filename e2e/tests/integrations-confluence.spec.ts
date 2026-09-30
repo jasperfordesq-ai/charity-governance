@@ -1,5 +1,7 @@
-import { test, expect } from '../fixtures';
+import path from 'node:path';
+import { test, expect, reliableFill } from '../fixtures';
 import { gotoWithDevServerRetry } from '../helpers/navigation';
+import { withDb } from '../helpers/db';
 
 /**
  * Journey: the Confluence connector, end to end, against a fake Atlassian.
@@ -24,9 +26,11 @@ import { gotoWithDevServerRetry } from '../helpers/navigation';
 
 /** The API path the web app proxies to. Kept in one place so a rename is one edit. */
 const CONFLUENCE_API = /\/api\/v1\/integrations\/confluence/;
+const SAMPLE_FILE = path.resolve(__dirname, '../fixtures/sample-document.txt');
 
 test.describe('Confluence connector', () => {
-  test('disclosure, connect, choose a space, and only then publishing', async ({ ownerPage }) => {
+  test('disclosure, connect, choose a space, and review the exact destination before approval', async ({ owner, ownerPage }) => {
+    test.setTimeout(180_000);
     await gotoWithDevServerRetry(ownerPage, '/integrations');
 
     // ── 1. Not connected, and saying so plainly ──────────────────────────
@@ -44,7 +48,7 @@ test.describe('Confluence connector', () => {
     // throws rather than returning a URL when the disclosure is missing. So the
     // presence of this button is itself the assertion that the limits were
     // shown: there is no path to the link that skips them.
-    const continueButton = ownerPage.getByRole('link', { name: /continue to Atlassian/i });
+    const continueButton = ownerPage.getByRole('button', { name: /continue to Atlassian/i });
     await expect(continueButton).toBeVisible();
 
     // The two limits a DPO cares about most must be on screen before consent.
@@ -88,7 +92,9 @@ test.describe('Confluence connector', () => {
     expect((await spaces).status()).toBe(200);
 
     await ownerPage.getByRole('button', { name: /Confluence space/i }).click();
-    await ownerPage.getByRole('option', { name: /Governance \(GOV\)/ }).click();
+    const governanceSpace = ownerPage.getByRole('option', { name: /Governance \(GOV\)/ });
+    await expect(governanceSpace).toBeVisible();
+    await governanceSpace.press('Enter');
 
     const savedSpace = ownerPage.waitForResponse(
       (r) => /\/confluence\/publish-space$/.test(r.url()) && r.request().method() === 'PUT',
@@ -124,9 +130,114 @@ test.describe('Confluence connector', () => {
 
     // And the screen says so too. A charity reads the page, not the payload.
     await expect(ownerPage.getByText(/Governance/).first()).toBeVisible();
+
+    // The document approval must name the destination the administrator saw,
+    // and a changed selection must fail without an approval event.
+    await gotoWithDevServerRetry(ownerPage, '/documents');
+    const documentName = `DPO reviewed destination ${Date.now()}`;
+    await ownerPage.getByRole('button', { name: /Upload document/i }).click();
+    await reliableFill(ownerPage.getByLabel('Document name'), documentName);
+    await ownerPage.locator('#document-upload-file').setInputFiles(SAMPLE_FILE);
+    const uploaded = ownerPage.waitForResponse((response) =>
+      /\/api\/v1\/documents$/.test(response.url()) && response.request().method() === 'POST');
+    await ownerPage.getByRole('button', { name: 'Upload', exact: true }).click();
+    const uploadResponse = await uploaded;
+    expect(uploadResponse.status()).toBe(201);
+    const documentId = ((await uploadResponse.json()) as { data?: { id?: string } }).data?.id;
+    if (!documentId) throw new Error('The uploaded document has no server-issued ID');
+    const row = ownerPage.getByRole('article').filter({ hasText: documentName });
+    await row.getByRole('button', { name: `Classify ${documentName}` }).click();
+    await reliableFill(ownerPage.getByLabel('Reason for this decision'),
+      'This synthetic file is current for the isolated approval journey.');
+    const classified = ownerPage.waitForResponse((response) =>
+      response.url().endsWith(`/api/v1/documents/${documentId}`) && response.request().method() === 'PATCH');
+    await ownerPage.getByRole('button', { name: 'Save status' }).click();
+    expect((await classified).status()).toBe(200);
+
+    const firstMirror = ownerPage.waitForResponse((response) =>
+      /\/api\/v1\/documents\/confluence-mirrors\?/.test(response.url())
+      && response.request().method() === 'GET');
+    await row.getByRole('button', { name: `Review Confluence publication for ${documentName}` }).click();
+    const mirrorResponse = await firstMirror;
+    expect(mirrorResponse.status()).toBe(200);
+    const mirror = ((await mirrorResponse.json()) as { mirrors?: Record<string, {
+      publishDestination?: { siteId: string; spaceId: string; spaceKey: string; spaceName: string; siteUrl: string };
+    }> }).mirrors?.[documentId];
+    const destination = mirror?.publishDestination;
+    if (!destination) throw new Error('The fresh mirror response has no selected destination');
+    await expect(ownerPage.getByText(/Reviewed destination:.*Governance.*GOV/)).toBeVisible();
+    await expect(ownerPage.getByText(new RegExp(destination.siteUrl.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')))).toBeVisible();
+
+    await reliableFill(ownerPage.getByLabel('Reason for this decision'),
+      'Reviewed the exact displayed Confluence destination for this synthetic file.');
+    await withDb(async (client) => {
+      await client.query('BEGIN');
+      let transactionOpen = true;
+      try {
+        await client.query(
+          `UPDATE "OrganisationIntegration" SET "publishSpaceId" = 'changed-space'
+           WHERE "organisationId" = $1 AND "provider" = 'CONFLUENCE'`,
+          [owner.organisationId],
+        );
+        const staleApproval = ownerPage.waitForResponse((response) =>
+          response.url().endsWith(`/api/v1/documents/${documentId}`) && response.request().method() === 'PATCH');
+        await ownerPage.getByRole('button', { name: 'Approve publication' }).click();
+        await expect.poll(async () => {
+          const activity = await withDb((observer) => observer.query<{ waiting: number }>(
+            `SELECT count(*)::integer AS waiting FROM pg_stat_activity
+             WHERE datname = current_database() AND application_name = 'charitypilot-api-e2e'
+               AND wait_event_type = 'Lock' AND query LIKE '%FOR SHARE%'`,
+          ));
+          return activity.rows[0]?.waiting ?? 0;
+        }, { timeout: 10_000, message: 'approval must wait for the in-flight destination change' })
+          .toBeGreaterThan(0);
+        await client.query('COMMIT');
+        transactionOpen = false;
+        const refused = await staleApproval;
+        expect(refused.status()).toBe(409);
+        expect(((await refused.json()) as { code?: string }).code).toBe('DOCUMENT_PUBLICATION_TARGET_CHANGED');
+      } finally {
+        if (transactionOpen) await client.query('ROLLBACK');
+      }
+    });
+    const untouched = await withDb((client) => client.query(
+      `SELECT "externalPublicationApproved" FROM "Document"
+       WHERE "id" = $1 AND "organisationId" = $2`,
+      [documentId, owner.organisationId],
+    ));
+    expect(untouched.rows[0]?.externalPublicationApproved).toBe(false);
+
+    await withDb((client) => client.query(
+      `UPDATE "OrganisationIntegration" SET "publishSpaceId" = $1
+       WHERE "organisationId" = $2 AND "provider" = 'CONFLUENCE'`,
+      [destination.spaceId, owner.organisationId],
+    ));
+    await ownerPage.getByRole('button', { name: 'Cancel' }).click();
+    const reviewedMirror = ownerPage.waitForResponse((response) =>
+      /\/api\/v1\/documents\/confluence-mirrors\?/.test(response.url())
+      && response.request().method() === 'GET');
+    await row.getByRole('button', { name: `Review Confluence publication for ${documentName}` }).click();
+    expect((await reviewedMirror).status()).toBe(200);
+    await reliableFill(ownerPage.getByLabel('Reason for this decision'),
+      'Approved this synthetic current file for the reviewed Confluence space.');
+    const approved = ownerPage.waitForResponse((response) =>
+      response.url().endsWith(`/api/v1/documents/${documentId}`) && response.request().method() === 'PATCH');
+    await ownerPage.getByRole('button', { name: 'Approve publication' }).click();
+    const approvalResponse = await approved;
+    expect(approvalResponse.status()).toBe(200);
+    const submitted = approvalResponse.request().postDataJSON() as Record<string, unknown>;
+    expect(submitted.reviewedPublicationSiteId).toBe(destination.siteId);
+    expect(submitted.reviewedPublicationSpaceId).toBe(destination.spaceId);
+    const stored = await withDb((client) => client.query(
+      `SELECT "externalPublicationApproved", "externalPublicationSiteId", "externalPublicationSpaceId"
+       FROM "Document" WHERE "id" = $1 AND "organisationId" = $2`,
+      [documentId, owner.organisationId],
+    ));
+    expect(stored.rows[0]).toMatchObject({ externalPublicationApproved: true,
+      externalPublicationSiteId: destination.siteId, externalPublicationSpaceId: destination.spaceId });
   });
 
-  test('no token material reaches the browser on any connector response', async ({ ownerPage }) => {
+  test('no token material reaches the browser in observed connector responses', async ({ ownerPage }) => {
     const bodies: string[] = [];
     ownerPage.on('response', (response) => {
       if (!CONFLUENCE_API.test(response.url())) return;
@@ -136,11 +247,25 @@ test.describe('Confluence connector', () => {
         .catch(() => undefined);
     });
 
+    const status = ownerPage.waitForResponse((response) =>
+      /\/confluence\/status$/.test(response.url()) && response.request().method() === 'GET');
     await gotoWithDevServerRetry(ownerPage, '/integrations');
-    await ownerPage.getByRole('button', { name: 'Connect Confluence' }).click();
-    await expect(ownerPage.getByRole('link', { name: /continue to Atlassian/i })).toBeVisible();
+    expect((await status).status()).toBe(200);
+    if (await ownerPage.getByRole('button', { name: 'Connect Confluence' }).count()) {
+      const authorize = ownerPage.waitForResponse((response) =>
+        /\/confluence\/authorize$/.test(response.url()) && response.request().method() === 'GET');
+      await ownerPage.getByRole('button', { name: 'Connect Confluence' }).click();
+      expect((await authorize).status()).toBe(200);
+      await expect(ownerPage.getByRole('button', { name: /continue to Atlassian/i })).toBeVisible();
+    } else {
+      const spaces = ownerPage.waitForResponse((response) =>
+        /\/confluence\/spaces/.test(response.url()) && response.request().method() === 'GET');
+      await ownerPage.getByRole('button', { name: /Change the space/i }).click();
+      expect((await spaces).status()).toBe(200);
+    }
 
-    expect(bodies.length, 'this assertion proves nothing over zero responses').toBeGreaterThan(0);
+    await expect.poll(() => bodies.length, { message: 'both connector responses must be captured' })
+      .toBeGreaterThanOrEqual(2);
     for (const body of bodies) {
       const lowered = body.toLowerCase();
       // The API's own unit tests pin this by allow-list; this is the same rule

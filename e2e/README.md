@@ -17,13 +17,15 @@ monorepo, so Playwright never enters the API/web production installs or images.
 | `tests/compliance.spec.ts` | record a governance standard's status (auto-saved) -> board sign-off on the Export page; pending standard edits trigger the in-app navigation confirmation |
 | `tests/conditional-obligations.spec.ts` | save organisation conditional triggers -> verify profile-triggered Documents, Deadlines, and Regulator prompts appear |
 | `tests/documents.spec.ts` | upload a document -> download it and verify the bytes |
-| `tests/integrations-confluence.spec.ts` | Confluence connector against the in-stack fake Atlassian: disclosure gate -> signed-state callback -> space choice -> connected-and-publishing; plus a forged state refused, and no token material on any connector response |
+| `tests/integrations-confluence.spec.ts` | Confluence connector against the in-stack fake Atlassian: disclosure gate -> signed-state callback -> space choice -> a reviewed Vault publication destination, including an in-flight destination change held by PostgreSQL, refusal and fresh reapproval; plus a forged state refused, and no token material on observed connector responses |
 | `tests/dashboard-navigation.spec.ts` | mobile dashboard sidebar opens, moves focus into navigation, closes with Escape, restores focus, and removes closed links from tab order |
 | `tests/deadlines-team.spec.ts` | create a deadline -> mark it complete; team invite -> accept -> join the workspace |
 | `tests/billing.spec.ts` | billing page renders tier + trial + Complete-plan feature gating (Stripe test mode) |
 | `tests/tenant-isolation.spec.ts` | an unknown/foreign principle id renders a clean not-found, never leaked content |
 | `tests/auth-session.spec.ts` | an unauthenticated visit to a protected route -> `/login?next=`; an expired/cleared session -> login |
 | `tests/authz.spec.ts` | a MEMBER gets read-only governance routes without privileged mutation affordances; a live Admin demotion fails closed in place |
+| `tests/dpo-review-navigation.spec.ts` | Owner and Member review navigation, a synthetic case-to-live-Vault link retained after draft removal, and a Vault upload/delete whose committed local-storage deletion outcome and absence receipt appear in Governance Audit |
+| `tests/dpo-mfa-last-code.spec.ts` | Synthetic Owner authenticator setup, last recovery-code browser sign-in, same-family recovery audit, different-family denial and password-proved blank-code removal against disposable PostgreSQL |
 | `tests/validation.spec.ts` | register blocks a long-but-weak password inline and sends no guaranteed-400 request |
 | `tests/accessibility.spec.ts` | axe - 0 serious/critical WCAG 2.1 AA violations on every key page, light + dark |
 
@@ -52,6 +54,9 @@ The retired boolean reset flag never grants reset authority. Local destructive
 tests require the managed runner's generated UUID, exact loopback identity,
 protected marker, restricted role and API binding proof. Direct Playwright from
 this directory is not a supported destructive entry point.
+The runner also generates a distinct integration encryption key for its
+disposable API. An ambient local override is refused; no real Atlassian
+credential or site is used by the fake-provider tests.
 
 The responsive route matrix can also be run in four focused chunks from the repo
 root. Use these when a local browser host or deployed QA runner cannot keep the
@@ -95,7 +100,7 @@ The expected cache should include `icudtl.dat` under the Playwright
   its final query, and uses `ONLY ... CONTINUE IDENTITY RESTRICT` without
   `CASCADE`; the API binding is checked again before browser work.
 - **No personal persistence.** The standalone stack uses dedicated loopback
-  ports (`55434`, `3302`, `3303`) and a runner-generated positive allow-list
+  ports (`3354`, `3302`, `3303`) and a runner-generated positive allow-list
   build context. The source Compose bytes are read once, validated, and written
   to a private `0600` runner snapshot; config, build, startup, logs, and teardown
   all use that same snapshot with the repository project directory fixed. The
@@ -155,7 +160,7 @@ recovery inputs instead of hiding the cleanup problem.
 
 Local URLs and identity are fixed by the runner: web
 `http://127.0.0.1:3303`, API `http://127.0.0.1:3302`, and the reserved disposable
-PostgreSQL target on `127.0.0.1:55434`. Ambient DSNs, generated credential names,
+PostgreSQL target on `127.0.0.1:3354`. Ambient DSNs, generated credential names,
 reset confirmations, instance IDs, Docker contexts, TLS endpoints, Buildx
 builders, and BuildKit hosts are rejected. Every build, startup, log, teardown,
 and residue command uses the same proven local daemon endpoint and private

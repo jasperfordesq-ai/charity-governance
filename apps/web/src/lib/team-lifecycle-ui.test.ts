@@ -75,8 +75,12 @@ test('session inventory and revocation controls cover one family, all families, 
 test('administrators receive the immutable audit view with password-reset evidence while ordinary members do not', () => {
   const page = team('page.tsx');
   const panel = team('team-security-audit-panel.tsx');
+  const auditWorkflow = team('use-team-security-audit.ts');
 
-  assert.match(page, /api\.get<SecurityAuditEventResponse\[\]>\('\/team\/security-audit'\)/);
+  assert.match(auditWorkflow, /api\.get<SecurityAuditPageResponse>\('\/team\/security-audit'\)/);
+  assert.match(auditWorkflow, /effectiveRole !== UserRole\.OWNER && effectiveRole !== UserRole\.ADMIN/);
+  assert.match(auditWorkflow, /setEvents\(data\.data\)/);
+  assert.match(page, /useTeamSecurityAudit\(effectiveRole\)/);
   assert.match(page, /effectiveRole === UserRole\.OWNER \|\| effectiveRole === UserRole\.ADMIN/);
   assert.match(page, /<TeamSecurityAuditPanel/);
   assert.match(panel, /Immutable evidence/);
@@ -171,7 +175,9 @@ test('role guidance describes Member access as read-only', () => {
   const display = team('team-display.ts');
   const guidance = team('team-role-guidance-panel.tsx');
 
-  assert.match(display, /Can view governance records, deadlines, registers, and available documents, but cannot change them/);
+  assert.match(display, /Can view permitted governance records, deadlines, risk and fundraising registers, and available documents/);
+  assert.match(display, /Full reports, conflicts and complaints require an Owner or Admin/);
   assert.doesNotMatch(display, /Member'[\s\S]{0,160}maintain compliance records/);
-  assert.match(guidance, /Members have read-only access/);
+  assert.match(guidance, /Members can read permitted status views/);
+  assert.match(guidance, /documents explicitly made Member-visible/);
 });

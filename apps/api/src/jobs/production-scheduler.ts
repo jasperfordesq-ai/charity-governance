@@ -51,6 +51,7 @@ import {
   type AuthOperatorReviewAlertClaim,
 } from '../services/auth-email-delivery.service.js';
 import { requireAuthRecoveryControlForRuntime } from '../services/auth-recovery-control.js';
+import { RiskControlReviewService } from '../services/risk-control-review.service.js';
 
 const DEFAULT_DEADLINE_REMINDERS_INTERVAL_MS = 24 * 60 * 60 * 1000;
 const DEFAULT_DOCUMENT_STORAGE_CLEANUP_INTERVAL_MS = 60 * 60 * 1000;
@@ -79,6 +80,7 @@ const DEFAULT_AUTH_DELIVERY_INTERVAL_MS = 5 * 1000;
 const DEFAULT_AUTH_DELIVERY_BATCH_SIZE = 25;
 const DEFAULT_AUTH_DELIVERY_CLEANUP_BATCH_SIZE = 500;
 const DEFAULT_AUTH_DELIVERY_STALE_SENDING_MS = 60 * 1000;
+const DEFAULT_RISK_CONTROL_REVIEW_INTERVAL_MS = 24 * 60 * 60 * 1000;
 const DEFAULT_SCHEDULER_SHUTDOWN_TIMEOUT_MS = 45 * 1000;
 const MAX_SCHEDULER_SHUTDOWN_TIMEOUT_MS = 55 * 1000;
 
@@ -94,6 +96,7 @@ type DeadlineReminderRunner = {
 };
 
 type DocumentStorageCleanupRunner = {
+  reconcileStaleUploadIntents(limit: number): Promise<{ attached: number; queued: number; failed: number }>;
   retryPendingStorageDeletions(
     dispatch: ErasureDispatcher,
     limit: number,
@@ -103,7 +106,7 @@ type DocumentStorageCleanupRunner = {
 };
 
 type StorageDeletionRunner = {
-  deleteFile(organisationId: string, storagePath: string, signal?: AbortSignal): Promise<void>;
+  deleteFile(organisationId: string, storagePath: string, signal?: AbortSignal, uploadedProvider?: string): Promise<Date>;
 };
 
 type DocumentPublicationRunner = {
@@ -145,6 +148,10 @@ type AuthEmailDeliveryRunner = {
   releaseOperatorReviewAlertClaim?(claim: AuthOperatorReviewAlertClaim): Promise<number>;
 };
 
+type RiskControlReviewRunner = {
+  countStaleClaims(): Promise<number>;
+};
+
 type AlertSender = (payload: ErrorAlertPayload) => Promise<void | boolean>;
 
 export type ProductionSchedulerConfig = {
@@ -161,6 +168,7 @@ export type ProductionSchedulerConfig = {
   authDeliveryBatchSize: number;
   authDeliveryCleanupBatchSize: number;
   authDeliveryStaleSendingMs: number;
+  riskControlReviewIntervalMs: number;
   shutdownTimeoutMs: number;
   runOnce: boolean;
 };
@@ -171,6 +179,7 @@ export type ProductionSchedulerRunResult = {
   documentPublicationFailed: boolean;
   documentReconcileFailed: boolean;
   authEmailDeliveryFailed: boolean;
+  riskControlReviewFailed: boolean;
 };
 
 export function productionSchedulerConfigFromEnv(env: SchedulerEnv = process.env): ProductionSchedulerConfig {
@@ -231,6 +240,12 @@ export function productionSchedulerConfigFromEnv(env: SchedulerEnv = process.env
       env.AUTH_DELIVERY_STALE_SENDING_MS,
       DEFAULT_AUTH_DELIVERY_STALE_SENDING_MS,
       300 * 1000,
+    ),
+    riskControlReviewIntervalMs: boundedPositiveIntegerEnv(
+      env.RISK_CONTROL_REVIEW_INTERVAL_MS,
+      DEFAULT_RISK_CONTROL_REVIEW_INTERVAL_MS,
+      7 * 24 * 60 * 60 * 1000,
+      60 * 60 * 1000,
     ),
     shutdownTimeoutMs: boundedPositiveIntegerEnv(
       env.PRODUCTION_SCHEDULER_SHUTDOWN_TIMEOUT_MS,
@@ -299,10 +314,12 @@ export async function runDocumentStorageCleanup(input: {
   try {
     const dispatch = createErasureDispatcher({
       supabase: createSupabaseEraser((organisationId, storagePath, signal) =>
-        input.storageService.deleteFile(organisationId, storagePath, signal)),
+        input.storageService.deleteFile(organisationId, storagePath, signal, 'supabase')),
+      local: createSupabaseEraser((organisationId, storagePath, signal) =>
+        input.storageService.deleteFile(organisationId, storagePath, signal, 'local')),
       // Registered unconditionally, for the same reason
       // `cleanup-document-storage.ts` registers it: a Confluence row is
-      // enqueued by the same `remove()` that enqueues a Supabase one, so
+      // enqueued by the explicit erasure request, so
       // leaving this unregistered on any deployment would dead-letter every
       // Confluence erasure as PROVIDER_NOT_ERASABLE — a charity's published
       // copy left in place while an operator is told the deployment cannot
@@ -317,6 +334,7 @@ export async function runDocumentStorageCleanup(input: {
       `[ProductionScheduler] Document storage cleanup run completed. Processed: ${result.processed}. Retry scheduled: ${'retryScheduled' in result ? result.retryScheduled : result.failed}. Newly dead-lettered: ${'newlyDeadLettered' in result ? result.newlyDeadLettered : 0}.`,
     );
     const deadLetterAlert = 'deadLetterAlert' in result ? result.deadLetterAlert : null;
+    let needsAttention = false;
     if (deadLetterAlert) {
       if (!input.documentService.markDeadLetterAlertSent || !input.documentService.releaseDeadLetterAlertClaim) {
         throw new Error('Document storage cleanup dead-letter alert acknowledgement is unavailable');
@@ -338,9 +356,26 @@ export async function runDocumentStorageCleanup(input: {
       } else {
         await input.documentService.releaseDeadLetterAlertClaim(deadLetterAlert);
       }
-      return true;
+      needsAttention = true;
     }
-    return false;
+    const intents = await input.documentService.reconcileStaleUploadIntents(input.documentStorageCleanupLimit);
+    input.logger.info(
+      `[ProductionScheduler] Upload-intent reconciliation completed. Attached: ${intents.attached}. Cleanup queued: ${intents.queued}. Failed: ${intents.failed}.`,
+    );
+    if (intents.failed > 0) {
+      const failure = new Error(`Upload-intent reconciliation failed for ${intents.failed} reservation(s).`);
+      failure.name = 'DocumentUploadIntentReconcileFailed';
+      await sendJobFailureAlert({
+        job: 'document-storage-cleanup',
+        code: 'DOCUMENT_UPLOAD_INTENT_RECONCILE_FAILED',
+        error: failure,
+        logger: input.logger,
+        alertSender: input.alertSender,
+        affectedCount: intents.failed,
+      });
+      needsAttention = true;
+    }
+    return needsAttention;
   } catch (error) {
     logSchedulerError(input.logger, '[ProductionScheduler] Document storage cleanup run failed.', error);
     await sendJobFailureAlert({
@@ -561,8 +596,9 @@ export async function runAuthEmailDelivery(input: {
 }
 
 /**
- * One reconcile pass: a bounded number of tenants, a bounded number of pages
- * each, then the orphan sweep and the dormancy sweep.
+ * One reconcile pass: retire local orphan rows, visit a bounded number of
+ * tenants and pages, then run the dormancy sweep. Local orphan retirement must
+ * still run when a remote reconciliation or tenant listing fails.
  *
  * ORDER MATTERS. The dormancy sweep runs LAST, after the tenants with work have
  * been visited and have refreshed their tokens as a by-product. Running it first
@@ -586,6 +622,21 @@ export async function runDocumentReconcile(input: {
   now?: () => Date;
 }): Promise<boolean> {
   const now = input.now ?? (() => new Date());
+  let orphans = { retired: 0, deleted: 0 };
+  let orphanSweepFailed = false;
+  try {
+    orphans = await input.publicationService.retireOrphanedPublications();
+  } catch (error) {
+    orphanSweepFailed = true;
+    logSchedulerError(input.logger, '[ProductionScheduler] Document orphan retirement failed.', error);
+    await sendJobFailureAlert({
+      job: 'document-reconcile',
+      code: 'DOCUMENT_RECONCILE_FAILED',
+      error,
+      logger: input.logger,
+      alertSender: input.alertSender,
+    });
+  }
   try {
     const tenants = await listTenantsForReconcile(
       input.prisma as unknown as Parameters<typeof listTenantsForReconcile>[0],
@@ -641,7 +692,6 @@ export async function runDocumentReconcile(input: {
       }
     }
 
-    const orphans = await input.publicationService.retireOrphanedPublications();
     const notices = await sweepDormantIntegrations(
       input.prisma as unknown as Parameters<typeof sweepDormantIntegrations>[0],
       { now: now() },
@@ -693,16 +743,43 @@ export async function runDocumentReconcile(input: {
     input.logger.info(
       `[ProductionScheduler] Document reconcile run completed. Tenants visited: ${tenantsVisited}. ` +
         `Skipped as dormant: ${tenantsSkipped}. Pages read: ${pagesRead}. ` +
-        `Orphans retired: ${orphans.retired}, deleted: ${orphans.deleted}. Dormancy notices: ${notices.length}.` +
+        (orphanSweepFailed
+          ? 'Orphan retirement failed. '
+          : `Orphans retired: ${orphans.retired}, deleted: ${orphans.deleted}. `) +
+        `Dormancy notices: ${notices.length}.` +
         (rateLimited ? ' Run stopped early: Confluence rate limited the shared pool.' : ''),
     );
 
-    return false;
+    return orphanSweepFailed;
   } catch (error) {
     logSchedulerError(input.logger, '[ProductionScheduler] Document reconcile run failed.', error);
     await sendJobFailureAlert({
       job: 'document-reconcile',
       code: 'DOCUMENT_RECONCILE_FAILED',
+      error,
+      logger: input.logger,
+      alertSender: input.alertSender,
+    });
+    return true;
+  }
+}
+
+export async function runRiskControlReviewScan(input: {
+  riskControlReviewService: RiskControlReviewRunner;
+  logger: SchedulerLogger;
+  alertSender?: AlertSender;
+}): Promise<boolean> {
+  try {
+    const count = await input.riskControlReviewService.countStaleClaims();
+    input.logger.info(
+      `[ProductionScheduler] Risk control evidence review scan completed. Claims requiring review: ${count}.`,
+    );
+    return false;
+  } catch (error) {
+    logSchedulerError(input.logger, '[ProductionScheduler] Risk control evidence review scan failed.', error);
+    await sendJobFailureAlert({
+      job: 'risk-control-review',
+      code: 'RISK_CONTROL_REVIEW_SCAN_FAILED',
       error,
       logger: input.logger,
       alertSender: input.alertSender,
@@ -717,6 +794,7 @@ export async function runProductionSchedulerOnce(input: {
   publicationService: DocumentPublicationRunner & DocumentReconcileRunner;
   storageService: StorageDeletionRunner & DocumentDownloadRunner;
   authEmailDeliveryService: AuthEmailDeliveryRunner;
+  riskControlReviewService: RiskControlReviewRunner;
   /**
    * Required, like `prisma`. An optional reconciler would let a caller build a
    * scheduler that silently never checks a single mirror, which is exactly the
@@ -781,6 +859,11 @@ export async function runProductionSchedulerOnce(input: {
     logger: input.logger,
     alertSender: input.alertSender,
   });
+  const riskControlReviewFailed = await runRiskControlReviewScan({
+    riskControlReviewService: input.riskControlReviewService,
+    logger: input.logger,
+    alertSender: input.alertSender,
+  });
 
   return {
     deadlineRemindersFailed,
@@ -788,6 +871,7 @@ export async function runProductionSchedulerOnce(input: {
     documentPublicationFailed,
     documentReconcileFailed,
     authEmailDeliveryFailed,
+    riskControlReviewFailed,
   };
 }
 
@@ -797,15 +881,18 @@ export async function sendJobFailureAlert(input: {
     | 'document-storage-cleanup'
     | 'document-publication'
     | 'document-reconcile'
-    | 'auth-email-delivery';
+    | 'auth-email-delivery'
+    | 'risk-control-review';
   code:
     | 'DEADLINE_REMINDERS_FAILED'
     | 'DOCUMENT_STORAGE_CLEANUP_FAILED'
+    | 'DOCUMENT_UPLOAD_INTENT_RECONCILE_FAILED'
     | 'DOCUMENT_STORAGE_DELETION_DEAD_LETTERED'
     | 'DOCUMENT_PUBLICATION_FAILED'
     | 'DOCUMENT_PUBLICATION_DEAD_LETTERED'
     | 'DOCUMENT_RECONCILE_FAILED'
-    | 'AUTH_EMAIL_DELIVERY_FAILED';
+    | 'AUTH_EMAIL_DELIVERY_FAILED'
+    | 'RISK_CONTROL_REVIEW_SCAN_FAILED';
   error: unknown;
   logger: SchedulerLogger;
   alertSender?: AlertSender;
@@ -932,6 +1019,7 @@ async function main(): Promise<void> {
   const publicationService = new DocumentPublicationService(prisma);
   const storageService = new StorageService(createPrismaOrganisationStorageResolver(prisma));
   const authEmailDeliveryService = new AuthEmailDeliveryService(prisma);
+  const riskControlReviewService = new RiskControlReviewService(prisma);
   const reconcile = createConfluenceReconciler({ prisma });
   const logger: SchedulerLogger = console;
 
@@ -942,6 +1030,7 @@ async function main(): Promise<void> {
       publicationService,
       storageService,
       authEmailDeliveryService,
+      riskControlReviewService,
       prisma,
       reconcile,
       documentStorageCleanupLimit: config.documentStorageCleanupLimit,
@@ -960,7 +1049,8 @@ async function main(): Promise<void> {
       result.documentStorageCleanupFailed ||
       result.documentPublicationFailed ||
       result.documentReconcileFailed ||
-      result.authEmailDeliveryFailed
+      result.authEmailDeliveryFailed ||
+      result.riskControlReviewFailed
     ) {
       process.exitCode = 1;
       return;
@@ -1029,6 +1119,12 @@ async function main(): Promise<void> {
       logger,
     }),
   });
+  const riskControlReviewJob = startRecurringJob({
+    name: 'Risk control evidence review',
+    intervalMs: config.riskControlReviewIntervalMs,
+    logger,
+    run: () => runRiskControlReviewScan({ riskControlReviewService, logger }),
+  });
 
   let shutdownStarted = false;
   const shutdown = async (signal: NodeJS.Signals) => {
@@ -1042,6 +1138,7 @@ async function main(): Promise<void> {
         documentPublicationJob,
         documentReconcileJob,
         authEmailDeliveryJob,
+        riskControlReviewJob,
       ],
       config.shutdownTimeoutMs,
     );

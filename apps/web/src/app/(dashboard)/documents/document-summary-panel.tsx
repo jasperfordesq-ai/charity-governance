@@ -4,10 +4,14 @@ import { StatusChip, statusPanelClassName } from '@/components/ui/status';
 
 export function DocumentSummaryPanel({
   documentsCount,
+  documentTotal,
+  partial,
   linkedStandardsCount,
   missingEvidenceCount,
 }: {
   documentsCount: number;
+  documentTotal: number;
+  partial: boolean;
   linkedStandardsCount: number;
   missingEvidenceCount: number;
 }) {
@@ -26,15 +30,15 @@ export function DocumentSummaryPanel({
         </div>
         <div className="grid grid-cols-2 gap-2 text-sm sm:grid-cols-3 lg:min-w-80">
           <div className={statusPanelClassName('neutral', 'p-3')}>
-            <p className="text-xs text-gray-500 dark:text-gray-400">Documents</p>
-            <p className="text-xl font-bold text-gray-950 dark:text-gray-50">{documentsCount}</p>
+            <p className="text-xs text-gray-500 dark:text-gray-400">{partial ? 'Documents loaded' : 'Documents'}</p>
+            <p className="text-xl font-bold text-gray-950 dark:text-gray-50">{documentsCount}{partial ? ` of ${documentTotal}` : ''}</p>
           </div>
           <div className={statusPanelClassName('neutral', 'p-3')}>
-            <p className="text-xs text-gray-500 dark:text-gray-400">Linked standards</p>
+            <p className="text-xs text-gray-500 dark:text-gray-400">{partial ? 'Links in loaded files' : 'Linked standards'}</p>
             <p className="text-xl font-bold text-gray-950 dark:text-gray-50">{linkedStandardsCount}</p>
           </div>
           <div className={statusPanelClassName('neutral', 'p-3')}>
-            <p className="text-xs text-gray-500 dark:text-gray-400">Evidence gaps</p>
+            <p className="text-xs text-gray-500 dark:text-gray-400">{partial ? 'Possible evidence gaps' : 'Evidence gaps'}</p>
             <p className="text-xl font-bold text-gray-950 dark:text-gray-50">{missingEvidenceCount}</p>
           </div>
         </div>

@@ -17,8 +17,10 @@ const { default: bcrypt } = await import("bcryptjs");
 /** Records what the approve route tried to grant, and under what conditions. */
 const approvalStore = {
   granted: [] as Array<Record<string, unknown>>,
+  refusals: [] as Array<Record<string, unknown>>,
   reset() {
     this.granted.length = 0;
+    this.refusals.length = 0;
   },
 };
 
@@ -42,6 +44,7 @@ const { registerBrowserOriginProtection } = await import(
 const CLIENT = "mcp-connector/0.1.0";
 
 type Recorded = {
+  loginData?: unknown;
   loginPosture?: unknown;
   refreshExpectedKind?: unknown;
 };
@@ -100,6 +103,10 @@ function fakePrisma(recorded: Recorded) {
         };
       },
     },
+    securityAuditEvent: { create: async ({ data }: { data: Record<string, unknown> }) => {
+      approvalStore.refusals.push(data);
+      return { id: 'refusal-1' };
+    } },
   };
 }
 
@@ -121,6 +128,7 @@ async function buildApp(recorded: Recorded, behaviour: {
   const originalLogout = AuthService.prototype.logout;
 
   AuthService.prototype.login = async function patchedLogin(data, posture) {
+    recorded.loginData = data;
     recorded.loginPosture = posture;
     if (behaviour.login) return behaviour.login(data, posture) as never;
     return {
@@ -221,6 +229,24 @@ test("login returns tokens in the body and sets no cookie at all", async () => {
     restore();
     await app.close();
   }
+});
+
+test('charity connector forwards a second-factor proof to the password-gated service', async () => {
+  const recorded: Recorded = {};
+  const { app, restore } = await buildApp(recorded);
+  try {
+    const response = await app.inject({
+      method: 'POST', url: '/api/v1/auth/connector/login',
+      headers: { [CONNECTOR_CLIENT_HEADER]: CLIENT },
+      payload: loginBody({ recoveryCode: 'ABCDEF-234567' }),
+    });
+    assert.equal(response.statusCode, 200);
+    assert.deepEqual(recorded.loginData, {
+      email: 'owner@example.org', password: 'a-real-password',
+      code: undefined, recoveryCode: 'ABCDEF-234567',
+    });
+    assert.doesNotMatch(response.body, /ABCDEF-234567/);
+  } finally { restore(); await app.close(); }
 });
 
 test("the route decides the client kind, whatever the body claims", async () => {
@@ -472,6 +498,10 @@ test("approving needs the right password, and says nothing more on failure", asy
 
     assert.equal(wrong.statusCode, 401);
     assert.equal(wrong.json().code, "APPROVAL_REFUSED");
+    assert.equal(approvalStore.refusals.length, 1);
+    assert.equal(approvalStore.refusals[0].type, 'ACTION_APPROVAL_REFUSED');
+    assert.deepEqual(approvalStore.refusals[0].context, { clientKind: 'MCP_CONNECTOR' });
+    assert.doesNotMatch(JSON.stringify(approvalStore.refusals[0]), /apr-1|not-the-password/);
     assert.equal(
       approvalStore.granted.length,
       0,

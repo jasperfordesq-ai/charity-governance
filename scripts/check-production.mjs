@@ -783,12 +783,14 @@ export function validateProductionEnvironment(env, processEnv = process.env) {
   requireIntegerPort(env, 'PORT', issues);
   requireDatabaseUrl(env, 'DATABASE_URL', issues);
   requireDocumentStorageRecoveryDatabaseHostAllowlist(env, issues);
+  requireOptionalCanonicalIntegerRange(env, 'STORAGE_UPLOAD_TIMEOUT_MS', 100, 1800000, issues);
   requireOptionalCanonicalIntegerRange(env, 'STORAGE_DELETE_TIMEOUT_MS', 100, 8000, issues);
   requireOptionalCanonicalIntegerRange(env, 'SECURITY_EMAIL_PROVIDER_TIMEOUT_MS', 1000, 15000, issues);
   requireOptionalCanonicalIntegerRange(env, 'AUTH_DELIVERY_INTERVAL_MS', 1000, 60000, issues);
   requireOptionalCanonicalIntegerRange(env, 'AUTH_DELIVERY_BATCH_SIZE', 1, 100, issues);
   requireOptionalCanonicalIntegerRange(env, 'AUTH_DELIVERY_CLEANUP_BATCH_SIZE', 3, 1000, issues);
   requireOptionalCanonicalIntegerRange(env, 'AUTH_DELIVERY_STALE_SENDING_MS', 16000, 300000, issues);
+  requireOptionalCanonicalIntegerRange(env, 'RISK_CONTROL_REVIEW_INTERVAL_MS', 3600000, 604800000, issues);
   requirePrefix(env, 'STRIPE_SECRET_KEY', 'sk_live_', 'live Stripe secret key', issues);
   requirePrefix(env, 'STRIPE_WEBHOOK_SECRET', 'whsec_', 'Stripe webhook signing secret', issues);
   for (const key of [

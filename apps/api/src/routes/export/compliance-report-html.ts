@@ -264,6 +264,34 @@ export interface ApprovedComplianceReportMetadata {
   snapshotHash: string;
 }
 
+/** Strict allowlist for a draft intended for audience review before disclosure. */
+export function buildMinimisedComplianceReportHtml(
+  snapshot: ComplianceApprovalSnapshotPayloadV1,
+): string {
+  const statuses = ['COMPLIANT', 'WORKING_TOWARDS', 'NOT_STARTED', 'NOT_APPLICABLE', 'EXPLAIN'] as const;
+  const counts = new Map(statuses.map((status) => [status, 0]));
+  for (const entry of snapshot.evidence.standards) {
+    const status = entry.record?.status;
+    if (status && counts.has(status)) counts.set(status, (counts.get(status) ?? 0) + 1);
+  }
+  const rows = statuses.map((status) => `<tr><th scope="row">${status.replace(/_/g, ' ')}</th><td>${counts.get(status)}</td></tr>`).join('');
+  return `<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'; base-uri 'none'; form-action 'none'">
+<title>Minimised Compliance Record draft</title>
+<style>body{font-family:system-ui,sans-serif;max-width:48rem;margin:2rem auto;padding:0 1rem;color:#111827;line-height:1.5}table{border-collapse:collapse;width:100%}th,td{border:1px solid #d1d5db;padding:.5rem;text-align:left}.notice{background:#fef3c7;padding:1rem}</style>
+</head><body>
+<h1>Minimised Compliance Record draft</h1>
+<p class="notice">For audience and field review only. Board approval of the internal snapshot does not authorise disclosure of this draft or constitute a regulator filing.</p>
+<p><strong>Organisation:</strong> ${escapeHtml(snapshot.evidence.organisation.name)}</p>
+<p><strong>RCN:</strong> ${escapeHtml(snapshot.evidence.organisation.rcnNumber ?? 'Not recorded')}</p>
+<p><strong>Reporting year:</strong> ${snapshot.evidence.reportingYear}</p>
+<p><strong>Approved snapshot sequence:</strong> ${snapshot.approval.sequence}</p>
+<p><strong>Approved at:</strong> ${escapeHtml(snapshot.approval.approvedAt)}</p>
+<h2>Aggregate standard statuses</h2><table><thead><tr><th scope="col">Status</th><th scope="col">Standards</th></tr></thead><tbody>${rows}</tbody></table>
+</body></html>`;
+}
+
 /**
  * Render retained approval evidence without consulting current tenant rows or
  * the process's current compliance matrix. Every substantive value comes from

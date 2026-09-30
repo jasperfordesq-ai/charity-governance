@@ -101,6 +101,7 @@ async function buildBoardApp() {
   const transaction = {
     boardMember,
     conflictRecord: { updateMany: async () => ({ count: 0 }) },
+    governanceRegisterChangeAudit: { create: async () => ({ id: 'audit-1' }) },
     $queryRaw: async () => [{ id: 'org-1' }],
   };
 

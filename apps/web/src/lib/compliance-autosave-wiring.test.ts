@@ -68,7 +68,7 @@ test('compliance records are role-aware and exact forbidden saves fail closed wi
 
   assert.match(overview, /canManageGovernance\(user\?\.role\)/);
   assert.match(list, /canManageRecords \? 'Edit records' : 'View records'/);
-  assert.match(page, /Records are view-only for Members/);
+  assert.match(page, /Members can review statuses\. Detailed evidence requires an Owner or Admin/);
 
   assert.match(workflow, /const canManageRecords = roleCanManageRecords && !editingRevoked/);
   assert.match(workflow, /if \(canManageRecords\) \{\s*initialQueues\[standard\.id\] = createSaveQueue/);

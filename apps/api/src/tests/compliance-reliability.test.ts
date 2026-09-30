@@ -123,6 +123,217 @@ async function buildComplianceApp(
   return app;
 }
 
+test('Admin connector cannot read full compliance change history through the direct API', async () => {
+  let reads = 0;
+  const app = await buildComplianceApp({
+    authSession: { findFirst: async () => ({ id: 'sess-1', clientKind: 'MCP_CONNECTOR', accessLevel: 'ADMIN' }) },
+    complianceAuditEvent: { findMany: async () => { reads += 1; return []; } },
+  });
+  try {
+    const response = await app.inject({ method: 'GET', url: '/audit?year=2026',
+      headers: { authorization: tokenFor('ADMIN') } });
+    assert.equal(response.statusCode, 403);
+    assert.equal(response.json().code, 'WEB_SESSION_REQUIRED');
+    assert.equal(reads, 0);
+  } finally { await app.close(); }
+});
+
+test('compliance change audit is tenant/year scoped and restricted to Owner/Admin', async () => {
+  const reads: unknown[] = [];
+  const delegate = { findMany: async (args: unknown) => { reads.push(args); return []; } };
+  const member = await buildComplianceApp({ complianceAuditEvent: delegate }, 'MEMBER');
+  try {
+    const denied = await member.inject({ method: 'GET', url: '/audit?year=2026', headers: { authorization: tokenFor('MEMBER') } });
+    assert.equal(denied.statusCode, 403);
+    assert.equal(reads.length, 0);
+  } finally { await member.close(); }
+  const admin = await buildComplianceApp({ complianceAuditEvent: delegate });
+  try {
+    const allowed = await admin.inject({ method: 'GET', url: '/audit?year=2026', headers: { authorization: tokenFor('ADMIN') } });
+    assert.equal(allowed.statusCode, 200);
+    assert.deepEqual((reads[0] as { where: unknown }).where, { organisationId: 'org-1', reportingYear: 2026 });
+  } finally { await admin.close(); }
+});
+
+test('detailed compliance audit pages tied-time changes within one charity and reporting year', async () => {
+  const occurredAt = new Date('2026-09-29T10:00:00.000Z');
+  const events = Array.from({ length: 202 }, (_, index) => ({
+    id: `compliance-audit-${String(index).padStart(3, '0')}`,
+    organisationId: 'org-1', reportingYear: 2026, occurredAt,
+  }));
+  events.push({ id: 'foreign-compliance-audit', organisationId: 'org-2', reportingYear: 2026, occurredAt });
+  events.push({ id: 'prior-year-compliance-audit', organisationId: 'org-1', reportingYear: 2025, occurredAt });
+  const reads: Array<{ where: Record<string, unknown>; take: number; orderBy: unknown }> = [];
+  const delegate = {
+    findFirst: async ({ where }: { where: { id: string; organisationId: string; reportingYear: number } }) =>
+      events.find((event) => event.id === where.id && event.organisationId === where.organisationId &&
+        event.reportingYear === where.reportingYear) ?? null,
+    findMany: async (args: { where: Record<string, unknown>; take: number; orderBy: unknown }) => {
+      reads.push(args);
+      const anchor = (args.where.OR as Array<Record<string, unknown>> | undefined)?.[1]?.id as { lt: string } | undefined;
+      return events.filter((event) => event.organisationId === args.where.organisationId &&
+        event.reportingYear === args.where.reportingYear && (!anchor || event.id < anchor.lt))
+        .sort((a, b) => b.id.localeCompare(a.id)).slice(0, args.take);
+    },
+  };
+  const admin = await buildComplianceApp({ complianceAuditEvent: delegate });
+  try {
+    const ids: string[] = [];
+    let before: string | null = null;
+    do {
+      const response: Awaited<ReturnType<typeof admin.inject>> = await admin.inject({ method: 'GET',
+        url: `/audit?year=2026${before ? `&before=${before}` : ''}`,
+        headers: { authorization: tokenFor('ADMIN') } });
+      assert.equal(response.statusCode, 200);
+      const page = response.json().data as { items: Array<{ id: string }>; nextCursor: string | null };
+      ids.push(...page.items.map((event) => event.id));
+      before = page.nextCursor;
+    } while (before);
+    assert.equal(ids.length, 202);
+    assert.equal(new Set(ids).size, 202);
+    assert.equal(reads.length, 5);
+    assert.ok(reads.every((read) => read.take === 51 && read.where.organisationId === 'org-1' && read.where.reportingYear === 2026));
+    assert.deepEqual(reads[0].orderBy, [{ occurredAt: 'desc' }, { id: 'desc' }]);
+    const foreign = await admin.inject({ method: 'GET', url: '/audit?year=2026&before=foreign-compliance-audit',
+      headers: { authorization: tokenFor('ADMIN') } });
+    assert.equal(foreign.statusCode, 404);
+    const wrongYear = await admin.inject({ method: 'GET', url: '/audit?year=2026&before=prior-year-compliance-audit',
+      headers: { authorization: tokenFor('ADMIN') } });
+    assert.equal(wrongYear.statusCode, 404);
+    const invalid = await admin.inject({ method: 'GET', url: '/audit?year=2026&before=bad%40cursor',
+      headers: { authorization: tokenFor('ADMIN') } });
+    assert.equal(invalid.statusCode, 400);
+    assert.equal(reads.length, 5);
+  } finally { await admin.close(); }
+});
+
+test('Member compliance reads omit evidence narratives, editor and sign-off particulars', async () => {
+  const now = new Date('2026-09-28T10:00:00.000Z');
+  const record = {
+    id: 'record-1', organisationId: 'org-1', standardId: 's1', reportingYear: 2026,
+    status: 'WORKING_TOWARDS', actionTaken: 'private action', evidence: 'private evidence',
+    notes: 'private notes', explanationIfNA: 'private explanation', revision: 2,
+    updatedById: 'private-editor-id', updatedBy: { id: 'private-editor-id', name: 'Private editor' },
+    updatedAt: now, standard: { id: 's1', code: '1.1', title: 'Standard' },
+  };
+  const signoff = {
+    id: 'signoff-1', organisationId: 'org-1', reportingYear: 2026, status: 'DRAFT',
+    boardMeetingDate: now, minuteReference: 'Private minute', approvedByName: 'Private approver',
+    approvedByRole: 'Private role', approvalNotes: 'private signoff notes',
+    approvedAt: null, revision: 2, approvalSequence: 0,
+    currentApprovalSnapshotId: 'private-snapshot-id', currentApprovalSnapshot: {
+      id: 'private-snapshot-id', approvalSequence: 1, evidenceHash: 'private-evidence-hash',
+      snapshotHash: 'private-snapshot-hash', approvedAt: now,
+    },
+    invalidatedAt: null, invalidationReason: null, invalidatedById: 'private-invalidator',
+    updatedById: 'private-editor-id', updatedAt: now,
+  };
+  const recordReads: Array<{ kind: 'list' | 'detail'; args: { where: Record<string, unknown>; select?: Record<string, unknown>; include?: Record<string, unknown> } }> = [];
+  const signoffReads: Array<{ where: Record<string, unknown>; select?: Record<string, unknown>; include?: Record<string, unknown> }> = [];
+  let latestApprovalReads = 0;
+  const models = {
+    complianceRecord: {
+      findMany: async (args: { where: Record<string, unknown>; select?: Record<string, unknown>; include?: Record<string, unknown> }) => {
+        recordReads.push({ kind: 'list', args }); return [record];
+      },
+      findUnique: async (args: { where: Record<string, unknown>; select?: Record<string, unknown>; include?: Record<string, unknown> }) => {
+        recordReads.push({ kind: 'detail', args }); return record;
+      },
+    },
+    complianceSignoff: { findUnique: async (args: { where: Record<string, unknown>; select?: Record<string, unknown>; include?: Record<string, unknown> }) => {
+      signoffReads.push(args); return signoff;
+    } },
+    complianceApprovalSnapshot: { findFirst: async () => {
+      latestApprovalReads += 1; return signoff.currentApprovalSnapshot;
+    } },
+  };
+  for (const role of ['MEMBER', 'ADMIN'] as const) {
+    recordReads.length = 0;
+    signoffReads.length = 0;
+    latestApprovalReads = 0;
+    const app = await buildComplianceApp(models, role);
+    try {
+      for (const path of ['/records?year=2026', '/records/s1?year=2026', '/signoff?year=2026']) {
+        const result = await app.inject({ method: 'GET', url: path, headers: { authorization: tokenFor(role) } });
+        assert.equal(result.statusCode, 200, path);
+        assert.match(result.body, /WORKING_TOWARDS|DRAFT/, path);
+        if (role === 'MEMBER') {
+          assert.doesNotMatch(result.body, /private |Private |private-/i, path);
+        } else {
+          assert.match(result.body, /private |Private |private-/i, path);
+        }
+      }
+      assert.deepEqual(recordReads.map((read) => read.kind), ['list', 'detail']);
+      for (const { args } of recordReads) {
+        assert.equal(args.where.organisationId ??
+          (args.where.organisationId_standardId_reportingYear as { organisationId?: string })?.organisationId, 'org-1');
+        if (role === 'MEMBER') {
+          assert.ok(args.select, 'Member record reads must select limited fields');
+          for (const field of ['actionTaken', 'evidence', 'notes', 'explanationIfNA', 'updatedBy', 'updatedById']) {
+            assert.equal(args.select[field], undefined, `Member record read must not load ${field}`);
+          }
+        } else {
+          assert.equal(args.select, undefined, 'Admin record reads must remain complete');
+          assert.ok(args.include, 'Admin record reads retain related record details');
+        }
+      }
+      assert.equal(signoffReads.length, 1);
+      assert.deepEqual(signoffReads[0]?.where, {
+        organisationId_reportingYear: { organisationId: 'org-1', reportingYear: 2026 },
+      });
+      if (role === 'MEMBER') {
+        const selected = signoffReads[0]?.select;
+        assert.ok(selected);
+        for (const field of ['minuteReference', 'approvedByName', 'approvedByRole', 'approvalNotes', 'updatedById', 'invalidatedById']) {
+          assert.equal(selected[field], undefined, `Member sign-off must not load ${field}`);
+        }
+        assert.deepEqual(selected.currentApprovalSnapshot, { select: { evidenceHash: true } });
+        assert.equal(latestApprovalReads, 0, 'Member sign-off must not read a historical approval snapshot');
+      } else {
+        assert.equal(signoffReads[0]?.select, undefined);
+        assert.ok(signoffReads[0]?.include);
+        assert.equal(latestApprovalReads, 1);
+      }
+    } finally { await app.close(); }
+  }
+});
+
+test('Member sign-off preserves an honest current-approval flag without historical snapshot reads', async () => {
+  const now = new Date('2026-09-29T10:00:00.000Z');
+  let snapshotHash = 'matching-hash';
+  let signoffPresent = true;
+  let evidenceChecks = 0;
+  const prisma = {
+    complianceSignoff: { findUnique: async () => signoffPresent ? {
+      id: 'signoff-1', organisationId: 'org-1', reportingYear: 2026, status: 'APPROVED',
+      boardMeetingDate: now, approvedAt: now, revision: 2, approvalSequence: 1,
+      currentApprovalSnapshotId: 'snapshot-1',
+      currentApprovalSnapshot: { evidenceHash: snapshotHash },
+      invalidatedAt: null, invalidationReason: null, updatedAt: now,
+    } : null },
+    complianceApprovalSnapshot: { findFirst: async () => assert.fail('Member sign-off must not read latest snapshot') },
+  };
+  const service = new ComplianceService(prisma as never);
+  Object.assign(service, { buildApprovalEvidenceState: async () => {
+    evidenceChecks += 1;
+    return { evidenceHash: 'matching-hash' };
+  } });
+
+  const current = await service.getMemberSignoff('org-1', 2026);
+  assert.equal(current.approvalCurrent, true);
+  assert.equal(current.currentApprovalSnapshotId, null);
+  assert.equal(current.currentApproval, null);
+  assert.equal(current.latestApproval, null);
+  snapshotHash = 'stale-hash';
+  assert.equal((await service.getMemberSignoff('org-1', 2026)).approvalCurrent, false);
+  signoffPresent = false;
+  const absent = await service.getMemberSignoff('org-1', 2026);
+  assert.equal(absent.status, 'DRAFT');
+  assert.equal(absent.approvalCurrent, false);
+  assert.equal(absent.revision, 0);
+  assert.equal(evidenceChecks, 2, 'an absent sign-off does not read approval evidence');
+});
+
 // ── service-level harness (clone of compliance-service.test.ts buildService) ──
 
 type Call = { name: string; args: unknown };
@@ -306,7 +517,7 @@ test('an ADMIN may upsert a compliance record and the board sign-off', async () 
   }
 });
 
-test('GET /approval-readiness returns readiness for authenticated subscribed members and validates year', async () => {
+test('GET /approval-readiness denies Members before evidence reads; Admin gets readiness', async () => {
   const records = [
     {
       id: 'rec_1',
@@ -326,23 +537,30 @@ test('GET /approval-readiness returns readiness for authenticated subscribed mem
       updatedBy: null,
     },
   ];
-  const app = await buildComplianceApp(
-    {
-      governanceStandard: { findMany: async () => [{
-        id: 's1', principleId: 'p1', code: '1.1', title: 'Standard', isCore: true,
-        isAdditional: false, sortOrder: 1,
-        principle: { id: 'p1', number: 1, title: 'Principle', description: '', sortOrder: 1 },
-      }] },
-      complianceRecord: { findMany: async () => records },
-    },
-    'MEMBER',
-    activeSubscription('COMPLETE'),
-  );
+  let evidenceReads = 0;
+  const models = {
+    governanceStandard: { findMany: async () => [{
+      id: 's1', principleId: 'p1', code: '1.1', title: 'Standard', isCore: true,
+      isAdditional: false, sortOrder: 1,
+      principle: { id: 'p1', number: 1, title: 'Principle', description: '', sortOrder: 1 },
+    }] },
+    complianceRecord: { findMany: async () => { evidenceReads++; return records; } },
+  };
+  const member = await buildComplianceApp(models, 'MEMBER', activeSubscription('COMPLETE'));
+  try {
+    const denied = await member.inject({
+      method: 'GET', url: '/approval-readiness?year=2026',
+      headers: { authorization: tokenFor('MEMBER') },
+    });
+    assert.equal(denied.statusCode, 403);
+    assert.equal(evidenceReads, 0);
+  } finally { await member.close(); }
+  const app = await buildComplianceApp(models, 'ADMIN', activeSubscription('COMPLETE'));
   try {
     const ok = await app.inject({
       method: 'GET',
       url: '/approval-readiness?year=2026',
-      headers: { authorization: tokenFor('MEMBER') },
+      headers: { authorization: tokenFor('ADMIN') },
     });
     assert.equal(ok.statusCode, 200);
     assert.deepEqual(ok.json().data, {
@@ -361,7 +579,7 @@ test('GET /approval-readiness returns readiness for authenticated subscribed mem
     const badYear = await app.inject({
       method: 'GET',
       url: '/approval-readiness?year=not-a-year',
-      headers: { authorization: tokenFor('MEMBER') },
+      headers: { authorization: tokenFor('ADMIN') },
     });
     assert.equal(badYear.statusCode, 400);
     assert.equal(badYear.json().code, 'VALIDATION_ERROR');

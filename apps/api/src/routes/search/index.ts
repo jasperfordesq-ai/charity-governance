@@ -50,6 +50,7 @@ export async function searchRoutes(app: FastifyInstance) {
           // the caller name its own scope would be a way around the gate
           // rather than a search.
           dataScope: request.authSession?.dataScope ?? 'FULL',
+          viewerRole: request.user.role,
         }),
       );
     } catch (err) {

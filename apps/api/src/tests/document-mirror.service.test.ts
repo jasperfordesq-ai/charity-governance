@@ -45,6 +45,7 @@ function publicationRow(overrides: Row = {}): Row {
     provider: 'confluence',
     state: 'PROCESSED',
     cloudId: 'site-1',
+    spaceId: 'space-1',
     pageId: 'page-1',
     pageTitle: 'Safeguarding Policy',
     remoteState: 'VISIBLE',
@@ -69,7 +70,11 @@ test('every id asked for comes back, so a missing row is never ambiguous', async
   // A document with no publication row has a truthful answer, not a gap the
   // caller has to interpret.
   assert.equal(mirrors.get('doc-2')?.publication, 'NOT_PUBLISHED');
+  assert.equal(mirrors.get('doc-2')?.pageRecorded, false);
+  assert.equal(mirrors.get('doc-2')?.pageSiteMatchesConnection, null);
+  assert.equal(mirrors.get('doc-2')?.connectionAvailable, null);
   assert.equal(mirrors.get('doc-1')?.publication, 'PUBLISHED');
+  assert.equal(mirrors.get('doc-1')?.pageRecorded, true);
 });
 
 test('a list is one query, not one per document', async () => {
@@ -139,6 +144,7 @@ test('the page link is the stable redirect, which survives a rename', async () =
     organisationId: 'org-1',
     documentId: 'doc-1',
     siteUrl: SITE,
+    siteId: 'site-1',
   });
 
   // `/spaces/KEY/pages/...` breaks when a page is renamed or moved between
@@ -146,11 +152,48 @@ test('the page link is the stable redirect, which survives a rename', async () =
   assert.equal(mirror.pageUrl, `${SITE}/wiki/pages/viewpage.action?pageId=page-1`);
 });
 
+test('a recorded page is compared with both selected publishing identifiers', async () => {
+  const { prisma } = fakePrisma([publicationRow()]);
+  const same = await mirrorForDocument(prisma, { organisationId: 'org-1', documentId: 'doc-1',
+    publishSiteId: 'site-1', publishSpaceId: 'space-1' });
+  assert.equal(same.recordedPageMatchesDestination, true);
+  const otherSpace = await mirrorForDocument(prisma, { organisationId: 'org-1', documentId: 'doc-1',
+    publishSiteId: 'site-1', publishSpaceId: 'space-2' });
+  assert.equal(otherSpace.recordedPageMatchesDestination, false);
+  const unknown = await mirrorForDocument(prisma, { organisationId: 'org-1', documentId: 'doc-1' });
+  assert.equal(unknown.recordedPageMatchesDestination, null);
+});
+
 test('no site url means no link, rather than a broken one', async () => {
   const { prisma } = fakePrisma([publicationRow()]);
 
   const mirror = await mirrorForDocument(prisma, { organisationId: 'org-1', documentId: 'doc-1' });
 
+  assert.equal(mirror.pageUrl, null);
+  assert.equal(mirror.pageRecorded, true, 'the missing site address must not erase the recorded page fact');
+  assert.equal(mirror.pageSiteMatchesConnection, null);
+});
+
+test('a reconnect to another Confluence site cannot construct a link to the old page on the new site', async () => {
+  const { prisma } = fakePrisma([publicationRow({ state: 'DEAD_LETTER' })]);
+  const mirror = await mirrorForDocument(prisma, {
+    organisationId: 'org-1', documentId: 'doc-1', siteUrl: SITE, siteId: 'different-site',
+  });
+  assert.equal(mirror.publication, 'FAILED');
+  assert.equal(mirror.pageRecorded, true);
+  assert.equal(mirror.pageSiteMatchesConnection, false);
+  assert.equal(mirror.pageUrl, null);
+});
+
+test('a disconnected integration cannot turn retained site facts into a current page link', async () => {
+  const { prisma } = fakePrisma([publicationRow()]);
+  const mirror = await mirrorForDocument(prisma, {
+    organisationId: 'org-1', documentId: 'doc-1', siteUrl: SITE,
+    siteId: 'site-1', connectionAvailable: false,
+  });
+  assert.equal(mirror.pageRecorded, true);
+  assert.equal(mirror.connectionAvailable, false);
+  assert.equal(mirror.pageSiteMatchesConnection, null);
   assert.equal(mirror.pageUrl, null);
 });
 
@@ -161,9 +204,12 @@ test('a row with no page id has no link', async () => {
     organisationId: 'org-1',
     documentId: 'doc-1',
     siteUrl: SITE,
+    siteId: 'site-1',
   });
 
   assert.equal(mirror.publication, 'PENDING');
+  assert.equal(mirror.pageRecorded, false);
+  assert.equal(mirror.pageSiteMatchesConnection, null);
   assert.equal(mirror.pageUrl, null);
 });
 

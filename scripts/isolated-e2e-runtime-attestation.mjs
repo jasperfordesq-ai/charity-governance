@@ -45,7 +45,7 @@ const WEB_RUNTIME_ENVIRONMENT = Object.freeze({
 const GATEWAY_PORTS = Object.freeze({
   '3302/tcp': '3302',
   '3303/tcp': '3303',
-  '55434/tcp': '55434',
+  '3354/tcp': '3354',
 });
 
 const EMPTY_HOST_COUPLING_FIELDS = Object.freeze([

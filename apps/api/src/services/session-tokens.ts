@@ -6,6 +6,7 @@ import {
 } from '@prisma/client';
 import { signAccessToken, type TokenPayload } from '../utils/jwt.js';
 import { AppError } from '../utils/errors.js';
+import { verifyUserLoginSecondFactor, type OfferedSecondFactor } from './user-second-factor.service.js';
 
 type SessionUser = {
   id: string;
@@ -15,6 +16,7 @@ type SessionUser = {
 
 type LoginSessionUser = SessionUser & {
   passwordHash: string;
+  name?: string;
 };
 
 /**
@@ -66,6 +68,7 @@ type LockedFamilyRow = LockedPrincipalRow & {
   familyCreatedAt: Date;
   expiresAt: Date;
   revokedAt: Date | null;
+  revocationReason: AuthSessionRevocationReason | null;
   deviceLabel: string | null;
   clientKind: SessionPosture['clientKind'];
   accessLevel: SessionPosture['accessLevel'];
@@ -214,6 +217,7 @@ async function lockPrincipalAndFamily(
         session."familyCreatedAt",
         session."expiresAt",
         session."revokedAt",
+        session."revocationReason",
         session."deviceLabel",
         session."clientKind",
         session."accessLevel",
@@ -236,6 +240,7 @@ async function lockPrincipalAndFamily(
       locked_family."familyCreatedAt",
       locked_family."expiresAt",
       locked_family."revokedAt",
+      locked_family."revocationReason",
       locked_family."deviceLabel",
       locked_family."clientKind",
       locked_family."accessLevel",
@@ -252,6 +257,7 @@ async function issueSessionTokensWithClient(
   expectedUser: SessionUser,
   expectedPasswordHash?: string,
   posture: SessionPosture = WEB_SESSION_POSTURE,
+  loginFactor?: { offered: OfferedSecondFactor; actorName: string },
 ) {
   const refreshToken = crypto.randomBytes(REFRESH_TOKEN_BYTES).toString('base64url');
   const refreshTokenHash = hashOpaqueToken(refreshToken);
@@ -264,6 +270,18 @@ async function issueSessionTokensWithClient(
     expectedUser.organisationId,
     expectedPasswordHash,
   );
+  if (expectedPasswordHash !== undefined && user.role !== expectedUser.role) {
+    // The public login profile was selected for expectedUser.role. A role
+    // change between that read and this locked issuance must not return the
+    // old role's organisation fields with a newly minted lower-role session.
+    throw invalidLoginCredentials();
+  }
+  if (loginFactor) {
+    const failure = await verifyUserLoginSecondFactor(client as Prisma.TransactionClient, {
+      id: user.id, organisationId: user.organisationId, name: loginFactor.actorName,
+    }, loginFactor.offered, familyId);
+    if (failure) return failure;
+  }
   const session = await client.authSession.create({
     data: {
       userId: user.id,
@@ -291,7 +309,9 @@ export async function issueSessionTokensInTransaction(
   expectedUser: SessionUser,
   posture: SessionPosture = WEB_SESSION_POSTURE,
 ) {
-  return issueSessionTokensWithClient(tx, expectedUser, undefined, posture);
+  const result = await issueSessionTokensWithClient(tx, expectedUser, undefined, posture);
+  if (result instanceof AppError) throw result;
+  return result;
 }
 
 export async function issueSessionTokens(
@@ -299,12 +319,14 @@ export async function issueSessionTokens(
   expectedUser: SessionUser,
   posture: SessionPosture = WEB_SESSION_POSTURE,
 ) {
-  return prisma.$transaction((tx) => issueSessionTokensWithClient(
+  const result = await prisma.$transaction((tx) => issueSessionTokensWithClient(
     tx,
     expectedUser,
     undefined,
     posture,
   ));
+  if (result instanceof AppError) throw result;
+  return result;
 }
 
 /**
@@ -317,19 +339,24 @@ export async function issueLoginSessionTokens(
   prisma: PrismaClient,
   expectedUser: LoginSessionUser,
   posture: SessionPosture = WEB_SESSION_POSTURE,
+  offered: OfferedSecondFactor = {},
 ) {
-  return prisma.$transaction((tx) => issueSessionTokensWithClient(
+  const result = await prisma.$transaction((tx) => issueSessionTokensWithClient(
     tx,
     expectedUser,
     expectedUser.passwordHash,
     posture,
+    { offered, actorName: expectedUser.name ?? 'CharityPilot account' },
   ));
+  if (result instanceof AppError) throw result;
+  return result;
 }
 
 export async function rotateSessionTokens(
   prisma: PrismaClient,
   refreshToken: string,
   expectedClientKind?: SessionPosture['clientKind'],
+  requestId?: string,
 ) {
   const refreshTokenHash = hashOpaqueToken(refreshToken);
   const locators = await prisma.$queryRaw<SessionLocatorRow[]>`
@@ -372,7 +399,7 @@ export async function rotateSessionTokens(
 
     const now = new Date();
     if (session.revokedAt) {
-      await tx.authSession.updateMany({
+      const newlyQuarantined = await tx.authSession.updateMany({
         where: {
           userId: session.id,
           familyId: session.familyId,
@@ -402,7 +429,22 @@ export async function rotateSessionTokens(
           subjectLabel: 'Session family quarantined after a replayed refresh token',
           subjectSessionId: session.familyId,
           reason: 'A refresh token was presented after it had already been used.',
-          context: { clientKind: session.clientKind, accessLevel: session.accessLevel },
+          context: {
+            clientKind: session.clientKind,
+            accessLevel: session.accessLevel,
+            requestId: requestId ?? null,
+            previousRevocationReason: session.revocationReason,
+            // The time of the earlier rotation/revocation lets a reviewer
+            // compare the reuse delay with restricted request logs. It does
+            // not distinguish a racing tab from a copied credential alone.
+            presentedSessionRevokedAt: session.revokedAt.toISOString(),
+            // Stable within a spent session row, without persisting its ID or
+            // the presented token in the audit. Equal values mean the same
+            // row was presented again; they do not establish why.
+            presentedSessionFingerprint: crypto.createHash('sha256')
+              .update(session.sessionId).digest('hex').slice(0, 12).toUpperCase(),
+            newlyQuarantinedSessionCount: newlyQuarantined.count,
+          },
         },
       });
 

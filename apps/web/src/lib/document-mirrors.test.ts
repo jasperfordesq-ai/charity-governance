@@ -13,6 +13,13 @@ import {
 function validMirror(overrides: Record<string, unknown> = {}) {
   return {
     publication: 'PUBLISHED',
+    pageRecorded: true,
+    pageSiteMatchesConnection: true,
+    recordedPageMatchesDestination: true,
+    connectionAvailable: true,
+    approvalDestinationCurrent: true,
+    publishDestination: { siteId: 'site-1', siteUrl: 'https://charity.atlassian.net',
+      spaceId: 'space-1', spaceKey: 'GOV', spaceName: 'Governance' },
     pageUrl: 'https://charity.atlassian.net/wiki/pages/viewpage.action?pageId=page-1',
     remote: {
       state: 'VISIBLE',
@@ -29,8 +36,41 @@ test('a well-formed mirror parses whole', () => {
   const mirror = parseDocumentMirror(validMirror());
 
   assert.equal(mirror?.publication, 'PUBLISHED');
+  assert.equal(mirror?.pageRecorded, true);
+  assert.equal(mirror?.pageSiteMatchesConnection, true);
+  assert.equal(mirror?.recordedPageMatchesDestination, true);
+  assert.equal(mirror?.connectionAvailable, true);
+  assert.equal(mirror?.approvalDestinationCurrent, true);
+  assert.equal(mirror?.publishDestination?.spaceName, 'Governance');
   assert.equal(mirror?.remote?.state, 'VISIBLE');
   assert.equal(mirror?.remote?.version, 3);
+});
+
+test('recorded page survives a missing site URL and an older response stays uncertain', () => {
+  assert.equal(parseDocumentMirror(validMirror({ publication: 'FAILED', pageUrl: null }))?.pageRecorded, true);
+  assert.equal(parseDocumentMirror(validMirror({ publication: 'FAILED', pageUrl: null,
+    pageSiteMatchesConnection: false }))?.pageSiteMatchesConnection, false);
+  assert.equal(parseDocumentMirror(validMirror({ publication: 'FAILED', pageUrl: null,
+    connectionAvailable: false }))?.connectionAvailable, false);
+  assert.equal(parseDocumentMirror(validMirror({ approvalDestinationCurrent: false }))?.approvalDestinationCurrent, false);
+  assert.equal(parseDocumentMirror(validMirror({ publishDestination: { siteId: 'site-1', spaceId: '' } }))?.publishDestination, null);
+  const oldResponse = validMirror({ publication: 'FAILED', pageUrl: null });
+  delete (oldResponse as { pageRecorded?: unknown }).pageRecorded;
+  delete (oldResponse as { pageSiteMatchesConnection?: unknown }).pageSiteMatchesConnection;
+  delete (oldResponse as { recordedPageMatchesDestination?: unknown }).recordedPageMatchesDestination;
+  delete (oldResponse as { connectionAvailable?: unknown }).connectionAvailable;
+  delete (oldResponse as { approvalDestinationCurrent?: unknown }).approvalDestinationCurrent;
+  delete (oldResponse as { publishDestination?: unknown }).publishDestination;
+  assert.equal(parseDocumentMirror(oldResponse)?.pageRecorded, null);
+  assert.equal(parseDocumentMirror(oldResponse)?.pageSiteMatchesConnection, null);
+  assert.equal(parseDocumentMirror(oldResponse)?.recordedPageMatchesDestination, null);
+  assert.equal(parseDocumentMirror(oldResponse)?.connectionAvailable, null);
+  assert.equal(parseDocumentMirror(oldResponse)?.approvalDestinationCurrent, null);
+  assert.equal(parseDocumentMirror(oldResponse)?.publishDestination, null);
+  assert.equal(parseDocumentMirror(validMirror({ pageRecorded: false }))?.pageRecorded, true,
+    'a present page URL is evidence even if the flag is contradictory');
+  assert.equal(parseDocumentMirror(validMirror({ pageSiteMatchesConnection: false }))?.pageSiteMatchesConnection, true,
+    'a URL is constructed only when the API has a matching connected site');
 });
 
 test('a publication state this build has never heard of is dropped, not rendered', () => {

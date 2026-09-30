@@ -95,6 +95,7 @@ export function useRegistersWorkflow() {
   const [financial, setFinancial] = useState<FinancialControlReviewResponse>(emptyFinancial(currentYear));
   const [loadedRegistersYear, setLoadedRegistersYear] = useState<number | null>(null);
   const [modalType, setModalType] = useState<RegisterType | null>(null);
+  const [editingRisk, setEditingRisk] = useState<RiskRecordResponse | null>(null);
   const [form, setForm] = useState<Record<string, string | number | boolean>>({});
   const [permissionRevoked, setPermissionRevoked] = useState(false);
   const canManage = canManageGovernance(user?.role) && !permissionRevoked;
@@ -107,6 +108,7 @@ export function useRegistersWorkflow() {
     if (!isApiForbiddenError(error)) return false;
     setPermissionRevoked(true);
     setModalType(null);
+    setEditingRisk(null);
     setForm({});
     setAnnual(persistedAnnualRef.current);
     setFinancial(persistedFinancialRef.current);
@@ -127,19 +129,19 @@ export function useRegistersWorkflow() {
     setLoadedRegistersYear(null);
     try {
       const [summaryRes, conflictsRes, risksRes, complaintsRes, fundraisingRes, annualRes, financialRes] = await Promise.all([
-        api.get(`/governance-registers/summary?year=${requestedYear}`),
-        api.get('/governance-registers/conflicts'),
+        canManage ? api.get(`/governance-registers/summary?year=${requestedYear}`) : Promise.resolve(null),
+        canManage ? api.get('/governance-registers/conflicts') : Promise.resolve(null),
         api.get('/governance-registers/risks'),
-        api.get('/governance-registers/complaints'),
+        canManage ? api.get('/governance-registers/complaints') : Promise.resolve(null),
         api.get('/governance-registers/fundraising'),
         api.get(`/governance-registers/annual-report?year=${requestedYear}`),
         api.get(`/governance-registers/financial-controls?year=${requestedYear}`),
       ]);
       if (!isLatestRegistersRequest(requestSeq)) return;
-      setSummary(summaryRes.data);
-      setConflicts(conflictsRes.data ?? []);
+      setSummary(summaryRes?.data ?? null);
+      setConflicts(conflictsRes?.data ?? []);
       setRisks(risksRes.data ?? []);
-      setComplaints(complaintsRes.data ?? []);
+      setComplaints(complaintsRes?.data ?? []);
       setFundraising(fundraisingRes.data ?? []);
       persistedAnnualRef.current = annualRes.data ?? emptyAnnual(requestedYear);
       persistedFinancialRef.current = financialRes.data ?? emptyFinancial(requestedYear);
@@ -183,7 +185,7 @@ export function useRegistersWorkflow() {
         setLoading(false);
       }
     }
-  }, [isLatestRegistersRequest, toast]);
+  }, [canManage, isLatestRegistersRequest, toast]);
 
   const fetchOrganisationProfile = useCallback(async () => {
     setOrganisationProfileError('');
@@ -214,6 +216,7 @@ export function useRegistersWorkflow() {
 
   const openModal = (type: RegisterType) => {
     if (!canManage) return;
+    setEditingRisk(null);
     setModalType(type);
     setFormError('');
     if (type === 'conflict') {
@@ -273,6 +276,19 @@ export function useRegistersWorkflow() {
     }
   };
 
+  const openEditRisk = (risk: RiskRecordResponse) => {
+    if (!canManage) return;
+    setEditingRisk(risk);
+    setModalType('risk');
+    setFormError('');
+    setForm({
+      title: risk.title, category: risk.category, description: risk.description,
+      likelihood: risk.likelihood, impact: risk.impact, mitigation: risk.mitigation,
+      owner: risk.owner ?? '', reviewDate: risk.reviewDate?.slice(0, 10) ?? '',
+      status: risk.status, boardMinuteReference: risk.boardMinuteReference ?? '',
+    });
+  };
+
   const updateForm = (key: string, value: string | number | boolean) => {
     if (!canManage) return;
     setForm((prev) => ({ ...prev, [key]: value }));
@@ -280,6 +296,7 @@ export function useRegistersWorkflow() {
 
   const closeModal = () => {
     setModalType(null);
+    setEditingRisk(null);
     setForm({});
     setFormError('');
   };
@@ -326,10 +343,16 @@ export function useRegistersWorkflow() {
         complaint: '/governance-registers/complaints',
         fundraising: '/governance-registers/fundraising',
       }[modalType];
-      await api.post(endpoint, normalizeRegisterForm(form));
+      if (editingRisk && modalType === 'risk') {
+        await api.patch(`${endpoint}/${editingRisk.id}`, {
+          ...normalizeRegisterForm(form), expectedUpdatedAt: editingRisk.updatedAt,
+        });
+      } else {
+        await api.post(endpoint, normalizeRegisterForm(form));
+      }
       closeModal();
       await fetchRegisters();
-      toast('Register record added');
+      toast(editingRisk ? 'Risk record updated' : 'Register record added');
     } catch (err) {
       if (await reconcileForbidden(err)) return;
       const message = apiErrorMessage(err, 'Register record could not be saved. Please review the fields and try again.');
@@ -495,6 +518,9 @@ export function useRegistersWorkflow() {
     loading,
     missingConditionalRegisterCount,
     modalType,
+    editingRisk,
+    openEditRisk,
+    allRisks: risks,
     openModal,
     openRegisterCount,
     organisationProfileError,

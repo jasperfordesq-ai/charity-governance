@@ -29,6 +29,16 @@ test('every tool is advertised once the gate that guards it is open', () => {
   }
 });
 
+test('whole-file download tools are advertised only with a full personal-data session', () => {
+  const config = { downloadDir: 'C:\\reports' };
+  for (const name of ['report_export', 'document_download']) {
+    assert.equal(buildToolList('admin', { ...config, allowPersonalData: false })
+      .some((tool) => tool.name === name), false, name);
+    assert.equal(buildToolList('admin', { ...config, allowPersonalData: true })
+      .some((tool) => tool.name === name), true, name);
+  }
+});
+
 test('advertised tools carry a name, description and input schema', () => {
   for (const tool of buildToolList()) {
     assert.ok(tool.name.length > 0);

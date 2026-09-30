@@ -41,8 +41,7 @@ function authModels(role: Role, subscription: unknown) {
 
 async function buildBoardApp(role: Role, subscription: unknown = activeSubscription()) {
   const app = Fastify({ logger: false });
-  app.decorate('prisma', {
-    ...authModels(role, subscription),
+  const transaction = {
     boardMember: {
       findMany: async () => [],
       count: async () => 0,
@@ -51,6 +50,13 @@ async function buildBoardApp(role: Role, subscription: unknown = activeSubscript
       update: async () => ({ id: 'bm-1' }),
       delete: async () => ({}),
     },
+    governanceRegisterChangeAudit: { create: async () => ({ id: 'audit-1' }) },
+    $queryRaw: async () => [{ id: 'org-1' }],
+  };
+  app.decorate('prisma', {
+    ...authModels(role, subscription),
+    ...transaction,
+    $transaction: async (callback: (client: typeof transaction) => Promise<unknown>) => callback(transaction),
   } as never);
   await app.register(boardMemberRoutes);
   return app;

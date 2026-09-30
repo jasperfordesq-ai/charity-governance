@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, type FormEvent } from 'react';
+import { useEffect, useState, type FormEvent } from 'react';
 import { Button, Card, CardBody, Input, Link } from '@heroui/react';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/lib/auth-context';
@@ -24,10 +24,16 @@ export default function LoginPage() {
 
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [secondFactor, setSecondFactor] = useState('');
+  const [factorPrompt, setFactorPrompt] = useState(false);
   const [error, setError] = useState<AuthFailureNotice | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
   const [touched, setTouched] = useState<Record<string, boolean>>({});
+  const [renewalUnavailable, setRenewalUnavailable] = useState(false);
+  useEffect(() => {
+    setRenewalUnavailable(new URLSearchParams(window.location.search).get('session') === 'renewal-unavailable');
+  }, []);
   // Two separate reasons hid behind one flag: whether reset is self-service
   // (email axis) and whether new orgs can sign up (registration axis). A
   // single-tenant install with provider email configured needs the former
@@ -47,9 +53,11 @@ export default function LoginPage() {
     setIsLoading(true);
 
     try {
-      const user = await login(email, password);
+      const user = await login(email, password, secondFactor);
       router.push(loginDestination(user));
     } catch (err: unknown) {
+      const code = (err as { response?: { data?: { code?: string } } })?.response?.data?.code;
+      if (code === 'SECOND_FACTOR_REQUIRED') setFactorPrompt(true);
       // The credentials fallback is only reachable once the server has actually
       // answered: an origin rejection (403 INVALID_ORIGIN, or a CORS-blocked
       // response with no readable body) never reaches the credential check.
@@ -74,6 +82,10 @@ export default function LoginPage() {
                 : 'Sign in to your CharityPilot account'}
             </p>
           </div>
+
+          {renewalUnavailable && (
+            <FormAlert title="Sign in again">Your browser could not safely renew this session. Please sign in again.</FormAlert>
+          )}
 
           <form onSubmit={handleSubmit} className="space-y-5">
             {error && (
@@ -116,6 +128,16 @@ export default function LoginPage() {
                     onPress={() => setShowPassword((current) => !current)}
                   />
                 }
+              />
+
+              <Input
+                label="Authenticator or recovery code"
+                type="password"
+                description={factorPrompt ? 'This account requires a code. Use the six digits from your authenticator or one saved recovery code.' : 'Enter a code if you have enabled two-step sign-in.'}
+                value={secondFactor}
+                onValueChange={setSecondFactor}
+                autoComplete="one-time-code"
+                variant="bordered"
               />
 
               {manualLinkOnly ? (

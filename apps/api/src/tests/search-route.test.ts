@@ -63,7 +63,7 @@ function prismaWith(
   rows: Partial<Record<string, Record<string, unknown>[]>>,
   plan: 'ESSENTIALS' | 'COMPLETE' = 'COMPLETE',
 ) {
-  const calls: { delegate: string; where: Record<string, unknown> }[] = [];
+  const calls: { delegate: string; where: Record<string, unknown>; select: Record<string, boolean> }[] = [];
 
   const matches = (row: Record<string, unknown>, where: Record<string, unknown>): boolean => {
     for (const [key, condition] of Object.entries(where)) {
@@ -78,15 +78,28 @@ function prismaWith(
         if (typeof value !== 'string' || !value.toLowerCase().includes(needle)) return false;
         continue;
       }
+      if (condition !== null && typeof condition === 'object' && 'not' in condition) {
+        if (row[key] === null || row[key] === undefined || row[key] === (condition as { not: unknown }).not) return false;
+        continue;
+      }
+      if (condition !== null && typeof condition === 'object' && 'notIn' in condition) {
+        if ((condition as { notIn: unknown[] }).notIn.includes(row[key])) return false;
+        continue;
+      }
+      if (condition !== null && typeof condition === 'object' && 'in' in condition) {
+        if (!(condition as { in: unknown[] }).in.includes(row[key])) return false;
+        continue;
+      }
       if (row[key] !== condition) return false;
     }
     return true;
   };
 
   const delegate = (name: string) => ({
-    findMany: async ({ where, take }: { where: Record<string, unknown>; take: number }) => {
-      calls.push({ delegate: name, where });
-      return (rows[name] ?? []).filter((row) => matches(row, where)).slice(0, take);
+    findMany: async ({ where, take, select }: { where: Record<string, unknown>; take: number; select: Record<string, boolean> }) => {
+      calls.push({ delegate: name, where, select });
+      return (rows[name] ?? []).filter((row) => matches(row, where)).slice(0, take)
+        .map((row) => Object.fromEntries(Object.keys(select).map((field) => [field, row[field]])));
     },
   });
 
@@ -103,6 +116,7 @@ async function buildApp(
   rows: Parameters<typeof prismaWith>[0],
   dataScope: Scope = 'WITHHELD',
   plan: 'ESSENTIALS' | 'COMPLETE' = 'COMPLETE',
+  role: 'ADMIN' | 'MEMBER' = 'ADMIN',
 ) {
   const { prisma, calls } = prismaWith(rows, plan);
   const app = Fastify({ logger: false });
@@ -114,7 +128,7 @@ async function buildApp(
       findUnique: async () => ({
         id: 'u1',
         organisationId: 'org-1',
-        role: 'ADMIN' as const,
+        role,
         emailVerified: true,
       }),
     },
@@ -134,6 +148,83 @@ async function buildApp(
   await app.register(searchRoutes, { prefix: '/api/v1/search' });
   return { app, calls };
 }
+
+test('Member search cannot bypass register, trustee-detail or document visibility boundaries even with FULL session scope', async () => {
+  const { app, calls } = await buildApp({
+    boardMember: [TRUSTEE], conflictRecord: [CONFLICT],
+    governingAct: [ACT],
+    resolution: [{ id: 'res-1', organisationId: 'org-1', text: 'Secret register discussion', itemNumber: '4', createdAt: new Date() }],
+    complaintRecord: [{ id: 'complaint-1', organisationId: 'org-1', summary: 'Sensitive complaint', receivedDate: new Date() }],
+    riskRecord: [{ id: 'risk-1', organisationId: 'org-1', title: 'Private safeguarding risk', boardMinuteReference: 'R-1', createdAt: new Date() }],
+    fundraisingRecord: [{ id: 'fundraiser-1', organisationId: 'org-1', name: 'Private fundraising review', boardMinuteReference: 'F-1', createdAt: new Date() }],
+    document: [
+      { id: 'doc-restricted', organisationId: 'org-1', name: 'Secret register', visibility: 'RESTRICTED', createdAt: new Date() },
+      { id: 'doc-visible', organisationId: 'org-1', name: 'Open register', boardMinuteReference: 'PRIVATE-MINUTE-27',
+        visibility: 'MEMBER_VISIBLE', contentAccessClass: 'MEMBER_SUITABLE', memberReviewedSha256: 'a'.repeat(64), storageProvider: 'local', lifecycleStatus: 'CURRENT', createdAt: new Date() },
+      { id: 'doc-unverified-provider', organisationId: 'org-1', name: 'Unverified custody policy',
+        visibility: 'MEMBER_VISIBLE', contentAccessClass: 'MEMBER_SUITABLE', memberReviewedSha256: 'a'.repeat(64), storageProvider: null, lifecycleStatus: 'CURRENT', createdAt: new Date() },
+      { id: 'doc-unhashed', organisationId: 'org-1', name: 'Old byte review',
+        visibility: 'MEMBER_VISIBLE', contentAccessClass: 'MEMBER_SUITABLE', memberReviewedSha256: null, storageProvider: 'local', lifecycleStatus: 'CURRENT', createdAt: new Date() },
+      { id: 'doc-unassessed-content', organisationId: 'org-1', name: 'Unassessed content',
+        visibility: 'MEMBER_VISIBLE', contentAccessClass: 'UNASSESSED', lifecycleStatus: 'CURRENT', createdAt: new Date() },
+      { id: 'doc-unreviewed', organisationId: 'org-1', name: 'Unreviewed release',
+        visibility: 'MEMBER_VISIBLE', lifecycleStatus: 'UNREVIEWED', createdAt: new Date() },
+      { id: 'doc-draft', organisationId: 'org-1', name: 'Working draft',
+        visibility: 'MEMBER_VISIBLE', lifecycleStatus: 'DRAFT', createdAt: new Date() },
+    ],
+    deadline: [
+      { id: 'deadline-manual', organisationId: 'org-1', title: 'Personnel review', isAutoGenerated: false, generatedKind: null, dueDate: new Date() },
+      { id: 'deadline-generated', organisationId: 'org-1', title: 'Annual return', isAutoGenerated: true, generatedKind: 'CHARITY_ANNUAL_REPORT', dueDate: new Date() },
+      { id: 'deadline-legacy', organisationId: 'org-1', title: 'Legacy personnel task', isAutoGenerated: true, generatedKind: 'LEGACY_UNVERIFIED', dueDate: new Date() },
+    ],
+  }, 'FULL', 'COMPLETE', 'MEMBER');
+  const memberAuthorization = `Bearer ${signAccessToken({ userId: 'u1', organisationId: 'org-1', role: 'MEMBER', sessionId: 'sess-1' })}`;
+  try {
+    const run = (query: string) => app.inject({ method: 'GET', url: `/api/v1/search?q=${encodeURIComponent(query)}`, headers: { authorization: memberAuthorization } });
+    const personal = (await run('Kelly Street')).json().data;
+    assert.deepEqual(personal.data, []);
+    assert.equal(personal.dataScope, 'WITHHELD');
+    assert.equal(personal.searched.includes('ConflictRecord'), false);
+    assert.equal(personal.searched.includes('ComplaintRecord'), false);
+    assert.equal(personal.searched.includes('GoverningAct'), false);
+    assert.equal(personal.searched.includes('Resolution'), false);
+    assert.equal(personal.searched.includes('RiskRecord'), false);
+    assert.equal(personal.searched.includes('FundraisingRecord'), false);
+    assert.deepEqual((await run('Board meeting February')).json().data.data, []);
+    assert.deepEqual((await run('Secret register')).json().data.data, []);
+    assert.deepEqual((await run('PRIVATE-MINUTE-27')).json().data.data, []);
+    assert.deepEqual((await run('Private safeguarding risk')).json().data.data, []);
+    assert.deepEqual((await run('Private fundraising review')).json().data.data, []);
+    assert.deepEqual((await run('Unreviewed release')).json().data.data, []);
+    assert.deepEqual((await run('Working draft')).json().data.data, []);
+    assert.deepEqual((await run('Unassessed content')).json().data.data, []);
+    assert.deepEqual((await run('Unverified custody policy')).json().data.data, []);
+    assert.deepEqual((await run('Old byte review')).json().data.data, []);
+    const visible = (await run('Open register')).json().data.data;
+    assert.deepEqual(visible.map((hit: { id: string }) => hit.id), ['doc-visible']);
+    assert.deepEqual((await run('Personnel review')).json().data.data, []);
+    assert.deepEqual((await run('Legacy personnel')).json().data.data, []);
+    assert.deepEqual((await run('Annual return')).json().data.data.map((hit: { id: string }) => hit.id), ['deadline-generated']);
+    assert.equal(calls.filter((call) => ['conflictRecord', 'complaintRecord', 'governingAct', 'resolution', 'riskRecord', 'fundraisingRecord'].includes(call.delegate)).length, 0);
+    assert.equal(calls.filter((call) => call.delegate === 'document').every((call) => call.where.visibility === 'MEMBER_VISIBLE'
+      && call.where.contentAccessClass === 'MEMBER_SUITABLE'
+      && JSON.stringify(call.where.memberReviewedSha256) === JSON.stringify({ not: null })
+      && JSON.stringify(call.where.storageProvider) === JSON.stringify({ in: ['local', 'supabase'] })
+      && JSON.stringify(call.where.lifecycleStatus) === JSON.stringify({ notIn: ['UNREVIEWED', 'DRAFT'] })), true);
+    assert.equal(calls.filter((call) => call.delegate === 'document').every((call) =>
+      (call.where.OR as Array<Record<string, unknown>>).every((part) => Object.keys(part)[0] === 'name')), true);
+    for (const call of calls) {
+      const type = SEARCH_TYPES.find((candidate) => SEARCHABLE[candidate].delegate === call.delegate);
+      assert.ok(type);
+      assert.deepEqual(Object.keys(call.select).sort(), ['id', ...SEARCHABLE[type].safeFields].sort(),
+        `${type} Member search must not load hidden columns`);
+    }
+    assert.equal(calls.filter((call) => call.delegate === 'deadline').every((call) => call.where.isAutoGenerated === true
+      && JSON.stringify(call.where.generatedKind) === JSON.stringify({ not: 'LEGACY_UNVERIFIED' })), true);
+  } finally {
+    await app.close();
+  }
+});
 
 function get(app: Awaited<ReturnType<typeof buildApp>>['app'], query: string) {
   return app.inject({ method: 'GET', url: `/api/v1/search${query}`, headers: { authorization } });

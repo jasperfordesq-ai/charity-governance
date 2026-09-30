@@ -14,6 +14,7 @@ import {
   hashPasswordRecoveryToken,
 } from './password-recovery-crypto.js';
 import { SECURITY_EMAIL_TEMPLATE_VERSION } from './security-email-templates.js';
+import { verifyUserPasswordChangeSecondFactor, type OfferedSecondFactor } from './user-second-factor.service.js';
 import {
   AUTH_RECOVERY_CONTROL_ERROR_CODE,
   assertAuthRecoveryControlForCurrentSecret,
@@ -47,6 +48,7 @@ type LockedUser = {
   email: string;
   name: string;
   lifecycleStatus: 'ACTIVE' | 'SUSPENDED' | 'REMOVED';
+  passwordHash: string;
 };
 
 type LockedRecoveryRequest = {
@@ -172,7 +174,10 @@ export function mapPasswordRecoveryInfrastructureError(error: unknown): unknown 
 
 async function databaseNow(tx: TransactionClient): Promise<Date> {
   const rows = await tx.$queryRaw<Array<{ now: Date }>>`
-    SELECT CURRENT_TIMESTAMP::timestamp(3) AS "now"
+    -- A transaction may have waited behind a newer recovery request. Use
+    -- wall time after the principal/request locks so termination cannot
+    -- predate that request's createdAt.
+    SELECT clock_timestamp()::timestamp(3) AS "now"
   `;
   if (!rows[0]) throw new Error('Password recovery database clock is unavailable');
   return rows[0].now;
@@ -259,13 +264,13 @@ async function lockUser(
 ): Promise<LockedUser | null> {
   const query = mode === 'UPDATE'
     ? Prisma.sql`
-        SELECT "id", "organisationId", "email", "name", "lifecycleStatus"
+        SELECT "id", "organisationId", "email", "name", "lifecycleStatus", "passwordHash"
         FROM "User"
         WHERE "id" = ${userId} AND "organisationId" = ${organisationId}
         FOR UPDATE
       `
     : Prisma.sql`
-        SELECT "id", "organisationId", "email", "name", "lifecycleStatus"
+        SELECT "id", "organisationId", "email", "name", "lifecycleStatus", "passwordHash"
         FROM "User"
         WHERE "id" = ${userId} AND "organisationId" = ${organisationId}
         FOR SHARE
@@ -444,6 +449,92 @@ export class PasswordRecoveryService {
       responseTargetDurationMs,
     );
     return { message: PASSWORD_RECOVERY_NEUTRAL_MESSAGE };
+  }
+
+  /** Change an authenticated account password and end every existing session. */
+  async changePassword(
+    userId: string,
+    organisationId: string,
+    currentPassword: string,
+    newPassword: string,
+    offered: OfferedSecondFactor,
+    sessionId: string,
+    sessionFamilyId: string,
+    requestId?: string,
+  ): Promise<void> {
+    const principal = await this.prisma.user.findFirst({
+      where: { id: userId, organisationId, lifecycleStatus: 'ACTIVE',
+        organisation: { lifecycleStatus: 'ACTIVE' } },
+      select: { passwordHash: true },
+    });
+    if (!principal || !await bcrypt.compare(currentPassword, principal.passwordHash)) {
+      throw new AppError(401, 'INVALID_CREDENTIALS', 'The account password did not match.');
+    }
+    if (await bcrypt.compare(newPassword, principal.passwordHash)) {
+      throw new AppError(400, 'PASSWORD_UNCHANGED', 'Choose a different password.');
+    }
+    const passwordHash = await bcrypt.hash(newPassword, SALT_ROUNDS);
+    const outcome = await this.prisma.$transaction(async (tx) => {
+      await assertAuthRecoveryControlForCurrentSecret(tx);
+      const organisation = await lockOrganisation(tx, organisationId, 'UPDATE');
+      const user = await lockUser(tx, organisationId, userId, 'UPDATE');
+      if (!organisation || organisation.lifecycleStatus !== 'ACTIVE' ||
+          !user || user.lifecycleStatus !== 'ACTIVE' ||
+          user.passwordHash !== principal.passwordHash) {
+        return new AppError(401, 'INVALID_CREDENTIALS', 'The account password has changed. Sign in again.');
+      }
+      // A failed proof is returned, allowing its account-wide attempt counter
+      // to commit. A recovery code consumed by success shares this transaction.
+      const factorFailure = await verifyUserPasswordChangeSecondFactor(tx, user, offered, sessionFamilyId);
+      if (factorFailure) return factorFailure;
+      await tx.$queryRaw<Array<{ id: string }>>`
+        SELECT "id" FROM "PasswordRecoveryRequest"
+        WHERE "userId" = ${userId} AND "organisationId" = ${organisationId}
+        ORDER BY "id" FOR UPDATE
+      `;
+      const lockedSessions = await tx.$queryRaw<Array<{ id: string }>>`
+        SELECT "id" FROM "AuthSession"
+        WHERE "userId" = ${userId} AND "revokedAt" IS NULL
+          AND "expiresAt" > clock_timestamp()
+        ORDER BY "id" FOR UPDATE
+      `;
+      if (!lockedSessions.some((session) => session.id === sessionId)) {
+        // Roll back a recovery code spent earlier in this transaction too.
+        throw new AppError(401, 'UNAUTHORIZED', 'This session has ended. Sign in again.');
+      }
+      const now = await databaseNow(tx);
+      const terminated = await tx.passwordRecoveryRequest.updateMany({
+        where: { userId, organisationId, terminatedAt: null },
+        data: { terminatedAt: now, terminationReason: 'PASSWORD_RESET_COMPLETED',
+          nextDeliveryAttemptAt: null },
+      });
+      const changed = await tx.user.updateMany({
+        where: { id: userId, organisationId, lifecycleStatus: 'ACTIVE',
+          passwordHash: principal.passwordHash },
+        data: { passwordHash },
+      });
+      if (changed.count !== 1) throw new Error('Password change lost the principal lock');
+      const revoked = await tx.authSession.updateMany({
+        where: { userId, revokedAt: null },
+        data: { revokedAt: now, revocationReason: 'USER_ALL_SESSIONS_REVOKED' },
+      });
+      await tx.securityAuditEvent.create({ data: {
+        organisationId,
+        type: 'ALL_SESSIONS_REVOKED',
+        actorKind: 'USER',
+        actorUserId: userId,
+        actorLabel: displayName(user),
+        subjectLabel: displayName(user),
+        subjectUserId: userId,
+        reason: 'Account password changed; all sessions ended.',
+        requestId: requestId ? boundedEvidence(requestId, 128) || undefined : undefined,
+        context: { eventKind: 'PASSWORD_CHANGED', terminatedRequestCount: terminated.count,
+          revokedSessionCount: revoked.count } satisfies Prisma.InputJsonObject,
+        occurredAt: now,
+      } });
+      return null;
+    });
+    if (outcome instanceof AppError) throw outcome;
   }
 
   async resetPassword(

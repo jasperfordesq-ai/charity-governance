@@ -4362,11 +4362,11 @@
     "surface": "web",
     "group": "web-platform",
     "concern": "auth-session",
-    "guarantee": "The server-side protected-route check forwards the deployed web Origin the API origin guard requires when it refreshes a session at the edge.",
+    "guarantee": "An expired protected-page request redirects to browser renewal without a web worker presenting the single-use refresh token.",
     "status": "covered",
     "testType": "unit",
     "testFile": "apps/web/src/proxy.test.ts",
-    "testTitle": "server-side protected route refresh sends the deployed web Origin required by the API origin guard",
+    "testTitle": "expired protected page requests hand renewal to the browser without spending a refresh token",
     "gapDescription": "",
     "proposedTitle": ""
   },

@@ -32,6 +32,14 @@ export type DocumentMirrorPublicationState =
 
 export type DocumentMirror = {
   publication: DocumentMirrorPublicationState;
+  /** Recorded page ID exists, regardless of whether this connection has a usable site URL. */
+  pageRecorded: boolean;
+  /** Null means no page or insufficient site identity to compare; false means an old-site page. */
+  pageSiteMatchesConnection: boolean | null;
+  /** Compared only against the recorded page's stored site and space, not live Confluence permissions. */
+  recordedPageMatchesDestination: boolean | null;
+  /** False means the integration is not currently connected; null means this response lacks that fact. */
+  connectionAvailable: boolean | null;
   pageUrl: string | null;
   remote: {
     state: DocumentPublicationRemoteState;
@@ -46,6 +54,7 @@ type MirrorRow = {
   documentId: unknown;
   state: unknown;
   cloudId: unknown;
+  spaceId: unknown;
   pageId: unknown;
   pageTitle: unknown;
   remoteState: unknown;
@@ -90,7 +99,7 @@ function publicationStateOf(state: unknown): DocumentMirrorPublicationState {
  * The page's address, or null.
  *
  * Built from the recorded `cloudId` and `pageId` rather than from a stored URL,
- * and only for a page that was actually published. A URL stored at publish time
+ * and only when the recorded site matches the current connection. A URL stored at publish time
  * would be a second copy of the same fact that could disagree with the
  * identifiers the eraser uses — and the identifiers are the ones that matter.
  *
@@ -98,19 +107,32 @@ function publicationStateOf(state: unknown): DocumentMirrorPublicationState {
  * survives a page being renamed or moved between spaces, which a
  * `/spaces/KEY/pages/...` link does not.
  */
-function pageUrlOf(row: MirrorRow, siteUrl: string | null): string | null {
+function pageUrlOf(row: MirrorRow, siteUrl: string | null, siteId: string | null): string | null {
   if (typeof row.pageId !== 'string' || row.pageId.length === 0) return null;
-  if (siteUrl === null || siteUrl.length === 0) return null;
+  // A reconnect may point the charity's integration at a different site.
+  // Never combine that site's URL with a page ID recorded on the old site.
+  if (siteUrl === null || siteUrl.length === 0 || siteId === null || row.cloudId !== siteId) return null;
   return `${siteUrl.replace(/\/+$/, '')}/wiki/pages/viewpage.action?pageId=${encodeURIComponent(row.pageId)}`;
 }
 
-function toMirror(row: MirrorRow, siteUrl: string | null): DocumentMirror {
+function toMirror(row: MirrorRow, siteUrl: string | null, siteId: string | null, connectionAvailable: boolean | null,
+  publishSiteId: string | null, publishSpaceId: string | null): DocumentMirror {
   const publication = publicationStateOf(row.state);
   const remoteState = row.remoteState;
+  const activeSiteId = connectionAvailable === false ? null : siteId;
+  const activeSiteUrl = connectionAvailable === false ? null : siteUrl;
 
   return {
     publication,
-    pageUrl: pageUrlOf(row, siteUrl),
+    pageRecorded: typeof row.pageId === 'string' && row.pageId.length > 0,
+    pageSiteMatchesConnection: typeof row.pageId === 'string' && row.pageId.length > 0
+      && typeof row.cloudId === 'string' && row.cloudId.length > 0 && activeSiteId !== null
+      ? row.cloudId === activeSiteId : null,
+    recordedPageMatchesDestination: typeof row.pageId === 'string' && row.pageId.length > 0
+      && publishSiteId !== null && publishSpaceId !== null
+      ? row.cloudId === publishSiteId && row.spaceId === publishSpaceId : null,
+    connectionAvailable,
+    pageUrl: pageUrlOf(row, activeSiteUrl, activeSiteId),
     // Null means never checked, which is a different answer from UNKNOWN and is
     // rendered differently: one says the reconcile job has not reached this
     // page, the other says the site refused to tell us about it.
@@ -132,6 +154,10 @@ function toMirror(row: MirrorRow, siteUrl: string | null): DocumentMirror {
 
 export const NOT_PUBLISHED: DocumentMirror = {
   publication: 'NOT_PUBLISHED',
+  pageRecorded: false,
+  pageSiteMatchesConnection: null,
+  recordedPageMatchesDestination: null,
+  connectionAvailable: null,
   pageUrl: null,
   remote: null,
 };
@@ -145,7 +171,8 @@ export const NOT_PUBLISHED: DocumentMirror = {
  */
 export async function mirrorsForDocuments(
   prisma: MirrorClient,
-  input: { organisationId: string; documentIds: string[]; siteUrl?: string | null },
+  input: { organisationId: string; documentIds: string[]; siteUrl?: string | null; siteId?: string | null;
+    connectionAvailable?: boolean | null; publishSiteId?: string | null; publishSpaceId?: string | null },
 ): Promise<Map<string, DocumentMirror>> {
   const mirrors = new Map<string, DocumentMirror>();
   for (const id of input.documentIds) mirrors.set(id, NOT_PUBLISHED);
@@ -164,6 +191,7 @@ export async function mirrorsForDocuments(
       documentId: true,
       state: true,
       cloudId: true,
+      spaceId: true,
       pageId: true,
       pageTitle: true,
       remoteState: true,
@@ -176,7 +204,8 @@ export async function mirrorsForDocuments(
 
   for (const row of rows) {
     if (typeof row.documentId !== 'string') continue;
-    mirrors.set(row.documentId, toMirror(row, input.siteUrl ?? null));
+    mirrors.set(row.documentId, toMirror(row, input.siteUrl ?? null, input.siteId ?? null,
+      input.connectionAvailable ?? null, input.publishSiteId ?? null, input.publishSpaceId ?? null));
   }
 
   return mirrors;
@@ -185,12 +214,17 @@ export async function mirrorsForDocuments(
 /** The mirror for one document. */
 export async function mirrorForDocument(
   prisma: MirrorClient,
-  input: { organisationId: string; documentId: string; siteUrl?: string | null },
+  input: { organisationId: string; documentId: string; siteUrl?: string | null; siteId?: string | null;
+    connectionAvailable?: boolean | null; publishSiteId?: string | null; publishSpaceId?: string | null },
 ): Promise<DocumentMirror> {
   const mirrors = await mirrorsForDocuments(prisma, {
     organisationId: input.organisationId,
     documentIds: [input.documentId],
     siteUrl: input.siteUrl ?? null,
+    siteId: input.siteId ?? null,
+    connectionAvailable: input.connectionAvailable ?? null,
+    publishSiteId: input.publishSiteId ?? null,
+    publishSpaceId: input.publishSpaceId ?? null,
   });
   return mirrors.get(input.documentId) ?? NOT_PUBLISHED;
 }

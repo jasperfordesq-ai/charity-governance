@@ -20,7 +20,7 @@ test("deleting a board member names the trustee, scoped to the charity", async (
 
   const described = await describeAction(prisma, "org-1", "DELETE", "/api/v1/board-members/:id", { id: "bm-1" });
 
-  assert.equal(described.summary, 'Permanently delete board member "Aoife Chairperson" (Chair)');
+  assert.equal(described.summary, 'Remove board member "Aoife Chairperson" (Chair) from active records; audit and backup copies may remain');
   assert.equal(described.resourceId, "bm-1");
   assert.deepEqual(seen[0], { id: "bm-1", organisationId: "org-1" }, "the lookup must be tenant-scoped");
 });
@@ -47,17 +47,26 @@ test("a record that cannot be found falls back to the route and the identifier",
 
   const described = await describeAction(prisma, "org-1", "DELETE", "/api/v1/governance-registers/risks/:id", { id: "r-9" });
 
-  assert.equal(described.summary, "Permanently delete: governance registers risks (DELETE): record r-9");
+  assert.equal(described.summary, "Delete from active records: governance registers risks (DELETE): record r-9");
   assert.equal(described.resourceId, "r-9");
 });
 
 test("a route with no lookup, or a lookup that throws, still yields a summary", async () => {
   const throwing = prismaWith({ document: { findFirst: async () => { throw new Error("db down"); } } });
   const described = await describeAction(throwing, "org-1", "DELETE", "/api/v1/documents/:id", { id: "d-1" });
-  assert.match(described.summary, /^Permanently delete: documents \(DELETE\): record d-1$/);
+  assert.equal(described.summary, "Remove an eligible draft document from the Vault; stored-file cleanup is tracked separately: record d-1");
 
   const unknown = await describeAction(prismaWith({}), "org-1", "POST", "/api/v1/team/members/:id/suspend", { id: "u-1" });
   assert.equal(unknown.summary, "Carry out: team members suspend (POST): record u-1");
+});
+
+test("document removal summary does not promise immediate file or Confluence erasure", async () => {
+  const prisma = prismaWith({ document: { findFirst: async () => ({ name: "Draft policy", category: "POLICY" }) } });
+  const described = await describeAction(prisma, "org-1", "DELETE", "/api/v1/documents/:id", { id: "d-1" });
+  assert.match(described.summary, /if it is an unheld draft/);
+  assert.match(described.summary, /stored-file cleanup is tracked separately/);
+  assert.match(described.summary, /Confluence copies remain/);
+  assert.doesNotMatch(described.summary, /permanent/i);
 });
 
 test("unlinking names both the document and the standard", async () => {
@@ -101,7 +110,17 @@ test("erasing a Confluence page names the page and the document it belonged to, 
 
   assert.equal(
     described.summary,
-    'Permanently erase the Confluence page "Board minutes 2026-08" for deleted document doc-9',
+    'Request erasure of the Confluence page "Board minutes 2026-08" for deleted document doc-9; purge may require separate administrator review',
   );
   assert.deepEqual(seen[0], { id: "pub-1", organisationId: "org-1", provider: "confluence" });
+});
+
+test("Confluence erasure fallback does not promise a completed purge", async () => {
+  const prisma = prismaWith({ documentPublication: { findFirst: async () => null } });
+  const described = await describeAction(
+    prisma, "org-1", "POST", "/api/v1/integrations/confluence/publications/:publicationId/erase",
+    { publicationId: "pub-1" },
+  );
+  assert.equal(described.summary, "Request erasure of a Confluence publication; purge may require administrator review");
+  assert.doesNotMatch(described.summary, /permanent/i);
 });

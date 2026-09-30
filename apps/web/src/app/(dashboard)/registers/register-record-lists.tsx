@@ -38,22 +38,26 @@ export function riskScore(risk: RiskRecordResponse) {
 }
 
 export function RegisterRecordsPanel({
+  showSensitiveRegisters,
   conflicts,
   risks,
   complaints,
   fundraising,
   onAdd,
   onClose,
+  onEditRisk,
   closingRecordId,
   saving,
   canManage,
 }: {
+  showSensitiveRegisters: boolean;
   conflicts: ConflictRecordResponse[];
   risks: RiskRecordResponse[];
   complaints: ComplaintRecordResponse[];
   fundraising: FundraisingRecordResponse[];
   onAdd: (type: RegisterType) => void;
   onClose: (type: RegisterType, id: string) => void;
+  onEditRisk: (risk: RiskRecordResponse) => void;
   closingRecordId: string | null;
   saving: boolean;
   canManage: boolean;
@@ -67,7 +71,7 @@ export function RegisterRecordsPanel({
 
   return (
     <div className="grid grid-cols-1 gap-5 xl:grid-cols-2">
-      <RegisterSection
+      {showSensitiveRegisters ? <RegisterSection
         title="Conflicts register"
         description="Declared interests, meeting handling, decisions, and review dates."
         count={conflicts.length}
@@ -108,11 +112,11 @@ export function RegisterRecordsPanel({
             ) : null}
           />
         ))}
-      </RegisterSection>
+      </RegisterSection> : null}
 
       <RegisterSection
         title="Risk register"
-        description="Board-level risk, score, mitigation, owner, and review evidence."
+        description={canManage ? 'Board-level risk, score, mitigation, owner, and review evidence.' : 'Risk categories, scores, status and review dates. Record details require an Owner or Admin.'}
         count={risks.length}
         actionLabel="Add risk"
         onAdd={() => onAdd('risk')}
@@ -125,34 +129,39 @@ export function RegisterRecordsPanel({
         {risks.map((item) => (
           <RegisterRow
             key={item.id}
-            title={item.title}
-            description={item.mitigation || item.description}
-            meta={`Owner ${compactValue(item.owner, 'not assigned')} - Review ${niceDate(item.reviewDate)}`}
+            title={canManage ? item.title : `Risk ${item.id.slice(0, 8)}`}
+            description={canManage ? item.mitigation || item.description : 'Detailed risk notes require an Owner or Admin.'}
+            meta={canManage ? `Owner ${compactValue(item.owner, 'not assigned')} - Review ${niceDate(item.reviewDate)}` : `Review ${niceDate(item.reviewDate)}`}
             chips={(
               <>
                 <StatusChip tone={riskScore(item) >= 12 ? 'danger' : 'warning'}>Score {riskScore(item)}</StatusChip>
                 <StatusChip tone="neutral">{riskCategoryLabels[item.category]}</StatusChip>
-                <EvidenceChip status={item.boardMinuteReference ? 'ready' : 'review'}>
+                {canManage ? <EvidenceChip status={item.boardMinuteReference ? 'ready' : 'review'}>
                   {item.boardMinuteReference ? 'Board minute' : 'Review flag'}
-                </EvidenceChip>
+                </EvidenceChip> : null}
               </>
             )}
-            action={canManage && item.status !== RegisterStatus.CLOSED ? (
-              <Button
-                size="sm"
-                variant="flat"
-                onPress={() => onClose('risk', item.id)}
-                isLoading={closingRecordId === item.id}
-                isDisabled={Boolean(closingRecordId) || saving}
-              >
-                Close
-              </Button>
+            action={canManage ? (
+              <div className="flex gap-2">
+                <Button size="sm" variant="flat" onPress={() => onEditRisk(item)} isDisabled={actionsDisabled}>Edit</Button>
+                {item.status !== RegisterStatus.CLOSED ? (
+                  <Button
+                    size="sm"
+                    variant="flat"
+                    onPress={() => onClose('risk', item.id)}
+                    isLoading={closingRecordId === item.id}
+                    isDisabled={actionsDisabled}
+                  >
+                    Close
+                  </Button>
+                ) : null}
+              </div>
             ) : null}
           />
         ))}
       </RegisterSection>
 
-      <RegisterSection
+      {showSensitiveRegisters ? <RegisterSection
         title="Complaints register"
         description="Complaints, action taken, outcomes, and board review references."
         count={complaints.length}
@@ -193,7 +202,7 @@ export function RegisterRecordsPanel({
             ) : null}
           />
         ))}
-      </RegisterSection>
+      </RegisterSection> : null}
 
       <RegisterSection
         title="Fundraising register"
@@ -210,9 +219,9 @@ export function RegisterRecordsPanel({
         {fundraising.map((item) => (
           <RegisterRow
             key={item.id}
-            title={item.name}
-            description={item.controls || 'Controls not recorded yet.'}
-            meta={`Review outcome: ${compactValue(item.reviewOutcome, 'pending')}`}
+            title={canManage ? item.name : `Activity ${item.id.slice(0, 8)}`}
+            description={canManage ? item.controls || 'Controls not recorded yet.' : 'Detailed controls require an Owner or Admin.'}
+            meta={canManage ? `Review outcome: ${compactValue(item.reviewOutcome, 'pending')}` : `Started ${niceDate(item.startDate)}`}
             chips={(
               <>
                 <StatusChip tone={item.status === RegisterStatus.CLOSED ? 'success' : 'warning'}>

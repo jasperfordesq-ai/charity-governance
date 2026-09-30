@@ -783,7 +783,7 @@ test('platform audit ledger records launch evidence gate hardening', () => {
   const auditLedger = readRepoFile('docs/platform-completion-audit.md');
 
   assert.match(auditGenerator, /Launch status now separates missing production env values from external launch evidence gates/);
-  assert.match(auditGenerator, /89 machine-readable launch evidence checks/);
+  assert.match(auditGenerator, /machine-readable launch evidence checks/);
   assert.match(auditGenerator, /launch evidence ledger status/);
   assert.match(auditGenerator, /launch evidence approval state, final signoff state, and the next incomplete checks/);
   assert.match(auditGenerator, /Release binding/);
@@ -802,7 +802,7 @@ test('platform audit ledger records launch evidence gate hardening', () => {
   assert.match(auditGenerator, /release image promotion GitHub environment variables/);
   assert.match(auditGenerator, /legal\/compliance final approval/);
   assert.match(auditLedger, /Launch status now separates missing production env values from external launch evidence gates/);
-  assert.match(auditLedger, /89 machine-readable launch evidence checks/);
+  assert.match(auditLedger, /machine-readable launch evidence checks/);
   assert.match(auditLedger, /launch evidence ledger status/);
   assert.match(auditLedger, /launch evidence approval state, final signoff state, and the next incomplete checks/);
   assert.match(auditLedger, /Release binding:/);

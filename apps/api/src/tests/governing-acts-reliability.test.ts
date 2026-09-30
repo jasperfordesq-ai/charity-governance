@@ -47,13 +47,31 @@ async function buildApp(
   subscription: unknown = activeSubscription('COMPLETE'),
 ) {
   const app = Fastify({ logger: false });
-  app.decorate('prisma', {
+  const prisma = {
     ...authModels(role, subscription),
+    minuteBookChangeAudit: { create: async () => ({ id: 'audit-1' }) },
     ...prismaOverrides,
-  } as never);
+  } as Record<string, unknown>;
+  prisma.$transaction ??= async (callback: (tx: typeof prisma) => Promise<unknown>) => callback(prisma);
+  app.decorate('prisma', prisma as never);
   await app.register(governingActRoutes, { prefix: PREFIX });
   return app;
 }
+
+test('Admin connector cannot read full Minute Book change history through the direct API', async () => {
+  let reads = 0;
+  const app = await buildApp({
+    authSession: { findFirst: async () => ({ id: 'sess-1', clientKind: 'MCP_CONNECTOR', accessLevel: 'ADMIN' }) },
+    minuteBookChangeAudit: { findMany: async () => { reads += 1; return []; } },
+  });
+  try {
+    const response = await app.inject({ method: 'GET', url: `${PREFIX}/audit`,
+      headers: { authorization: tokenFor('ADMIN') } });
+    assert.equal(response.statusCode, 403);
+    assert.equal(response.json().code, 'WEB_SESSION_REQUIRED');
+    assert.equal(reads, 0);
+  } finally { await app.close(); }
+});
 
 function spy(): { called: boolean; fn: (...a: unknown[]) => Promise<unknown> } {
   const state = { called: false, fn: async (..._a: unknown[]) => ({ id: 'x' }) };
@@ -81,6 +99,44 @@ const DRAFT_ACT = {
   status: 'DRAFT',
   reference: 'BM-2026-03-18',
 };
+
+test('removed minute-book snapshots are restricted to Admin and tenant scoped', async () => {
+  const reads: unknown[] = [];
+  const models = { governingActVoid: { findMany: async (args: unknown) => {
+    reads.push(args);
+    return [{ id: 'void-1', reason: 'Private removal reason' }];
+  } } };
+  const member = await buildApp(models, 'MEMBER');
+  try {
+    const response = await member.inject({ method: 'GET', url: `${PREFIX}/voids`, headers: { authorization: tokenFor('MEMBER') } });
+    assert.equal(response.statusCode, 403);
+    assert.equal(reads.length, 0);
+  } finally { await member.close(); }
+  const admin = await buildApp(models, 'ADMIN');
+  try {
+    const response = await admin.inject({ method: 'GET', url: `${PREFIX}/voids`, headers: { authorization: tokenFor('ADMIN') } });
+    assert.equal(response.statusCode, 200);
+    assert.match(response.body, /Private removal reason/);
+    assert.deepEqual(reads, [{ where: { organisationId: 'org-1' }, orderBy: { voidedAt: 'desc' } }]);
+  } finally { await admin.close(); }
+});
+
+test('Member cannot read unclassified Minute Book acts or resolution text', async () => {
+  const actRead = spy();
+  const resolutionRead = spy();
+  const app = await buildApp({
+    governingAct: { findMany: actRead.fn, findFirst: actRead.fn },
+    resolution: { findFirst: resolutionRead.fn },
+  }, 'MEMBER');
+  try {
+    for (const path of [PREFIX, `${PREFIX}/act-1`, `${PREFIX}/resolutions/res-1`]) {
+      const response = await app.inject({ method: 'GET', url: path, headers: { authorization: tokenFor('MEMBER') } });
+      assert.equal(response.statusCode, 403, path);
+    }
+    assert.equal(actRead.called, false);
+    assert.equal(resolutionRead.called, false);
+  } finally { await app.close(); }
+});
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Tenant isolation (service level)
@@ -159,8 +215,26 @@ test('board-submissions document query is scoped to the caller organisation', as
 
   const call = calls.find((c) => c.name === 'document.findMany');
   assert.ok(call, 'document.findMany must be issued');
-  const where = (call.args as { where: { organisationId?: string } }).where;
+  const where = (call.args as { where: { organisationId?: string; lifecycleStatus?: string } }).where;
   assert.equal(where.organisationId, 'org-1', 'document.findMany must be scoped to org-1');
+  assert.equal(where.lifecycleStatus, 'CURRENT', 'only classified current files may appear as board evidence');
+});
+
+test('board submissions with resolution text are restricted to Admin before document reads', async () => {
+  const reads: unknown[] = [];
+  const models = { document: { findMany: async (args: unknown) => { reads.push(args); return []; } } };
+  const member = await buildApp(models, 'MEMBER');
+  try {
+    const response = await member.inject({ method: 'GET', url: `${PREFIX}/board-submissions`, headers: { authorization: tokenFor('MEMBER') } });
+    assert.equal(response.statusCode, 403);
+    assert.equal(reads.length, 0);
+  } finally { await member.close(); }
+  const admin = await buildApp(models, 'ADMIN');
+  try {
+    const response = await admin.inject({ method: 'GET', url: `${PREFIX}/board-submissions`, headers: { authorization: tokenFor('ADMIN') } });
+    assert.equal(response.statusCode, 200);
+    assert.equal(reads.length, 1);
+  } finally { await admin.close(); }
 });
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -169,7 +243,7 @@ test('board-submissions document query is scoped to the caller organisation', as
 
 test('setDocumentApproval rejects a resolution whose governing act is DRAFT', async () => {
 
-  const draftPrisma = {
+  const draftModels = {
     document: {
       findFirst: async () => ({ id: 'doc-1', organisationId: 'org-1', updatedAt: NOW }),
       updateMany: async () => ({ count: 1 }),
@@ -182,11 +256,12 @@ test('setDocumentApproval rejects a resolution whose governing act is DRAFT', as
       }),
     },
   };
+  const draftPrisma = { ...draftModels, $transaction: async (callback: (tx: typeof draftModels) => Promise<unknown>) => callback(draftModels) };
 
   const svc = new GoverningActService(draftPrisma as never);
 
   await assert.rejects(
-    () => svc.setDocumentApproval('org-1', 'doc-1', 'res-1', undefined, NOW.toISOString()),
+    () => svc.setDocumentApproval('org-1', 'doc-1', 'res-1', undefined, NOW.toISOString(), 'u1'),
     (err: { code?: string }) => {
       assert.equal(err.code, 'MINUTES_NOT_YET_APPROVED');
       return true;
@@ -197,9 +272,11 @@ test('setDocumentApproval rejects a resolution whose governing act is DRAFT', as
 
 test('setDocumentApproval accepts a resolution from an APPROVED governing act', async () => {
   let updated = false;
-  const approvedPrisma = {
+  const auditEntries: Record<string, unknown>[] = [];
+  const approvedModels = {
     document: {
-      findFirst: async () => ({ id: 'doc-1', organisationId: 'org-1', updatedAt: NOW }),
+      findFirst: async () => ({ id: 'doc-1', organisationId: 'org-1', updatedAt: NOW,
+        approvedByResolutionId: null, approvalAsserted: false }),
       updateMany: async () => {
         updated = true;
         return { count: 1 };
@@ -212,15 +289,60 @@ test('setDocumentApproval accepts a resolution from an APPROVED governing act', 
         governingAct: APPROVED_ACT,
       }),
     },
+    documentControlAudit: { create: async ({ data }: { data: Record<string, unknown> }) => {
+      auditEntries.push(data);
+      return {};
+    } },
   };
+  const approvedPrisma = { ...approvedModels,
+    $transaction: async (callback: (tx: typeof approvedModels) => Promise<unknown>) => callback(approvedModels) };
 
   const svc = new GoverningActService(approvedPrisma as never);
 
   await assert.doesNotReject(
-    () => svc.setDocumentApproval('org-1', 'doc-1', 'res-1', undefined, NOW.toISOString()),
+    () => svc.setDocumentApproval('org-1', 'doc-1', 'res-1', undefined, NOW.toISOString(), 'u1'),
     'Must succeed when the governing act is APPROVED',
   );
   assert.equal(updated, true, 'document.updateMany must be called on success');
+  assert.equal(auditEntries.length, 1);
+  assert.equal(auditEntries[0].kind, 'BOARD_APPROVAL');
+  assert.equal(auditEntries[0].actorUserId, 'u1');
+  assert.deepEqual(JSON.parse(String(auditEntries[0].previous)), { approvedByResolutionId: null, approvalAsserted: false });
+  assert.deepEqual(JSON.parse(String(auditEntries[0].next)), { approvedByResolutionId: 'res-1', approvalAsserted: false });
+});
+
+test('repeating an unchanged Board approval does not create a false change event', async () => {
+  let writes = 0;
+  let audits = 0;
+  const models = {
+    document: {
+      findFirst: async () => ({ id: 'doc-1', organisationId: 'org-1', updatedAt: NOW,
+        approvedByResolutionId: null, approvalAsserted: true }),
+      updateMany: async () => { writes += 1; return { count: 1 }; },
+    },
+    documentControlAudit: { create: async () => { audits += 1; return {}; } },
+  };
+  const prisma = { ...models,
+    $transaction: async (callback: (tx: typeof models) => Promise<unknown>) => callback(models) };
+
+  await new GoverningActService(prisma as never)
+    .setDocumentApproval('org-1', 'doc-1', undefined, true, NOW.toISOString(), 'u1');
+
+  assert.equal(writes, 0);
+  assert.equal(audits, 0);
+});
+
+test('an empty Board approval patch is rejected before database access', async () => {
+  let documentRead = false;
+  const app = await buildApp({ document: { findFirst: async () => { documentRead = true; return null; } } });
+  try {
+    const response = await app.inject({
+      method: 'PATCH', url: `${PREFIX}/documents/doc-1/approval`, headers: { authorization: tokenFor('ADMIN') },
+      payload: { expectedUpdatedAt: NOW.toISOString() },
+    });
+    assert.equal(response.statusCode, 400);
+    assert.equal(documentRead, false);
+  } finally { await app.close(); }
 });
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -305,7 +427,9 @@ test('a MEMBER cannot add resolutions (requireAdmin)', async () => {
 
 test('an ADMIN can create a governing act', async () => {
   const create = spy();
+  const audits: Record<string, unknown>[] = [];
   const app = await buildApp({
+    minuteBookChangeAudit: { create: async ({ data }: { data: Record<string, unknown> }) => { audits.push(data); return { id: 'audit-1' }; } },
     governingAct: {
       findFirst: async () => null,
       create: async (args: unknown) => {
@@ -323,9 +447,131 @@ test('an ADMIN can create a governing act', async () => {
     });
     assert.equal(res.statusCode, 201, `expected 201, got ${res.statusCode}: ${res.body}`);
     assert.equal(create.called, true, 'governingAct.create must be called');
+    assert.equal(audits.length, 1);
+    assert.deepEqual({ organisationId: audits[0].organisationId, recordKind: audits[0].recordKind,
+      recordId: audits[0].recordId, action: audits[0].action, actorUserId: audits[0].actorUserId },
+    { organisationId: 'org-1', recordKind: 'ACT', recordId: 'act-new', action: 'CREATE', actorUserId: 'u1' });
+    assert.equal(audits[0].beforeState, undefined);
+    assert.equal((audits[0].afterState as { title: string }).title, validActBody.title);
   } finally {
     await app.close();
   }
+});
+
+test('Minute Book audit is Admin-only and tenant scoped', async () => {
+  const reads: unknown[] = [];
+  const models = { minuteBookChangeAudit: { findMany: async (args: unknown) => { reads.push(args); return []; } } };
+  const member = await buildApp(models, 'MEMBER');
+  try {
+    const res = await member.inject({ method: 'GET', url: `${PREFIX}/audit`, headers: { authorization: tokenFor('MEMBER') } });
+    assert.equal(res.statusCode, 403);
+    assert.equal(reads.length, 0);
+  } finally { await member.close(); }
+  const admin = await buildApp(models, 'ADMIN');
+  try {
+    const res = await admin.inject({ method: 'GET', url: `${PREFIX}/audit`, headers: { authorization: tokenFor('ADMIN') } });
+    assert.equal(res.statusCode, 200);
+    assert.deepEqual(reads, [{ where: { organisationId: 'org-1' },
+      orderBy: [{ occurredAt: 'desc' }, { id: 'desc' }], take: 51 }]);
+  } finally { await admin.close(); }
+});
+
+test('Minute Book detailed audit pages tied-time changes with a tenant-bound cursor', async () => {
+  const occurredAt = new Date('2026-09-29T10:00:00.000Z');
+  const events = Array.from({ length: 202 }, (_, index) => ({
+    id: `minute-audit-${String(index).padStart(3, '0')}`, organisationId: 'org-1', occurredAt,
+  }));
+  events.push({ id: 'foreign-minute-audit', organisationId: 'org-2', occurredAt });
+  const reads: Array<{ where: Record<string, unknown>; take: number; orderBy: unknown }> = [];
+  const models = { minuteBookChangeAudit: {
+    findFirst: async ({ where }: { where: { id: string; organisationId: string } }) =>
+      events.find((event) => event.id === where.id && event.organisationId === where.organisationId) ?? null,
+    findMany: async (args: { where: Record<string, unknown>; take: number; orderBy: unknown }) => {
+      reads.push(args);
+      const anchor = (args.where.OR as Array<Record<string, unknown>> | undefined)?.[1]?.id as { lt: string } | undefined;
+      return events.filter((event) => event.organisationId === args.where.organisationId &&
+        (!anchor || event.id < anchor.lt)).sort((a, b) => b.id.localeCompare(a.id)).slice(0, args.take);
+    },
+  } };
+  const admin = await buildApp(models, 'ADMIN');
+  try {
+    const ids: string[] = [];
+    let before: string | null = null;
+    do {
+      const response: Awaited<ReturnType<typeof admin.inject>> = await admin.inject({
+        method: 'GET', url: `${PREFIX}/audit${before ? `?before=${before}` : ''}`,
+        headers: { authorization: tokenFor('ADMIN') },
+      });
+      assert.equal(response.statusCode, 200);
+      const page = response.json().data as { items: Array<{ id: string }>; nextCursor: string | null };
+      ids.push(...page.items.map((event) => event.id));
+      before = page.nextCursor;
+    } while (before);
+    assert.equal(ids.length, 202);
+    assert.equal(new Set(ids).size, 202);
+    assert.equal(reads.length, 5);
+    assert.ok(reads.every((read) => read.take === 51 && read.where.organisationId === 'org-1'));
+    assert.deepEqual(reads[0].orderBy, [{ occurredAt: 'desc' }, { id: 'desc' }]);
+    const foreign = await admin.inject({ method: 'GET', url: `${PREFIX}/audit?before=foreign-minute-audit`,
+      headers: { authorization: tokenFor('ADMIN') } });
+    assert.equal(foreign.statusCode, 404);
+    const invalid = await admin.inject({ method: 'GET', url: `${PREFIX}/audit?before=bad%40cursor`,
+      headers: { authorization: tokenFor('ADMIN') } });
+    assert.equal(invalid.statusCode, 400);
+    assert.equal(reads.length, 5);
+  } finally { await admin.close(); }
+});
+
+test('governing-act update writes before and after snapshots with its guarded change', async () => {
+  const audits: Record<string, unknown>[] = [];
+  let reads = 0;
+  const app = await buildApp({
+    governingAct: {
+      findFirst: async () => ++reads === 1 ? APPROVED_ACT : { ...APPROVED_ACT, title: 'Amended title' },
+      updateMany: async () => ({ count: 1 }),
+    },
+    minuteBookChangeAudit: { create: async ({ data }: { data: Record<string, unknown> }) => { audits.push(data); return {}; } },
+  });
+  try {
+    const res = await app.inject({ method: 'PATCH', url: `${PREFIX}/act-1`,
+      headers: { authorization: tokenFor('ADMIN') },
+      payload: { expectedUpdatedAt: NOW.toISOString(), title: 'Amended title' } });
+    assert.equal(res.statusCode, 200, res.body);
+    assert.equal(audits.length, 1);
+    assert.equal(audits[0].action, 'UPDATE');
+    assert.equal(audits[0].actorUserId, 'u1');
+    assert.equal((audits[0].beforeState as { title: string }).title, APPROVED_ACT.title);
+    assert.equal((audits[0].afterState as { title: string }).title, 'Amended title');
+  } finally { await app.close(); }
+});
+
+test('resolution creation and update write actor-bound Minute Book history', async () => {
+  const audits: Record<string, unknown>[] = [];
+  let reads = 0;
+  const resolution = { id: 'res-1', organisationId: 'org-1', governingActId: 'act-1',
+    text: validResolutionBody.text, updatedAt: NOW };
+  const app = await buildApp({
+    governingAct: { findFirst: async () => APPROVED_ACT },
+    resolution: {
+      create: async () => resolution,
+      findFirst: async () => ++reads === 1 ? resolution : { ...resolution, text: 'Amended resolution' },
+      updateMany: async () => ({ count: 1 }),
+    },
+    minuteBookChangeAudit: { create: async ({ data }: { data: Record<string, unknown> }) => { audits.push(data); return {}; } },
+  });
+  try {
+    const created = await app.inject({ method: 'POST', url: `${PREFIX}/act-1/resolutions`,
+      headers: { authorization: tokenFor('ADMIN') }, payload: validResolutionBody });
+    assert.equal(created.statusCode, 201, created.body);
+    const changed = await app.inject({ method: 'PATCH', url: `${PREFIX}/resolutions/res-1`,
+      headers: { authorization: tokenFor('ADMIN') },
+      payload: { expectedUpdatedAt: NOW.toISOString(), text: 'Amended resolution' } });
+    assert.equal(changed.statusCode, 200, changed.body);
+    assert.deepEqual(audits.map((audit) => [audit.recordKind, audit.recordId, audit.action, audit.actorUserId]),
+      [['RESOLUTION', 'res-1', 'CREATE', 'u1'], ['RESOLUTION', 'res-1', 'UPDATE', 'u1']]);
+    assert.equal((audits[1].beforeState as { text: string }).text, validResolutionBody.text);
+    assert.equal((audits[1].afterState as { text: string }).text, 'Amended resolution');
+  } finally { await app.close(); }
 });
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -469,7 +715,7 @@ test('setDocumentApproval reports a conflict when the guarded write matches no r
   // other optimistic-locking path raises 409 here; approval evidence must not
   // be the one that reports success after writing nothing.
   let updateArgs: unknown;
-  const racingPrisma = {
+  const racingModels = {
     document: {
       findFirst: async () => ({ id: 'doc-1', organisationId: 'org-1', updatedAt: NOW }),
       updateMany: async (args: unknown) => {
@@ -481,11 +727,13 @@ test('setDocumentApproval reports a conflict when the guarded write matches no r
       findFirst: async () => ({ id: 'res-1', organisationId: 'org-1', governingAct: APPROVED_ACT }),
     },
   };
+  const racingPrisma = { ...racingModels,
+    $transaction: async (callback: (tx: typeof racingModels) => Promise<unknown>) => callback(racingModels) };
 
   const svc = new GoverningActService(racingPrisma as never);
 
   await assert.rejects(
-    () => svc.setDocumentApproval('org-1', 'doc-1', 'res-1', undefined, NOW.toISOString()),
+    () => svc.setDocumentApproval('org-1', 'doc-1', 'res-1', undefined, NOW.toISOString(), 'u1'),
     (err: { statusCode?: number; code?: string }) => {
       assert.equal(err.statusCode, 409);
       assert.equal(err.code, 'DOCUMENT_UPDATE_CONFLICT');
@@ -851,7 +1099,7 @@ test('a refusal whose act reference contains 40001 is not mistaken for a seriali
   assert.equal(attempts, 1, 'a deliberate refusal must not be retried');
 });
 
-test('reading one act scopes the lookup to the caller’s charity and brings its resolutions', async () => {
+test('Admin reading one act scopes the lookup to the caller’s charity and brings its resolutions', async () => {
   let seen: { where?: Record<string, unknown>; include?: Record<string, unknown> } = {};
   const app = await buildApp({
     governingAct: {
@@ -865,7 +1113,7 @@ test('reading one act scopes the lookup to the caller’s charity and brings its
   const response = await app.inject({
     method: 'GET',
     url: `${PREFIX}/act-1`,
-    headers: { authorization: tokenFor('MEMBER') },
+    headers: { authorization: tokenFor('ADMIN') },
   });
 
   assert.equal(response.statusCode, 200);

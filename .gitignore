@@ -47,6 +47,7 @@ yarn-error.log*
 .charitypilot-backups/
 .charitypilot-launch-evidence/
 .charitypilot-local-storage/
+.charitypilot-private/
 production-launch-evidence*.json
 
 # Coverage

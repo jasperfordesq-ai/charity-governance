@@ -26,12 +26,13 @@ import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import { z, ZodError } from 'zod';
 import { authGuard } from '../../middleware/auth.js';
 import { requireAdmin } from '../../middleware/roles.js';
-import { requireSessionLevel } from '../../middleware/session-level.js';
+import { requireSessionLevel, requireWebSession } from '../../middleware/session-level.js';
 import { requireActionApproval } from '../../middleware/action-approval.js';
 import {
   listRetiredConfluencePublications,
   requestConfluenceErasure,
 } from '../../services/confluence-erasure-request.service.js';
+import { listOtherConfluenceCopies } from '../../services/confluence-copy-inventory.service.js';
 import {
   connectConfluence,
   currentAccessTokenForOrganisation,
@@ -42,9 +43,10 @@ import {
 import { createConfluenceClient, type ConfluenceClientDeps } from '../../services/confluence-client.js';
 import { listSpaces } from '../../services/confluence-spaces.js';
 import {
-  chooseConfluencePublishSpace,
   confluenceSiteIdFromConfig,
+  persistConfluencePublishSpace,
   readConfluencePublishTarget,
+  validateConfluencePublishSpace,
 } from '../../services/confluence-publish-target.service.js';
 import { decodeIntegrationKey } from '../../services/integration-crypto.js';
 import {
@@ -58,6 +60,7 @@ import {
 } from '../../services/integration-declared-environment.service.js';
 import {
   citeConfluencePage,
+  listConfluenceReferenceInventory,
   listConfluenceReferences,
   removeConfluenceReference,
 } from '../../services/confluence-reference.service.js';
@@ -170,9 +173,9 @@ export const CONFLUENCE_CONNECT_DISCLOSURE = Object.freeze({
     'Erasure from your Confluence site is a separate action an administrator has to ask for ' +
       'explicitly, and it is best-effort: it is bounded by permissions you control, not ' +
       'permissions CharityPilot holds.',
-    'When an erasure is requested, CharityPilot deletes and then permanently purges the page and ' +
-      'the attachments it recorded, and proves the erasure by reading the page back and requiring ' +
-      'a 404.',
+    'When an erasure is requested, CharityPilot attempts to delete and then purge the page and ' +
+      'the attachments it recorded. It checks that the current page endpoint returns 404; this ' +
+      'does not prove erasure of versions or backups.',
     'Purging needs a higher permission than deleting: the space manage/content permission for a ' +
       'page, and the administer space permission for an attachment. If the connection you grant ' +
       'cannot purge, CharityPilot reports the erasure as failed and needing a person with those ' +
@@ -629,7 +632,7 @@ export async function integrationRoutes(
    * Returns the authorization URL; deliberately does not redirect, so the web
    * app decides when and how to send the administrator to Atlassian.
    */
-  app.get('/confluence/authorize', async (request, reply) => {
+  app.get('/confluence/authorize', { preHandler: [requireWebSession] }, async (request, reply) => {
     try {
       const refusal = connectRefusal();
       if (refusal) return sendConnectRefusal(request, reply, refusal);
@@ -705,7 +708,7 @@ export async function integrationRoutes(
    * exchanged or written. Everything after that line is allowed to assume
    * this authorisation belongs to the organisation making the request.
    */
-  app.post('/confluence/callback', async (request, reply) => {
+  app.post('/confluence/callback', { preHandler: [requireWebSession] }, async (request, reply) => {
     try {
       const state = verifyIntegrationOAuthState(bodyParam(request.body, 'state'), {
         organisationId: request.user.organisationId,
@@ -900,7 +903,7 @@ export async function integrationRoutes(
    * The response is exactly what `listSpaces` returns: `{ id, key, name }`
    * per space, nothing wider. See `confluence-spaces.ts` for why.
    */
-  app.get('/confluence/spaces', async (request, reply) => {
+  app.get('/confluence/spaces', { preHandler: [requireWebSession] }, async (request, reply) => {
     try {
       const { cloudId } = await liveConnection(request.user.organisationId, 'list spaces from');
 
@@ -923,7 +926,7 @@ export async function integrationRoutes(
    * destination the pipeline has otherwise had none of.
    *
    * **The chosen id is validated against the spaces `/confluence/spaces`
-   * actually lists**, by `chooseConfluencePublishSpace`, and that validation
+   * actually lists**, by `validateConfluencePublishSpace`, and that validation
    * is the point of the route. An arbitrary id accepted from a browser aims
    * publication at a space the charity never intended, and that id is then
    * baked into every page this pipeline creates and into the erasure target
@@ -937,7 +940,7 @@ export async function integrationRoutes(
    * authenticated organisation's own row, exactly like every other route in
    * this file.
    */
-  app.put('/confluence/publish-space', async (request, reply) => {
+  app.put('/confluence/publish-space', { preHandler: [requireWebSession] }, async (request, reply) => {
     try {
       const { integration, cloudId } = await liveConnection(
         request.user.organisationId,
@@ -955,29 +958,24 @@ export async function integrationRoutes(
 
       const client = confluenceClientFor(request.user.organisationId, cloudId);
 
-      const target = await chooseConfluencePublishSpace(
-        app.prisma,
-        {
+      const target = await validateConfluencePublishSpace(
+        { cloudId, spaceId },
+        (cursor) => listSpaces(client, cursor),
+      );
+      const actor = await integrationAuditActor(app.prisma, request.user);
+      // The provider listing is complete before opening the transaction.
+      // A changed connection refuses the write, and an audit failure rolls
+      // the target change back rather than leaving an untraceable destination.
+      await app.prisma.$transaction(async (tx) => {
+        await persistConfluencePublishSpace(tx, {
           integrationId: integration.id,
           organisationId: request.user.organisationId,
           cloudId,
-          spaceId,
-        },
-        (cursor) => listSpaces(client, cursor),
-      );
-
-      // Where a charity's governance documents go is exactly the kind of
-      // decision a DPO reviews after the fact, and until now it left no trace:
-      // an administrator could repoint publication at a different space and
-      // nothing recorded that anybody had. Best-effort because the choice is
-      // already persisted by this line, and failing the response would invite a
-      // retry that would simply choose the same space again.
-      await recordIntegrationAuditEventBestEffort(
-        app.prisma,
-        {
+        }, target);
+        await recordIntegrationAuditEvent(tx, {
           organisationId: request.user.organisationId,
           type: 'INTEGRATION_PUBLISH_TARGET_CHANGED',
-          actor: await integrationAuditActor(app.prisma, request.user),
+          actor,
           subjectLabel: `${target.spaceName} (${target.spaceKey})`,
           reason: 'The Confluence space this organisation publishes governance documents into was set.',
           context: {
@@ -991,9 +989,8 @@ export async function integrationRoutes(
             cloudId,
           },
           requestId: request.id,
-        },
-        (error) => request.log.error({ err: error }, 'Failed to record the Confluence publish-target audit event.'),
-      );
+        });
+      });
 
       // The same shape `status` reports, so a client that re-reads and a
       // client that trusts this response agree about where publication goes.
@@ -1077,6 +1074,38 @@ export async function integrationRoutes(
 
   const publicationIdSchema = z.string().min(1).max(160).regex(/^[A-Za-z0-9_-]+$/);
 
+  // A read-only inventory of recorded pages outside the retired-copy action
+  // queue. A local publication row and its last remote observation are not a
+  // live provider inventory. The document join is separately tenant scoped.
+  app.get('/confluence/copy-inventory', { preHandler: [requireWebSession] }, async (request, reply) => {
+    try {
+      const query = z.object({ before: publicationIdSchema.optional() }).strict().parse(request.query);
+      return sendSuccess(reply, await listOtherConfluenceCopies(app.prisma, request.user.organisationId, query.before));
+    } catch (error) {
+      if (error instanceof ZodError) {
+        return reply.status(400).send({ error: 'Validation failed', code: 'VALIDATION_ERROR', details: error.errors });
+      }
+      return handleError(reply, error);
+    }
+  });
+
+  // Charity-managed cited pages are separate from publications this service
+  // created. The global read helps Admins review the current evidence links
+  // without suggesting that CharityPilot can erase those external pages.
+  app.get('/confluence/reference-inventory', { preHandler: [requireWebSession] }, async (request, reply) => {
+    try {
+      const query = z.object({ before: publicationIdSchema.optional() }).strict().parse(request.query);
+      return sendSuccess(reply, await listConfluenceReferenceInventory(
+        app.prisma, request.user.organisationId, query.before,
+      ));
+    } catch (error) {
+      if (error instanceof ZodError) {
+        return reply.status(400).send({ error: 'Validation failed', code: 'VALIDATION_ERROR', details: error.errors });
+      }
+      return handleError(reply, error);
+    }
+  });
+
   /**
    * The pages this charity could still ask to erase — publications whose document
    * has been deleted in CharityPilot while the Confluence page was left standing.
@@ -1087,17 +1116,25 @@ export async function integrationRoutes(
    */
   app.get('/confluence/publications', async (request, reply) => {
     try {
-      const rows = await listRetiredConfluencePublications(app.prisma, request.user.organisationId);
+      const query = z.object({ before: publicationIdSchema.optional() }).strict().parse(request.query);
+      const page = await listRetiredConfluencePublications(app.prisma, request.user.organisationId, query.before);
       return sendSuccess(reply, {
-        publications: rows.map((row) => ({
+        publications: page.publications.map((row) => ({
           id: row.id,
           documentId: row.documentId,
           pageTitle: row.pageTitle,
+          recordedSiteId: row.cloudId,
+          recordedSpaceId: row.spaceId,
+          recordedPageId: row.pageId,
           retiredAt: row.retiredAt ? new Date(row.retiredAt).toISOString() : null,
           erasureRequested: row.erasureRequestedAt !== null,
         })),
+        nextCursor: page.nextCursor,
       });
     } catch (error) {
+      if (error instanceof ZodError) {
+        return reply.status(400).send({ error: 'Validation failed', code: 'VALIDATION_ERROR', details: error.errors });
+      }
       return handleError(reply, error);
     }
   });
@@ -1105,13 +1142,14 @@ export async function integrationRoutes(
   /**
    * Destroy the Confluence page a deleted document left behind.
    *
-   * The same preHandler stack as `DELETE /documents/:id`, because it is the same
-   * weight of action: a recent-authentication check and an explicit approval, on
-   * top of the admin guard this whole plugin already applies.
+   * Only a web Admin can request this provider-side erasure. The body still
+   * requires its typed confirmation, and the Admin-level session check remains
+   * beside the plugin-wide role guard. The connector approval guard stays as
+   * defence in depth, but a connector is refused before reaching it.
    */
   app.post<{ Params: { publicationId: string } }>(
     '/confluence/publications/:publicationId/erase',
-    { preHandler: [requireSessionLevel('ADMIN'), requireActionApproval()] },
+    { preHandler: [requireWebSession, requireSessionLevel('ADMIN'), requireActionApproval()] },
     async (request, reply) => {
       try {
         const body = confluenceErasureSchema.parse(request.body);
@@ -1148,26 +1186,6 @@ export async function integrationRoutes(
           publicationId,
           reason: body.reason,
           requestedById: request.user.userId,
-        });
-
-        // NOT best-effort. Erasing a page from a charity's own Confluence site
-        // is the most consequential thing this connector can be asked to do —
-        // the owner's 2026-09-19 ruling makes it an explicitly authorised
-        // action precisely because an ordinary deletion must never reach it —
-        // and the record that somebody asked for it is part of what the charity
-        // is owed. If the row cannot be written, the caller is told, and the
-        // queued deletion is visible in the erasure listing either way.
-        //
-        // REQUESTED, not performed. A purge that later fails must not remove
-        // the record that it was asked for, so the event is written here rather
-        // than when the worker confirms the page is gone.
-        await recordIntegrationAuditEvent(app.prisma, {
-          organisationId: request.user.organisationId,
-          type: 'CONFLUENCE_ERASURE_REQUESTED',
-          actor: await integrationAuditActor(app.prisma, request.user),
-          subjectLabel: `Confluence publication ${publicationId}`,
-          reason: body.reason,
-          context: { publicationId, storageDeletionId: deletionId, provider: PROVIDER },
           requestId: request.id,
         });
 
@@ -1221,7 +1239,7 @@ export async function integrationRoutes(
    */
   app.post<{ Params: { documentId: string } }>(
     '/confluence/references/:documentId',
-    { preHandler: [requireAdmin] },
+    { preHandler: [requireAdmin, requireWebSession] },
     async (request, reply) => {
       try {
         const { cloudId } = await liveConnection(request.user.organisationId, 'cite a page from');
@@ -1256,6 +1274,7 @@ export async function integrationRoutes(
   /** The pages cited for one document. Ungated, like the publications listing. */
   app.get<{ Params: { documentId: string } }>(
     '/confluence/references/:documentId',
+    { preHandler: [requireWebSession] },
     async (request, reply) => {
       try {
         return sendSuccess(reply, {
@@ -1281,12 +1300,13 @@ export async function integrationRoutes(
    */
   app.delete<{ Params: { referenceId: string } }>(
     '/confluence/references/by-id/:referenceId',
-    { preHandler: [requireAdmin] },
+    { preHandler: [requireAdmin, requireWebSession] },
     async (request, reply) => {
       try {
         const removed = await removeConfluenceReference(app.prisma, {
           organisationId: request.user.organisationId,
           referenceId: request.params.referenceId,
+          actorUserId: request.user.userId,
         });
         if (!removed) {
           throw new AppError(404, 'CONFLUENCE_REFERENCE_NOT_FOUND', 'That citation was not found.');
@@ -1298,7 +1318,7 @@ export async function integrationRoutes(
     },
   );
 
-  app.put('/confluence/declared-environment', async (request, reply) => {
+  app.put('/confluence/declared-environment', { preHandler: [requireWebSession] }, async (request, reply) => {
     try {
       const integration = await findOwnConfluenceIntegration(app.prisma, request.user.organisationId);
       if (!integration) {
@@ -1309,11 +1329,27 @@ export async function integrationRoutes(
         );
       }
 
-      const declared = await recordDeclaredEnvironment(app.prisma, {
+      const actor = await integrationAuditActor(app.prisma, {
         organisationId: request.user.organisationId,
-        declaredById: request.user.userId,
-        plan: bodyParam(request.body, 'plan'),
-        residency: bodyParam(request.body, 'residency'),
+        userId: request.user.userId,
+      });
+      const declared = await app.prisma.$transaction(async (tx) => {
+        const saved = await recordDeclaredEnvironment(tx, {
+          organisationId: request.user.organisationId,
+          declaredById: request.user.userId,
+          plan: bodyParam(request.body, 'plan'),
+          residency: bodyParam(request.body, 'residency'),
+        });
+        await recordIntegrationAuditEvent(tx, {
+          organisationId: request.user.organisationId,
+          type: 'INTEGRATION_ENVIRONMENT_DECLARED',
+          actor,
+          subjectLabel: 'Confluence environment declaration',
+          reason: 'Charity administrator changed the declared Confluence environment.',
+          context: { action: saved.plan === null && saved.residency === null ? 'CLEARED' : 'RECORDED' },
+          requestId: request.id,
+        });
+        return saved;
       });
 
       return sendSuccess(reply, {
@@ -1329,7 +1365,7 @@ export async function integrationRoutes(
     }
   });
 
-  app.delete('/confluence', async (request, reply) => {
+  app.delete('/confluence', { preHandler: [requireWebSession] }, async (request, reply) => {
     try {
       const integration = await findOwnConfluenceIntegration(app.prisma, request.user.organisationId);
       if (!integration) {

@@ -23,9 +23,11 @@ try {
   const storageService = new StorageService(createPrismaOrganisationStorageResolver(prisma));
   const dispatch = createErasureDispatcher({
     supabase: createSupabaseEraser((organisationId, storagePath, signal) =>
-      storageService.deleteFile(organisationId, storagePath, signal)),
-    // Registered unconditionally. A Confluence row is enqueued by the same
-    // `remove()` that enqueues a Supabase one, so leaving this unregistered on
+      storageService.deleteFile(organisationId, storagePath, signal, 'supabase')),
+    local: createSupabaseEraser((organisationId, storagePath, signal) =>
+      storageService.deleteFile(organisationId, storagePath, signal, 'local')),
+    // Registered unconditionally. An explicit Confluence erasure request
+    // enqueues this provider, so leaving it unregistered on
     // any deployment would dead-letter every Confluence erasure as
     // PROVIDER_NOT_ERASABLE — a charity's published copy left in place while
     // an operator is told the deployment cannot erase it.
@@ -53,6 +55,22 @@ try {
     } else {
       await documentService.releaseDeadLetterAlertClaim(result.deadLetterAlert);
     }
+    process.exitCode = 1;
+  }
+  const intents = await documentService.reconcileStaleUploadIntents(cleanupLimit());
+  logger.info(
+    `Document upload-intent reconciliation completed. Attached: ${intents.attached}. Cleanup queued: ${intents.queued}. Failed: ${intents.failed}.`,
+  );
+  if (intents.failed > 0) {
+    const failure = new Error(`Upload-intent reconciliation failed for ${intents.failed} reservation(s).`);
+    failure.name = 'DocumentUploadIntentReconcileFailed';
+    await sendJobFailureAlert({
+      job: 'document-storage-cleanup',
+      code: 'DOCUMENT_UPLOAD_INTENT_RECONCILE_FAILED',
+      error: failure,
+      logger,
+      affectedCount: intents.failed,
+    });
     process.exitCode = 1;
   }
 } catch (error) {

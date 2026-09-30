@@ -168,6 +168,7 @@ test('the publication state and terminal-reason enums are pinned exhaustively, r
   // the exhausted-retries reason the backoff engine itself produces.
   assert.deepEqual(declared, [
     'MAX_ATTEMPTS_EXHAUSTED',
+    'PERMANENT_APPROVAL_REQUIRED',
     'PERMANENT_CONNECTION_UNAVAILABLE',
     'PERMANENT_PERMISSION_DENIED',
     'PERMANENT_CONFLICT_UNRESOLVED',

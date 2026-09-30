@@ -22,6 +22,7 @@ import {
   CreditCard,
   Download,
   FileText,
+  History,
   LayoutDashboard,
   LogOut,
   Menu,
@@ -100,6 +101,21 @@ const NAV_ITEMS: NavItem[] = [
     icon: <BookOpenCheck className={navIconClassName} strokeWidth={1.5} aria-hidden="true" />,
   },
   {
+    href: '/governance-audit',
+    label: 'Governance Audit',
+    icon: <History className={navIconClassName} strokeWidth={1.5} aria-hidden="true" />,
+  },
+  {
+    href: '/security-data',
+    label: 'Security & Data',
+    icon: <ShieldCheck className={navIconClassName} strokeWidth={1.5} aria-hidden="true" />,
+  },
+  {
+    href: '/data-lifecycle',
+    label: 'Data Requests',
+    icon: <ShieldCheck className={navIconClassName} strokeWidth={1.5} aria-hidden="true" />,
+  },
+  {
     href: '/deadlines',
     label: 'Deadlines',
     icon: <CalendarDays className={navIconClassName} strokeWidth={1.5} aria-hidden="true" />,
@@ -158,9 +174,10 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   // show. The Team item is tenancy-agnostic and every other item is available
   // regardless of axis, so billing is the only trim here.
   const billingEnabled = webBillingMode() !== 'none';
-  const visibleNavItems = billingEnabled
-    ? NAV_ITEMS
-    : NAV_ITEMS.filter((item) => item.href !== '/billing');
+  const visibleNavItems = NAV_ITEMS.filter((item) =>
+    (billingEnabled || item.href !== '/billing') &&
+    (!['/governance-audit', '/data-lifecycle', '/minute-book'].includes(item.href) || user?.role === 'OWNER' || user?.role === 'ADMIN'),
+  );
 
   const closeSidebar = useCallback((restoreFocus = false) => {
     setSidebarOpen(false);

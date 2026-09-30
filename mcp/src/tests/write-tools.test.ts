@@ -241,8 +241,20 @@ test('a destructive tool refuses to act without a reason', async () => {
 
   await assert.rejects(
     () => runTool(tool, api, false, { id: 'clx-1' }),
-    /removes something permanently/,
+    /is a destructive action/,
   );
+});
+
+test('register and deadline removal tools do not promise complete erasure', () => {
+  for (const name of [
+    'board_member_delete', 'conflict_delete', 'risk_delete',
+    'complaint_delete', 'fundraising_delete', 'deadline_delete',
+  ]) {
+    const description = WRITE_TOOLS.find((tool) => tool.name === name)?.description ?? '';
+    assert.match(description, /active (?:board|conflicts|risk|complaints|fundraising|calendar)/);
+    assert.match(description, /audit and backup copies may remain/);
+    assert.doesNotMatch(description, /permanent/i);
+  }
 });
 
 test('a destructive tool passes the approval identifier on when it has one', async () => {
@@ -444,9 +456,14 @@ test('every concurrency stamp the API requires is declared as a control field', 
   }
 });
 
-test('document_delete does not describe a Confluence deletion the owner has ruled out', () => {
+test('document_delete describes draft removal and leaves Confluence copies to separate review', () => {
   const tool = WRITE_TOOLS.find((t) => t.name === 'document_delete')!;
-  assert.ok(!/confluence/i.test(tool.description));
+  assert.match(tool.description, /unheld draft document/);
+  assert.match(tool.description, /Stored-file cleanup is tracked separately/);
+  assert.match(tool.description, /Confluence copies require separate review/);
+  assert.doesNotMatch(tool.description, /permanently remove|delete.*Confluence/i);
+  assert.deepEqual(tool.body?.map((field) => ({ name: field.name, required: field.required })),
+    [{ name: 'reason', required: true }]);
 });
 
 /* --- Phase C: the team ---------------------------------------------------- */

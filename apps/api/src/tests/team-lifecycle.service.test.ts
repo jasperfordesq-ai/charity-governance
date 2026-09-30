@@ -692,6 +692,110 @@ test('session inventory returns a deterministic bounded family summary instead o
   assert.ok((summaryQuery?.values ?? []).filter((value) => value === 50).length >= 2);
 });
 
+test('replay diagnostics require an active Admin and expose only bounded correlation facts', async () => {
+  const familyId = 'a6c790d4-89af-4a85-9e32-61ec5a4e51fb';
+  const event = {
+    id: 'event-replay-1',
+    occurredAt: new Date('2026-09-28T14:00:00.000Z'),
+    subjectSessionId: familyId,
+    subjectUserId: 'private-user-id',
+    context: {
+      clientKind: 'WEB', accessLevel: 'ADMIN', requestId: 'req-123', previousRevocationReason: 'ROTATED',
+      presentedSessionRevokedAt: '2026-09-28T13:59:58.000Z',
+      presentedSessionFingerprint: 'A1B2C3D4E5F6', newlyQuarantinedSessionCount: 0,
+      refreshToken: 'private-token',
+    },
+  };
+  let reads = 0;
+  let query: Record<string, unknown> | undefined;
+  const run = (actor: LockedUserFixture) => {
+    let lockCall = 0;
+    const tx = {
+      $queryRaw: async () => (++lockCall === 1
+        ? [{ id: 'org-1', lifecycleStatus: 'ACTIVE' }]
+        : [actor]),
+      securityAuditEvent: { findMany: async (args: Record<string, unknown>) => {
+        reads++;
+        query = args;
+        return [event, { ...event, id: 'event-replay-2', context: {
+          clientKind: 'FAKE', requestId: 'secret\nheader', previousRevocationReason: 'UNKNOWN',
+          presentedSessionRevokedAt: 'not-a-date',
+          presentedSessionFingerprint: 'malformed', newlyQuarantinedSessionCount: -1,
+        }, subjectSessionId: 'invalid' }];
+      } },
+    };
+    return new TeamLifecycleService({ $transaction: async (work: (client: unknown) => Promise<unknown>) => work(tx) } as never)
+      .listReplayDiagnostics('org-1', actor.id);
+  };
+
+  await assert.rejects(() => run(userFixture()), (error: unknown) => error instanceof AppError && error.statusCode === 403);
+  assert.equal(reads, 0, 'Member refusal must happen before reading replay events');
+
+  const page = await run(owner());
+  const result = page.data;
+  assert.deepEqual(query, {
+    where: { organisationId: 'org-1', type: 'SESSION_REPLAY_DETECTED' },
+    orderBy: [{ occurredAt: 'desc' }, { id: 'desc' }],
+    take: 51,
+    select: { id: true, occurredAt: true, subjectSessionId: true, context: true },
+  });
+  assert.equal(page.nextCursor, null);
+  assert.equal(result[0].eventId, 'event-replay-1');
+  assert.equal(result[1].eventId, 'event-replay-2');
+  assert.equal(result[0].requestId, 'req-123');
+  assert.equal(result[0].previousRevocationReason, 'ROTATED');
+  assert.equal(result[0].presentedSessionRevokedAt, '2026-09-28T13:59:58.000Z');
+  assert.equal(result[0].presentedSessionFingerprint, 'A1B2C3D4E5F6');
+  assert.equal(result[0].newlyQuarantinedSessionCount, 0);
+  assert.match(result[0].familyFingerprint ?? '', /^[A-F0-9]{12}$/);
+  assert.equal(result[1].requestId, null);
+  assert.equal(result[1].familyFingerprint, null);
+  assert.equal(result[1].clientKind, null);
+  assert.equal(result[1].previousRevocationReason, null);
+  assert.equal(result[1].presentedSessionRevokedAt, null);
+  assert.equal(result[1].presentedSessionFingerprint, null);
+  assert.equal(result[1].newlyQuarantinedSessionCount, null);
+  assert.doesNotMatch(JSON.stringify(result), /private-user-id|private-token|a6c790d4|secret/);
+});
+
+test('replay diagnostics page older events in stable timestamp and ID order with a tenant-bound cursor', async () => {
+  const occurredAt = new Date('2026-09-28T14:00:00.000Z');
+  const events = Array.from({ length: 52 }, (_, index) => ({
+    id: `event-${String(52 - index).padStart(3, '0')}`, occurredAt,
+    subjectSessionId: null, context: null,
+  }));
+  const queries: Record<string, unknown>[] = [];
+  let lockCall = 0;
+  const tx = {
+    $queryRaw: async () => (++lockCall % 2 === 1)
+      ? [{ id: 'org-1', lifecycleStatus: 'ACTIVE' }] : [owner()],
+    securityAuditEvent: {
+      findFirst: async (args: { where: { id: string; organisationId: string; type: string } }) =>
+        args.where.organisationId === 'org-1' && args.where.type === 'SESSION_REPLAY_DETECTED'
+          ? events.find((event) => event.id === args.where.id) ?? null : null,
+      findMany: async (args: Record<string, unknown>) => {
+        queries.push(args);
+        const where = args.where as { OR?: [{ occurredAt: { lt: Date } }, { occurredAt: Date; id: { lt: string } }] };
+        return events.filter((event) => !where.OR || event.id < where.OR[1].id.lt).slice(0, 51);
+      },
+    },
+  };
+  const service = new TeamLifecycleService({ $transaction: async (work: (client: unknown) => Promise<unknown>) => work(tx) } as never);
+  const first = await service.listReplayDiagnostics('org-1', owner().id);
+  assert.equal(first.data.length, 50);
+  assert.equal(first.nextCursor, 'event-003');
+  const second = await service.listReplayDiagnostics('org-1', owner().id, first.nextCursor!);
+  assert.deepEqual(second.data.map((event) => event.eventId), ['event-002', 'event-001']);
+  assert.equal(second.nextCursor, null);
+  assert.deepEqual((queries[1].where as { OR: unknown }).OR, [
+    { occurredAt: { lt: occurredAt } },
+    { occurredAt, id: { lt: 'event-003' } },
+  ]);
+  await assert.rejects(() => service.listReplayDiagnostics('org-1', owner().id, 'other-tenant-event'),
+    (error: unknown) => error instanceof AppError && error.statusCode === 404);
+  assert.equal(queries.length, 2, 'an invalid cursor must not read a page');
+});
+
 test('browser security audit returns the immutable subject snapshot after a member name change and omits raw evidence', async () => {
   const actor = owner();
   let rawCall = 0;
@@ -742,6 +846,14 @@ test('browser security audit returns the immutable subject snapshot after a memb
             method: 'PASSWORD_RECOVERY_LINK',
           },
           occurredAt: new Date('2026-07-11T02:01:00.000Z'),
+        }, {
+          type: 'ALL_SESSIONS_REVOKED',
+          actorKind: 'USER',
+          actorLabel: 'Owner One',
+          subjectLabel: 'Owner One',
+          reason: 'Account password changed; all sessions ended.',
+          context: { eventKind: 'PASSWORD_CHANGED', revokedSessionCount: 3 },
+          occurredAt: new Date('2026-07-11T02:00:00.000Z'),
         }];
       },
     },
@@ -755,8 +867,9 @@ test('browser security audit returns the immutable subject snapshot after a memb
     actor.id,
   );
 
-  assert.equal(findArgs?.take, 20);
+  assert.equal(findArgs?.take, 51);
   assert.deepEqual(findArgs?.select, {
+    id: true,
     type: true,
     actorKind: true,
     actorLabel: true,
@@ -765,18 +878,69 @@ test('browser security audit returns the immutable subject snapshot after a memb
     context: true,
     occurredAt: true,
   });
-  assert.deepEqual(Object.keys(result[0]).sort(), [
+  assert.deepEqual(Object.keys(result.data[0]).sort(), [
     'actorLabel',
     'occurredAt',
     'reason',
     'subjectLabel',
     'type',
   ]);
-  assert.equal(result[0].subjectLabel, 'Member One at event time');
-  assert.equal(result[1].type, 'PASSWORD_RESET_COMPLETED');
-  assert.equal(result[2].type, 'ALL_SESSIONS_REVOKED');
+  assert.equal(result.data[0].subjectLabel, 'Member One at event time');
+  assert.equal(result.data[1].type, 'PASSWORD_RESET_COMPLETED');
+  assert.equal(result.data[2].type, 'ALL_SESSIONS_REVOKED');
+  assert.equal(result.data[3].type, 'PASSWORD_CHANGED');
+  assert.equal(result.nextCursor, null);
   assert.doesNotMatch(
     JSON.stringify(result),
     /internal-event-id|member-1|internal-family-id|grant-secret|internal-request-id|Renamed Member|renamed@example/,
   );
+});
+
+test('security audit pages retained events in stable tenant-bound order and checks current role first', async () => {
+  const occurredAt = new Date('2026-07-11T02:03:04.000Z');
+  const events = Array.from({ length: 52 }, (_, index) => ({
+    id: `event-${String(52 - index).padStart(3, '0')}`,
+    type: 'SESSION_REVOKED',
+    actorKind: 'USER',
+    actorLabel: 'Owner One',
+    subjectLabel: 'Owner One',
+    reason: 'Session ended.',
+    context: null,
+    occurredAt,
+  }));
+  let actor = owner();
+  let rawCall = 0;
+  let pageReads = 0;
+  const tx = {
+    $queryRaw: async () => {
+      rawCall += 1;
+      return rawCall % 2 === 1 ? [{ id: 'org-1', lifecycleStatus: 'ACTIVE' }] : [actor];
+    },
+    securityAuditEvent: {
+      findFirst: async (args: { where: { id: string; organisationId: string } }) =>
+        args.where.organisationId === 'org-1'
+          ? events.find((event) => event.id === args.where.id) ?? null : null,
+      findMany: async (args: { where: { organisationId: string; OR?: [{ occurredAt: { lt: Date } }, { occurredAt: Date; id: { lt: string } }] }; take: number }) => {
+        pageReads += 1;
+        assert.equal(args.where.organisationId, 'org-1');
+        assert.equal(args.take, 51);
+        return events.filter((event) => !args.where.OR || event.id < args.where.OR[1].id.lt).slice(0, args.take);
+      },
+    },
+  };
+  const service = new TeamLifecycleService({ $transaction: async (work: (client: unknown) => Promise<unknown>) => work(tx) } as never);
+  const first = await service.listSecurityAudit('org-1', actor.id);
+  assert.equal(first.data.length, 50);
+  assert.equal(first.nextCursor, 'event-003');
+  const second = await service.listSecurityAudit('org-1', actor.id, first.nextCursor!);
+  assert.equal(second.data.length, 2);
+  assert.equal(second.nextCursor, null);
+  assert.equal(pageReads, 2);
+  await assert.rejects(() => service.listSecurityAudit('org-1', actor.id, 'foreign-event'),
+    (error: unknown) => error instanceof AppError && error.statusCode === 404);
+  assert.equal(pageReads, 2, 'a foreign cursor cannot read a page');
+  actor = owner({ role: 'MEMBER' });
+  await assert.rejects(() => service.listSecurityAudit('org-1', actor.id, first.nextCursor!),
+    (error: unknown) => error instanceof AppError && error.statusCode === 403);
+  assert.equal(pageReads, 2, 'a demoted member cannot read a page');
 });

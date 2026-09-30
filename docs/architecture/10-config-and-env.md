@@ -80,6 +80,7 @@ A narrow CI escape hatch relaxes the localhost/TLS rules: when `CHARITYPILOT_ALL
 | `SUPABASE_STORAGE_BUCKET` | Private bucket name; defaults to `documents` at read time (`apps/api/src/utils/env.ts:451`, `apps/api/src/services/storage.service.ts:13-15`) | Yes |
 | `DOCUMENT_STORAGE_DRIVER` | Selects storage backend; `local` switches to filesystem storage (`apps/api/src/services/storage.service.ts:17-19`) | No — production uses the Supabase driver |
 | `LOCAL_FILE_STORAGE_DIR` | Filesystem root for the local driver; defaults to `.charitypilot-local-storage/documents` (`apps/api/src/services/storage.service.ts:21-23`) | No (dev only) |
+| `STORAGE_UPLOAD_TIMEOUT_MS` | Bounds local and Supabase provider writes after a durable upload reservation; defaults to 300000 ms, accepts 100-1800000 ms, and stays below the one-hour stale-reservation cleanup threshold. Production preflight requires a canonical integer when set. | No (default `300000`) |
 | `STORAGE_DOWNLOAD_TIMEOUT_MS` | Bounds authenticated Supabase byte-proxy downloads, including response-body reads; defaults to 10000 ms and accepts 100-60000 ms | No |
 | `STORAGE_DELETE_TIMEOUT_MS` | Bounds each provider object-deletion request; defaults to 5000 ms. When set, the production preflight accepts only canonical integers from 100 through 8000 ms. | No (default `5000`) |
 | `DOCUMENT_STORAGE_RECOVERY_DATABASE_HOST_ALLOWLIST` | Exact comma-separated managed PostgreSQL hostnames authorized for the one-shot document-deletion recovery CLI. Entries must be unique syntactically public DNS names in canonical ASCII/IDNA form, lowercase and without wildcards or trailing dots, and the list must include the `DATABASE_URL` hostname. This is required by production preflight and the recovery operator environment; the API runtime does not consume it. | Yes for the supported production deploy/recovery path |
@@ -105,6 +106,7 @@ through the authenticated CharityPilot API download route.
 | `READINESS_DEPENDENCY_TIMEOUT_MS` / `STORAGE_READINESS_TIMEOUT_MS` | readiness route (`apps/api/src/routes/health/index.ts`) | Bound dependency-probe latency in the readiness check | No |
 | `ENABLE_IN_PROCESS_JOBS` | API | Whether reminders run in-process; kept `false` when a dedicated scheduler runs them (`.env.production.example:82-83`) | No |
 | `DEADLINE_REMINDERS_INTERVAL_MS` / `DOCUMENT_STORAGE_CLEANUP_INTERVAL_MS` / `DOCUMENT_STORAGE_CLEANUP_LIMIT` | scheduler container | Production scheduler intervals and batch size (`.env.production.example:84-91`) | No (have defaults) |
+| `RISK_CONTROL_REVIEW_INTERVAL_MS` | scheduler container | Scan latest active verified risk-control claims for an unknown or changed risk revision; log only the aggregate needing Admin evidence review. Allowed 1 hour to 7 days. | No; default 24 hours |
 | `SECURITY_EMAIL_PROVIDER_TIMEOUT_MS` | API/authentication-delivery worker | Bounded Resend request timeout for recovery links and reset-completion notices; canonical integer 1000-15000 ms | No; default 8000 ms |
 | `AUTH_DELIVERY_INTERVAL_MS` / `AUTH_DELIVERY_BATCH_SIZE` | scheduler container | Authentication-delivery cadence and per-kind claim bound | No; defaults 5000 ms / 25 |
 | `AUTH_DELIVERY_CLEANUP_BATCH_SIZE` / `AUTH_DELIVERY_STALE_SENDING_MS` | scheduler container | Shared evidence-cleanup budget and stale-claim quarantine threshold; the stale threshold must exceed the provider timeout | No; defaults 500 / 60000 ms |
@@ -142,7 +144,7 @@ On top of presence, the validator applies structural rules:
 | Canonical web/API origins | `validateUrlValue` | Production web/API origins must be `https://app.charitypilot.ie` and `https://api.charitypilot.ie`; approved-host checks alone are not sufficient for launch (`apps/api/src/utils/env.ts`) |
 | DB connection | `requireDatabaseUrl` | PostgreSQL protocol, username, one non-root database path segment, no fragment, and a syntactically public canonical ASCII/IDNA hostname. The repository production preflight mirrors the recovery CLI's query-option allowlist and value constraints, requires exact lowercase `sslmode=verify-full` and `target_session_attrs=read-write`, and permits `sslrootcert` only as a normalized absolute `.crt`/`.pem` CA path. |
 | Recovery DB authority | `requireDocumentStorageRecoveryDatabaseHostAllowlist` | Unique syntactically public DNS names in canonical lowercase ASCII/IDNA form only; rejects wildcards, IP/local/private/reserved names and requires an exact match for the `DATABASE_URL` hostname. This is a textual authority check, not a DNS-resolution attestation (`scripts/check-production.mjs`). |
-| Storage deletion timeout | `requireOptionalCanonicalIntegerRange` | When set, `STORAGE_DELETE_TIMEOUT_MS` is a canonical integer from 100 through 8000 (`scripts/check-production.mjs`). |
+| Storage upload/deletion timeouts | `requireOptionalCanonicalIntegerRange` | When set, `STORAGE_UPLOAD_TIMEOUT_MS` is a canonical integer from 100 through 1800000 and `STORAGE_DELETE_TIMEOUT_MS` from 100 through 8000 (`scripts/check-production.mjs`). |
 | Email sender | `requireApprovedEmailSender` | Valid address on an approved sender domain (`apps/api/src/utils/env.ts:178-191`) |
 | Proxy list | `requireTrustedProxyAddresses` | Explicit IPs/CIDRs only, no wildcards (`apps/api/src/utils/env.ts:303-314`) |
 
@@ -186,8 +188,8 @@ headers. Caddy's reverse proxy replaces those values, and Fastify therefore sees
 the shared gateway as the network client while account/credential rate-limit
 buckets remain distinct. Its published Windows port remains bound to
 `127.0.0.1`, and API, web and database containers remain internal-only. The
-exact configured public origin is used directly for server-side refresh
-requests, CSP and redirects so TLS termination outside Caddy cannot cause an
+exact configured public origin is used for browser refresh requests, CSP and
+redirects so TLS termination outside Caddy cannot cause an
 HTTPS-to-HTTP downgrade.
 
 `CHARITYPILOT_INTERNAL_API_URL=http://api:3002` is server-only. Browser requests
@@ -235,13 +237,13 @@ or package dependency; only that gateway also joins the project-scoped,
 non-attachable edge bridge. API alone builds the shared app image and web reuses
 that exact tag, preventing concurrent same-tag image exports. Before Playwright
 can reset the database, runtime inspection binds the three random image tags to
-immutable IDs and proves exactly four healthy project-labelled containers with
+immutable IDs and proves exactly five healthy project-labelled containers with
 the expected images, networks, loopback publications, mounts/tmpfs, users, and
 security controls. `npm run test:e2e` also runs the pure isolation contract as a
 pre-Docker lifecycle gate.
 
 Local mode fixes the web, API, and PostgreSQL endpoints to
-`127.0.0.1:3303`, `127.0.0.1:3302`, and `127.0.0.1:55434` respectively. It
+`127.0.0.1:3303`, `127.0.0.1:3302`, and `127.0.0.1:3354` respectively. It
 accepts no ambient database URL, instance ID, reset confirmation, generated
 credential, Docker context, or remote builder. Direct database identity, the
 protected UUID marker/restricted role, exact table inventory, and a keyed API

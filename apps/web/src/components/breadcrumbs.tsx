@@ -14,6 +14,9 @@ const LABELS: Record<string, string> = {
   organisation: 'Organisation',
   billing: 'Billing',
   export: 'Export',
+  'governance-audit': 'Governance Audit',
+  'security-data': 'Security & Data',
+  'data-lifecycle': 'Data Requests',
 };
 
 const PRINCIPLE_LABELS = Object.fromEntries(

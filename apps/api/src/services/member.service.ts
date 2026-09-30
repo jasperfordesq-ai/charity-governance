@@ -25,16 +25,11 @@ function publicMember(member: {
     address: member.address,
     dateEntered: civilDateFromPrisma(member.dateEntered),
     dateCeased: member.dateCeased ? civilDateFromPrisma(member.dateCeased) : null,
-    retentionDeleteAt: member.retentionDeleteAt ? civilDateFromPrisma(member.retentionDeleteAt) : null,
+    // No approved CharityPilot retention rule authorises this legacy derived date.
+    retentionDeleteAt: null,
     createdAt: member.createdAt.toISOString(),
     updatedAt: member.updatedAt.toISOString(),
   };
-}
-
-function addOneYear(date: string): string {
-  // date is YYYY-MM-DD; retain the same MM-DD, advance year by 1
-  const [year, rest] = [date.slice(0, 4), date.slice(4)];
-  return `${String(Number(year) + 1)}${rest}`;
 }
 
 export class MemberService {
@@ -51,25 +46,27 @@ export class MemberService {
     return members.map(publicMember);
   }
 
-  async create(organisationId: string, input: CreateMemberInput) {
-    const member = await this.prisma.member.create({
-      data: {
-        organisationId,
-        name: input.name,
-        address: input.address ?? null,
-        dateEntered: prismaDateFromCivil(input.dateEntered),
-      },
+  async create(organisationId: string, input: CreateMemberInput, actorUserId: string) {
+    const member = await this.prisma.$transaction(async (tx) => {
+      const created = await tx.member.create({
+        data: {
+          organisationId,
+          name: input.name,
+          address: input.address ?? null,
+          dateEntered: prismaDateFromCivil(input.dateEntered),
+        },
+      });
+      await tx.governanceRegisterChangeAudit.create({ data: {
+        organisationId, recordKind: 'MEMBER', recordId: created.id,
+        actorUserId, action: 'CREATE', previousStatus: null,
+        nextStatus: 'ACTIVE', changedFields: ['name', 'address', 'dateEntered'],
+      } });
+      return created;
     });
     return publicMember(member);
   }
 
-  async update(organisationId: string, memberId: string, input: UpdateMemberInput) {
-    const existing = await this.prisma.member.findFirst({
-      where: { id: memberId, organisationId },
-    });
-    if (!existing) {
-      throw new AppError(404, 'MEMBER_NOT_FOUND', 'Member not found');
-    }
+  async update(organisationId: string, memberId: string, input: UpdateMemberInput, actorUserId: string) {
     const expectedUpdatedAt = new Date(input.expectedUpdatedAt);
     const data: Record<string, unknown> = {};
 
@@ -79,20 +76,41 @@ export class MemberService {
     if ('dateCeased' in input) {
       const ceased = input.dateCeased ?? null;
       data.dateCeased = ceased ? prismaDateFromCivil(ceased) : null;
-      // retentionDeleteAt = dateCeased + 1 year, or null if not ceased
-      data.retentionDeleteAt = ceased ? prismaDateFromCivil(addOneYear(ceased)) : null;
+      // Clear the unapproved legacy date on cessation edits; this is not a purge schedule.
+      data.retentionDeleteAt = null;
+    }
+    if (Object.keys(data).length === 0) {
+      throw new AppError(400, 'MEMBER_UPDATE_EMPTY', 'Choose a register field to update.');
     }
 
-    const result = await this.prisma.member.updateMany({
-      where: { id: memberId, organisationId, updatedAt: expectedUpdatedAt },
-      data,
+    const updated = await this.prisma.$transaction(async (tx) => {
+      const existing = await tx.member.findFirst({ where: { id: memberId, organisationId } });
+      if (!existing) throw new AppError(404, 'MEMBER_NOT_FOUND', 'Member not found');
+      const effectiveEntered = input.dateEntered ?? civilDateFromPrisma(existing.dateEntered);
+      const effectiveCeased = 'dateCeased' in input
+        ? input.dateCeased
+        : existing.dateCeased ? civilDateFromPrisma(existing.dateCeased) : null;
+      if (effectiveCeased && effectiveCeased < effectiveEntered) {
+        throw new AppError(400, 'MEMBER_DATE_ORDER_INVALID', 'Cessation date cannot precede the entry date.');
+      }
+      const result = await tx.member.updateMany({
+        where: { id: memberId, organisationId, updatedAt: expectedUpdatedAt }, data,
+      });
+      if (result.count === 0) {
+        const still = await tx.member.findFirst({ where: { id: memberId, organisationId } });
+        if (!still) throw new AppError(404, 'MEMBER_NOT_FOUND', 'Member not found');
+        throw new AppError(409, 'CONCURRENCY_CONFLICT', 'Member was modified by another session. Refresh and try again.');
+      }
+      const current = await tx.member.findFirstOrThrow({ where: { id: memberId, organisationId } });
+      await tx.governanceRegisterChangeAudit.create({ data: {
+        organisationId, recordKind: 'MEMBER', recordId: memberId, actorUserId,
+        action: 'UPDATE',
+        previousStatus: existing.dateCeased ? 'CEASED' : 'ACTIVE',
+        nextStatus: current.dateCeased ? 'CEASED' : 'ACTIVE',
+        changedFields: Object.keys(data).sort(),
+      } });
+      return current;
     });
-    if (result.count === 0) {
-      const still = await this.prisma.member.findFirst({ where: { id: memberId, organisationId } });
-      if (!still) throw new AppError(404, 'MEMBER_NOT_FOUND', 'Member not found');
-      throw new AppError(409, 'CONCURRENCY_CONFLICT', 'Member was modified by another session. Refresh and try again.');
-    }
-    const updated = await this.prisma.member.findFirstOrThrow({ where: { id: memberId, organisationId } });
     return publicMember(updated);
   }
 }

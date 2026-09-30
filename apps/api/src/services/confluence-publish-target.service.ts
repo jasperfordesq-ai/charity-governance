@@ -46,6 +46,7 @@
  * a step left. The screen says so in as many words; see
  * `apps/web/src/lib/integration-status.ts`.
  */
+import type { Prisma } from '@prisma/client';
 import { AppError } from '../utils/errors.js';
 import {
   readPublishingModel,
@@ -105,7 +106,7 @@ export type PublishTargetClient = {
       select: Record<string, boolean>;
     }): Promise<Record<string, unknown> | null>;
     updateMany(args: {
-      where: { id: string; organisationId: string };
+      where: Record<string, unknown>;
       data: Record<string, unknown>;
     }): Promise<{ count: number }>;
   };
@@ -228,6 +229,27 @@ export async function confluencePublishTargetForOrganisation(
 }
 
 /**
+ * Read the approval destination while holding the integration row until the
+ * caller's document transaction commits. A concurrent space change or
+ * reconnect must either finish before this read or wait until the approval
+ * has committed. The publisher separately rechecks changes made afterwards.
+ */
+export async function lockedConfluencePublishTargetForOrganisation(
+  tx: Pick<Prisma.TransactionClient, '$queryRaw'>,
+  organisationId: string,
+): Promise<ConfluencePublishTarget | null> {
+  const rows = await tx.$queryRaw<Array<PublishTargetRow & { status: string }>>`
+    SELECT "status", "config", "publishSpaceId", "publishSpaceKey",
+           "publishSpaceName", "publishSpaceSiteId", "publishingModel"
+    FROM "OrganisationIntegration"
+    WHERE "organisationId" = ${organisationId} AND "provider" = 'CONFLUENCE'
+    FOR SHARE
+  `;
+  const row = rows[0];
+  return row?.status === 'CONNECTED' ? readConfluencePublishTarget(row) : null;
+}
+
+/**
  * Records the space this charity publishes into.
  *
  * **The id is validated against the spaces Confluence actually listed**, and
@@ -242,10 +264,21 @@ export async function confluencePublishTargetForOrganisation(
  * authenticated organisation's own row — never accepted from a request. The
  * write names both the row and the organisation, so a wrong id cannot reach
  * another charity's row even if one were ever passed in.
+ * The final write also requires a connected integration still naming the same
+ * site; a reconnect during the remote listing cannot save a stale target.
  */
 export async function chooseConfluencePublishSpace(
   prisma: PublishTargetClient,
   params: { integrationId: string; organisationId: string; cloudId: string; spaceId: string },
+  listSpaces: SpaceLister,
+): Promise<ChosenPublishSpace> {
+  const target = await validateConfluencePublishSpace(params, listSpaces);
+  return persistConfluencePublishSpace(prisma, params, target);
+}
+
+/** Validate against Confluence before opening a database transaction. */
+export async function validateConfluencePublishSpace(
+  params: { cloudId: string; spaceId: string },
   listSpaces: SpaceLister,
 ): Promise<ChosenPublishSpace> {
   const requested = typeof params.spaceId === 'string' ? params.spaceId.trim() : '';
@@ -267,23 +300,42 @@ export async function chooseConfluencePublishSpace(
     );
   }
 
-  await prisma.organisationIntegration.updateMany({
-    where: { id: params.integrationId, organisationId: params.organisationId },
-    data: {
-      publishSpaceId: listed.id,
-      publishSpaceKey: listed.key,
-      publishSpaceName: listed.name,
-      // The site the space belongs to, stored with it. See the module header.
-      publishSpaceSiteId: params.cloudId,
-    },
-  });
-
   return {
     cloudId: params.cloudId,
     spaceId: listed.id,
     spaceKey: listed.key,
     spaceName: listed.name,
   };
+}
+
+/** Persist only a provider-validated target, refusing a changed connection. */
+export async function persistConfluencePublishSpace(
+  prisma: PublishTargetClient,
+  params: { integrationId: string; organisationId: string; cloudId: string },
+  target: ChosenPublishSpace,
+): Promise<ChosenPublishSpace> {
+  if (target.cloudId !== params.cloudId) {
+    throw new AppError(409, 'CONFLUENCE_SITE_CHANGED', 'The Confluence site changed. Reload its spaces and choose again.');
+  }
+  const changed = await prisma.organisationIntegration.updateMany({
+    where: {
+      id: params.integrationId,
+      organisationId: params.organisationId,
+      status: 'CONNECTED',
+      config: { path: ['siteId'], equals: params.cloudId },
+    },
+    data: {
+      publishSpaceId: target.spaceId,
+      publishSpaceKey: target.spaceKey,
+      publishSpaceName: target.spaceName,
+      // The site the space belongs to, stored with it. See the module header.
+      publishSpaceSiteId: params.cloudId,
+    },
+  });
+  if (changed.count !== 1) {
+    throw new AppError(409, 'CONFLUENCE_SITE_CHANGED', 'The Confluence connection changed. Reload its spaces and choose again.');
+  }
+  return target;
 }
 
 /**

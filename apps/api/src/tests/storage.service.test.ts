@@ -12,7 +12,7 @@ const STORAGE_OPERATION_FAILED_MESSAGE = 'Document storage operation failed. Ple
 
 type GuardedStorageService = {
   downloadFile(organisationId: string, storagePath: string): Promise<Buffer>;
-  deleteFile(organisationId: string, storagePath: string): Promise<void>;
+  deleteFile(organisationId: string, storagePath: string): Promise<Date>;
 };
 
 async function assertForbiddenStoragePath(action: () => Promise<unknown>) {
@@ -136,6 +136,8 @@ test('local storage driver writes, downloads, and deletes files without Supabase
       'application/pdf',
     );
 
+    assert.equal(uploaded.provider, 'local');
+
     assert.match(
       uploaded.storagePath,
       /^org-local\/\d+-[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}-board-minutes-june-2026\.pdf$/,
@@ -225,6 +227,60 @@ test('Supabase byte download aborts within the configured bound and returns no b
   }
 });
 
+test('Supabase upload stops before a reserved object can reach the orphan-reconciliation age', async () => {
+  const originalEnv = {
+    DOCUMENT_STORAGE_DRIVER: process.env.DOCUMENT_STORAGE_DRIVER,
+    SUPABASE_URL: process.env.SUPABASE_URL,
+    SUPABASE_SERVICE_ROLE_KEY: process.env.SUPABASE_SERVICE_ROLE_KEY,
+    SUPABASE_STORAGE_BUCKET: process.env.SUPABASE_STORAGE_BUCKET,
+    STORAGE_UPLOAD_TIMEOUT_MS: process.env.STORAGE_UPLOAD_TIMEOUT_MS,
+  };
+  let responseClosed = false;
+  const server = createServer((_request, response) => {
+    response.on('close', () => { responseClosed = true; });
+    response.writeHead(200, { 'Content-Type': 'application/json', 'Content-Length': '1024' });
+    response.flushHeaders();
+  });
+  await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve));
+  const address = server.address();
+  if (!address || typeof address === 'string') throw new Error('Expected a TCP test server');
+
+  delete process.env.DOCUMENT_STORAGE_DRIVER;
+  process.env.SUPABASE_URL = `http://127.0.0.1:${address.port}`;
+  process.env.SUPABASE_SERVICE_ROLE_KEY = 'configured-service-role-key';
+  process.env.SUPABASE_STORAGE_BUCKET = 'documents';
+  process.env.STORAGE_UPLOAD_TIMEOUT_MS = '100';
+
+  try {
+    let reserved = false;
+    const startedAt = Date.now();
+    await assert.rejects(
+      () => new StorageService().uploadFile(
+        'org-timeout', 'stalled.pdf', Buffer.from('%PDF-1.7'), 'application/pdf',
+        async () => { reserved = true; },
+      ),
+      (error: unknown) => {
+        assert.equal(error instanceof AppError, true);
+        assert.equal((error as AppError).code, 'STORAGE_UPLOAD_FAILED');
+        return true;
+      },
+    );
+    assert.equal(reserved, true, 'the object key is reserved before the provider request');
+    assert.ok(Date.now() - startedAt < 2_000, 'upload timeout must bound the API request');
+    await new Promise((resolve) => setTimeout(resolve, 25));
+    assert.equal(responseClosed, true, 'the timed fetch must close the underlying provider request');
+  } finally {
+    server.closeAllConnections();
+    await new Promise<void>((resolve, reject) => {
+      server.close((error) => (error ? reject(error) : resolve()));
+    });
+    for (const [key, value] of Object.entries(originalEnv)) {
+      if (value === undefined) delete process.env[key];
+      else process.env[key] = value;
+    }
+  }
+});
+
 test('Supabase deletion aborts the underlying request within the configured bound', async () => {
   const originalEnv = {
     DOCUMENT_STORAGE_DRIVER: process.env.DOCUMENT_STORAGE_DRIVER,
@@ -275,6 +331,63 @@ test('Supabase deletion aborts the underlying request within the configured boun
     }
   }
 });
+
+for (const [status, shouldComplete] of [[404, true], [200, false], [400, false]] as const) {
+  test(`Supabase deletion requires a confirmed missing active object (HEAD ${status})`, { concurrency: false }, async () => {
+    const originalEnv = {
+      DOCUMENT_STORAGE_DRIVER: process.env.DOCUMENT_STORAGE_DRIVER,
+      SUPABASE_URL: process.env.SUPABASE_URL,
+      SUPABASE_SERVICE_ROLE_KEY: process.env.SUPABASE_SERVICE_ROLE_KEY,
+      SUPABASE_STORAGE_BUCKET: process.env.SUPABASE_STORAGE_BUCKET,
+    };
+    const requests: string[] = [];
+    const server = createServer((request, response) => {
+      requests.push(`${request.method} ${request.url}`);
+      if (request.method === 'DELETE' && request.url === '/storage/v1/object/documents') {
+        response.writeHead(200, { 'Content-Type': 'application/json' });
+        response.end('[]');
+        return;
+      }
+      if (request.method === 'HEAD' && request.url === '/storage/v1/object/documents/org-proof/file.pdf') {
+        response.writeHead(status);
+        response.end();
+        return;
+      }
+      response.writeHead(500);
+      response.end();
+    });
+    await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve));
+    const address = server.address();
+    if (!address || typeof address === 'string') throw new Error('Expected a TCP test server');
+    delete process.env.DOCUMENT_STORAGE_DRIVER;
+    process.env.SUPABASE_URL = `http://127.0.0.1:${address.port}`;
+    process.env.SUPABASE_SERVICE_ROLE_KEY = 'configured-service-role-key';
+    process.env.SUPABASE_STORAGE_BUCKET = 'documents';
+    try {
+      const attempt = new StorageService().deleteFile('org-proof', 'org-proof/file.pdf');
+      if (shouldComplete) {
+        await attempt;
+      } else {
+        await assert.rejects(attempt, (error: unknown) => {
+          assert.equal(error instanceof AppError, true);
+          assert.equal((error as AppError).code, 'STORAGE_DELETE_UNVERIFIED');
+          return true;
+        });
+      }
+      assert.deepEqual(requests, [
+        'DELETE /storage/v1/object/documents',
+        'HEAD /storage/v1/object/documents/org-proof/file.pdf',
+      ]);
+    } finally {
+      server.closeAllConnections();
+      await new Promise<void>((resolve, reject) => server.close((error) => error ? reject(error) : resolve()));
+      for (const [key, value] of Object.entries(originalEnv)) {
+        if (value === undefined) delete process.env[key];
+        else process.env[key] = value;
+      }
+    }
+  });
+}
 
 test('uploadFile generates unique storage paths for same-name uploads', async () => {
   const originalEnv = {
@@ -334,6 +447,92 @@ test('an organisation pinned to local storage uses local storage even when the d
     else process.env.DOCUMENT_STORAGE_DRIVER = previousDriver;
     if (previousRoot === undefined) delete process.env.LOCAL_FILE_STORAGE_DIR;
     else process.env.LOCAL_FILE_STORAGE_DIR = previousRoot;
+  }
+});
+
+test('failed-upload cleanup uses the provider recorded at upload even after tenant selection changes', async () => {
+  const previousDriver = process.env.DOCUMENT_STORAGE_DRIVER;
+  const previousRoot = process.env.LOCAL_FILE_STORAGE_DIR;
+  const root = await mkdtemp(join(tmpdir(), 'charitypilot-upload-cleanup-'));
+  delete process.env.DOCUMENT_STORAGE_DRIVER;
+  process.env.LOCAL_FILE_STORAGE_DIR = root;
+  let selectedProvider = 'local';
+  const resolver: OrganisationStorageResolver = async () => ({ provider: selectedProvider, alphaOptIn: false });
+
+  try {
+    const service = new StorageService(resolver);
+    const uploaded = await service.uploadFile('org-pinned', 'orphan.pdf', Buffer.from('orphan'), 'application/pdf');
+    assert.equal(uploaded.provider, 'local');
+    selectedProvider = 'supabase';
+    await service.deleteFile('org-pinned', uploaded.storagePath, undefined, uploaded.provider);
+    await assert.rejects(() => readFile(join(root, uploaded.storagePath)));
+  } finally {
+    await rm(root, { recursive: true, force: true });
+    if (previousDriver === undefined) delete process.env.DOCUMENT_STORAGE_DRIVER;
+    else process.env.DOCUMENT_STORAGE_DRIVER = previousDriver;
+    if (previousRoot === undefined) delete process.env.LOCAL_FILE_STORAGE_DIR;
+    else process.env.LOCAL_FILE_STORAGE_DIR = previousRoot;
+  }
+});
+
+test('a document download uses its written provider after the tenant preference changes', async () => {
+  const previousDriver = process.env.DOCUMENT_STORAGE_DRIVER;
+  const previousRoot = process.env.LOCAL_FILE_STORAGE_DIR;
+  const root = await mkdtemp(join(tmpdir(), 'charitypilot-pinned-download-'));
+  delete process.env.DOCUMENT_STORAGE_DRIVER;
+  process.env.LOCAL_FILE_STORAGE_DIR = root;
+  let selectedProvider = 'local';
+  const resolver: OrganisationStorageResolver = async () => ({ provider: selectedProvider, alphaOptIn: false });
+  try {
+    const service = new StorageService(resolver);
+    const uploaded = await service.uploadFile('org-pinned', 'policy.pdf', Buffer.from('retained'), 'application/pdf');
+    selectedProvider = 'supabase';
+    const bytes = await service.downloadFile('org-pinned', uploaded.storagePath, uploaded.provider);
+    assert.equal(bytes.toString(), 'retained');
+    await service.deleteFile('org-pinned', uploaded.storagePath, undefined, uploaded.provider);
+  } finally {
+    await rm(root, { recursive: true, force: true });
+    if (previousDriver === undefined) delete process.env.DOCUMENT_STORAGE_DRIVER;
+    else process.env.DOCUMENT_STORAGE_DRIVER = previousDriver;
+    if (previousRoot === undefined) delete process.env.LOCAL_FILE_STORAGE_DIR;
+    else process.env.LOCAL_FILE_STORAGE_DIR = previousRoot;
+  }
+});
+
+test('legacy custody inspection distinguishes a local object from absence and refuses an unavailable second store', async () => {
+  const previousDriver = process.env.DOCUMENT_STORAGE_DRIVER;
+  const previousRoot = process.env.LOCAL_FILE_STORAGE_DIR;
+  const previousUrl = process.env.SUPABASE_URL;
+  const previousKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+  const root = await mkdtemp(join(tmpdir(), 'charitypilot-custody-check-'));
+  process.env.DOCUMENT_STORAGE_DRIVER = 'local';
+  process.env.LOCAL_FILE_STORAGE_DIR = root;
+  delete process.env.SUPABASE_URL;
+  delete process.env.SUPABASE_SERVICE_ROLE_KEY;
+  try {
+    const service = new StorageService();
+    const uploaded = await service.uploadFile('org-custody', 'legacy.pdf', Buffer.from('known bytes'), 'application/pdf');
+    assert.deepEqual(await service.inspectActiveObject('org-custody', uploaded.storagePath, 'local'), {
+      present: true, size: 11,
+    });
+    assert.deepEqual(await service.inspectActiveObject('org-custody', 'org-custody/missing.pdf', 'local'), {
+      present: false, size: null,
+    });
+    await assert.rejects(
+      () => service.inspectActiveObject('org-custody', uploaded.storagePath, 'supabase'),
+      (error: unknown) => (error as AppError).code === 'STORAGE_NOT_CONFIGURED',
+    );
+    await service.deleteFile('org-custody', uploaded.storagePath, undefined, 'local');
+  } finally {
+    await rm(root, { recursive: true, force: true });
+    if (previousDriver === undefined) delete process.env.DOCUMENT_STORAGE_DRIVER;
+    else process.env.DOCUMENT_STORAGE_DRIVER = previousDriver;
+    if (previousRoot === undefined) delete process.env.LOCAL_FILE_STORAGE_DIR;
+    else process.env.LOCAL_FILE_STORAGE_DIR = previousRoot;
+    if (previousUrl === undefined) delete process.env.SUPABASE_URL;
+    else process.env.SUPABASE_URL = previousUrl;
+    if (previousKey === undefined) delete process.env.SUPABASE_SERVICE_ROLE_KEY;
+    else process.env.SUPABASE_SERVICE_ROLE_KEY = previousKey;
   }
 });
 

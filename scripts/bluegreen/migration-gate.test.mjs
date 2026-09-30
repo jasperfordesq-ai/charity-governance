@@ -329,6 +329,31 @@ test('validating-constraint does not warn when CHECK carries NOT VALID', () => {
   assert.equal(blockIds(warned).includes('validating-constraint'), false);
 });
 
+test('validating-constraint handles a long CHECK before NOT VALID', () => {
+  const statement = `ALTER TABLE "Foo" ADD CONSTRAINT "Foo_review_pair" CHECK (
+    ("reviewSha256" IS NULL AND "documentUpdatedAt" IS NULL)
+    OR ("reviewSha256" IS NOT NULL
+      AND "reviewSha256" ~ '^[0-9a-f]{64}$'
+      AND "documentUpdatedAt" IS NOT NULL)
+  )`;
+  assert.equal(
+    blockIds(lintMigrationSql('m1', `${statement} NOT VALID;`).warned).includes('validating-constraint'),
+    false,
+  );
+  assert.equal(
+    blockIds(lintMigrationSql('m1', `${statement};`).warned).includes('validating-constraint'),
+    true,
+  );
+});
+
+test('validating-constraint does not borrow NOT VALID from a later statement', () => {
+  const { warned } = lintMigrationSql(
+    'm1',
+    'ALTER TABLE "Foo" ADD CONSTRAINT "Foo_bar_check" CHECK ("bar" > 0); ALTER TABLE "Foo" ADD CONSTRAINT "Foo_baz_check" CHECK ("baz" > 0) NOT VALID;',
+  );
+  assert.equal(blockIds(warned).includes('validating-constraint'), true);
+});
+
 test('validating-constraint warns on a bare ADD CONSTRAINT ... FOREIGN KEY', () => {
   const { warned } = lintMigrationSql(
     'm1',

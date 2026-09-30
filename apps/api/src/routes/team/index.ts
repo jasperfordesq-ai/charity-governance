@@ -1,9 +1,9 @@
 import type { FastifyInstance } from 'fastify';
-import { ZodError } from 'zod';
+import { z, ZodError } from 'zod';
 import { TeamService } from '../../services/team.service.js';
 import { TeamLifecycleService } from '../../services/team-lifecycle.service.js';
 import { authGuard } from '../../middleware/auth.js';
-import { requireSessionLevel } from '../../middleware/session-level.js';
+import { requireSessionLevel, requireWebSession } from '../../middleware/session-level.js';
 import { requireActionApproval } from '../../middleware/action-approval.js';
 import { subscriptionGuard } from '../../middleware/subscription.js';
 import { clearAuthCookies, setAuthCookies } from '../../utils/auth-cookies.js';
@@ -85,7 +85,7 @@ export async function teamRoutes(app: FastifyInstance) {
       }
     });
 
-    authedApp.post('/invites/:id/link', async (request, reply) => {
+    authedApp.post('/invites/:id/link', { preHandler: [requireWebSession] }, async (request, reply) => {
       try {
         const { id } = request.params as { id: string };
         return await service.reissueLink(
@@ -201,7 +201,7 @@ export async function teamRoutes(app: FastifyInstance) {
       }
     });
 
-    authedApp.post('/ownership/transfer', { preHandler: [requireSessionLevel('ADMIN'), requireActionApproval()] }, async (request, reply) => {
+    authedApp.post('/ownership/transfer', { preHandler: [requireWebSession, requireSessionLevel('ADMIN'), requireActionApproval()] }, async (request, reply) => {
       try {
         const body = transferTeamOwnershipSchema.parse(request.body);
         const result = await lifecycleService.transferOwnership({
@@ -285,11 +285,32 @@ export async function teamRoutes(app: FastifyInstance) {
 
     authedApp.get('/security-audit', async (request, reply) => {
       try {
+        const { before } = z.object({
+          before: z.string().min(1).max(160).regex(/^[A-Za-z0-9_-]+$/).optional(),
+        }).strict().parse(request.query);
         return await lifecycleService.listSecurityAudit(
           request.user.organisationId,
           request.user.userId,
+          before,
         );
       } catch (err) {
+        if (err instanceof ZodError) return reply.status(400).send(formatZodError(err));
+        return handleError(reply, err);
+      }
+    });
+
+    authedApp.get('/replay-diagnostics', { preHandler: [requireWebSession] }, async (request, reply) => {
+      try {
+        const { before } = z.object({
+          before: z.string().min(1).max(160).regex(/^[A-Za-z0-9_-]+$/).optional(),
+        }).strict().parse(request.query);
+        return await lifecycleService.listReplayDiagnostics(
+          request.user.organisationId,
+          request.user.userId,
+          before,
+        );
+      } catch (err) {
+        if (err instanceof ZodError) return reply.status(400).send(formatZodError(err));
         return handleError(reply, err);
       }
     });

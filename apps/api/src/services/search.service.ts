@@ -1,5 +1,6 @@
 import type { PrismaClient } from '@prisma/client';
 import { AppError } from '../utils/errors.js';
+import { MEMBER_DEADLINE_FILTER } from './deadline.service.js';
 
 /**
  * One search across the records a charity keeps.
@@ -170,8 +171,8 @@ export const SEARCHABLE: Record<SearchType, Searchable> = {
     // `fileUrl` is absent deliberately. It is the storage path, it encodes the
     // original filename, and it must never leave the API.
     delegate: 'document',
-    safeFields: ['name', 'boardMinuteReference'],
-    personalFields: ['description', 'owner'],
+    safeFields: ['name'],
+    personalFields: ['description', 'owner', 'boardMinuteReference'],
     titleFields: ['name'],
     tenantScoped: true,
     refPath: 'document',
@@ -305,6 +306,7 @@ export interface SearchOptions {
   limit?: number;
   /** The session's scope, which decides what may be matched at all. */
   dataScope: 'WITHHELD' | 'FULL';
+  viewerRole: 'OWNER' | 'ADMIN' | 'MEMBER';
 }
 
 export class SearchService {
@@ -361,7 +363,8 @@ export class SearchService {
       Math.max(1, options.limit ?? SEARCH_DEFAULT_LIMIT),
     );
     const requested = options.types?.length ? options.types : SEARCH_TYPES;
-    const full = options.dataScope === 'FULL';
+    const member = options.viewerRole === 'MEMBER';
+    const full = !member && options.dataScope === 'FULL';
 
     // One lookup for both questions the plan decides: which kinds may be
     // searched at all, and how much of the Governance Code is in scope.
@@ -372,6 +375,13 @@ export class SearchService {
     const searched: SearchType[] = [];
 
     for (const type of requested) {
+      // Search hits are disclosures, even when the target read route refuses
+      // the Member. Keep the search boundary aligned with those routes.
+      if (member && (
+        type === 'ConflictRecord' || type === 'ComplaintRecord' ||
+        type === 'GoverningAct' || type === 'Resolution' ||
+        type === 'RiskRecord' || type === 'FundraisingRecord'
+      )) continue;
       const spec = SEARCHABLE[type];
 
       // Left out of `searched` as well as out of the results: a charity on
@@ -380,6 +390,9 @@ export class SearchService {
       if (spec.completePlanOnly && !plan.complete) continue;
 
       const fields = full ? [...spec.safeFields, ...spec.personalFields] : spec.safeFields;
+      const titleFields = full && spec.fullTitleFields
+        ? [...spec.fullTitleFields, ...spec.titleFields]
+        : spec.titleFields;
 
       // A kind with nothing searchable under this scope is left out of
       // `searched`, so the caller can see that the gate, not the query, is
@@ -389,6 +402,12 @@ export class SearchService {
 
       const where: Record<string, unknown> = {
         ...(spec.tenantScoped ? { organisationId } : {}),
+        ...(member && type === 'Document'
+          ? { visibility: 'MEMBER_VISIBLE', contentAccessClass: 'MEMBER_SUITABLE',
+            memberReviewedSha256: { not: null }, storageProvider: { in: ['local', 'supabase'] },
+            lifecycleStatus: { notIn: ['UNREVIEWED', 'DRAFT'] } }
+          : {}),
+        ...(member && type === 'Deadline' ? MEMBER_DEADLINE_FILTER : {}),
         ...(type === 'GovernanceStandard' && !plan.additionalStandards
           ? { isCore: true }
           : {}),
@@ -403,6 +422,9 @@ export class SearchService {
 
       const rows = await delegate.findMany({
         where,
+        // The same field policy applies at the database boundary. Matching
+        // and quoting never require the rest of a document or register row.
+        select: Object.fromEntries(['id', ...fields, ...titleFields].map((field) => [field, true])),
         // One more than asked for, purely to know whether to say there are
         // more. The extra row is never returned.
         take: limit + 1,
@@ -422,9 +444,7 @@ export class SearchService {
           // cannot be the leak.
           title: titleOf(
             row,
-            full && spec.fullTitleFields
-              ? [...spec.fullTitleFields, ...spec.titleFields]
-              : spec.titleFields,
+            titleFields,
           ),
           field: match.field,
           snippet: match.snippet,
@@ -435,7 +455,7 @@ export class SearchService {
 
     const result: SearchResult = {
       query,
-      dataScope: options.dataScope,
+      dataScope: full ? 'FULL' : 'WITHHELD',
       data,
       truncated,
       searched,
@@ -448,10 +468,11 @@ export class SearchService {
     }
 
     if (!full) {
-      result.note =
-        'This session withholds personal data, so free-text notes, narratives and names '
-        + 'were not searched and cannot be matched. Connect with personal data released to '
-        + 'search them.';
+      result.note = member
+        ? 'Member search excludes sensitive register content, Minute Book contents and personal narratives. Restricted documents cannot be matched.'
+        : 'This session withholds personal data, so free-text notes, narratives and names '
+          + 'were not searched and cannot be matched. Connect with personal data released to '
+          + 'search them.';
     }
 
     return result;

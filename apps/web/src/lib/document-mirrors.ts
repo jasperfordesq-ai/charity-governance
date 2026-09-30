@@ -65,6 +65,14 @@ export function parseDocumentMirror(value: unknown): ConfluenceMirror | null {
   if (!PUBLICATION_STATES.includes(publication as ConfluencePublicationState)) return null;
 
   const remoteRecord = asRecord(record.remote);
+  const destinationRecord = asRecord(record.publishDestination);
+  const publishDestination = destinationRecord && asNullableString(destinationRecord.siteId)
+    && asNullableString(destinationRecord.spaceId) && asNullableString(destinationRecord.spaceKey)
+    ? { siteId: String(destinationRecord.siteId), spaceId: String(destinationRecord.spaceId),
+      spaceKey: String(destinationRecord.spaceKey),
+      spaceName: typeof destinationRecord.spaceName === 'string' ? destinationRecord.spaceName : '',
+      siteUrl: asNullableString(destinationRecord.siteUrl) }
+    : null;
   let remote: ConfluenceMirror['remote'] = null;
   if (remoteRecord !== null) {
     const state = remoteRecord.state;
@@ -84,6 +92,21 @@ export function parseDocumentMirror(value: unknown): ConfluenceMirror | null {
 
   return {
     publication: publication as ConfluencePublicationState,
+    // A URL requires both a recorded page ID and a usable site address. An
+    // older API omits pageRecorded; a missing URL in that case is unknown,
+    // never evidence that no page was created.
+    pageRecorded: asNullableString(record.pageUrl) !== null
+      ? true
+      : typeof record.pageRecorded === 'boolean' ? record.pageRecorded : null,
+    pageSiteMatchesConnection: asNullableString(record.pageUrl) !== null
+      ? true
+      : typeof record.pageSiteMatchesConnection === 'boolean' ? record.pageSiteMatchesConnection : null,
+    recordedPageMatchesDestination: typeof record.recordedPageMatchesDestination === 'boolean'
+      ? record.recordedPageMatchesDestination : null,
+    connectionAvailable: typeof record.connectionAvailable === 'boolean' ? record.connectionAvailable : null,
+    approvalDestinationCurrent: typeof record.approvalDestinationCurrent === 'boolean'
+      ? record.approvalDestinationCurrent : null,
+    publishDestination,
     pageUrl: asNullableString(record.pageUrl),
     remote,
   };

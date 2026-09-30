@@ -226,7 +226,8 @@ const READ_TOOLS: readonly ToolDefinition[] = [
     name: 'organisation',
     description:
       'The charity\'s own registration details: names, numbers, legal form, financial year end '
-      + 'and key dates.' + GATED + 'registered address, contact email, contact phone, which for '
+      + 'and key dates. Member API responses omit address, contact details and conditional obligation facts.'
+      + GATED + 'registered address, contact email, contact phone, which for '
       + 'a small charity are frequently a trustee\'s own.',
     path: '/api/v1/organisation',
     model: 'Organisation',
@@ -245,7 +246,7 @@ const READ_TOOLS: readonly ToolDefinition[] = [
   {
     name: 'deadlines_list',
     description:
-      'Governance deadlines: returns, filings, reviews and meetings.' + GATED
+      'Governance deadlines: returns, filings, reviews and meetings. Member sessions see only current-rule generated deadlines while custom and legacy titles await classification.' + GATED
       + 'deadline descriptions and the profile snapshot that generated each one.',
     path: '/api/v1/deadlines',
     params: PAGED,
@@ -254,7 +255,7 @@ const READ_TOOLS: readonly ToolDefinition[] = [
   {
     name: 'deadline_get',
     description:
-      'One deadline from the calendar, by identifier.' + GATED
+      'One deadline from the calendar, by identifier. Member sessions cannot open custom or legacy calculated deadlines.' + GATED
       + 'the description and the profile that generated it.',
     path: '/api/v1/deadlines/:id',
     params: [{ kind: 'id', name: 'id' }],
@@ -262,7 +263,7 @@ const READ_TOOLS: readonly ToolDefinition[] = [
   },
   {
     name: 'deadlines_history',
-    description: 'Completed governance deadlines, with the same fields withheld as the deadline list.',
+    description: 'Completed governance deadlines; Member sessions omit legacy calculated records and use the same field withholding as the deadline list.',
     path: '/api/v1/deadlines/history',
     params: PAGED,
     model: 'Deadline',
@@ -286,7 +287,8 @@ const READ_TOOLS: readonly ToolDefinition[] = [
     name: 'board_register',
     description:
       'Trustees: names, roles, terms, conduct and induction status.' + GATED
-      + 'dates of birth, home addresses, former names, other directorships, email addresses.',
+      + 'dates of birth, home addresses, former names, other directorships and email addresses. '
+      + 'Member-role API responses always omit those particulars, even when the gate is open.',
     path: '/api/v1/board-members',
     params: PAGED,
     model: 'BoardMember',
@@ -296,7 +298,8 @@ const READ_TOOLS: readonly ToolDefinition[] = [
     description:
       'One trustee by identifier, as the board register returns them. Use this to resolve a '
       + 'boardMemberId carried on a conflict record rather than paging the register.' + GATED
-      + 'date of birth, home address, former names, other directorships, email address.',
+      + 'date of birth, home address, former names, other directorships and email address. '
+      + 'Member-role API responses always omit those particulars, even when the gate is open.',
     path: '/api/v1/board-members/:id',
     params: [{ kind: 'id', name: 'id' }],
     model: 'BoardMember',
@@ -305,7 +308,7 @@ const READ_TOOLS: readonly ToolDefinition[] = [
     name: 'governing_acts',
     description:
       'The minute book: board meetings, written resolutions and general meetings, with kind, '
-      + 'status, dates, references and titles.' + GATED + 'resolution text, who abstained, and '
+      + 'status, dates, references and titles. Owner/Admin only while Minute Book sensitivity is unclassified.' + GATED + 'resolution text, who abstained, and '
       + 'any link back to a conflict record.' + COMPLETE_PLAN,
     path: '/api/v1/governing-acts',
     params: [
@@ -320,7 +323,7 @@ const READ_TOOLS: readonly ToolDefinition[] = [
     description:
       'One meeting or written resolution by identifier, with its resolutions. The minute book '
       + 'tool returns every act, which is a great deal to read to answer a question about '
-      + 'one.' + GATED + 'resolution text, who abstained, and any link back to a conflict '
+      + 'one. Owner/Admin only while Minute Book sensitivity is unclassified.' + GATED + 'resolution text, who abstained, and any link back to a conflict '
       + 'record.' + COMPLETE_PLAN,
     path: '/api/v1/governing-acts/:id',
     params: [{ kind: 'id', name: 'id' }],
@@ -330,7 +333,7 @@ const READ_TOOLS: readonly ToolDefinition[] = [
     name: 'resolution_get',
     description:
       'One resolution by identifier, with the meeting that passed it. Use this to follow a '
-      + 'search hit: a decision with no date or reference is not evidence of anything.' + GATED
+      + 'search hit: a decision with no date or reference is not evidence of anything. Owner/Admin only while Minute Book sensitivity is unclassified.' + GATED
       + 'the resolution text itself, who abstained, and any link to a conflict record.'
       + COMPLETE_PLAN,
     path: '/api/v1/governing-acts/resolutions/:id',
@@ -349,7 +352,8 @@ const READ_TOOLS: readonly ToolDefinition[] = [
     name: 'board_submissions',
     description:
       'Documents submitted to the board for approval, split into evidenced and outstanding, each '
-      + 'linked to the resolution that approved it.' + GATED + 'resolution text and document '
+      + 'linked to the resolution that approved it. Owner/Admin only because the response contains '
+      + 'resolution text and approval particulars.' + GATED + 'resolution text and document '
       + 'owners.' + COMPLETE_PLAN,
     path: '/api/v1/governing-acts/board-submissions',
     shape: 'boardSubmissions',
@@ -456,7 +460,7 @@ const READ_TOOLS: readonly ToolDefinition[] = [
   {
     name: 'members_list',
     description:
-      'The statutory register of members: when each was entered and ceased.' + GATED
+      'Owner/Admin only. The statutory register of members: when each was entered and ceased.' + GATED
       + 'members\' names and addresses, which unlike trustees\' appear on no public register.'
       + COMPLETE_PLAN,
     path: '/api/v1/members',
@@ -487,7 +491,9 @@ const READ_TOOLS: readonly ToolDefinition[] = [
     name: 'team_list',
     description:
       'Who has access to this charity\'s CharityPilot account and at what role, and which '
-      + 'invitations are outstanding.' + GATED + 'account holders\' names and email addresses.',
+      + 'invitations are outstanding. The API\'s Member view includes only active accounts and withholds contact and verification details; '
+      + 'the connector may withhold names under its separate personal-data gate.'
+      + GATED + 'account holders\' names and email addresses.',
     path: '/api/v1/team',
     shape: 'team',
   },
@@ -505,11 +511,13 @@ const READ_TOOLS: readonly ToolDefinition[] = [
   {
     name: 'security_audit',
     description:
-      'The twenty most recent security events for this charity: role changes, suspensions, '
+      'Security events for this charity, 50 at a time. Pass nextCursor as before to read older '
+      + 'events: role changes, suspensions, '
       + 'removals, session revocations and replayed credentials, with when each happened.'
       + GATED + 'who acted, who it was about, and the reason given, all of which are prose '
       + 'naming people.' + ADMIN_ONLY,
     path: '/api/v1/team/security-audit',
+    params: [{ kind: 'cursor', name: 'before' }],
     shape: 'securityAudit',
   },
 
@@ -539,13 +547,14 @@ const READ_TOOLS: readonly ToolDefinition[] = [
   {
     name: 'confluence_publications',
     description:
-      'Pages still standing in this charity’s Confluence after the documents that made '
-      + 'them were deleted here, with the page title, when it was retired and whether an '
-      + 'erasure has already been asked for. Answers “what is still out there”. The '
-      + 'titles are as Confluence holds them, which may differ from a document’s current '
-      + 'name: renaming a document here deliberately does not re-title its page.'
+      'Retained CharityPilot references to retired Confluence copies, 50 at a time. '
+      + 'Pass nextCursor as before to read the next page. A reference or erasure request '
+      + 'does not prove the page remains live or has been purged at the provider. '
+      + 'Titles are those recorded when published; renaming a document here does not '
+      + 're-title its Confluence page.'
       + ADMIN_ONLY,
     path: '/api/v1/integrations/confluence/publications',
+    params: [{ kind: 'cursor', name: 'before' }],
     shape: 'confluencePublications',
   },
 ];
@@ -936,12 +945,12 @@ export async function runTool(
     );
   }
 
-  // A reason is required for the actions that cannot be undone, and only for
-  // those. Demanding one everywhere would train a caller to write filler.
+  // A reason is required for actions marked destructive, and only for those.
+  // Demanding one everywhere would train a caller to write filler.
   if (tool.destructive && !reason) {
     throw new ConnectorError(
       'REASON_REQUIRED',
-      `${tool.name} removes something permanently. Pass a reason saying why, which is `
+      `${tool.name} is a destructive action. Pass a reason saying why, which is `
         + 'recorded against the action.',
       { action: 'fix_arguments' },
     );

@@ -1,10 +1,141 @@
 # Document Storage Flow
 
+Admin Integrations also has a separate read-only inventory of current
+`ConfluenceReference` rows: charity-managed cited pages and the version
+recorded when cited. This is distinct from `DocumentPublication` and its
+erasure flow. The relation to `Document` has a cascade, but ordinary deletion
+and migration `20260929420000_document_linked_evidence_delete_guard` refuse
+deletion while a current citation or standard link exists. A reviewer must
+dispose of the link separately before a draft can be removed. The current
+inventory does not preserve historical citations after that separate unlink;
+the control audit records the citation ID but not the complete page/version
+snapshot.
+
+Migration `20260929430000_document_content_access_class` adds an explicit
+full-file Member access assessment. Every existing document receives
+`UNASSESSED`, including legacy `MEMBER_VISIBLE` rows. The Member API withholds
+those rows in list, detail, search, activity and download; download rechecks
+after reading storage. A `NOT VALID` check preserves legacy rows for review
+while refusing new or updated Member-visible rows unless the assessment is
+`MEMBER_SUITABLE`. Owner/Admin can record a reasoned assessment and visibility
+change together, or mark restricted content sensitive. This does not classify
+actual tenant files or control the audience of a separate Confluence copy.
+An edit to a Member-suitable document's card withdraws that assessment and
+Member visibility in the same transaction; the history records the reset and
+any visibility withdrawal. A database trigger refuses metadata edits that
+leave the former Member-suitable class in place, including direct SQL updates.
+The stored bytes remain immutable through this edit endpoint. A reviewer must
+inspect the revised card before releasing it to Members again.
+
+The Admin copy lists now display retained site, space and page IDs. For
+non-retired copies, a tenant-bound document lookup compares its saved
+publication approval site/space with the page's recorded site/space; a match
+is only a local record comparison, not an active connection or external
+audience check. The retired request form is unavailable when the saved site
+or page ID is missing, and the server validates the target again when asked.
+
+The Admin Integrations screen now pages recorded Confluence pages in two
+groups: non-retired publication rows with a page ID for audience review, and
+retired rows eligible for the separate confirmed erasure request. The
+non-retired read joins current document lifecycle and publication approval
+within the same charity; it flags missing or non-CURRENT/unapproved documents.
+These are local recorded references and last observations, not a live provider
+scan. Pages never recorded by CharityPilot, current external permissions and
+provider purge remain outside this evidence.
+
+Confluence publication approval is destination-specific. Migration
+`20260929370000_document_publication_approval_destination` adds the selected
+site/space IDs to an approved `Document`, resets legacy unbound approvals with
+a system control event, and requires a bound pair for any true approval. A
+reasoned Owner/Admin decision records destination changes in
+`DocumentControlAudit`; queue, retry and worker paths check the current
+binding. A publication with a recorded page in another site or space is held
+for copy disposition rather than reused at the new destination. This gate
+does not inspect the external space audience or delete an existing page.
+The Vault control dialog separately fetches the current site and space for
+review and sends both IDs with an approval request. The API refuses missing
+IDs or a selected target that differs when the transaction reads it. A later
+target change leaves the saved binding stale and the worker refuses to publish.
+The Admin mirror compares a recorded page's stored site and space to the
+selected target without claiming that the remote page still occupies that
+space. The approval dialog withholds the action on a recorded mismatch.
+
+
+Migration 38 fixes each queued deletion job's ID, provider, JSON target,
+request reason and requesting actor at insertion. Retry status may change,
+and the separately audited corrected-path dead-letter recovery retains its
+existing rule. The worker also compares a Confluence job's target with the
+linked retired publication before provider I/O, so an inconsistent
+publication enters retry and operator review without a remote call.
+
+Before a queued Confluence erasure reaches the provider, the cleanup worker
+parses its target and compares the cloud, page and attachment IDs with the
+uniquely linked, same-charity `RETIRED` publication. A mismatch records a retry
+for operator review without calling the provider. A disposable populated
+PostgreSQL 16 rehearsal through migration 37 exercised a changed queued page
+ID and subsequent restored target with a fake provider; it is not evidence
+that Atlassian deleted an object or purged versions or backups.
+
+For explicit Confluence erasure, the request reserves a deletion ID and stamps
+the retired publication before inserting the deletion job, all in one
+transaction with the actor audit. Migration 37 allows the job's source
+document ID only when that same-charity publication already matches the job ID
+and retired storage path. Ordinary local/Supabase deletion keeps the earlier
+live-document/path source guard. A failed job insert rolls the stamp and audit
+back; a successful insert still requires the worker's later source and live
+document recheck before any provider call.
+
+New explicit Confluence erasure jobs retain the source document ID. The cleanup
+worker follows the queued deletion ID back to exactly one `RETIRED` publication in the
+same charity, checks that a populated source ID agrees, and checks that the
+local document is absent before calling Confluence. An older job without a
+source ID still needs the publication link. A failed recheck leaves the
+provider untouched and routes the job through retry and operator review; it
+is not evidence of remote erasure.
+
+An explicit Confluence erasure request requires a `RETIRED` publication and
+checks that the charity's document is absent before queuing provider deletion.
+A stale or inconsistent `RETIRED` label cannot erase a still-live local
+document. This guard does not provide a withdrawal path for a published live
+document; the publication row is unique per document/provider and `RETIRED` is
+terminal in the current workflow. Retention and hold decisions for that path
+remain open.
+
 CharityPilot stores governance documents (policies, minutes, certificates) as opaque binary objects in an external object store, keeping only metadata and a storage key in PostgreSQL. The storage layer is abstracted behind a single `StorageService` that switches between a Supabase Storage private bucket and a local filesystem driver (dev/Docker). Which one is used is resolved **per organisation**, not per process: the organisation's recorded preference wins, and `DOCUMENT_STORAGE_DRIVER` is the deployment default it falls back to. Deletion is decoupled from the request that triggers it via a durable reconciliation record (`DocumentStorageDeletion`) reconciled by a scheduled cleanup job.
 
 ## Storage drivers
 
-`StorageService` resolves the provider at call time, per organisation; there is no persistent client. `uploadFile`, `downloadFile` and `deleteFile` each resolve the provider for the organisation they were given and branch on the answer.
+`StorageService` resolves the provider at upload time, per organisation; there is no persistent client. Upload returns the provider actually used, and the document and upload reservation retain it. Later authenticated downloads and ordinary draft deletion use the document's written provider so a tenant preference change cannot redirect a read or produce a false absence receipt. Migration `20260929320000_document_written_storage_provider` backfills only exact attached-reservation matches. Older documents without that evidence keep a null provider: ordinary deletion stops with `DOCUMENT_STORAGE_PROVIDER_UNVERIFIED` until custody is reviewed. Owner/Admin legacy download still resolves the current preference until its original provider is established, so it is not provider-migration proof.
+
+For a null legacy provider, Owner/Admin can open the Vault's **Verify storage** control. `POST /documents/:id/verify-storage-provider` checks the exact tenant-scoped key in both supported active stores, requires both checks to succeed, exactly one key to exist, and its byte size to match `Document.fileSize`. A successful check sets the provider once and writes an actor-bound `DocumentControlAudit` event in the same revision-checked transaction; migration `20260929330000_document_storage_provider_audit_kind` permits that event. The UI shows unverified custody and blocks its ordinary Delete control until verified. A missing store configuration or failed check is not evidence of absence; duplicate keys, size mismatch and stale document revision also refuse the update. In particular a local-only installation without access to Supabase cannot use this automated check. It checks one active object at a point in time, not original upload provenance, byte identity, version history or backups. Provider verification is not deleted-item recovery, final erasure or retention authority.
+
+Member reads exclude legacy files without a verified written provider. A file
+cannot be assessed as `MEMBER_SUITABLE` or released to Members before this
+custody check. Migration `20260929460000_member_visible_provider_guard` also
+rejects new or updated Member-visible rows without a known provider, leaving
+older violations for individual review. Migration 47 makes the recorded path,
+provider, size, MIME type and version part of assessment freshness. Neither
+guard detects bytes changed in place at the same provider and path. Migration
+`20260929470000_member_reviewed_byte_hash` adds a nullable SHA-256 digest and
+a `NOT VALID` check requiring a valid digest for new or updated Member-visible
+rows. Owner/Admin `MEMBER_SUITABLE` assessment downloads the current object,
+checks its recorded size and stores the server-computed digest in the same
+reasoned decision. Member query paths hide legacy rows without a digest, and
+the download route compares current bytes to the stored digest before its
+preparation audit or response. The Vault offers same-class re-review for old
+approvals without a fingerprint. This protects Member delivery against a
+same-path overwrite. It does not prove that the reviewer viewed those exact
+bytes, authenticate historical provider versions or classify real content.
+Migrations `20260929480000_document_download_review_receipt` and
+`20260929490000_document_download_review_lookup` add optional SHA-256 and
+document-revision fields to the existing append-only download-preparation
+ledger, with a concurrent lookup index. Only an Owner/Admin preparation with a
+known written provider, matching recorded size and unchanged record revision
+receives those review fields. Before recording a `MEMBER_SUITABLE` assessment,
+the service requires a prior row for the same charity, document, actor,
+revision and current server-read SHA-256. Older preparation rows and Member
+downloads do not serve as review receipts. This proves preparation for HTTP
+delivery; it cannot prove receipt by the browser or human inspection.
 
 Resolution is two layers, neither of which lives in `StorageService`:
 
@@ -66,11 +197,11 @@ Signature checks: PDF requires the `%PDF-` prefix; Office formats require the ZI
 
 ### Storage write and DB row creation
 
-Only after validation does the handler call `storageService.uploadFile`, which derives the org-scoped storage path and writes the bytes (local `writeFile` after `mkdir`, or Supabase `upload` with `upsert: false`); a Supabase error becomes `500 STORAGE_UPLOAD_FAILED` (`apps/api/src/services/storage.service.ts:139-166`). The returned `storagePath` is then persisted as the `Document.fileUrl` column via `DocumentService.create` (`apps/api/src/routes/documents/index.ts:258-278`).
+Only after validation does the handler call `storageService.uploadFile`, which derives the org-scoped storage path and resolves its provider. Before either local `writeFile` or Supabase `upload` writes bytes, the handler persists a `DocumentUploadIntent` reservation with the exact tenant, path and provider. A failed reservation prevents the byte write. Local and Supabase provider writes have an abortable five-minute default bound (`STORAGE_UPLOAD_TIMEOUT_MS`, accepted range 100-1800000 ms); the Supabase fetch itself is cancelled on timeout. The configured maximum is below the one-hour orphan-reservation threshold. A Supabase upload error becomes `500 STORAGE_UPLOAD_FAILED`. Document creation stores that written provider; the actor audit and the same-provider reservation transition to `ATTACHED` share one database transaction. If creation fails or the process stops after upload, the reservation remains `RESERVED` rather than attempting an immediate delete when the database commit result may be uncertain. Both cleanup entry points scan reservations older than one hour: a live same-tenant document moves the intent to `ATTACHED`; otherwise the worker creates a provider-pinned `DocumentStorageDeletion` and moves the intent to `CLEANUP_PENDING` in one transaction. A failed queue transaction leaves the reservation for retry and reports a count-only operational alert. The deletion worker separately checks for a live document reference before deleting that path. This is eventual orphan cleanup, not a deleted-item recovery window or proof of backup and object-version purge. Stale-reservation cleanup records `lastReconcileAttemptAt` before each settlement attempt and checks unattempted or less recently attempted reservations first. A failed settlement stays `RESERVED` for retry without indefinitely hiding later orphaned objects.
 
 `DocumentService.create` runs inside a transaction. It first asserts the storage quota, then inserts the `Document` row (`apps/api/src/services/document.service.ts:298-342`). `assertStorageQuota` locks the `Organisation` row (`SELECT ... FOR UPDATE`), reads the subscription plan, sums existing `Document.fileSize` for the org, and rejects with `403 DOCUMENT_STORAGE_QUOTA_EXCEEDED` if the new file would push usage past the plan quota (`apps/api/src/services/document.service.ts:178-216`). Quotas are 2 GiB for ESSENTIALS and 10 GiB for COMPLETE (`apps/api/src/services/document.service.ts:13-18`); a missing subscription is `403 NO_SUBSCRIPTION` (`apps/api/src/services/document.service.ts:193-195`).
 
-If the DB create fails after the bytes were stored, the route compensates by deleting the just-written object (best-effort, logged on failure) and re-throws (`apps/api/src/routes/documents/index.ts:279-289`). On success the handler responds `201` with the public document shape (`apps/api/src/routes/documents/index.ts:291`).
+If the database create fails after the bytes were stored, the reservation remains for reconciliation; the route does not immediately erase a path whose commit result may be uncertain. On success the handler responds `201` with the public document shape.
 
 ```mermaid
 sequenceDiagram
@@ -88,15 +219,16 @@ sequenceDiagram
     Route->>Route: parse metadata (uploadDocumentSchema)
     Route->>Route: verify extension + magic bytes
     Route->>Storage: uploadFile(orgId, filename, buffer, mime)
+    Storage->>DB: reserve tenant/path/provider upload intent
     Storage->>Store: write at "orgId/epoch-uuid-name"
     Store-->>Storage: ok
-    Storage-->>Route: { storagePath }
-    Route->>Doc: create(orgId, userId, { fileUrl: storagePath, fileSize, ... })
+    Storage-->>Route: { storagePath, provider }
+    Route->>Doc: create(orgId, userId, metadata, uploadIntentId, provider)
     Doc->>DB: SELECT Organisation FOR UPDATE
     Doc->>DB: check quota (sum fileSize vs plan)
-    Doc->>DB: INSERT Document (fileUrl = storagePath)
+    Doc->>DB: transaction: insert Document, audit, attach intent
     alt DB create fails
-        Route->>Storage: deleteFile(orgId, storagePath) (compensating)
+        Note over DB: reserved intent remains for delayed reconciliation
         Route-->>Admin: error
     else success
         Doc-->>Route: public document
@@ -113,7 +245,7 @@ sequenceDiagram
 - **Supabase**: the API uses its server-only service role to call `download(path)` on the private bucket. A 10-second default `STORAGE_DOWNLOAD_TIMEOUT_MS` bound (configurable from 100 to 60000 ms) applies an abort signal to the underlying fetch and bounds both provider download and response-body conversion. Provider errors and timeouts map to the generic `500 STORAGE_DOWNLOAD_FAILED`; the response never exposes the provider payload or credential.
 - **Local**: the read resolves the path beneath the configured root, rejects files over 10 MB, maps a missing object to `404 STORAGE_FILE_NOT_FOUND`, and returns a `Buffer` (`apps/api/src/services/storage.service.ts:164-181`). It does not re-ask whether the *deployment* driver is local — the organisation's resolved provider already decided that. (The deployment-scoped `readLocalFile` wrapper, which does ask, is retained for the tenant-isolation tests and must not be used on a per-tenant path.) There is no query-string `_local-download` endpoint.
 
-The route revalidates the caller's exact session and active user/organisation membership after storage I/O, so a concurrent suspension, removal, ownership transfer, or session revocation wins before bytes are sent. Successful responses use `Cache-Control: private, no-store, max-age=0`, `Pragma: no-cache`, an allow-listed MIME type (or `application/octet-stream`), and a sanitised attachment filename (`apps/api/src/routes/documents/index.ts:64-108`). The web client fetches this API route through the authenticated Axios refresh path, creates a same-page object URL only after the response arrives, clicks a temporary download anchor, and revokes the object URL after a bounded 30-second WebKit-safe grace window. It never navigates to provider storage.
+After storage I/O, the route checks that the document still exists in the tenant and reads its current visibility, lifecycle, storage path, written provider and revision. A different path/provider or revision returns 409 without delivering the stale bytes or claiming a prepared download; this matters when an unverified legacy provider is pinned during the read. It then revalidates the exact session, active user/organisation and current Owner/Admin role when that visibility is restricted. A removed draft, withdrawn Member visibility or simultaneous Admin demotion and restriction therefore withholds the fetched bytes. Before sending, it appends a `DocumentDownloadPreparationAudit` row with tenant, document ID, actor, current visibility and time. For a successful Owner/Admin download of a known written provider whose byte size matches the recorded size, the restricted row also records the server-computed SHA-256 and document revision. That pair can support a later Member-suitability decision by the same reviewer for the same bytes and revision; Member rows have neither field. An audit-write failure withholds the bytes. The row means the server prepared an authorised HTTP response; it does not prove client receipt or human inspection. Owner/Admin can page through a metadata-only projection of these events in Governance Audit; the digest and revision are excluded there. File bytes, name, storage path and session token are absent from the audit row. Successful responses use `Cache-Control: private, no-store, max-age=0`, `Pragma: no-cache`, an allow-listed MIME type (or `application/octet-stream`), and a sanitised attachment filename. The web client fetches this API route through the authenticated Axios refresh path, creates a same-page object URL only after the response arrives, clicks a temporary download anchor, and revokes the object URL after a bounded 30-second WebKit-safe grace window. It never navigates to provider storage.
 
 ```mermaid
 sequenceDiagram
@@ -127,26 +259,38 @@ sequenceDiagram
 
     User->>Route: GET /:id/download
     Route->>Doc: getDownloadDescriptor(orgId, id)
-    Doc->>DB: SELECT fileUrl, mimeType, name WHERE id, organisationId
+    Doc->>DB: SELECT fileUrl, storageProvider, mimeType, name WHERE id, organisationId
     DB-->>Doc: tenant-scoped descriptor
     Doc-->>Route: descriptor
-    Route->>Storage: downloadFile(orgId, storagePath)
+    Route->>Storage: downloadFile(orgId, storagePath, writtenProvider)
     Storage->>Storage: assertOrganisationStoragePath
     Storage->>Supa: download(path) with server-only service role
     Supa-->>Storage: file bytes
     Storage-->>Route: Buffer (max 10 MB)
-    Route->>DB: revalidate exact active session and membership
-    DB-->>Route: active session
+    Route->>DB: recheck document existence, Member visibility and storage source
+    DB-->>Route: authorised current record
+    Route->>DB: revalidate exact active session and current role
+    DB-->>Route: authorised active session
+    Route->>DB: append download-preparation audit
+    DB-->>Route: recorded
     Route-->>User: 200 attachment bytes, private/no-store
 ```
 
 ## Delete and the deletion-reconciliation model
 
-Hard-deleting a document must remove both the DB row and the stored object, but those live in two systems that can fail independently. CharityPilot records the intended object removal in a durable outbox table (`DocumentStorageDeletion`) inside the same transaction that deletes the `Document`, then attempts the object removal immediately and falls back to a retry job.
+Ordinary Vault deletion accepts only `DRAFT` documents without a deletion hold and requires a 10–500-character administrator reason. Unreviewed files need an audited classification first; retained lifecycle states cannot use this action and need a separate reviewed retention and erasure path. A draft record and its stored object live in two systems that can fail independently. CharityPilot records the intended object removal in a durable outbox table (`DocumentStorageDeletion`) inside the same transaction that deletes the `Document`, then attempts the object removal immediately and falls back to a retry job. New local/Supabase completions require an active-object absence observation; this does not prove version or backup purge.
 
-`DocumentService.remove` runs a transaction that loads the document (org-scoped, `404` if missing), creates a `DocumentStorageDeletion` row carrying the org id and `storagePath` (the document's `fileUrl`), deletes the `Document`, and returns both the storage path and the new deletion-record id (`apps/api/src/services/document.service.ts:344-365`). Deleting the `Document` cascades to `DocumentStandardLink` rows (`onDelete: Cascade`, `apps/api/prisma/schema.prisma:318`).
+Working drafts cannot be released to Members. A reasoned visibility decision may expose a classified lifecycle state, but new `DRAFT`/`MEMBER_VISIBLE` writes are rejected by the API and migration `20260929340000_draft_member_visibility_guard`'s `NOT VALID` CHECK. Member queries and the post-storage download check also withhold a legacy row in that combination. Existing violating rows are not automatically changed or validated; their contents and audience need review.
 
-The route then performs the inline ("happy path") removal: it calls `storageService.deleteFile` and, on success, immediately marks the deletion record processed via `markStorageDeletionProcessed`. If the object removal throws, it records the failure on the same record via `recordStorageDeletionFailure` (itself wrapped so an outbox-write failure is only logged), and the request still returns `204` (`apps/api/src/routes/documents/index.ts:300-324`). The pending record left behind is what the cleanup job reconciles.
+`DocumentService.remove` runs a transaction that loads the document within the organisation (`404` if missing), refuses a held or non-draft document, and refuses an unknown written provider with `409 DOCUMENT_STORAGE_PROVIDER_UNVERIFIED`. A draft with a current standard link or cited Confluence page returns `409 DOCUMENT_LINKED_EVIDENCE_REVIEW_REQUIRED` before a cleanup job is queued. The conditional delete rechecks that neither relation exists, and migration `20260929420000_document_linked_evidence_delete_guard` refuses even a direct database DELETE while either exists. For an eligible draft the service creates a `DocumentStorageDeletion` row carrying the organisation, storage path and written provider, then conditionally deletes the record. The supplied reason is written to the append-only `RECORD_DELETE` document control event in that transaction and remains readable in the restricted Documents history after the row is gone. A null legacy provider requires source/provider reconciliation before this action; the current organisation preference alone is not evidence of where the bytes were written.
+
+The route then performs the inline removal: it calls `storageService.deleteFile` and, on success, immediately marks the deletion record processed via `markStorageDeletionProcessed`. If the object removal throws, it records the failure on the same record via `recordStorageDeletionFailure` (itself wrapped so an outbox-write failure is only logged), and the request still returns `204`. The pending record left behind is what the cleanup job reconciles.
+
+Both the recurring production scheduler and standalone cleanup job register pinned `supabase` and `local` erasers. Before either erases a primary path, the worker queries for a live `Document` with the same tenant and storage key. A match blocks erasure and remains in retry/dead-letter review; it is not evidence that the live document was deleted. This guard is especially important for failed-upload cleanup when a database create response was ambiguous. Confluence erasure remains a separate provider and decision path.
+
+An explicit Confluence copy-erasure request currently requires a `RETIRED` publication after the CharityPilot document has been deleted. It records the reason, requester and request ID, and commits the Confluence deletion job, publication stamp and `CONFLUENCE_ERASURE_REQUESTED` event in one transaction; an audit-write failure rolls back the request. Ordinary Vault deletion is DRAFT-only, so a formerly published live document needs a separate reviewed removal or withdrawal path before its copy can reach this request. Neither the request event nor a provider job proves the page, versions or backups were purged.
+
+The Owner/Admin Integrations page lists these retained retired-copy references in tenant-scoped, 50-row cursor pages and exposes the separately confirmed request. A reference is not a live provider check, and the returned job ID is not an erasure receipt. Non-retired recorded copies and copies never recorded in CharityPilot require separate inventory and disposition.
 
 ### Historical deletion-worker summary (superseded)
 
@@ -206,6 +350,8 @@ Dead letters are claimed separately for alert delivery. Alert acknowledgement an
 
 Every recovery writes an append-only `DocumentStorageDeletionRecovery` event and updates the deletion row in the same transaction. The event has a random recovery nonce; its `transactionId` is overwritten by the database with `txid_current()`. The deletion's `lastRecoveryId`, nonce, disposition, and timestamp must exactly bind that event. The trigger checks the same transaction ID, tenant, previous attempt count, terminal reason, and previous path. Recovery first locks the dead-letter row with `FOR UPDATE`; timestamp comparison is not used as authorization.
 
+Owner/Admin can page through these retained recovery decisions in Governance Audit. The overview includes the deletion reference, disposition, actor type/user, prior attempt count, terminal reason and decision time; it omits the free-text reason, operator identity, nonce and storage paths. The adjacent storage-deletion feed shows each queue row's current state and cumulative attempt count. Starting with migration 24, a separate append-only attempt feed records pending-deletion retries, dead-letter outcomes and completions in the same database transaction as the queue transition. It does not backfill earlier attempts or record an in-flight provider call that never commits a queue transition. It omits storage paths and provider error narratives. These feeds alone do not prove byte restoration or purge of versions and backups.
+
 There are three explicit dispositions:
 
 - `REQUEUE_UNCHANGED` resets the bounded retry lifecycle. Active, entitled tenant owners and administrators may perform only this disposition through the authenticated route. A permanently rejected path cannot be requeued unchanged.
@@ -241,6 +387,6 @@ The always-on scheduler and the `jobs`-profile cleanup entrypoint both call the 
 ## Cross-references
 
 - [Module & Dependency Graph](02-module-dependency-graph.md) — the documents route group and DocumentService/StorageService.
-- [Data Model Reference](03-data-model.md) — the Document and DocumentStorageDeletion models.
+- [Data Model Reference](03-data-model.md) — the Document, DocumentUploadIntent and DocumentStorageDeletion models.
 - [Reminder Scheduler & Jobs](07-reminder-scheduler.md) — how the storage-cleanup job is scheduled.
 - [Configuration, Environment & the Two-Gate Model](10-config-and-env.md) — the Supabase/local storage environment surface.

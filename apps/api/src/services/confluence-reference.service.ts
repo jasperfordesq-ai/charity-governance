@@ -29,6 +29,7 @@
  * repaired, because updating the number would destroy the only thing the record
  * was for.
  */
+import type { PrismaClient } from '@prisma/client';
 import { AppError } from '../utils/app-error.js';
 import type { ConfluenceClient } from './confluence-client.js';
 import { getPage as getPageDefault, type ConfluencePage } from './confluence-pages.js';
@@ -91,7 +92,7 @@ function toReference(row: Record<string, unknown>): ConfluenceReference {
  * exactly the moment it must not fail.
  */
 export async function citeConfluencePage(
-  prisma: ReferenceClient,
+  prisma: PrismaClient,
   client: ConfluenceClient,
   input: {
     organisationId: string;
@@ -136,21 +137,33 @@ export async function citeConfluencePage(
   }
 
   const citedAt = input.now ?? new Date();
-  const created = await prisma.confluenceReference.create({
-    data: {
+  const created = await prisma.$transaction(async (tx) => {
+    const reference = await tx.confluenceReference.create({
+      data: {
+        organisationId: input.organisationId,
+        documentId: input.documentId,
+        cloudId: input.cloudId,
+        pageId: page.id,
+        // What the page was CALLED when it was cited. Not kept current, for the
+        // same reason the version is not.
+        pageTitle: page.title.slice(0, 500) || page.id,
+        pageVersion: page.version,
+        pageUrl: page.webUrl.length > 0 ? page.webUrl.slice(0, 2000) : null,
+        citedAt,
+        citedById: input.citedById,
+        updatedAt: citedAt,
+      },
+    });
+    await tx.documentControlAudit.create({ data: {
       organisationId: input.organisationId,
       documentId: input.documentId,
-      cloudId: input.cloudId,
-      pageId: page.id,
-      // What the page was CALLED when it was cited. Not kept current, for the
-      // same reason the version is not.
-      pageTitle: page.title.slice(0, 500) || page.id,
-      pageVersion: page.version,
-      pageUrl: page.webUrl.length > 0 ? page.webUrl.slice(0, 2000) : null,
-      citedAt,
-      citedById: input.citedById,
-      updatedAt: citedAt,
-    },
+      actorUserId: input.citedById,
+      kind: 'CONFLUENCE_REFERENCE',
+      previous: 'UNLINKED',
+      next: `CITED:${reference.id}`,
+      reason: 'Confluence page citation added.',
+    } });
+    return reference;
   });
 
   return toReference(created);
@@ -169,6 +182,49 @@ export async function listConfluenceReferences(
 }
 
 /**
+ * Charity-wide review of citations that still belong to live Vault records.
+ * These are references to charity-managed pages, never CharityPilot copies or
+ * candidates for the publication-erasure route. A document with a current
+ * citation cannot be deleted; separately unciting removes that current row,
+ * so this is not a historical provider inventory.
+ */
+export async function listConfluenceReferenceInventory(
+  prisma: PrismaClient,
+  organisationId: string,
+  before?: string,
+) {
+  if (before) {
+    const anchor = await prisma.confluenceReference.findFirst({
+      where: { id: before, organisationId }, select: { id: true },
+    });
+    if (!anchor) throw new AppError(404, 'CONFLUENCE_REFERENCE_CURSOR_NOT_FOUND', 'Reference cursor not found');
+  }
+  const rows = await prisma.confluenceReference.findMany({
+    where: { organisationId, ...(before ? { id: { lt: before } } : {}) },
+    select: { id: true, documentId: true, cloudId: true, pageId: true,
+      pageTitle: true, pageVersion: true, citedAt: true },
+    orderBy: { id: 'desc' }, take: 51,
+  });
+  const selected = rows.slice(0, 50);
+  const documents = selected.length ? await prisma.document.findMany({
+    where: { organisationId, id: { in: selected.map((row) => row.documentId) } },
+    select: { id: true, name: true, lifecycleStatus: true, visibility: true },
+  }) : [];
+  const documentById = new Map(documents.map((row) => [row.id, row]));
+  return {
+    references: selected.map((row) => {
+      const document = documentById.get(row.documentId);
+      return { id: row.id, documentId: row.documentId, recordedSiteId: row.cloudId,
+        recordedPageId: row.pageId, recordedTitle: row.pageTitle,
+        citedVersion: row.pageVersion, citedAt: row.citedAt,
+        documentName: document?.name ?? null, documentLifecycle: document?.lifecycleStatus ?? null,
+        documentVisibility: document?.visibility ?? null };
+    }),
+    nextCursor: rows.length > 50 ? selected[selected.length - 1]!.id : null,
+  };
+}
+
+/**
  * Removes CharityPilot's citation. Touches nothing in Confluence.
  *
  * Worth saying in the name of the thing and again here, because "remove" beside
@@ -177,13 +233,30 @@ export async function listConfluenceReferences(
  * no code path in this module that could reach it.
  */
 export async function removeConfluenceReference(
-  prisma: ReferenceClient,
-  input: { organisationId: string; referenceId: string },
+  prisma: PrismaClient,
+  input: { organisationId: string; referenceId: string; actorUserId: string },
 ): Promise<boolean> {
-  const result = await prisma.confluenceReference.deleteMany({
-    where: { id: input.referenceId, organisationId: input.organisationId },
+  return prisma.$transaction(async (tx) => {
+    const reference = await tx.confluenceReference.findFirst({
+      where: { id: input.referenceId, organisationId: input.organisationId },
+      select: { id: true, documentId: true },
+    });
+    if (!reference) return false;
+    const result = await tx.confluenceReference.deleteMany({
+      where: { id: reference.id, organisationId: input.organisationId, documentId: reference.documentId },
+    });
+    if (result.count === 0) return false;
+    await tx.documentControlAudit.create({ data: {
+      organisationId: input.organisationId,
+      documentId: reference.documentId,
+      actorUserId: input.actorUserId,
+      kind: 'CONFLUENCE_REFERENCE',
+      previous: `CITED:${reference.id}`,
+      next: 'UNLINKED',
+      reason: 'Confluence page citation removed; the page was not changed.',
+    } });
+    return true;
   });
-  return result.count > 0;
 }
 
 /**

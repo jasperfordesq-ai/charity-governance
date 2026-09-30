@@ -363,7 +363,7 @@ test("a web session never meets any of this", async () => {
 test("the summary describes the route, not anything the caller sent", () => {
   assert.equal(
     summarise("DELETE", "/api/v1/board-members/:id"),
-    "Permanently delete: board members (DELETE)",
+    "Delete from active records: board members (DELETE)",
   );
   assert.match(summarise("PATCH", "/api/v1/team/members/:id/role"), /^Change: /);
   assert.match(

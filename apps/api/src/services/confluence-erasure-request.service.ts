@@ -8,9 +8,9 @@
  * Confluence source requires an explicit erasure workflow. This is that
  * workflow, and it is now the ONLY place a `confluence` erasure row is written.
  *
- * Everything downstream is unchanged: Phase 5's dispatcher, its permanence
- * mapping, its dead-lettering and its operator recovery drive the row exactly as
- * before. The change is who asks for it, and when.
+ * The storage-deletion worker rechecks the retired publication link and local
+ * document absence before it calls the Confluence eraser. The dispatcher,
+ * dead-letter and operator recovery paths still drive the queued row.
  *
  * **Only a RETIRED publication can be erased**, which makes this a two-step
  * workflow: delete the document in CharityPilot, then erase the Confluence copy.
@@ -18,14 +18,17 @@
  * the page that a live document still points at.
  */
 import type { PrismaClient } from '@prisma/client';
+import { randomUUID } from 'node:crypto';
 import { AppError } from '../utils/errors.js';
 import { publicationErasureTarget } from './document-publication.service.js';
+import { integrationAuditActor, recordIntegrationAuditEvent } from './integration-audit.service.js';
 
 export type ConfluenceErasureRequest = {
   organisationId: string;
   publicationId: string;
   reason: string;
   requestedById: string;
+  requestId?: string;
   now?: () => Date;
 };
 
@@ -34,6 +37,8 @@ export type RetiredConfluencePublication = {
   documentId: string;
   pageTitle: string | null;
   pageId: string | null;
+  cloudId: string | null;
+  spaceId: string | null;
   retiredAt: Date | null;
   erasureRequestedAt: Date | null;
 };
@@ -43,6 +48,8 @@ const PUBLICATION_SELECT = {
   documentId: true,
   pageTitle: true,
   pageId: true,
+  cloudId: true,
+  spaceId: true,
   retiredAt: true,
   erasureRequestedAt: true,
 } as const;
@@ -59,13 +66,24 @@ const PUBLICATION_SELECT = {
 export async function listRetiredConfluencePublications(
   prisma: PrismaClient,
   organisationId: string,
-): Promise<RetiredConfluencePublication[]> {
-  return prisma.documentPublication.findMany({
-    where: { organisationId, provider: 'confluence', state: 'RETIRED' },
+  before?: string,
+): Promise<{ publications: RetiredConfluencePublication[]; nextCursor: string | null }> {
+  const anchor = before ? await prisma.documentPublication.findFirst({
+    where: { id: before, organisationId, provider: 'confluence', state: 'RETIRED' },
+    select: { id: true },
+  }) : null;
+  if (before && !anchor) {
+    throw new AppError(404, 'CONFLUENCE_PUBLICATION_CURSOR_NOT_FOUND', 'Publication cursor not found');
+  }
+  const rows = await prisma.documentPublication.findMany({
+    where: { organisationId, provider: 'confluence', state: 'RETIRED',
+      ...(anchor ? { id: { lt: anchor.id } } : {}) },
     select: PUBLICATION_SELECT,
-    orderBy: { retiredAt: 'desc' },
-    take: 200,
-  }) as Promise<RetiredConfluencePublication[]>;
+    orderBy: { id: 'desc' },
+    take: 51,
+  }) as RetiredConfluencePublication[];
+  const publications = rows.slice(0, 50);
+  return { publications, nextCursor: rows.length > 50 ? publications[publications.length - 1].id : null };
 }
 
 export async function requestConfluenceErasure(
@@ -98,6 +116,21 @@ export async function requestConfluenceErasure(
       );
     }
 
+    // RETIRED is written after ordinary document removal today, but a state
+    // label alone must not authorise remote destruction if an inconsistent or
+    // future path leaves the CharityPilot document live (including on hold).
+    const liveDocument = await client.document.findFirst({
+      where: { id: publication.documentId, organisationId: input.organisationId },
+      select: { id: true },
+    });
+    if (liveDocument) {
+      throw new AppError(
+        409,
+        'CONFLUENCE_DOCUMENT_STILL_PRESENT',
+        'The CharityPilot document still exists. Review its retention and publication state before requesting erasure of the Confluence copy.',
+      );
+    }
+
     if (publication.erasureDeletionId !== null) {
       throw new AppError(
         409,
@@ -113,9 +146,30 @@ export async function requestConfluenceErasure(
     // than dead-lettering hours later.
     const targetRef = publicationErasureTarget(publication);
 
+    // The source-identity trigger must see a retired publication already
+    // linked to this job. Reserve the ID locally, stamp the publication first,
+    // then insert the job; the transaction rolls both back on any failure.
+    const deletionId = randomUUID();
+    const stamped = await client.documentPublication.updateMany({
+      // `erasureDeletionId: null` is the fence: two administrators clicking at
+      // once produce one erasure, and the loser is told so.
+      where: { id: publication.id, erasureDeletionId: null },
+      data: { erasureRequestedAt: now(), erasureDeletionId: deletionId },
+    });
+
+    if (stamped.count !== 1) {
+      throw new AppError(
+        409,
+        'CONFLUENCE_ERASURE_ALREADY_REQUESTED',
+        'An erasure was requested for this page at the same moment. Only one was queued.',
+      );
+    }
+
     const deletion = await client.documentStorageDeletion.create({
       data: {
+        id: deletionId,
         organisationId: input.organisationId,
+        sourceDocumentId: publication.documentId,
         // NOT how the row is addressed — the eraser reads targetRef. The column
         // is NOT NULL and this is what tells an operator which document a
         // dead-lettered row belongs to, now that the Document row is gone.
@@ -132,21 +186,25 @@ export async function requestConfluenceErasure(
       },
     });
 
-    const stamped = await client.documentPublication.updateMany({
-      // `erasureDeletionId: null` is the fence: two administrators clicking at
-      // once produce one erasure, and the loser is told so rather than silently
-      // queueing a second destruction of the same page.
-      where: { id: publication.id, erasureDeletionId: null },
-      data: { erasureRequestedAt: now(), erasureDeletionId: deletion.id },
+    // The deletion must never commit without the record of who requested it.
+    // If the audit insert fails, Prisma rolls the queued deletion and the
+    // publication stamp back with it.
+    await recordIntegrationAuditEvent(client, {
+      organisationId: input.organisationId,
+      type: 'CONFLUENCE_ERASURE_REQUESTED',
+      actor: await integrationAuditActor(client, {
+        userId: input.requestedById,
+        organisationId: input.organisationId,
+      }),
+      subjectLabel: `Confluence publication ${input.publicationId}`,
+      reason: input.reason,
+      context: {
+        publicationId: input.publicationId,
+        storageDeletionId: deletion.id,
+        provider: 'CONFLUENCE',
+      },
+      requestId: input.requestId,
     });
-
-    if (stamped.count !== 1) {
-      throw new AppError(
-        409,
-        'CONFLUENCE_ERASURE_ALREADY_REQUESTED',
-        'An erasure was requested for this page at the same moment. Only one was queued.',
-      );
-    }
 
     return { deletionId: deletion.id };
   });

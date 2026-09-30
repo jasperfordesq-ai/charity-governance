@@ -15,12 +15,15 @@ import { AnnualReportCard, FinancialControlsCard } from './register-compliance-c
 import { RegisterOverviewPanel } from './register-overview-panel';
 import { RegisterRecordsPanel } from './register-record-lists';
 import { RegisterRecordModal } from './register-record-modal';
+import { RiskControlEvidencePanel } from './risk-control-evidence-panel';
+import { RegisterChangeAudit } from './register-change-audit';
 import { useRegistersWorkflow } from './use-registers-workflow';
 
 export default function RegistersPage() {
   useDocumentTitle('Governance Registers');
   const {
     annual,
+    allRisks,
     annualFilingDisabledReason,
     canManage,
     canSaveAnnual,
@@ -36,6 +39,7 @@ export default function RegistersPage() {
     fetchOrganisationProfile,
     fetchRegisters,
     financial,
+    editingRisk,
     form,
     formDisabledReason,
     formError,
@@ -48,6 +52,7 @@ export default function RegistersPage() {
     missingConditionalRegisterCount,
     modalType,
     openModal,
+    openEditRisk,
     openRegisterCount,
     organisationProfileError,
     planUnavailable,
@@ -112,7 +117,7 @@ export default function RegistersPage() {
         </div>
       )}
     >
-      {registersDataReady && (
+      {registersDataReady && canManage && (
         <RegisterOverviewPanel
           openRegisterCount={openRegisterCount}
           highRiskCount={highRisks.length}
@@ -135,25 +140,29 @@ export default function RegistersPage() {
         />
       ) : (
         <>
-          <RegisterPriorityPanel
+          {canManage ? <RegisterPriorityPanel
             conditionalProfile={conditionalProfile}
             priorities={conditionalRegisterPriorities}
             missingCount={missingConditionalRegisterCount}
             error={organisationProfileError}
             onRetry={fetchOrganisationProfile}
-          />
+          /> : null}
 
           <AppSection
             title="Operational registers"
-            description="Use each register for one decision trail: what happened, what was done, where the board minute sits, and what needs review next."
+            description={canManage
+              ? 'Use each register for one decision trail: what happened, what was done, where the board minute sits, and what needs review next.'
+              : 'Risk and fundraising records are available to Members. Conflict and complaint records require an Owner or Admin.'}
           >
             <RegisterRecordsPanel
+              showSensitiveRegisters={canManage}
               conflicts={conflictsForSelectedYear}
               risks={risksForSelectedYear}
               complaints={complaintsForSelectedYear}
               fundraising={fundraisingForSelectedYear}
               onAdd={openModal}
               onClose={closeRecord}
+              onEditRisk={openEditRisk}
               canManage={canManage}
               closingRecordId={closingRecordId}
               saving={saving}
@@ -177,11 +186,14 @@ export default function RegistersPage() {
               <FinancialControlsCard financial={financial} setFinancial={setFinancial} onSave={saveFinancial} saving={saving} saveDisabled={!canSaveFinancial} canManage={canManage} />
             </div>
           </AppSection>
+          {canManage ? <RiskControlEvidencePanel risks={allRisks} /> : null}
+          {canManage ? <RegisterChangeAudit /> : null}
         </>
       )}
 
       <RegisterRecordModal
         modalType={modalType}
+        editingRisk={Boolean(editingRisk)}
         closeModal={closeModal}
         form={form}
         updateForm={updateForm}
