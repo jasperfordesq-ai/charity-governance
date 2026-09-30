@@ -47,6 +47,16 @@ path and retains the earlier unresolved disposal reservation unchanged. This is
 still an internal orchestration path, not database enforcement across all hold
 writers. Outcome publication/release, safe cancellation and replay remain open.
 
+Hold outcome preservation now has a strict minimal fact schema and a separate
+authenticated `COMPLAINT_HOLD_OUTCOME` envelope with its own encryption domain
+and `hold-outcomes/` object namespace. Create-only retries retain original bytes;
+published readers require an independently trusted digest and never reconstruct
+missing referenced bytes. The real database protocol test also preserves and
+opens its committed outcome through real encryption and synthetic S3/KMS.
+This storage primitive does not publish a journal entry or release a reservation.
+Provider custody, published-outcome verification and all-writer enforcement remain
+separate requirements; no live provider configuration or activation is added.
+
 ## Inactive complaint database execution gate
 
 The next preservation-writer slice adds `ComplaintHoldRecoveryPreparation` and

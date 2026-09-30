@@ -1,5 +1,11 @@
 # CharityPilot Full-Platform Remediation Audit
 
+> DPO-05 hold outcome storage: strict minimal facts and separately authenticated
+> hold-outcome envelopes now support create-only ciphertext preservation and
+> exact-byte recovery reads. This is an inactive storage primitive. A locally
+> computed digest is not an independent published head; journal publication,
+> reservation release, cancellation/replay and provider custody remain open.
+
 > DPO-05 hold execution composition: the internal execution service now verifies
 > the reserved published preparation and unchanged current writer/head before
 > applying the atomic local hold/outcome transaction. Retry retains one event

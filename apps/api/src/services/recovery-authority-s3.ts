@@ -7,6 +7,7 @@ import { validateRecoveryAuthorityEntry } from './recovery-authority-journal.js'
 import { inspectRecoveryPreparationEnvelope } from './recovery-preparation-envelope.js';
 import { inspectHoldPreparationEnvelope } from './hold-recovery-envelope.js';
 import { inspectRecoveryOutcomeEnvelope } from './recovery-outcome-envelope.js';
+import { inspectHoldOutcomeEnvelope } from './hold-outcome-envelope.js';
 import { validateRecoveryControlValue, type RecoveryControlStore, type RecoveryControlValue } from './recovery-operation-reservation.js';
 
 const identity = z.string().regex(/^[A-Za-z0-9_-]{1,120}$/);
@@ -203,6 +204,30 @@ export class S3AuthorityObjectStore implements AuthorityObjectStore, AuthorityHe
 
   async createHoldPreparation(operationId: string, envelope: string) {
     const request = this.holdPreparationRequest(operationId); this.checkHoldPreparation(operationId, envelope);
+    return this.writeObject(request, envelope, { IfNoneMatch: '*' }, 32768);
+  }
+
+  private holdOutcomeRequest(operationId: string) {
+    const request = this.replayRequest(operationId);
+    return { ...request, Key: `hold-outcomes/${this.config.installationId}/${this.config.organisationId}/${operationId}.json` };
+  }
+
+  private checkHoldOutcome(operationId: string, envelope: string) {
+    const context = inspectHoldOutcomeEnvelope(envelope);
+    if (context.installationId !== this.config.installationId || context.organisationId !== this.config.organisationId
+      || context.operationId !== operationId || context.keyId !== this.config.replayKeyArn) {
+      throw new Error('Hold outcome envelope scope mismatch');
+    }
+  }
+
+  async readHoldOutcome(operationId: string) {
+    const object = await this.readObject(this.holdOutcomeRequest(operationId), undefined, 32768);
+    if (!object) return null;
+    this.checkHoldOutcome(operationId, object.body); return object.body;
+  }
+
+  async createHoldOutcome(operationId: string, envelope: string) {
+    const request = this.holdOutcomeRequest(operationId); this.checkHoldOutcome(operationId, envelope);
     return this.writeObject(request, envelope, { IfNoneMatch: '*' }, 32768);
   }
 

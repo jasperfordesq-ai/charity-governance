@@ -20,6 +20,7 @@ import { readCommittedComplaintHoldOutcome } from '../apps/api/src/services/comp
 import { executePublishedComplaintHold } from '../apps/api/src/services/execute-published-complaint-hold.ts';
 import { preserveHoldPreparation } from '../apps/api/src/services/hold-recovery-envelope.ts';
 import { publishVerifiedHoldPreparation } from '../apps/api/src/services/published-hold-preparation.ts';
+import { preserveHoldOutcome, readVerifiedHoldOutcome } from '../apps/api/src/services/hold-outcome-envelope.ts';
 
 // Disposable fixture only: real PostgreSQL and crypto, synthetic S3/KMS transport.
 // This proves the complaint gate, not provider custody or all-writer fencing.
@@ -265,6 +266,13 @@ try {
   await prisma.$disconnect();
   assert.deepEqual(await executeHold(), { ...result, replayed: true });
   assert.equal(await prisma.complaintHoldEvent.count({ where: { complaintId: 'published-hold-complaint' } }), 1);
+  assert.equal((await hs.readControl()).activeOperation.operationId, hc.operationId);
+  const committedHold = await readCommittedComplaintHoldOutcome(prisma, {
+    ...hb, operationId: hc.operationId });
+  const preservedHold = await preserveHoldOutcome(committedHold.body, hc, keys, hs);
+  assert.equal((await preserveHoldOutcome(committedHold.body, hc, keys, hs)).digest, preservedHold.digest);
+  assert.equal((await readVerifiedHoldOutcome(preservedHold.digest, hc, keys, hs)).body, committedHold.body);
+  // This digest is local test evidence only, not a published independent head.
   assert.equal((await hs.readControl()).activeOperation.operationId, hc.operationId);
   assert.equal((await store.readControl()).activeOperation.operationId, staleContext.operationId);
   process.stdout.write('complaint-recovery-protocol-composition-verified');
