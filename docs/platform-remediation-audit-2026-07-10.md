@@ -1,5 +1,18 @@
 # CharityPilot Full-Platform Remediation Audit
 
+> **March Governance Policy Index source found, 2026-09-30:** retained
+> approval email attachment and external Policies DOCX have identical
+> extracted main-document text. The signed-in Owner Vault shows all 63
+> records but no full March DOCX, contrary to its text stub's `uploaded` and
+> `safe to delete` narrative. The August index is a distinct unadopted draft.
+> Preserve the stub's unique record note, verify a separate original record,
+> and seek controller lifecycle/owner/audience decisions before live changes.
+> Private proposal is Board/HISTORICAL/RESTRICTED for the stub. Eighteen of
+> 63 rows have source evidence, 17 have some proposal, 46 have none, all
+> PENDING. No live metadata changed. Private evidence:
+> `.charitypilot-private/text-stub-source-review-2026-09-30.md`.
+
+
 > **Garda Vetting adopted-text mismatch, 2026-09-30:** exact backup Vault
 > DOCX matches the plain local policy and the plain March email attachment's
 > extracted body. The retained approval schedule names item 6 as the ECRIS

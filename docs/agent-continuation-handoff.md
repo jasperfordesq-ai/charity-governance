@@ -1,5 +1,19 @@
 # CharityPilot Agent Continuation Handoff
 
+> **March Governance Policy Index source found, 2026-09-30:** the retained
+> 21 March approval email and external Policies folder each hold a March
+> Index DOCX with identical extracted main-document body tokens, despite
+> different binary hashes. The live Owner Vault loaded 63/63 records and has
+> only a near-complete text stub (with unique 22 September provenance note),
+> not the full March DOCX. Its `uploaded`/`safe to delete` narrative is
+> contradicted. The August DOCX is a separate unadopted index. Private
+> worksheet proposes Board/HISTORICAL/RESTRICTED for the stub, no successor
+> until the original has a verified Vault record and controller decision.
+> Eighteen of 63 rows have source evidence, 17 have some proposal, 46 have
+> none, all 63 PENDING. No live metadata changed. Private evidence:
+> `.charitypilot-private/text-stub-source-review-2026-09-30.md`.
+
+
 > **Garda Vetting adopted-text mismatch, 2026-09-30:** the exact backup Vault
 > DOCX is byte-identical to the plain local policy and its extracted body
 > matches the plain 21 March email attachment. The retained resolution email
