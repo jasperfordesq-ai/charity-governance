@@ -56,6 +56,7 @@ export class ComplaintRecoveryPreparationStore {
         throw new Error('Recovery preparation requires unclaimed unwithdrawn Owner review');
       }
       const { claim: _claim, withdrawal: _withdrawal, ...authorization } = auth;
+      await tx.$queryRaw`SELECT id FROM "ComplaintRecord" WHERE id=${auth.complaintId} AND "organisationId"=${organisationId} FOR UPDATE`;
       const complaint = await tx.complaintRecord.findFirst({ where: { id: auth.complaintId, organisationId },
         select: { id: true, organisationId: true, revision: true, status: true, removedAt: true,
           removalId: true, reviewedByBoard: true, boardMinuteReference: true } });
@@ -83,7 +84,11 @@ export class ComplaintRecoveryPreparationStore {
         removal, resolution, removalResolution, latestHold };
       const { authorizationId: _authorizationId, ...payload } = facts;
       return this.persistInTransaction(tx, organisationId, actorUserId, JSON.parse(JSON.stringify(payload)));
-    }, { isolationLevel: 'Serializable' });
+    // Snapshot isolation can retain a pre-lock view after waiting for a hold
+    // writer. ReadCommitted observes committed changes after the charity lock;
+    // hold/policy/review writers share that lock, and the primary row is locked
+    // explicitly. This is fresh local capture, not a remote execution fence.
+    }, { isolationLevel: 'ReadCommitted' });
   }
 
   private async persistInTransaction(tx: Prisma.TransactionClient, organisationId: string, actorUserId: string, raw: unknown) {

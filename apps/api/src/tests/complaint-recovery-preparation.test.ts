@@ -126,7 +126,7 @@ test('capture selects decision fields and persists in one transaction; retries d
     complaintRecoveryPreparation: { findUnique: async () => saved,
       create: async ({ data }: { data: Record<string, unknown> }) => { writes++; saved = { ...data, id: 'captured' }; return saved; } },
   };
-  const client = { $transaction: async (work: (value: typeof tx) => unknown, options: { isolationLevel: string }) => { assert.equal(options.isolationLevel, 'Serializable'); transactions++; return work(tx); } } as unknown as PrismaClient;
+  const client = { $transaction: async (work: (value: typeof tx) => unknown, options: { isolationLevel: string }) => { assert.equal(options.isolationLevel, 'ReadCommitted'); transactions++; return work(tx); } } as unknown as PrismaClient;
   const store = new ComplaintRecoveryPreparationStore(client);
   const request = { installationId: source.installationId, operationId: source.operationId,
     writerEpoch: source.writerEpoch, sourceRevision: source.sourceRevision, authorizationId: source.authorization.id };

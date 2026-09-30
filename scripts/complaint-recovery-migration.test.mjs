@@ -19,7 +19,7 @@ test('complaint recovery migration preserves records and enforces reviewed remov
   validateLocalDockerEndpoint({ endpoint: endpoint.Host, skipTlsVerify: endpoint.SkipTLSVerify }, process.env);
   const docker = (args, input) => spawnSync('docker', ['--host', endpoint.Host, ...args],
     { input, encoding: 'utf8', timeout: 30_000, maxBuffer: 4 * 1024 * 1024 });
-  const started = docker(['run', '--detach', '--network', 'none', '--name', `charitypilot-complaint-proof-${randomUUID()}`,
+  const started = docker(['run', '--detach', '--publish', '127.0.0.1::5432', '--name', `charitypilot-complaint-proof-${randomUUID()}`,
     '--tmpfs', '/var/lib/postgresql/data', '--env', 'POSTGRES_PASSWORD=synthetic-complaint-proof',
     'postgres@sha256:5660c2cbfea50c7a9127d17dc4e48543eedd3d7a41a595a2dfa572471e37e64c']);
   assert.equal(started.status, 0, started.stderr);
@@ -38,6 +38,10 @@ test('complaint recovery migration preserves records and enforces reviewed remov
       await new Promise(resolve => setTimeout(resolve, 100));
     }
     assert.ok(ready);
+    const port = docker(['port', container, '5432/tcp']);
+    assert.equal(port.status, 0, port.stderr);
+    assert.match(port.stdout.trim(), /^127\.0\.0\.1:[0-9]+$/);
+    const captureUrl = `postgresql://postgres:synthetic-complaint-proof@${port.stdout.trim()}/postgres`;
     const names = readdirSync(migrations, { withFileTypes: true }).filter(e => e.isDirectory()).map(e => e.name).sort();
     assert.ok(names.includes(target));
     for (const name of names.filter(name => name < target)) {
@@ -237,6 +241,10 @@ test('complaint recovery migration preserves records and enforces reviewed remov
     sql(claim('stale-hold-claim','before-new-hold'),/unchanged unheld revision/);
     sql(authorize('fresh-purge',{holdRevision:4,policy:'final-review-policy'}));
     proveComplaintRecoveryPreparation(sql, 'fresh-purge');
+    const captureProof = spawnSync(process.execPath, ['--import', 'tsx', 'scripts/complaint-capture-postgres-proof.mjs'],
+      { cwd: fileURLToPath(new URL('../', import.meta.url)), input: captureUrl, encoding: 'utf8', timeout: 40000 });
+    assert.equal(captureProof.status, 0, captureProof.stderr);
+    assert.equal(captureProof.stdout.trim(), 'capture-retry-and-preservation-race-verified');
     sql(claim('wrong-owner','fresh-purge','expired','ordinary-admin'),/matching unwithdrawn Owner authority/);
     // A later transaction failure must roll back the claim, delete and audit.
     sql(`BEGIN; ${claim('rolled-back')} SELECT 1/0; COMMIT;`,/division by zero/);

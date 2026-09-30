@@ -3760,7 +3760,7 @@ unfinished; no production migration or activation has occurred.
 ### Fresh complaint preparation capture implemented locally
 
 The internal preparation store now captures explicitly selected complaint decision
-rows and persists them in one Serializable transaction with charity/Owner locks.
+rows and persists them in one ReadCommitted transaction with charity/Owner and primary-record locks.
 It refuses withdrawn/claimed reviews and changed or ambiguous current policies.
 Retries validate the existing exact binding/digest and return original preparation;
 they do not silently recapture newer facts. The public raw-facts persistence method
@@ -3770,3 +3770,20 @@ migration, not the newly added Prisma capture path or its concurrency schedules.
 Actual Prisma/PostgreSQL capture and race acceptance remain required. No route,
 claim or worker uses this store; external epoch reservation/encryption and live
 field-purpose approval remain open.
+
+Real Prisma/PostgreSQL verification reproduced a stale-snapshot race in the prior
+Serializable capture: a holder committed preservation while capture waited, yet
+capture could retain its earlier snapshot. This was local, inactive code. Capture
+now takes the shared charity lock before reading under ReadCommitted, and locks
+the primary complaint row explicitly. The integration fixture verifies actual lock
+contention, not timing alone. The fixture database has a dynamically allocated
+loopback-only port so the real Prisma client can connect; endpoint and binding are
+checked and all records are synthetic. This does not alter personal-server ports.
+The prior mocked-only capture statement is historical; the corrected PostgreSQL
+run is being verified separately. External fencing and live activation remain open.
+
+The corrected full PostgreSQL fixture completed successfully in 72.8 seconds,
+including real Prisma capture/reconnect and the preservation race. The race
+assertion failed before the isolation/locking correction and now passes. API build
+and nine focused tests also passed. This supersedes the running-proof note above;
+it does not establish independent host fencing or authorize deployment/erasure.
