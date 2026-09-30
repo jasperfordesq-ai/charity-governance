@@ -354,3 +354,23 @@ navigation. A native GET submit is never accepted as a passing form journey.
 uploads the HTML report and failure artifacts. It runs on `workflow_dispatch`,
 relevant pull requests and direct pushes to `master`. CI supplies no DSN,
 database password, UUID or reset confirmation; the runner creates them per run.
+
+## Isolated primary-purge worker proof
+
+Run the guarded local worker proof before the two browser journeys:
+
+```powershell
+node scripts/run-isolated-e2e.mjs --runner-purge-worker-proof -- tests/document-purge.spec.ts tests/document-recovery.spec.ts
+```
+
+The runner uses its exact attested API container and verified local Docker
+endpoint. The script independently verifies both database connections and the
+file-store tmpfs before creating synthetic data. Remote-disposable and deployed
+QA modes are rejected. The proof checks exact local byte absence, competing
+workers, retained bytes after timeout, retry and an untouched control file.
+Synthetic removal dates exercise recovery expiry. Retry uses the real database
+deadline (about five minutes), including early refusal; no policy or host clock
+is changed. Browser setup resets the
+synthetic database afterward; runner cleanup destroys its tmpfs storage.
+The browser purge journey still tests a pending handoff independently of this
+worker proof. Neither proves external-provider versions or backup erasure.

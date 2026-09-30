@@ -278,13 +278,28 @@ sequenceDiagram
 
 ## Delete and the deletion-reconciliation model
 
-Ordinary Vault deletion accepts only `DRAFT` documents without a deletion hold and requires a 10–500-character administrator reason. Unreviewed files need an audited classification first; retained lifecycle states cannot use this action and need a separate reviewed retention and erasure path. A draft record and its stored object live in two systems that can fail independently. CharityPilot records the intended object removal in a durable outbox table (`DocumentStorageDeletion`) inside the same transaction that deletes the `Document`, then attempts the object removal immediately and falls back to a retry job. New local/Supabase completions require an active-object absence observation; this does not prove version or backup purge.
+Current source (30 September 2026): ordinary Vault removal retains the Document
+and its exact bytes in Deleted Items under an approved policy. It accepts only
+eligible, unheld drafts, records the actor/reason and recovery deadline, and
+withdraws sharing approval. No storage job is created by removal. The route
+returns 200 with the retained-removal result. This newer workflow is locally
+implemented; deployment and live acceptance remain open.
+
+Permanent primary disposal requires a separate Owner authorization and atomic
+claim after both deadlines, with current policy, revision, holds and links
+rechecked. The claim commits one provider-pinned cleanup job and retained audit
+before removing the recoverable Document. Only a later worker observation can
+establish primary-object absence. Versions, Confluence, exports and backups
+remain separate disposition targets. See [recovery and purge contract](document-recovery-and-purge.md)
+for the current implementation checkpoints and remaining acceptance gates.
 
 Working drafts cannot be released to Members. A reasoned visibility decision may expose a classified lifecycle state, but new `DRAFT`/`MEMBER_VISIBLE` writes are rejected by the API and migration `20260929340000_draft_member_visibility_guard`'s `NOT VALID` CHECK. Member queries and the post-storage download check also withhold a legacy row in that combination. Existing violating rows are not automatically changed or validated; their contents and audience need review.
 
-`DocumentService.remove` runs a transaction that loads the document within the organisation (`404` if missing), refuses a held or non-draft document, and refuses an unknown written provider with `409 DOCUMENT_STORAGE_PROVIDER_UNVERIFIED`. A draft with a current standard link or cited Confluence page returns `409 DOCUMENT_LINKED_EVIDENCE_REVIEW_REQUIRED` before a cleanup job is queued. The conditional delete rechecks that neither relation exists, and migration `20260929420000_document_linked_evidence_delete_guard` refuses even a direct database DELETE while either exists. For an eligible draft the service creates a `DocumentStorageDeletion` row carrying the organisation, storage path and written provider, then conditionally deletes the record. The supplied reason is written to the append-only `RECORD_DELETE` document control event in that transaction and remains readable in the restricted Documents history after the row is gone. A null legacy provider requires source/provider reconciliation before this action; the current organisation preference alone is not evidence of where the bytes were written.
-
-The route then performs the inline removal: it calls `storageService.deleteFile` and, on success, immediately marks the deletion record processed via `markStorageDeletionProcessed`. If the object removal throws, it records the failure on the same record via `recordStorageDeletionFailure` (itself wrapped so an outbox-write failure is only logged), and the request still returns `204`. The pending record left behind is what the cleanup job reconciles.
+The obsolete `DocumentService.remove` immediate-delete path has been removed.
+`DocumentRecoveryService` handles retained removal and restoration;
+`DocumentPurgeService` handles reviewed authority and claim. Unknown legacy
+providers still require reconciliation; the charity's current storage preference
+alone does not establish where existing bytes were written.
 
 Both the recurring production scheduler and standalone cleanup job register pinned `supabase` and `local` erasers. Before either erases a primary path, the worker queries for a live `Document` with the same tenant and storage key. A match blocks erasure and remains in retry/dead-letter review; it is not evidence that the live document was deleted. This guard is especially important for failed-upload cleanup when a database create response was ambiguous. Confluence erasure remains a separate provider and decision path.
 

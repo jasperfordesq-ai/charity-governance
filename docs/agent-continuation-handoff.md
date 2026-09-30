@@ -2,6 +2,30 @@
 
 Last updated: 2026-09-30
 
+Local primary-purge worker checkpoint, 30 September 2026: the guarded runner
+now executes a real worker proof inside its exact attested API container, with
+two identity-verified PostgreSQL connections and local tmpfs files. The proof
+passes: retained removal/claim preserve bytes; only one competing worker
+dispatches; completion observes actual filesystem absence; repeated processing
+is inert; injected timeout preserves bytes and records a retry; early retry is
+refused; normal retry after the real database deadline removes the intended file.
+An unrelated control file remains byte-identical. Recovery expiry alone uses
+synthetic dates in the disposable fixture; the retry clock/deadline is real.
+Both reviewed-purge and exact-byte recovery browser journeys then pass after
+their database reset. Runner exit 0 confirms the managed run and cleanup;
+52 runner/attestation tests and E2E TypeScript also pass.
+
+The initial proof incorrectly counted successful dispatches in the failed-attempt
+counter, then tried to advance the application clock past a database-clock gate.
+Both test assumptions were corrected without weakening production controls.
+Ordinary browser probes now use origin-fenced browser fetch, and policy selection
+uses its evidence reference rather than a hard-coded revision number.
+
+This proves local primary-file disposal only. Supabase/version mutation, retained
+per-store disposition evidence, Confluence/export/backup handling, backup restore
+reconciliation, other record classes, deployment and live/DPO acceptance remain
+open. No live policy was activated and no deployment occurred in this checkpoint.
+
 R3 dashboard review and persisted browser handoff pass. The six-store form has
 explicit Owner confirmation; cancellation and permanent primary disposal are
 separate reviews, and history remains browsable after purge. Real disposable

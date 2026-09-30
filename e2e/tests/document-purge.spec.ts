@@ -86,8 +86,12 @@ test('Owner reviews, cancels and executes primary disposal with retained history
   const result = await claim(secondEvidence, secondId, 200);
   const deletionId = (await result.json()).data.deletionId as string;
   await expect(retained).toHaveCount(0);
-  const retry = await ownerPage.request.post(`${browserOriginFence.apiOrigin}/api/v1/documents/purge-authorizations/${secondId}/claim`, { headers: { origin: browserOriginFence.webOrigin }, data: { confirmPermanentPurge: true } });
-  expect(retry.status()).toBe(200); expect((await retry.json()).data.deletionId).toBe(deletionId);
+  const retry = await ownerPage.evaluate(async url => {
+    const response = await fetch(url, { method: 'POST', credentials: 'include', headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ confirmPermanentPurge: true }) });
+    return { status: response.status, body: await response.json() };
+  }, `${browserOriginFence.apiOrigin}/api/v1/documents/purge-authorizations/${secondId}/claim`);
+  expect(retry.status).toBe(200); expect(retry.body.data.deletionId).toBe(deletionId);
   // This stack deliberately has no cleanup worker. Verify the durable handoff,
   // not physical erasure; a separate worker integration test must establish that.
   const job = await withDb(client => client.query(`SELECT state,"activeObjectAbsentAt" FROM "DocumentStorageDeletion" WHERE id=$1 AND "sourceDocumentId"=$2`, [deletionId, id]));

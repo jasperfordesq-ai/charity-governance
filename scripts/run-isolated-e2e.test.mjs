@@ -357,6 +357,9 @@ test("local run identity pins the disposable contract and creates no reusable cr
 });
 
 test("runner arguments reserve runner options and pass Playwright arguments through exactly", () => {
+  assert.deepEqual(parseRunnerArgs(['--runner-purge-worker-proof', '--', 'tests/document-purge.spec.ts']), {
+    validateOnly: false, purgeWorkerProof: true, playwrightArgs: ['tests/document-purge.spec.ts'],
+  });
   assert.deepEqual(
     parseRunnerArgs([
       "--validate-only",
@@ -374,6 +377,15 @@ test("runner arguments reserve runner options and pass Playwright arguments thro
     () => parseRunnerArgs(["--runner-unknown"]),
     /Unknown isolated E2E runner option/,
   );
+});
+
+test('purge worker proof refuses every non-local execution mode before running commands', async () => {
+  for (const env of [{ E2E_DEPLOYED_QA: 'true' }, { E2E_EXECUTION_MODE: 'remote-disposable' }]) {
+    let ran = false;
+    await assert.rejects(runIsolatedE2e(['--runner-purge-worker-proof'], { env,
+      runCommand: async () => { ran = true; } }), /locally attested disposable stack/);
+    assert.equal(ran, false);
+  }
 });
 
 test("every runner mode has a bounded default deadline and rejects malformed explicit timeouts", () => {

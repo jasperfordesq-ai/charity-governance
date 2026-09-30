@@ -56,8 +56,9 @@ test('a draft enters Deleted Items and restores with identical bytes and retaine
   expect(deadline.rows[0].recoveryUntil).toEqual(retained.rows[0].recoveryUntil);
   // Owner ordinary detail/download are denied while the record is retained.
   for (const suffix of ['', '/download']) {
-    const response = await ownerPage.request.get(`${browserOriginFence.apiOrigin}/api/v1/documents/${id}${suffix}`);
-    expect(response.status()).toBe(404);
+    const status = await ownerPage.evaluate(async url => (await fetch(url, { credentials: 'include' })).status,
+      `${browserOriginFence.apiOrigin}/api/v1/documents/${id}${suffix}`);
+    expect(status).toBe(404);
   }
   const panel = ownerPage.getByRole('region', { name: 'Deleted Items', exact: true });
   await panel.getByRole('button', { name: 'Load Deleted Items' }).click();
@@ -78,7 +79,7 @@ test('a draft enters Deleted Items and restores with identical bytes and retaine
   const audit = await withDb(client => client.query(`SELECT kind FROM "DocumentControlAudit" WHERE "documentId"=$1 AND kind IN ('RECORD_REMOVE','RECORD_RESTORE') ORDER BY "occurredAt"`, [id]));
   expect(audit.rows.map(row => row.kind)).toEqual(['RECORD_REMOVE', 'RECORD_RESTORE']);
   await policies.getByRole('button', { name: 'Load policy history' }).click();
-  const current = policies.getByRole('listitem').filter({ hasText: 'Revision 3: Approved' });
+  const current = policies.getByRole('listitem').filter({ has: ownerPage.getByText('Approval evidence: SYNTHETIC-POLICY-002', { exact: true }) });
   await current.getByRole('button', { name: 'Review withdrawal' }).click();
   await reliableFill(ownerPage.getByLabel('Withdrawal evidence reference'), 'SYNTHETIC-WITHDRAW-001');
   await reliableFill(ownerPage.getByLabel('Reason for policy withdrawal'), 'Withdraw the policy after this synthetic recovery rehearsal.');

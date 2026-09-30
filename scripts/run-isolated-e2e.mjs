@@ -80,6 +80,8 @@ export const BUILD_CONTEXT_MANIFEST = Object.freeze([
   },
   { path: "scripts/clean-next-export.cjs", type: "file" },
   { path: "scripts/next-build-fs-retry.cjs", type: "file" },
+  { path: "scripts/verify-document-purge-worker.mjs", type: "file" },
+  { path: "e2e/helpers/database-safety.cjs", type: "file" },
   { path: "e2e/docker/Dockerfile", type: "file" },
   { path: "e2e/docker/init-disposable-database.sql", type: "file" },
   { path: "e2e/docker/tcp-gateway.mjs", type: "file" },
@@ -162,6 +164,7 @@ const FORBIDDEN_DOCKER_OVERRIDE_KEYS = Object.freeze([
 export function parseRunnerArgs(argv) {
   const playwrightArgs = [];
   let validateOnly = false;
+  let purgeWorkerProof = false;
   let passthrough = false;
 
   for (const arg of argv) {
@@ -173,13 +176,17 @@ export function parseRunnerArgs(argv) {
       validateOnly = true;
       continue;
     }
+    if (!passthrough && arg === "--runner-purge-worker-proof") {
+      purgeWorkerProof = true;
+      continue;
+    }
     if (!passthrough && arg.startsWith("--runner-")) {
       throw new Error(`Unknown isolated E2E runner option: ${arg}`);
     }
     playwrightArgs.push(arg);
   }
 
-  return { validateOnly, playwrightArgs };
+  return { validateOnly, playwrightArgs, ...(purgeWorkerProof ? { purgeWorkerProof: true } : {}) };
 }
 
 export function resolveOverallRunnerTimeoutMs(env = process.env, override) {
@@ -2392,6 +2399,9 @@ export async function runIsolatedE2e(
 ) {
   const env = options.env ?? process.env;
   const parsed = parseRunnerArgs(argv);
+  if (parsed.purgeWorkerProof && (env.E2E_DEPLOYED_QA === 'true' || env.E2E_EXECUTION_MODE === 'remote-disposable')) {
+    throw new Error('Purge worker proof requires the locally attested disposable stack.');
+  }
   let activeChild = null;
   let receivedSignal = null;
   let cleanupStarted = false;
@@ -2907,7 +2917,7 @@ export async function runIsolatedE2e(
       { env: composeChildEnv, timeoutMs: 780_000 },
     );
     shutdownController.signal.throwIfAborted();
-    await (
+    const runningAttestation = await (
       options.captureRunningContainerAttestation ??
       captureRunningContainerAttestation
     )(
@@ -2918,6 +2928,14 @@ export async function runIsolatedE2e(
       builtAttestation,
     );
     shutdownController.signal.throwIfAborted();
+    if (parsed.purgeWorkerProof) {
+      const apiContainer = runningAttestation?.containerIds?.api;
+      if (!/^[0-9a-f]{64}$/u.test(apiContainer ?? '')) throw new Error('Purge worker proof requires an attested API container ID.');
+      await runCommand('docker', ['--host', validatedDockerEndpoint, 'exec', apiContainer,
+        'node', '--import', 'tsx', 'scripts/verify-document-purge-worker.mjs', identity.instanceId],
+        { env: composeChildEnv, timeoutMs: 480_000 });
+      shutdownController.signal.throwIfAborted();
+    }
     await Promise.all([
       waitForEndpoint(
         `${LOCAL_CONTRACT.apiUrl}/api/v1/health`,
