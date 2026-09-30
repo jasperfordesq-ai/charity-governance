@@ -2,6 +2,15 @@
 
 Last updated: 2026-09-30
 
+Hosted follow-up: f9857ed6 CI 36702789366 failed the web audit-summary test,
+which assumed there could be no remaining decorative-page findings. The
+refreshed audit flags Minute Book. The assertion now follows the recorded
+route findings. Workspace test caching is disabled because source-wiring tests
+also read repository-level docs/scripts outside package cache inputs. A direct
+uncached web run passes all 542 tests; broader uncached verification is recorded
+in the private release evidence. The earlier root-command success included
+cached workspace results and is not proof of this changed audit assertion.
+
 Data Requests release-gate repair: request state, API operations and stale-response
 guards now live in a route-local hook, with shared typed records separate from
 the 381-line display route. Rendered forms and request handling are preserved.

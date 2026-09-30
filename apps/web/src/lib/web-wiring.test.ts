@@ -2498,10 +2498,17 @@ test('platform audit distinguishes decorative pills from functional toggles and 
 test('platform audit summary follows the remaining route findings instead of stale decorative-pill wording', () => {
   const audit = repo('docs/platform-completion-audit.md');
 
-  assert.doesNotMatch(audit, /visual treatment on decorative or pill-heavy pages/i);
-  assert.doesNotMatch(audit, /visual treatment on flagged P0 routes/i);
+  const decorativeRouteRows = audit.split('\n').filter((line) =>
+    /^\| P[012] \| `\//.test(line) && line.includes('decorative or pill-heavy'));
+  if (decorativeRouteRows.length > 0) {
+    assert.match(audit, /visual treatment on decorative or pill-heavy pages/i);
+    assert.match(audit, /visual treatment on flagged P0 routes/i);
+  } else {
+    assert.doesNotMatch(audit, /visual treatment on decorative or pill-heavy pages/i);
+    assert.doesNotMatch(audit, /visual treatment on flagged P0 routes/i);
+    assert.match(audit, /deployed browser QA for every route/i);
+  }
   assert.doesNotMatch(audit, /Convert remaining route-local state UI/i);
-  assert.match(audit, /deployed browser QA for every route/i);
   assert.match(audit, /Use deployed QA findings to fix route-specific state or visual regressions/i);
 });
 
