@@ -2,6 +2,19 @@
 
 Last updated: 2026-09-30
 
+The revised Nikita goal is active: finish, deploy and verify technical
+remediation, prepare policy decisions and provide an evidence/acceptance pack.
+The private `nikita-review-pack-2026-09-30.md` now contains nine proposed
+decisions, a candidate schedule crosswalk and the four requested review
+locations. No proposal is approved or sent. The remaining engineering
+contract is [Document recovery and purge](architecture/document-recovery-and-purge.md).
+The current ordinary draft deletion still removes the row and starts byte
+cleanup; true trash/restore and full purge remain unimplemented. Work through
+R1-R5 in that contract, including all ordinary read surfaces, concurrency,
+downstream copies and backup reconciliation. Approval gates live policy
+activation, not synthetic implementation. Do not equate cleanup retries with
+restoration or a policy ledger with completed DPO-05 remediation.
+
 2026-09-30 resumed live evidence: two 28 September replay alerts correlate in
 the retained former API logs with logout, a rejected session check and a
 rejected refresh milliseconds later. That sequence fits the former web
