@@ -1,3 +1,4 @@
+import { reviewCopyPolicy } from '../helpers/copy-policy';
 import { reviewCopyPreservation } from '../helpers/copy-preservation';
 import path from 'node:path';
 import { test, expect, reliableFill } from '../fixtures';
@@ -162,4 +163,5 @@ test('Owner reviews, cancels and executes primary disposal with retained history
   await expect(observation('SYNTHETIC-BACKUP-REOPEN-002')).toContainText('Needs review');
   await copies.scrollIntoViewIfNeeded();
   await ownerPage.screenshot({ path: test.info().outputPath('purge-history.png'), fullPage: false, animations: 'disabled' });
+  await reviewCopyPolicy(ownerPage, 'Document');
 });

@@ -2,6 +2,23 @@
 
 Last updated: 2026-09-30
 
+## Copy retention policy dashboard - 30 September 2026 (source only)
+
+Documents and Registers now expose separate DOCUMENT_COPY and COMPLAINT_COPY
+policy panels through the existing restricted policy component. Admins can
+propose terms; Owner approval and withdrawal use the established server gates.
+Timed rules name reviewed copy creation as their anchor. No period is supplied
+automatically. Copy-specific text distinguishes recorded recovery terms from
+actual provider recovery and requires separate scoped authority for disposal.
+
+Both compiled isolated Chromium journeys pass (48.1s): each retains a proposal,
+requires explicit approval confirmation, approves a separate copy policy,
+withdraws it and displays both historical revisions. They also repeat primary
+disposal and copy hold/release coverage. Web/E2E type checks and targeted lint
+pass. Evidence: private copy-policy-ui-browser.log. Session 24571 is terminal,
+exit 0. No live policy changed. Runtime remains e39edbe8; deployment, scoped
+copy-authority forms, Admin preservation access and wider DPO acceptance remain.
+
 ## Scoped copy preservation dashboard - 30 September 2026 (source only)
 
 The document and complaint copy-observation forms now provide preservation

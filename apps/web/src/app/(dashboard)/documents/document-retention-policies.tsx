@@ -11,22 +11,23 @@ import { ConfirmActionModal } from '@/components/ui/confirm-action-modal';
 type Terms = { retentionMode: 'REVIEW_REQUIRED' | 'PERMANENT' | 'AFTER_ANCHOR'; retentionDays: number | null; recoveryDays: number };
 type Revision = Terms & { id: string; revision: number; state: 'DRAFT' | 'APPROVED';
   approvedAt: string | null; approvalEvidenceRef: string | null; withdrawal: { reason: string; evidenceRef: string } | null };
-function describe(terms: Terms, anchor = 'document creation') {
+function describe(terms: Terms, anchor = 'document creation', copy = false) {
   const retention = terms.retentionMode === 'PERMANENT' ? 'Permanent retention: removal is prohibited.'
     : terms.retentionMode === 'AFTER_ANCHOR' ? `Retain for ${terms.retentionDays} days from ${anchor} before reviewing removal.`
     : 'Each removal requires a recorded, individual review decision.';
-  return `${retention} Recovery window after authorised removal: ${terms.recoveryDays} days.`;
+  return `${retention} ${copy ? 'Recorded recovery term (does not establish provider recovery)' : 'Recovery window after authorised removal'}: ${terms.recoveryDays} days.`;
 }
 
 export function DocumentRetentionPolicies() {
   return <RetentionPolicies recordClass="VAULT_DRAFT" />;
 }
 
-export function RetentionPolicies({ recordClass }: { recordClass: 'VAULT_DRAFT' | 'COMPLAINT' }) {
-  const complaint = recordClass === 'COMPLAINT';
-  const endpoint = complaint ? '/governance-registers/complaints/policy-revisions' : '/documents/policy-revisions';
-  const title = complaint ? 'Complaint retention policies' : 'Draft retention policies';
-  const anchor = complaint ? 'reviewed complaint resolution' : 'document creation';
+export function RetentionPolicies({ recordClass }: { recordClass: 'VAULT_DRAFT' | 'COMPLAINT' | 'DOCUMENT_COPY' | 'COMPLAINT_COPY' }) {
+  const complaint = recordClass === 'COMPLAINT' || recordClass === 'COMPLAINT_COPY';
+  const copy = recordClass === 'DOCUMENT_COPY' || recordClass === 'COMPLAINT_COPY';
+  const endpoint = `${complaint ? '/governance-registers/complaints' : '/documents'}/${copy ? 'copy-policy-revisions' : 'policy-revisions'}`;
+  const title = copy ? `${complaint ? 'Complaint' : 'Document'} copy retention policies` : complaint ? 'Complaint retention policies' : 'Draft retention policies';
+  const anchor = copy ? 'reviewed copy creation' : complaint ? 'reviewed complaint resolution' : 'document creation';
   const { user } = useAuth();
   const isOwner = user?.role === 'OWNER';
   const [rows, setRows] = useState<Revision[] | null>(null);
@@ -66,7 +67,7 @@ export function RetentionPolicies({ recordClass }: { recordClass: 'VAULT_DRAFT' 
         ? { ...review, state: 'APPROVED', authorityConfirmed: true, approvalEvidenceRef: evidence }
         : { ...terms, state: 'DRAFT' });
       setReview(null); setRows(null); setBefore(null);
-      setNotice(approved ? 'New policy approved. Earlier approvals were withdrawn; existing recovery deadlines are unchanged.' : 'Proposal recorded. It does not authorise removal.');
+      setNotice(approved ? (copy ? 'Copy policy approved. Earlier approvals for this copy class were withdrawn. Separate scoped authority is still required.' : 'New policy approved. Earlier approvals were withdrawn; existing recovery deadlines are unchanged.') : 'Proposal recorded. It does not authorise removal.');
     } catch (cause) { setError(apiErrorMessage(cause, 'Policy could not be recorded.')); }
     finally { pending.current = false; setBusy(false); }
   };
@@ -83,7 +84,7 @@ export function RetentionPolicies({ recordClass }: { recordClass: 'VAULT_DRAFT' 
 
   return <section className={statusPanelClassName('neutral', 'p-5')} aria-label={title}>
     <h2 className="font-semibold">{title}</h2>
-    <p className="text-sm">{complaint ? 'These rules apply only to complaints. Timed rules require reviewed resolution evidence that still matches the closed complaint. Complaints with board evidence require separate review; permanent erasure is not available here.' : 'These rules apply only to unheld Vault drafts without linked evidence.'} Recovery days are separate from retention obligations. Record the charity’s approved rules; no period is supplied automatically. Other record classes and permanent erasure need separate review.</p>
+    <p className="text-sm">{copy ? 'These rules apply only to retained copies after primary disposal. Each scope still requires separate Owner authority and evidence of its creation time for a timed rule. Recorded recovery days do not provide recovery of external copies.' : complaint ? 'These rules apply only to complaints. Timed rules require reviewed resolution evidence that still matches the closed complaint. Complaints with board evidence require separate review; permanent erasure is not available here.' : 'These rules apply only to unheld Vault drafts without linked evidence.'} Recovery days are separate from retention obligations. Record the charity’s approved rules; no period is supplied automatically. Other record classes and permanent erasure need separate review.</p>
     <div className="mt-4 grid gap-3 sm:grid-cols-2">
       <label className="text-sm">Retention rule<select className="mt-1 block w-full rounded border p-2" value={mode} disabled={busy}
         onChange={event => setMode(event.target.value as Terms['retentionMode'])}>
@@ -92,9 +93,9 @@ export function RetentionPolicies({ recordClass }: { recordClass: 'VAULT_DRAFT' 
         <option value="PERMANENT">Permanent retention — no removal</option>
       </select></label>
       {mode === 'AFTER_ANCHOR' ? <Input type="number" label="Minimum retention days" value={retention} onValueChange={setRetention} min={1} max={36525} isDisabled={busy} /> : null}
-      <Input type="number" label="Recovery days after removal" value={recovery} onValueChange={setRecovery} min={1} max={3650} isDisabled={busy}
+      <Input type="number" label={copy ? 'Recorded recovery period (days)' : 'Recovery days after removal'} value={recovery} onValueChange={setRecovery} min={1} max={3650} isDisabled={busy}
         classNames={{ description: '!text-gray-700 dark:!text-gray-300' }}
-        description="A permanent-retention rule still prohibits removal regardless of this recovery value." />
+        description={copy ? 'A policy term only. Verify actual recovery with the provider; this form cannot create it.' : 'A permanent-retention rule still prohibits removal regardless of this recovery value.'} />
     </div>
     <div className="mt-3 flex flex-wrap gap-2">
       <Button size="sm" variant="flat" onPress={() => save(false)} isDisabled={!valid || busy}>Save proposal</Button>
@@ -106,7 +107,7 @@ export function RetentionPolicies({ recordClass }: { recordClass: 'VAULT_DRAFT' 
     {rows?.length === 0 ? <p className="mt-3 text-sm">No policy revisions recorded.</p> : null}
     {rows?.length ? <ol className="mt-4 space-y-3">{rows.map(row => <li key={row.id} className="rounded border p-3 text-sm">
       <h3 className="font-medium">Revision {row.revision}: {row.withdrawal ? 'Withdrawn' : row.state === 'APPROVED' ? 'Approved' : 'Proposal'}</h3>
-      <p>{describe(row, anchor)}</p>
+      <p>{describe(row, anchor, copy)}</p>
       {row.approvalEvidenceRef ? <p>Approval evidence: {row.approvalEvidenceRef}</p> : null}
       {row.withdrawal ? <p>Withdrawal: {row.withdrawal.reason} Evidence: {row.withdrawal.evidenceRef}</p> : null}
       <div className="mt-2 flex flex-wrap gap-2">
@@ -117,10 +118,10 @@ export function RetentionPolicies({ recordClass }: { recordClass: 'VAULT_DRAFT' 
     </li>)}</ol> : null}
     {before ? <Button className="mt-3" size="sm" variant="flat" isDisabled={busy} onPress={() => load(true)}>Load older policies</Button> : null}
     <ConfirmActionModal isOpen={review !== null} onOpenChange={open => { if (!open && !busy) setReview(null); }}
-      title={complaint ? 'Approve complaint retention policy' : 'Approve draft retention policy'} confirmLabel="Approve and replace earlier approvals" confirming={busy}
+      title={copy ? `Approve ${complaint ? 'complaint' : 'document'} copy retention policy` : complaint ? 'Approve complaint retention policy' : 'Approve draft retention policy'} confirmLabel="Approve and replace earlier approvals" confirming={busy}
       confirmDisabled={!isOwner || !confirmed || !validEvidence} onConfirm={() => save(true)}>
-      <p>{review ? describe(review, anchor) : ''}</p>
-      <p className="mt-2">This becomes available for new removals. It withdraws earlier approvals for this record class. Existing removed records keep their recorded deadlines. This does not authorise permanent erasure.</p>
+      <p>{review ? describe(review, anchor, copy) : ''}</p>
+      <p className="mt-2">{copy ? 'This policy becomes available for separate scoped copy review. It withdraws earlier approvals only for this copy class. It does not approve disposal, establish provider recovery or erase copies.' : 'This becomes available for new removals. It withdraws earlier approvals for this record class. Existing removed records keep their recorded deadlines. This does not authorise permanent erasure.'}</p>
       <Input className="mt-3" label="Policy approval evidence reference" value={evidence} onValueChange={setEvidence} maxLength={120} isDisabled={busy}
         description="Capital letters, numbers and hyphens, for example POLICY-001." />
       <Checkbox className="mt-3" isSelected={confirmed} onValueChange={setConfirmed} isDisabled={busy}>I have authority to approve these exact terms and the cited evidence records that decision.</Checkbox>

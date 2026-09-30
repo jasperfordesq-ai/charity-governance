@@ -1,5 +1,10 @@
 # CharityPilot Full-Platform Remediation Audit
 
+> DPO-05 copy policy dashboard, 2026-09-30: separate copy-class proposal,
+> approval and withdrawal controls are wired into Documents and Registers.
+> Both compiled isolated browser journeys pass; scoped authority forms, Admin
+> preservation access, deployment and broader DPO acceptance remain open.
+
 > DPO-05 preservation dashboard, 2026-09-30: Owner copy-observation forms
 > now support scoped hold/release review with complete history and confirmation.
 > Both compiled isolated browser journeys pass; Admin dashboard access, copy

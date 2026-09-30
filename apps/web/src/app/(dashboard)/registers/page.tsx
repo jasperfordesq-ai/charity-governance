@@ -196,7 +196,7 @@ export default function RegistersPage() {
           {canManage ? <ComplaintResolutionPanel complaints={complaintsForSelectedYear} onChanged={fetchRegisters} /> : null}
           {canManage ? <ComplaintRecoveryPanel onChanged={fetchRegisters} refreshVersion={complaintRecoveryVersion} /> : null}
           <ComplaintPurgePanel onDisposed={()=>setComplaintRecoveryVersion(version=>version+1)} />
-          {canManage ? <RetentionPolicies recordClass="COMPLAINT" /> : null}
+          {canManage ? <><RetentionPolicies recordClass="COMPLAINT" /><RetentionPolicies recordClass="COMPLAINT_COPY" /></> : null}
           {canManage ? <RegisterChangeAudit /> : null}
         </>
       )}
