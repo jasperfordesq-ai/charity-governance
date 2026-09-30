@@ -635,7 +635,7 @@ test('list register methods scope findMany to the caller organisation', async ()
     assert.ok(findMany, `${model}.findMany must be issued`);
     assert.deepEqual(
       (findMany.args as { where: unknown }).where,
-      { organisationId: 'org_1' },
+      { organisationId: 'org_1', ...(model === 'complaintRecord' ? { removedAt: null } : {}) },
       `${model}.findMany must be scoped to the caller organisation`,
     );
   }
@@ -1179,7 +1179,7 @@ test('complaint resolution API binds actor and charity, rejects injected fields 
   const tx = {
     $queryRaw: async () => [{ id: 'org-1' }],
     complaintRecord: { findFirst: async ({ where }: { where: Record<string, unknown> }) => {
-      assert.deepEqual(where, { id: 'complaint-1', organisationId: 'org-1' });
+      assert.deepEqual(where, { id: 'complaint-1', organisationId: 'org-1', removedAt: null });
       return { id: 'complaint-1', revision: recordRevision, status: 'CLOSED', receivedDate: new Date('2026-01-01') };
     } },
     complaintResolutionEvidence: {

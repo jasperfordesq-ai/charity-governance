@@ -129,7 +129,7 @@ export class GovernanceRegisterService {
     const [openConflicts, openRisks, openComplaints, activeFundraisingActivities, annual, financial] = await Promise.all([
       this.prisma.conflictRecord.count({ where: { organisationId, status: { not: 'CLOSED' } } }),
       this.prisma.riskRecord.count({ where: { organisationId, status: { not: 'CLOSED' } } }),
-      this.prisma.complaintRecord.count({ where: { organisationId, status: { not: 'CLOSED' } } }),
+      this.prisma.complaintRecord.count({ where: { organisationId, removedAt: null, status: { not: 'CLOSED' } } }),
       this.prisma.fundraisingRecord.count({ where: { organisationId, status: { not: 'CLOSED' } } }),
       this.getAnnualReportReadiness(organisationId, reportingYear),
       this.getFinancialControlReview(organisationId, reportingYear),
@@ -156,7 +156,7 @@ export class GovernanceRegisterService {
     const { delegate, code, name } = REGISTER_RECORDS[kind];
     const record = await (this.prisma as unknown as Record<string, {
       findFirst: (args: unknown) => Promise<unknown>;
-    }>)[delegate]!.findFirst({ where: { id, organisationId } });
+    }>)[delegate]!.findFirst({ where: { id, organisationId, ...(kind === 'complaint' ? { removedAt: null } : {}) } });
 
     if (!record) throw new AppError(404, code, `${name} not found`);
     return record;
@@ -527,7 +527,7 @@ export class GovernanceRegisterService {
 
   listComplaints(organisationId: string) {
     return this.prisma.complaintRecord.findMany({
-      where: { organisationId },
+      where: { organisationId, removedAt: null },
       orderBy: [{ status: 'asc' }, { receivedDate: 'desc' }],
     });
   }
@@ -551,7 +551,7 @@ export class GovernanceRegisterService {
     return this.prisma.$transaction(async (tx) => {
       await lockOrganisationForUpdate(tx, input.organisationId);
       const complaint = await tx.complaintRecord.findFirst({
-        where: { id: input.complaintId, organisationId: input.organisationId },
+        where: { id: input.complaintId, organisationId: input.organisationId, removedAt: null },
       });
       if (!complaint) throw new AppError(404, 'COMPLAINT_NOT_FOUND', 'Complaint record not found');
       const latest = await tx.complaintResolutionEvidence.findFirst({
@@ -622,7 +622,7 @@ export class GovernanceRegisterService {
   async updateComplaint(organisationId: string, id: string, data: Partial<CreateComplaintRecordRequest>, expectedUpdatedAt: string | undefined, actorUserId: string) {
     return this.prisma.$transaction(async (tx) => {
       await lockOrganisationForUpdate(tx, organisationId);
-      const existing = await tx.complaintRecord.findFirst({ where: { id, organisationId } });
+      const existing = await tx.complaintRecord.findFirst({ where: { id, organisationId, removedAt: null } });
       if (!existing) throw new AppError(404, 'COMPLAINT_NOT_FOUND', 'Complaint record not found');
       assertUnchanged(existing, expectedUpdatedAt, 'REGISTER_UPDATE_CONFLICT');
       const row = await tx.complaintRecord.update({
@@ -647,11 +647,16 @@ export class GovernanceRegisterService {
     });
   }
 
-  async removeComplaint(_organisationId: string, _id: string, _actorUserId: string) {
+  async removeComplaint(organisationId: string, id: string, _actorUserId: string) {
     // This legacy path had no recovery window or retention-policy checks.
     // Do not let new approved policies coexist with a destructive bypass.
-    throw new AppError(409, 'COMPLAINT_RECOVERY_REQUIRED',
-      'Permanent complaint deletion is unavailable. Policy-bound recoverable removal must be completed first.');
+    return this.prisma.$transaction(async tx => {
+      await lockOrganisationForUpdate(tx, organisationId);
+      const row = await tx.complaintRecord.findFirst({ where: { id, organisationId, removedAt: null }, select: { id: true } });
+      if (!row) throw new AppError(404, 'COMPLAINT_NOT_FOUND', 'Complaint record not found');
+      throw new AppError(409, 'COMPLAINT_RECOVERY_REQUIRED',
+        'Permanent complaint deletion is unavailable. Policy-bound recoverable removal must be completed first.');
+    });
   }
 
   listFundraising(organisationId: string) {

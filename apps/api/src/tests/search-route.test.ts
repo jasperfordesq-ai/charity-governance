@@ -98,7 +98,8 @@ function prismaWith(
   const delegate = (name: string) => ({
     findMany: async ({ where, take, select }: { where: Record<string, unknown>; take: number; select: Record<string, boolean> }) => {
       calls.push({ delegate: name, where, select });
-      return (rows[name] ?? []).map(row => name === 'document' ? { deletedAt: null, ...row } : row)
+      return (rows[name] ?? []).map(row => name === 'document' ? { deletedAt: null, ...row }
+        : name === 'complaintRecord' ? { removedAt: null, ...row } : row)
         .filter((row) => matches(row, where)).slice(0, take)
         .map((row) => Object.fromEntries(Object.keys(select).map((field) => [field, row[field]])));
     },
@@ -159,6 +160,18 @@ test('Admin search excludes removed documents while finding an active matching f
     const response = await app.inject({ method: 'GET', url: '/api/v1/search?q=Recovery%20proof&types=Document', headers: { authorization } });
     assert.equal(response.statusCode, 200);
     assert.deepEqual(response.json().data.data.map((hit: { id: string }) => hit.id), ['active-doc']);
+  } finally { await app.close(); }
+});
+
+test('Admin search excludes recoverable complaints while finding the active match', async () => {
+  const { app } = await buildApp({ complaintRecord: [
+    { id: 'active-case', organisationId: 'org-1', boardMinuteReference: 'Recovery proof active', receivedDate: new Date(), removedAt: null },
+    { id: 'removed-case', organisationId: 'org-1', boardMinuteReference: 'Recovery proof removed', receivedDate: new Date(), removedAt: new Date() },
+  ] });
+  try {
+    const response = await app.inject({ method: 'GET', url: '/api/v1/search?q=Recovery%20proof&types=ComplaintRecord', headers: { authorization } });
+    assert.equal(response.statusCode, 200);
+    assert.deepEqual(response.json().data.data.map((hit: { id: string }) => hit.id), ['active-case']);
   } finally { await app.close(); }
 });
 

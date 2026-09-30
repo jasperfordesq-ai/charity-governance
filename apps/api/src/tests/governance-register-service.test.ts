@@ -280,6 +280,7 @@ test('summary counts only non-closed records scoped to the organisation', async 
     assert.ok(count, `${model} must be counted`);
     assert.deepEqual((count.args as { where: unknown }).where, {
       organisationId: 'org_1',
+      ...(model === 'complaintRecord' ? { removedAt: null } : {}),
       status: { not: 'CLOSED' },
     });
   }

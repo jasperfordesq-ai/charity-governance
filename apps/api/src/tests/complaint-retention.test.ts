@@ -10,7 +10,7 @@ test('complaint retention uses only the latest matching resolution and a single 
   const policy = { id: 'policy', retentionMode: 'AFTER_ANCHOR', retentionAnchor: 'RESOLVED_AT', retentionDays: 10 };
   const tx = {
     $queryRaw: async (strings: TemplateStringsArray) => strings.join('').includes('statement_timestamp') ? [{ now }] : [{ id: 'org' }],
-    complaintRecord: { findFirst: async ({ where }: any) => { assert.deepEqual(where, { id: 'complaint', organisationId: 'org' }); return complaint; } },
+    complaintRecord: { findFirst: async ({ where }: any) => { assert.deepEqual(where, { id: 'complaint', organisationId: 'org', removedAt: null }); return complaint; } },
     complaintResolutionEvidence: { findFirst: async ({ where, orderBy }: any) => {
       assert.deepEqual(where, { organisationId: 'org', complaintId: 'complaint' });
       assert.deepEqual(orderBy, { revision: 'desc' }); return evidence;

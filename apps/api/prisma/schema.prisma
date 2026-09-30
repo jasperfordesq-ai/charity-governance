@@ -1295,6 +1295,7 @@ model DataRetentionPolicyRevision {
   withdrawal          DataRetentionPolicyWithdrawal?
   removedDocuments    Document[]
   purgeAuthorizations DocumentPurgeAuthorization[]
+  complaintRemovals   ComplaintRemoval[]
 
   @@unique([id, organisationId])
   @@unique([organisationId, recordClass, revision], map: "RetentionPolicy_org_class_revision_key")
@@ -1871,11 +1872,36 @@ model ComplaintRecord {
   boardMinuteReference String?
   // Database-maintained version; changes invalidate earlier resolution evidence.
   revision             Int            @default(1)
+  removedAt            DateTime?
+  removalId            String?
+  removal              ComplaintRemoval? @relation(fields: [removalId, organisationId], references: [id, organisationId], onDelete: Restrict)
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
   @@index([organisationId])
+}
+
+// Immutable removal authority; remains available after restoration or later purge.
+model ComplaintRemoval {
+  id                   String   @id @default(cuid())
+  organisationId       String
+  complaintId          String
+  recordRevision       Int
+  actorUserId          String
+  policyId             String
+  policy               DataRetentionPolicyRevision @relation(fields: [policyId, organisationId], references: [id, organisationId], onDelete: Restrict)
+  resolutionEvidenceId String?
+  evidenceRef          String
+  reason               String
+  occurredAt           DateTime @default(now())
+  // Computed by the database from the approved policy at insertion.
+  recoveryUntil        DateTime @default(now())
+  records              ComplaintRecord[]
+
+  @@unique([id, organisationId])
+  @@unique([organisationId, complaintId, recordRevision])
+  @@index([organisationId, occurredAt, id])
 }
 
 // Evidence of a reviewed resolution date, not a retention or erasure decision.

@@ -64,7 +64,7 @@ const LOOKUPS: Record<string, Lookup> = {
   },
   "DELETE /api/v1/governance-registers/complaints/:id": async (prisma, organisationId, params) => {
     const row = await prisma.complaintRecord.findFirst({
-      where: { id: idOf(params), organisationId },
+      where: { id: idOf(params), organisationId, removedAt: null },
       select: { receivedDate: true, status: true },
     });
     return row

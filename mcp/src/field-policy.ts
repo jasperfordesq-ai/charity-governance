@@ -173,7 +173,7 @@ export const WITHHELD_FIELDS: Record<ModelName, readonly string[]> = {
   BoardMember: ['email', 'dateOfBirth', 'residentialAddress', 'formerNames', 'otherDirectorships'],
   Member: ['address', 'name'],
   ConflictRecord: ['trusteeName', 'matter', 'nature', 'actionTaken', 'decision', 'boardMemberId'],
-  ComplaintRecord: ['summary', 'source', 'actionTaken', 'outcome', 'revision'],
+  ComplaintRecord: ['summary', 'source', 'actionTaken', 'outcome', 'revision', 'removedAt', 'removalId'],
   // notes is the one free-text narrative field on the minute book: an open box
   // that can carry anything, including the kind of personal detail the other
   // withheld fields exist to hold back.

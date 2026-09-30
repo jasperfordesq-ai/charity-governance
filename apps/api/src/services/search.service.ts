@@ -403,6 +403,7 @@ export class SearchService {
       const where: Record<string, unknown> = {
         ...(spec.tenantScoped ? { organisationId } : {}),
         ...(type === 'Document' ? { deletedAt: null } : {}),
+        ...(type === 'ComplaintRecord' ? { removedAt: null } : {}),
         ...(member && type === 'Document'
           ? { visibility: 'MEMBER_VISIBLE', contentAccessClass: 'MEMBER_SUITABLE',
             memberReviewedSha256: { not: null }, storageProvider: { in: ['local', 'supabase'] },

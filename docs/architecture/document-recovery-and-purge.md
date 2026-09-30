@@ -11,6 +11,24 @@ checkpoints below describe the state when recorded, not the current API surface.
 
 ### Complaint resolution evidence: persistence checkpoint
 
+Recovery persistence increment: `ComplaintRemoval` retains the reviewed actor,
+policy, evidence reference/reason and database-calculated deadline. A guarded
+pointer removes a complaint from ordinary views without deleting its fields.
+Removal needs the current closed revision, no board evidence, current approved
+COMPLAINT policy, and the latest matching resolution evidence when timed.
+Restoration preserves the original fields and increments the complaint revision;
+resolution evidence therefore requires fresh review after restoration. Removed
+complaints cannot receive edits or new resolution observations. History survives
+restoration, and direct hard deletion remains refused. Search, active reads and
+working exports exclude removed rows; immutable approved reports remain separate
+historical evidence. `test:complaint-recovery` verifies populated upgrade,
+preserved restoration, tenant/actor/policy checks, stale authority and expiry in
+disposable PostgreSQL. Expiry setup temporarily changes a fixture deadline as a
+test superuser, then restores append-only protection before checking refusal.
+Application removal/restore commands, UI, restore audit and browser acceptance
+are still required. This persistence increment does not enable an operator
+workflow or claim completed complaint retention, recovery or purge.
+
 Current extension: complaints have a separate COMPLAINT policy administration
 surface. Timed rules use RESOLVED_AT; Vault approvals and withdrawals remain
 isolated. The restricted assessment checks one active approved policy, closure

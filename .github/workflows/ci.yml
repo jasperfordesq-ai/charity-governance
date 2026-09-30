@@ -191,6 +191,11 @@ jobs:
       - name: Test
         run: npm run test
 
+      - name: Verify complaint retention migrations
+        run: |
+          npm run test:complaint-resolution
+          npm run test:complaint-recovery
+
       - name: Reliability ledger (API + Web)
         # Runs the apps/api and apps/web unit suites and fails the build if any covered
         # guarantee in docs/reliability/guarantees.json is not linked to a passing test

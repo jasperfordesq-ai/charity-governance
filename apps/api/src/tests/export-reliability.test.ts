@@ -410,7 +410,7 @@ test('export scopes the organisation and compliance reads to the token organisat
 });
 
 test('Complete plan governance registers are scoped to the token organisation', async () => {
-  const captured: Record<string, { organisationId?: string } | undefined> = {};
+  const captured: Record<string, { organisationId?: string; removedAt?: null } | undefined> = {};
   const capturedUnique: Record<
     string,
     { organisationId_reportingYear?: { organisationId?: string } } | undefined
@@ -463,6 +463,7 @@ test('Complete plan governance registers are scoped to the token organisation', 
     assert.equal(captured.conflict?.organisationId, 'org-A');
     assert.equal(captured.risk?.organisationId, 'org-A');
     assert.equal(captured.complaint?.organisationId, 'org-A');
+    assert.equal(captured.complaint?.removedAt, null);
     assert.equal(captured.fundraising?.organisationId, 'org-A');
     assert.equal(
       capturedUnique.annualReport?.organisationId_reportingYear?.organisationId,

@@ -2,6 +2,30 @@
 
 Last updated: 2026-09-30
 
+Complaint recovery persistence checkpoint: ComplaintRemoval now retains scoped,
+immutable actor/policy/evidence decisions and a database-calculated recovery
+deadline. ComplaintRecord has a guarded removal pointer and timestamp. The
+database requires a closed complaint without board evidence, current approved
+complaint policy and elapsed matching resolution evidence for timed rules.
+Removal and restoration preserve content; removed records cannot be edited or
+receive resolution evidence, stale authority cannot be reused, and hard deletion
+is refused pending the separate purge workflow. Ordinary lists/details, edits,
+counts, search and working exports exclude removed complaints. The application
+removal/restore service, UI, actor-bound restore audit and browser acceptance
+remain open; no new runtime deployment occurred. Real PostgreSQL migration
+proof passes, including restoration, withdrawn evidence/policy and expired
+recovery refusal (expiry uses fixture-only time travel with append-only
+protection re-enabled before testing). All 119 affected API/search/export tests,
+51 model/reset checks, schema validation, API build and 408 runnable MCP tests
+pass (two Windows skips). CI now names both complaint migration proofs.
+
+38ed10ad CI 36713260937 failed because the legacy delete blocker returned 409
+instead of scoped not-found for another charity's record. The implementation
+now performs the same-charity active-record lookup before refusing deletion;
+the existing cross-tenant contract passes without weakening its assertion.
+Exact successor hosted gates remain required. E2E 36713260920 was still running
+at its last observation; do not infer completion from the failed CI result.
+
 Complaint policy/assessment checkpoint: the policy service now separates
 COMPLAINT from VAULT_DRAFT, with RESOLVED_AT as the complaint timed anchor.
 Browser-only administration permits Admin proposals and Owner approval or

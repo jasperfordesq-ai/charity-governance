@@ -22,6 +22,7 @@
     "test:local-docker": "node --test scripts/check-local-docker.test.mjs",
     "test:retention-policy": "node --test scripts/retention-policy-migration.test.mjs",
     "test:complaint-resolution": "node --test scripts/complaint-resolution-migration.test.mjs",
+    "test:complaint-recovery": "node --test scripts/complaint-recovery-migration.test.mjs",
     "test:local-docker:smoke": "node scripts/smoke-local-docker.mjs",
     "personal:ready": "node scripts/personal-local-ready.mjs",
     "test:personal-server": "node --test scripts/check-personal-server-compose.test.mjs scripts/personal-server.test.mjs scripts/personal-server-preflight.test.mjs scripts/personal-server-installer.test.mjs scripts/personal-server-linux.test.mjs scripts/personal-server-release.test.mjs scripts/personal-server-certify.test.mjs scripts/personal-server-auth-recovery-rotation.test.mjs",

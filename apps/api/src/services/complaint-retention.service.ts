@@ -9,7 +9,7 @@ export class ComplaintRetentionService {
   assess(organisationId: string, complaintId: string) {
     return this.prisma.$transaction(async tx => {
       await lockOrganisationForUpdate(tx, organisationId);
-      const complaint = await tx.complaintRecord.findFirst({ where: { id: complaintId, organisationId },
+      const complaint = await tx.complaintRecord.findFirst({ where: { id: complaintId, organisationId, removedAt: null },
         select: { id: true, revision: true, status: true, receivedDate: true } });
       if (!complaint) throw new AppError(404, 'COMPLAINT_NOT_FOUND', 'Complaint record not found');
       const [clock] = await tx.$queryRaw<Array<{ now: Date }>>`SELECT timezone('UTC', statement_timestamp())::timestamp(3) AS now`;

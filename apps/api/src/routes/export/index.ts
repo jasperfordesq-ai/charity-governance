@@ -279,7 +279,7 @@ async function loadGovernanceRegisters(
   const [conflicts, risks, complaints, fundraising, annualReport, financialControls] = await Promise.all([
     app.prisma.conflictRecord.findMany({ where: { organisationId }, orderBy: { dateDeclared: 'desc' } }),
     app.prisma.riskRecord.findMany({ where: { organisationId }, orderBy: { updatedAt: 'desc' } }),
-    app.prisma.complaintRecord.findMany({ where: { organisationId }, orderBy: { receivedDate: 'desc' } }),
+    app.prisma.complaintRecord.findMany({ where: { organisationId, removedAt: null }, orderBy: { receivedDate: 'desc' } }),
     app.prisma.fundraisingRecord.findMany({ where: { organisationId }, orderBy: { updatedAt: 'desc' } }),
     app.prisma.annualReportReadiness.findUnique({ where: { organisationId_reportingYear: { organisationId, reportingYear: year } } }),
     app.prisma.financialControlReview.findUnique({ where: { organisationId_reportingYear: { organisationId, reportingYear: year } } }),
