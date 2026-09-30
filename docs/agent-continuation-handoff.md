@@ -1,5 +1,16 @@
 # CharityPilot Agent Continuation Handoff
 
+> **Three Board minutes exact-source review, 2026-09-30:** March, July and
+> August 2026 DOCX files match verified backup hashes. July and August source
+> copies explicitly say DRAFT; the August draft records approval of July,
+> but no signed final July copy was established. March signing fields are
+> blank. The private worksheet proposes Company Secretary/RESTRICTED for
+> all, DRAFT for exact July/August Vault copies, and leaves March lifecycle
+> open. This does not invalidate underlying meetings or resolutions.
+> Counts: 28/63 source evidenced, 27 with some proposal, 36 with none,
+> all PENDING. No live change. Private evidence:
+> `.charitypilot-private/board-minutes-source-review-2026-09-30.md`.
+
 > **Annual-accounts exact-source review, 2026-09-30:** FY2021, FY2022,
 > FY2024 and FY2025 PDFs in the verified backup each match manifest hashes.
 > They cover distinct year-end periods. Vault `CRO-filed` labels and exact

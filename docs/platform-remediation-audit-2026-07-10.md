@@ -3510,3 +3510,11 @@ remaining external blockers and owners, and an explicit confirmation that no
 > verified against filing receipts or exact public copies. No live document,
 > audience, retention or publication state changed. See the private
 > `abridged-accounts-source-review-2026-09-30.md`.
+
+> **Nikita minute-book review update, 2026-09-30:** Exact March/July/August
+> minute DOCX files match backup hashes. July/August copies say DRAFT;
+> March signing fields are blank. August draft records July approval, but
+> a signed final July copy was not established. Private worksheet now has
+> 28/63 source-evidenced rows, 27 with some proposal and 36 without; all
+> PENDING. No live minute, approval, audience or report state changed.
+> See private `board-minutes-source-review-2026-09-30.md`.
