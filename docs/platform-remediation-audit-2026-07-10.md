@@ -1,5 +1,15 @@
 # CharityPilot Full-Platform Remediation Audit
 
+> **Complaint hold database gate follow-up, 2026-10-01:** a new deferred
+> constraint requires a matching same-transaction recovery outcome for
+> post-binding hold events. Direct inserts are refused in the real
+> PostgreSQL protocol proof; prepared outcomes and existing races pass.
+> This is a partial relational guard. The broad runtime credential can
+> still insert outcomes, and no supported emergency preservation workflow
+> or independent provider custody exists. Enforcement is inactive and
+> P05/P07/P08 and DPO acceptance remain open. See the private hold
+> writer-gate analysis and the tracked continuation handoff.
+
 > **Trustee master-template source review, 2026-09-30:** the exact
 > manifest-matched induction pack body corresponds to March-approved item
 > 20 but ends in a blank individual declaration. The separate conduct

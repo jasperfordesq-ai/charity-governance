@@ -1,5 +1,16 @@
 # CharityPilot Agent Continuation Handoff
 
+> **Complaint hold relational gate, 2026-10-01:** migration
+> `20261001020000_complaint_hold_recovery_event_gate` adds a deferred
+> same-transaction outcome check to every hold-event insert once a charity
+> has a recovery enforcement binding. Direct post-binding inserts are
+> refused; the prepared outcome's event-before-row trigger still commits.
+> The complete real-PostgreSQL complaint recovery proof and API build pass.
+> This does not authenticate independent publication: the current broad
+> database credential can still insert outcomes. Runtime/executor privilege
+> separation, emergency preservation workflow, provider custody and
+> host-loss acceptance remain required. No live binding was activated.
+
 > **Disposable hold-role proof, 2026-10-01:** All 139 migrations applied to
 > local PostgreSQL 16.4. Independent non-superuser login roles proved the
 > ordinary role can be denied hold-outcome INSERT and cannot assume the

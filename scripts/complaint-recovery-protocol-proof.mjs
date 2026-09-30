@@ -43,6 +43,11 @@ try {
   // Synthetic activation only. Production has no supported activation path yet.
   await prisma.$executeRaw`INSERT INTO "ComplaintRecoveryEnforcement"
     (id,"organisationId","installationId","writerId","writerEpoch") VALUES ('protocol','a','protocol-install','host-a',1)`;
+  await assert.rejects(prisma.complaintHoldEvent.create({ data: {
+    organisationId: 'a', complaintId: 'recovery-protocol', revision: 1,
+    recordRevision: 2, held: true, actorUserId: 'admin-a',
+    evidenceRef: 'DIRECT-HOLD-DENIED-001', reason: 'Direct hold after recovery binding',
+  } }), /same-transaction recovery outcome/);
   await assert.rejects(prisma.complaintPurgeClaim.create({ data: { organisationId: 'a', actorUserId: 'admin-a',
     authorizationId: 'recovery-protocol-authority', complaintId: 'recovery-protocol' } }), /recovery execution/);
   const capture = await new ComplaintRecoveryPreparationStore(prisma).capture('a', 'admin-a', {
@@ -169,13 +174,20 @@ try {
   const staleEnvelope = await preserveRecoveryPreparation(stalePreparation.facts, staleContext, keys, store);
   const stalePublished = await publishVerifiedComplaintPreparation(journal, store, { writerId: 'host-a', preparationDigest: stale.digest,
     expectedGeneration: final.generation, expectedDigest: final.digest }, staleContext, keys, store);
-  await prisma.complaintHoldEvent.create({ data: { organisationId: 'a', complaintId: 'recovery-stale', revision: 1,
-    recordRevision: 2, held: true, actorUserId: 'admin-a', evidenceRef: 'LATER-HOLD-001', reason: 'Preserve after publication' } });
+  const holdPreparations = new ComplaintHoldRecoveryPreparationStore(prisma);
+  // A prepared same-transaction outcome changes the dependency. The synthetic
+  // fixture calls the internal outcome directly; this is not provider proof.
+  const dependencyHold = await holdPreparations.capture('a', 'recovery-stale', 'admin-a', {
+    installationId: binding.installationId, operationId: 'dependency-hold-after-primary',
+    writerEpoch: 1, sourceRevision: context.sourceRevision, expectedRecordRevision: 2,
+    expectedHoldRevision: 0, held: true, evidenceRef: 'LATER-HOLD-001',
+    reason: 'Preserve after publication',
+  });
+  await prisma.complaintHoldRecoveryOutcome.create({ data: { preparationId: dependencyHold.id } });
   await assert.rejects(executePublishedComplaintOperation(prisma, journal, store, 'host-a', staleContext, keys, store), /dependencies changed/);
   assert.equal(await prisma.complaintRecord.count({ where: { id: 'recovery-stale' } }), 1);
   assert.equal(await prisma.complaintRecoveryExecution.count({ where: { preparationId: stale.id } }), 0);
   assert.equal((await store.readControl()).activeOperation.operationId, staleContext.operationId);
-  const holdPreparations = new ComplaintHoldRecoveryPreparationStore(prisma);
   const holdInput = { installationId: binding.installationId, operationId: 'hold-release-operation', writerEpoch: 1,
     sourceRevision: context.sourceRevision, expectedRecordRevision: 2, expectedHoldRevision: 1, held: false,
     evidenceRef: 'RELEASE-REVIEW-001', reason: 'Synthetic release review for recovery' };
@@ -210,7 +222,7 @@ try {
     throw new Error('synthetic rollback');
   }), /synthetic rollback/);
   assert.equal(await prisma.complaintHoldEvent.count({ where: { id: capturedDecision.id } }), 0);
-  assert.equal(await prisma.complaintHoldRecoveryOutcome.count(), 0);
+  assert.equal(await prisma.complaintHoldRecoveryOutcome.count({ where: { preparationId: holdCapture.id } }), 0);
   await prisma.user.update({ where: { id: 'ordinary-admin' }, data: { role: 'MEMBER' } });
   await assert.rejects(prisma.complaintHoldRecoveryOutcome.create({ data: { preparationId: holdCapture.id } }), /administrator/);
   await prisma.user.update({ where: { id: 'ordinary-admin' }, data: { role: 'ADMIN' } });
