@@ -4858,8 +4858,11 @@ test('storage provider failures are sanitized before logs and retry state', () =
   assert.match(documentService, /formatProviderError\(error\)/);
   assert.doesNotMatch(documentService, /function errorMessage/);
   assert.doesNotMatch(documentService, /lastError:\s*errorMessage\(error\)/);
-  assert.match(documentRoutes, /formatProviderError\(cleanupError\)/);
-  assert.match(documentRoutes, /formatProviderError\(outboxError\)/);
+  // Uploads now reserve a durable intent before provider I/O; cleanup is
+  // reconciled by DocumentService, not an inline route catch block.
+  assert.match(documentRoutes, /documentUploadIntent\.create/);
+  assert.doesNotMatch(documentRoutes, /storageService\.deleteFile\(/);
+  assert.match(documentService, /lastError:\s*formatProviderError\(error\)\.slice\(0, 500\)/);
   assert.doesNotMatch(documentRoutes, /request\.log\.error\(cleanupError/);
   assert.doesNotMatch(documentRoutes, /request\.log\.error\(outboxError/);
   assert.doesNotMatch(storageService, /Failed to upload file: \$\{error\.message\}/);
