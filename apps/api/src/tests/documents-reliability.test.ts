@@ -296,7 +296,7 @@ test('Member document list, detail and download exclude restricted records at th
     for (const field of ['description', 'owner', 'boardMinuteReference', 'uploadedById']) {
       assert.equal(list.json().data[0][field], null, `${field} must be withheld from the Member card`);
     }
-    assert.deepEqual(observedWhere, [{ organisationId: 'org-1', visibility: 'MEMBER_VISIBLE', contentAccessClass: 'MEMBER_SUITABLE',
+    assert.deepEqual(observedWhere, [{ organisationId: 'org-1', deletedAt: null, visibility: 'MEMBER_VISIBLE', contentAccessClass: 'MEMBER_SUITABLE',
       memberReviewedSha256: { not: null }, storageProvider: { in: ['local', 'supabase'] }, lifecycleStatus: { notIn: ['UNREVIEWED', 'DRAFT'] } }]);
     assert.equal(memberCardSelections.length, 1, 'Member list must use a field selection');
 

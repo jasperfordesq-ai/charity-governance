@@ -198,7 +198,7 @@ test('Vault page cursor rejects malformed and other-charity anchors before listi
     const foreign = await app.inject({ method: 'GET', url: '/?before=other-charity-file', headers: { authorization: authHeader } });
     assert.equal(foreign.statusCode, 404);
     assert.equal(foreign.json().code, 'DOCUMENT_CURSOR_NOT_FOUND');
-    assert.deepEqual(anchorWhere, { organisationId: 'org-1', id: 'other-charity-file' });
+    assert.deepEqual(anchorWhere, { organisationId: 'org-1', deletedAt: null, id: 'other-charity-file' });
   } finally {
     await app.close();
   }
@@ -223,13 +223,44 @@ test('Member Vault cursor cannot anchor on a restricted file', async () => {
     assert.equal(response.statusCode, 404);
     assert.equal(response.json().code, 'DOCUMENT_CURSOR_NOT_FOUND');
     assert.deepEqual(anchorWhere, {
-      organisationId: 'org-1', id: 'restricted-file', visibility: 'MEMBER_VISIBLE',
+      organisationId: 'org-1', deletedAt: null, id: 'restricted-file', visibility: 'MEMBER_VISIBLE',
       contentAccessClass: 'MEMBER_SUITABLE', memberReviewedSha256: { not: null },
       storageProvider: { in: ['local', 'supabase'] },
       lifecycleStatus: { notIn: ['UNREVIEWED', 'DRAFT'] },
     });
   } finally {
     await app.close();
+  }
+});
+
+test('removed documents are denied through ordinary detail, download and delete routes', async () => {
+  for (const role of ['ADMIN', 'MEMBER'] as const) {
+    const reads: Record<string, unknown>[] = [];
+    const app = await buildDocumentsApp({
+      subscription: subscription(),
+      user: { findUnique: async () => ({ id: 'user-1', organisationId: 'org-1', role, emailVerified: true }) },
+      organisation: { findUniqueOrThrow: async () => ({ complexity: 'SIMPLE' }) },
+      document: { findFirst: async (args) => {
+        const where = (args as { where: Record<string, unknown> }).where;
+        reads.push(where);
+        assert.equal(where.deletedAt, null, 'ordinary route must exclude recoverable records');
+        return null;
+      } },
+      documentStorageDeletion: { create: async () => { throw new Error('A recoverable item cannot enter cleanup'); } },
+    });
+    const authorization = `Bearer ${signAccessToken({ userId: 'user-1', organisationId: 'org-1', role, sessionId: 'session-1' })}`;
+    try {
+      for (const url of ['/removed', '/removed/download']) {
+        const response = await app.inject({ method: 'GET', url, headers: { authorization } });
+        assert.equal(response.statusCode, 404);
+        assert.equal(response.json().code, 'DOCUMENT_NOT_FOUND');
+      }
+      if (role === 'ADMIN') {
+        const response = await app.inject({ method: 'DELETE', url: '/removed', headers: { authorization }, payload: deletionPayload });
+        assert.equal(response.statusCode, 404);
+      }
+      assert.equal(reads.length, role === 'ADMIN' ? 3 : 2);
+    } finally { await app.close(); }
   }
 });
 
@@ -294,6 +325,25 @@ function publicDocument(overrides: Record<string, unknown> = {}) {
   };
 }
 
+test('ordinary mirror lookup excludes removed documents before reading publication details', async () => {
+  const app = await buildDocumentsApp({
+    subscription: subscription(),
+    document: { findMany: async (args) => {
+      assert.deepEqual((args as { where: unknown }).where,
+        { organisationId: 'org-1', deletedAt: null, id: { in: ['removed'] } });
+      return [];
+    } },
+    organisationIntegration: { findUnique: async () => null },
+    documentPublication: { findMany: async () => { throw new Error('Removed publication read'); } },
+  });
+  try {
+    const response = await app.inject({ method: 'GET', url: '/confluence-mirrors?ids=removed',
+      headers: { authorization: authHeader } });
+    assert.equal(response.statusCode, 200);
+    assert.deepEqual(response.json(), { mirrors: {} });
+  } finally { await app.close(); }
+});
+
 test('Admin mirror route links only a page on the currently connected Confluence site', async () => {
   let connectedSiteId = 'site-1';
   let connectionStatus = 'CONNECTED';
@@ -301,7 +351,7 @@ test('Admin mirror route links only a page on the currently connected Confluence
   const app = await buildDocumentsApp({
     subscription: subscription(), document: { findMany: async (args) => {
       assert.deepEqual((args as { where: unknown }).where,
-        { organisationId: 'org-1', id: { in: ['doc-1'] } });
+        { organisationId: 'org-1', deletedAt: null, id: { in: ['doc-1'] } });
       return [{ id: 'doc-1', externalPublicationApproved: true,
         externalPublicationSiteId: 'site-1', externalPublicationSpaceId: 'space-1' }];
     } },
@@ -480,8 +530,8 @@ test('replacement search is Admin-only and stays within the source charity and c
     const response = await admin.inject({ method: 'GET', url: '/replacement-candidates/doc-1?q=policy&page=2', headers: { authorization: authHeader } });
     assert.equal(response.statusCode, 200);
     assert.equal(response.json().data.data[0].id, 'doc-2');
-    assert.deepEqual(queries[0], { id: 'doc-1', organisationId: 'org-1' });
-    assert.deepEqual(queries[1], { organisationId: 'org-1', id: { not: 'doc-1' }, category: 'POLICY',
+    assert.deepEqual(queries[0], { deletedAt: null, id: 'doc-1', organisationId: 'org-1' });
+    assert.deepEqual(queries[1], { organisationId: 'org-1', deletedAt: null, id: { not: 'doc-1' }, category: 'POLICY',
       lifecycleStatus: 'CURRENT', name: { contains: 'policy', mode: 'insensitive' } });
   } finally { await admin.close(); }
 });
@@ -1450,7 +1500,7 @@ test('document delete removes storage after deleting the database record', { con
     document: {
       findFirst: async () => ({ id: 'doc-1', organisationId: 'org-1', fileUrl: 'org-1/policy.pdf', storageProvider: 'supabase', lifecycleStatus: 'DRAFT' }),
       delete: async (args: unknown) => {
-        assert.deepEqual((args as { where: unknown }).where, { id: 'doc-1', organisationId: 'org-1', deletionHold: false,
+        assert.deepEqual((args as { where: unknown }).where, { deletedAt: null, id: 'doc-1', organisationId: 'org-1', deletionHold: false,
           lifecycleStatus: 'DRAFT', standardLinks: { none: {} }, confluenceReferences: { none: {} } });
         databaseDeleteOrder = ++order;
         return { id: 'doc-1' };
@@ -1710,7 +1760,7 @@ test('a deletion hold placed during delete prevents cleanup and the transaction 
     document: {
       findFirst: async () => ({ id: 'doc-1', organisationId: 'org-1', fileUrl: 'org-1/policy.pdf', storageProvider: 'supabase', lifecycleStatus: 'DRAFT', deletionHold: false }),
       delete: async (args: unknown) => {
-        assert.deepEqual((args as { where: unknown }).where, { id: 'doc-1', organisationId: 'org-1', deletionHold: false,
+        assert.deepEqual((args as { where: unknown }).where, { deletedAt: null, id: 'doc-1', organisationId: 'org-1', deletionHold: false,
           lifecycleStatus: 'DRAFT', standardLinks: { none: {} }, confluenceReferences: { none: {} } });
         throw Object.assign(new Error('hold changed concurrently'), { code: 'P2025' });
       },
@@ -2552,7 +2602,7 @@ test('superseding requires a current same-charity, same-category replacement and
     }
     assert.equal(audits.length, 0);
     assert.deepEqual(written, {});
-    assert.deepEqual(reads.filter((where) => where.id === 'doc-2'), Array(3).fill(null).map(() => ({ id: 'doc-2', organisationId: 'org-1' })));
+    assert.deepEqual(reads.filter((where) => where.id === 'doc-2'), Array(3).fill(null).map(() => ({ deletedAt: null, id: 'doc-2', organisationId: 'org-1' })));
 
     candidate = { id: 'doc-2', category: 'POLICY', lifecycleStatus: 'CURRENT' };
     const good = await app.inject({ method: 'PATCH', url: '/doc-1', headers: { authorization: authHeader }, payload });

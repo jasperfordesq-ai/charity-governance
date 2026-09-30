@@ -98,7 +98,8 @@ function prismaWith(
   const delegate = (name: string) => ({
     findMany: async ({ where, take, select }: { where: Record<string, unknown>; take: number; select: Record<string, boolean> }) => {
       calls.push({ delegate: name, where, select });
-      return (rows[name] ?? []).filter((row) => matches(row, where)).slice(0, take)
+      return (rows[name] ?? []).map(row => name === 'document' ? { deletedAt: null, ...row } : row)
+        .filter((row) => matches(row, where)).slice(0, take)
         .map((row) => Object.fromEntries(Object.keys(select).map((field) => [field, row[field]])));
     },
   });
@@ -148,6 +149,18 @@ async function buildApp(
   await app.register(searchRoutes, { prefix: '/api/v1/search' });
   return { app, calls };
 }
+
+test('Admin search excludes removed documents while finding an active matching file', async () => {
+  const { app } = await buildApp({ document: [
+    { id: 'active-doc', organisationId: 'org-1', name: 'Recovery proof active', createdAt: new Date(), deletedAt: null },
+    { id: 'removed-doc', organisationId: 'org-1', name: 'Recovery proof removed', createdAt: new Date(), deletedAt: new Date() },
+  ] });
+  try {
+    const response = await app.inject({ method: 'GET', url: '/api/v1/search?q=Recovery%20proof&types=Document', headers: { authorization } });
+    assert.equal(response.statusCode, 200);
+    assert.deepEqual(response.json().data.data.map((hit: { id: string }) => hit.id), ['active-doc']);
+  } finally { await app.close(); }
+});
 
 test('Member search cannot bypass register, trustee-detail or document visibility boundaries even with FULL session scope', async () => {
   const { app, calls } = await buildApp({

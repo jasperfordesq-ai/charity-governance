@@ -523,6 +523,7 @@ export class DocumentService {
                 'The queued Confluence erasure target no longer matches the retired publication. Review the page and attachment IDs before retrying.');
             }
             const liveDocument = await this.prisma.document.findFirst({
+              // Recoverable records still protect their external copies.
               where: { id: publications[0]!.documentId, organisationId: deletion.organisationId },
               select: { id: true },
             });
@@ -761,10 +762,10 @@ export class DocumentService {
   async list(organisationId: string, page = 1, pageSize = 50, viewerRole: 'OWNER' | 'ADMIN' | 'MEMBER' = 'MEMBER', before?: string) {
     const skip = (page - 1) * pageSize;
     const baseWhere: Prisma.DocumentWhereInput = viewerRole === 'MEMBER'
-      ? { organisationId, visibility: 'MEMBER_VISIBLE' as const, contentAccessClass: 'MEMBER_SUITABLE' as const,
+      ? { organisationId, deletedAt: null, visibility: 'MEMBER_VISIBLE' as const, contentAccessClass: 'MEMBER_SUITABLE' as const,
         memberReviewedSha256: { not: null },
         storageProvider: { in: ['local', 'supabase'] }, lifecycleStatus: { notIn: ['UNREVIEWED', 'DRAFT'] as Array<'UNREVIEWED' | 'DRAFT'> } }
-      : { organisationId };
+      : { organisationId, deletedAt: null };
     const anchor = before ? await this.prisma.document.findFirst({
       where: { ...baseWhere, id: before }, select: { id: true, createdAt: true },
     }) : null;
@@ -807,7 +808,7 @@ export class DocumentService {
     const includeAdditionalStandards = await documentStandardLinkScope(this.prisma, organisationId);
     if (viewerRole === 'MEMBER') {
       const doc = await this.prisma.document.findFirst({
-        where: { id, organisationId, visibility: 'MEMBER_VISIBLE', contentAccessClass: 'MEMBER_SUITABLE',
+        where: { deletedAt: null, id, organisationId, visibility: 'MEMBER_VISIBLE', contentAccessClass: 'MEMBER_SUITABLE',
           memberReviewedSha256: { not: null },
           storageProvider: { in: ['local', 'supabase'] }, lifecycleStatus: { notIn: ['UNREVIEWED', 'DRAFT'] } },
         select: memberDocumentSelect(includeAdditionalStandards),
@@ -816,7 +817,7 @@ export class DocumentService {
       return publicDocument(doc);
     }
     const doc = await this.prisma.document.findFirst({
-      where: { id, organisationId },
+      where: { deletedAt: null, id, organisationId },
       include: scopedPublicDocumentInclude(includeAdditionalStandards),
     });
 
@@ -852,7 +853,7 @@ export class DocumentService {
 
     const updated = await this.prisma.$transaction(async (tx) => {
       const existing = await tx.document.findFirst({
-        where: { id, organisationId },
+        where: { deletedAt: null, id, organisationId },
         select: { id: true, updatedAt: true, category: true, visibility: true, contentAccessClass: true,
           memberReviewedSha256: true, lifecycleStatus: true, storageProvider: true,
           supersededByDocumentId: true, externalPublicationApproved: true,
@@ -903,7 +904,7 @@ export class DocumentService {
           throw new AppError(400, 'DOCUMENT_REPLACEMENT_REQUIRED', 'Choose a different current document as the replacement.');
         }
         const replacement = await tx.document.findFirst({
-          where: { id: data.replacementDocumentId, organisationId },
+          where: { deletedAt: null, id: data.replacementDocumentId, organisationId },
           select: { id: true, category: true, lifecycleStatus: true },
         });
         if (!replacement || replacement.lifecycleStatus !== 'CURRENT' || replacement.category !== (data.category ?? existing.category)) {
@@ -1013,10 +1014,10 @@ export class DocumentService {
       try {
         result = await tx.document.update({
           where: changingControl
-            ? { id, organisationId, visibility: existing.visibility, contentAccessClass: existing.contentAccessClass,
+            ? { id, organisationId, deletedAt: null, visibility: existing.visibility, contentAccessClass: existing.contentAccessClass,
               memberReviewedSha256: existing.memberReviewedSha256, lifecycleStatus: existing.lifecycleStatus,
               externalPublicationApproved: existing.externalPublicationApproved, updatedAt: existing.updatedAt }
-            : { id, organisationId, updatedAt: existing.updatedAt },
+            : { id, organisationId, deletedAt: null, updatedAt: existing.updatedAt },
           data: {
             name: data.name,
             description: data.description,
@@ -1174,10 +1175,10 @@ export class DocumentService {
   }> {
     const doc = await this.prisma.document.findFirst({
       where: viewerRole === 'MEMBER'
-        ? { id, organisationId, visibility: 'MEMBER_VISIBLE', contentAccessClass: 'MEMBER_SUITABLE',
+        ? { id, organisationId, deletedAt: null, visibility: 'MEMBER_VISIBLE', contentAccessClass: 'MEMBER_SUITABLE',
           memberReviewedSha256: { not: null },
           storageProvider: { in: ['local', 'supabase'] }, lifecycleStatus: { notIn: ['UNREVIEWED', 'DRAFT'] } }
-        : { id, organisationId },
+        : { id, organisationId, deletedAt: null },
       select: { fileUrl: true, storageProvider: true, fileSize: true, mimeType: true, name: true, updatedAt: true,
         visibility: true, contentAccessClass: true, lifecycleStatus: true },
     });
@@ -1291,7 +1292,7 @@ export class DocumentService {
       );
       if (target === null) return;
       const approved = await this.prisma.document.findFirst({
-        where: { id: documentId, organisationId, lifecycleStatus: 'CURRENT',
+        where: { deletedAt: null, id: documentId, organisationId, lifecycleStatus: 'CURRENT',
           externalPublicationApproved: true, externalPublicationSiteId: target.cloudId,
           externalPublicationSpaceId: target.spaceId },
         select: { id: true },
@@ -1423,7 +1424,7 @@ export class DocumentService {
     id: string; storageProviderVerified: true; updatedAt: Date;
   }> {
     const doc = await this.prisma.document.findFirst({
-      where: { id: input.documentId, organisationId: input.organisationId },
+      where: { deletedAt: null, id: input.documentId, organisationId: input.organisationId },
       select: { id: true, fileUrl: true, fileSize: true, storageProvider: true },
     });
     if (!doc) throw new AppError(404, 'DOCUMENT_NOT_FOUND', 'Document not found');
@@ -1449,7 +1450,7 @@ export class DocumentService {
       try {
         updated = await tx.document.update({
           where: {
-            id: input.documentId, organisationId: input.organisationId,
+            deletedAt: null, id: input.documentId, organisationId: input.organisationId,
             storageProvider: null, fileUrl: doc.fileUrl, fileSize: doc.fileSize,
             updatedAt: input.expectedUpdatedAt,
           },
@@ -1475,7 +1476,7 @@ export class DocumentService {
   async remove(organisationId: string, id: string, actorUserId: string, reason: string): Promise<{ storagePath: string; storageDeletionId: string; provider: string }> {
     const result = await this.prisma.$transaction(async (tx) => {
       const doc = await tx.document.findFirst({
-        where: { id, organisationId },
+        where: { deletedAt: null, id, organisationId },
         include: {
           standardLinks: { select: { id: true }, take: 1 },
           confluenceReferences: { select: { id: true }, take: 1 },
@@ -1513,7 +1514,7 @@ export class DocumentService {
       });
 
       try {
-        await tx.document.delete({ where: { id, organisationId, deletionHold: false,
+        await tx.document.delete({ where: { deletedAt: null, id, organisationId, deletionHold: false,
           lifecycleStatus: 'DRAFT', standardLinks: { none: {} }, confluenceReferences: { none: {} } } });
       } catch (error) {
         if (typeof error === 'object' && error !== null && 'code' in error && error.code === 'P2025') {
@@ -2356,7 +2357,7 @@ export class DocumentService {
   async linkStandard(organisationId: string, documentId: string, standardId: string, actorUserId: string) {
     const [doc, standard, organisation, subscription] = await Promise.all([
       this.prisma.document.findFirst({
-        where: { id: documentId, organisationId },
+        where: { deletedAt: null, id: documentId, organisationId },
       }),
       this.prisma.governanceStandard.findUnique({
         where: { id: standardId },
@@ -2416,7 +2417,7 @@ export class DocumentService {
 
   async unlinkStandard(organisationId: string, documentId: string, standardId: string, actorUserId: string) {
     const doc = await this.prisma.document.findFirst({
-      where: { id: documentId, organisationId },
+      where: { deletedAt: null, id: documentId, organisationId },
     });
 
     if (!doc) {

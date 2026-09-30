@@ -2,6 +2,15 @@
 
 Last updated: 2026-09-30
 
+Recovery continuation: removal-state migration and ordinary read exclusions are
+now implemented locally. The PostgreSQL upgrade proof checks retained metadata,
+no cleanup job, restricted restoration, policy withdrawal and rejection of new
+citations/replacement links to trash. The mirror endpoint filters removed rows
+before publication lookup. Build and 73 document-route tests pass after that
+fix; the preceding broader focused run passed 804 tests. No physical-byte restore,
+concurrency, removal/restore API/UI or live deployment is proven. R2-R5 remain
+open; see the recovery contract for the next work and exact evidence limits.
+
 Recovery R1 policy persistence is now implemented locally in migration
 `20260930010000_retention_policy_revisions`: immutable proposals/approvals and
 separate withdrawal facts, same-charity active actor checks, complete approval

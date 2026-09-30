@@ -1,7 +1,7 @@
 # Document recovery and purge implementation contract
 
 Status: implementation in progress, 30 September 2026. R1 policy persistence
-is implemented locally; removal state and R2-R5 remain open. Other data
+and removal state are implemented locally; R2-R5 remain open. Other data
 classes and downstream stores remain in the full data-lifecycle scope.
 
 Policy persistence checkpoint: immutable `DataRetentionPolicyRevision` rows
@@ -24,6 +24,24 @@ The migration is not deployed. This checkpoint does not prove recovery,
 purge/hold races, user-interface behavior or provider/backup disposal.
 
 ## Observed starting point
+
+Recovery-state checkpoint: additive migration
+`20260930020000_document_recoverable_state` retains removed rows with scoped
+policy, actor, revision, evidence and deadline facts. It rejects held or linked
+draft removal, invalid/withdrawn policy, altered content, premature hard deletion
+and new citation/replacement references. Restore-state transitions preserve
+restricted sharing and holds. Ordinary Vault, search, activity, evidence-selection,
+download and publication reads exclude removed rows; ordinary mirror lookup
+filters before fetching publication details. Custody checks and quota still
+include retained rows, so cleanup cannot mistake trash for unreferenced storage.
+
+The real PostgreSQL proof now exercises removal/restoration state, preserved
+path/size, no cleanup job, reference rejection and policy withdrawal. It does
+not verify physical bytes or concurrent transitions. API build and the earlier
+804 focused tests pass; after the mirror fix, all 73 document-route tests pass.
+No removal/restore API or UI is exposed, no policy is activated, and neither
+new migration is deployed. Continue R2 and the remaining R1 publication-fixture
+coverage; these foundations do not complete the recovery contract.
 
 `DocumentService.remove` transactionally removes an eligible, unheld DRAFT
 record and enqueues a provider-pinned `DocumentStorageDeletion`. The DELETE

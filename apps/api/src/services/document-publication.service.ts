@@ -618,7 +618,7 @@ export type ConfluencePublishConnect = (input: {
 type DocumentReadClient = {
   document: {
     findFirst(args: {
-      where: { id: string; organisationId: string; lifecycleStatus: 'CURRENT'; externalPublicationApproved: true;
+      where: { id: string; organisationId: string; deletedAt: null; lifecycleStatus: 'CURRENT'; externalPublicationApproved: true;
         externalPublicationSiteId?: string; externalPublicationSpaceId?: string };
       select: Record<string, boolean>;
     }): Promise<Record<string, unknown> | null>;
@@ -680,7 +680,7 @@ function defaultReadDocument(
     // Scoped on the organisation as well as the id: a publication row names a
     // tenant, and a document id alone must never reach another charity's row.
     const doc = await prisma.document.findFirst({
-      where: { id: documentId, organisationId, lifecycleStatus: 'CURRENT', externalPublicationApproved: true },
+      where: { deletedAt: null, id: documentId, organisationId, lifecycleStatus: 'CURRENT', externalPublicationApproved: true },
       select: {
         id: true,
         name: true,
@@ -791,7 +791,7 @@ export function createConfluencePublisher(deps: ConfluencePublisherDeps): Publis
   const assertStillApproved = async (organisationId: string, documentId: string, target: ConfluencePublishTarget) => {
     if (!deps.prisma) return; // Pure publisher tests inject every dependency; production supplies Prisma.
     const approved = await deps.prisma.document.findFirst({
-      where: { id: documentId, organisationId, lifecycleStatus: 'CURRENT', externalPublicationApproved: true,
+      where: { deletedAt: null, id: documentId, organisationId, lifecycleStatus: 'CURRENT', externalPublicationApproved: true,
         externalPublicationSiteId: target.cloudId, externalPublicationSpaceId: target.spaceId },
       select: { id: true },
     });

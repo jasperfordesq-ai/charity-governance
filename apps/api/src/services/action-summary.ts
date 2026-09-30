@@ -87,7 +87,7 @@ const LOOKUPS: Record<string, Lookup> = {
   },
   "DELETE /api/v1/documents/:id": async (prisma, organisationId, params) => {
     const row = await prisma.document.findFirst({
-      where: { id: idOf(params), organisationId },
+      where: { deletedAt: null, id: idOf(params), organisationId },
       select: { name: true, category: true },
     });
     return row
@@ -97,7 +97,7 @@ const LOOKUPS: Record<string, Lookup> = {
   "DELETE /api/v1/documents/:id/standards/:standardId": async (prisma, organisationId, params) => {
     const [document, standard] = await Promise.all([
       prisma.document.findFirst({
-        where: { id: idOf(params), organisationId },
+        where: { deletedAt: null, id: idOf(params), organisationId },
         select: { name: true },
       }),
       // Reference data describing the Governance Code itself, identical for

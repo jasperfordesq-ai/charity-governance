@@ -343,10 +343,10 @@ export class GoverningActService {
       // Historical, draft and unreviewed files remain in the Vault, but may
       // never be presented as current board-submission evidence.
       where: viewerRole === 'MEMBER'
-        ? { organisationId, lifecycleStatus: 'CURRENT', visibility: 'MEMBER_VISIBLE',
+        ? { organisationId, deletedAt: null, lifecycleStatus: 'CURRENT', visibility: 'MEMBER_VISIBLE',
           contentAccessClass: 'MEMBER_SUITABLE', memberReviewedSha256: { not: null },
           storageProvider: { in: ['local', 'supabase'] } }
-        : { organisationId, lifecycleStatus: 'CURRENT' },
+        : { organisationId, deletedAt: null, lifecycleStatus: 'CURRENT' },
       include: {
         approvedByResolution: {
           include: {
@@ -419,7 +419,7 @@ export class GoverningActService {
     const expectedInstant = new Date(expectedUpdatedAt);
 
     await this.prisma.$transaction(async (tx) => {
-    const doc = await tx.document.findFirst({ where: { id: documentId, organisationId } });
+    const doc = await tx.document.findFirst({ where: { deletedAt: null, id: documentId, organisationId } });
     if (!doc) throw new AppError(404, 'DOCUMENT_NOT_FOUND', 'Document not found');
     if (doc.updatedAt.getTime() !== expectedInstant.getTime()) {
       throw new AppError(
@@ -463,7 +463,7 @@ export class GoverningActService {
     }
 
     const updated = await tx.document.updateMany({
-      where: { id: documentId, organisationId, updatedAt: expectedInstant },
+      where: { deletedAt: null, id: documentId, organisationId, updatedAt: expectedInstant },
       data: {
         ...(approvedByResolutionId !== undefined ? { approvedByResolutionId } : {}),
         ...(approvalAsserted !== undefined ? { approvalAsserted } : {}),

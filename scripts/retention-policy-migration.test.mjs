@@ -10,7 +10,7 @@ const migrations = fileURLToPath(new URL('../apps/api/prisma/migrations/', impor
 const target = '20260930010000_retention_policy_revisions';
 const image = 'postgres@sha256:5660c2cbfea50c7a9127d17dc4e48543eedd3d7a41a595a2dfa572471e37e64c';
 
-test('retention policy upgrade preserves documents and enforces immutable scoped approval facts', { timeout: 240_000 }, async () => {
+test('retention policy and recovery-state upgrade preserve documents and enforce scoped transitions', { timeout: 240_000 }, async () => {
   const context = spawnSync('docker', ['context', 'inspect', '--format', '{{json .Endpoints.docker}}'], { encoding: 'utf8', timeout: 10_000 });
   assert.equal(context.status, 0, context.stderr);
   const endpoint = JSON.parse(context.stdout);
@@ -84,6 +84,29 @@ test('retention policy upgrade preserves documents and enforces immutable scoped
     sql(`UPDATE "DataRetentionPolicyWithdrawal" SET reason='Changed after the event' WHERE id='withdrawn';`, /append-only/);
     sql(`DELETE FROM "DataRetentionPolicyWithdrawal" WHERE id='withdrawn';`, /append-only/);
     assert.equal(sql(`SELECT count(*) FROM "DataRetentionPolicyRevision" p WHERE state='APPROVED' AND NOT EXISTS (SELECT 1 FROM "DataRetentionPolicyWithdrawal" w WHERE w."policyId"=p.id AND w."organisationId"=p."organisationId");`), '0');
+    sql(readFileSync(`${migrations}/20260930020000_document_recoverable_state/migration.sql`, 'utf8'));
+    assert.equal(sql(`SELECT count(*) FROM "Document" WHERE "deletedAt" IS NOT NULL;`), '0');
+    sql(`${insert('recovery', ',"state","approvedById","approvedAt","approvalEvidenceRef"')} VALUES ('recovery','retention-a','VAULT_DRAFT',3,'REVIEW_REQUIRED',30,'owner-a','APPROVED','owner-a',CURRENT_TIMESTAMP,'POLICY-APPROVAL-003');`);
+    sql(`UPDATE "Document" SET "lifecycleStatus"='DRAFT', "storageProvider"='local' WHERE id='retained-doc';`);
+    const active = sql(`SELECT (to_jsonb(d) - 'updatedAt')::text FROM "Document" d WHERE id='retained-doc';`);
+    const remove = (policy = 'recovery', days = 30) => `UPDATE "Document" SET "deletedAt"=timezone('UTC',statement_timestamp()), "deletedById"='owner-a', "removedFromRevision"="updatedAt", "removalEvidenceRef"='REMOVAL-001', "recoveryPolicyId"='${policy}', "recoveryUntil"=timezone('UTC',statement_timestamp()) + INTERVAL '${days} days', "updatedAt"=timezone('UTC',statement_timestamp()) WHERE id='retained-doc';`;
+    sql(remove('draft'), /approved current draft recovery policy/);
+    sql(remove('approved'), /approved current draft recovery policy/);
+    sql(remove('recovery', 1), /revision or recovery deadline/);
+    sql(remove());
+    sql(`INSERT INTO "ConfluenceReference" (id,"organisationId","documentId","cloudId","pageId","pageTitle","pageVersion","citedAt","citedById","updatedAt") VALUES ('blocked-reference','retention-a','retained-doc','synthetic-site','synthetic-page','Synthetic citation',1,CURRENT_TIMESTAMP,'owner-a',CURRENT_TIMESTAMP);`, /cannot receive new evidence references/);
+    sql(`INSERT INTO "Document" (id,"organisationId",name,category,"fileUrl","fileSize","mimeType","updatedAt","supersededByDocumentId") VALUES ('blocked-predecessor','retention-a','Synthetic predecessor','OTHER','retention-a/predecessor.pdf',12,'application/pdf',CURRENT_TIMESTAMP,'retained-doc');`, /cannot receive new evidence references/);
+    assert.equal(sql(`SELECT "fileUrl" || ':' || "fileSize" FROM "Document" WHERE id='retained-doc'; SELECT count(*) FROM "DocumentStorageDeletion";`), 'retention-a/file.pdf:12\n0');
+    sql(`UPDATE "Document" SET name='Unexpected overwrite' WHERE id='retained-doc';`, /cannot be rewritten/);
+    sql(`DELETE FROM "Document" WHERE id='retained-doc';`, /authorized purge transition/);
+    sql(`UPDATE "Document" SET "deletionHold"=true WHERE id='retained-doc';`);
+    sql(`UPDATE "Document" SET "deletedAt"=NULL,"deletedById"=NULL,"removedFromRevision"=NULL,"removalEvidenceRef"=NULL,"recoveryPolicyId"=NULL,"recoveryUntil"=NULL WHERE id='retained-doc';`);
+    assert.equal(sql(`SELECT "deletionHold" FROM "Document" WHERE id='retained-doc';`), 't');
+    sql(remove(), /hold or linked evidence review/);
+    sql(`UPDATE "Document" SET "deletionHold"=false WHERE id='retained-doc';`);
+    assert.equal(sql(`SELECT (to_jsonb(d) - 'updatedAt')::text FROM "Document" d WHERE id='retained-doc';`), active);
+    sql(withdrawal('recovery-withdrawn', 'retention-a', 'recovery'));
+    sql(remove(), /approved current draft recovery policy/);
   } finally {
     const removed = docker(['rm', '--force', '--volumes', container]);
     assert.equal(removed.status, 0, removed.stderr);

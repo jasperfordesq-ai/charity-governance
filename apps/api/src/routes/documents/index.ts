@@ -150,7 +150,7 @@ export async function documentRoutes(app: FastifyInstance) {
         q: z.string().trim().max(100).optional(),
       }).parse(request.query);
       const source = await app.prisma.document.findFirst({
-        where: { id: request.params.id, organisationId: request.user.organisationId },
+        where: { deletedAt: null, id: request.params.id, organisationId: request.user.organisationId },
         select: { category: true },
       });
       if (!source) throw new AppError(404, 'DOCUMENT_NOT_FOUND', 'Document not found');
@@ -158,6 +158,7 @@ export async function documentRoutes(app: FastifyInstance) {
         where: {
           organisationId: request.user.organisationId,
           id: { not: request.params.id },
+          deletedAt: null,
           category: source.category,
           lifecycleStatus: 'CURRENT',
           ...(query.q ? { name: { contains: query.q, mode: 'insensitive' } } : {}),
@@ -213,9 +214,14 @@ export async function documentRoutes(app: FastifyInstance) {
       const siteUrl = typeof config?.siteUrl === 'string' ? config.siteUrl : null;
       const target = connected ? readConfluencePublishTarget(integration) : null;
 
+      const documents = documentIds.length ? await app.prisma.document.findMany({
+        where: { organisationId: request.user.organisationId, deletedAt: null, id: { in: documentIds } },
+        select: { id: true, externalPublicationApproved: true,
+          externalPublicationSiteId: true, externalPublicationSpaceId: true },
+      }) : [];
       const mirrors = await mirrorsForDocuments(app.prisma, {
         organisationId: request.user.organisationId,
-        documentIds,
+        documentIds: documents.map((doc) => doc.id),
         siteUrl,
         siteId: connected ? confluenceSiteIdFromConfig(integration.config) : null,
         connectionAvailable: connected,
@@ -223,11 +229,6 @@ export async function documentRoutes(app: FastifyInstance) {
         publishSpaceId: target?.spaceId ?? null,
       });
 
-      const documents = documentIds.length ? await app.prisma.document.findMany({
-        where: { organisationId: request.user.organisationId, id: { in: documentIds } },
-        select: { id: true, externalPublicationApproved: true,
-          externalPublicationSiteId: true, externalPublicationSpaceId: true },
-      }) : [];
       const approvalCurrent = new Map(documents.map((doc) => [doc.id,
         Boolean(doc.externalPublicationApproved && target &&
           doc.externalPublicationSiteId === target.cloudId &&
@@ -342,7 +343,7 @@ export async function documentRoutes(app: FastifyInstance) {
         }
         const approved = await app.prisma.document.findFirst({
           where: {
-            id: request.params.id,
+            deletedAt: null, id: request.params.id,
             organisationId: request.user.organisationId,
             lifecycleStatus: 'CURRENT',
             externalPublicationApproved: true,
@@ -549,7 +550,7 @@ export async function documentRoutes(app: FastifyInstance) {
       // Re-read the live tenant record before deciding which current role is
       // required; the descriptor's earlier visibility is no longer authority.
       const currentDocument = await app.prisma.document.findFirst({
-        where: { id: request.params.id, organisationId: request.user.organisationId },
+        where: { deletedAt: null, id: request.params.id, organisationId: request.user.organisationId },
         select: { id: true, visibility: true, contentAccessClass: true, memberReviewedSha256: true,
           lifecycleStatus: true, fileUrl: true, storageProvider: true, fileSize: true, updatedAt: true },
       });

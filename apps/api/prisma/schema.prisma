@@ -1292,6 +1292,7 @@ model DataRetentionPolicyRevision {
   approvedAt          DateTime?
   approvalEvidenceRef String?
   withdrawal          DataRetentionPolicyWithdrawal?
+  removedDocuments    Document[]
 
   @@unique([id, organisationId])
   @@unique([organisationId, recordClass, revision], map: "RetentionPolicy_org_class_revision_key")
@@ -1332,6 +1333,14 @@ model Document {
   externalPublicationSiteId String?
   externalPublicationSpaceId String?
   deletionHold           Boolean @default(false)
+  // Recovery metadata is separate from document lifecycle. Null means active.
+  deletedAt              DateTime?
+  deletedById            String?
+  removedFromRevision    DateTime?
+  removalEvidenceRef     String?
+  recoveryUntil          DateTime?
+  recoveryPolicyId       String?
+  recoveryPolicy         DataRetentionPolicyRevision? @relation(fields: [recoveryPolicyId, organisationId], references: [id, organisationId], onDelete: Restrict, map: "Document_recovery_policy_fkey")
   fileUrl                String
   // Provider recorded from the write, an exact attached reservation, or a
   // guarded active-object review; null means legacy custody is unverified.

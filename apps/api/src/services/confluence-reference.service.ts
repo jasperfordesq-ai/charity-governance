@@ -117,7 +117,7 @@ export async function citeConfluencePage(
   // Scoped on the organisation as well as the id, like every other read here: a
   // document id alone must never reach another charity's row.
   const document = await prisma.document.findFirst({
-    where: { id: input.documentId, organisationId: input.organisationId },
+    where: { deletedAt: null, id: input.documentId, organisationId: input.organisationId },
     select: { id: true },
   });
   if (document === null) {

@@ -41,10 +41,10 @@ export class ActivityService {
       }),
       this.prisma.document.findMany({
         where: viewerRole === 'MEMBER'
-          ? { organisationId, visibility: 'MEMBER_VISIBLE', contentAccessClass: 'MEMBER_SUITABLE',
+          ? { organisationId, deletedAt: null, visibility: 'MEMBER_VISIBLE', contentAccessClass: 'MEMBER_SUITABLE',
             memberReviewedSha256: { not: null }, storageProvider: { in: ['local', 'supabase'] },
             lifecycleStatus: { notIn: ['UNREVIEWED', 'DRAFT'] } }
-          : { organisationId },
+          : { organisationId, deletedAt: null },
         orderBy: { createdAt: 'desc' },
         take: limit,
         select: {
