@@ -3563,6 +3563,8 @@ SET
   "deadLetteredAt" = NULL,
   "terminalReason" = NULL,
   "processedAt" = ${fixedTimestamp},
+  -- Synthetic CI-only observation; never evidence of real object disposal.
+  "activeObjectAbsentAt" = ${fixedTimestamp},
   "updatedAt" = ${fixedTimestamp}
 WHERE "id" = ${sqlLiteral(sentinel.documentStorageDeletionId)}
   AND "state" = 'PENDING';

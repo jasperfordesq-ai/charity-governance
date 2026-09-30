@@ -1193,6 +1193,7 @@ test('postgres backup CLI renders operational restore sentinel seeding without e
   assert.match(result.stdout, /00000000-0000-4000-8000-000000000001/);
   assert.match(result.stdout, /"lastRecoveryDisposition" = 'REQUEUE_UNCHANGED'/);
   assert.match(result.stdout, /"state" = 'PROCESSED'/);
+  assert.match(result.stdout, /"activeObjectAbsentAt" = /);
   assert.match(result.stdout, /ON CONFLICT/);
   assert.doesNotMatch(result.stdout, /backup-user:secret/);
 });

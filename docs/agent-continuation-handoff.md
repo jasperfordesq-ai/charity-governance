@@ -2,6 +2,14 @@
 
 Last updated: 2026-09-30
 
+Backup gate follow-up: CI 36698387739 for 86b5433d failed while seeding its
+synthetic restore sentinel, before backup began. Its PENDING-to-PROCESSED
+local-storage fixture omitted the activeObjectAbsentAt receipt required by
+the new database guard. The fixture now supplies its synthetic fixed timestamp
+in the same completion update; no production guard is relaxed. The backup
+CLI suite passes 43 tests with one platform skip. Actual PostgreSQL CI backup
+and restore verification and exact-candidate E2E remain required before deploy.
+
 CI security follow-up: the synthetic worker proof uses tagged constant DDL and
 the trusted repository identity SQL through Prisma's supported query API.
 Integration control-character expressions now use explicit Unicode escapes;
