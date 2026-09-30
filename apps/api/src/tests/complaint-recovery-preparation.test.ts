@@ -1,0 +1,96 @@
+import assert from 'node:assert/strict';
+import { test } from 'node:test';
+import { prepareComplaintRecoveryFacts } from '../services/complaint-recovery-preparation.js';
+
+function fixture() {
+  const organisationId = 'charity', stamp = '2026-09-01T00:00:00.000Z';
+  const provenance = { actorUserId: 'owner', evidenceRef: 'EVIDENCE-1', reason: 'Synthetic reviewed reason' };
+  const copy = { disposition: 'RETAIN_APPROVED', evidenceRef: 'COPY-1' };
+  const value = { format: 1, action: 'COMPLAINT_PURGE_PREPARATION', installationId: 'install', organisationId,
+    operationId: 'operation', writerEpoch: 1, actorUserId: 'owner', preparedAt: stamp, sourceRevision: 'a'.repeat(40),
+    complaint: { id: 'complaint', organisationId, revision: 2, status: 'CLOSED', removedAt: stamp,
+      removalId: 'removal', reviewedByBoard: false, boardMinuteReference: null },
+    authorization: { id: 'authority', organisationId, complaintId: 'complaint', recordRevision: 2,
+      holdRevision: 0, removalId: 'removal', policyId: 'policy', ...provenance, recoveryUntil: stamp,
+      authorizedAt: stamp, dispositionPlan: { PRIMARY: { ...copy, disposition: 'DISPOSE' },
+        SNAPSHOTS: copy, EXPORTS: copy, AUDIT: copy, BACKUPS: copy, OTHER_COPIES: copy } },
+    policy: { id: 'policy', organisationId, recordClass: 'COMPLAINT', revision: 1, state: 'APPROVED',
+      retentionMode: 'REVIEW_REQUIRED', retentionAnchor: null as string | null, retentionDays: null as number | null,
+      recoveryDays: 1, createdById: 'owner', createdAt: stamp, approvedById: 'owner', approvedAt: stamp,
+      approvalEvidenceRef: 'POLICY-1' },
+    removal: { id: 'removal', organisationId, complaintId: 'complaint', recordRevision: 1,
+      ...provenance, policyId: 'policy', resolutionEvidenceId: null as string | null, occurredAt: stamp, recoveryUntil: stamp },
+    removalResolution: null as Record<string, unknown> | null, resolution: null as Record<string, unknown> | null, latestHold: null as Record<string, unknown> | null };
+  return { ...value, removalPolicy: { ...value.policy } };
+}
+
+test('preparation preserves explicit decision facts with stable bytes and never authorizes action', () => {
+  const input = fixture();
+  const first = prepareComplaintRecoveryFacts(input);
+  const reordered = Object.fromEntries(Object.entries(input).reverse());
+  assert.deepEqual(prepareComplaintRecoveryFacts(reordered), first);
+  assert.equal(first.actionAuthorized, false);
+  assert.equal(JSON.parse(first.body).authorization.reason, input.authorization.reason);
+  input.authorization.reason = 'A different reviewed decision';
+  assert.notEqual(prepareComplaintRecoveryFacts(input).digest, first.digest);
+});
+
+test('preparation refuses subject fields at every object boundary without leaking their values', () => {
+  for (const key of ['', 'complaint', 'authorization', 'policy', 'removalPolicy', 'removal']) {
+    const input = fixture();
+    const target = key ? (input as unknown as Record<string, object>)[key]! : input;
+    Object.assign(target, { narrative: 'sensitive-example' });
+    assert.throws(() => prepareComplaintRecoveryFacts(input), { message: 'Invalid complaint recovery preparation' });
+  }
+});
+
+test('preparation refuses foreign, missing, held and inconsistent dependencies', () => {
+  const mutations = [
+    (v: ReturnType<typeof fixture>) => { v.policy.organisationId = 'foreign'; },
+    (v: ReturnType<typeof fixture>) => { v.authorization.policyId = 'absent'; },
+    (v: ReturnType<typeof fixture>) => { v.authorization.recordRevision++; },
+    (v: ReturnType<typeof fixture>) => { v.authorization.actorUserId = 'former-owner'; },
+    (v: ReturnType<typeof fixture>) => { v.authorization.holdRevision = 1; },
+    (v: ReturnType<typeof fixture>) => { v.policy.retentionDays = 10; },
+    (v: ReturnType<typeof fixture>) => { v.removal.resolutionEvidenceId = 'missing'; },
+    (v: ReturnType<typeof fixture>) => { v.complaint.reviewedByBoard = true; },
+    (v: ReturnType<typeof fixture>) => { v.writerEpoch = 0; },
+    (v: ReturnType<typeof fixture>) => { v.removal.recoveryUntil = '2026-10-01T00:00:00.000Z'; },
+  ];
+  for (const change of mutations) {
+    const input = fixture(); change(input);
+    assert.throws(() => prepareComplaintRecoveryFacts(input));
+  }
+});
+
+test('timed retention preparation requires the actual linked resolution evidence', () => {
+  const input = fixture();
+  input.policy.retentionMode = 'AFTER_ANCHOR'; input.policy.retentionAnchor = 'RESOLVED_AT'; input.policy.retentionDays = 10;
+  input.policy.id = 'timed-policy'; input.authorization.policyId = 'timed-policy';
+  assert.throws(() => prepareComplaintRecoveryFacts(input));
+  input.removal.resolutionEvidenceId = 'resolution';
+  input.resolution = { id: 'resolution', organisationId: 'charity', complaintId: 'complaint', revision: 1,
+    recordRevision: 1, actorUserId: 'owner', evidenceRef: 'RESOLUTION-1', reason: 'Synthetic resolution reason',
+    state: 'RECORDED', resolvedAt: '2026-08-01T00:00:00.000Z', occurredAt: '2026-08-01T00:00:00.000Z' };
+  input.removalResolution = { ...input.resolution };
+  assert.equal(prepareComplaintRecoveryFacts(input).actionAuthorized, false);
+  input.resolution.recordRevision = 2;
+  assert.throws(() => prepareComplaintRecoveryFacts(input));
+});
+
+test('one dependency identity cannot carry conflicting facts', () => {
+  const input = fixture();
+  input.removalPolicy.recoveryDays = 2;
+  assert.throws(() => prepareComplaintRecoveryFacts(input));
+});
+
+test('a later disposal policy preserves the distinct original removal policy', () => {
+  const input = fixture();
+  input.policy.id = 'later-policy'; input.policy.revision = 2;
+  input.authorization.policyId = 'later-policy';
+  const facts = JSON.parse(prepareComplaintRecoveryFacts(input).body);
+  assert.equal(facts.removalPolicy.id, 'policy');
+  assert.equal(facts.policy.id, 'later-policy');
+  input.removalPolicy.id = 'missing-original';
+  assert.throws(() => prepareComplaintRecoveryFacts(input));
+});

@@ -3712,3 +3712,15 @@ before a replacement write. It remains inactive and requires independent immutab
 entry custody before use. Hosted CI 36744603266 and E2E 36744603344 passed for
 preceding f94b03ffc5d66f910fefc4a7ad9f7fe600da355b only; do not attribute those runs
 to the later optimization. The live release remains the documented d31ac597.
+
+### Complaint recovery preparation format under development
+
+An inactive candidate serializer now enumerates complaint disposal preparation
+facts, including distinct original-removal and later-disposal policy/resolution
+dependencies. It refuses unknown fields, foreign/mismatched dependencies and
+conflicting facts under one identity. Six focused tests and the API build pass.
+It neither persists nor encrypts data, proves freshness, reserves a writer epoch,
+nor authorizes a claim. Reason/actor retention still needs the prepared policy
+decision before live export. Durable preparation, reservation, database guards,
+full decision history and reconciliation integration remain required. This is
+not a deployed recovery feature or independent authority acceptance.
