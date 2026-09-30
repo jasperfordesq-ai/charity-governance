@@ -3535,3 +3535,11 @@ remaining external blockers and owners, and an explicit confirmation that no
 > and 17 without; all decisions remain PENDING. No live lifecycle, access,
 > approval or retention state changed. See private
 > `march-fourteen-policy-source-review-2026-09-30.md`.
+
+> **Nikita website-file source review, 2026-09-30:** Four named March
+> terms/privacy attachments match the verified Vault DOCX main-body tokens.
+> Current public pages, later approvals and exact published binaries are
+> unverified. Private worksheet now has 51/63 source-evidenced rows,
+> 50 with proposals and 13 without; all PENDING. No live publication,
+> access, lifecycle or retention state changed. See private
+> `four-website-terms-source-review-2026-09-30.md`.

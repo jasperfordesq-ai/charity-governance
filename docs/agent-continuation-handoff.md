@@ -1,5 +1,15 @@
 # CharityPilot Agent Continuation Handoff
 
+> **Four website terms/privacy files, 2026-09-30:** the verified Vault
+> backup DOCX files for hour-timebank.ie Terms v2, Privacy v1 and Cookie
+> Policy, plus timebank.global Platform Terms v1, match the named March
+> approval-email attachment main-body tokens. Actual current website
+> versions and later approvals were not checked. Private worksheet
+> proposes Board/RESTRICTED Vault audience, leaving lifecycle and external
+> publication open. Counts: 51/63 source evidenced, 50 with some proposal,
+> 13 with none, all PENDING. No live change. Private evidence:
+> `.charitypilot-private/four-website-terms-source-review-2026-09-30.md`.
+
 > **Fourteen further March governance documents, 2026-09-30:** the retained
 > adoption email explicitly names fourteen more files whose manifest-verified
 > Vault DOCX main bodies match their email attachments token for token.
