@@ -60,6 +60,16 @@ Before paid activation, replace repeated whole-history append scans with verifie
 incremental traversal and make full recovery resumable; also resolve the
 10,000-entry capacity/rollover boundary. Do not weaken chain/freshness checks or
 raise deadlines as a substitute. No live resource has been provisioned.
+
+An opt-in VERIFIED_PREFIX append mode now reuses only history fully verified in
+the same process, rereads its boundary and verifies new entries. Measured warm
+appends at 10 and 100 existing entries use 12 S3 GETs and two PUTs. FULL remains
+the default; recovery inspection always traverses every entry. Prefix mode does
+not re-audit older bytes on every append and must stay disabled until immutable
+entry storage is independently enforced and reviewed. Failures invalidate reuse;
+known history cannot silently shrink on fallback. Restarts require verification
+again. Resumable full recovery, rollover, mutation fencing and activation remain
+unfinished; this optimization is not a recovery or disposal authorization.
 No S3 resource has been provisioned or live-tested. Provisioning, bucket
 policy/retention, independent key custody, fencing and end-to-end recovery
 acceptance still gate activation.
@@ -3693,3 +3703,12 @@ Repo-side-only estimate:
 ## Final Rule For Future Agents
 
 Do not redefine success around passing local tests. CharityPilot is not launch-ready until the real production environment, live providers, deployed QA, legal/compliance review, external security review, backup/restore evidence, all 89 launch evidence checks, and all five final signoffs are complete and recorded.
+
+### Latest source verification: recovery append optimization
+
+The opt-in prefix optimization passed 2,469 API tests and four real PostgreSQL
+migration tests locally. Its rollback regression refuses shortened known history
+before a replacement write. It remains inactive and requires independent immutable
+entry custody before use. Hosted CI 36744603266 and E2E 36744603344 passed for
+preceding f94b03ffc5d66f910fefc4a7ad9f7fe600da355b only; do not attribute those runs
+to the later optimization. The live release remains the documented d31ac597.

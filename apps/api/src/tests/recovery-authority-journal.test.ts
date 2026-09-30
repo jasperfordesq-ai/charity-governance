@@ -5,7 +5,7 @@ import { RecoveryAuthorityJournal, type AuthorityObjectStore, type AuthorityChec
 const binding = { installationId: 'install-a', organisationId: 'charity-a' };
 const initializationCheckpoint = { ...binding, generation: 0, digest: null };
 
-function fixture() {
+function fixture(options?: { appendVerification: 'FULL' | 'VERIFIED_PREFIX' }) {
   const rows = new Map<string, string>();
   let loseAcknowledgement = false;
   const store: AuthorityObjectStore = {
@@ -18,13 +18,13 @@ function fixture() {
     },
   };
   return { rows, store, loseNextAck() { loseAcknowledgement = true; },
-    journal: new RecoveryAuthorityJournal(store, binding, initializationCheckpoint) };
+    journal: new RecoveryAuthorityJournal(store, binding, initializationCheckpoint, options) };
 }
 const intent = { operationId: 'operation-a', kind: 'DISPOSAL_INTENT' as const,
   factsDigest: 'a'.repeat(64), expectedGeneration: 0, expectedDigest: null };
 
-function publisherFixture() {
-  const f = fixture();
+function publisherFixture(options?: { appendVerification: 'FULL' | 'VERIFIED_PREFIX' }) {
+  const f = fixture(options);
   let head = { ...initializationCheckpoint, digest: null as string | null, revision: 'version-0' };
   let version = 0; let loseAck = false;
   const publisher = {
@@ -277,4 +277,79 @@ test('a store resolving absence during cancellation cannot turn expiry into a ve
   const refusal = assert.rejects(() => f.journal.inspect(), /verification deadline/);
   t.mock.timers.tick(30001);
   await refusal;
+});
+
+test('opt-in verified-prefix append uses bounded reads after warming the complete history', async () => {
+  const f = publisherFixture({ appendVerification: 'VERIFIED_PREFIX' });
+  const originalRead = f.store.read; let reads = 0;
+  f.store.read = async (...args) => { reads++; return originalRead(...args); };
+  let previous = { generation: 0, digest: null as string | null };
+  for (let i = 0; i < 30; i++) {
+    reads = 0;
+    previous = await f.journal.appendPublished({ ...intent, operationId: `operation-${i}`,
+      expectedGeneration: previous.generation, expectedDigest: previous.digest }, f.publisher);
+    assert.ok(reads <= 10, `append ${i} used ${reads} object reads`);
+  }
+  await assert.rejects(() => f.journal.appendPublished({ ...intent, operationId: 'operation-0',
+    expectedGeneration: previous.generation, expectedDigest: previous.digest }, f.publisher), /operation identity/);
+});
+
+test('verified-prefix mode rechecks its boundary and full recovery still reads historical entries', async () => {
+  const f = publisherFixture({ appendVerification: 'VERIFIED_PREFIX' });
+  const first = await f.journal.appendPublished(intent, f.publisher);
+  const second = await f.journal.appendPublished({ ...intent, operationId: 'second',
+    expectedGeneration: first.generation, expectedDigest: first.digest }, f.publisher);
+  const keys = [...f.rows.keys()];
+  const boundary = f.rows.get(keys[1]!)!;
+  f.rows.set(keys[1]!, '{}');
+  await assert.rejects(() => f.journal.appendPublished({ ...intent, operationId: 'third',
+    expectedGeneration: second.generation, expectedDigest: second.digest }, f.publisher));
+  f.rows.set(keys[1]!, boundary);
+  f.rows.set(keys[0]!, '{}');
+  await assert.rejects(() => f.journal.inspectCurrent(f.publisher));
+  await assert.rejects(() => f.journal.appendPublished({ ...intent, operationId: 'third',
+    expectedGeneration: second.generation, expectedDigest: second.digest }, f.publisher));
+});
+
+test('verified-prefix append reads another writer\'s new history and refuses stale expectations', async () => {
+  const f = publisherFixture({ appendVerification: 'VERIFIED_PREFIX' });
+  const first = await f.journal.appendPublished(intent, f.publisher);
+  const other = new RecoveryAuthorityJournal(f.store, binding, initializationCheckpoint);
+  const second = await other.appendPublished({ ...intent, operationId: 'other-writer-hold', kind: 'PRESERVATION_CHANGE',
+    expectedGeneration: first.generation, expectedDigest: first.digest }, f.publisher);
+  await assert.rejects(() => f.journal.appendPublished({ ...intent, operationId: 'stale-intent',
+    expectedGeneration: first.generation, expectedDigest: first.digest }, f.publisher), /generation changed/);
+  const third = await f.journal.appendPublished({ ...intent, operationId: 'new-review',
+    expectedGeneration: second.generation, expectedDigest: second.digest }, f.publisher);
+  assert.equal(third.generation, 3); assert.equal(third.actionAuthorized, false);
+});
+
+test('verified-prefix mode recovers acknowledgement loss and a fresh instance verifies the old prefix', async () => {
+  const f = publisherFixture({ appendVerification: 'VERIFIED_PREFIX' });
+  const first = await f.journal.appendPublished(intent, f.publisher);
+  f.loseHeadAck();
+  const next = { ...intent, operationId: 'second', expectedGeneration: first.generation, expectedDigest: first.digest };
+  await assert.rejects(() => f.journal.appendPublished(next, f.publisher), /unknown/);
+  assert.equal((await f.journal.appendPublished(next, f.publisher)).replayed, true);
+  assert.equal(f.version(), 2);
+  f.rows.set([...f.rows.keys()][0]!, '{}');
+  const restarted = new RecoveryAuthorityJournal(f.store, binding, initializationCheckpoint,
+    { appendVerification: 'VERIFIED_PREFIX' });
+  await assert.rejects(() => restarted.appendPublished(next, f.publisher), /Invalid recovery authority/);
+});
+
+test('invalidating prefix reuse does not forget a later history already verified in this process', async () => {
+  const f = publisherFixture({ appendVerification: 'VERIFIED_PREFIX' });
+  const first = await f.journal.appendPublished(intent, f.publisher);
+  const oldHead = await f.publisher.readHead();
+  await f.journal.appendPublished({ ...intent, operationId: 'later-hold',
+    expectedGeneration: first.generation, expectedDigest: first.digest }, f.publisher);
+  const keys = [...f.rows.keys()];
+  f.rows.set(keys[1]!, '{}');
+  await assert.rejects(() => f.journal.inspect());
+  f.rows.delete(keys[1]!);
+  f.publisher.readHead = async () => oldHead;
+  await assert.rejects(() => f.journal.appendPublished({ ...intent, operationId: 'replacement',
+    expectedGeneration: first.generation, expectedDigest: first.digest }, f.publisher), /verified history/);
+  assert.equal(f.rows.size, 1);
 });

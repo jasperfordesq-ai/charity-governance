@@ -56,13 +56,18 @@ const unsigned = (entry: Omit<Entry, 'digest'>) => JSON.stringify({ format: entr
 export class RecoveryAuthorityJournal {
   private readonly binding: z.infer<typeof bindingSchema>;
   private readonly checkpoint: AuthorityCheckpoint;
+  private readonly appendVerification: 'FULL' | 'VERIFIED_PREFIX';
+  private verifiedPrefix: Entry[] = [];
+  private prefixReusable = false;
   /** Checkpoint must come from separately trusted custody, never this journal's
    * own unverified scan. It is a minimum known history, not proof of freshness.
    * Generation zero is permitted only for explicitly authorized initialization. */
   constructor(private readonly store: AuthorityObjectStore, binding: z.infer<typeof bindingSchema>,
-    checkpoint: AuthorityCheckpoint) {
+    checkpoint: AuthorityCheckpoint, options = { appendVerification: 'FULL' as 'FULL' | 'VERIFIED_PREFIX' }) {
     this.binding = bindingSchema.parse(binding);
     this.checkpoint = checkpointSchema.parse(checkpoint);
+    this.appendVerification = z.object({ appendVerification: z.enum(['FULL', 'VERIFIED_PREFIX']) })
+      .strict().parse(options).appendVerification;
     if (this.checkpoint.installationId !== this.binding.installationId ||
       this.checkpoint.organisationId !== this.binding.organisationId) {
       throw new Error('Recovery authority checkpoint binding mismatch');
@@ -73,7 +78,10 @@ export class RecoveryAuthorityJournal {
     return `authority/${this.binding.installationId}/${this.binding.organisationId}/${String(generation).padStart(10, '0')}.json`;
   }
 
-  private async history(): Promise<Entry[]> {
+  /** Prefix reuse is opt-in and assumes independently enforced immutable entry
+   * storage. It does not re-audit historical bytes before the boundary on each
+   * append. Recovery inspection always traverses the complete chain. */
+  private async history(reusePrefix = false): Promise<Entry[]> {
     const controller = new AbortController();
     let timer: ReturnType<typeof setTimeout>;
     const expired = new Promise<never>((_resolve, reject) => {
@@ -82,20 +90,52 @@ export class RecoveryAuthorityJournal {
         reject(new Error('Recovery authority verification deadline exceeded'));
       }, 30000);
     });
-    try { return await this.scanHistory(controller.signal, expired); }
+    try {
+      const prefix = reusePrefix && this.appendVerification === 'VERIFIED_PREFIX' && this.prefixReusable
+        ? this.verifiedPrefix : [];
+      const rows = await this.scanHistory(controller.signal, expired, prefix);
+      if (this.appendVerification === 'VERIFIED_PREFIX') {
+        if (rows.length < this.verifiedPrefix.length) {
+          throw new Error('Previously verified history is truncated');
+        }
+        const previous = this.verifiedPrefix.at(-1);
+        if (previous && rows[previous.generation - 1]?.digest !== previous.digest) {
+          throw new Error('Previously verified recovery history changed');
+        }
+        this.verifiedPrefix = rows;
+        this.prefixReusable = true;
+      }
+      return rows;
+    } catch (error) { this.prefixReusable = false; throw error; }
     finally { clearTimeout(timer!); controller.abort(); }
   }
 
-  private async scanHistory(signal: AbortSignal, expired: Promise<never>): Promise<Entry[]> {
-    const rows: Entry[] = []; const operations = new Set<string>();
-    for (let generation = 1; generation <= 10001; generation++) {
-      let body: string | null;
-      try { body = await Promise.race([this.store.read(this.key(generation), signal), expired]); }
-      catch {
-        if (signal.aborted) throw new Error('Recovery authority verification deadline exceeded');
-        throw new Error('Recovery authority is unavailable; keep dependent actions closed.');
-      }
+  private async readBody(generation: number, signal: AbortSignal, expired: Promise<never>) {
+    let body: string | null;
+    try { body = await Promise.race([this.store.read(this.key(generation), signal), expired]); }
+    catch {
       if (signal.aborted) throw new Error('Recovery authority verification deadline exceeded');
+      throw new Error('Recovery authority is unavailable; keep dependent actions closed.');
+    }
+    if (signal.aborted) throw new Error('Recovery authority verification deadline exceeded');
+    return body;
+  }
+
+  private async scanHistory(signal: AbortSignal, expired: Promise<never>, prefix: Entry[]): Promise<Entry[]> {
+    const rows = [...prefix]; const operations = new Set(prefix.map(row => row.operationId));
+    const boundary = prefix.at(-1);
+    if (boundary) {
+      const body = await this.readBody(boundary.generation, signal, expired);
+      try {
+        if (body === null || body.length > 4096) throw new Error('Missing boundary');
+        const observed = entrySchema.parse(JSON.parse(body));
+        if (observed.digest !== boundary.digest || hash(unsigned(observed)) !== boundary.digest) {
+          throw new Error('Changed boundary');
+        }
+      } catch { throw new Error('Previously verified recovery authority boundary is missing or changed'); }
+    }
+    for (let generation = prefix.length + 1; generation <= 10001; generation++) {
+      const body = await this.readBody(generation, signal, expired);
       if (body === null) {
         if (rows.length < this.checkpoint.generation) {
           throw new Error('Recovery authority history is shorter than its trusted checkpoint');
@@ -182,7 +222,7 @@ export class RecoveryAuthorityJournal {
   async appendPublished(raw: Input, publisher: AuthorityHeadPublisher) {
     const input = inputSchema.parse(raw);
     const before = await this.readCurrentHead(publisher);
-    const rows = await this.history();
+    const rows = await this.history(true);
     this.headMatchesHistory(before, rows);
     const previous = this.prior(rows, input);
     if (previous && previous.generation <= before.generation) {
@@ -194,7 +234,7 @@ export class RecoveryAuthorityJournal {
     if (rows.length > before.generation && (!previous || rows.length !== previous.generation)) {
       throw new Error('Recovery authority has unresolved pending history; reconcile the exact operation.');
     }
-    const receipt = await this.append(input);
+    const receipt = await this.appendIntent(input, true);
     const next = { ...this.binding, generation: receipt.generation, digest: receipt.digest };
     let published: boolean;
     try { published = await publisher.compareAndSwap(before.revision, next); }
@@ -202,7 +242,7 @@ export class RecoveryAuthorityJournal {
     let after: z.infer<typeof headSchema>;
     try {
       after = await this.readCurrentHead(publisher);
-      const currentRows = await this.history();
+      const currentRows = await this.history(true);
       this.headMatchesHistory(after, currentRows);
       if (currentRows[receipt.generation - 1]?.digest !== receipt.digest) {
         throw new Error('Intent changed');
@@ -216,7 +256,11 @@ export class RecoveryAuthorityJournal {
   }
 
   async append(raw: Input) {
-    const input = inputSchema.parse(raw); const rows = await this.history();
+    return this.appendIntent(raw, false);
+  }
+
+  private async appendIntent(raw: Input, reusePrefix: boolean) {
+    const input = inputSchema.parse(raw); const rows = await this.history(reusePrefix);
     const previous = this.prior(rows, input);
     if (previous) return this.receipt(previous, true);
     if (input.expectedGeneration !== rows.length || input.expectedDigest !== (rows.at(-1)?.digest ?? null)) {
@@ -229,7 +273,7 @@ export class RecoveryAuthorityJournal {
     try { created = await this.store.create(this.key(entry.generation), JSON.stringify(entry)); }
     catch { throw new Error('Recovery write outcome is unknown; retry the same operation identity.'); }
     let observed: Entry | undefined;
-    try { observed = this.prior(await this.history(), input); }
+    try { observed = this.prior(await this.history(reusePrefix), input); }
     catch { throw new Error('Recovery write outcome is unknown; retry the same operation identity.'); }
     if (!observed) {
       if (!created) throw new Error('Recovery authority generation changed; review current decisions.');
