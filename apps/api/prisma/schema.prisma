@@ -1882,6 +1882,23 @@ model ComplaintRecord {
   @@index([organisationId])
 }
 
+// Append-only administrative hold transitions; no complaint narrative is copied.
+model ComplaintHoldEvent {
+  id             String   @id @default(cuid())
+  organisationId String
+  complaintId    String
+  revision       Int
+  recordRevision Int
+  held           Boolean
+  actorUserId    String
+  evidenceRef    String
+  reason         String
+  occurredAt     DateTime @default(now())
+
+  @@unique([organisationId, complaintId, revision])
+  @@index([organisationId, occurredAt, id], map: "ComplaintHoldEvent_history_idx")
+}
+
 // Immutable removal authority; remains available after restoration or later purge.
 model ComplaintRemoval {
   id                   String   @id @default(cuid())

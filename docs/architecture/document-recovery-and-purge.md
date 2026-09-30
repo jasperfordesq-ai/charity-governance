@@ -11,6 +11,16 @@ checkpoints below describe the state when recorded, not the current API surface.
 
 ### Complaint resolution evidence: persistence checkpoint
 
+Administrative-hold persistence increment: `ComplaintHoldEvent` retains each
+apply/release transition with exact record/hold revisions and actor/evidence.
+It does not modify the complaint's content or invalidate resolution evidence.
+Only an active same-charity Owner/Admin may append a state change. An active
+hold blocks both new removal decisions and application of an earlier decision;
+the record guard also blocks hard deletion while held. Restoration retains the
+hold. History is immutable and survives future source disposal. This is an
+administrative preservation control, not a legal-hold determination. API/UI and
+release acceptance are still pending for this increment.
+
 Application extension: restricted browser Admin sessions can now submit reviewed
 removal or restoration from Registers. Writes lock the charity, complaint and
 acting administrator, check the reviewed revision, and preserve the database

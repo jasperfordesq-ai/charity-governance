@@ -2,6 +2,19 @@
 
 Last updated: 2026-09-30
 
+Complaint hold persistence increment (not yet deployed): append-only
+ComplaintHoldEvent records alternating apply/release decisions, exact complaint
+and hold revisions, active same-charity Owner/Admin, controlled evidence and
+reason, with database timestamps. Holds apply to active and removed records
+without changing complaint content or resolution revisions. Database guards
+reject removal decisions and removal/purge while held; restore preserves the
+hold. Retained hold identities cannot be reused. Real PostgreSQL proof covers
+unauthorized/stale transitions, append-only history, holds arriving after removal
+review, restoration without clearing a hold and competing hold writes.
+Restricted API, dashboard, metadata audit feed, assessment/removal messages and
+isolated browser proof remain required before calling this a usable hold control.
+Then continue complaint purge and the full remaining scope below.
+
 Current private runtime: e5e988a364c7ace46c7e77ac1a6821fb8cd2f17e on blue,
 deployed at 12:46:33 UTC. Exact CI 36715435652 and E2E 36715435558 succeeded;
 all 237 browser tests passed first-attempt, including the complaint recovery

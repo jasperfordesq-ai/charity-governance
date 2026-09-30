@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { spawnSync } from 'node:child_process';
+import { spawn, spawnSync } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
 import { readFileSync, readdirSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
@@ -67,12 +67,34 @@ test('complaint recovery migration preserves records and enforces reviewed remov
     sql(decision('wrong-class','admin-a','vault'), /approved complaint policy/);
     sql(decision('stale','admin-a','policy',2), /current closed complaint/);
     sql(decision('no-anchor','admin-a','policy',1,'NULL'), /current resolution evidence/);
+    const hold = (id, revision, held, actor='admin-a', recordRevision=1, organisation='a') =>
+      `INSERT INTO "ComplaintHoldEvent" (id,"organisationId","complaintId",revision,"recordRevision",held,"actorUserId","evidenceRef",reason)
+       VALUES ('${id}','${organisation}','complaint',${revision},${recordRevision},${held},'${actor}','HOLD-001','Reviewed synthetic administrative hold');`;
+    sql(hold('no-initial-release',1,false), /must change the current hold state/);
+    sql(hold('member-hold',1,true,'member-a'), /active charity administrator/);
+    sql(hold('foreign-actor-hold',1,true,'admin-b'), /active charity administrator/);
+    sql(hold('foreign-record-hold',1,true,'admin-b',1,'b'), /current same-charity record revision/);
+    sql(hold('stale-record-hold',1,true,'admin-a',2), /current same-charity record revision/);
+    sql(hold('hold-active',1,true));
+    sql(hold('duplicate-hold',2,true), /must change the current hold state/);
+    sql(hold('stale-hold',1,false), /hold revision conflict/);
+    sql(decision('held-removal'), /administrative hold blocks removal/);
+    sql(`DELETE FROM "ComplaintRecord" WHERE id='complaint';`, /administrative hold blocks/);
+    sql(`UPDATE "ComplaintHoldEvent" SET held=false WHERE id='hold-active';`, /append-only/);
+    sql(`DELETE FROM "ComplaintHoldEvent" WHERE id='hold-active';`, /append-only/);
+    assert.equal(sql(`SELECT revision FROM "ComplaintRecord" WHERE id='complaint';`),'1');
+    sql(hold('release-active',2,false));
     sql(`UPDATE "ComplaintRecord" SET "removedAt"=now(),"removalId"='unreviewed' WHERE id='complaint';`, /matching current authority/);
     sql(decision('removal'));
+    // A hold arriving after a reviewed decision still blocks its application.
+    sql(hold('hold-reviewed',3,true));
+    sql(`UPDATE "ComplaintRecord" SET "removalId"='removal',"removedAt"=(SELECT "occurredAt" FROM "ComplaintRemoval" WHERE id='removal') WHERE id='complaint';`, /administrative hold blocks/);
+    sql(hold('release-reviewed',4,false));
     assert.equal(sql(`SELECT "recoveryUntil"="occurredAt"+INTERVAL '30 days' FROM "ComplaintRemoval" WHERE id='removal';`), 't');
     sql(`UPDATE "ComplaintRecord" SET "removalId"='removal',"removedAt"=(SELECT "occurredAt" FROM "ComplaintRemoval" WHERE id='removal'), summary='Changed during removal' WHERE id='complaint';`, /preserve its contents/);
     sql(`UPDATE "ComplaintRecord" SET "removalId"='removal',"removedAt"=(SELECT "occurredAt" FROM "ComplaintRemoval" WHERE id='removal') WHERE id='complaint';`);
     assert.equal(sql(`SELECT count(*) FROM "ComplaintRecord" WHERE "organisationId"='a' AND "removedAt" IS NULL;`), '0');
+    sql(hold('hold-removed',5,true,'admin-a',2));
     sql(`UPDATE "ComplaintRecord" SET summary='Edited after removal' WHERE id='complaint';`, /cannot be edited/);
     sql(`INSERT INTO "ComplaintResolutionEvidence" (id,"organisationId","complaintId",revision,"recordRevision",state,"resolvedAt","evidenceRef",reason,"actorUserId")
       VALUES ('removed-resolution','a','complaint',2,2,'RECORDED','2026-01-02','RESOLUTION-002','Attempted review while removed','admin-a');`, /cannot receive new resolution/);
@@ -83,6 +105,27 @@ test('complaint recovery migration preserves records and enforces reviewed remov
     assert.equal(sql(`SELECT (row_to_json(c)::jsonb - ARRAY['removedAt','removalId','revision'])::text FROM "ComplaintRecord" c;`),
       sql(`SELECT '${before.replaceAll("'", "''")}'::jsonb - 'revision';`));
     assert.equal(sql(`SELECT revision FROM "ComplaintRecord" WHERE id='complaint';`), '3');
+    assert.equal(sql(`SELECT held FROM "ComplaintHoldEvent" WHERE "complaintId"='complaint' ORDER BY revision DESC LIMIT 1;`),'t');
+    // Restoring held evidence is permitted and does not silently clear its hold.
+    sql(hold('release-restored',6,false,'admin-a',3));
+    // Separate database connections race the same reviewed hold revision.
+    const concurrent = statement => new Promise((resolve, reject) => {
+      const child = spawn('docker', ['--host', endpoint.Host, 'exec', '-i', container,
+        'psql', '-h', '127.0.0.1', '-U', 'postgres', '-v', 'ON_ERROR_STOP=1', '-Atq'],
+      { stdio: ['pipe','pipe','pipe'], timeout: 30_000 });
+      let stderr='';
+      child.stdout.resume(); child.stderr.on('data', value => { stderr+=value; });
+      child.on('error',reject); child.on('close',code => resolve({ code, stderr }));
+      child.stdin.end(statement);
+    });
+    const competing = await Promise.all([
+      concurrent(hold('concurrent-a',7,true,'admin-a',3)),
+      concurrent(hold('concurrent-b',7,true,'admin-a',3)),
+    ]);
+    assert.equal(competing.filter(result => result.code===0).length,1);
+    assert.match(competing.find(result => result.code!==0).stderr,/hold revision conflict/);
+    assert.equal(sql(`SELECT count(*) FROM "ComplaintHoldEvent" WHERE revision=7;`),'1');
+    sql(hold('release-concurrent',8,false,'admin-a',3));
     assert.equal(sql(`SELECT count(*) FROM "ComplaintRemoval";`), '1');
     sql(`UPDATE "ComplaintRecord" SET "removalId"='removal',"removedAt"=(SELECT "occurredAt" FROM "ComplaintRemoval" WHERE id='removal') WHERE id='complaint';`, /matching current authority/);
     sql(decision('restored-stale','admin-a','policy',3), /current resolution evidence/);
