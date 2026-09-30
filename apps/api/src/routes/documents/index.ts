@@ -1,6 +1,7 @@
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import { createHash } from 'node:crypto';
 import { DocumentService } from '../../services/document.service.js';
+import { DocumentRecoveryService } from '../../services/document-recovery.service.js';
 import { StorageService } from '../../services/storage.service.js';
 import { authGuard } from '../../middleware/auth.js';
 import { requireSessionLevel, requireWebSession } from '../../middleware/session-level.js';
@@ -120,9 +121,35 @@ function safeDownloadFilename(name: string, storagePath: string): string {
 export async function documentRoutes(app: FastifyInstance) {
   const service = new DocumentService(app.prisma);
   const storageService = new StorageService(createPrismaOrganisationStorageResolver(app.prisma));
+  const recovery = new DocumentRecoveryService(app.prisma,
+    (organisationId, path, provider) => storageService.downloadFile(organisationId, path, provider));
 
   app.addHook('onRequest', authGuard);
   app.addHook('onRequest', subscriptionGuard);
+
+  app.get('/deleted', { preHandler: [requireAdmin, requireWebSession] }, async (request, reply) => {
+    try {
+      const { before } = z.object({ before: storageDeletionIdSchema.optional() }).strict().parse(request.query);
+      return sendSuccess(reply, await recovery.list(request.user.organisationId, before));
+    } catch (error) {
+      if (error instanceof ZodError) return reply.status(400).send({ code: 'VALIDATION_ERROR', error: 'Validation failed', details: error.errors });
+      return handleError(reply, error);
+    }
+  });
+
+  app.post<{ Params: { id: string } }>('/:id/restore', {
+    preHandler: [requireSessionLevel('ADMIN'), requireAdmin, requireWebSession],
+  }, async (request, reply) => {
+    try {
+      const body = deleteDocumentSchema.extend({ expectedUpdatedAt: z.string().datetime({ offset: true }) }).parse(request.body);
+      return sendSuccess(reply, await recovery.restore({ organisationId: request.user.organisationId,
+        documentId: request.params.id, actorUserId: request.user.userId,
+        reason: body.reason, expectedUpdatedAt: new Date(body.expectedUpdatedAt) }));
+    } catch (error) {
+      if (error instanceof ZodError) return reply.status(400).send({ code: 'VALIDATION_ERROR', error: 'Validation failed', details: error.errors });
+      return handleError(reply, error);
+    }
+  });
 
   app.get('/', async (request, reply) => {
     try {

@@ -25,6 +25,31 @@ purge/hold races, user-interface behavior or provider/backup disposal.
 
 ## Observed starting point
 
+Recovery-service checkpoint: `DocumentRecoveryService` implements transactional
+policy-bound removal without cleanup and fingerprint-checked restoration. It
+locks the document and policy, checks the expected revision and active actor,
+uses database time, withdraws sharing and appends removal/restore audit events.
+`20260930030000_document_recovery_fingerprint` requires an immutable SHA-256
+while removed and permits the two new audit kinds. Existing unsupported removed
+rows without a fingerprint cause migration refusal; no hash is invented.
+Browser Admin/Owner endpoints now list Deleted Items and restore with a reason
+and expected revision. The removal service is not yet wired to ordinary DELETE;
+that route still uses legacy immediate deletion. No dashboard recovery UI or
+policy administration is present. Do not deploy this as completed recovery.
+
+Focused service tests use an actual temporary local file with a transactional
+database double: bytes survive removal/restoration, a hold survives restoration,
+and missing/changed files, expired windows, missing policies, linked/held records,
+inactive actors and stale revisions are refused. Separately the real PostgreSQL
+migration proof rejects missing/rewritten recovery fingerprints. Neither test
+is a combined real-database HTTP journey or a concurrency proof. Continue by
+replacing ordinary DELETE, wiring reviewed policy selection and the UI, then
+exercise full persisted journeys and purge races.
+
+Verification for this checkpoint: API build, all 77 recovery-service/document-route
+tests, and the disposable PostgreSQL migration proof pass. The route tests include
+Member and connector denial, bounded listing and invalid restore-input rejection.
+
 Recovery-state checkpoint: additive migration
 `20260930020000_document_recoverable_state` retains removed rows with scoped
 policy, actor, revision, evidence and deadline facts. It rejects held or linked

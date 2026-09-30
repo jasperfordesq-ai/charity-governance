@@ -107,6 +107,13 @@ test('retention policy and recovery-state upgrade preserve documents and enforce
     assert.equal(sql(`SELECT (to_jsonb(d) - 'updatedAt')::text FROM "Document" d WHERE id='retained-doc';`), active);
     sql(withdrawal('recovery-withdrawn', 'retention-a', 'recovery'));
     sql(remove(), /approved current draft recovery policy/);
+    sql(readFileSync(`${migrations}/20260930030000_document_recovery_fingerprint/migration.sql`, 'utf8'));
+    sql(`${insert('fingerprint', ',"state","approvedById","approvedAt","approvalEvidenceRef"')} VALUES ('fingerprint','retention-a','VAULT_DRAFT',4,'REVIEW_REQUIRED',30,'owner-a','APPROVED','owner-a',CURRENT_TIMESTAMP,'POLICY-APPROVAL-004');`);
+    sql(remove('fingerprint'), /Document_recovery_digest_valid/);
+    sql(remove('fingerprint').replace('SET "deletedAt"', `SET "recoverySha256"='${'a'.repeat(64)}', "deletedAt"`));
+    sql(`UPDATE "Document" SET "recoverySha256"='${'b'.repeat(64)}' WHERE id='retained-doc';`, /cannot be rewritten/);
+    sql(`UPDATE "Document" SET "deletedAt"=NULL,"deletedById"=NULL,"removedFromRevision"=NULL,"removalEvidenceRef"=NULL,"recoveryPolicyId"=NULL,"recoveryUntil"=NULL,"recoverySha256"=NULL WHERE id='retained-doc';`);
+    assert.equal(sql(`SELECT count(*) FROM "Document" WHERE id='retained-doc' AND "recoverySha256" IS NULL AND "deletedAt" IS NULL;`), '1');
   } finally {
     const removed = docker(['rm', '--force', '--volumes', container]);
     assert.equal(removed.status, 0, removed.stderr);

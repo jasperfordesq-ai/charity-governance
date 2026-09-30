@@ -2,6 +2,17 @@
 
 Last updated: 2026-09-30
 
+Latest recovery checkpoint: a new DocumentRecoveryService implements policy-bound
+retained removal and fingerprint-checked restoration with audit. Deleted Items
+and restore endpoints require an Admin/Owner web session. Migration
+`20260930030000_document_recovery_fingerprint` adds immutable removed-file hashes
+and removal/restore audit kinds. IMPORTANT: ordinary DELETE still calls the old
+immediate-delete implementation; the new removal service is not connected yet.
+Next replace that route and dashboard action, add policy administration and
+Deleted Items UI, then run persisted journeys and concurrency checks. Current
+proof combines actual local storage with a database double, plus a separate
+real-PostgreSQL migration test; no end-to-end or deployment claim follows.
+
 Recovery continuation: removal-state migration and ordinary read exclusions are
 now implemented locally. The PostgreSQL upgrade proof checks retained metadata,
 no cleanup job, restricted restoration, policy withdrawal and rejection of new

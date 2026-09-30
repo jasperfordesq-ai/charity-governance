@@ -325,6 +325,35 @@ function publicDocument(overrides: Record<string, unknown> = {}) {
   };
 }
 
+test('Deleted Items list is scoped and restricted to web administrators', async () => {
+  const app = await buildDocumentsApp({ subscription: subscription(), document: { findMany: async (args) => {
+    const query = args as { where: unknown; select: Record<string, boolean>; take: number };
+    assert.deepEqual(query.where, { organisationId: 'org-1', deletedAt: { not: null } });
+    assert.equal(query.take, 51);
+    assert.equal(query.select.fileUrl, undefined);
+    assert.equal(query.select.recoverySha256, undefined);
+    return [];
+  } } });
+  try {
+    const response = await app.inject({ method: 'GET', url: '/deleted', headers: { authorization: authHeader } });
+    assert.equal(response.statusCode, 200);
+    assert.deepEqual(response.json().data, { items: [], nextCursor: null });
+    const invalid = await app.inject({ method: 'POST', url: '/doc-1/restore',
+      headers: { authorization: authHeader }, payload: deletionPayload });
+    assert.equal(invalid.statusCode, 400);
+  } finally { await app.close(); }
+  const member = await buildDocumentsApp({ subscription: subscription(), document: {},
+    user: { findUnique: async () => ({ id: 'user-1', organisationId: 'org-1', role: 'MEMBER', emailVerified: true }) } });
+  try {
+    for (const method of ['GET', 'POST'] as const) {
+      const response = await member.inject({ method, url: method === 'GET' ? '/deleted' : '/doc-1/restore',
+        headers: { authorization: authHeader }, ...(method === 'POST' ? { payload: { ...deletionPayload,
+          expectedUpdatedAt: '2026-09-30T12:00:00Z' } } : {}) });
+      assert.equal(response.statusCode, 403);
+    }
+  } finally { await member.close(); }
+});
+
 test('ordinary mirror lookup excludes removed documents before reading publication details', async () => {
   const app = await buildDocumentsApp({
     subscription: subscription(),
@@ -2095,7 +2124,7 @@ test('Admin connector cannot read dashboard-only Vault control and deletion hist
   try {
     for (const path of [
       '/replacement-candidates/doc-1', '/confluence-mirrors?ids=doc-1',
-      '/control-audit', '/storage-deletions/history', '/storage-deletions/dead-letter',
+      '/control-audit', '/storage-deletions/history', '/storage-deletions/dead-letter', '/deleted',
     ]) {
       const response = await app.inject({ method: 'GET', url: path, headers: { authorization: authHeader } });
       assert.equal(response.statusCode, 403, path);
@@ -2112,7 +2141,7 @@ test('Admin connector cannot directly retry a publication or requeue a storage d
     }) },
   } as never);
   try {
-    for (const path of ['/doc-1/publication/retry', '/storage-deletions/deletion-1/requeue']) {
+    for (const path of ['/doc-1/publication/retry', '/storage-deletions/deletion-1/requeue', '/doc-1/restore']) {
       const response = await app.inject({ method: 'POST', url: path, headers: { authorization: authHeader } });
       assert.equal(response.statusCode, 403, path);
       assert.equal(response.json().code, 'WEB_SESSION_REQUIRED');

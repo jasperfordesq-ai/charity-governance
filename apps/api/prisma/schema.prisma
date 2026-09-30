@@ -1335,6 +1335,7 @@ model Document {
   deletionHold           Boolean @default(false)
   // Recovery metadata is separate from document lifecycle. Null means active.
   deletedAt              DateTime?
+  recoverySha256         String?
   deletedById            String?
   removedFromRevision    DateTime?
   removalEvidenceRef     String?
