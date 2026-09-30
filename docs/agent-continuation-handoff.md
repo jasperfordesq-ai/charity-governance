@@ -36,10 +36,16 @@ The S3 intent-object adapter is now implemented for explicit credentials, an
 Ireland endpoint, expected bucket owner and a configured KMS key. It uses
 create-only conditional writes and bounded current-version reads. Its tests
 include SDK request serialization/signing through an isolated HTTP handler.
-No S3 resource has been provisioned or live-tested. The S3 head adapter remains
-unimplemented: ETag conditional writes must not be confused with version-ID
-conditions. Provisioning, bucket policy/retention, independent key custody,
-head protocol and end-to-end recovery acceptance still gate activation.
+The S3 head adapter now reads a strict envelope, derives a revision from the
+bound request/version/ETag/body, and conditionally advances one generation with
+a fresh publication UUID. ETag conditional writes are not version-ID conditions;
+privileged out-of-band replay remains a custody/policy threat. Missing heads do
+not initialize automatically. Combined synthetic journal/adapter restart tests
+cover lost publication acknowledgement. Explicit operation deadlines include
+response streaming; the SDK warning-only timeout default is overridden.
+No S3 resource has been provisioned or live-tested. Provisioning, bucket
+policy/retention, independent key custody, fencing and end-to-end recovery
+acceptance still gate activation.
 
 Before integration, implement fresh independent authority, protected replay
 facts, provider durability/permissions, action fencing and supported recovery
