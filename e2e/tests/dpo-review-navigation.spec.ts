@@ -11,8 +11,14 @@ const SAMPLE_FILE = path.resolve(__dirname, '../fixtures/sample-document.txt');
 test.describe('DPO review navigation', () => {
   test.skip(IS_DEPLOYED_QA, 'Review fixtures require the identity-bound disposable database.');
 
-  test('an Owner can page older detailed compliance decisions for one reporting year', async ({ owner, ownerPage }) => {
+  test('an Owner can page older detailed compliance decisions for one reporting year', async ({ newFencedContext }) => {
     test.setTimeout(120_000);
+    // Exact pagination counts require a charity without earlier compliance decisions.
+    const owner = await createVerifiedOwner({ email: uniqueEmail('compliance-history'), password: TEST_PASSWORD,
+      name: 'Compliance History Owner', organisationName: 'Isolated Compliance History Charity' });
+    const storageState = await createAuthenticatedStorageState({ ...owner, role: 'OWNER' });
+    const context = await newFencedContext({ storageState });
+    const ownerPage = await context.newPage();
     const stamp = Date.now();
     await withDb((client) => client.query(
       `INSERT INTO "ComplianceAuditEvent"

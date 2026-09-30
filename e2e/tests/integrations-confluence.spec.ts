@@ -1,7 +1,7 @@
 import path from 'node:path';
-import { test, expect, reliableFill } from '../fixtures';
+import { test, expect, reliableFill, uniqueEmail, TEST_PASSWORD } from '../fixtures';
 import { gotoWithDevServerRetry } from '../helpers/navigation';
-import { withDb } from '../helpers/db';
+import { createAuthenticatedStorageState, createVerifiedOwner, withDb } from '../helpers/db';
 
 /**
  * Journey: the Confluence connector, end to end, against a fake Atlassian.
@@ -29,8 +29,14 @@ const CONFLUENCE_API = /\/api\/v1\/integrations\/confluence/;
 const SAMPLE_FILE = path.resolve(__dirname, '../fixtures/sample-document.txt');
 
 test.describe('Confluence connector', () => {
-  test('disclosure, connect, choose a space, and review the exact destination before approval', async ({ owner, ownerPage }) => {
+  test('disclosure, connect, choose a space, and review the exact destination before approval', async ({ newFencedContext }) => {
     test.setTimeout(180_000);
+    // This connection journey must start without another test's integration state.
+    const owner = await createVerifiedOwner({ email: uniqueEmail('confluence-connect'), password: TEST_PASSWORD,
+      name: 'Confluence Owner', organisationName: 'Isolated Confluence Charity' });
+    const storageState = await createAuthenticatedStorageState({ ...owner, role: 'OWNER' });
+    const context = await newFencedContext({ storageState });
+    const ownerPage = await context.newPage();
     await gotoWithDevServerRetry(ownerPage, '/integrations');
 
     // ── 1. Not connected, and saying so plainly ──────────────────────────

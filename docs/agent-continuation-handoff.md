@@ -2,6 +2,16 @@
 
 Last updated: 2026-09-30
 
+Further browser isolation checkpoint: 5b0e7c66 E2E completed with234 first-pass
+tests and two retry passes. Compliance pagination inherited six earlier audit
+rows; the Confluence connection journey inherited an existing integration.
+Both journeys now create their own verified charity and fenced browser context.
+The focused pair passes first-attempt locally (9.9s), managed runner exit0;
+E2E TypeScript and all116 runner contracts pass. Assertions and product behavior
+are unchanged. Exact successor hosted checks remain required. The efa2e27e CI
+has passed local Docker smoke and the Linux MCP connector gate; its complete
+CI/E2E results were still pending at this checkpoint. No new deployment.
+
 Connector inventory follow-up: 41c00edf CI 36707087273 passed the previously
 failing local Docker smoke, then found missing route and field classifications
 in the MCP coverage ledger. Recovery/policy/purge administration is now explicitly
