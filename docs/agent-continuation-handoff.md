@@ -53,6 +53,13 @@ Each full journal scan also has a 30-second deadline, propagated to S3 reads.
 Cancellation cannot be interpreted as an absent object or empty history. This
 bounds each scan, not the full multi-phase publication or a database transaction;
 it does not replace the durable mutation fence or justify holding locks remotely.
+Measured synthetic SDK counts for the current full-scan implementation are
+4N+9 GETs and two PUTs per successful publication with N existing entries.
+The private deployment/cost review records regional rate sources and assumptions.
+Before paid activation, replace repeated whole-history append scans with verified
+incremental traversal and make full recovery resumable; also resolve the
+10,000-entry capacity/rollover boundary. Do not weaken chain/freshness checks or
+raise deadlines as a substitute. No live resource has been provisioned.
 No S3 resource has been provisioned or live-tested. Provisioning, bucket
 policy/retention, independent key custody, fencing and end-to-end recovery
 acceptance still gate activation.
