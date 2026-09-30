@@ -1,3 +1,4 @@
+import { proveCopyAuthority } from './copy-authority-proof.mjs';
 import assert from 'node:assert/strict';
 import { spawn, spawnSync } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
@@ -325,6 +326,7 @@ test('retention policy and recovery-state upgrade preserve documents and enforce
     for (const name of names.filter(name => name > '20260930070000_document_purge_disposition')) {
       sql(readFileSync(`${migrations}/${name}/migration.sql`, 'utf8'));
     }
+    proveCopyAuthority(sql, {kind:'Document',organisation:'retention-a',actor:'owner-a',foreignActor:'owner-b',authorization:'expired-authorization',scope:'BACKUP-SET-001',observationRevision:1});
     const authority = JSON.parse(sql(PURGE_RESTORE_SNAPSHOT_SQL));
     const localKeys = JSON.parse(sql(PURGE_RESTORE_LOCAL_OBJECTS_SQL));
     assert.equal(localKeys.length, 1);
@@ -347,6 +349,7 @@ test('retention policy and recovery-state upgrade preserve documents and enforce
     assert.throws(() => assertPurgeRestoreLedger(authority, oldRestored), error => {
       assert.equal(error.code, 'PURGE_RESTORE_RECONCILIATION_REQUIRED');
       assert.equal(error.report.resurrectedDocuments, 1);
+      assert.ok(error.report.differences.some(item => item.table === 'DocumentCopyDispositionAuthority' && item.missing === 3));
       assert.ok(error.report.differences.some(item => item.table === 'DocumentPurgeClaim' && item.missing === 1));
       return true;
     });

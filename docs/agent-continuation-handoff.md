@@ -2,6 +2,36 @@
 
 Last updated: 2026-09-30
 
+## Scoped copy authority persistence — 30 September 2026 (source only)
+
+Migration 1900 adds separate document and complaint scoped authority histories.
+An active same-charity Owner can append a time-limited reviewed decision against
+an existing primary claim and exact area/scope observation revision. Exact
+predecessor identity and revision prevent stale replacement. Separate controlled
+retention and hold-review references are mandatory; withdrawal grants nothing,
+and replacement preserves every prior decision. No primary plan is rewritten.
+Restore comparison hashes both histories and disposable-reset/model inventories
+include them. References are reviewer evidence, not independent verification.
+
+This is the persistence increment, not an enabled disposal workflow. No API or
+UI can create these records yet; existing observations deliberately continue
+using the original plan and reject contradictory absence assertions. Next:
+bind observations to exact scoped authority, recheck current policy/holds and
+expiry under the shared locks, add restricted browser review and metadata audit,
+and prove withdrawal/policy/hold races and both browser journeys. No provider
+operation, policy approval, production migration or live data change occurred.
+Runtime remains e39edbe8. Broader original DPO scope remains open.
+
+Persistence evidence: real disposable PostgreSQL complaint proof passed in
+53.98s and document proof in 51.32s, including stale restore rejection, immutable
+withdrawal/replacement history, original-plan preservation, no implicit absence
+authority and competing complaint authority revisions. All 94 supporting
+restore/model/reset/backup tests pass; Prisma validation/generation and API
+build pass. Migration gate: zero blocked, one new-table index warning, no
+override. Private logs: copy-authority-database-final.log,
+copy-authority-unit-final.log, copy-authority-build.log; initial missing-table
+failure is recorded in copy-authority-red.log. All test handles are terminal.
+
 ## Verified deployment â€” 30 September 2026
 
 Private runtime e39edbe8f220c9118d248ab7d92d95a603ba1cbb is live on green

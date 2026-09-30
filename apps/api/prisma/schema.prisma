@@ -1342,6 +1342,8 @@ model DocumentPurgeAuthorization {
 
   @@unique([id, organisationId])
   @@index([organisationId, documentId, authorizedAt])
+  copyAuthorities DocumentCopyDispositionAuthority[]
+
 }
 
 // Reviewer evidence about an explicitly referenced downstream scope, never a
@@ -1946,6 +1948,8 @@ model ComplaintPurgeAuthorization {
 
   @@unique([id, organisationId])
   @@index([organisationId, complaintId, authorizedAt, id], map: "ComplaintPurgeAuthorization_history_idx")
+  copyAuthorities ComplaintCopyDispositionAuthority[]
+
 }
 
 model ComplaintPurgeClaim {
@@ -2741,4 +2745,52 @@ model OperatorActionApproval {
   @@unique([id, operatorId])
   @@index([sessionFamilyId, requestDigest])
   @@index([expiresAt])
+}
+
+// Scoped later review history; does not change original primary authority.
+model DocumentCopyDispositionAuthority {
+  id String @id @default(cuid())
+  organisationId String
+  authorizationId String
+  authorization DocumentPurgeAuthorization @relation(fields: [authorizationId, organisationId], references: [id, organisationId], onDelete: Restrict, map: "DocumentCopyAuthority_authorization_fkey")
+  area String
+  scopeRef String
+  revision Int
+  previousId String?
+  observationRevision Int
+  state String
+  disposition String?
+  actorUserId String
+  evidenceRef String
+  reason String
+  retentionEvidenceRef String?
+  holdEvidenceRef String?
+  validUntil DateTime?
+  occurredAt DateTime @default(now())
+  @@unique([authorizationId, area, scopeRef, revision], map: "DocumentCopyAuthority_scope_revision_key")
+  @@index([organisationId, authorizationId, occurredAt, id], map: "DocumentCopyDispositionAuthority_history_idx")
+}
+
+// Scoped later review history; does not change original primary authority.
+model ComplaintCopyDispositionAuthority {
+  id String @id @default(cuid())
+  organisationId String
+  authorizationId String
+  authorization ComplaintPurgeAuthorization @relation(fields: [authorizationId, organisationId], references: [id, organisationId], onDelete: Restrict, map: "ComplaintCopyAuthority_authorization_fkey")
+  area String
+  scopeRef String
+  revision Int
+  previousId String?
+  observationRevision Int
+  state String
+  disposition String?
+  actorUserId String
+  evidenceRef String
+  reason String
+  retentionEvidenceRef String?
+  holdEvidenceRef String?
+  validUntil DateTime?
+  occurredAt DateTime @default(now())
+  @@unique([authorizationId, area, scopeRef, revision], map: "ComplaintCopyAuthority_scope_revision_key")
+  @@index([organisationId, authorizationId, occurredAt, id], map: "ComplaintCopyDispositionAuthority_history_idx")
 }

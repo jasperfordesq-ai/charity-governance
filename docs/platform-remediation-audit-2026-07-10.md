@@ -1,5 +1,12 @@
 # CharityPilot Full-Platform Remediation Audit
 
+> DPO-05 scoped-copy authority persistence, 2026-09-30: append-only,
+> time-limited Owner review/withdrawal histories now exist in source for both
+> documents and complaints. Original-plan observation guards remain unchanged.
+> This does not yet enable later disposition changes: authority binding,
+> current policy/hold checks, API/UI/audit integration and deployment remain
+> open, alongside the existing broader erasure and recovery requirements.
+
 > DPO-05 restore-drill comparison, 2026-09-30: bluegreen restore drills now
 > compare current live purge authority with the isolated restored database,
 > then recapture authority to detect changes. Stale, unreadable or changed
