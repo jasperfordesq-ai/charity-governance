@@ -1,5 +1,12 @@
 # CharityPilot Full-Platform Remediation Audit
 
+> DPO-05 hold execution composition: the internal execution service now verifies
+> the reserved published preparation and unchanged current writer/head before
+> applying the atomic local hold/outcome transaction. Retry retains one event
+> and the reservation is not released. This does not close all-writer database
+> enforcement, independent outcome publication, cancellation/replay or provider
+> custody. Hosted and deployed evidence must identify the resulting revision.
+
 > DPO-05 source checkpoint, 2026-09-30: atomic local hold outcomes now pair the
 > exact prepared transition with an append-only receipt in one database
 > transaction. Current authority, previous hold and complaint revision are

@@ -2,6 +2,17 @@
 
 Last updated: 2026-09-30
 
+## Resuming the DPO remediation after an interruption
+
+Start with `.charitypilot-private/RESUME-HERE.md` on Jasper's existing workstation.
+It records the original email, exact source/live separation, unresolved work,
+failed and running checks, authority boundaries and evidence locations. That
+folder is deliberately gitignored and absent from a fresh clone. If it is
+missing, retrieve the private handoff archive from the operator's existing
+backup custody before making claims about private-host or DPO acceptance.
+Revalidate the checkout, hosted jobs and live release; a dated handoff is not
+proof of current state. Never discard uncommitted continuation work.
+
 ## Atomic local preservation outcomes
 
 Private release 24e9ca03 is deployed with bounded runtime, backup, restore and
@@ -24,6 +35,17 @@ release/replay and other preservation writers remain required before activation.
 Do not treat a local outcome as independent custody or reopening authority.
 Current source verification is recorded in the private hold-outcome logs; hosted
 gates and deployment must be evidenced separately for the resulting revision.
+
+`executePublishedComplaintHold` now composes authenticated published-preparation
+verification with the atomic local transition. It requires the exact current
+reservation, writer/epoch and latest journal entry, unchanged control throughout
+verification, then an exact local writer binding and preparation under the charity
+lock. Provider IO finishes before that transaction. A committed retry returns the
+existing outcome without another transition; the reservation remains occupied.
+The disposable PostgreSQL/crypto protocol test uses a separate charity for this
+path and retains the earlier unresolved disposal reservation unchanged. This is
+still an internal orchestration path, not database enforcement across all hold
+writers. Outcome publication/release, safe cancellation and replay remain open.
 
 ## Inactive complaint database execution gate
 

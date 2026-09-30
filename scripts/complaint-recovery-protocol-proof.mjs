@@ -17,6 +17,9 @@ import { releaseCommittedComplaintOperation } from '../apps/api/src/services/rel
 import { executePublishedComplaintOperation } from '../apps/api/src/services/execute-published-complaint-operation.ts';
 import { ComplaintHoldRecoveryPreparationStore } from '../apps/api/src/services/complaint-hold-recovery-preparation-store.ts';
 import { readCommittedComplaintHoldOutcome } from '../apps/api/src/services/complaint-hold-recovery-outcome.ts';
+import { executePublishedComplaintHold } from '../apps/api/src/services/execute-published-complaint-hold.ts';
+import { preserveHoldPreparation } from '../apps/api/src/services/hold-recovery-envelope.ts';
+import { publishVerifiedHoldPreparation } from '../apps/api/src/services/published-hold-preparation.ts';
 
 // Disposable fixture only: real PostgreSQL and crypto, synthetic S3/KMS transport.
 // This proves the complaint gate, not provider custody or all-writer fencing.
@@ -222,6 +225,48 @@ try {
   await prisma.complaintHoldRecoveryOutcome.create({ data: { preparationId: applyCapture.id } });
   assert.equal((await prisma.complaintHoldEvent.findFirstOrThrow({ where: { complaintId: 'recovery-stale' },
     orderBy: { revision: 'desc' } })).held, true);
+  // Separate synthetic charity: never clear the unresolved disposal reservation.
+  const hb = { organisationId: 'b', installationId: 'hold-install' };
+  const hc = { ...context, ...hb, operationId: 'published-hold' };
+  await prisma.complaintRecord.create({ data: { id: 'published-hold-complaint', organisationId: 'b',
+    receivedDate: new Date(), summary: 'Synthetic integration complaint' } });
+  const hp = await holdPreparations.capture('b', 'published-hold-complaint', 'admin-b', {
+    ...holdInput, installationId: hb.installationId, operationId: hc.operationId,
+    expectedRecordRevision: 1, expectedHoldRevision: 0, held: true });
+  const hpRow = await prisma.complaintHoldRecoveryPreparation.findUniqueOrThrow({ where: { id: hp.id } });
+  const hi = { ...hb, generation: 0, digest: null };
+  const hk = `authority/${hb.installationId}/${hb.organisationId}/head.json`;
+  objects.set(hk, { body: JSON.stringify({ ...validateRecoveryControlValue({ format: 2, ...hi,
+    writerId: 'host-b', writerEpoch: 1, activeOperation: null }),
+    publicationId: '22222222-2222-4222-8222-222222222222' }), version: ++version });
+  const hs = new S3AuthorityObjectStore({ ...config, ...hb }, credentials, client);
+  const hj = new RecoveryAuthorityJournal(hs, hb, hi);
+  const executeHold = () => executePublishedComplaintHold(prisma, hj, hs, 'host-b', hc, keys, hs);
+  await assert.rejects(executeHold, /writer or operation/);
+  await reserveRecoveryOperation({ ...hb, writerId: 'host-b', writerEpoch: 1, operationId: hc.operationId,
+    preparationDigest: hp.digest, expectedGeneration: 0, expectedDigest: null }, hs);
+  await assert.rejects(executeHold); // No authenticated published payload yet.
+  await preserveHoldPreparation(hpRow.facts, hc, keys, hs);
+  await publishVerifiedHoldPreparation(hj, hs, { writerId: 'host-b', preparationDigest: hp.digest,
+    expectedGeneration: 0, expectedDigest: null }, hc, keys, hs);
+  await assert.rejects(executeHold, /bound to this writer/);
+  await prisma.complaintRecoveryEnforcement.create({ data: { ...hb, writerId: 'host-b', writerEpoch: 1 } });
+  await assert.rejects(executePublishedComplaintHold(prisma, hj, hs, 'old-host', hc, keys, hs), /writer or operation/);
+  let holdControlReads = 0;
+  const changingControl = { async readControl() {
+    const value = await hs.readControl();
+    return ++holdControlReads > 1 ? { ...value, writerId: 'changed-host' } : value;
+  }, async compareAndSwapControl() { throw new Error('Execution must not mutate the control'); } };
+  await assert.rejects(executePublishedComplaintHold(prisma, hj, changingControl, 'host-b', hc, keys, hs), /publication changed/);
+  assert.equal(await prisma.complaintHoldEvent.count({ where: { complaintId: 'published-hold-complaint' } }), 0);
+  const result = await executeHold();
+  assert.equal(result.replayed, false);
+  assert.equal(result.actionAuthorized, false);
+  await prisma.$disconnect();
+  assert.deepEqual(await executeHold(), { ...result, replayed: true });
+  assert.equal(await prisma.complaintHoldEvent.count({ where: { complaintId: 'published-hold-complaint' } }), 1);
+  assert.equal((await hs.readControl()).activeOperation.operationId, hc.operationId);
+  assert.equal((await store.readControl()).activeOperation.operationId, staleContext.operationId);
   process.stdout.write('complaint-recovery-protocol-composition-verified');
 } finally {
   for (const value of retainedKeys.values()) value.key.fill(0);
