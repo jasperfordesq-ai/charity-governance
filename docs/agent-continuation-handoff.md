@@ -1,5 +1,13 @@
 # CharityPilot Agent Continuation Handoff
 
+> DPO-05 interrupted cancellation completion (source only): an internal helper
+> resumes an already committed cancellation using the same writer. A preparation
+> head permits preserving/publishing that exact receipt; a terminal head goes
+> directly through the committed release verifier. Missing published bytes are
+> never regenerated. This does not replay restored records, create cancellation
+> decisions, execute disposal, transfer writer authority or activate the provider.
+
+
 > DPO-05 cancellation release (source only): a dedicated
 > service compares the authenticated published cancellation with its exact
 > committed database receipt and current writer before conditional reservation

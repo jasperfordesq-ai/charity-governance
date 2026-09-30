@@ -1,3 +1,4 @@
+import { resumeCommittedCancellation } from '../apps/api/src/services/resume-committed-cancellation.ts';
 import { releaseCommittedCancellationOperation } from '../apps/api/src/services/release-cancellation-recovery-operation.ts';
 import { preserveCancellation } from '../apps/api/src/services/cancellation-envelope.ts';
 import { publishVerifiedCancellation, readPublishedCancellation } from '../apps/api/src/services/published-cancellation.ts';
@@ -448,11 +449,13 @@ try {
     await assert.rejects(releaseCancellation, /not published/);
     const publishCancellation = () => publishVerifiedCancellation(j, storage, request, ctx, keys, storage);
     await assert.rejects(publishCancellation, /missing/);
+    const resumeCancellation = () => resumeCommittedCancellation(prisma, j, storage, writerId, kind, ctx, keys, storage);
+    await assert.rejects(resumeCommittedCancellation(prisma, j, storage, 'old-writer', kind, ctx, keys, storage), /writer or operation mismatch/);
+    loseHeadAck = true;
+    await assert.rejects(resumeCancellation, /unknown/);
     const preserved = await preserveCancellation(evidence.body, ctx, keys, storage);
     assert.equal((await preserveCancellation(evidence.body, ctx, keys, storage)).digest, preserved.digest);
     await assert.rejects(publishVerifiedCancellation(j, storage, { ...request, writerId: 'stale-writer' }, ctx, keys, storage), /reservation mismatch/);
-    loseHeadAck = true;
-    await assert.rejects(publishCancellation, /unknown/);
     const publishedCancellation = await publishCancellation();
     assert.equal(publishedCancellation.headPublished, true); assert.equal(publishedCancellation.replayed, true);
     const source = { async readHead() {
@@ -468,6 +471,7 @@ try {
     const original = objects.get(key); objects.delete(key);
     await assert.rejects(readPublishedCancellation(j, source, ctx, kind, keys, storage), /unresolved/);
     await assert.rejects(releaseCancellation, /unresolved/);
+    await assert.rejects(resumeCancellation, /unresolved/);
     assert.equal(objects.has(key), false); objects.set(key, original);
     await assert.rejects(releaseCommittedCancellationOperation(prisma, j, storage, 'stale-writer', kind, ctx, keys, storage), /writer or operation mismatch/);
     const missingLocal = { complaintRecoveryCancellation: { async findFirst() { return null; } } };
@@ -485,9 +489,9 @@ try {
     await assert.rejects(releaseCommittedCancellationOperation(prisma, j, changedControl, writerId, kind, ctx, keys, storage), /evidence does not match/);
     const beforeRelease = await storage.readControl();
     loseHeadAck = true;
-    await assert.rejects(releaseCancellation, /unknown/);
+    await assert.rejects(resumeCancellation, /unknown/);
     await prisma.$disconnect();
-    assert.deepEqual(await releaseCancellation(), { released: true, replayed: true, actionAuthorized: false });
+    assert.deepEqual(await resumeCancellation(), { released: true, replayed: true, actionAuthorized: false });
     const afterRelease = await storage.readControl();
     assert.equal(afterRelease.activeOperation, null);
     assert.equal(afterRelease.digest, beforeRelease.digest);
@@ -497,6 +501,7 @@ try {
       writerId, writerEpoch: ctx.writerEpoch, operationId: 'after-cancellation', preparationDigest: prepDigest,
       expectedGeneration: afterRelease.generation, expectedDigest: afterRelease.digest }, storage);
     await assert.rejects(releaseCancellation, /writer or operation mismatch/);
+    await assert.rejects(resumeCancellation, /writer or operation mismatch/);
     assert.equal((await storage.readControl()).activeOperation.operationId, 'after-cancellation');
 
   }
