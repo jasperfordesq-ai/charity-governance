@@ -49,18 +49,9 @@ try {
     recordRevision: 2, held: true, actorUserId: 'admin-a',
     evidenceRef: 'DIRECT-HOLD-DENIED-001', reason: 'Direct hold after recovery binding',
   } }), /same-transaction recovery outcome/);
-  // Exercise a separate real PostgreSQL login under the complete migrated
-  // schema. The runtime role can still write ordinary application rows, but
-  // must not be able to forge the off-host outcome that admits a bound hold.
-  await prisma.$executeRaw`CREATE ROLE cp_protocol_runtime LOGIN NOINHERIT PASSWORD 'synthetic-runtime-proof'`;
-  await prisma.$executeRaw`GRANT CONNECT ON DATABASE postgres TO cp_protocol_runtime`;
-  await prisma.$executeRaw`GRANT USAGE ON SCHEMA public TO cp_protocol_runtime`;
-  await prisma.$executeRaw`GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA public TO cp_protocol_runtime`;
-  await prisma.$executeRaw`GRANT USAGE ON ALL SEQUENCES IN SCHEMA public TO cp_protocol_runtime`;
-  await prisma.$executeRaw`REVOKE INSERT, UPDATE, DELETE ON
-    "ComplaintHoldRecoveryOutcome", "ComplaintRecoveryEnforcement",
-    "ComplaintRecoveryExecution", "ComplaintRecoveryOutcome",
-    "ComplaintRecoveryCancellation" FROM cp_protocol_runtime`;
+  // Exercise the separate login provisioned by runtime-role-grants.psql
+  // against the completed migration set. It may write ordinary rows but
+  // cannot forge the protected published outcome.
   const runtimeUrl = new URL(adminDatabaseUrl);
   runtimeUrl.username = 'cp_protocol_runtime';
   runtimeUrl.password = 'synthetic-runtime-proof';
@@ -77,6 +68,8 @@ try {
     await assert.rejects(runtime.$executeRaw`INSERT INTO "ComplaintHoldRecoveryOutcome"
       (id,"preparationId","holdEventId","transactionId") VALUES
       ('forged-outcome','missing','forged-event',txid_current())`, /permission denied/);
+    await assert.rejects(runtime.$executeRaw`INSERT INTO "_prisma_migrations" (id)
+      VALUES ('forged-migration')`, /permission denied/);
     await assert.rejects(runtime.$executeRaw`SET ROLE postgres`, /permission denied/);
     await assert.rejects(runtime.$executeRaw`ALTER TABLE "ComplaintHoldEvent" DISABLE TRIGGER "ComplaintHoldEvent_recovery_gate"`, /must be owner/);
     await assert.rejects(runtime.complaintHoldEvent.create({ data: {

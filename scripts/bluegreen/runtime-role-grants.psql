@@ -1,0 +1,72 @@
+\set ON_ERROR_STOP on
+\set QUIET on
+\getenv runtime_role CHARITYPILOT_RUNTIME_ROLE
+\getenv runtime_password CHARITYPILOT_RUNTIME_PASSWORD
+
+-- Internal, transaction-bound grant reconciliation for a prevalidated
+-- separate app login. The guarded operator path must supply both variables
+-- without putting the password in process arguments or logs. This file is
+-- not a standalone operator command.
+BEGIN;
+
+DO $$
+BEGIN
+  IF EXISTS (
+    SELECT 1 FROM (VALUES
+      ('_prisma_migrations'),
+      ('ComplaintRecoveryEnforcement'),
+      ('ComplaintHoldRecoveryOutcome'),
+      ('ComplaintRecoveryExecution'),
+      ('ComplaintRecoveryOutcome'),
+      ('ComplaintRecoveryCancellation')) AS protected(name)
+    WHERE to_regclass(format('public.%I', protected.name)) IS NULL
+  ) THEN
+    RAISE EXCEPTION 'Protected recovery or migration table is missing';
+  END IF;
+END $$;
+
+-- An existing elevated login is an incident/review item, not something a
+-- provisioner silently downgrades or repurposes. ON_ERROR_STOP rolls back
+-- before any role/password/grant change.
+SELECT CASE WHEN :'runtime_role' = current_user OR EXISTS (
+  SELECT 1 FROM pg_roles r WHERE r.rolname = :'runtime_role' AND (
+    NOT r.rolcanlogin OR r.rolsuper OR r.rolcreatedb OR r.rolcreaterole OR r.rolreplication
+    OR r.rolbypassrls OR r.rolinherit
+    OR EXISTS (SELECT 1 FROM pg_auth_members m WHERE m.member = r.oid)
+    OR EXISTS (SELECT 1 FROM pg_class c WHERE c.relowner = r.oid AND c.relnamespace = 'public'::regnamespace)
+    OR EXISTS (SELECT 1 FROM pg_proc p WHERE p.proowner = r.oid AND p.pronamespace = 'public'::regnamespace)
+    OR EXISTS (SELECT 1 FROM pg_database d WHERE d.datname = current_database() AND d.datdba = r.oid)
+    OR has_database_privilege(r.oid, current_database(), 'CREATE')
+    OR has_schema_privilege(r.oid, 'public', 'CREATE')
+    OR EXISTS (
+      SELECT 1 FROM (VALUES
+        ('_prisma_migrations'), ('ComplaintRecoveryEnforcement'),
+        ('ComplaintHoldRecoveryOutcome'), ('ComplaintRecoveryExecution'),
+        ('ComplaintRecoveryOutcome'), ('ComplaintRecoveryCancellation')) AS protected(name)
+      WHERE has_table_privilege(r.oid, to_regclass(format('public.%I', protected.name)),
+        'INSERT,UPDATE,DELETE,TRUNCATE,REFERENCES,TRIGGER')
+    )
+  )
+) THEN 'SELECT CAST(''unsafe existing runtime role'' AS integer)' ELSE 'DO $$ BEGIN END $$' END \gexec
+
+SELECT format('CREATE ROLE %I LOGIN NOINHERIT NOSUPERUSER NOCREATEDB NOCREATEROLE NOREPLICATION NOBYPASSRLS PASSWORD %L',
+  :'runtime_role', :'runtime_password')
+WHERE NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = :'runtime_role') \gexec
+
+SELECT format('ALTER ROLE %I LOGIN NOINHERIT NOSUPERUSER NOCREATEDB NOCREATEROLE NOREPLICATION NOBYPASSRLS PASSWORD %L',
+  :'runtime_role', :'runtime_password') \gexec
+SELECT format('ALTER ROLE %I IN DATABASE %I SET search_path TO public',
+  :'runtime_role', current_database()) \gexec
+
+SELECT format('REVOKE ALL ON DATABASE %I FROM %I', current_database(), :'runtime_role') \gexec
+SELECT format('GRANT CONNECT ON DATABASE %I TO %I', current_database(), :'runtime_role') \gexec
+SELECT format('REVOKE ALL ON SCHEMA public FROM %I', :'runtime_role') \gexec
+SELECT format('GRANT USAGE ON SCHEMA public TO %I', :'runtime_role') \gexec
+SELECT format('REVOKE ALL ON ALL TABLES IN SCHEMA public FROM %I', :'runtime_role') \gexec
+SELECT format('GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA public TO %I', :'runtime_role') \gexec
+SELECT format('REVOKE ALL ON ALL SEQUENCES IN SCHEMA public FROM %I', :'runtime_role') \gexec
+SELECT format('GRANT USAGE, SELECT ON ALL SEQUENCES IN SCHEMA public TO %I', :'runtime_role') \gexec
+SELECT format('REVOKE ALL ON TABLE public."_prisma_migrations", public."ComplaintRecoveryEnforcement", public."ComplaintHoldRecoveryOutcome", public."ComplaintRecoveryExecution", public."ComplaintRecoveryOutcome", public."ComplaintRecoveryCancellation" FROM %I', :'runtime_role') \gexec
+SELECT format('GRANT SELECT ON TABLE public."_prisma_migrations", public."ComplaintRecoveryEnforcement", public."ComplaintHoldRecoveryOutcome", public."ComplaintRecoveryExecution", public."ComplaintRecoveryOutcome", public."ComplaintRecoveryCancellation" TO %I', :'runtime_role') \gexec
+
+COMMIT;

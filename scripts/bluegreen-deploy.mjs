@@ -1010,7 +1010,7 @@ export async function verifyAppRuntimeRole(run, deployEnv, fileEnv) {
       )
       AND NOT EXISTS (
         SELECT 1 FROM (VALUES
-          ('ComplaintRecoveryEnforcement'), ('ComplaintHoldRecoveryOutcome'),
+          ('_prisma_migrations'), ('ComplaintRecoveryEnforcement'), ('ComplaintHoldRecoveryOutcome'),
           ('ComplaintRecoveryExecution'), ('ComplaintRecoveryOutcome'),
           ('ComplaintRecoveryCancellation')) AS protected(name)
         WHERE to_regclass(format('public.%I', protected.name)) IS NULL

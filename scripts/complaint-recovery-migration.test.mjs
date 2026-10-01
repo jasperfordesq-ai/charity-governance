@@ -368,6 +368,16 @@ test('complaint recovery migration preserves records and enforces reviewed remov
       UPDATE "User" SET role='OWNER' WHERE id='admin-a'; COMMIT;`);
     raceFixture('recovery-protocol');
     raceFixture('recovery-stale');
+    // This harness applies migration.sql files directly. Prisma's CLI normally
+    // creates its own metadata table, so add that marker before testing the
+    // role-grant script that must protect it on a real deployment.
+    sql('CREATE TABLE "_prisma_migrations" (id text PRIMARY KEY);');
+    const grantScript = readFileSync(new URL('./bluegreen/runtime-role-grants.psql', import.meta.url), 'utf8');
+    const grants = docker(['exec', '-i', '--env', 'CHARITYPILOT_RUNTIME_ROLE=cp_protocol_runtime',
+      '--env', 'CHARITYPILOT_RUNTIME_PASSWORD=synthetic-runtime-proof', container,
+      'psql', '-X', '-q', '-v', 'ON_ERROR_STOP=1', '-U', 'postgres', '-d', 'postgres', '-f', '-'], grantScript);
+    assert.equal(grants.status, 0, grants.stderr);
+    assert.doesNotMatch(grants.stdout + grants.stderr, /synthetic-runtime-proof/);
     const protocolProof = spawnSync(process.execPath, ['--import', 'tsx', 'scripts/complaint-recovery-protocol-proof.mjs'],
       { cwd: fileURLToPath(new URL('../', import.meta.url)), input: captureUrl, encoding: 'utf8', timeout: 40000 });
     assert.equal(protocolProof.status, 0, protocolProof.stderr);

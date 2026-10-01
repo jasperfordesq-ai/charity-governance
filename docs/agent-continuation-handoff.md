@@ -1,5 +1,16 @@
 # CharityPilot Agent Continuation Handoff
 
+> **1 October 01:24 Dublin, source-only grant map:** Internal
+> `scripts/bluegreen/runtime-role-grants.psql` is transaction-bound, grants
+> ordinary app DML and restricts recovery receipt/binding tables and Prisma
+> migration history. The full disposable protocol now runs it and passes
+> 99-model reads, a permitted hold-preparation service write and protected
+> insert denials. Its 77.6-second run, 85 deployment tests and security
+> scan passed. A separate disposable check refused an already-unsafe role.
+> This is not a supported provisioner or VM credential change; no recovery
+> binding is active. Private receipt and open gates are in
+> `.charitypilot-private/runtime-role-grants-proof-2026-10-01.md`.
+
 > **1 October 01:11 Dublin, restricted-role read proof:** The disposable
 > full-migration complaint protocol now reads every generated Prisma model
 > through a separate restricted login (99 models at this revision), while

@@ -56,6 +56,8 @@ Until that report exists, this engine has not run against a real VM.
   application routes, or create a trusted executor, independent provider
   or emergency hold path. Do not
   enable recovery enforcement on the strength of this setting alone.
+  `scripts/bluegreen/runtime-role-grants.psql` is an internal, disposable-
+  tested grant map; it is not a supported operator provisioning command.
 - **`DATABASE_URL`** must resolve to hostname `db` exactly (the compose
   `db` service) — preflight rejects any other host.
 - **`READINESS_API_KEY`** must be set (candidate- and public-smoke both
