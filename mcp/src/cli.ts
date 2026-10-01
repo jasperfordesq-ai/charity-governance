@@ -8,10 +8,11 @@ import {
   profileSummary,
 } from './config.js';
 import {
+  chooseV2CredentialStore,
   chooseCredentialStore,
   bindCredentialToOrigin,
   originOf,
-  storedCredentials,
+  storedV2Credentials,
 } from './credentials.js';
 import {
   readPasswordFromStdin,
@@ -117,7 +118,7 @@ async function main(): Promise<void> {
   // Bound to the base URL in use: a credential minted against one host is never
   // presented to another, whatever changed the configuration.
   const store = bindCredentialToOrigin(
-    chooseCredentialStore({
+    chooseV2CredentialStore({
       profile: config.profile,
       credentialFile: process.env.CHARITYPILOT_CREDENTIAL_FILE,
       // Each host keeps its own credential, so one machine can hold the VM's
@@ -218,7 +219,15 @@ async function main(): Promise<void> {
 
   if (config.command === 'status') {
     if (!store.read()) {
-      stdout.write('Not connected. Run: charitypilot-mcp connect\n');
+      const legacy = chooseCredentialStore({
+        profile: config.profile,
+        credentialFile: process.env.CHARITYPILOT_CREDENTIAL_FILE,
+        origin: originOf(config.baseUrl),
+        realm: config.realm,
+      });
+      stdout.write(legacy.read()
+        ? 'An older connector session is stored. Run: charitypilot-mcp connect to create a new session, then revoke the older connector session in Team.\n'
+        : 'Not connected. Run: charitypilot-mcp connect\n');
       return;
     }
     const client = new ApiClient({ session, baseUrl: config.baseUrl });
@@ -257,7 +266,7 @@ async function main(): Promise<void> {
       // The hosts worth looking for are the pinned profiles plus wherever
       // this invocation is pointed; the keyring cannot be enumerated, so
       // there is no list to read.
-      const held = storedCredentials([
+      const held = storedV2Credentials([
         ...pinnedProfiles().map((pinned) => pinned.origin),
         config.baseUrl,
       ]);

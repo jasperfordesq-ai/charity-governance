@@ -2,14 +2,31 @@ import assert from 'node:assert/strict';
 import { spawn } from 'node:child_process';
 import { once } from 'node:events';
 import { createServer } from 'node:net';
+import { readFileSync } from 'node:fs';
 import { test } from 'node:test';
 import {
   ConnectorRefreshLockUnavailableError,
   connectorRefreshLockPort,
+  lockPortWithinEphemeral,
   withConnectorRefreshLock,
 } from '../refresh-coordination.js';
 
 const ORIGIN = 'https://refresh-coordination-fixture.test';
+
+test('v2 refresh mutex ports avoid the observed Linux ephemeral range', () => {
+  assert.equal(lockPortWithinEphemeral(24_000, 32_768, 60_999), false);
+  assert.equal(lockPortWithinEphemeral(26_000, 25_000, 60_999), true);
+  const observed = process.platform === 'linux'
+    ? readFileSync('/proc/sys/net/ipv4/ip_local_port_range', 'utf8').trim().split(/\s+/).map(Number)
+    : null;
+  for (let index = 0; index < 100; index++) {
+    for (const realm of ['charity', 'operator'] as const) {
+      const port = connectorRefreshLockPort(`https://fixture-${index}.test`, realm);
+      assert.ok(port >= 20_000 && port < 30_000);
+      if (observed) assert.equal(lockPortWithinEphemeral(port, observed[0]!, observed[1]!), false);
+    }
+  }
+});
 
 test('the same origin and realm serialize refresh work before reading a shared credential', async () => {
   let releaseFirst!: () => void;

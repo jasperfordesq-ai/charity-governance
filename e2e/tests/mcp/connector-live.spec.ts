@@ -53,6 +53,20 @@ test.beforeAll(async () => {
 });
 
 test.describe('MCP connector lifecycle', () => {
+  test('upgrade detects a legacy credential without spending it', async () => {
+    const credentialFile = credentialFileFor('legacy-upgrade');
+    writeFileSync(credentialFile, `${JSON.stringify({ refreshToken: 'legacy-test-token' })}\n`, { mode: 0o600 });
+    const before = await runConnector(
+      ['status', '--profile', 'local', '--base-url', API_BASE_URL],
+      { credentialFile },
+    );
+    expect(before.code).toBe(0);
+    expect(before.stdout).toContain('An older connector session is stored');
+    expect(before.stdout).not.toContain('legacy-test-token');
+    expect(storedRefreshToken(credentialFile)).toBeNull();
+    expect(JSON.parse(readFileSync(credentialFile, 'utf8')).refreshToken).toBe('legacy-test-token');
+  });
+
   test('status reports no session before connect', async () => {
     const result = await runConnector(
       ['status', '--profile', 'local', '--base-url', API_BASE_URL],

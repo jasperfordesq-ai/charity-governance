@@ -102,6 +102,24 @@ Publishing it, and choosing the name it would take, is the owner's decision.
 
 ## connect / status / disconnect
 
+### Renewal-lock v2 upgrade
+
+This connector version stores new sessions in a separate v2 OS credential
+entry (or a `.v2` sibling of a local test credential file). An older
+connector may still be running and using a single-use refresh token under
+the previous lock-port mapping. Sharing that token across the two mappings
+could cause a session replay alert. After updating, run `status` and then
+`connect` to create a fresh session. `status` will identify an older stored
+credential, but will never send it to the server from this version. Revoke
+the older connector session in CharityPilot's Team sessions view when its
+old process is no longer needed. `disconnect` acts on the current v2
+session; it does not silently revoke an older process's session.
+
+The v2 renewal lock uses a port below the usual Linux ephemeral range and
+checks its selected port against the host's observed range before refreshing.
+If that port overlaps, renewal fails closed and retains the credential for a
+later attempt.
+
 These are run by hand, in a terminal, before (and after) you use the
 connector from an AI client:
 

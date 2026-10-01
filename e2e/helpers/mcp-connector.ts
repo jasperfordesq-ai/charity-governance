@@ -105,6 +105,7 @@ export async function connectConnector(options: {
  * after the thing it guards had broken.
  */
 export function storedRefreshToken(path: string): string | null {
+  path = `${path}.v2`;
   if (!existsSync(path)) return null;
   const outer = JSON.parse(readFileSync(path, 'utf8')) as { refreshToken?: unknown };
   if (typeof outer.refreshToken !== 'string') return null;
@@ -154,7 +155,8 @@ export async function accessTokenFromStoredCredential(options: {
 
   // The token just spent is dead. Leaving it on disk would quarantine the whole
   // session family the next time the connector refreshed.
-  const outer = JSON.parse(readFileSync(options.credentialFile, 'utf8')) as { refreshToken: string };
+  const v2File = `${options.credentialFile}.v2`;
+  const outer = JSON.parse(readFileSync(v2File, 'utf8')) as { refreshToken: string };
   let stored: string = body.refreshToken;
   try {
     const bound = JSON.parse(outer.refreshToken) as Record<string, unknown>;
@@ -164,7 +166,7 @@ export async function accessTokenFromStoredCredential(options: {
   } catch {
     // Plain string entry: store the rotated token the same way.
   }
-  writeFileSync(options.credentialFile, `${JSON.stringify({ refreshToken: stored })}\n`, {
+  writeFileSync(v2File, `${JSON.stringify({ refreshToken: stored })}\n`, {
     mode: 0o600,
   });
 

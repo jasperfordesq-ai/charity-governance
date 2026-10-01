@@ -69,11 +69,55 @@ test('the real keyring round-trips, overwrites and deletes', { skip: keyringAvai
 import { mkdtempSync, rmSync, existsSync, statSync, writeFileSync } from 'node:fs';
 import { tmpdir, platform } from 'node:os';
 import { join } from 'node:path';
-import { createFileStore, chooseCredentialStore } from '../credentials.js';
+import {
+  createFileStore, chooseCredentialStore, chooseV2CredentialStore,
+  storedV2Credentials, v2CredentialFilePath,
+} from '../credentials.js';
 
 function tempFile(): string {
   return join(mkdtempSync(join(tmpdir(), 'cp-mcp-cred-')), 'credential.json');
 }
+
+test('v2 file credentials cannot be read or overwritten by a legacy connector', () => {
+  const path = tempFile();
+  const legacy = createFileStore(path);
+  const current = chooseV2CredentialStore({
+    profile: 'local', credentialFile: path, origin: 'https://example.test', realm: 'charity',
+  });
+  legacy.write('legacy-single-use-token');
+  assert.equal(current.read(), null, 'upgrading must require a fresh connect');
+  current.write('v2-single-use-token');
+  assert.equal(legacy.read(), 'legacy-single-use-token');
+  assert.equal(current.read(), 'v2-single-use-token');
+  legacy.write('legacy-rotated');
+  assert.equal(current.read(), 'v2-single-use-token');
+  current.clear();
+  assert.equal(legacy.read(), 'legacy-rotated');
+  assert.equal(existsSync(v2CredentialFilePath(path)), false);
+});
+
+test('v2 keyring credentials are isolated by host and realm from legacy accounts', () => {
+  const entries = new Map<string, string>();
+  const make = (account = 'refresh-token') => ({
+    read: () => entries.get(account) ?? null,
+    write: (token: string) => { entries.set(account, token); },
+    clear: () => { entries.delete(account); },
+  });
+  const origin = 'https://example.test';
+  const legacy = createHostScopedStore(origin, make);
+  const charity = chooseV2CredentialStore({ profile: 'default', origin, realm: 'charity', keyring: make });
+  const operator = chooseV2CredentialStore({ profile: 'default', origin, realm: 'operator', keyring: make });
+  legacy.write('old-token');
+  assert.equal(charity.read(), null);
+  charity.write('new-token');
+  operator.write('operator-token');
+  assert.equal(legacy.read(), 'old-token');
+  assert.equal(charity.read(), 'new-token');
+  assert.equal(operator.read(), 'operator-token');
+  assert.equal(storedV2Credentials([origin], make)[0]?.present, true);
+  legacy.clear();
+  assert.equal(charity.read(), 'new-token');
+});
 
 test('a file store round-trips, overwrites and clears', () => {
   const path = tempFile();
