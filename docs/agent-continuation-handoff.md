@@ -1,5 +1,13 @@
 # CharityPilot Agent Continuation Handoff
 
+> **1 October 01:11 Dublin, restricted-role read proof:** The disposable
+> full-migration complaint protocol now reads every generated Prisma model
+> through a separate restricted login (99 models at this revision), while
+> preserving its protected-write and role-escalation negative controls.
+> The real PostgreSQL protocol passed in 77.7 seconds. This proves SELECT
+> compatibility only; application writes, jobs, rollback and a provisioned
+> VM role remain open. Private status: `.charitypilot-private/ROADMAP.md`.
+
 > **1 October 01:08 Dublin, source only:** The blue-green command runner now
 > supports bounded stdin with exact-value redaction on stdout, stderr and
 > errors; its child-process test and 85 deployment tests pass. This allows

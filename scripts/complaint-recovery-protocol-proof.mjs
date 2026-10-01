@@ -11,7 +11,7 @@ import assert from 'node:assert/strict';
 import { createHash, randomBytes } from 'node:crypto';
 import { readFileSync } from 'node:fs';
 import { Readable } from 'node:stream';
-import { PrismaClient } from '@prisma/client';
+import { Prisma, PrismaClient } from '@prisma/client';
 import { S3Client, GetObjectCommand, PutObjectCommand } from '@aws-sdk/client-s3';
 import { ComplaintRecoveryPreparationStore } from '../apps/api/src/services/complaint-recovery-preparation-store.ts';
 import { RecoveryAuthorityJournal } from '../apps/api/src/services/recovery-authority-journal.ts';
@@ -66,6 +66,14 @@ try {
   runtimeUrl.password = 'synthetic-runtime-proof';
   const runtime = new PrismaClient({ datasources: { db: { url: runtimeUrl.toString() } } });
   try {
+    // The restricted login must still read every current Prisma model.
+    // This is a schema-wide SELECT proof, not a substitute for route/job
+    // write-path acceptance under that login.
+    for (const model of Prisma.dmmf.datamodel.models) {
+      const delegate = model.name[0].toLowerCase() + model.name.slice(1);
+      assert.equal(typeof runtime[delegate]?.count, 'function', `Missing Prisma delegate ${model.name}`);
+      await runtime[delegate].count();
+    }
     await assert.rejects(runtime.$executeRaw`INSERT INTO "ComplaintHoldRecoveryOutcome"
       (id,"preparationId","holdEventId","transactionId") VALUES
       ('forged-outcome','missing','forged-event',txid_current())`, /permission denied/);
