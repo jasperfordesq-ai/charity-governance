@@ -1771,7 +1771,11 @@ async function executeDeploy(deps) {
   // Phase 11: switch
   writeDeployStatus(resolvedStateDir, 'switch', `pointing Caddy at ${target}`);
   try {
-    await run([...composePrefix(), 'up', '-d', '--wait', 'caddy'], deployEnv);
+    // A stopped prior colour leaves Caddy's existing health check pointing
+    // at an unavailable upstream. Start Caddy first, then load the target
+    // upstream below; public-smoke verifies the front door after reload.
+    // Waiting for health before reload deadlocks this stopped-stack path.
+    await run([...composePrefix(), 'up', '-d', 'caddy'], deployEnv);
   } catch (error) {
     // I1 fix: same bare-await-with-no-recovery defect as phase 9 — a
     // failure starting/waiting on Caddy here runs AFTER quiesce stopped

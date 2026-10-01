@@ -66,9 +66,12 @@ Until that report exists, this engine has not run against a real VM.
   `scripts/bluegreen/runtime-role-grants.psql` is an internal, disposable-
   tested grant map; it is not a supported operator provisioning command.
   A Linux-only guarded provisioning candidate exists in
-  `scripts/bluegreen-runtime-role-provision.mjs`. It is source-only pending
-  full disposable CharityPilot app-route/job/rollback acceptance and live
-  release validation. Do not use it to change VM credentials yet. It keeps
+  `scripts/bluegreen-runtime-role-provision.mjs`. It passed disposable
+  existing-role and fresh-role backup/restore/grant/password runs on
+  1 October 2026. The earlier full-app role journey used a manually
+  provisioned synthetic role, so combined production-mode app-route,
+  nonempty-job, rollback and live release acceptance remain open. Do not
+  use it to change VM credentials yet. It keeps
   its sensitive receipts in a separate owner-only directory outside the
   checkout and leaves a pending receipt for checked resume after failure.
 - **`DATABASE_URL`** must resolve to hostname `db` exactly (the compose
@@ -307,6 +310,12 @@ history always shows exactly how far a deploy got.
 - **Caddy reload fails while switching** — the previous
   `active-upstreams.caddy` file is restored and reloaded; the scheduler is
   restarted on the old tag; traffic was never switched.
+- **Previously stopped stack** — Caddy may start with an upstream file
+  naming the stopped old colour. The deploy starts Caddy without waiting
+  for its health check, then validates and reloads the new upstream.
+  Public smoke verifies the front door after reload. Waiting for Caddy
+  health before changing the upstream would fail this path even when the
+  candidate API and web are healthy.
 - **Public smoke fails after the switch** (traffic is already on the new
   colour and the front-door readiness check fails) — the engine reverts:
   restores the previous upstream file, reloads Caddy, restarts the

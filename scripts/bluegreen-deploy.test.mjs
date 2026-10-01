@@ -1342,11 +1342,11 @@ test('I1: phase 11 (up caddy) failure restarts jobs on the OLD tag with --wait',
   const { deps, calls } = baseDeps({
     stateDir,
     overrides: (command) => {
-      // Only phase 11's `up -d --wait caddy` — must not match phase 9's
-      // up (which also includes 'up'/'-d'/'--wait' but also '--profile')
+      // Only phase 11's `up -d caddy` — must not match phase 9's
+      // up (which includes a profile and --wait)
       // or the later scheduler-restart up (which never includes 'caddy').
-      if (command.includes('up') && command.includes('--wait') && command.includes('caddy') && !command.includes('--profile')) {
-        return new Error('service "caddy" did not become healthy');
+      if (command.includes('up') && command.includes('caddy') && !command.includes('--profile')) {
+        return new Error('service "caddy" could not start');
       }
       return undefined;
     },
@@ -1373,6 +1373,42 @@ test('I1: phase 11 (up caddy) failure restarts jobs on the OLD tag with --wait',
   assert.equal(content, libModule.renderUpstreams('blue'));
 
   rmSync(stateDir, { recursive: true, force: true });
+});
+
+test('deploy reloads Caddy before requiring its health when the prior colour is stopped', async () => {
+  const runDeploy = await loadDeployRunner();
+  const libModule = await import(pathToFileURL(join(scriptsDir, 'bluegreen', 'lib.mjs')).href);
+  const stateDir = makeFixtureDir('bluegreen-stopped-prior-caddy-');
+  try {
+    const envPath = join(stateDir, 'bluegreen.env');
+    writeEnvFile(envPath);
+    libModule.writeState(stateDir, {
+      activeColor: 'blue', commit: OLD_COMMIT, previousColor: null,
+      previousCommit: null, deployedAt: new Date().toISOString(), rollbackable: true,
+    });
+    seedMigrationsDir(stateDir, TARGET_COMMIT, []);
+    writeFileSync(join(stateDir, 'active-upstreams.caddy'), libModule.renderUpstreams('blue'));
+    let reloaded = false;
+    const { deps, calls } = baseDeps({
+      stateDir,
+      overrides: (command) => {
+        if (command.includes('up') && command.includes('caddy') &&
+            command.includes('--wait') && !reloaded) {
+          return new Error('Caddy health still targets the stopped blue colour');
+        }
+        if (command.includes('reload') && command.includes('caddy')) reloaded = true;
+        return undefined;
+      },
+    });
+    const outcome = await runDeploy(['deploy', '--env-file', envPath, '--state-dir', stateDir], deps);
+    assert.equal(outcome.status, 0, outcome.stderr);
+    assert.equal(reloaded, true);
+    const up = calls.find((call) => call.command.includes('up') && call.command.includes('caddy'));
+    const reload = calls.find((call) => call.command.includes('reload') && call.command.includes('caddy'));
+    assert.ok(up && reload);
+    assert.ok(calls.indexOf(up) < calls.indexOf(reload));
+    assert.equal(up.command.includes('--wait'), false);
+  } finally { rmSync(stateDir, { recursive: true, force: true }); }
 });
 
 test('M2: public smoke failure on a first deploy skips the revert block with a clear message', async () => {
@@ -2589,7 +2625,7 @@ const ABORT_CASES = [
   {
     label: 'starting Caddy failure',
     expect: /starting Caddy failed/,
-    fail: (joined) => joined.includes('up -d --wait caddy'),
+    fail: (joined) => joined.includes('up -d caddy'),
   },
   {
     label: 'Caddy reload failure',
