@@ -883,7 +883,23 @@ function runCommandToOutputFile(command, { env, cwd, outputFile }) {
 // implementation (not an injected fake) is exactly what VM-cutover defect 3
 // was, so it has to be testable directly.
 export async function defaultRunCommand(command, options = {}) {
-  const { env, cwd = repoRoot, outputFile } = options;
+  const { env, cwd = repoRoot, outputFile, input, redactValues = [] } = options;
+  // Reserved for secret-bearing maintenance SQL: stdin avoids placing a
+  // credential in docker/psql arguments. A marked value is scrubbed even if
+  // the child echoes it on either success or failure.
+  if (input !== undefined && (typeof input !== 'string' || Buffer.byteLength(input, 'utf8') > 1024 * 1024)) {
+    throw new Error('runCommand input must be a UTF-8 string no larger than 1 MiB');
+  }
+  if (!Array.isArray(redactValues) || redactValues.some((value) => typeof value !== 'string')) {
+    throw new Error('runCommand redactValues must be an array of strings');
+  }
+  if (outputFile && input !== undefined) {
+    throw new Error('runCommand cannot combine secret stdin input with an output artifact');
+  }
+  const scrub = (value) => redactValues.reduce(
+    (text, secret) => secret ? text.replaceAll(secret, '[REDACTED]') : text,
+    value ?? '',
+  );
   // Contract (see backup.mjs's ctx shape notes): the outputFile case
   // resolves { stdout: '' } — callers read the FILE, never the resolved
   // stdout — and both cases throw on a non-zero exit.
@@ -891,13 +907,14 @@ export async function defaultRunCommand(command, options = {}) {
   const spawnResult = spawnCommandSync(command, {
     cwd,
     env: env ?? process.env,
+    input,
     encoding: 'utf8',
     maxBuffer: COMMAND_OUTPUT_MAX_BUFFER,
   });
   if (spawnResult.status !== 0) {
-    throw new Error(commandFailureMessage(command, spawnResult, spawnResult.stderr ?? ''));
+    throw new Error(scrub(commandFailureMessage(command, spawnResult, spawnResult.stderr ?? '')));
   }
-  return { stdout: spawnResult.stdout ?? '', stderr: spawnResult.stderr ?? '' };
+  return { stdout: scrub(spawnResult.stdout), stderr: scrub(spawnResult.stderr) };
 }
 
 function defaultSpawnDetached(command, options) {

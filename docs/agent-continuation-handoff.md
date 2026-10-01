@@ -1,5 +1,12 @@
 # CharityPilot Agent Continuation Handoff
 
+> **1 October 01:08 Dublin, source only:** The blue-green command runner now
+> supports bounded stdin with exact-value redaction on stdout, stderr and
+> errors; its child-process test and 85 deployment tests pass. This allows
+> a future role-provisioning path to avoid password-bearing command arguments.
+> No provisioner, role grant map or rotation workflow is active. The private
+> VM remains on `8d4a0058`. See `.charitypilot-private/ROADMAP.md`.
+
 > **Runtime-role acceptance scope, 2026-10-01:** Normal isolated E2E uses a
 > non-superuser runner that also migrates/seeds and has CREATE on public.
 > Its passing browser suite cannot prove the new restricted runtime role

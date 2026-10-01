@@ -3065,6 +3065,26 @@ test('runCommand: captured stdout far larger than the 1 MiB spawn buffer comes b
   rmSync(dir, { recursive: true, force: true });
 });
 
+test('runCommand: bounded stdin reaches child without leaking marked values in output or errors', async () => {
+  const module = await loadDeployModule();
+  const secret = 'synthetic-role-credential-7af3';
+  const echo = ['-e', 'process.stdin.on("data", d => process.stdout.write(d));'];
+  const ok = await module.defaultRunCommand([process.execPath, ...echo], {
+    input: `${secret}\n`, redactValues: [secret],
+  });
+  assert.equal(ok.stdout, '[REDACTED]\n');
+  await assert.rejects(
+    () => module.defaultRunCommand([process.execPath, '-e',
+      'process.stdin.on("data", d => { process.stderr.write(d); process.exit(7); });'], {
+      input: `${secret}\n`, redactValues: [secret],
+    }),
+    (error) => { assert.match(error.message, /exit code 7/); assert.doesNotMatch(error.message, /synthetic-role-credential-7af3/); return true; },
+  );
+  await assert.rejects(() => module.defaultRunCommand([process.execPath, ...echo], {
+    input: 'x'.repeat(1024 * 1024 + 1), redactValues: [secret],
+  }), /no larger than 1 MiB/);
+});
+
 test('runCommand: a spawn-level failure names its error code instead of "exit code unknown"', async () => {
   const module = await loadDeployModule();
   const dir = makeFixtureDir('bluegreen-runcommand-spawn-error-');
