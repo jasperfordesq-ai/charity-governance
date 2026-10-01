@@ -1,5 +1,29 @@
 # CharityPilot Agent Continuation Handoff
 
+> **1 October ~02:50 Dublin, Nikita continuation:** Source master
+> `b701d209` includes the connector renewal fix from PR #9. The prior
+> connector's hash-selected mutex port collided with Linux TCP TIME_WAIT
+> inside the ephemeral range during hosted E2E. New connector sessions use
+> separate v2 credential storage and a checked lower port range, so an
+> older process cannot refresh the same single-use token under a different
+> lock. Exact PR CI and E2E passed (240 browser checks); post-merge master
+> checks were still running. A separate-process synthetic old/new build
+> check showed independent rotation; live users must connect again and
+> revoke their older Team session when upgrading. This does not attribute
+> the nine historical replay events. A count-only VM check at 01:51 UTC
+> found nine total and none recorded
+> since the `8d4a0058` cutover; this short observation does not close them.
+> Separately, a disposable full app
+> ran under the restricted database role through API/web/scheduler startup,
+> selected Owner/Admin/Member routes, restricted download, empty-queue jobs
+> and rollback. That run manually provisioned the synthetic role and used
+> `NODE_ENV=test`; the guarded Linux provisioner and production-mode VM
+> switch remain unaccepted. The VM still runs `8d4a0058` with its broad
+> database credential and zero recovery bindings. Private evidence and
+> resume instructions: `.charitypilot-private/RESUME-HERE.md`,
+> `.charitypilot-private/split-role-full-stack-proof-2026-10-01.md` and
+> `.charitypilot-private/nikita-review-pack-2026-09-30.md`.
+
 > **1 October ~02:00 Dublin, source-only provisioning candidate:** A
 > Linux-only `bluegreen-runtime-role-provision.mjs` source command now
 > preflights the exact local Docker socket, canonical Git origin/HEAD,
