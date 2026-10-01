@@ -400,6 +400,9 @@ export function preflightIssues({ fileEnv, resolvedEnvFilePath }) {
         if (!/^[a-z_][a-z0-9_]{0,62}$/u.test(decodeURIComponent(appUrl.username))) {
           issues.push('BLUEGREEN_APP_ENV_FILE DATABASE_URL role must be a simple PostgreSQL identifier');
         }
+        if (/[\x00-\x1f\x7f]/u.test(decodeURIComponent(appUrl.password))) {
+          issues.push('BLUEGREEN_APP_ENV_FILE DATABASE_URL password must not contain control characters');
+        }
       } catch {
         issues.push('BLUEGREEN_APP_ENV_FILE must contain a valid DATABASE_URL');
       }
@@ -1037,6 +1040,7 @@ export async function verifyAppRuntimeRole(run, deployEnv, fileEnv) {
            OR has_table_privilege(r.oid, to_regclass(format('public.%I', protected.name)), 'UPDATE')
            OR has_table_privilege(r.oid, to_regclass(format('public.%I', protected.name)), 'DELETE')
            OR has_table_privilege(r.oid, to_regclass(format('public.%I', protected.name)), 'TRUNCATE')
+           OR has_table_privilege(r.oid, to_regclass(format('public.%I', protected.name)), 'REFERENCES')
            OR has_table_privilege(r.oid, to_regclass(format('public.%I', protected.name)), 'TRIGGER')
       )
   ) THEN 'safe' ELSE 'unsafe' END`;
@@ -1044,6 +1048,65 @@ export async function verifyAppRuntimeRole(run, deployEnv, fileEnv) {
   const check = await run([...composePrefix(), 'exec', '-T', 'db', 'psql',
     '-U', identity.databaseUser, '-d', identity.databaseName, '-tA', '-c', sql], deployEnv);
   return (check.stdout ?? '').trim() === 'safe';
+}
+
+// Runs after owner-only migrations, while jobs are stopped and before a
+// candidate starts. The role was already required to exist and be restricted
+// both before backup and immediately before this call. The grant map does not
+// rotate its password, preserving the serving colour's rollback credential.
+export async function reconcileAppRuntimeRole(runCommand, deployEnv, fileEnv) {
+  const appEnv = parseEnvFile(fileEnv.BLUEGREEN_APP_ENV_FILE);
+  const appUrl = new URL(appEnv.DATABASE_URL);
+  const role = decodeURIComponent(appUrl.username);
+  const password = decodeURIComponent(appUrl.password);
+  if (!/^[a-z_][a-z0-9_]{0,62}$/u.test(role) || !password || /[\x00-\x1f\x7f]/u.test(password)) {
+    throw new Error('application database role credential is invalid for grant reconciliation');
+  }
+  const grantScript = readFileSync(join(scriptsDir, 'bluegreen', 'runtime-role-grants.psql'), 'utf8');
+  const identity = databaseIdentity(fileEnv);
+  const shell = `IFS= read -r CHARITYPILOT_RUNTIME_PASSWORD
+export CHARITYPILOT_RUNTIME_PASSWORD
+CHARITYPILOT_RUNTIME_ROLE=${role}
+export CHARITYPILOT_RUNTIME_ROLE
+exec psql -X -q -v ON_ERROR_STOP=1 -U "$1" -d "$2" -f -`;
+  await runCommand([
+    ...composePrefix(), 'exec', '-T', 'db', 'sh', '-eu', '-c', shell, 'role-grants',
+    identity.databaseUser, identity.databaseName,
+  ], {
+    env: deployEnv,
+    cwd: repoRoot,
+    input: `${password}\n${grantScript}`,
+    redactValues: [password],
+  });
+}
+
+// Connect through the Compose network name rather than PostgreSQL's local
+// Unix socket or loopback trust rules. This checks the exact app password
+// before backup and again after reconciliation, without putting it in argv.
+export async function verifyAppRuntimePassword(runCommand, deployEnv, fileEnv) {
+  const appEnv = parseEnvFile(fileEnv.BLUEGREEN_APP_ENV_FILE);
+  const appUrl = new URL(appEnv.DATABASE_URL);
+  const role = decodeURIComponent(appUrl.username);
+  const password = decodeURIComponent(appUrl.password);
+  if (!/^[a-z_][a-z0-9_]{0,62}$/u.test(role) || !password || /[\x00-\x1f\x7f]/u.test(password)) {
+    throw new Error('application database role credential is invalid for login verification');
+  }
+  const identity = databaseIdentity(fileEnv);
+  const shell = `IFS= read -r PGPASSWORD
+export PGPASSWORD
+exec psql -X -w -h db -U "$1" -d "$2" -tA -c 'SELECT current_user'`;
+  const result = await runCommand([
+    ...composePrefix(), 'exec', '-T', 'db', 'sh', '-eu', '-c', shell, 'runtime-login',
+    role, identity.databaseName,
+  ], {
+    env: deployEnv,
+    cwd: repoRoot,
+    input: `${password}\n`,
+    redactValues: [password],
+  });
+  if ((result.stdout ?? '').trim() !== role) {
+    throw new Error('application database login did not return the expected role');
+  }
 }
 
 function readMigrationBatch(migrationsDir, names) {
@@ -1434,8 +1497,9 @@ async function executeDeploy(deps) {
     writeDeployStatus(resolvedStateDir, 'runtime-role', 'checking restricted application database role');
     try {
       if (!await verifyAppRuntimeRole(run, deployEnv, fileEnv)) {
-        return result(1, '', `Blue-green deploy refused: application database role has owner-level or protected recovery-table privileges.${await stopDbOnAbort()}\n`);
+        return result(1, '', `Blue-green deploy refused: application database role failed restricted privilege and ownership checks.${await stopDbOnAbort()}\n`);
       }
+      await verifyAppRuntimePassword(runCommand, deployEnv, fileEnv);
     } catch (error) {
       return result(1, '', `Blue-green deploy refused: application database role could not be verified: ${redact(error)}.${await stopDbOnAbort()}\n`);
     }
@@ -1591,8 +1655,13 @@ async function executeDeploy(deps) {
   if (fileEnv.BLUEGREEN_APP_ENV_FILE) {
     try {
       if (!await verifyAppRuntimeRole(run, deployEnv, fileEnv)) {
-        throw new Error('application database role has owner-level or protected recovery-table privileges');
+        throw new Error('application database role failed restricted privilege and ownership checks');
       }
+      await reconcileAppRuntimeRole(runCommand, deployEnv, fileEnv);
+      if (!await verifyAppRuntimeRole(run, deployEnv, fileEnv)) {
+        throw new Error('application database role gained unsafe privileges during grant reconciliation');
+      }
+      await verifyAppRuntimePassword(runCommand, deployEnv, fileEnv);
     } catch (error) {
       let recoveryNote = '';
       if (oldColor) {

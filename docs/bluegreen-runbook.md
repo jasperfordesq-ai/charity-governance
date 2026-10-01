@@ -51,8 +51,15 @@ Until that report exists, this engine has not run against a real VM.
   startup. The second check catches grants added by migrations. A refusal
   leaves the old colour serving and restores its scheduler where applicable.
   The intended role is NOINHERIT and cannot hold replication, database/schema
-  CREATE or privileged-role membership.
-  This check does not provision the restricted role or grants, validate all
+  CREATE or any role membership; public relation/function ownership and
+  reachable non-system SECURITY DEFINER functions are also refused. A
+  Compose-network password probe checks the configured app login before
+  backup. After owner-only migration, the engine reconciles ordinary
+  table/sequence grants over bounded stdin, then rechecks both the role
+  and app password before candidate startup. An existing role's password
+  is not rotated during reconciliation, so a failed cutover can keep using
+  the old credential.
+  This path does not provide supported initial role provisioning, validate all
   application routes, or create a trusted executor, independent provider
   or emergency hold path. Do not
   enable recovery enforcement on the strength of this setting alone.

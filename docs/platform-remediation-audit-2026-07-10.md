@@ -1,5 +1,15 @@
 # CharityPilot Full-Platform Remediation Audit
 
+> **Runtime grant reconciliation checkpoint, 2026-10-01:** Source deployment
+> now verifies the optional app credential before backup and after
+> migration, reconciles ordinary grants before candidate startup, and
+> leaves the existing password unchanged for rollback. Local Compose
+> network authentication, a full migrated complaint protocol, deployment
+> tests and security scan passed. No VM role/env was configured or switched;
+> no recovery binding was activated. Provisioning, all-route/job proof,
+> publisher custody and emergency hold are still unresolved.
+
+
 > **Restricted app-role source checkpoint, 2026-10-01:** The planned
 > blue-green owner/runtime split now has a stricter catalogue guard for
 > memberships, public relation/function ownership and reachable

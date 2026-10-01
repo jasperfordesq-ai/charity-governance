@@ -53,8 +53,11 @@ SELECT format('CREATE ROLE %I LOGIN NOINHERIT NOSUPERUSER NOCREATEDB NOCREATEROL
   :'runtime_role', :'runtime_password')
 WHERE NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = :'runtime_role') \gexec
 
-SELECT format('ALTER ROLE %I LOGIN NOINHERIT NOSUPERUSER NOCREATEDB NOCREATEROLE NOREPLICATION NOBYPASSRLS PASSWORD %L',
-  :'runtime_role', :'runtime_password') \gexec
+-- Reconciliation never rotates an existing credential: the previous colour
+-- and scheduler may still need it during cutover or rollback. A separate
+-- guarded rotation operation must own password changes.
+SELECT format('ALTER ROLE %I LOGIN NOINHERIT NOSUPERUSER NOCREATEDB NOCREATEROLE NOREPLICATION NOBYPASSRLS',
+  :'runtime_role') \gexec
 SELECT format('ALTER ROLE %I IN DATABASE %I SET search_path TO public',
   :'runtime_role', current_database()) \gexec
 

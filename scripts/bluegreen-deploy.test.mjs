@@ -2077,7 +2077,54 @@ test('separate app env requires a distinct runtime database role and no owner va
   assert.ok(unsafe.some((issue) => issue.includes('owner or migration variables')));
   assert.ok(preflightIssues({ fileEnv: { ...owner, BLUEGREEN_APP_ENV_FILE: ownerPath }, resolvedEnvFilePath: ownerPath })
     .some((issue) => issue.includes('must be separate')));
+  writeFileSync(appPath, 'DATABASE_URL=postgresql://runtime:bad%0Apassword@db:5432/charitypilot\n');
+  assert.ok(preflightIssues({ fileEnv: owner, resolvedEnvFilePath: ownerPath })
+    .some((issue) => issue.includes('control characters')));
   rmSync(dir, { recursive: true, force: true });
+});
+
+test('post-migration grant reconciliation transports app password only through bounded stdin', async () => {
+  const { reconcileAppRuntimeRole } = await loadDeployModule();
+  const dir = makeFixtureDir('bluegreen-runtime-grants-');
+  try {
+    const appPath = join(dir, 'app.env');
+    const secret = 'synthetic-app-password-4f3c';
+    writeFileSync(appPath, `DATABASE_URL=postgresql://runtime:${secret}@db:5432/charitypilot\n`);
+    let seen = 0;
+    await reconcileAppRuntimeRole(async (command, options) => {
+      seen++;
+      assert.ok(command.includes('exec') && command.includes('-T') && command.includes('db'));
+      assert.doesNotMatch(JSON.stringify(command), /synthetic-app-password-4f3c/);
+      assert.doesNotMatch(JSON.stringify(options.env), /synthetic-app-password-4f3c/);
+      assert.ok(options.input.startsWith(`${secret}\n\\set ON_ERROR_STOP on`));
+      assert.deepEqual(options.redactValues, [secret]);
+      return { stdout: '' };
+    }, {}, {
+      BLUEGREEN_APP_ENV_FILE: appPath,
+      POSTGRES_USER: 'charitypilot', POSTGRES_DB: 'charitypilot',
+    });
+    assert.equal(seen, 1);
+  } finally { rmSync(dir, { recursive: true, force: true }); }
+});
+
+test('runtime password probe uses Compose-network TCP and keeps the app password off argv', async () => {
+  const { verifyAppRuntimePassword } = await loadDeployModule();
+  const dir = makeFixtureDir('bluegreen-runtime-login-');
+  try {
+    const appPath = join(dir, 'app.env');
+    const secret = 'synthetic-login-password-74e2';
+    writeFileSync(appPath, `DATABASE_URL=postgresql://runtime:${secret}@db:5432/charitypilot\n`);
+    await verifyAppRuntimePassword(async (command, options) => {
+      assert.ok(command.some((part) => part.includes('-h db')));
+      assert.doesNotMatch(JSON.stringify(command), /synthetic-login-password-74e2/);
+      assert.equal(options.input, `${secret}\n`);
+      assert.deepEqual(options.redactValues, [secret]);
+      return { stdout: 'runtime\n' };
+    }, {}, {
+      BLUEGREEN_APP_ENV_FILE: appPath,
+      POSTGRES_USER: 'charitypilot', POSTGRES_DB: 'charitypilot',
+    });
+  } finally { rmSync(dir, { recursive: true, force: true }); }
 });
 
 test('optional app credential is refused before backup when the database role is privileged', async () => {
@@ -2102,7 +2149,7 @@ test('optional app credential is refused before backup when the database role is
       runRestoreDrillImpl: async () => ({}),
     });
     assert.equal(outcome.status, 1);
-    assert.match(outcome.stderr, /application database role has owner-level or protected recovery-table privileges/);
+    assert.match(outcome.stderr, /application database role failed restricted privilege and ownership checks/);
     assert.equal(backups, 0);
     assert.ok(calls.some((call) => call.command.some((part) => part.includes('ComplaintHoldRecoveryOutcome'))));
     assert.ok(calls.some((call) => call.command.some((part) => part.includes('has_database_privilege'))));
@@ -2125,6 +2172,9 @@ test('optional app credential is rechecked after migrations before candidate sta
       if (command.includes('psql') && command.some((part) => part.includes('SELECT CASE WHEN EXISTS'))) {
         return { stdout: ++checks === 1 ? 'safe\n' : 'unsafe\n' };
       }
+      if (command.some((part) => part.includes('SELECT current_user'))) {
+        return { stdout: 'runtime\n' };
+      }
       return undefined;
     } });
     const outcome = await runDeploy(['deploy', '--env-file', envPath, '--state-dir', stateDir], {
@@ -2136,6 +2186,49 @@ test('optional app credential is rechecked after migrations before candidate sta
     assert.equal(checks, 2);
     assert.match(outcome.stderr, /refused after migration/);
     assert.ok(!calls.some((call) => call.command.includes('api-blue') && call.command.includes('up')));
+  } finally { rmSync(stateDir, { recursive: true, force: true }); }
+});
+
+test('post-migration grant failure keeps the old scheduler and never starts the candidate', async () => {
+  const runDeploy = await loadDeployRunner();
+  const lib = await import(pathToFileURL(join(scriptsDir, 'bluegreen', 'lib.mjs')).href);
+  const stateDir = makeFixtureDir('bluegreen-runtime-grant-refusal-');
+  try {
+    const envPath = join(stateDir, 'owner.env');
+    const appPath = join(stateDir, 'app.env');
+    writeFileSync(appPath, 'DATABASE_URL=postgresql://runtime:runtime-password@db:5432/charitypilot\n');
+    writeEnvFile(envPath, { BLUEGREEN_APP_ENV_FILE: appPath });
+    lib.writeState(stateDir, {
+      activeColor: 'blue', commit: OLD_COMMIT,
+      previousColor: null, previousCommit: null,
+      deployedAt: new Date().toISOString(), rollbackable: true,
+    });
+    seedMigrationsDir(stateDir, TARGET_COMMIT, []);
+    let grantAttempts = 0;
+    const { runCommand, calls } = makeFakeRunCommand({ overrides(command) {
+      if (command.includes('psql') && command.some((part) => part.includes('SELECT CASE WHEN EXISTS'))) {
+        return { stdout: 'safe\n' };
+      }
+      if (command.some((part) => part.includes('SELECT current_user'))) {
+        return { stdout: 'runtime\n' };
+      }
+      if (command.some((part) => part.includes('CHARITYPILOT_RUNTIME_ROLE=runtime'))) {
+        grantAttempts++;
+        return new Error('synthetic grant refusal');
+      }
+      return undefined;
+    } });
+    const outcome = await runDeploy(['deploy', '--env-file', envPath, '--state-dir', stateDir], {
+      runCommand,
+      runBackupImpl: async () => ({ backupDir: join(stateDir, 'backups', 'x') }),
+      runRestoreDrillImpl: async () => ({}),
+    });
+    assert.equal(outcome.status, 1);
+    assert.equal(grantAttempts, 1);
+    assert.match(outcome.stderr, /refused after migration.*synthetic grant refusal/);
+    assert.ok(calls.some((call) => call.command.includes('scheduler') && call.command.includes('up')
+      && call.env?.BLUEGREEN_ACTIVE_TAG === OLD_COMMIT));
+    assert.ok(!calls.some((call) => call.command.includes('api-green') && call.command.includes('up')));
   } finally { rmSync(stateDir, { recursive: true, force: true }); }
 });
 

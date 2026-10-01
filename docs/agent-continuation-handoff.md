@@ -1,5 +1,19 @@
 # CharityPilot Agent Continuation Handoff
 
+> **1 October 01:42 Dublin, source-only grant reconciliation:** With the
+> optional separate application env, blue-green deployment now verifies
+> the app password through Compose-network TCP before backup, checks the
+> restricted role again after owner-only migration, reconciles ordinary
+> table/sequence grants through bounded stdin, then rechecks role and
+> password before candidate startup. Reconciliation does not rotate an
+> existing password, preserving the serving colour during rollback. A
+> disposable Compose fixture proved wrong-password refusal, old-password
+> continuity and grants; the full migrated complaint protocol (78.4s),
+> 88 deployment tests and local security scan passed. The VM has no app
+> env/role switch and still runs `8d4a0058`. Supported role provisioning,
+> all-route/job acceptance and separate recovery publisher remain open.
+
+
 > **1 October 01:35 Dublin, source-only role boundary:** The optional
 > blue-green runtime-role gate now refuses any inherited membership,
 > ownership of public relations/functions, and executable non-system
