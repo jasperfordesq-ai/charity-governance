@@ -2105,6 +2105,7 @@ test('optional app credential is refused before backup when the database role is
     assert.match(outcome.stderr, /application database role has owner-level or protected recovery-table privileges/);
     assert.equal(backups, 0);
     assert.ok(calls.some((call) => call.command.some((part) => part.includes('ComplaintHoldRecoveryOutcome'))));
+    assert.ok(calls.some((call) => call.command.some((part) => part.includes('has_database_privilege'))));
   } finally { rmSync(stateDir, { recursive: true, force: true }); }
 });
 

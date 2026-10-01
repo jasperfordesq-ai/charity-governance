@@ -1,5 +1,13 @@
 # CharityPilot Agent Continuation Handoff
 
+> **1 October 01:03 Dublin, source-only refinement:** The optional runtime
+> role guard now also refuses INHERIT, REPLICATION and database CREATE.
+> Disposable PostgreSQL 16 accepted the restricted baseline and rejected
+> each elevated case; 84 deployment tests and the local security scan pass.
+> No VM credential or binding changed. Full hosted checks for this exact
+> source and all-route compatibility are still required before any use.
+> Private receipt: `.charitypilot-private/role-gate-proof-2026-10-01.md`.
+
 > **1 October 00:57 Dublin, source only:** Opt-in blue-green app credentials
 > now receive a read-only PostgreSQL role/privilege check before backup and
 > after migration; unsafe privilege grants refuse deployment before candidate

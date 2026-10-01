@@ -50,6 +50,8 @@ Until that report exists, this engine has not run against a real VM.
   owner-capable or protected-recovery-table-writing app role before candidate
   startup. The second check catches grants added by migrations. A refusal
   leaves the old colour serving and restores its scheduler where applicable.
+  The intended role is NOINHERIT and cannot hold replication, database/schema
+  CREATE or privileged-role membership.
   This check does not provision the restricted role or grants, validate all
   application routes, or create a trusted executor, independent provider
   or emergency hold path. Do not

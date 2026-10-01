@@ -982,7 +982,9 @@ export async function verifyAppRuntimeRole(run, deployEnv, fileEnv) {
     SELECT 1 FROM pg_roles r WHERE r.rolname = '${role}'
       AND r.rolcanlogin AND NOT r.rolsuper AND NOT r.rolcreaterole
       AND NOT r.rolcreatedb AND NOT r.rolbypassrls
+      AND NOT r.rolreplication AND NOT r.rolinherit
       AND NOT pg_has_role(r.oid, (SELECT oid FROM pg_roles WHERE rolname = current_user), 'MEMBER')
+      AND NOT has_database_privilege(r.oid, current_database(), 'CREATE')
       AND NOT has_schema_privilege(r.oid, 'public', 'CREATE')
       AND NOT EXISTS (
         SELECT 1 FROM pg_roles privileged
