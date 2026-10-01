@@ -1,5 +1,16 @@
 # CharityPilot Full-Platform Remediation Audit
 
+> **Split-role provisioner source checkpoint, 2026-10-01:** A Linux-only
+> guarded provisioning candidate now targets the exact local Docker socket,
+> canonical checkout, Compose database volume and protected off-checkout
+> receipt location. It rehearses a backup before grant mutation and has a
+> checked pending/resume path. Source tests and isolated Linux filesystem
+> checks passed. Full disposable app-route/job/rollback acceptance and live
+> VM validation have not occurred; the VM still uses its broad credential.
+> Do not close the runtime/executor, independent-publisher, emergency-hold
+> or host-loss recovery findings from this source checkpoint.
+
+
 > **Runtime grant reconciliation checkpoint, 2026-10-01:** Source deployment
 > now verifies the optional app credential before backup and after
 > migration, reconciles ordinary grants before candidate startup, and

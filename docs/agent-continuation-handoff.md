@@ -1,5 +1,21 @@
 # CharityPilot Agent Continuation Handoff
 
+> **1 October ~02:00 Dublin, source-only provisioning candidate:** A
+> Linux-only `bluegreen-runtime-role-provision.mjs` source command now
+> preflights the exact local Docker socket, canonical Git origin/HEAD,
+> owner/app env separation, Compose project/database volume and protected
+> receipt directory outside the checkout. It takes and rehearses a backup
+> before creating/reconciling the role, verifies actual app login and
+> restricted grants, and keeps a pending receipt for checked resume. A
+> disposable fake-command failure/resume flow and real Linux filesystem
+> checks passed; the SQL/secret transport was separately proved against
+> disposable PostgreSQL/Compose. This command has **not** been run against
+> a full disposable CharityPilot stack or the private VM. It is not yet an
+> accepted operator procedure or authority to switch live credentials.
+> Exact hosted CI/E2E for preceding `f16ba57a` passed. The private VM
+> remains green `8d4a0058` with zero recovery bindings.
+
+
 > **1 October 01:42 Dublin, source-only grant reconciliation:** With the
 > optional separate application env, blue-green deployment now verifies
 > the app password through Compose-network TCP before backup, checks the

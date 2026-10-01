@@ -2127,6 +2127,34 @@ test('runtime password probe uses Compose-network TCP and keeps the app password
   } finally { rmSync(dir, { recursive: true, force: true }); }
 });
 
+test('standalone runtime-role helpers retain the private VM Compose override', async () => {
+  const { verifyAppRuntimeRole, verifyAppRuntimePassword, reconcileAppRuntimeRole } = await loadDeployModule();
+  const dir = makeFixtureDir('bluegreen-runtime-override-');
+  try {
+    const appPath = join(dir, 'app.env');
+    const overridePath = join(dir, 'private-override.yml');
+    writeFileSync(appPath, 'DATABASE_URL=postgresql://runtime:synthetic@db:5432/charitypilot\n');
+    writeFileSync(overridePath, 'services: {}\n');
+    const fileEnv = { BLUEGREEN_APP_ENV_FILE: appPath,
+      BLUEGREEN_COMPOSE_OVERRIDE: overridePath,
+      POSTGRES_USER: 'charitypilot', POSTGRES_DB: 'charitypilot' };
+    const check = async (command) => {
+      assert.ok(command.includes(overridePath));
+      assert.ok(command.includes('-p') && command.includes('charitypilot-bluegreen'));
+      return { stdout: 'safe\n' };
+    };
+    assert.equal(await verifyAppRuntimeRole(check, {}, fileEnv), true);
+    await verifyAppRuntimePassword(async (command) => {
+      assert.ok(command.includes(overridePath));
+      return { stdout: 'runtime\n' };
+    }, {}, fileEnv);
+    await reconcileAppRuntimeRole(async (command) => {
+      assert.ok(command.includes(overridePath));
+      return { stdout: '' };
+    }, {}, fileEnv);
+  } finally { rmSync(dir, { recursive: true, force: true }); }
+});
+
 test('optional app credential is refused before backup when the database role is privileged', async () => {
   const runDeploy = await loadDeployRunner();
   const stateDir = makeFixtureDir('bluegreen-runtime-role-');

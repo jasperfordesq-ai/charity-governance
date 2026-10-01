@@ -920,6 +920,12 @@ export async function defaultRunCommand(command, options = {}) {
   return { stdout: scrub(spawnResult.stdout), stderr: scrub(spawnResult.stderr) };
 }
 
+function runtimeRoleComposePrefix(fileEnv) {
+  // These helpers also serve the standalone role provisioner, which does
+  // not set the deployment engine's module-global activeComposeFileArgs.
+  return ['docker', 'compose', ...composeFileArgs(fileEnv), '-p', PROJECT_NAME];
+}
+
 function defaultSpawnDetached(command, options) {
   return spawn(command[0], command.slice(1), options);
 }
@@ -1045,7 +1051,7 @@ export async function verifyAppRuntimeRole(run, deployEnv, fileEnv) {
       )
   ) THEN 'safe' ELSE 'unsafe' END`;
   const identity = databaseIdentity(fileEnv);
-  const check = await run([...composePrefix(), 'exec', '-T', 'db', 'psql',
+  const check = await run([...runtimeRoleComposePrefix(fileEnv), 'exec', '-T', 'db', 'psql',
     '-U', identity.databaseUser, '-d', identity.databaseName, '-tA', '-c', sql], deployEnv);
   return (check.stdout ?? '').trim() === 'safe';
 }
@@ -1070,7 +1076,7 @@ CHARITYPILOT_RUNTIME_ROLE=${role}
 export CHARITYPILOT_RUNTIME_ROLE
 exec psql -X -q -v ON_ERROR_STOP=1 -U "$1" -d "$2" -f -`;
   await runCommand([
-    ...composePrefix(), 'exec', '-T', 'db', 'sh', '-eu', '-c', shell, 'role-grants',
+    ...runtimeRoleComposePrefix(fileEnv), 'exec', '-T', 'db', 'sh', '-eu', '-c', shell, 'role-grants',
     identity.databaseUser, identity.databaseName,
   ], {
     env: deployEnv,
@@ -1096,7 +1102,7 @@ export async function verifyAppRuntimePassword(runCommand, deployEnv, fileEnv) {
 export PGPASSWORD
 exec psql -X -w -h db -U "$1" -d "$2" -tA -c 'SELECT current_user'`;
   const result = await runCommand([
-    ...composePrefix(), 'exec', '-T', 'db', 'sh', '-eu', '-c', shell, 'runtime-login',
+    ...runtimeRoleComposePrefix(fileEnv), 'exec', '-T', 'db', 'sh', '-eu', '-c', shell, 'runtime-login',
     role, identity.databaseName,
   ], {
     env: deployEnv,

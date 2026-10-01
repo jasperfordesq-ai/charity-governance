@@ -65,6 +65,12 @@ Until that report exists, this engine has not run against a real VM.
   enable recovery enforcement on the strength of this setting alone.
   `scripts/bluegreen/runtime-role-grants.psql` is an internal, disposable-
   tested grant map; it is not a supported operator provisioning command.
+  A Linux-only guarded provisioning candidate exists in
+  `scripts/bluegreen-runtime-role-provision.mjs`. It is source-only pending
+  full disposable CharityPilot app-route/job/rollback acceptance and live
+  release validation. Do not use it to change VM credentials yet. It keeps
+  its sensitive receipts in a separate owner-only directory outside the
+  checkout and leaves a pending receipt for checked resume after failure.
 - **`DATABASE_URL`** must resolve to hostname `db` exactly (the compose
   `db` service) — preflight rejects any other host.
 - **`READINESS_API_KEY`** must be set (candidate- and public-smoke both
