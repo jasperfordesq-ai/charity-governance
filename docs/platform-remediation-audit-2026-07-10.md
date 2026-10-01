@@ -5,8 +5,8 @@
 > ephemeral/TIME_WAIT ports. PR #9 merged at `b701d209`: v2 credentials are
 > isolated from legacy connector processes before changing the mutex port
 > mapping, and the selected Linux port is checked against the observed
-> ephemeral range. PR CI and 240 E2E checks passed; post-merge master checks
-> were in progress. This is source evidence, not a deployed connector
+> ephemeral range. Exact master CI and 240 E2E checks passed. This is
+> source evidence, not an installed connector
 > upgrade or attribution of the nine historical replay alerts. A bounded
 > count-only VM observation at 01:51 UTC still found nine total and none
 > since the `8d4a0058` cutover; that short window does not close them. A bounded
@@ -14,9 +14,12 @@
 > selected role and download routes, empty-queue jobs and rollback, but
 > manually granted the role under `NODE_ENV=test`. The guarded Linux
 > provisioner, production-mode VM credential cutover, independent recovery
-> publisher, emergency hold and host-loss reopening remain open. Live VM
-> remains `8d4a0058` with broad DB access and no recovery bindings. See
-> the private Nikita review pack and split-role proof for exact evidence.
+> publisher, emergency hold and host-loss reopening remain open. A guarded
+> blue-green release deployed `5752590f` at 02:08:30 UTC, with healthy
+> front door, prior `8d4a0058` rollbackable, all 132 old backup hashes
+> preserved, a copied/verified new set and an isolated restore. Live VM
+> still has broad DB access and no recovery bindings. See the private
+> release receipt, Nikita review pack and split-role proof for exact scope.
 
 > **Split-role provisioner source checkpoint, 2026-10-01:** A Linux-only
 > guarded provisioning candidate now targets the exact local Docker socket,

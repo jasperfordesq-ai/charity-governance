@@ -6,8 +6,8 @@
 > inside the ephemeral range during hosted E2E. New connector sessions use
 > separate v2 credential storage and a checked lower port range, so an
 > older process cannot refresh the same single-use token under a different
-> lock. Exact PR CI and E2E passed (240 browser checks); post-merge master
-> checks were still running. A separate-process synthetic old/new build
+> lock. Exact master CI and E2E passed (240 browser checks). A
+> separate-process synthetic old/new build
 > check showed independent rotation; live users must connect again and
 > revoke their older Team session when upgrading. This does not attribute
 > the nine historical replay events. A count-only VM check at 01:51 UTC
@@ -18,11 +18,17 @@
 > selected Owner/Admin/Member routes, restricted download, empty-queue jobs
 > and rollback. That run manually provisioned the synthetic role and used
 > `NODE_ENV=test`; the guarded Linux provisioner and production-mode VM
-> switch remain unaccepted. The VM still runs `8d4a0058` with its broad
-> database credential and zero recovery bindings. Private evidence and
+> switch remain unaccepted. A guarded blue-green release then deployed
+> master `5752590f` at 02:08:30 UTC. API/web/scheduler and front door are
+> healthy; prior `8d4a0058` remains rollbackable. All 132 pre-release
+> backup file hashes were preserved, the new three-file set matched its
+> workstation copy, and isolated restore passed. The VM still uses its
+> broad database credential and has zero recovery bindings. Private evidence and
 > resume instructions: `.charitypilot-private/RESUME-HERE.md`,
 > `.charitypilot-private/split-role-full-stack-proof-2026-10-01.md` and
-> `.charitypilot-private/nikita-review-pack-2026-09-30.md`.
+> `.charitypilot-private/nikita-review-pack-2026-09-30.md`, plus the
+> private `release-5752590f-acceptance.md` receipt. This is not DPO
+> sign-off, live connector upgrade or independent recovery certification.
 
 > **1 October ~02:00 Dublin, source-only provisioning candidate:** A
 > Linux-only `bluegreen-runtime-role-provision.mjs` source command now
