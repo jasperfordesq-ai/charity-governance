@@ -1,5 +1,21 @@
 # CharityPilot Agent Continuation Handoff
 
+> **1 October ~03:23 Dublin, guarded role provisioner tested on a
+> disposable database:** Clean canonical master `d61025b1` ran the actual
+> Linux `bluegreen-runtime-role-provision.mjs` against the existing synthetic
+> `charitypilot-bluegreen` database through a local Unix Docker socket.
+> Preflight, backup, isolated restore drill, restricted-role grant
+> reconciliation, password check and completed receipt all passed for an
+> existing role. A second synthetic preflight confirmed a fresh role was
+> absent; its full backup/restore/create/grant/password flow also passed,
+> with a completed receipt and no pending operation. The source and database identities were
+> checked, and both test containers were stopped. This exercised an
+> role on Docker Desktop Linux; it did not switch the private VM credential or combine provisioner
+> and full app routes in one production-mode run. The live VM remains on
+> broad ordinary database access. Private evidence:
+> `.charitypilot-private/linux-role-provision-disposable-proof-2026-10-01.md`.
+
+
 > **1 October ~02:50 Dublin, Nikita continuation:** Source master
 > `b701d209` includes the connector renewal fix from PR #9. The prior
 > connector's hash-selected mutex port collided with Linux TCP TIME_WAIT

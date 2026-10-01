@@ -1,5 +1,17 @@
 # CharityPilot Full-Platform Remediation Audit
 
+> **Runtime-role provisioner acceptance update, 2026-10-01:** The guarded
+> Linux command passed real preflight, backup, isolated restore, grant
+> reconciliation and credential verification against the existing
+> synthetic split-role database from a clean canonical `d61025b1` clone.
+> Both existing-role reconciliation and a distinct fresh-role creation
+> path passed with completed receipts and verified backup manifest hashes;
+> test containers were stopped. This narrows the source-only provisioner
+> gap but does not prove production-mode full-app
+> cutover, live VM credential switch, independent recovery or Nikita's
+> real-role acceptance. Keep the corresponding remediation items open.
+
+
 > **Nikita DPO remediation continuation, 2026-10-01:** A hosted E2E failure
 > exposed an intermittent connector renewal-lock collision with Linux
 > ephemeral/TIME_WAIT ports. PR #9 merged at `b701d209`: v2 credentials are
