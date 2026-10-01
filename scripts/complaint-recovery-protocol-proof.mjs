@@ -300,9 +300,18 @@ try {
   const hc = { ...context, ...hb, operationId: 'published-hold' };
   await prisma.complaintRecord.create({ data: { id: 'published-hold-complaint', organisationId: 'b',
     receivedDate: new Date(), summary: 'Synthetic integration complaint' } });
-  const hp = await holdPreparations.capture('b', 'published-hold-complaint', 'admin-b', {
-    ...holdInput, installationId: hb.installationId, operationId: hc.operationId,
-    expectedRecordRevision: 1, expectedHoldRevision: 0, held: true });
+  // An ordinary restricted app writer may prepare the hold, but the
+  // separately privileged publisher still owns the committed outcome.
+  const runtimeForPreparation = new PrismaClient({ datasources: { db: { url: runtimeUrl.toString() } } });
+  let hp;
+  try {
+    hp = await new ComplaintHoldRecoveryPreparationStore(runtimeForPreparation)
+      .capture('b', 'published-hold-complaint', 'admin-b', {
+        ...holdInput, installationId: hb.installationId, operationId: hc.operationId,
+        expectedRecordRevision: 1, expectedHoldRevision: 0, held: true });
+  } finally {
+    await runtimeForPreparation.$disconnect();
+  }
   const hpRow = await prisma.complaintHoldRecoveryPreparation.findUniqueOrThrow({ where: { id: hp.id } });
   const hi = { ...hb, generation: 0, digest: null };
   const hk = `authority/${hb.installationId}/${hb.organisationId}/head.json`;
