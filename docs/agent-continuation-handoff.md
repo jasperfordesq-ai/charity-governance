@@ -1,5 +1,13 @@
 # CharityPilot Agent Continuation Handoff
 
+> **Runtime-role acceptance scope, 2026-10-01:** Normal isolated E2E uses a
+> non-superuser runner that also migrates/seeds and has CREATE on public.
+> Its passing browser suite cannot prove the new restricted runtime role
+> works across routes or rollback. Build a disposable owner/runtime split,
+> then test API/web/jobs and Member/Admin/Owner journeys before configuring
+> the private VM. Do not put a role password in command arguments or logs.
+> Private detail: `.charitypilot-private/nikita-review-pack-2026-09-30.md`.
+
 > **1 October 01:03 Dublin, source-only refinement:** The optional runtime
 > role guard now also refuses INHERIT, REPLICATION and database CREATE.
 > Disposable PostgreSQL 16 accepted the restricted baseline and rejected
