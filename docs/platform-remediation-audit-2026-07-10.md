@@ -1,5 +1,15 @@
 # CharityPilot Full-Platform Remediation Audit
 
+> **Restricted app-role source checkpoint, 2026-10-01:** The planned
+> blue-green owner/runtime split now has a stricter catalogue guard for
+> memberships, public relation/function ownership and reachable
+> SECURITY DEFINER functions, plus a transactional grant-script refusal.
+> Real disposable PostgreSQL negative controls and the full migrated
+> complaint protocol passed. No live runtime role was provisioned; the
+> private VM still uses `8d4a0058`, and complaint recovery enforcement is
+> inactive. Do not close the split-role, publisher, emergency hold or
+> host-loss recovery findings from these source tests.
+
 > **DPO document-decision checkpoint, 2026-10-01:** The private worksheet
 > validator was rerun against the current 63 Vault rows: 63 have source
 > references, 62 have some proposed treatment, and all 63 remain PENDING.

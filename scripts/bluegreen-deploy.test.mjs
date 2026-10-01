@@ -2106,6 +2106,8 @@ test('optional app credential is refused before backup when the database role is
     assert.equal(backups, 0);
     assert.ok(calls.some((call) => call.command.some((part) => part.includes('ComplaintHoldRecoveryOutcome'))));
     assert.ok(calls.some((call) => call.command.some((part) => part.includes('has_database_privilege'))));
+    assert.ok(calls.some((call) => call.command.some((part) => part.includes('pg_auth_members'))));
+    assert.ok(calls.some((call) => call.command.some((part) => part.includes('executable_definer'))));
   } finally { rmSync(stateDir, { recursive: true, force: true }); }
 });
 

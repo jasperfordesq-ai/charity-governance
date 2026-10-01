@@ -69,4 +69,16 @@ SELECT format('GRANT USAGE, SELECT ON ALL SEQUENCES IN SCHEMA public TO %I', :'r
 SELECT format('REVOKE ALL ON TABLE public."_prisma_migrations", public."ComplaintRecoveryEnforcement", public."ComplaintHoldRecoveryOutcome", public."ComplaintRecoveryExecution", public."ComplaintRecoveryOutcome", public."ComplaintRecoveryCancellation" FROM %I', :'runtime_role') \gexec
 SELECT format('GRANT SELECT ON TABLE public."_prisma_migrations", public."ComplaintRecoveryEnforcement", public."ComplaintHoldRecoveryOutcome", public."ComplaintRecoveryExecution", public."ComplaintRecoveryOutcome", public."ComplaintRecoveryCancellation" TO %I', :'runtime_role') \gexec
 
+-- PostgreSQL grants EXECUTE on new functions to PUBLIC by default. A
+-- SECURITY DEFINER function reachable by the app role could bypass the
+-- table grants above, so abort and roll back the entire transaction.
+SELECT CASE WHEN EXISTS (
+  SELECT 1 FROM pg_proc executable_definer
+  JOIN pg_namespace definer_schema ON definer_schema.oid = executable_definer.pronamespace
+  WHERE executable_definer.prosecdef
+    AND definer_schema.nspname NOT IN ('pg_catalog', 'information_schema')
+    AND has_schema_privilege(:'runtime_role', definer_schema.oid, 'USAGE')
+    AND has_function_privilege(:'runtime_role', executable_definer.oid, 'EXECUTE')
+) THEN 'SELECT CAST(''reachable security definer function'' AS integer)' ELSE 'DO $$ BEGIN END $$' END \gexec
+
 COMMIT;

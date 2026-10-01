@@ -1,5 +1,16 @@
 # CharityPilot Agent Continuation Handoff
 
+> **1 October 01:35 Dublin, source-only role boundary:** The optional
+> blue-green runtime-role gate now refuses any inherited membership,
+> ownership of public relations/functions, and executable non-system
+> `SECURITY DEFINER` functions. The internal transactional grant map also
+> rolls back when a reachable security-definer function exists. The full
+> migrated complaint protocol (80.1 seconds), 85 deployment tests and local
+> security scan passed. Disposable PostgreSQL negative controls proved
+> owner-relation and definer-function refusal, including grant rollback.
+> This has not been deployed to the private VM and does not constitute a
+> supported runtime-role provisioner. See the private roadmap and proof.
+
 > **1 October 01:24 Dublin, source-only grant map:** Internal
 > `scripts/bluegreen/runtime-role-grants.psql` is transaction-bound, grants
 > ordinary app DML and restricts recovery receipt/binding tables and Prisma
