@@ -257,6 +257,55 @@ export function chooseCredentialStore(options: {
 }
 
 /**
+ * Refresh-lock v2 deliberately uses a different credential location. A
+ * connector built before this change still uses the old lock port; letting it
+ * read a v2 token would allow two processes to spend the same single-use
+ * credential while holding different locks. Upgrading therefore requires a
+ * fresh connect and creates a separate server session.
+ */
+export function v2CredentialFilePath(path: string): string {
+  return `${path}.v2`;
+}
+
+export function v2AccountForOrigin(origin: string, realm: Realm): string {
+  return `${ACCOUNT}:v2:${realm}:${origin.toLowerCase()}`;
+}
+
+export function chooseV2CredentialStore(options: {
+  profile: ConnectorProfile;
+  credentialFile?: string | undefined;
+  origin: string;
+  realm: Realm;
+  keyring?: (account?: string) => CredentialStore;
+  file?: (path: string) => CredentialStore;
+}): CredentialStore {
+  if (options.credentialFile) {
+    if (options.profile !== 'local') {
+      throw new Error('CHARITYPILOT_CREDENTIAL_FILE is only valid with --profile local.');
+    }
+    return (options.file ?? createFileStore)(v2CredentialFilePath(options.credentialFile));
+  }
+  return (options.keyring ?? createKeyringStore)(v2AccountForOrigin(options.origin, options.realm));
+}
+
+export function storedV2Credentials(
+  origins: readonly string[],
+  make: (account?: string) => CredentialStore = createKeyringStore,
+): StoredCredential[] {
+  const seen = new Set<string>();
+  return origins.flatMap((raw) => {
+    let origin: string;
+    try { origin = originOf(raw); } catch { return []; }
+    if (seen.has(origin)) return [];
+    seen.add(origin);
+    let present = false;
+    try { present = make(v2AccountForOrigin(origin, 'charity')).read() !== null; }
+    catch { /* A locked keyring reads as absent. */ }
+    return [{ origin, present }];
+  });
+}
+
+/**
  * The shape a bound credential is stored as. Version 1 carries only the origin
  * that issued the token.
  *
