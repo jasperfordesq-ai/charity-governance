@@ -1,5 +1,19 @@
 # CharityPilot Full-Platform Remediation Audit
 
+> **DPO light acceptance update, 2026-10-03:** Nikita's Admin-account
+> disposable test passed document lifecycle/replacement and Governance Audit
+> observation. It was not production sign-off; Member validation was skipped.
+> Three restricted, unpublished test documents remain. Live count-only checks
+> found zero approved report snapshots and zero approved VAULT_DRAFT policies.
+> The minimised export exists only for an approved snapshot; its unconditional
+> explanatory wording is misleading when no approval exists. Draft removal
+> was correctly blocked and recovery untested. Owner/Admin MFA policy, live
+> restricted DB credential, historical replay attribution, C1 evidence,
+> retention/recovery decisions and Member acceptance remain open. Live
+> release `98220f3c` passed exact CI/E2E and remains on the broad ordinary
+> DB credential. Preserve each corresponding issue as unresolved. Private
+> source and evidence: `.charitypilot-private/nikita-acceptance-feedback-2026-10-03.md`.
+
 > **Runtime-role provisioner acceptance update, 2026-10-01:** The guarded
 > Linux command passed real preflight, backup, isolated restore, grant
 > reconciliation and credential verification against the existing

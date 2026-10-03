@@ -1,5 +1,19 @@
 # CharityPilot Agent Continuation Handoff
 
+> **3 October 2026, Nikita DPO acceptance update:** Nikita reported a light
+> Admin-account pass of disposable document lifecycle/replacement and
+> Governance Audit. This is not production sign-off; Member validation was
+> skipped. Three restricted, unpublished test documents remain in the Vault.
+> Read-only live counts found no approved report snapshots and no approved
+> VAULT_DRAFT policy: minimised export depends on an approved snapshot, and
+> draft deletion/recovery cannot yet be tested. The `/export` explanatory
+> text currently mentions a minimised draft even while its button is hidden;
+> correct that wording. Owner/Admin MFA policy, live restricted DB credential
+> cutover, historical replay attribution and C1 verification remain open.
+> The private VM now runs green `98220f3c` (exact CI/E2E success), still with
+> broad ordinary DB access. Detailed email, exact limits and next actions:
+> `.charitypilot-private/nikita-acceptance-feedback-2026-10-03.md`.
+
 > **1 October ~03:23 Dublin, guarded role provisioner tested on a
 > disposable database:** Clean canonical master `d61025b1` ran the actual
 > Linux `bluegreen-runtime-role-provision.mjs` against the existing synthetic
