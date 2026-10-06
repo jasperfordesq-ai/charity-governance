@@ -1,16 +1,19 @@
 # CharityPilot Full-Platform Remediation Audit
 
-> **6 October local erasure-proof defect (source fix, not live):** A nonempty
+> **6 October local erasure-proof defect (verified private VM fix):** A nonempty
 > synthetic production-mode `cp_runtime` cleanup job marked a local document
 > deletion processed while the file remained in the API documents volume.
 > Blue-green scheduler and one-shot cleanup lacked that shared mount. Source
 > now mounts the volume on both and refuses production local-storage absence
 > checks when `/data/documents` is not a mount. A corrected synthetic job
 > removed the file; no-mount/mounted container probes, focused tests and API
-> build passed. On exact live `843ff8b6`, the scheduler was unmounted but a
-> guarded read-only count found zero `provider=local` deletion rows. Hosted
-> CI/E2E, deployment and post-release verification remain open. Private
-> evidence: `.charitypilot-private/local-storage-erasure-mount-2026-10-06.md`.
+> build passed. Exact `915f44f9` hosted CI/E2E, guarded private VM cutover,
+> scheduler/API shared-mount check, deployed-image no-mount refusal, 159
+> preserved backup hashes, verified workstation copy and isolated restore
+> passed. A guarded read-only count found zero `provider=local` deletion rows
+> before and after release. This does not close retention/purge, other copies,
+> restricted DB credential, independent recovery or DPO acceptance. Private
+> evidence: `.charitypilot-private/release-915f44f9-acceptance.md`.
 
 > **6 October live credential and C1 boundary:** A guarded read-only check
 > confirmed the private VM's API, web and scheduler still use the broad owner

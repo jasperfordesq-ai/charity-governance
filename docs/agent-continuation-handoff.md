@@ -1,16 +1,19 @@
 # CharityPilot Agent Continuation Handoff
 
-> **6 October local erasure mount finding — source-only:** A production-mode
+> **6 October local erasure mount finding — verified private VM release:** A production-mode
 > disposable `cp_runtime` cleanup job reported a processed local deletion
 > while the file remained in the API volume. The blue-green scheduler and
 > cleanup service had no documents mount. Source now shares the mount and
 > adds a fail-closed production local-storage mount check. Corrected
-> synthetic deletion and container probes passed. The live private VM remains
-> `843ff8b6` at the read-only check; its scheduler lacks the mount, but its
-> reviewed database had zero `provider=local` deletion rows. Exact CI/E2E,
-> guarded release and post-release inventory remain pending. Do not treat
-> this as live remediation or DPO acceptance. Private proof:
-> `.charitypilot-private/local-storage-erasure-mount-2026-10-06.md`.
+> synthetic deletion and container probes passed. Exact `915f44f9` hosted
+> CI/E2E (240 browser checks) and a guarded VM cutover passed; green is live,
+> blue `843ff8b6` rollbackable. Postflight verified API/scheduler share the
+> private documents volume, the deployed image refuses an unmounted local
+> path, 159 prior backup hashes survived, the new set matched its workstation
+> copy and isolated restore passed. The reviewed live database has zero
+> `provider=local` deletion rows. This is bounded technical remediation, not
+> complete erasure or DPO acceptance. Private proof:
+> `.charitypilot-private/release-915f44f9-acceptance.md`.
 
 > **6 October 2026, live role/C1 read-only check:** On exact live
 > `843ff8b6`, the owner env has no separate application DB env configured;
