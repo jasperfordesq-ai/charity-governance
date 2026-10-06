@@ -67,9 +67,11 @@ test('persisted approval drives report status and current and retained exports a
   assert.match(workflow, /openAuthenticatedReport/);
   assert.doesNotMatch(workflow, /api\.getUri/);
   assert.doesNotMatch(page, /signoffStatusLabels\[signoffForm\.status\]/);
-  assert.match(controls, /Generate Compliance Report \(working copy\)/);
-  assert.match(controls, /Open latest approved snapshot/);
+  assert.match(controls, /Generate full internal report \(working copy\)/);
+  assert.match(controls, /Open full internal approved snapshot/);
   assert.match(controls, /Open minimised draft for audience review/);
+  assert.match(controls, /No approved snapshot is currently available for this reporting year/);
+  assert.match(controls, /The working report remains a full internal report/);
   assert.match(workflow, /handleExport\('approved', signoff\?\.latestApproval\?\.id, 'minimised'\)/);
   assert.match(workflow, /audience,/);
   assert.match(controls, /latestApproval\.snapshotHash/);
@@ -125,8 +127,8 @@ test('internal report is gated while sign-off editing and dirty navigation fail 
   assert.match(panel, /isDisabled=\{!canManageSignoff\}/);
   assert.match(panel, /isReadOnly=\{!canManageSignoff\}/);
   assert.match(panel, /<StatusChip tone="neutral">View only<\/StatusChip>/);
-  assert.match(controls, /Generate Compliance Report \(working copy\)/);
-  assert.match(controls, /Open latest approved snapshot/);
+  assert.match(controls, /Generate full internal report \(working copy\)/);
+  assert.match(controls, /Open full internal approved snapshot/);
 });
 
 test('dashboard sign-off card never treats an invalidated APPROVED status as current', () => {

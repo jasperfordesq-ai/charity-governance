@@ -120,6 +120,7 @@ function InternalExportPage() {
           exportingCurrent={exportingCurrent}
           exportingMinimised={exportingMinimised}
           latestApproval={latestApproval}
+          loading={loading}
           onExportApproved={handleExportApproved}
           onExportCurrent={handleExportCurrent}
           onExportMinimised={handleExportMinimised}

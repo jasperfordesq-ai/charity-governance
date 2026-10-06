@@ -14,6 +14,7 @@ export function ExportControlsPanel({
   exportingCurrent,
   exportingMinimised,
   latestApproval,
+  loading,
   onExportApproved,
   onExportCurrent,
   onExportMinimised,
@@ -30,6 +31,7 @@ export function ExportControlsPanel({
   exportingCurrent: boolean;
   exportingMinimised: boolean;
   latestApproval: ComplianceApprovalSnapshotSummary | null;
+  loading: boolean;
   onExportApproved: () => void;
   onExportCurrent: () => void;
   onExportMinimised: () => void;
@@ -60,7 +62,7 @@ export function ExportControlsPanel({
 
           <Button className={primaryActionButtonClassName} size="lg" onPress={onExportCurrent} isLoading={exportingCurrent}>
             <Download className="w-5 h-5 mr-2" aria-hidden="true" />
-            Generate Compliance Report (working copy)
+            Generate full internal report (working copy)
           </Button>
 
           {latestApproval ? (
@@ -72,7 +74,7 @@ export function ExportControlsPanel({
               isLoading={exportingApproved}
             >
               <Download className="w-5 h-5 mr-2" aria-hidden="true" />
-              Open latest approved snapshot
+              Open full internal approved snapshot
             </Button>
           ) : null}
           {latestApproval ? (
@@ -85,7 +87,11 @@ export function ExportControlsPanel({
         <p className="mt-4 text-sm leading-6 text-gray-600 dark:text-gray-300">
           The working report reflects current records and may be unapproved. An approved snapshot is an immutable copy retained from
           the recorded board approval, even if later edits require reapproval.
-          {' '}The minimised draft contains only organisation identity, approval date and aggregate status counts. Review its audience and fields before disclosure.
+          {!loading && (latestApproval ? (
+            <> The minimised draft contains only organisation identity, approval date and aggregate status counts. Review its audience and fields before disclosure.</>
+          ) : (
+            <> No approved snapshot is currently available for this reporting year. The minimised draft becomes available here after a Board-approved snapshot is recorded. The working report remains a full internal report.</>
+          ))}
         </p>
         {latestApproval ? (
           <p className="mt-2 text-xs leading-5 text-gray-500 dark:text-gray-400">

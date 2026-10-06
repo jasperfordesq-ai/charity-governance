@@ -1329,7 +1329,7 @@ test('export controls and readiness warning are extracted from the oversized rou
   assert.match(pageSrc, /ExportControlsPanel/);
   assert.doesNotMatch(pageSrc, /Generate Compliance Report/);
   assert.doesNotMatch(pageSrc, /Readiness blockers prevent board approval/);
-  assert.match(controlsSrc, /Generate Compliance Report/);
+  assert.match(controlsSrc, /Generate full internal report/);
   assert.match(controlsSrc, /Readiness blockers prevent board approval/);
   assert.match(controlsSrc, /ReviewWarningState/);
   assert.match(controlsSrc, /primaryActionButtonClassName/);
