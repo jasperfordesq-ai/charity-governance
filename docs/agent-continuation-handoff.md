@@ -1,5 +1,20 @@
 # CharityPilot Agent Continuation Handoff
 
+> **7 October complaint recovery-gate private VM release:** Green `4d03f890`
+> is live after exact hosted CI/E2E and guarded deployment. The new SQL and
+> service gate refuses ordinary complaint removal/restoration if independent
+> recovery enforcement is bound; the dashboard then explains that the
+> ordinary removal review is unavailable. Live binding count is zero, so no
+> provider or policy was activated. API/web/scheduler retain restricted
+> `cp_runtime`; SQL/grants, loopback/Tailscale, authenticated Owner MCP reads,
+> preservation of 168 earlier backup hashes, two verified workstation
+> copies and post-migration isolated restore (141 migrations) passed. Blue
+> `bc371350` is stopped/rollbackable. This is one inactive writer boundary,
+> not all-writer recovery, host-loss authority, Member/browser or DPO
+> acceptance. Exact private receipt:
+> `.charitypilot-private/release-4d03f890-complaint-gate-2026-10-07.md`.
+> Earlier live-colour statements below are dated historical checkpoints.
+
 > **6 October restricted-role private VM release:** Guarded env promotion and
 > blue-green deployment made blue `bc371350` live at 22:43:07 UTC. API, web
 > and scheduler now receive `cp_runtime`; API and scheduler SQL

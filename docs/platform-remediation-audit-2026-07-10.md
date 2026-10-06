@@ -1,5 +1,19 @@
 # CharityPilot Full-Platform Remediation Audit
 
+> **7 October private-VM recovery-gate subtask:** Exact `4d03f890` is live
+> after hosted CI/E2E and guarded cutover. If complaint recovery enforcement
+> is ever bound, ordinary removal/restoration now fail closed at service and
+> SQL layers, and the retention assessment marks the ordinary action
+> unavailable. Current live binding count is zero. Restricted `cp_runtime`,
+> migration, front doors, Owner MCP reads, 168 older backup hashes, new
+> workstation copies and a 141-migration isolated restore were verified.
+> This narrows a complaint writer gap but does not close the full-platform
+> DPO-05 issue: independent custody/history, all-writer fencing, approved
+> policy and host-loss reopening remain missing. Member/export/replay/C1 and
+> Nikita acceptance gates also remain. Private receipt:
+> `.charitypilot-private/release-4d03f890-complaint-gate-2026-10-07.md`.
+> Older release/status blocks below are historical checkpoints.
+
 > **6 October private-VM restricted-role milestone:** Blue `bc371350` is
 > live after guarded owner-env promotion and blue-green cutover. Serving
 > API/web/scheduler use `cp_runtime`, with SQL `current_user` proof in API
