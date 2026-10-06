@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 
-export async function proveCopyBinding(sql,{kind,organisation,actor,authorization},orderedRace) {
+export async function proveCopyBinding(sql,{kind,organisation,actor,authorization,originalPolicyFrozenAfterRecoveryBinding=false},orderedRace) {
   const scope='BINDING-COPY-001';
   const observation=(id,overrides={})=>{
     const v={scope,revision:1,status:'RETAINED_APPROVED',binding:'NULL',observed:"timezone('UTC',clock_timestamp())",...overrides};
@@ -63,8 +63,13 @@ export async function proveCopyBinding(sql,{kind,organisation,actor,authorizatio
   sql(grant('permanent-retain',{scope:'PERMANENT-COPY',policy:"'copy-permanent'",disposition:"'RETAIN_APPROVED'"}));
   sql(observation('permanent-retained',{scope:'PERMANENT-COPY',revision:2,binding:"'permanent-retain'"}));
   const originalPolicy=sql(`SELECT "policyId" FROM "${kind}PurgeAuthorization" WHERE id='${authorization}';`);
-  sql(withdrawPolicy(originalPolicy));
-  sql(observation('withdrawn-original-plan',{scope:'ORIGINAL-PLAN-WITHDRAWN'}),/current original-plan policy/);
-  sql(observation('withdrawn-original-fact',{scope:'ORIGINAL-PLAN-WITHDRAWN',status:'NEEDS_REVIEW'}));
+  if (originalPolicyFrozenAfterRecoveryBinding) {
+    sql(withdrawPolicy(originalPolicy),/requires independent recovery authority/);
+    assert.equal(sql(`SELECT count(*) FROM "DataRetentionPolicyWithdrawal" WHERE "policyId"='${originalPolicy}';`),'0');
+  } else {
+    sql(withdrawPolicy(originalPolicy));
+    sql(observation('withdrawn-original-plan',{scope:'ORIGINAL-PLAN-WITHDRAWN'}),/current original-plan policy/);
+    sql(observation('withdrawn-original-fact',{scope:'ORIGINAL-PLAN-WITHDRAWN',status:'NEEDS_REVIEW'}));
+  }
   assert.equal(sql(`SELECT "copyAuthorityId" IS NULL FROM "${kind}PurgeDispositionEvent" WHERE id='binding-retained';`),'t');
 }

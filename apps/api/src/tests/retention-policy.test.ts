@@ -9,6 +9,7 @@ function fixture() {
   let rows: any[] = [];
   let withdrawals: any[] = [];
   let role = 'OWNER';
+  let enforced = false;
   let failCreate = false;
   const locks: string[] = [];
   const tx = {
@@ -22,6 +23,7 @@ function fixture() {
     },
     user: { findFirst: async ({ where }: any) => where.organisationId === 'org-a'
       && (typeof where.role === 'string' ? where.role === role : where.role.in.includes(role)) ? { id: 'actor-a' } : null },
+    complaintRecoveryEnforcement: { findUnique: async () => enforced ? { id: 'binding' } : null },
     dataRetentionPolicyRevision: {
       findFirst: async ({ where }: any) => {
         const row = [...rows].reverse().find(row => row.organisationId === where.organisationId
@@ -43,7 +45,8 @@ function fixture() {
   } } as unknown as PrismaClient;
   return { documentCopies: new RetentionPolicyService(prisma,'DOCUMENT_COPY'), complaintCopies: new RetentionPolicyService(prisma,'COMPLAINT_COPY'), service: new RetentionPolicyService(prisma), complaints: new RetentionPolicyService(prisma, 'COMPLAINT'), locks,
     get rows() { return rows; }, get withdrawals() { return withdrawals; },
-    setRole: (next: string) => { role = next; }, fail: () => { failCreate = true; } };
+    setRole: (next: string) => { role = next; }, setEnforced: (next: boolean) => { enforced = next; },
+    fail: () => { failCreate = true; } };
 }
 
 test('policy revisions preserve draft facts; a new approval withdraws older approvals atomically', async () => {
@@ -122,6 +125,24 @@ test('complaint approvals use resolution anchors and cannot replace or withdraw 
     evidenceRef: 'WITHDRAW-001', reason: 'This belongs to a different record class.',
   }), (error: any) => error.statusCode === 404);
   assert.deepEqual(f.withdrawals.map(row => row.policyId), ['policy-2']);
+});
+
+test('independent recovery binding freezes complaint policy revisions and withdrawals only', async () => {
+  const f = fixture();
+  await f.complaints.create('org-a', 'actor-a', approved);
+  f.setEnforced(true);
+  const input = { evidenceRef: 'WITHDRAW-001', reason: 'Review revised complaint disposal authority.' };
+  for (const policy of [draft, approved]) {
+    await assert.rejects(f.complaints.create('org-a', 'actor-a', policy),
+      (error: any) => error?.code === 'RETENTION_POLICY_RECOVERY_REQUIRED');
+  }
+  await assert.rejects(f.complaints.withdraw('org-a', 'actor-a', 'policy-1', input),
+    (error: any) => error?.code === 'RETENTION_POLICY_RECOVERY_REQUIRED');
+  assert.equal(f.rows.length, 1);
+  assert.equal(f.withdrawals.length, 0);
+  await f.service.create('org-a', 'actor-a', draft);
+  await f.documentCopies.create('org-a', 'actor-a', draft);
+  assert.deepEqual(f.rows.map(row => row.recordClass), ['COMPLAINT', 'VAULT_DRAFT', 'DOCUMENT_COPY']);
 });
 
 

@@ -693,6 +693,37 @@ test('real PostgreSQL 16 migration freezes ordinary complaint removal and restor
   } finally { await removeDisposableContainer(container); }
 });
 
+test('real PostgreSQL 16 migration freezes only complaint policy facts after recovery enforcement', { timeout: 120_000 }, async () => {
+  const container = `charitypilot-policy-gate-${randomUUID()}`;
+  assertDockerSuccess(docker(['run', '--detach', '--name', container, '--network', 'none',
+    '-e', 'POSTGRES_HOST_AUTH_METHOD=trust', POSTGRES_IMAGE]), 'start policy gate fixture');
+  try {
+    await waitForPostgres(container);
+    psql(container, `
+      CREATE TABLE "Organisation" (id TEXT PRIMARY KEY);
+      INSERT INTO "Organisation" VALUES ('charity'), ('other');
+      CREATE TABLE "ComplaintRecoveryEnforcement" (id TEXT PRIMARY KEY, "organisationId" TEXT UNIQUE);
+      CREATE TABLE "DataRetentionPolicyRevision" (id TEXT PRIMARY KEY, "organisationId" TEXT, "recordClass" TEXT);
+      CREATE TABLE "DataRetentionPolicyWithdrawal" (id TEXT PRIMARY KEY, "organisationId" TEXT, "policyId" TEXT);
+    `);
+    psql(container, readFileSync(new URL('../../prisma/migrations/20261007010000_complaint_policy_recovery_gate/migration.sql', import.meta.url), 'utf8'));
+    psql(container, `INSERT INTO "DataRetentionPolicyRevision" VALUES
+      ('old-complaint','charity','COMPLAINT'), ('new-vault','charity','VAULT_DRAFT');
+      INSERT INTO "DataRetentionPolicyWithdrawal" VALUES ('old-withdrawal','charity','old-complaint');
+      INSERT INTO "ComplaintRecoveryEnforcement" VALUES ('binding','charity');`);
+    assert.match(psql(container, `INSERT INTO "DataRetentionPolicyRevision" VALUES ('blocked','charity','COMPLAINT');`, false).stderr,
+      /revision requires independent recovery authority/);
+    assert.match(psql(container, `INSERT INTO "DataRetentionPolicyWithdrawal" VALUES ('blocked','charity','old-complaint');`, false).stderr,
+      /withdrawal requires independent recovery authority/);
+    psql(container, `INSERT INTO "DataRetentionPolicyRevision" VALUES
+      ('later-vault','charity','VAULT_DRAFT'), ('other-complaint','other','COMPLAINT');
+      INSERT INTO "DataRetentionPolicyWithdrawal" VALUES
+      ('vault-withdrawal','charity','new-vault'), ('other-withdrawal','other','other-complaint');`);
+    assert.equal(psql(container, `SELECT count(*) FROM "DataRetentionPolicyRevision" WHERE "organisationId"='charity';`).stdout.trim(), '3');
+    assert.equal(psql(container, `SELECT count(*) FROM "DataRetentionPolicyWithdrawal" WHERE "organisationId"='charity';`).stdout.trim(), '2');
+  } finally { await removeDisposableContainer(container); }
+});
+
 test('disposable E2E reset inventory includes recovery evidence exactly once', () => {
   assert.equal(
     DISPOSABLE_DATABASE_RESET_TABLES.filter(
