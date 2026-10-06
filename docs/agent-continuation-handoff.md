@@ -1,5 +1,22 @@
 # CharityPilot Agent Continuation Handoff
 
+> **6 October 2026, verified private VM release:** Exact
+> `843ff8b6daa7cc30b316c0dcb7f45f3b0dfbb580` is live on blue after
+> hosted CI `37527573161` and E2E `37527573150` success (240 E2E checks),
+> guarded cutover, healthy loopback and Tailscale health/login responses,
+> preservation of 156 prior backup file hashes, verified workstation copy
+> of the new set and successful isolated restore drill. Prior green
+> `98220f3c` is stopped and rollbackable. The release includes the export
+> wording correction and locked production dependency fixes. Count-only
+> live checks still show zero approved report snapshots, zero approved
+> VAULT_DRAFT policies, three Nikita test documents and nine replay alerts
+> (latest 30 September). Nikita has not rechecked the release. Member
+> acceptance, MFA policy, live restricted DB credential, historical replay
+> attribution, C1 evidence, retention/recovery decisions, independent
+> custody/host-loss reopening and DPO sign-off remain open. Full private
+> receipt: `.charitypilot-private/release-843ff8b6-acceptance.md`. The
+> source-only 6 October section below is a superseded pre-release checkpoint.
+
 > **6 October 2026, export clarification is source-only:** Commit
 > `2d543517` labels both ordinary report controls as full internal and
 > explains that the minimised draft needs a retained Board-approved

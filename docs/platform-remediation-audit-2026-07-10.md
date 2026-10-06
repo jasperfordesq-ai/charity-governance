@@ -1,5 +1,21 @@
 # CharityPilot Full-Platform Remediation Audit
 
+> **6 October 2026, verified private VM release:** Exact `843ff8b6` passed
+> hosted CI/E2E (240 E2E checks) and a guarded blue-green cutover. Health
+> and login paths returned HTTP 200 on loopback and Tailscale; 156 earlier
+> backup hashes were preserved; the new set matched its workstation copy
+> and passed isolated restore. The export copy fix and production dependency
+> repair are live. This does not close the DPO export-minimisation finding:
+> the tenant has zero approved snapshots and Nikita has not rechecked the UI.
+> Count-only post-release checks found zero approved VAULT_DRAFT policies,
+> three retained Nikita test documents and nine historical replay events.
+> Keep Member authorization acceptance, Owner/Admin MFA decision, live
+> restricted DB credential, replay attribution, C1 evidence, deletion and
+> recovery policy, independent custody/host-loss gates and DPO sign-off
+> unresolved. Private details:
+> `.charitypilot-private/release-843ff8b6-acceptance.md`. The 6 October
+> source-only note below is a superseded pre-release checkpoint.
+
 > **6 October 2026, DPO export-copy follow-up:** Source `2d543517`
 > clarifies full internal report labels and explains the approved-snapshot
 > prerequisite for the minimised draft. Local web tests, build, lint and
