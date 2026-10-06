@@ -205,6 +205,16 @@ test('scheduler and job singletons mirror compose.production.yml but run the loc
   }
 });
 
+test('local-storage erasure workers share the API documents volume', () => {
+  for (const service of ['api-blue', 'api-green', 'scheduler', 'document-storage-cleanup']) {
+    assert.match(
+      serviceSection(service),
+      /volumes:\s*\n\s+- bluegreen-documents:\/data\/documents\s*\n/,
+      `${service} must see the same local bytes before it can report deletion`,
+    );
+  }
+});
+
 test('the production scheduler is given what the Confluence worker needs', () => {
   const scheduler = serviceBlock(productionCompose, 'production-scheduler');
 

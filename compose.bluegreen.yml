@@ -320,6 +320,8 @@ services:
     read_only: true
     tmpfs:
       - /tmp:rw,noexec,nosuid,nodev,size=64m
+    volumes:
+      - bluegreen-documents:/data/documents
     networks:
       - bluegreen-internal
     logging: *json-logging
@@ -358,6 +360,8 @@ services:
     read_only: true
     tmpfs:
       - /tmp:rw,noexec,nosuid,nodev,size=64m
+    volumes:
+      - bluegreen-documents:/data/documents
     networks:
       - bluegreen-internal
     logging: *json-logging

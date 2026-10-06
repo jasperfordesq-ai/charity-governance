@@ -12,6 +12,15 @@ const override = readFixture('compose.bluegreen.private-vm.yml');
 const personalServerCompose = readFixture('compose.personal-server.yml');
 const DOCKER_COMPOSE_CONFIG_TIMEOUT_MS = 120_000;
 
+function renderedServiceBlock(source, name) {
+  const marker = `  ${name}:\n`;
+  const start = source.indexOf(`\n${marker}`);
+  assert.notEqual(start, -1, `rendered config is missing ${name}`);
+  const bodyStart = start + marker.length + 1;
+  const following = source.slice(bodyStart).search(/^  [a-z0-9][a-z0-9-]*:\s*$/m);
+  return source.slice(bodyStart, following === -1 ? source.length : bodyStart + following);
+}
+
 test('the override redefines only volumes and the network — never a service', () => {
   assert.doesNotMatch(override, /^services:/m);
   assert.match(override, /^volumes:\n  bluegreen-db:\n    external: true\n    name: charitypilot-personal-server-db\n/m);
@@ -87,6 +96,12 @@ test('docker compose config with both files renders the external appliance volum
   assert.doesNotMatch(result.stdout, /charitypilot-bluegreen-db\b/);
   assert.doesNotMatch(result.stdout, /charitypilot-bluegreen-documents\b/);
   assert.match(result.stdout, /subnet: 172\.31\.250\.0\/24/);
-  // Every api/web/scheduler documents mount still resolves to the (now external) bluegreen-documents key.
-  assert.match(result.stdout, /source: bluegreen-documents\n\s+target: \/data\/documents/);
+  // Every local-storage erasure worker must resolve the VM's external volume.
+  for (const service of ['api-blue', 'scheduler', 'document-storage-cleanup']) {
+    assert.match(
+      renderedServiceBlock(result.stdout, service),
+      /source: bluegreen-documents\n\s+target: \/data\/documents/,
+      `${service} must use the same external documents volume`,
+    );
+  }
 });

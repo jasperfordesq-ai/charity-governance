@@ -87,6 +87,14 @@ Until that report exists, this engine has not run against a real VM.
   file's own `charitypilot-bluegreen-documents` volume name) — set it
   only if this deployment's document storage volume was named
   differently.
+- **Local-storage erasure mount.** API colours, the singleton scheduler and
+  the one-shot document-storage-cleanup service must all mount the same
+  `bluegreen-documents` volume at `/data/documents`. Without it, a worker can
+  mistake an empty container directory for an erased file. Production local
+  storage operations now refuse an unmounted `/data/documents`, but the
+  release check must still inspect the resolved Compose mount on the active
+  scheduler. Primary-file absence does not establish purge of backups or
+  other copies.
 - **`BLUEGREEN_COMPOSE_OVERRIDE`** (optional; path resolved against the repo
   root) adds a second `-f` to every compose invocation the engine makes —
   the only sanctioned way to relocate the engine's volumes. The private VM

@@ -34,6 +34,24 @@ function getLocalStorageRoot(): string {
   return resolve(process.env.LOCAL_FILE_STORAGE_DIR ?? DEFAULT_LOCAL_STORAGE_DIR);
 }
 
+// A missing Docker volume makes an empty container directory look like an
+// already-erased object. In production containers that use the standard local
+// root, absence is trustworthy only when that root is a distinct mount.
+export function hasLocalStorageMount(mountInfo: string, root = '/data/documents'): boolean {
+  return mountInfo.split('\n').some((line) => line.split(' ')[4] === root);
+}
+
+async function requireMountedProductionLocalStorage(): Promise<void> {
+  if (process.platform !== 'linux' || process.env.NODE_ENV !== 'production' ||
+      getLocalStorageRoot() !== '/data/documents') return;
+  let mountInfo: string;
+  try { mountInfo = await readFile('/proc/self/mountinfo', 'utf8'); }
+  catch { throw new AppError(503, 'LOCAL_STORAGE_MOUNT_MISSING', STORAGE_UNAVAILABLE_MESSAGE); }
+  if (!hasLocalStorageMount(mountInfo)) {
+    throw new AppError(503, 'LOCAL_STORAGE_MOUNT_MISSING', STORAGE_UNAVAILABLE_MESSAGE);
+  }
+}
+
 function readinessTimeoutMs(): number {
   const configured = Number(process.env.STORAGE_READINESS_TIMEOUT_MS);
   return Number.isInteger(configured) && configured > 0 ? configured : 3000;
@@ -217,6 +235,7 @@ export class StorageService {
   async verifyBucket(): Promise<boolean> {
     if (isLocalStorageDriver()) {
       try {
+        await requireMountedProductionLocalStorage();
         await mkdir(getLocalStorageRoot(), { recursive: true });
         return true;
       } catch {
@@ -261,6 +280,7 @@ export class StorageService {
     // reconciliation window. A stalled upload must not still be writing when
     // the cleanup worker considers its reserved path orphaned.
     if (provider === LOCAL_STORAGE_DRIVER) {
+      await requireMountedProductionLocalStorage();
       const filePath = localFilePath(storagePath);
       await mkdir(dirname(filePath), { recursive: true });
       await withOperationTimeout(writeFile(filePath, buffer, { signal: AbortSignal.timeout(timeoutMs) }), timeoutMs);
@@ -280,6 +300,7 @@ export class StorageService {
   }
 
   private async readLocalResolved(guardedPath: string): Promise<Buffer> {
+    await requireMountedProductionLocalStorage();
     try {
       const filePath = localFilePath(guardedPath);
       const file = await stat(filePath);
@@ -360,6 +381,7 @@ export class StorageService {
   ): Promise<{ present: boolean; size: number | null }> {
     const guardedPath = assertOrganisationStoragePath(organisationId, storagePath);
     if (provider === LOCAL_STORAGE_DRIVER) {
+      await requireMountedProductionLocalStorage();
       try {
         const file = await withOperationTimeout(stat(localFilePath(guardedPath)), downloadTimeoutMs());
         if (!file.isFile()) throw new AppError(409, 'STORAGE_CUSTODY_NOT_FILE', 'Storage object is not a file');
@@ -412,6 +434,7 @@ export class StorageService {
     }
 
     if (provider === LOCAL_STORAGE_DRIVER) {
+      await requireMountedProductionLocalStorage();
       const filePath = localFilePath(guardedPath);
       try {
         await withOperationTimeout(unlink(filePath), storageDeleteTimeoutMs());

@@ -4,11 +4,19 @@ import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { createServer } from 'node:http';
 import test from 'node:test';
-import { StorageService, withReadinessTimeout } from '../services/storage.service.js';
+import { StorageService, hasLocalStorageMount, withReadinessTimeout } from '../services/storage.service.js';
 import { AppError } from '../utils/errors.js';
 import type { OrganisationStorageResolver } from '../services/document-storage-resolution.js';
 
 const STORAGE_OPERATION_FAILED_MESSAGE = 'Document storage operation failed. Please try again later.';
+
+test('production local-storage mount check requires an exact documents mount', () => {
+  const rootOnly = '1 0 0:1 / / rw - overlay overlay rw\n';
+  const mounted = `${rootOnly}42 1 8:1 / /data/documents rw - ext4 /dev/mock rw\n`;
+  assert.equal(hasLocalStorageMount(rootOnly), false);
+  assert.equal(hasLocalStorageMount(mounted), true);
+  assert.equal(hasLocalStorageMount(`${rootOnly}42 1 8:1 / /data/documents-old rw - ext4 /dev/mock rw\n`), false);
+});
 
 type GuardedStorageService = {
   downloadFile(organisationId: string, storagePath: string): Promise<Buffer>;
@@ -796,4 +804,3 @@ for (const [label, resolver] of unservableProviderResolvers) {
     );
   });
 }
-
