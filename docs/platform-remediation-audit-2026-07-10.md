@@ -1,5 +1,14 @@
 # CharityPilot Full-Platform Remediation Audit
 
+> **6 October 2026, DPO export-copy follow-up:** Source `2d543517`
+> clarifies full internal report labels and explains the approved-snapshot
+> prerequisite for the minimised draft. Local web tests, build, lint and
+> existing synthetic API snapshot tests passed. This is not live deployment
+> or DPO acceptance. Preserve the export-minimisation finding until exact
+> hosted checks, live release and real review; do not infer a Board approval
+> from the test. All other 3 October DPO gates remain open.
+
+
 > **DPO light acceptance update, 2026-10-03:** Nikita's Admin-account
 > disposable test passed document lifecycle/replacement and Governance Audit
 > observation. It was not production sign-off; Member validation was skipped.

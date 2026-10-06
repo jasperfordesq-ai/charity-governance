@@ -1,5 +1,18 @@
 # CharityPilot Agent Continuation Handoff
 
+> **6 October 2026, export clarification is source-only:** Commit
+> `2d543517` labels both ordinary report controls as full internal and
+> explains that the minimised draft needs a retained Board-approved
+> snapshot. Local web tests (546/546), production web build, edited-file
+> lint and existing synthetic approved-snapshot API tests (8/8) passed.
+> Hosted CI/E2E, deployment and Nikita's recheck are still pending. The
+> last independently verified live release was `98220f3c` on 3 October;
+> its tenant had no approved snapshots. No policy or Board approval was
+> created. Newer Nikita emails about NEXUS testing, continuity, Atlassian
+> and Help Desk are routed separately in private
+> `.charitypilot-private/nikita-mail-triage-2026-10-06.md`.
+
+
 > **3 October 2026, Nikita DPO acceptance update:** Nikita reported a light
 > Admin-account pass of disposable document lifecycle/replacement and
 > Governance Audit. This is not production sign-off; Member validation was
