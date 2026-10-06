@@ -1,5 +1,16 @@
 # CharityPilot Agent Continuation Handoff
 
+> **6 October 2026, bounded replay follow-up:** Read-only metadata on exact
+> live `843ff8b6` still found nine replay events and no new row after
+> 30 September. Both 30 September web events presented sessions previously
+> revoked for LOGOUT, 134–137 ms earlier, with zero newly quarantined active
+> sessions. One family had a prior ROTATED row. Restricted context has request
+> IDs/fingerprints, but no request-log correlation was completed. The pattern
+> supports a post-logout race; it does not establish client identity or an
+> incident verdict. Older events, including the connector event, remain
+> incompletely attributed. Private exact query and limits:
+> `.charitypilot-private/live-replay-review-2026-09-30.md`.
+
 > **6 October 2026, verified private VM release:** Exact
 > `843ff8b6daa7cc30b316c0dcb7f45f3b0dfbb580` is live on blue after
 > hosted CI `37527573161` and E2E `37527573150` success (240 E2E checks),

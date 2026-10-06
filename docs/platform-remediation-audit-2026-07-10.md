@@ -1,5 +1,13 @@
 # CharityPilot Full-Platform Remediation Audit
 
+> **6 October replay evidence update:** A guarded read-only query on live
+> `843ff8b6` found nine total alerts, latest 30 September. Its two 30
+> September web alerts followed a LOGOUT by 134–137 ms and quarantined no
+> additional active session. This strengthens a concurrency explanation but
+> cannot prove the presenting client or dispose of the older connector and
+> web events. Keep replay investigation and DPO/security disposition open;
+> exact limits are in the private replay review.
+
 > **6 October 2026, verified private VM release:** Exact `843ff8b6` passed
 > hosted CI/E2E (240 E2E checks) and a guarded blue-green cutover. Health
 > and login paths returned HTTP 200 on loopback and Tailscale; 156 earlier
