@@ -1,5 +1,20 @@
 # CharityPilot Agent Continuation Handoff
 
+> **6 October restricted-role private VM release:** Guarded env promotion and
+> blue-green deployment made blue `bc371350` live at 22:43:07 UTC. API, web
+> and scheduler now receive `cp_runtime`; API and scheduler SQL
+> `current_user` confirm it. The post-migration role has no privileged
+> attributes, memberships, public-table ownership, database/schema CREATE
+> or write grants on the named protected recovery tables. Exact hosted
+> CI/E2E, front-door and read-only connector checks, shared documents mount,
+> preservation of 165 earlier backup file hashes, verified workstation copy
+> and isolated restore drill passed. Previous green `915f44f9` is stopped
+> and rollbackable. This closes the *live private-VM credential cutover*
+> milestone, while authenticated browser/Member acceptance, genuine policy
+> and Board decisions, historical replay/C1 disposition, independent
+> recovery authority and Nikita's DPO review remain open. Private receipt:
+> `.charitypilot-private/release-bc371350-restricted-role-2026-10-06.md`.
+
 > **6 October local erasure mount finding — verified private VM release:** A production-mode
 > disposable `cp_runtime` cleanup job reported a processed local deletion
 > while the file remained in the API volume. The blue-green scheduler and

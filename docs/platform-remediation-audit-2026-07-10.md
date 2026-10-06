@@ -1,5 +1,17 @@
 # CharityPilot Full-Platform Remediation Audit
 
+> **6 October private-VM restricted-role milestone:** Blue `bc371350` is
+> live after guarded owner-env promotion and blue-green cutover. Serving
+> API/web/scheduler use `cp_runtime`, with SQL `current_user` proof in API
+> and scheduler and post-migration restricted-grant checks. Exact hosted
+> CI/E2E, loopback/Tailscale and read-only connector checks, prior backup
+> preservation, new workstation copy and isolated restore passed. The prior
+> green is rollbackable. This resolves the *private-VM serving credential*
+> subtask only. It does not close the full-platform issue ledger or establish
+> browser/Member/DPO acceptance, public-production role deployment, retention
+> approvals, independent host-loss recovery or replay/C1 disposition. Exact
+> private evidence: `.charitypilot-private/release-bc371350-restricted-role-2026-10-06.md`.
+
 > **6 October local erasure-proof defect (verified private VM fix):** A nonempty
 > synthetic production-mode `cp_runtime` cleanup job marked a local document
 > deletion processed while the file remained in the API documents volume.
