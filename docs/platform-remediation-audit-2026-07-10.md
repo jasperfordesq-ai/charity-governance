@@ -1,5 +1,13 @@
 # CharityPilot Full-Platform Remediation Audit
 
+> **6 October live credential and C1 boundary:** A guarded read-only check
+> confirmed the private VM's API, web and scheduler still use the broad owner
+> DB role; no separate app env is configured. The prospective restricted-role
+> cutover has not occurred. The NEXUS admin-notification source fix remains
+> in the current clean checkout, but no original C1 closure receipt was found
+> in a targeted May–June Nikita mail search. The scoped verification and OPEN
+> live risk status remain; neither item is closed by these checks.
+
 > **6 October replay evidence update:** A guarded read-only query on live
 > `843ff8b6` found nine total alerts, latest 30 September. Its two 30
 > September web alerts followed a LOGOUT by 134–137 ms and quarantined no

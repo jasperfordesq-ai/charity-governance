@@ -1,5 +1,17 @@
 # CharityPilot Agent Continuation Handoff
 
+> **6 October 2026, live role/C1 read-only check:** On exact live
+> `843ff8b6`, the owner env has no separate application DB env configured;
+> API-blue, web-blue and scheduler each receive the broad
+> `charitypilot_personal_server` database role. No credential or row changed.
+> Combined guarded provisioner, production-mode app, nonempty-job and rollback
+> acceptance still precede a live restricted-role cutover. The 2 May C1
+> source fix remains an ancestor of the clean current NEXUS checkout, but a
+> targeted May–June Nikita mail search found no original closure receipt.
+> C1's bounded live wording remains OPEN pending scope acceptance or stronger
+> proof. Private notes: `.charitypilot-private/live-db-role-2026-10-06.md`
+> and `.charitypilot-private/c1-evidence-recheck-2026-10-06.md`.
+
 > **6 October 2026, bounded replay follow-up:** Read-only metadata on exact
 > live `843ff8b6` still found nine replay events and no new row after
 > 30 September. Both 30 September web events presented sessions previously
