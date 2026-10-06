@@ -6,6 +6,7 @@ function fixture() {
   const now = new Date('2026-09-30T12:00:00Z');
   const f = {
     actor: true,
+    enforced: false,
     held: false,
     row: { id: 'complaint', organisationId: 'org', revision: 4, status: 'CLOSED', summary: 'Private complaint narrative',
       reviewedByBoard: false, boardMinuteReference: null, removedAt: null, removal: null } as any,
@@ -19,6 +20,7 @@ function fixture() {
       assert.deepEqual(where, { id: 'actor', organisationId: 'org', lifecycleStatus: 'ACTIVE', role: { in: ['OWNER', 'ADMIN'] } });
       return f.actor ? { id: 'actor' } : null;
     } },
+    complaintRecoveryEnforcement: { findUnique: async () => f.enforced ? { id: 'binding' } : null },
     complaintRecord: {
       findFirst: async ({ where }: any) => {
         assert.equal(where.organisationId, 'org'); assert.equal(where.id, 'complaint');
@@ -90,4 +92,20 @@ test('complaint recovery refuses missing authority, stale revisions, board evide
   f.row.removal = { recoveryUntil: new Date('2026-09-30T12:00:00Z') };
   await assert.rejects(service.restore(input), /recovery window has expired/);
   assert.equal(f.writes, 0); assert.equal(f.audits.length, 0);
+});
+
+test('enforced charity refuses ordinary removal and restoration before any decision or write', async () => {
+  for (const operation of ['remove', 'restore'] as const) {
+    const { service, f } = fixture();
+    f.enforced = true;
+    if (operation === 'restore') {
+      f.row.removedAt = new Date('2026-09-29T12:00:00Z');
+      f.row.removal = { recoveryUntil: new Date('2026-10-30T12:00:00Z') };
+    }
+    await assert.rejects(operation === 'remove' ? service.remove(input) : service.restore(input),
+      (error: any) => error?.code === 'COMPLAINT_RECOVERY_AUTHORITY_REQUIRED');
+    assert.equal(f.decisions.length, 0);
+    assert.equal(f.writes, 0);
+    assert.equal(f.audits.length, 0);
+  }
 });

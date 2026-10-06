@@ -23,6 +23,7 @@ const assessmentLabels: Record<string, string> = {
   INDIVIDUAL_REVIEW_REQUIRED: 'The policy requires an individual removal review.',
   RESOLUTION_REVIEW_REQUIRED: 'Current resolution evidence must be reviewed first.',
   RETENTION_NOT_REACHED: 'The approved minimum retention period has not elapsed.',
+  INDEPENDENT_RECOVERY_REQUIRED: 'This charity requires an independently recorded recovery decision before removal can be reviewed.',
   READY_FOR_REMOVAL_REVIEW: 'The minimum retention period has elapsed; removal still requires review.',
 };
 

@@ -8,6 +8,7 @@ test('complaint retention uses only the latest matching resolution and a single 
   let evidence: any = { id: 'evidence', revision: 3, recordRevision: 4, state: 'RECORDED', resolvedAt: new Date('2026-09-20T12:00:00Z') };
   let policies: any[] = [];
   let held = false;
+  let enforced = false;
   const policy = { id: 'policy', retentionMode: 'AFTER_ANCHOR', retentionAnchor: 'RESOLVED_AT', retentionDays: 10 };
   const tx = {
     complaintHoldEvent: { findFirst: async () => ({ held }) },
@@ -21,6 +22,7 @@ test('complaint retention uses only the latest matching resolution and a single 
       assert.deepEqual(where, { organisationId: 'org', recordClass: 'COMPLAINT', state: 'APPROVED', withdrawal: { is: null } });
       assert.equal(take, 2); return policies;
     } },
+    complaintRecoveryEnforcement: { findUnique: async () => enforced ? { id: 'binding' } : null },
   };
   const service = new ComplaintRetentionService({ $transaction: async (callback: (tx: any) => unknown) => callback(tx) } as never);
   const state = async () => { const result = await service.assess('org', 'complaint'); assert.equal(result.removalAuthorized, false); return result; };
@@ -31,6 +33,9 @@ test('complaint retention uses only the latest matching resolution and a single 
   const elapsed = await state();
   assert.equal(elapsed.state, 'READY_FOR_REMOVAL_REVIEW');
   assert.equal(elapsed.retentionUntil?.getTime(), now.getTime());
+  enforced = true;
+  assert.equal((await state()).state, 'INDEPENDENT_RECOVERY_REQUIRED');
+  enforced = false;
   policy.retentionDays = 11;
   assert.equal((await state()).state, 'RETENTION_NOT_REACHED');
   policy.retentionAnchor = 'CREATED_AT';
@@ -50,6 +55,9 @@ test('complaint retention uses only the latest matching resolution and a single 
   assert.equal((await state()).state, 'PERMANENT_RETENTION');
   policy.retentionMode = 'REVIEW_REQUIRED'; complaint.status = 'CLOSED';
   assert.equal((await state()).state, 'INDIVIDUAL_REVIEW_REQUIRED');
+  enforced = true;
+  assert.equal((await state()).state, 'INDEPENDENT_RECOVERY_REQUIRED');
+  enforced = false;
   held = true;
   assert.equal((await state()).state, 'ADMINISTRATIVE_HOLD');
   complaint = null;

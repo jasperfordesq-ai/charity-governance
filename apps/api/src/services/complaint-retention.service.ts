@@ -31,7 +31,12 @@ export class ComplaintRetentionService {
       const policy = policies[0]!;
       if (policy.retentionMode === 'PERMANENT') return { ...base, state: 'PERMANENT_RETENTION' as const, retentionUntil: null };
       if (complaint.status !== 'CLOSED') return { ...base, state: 'COMPLAINT_OPEN' as const, retentionUntil: null };
-      if (policy.retentionMode === 'REVIEW_REQUIRED') return { ...base, state: 'INDIVIDUAL_REVIEW_REQUIRED' as const, retentionUntil: null };
+      const enforcement = await tx.complaintRecoveryEnforcement.findUnique({
+        where: { organisationId }, select: { id: true },
+      });
+      if (policy.retentionMode === 'REVIEW_REQUIRED') return { ...base,
+        state: enforcement ? 'INDEPENDENT_RECOVERY_REQUIRED' as const : 'INDIVIDUAL_REVIEW_REQUIRED' as const,
+        retentionUntil: null };
       if (policy.retentionMode !== 'AFTER_ANCHOR' || policy.retentionAnchor !== 'RESOLVED_AT' ||
         !Number.isInteger(policy.retentionDays) || policy.retentionDays! < 1 || policy.retentionDays! > 36525) {
         return { ...base, state: 'POLICY_REVIEW_REQUIRED' as const, retentionUntil: null };
@@ -41,7 +46,8 @@ export class ComplaintRetentionService {
         return { ...base, state: 'RESOLUTION_REVIEW_REQUIRED' as const, retentionUntil: null };
       }
       const retentionUntil = new Date(latest.resolvedAt.getTime() + policy.retentionDays! * 86400000);
-      return { ...base, state: retentionUntil > clock!.now ? 'RETENTION_NOT_REACHED' as const : 'READY_FOR_REMOVAL_REVIEW' as const,
+      return { ...base, state: retentionUntil > clock!.now ? 'RETENTION_NOT_REACHED' as const
+        : enforcement ? 'INDEPENDENT_RECOVERY_REQUIRED' as const : 'READY_FOR_REMOVAL_REVIEW' as const,
         retentionUntil };
     });
   }

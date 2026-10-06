@@ -16,6 +16,13 @@ export class ComplaintRecoveryService {
     const actor = await tx.user.findFirst({ where: { id: input.actorUserId, organisationId: input.organisationId,
       lifecycleStatus: 'ACTIVE', role: { in: ['OWNER', 'ADMIN'] } }, select: { id: true } });
     if (!actor) throw new AppError(403, 'COMPLAINT_RECOVERY_FORBIDDEN', 'An active charity administrator is required.');
+    // Removal and restoration have no independently published operation yet.
+    // The database repeats this boundary for callers outside this service.
+    const enforcement = await tx.complaintRecoveryEnforcement.findUnique({
+      where: { organisationId: input.organisationId }, select: { id: true },
+    });
+    if (enforcement) throw new AppError(409, 'COMPLAINT_RECOVERY_AUTHORITY_REQUIRED',
+      'This charity requires an independently recorded recovery decision.');
     const complaint = await tx.complaintRecord.findFirst({ where: { id: input.complaintId, organisationId: input.organisationId,
       removedAt: removed ? { not: null } : null }, include: { removal: true } });
     if (!complaint) throw new AppError(404, 'COMPLAINT_NOT_FOUND', 'Complaint record not found');

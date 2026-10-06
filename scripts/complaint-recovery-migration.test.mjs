@@ -368,6 +368,9 @@ test('complaint recovery migration preserves records and enforces reviewed remov
       UPDATE "User" SET role='OWNER' WHERE id='admin-a'; COMMIT;`);
     raceFixture('recovery-protocol');
     raceFixture('recovery-stale');
+    raceFixture('recovery-restore-gate',false);
+    const cancellationRaceFixtures=new Map(['primary-cancel-first','primary-execute-first']
+      .map(id=>[id,raceFixture(id)]));
     // This harness applies migration.sql files directly. Prisma's CLI normally
     // creates its own metadata table, so add that marker before testing the
     // role-grant script that must protect it on a real deployment.
@@ -382,10 +385,12 @@ test('complaint recovery migration preserves records and enforces reviewed remov
       { cwd: fileURLToPath(new URL('../', import.meta.url)), input: captureUrl, encoding: 'utf8', timeout: 40000 });
     assert.equal(protocolProof.status, 0, protocolProof.stderr);
     assert.equal(protocolProof.stdout.trim(), 'complaint-recovery-protocol-composition-verified');
+    sql(`UPDATE "ComplaintRecord" SET "removedAt"=NULL,"removalId"=NULL WHERE id='recovery-restore-gate';`,
+      /independent recovery authority/);
     // Primary execution/cancellation race, in both explicit lock orders.
     for (const cancelFirst of [true, false]) {
       const id = cancelFirst ? 'primary-cancel-first' : 'primary-execute-first';
-      const fixture = raceFixture(id);
+      const fixture = cancellationRaceFixtures.get(id);
       proveComplaintRecoveryPreparation(sql, `${id}-authority`, 'protocol-install');
       const preparationId = `prepared-${id}-authority`;
       const cancellation = `INSERT INTO "ComplaintRecoveryCancellation"

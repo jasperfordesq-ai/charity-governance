@@ -657,6 +657,42 @@ test('real PostgreSQL 16 migration binds complaint recovery outcomes to the exac
   } finally { await removeDisposableContainer(container); }
 });
 
+test('real PostgreSQL 16 migration freezes ordinary complaint removal and restoration after enforcement', { timeout: 120_000 }, async () => {
+  const container = `charitypilot-removal-gate-${randomUUID()}`;
+  assertDockerSuccess(docker(['run', '--detach', '--name', container, '--network', 'none',
+    '-e', 'POSTGRES_HOST_AUTH_METHOD=trust', POSTGRES_IMAGE]), 'start removal gate fixture');
+  try {
+    await waitForPostgres(container);
+    psql(container, `
+      CREATE TABLE "Organisation" (id TEXT PRIMARY KEY);
+      INSERT INTO "Organisation" VALUES ('charity'), ('other');
+      CREATE TABLE "ComplaintRecoveryEnforcement" (id TEXT PRIMARY KEY, "organisationId" TEXT UNIQUE);
+      CREATE TABLE "ComplaintRemoval" (id TEXT PRIMARY KEY, "organisationId" TEXT);
+      CREATE TABLE "ComplaintRecord" (id TEXT PRIMARY KEY, "organisationId" TEXT,
+        "removedAt" TIMESTAMP(3), "removalId" TEXT, summary TEXT);
+      INSERT INTO "ComplaintRecord" VALUES
+        ('active','charity',NULL,NULL,'untouched'),
+        ('removed','charity','2026-09-30','earlier','untouched'),
+        ('other-active','other',NULL,NULL,'untouched');
+    `);
+    psql(container, readFileSync(new URL('../../prisma/migrations/20261007000000_complaint_removal_recovery_gate/migration.sql', import.meta.url), 'utf8'));
+    psql(container, `INSERT INTO "ComplaintRemoval" VALUES ('before','charity');
+      UPDATE "ComplaintRecord" SET "removedAt"='2026-10-01', "removalId"='before' WHERE id='active';
+      UPDATE "ComplaintRecord" SET "removedAt"=NULL, "removalId"=NULL WHERE id='active';`);
+    psql(container, `INSERT INTO "ComplaintRecoveryEnforcement" VALUES ('binding','charity');`);
+    assert.match(psql(container, `INSERT INTO "ComplaintRemoval" VALUES ('after','charity');`, false).stderr,
+      /requires independent recovery authority/);
+    assert.match(psql(container, `UPDATE "ComplaintRecord" SET "removedAt"='2026-10-01', "removalId"='before' WHERE id='active';`, false).stderr,
+      /requires independent recovery authority/);
+    assert.match(psql(container, `UPDATE "ComplaintRecord" SET "removedAt"=NULL, "removalId"=NULL WHERE id='removed';`, false).stderr,
+      /requires independent recovery authority/);
+    psql(container, `UPDATE "ComplaintRecord" SET summary='still readable' WHERE id='active';
+      INSERT INTO "ComplaintRemoval" VALUES ('other-removal','other');
+      UPDATE "ComplaintRecord" SET "removedAt"='2026-10-01', "removalId"='other-removal' WHERE id='other-active';`);
+    assert.equal(psql(container, `SELECT count(*) FROM "ComplaintRemoval" WHERE "organisationId"='charity';`).stdout.trim(), '1');
+  } finally { await removeDisposableContainer(container); }
+});
+
 test('disposable E2E reset inventory includes recovery evidence exactly once', () => {
   assert.equal(
     DISPOSABLE_DATABASE_RESET_TABLES.filter(
