@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { createHash } from "node:crypto";
 import { afterEach, test } from "node:test";
 import { NextRequest } from "next/server";
 import { proxy } from "./proxy";
@@ -76,17 +77,30 @@ test('the public session-renew page has sensitive no-store headers', async () =>
   assert.equal(response.headers.get('referrer-policy'), 'no-referrer');
 });
 
-test("parallel protected route checks share only an in-flight auth validation", async () => {
+test("parallel protected route checks share only an in-flight auth validation", { timeout: 5_000 }, async () => {
   Object.assign(process.env, { NODE_ENV: "production" });
   process.env.NEXT_PUBLIC_API_URL = "https://api.charitypilot.ie";
+  const subtle = globalThis.crypto.subtle;
+  const originalDigest = subtle.digest;
+  // Resolve both credential digests in this event-loop turn. A real WebCrypto
+  // worker can start the second validation after the first fetch is released,
+  // which would test scheduling rather than the in-flight map.
+  subtle.digest = async (_algorithm, data) => Uint8Array.from(
+    createHash("sha256").update(Buffer.from(data as Uint8Array)).digest(),
+  ).buffer;
 
   let finishValidation: ((response: Response) => void) | undefined;
   const pendingValidation = new Promise<Response>((resolve) => {
     finishValidation = resolve;
   });
+  let signalValidationStarted: (() => void) | undefined;
+  const validationStarted = new Promise<void>((resolve) => {
+    signalValidationStarted = resolve;
+  });
   let validationCalls = 0;
   globalThis.fetch = (async () => {
     validationCalls += 1;
+    signalValidationStarted?.();
     return validationCalls === 1
       ? pendingValidation
       : new Response(null, { status: 401 });
@@ -97,23 +111,30 @@ test("parallel protected route checks share only an in-flight auth validation", 
   });
   const first = proxy(request());
   const second = proxy(request());
-  await new Promise((resolve) => setTimeout(resolve, 10));
-  assert.equal(validationCalls, 1);
-  const otherCredential = await proxy(new NextRequest("https://app.charitypilot.ie/dashboard", {
-    headers: { cookie: "charitypilot_access=other-access" },
-  }));
-  assert.equal(otherCredential.status, 307, "a second account must never borrow the pending success");
-  assert.equal(validationCalls, 2);
-  finishValidation?.(new Response(null, { status: 200 }));
+  try {
+    await validationStarted;
+    await new Promise<void>((resolve) => setImmediate(resolve));
+    assert.equal(validationCalls, 1);
+    const otherCredential = await proxy(new NextRequest("https://app.charitypilot.ie/dashboard", {
+      headers: { cookie: "charitypilot_access=other-access" },
+    }));
+    assert.equal(otherCredential.status, 307, "a second account must never borrow the pending success");
+    assert.equal(validationCalls, 2);
+    finishValidation?.(new Response(null, { status: 200 }));
 
-  const responses = await Promise.all([first, second]);
-  assert.deepEqual(responses.map((response) => response.status), [200, 200]);
-  assert.equal(validationCalls, 2);
+    const responses = await Promise.all([first, second]);
+    assert.deepEqual(responses.map((response) => response.status), [200, 200]);
+    assert.equal(validationCalls, 2);
 
-  // A completed success is not cached: revocation is checked on the next request.
-  const later = await proxy(request());
-  assert.equal(later.status, 307);
-  assert.equal(validationCalls, 3);
+    // A completed success is not cached: revocation is checked on the next request.
+    const later = await proxy(request());
+    assert.equal(later.status, 307);
+    assert.equal(validationCalls, 3);
+  } finally {
+    subtle.digest = originalDigest;
+    finishValidation?.(new Response(null, { status: 503 }));
+    await Promise.allSettled([first, second]);
+  }
 });
 
 test("non-401 auth validation failures fail closed without a false login redirect or refresh storm", async () => {

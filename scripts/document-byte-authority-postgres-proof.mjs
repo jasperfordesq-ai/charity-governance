@@ -6,6 +6,7 @@ import { readClaimedDocumentByteAuthority,
   readCurrentDocumentByteAuthority } from '../apps/api/dist/services/document-byte-authority-projection.js';
 import { readCommittedDocumentByteProviderUnknown } from '../apps/api/dist/services/document-byte-provider-unknown.js';
 import { DocumentService } from '../apps/api/dist/services/document.service.js';
+import { DocumentPublicationService } from '../apps/api/dist/services/document-publication.service.js';
 
 // Only the disposable, loopback-published PostgreSQL fixture created by the
 // parent test may invoke this process. Never run against a charity database.
@@ -730,8 +731,49 @@ try {
   /append-only/);
   await assert.rejects(prisma.$executeRaw`DELETE FROM "DocumentByteProviderAttempt"
     WHERE "leaseId"='lease'`, /append-only/);
+  // Exercise the exact Prisma query and bound values used by the publisher,
+  // against the fully migrated database. A copied SQL fixture alone would not
+  // catch a broken production INSERT. Roll the synthetic attempt back.
+  const claimedAt = new Date('2026-10-07T12:00:00Z');
+  await assert.rejects(prisma.$transaction(async (tx) => {
+    await tx.document.create({ data: {
+      id: 'upload-service-proof-doc', organisationId: 'charity',
+      name: 'Synthetic upload intent document', category: 'OTHER',
+      lifecycleStatus: 'DRAFT', fileUrl: 'charity/upload-service-proof',
+      storageProvider: 'local', mimeType: 'application/pdf', fileSize: 5,
+    } });
+    await tx.documentPublication.create({ data: {
+      id: 'upload-service-proof', organisationId: 'charity',
+      documentId: 'upload-service-proof-doc',
+    } });
+    await tx.documentPublication.update({ where: { id: 'upload-service-proof' },
+      data: { claimedAt } });
+    const publisher = new DocumentPublicationService(tx);
+    assert.equal(await publisher.reserveRemoteWrite('upload-service-proof', claimedAt), true);
+    assert.equal(await publisher.attachPublicationPage('upload-service-proof', {
+      cloudId: 'cloud-1', spaceId: 'space-1', pageId: 'page-1', pageTitle: 'Synthetic page',
+    }, claimedAt), true);
+    const claimed = await tx.documentPublication.findUniqueOrThrow({
+      where: { id: 'upload-service-proof' },
+    });
+    const operationId = await publisher.reserveUploadIntent(claimed, {
+      cloudId: 'cloud-1', spaceId: 'space-1', pageId: 'page-1',
+      filename: 'synthetic.pdf', sha256: 'a'.repeat(64),
+    });
+    assert.match(operationId, /^[0-9a-f]{32}$/u);
+    const saved = await tx.documentPublicationUploadIntent.findUniqueOrThrow({
+      where: { id: operationId },
+    });
+    assert.equal(saved.publicationId, 'upload-service-proof');
+    assert.equal(saved.organisationId, 'charity');
+    assert.equal(saved.pageId, 'page-1');
+    assert.equal(saved.filename, 'synthetic.pdf');
+    assert.equal(saved.sha256, 'a'.repeat(64));
+    throw new Error('synthetic upload intent proof rollback');
+  }), /synthetic upload intent proof rollback/u);
+  assert.equal(await prisma.documentPublicationUploadIntent.count(), 0);
   process.stdout.write(
-    'current-authority-real-postgres-composition=verified; protected-worker-skip=verified; cleanup-alias-fence=verified; upload-intent-fence=verified; copy-evidence-digest=changed; post-claim-local-authority=verified; provider-start-marker=verified; provider-start-race=one-winner; provider-unknown-facts=verified; post-start-ordinary-retry-refused=verified\n',
+    'current-authority-real-postgres-composition=verified; protected-worker-skip=verified; cleanup-alias-fence=verified; upload-intent-fence=verified; publication-upload-intent-service=verified; copy-evidence-digest=changed; post-claim-local-authority=verified; provider-start-marker=verified; provider-start-race=one-winner; provider-unknown-facts=verified; post-start-ordinary-retry-refused=verified\n',
   );
 } finally {
   await prisma.$disconnect();
