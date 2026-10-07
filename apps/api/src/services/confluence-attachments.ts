@@ -58,6 +58,14 @@ export type ConfluenceAttachment = {
   mediaType: string;
   fileSize: number;
   downloadUrl: string;
+  /** Present when Confluence supplied a valid current version number. */
+  versionNumber?: number;
+};
+
+export type ConfluenceAttachmentVersion = {
+  number: number;
+  attachmentId: string;
+  createdAt: string;
 };
 
 export type UploadAttachmentInput = {
@@ -213,6 +221,10 @@ function readNonNegativeNumber(value: unknown): number | undefined {
   return typeof value === 'number' && Number.isFinite(value) && value >= 0 ? value : undefined;
 }
 
+function readVersionNumber(value: unknown): number | undefined {
+  return typeof value === 'number' && Number.isSafeInteger(value) && value > 0 ? value : undefined;
+}
+
 /** Joins a relative link onto the `_links.base` Confluence supplied, if any. */
 function absolutise(link: string, base: string): string {
   if (link.length === 0) return '';
@@ -309,12 +321,14 @@ function parseAttachment(
       : undefined) ??
     '';
 
+  const versionNumber = readVersionNumber(asObject(attachment.version)?.number);
   return {
     id,
     title: typeof attachment.title === 'string' ? attachment.title : '',
     mediaType,
     fileSize,
     downloadUrl: absolutise(downloadLink, base),
+    ...(versionNumber === undefined ? {} : { versionNumber }),
   };
 }
 
@@ -394,6 +408,75 @@ export async function listAttachments(
     'CONFLUENCE_ATTACHMENT_LIST_UNBOUNDED',
     `Confluence kept offering another page of attachments after ${MAX_LIST_PAGES} requests. ` +
       'The list was not read to the end, so it is not safe to treat as complete.',
+  );
+}
+
+/**
+ * Read every recorded version of one attachment. An incomplete, malformed or
+ * contradictory inventory must never be mistaken for proof that an uncertain
+ * upload did not create a version. This is metadata only: it does not verify
+ * the bytes of any version or authorize a publication retry or erasure.
+ */
+export async function listAttachmentVersions(
+  client: ConfluenceClient,
+  attachmentId: string,
+): Promise<ConfluenceAttachmentVersion[]> {
+  if (typeof attachmentId !== 'string' || !ID_PATTERN.test(attachmentId)) {
+    throw new AppError(400, 'CONFLUENCE_ATTACHMENT_ID_INVALID', 'A Confluence attachment id must be a plain identifier.');
+  }
+
+  const versions: ConfluenceAttachmentVersion[] = [];
+  const seenNumbers = new Set<number>();
+  const seenCursors = new Set<string>();
+  let cursor: string | undefined;
+
+  for (let page = 0; page < MAX_LIST_PAGES; page += 1) {
+    const query: Record<string, string> = { limit: String(LIST_PAGE_SIZE) };
+    if (cursor !== undefined) query.cursor = cursor;
+    const response = await client.request({
+      method: 'GET',
+      api: 'v2',
+      path: `attachments/${attachmentId}/versions`,
+      query,
+      idempotent: true,
+    });
+    const results = readResults(response.body);
+    if (results === undefined) throw invalidResponse('attachment version list');
+
+    for (const result of results) {
+      const record = asObject(result);
+      const number = readVersionNumber(record?.number);
+      const observedId = readId(asObject(record?.attachment)?.id);
+      if (number === undefined || observedId !== attachmentId || seenNumbers.has(number)) {
+        throw invalidResponse('complete, matching attachment version');
+      }
+      seenNumbers.add(number);
+      versions.push({
+        number,
+        attachmentId,
+        createdAt: typeof record?.createdAt === 'string' ? record.createdAt : '',
+      });
+    }
+
+    const next = asObject(asObject(response.body)?._links)?.next;
+    if (next === undefined || next === null) {
+      if (versions.length === 0) throw invalidResponse('attachment version history');
+      return versions;
+    }
+    if (next === '') throw invalidResponse('attachment version cursor');
+    if (typeof next !== 'string') throw invalidResponse('attachment version cursor');
+    const nextCursor = readNextCursor(response.body);
+    if (nextCursor === undefined || seenCursors.has(nextCursor)) {
+      throw invalidResponse('non-repeating attachment version cursor');
+    }
+    seenCursors.add(nextCursor);
+    cursor = nextCursor;
+  }
+
+  throw new AppError(
+    502,
+    'CONFLUENCE_ATTACHMENT_VERSION_LIST_UNBOUNDED',
+    `Confluence kept offering another page of attachment versions after ${MAX_LIST_PAGES} requests. The inventory is incomplete.`,
   );
 }
 

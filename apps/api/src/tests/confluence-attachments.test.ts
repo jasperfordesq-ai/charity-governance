@@ -5,6 +5,7 @@ import type { ConfluenceClient, ConfluenceRequestSpec } from '../services/conflu
 import {
   CONFLUENCE_ATTACHMENT_MAX_BYTES,
   deleteAttachment,
+  listAttachmentVersions,
   listAttachments,
   purgeAttachment,
   uploadAttachment,
@@ -304,6 +305,59 @@ test('listAttachments follows the v2 cursor so a long list is not silently trunc
 test('listAttachments returns an empty list for a page with no attachments', async () => {
   const { client } = harness([ok(v2ListBody([]))]);
   assert.deepEqual(await listAttachments(client, PAGE_ID), []);
+});
+
+test('listAttachments preserves the current v2 version when supplied', async () => {
+  const { client } = harness([ok(v2ListBody([{
+    id: 'att789', title: 'board-minutes.pdf', version: { number: 3 },
+  }]))]);
+  const attachments = await listAttachments(client, PAGE_ID);
+  assert.equal(attachments[0]?.versionNumber, 3);
+});
+
+test('listAttachmentVersions follows the entire v2 cursor and binds each version to the attachment', async () => {
+  const first = {
+    results: [{ number: 1, attachment: { id: 'att789' }, createdAt: '2026-10-01T00:00:00Z' }],
+    _links: { next: '/wiki/api/v2/attachments/att789/versions?cursor=SECOND&limit=250' },
+  };
+  const second = {
+    results: [{ number: 2, attachment: { id: 'att789' }, createdAt: '2026-10-02T00:00:00Z' }],
+    _links: {},
+  };
+  const { client, specs } = harness([ok(first), ok(second)]);
+  assert.deepEqual(await listAttachmentVersions(client, 'att789'), [
+    { number: 1, attachmentId: 'att789', createdAt: '2026-10-01T00:00:00Z' },
+    { number: 2, attachmentId: 'att789', createdAt: '2026-10-02T00:00:00Z' },
+  ]);
+  assert.equal(specs[0]?.path, 'attachments/att789/versions');
+  assert.equal(specs[0]?.api, 'v2');
+  assert.equal(specs[0]?.idempotent, true);
+  assert.equal(specs[1]?.query?.cursor, 'SECOND');
+});
+
+test('listAttachmentVersions refuses an incomplete or contradictory inventory', async () => {
+  const valid = { number: 1, attachment: { id: 'att789' } };
+  const invalidBodies = [
+    { results: [], _links: {} },
+    { results: [valid], _links: { next: '/versions?cursor=SAME' } },
+    { results: [{ ...valid, attachment: { id: 'different' } }], _links: {} },
+    { results: [{ ...valid, number: 0 }], _links: {} },
+    { results: [valid, valid], _links: {} },
+    { results: [valid], _links: { next: '/versions?limit=250' } },
+    { results: [valid], _links: { next: '' } },
+  ];
+  for (const body of invalidBodies) {
+    const { client } = harness([ok(body)]);
+    const error = await rejectsWith(() => listAttachmentVersions(client, 'att789'));
+    assert.equal(error.code, 'CONFLUENCE_RESPONSE_INVALID');
+  }
+});
+
+test('listAttachmentVersions rejects an unsafe identifier before I/O', async () => {
+  const { client, specs } = harness([]);
+  const error = await rejectsWith(() => listAttachmentVersions(client, '../wrong'));
+  assert.equal(error.code, 'CONFLUENCE_ATTACHMENT_ID_INVALID');
+  assert.equal(specs.length, 0);
 });
 
 for (const [what, body] of [
