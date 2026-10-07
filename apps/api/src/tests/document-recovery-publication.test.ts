@@ -238,6 +238,25 @@ test('document claim outcome publishes only the committed result and remains occ
   assert.equal(published.body, committed.body);
   assert.equal(published.actionAuthorized, false);
   assert.equal((await f.store.readControl()).activeOperation?.operationId, f.context.operationId);
+  const permitRequest = { writerId: f.request.writerId, writerEpoch: f.context.writerEpoch,
+    operationId: f.context.operationId, preparationDigest: f.prepared.digest,
+    outcomeGeneration: prepReceipt.generation + 1,
+    outcomeEntryDigest: published.entryDigest, outcomeEnvelopeDigest: published.envelopeDigest,
+    permitEnvelopeDigest: 'f'.repeat(64) };
+  await assert.rejects(f.journal.appendReservedDocumentBytePermit({ ...permitRequest,
+    outcomeEntryDigest: '0'.repeat(64) }, f.store), /exact published claim outcome/);
+  f.loseAck(true);
+  await assert.rejects(f.journal.appendReservedDocumentBytePermit(permitRequest, f.store), /unknown/);
+  const permit = await f.journal.appendReservedDocumentBytePermit(permitRequest, f.store);
+  assert.equal(permit.generation, prepReceipt.generation + 2);
+  assert.equal(permit.actionAuthorized, false);
+  assert.equal(permit.replayed, true);
+  assert.equal((await f.journal.appendReservedDocumentBytePermit(permitRequest, f.store)).replayed, true);
+  assert.equal((await f.store.readControl()).activeOperation?.operationId, f.context.operationId);
+  assert.equal((await readPublishedDocumentOutcome(f.journal, f.store,
+    f.context, f.keys, f.store)).body, committed.body);
+  await assert.rejects(f.journal.appendReservedDocumentBytePermit({ ...permitRequest,
+    permitEnvelopeDigest: 'e'.repeat(64) }, f.store), /different facts/);
   f.keys.unwrap = async () => {
     const head = f.objects.get(f.headKey)!, value = JSON.parse(head.body);
     value.publicationId = '55555555-5555-4555-8555-555555555555';

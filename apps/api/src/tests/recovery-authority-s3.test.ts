@@ -297,10 +297,12 @@ test('journal and S3 adapter recover a lost publication acknowledgement together
 });
 
 test('S3 explicit release requires the exact outcome head and refuses generic slot clearing', async () => {
-  for (const scenario of ['valid', 'valid-hold', 'valid-cancellation', 'valid-hold-cancellation', 'document-outcome', 'wrong-kind', 'wrong-operation', 'missing', 'corrupt', 'race']) {
+  for (const scenario of ['valid', 'valid-hold', 'valid-cancellation', 'valid-hold-cancellation',
+    'document-outcome', 'document-byte-permit', 'wrong-kind', 'wrong-operation', 'missing', 'corrupt', 'race']) {
     const facts = { format: 1, installationId: config.installationId, organisationId: config.organisationId,
       generation: 2, previousDigest: 'b'.repeat(64), operationId: scenario === 'wrong-operation' ? 'other' : 'operation-a',
       kind: ({ 'wrong-kind': 'DISPOSAL_RESULT', 'document-outcome': 'DOCUMENT_OUTCOME_V1',
+        'document-byte-permit': 'DOCUMENT_BYTE_PERMIT_V1',
         'valid-hold': 'COMPLAINT_HOLD_OUTCOME_V1',
         'valid-cancellation': 'COMPLAINT_CANCELLATION_V1', 'valid-hold-cancellation': 'COMPLAINT_HOLD_CANCELLATION_V1' } as Record<string, string>)[scenario] ?? 'COMPLAINT_OUTCOME_V1', factsDigest: 'c'.repeat(64) };
     const digest = createHash('sha256').update(JSON.stringify(facts)).digest('hex');

@@ -21,7 +21,8 @@ const identity = z.string().regex(/^[A-Za-z0-9_-]{1,120}$/);
 const digest = z.string().regex(/^[a-f0-9]{64}$/);
 const kinds = z.enum(['DISPOSAL_INTENT', 'DISPOSAL_RESULT', 'PRESERVATION_CHANGE', 'CONTROL_CHANGE',
   'COMPLAINT_PREPARATION_V1', 'COMPLAINT_OUTCOME_V1', 'COMPLAINT_HOLD_PREPARATION_V1', 'COMPLAINT_HOLD_OUTCOME_V1',
-  'COMPLAINT_CANCELLATION_V1', 'COMPLAINT_HOLD_CANCELLATION_V1', 'DOCUMENT_PREPARATION_V1', 'DOCUMENT_OUTCOME_V1']);
+  'COMPLAINT_CANCELLATION_V1', 'COMPLAINT_HOLD_CANCELLATION_V1', 'DOCUMENT_PREPARATION_V1', 'DOCUMENT_OUTCOME_V1',
+  'DOCUMENT_BYTE_PERMIT_V1']);
 const bindingSchema = z.object({ installationId: identity, organisationId: identity }).strict();
 const checkpointFields = {
   generation: z.number().int().nonnegative().max(10000), digest: digest.nullable(),
@@ -47,10 +48,11 @@ const entrySchema = z.object({ format: z.literal(1), installationId: identity, o
 }).strict();
 type Entry = z.infer<typeof entrySchema>;
 type Input = z.infer<typeof inputSchema>;
-const preparationKind = (kind: Entry['kind']) => {
+const predecessorKind = (kind: Entry['kind']) => {
   if (kind === 'COMPLAINT_OUTCOME_V1' || kind === 'COMPLAINT_CANCELLATION_V1') return 'COMPLAINT_PREPARATION_V1';
   if (kind === 'COMPLAINT_HOLD_OUTCOME_V1' || kind === 'COMPLAINT_HOLD_CANCELLATION_V1') return 'COMPLAINT_HOLD_PREPARATION_V1';
   if (kind === 'DOCUMENT_OUTCOME_V1') return 'DOCUMENT_PREPARATION_V1';
+  if (kind === 'DOCUMENT_BYTE_PERMIT_V1') return 'DOCUMENT_OUTCOME_V1';
   return undefined;
 };
 const hash = (value: string) => createHash('sha256').update(value, 'utf8').digest('hex');
@@ -163,14 +165,14 @@ export class RecoveryAuthorityJournal {
       let entry: Entry;
       try { entry = entrySchema.parse(JSON.parse(body)); }
       catch { throw new Error('Invalid recovery authority entry'); }
-      const expectedPreparation = preparationKind(entry.kind);
-      const followsPreparation = expectedPreparation !== undefined
-        && rows.at(-1)?.kind === expectedPreparation
+      const expectedPredecessor = predecessorKind(entry.kind);
+      const followsPredecessor = expectedPredecessor !== undefined
+        && rows.at(-1)?.kind === expectedPredecessor
         && rows.at(-1)?.operationId === entry.operationId;
       if (entry.installationId !== this.binding.installationId || entry.organisationId !== this.binding.organisationId ||
         entry.generation !== generation || entry.previousDigest !== (rows.at(-1)?.digest ?? null) ||
-        entry.digest !== hash(unsigned(entry)) || (operations.has(entry.operationId) && !followsPreparation)
-        || (expectedPreparation !== undefined && !followsPreparation)) {
+        entry.digest !== hash(unsigned(entry)) || (operations.has(entry.operationId) && !followsPredecessor)
+        || (expectedPredecessor !== undefined && !followsPredecessor)) {
         throw new Error('Invalid recovery authority binding or chain');
       }
       if (generation === this.checkpoint.generation && entry.digest !== this.checkpoint.digest) {
@@ -241,8 +243,11 @@ export class RecoveryAuthorityJournal {
   }
 
   private prior(rows: Entry[], input: Input) {
-    const previous = rows.find(row => row.operationId === input.operationId
-      && row.kind !== preparationKind(input.kind));
+    const previous = rows.find(row => row.operationId === input.operationId && row.kind === input.kind);
+    if (!previous && predecessorKind(input.kind) === undefined
+      && rows.some(row => row.operationId === input.operationId)) {
+      throw new Error('Recovery operation identity was already used for different facts.');
+    }
     if (previous && (previous.kind !== input.kind || previous.factsDigest !== input.factsDigest ||
       previous.generation !== input.expectedGeneration + 1 || previous.previousDigest !== input.expectedDigest)) {
       throw new Error('Recovery operation identity was already used for different facts.');
@@ -339,6 +344,29 @@ export class RecoveryAuthorityJournal {
     return this.appendReservedOutcome(raw, control, 'DOCUMENT_OUTCOME_V1');
   }
 
+  /** A third-stage journal binding only. The caller must authenticate a
+   * separate encrypted permit candidate and current local authority before
+   * supplying its digest. This receipt never enables the byte worker. */
+  async appendReservedDocumentBytePermit(raw: unknown, control: RecoveryControlStore) {
+    const request = z.object({ operationId: identity, writerId: identity,
+      writerEpoch: z.number().int().positive().max(2147483647), preparationDigest: digest,
+      outcomeGeneration: z.number().int().positive().max(9999), outcomeEntryDigest: digest,
+      outcomeEnvelopeDigest: digest, permitEnvelopeDigest: digest,
+    }).strict().parse(raw);
+    const publisher = await this.complaintPublisher(request, control);
+    const before = await this.readCurrentHead(publisher), rows = await this.history();
+    this.headMatchesHistory(before, rows);
+    const outcome = rows[request.outcomeGeneration - 1];
+    if (!outcome || outcome.kind !== 'DOCUMENT_OUTCOME_V1'
+      || outcome.operationId !== request.operationId || outcome.digest !== request.outcomeEntryDigest
+      || outcome.factsDigest !== request.outcomeEnvelopeDigest || before.generation < outcome.generation) {
+      throw new Error('Document byte permit requires the exact published claim outcome');
+    }
+    return this.appendPublished({ operationId: request.operationId, kind: 'DOCUMENT_BYTE_PERMIT_V1',
+      factsDigest: request.permitEnvelopeDigest, expectedGeneration: outcome.generation,
+      expectedDigest: outcome.digest }, publisher);
+  }
+
   async appendReservedHoldOutcome(raw: unknown, control: RecoveryControlStore) {
     return this.appendReservedOutcome(raw, control, 'COMPLAINT_HOLD_OUTCOME_V1');
   }
@@ -362,7 +390,7 @@ export class RecoveryAuthorityJournal {
     const before = await this.readCurrentHead(publisher), rows = await this.history();
     this.headMatchesHistory(before, rows);
     const preparation = rows[request.preparationGeneration - 1];
-    if (!preparation || preparation.kind !== preparationKind(kind)
+    if (!preparation || preparation.kind !== predecessorKind(kind)
       || preparation.operationId !== request.operationId || preparation.digest !== request.preparationEntryDigest
       || preparation.factsDigest !== request.preparationEnvelopeDigest || before.generation < preparation.generation) {
       throw new Error('Recovery outcome requires the exact published preparation');
@@ -408,10 +436,10 @@ export class RecoveryAuthorityJournal {
     if (input.expectedGeneration !== rows.length || input.expectedDigest !== (rows.at(-1)?.digest ?? null)) {
       throw new Error('Recovery authority generation changed; review current decisions.');
     }
-    const expectedPreparation = preparationKind(input.kind);
-    if (expectedPreparation !== undefined && (rows.at(-1)?.kind !== expectedPreparation
+    const expectedPredecessor = predecessorKind(input.kind);
+    if (expectedPredecessor !== undefined && (rows.at(-1)?.kind !== expectedPredecessor
       || rows.at(-1)?.operationId !== input.operationId)) {
-      throw new Error('Recovery outcome must immediately follow its original preparation');
+      throw new Error('Recovery operation entry must immediately follow its exact predecessor');
     }
     const facts = { format: 1 as const, ...this.binding, generation: rows.length + 1,
       previousDigest: input.expectedDigest, operationId: input.operationId, kind: input.kind, factsDigest: input.factsDigest };
