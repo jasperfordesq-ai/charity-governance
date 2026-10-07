@@ -1,5 +1,20 @@
 # CharityPilot Agent Continuation Handoff
 
+> **7 October ~09:19 Dublin cleanup-alias fence live:** Exact source
+> `516f020e` passed hosted CI `37591101119` and E2E `37591101216`.
+> Guarded private-VM cutover now serves blue `516f020e`, with green
+> `5dfa72b3` retained as rollback. Restricted `cp_runtime`, the new
+> migration and both triggers, prior guards, zero claims/aliases,
+> format-4 inventory and loopback/Tailscale health/login passed read-only
+> postflight. All 273 earlier backup hashes survived; two new sets were
+> copied off the VM with six matching SHA-256 hashes; isolated restore
+> passed with 149 migrations. Private exact receipt:
+> `.charitypilot-private/release-516f020e-cleanup-alias-fence-2026-10-07.md`.
+> This does not activate protected byte execution or settle all-copy,
+> independent P05/P08 host-loss recovery, policy/MFA, Member/export/
+> deletion, replay/C1, real connector first contact or Nikita acceptance.
+> The source-only checkpoint below is dated history.
+
 > **7 October source-only cleanup-alias fence:** A new migration makes a
 > primary purge claim refuse another cleanup job for the exact provider
 > key, and refuses a new matching job after claim. The production worker

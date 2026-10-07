@@ -1,5 +1,17 @@
 # CharityPilot Full-Platform Remediation Audit
 
+> **7 October DPO-05 live cleanup-alias fence:** Exact `516f020e`
+> passed hosted CI/E2E, guarded private-VM cutover and postflight. The
+> migration and both triggers are present under restricted `cp_runtime`;
+> zero claim/alias rows exist. All 273 earlier backup hashes survived,
+> six new off-VM files match SHA-256 and isolated restore passed at 149
+> migrations. This is one technical provider-key fence, not final
+> independent byte authority, all-copy coverage, P05/P08 custody or
+> host-loss reopening. Policy, role, export, deletion, replay/C1,
+> Confluence test-site and Nikita review gates remain open. Exact private
+> receipt: `.charitypilot-private/release-516f020e-cleanup-alias-fence-2026-10-07.md`.
+> The source-only paragraph below is dated history.
+
 > **7 October DPO-05 source-only cleanup-alias fence:** A matching ordinary
 > cleanup job is now fenced against the exact primary purge provider key;
 > worker and current-authority reads also refuse a synthetic privileged
