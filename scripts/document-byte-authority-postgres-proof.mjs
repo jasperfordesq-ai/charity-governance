@@ -119,15 +119,11 @@ try {
     // This fixture needs an already-expired recovery window. Backdate only
     // its synthetic removed row, then restore the trigger before testing the
     // real authorization, preparation, execution, claim and outcome guards.
-    await tx.$executeRawUnsafe(
-      'ALTER TABLE "Document" DISABLE TRIGGER "Document_recovery_state_guard"',
-    );
+    await tx.$executeRaw`ALTER TABLE "Document" DISABLE TRIGGER "Document_recovery_state_guard"`;
     try {
       await tx.$executeRaw`UPDATE "Document" SET "deletedAt"=${new Date('2026-01-02T00:00:00Z')}, "deletedById"='owner', "removedFromRevision"=${old}, "removalEvidenceRef"='TEST-REMOVAL-001', "recoveryUntil"=${new Date('2026-01-03T00:00:00Z')}, "recoveryPolicyId"='policy', "recoverySha256"=${'a'.repeat(64)}, "updatedAt"=${new Date('2026-01-02T00:00:00Z')} WHERE id='doc'`;
     } finally {
-      await tx.$executeRawUnsafe(
-        'ALTER TABLE "Document" ENABLE TRIGGER "Document_recovery_state_guard"',
-      );
+      await tx.$executeRaw`ALTER TABLE "Document" ENABLE TRIGGER "Document_recovery_state_guard"`;
     }
   });
   const doc = await prisma.document.findUniqueOrThrow({ where: { id: 'doc' } });
