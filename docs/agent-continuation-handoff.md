@@ -1,5 +1,21 @@
 # CharityPilot Agent Continuation Handoff
 
+> **7 October ~12:56 Dublin verified `a9199b59` release:** Exact hosted
+> CI `37615526028` and E2E `37615526020` (240 browser tests) passed. The
+> guarded private-VM deployment moved blue live with an append-only,
+> one-use provider-start marker tied to a committed claimed exact lease.
+> Restricted runtime, both migrations, zero protected rows and both front
+> doors passed initial and post-restore checks. All 312 earlier backup hashes
+> survived; six new files were copied and SHA-verified on the workstation.
+> Isolated restore passed 151 migrations and 68 documents, with zero leases
+> or attempts. Green `cac64564` is previous. No production worker calls the
+> marker or provider; it records possible I/O rather than erasure. DPO-05,
+> all-copy, independent P05/P08 host-loss, P01–P09/MFA, Member/export/
+> deletion, replay/C1, test-site connector and Nikita acceptance remain
+> open. Exact private receipt:
+> `.charitypilot-private/release-a9199b59-provider-attempt-2026-10-07.md`.
+> The earlier checkpoint below is dated history.
+>
 > **7 October ~12:15 Dublin verified `cac64564` release:** Exact hosted
 > CI `37611085510` and E2E `37611085454` (240 passed), guarded green
 > private-VM cutover, restricted runtime, zero protected claims/leases and

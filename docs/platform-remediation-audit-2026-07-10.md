@@ -1,5 +1,18 @@
 # CharityPilot Full-Platform Remediation Audit
 
+> **7 October DPO-05 live provider-start marker:** Exact `a9199b59` passed
+> hosted CI/E2E (240 browser tests), guarded blue private-VM cutover,
+> restricted-runtime and empty protected-row postflight, preservation of
+> all 312 prior backup hashes, six verified workstation copies and isolated
+> 151-migration restore with 68 documents and zero attempts. The append-only
+> marker records possible provider I/O after a committed claimed lease; no
+> production worker invokes it or calls a provider, and it proves no erasure.
+> Real final approved facts/inventory, pre-provider authority, UNKNOWN
+> reconciliation, all-copy fencing and independent P05/P08 host-loss proof
+> remain absent. DPO-05 and all Nikita controller, role, historical,
+> connector and acceptance gates stay open. See the private exact receipt;
+> the earlier checkpoint below is dated history.
+>
 > **7 October DPO-05 live matched decision/lease read:** Exact `cac64564`
 > passed hosted CI/E2E (240 browser tests), guarded private-VM green
 > cutover, restricted-runtime/zero-protected-row postflight, preservation
