@@ -111,13 +111,22 @@ test(
           'public."DocumentBytePermitCandidateBinding"','SELECT'),
           has_table_privilege('cp_fixture',
           'public."DocumentByteExecutionLease"','UPDATE'),
+          has_table_privilege('cp_fixture',
+          'public."DocumentByteProviderAttempt"','SELECT'),
+          has_table_privilege('cp_fixture',
+          'public."DocumentByteProviderAttempt"','INSERT,UPDATE,DELETE'),
           has_function_privilege('cp_fixture',
           'public."DocumentByteExecutionLease_claim"(text,text)','EXECUTE'),
+          has_function_privilege('cp_fixture',
+          'public."DocumentByteProviderAttempt_start"(text,text)','EXECUTE'),
           EXISTS (SELECT 1 FROM aclexplode((SELECT proacl FROM pg_proc WHERE oid =
             'public."DocumentByteExecutionLease_claim"(text,text)'::regprocedure)) acl
+            WHERE acl.grantee=0 AND acl.privilege_type='EXECUTE'),
+          EXISTS (SELECT 1 FROM aclexplode((SELECT proacl FROM pg_proc WHERE oid =
+            'public."DocumentByteProviderAttempt_start"(text,text)'::regprocedure)) acl
             WHERE acl.grantee=0 AND acl.privilege_type='EXECUTE');`]),
       'read disposable runtime privileges');
-      assert.equal(privileges, 'f|t|f|t|f');
+      assert.equal(privileges, 'f|t|f|t|f|t|t|f|f');
       requireSuccess(
         run(process.execPath, ['node_modules/typescript/bin/tsc', '-p', 'apps/api/tsconfig.json'], {
           env,
@@ -130,14 +139,15 @@ test(
       );
       assert.match(
         output,
-        /current-authority-real-postgres-composition=verified; protected-worker-skip=verified; cleanup-alias-fence=verified; upload-intent-fence=verified; copy-evidence-digest=changed; post-claim-local-authority=verified/u,
+        /current-authority-real-postgres-composition=verified; protected-worker-skip=verified; cleanup-alias-fence=verified; upload-intent-fence=verified; copy-evidence-digest=changed; post-claim-local-authority=verified; provider-start-marker=verified/u,
       );
       const snapshot = JSON.parse(requireSuccess(docker(['exec', name, 'psql', '-U',
         'postgres', '-d', database, '-tA', '-c', PURGE_RESTORE_SNAPSHOT_SQL]),
-      'capture format-5 disposable restore inventory'));
-      assert.equal(snapshot.format, 5);
+      'capture format-6 disposable restore inventory'));
+      assert.equal(snapshot.format, 6);
       assert.equal(snapshot.tables.DocumentBytePermitCandidateBinding.length, 1);
       assert.equal(snapshot.tables.DocumentByteExecutionLease.length, 1);
+      assert.equal(snapshot.tables.DocumentByteProviderAttempt.length, 1);
     } finally {
       assert.equal(
         requireSuccess(

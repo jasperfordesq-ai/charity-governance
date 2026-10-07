@@ -2179,6 +2179,8 @@ test('standalone runtime-role helpers retain the private VM Compose override', a
       assert.ok(command.includes('-p') && command.includes('charitypilot-bluegreen'));
       const sql = command.at(-1);
       assert.match(sql, /DocumentByteExecutionLease_claim"\(text,text\)/u);
+      assert.match(sql, /DocumentByteProviderAttempt_start"\(text,text\)/u);
+      assert.match(sql, /DocumentByteProviderAttempt/u);
       assert.match(sql, /executable_definer\.proowner = current_user::regrole/u);
       assert.match(sql, /search_path=pg_catalog, public, pg_temp/u);
       assert.match(sql, /acl\.grantee=0 AND acl\.privilege_type='EXECUTE'/u);

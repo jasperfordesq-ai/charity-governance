@@ -19,7 +19,7 @@ group when its migration is introduced.
 - registers-controls: `BoardMember`, `ConflictRecord`, `RiskRecord`, `RiskChangeAudit`, `RiskControlVerification`, `RiskControlVerificationCounter`, `ComplaintRecord`, `ComplaintResolutionEvidence`, `ComplaintRemoval`, `ComplaintHoldEvent`, `ComplaintPurgeAuthorization`, `ComplaintPurgeAuthorizationWithdrawal`, `ComplaintPurgeClaim`, `ComplaintRecoveryPreparation`, `ComplaintRecoveryOutcome`, `ComplaintRecoveryEnforcement`, `ComplaintRecoveryExecution`, `ComplaintHoldRecoveryPreparation`, `ComplaintHoldRecoveryOutcome`, `ComplaintRecoveryCancellation`, `ComplaintPurgeDispositionEvent`, `ComplaintCopyDispositionAuthority`, `ComplaintCopyHoldEvent`, `GovernanceRegisterChangeAudit`, `OrganisationChangeAudit`, `FundraisingRecord`, `AnnualReportReadiness`, `FinancialControlReview`, `Member`
 - calendar-minutes: `Deadline`, `DeadlineChangeAudit`, `DeadlineReminderLog`, `DeadlineReminderAudit`, `GoverningAct`, `Resolution`, `GoverningActVoid`, `MinuteBookChangeAudit`
 - team-billing: `TeamInvite`, `Subscription`, `BillingCheckoutAttempt`, `StripeWebhookEvent`
-- data-requests: `DataLifecycleRequest`, `DataLifecycleStorageLink`, `DataLifecycleStorageLinkWithdrawal`, `DataLifecycleDocumentLink`, `DataLifecycleDocumentLinkWithdrawal`, `DataLifecycleReviewEvent`, `DataLifecycleTargetEvent`, `DataLifecycleResponseEvent`, `DataLifecycleCoverageEvent`, `DataRetentionPolicyRevision`, `DataRetentionPolicyWithdrawal`, `DocumentPurgeAuthorization`, `DocumentPurgeAuthorizationWithdrawal`, `DocumentPurgeClaim`, `DocumentPurgeDispositionEvent`, `DocumentRecoveryPreparation`, `DocumentRecoveryEnforcement`, `DocumentRecoveryExecution`, `DocumentRecoveryOutcome`, `DocumentBytePermitCandidateBinding`, `DocumentByteExecutionLease`, `DocumentCopyDispositionAuthority`, `DocumentCopyHoldEvent`
+- data-requests: `DataLifecycleRequest`, `DataLifecycleStorageLink`, `DataLifecycleStorageLinkWithdrawal`, `DataLifecycleDocumentLink`, `DataLifecycleDocumentLinkWithdrawal`, `DataLifecycleReviewEvent`, `DataLifecycleTargetEvent`, `DataLifecycleResponseEvent`, `DataLifecycleCoverageEvent`, `DataRetentionPolicyRevision`, `DataRetentionPolicyWithdrawal`, `DocumentPurgeAuthorization`, `DocumentPurgeAuthorizationWithdrawal`, `DocumentPurgeClaim`, `DocumentPurgeDispositionEvent`, `DocumentRecoveryPreparation`, `DocumentRecoveryEnforcement`, `DocumentRecoveryExecution`, `DocumentRecoveryOutcome`, `DocumentBytePermitCandidateBinding`, `DocumentByteExecutionLease`, `DocumentByteProviderAttempt`, `DocumentCopyDispositionAuthority`, `DocumentCopyHoldEvent`
 - platform-operators: `PlatformOperator`, `PlatformOperatorRecoveryCode`, `PlatformOperatorSession`, `OperatorActionApproval`
 <!-- MODEL_INVENTORY_END -->
 
@@ -77,8 +77,13 @@ production caller and does not authorize a worker. The later
 capability hash to that candidate. The restricted runtime can consume the
 capability only through an exact SQL claim function; it cannot write the lease
 table. The claim still has no provider-byte caller or independent pre-provider
-head check. Restore snapshot format 5 hashes lease rows, format 4 covers the
-candidate binding without the lease, and format 3 covers the older schema.
+head check. `DocumentByteProviderAttempt` is a separate append-only,
+one-use marker for a committed claimed lease. It records that provider I/O
+was about to start, not whether it reached the provider or removed bytes.
+The runtime can create it only through the exact capability-checked SQL
+function; no production worker calls it yet. Restore snapshot format 6
+hashes this marker, format 5 covers leases without it, format 4 covers the
+candidate binding without a lease, and format 3 covers the older schema.
 Mixed formats refuse reconciliation. None of these rows alone is permission
 to reopen after host loss.
 

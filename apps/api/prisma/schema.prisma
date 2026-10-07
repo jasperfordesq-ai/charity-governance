@@ -513,6 +513,7 @@ model Organisation {
   documentRecoveryEnforcement DocumentRecoveryEnforcement?
   documentBytePermitBindings DocumentBytePermitCandidateBinding[]
   documentByteExecutionLeases DocumentByteExecutionLease[]
+  documentByteProviderAttempts DocumentByteProviderAttempt[]
   complaintHoldRecoveryPreparations ComplaintHoldRecoveryPreparation[]
   id                                      String                      @id @default(cuid())
   name                                    String
@@ -1474,9 +1475,28 @@ model DocumentByteExecutionLease {
   organisation               Organisation @relation(fields: [organisationId], references: [id], onDelete: Restrict)
   candidateBinding           DocumentBytePermitCandidateBinding @relation(fields: [candidateBindingId], references: [id], onDelete: Restrict)
   deletion                   DocumentStorageDeletion @relation(fields: [deletionId, organisationId], references: [id, organisationId], onDelete: Restrict)
+  providerAttempt            DocumentByteProviderAttempt?
 
   @@unique([deletionId, organisationId])
   @@index([organisationId, recordedAt, id])
+}
+
+// One durable provider-started marker per committed lease. It is not an
+// erasure result: any timeout/crash after insertion needs reconciliation.
+model DocumentByteProviderAttempt {
+  id                   String @id
+  leaseId              String @unique
+  organisationId       String
+  deletionId           String @unique
+  decisionEntryDigest  String
+  startedTransactionId BigInt
+  startedAt            DateTime
+  lease                DocumentByteExecutionLease @relation(fields: [leaseId], references: [id], onDelete: Restrict)
+  organisation         Organisation @relation(fields: [organisationId], references: [id], onDelete: Restrict)
+  deletion             DocumentStorageDeletion @relation(fields: [deletionId, organisationId], references: [id, organisationId], onDelete: Restrict)
+
+  @@unique([deletionId, organisationId])
+  @@index([organisationId, startedAt, leaseId])
 }
 
 // Reviewer evidence about an explicitly referenced downstream scope, never a
@@ -1756,6 +1776,7 @@ model DocumentStorageDeletion {
   purgeClaim              DocumentPurgeClaim?
   bytePermitBinding       DocumentBytePermitCandidateBinding?
   byteExecutionLease      DocumentByteExecutionLease?
+  byteProviderAttempt      DocumentByteProviderAttempt?
 
   @@unique([id, organisationId])
   @@index([organisationId])

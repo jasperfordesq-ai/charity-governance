@@ -488,6 +488,8 @@ try {
     assert.equal(result[0].claimed, true);
     const claimed = await tx.documentStorageDeletion.findUniqueOrThrow({ where: { id: 'job' } });
     assert.ok(claimed.claimedAt);
+    await assert.rejects(tx.$queryRaw`SELECT public."DocumentByteProviderAttempt_start"('lease', ${attempt})`,
+      /lease or target is stale/);
     await assert.rejects(tx.$queryRaw`SELECT public."DocumentByteExecutionLease_claim"('lease', ${attempt})`);
     throw new Error('rollback-exact-lease-proof');
   }), /rollback-exact-lease-proof/);
@@ -615,8 +617,49 @@ try {
   await assert.rejects(readClaimedDocumentByteAuthority(prisma,
     { ...request, leaseId: 'lease', oneUseAttemptId: randomUUID() }),
   /changed or cannot be bounded/);
+  assert.equal((await prisma.$queryRaw`SELECT count(*)::integer AS count
+    FROM "DocumentByteProviderAttempt"`)[0].count, 0);
+  await assert.rejects(prisma.$transaction(async tx => {
+    await tx.$executeRaw`SET LOCAL ROLE cp_fixture`;
+    await tx.$executeRaw`INSERT INTO "DocumentByteProviderAttempt"
+      (id,"leaseId","organisationId","deletionId","decisionEntryDigest",
+        "startedTransactionId","startedAt")
+      VALUES ('lease','lease','charity','job',${'1'.repeat(64)},txid_current(),now())`;
+  }), /permission denied/);
+  await assert.rejects(prisma.$transaction(async tx => {
+    await tx.$executeRaw`SET LOCAL ROLE cp_fixture`;
+    await tx.$queryRaw`SELECT public."DocumentByteProviderAttempt_start"('lease', ${randomUUID()})`;
+  }), /capability does not match/);
+  await assert.rejects(prisma.$transaction(async tx => {
+    await tx.$executeRaw`SET LOCAL ROLE cp_fixture`;
+    const result = await tx.$queryRaw`SELECT public."DocumentByteProviderAttempt_start"('lease', ${attempt}) AS started`;
+    assert.equal(result[0].started, true);
+    throw new Error('rollback-provider-start-proof');
+  }), /rollback-provider-start-proof/);
+  assert.equal((await prisma.$queryRaw`SELECT count(*)::integer AS count
+    FROM "DocumentByteProviderAttempt"`)[0].count, 0);
+  await prisma.$transaction(async tx => {
+    await tx.$executeRaw`SET LOCAL ROLE cp_fixture`;
+    const result = await tx.$queryRaw`SELECT public."DocumentByteProviderAttempt_start"('lease', ${attempt}) AS started`;
+    assert.equal(result[0].started, true);
+  });
+  const started = await prisma.documentByteProviderAttempt.findUniqueOrThrow({
+    where: { leaseId: 'lease' },
+  });
+  assert.equal(started.organisationId, 'charity');
+  assert.equal(started.deletionId, 'job');
+  assert.equal(started.decisionEntryDigest, '1'.repeat(64));
+  await assert.rejects(prisma.$transaction(async tx => {
+    await tx.$executeRaw`SET LOCAL ROLE cp_fixture`;
+    await tx.$queryRaw`SELECT public."DocumentByteProviderAttempt_start"('lease', ${attempt})`;
+  }));
+  await assert.rejects(prisma.$executeRaw`UPDATE "DocumentByteProviderAttempt"
+    SET "decisionEntryDigest"=${'2'.repeat(64)} WHERE "leaseId"='lease'`,
+  /append-only/);
+  await assert.rejects(prisma.$executeRaw`DELETE FROM "DocumentByteProviderAttempt"
+    WHERE "leaseId"='lease'`, /append-only/);
   process.stdout.write(
-    'current-authority-real-postgres-composition=verified; protected-worker-skip=verified; cleanup-alias-fence=verified; upload-intent-fence=verified; copy-evidence-digest=changed; post-claim-local-authority=verified\n',
+    'current-authority-real-postgres-composition=verified; protected-worker-skip=verified; cleanup-alias-fence=verified; upload-intent-fence=verified; copy-evidence-digest=changed; post-claim-local-authority=verified; provider-start-marker=verified\n',
   );
 } finally {
   await prisma.$disconnect();

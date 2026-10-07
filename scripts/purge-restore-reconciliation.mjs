@@ -10,6 +10,7 @@ const tables = [
   'DocumentRecoveryEnforcement', 'DocumentRecoveryExecution', 'DocumentRecoveryOutcome',
   'DocumentBytePermitCandidateBinding',
   'DocumentByteExecutionLease',
+  'DocumentByteProviderAttempt',
   'DocumentPurgeClaim', 'DocumentPurgeDispositionEvent',
   'ComplaintResolutionEvidence', 'ComplaintRemoval', 'ComplaintHoldEvent',
   'ComplaintPurgeAuthorization', 'ComplaintPurgeAuthorizationWithdrawal',
@@ -22,8 +23,9 @@ const tables = [
   'DocumentCopyDispositionAuthority', 'ComplaintCopyDispositionAuthority',
   'DocumentCopyHoldEvent', 'ComplaintCopyHoldEvent',
 ];
-const previousTables = tables.filter(name => name !== 'DocumentByteExecutionLease');
-const legacyTables = previousTables.filter(name => name !== 'DocumentBytePermitCandidateBinding');
+const previousTables = tables.filter(name => name !== 'DocumentByteProviderAttempt');
+const legacyTables = previousTables.filter(name => name !== 'DocumentByteExecutionLease');
+const oldestTables = legacyTables.filter(name => name !== 'DocumentBytePermitCandidateBinding');
 const digest = expression => `encode(sha256(convert_to((${expression})::text,'UTF8')),'hex')`;
 const virtualEntries = [];
 virtualEntries.push(`SELECT 'ClaimedPrimaryJobs' AS name, COALESCE(jsonb_agg(jsonb_build_object('id',t.id,'sha256',${digest('to_jsonb(t)')}) ORDER BY t.id),'[]'::jsonb) AS rows
@@ -42,6 +44,7 @@ const virtualNames = ['ClaimedPrimaryJobs', 'ComplaintRecoveryState', 'DocumentR
 export const PURGE_RESTORE_TABLES = Object.freeze([...tables, ...virtualNames]);
 export const PURGE_RESTORE_PREVIOUS_TABLES = Object.freeze([...previousTables, ...virtualNames]);
 export const PURGE_RESTORE_LEGACY_TABLES = Object.freeze([...legacyTables, ...virtualNames]);
+export const PURGE_RESTORE_OLDEST_TABLES = Object.freeze([...oldestTables, ...virtualNames]);
 // Object keys are hashed in PostgreSQL so raw storage paths are not returned.
 // Any claimed local object still present requires quarantine/reconciliation,
 // including a pending deletion; byte changes at the same key do not excuse it.
@@ -88,10 +91,11 @@ function snapshotSql(format, names) {
  'documents',COALESCE((SELECT jsonb_agg(jsonb_build_object('organisationId',"organisationId",'documentId',id) ORDER BY "organisationId",id) FROM "Document"),'[]'::jsonb)
 ) AS snapshot;`;
 }
-export const PURGE_RESTORE_SNAPSHOT_SQL = snapshotSql(5, tables);
-export const PURGE_RESTORE_PREVIOUS_SNAPSHOT_SQL = snapshotSql(4, previousTables);
-export const PURGE_RESTORE_LEGACY_SNAPSHOT_SQL = snapshotSql(3, legacyTables);
-export const PURGE_RESTORE_BINDING_PROBE_SQL = `SELECT CASE WHEN to_regclass('public."DocumentBytePermitCandidateBinding"') IS NULL THEN 'legacy' WHEN to_regclass('public."DocumentByteExecutionLease"') IS NULL THEN 'current' ELSE 'lease' END;`;
+export const PURGE_RESTORE_SNAPSHOT_SQL = snapshotSql(6, tables);
+export const PURGE_RESTORE_PREVIOUS_SNAPSHOT_SQL = snapshotSql(5, previousTables);
+export const PURGE_RESTORE_LEGACY_SNAPSHOT_SQL = snapshotSql(4, legacyTables);
+export const PURGE_RESTORE_OLDEST_SNAPSHOT_SQL = snapshotSql(3, oldestTables);
+export const PURGE_RESTORE_BINDING_PROBE_SQL = `SELECT CASE WHEN to_regclass('public."DocumentBytePermitCandidateBinding"') IS NULL THEN 'oldest' WHEN to_regclass('public."DocumentByteExecutionLease"') IS NULL THEN 'legacy' WHEN to_regclass('public."DocumentByteProviderAttempt"') IS NULL THEN 'lease' ELSE 'attempt' END;`;
 
 function exact(value, keys, label) {
   if (!value || typeof value !== 'object' || Array.isArray(value) ||
@@ -113,12 +117,13 @@ function references(rows, label) {
 }
 function validate(snapshot) {
   exact(snapshot, ['format','capturedAt','tables','claims','documents'], 'snapshot');
-  if (![3, 4, 5].includes(snapshot.format) || typeof snapshot.capturedAt !== 'string' ||
+  if (![3, 4, 5, 6].includes(snapshot.format) || typeof snapshot.capturedAt !== 'string' ||
     !/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/.test(snapshot.capturedAt) ||
     !Number.isFinite(Date.parse(snapshot.capturedAt)) ||
     new Date(snapshot.capturedAt).toISOString() !== snapshot.capturedAt) throw new Error('Invalid purge restore format or time');
-  const tableNames = snapshot.format === 5 ? PURGE_RESTORE_TABLES
-    : snapshot.format === 4 ? PURGE_RESTORE_PREVIOUS_TABLES : PURGE_RESTORE_LEGACY_TABLES;
+  const tableNames = snapshot.format === 6 ? PURGE_RESTORE_TABLES
+    : snapshot.format === 5 ? PURGE_RESTORE_PREVIOUS_TABLES
+      : snapshot.format === 4 ? PURGE_RESTORE_LEGACY_TABLES : PURGE_RESTORE_OLDEST_TABLES;
   exact(snapshot.tables, tableNames, 'table inventory');
   const inventories = new Map();
   for (const table of tableNames) {

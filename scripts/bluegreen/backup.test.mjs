@@ -5,8 +5,9 @@ import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { test } from 'node:test';
-import { PURGE_RESTORE_TABLES, PURGE_RESTORE_LEGACY_TABLES,
+import { PURGE_RESTORE_TABLES, PURGE_RESTORE_PREVIOUS_TABLES, PURGE_RESTORE_OLDEST_TABLES,
   PURGE_RESTORE_SNAPSHOT_SQL, PURGE_RESTORE_PREVIOUS_SNAPSHOT_SQL, PURGE_RESTORE_LEGACY_SNAPSHOT_SQL,
+  PURGE_RESTORE_OLDEST_SNAPSHOT_SQL,
   PURGE_RESTORE_BINDING_PROBE_SQL, PURGE_RESTORE_LOCAL_OBJECTS_SQL } from '../purge-restore-reconciliation.mjs';
 
 const scriptsDir = dirname(fileURLToPath(import.meta.url));
@@ -530,8 +531,8 @@ function makeDrillRecordingRunCommand({
   documentHashStdout,
   failOn = null,
   localKeys = [],
-  schema = () => 'lease',
-  history = () => ({ format: 5, capturedAt: '2026-09-30T10:00:00.000Z',
+  schema = () => 'attempt',
+  history = () => ({ format: 6, capturedAt: '2026-09-30T10:00:00.000Z',
     tables: Object.fromEntries(PURGE_RESTORE_TABLES.map(table => [table, []])), claims: [], documents: [] }),
 }) {
   const calls = [];
@@ -560,7 +561,8 @@ function makeDrillRecordingRunCommand({
     }
     if (command.includes(PURGE_RESTORE_BINDING_PROBE_SQL)) return { stdout: schema(command, calls) };
     if (command.includes(PURGE_RESTORE_SNAPSHOT_SQL) || command.includes(PURGE_RESTORE_PREVIOUS_SNAPSHOT_SQL)
-      || command.includes(PURGE_RESTORE_LEGACY_SNAPSHOT_SQL)) {
+      || command.includes(PURGE_RESTORE_LEGACY_SNAPSHOT_SQL)
+      || command.includes(PURGE_RESTORE_OLDEST_SNAPSHOT_SQL)) {
       return { stdout: JSON.stringify(history(command, calls)) };
     }
     if (command.includes(PURGE_RESTORE_LOCAL_OBJECTS_SQL)) return { stdout: JSON.stringify(localKeys) };
@@ -581,6 +583,7 @@ function assertNeverTouchesLiveDb(calls) {
     if (command.includes('compose') && (command.includes(PURGE_RESTORE_SNAPSHOT_SQL)
       || command.includes(PURGE_RESTORE_PREVIOUS_SNAPSHOT_SQL)
       || command.includes(PURGE_RESTORE_LEGACY_SNAPSHOT_SQL)
+      || command.includes(PURGE_RESTORE_OLDEST_SNAPSHOT_SQL)
       || command.includes(PURGE_RESTORE_BINDING_PROBE_SQL)
       || command.includes(PURGE_RESTORE_LOCAL_OBJECTS_SQL))) {
       assert.ok(command.includes('psql'));
@@ -709,7 +712,7 @@ test('runRestoreDrill refuses stale, unreadable, changed authority or claimed ar
           const live = command.includes('compose');
           if (live) liveReads++;
           if (scenario === 'unreadable' && live) return undefined;
-          const snapshot = { format: 5, capturedAt: '2026-09-30T10:00:00.000Z',
+          const snapshot = { format: 6, capturedAt: '2026-09-30T10:00:00.000Z',
             tables: Object.fromEntries(PURGE_RESTORE_TABLES.map(table => [table, []])), claims: [], documents: [] };
           if ((scenario === 'stale' && live) || (scenario === 'changed' && liveReads === 2)) {
             snapshot.tables.DocumentPurgeDispositionEvent.push({ id: 'later-review', sha256: 'a'.repeat(64) });
@@ -808,21 +811,40 @@ test('runRestoreDrill uses exact legacy inventory before migration and refuses s
     const { plan, documentEntries } = writeFixtureBackup(stateDir);
     const documentHashStdout = documentEntries.map(e => `${e.sha256}\t${e.bytes}\t${e.path}`).join('\n');
     const history = () => ({ format: 3, capturedAt: '2026-09-30T10:00:00.000Z',
-      tables: Object.fromEntries(PURGE_RESTORE_LEGACY_TABLES.map(table => [table, []])),
+      tables: Object.fromEntries(PURGE_RESTORE_OLDEST_TABLES.map(table => [table, []])),
       claims: [], documents: [] });
     const legacy = makeDrillRecordingRunCommand({ documentHashStdout,
-      schema: () => 'legacy', history });
+      schema: () => 'oldest', history });
     const result = await runRestoreDrill({ runCommand: legacy.runCommand, stateDir, plan,
       sleep: async () => {} });
     assert.equal(result.purgeReconciliation.databaseLedgerMatches, true);
-    assert.ok(legacy.calls.some(({ command }) => command.includes(PURGE_RESTORE_LEGACY_SNAPSHOT_SQL)));
+    assert.ok(legacy.calls.some(({ command }) => command.includes(PURGE_RESTORE_OLDEST_SNAPSHOT_SQL)));
     assertNeverTouchesLiveDb(legacy.calls);
     const mismatch = makeDrillRecordingRunCommand({ documentHashStdout,
-      schema: command => command.includes('compose') ? 'current' : 'legacy' });
+      schema: command => command.includes('compose') ? 'lease' : 'oldest' });
     await assert.rejects(() => runRestoreDrill({ runCommand: mismatch.runCommand,
       stateDir, plan, sleep: async () => {} }), /schema versions differ/u);
     assert.equal(teardownCallsOf(mismatch.calls).length, 1);
     assertNeverTouchesLiveDb(mismatch.calls);
+  } finally { rmSync(stateDir, { recursive: true, force: true }); }
+});
+
+test('runRestoreDrill recognizes the previous lease inventory without accepting a schema mix', async () => {
+  const { runRestoreDrill } = await loadBackupModule();
+  const stateDir = makeTempDir('charitypilot-purge-lease-drill-');
+  try {
+    const { plan, documentEntries } = writeFixtureBackup(stateDir);
+    const documentHashStdout = documentEntries.map(e => `${e.sha256}\t${e.bytes}\t${e.path}`).join('\n');
+    const history = () => ({ format: 5, capturedAt: '2026-09-30T10:00:00.000Z',
+      tables: Object.fromEntries(PURGE_RESTORE_PREVIOUS_TABLES.map(table => [table, []])),
+      claims: [], documents: [] });
+    const lease = makeDrillRecordingRunCommand({ documentHashStdout,
+      schema: () => 'lease', history });
+    const result = await runRestoreDrill({ runCommand: lease.runCommand, stateDir, plan,
+      sleep: async () => {} });
+    assert.equal(result.purgeReconciliation.databaseLedgerMatches, true);
+    assert.ok(lease.calls.some(({ command }) => command.includes(PURGE_RESTORE_PREVIOUS_SNAPSHOT_SQL)));
+    assertNeverTouchesLiveDb(lease.calls);
   } finally { rmSync(stateDir, { recursive: true, force: true }); }
 });
 
