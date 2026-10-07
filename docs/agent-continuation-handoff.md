@@ -1,5 +1,20 @@
 # CharityPilot Agent Continuation Handoff
 
+> **7 October verified `3f137c36` private-VM release:** PR #19's
+> title-only Confluence page-adoption fence passed exact PR-head CI/E2E and
+> automated review, then exact merged-master CI `37695270803` and E2E
+> `37695271218`. Guarded green cutover, restricted-runtime/zero-row
+> postflight, both front doors, preservation of all 357 prior VM backup
+> hashes, SHA-matched three-file workstation copy, isolated 155-migration/
+> 68-document restore and repeat serving postflight passed. Blue
+> `a0ab2d0e` is previous. An unrecorded title match now refuses document
+> bytes; a 409 after committed page-create reservation stays UNKNOWN.
+> Private receipt: `.charitypilot-private/release-3f137c36-title-adoption-fence-2026-10-07.md`.
+> No real provider first contact, exact page identity, all-copy/UNKNOWN
+> resolution, independent P05/P08 host-loss, controller/MFA, Member/export/
+> deletion, replay/C1 or Nikita acceptance follows. Older checkpoints below
+> are dated history.
+
 > **7 October verified `a0ab2d0e` private-VM release:** PR #16's immutable
 > local Confluence page-create intent, bounded copy digest and unresolved-
 > page purge fence passed exact merged-master CI `37688978306` and E2E
