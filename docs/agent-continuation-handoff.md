@@ -1,5 +1,18 @@
 # CharityPilot Agent Continuation Handoff
 
+> **7 October 03:34 Dublin guarded document-outcome release:** Exact
+> `f06075dd` hosted CI/E2E succeeded and green now serves the inactive
+> authenticated document primary-claim outcome publication/read path. Blue
+> `aa4d529b` is rollbackable. Postflight proved `cp_runtime`, zero recovery
+> rows/binding, format-3 restore inventory, shared mount and both front
+> doors. All 204 previous backup hashes survived, three new sets were copied
+> and SHA-verified off-VM, and a 144-migration isolated restore passed.
+> This is not byte/copy erasure, live provider custody, host-loss reopening
+> or DPO-05 closure. Worker/all-copy fences, P05/P08, P01-P09/MFA,
+> Member/approved export/deletion, replay/C1 and Nikita review remain open.
+> Private receipt: `.charitypilot-private/release-f06075dd-document-outcome-2026-10-07.md`.
+> Older checkpoints below are dated history.
+
 > **7 October 03:18 Dublin source-only document outcome path:** The worktree
 > adds an inactive committed document claim reader, encrypted independent
 > outcome envelope, separate S3 namespace, reserved journal publication and

@@ -1,5 +1,17 @@
 # CharityPilot Full-Platform Remediation Audit
 
+> **7 October DPO-05 document outcome release:** Exact `f06075dd` hosted
+> CI/E2E and guarded private-VM cutover passed. Green serves inactive,
+> authenticated publication/read code for a committed document primary
+> claim and queued byte job; the operation reservation remains occupied.
+> Restricted runtime, empty recovery tables, format-3 restore inventory,
+> 204 preserved backup hashes, three verified workstation copies and
+> isolated restore passed. This does not prove byte or copy erasure,
+> approved custody or host-loss reopening. Keep DPO-05 open for the
+> storage-worker/all-copy fences and P05/P08 decisions; Member/export,
+> policy/MFA, replay/C1 and Nikita acceptance remain separate open gates.
+> Private receipt: `.charitypilot-private/release-f06075dd-document-outcome-2026-10-07.md`.
+
 > **7 October 03:18 DPO-05 source progress:** An inactive authenticated
 > document primary-claim outcome publication/read path is in the worktree.
 > It records only a committed row claim and queued byte job, retains the
