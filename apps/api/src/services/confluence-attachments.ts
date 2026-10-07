@@ -66,6 +66,8 @@ export type ConfluenceAttachmentVersion = {
   number: number;
   attachmentId: string;
   createdAt: string;
+  /** Bounded provider version message; an upload comment may appear here. */
+  message?: string;
 };
 
 export type UploadAttachmentInput = {
@@ -74,6 +76,8 @@ export type UploadAttachmentInput = {
   /** The MIME type recorded against the attachment, e.g. `application/pdf`. */
   contentType: string;
   bytes: Uint8Array;
+  /** Optional provider version comment; never include personal data or secrets. */
+  comment?: string;
 };
 
 /**
@@ -483,10 +487,15 @@ export async function listAttachmentVersions(
         throw invalidResponse('complete, matching attachment version');
       }
       seenNumbers.add(number);
+      const message = record?.message;
+      if (message !== undefined && (typeof message !== 'string' || message.length > 1024)) {
+        throw invalidResponse('bounded attachment version message');
+      }
       versions.push({
         number,
         attachmentId,
         createdAt: typeof record?.createdAt === 'string' ? record.createdAt : '',
+        ...(typeof message === 'string' ? { message } : {}),
       });
     }
 
@@ -673,12 +682,19 @@ export async function uploadAttachment(
   const id = assertPageId(input.pageId);
   const filename = assertFilename(input.filename);
   const payload = assertUploadableSize(filename, input.bytes);
+  if (input.comment !== undefined && (typeof input.comment !== 'string'
+    || input.comment.length === 0 || input.comment.length > 256
+    || hasControlCharacter(input.comment))) {
+    throw new AppError(400, 'CONFLUENCE_ATTACHMENT_COMMENT_INVALID',
+      'An attachment version comment must be bounded printable text.');
+  }
 
   const formData = new FormData();
   // `Blob` and `FormData` are built in; no dependency is needed to build a
   // multipart body, and the boundary is fetch's to generate — which is why no
   // Content-Type is set here, and why the core refuses one alongside a body.
   formData.append(FILE_FIELD, new Blob([payload], { type: input.contentType }), filename);
+  if (input.comment !== undefined) formData.append('comment', input.comment);
 
   let response;
   try {

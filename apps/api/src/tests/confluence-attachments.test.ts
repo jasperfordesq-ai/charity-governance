@@ -225,6 +225,23 @@ test('uploadAttachment sends the file as multipart and lets fetch own the Conten
   );
 });
 
+test('uploadAttachment carries a bounded version comment in the provider multipart request', async () => {
+  const { client, specs } = harness([ok(v1UploadBody())]);
+  const marker = 'CharityPilot operation 0123456789abcdef sha256 0123456789abcdef';
+  await uploadAttachment(client, uploadInput({ comment: marker }));
+  assert.equal(specs[0]?.formData?.get('comment'), marker);
+  assert.equal(specs[0]?.idempotent, false);
+});
+
+test('uploadAttachment rejects malformed version comments before provider I/O', async () => {
+  for (const comment of ['', 'bad\r\nheader', 'x'.repeat(257), 17]) {
+    const { client, specs } = harness([]);
+    const error = await rejectsWith(() => uploadAttachment(client, uploadInput({ comment })));
+    assert.equal(error.code, 'CONFLUENCE_ATTACHMENT_COMMENT_INVALID');
+    assert.equal(specs.length, 0);
+  }
+});
+
 test('listAttachments reads the v2 endpoint and parses its flat fields', async () => {
   const { client, specs } = harness([ok(v2ListBody())]);
 
@@ -333,6 +350,24 @@ test('listAttachmentVersions follows the entire v2 cursor and binds each version
   assert.equal(specs[0]?.api, 'v2');
   assert.equal(specs[0]?.idempotent, true);
   assert.equal(specs[1]?.query?.cursor, 'SECOND');
+});
+
+test('attachment version inventory retains a bounded provider message for operation correlation', async () => {
+  const marker = 'CharityPilot operation 0123456789abcdef sha256 0123456789abcdef';
+  const { client } = harness([ok({
+    results: [{ number: 3, attachment: { id: 'att789' }, message: marker }], _links: {},
+  })]);
+  assert.deepEqual(await listAttachmentVersions(client, 'att789'), [
+    { number: 3, attachmentId: 'att789', createdAt: '', message: marker },
+  ]);
+
+  for (const message of [17, 'x'.repeat(1025)]) {
+    const invalid = harness([ok({
+      results: [{ number: 3, attachment: { id: 'att789' }, message }], _links: {},
+    })]);
+    const error = await rejectsWith(() => listAttachmentVersions(invalid.client, 'att789'));
+    assert.equal(error.code, 'CONFLUENCE_RESPONSE_INVALID');
+  }
 });
 
 test('attachment version inventory follows the Link header when the body omits next', async () => {
