@@ -115,6 +115,13 @@ try {
       updatedAt: old,
     },
   });
+  // The existing orphan-cleanup route may remove a no-page row while no
+  // recovery enforcement or claim exists. The new fence must preserve it.
+  await prisma.documentPublication.create({ data: {
+    id: 'ordinary-no-page-orphan', organisationId: 'charity',
+    documentId: 'missing-document', provider: 'confluence',
+  } });
+  await prisma.documentPublication.delete({ where: { id: 'ordinary-no-page-orphan' } });
   await prisma.$transaction(async (tx) => {
     // This fixture needs an already-expired recovery window. Backdate only
     // its synthetic removed row, then restore the trigger before testing the
@@ -130,7 +137,7 @@ try {
   const plan = {
     PRIMARY: { disposition: 'DISPOSE', evidenceRef: 'TEST-COPY-001' },
     VERSIONS: { disposition: 'RETAIN_APPROVED', evidenceRef: 'TEST-COPY-001' },
-    CONFLUENCE: { disposition: 'NOT_APPLICABLE', evidenceRef: 'TEST-COPY-001' },
+    CONFLUENCE: { disposition: 'RETAIN_APPROVED', evidenceRef: 'TEST-COPY-001' },
     EXPORTS: { disposition: 'RETAIN_APPROVED', evidenceRef: 'TEST-COPY-001' },
     AUDIT: { disposition: 'RETAIN_APPROVED', evidenceRef: 'TEST-COPY-001' },
     BACKUPS: { disposition: 'RETAIN_APPROVED', evidenceRef: 'TEST-COPY-001' },
@@ -192,6 +199,90 @@ try {
       writerEpoch: 1,
     },
   });
+  await assert.rejects(prisma.$transaction(async (tx) => {
+    await tx.documentPublication.create({
+      data: { id: 'mirror-delete-attempt', organisationId: 'charity',
+        documentId: 'doc', provider: 'confluence' },
+    });
+    await tx.documentPublication.delete({ where: { id: 'mirror-delete-attempt' } });
+  }), /publication evidence cannot be deleted/);
+  await assert.rejects(prisma.$transaction(async (tx) => {
+    await tx.documentPublication.create({
+      data: { id: 'mirror-redirect-attempt', organisationId: 'charity',
+        documentId: 'doc', provider: 'confluence' },
+    });
+    await tx.documentPublication.update({ where: { id: 'mirror-redirect-attempt' },
+      data: { documentId: 'different-document' } });
+  }), /publication identity cannot be changed/);
+  assert.equal(await prisma.documentPublication.count(), 0);
+  // A publication row exists before remote I/O. Even a PENDING row may be a
+  // timed-out page/attachment write, so the exact primary claim must refuse
+  // it. The rejected transaction rolls back the synthetic mirror and
+  // execution, leaving the normal committed-claim proof below untouched.
+  await assert.rejects(prisma.$transaction(async (tx) => {
+    await tx.documentPublication.create({
+      data: { id: 'mirror-before-claim', organisationId: 'charity',
+        documentId: 'doc', provider: 'confluence' },
+    });
+    await tx.documentRecoveryExecution.create({
+      data: { id: 'mirror-test-execution', preparationId: 'preparation',
+        writerId: 'host', generation: 1, entryDigest: 'c'.repeat(64),
+        envelopeDigest: 'd'.repeat(64), controlRevision: 'revision' },
+    });
+    await tx.documentPurgeClaim.create({
+      data: { id: 'mirror-test-claim', organisationId: 'charity',
+        authorizationId: 'auth', documentId: 'doc', deletionId: 'mirror-test-job',
+        actorUserId: 'owner' },
+    });
+  }), /reconciliation of unresolved publication/);
+  assert.equal(await prisma.documentPublication.count(), 0);
+  assert.equal(await prisma.documentRecoveryExecution.count(), 0);
+  // A stable, named remote copy can be retained under an explicit Owner
+  // disposition. The separate Confluence erasure path is after local removal.
+  await prisma.documentPublication.create({
+    data: { id: 'retained-mirror', organisationId: 'charity',
+      documentId: 'doc', provider: 'confluence', state: 'PROCESSED',
+      cloudId: 'synthetic-cloud', spaceId: 'synthetic-space', pageId: 'synthetic-page',
+      pageTitle: 'Synthetic proof page', publishedAt: new Date(),
+      processedAt: new Date(), nextAttemptAt: null },
+  });
+  const noRetainAuthorization = await prisma.documentPurgeAuthorization.create({ data: {
+    id: 'auth-no-retain', organisationId: 'charity', documentId: 'doc',
+    documentRevision: doc.updatedAt, policyId: 'policy', actorUserId: 'owner',
+    evidenceRef: 'TEST-PURGE-NO-RETAIN', reason: 'Synthetic refused copy plan',
+    storagePath: doc.fileUrl, provider: 'local', sha256: doc.recoverySha256,
+    fileSize: doc.fileSize, recoveryUntil: doc.recoveryUntil,
+    dispositionPlan: { ...plan, CONFLUENCE: {
+      disposition: 'NOT_APPLICABLE', evidenceRef: 'TEST-COPY-001' } },
+  } });
+  const noRetainFacts = prepareDocumentRecoveryFacts({
+    format: 1, action: 'DOCUMENT_PURGE_PREPARATION',
+    installationId: 'synthetic-install', organisationId: 'charity',
+    operationId: 'operation-no-retain', writerEpoch: 1, actorUserId: 'owner',
+    preparedAt: new Date().toISOString(), sourceRevision: 'b'.repeat(40),
+    document: pick(doc, documentKeys),
+    authorization: pick(noRetainAuthorization, authorizationKeys),
+    policy: pick(policy, policyKeys), removalPolicy: pick(policy, policyKeys),
+    removalPolicyWithdrawal: null,
+  });
+  await prisma.documentRecoveryPreparation.create({ data: {
+    id: 'preparation-no-retain', organisationId: 'charity',
+    installationId: 'synthetic-install', operationId: 'operation-no-retain',
+    writerEpoch: 1, authorizationId: 'auth-no-retain', actorUserId: 'owner',
+    facts: noRetainFacts.body, factsDigest: noRetainFacts.digest,
+  } });
+  await assert.rejects(prisma.$transaction(async (tx) => {
+    await tx.documentRecoveryExecution.create({ data: {
+      id: 'execution-no-retain', preparationId: 'preparation-no-retain',
+      writerId: 'host', generation: 1, entryDigest: 'c'.repeat(64),
+      envelopeDigest: 'd'.repeat(64), controlRevision: 'revision',
+    } });
+    await tx.documentPurgeClaim.create({ data: {
+      id: 'claim-no-retain', organisationId: 'charity',
+      authorizationId: 'auth-no-retain', documentId: 'doc',
+      deletionId: 'job-no-retain', actorUserId: 'owner',
+    } });
+  }), /approved retention of identified external copy/);
   await prisma.$transaction(async (tx) => {
     await tx.documentRecoveryExecution.create({
       data: {
@@ -218,6 +309,17 @@ try {
       data: { id: 'outcome', preparationId: 'preparation', claimId: 'claim' },
     });
   });
+  await assert.rejects(prisma.documentPublication.create({
+    data: { id: 'mirror-after-claim', organisationId: 'charity',
+      documentId: 'doc', provider: 'confluence' },
+  }), /fenced by primary purge/);
+  await assert.rejects(prisma.documentPublication.update({
+    where: { id: 'retained-mirror' }, data: { pageTitle: 'Unexpected republish' },
+  }), /fenced by primary purge/);
+  await prisma.documentPublication.update({ where: { id: 'retained-mirror' },
+    data: { state: 'RETIRED', retiredAt: new Date(), nextAttemptAt: null },
+  });
+  assert.equal(await prisma.documentPublication.count(), 1);
   const request = {
     installationId: 'synthetic-install',
     organisationId: 'charity',
