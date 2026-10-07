@@ -443,9 +443,14 @@ export async function listAttachments(
 export async function listAttachmentVersions(
   client: ConfluenceClient,
   attachmentId: string,
+  maxVersions = LIST_PAGE_SIZE * MAX_LIST_PAGES,
 ): Promise<ConfluenceAttachmentVersion[]> {
   if (typeof attachmentId !== 'string' || !ID_PATTERN.test(attachmentId)) {
     throw new AppError(400, 'CONFLUENCE_ATTACHMENT_ID_INVALID', 'A Confluence attachment id must be a plain identifier.');
+  }
+  if (!Number.isSafeInteger(maxVersions) || maxVersions <= 0
+    || maxVersions > LIST_PAGE_SIZE * MAX_LIST_PAGES) {
+    throw new AppError(400, 'CONFLUENCE_ATTACHMENT_VERSION_LIMIT_INVALID', 'A bounded attachment version inventory requires a valid limit.');
   }
 
   const versions: ConfluenceAttachmentVersion[] = [];
@@ -454,7 +459,7 @@ export async function listAttachmentVersions(
   let cursor: string | undefined;
 
   for (let page = 0; page < MAX_LIST_PAGES; page += 1) {
-    const query: Record<string, string> = { limit: String(LIST_PAGE_SIZE) };
+    const query: Record<string, string> = { limit: String(Math.min(LIST_PAGE_SIZE, maxVersions - versions.length)) };
     if (cursor !== undefined) query.cursor = cursor;
     const response = await client.request({
       method: 'GET',
@@ -467,6 +472,10 @@ export async function listAttachmentVersions(
     if (results === undefined) throw invalidResponse('attachment version list');
 
     for (const result of results) {
+      if (versions.length >= maxVersions) {
+        throw new AppError(502, 'CONFLUENCE_ATTACHMENT_VERSION_LIST_UNBOUNDED',
+          'Confluence returned more attachment versions than the approved observation limit.');
+      }
       const record = asObject(result);
       const number = readVersionNumber(record?.number);
       const observedId = readId(asObject(record?.attachment)?.id);
@@ -485,6 +494,10 @@ export async function listAttachmentVersions(
     if (nextCursor === undefined) {
       if (versions.length === 0) throw invalidResponse('attachment version history');
       return versions;
+    }
+    if (versions.length >= maxVersions) {
+      throw new AppError(502, 'CONFLUENCE_ATTACHMENT_VERSION_LIST_UNBOUNDED',
+        'Confluence has more attachment versions than the approved observation limit.');
     }
     if (seenCursors.has(nextCursor)) {
       throw invalidResponse('non-repeating attachment version cursor');
