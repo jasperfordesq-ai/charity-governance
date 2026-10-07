@@ -1,5 +1,29 @@
 # CharityPilot Full-Platform Remediation Audit
 
+> **7 October DPO-05 guarded worker claim release:** Exact `4adf8aa9`
+> hosted CI/E2E and guarded private-VM release passed. Green serves the
+> SQL claim exclusion for purge jobs under active document enforcement;
+> the live trigger remains the activation race guard. Restricted runtime,
+> empty enforcement/recovery tables, both front doors, 219 preserved prior
+> backup hashes, two copied/SHA-verified new sets and a 145-migration
+> isolated restore passed. No independent byte permit, all-copy writer
+> fence, P05/P08 custody or host-loss reopening exists. Keep binding
+> inactive and DPO-05 open, with policy, Member/export/deletion,
+> replay/C1 and Nikita acceptance as separate gates. Private receipt:
+> `.charitypilot-private/release-4adf8aa9-worker-claim-2026-10-07.md`.
+> The source-only note below is dated history.
+
+
+> **7 October DPO-05 worker claim source candidate:** The SQL cleanup
+> claimant excludes purge-claim jobs under active document recovery
+> enforcement, preventing one intentionally blocked job from rolling back
+> ordinary jobs in a mixed batch. The live database trigger still fences
+> activation races. API build, 29 focused worker/eraser tests and the
+> dedicated real-PostgreSQL trigger test pass locally. No worker byte
+> permit or all-copy control exists; source `4adf8aa9` is committed/pushed
+> but not yet hosted-tested or deployed. Keep enforcement inactive and DPO-05 open.
+
+
 > **7 October DPO-05 byte-fence live release:** Exact `b0cff53a` hosted
 > CI/E2E and guarded private-VM deployment passed. Blue serves the migration;
 > live SQL proves its trigger and zero recovery/enforcement rows. Restricted

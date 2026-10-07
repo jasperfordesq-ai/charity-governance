@@ -1,5 +1,33 @@
 # CharityPilot Agent Continuation Handoff
 
+> **7 October guarded worker claim release:** Exact `4adf8aa9` hosted
+> CI/E2E passed and green serves the private VM. The production SQL worker
+> skips document purge jobs under active recovery enforcement, so an
+> intentionally blocked job does not roll back ordinary cleanup in the
+> same batch; the database trigger remains the race guard. Live postflight
+> proved `cp_runtime`, empty enforcement/recovery tables, format-3 inventory,
+> shared mount and loopback/Tailscale health/login. All 219 prior backup
+> hashes survived, two new sets were copied/SHA-verified off-VM, and a
+> 145-migration isolated restore passed. Blue `b0cff53a` is rollbackable.
+> This is not a verified byte-execution permit. Keep enforcement inactive;
+> all-copy, P05/P08 custody, host-loss, policy, role/export, replay/C1 and
+> Nikita review gates remain open. Private receipt:
+> `.charitypilot-private/release-4adf8aa9-worker-claim-2026-10-07.md`.
+> The source-only note below is dated history.
+
+
+> **7 October worker claim source candidate:** The production SQL claimant
+> now omits a `DocumentPurgeClaim` deletion job when that organisation has
+> active `DocumentRecoveryEnforcement`, allowing ordinary cleanup in the
+> same batch to continue. The byte-fence trigger remains the final
+> activation/claim race guard. API build, 29 focused worker/eraser tests and
+> the dedicated real-PostgreSQL trigger test pass locally. This source is
+> committed/pushed as `4adf8aa9`, but not yet hosted-tested or deployed and does
+> not introduce a verified byte-execution permit. Inspect `git status` and
+> private `RESUME-HERE.md` before advancing. The live VM still serves
+> `b0cff53a`; the release note below remains authoritative.
+
+
 > **7 October guarded byte-fence release:** Exact `b0cff53a` hosted CI/E2E
 > passed and blue now serves the private VM. Live postflight proved the
 > `DocumentRecoveryByteFence` migration/trigger, restricted `cp_runtime`,
