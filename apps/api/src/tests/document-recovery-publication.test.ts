@@ -245,6 +245,7 @@ async function readyBytePermitPublisher() {
     documentPurgeDispositionEvent: { findMany: async () => [] },
     documentPublication: { findMany: async () => [] },
     documentUploadIntent: { findMany: async () => [] },
+    documentPublicationUploadIntent: { findMany: async () => [] },
     document: { count: async () => 0 },
     documentStandardLink: { count: async () => 0 },
     confluenceReference: { count: async () => 0 },
