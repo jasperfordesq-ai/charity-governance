@@ -382,6 +382,20 @@ test('getPageStorage fails closed on absent, converted or mismatched body and pa
   assert.equal(await getPageStorage(harness([throwing(upstreamNotFound())]).client, PAGE_ID), null);
 });
 
+test('getPageStorage distinguishes root pages, numeric parent ids and malformed parents', async () => {
+  const body = { storage: { representation: 'storage', value: '<p>x</p>' } };
+  const missing = await getPageStorage(harness([ok(pageBody({ body }))]).client, PAGE_ID);
+  const explicitNull = await getPageStorage(harness([ok(pageBody({ body, parentId: null }))]).client, PAGE_ID);
+  const numeric = await getPageStorage(harness([ok(pageBody({ body, parentId: 456 }))]).client, PAGE_ID);
+  assert.equal(missing?.parentId, null);
+  assert.equal(explicitNull?.parentId, null);
+  assert.equal(numeric?.parentId, '456');
+  const invalid = await rejectsWith(() => getPageStorage(
+    harness([ok(pageBody({ body, parentId: {} }))]).client, PAGE_ID,
+  ));
+  assert.equal(invalid.code, 'CONFLUENCE_RESPONSE_INVALID');
+});
+
 test('getPage does not swallow anything but a 404', async () => {
   const { client } = harness([throwing(upstreamReconnectRequired())]);
 
