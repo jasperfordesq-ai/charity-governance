@@ -1,5 +1,16 @@
 # CharityPilot Full-Platform Remediation Audit
 
+> **7 October DPO-05 inert-observer release:** Exact `c4e5040d` passed
+> merged-master CI/E2E, guarded blue private-VM cutover, restricted-runtime
+> and zero-row postflight, both front doors, all 348 older backup hashes,
+> three SHA-matched workstation copies and isolated 153-migration restore.
+> The observer can repeat current Confluence attachment-version bytes around
+> metadata checks but has no production caller, provider use, outbound
+> operation identity, all-copy proof or retry/erasure authority. DPO-05,
+> independent P05/P08, controller, role-specific, historical, test-site and
+> Nikita acceptance gates remain OPEN. See private exact receipt. Earlier
+> source/release checkpoints below are dated history.
+
 > **7 October DPO-05 verified inert-reader release:** Exact `9f495a15`
 > passed merged-master CI/E2E, guarded green private-VM cutover,
 > restricted-runtime and zero-row postflight, both front doors, 345

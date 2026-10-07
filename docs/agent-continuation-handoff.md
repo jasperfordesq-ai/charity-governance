@@ -1,5 +1,19 @@
 # CharityPilot Agent Continuation Handoff
 
+> **7 October verified `c4e5040d` private-VM release:** PR #12's bounded
+> repeat Confluence attachment-version observation passed exact PR and
+> merged-master CI/E2E (240 browser tests on merged master). Guarded blue
+> cutover, restricted runtime/zero protected and publication rows, both
+> front doors, preservation of all 348 prior VM backup hashes, three
+> SHA-matched workstation files and isolated 153-migration/68-document
+> restore with repeat serving postflight passed. The observer remains inert:
+> no production caller, real provider use or operation binding. Private
+> receipt: `.charitypilot-private/release-c4e5040d-confluence-repeat-observation-2026-10-07.md`.
+> DPO-05, all-copy/UNKNOWN outcome, independent P05/P08 host-loss,
+> controller/MFA, Member/export/deletion, replay/C1, disposable test-site
+> and Nikita acceptance remain OPEN. Older release checkpoints below are
+> dated history.
+
 > **7 October verified `9f495a15` private-VM release:** Exact merged-master
 > CI `37658637396` and E2E `37658637505` passed. Guarded green cutover,
 > corrected serving postflight, restricted runtime and zero protected
