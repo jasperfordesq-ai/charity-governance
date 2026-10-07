@@ -1,5 +1,17 @@
 # CharityPilot Agent Continuation Handoff
 
+> **7 October ~11:49 Dublin live post-claim observation release:** Exact
+> `00299a598cbeabe096401d6d4c3245f4e10781c9` passed hosted CI
+> `37607966539` and E2E `37607966538` (240 passed), guarded blue cutover,
+> restricted runtime/zero protected rows, 300 unchanged prior backup
+> hashes, six new SHA-verified workstation copies and isolated 150-migration
+> restore with 68 documents. Green `1fae37fc` is previous. The local
+> consumed-lease reader is non-authorizing and has no production caller.
+> DPO-05, all-copy, P05/P08 host-loss, P01–P09/MFA, Member/export/deletion,
+> replay/C1, test-site connector and Nikita acceptance remain open. Exact
+> private receipt: `.charitypilot-private/release-00299a59-postclaim-local-authority-2026-10-07.md`.
+> The previous release checkpoint below is dated history.
+
 > **7 October ~11:12 Dublin live SQL claim release:** Green
 > `1fae37fc343bedeb48ded1661b67f309e3dbdd1f` serves after repaired
 > hosted CI `37604105082` and E2E `37604104862` (240 passed), guarded
