@@ -48,12 +48,19 @@ const entrySchema = z.object({ format: z.literal(1), installationId: identity, o
 }).strict();
 type Entry = z.infer<typeof entrySchema>;
 type Input = z.infer<typeof inputSchema>;
-const predecessorKind = (kind: Entry['kind']) => {
+const predecessorKind = (kind: Entry['kind']): Entry['kind'] | undefined => {
   if (kind === 'COMPLAINT_OUTCOME_V1' || kind === 'COMPLAINT_CANCELLATION_V1') return 'COMPLAINT_PREPARATION_V1';
   if (kind === 'COMPLAINT_HOLD_OUTCOME_V1' || kind === 'COMPLAINT_HOLD_CANCELLATION_V1') return 'COMPLAINT_HOLD_PREPARATION_V1';
   if (kind === 'DOCUMENT_OUTCOME_V1') return 'DOCUMENT_PREPARATION_V1';
   if (kind === 'DOCUMENT_BYTE_PERMIT_V1') return 'DOCUMENT_OUTCOME_V1';
   return undefined;
+};
+const isAncestorKind = (ancestor: Entry['kind'], kind: Entry['kind']) => {
+  for (let predecessor = predecessorKind(kind); predecessor !== undefined;
+    predecessor = predecessorKind(predecessor)) {
+    if (predecessor === ancestor) return true;
+  }
+  return false;
 };
 const hash = (value: string) => createHash('sha256').update(value, 'utf8').digest('hex');
 const unsigned = (entry: Omit<Entry, 'digest'>) => JSON.stringify({ format: entry.format,
@@ -244,8 +251,8 @@ export class RecoveryAuthorityJournal {
 
   private prior(rows: Entry[], input: Input) {
     const previous = rows.find(row => row.operationId === input.operationId && row.kind === input.kind);
-    if (!previous && predecessorKind(input.kind) === undefined
-      && rows.some(row => row.operationId === input.operationId)) {
+    if (rows.some(row => row.operationId === input.operationId && row.kind !== input.kind
+      && !isAncestorKind(row.kind, input.kind) && !isAncestorKind(input.kind, row.kind))) {
       throw new Error('Recovery operation identity was already used for different facts.');
     }
     if (previous && (previous.kind !== input.kind || previous.factsDigest !== input.factsDigest ||
