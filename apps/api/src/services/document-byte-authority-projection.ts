@@ -13,6 +13,16 @@ const claimedRequestSchema = requestSchema.extend({
   oneUseAttemptId: z.string().regex(/^[a-f0-9]{8}-[a-f0-9]{4}-4[a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}$/),
 }).strict();
 type ClaimedRequest = z.infer<typeof claimedRequestSchema>;
+type ClaimedLeaseObservation = {
+  decisionEntryDigest: string; decisionEnvelopeDigest: string;
+  decisionBodyDigest: string; providerInventoryDigest: string;
+  candidateEntryDigest: string; candidateEnvelopeDigest: string;
+  outcomeEntryDigest: string; provider: string; storagePath: string;
+  objectSha256: string; fileSize: number;
+};
+type LocalObservation = { digest: string; localCopyObservationDigest: string;
+  localHoldObservationDigest: string; actionAuthorized: false;
+  claimedLease?: ClaimedLeaseObservation };
 
 function canonical(value: unknown): string {
   if (value === null || typeof value === 'boolean' || typeof value === 'string') return JSON.stringify(value);
@@ -48,8 +58,7 @@ export async function readCurrentDocumentByteAuthority(prisma: PrismaClient, raw
  * in this serializable transaction. An exception rolls back its writes. */
 export async function withCurrentDocumentByteAuthorityTransaction<T>(prisma: PrismaClient,
   raw: unknown, callback: (tx: Prisma.TransactionClient,
-    result: { digest: string; localCopyObservationDigest: string;
-      localHoldObservationDigest: string; actionAuthorized: false }) => Promise<T>) {
+    result: LocalObservation) => Promise<T>) {
   const request: Request = requestSchema.parse(raw);
   return withDocumentByteAuthorityTransaction(prisma, request, null, callback);
 }
@@ -63,14 +72,16 @@ export async function readClaimedDocumentByteAuthority(prisma: PrismaClient, raw
   const request = requestSchema.parse({ installationId: claimed.installationId,
     organisationId: claimed.organisationId, operationId: claimed.operationId });
   return withDocumentByteAuthorityTransaction(prisma, request, claimed,
-    async (_tx, result) => result);
+    async (_tx, result) => {
+      if (!result.claimedLease) throw new Error('Document byte lease observation is unavailable');
+      return { ...result, claimedLease: result.claimedLease };
+    });
 }
 
 async function withDocumentByteAuthorityTransaction<T>(prisma: PrismaClient,
   request: Request, claimed: ClaimedRequest | null,
   callback: (tx: Prisma.TransactionClient,
-    result: { digest: string; localCopyObservationDigest: string;
-      localHoldObservationDigest: string; actionAuthorized: false }) => Promise<T>) {
+    result: LocalObservation) => Promise<T>) {
   return prisma.$transaction(async tx => {
     const locked = await tx.$queryRaw<Array<{ id: string }>>`
       SELECT id FROM "Organisation" WHERE id=${request.organisationId} FOR UPDATE`;
@@ -222,7 +233,20 @@ async function withDocumentByteAuthorityTransaction<T>(prisma: PrismaClient,
       || lease?.localHoldObservationDigest !== localHoldObservationDigest)) {
       throw new Error('Document byte lease copy or hold authority changed');
     }
+    const claimedLease: ClaimedLeaseObservation | undefined = claimed && lease ? {
+      decisionEntryDigest: lease.decisionEntryDigest,
+      decisionEnvelopeDigest: lease.decisionEnvelopeDigest,
+      decisionBodyDigest: lease.decisionBodyDigest,
+      providerInventoryDigest: lease.providerInventoryDigest,
+      candidateEntryDigest: lease.candidateBinding.permitEntryDigest,
+      candidateEnvelopeDigest: lease.candidateBinding.permitEnvelopeDigest,
+      outcomeEntryDigest: lease.candidateBinding.outcomeEntryDigest,
+      provider: lease.candidateBinding.provider,
+      storagePath: lease.candidateBinding.storagePath,
+      objectSha256: lease.candidateBinding.objectSha256,
+      fileSize: lease.candidateBinding.fileSize,
+    } : undefined;
     return callback(tx, { digest, localCopyObservationDigest,
-      localHoldObservationDigest, actionAuthorized: false as const });
+      localHoldObservationDigest, claimedLease, actionAuthorized: false as const });
   }, { isolationLevel: 'Serializable', timeout: 30000 });
 }

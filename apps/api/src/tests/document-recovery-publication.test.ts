@@ -22,6 +22,7 @@ import { prepareDocumentByteExecutionDecisionFacts } from '../services/document-
 import { openDocumentByteExecutionDecision, preserveDocumentByteExecutionDecision,
   readVerifiedDocumentByteExecutionDecision } from '../services/document-byte-execution-decision-envelope.js';
 import { readPublishedDocumentByteExecutionDecision } from '../services/published-document-byte-execution-decision.js';
+import { readMatchedClaimedDocumentByteDecision } from '../services/matched-claimed-document-byte-decision.js';
 import { bindVerifiedDocumentBytePermitCandidate, compareDocumentBytePermitAuthority,
   publishVerifiedDocumentBytePermitCandidate,
   readPublishedDocumentBytePermit } from '../services/published-document-byte-permit.js';
@@ -310,11 +311,16 @@ test('verified document byte candidate publisher binds the exact outcome and sta
 });
 
 test('fourth-stage document byte decision stays distinct, encrypted, immutable and non-executable', async () => {
-  const { f, prisma } = await readyBytePermitPublisher();
+  const { f, prisma, state } = await readyBytePermitPublisher();
   await publishVerifiedDocumentBytePermitCandidate(prisma,
     f.journal, f.store, f.context, f.keys, f.store);
   const candidate = await readPublishedDocumentBytePermit(f.journal, f.store,
     f.context, f.keys, f.store);
+  await bindVerifiedDocumentBytePermitCandidate(prisma,
+    f.journal, f.store, f.context, f.keys, f.store);
+  const localBeforeClaim = await readCurrentDocumentByteAuthority(prisma, {
+    installationId: f.context.installationId, organisationId: f.context.organisationId,
+    operationId: f.context.operationId });
   const candidateFacts = JSON.parse(candidate.body);
   const control = await f.store.readControl();
   const decision = prepareDocumentByteExecutionDecisionFacts({ format: 1,
@@ -331,8 +337,10 @@ test('fourth-stage document byte decision stays distinct, encrypted, immutable a
     authorizationId: candidateFacts.authorizationId, documentId: candidateFacts.documentId,
     actorUserId: candidateFacts.actorUserId, provider: candidateFacts.provider,
     storagePath: candidateFacts.storagePath, objectSha256: candidateFacts.objectSha256,
-    fileSize: candidateFacts.fileSize, copyDispositionDigest: 'a'.repeat(64),
-    holdStateDigest: 'b'.repeat(64), providerInventoryDigest: 'c'.repeat(64),
+    fileSize: candidateFacts.fileSize,
+    copyDispositionDigest: localBeforeClaim.localCopyObservationDigest,
+    holdStateDigest: localBeforeClaim.localHoldObservationDigest,
+    providerInventoryDigest: 'c'.repeat(64),
     decisionEvidenceRef: 'SYNTHETIC-DECISION-001',
     oneUseAttemptId: '11111111-1111-4111-8111-111111111111',
     issuedAt: '2026-10-07T08:00:00.000Z' });
@@ -390,6 +398,32 @@ test('fourth-stage document byte decision stays distinct, encrypted, immutable a
   assert.equal(verified.actionAuthorized, false);
   assert.equal((await f.store.readControl()).activeOperation?.operationId, f.context.operationId);
   assert.equal((await publish()).replayed, true);
+  const claimedAt = new Date('2026-10-07T08:03:00.000Z');
+  state.claimedAt = claimedAt;
+  state.lease = { id: 'lease', organisationId: f.context.organisationId,
+    deletionId: candidateFacts.deletionId, candidateBindingId: 'binding',
+    state: 'CLAIMED', claimedAt, insertTransactionId: 123n, claimTransactionId: 123n,
+    attemptHash: createHash('sha256').update(JSON.parse(decision.body).oneUseAttemptId).digest('hex'),
+    decisionEntryDigest: verified.entryDigest, decisionEnvelopeDigest: verified.envelopeDigest,
+    decisionBodyDigest: createHash('sha256').update(decision.body).digest('hex'),
+    localCopyObservationDigest: localBeforeClaim.localCopyObservationDigest,
+    localHoldObservationDigest: localBeforeClaim.localHoldObservationDigest,
+    providerInventoryDigest: 'c'.repeat(64), candidateBinding: state.candidateBinding };
+  const matched = () => readMatchedClaimedDocumentByteDecision(prisma, f.journal,
+    f.store, f.context, f.keys, f.store, 'lease', JSON.parse(decision.body).oneUseAttemptId);
+  assert.equal((await matched()).actionAuthorized, false);
+  state.lease.decisionBodyDigest = '0'.repeat(64);
+  await assert.rejects(matched(), /differs from current independent decision/);
+  state.lease.decisionBodyDigest = createHash('sha256').update(decision.body).digest('hex');
+  state.lease.providerInventoryDigest = '0'.repeat(64);
+  await assert.rejects(matched(), /differs from current independent decision/);
+  state.lease.providerInventoryDigest = 'c'.repeat(64);
+  state.copyHolds.push({ id: 'later-hold', held: true });
+  await assert.rejects(matched(), /copy or hold authority changed/);
+  state.copyHolds.length = 0;
+  await assert.rejects(readMatchedClaimedDocumentByteDecision(prisma, f.journal,
+    f.store, f.context, f.keys, f.store, 'lease',
+    '22222222-2222-4222-8222-222222222222'), /attempt differs/);
   const candidateKey = [...f.objects.keys()].find(key => key.startsWith('document-byte-permits/'));
   assert.ok(candidateKey);
   const candidateObject = f.objects.get(candidateKey)!;
@@ -399,9 +433,13 @@ test('fourth-stage document byte decision stays distinct, encrypted, immutable a
   f.objects.set(candidateKey, candidateObject);
   const decisionKey = [...f.objects.keys()].find(key => key.startsWith('document-byte-execution-decisions/'));
   assert.ok(decisionKey);
+  const decisionObject = f.objects.get(decisionKey)!;
   f.objects.delete(decisionKey);
   await assert.rejects(readPublishedDocumentByteExecutionDecision(f.journal,
     f.store, f.context, f.keys, f.store), /unresolved/);
+  f.objects.set(decisionKey, decisionObject);
+  f.objects.delete(f.headKey);
+  await assert.rejects(matched());
 });
 
 test('verified document byte candidate publisher refuses changed local facts before journal append', async () => {
