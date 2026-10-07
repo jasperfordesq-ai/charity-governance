@@ -1,5 +1,20 @@
 # CharityPilot Full-Platform Remediation Audit
 
+> **7 October DPO-05 page-create-intent release:** Exact `a0ab2d0e`
+> passed merged-master CI/E2E, guarded blue private-VM cutover, restricted-
+> runtime and zero-row postflight, enabled page-intent guard/purge fence,
+> both front doors, preservation of all 354 older backup hashes, three
+> SHA-matched workstation files and isolated 154-migration/68-document
+> restore. The local intent records a possible non-idempotent page create;
+> it is not provider-visible identity or a proven provider outcome. No
+> disposable test-site first contact, complete remote/local/export/backup
+> inventory, independent UNKNOWN disposition or P05/P08 host-loss recovery
+> follows. The 13 age-review backup sets remain preserved pending approved
+> retention. Controller, role-specific, historical, test-site and Nikita
+> acceptance gates remain OPEN. Exact private receipt:
+> `.charitypilot-private/release-a0ab2d0e-confluence-page-create-intent-2026-10-07.md`.
+> Older release checkpoints below are dated history.
+
 > **7 October DPO-05 release evidence:** Exact `edc9e15d` passed merged-
 > master CI/E2E, guarded green private-VM cutover, restricted-runtime and
 > zero-row postflight, both front doors, preservation of all 351 earlier VM
