@@ -6,6 +6,7 @@ import {
   observeAttachmentVersionBytes,
   type AttachmentObservationOperations,
 } from '../services/confluence-attachment-observation.js';
+import { confluenceUploadOperationMarker } from '../services/confluence-upload-operation-marker.js';
 import { AppError } from '../utils/errors.js';
 
 const digest = (value: string) => createHash('sha256').update(value).digest('hex');
@@ -145,5 +146,66 @@ test('invalid tenant host is rejected before token or provider calls', async () 
   await rejected(() => observeAttachmentVersionBytes(input(h.operations, {
     siteHostname: 'evil.example',
   })), 'CONFLUENCE_ATTACHMENT_OBSERVATION_INPUT_INVALID');
+  assert.deepEqual(h.calls, []);
+});
+
+const operationId = '0123456789abcdef0123456789abcdef';
+
+test('identifies one matching upload message and byte digest as a non-authorizing candidate', async () => {
+  const marked = versions.map((version) => version.number === 1
+    ? { ...version, message: confluenceUploadOperationMarker(operationId, digest('1')) }
+    : version);
+  const h = harness({ listAttachmentVersions: async () => marked });
+  const result = await observeAttachmentVersionBytes(input(h.operations, {
+    expectedUpload: { operationId, sha256: digest('1') },
+  }));
+  assert.equal(result.uploadCandidateVersionNumber, 1);
+  assert.equal(result.actionAuthorized, false);
+});
+
+test('missing upload marker yields no candidate or action authority', async () => {
+  const h = harness();
+  const result = await observeAttachmentVersionBytes(input(h.operations, {
+    expectedUpload: { operationId, sha256: digest('1') },
+  }));
+  assert.equal(result.uploadCandidateVersionNumber, null);
+  assert.equal(result.actionAuthorized, false);
+});
+
+test('duplicate marker, mismatched bytes and changed messages invalidate the observation', async () => {
+  const marker = confluenceUploadOperationMarker(operationId, digest('1'));
+  const duplicate = harness({ listAttachmentVersions: async () => versions.map(
+    (version) => ({ ...version, message: marker }),
+  ) });
+  await rejected(() => observeAttachmentVersionBytes(input(duplicate.operations, {
+    expectedUpload: { operationId, sha256: digest('1') },
+  })), 'CONFLUENCE_ATTACHMENT_OBSERVATION_INVALID');
+
+  const mismatched = harness({ listAttachmentVersions: async () => versions.map(
+    (version) => version.number === 2 ? { ...version, message: marker } : version,
+  ) });
+  await rejected(() => observeAttachmentVersionBytes(input(mismatched.operations, {
+    expectedUpload: { operationId, sha256: digest('1') },
+  })), 'CONFLUENCE_ATTACHMENT_OBSERVATION_INVALID');
+
+  let reads = 0;
+  const drift = harness({ listAttachmentVersions: async () => {
+    reads += 1;
+    return versions.map((version) => version.number === 1
+      ? { ...version, message: reads === 3 ? 'changed' : marker } : version);
+  } });
+  await rejected(() => observeAttachmentVersionBytes(input(drift.operations, {
+    expectedUpload: { operationId, sha256: digest('1') },
+  })), 'CONFLUENCE_ATTACHMENT_OBSERVATION_INVALID');
+});
+
+test('invalid expected upload identity is refused before token or provider calls', async () => {
+  const h = harness();
+  let tokenCalls = 0;
+  await rejected(() => observeAttachmentVersionBytes(input(h.operations, {
+    getAccessToken: async () => { tokenCalls += 1; return 'private-token'; },
+    expectedUpload: { operationId: 'not-an-id', sha256: digest('1') },
+  })), 'CONFLUENCE_UPLOAD_OPERATION_INVALID');
+  assert.equal(tokenCalls, 0);
   assert.deepEqual(h.calls, []);
 });
