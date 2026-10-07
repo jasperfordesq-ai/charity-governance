@@ -1,5 +1,13 @@
 # CharityPilot Full-Platform Remediation Audit
 
+> **7 October DPO-06 C1 CTA source boundary:** At NEXUS source `06850f22`,
+> the ordinary registration-notice numeric-ID profile link is behind login,
+> tenant and profile-privacy checks. It is not Admin-only; another
+> same-tenant signed-in Member can view a visible public profile. This is
+> source-only and does not prove delivered mail, deployed-route behavior,
+> original closure or risk-owner acceptance. C1 stays OPEN with zero
+> verification rows. See the private CTA evidence and decision sheets.
+
 > **7 October DPO-06 C1 evidence boundary:** Exact live `cdece785`
 > read-only query still shows OPEN revision 2 and zero verification rows.
 > Current NEXUS source `4af219ee` retains the May fix; 11 locale sets,

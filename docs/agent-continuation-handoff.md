@@ -1,5 +1,16 @@
 # CharityPilot Agent Continuation Handoff
 
+> **7 October C1 CTA source boundary:** A read-only trace at current NEXUS
+> source `06850f22` found the ordinary registration notice's numeric-ID
+> `/profile/{id}` link behind React login and an authenticated,
+> resolved-tenant API profile read with privacy checks. The link is not
+> Admin-only: a same-tenant signed-in Member may view a visible public
+> profile. The pending-approval CTA uses the Admin queue or broker list.
+> This is source evidence, not deployed-route or delivered-mail proof.
+> No PHP runtime test, risk-owner decision or C1 verification row follows;
+> keep C1 OPEN. Exact hashes and limits are in private
+> `c1-cta-source-access-2026-10-07.md`.
+
 > **7 October ~14:19 Dublin C1 read-only evidence:** Exact live
 > `cdece785` still has one C1 risk OPEN at revision 2 and zero control
 > verification rows. Current NEXUS source `4af219ee` retains the May
