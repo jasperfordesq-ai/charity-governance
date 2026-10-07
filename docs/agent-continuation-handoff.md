@@ -1,5 +1,32 @@
 # CharityPilot Agent Continuation Handoff
 
+> **7 October ~07:34 Dublin authenticated inert binding release:** Exact
+> `9c6e795b` hosted CI/E2E passed and green serves the guarded private VM;
+> blue `0e517dfb` remains rollbackable. Restricted runtime, empty binding
+> and recovery rows, byte/binding guards, format-4 inventory, both front
+> doors, 255 preserved earlier backup hashes, six SHA-verified off-VM new
+> files and isolated 146-migration restore passed. The new insertion has
+> no production caller or byte authority. DPO-05 still needs worker lease
+> and pre-provider current-head checks, all-copy fencing and independent
+> P05/P08 custody/host-loss reopening. Policy, MFA, Member/export/deletion,
+> replay/C1 and Nikita acceptance remain separate open gates. Private
+> exact receipt: `release-9c6e795b-authenticated-inert-binding-2026-10-07.md`.
+> Older source-only checkpoints below are dated history.
+
+> **7 October ~07:18 Dublin source-only candidate insertion:** Pushed
+> `9c6e795b` adds authenticated, serializable local candidate insertion and
+> independent/local rechecks. The result is inert, has no production caller,
+> and the existing byte fence remains denying. Local build, focused tests,
+> security scan, disposable projection proof and production checks pass.
+> API units passed 2,568/2,568; one unrelated password-recovery migration
+> test failed once and passed on isolated rerun. Exact hosted checks and
+> guarded deployment remain pending. Live blue remains `0e517dfb`.
+> DPO-05 still needs worker lease/pre-provider validation, all-copy fencing,
+> independent P05/P08 custody and supervised host-loss reopening. Nikita's
+> 3 October Admin review leaves Member, approved export/deletion/recovery,
+> MFA, replay/C1 and scope-specific DPO acceptance open. Private goal audit
+> and release receipts have the exact continuation scope.
+
 > **7 October ~07:08 Dublin inert candidate-binding release:** Exact
 > `0e517dfb` hosted CI/E2E and guarded blue private-VM cutover passed.
 > Green `b25128d7` is rollbackable. The owner-only binding table is empty,
