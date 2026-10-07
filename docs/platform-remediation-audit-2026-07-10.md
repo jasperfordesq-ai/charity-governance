@@ -1,5 +1,16 @@
 # CharityPilot Full-Platform Remediation Audit
 
+> **7 October DPO-05 inert publisher release:** Exact `b25128d7` passed
+> hosted CI/E2E and guarded green private-VM cutover. Restricted runtime,
+> empty recovery, byte fence, both front doors, 243 preserved prior backup
+> hashes, two verified off-VM sets and isolated 145-migration restore passed.
+> The encrypted candidate publisher is still non-executable and has no
+> production caller. No SQL/worker byte permit, all-copy writer fence,
+> approved P05/P08 custody or host-loss reopening exists. Keep DPO-05 and
+> P01-P09/MFA, Member/export/deletion, replay/C1 and Nikita acceptance open.
+> See private `release-b25128d7-inert-publisher-2026-10-07.md`. Older
+> checkpoints below are dated history.
+
 > **7 October DPO-05 current-authority projection release:** Exact
 > `a5234cca` hosted CI/E2E and guarded private-VM cutover passed. Blue
 > serves the inert local projection; green `05087bbf` is rollbackable.

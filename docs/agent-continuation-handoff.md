@@ -1,5 +1,18 @@
 # CharityPilot Agent Continuation Handoff
 
+> **7 October ~06:27 Dublin inert byte-candidate publisher release:** Exact
+> `b25128d7` hosted CI/E2E and guarded private-VM cutover passed. Green
+> serves it; blue `a5234cca` is rollbackable. Restricted runtime, empty
+> recovery tables, byte fence, both front doors, 243 unchanged prior backup
+> hashes, two SHA-verified off-VM sets and isolated 145-migration restore
+> passed. The disposable real-PostgreSQL projection proof also passed exact
+> hosted checks. The publisher has no production caller and returns no byte
+> execution authority. DPO-05 remains open for SQL/worker permit, all-copy
+> fencing, P05/P08 custody and supervised host-loss reopening. Policy,
+> MFA, Member/export/deletion, replay/C1 and Nikita acceptance remain open.
+> Private receipt: `release-b25128d7-inert-publisher-2026-10-07.md`.
+> Older checkpoints below are dated history.
+
 > **7 October ~05:36 Dublin guarded current-authority projection release:**
 > Exact `a5234cca` hosted CI/E2E succeeded and blue serves the private VM.
 > Restricted runtime, empty recovery tables, byte fence, both front doors,
