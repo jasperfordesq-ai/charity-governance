@@ -575,17 +575,27 @@ export class DocumentService {
           SET "claimedAt" = CURRENT_TIMESTAMP,
               "updatedAt" = CURRENT_TIMESTAMP
           WHERE "id" IN (
-            SELECT "id"
-            FROM "DocumentStorageDeletion"
-            WHERE "state" = 'PENDING'
-              AND "processedAt" IS NULL
-              AND "attempts" < ${DOCUMENT_STORAGE_DELETION_MAX_ATTEMPTS}
-              AND "nextAttemptAt" <= CURRENT_TIMESTAMP
+            SELECT candidate."id"
+            FROM "DocumentStorageDeletion" candidate
+            WHERE candidate."state" = 'PENDING'
+              AND candidate."processedAt" IS NULL
+              AND candidate."attempts" < ${DOCUMENT_STORAGE_DELETION_MAX_ATTEMPTS}
+              AND candidate."nextAttemptAt" <= CURRENT_TIMESTAMP
               AND (
-                "claimedAt" IS NULL OR
-                "claimedAt" < CURRENT_TIMESTAMP - (${STORAGE_DELETION_CLAIM_STALE_AFTER_MS} * INTERVAL '1 millisecond')
+                candidate."claimedAt" IS NULL OR
+                candidate."claimedAt" < CURRENT_TIMESTAMP - (${STORAGE_DELETION_CLAIM_STALE_AFTER_MS} * INTERVAL '1 millisecond')
               )
-            ORDER BY "nextAttemptAt" ASC, "createdAt" ASC
+              -- The byte permit is not yet available. Leave a purge-claim job
+              -- pending under active recovery enforcement so ordinary cleanup
+              -- in the same batch can continue. The database update trigger
+              -- remains the authority for an activation/claim race.
+              AND NOT EXISTS (
+                SELECT 1 FROM "DocumentPurgeClaim" claim
+                JOIN "DocumentRecoveryEnforcement" binding
+                  ON binding."organisationId" = claim."organisationId"
+                WHERE claim."deletionId" = candidate."id"
+              )
+            ORDER BY candidate."nextAttemptAt" ASC, candidate."createdAt" ASC
             LIMIT ${limit}
             FOR UPDATE SKIP LOCKED
           )
