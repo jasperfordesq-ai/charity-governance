@@ -1,5 +1,20 @@
 # CharityPilot Agent Continuation Handoff
 
+> **7 October ~10:56 Dublin guarded release repair:** Exact `77ac0547`
+> passed hosted CI `37602214934` and E2E `37602214937` (240 tests).
+> Guarded private-VM deployment applied the lease migration, then stopped
+> before candidate services because `verifyAppRuntimeRole` still rejected
+> every reachable security-definer function. Jobs restarted on the prior
+> blue `cc4922b4`; loopback health is 200 and protected lease/claim counts
+> are zero. The grant script already had a narrowly checked exception, but
+> this separate pre/postflight check needed the same exception. Source now
+> adds it, with a 90-test local suite, security scan and a read-only run of
+> the exact generated SQL against the VM returning `safe`. This repair is
+> source-only until its own exact hosted CI/E2E and guarded continuation
+> pass. The first deploy handle is terminal; start any repair attempt only
+> after the new hosted gates. Its log is
+> `.bluegreen/state/deploy-2026-10-07T09-54-39-196Z.log`.
+
 > **7 October ~10:40 Dublin source-only one-use SQL lease:** A new
 > `DocumentByteExecutionLease` migration binds an owner-installed final
 > decision digest, exact candidate and deletion job, and SHA-256 of a

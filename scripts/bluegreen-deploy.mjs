@@ -1027,6 +1027,14 @@ export async function verifyAppRuntimeRole(run, deployEnv, fileEnv) {
           AND definer_schema.nspname NOT IN ('pg_catalog', 'information_schema')
           AND has_schema_privilege(r.oid, definer_schema.oid, 'USAGE')
           AND has_function_privilege(r.oid, executable_definer.oid, 'EXECUTE')
+          AND NOT (
+            executable_definer.oid = to_regprocedure('public."DocumentByteExecutionLease_claim"(text,text)')
+            AND executable_definer.proowner = current_user::regrole
+            AND executable_definer.proconfig @> ARRAY['search_path=pg_catalog, public, pg_temp']::text[]
+            AND NOT EXISTS (SELECT 1 FROM aclexplode(coalesce(executable_definer.proacl,
+              acldefault('f', executable_definer.proowner))) acl
+              WHERE acl.grantee=0 AND acl.privilege_type='EXECUTE')
+          )
       )
       AND NOT pg_has_role(r.oid, (SELECT oid FROM pg_roles WHERE rolname = current_user), 'MEMBER')
       AND NOT has_database_privilege(r.oid, current_database(), 'CREATE')
