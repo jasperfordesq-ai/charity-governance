@@ -228,6 +228,31 @@ try {
   assert.match(first.digest, /^[a-f0-9]{64}$/);
   const second = await readCurrentDocumentByteAuthority(prisma, request);
   assert.equal(second.digest, first.digest);
+  const insertCandidateBinding = (provider) => prisma.$executeRaw`
+    INSERT INTO "DocumentBytePermitCandidateBinding"
+      (id,"organisationId","preparationId","outcomeId","claimId","deletionId",
+       "installationId","operationId","writerId","writerEpoch",
+       "permitEntryDigest","permitEnvelopeDigest","outcomeEntryDigest",
+       "controlRevision","currentAuthorityDigest",provider,"storagePath",
+       "objectSha256","fileSize")
+    VALUES ('candidate-binding','charity','preparation','outcome','claim','job',
+      'synthetic-install','operation','host',1,
+      ${'e'.repeat(64)},${'f'.repeat(64)},${'c'.repeat(64)},
+      'synthetic-control-revision',${first.digest},${provider},
+      'charity/synthetic-proof',${'a'.repeat(64)},123)`;
+  await assert.rejects(insertCandidateBinding('wrong-provider'));
+  assert.equal((await prisma.$queryRaw`SELECT count(*)::integer AS count
+    FROM "DocumentBytePermitCandidateBinding"`)[0].count, 0);
+  await insertCandidateBinding('local');
+  await assert.rejects(prisma.$executeRaw`UPDATE "DocumentBytePermitCandidateBinding"
+    SET "writerEpoch"=2 WHERE id='candidate-binding'`);
+  await assert.rejects(prisma.$executeRaw`DELETE FROM "DocumentBytePermitCandidateBinding"
+    WHERE id='candidate-binding'`);
+  // A candidate binding is inert: even its exact pending job cannot advance.
+  await assert.rejects(prisma.$executeRaw`UPDATE "DocumentStorageDeletion"
+    SET attempts=1 WHERE id='job'`);
+  assert.equal((await prisma.$queryRaw`SELECT count(*)::integer AS count
+    FROM "DocumentBytePermitCandidateBinding"`)[0].count, 1);
   // A later reservation for the same path is a real writer fact that the
   // independent permit publisher must notice rather than reusing the digest.
   await prisma.documentUploadIntent.create({

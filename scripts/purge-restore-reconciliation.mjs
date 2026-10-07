@@ -8,6 +8,7 @@ const tables = [
   'DocumentPurgeAuthorization', 'DocumentPurgeAuthorizationWithdrawal',
   'DocumentRecoveryPreparation',
   'DocumentRecoveryEnforcement', 'DocumentRecoveryExecution', 'DocumentRecoveryOutcome',
+  'DocumentBytePermitCandidateBinding',
   'DocumentPurgeClaim', 'DocumentPurgeDispositionEvent',
   'ComplaintResolutionEvidence', 'ComplaintRemoval', 'ComplaintHoldEvent',
   'ComplaintPurgeAuthorization', 'ComplaintPurgeAuthorizationWithdrawal',
@@ -20,21 +21,24 @@ const tables = [
   'DocumentCopyDispositionAuthority', 'ComplaintCopyDispositionAuthority',
   'DocumentCopyHoldEvent', 'ComplaintCopyHoldEvent',
 ];
+const legacyTables = tables.filter(name => name !== 'DocumentBytePermitCandidateBinding');
 const digest = expression => `encode(sha256(convert_to((${expression})::text,'UTF8')),'hex')`;
-const entries = tables.map(name => `SELECT '${name}' AS name, COALESCE(jsonb_agg(jsonb_build_object('id',t.id,'sha256',${digest('to_jsonb(t)')}) ORDER BY t.id),'[]'::jsonb) AS rows FROM "${name}" t`);
-entries.push(`SELECT 'ClaimedPrimaryJobs' AS name, COALESCE(jsonb_agg(jsonb_build_object('id',t.id,'sha256',${digest('to_jsonb(t)')}) ORDER BY t.id),'[]'::jsonb) AS rows
+const virtualEntries = [];
+virtualEntries.push(`SELECT 'ClaimedPrimaryJobs' AS name, COALESCE(jsonb_agg(jsonb_build_object('id',t.id,'sha256',${digest('to_jsonb(t)')}) ORDER BY t.id),'[]'::jsonb) AS rows
  FROM "DocumentStorageDeletion" t JOIN "DocumentPurgeClaim" c ON c."deletionId"=t.id AND c."organisationId"=t."organisationId"`);
 // Recovery pointers are mutable; matching append-only decisions alone would
 // miss an older backup restoring a removed complaint to ordinary active views.
-entries.push(`SELECT 'ComplaintRecoveryState' AS name, COALESCE(jsonb_agg(jsonb_build_object('id',t.id,'sha256',${digest(`jsonb_build_object('id',t.id,'organisationId',t."organisationId",'revision',t.revision,'removedAt',t."removedAt",'removalId',t."removalId")`)}) ORDER BY t.id),'[]'::jsonb) AS rows FROM "ComplaintRecord" t`);
+virtualEntries.push(`SELECT 'ComplaintRecoveryState' AS name, COALESCE(jsonb_agg(jsonb_build_object('id',t.id,'sha256',${digest(`jsonb_build_object('id',t.id,'organisationId',t."organisationId",'revision',t.revision,'removedAt',t."removedAt",'removalId',t."removalId")`)}) ORDER BY t.id),'[]'::jsonb) AS rows FROM "ComplaintRecord" t`);
 // Surviving documents can have newer holds, removal/recovery state, reviewed
 // bytes or access restrictions without a purge claim. Compare full row hashes
 // so restoration cannot silently rewind those controls. No document content,
 // storage path or evidence reference leaves the database in this inventory.
-entries.push(`SELECT 'DocumentRecoveryState' AS name, COALESCE(jsonb_agg(jsonb_build_object('id',t.id,'sha256',${digest('to_jsonb(t)')}) ORDER BY t.id),'[]'::jsonb) AS rows FROM "Document" t`);
-entries.push(`SELECT 'ComplaintPrimaryConflicts' AS name, COALESCE(jsonb_agg(jsonb_build_object('id',c.id,'sha256',${digest('to_jsonb(c)')}) ORDER BY c.id),'[]'::jsonb) AS rows
+virtualEntries.push(`SELECT 'DocumentRecoveryState' AS name, COALESCE(jsonb_agg(jsonb_build_object('id',t.id,'sha256',${digest('to_jsonb(t)')}) ORDER BY t.id),'[]'::jsonb) AS rows FROM "Document" t`);
+virtualEntries.push(`SELECT 'ComplaintPrimaryConflicts' AS name, COALESCE(jsonb_agg(jsonb_build_object('id',c.id,'sha256',${digest('to_jsonb(c)')}) ORDER BY c.id),'[]'::jsonb) AS rows
  FROM "ComplaintPurgeClaim" c JOIN "ComplaintRecord" r ON r.id=c."complaintId" AND r."organisationId"=c."organisationId"`);
-export const PURGE_RESTORE_TABLES = Object.freeze([...tables, 'ClaimedPrimaryJobs', 'ComplaintRecoveryState', 'DocumentRecoveryState', 'ComplaintPrimaryConflicts']);
+const virtualNames = ['ClaimedPrimaryJobs', 'ComplaintRecoveryState', 'DocumentRecoveryState', 'ComplaintPrimaryConflicts'];
+export const PURGE_RESTORE_TABLES = Object.freeze([...tables, ...virtualNames]);
+export const PURGE_RESTORE_LEGACY_TABLES = Object.freeze([...legacyTables, ...virtualNames]);
 // Object keys are hashed in PostgreSQL so raw storage paths are not returned.
 // Any claimed local object still present requires quarantine/reconciliation,
 // including a pending deletion; byte changes at the same key do not excuse it.
@@ -71,13 +75,19 @@ export function assertNoClaimedLocalObjects(pathHashes, restoredEntries) {
 // One statement uses one MVCC snapshot. Hashes cover entire records, including
 // authority, policy, object fingerprint, outcome and deadlines. Raw paths,
 // reasons and evidence content never leave PostgreSQL in this result.
-export const PURGE_RESTORE_SNAPSHOT_SQL = `SELECT jsonb_build_object(
- 'format',3,
+function snapshotSql(format, names) {
+  const entries = names.map(name => `SELECT '${name}' AS name, COALESCE(jsonb_agg(jsonb_build_object('id',t.id,'sha256',${digest('to_jsonb(t)')}) ORDER BY t.id),'[]'::jsonb) AS rows FROM "${name}" t`);
+  return `SELECT jsonb_build_object(
+ 'format',${format},
  'capturedAt',to_char(timezone('UTC',statement_timestamp()),'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"'),
- 'tables',(SELECT jsonb_object_agg(name,rows) FROM (${entries.join(' UNION ALL ')}) inventories),
+ 'tables',(SELECT jsonb_object_agg(name,rows) FROM (${[...entries, ...virtualEntries].join(' UNION ALL ')}) inventories),
  'claims',COALESCE((SELECT jsonb_agg(jsonb_build_object('organisationId',"organisationId",'documentId',"documentId") ORDER BY "organisationId","documentId") FROM "DocumentPurgeClaim"),'[]'::jsonb),
  'documents',COALESCE((SELECT jsonb_agg(jsonb_build_object('organisationId',"organisationId",'documentId',id) ORDER BY "organisationId",id) FROM "Document"),'[]'::jsonb)
 ) AS snapshot;`;
+}
+export const PURGE_RESTORE_SNAPSHOT_SQL = snapshotSql(4, tables);
+export const PURGE_RESTORE_LEGACY_SNAPSHOT_SQL = snapshotSql(3, legacyTables);
+export const PURGE_RESTORE_BINDING_PROBE_SQL = `SELECT CASE WHEN to_regclass('public."DocumentBytePermitCandidateBinding"') IS NULL THEN 'legacy' ELSE 'current' END;`;
 
 function exact(value, keys, label) {
   if (!value || typeof value !== 'object' || Array.isArray(value) ||
@@ -99,13 +109,14 @@ function references(rows, label) {
 }
 function validate(snapshot) {
   exact(snapshot, ['format','capturedAt','tables','claims','documents'], 'snapshot');
-  if (snapshot.format !== 3 || typeof snapshot.capturedAt !== 'string' ||
+  if (![3, 4].includes(snapshot.format) || typeof snapshot.capturedAt !== 'string' ||
     !/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/.test(snapshot.capturedAt) ||
     !Number.isFinite(Date.parse(snapshot.capturedAt)) ||
     new Date(snapshot.capturedAt).toISOString() !== snapshot.capturedAt) throw new Error('Invalid purge restore format or time');
-  exact(snapshot.tables, PURGE_RESTORE_TABLES, 'table inventory');
+  const tableNames = snapshot.format === 4 ? PURGE_RESTORE_TABLES : PURGE_RESTORE_LEGACY_TABLES;
+  exact(snapshot.tables, tableNames, 'table inventory');
   const inventories = new Map();
-  for (const table of PURGE_RESTORE_TABLES) {
+  for (const table of tableNames) {
     const rows = snapshot.tables[table];
     if (!Array.isArray(rows) || rows.length > 1_000_000) throw new Error('Invalid purge restore row inventory');
     const inventory = new Map();
@@ -126,13 +137,15 @@ function validate(snapshot) {
   if (claims.size !== inventories.get('DocumentPurgeClaim').size || claims.size !== inventories.get('ClaimedPrimaryJobs').size) {
     throw new Error('Incomplete purge restore claim/job lineage');
   }
-  return { inventories, claims, documents: references(snapshot.documents, 'documents') };
+  return { format: snapshot.format, tableNames, inventories, claims,
+    documents: references(snapshot.documents, 'documents') };
 }
 
 export function reconcilePurgeRestore(authority, restored) {
   const source = validate(authority); const target = validate(restored);
+  if (source.format !== target.format) throw new Error('Purge restore schema versions differ; keep application access closed');
   const differences = [];
-  for (const table of PURGE_RESTORE_TABLES) {
+  for (const table of source.tableNames) {
     const expected = source.inventories.get(table); const actual = target.inventories.get(table);
     let missing = 0; let changed = 0; let unexpected = 0;
     for (const [id, hash] of expected) {

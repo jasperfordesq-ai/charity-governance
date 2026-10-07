@@ -2,7 +2,9 @@ import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
 import { spawnSync } from 'node:child_process';
 import { test } from 'node:test';
+import { readFileSync } from 'node:fs';
 import { validateLocalDockerEndpoint } from './personal-server-docker-boundary.mjs';
+import { PURGE_RESTORE_SNAPSHOT_SQL } from './purge-restore-reconciliation.mjs';
 
 const image = 'postgres@sha256:5660c2cbfea50c7a9127d17dc4e48543eedd3d7a41a595a2dfa572471e37e64c';
 const password = 'synthetic-byte-authority-proof';
@@ -97,6 +99,18 @@ test(
         ),
         'apply all Prisma migrations',
       );
+      const grants = readFileSync('scripts/bluegreen/runtime-role-grants.psql', 'utf8');
+      requireSuccess(docker(['exec', '-i', '-e', 'CHARITYPILOT_RUNTIME_ROLE=cp_fixture',
+        '-e', 'CHARITYPILOT_RUNTIME_PASSWORD=synthetic-only', name,
+        'psql', '-U', 'postgres', '-d', database], { input: grants }),
+      'restrict disposable runtime role');
+      const privileges = requireSuccess(docker(['exec', name, 'psql', '-U', 'postgres',
+        '-d', database, '-tA', '-c', `SELECT has_table_privilege('cp_fixture',
+          'public."DocumentBytePermitCandidateBinding"','INSERT'),
+          has_table_privilege('cp_fixture',
+          'public."DocumentBytePermitCandidateBinding"','SELECT');`]),
+      'read disposable runtime privileges');
+      assert.equal(privileges, 'f|t');
       requireSuccess(
         run(process.execPath, ['node_modules/typescript/bin/tsc', '-p', 'apps/api/tsconfig.json'], {
           env,
@@ -111,6 +125,11 @@ test(
         output,
         /current-authority-real-postgres-composition=verified; late-writer-digest=changed/u,
       );
+      const snapshot = JSON.parse(requireSuccess(docker(['exec', name, 'psql', '-U',
+        'postgres', '-d', database, '-tA', '-c', PURGE_RESTORE_SNAPSHOT_SQL]),
+      'capture format-4 disposable restore inventory'));
+      assert.equal(snapshot.format, 4);
+      assert.equal(snapshot.tables.DocumentBytePermitCandidateBinding.length, 1);
     } finally {
       assert.equal(
         requireSuccess(

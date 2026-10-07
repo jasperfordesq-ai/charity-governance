@@ -74,7 +74,8 @@ import { basename, dirname, join } from 'node:path';
 
 import { DEFAULT_POSTGRES_IMAGE } from '../postgres-backup.mjs';
 import { DOCUMENT_ARCHIVE_IMAGE } from '../personal-server.mjs';
-import { PURGE_RESTORE_SNAPSHOT_SQL, PURGE_RESTORE_LOCAL_OBJECTS_SQL,
+import { PURGE_RESTORE_SNAPSHOT_SQL, PURGE_RESTORE_LEGACY_SNAPSHOT_SQL,
+  PURGE_RESTORE_BINDING_PROBE_SQL, PURGE_RESTORE_LOCAL_OBJECTS_SQL,
   assertPurgeRestoreLedger, assertNoClaimedLocalObjects } from '../purge-restore-reconciliation.mjs';
 
 const DEFAULT_DATABASE_NAME = 'charitypilot';
@@ -779,15 +780,31 @@ export async function runRestoreDrill(ctx) {
     // backup manifest. These are SELECT-only queries; all restore writes stay
     // confined to the disposable container. Missing schema/authority fails.
     const liveHistoryCommand = liveRowCensusCommand(ctx);
-    liveHistoryCommand[liveHistoryCommand.length - 1] = PURGE_RESTORE_SNAPSHOT_SQL;
+    const restoredHistoryCommand = drillRowCensusCommand(containerName);
+    const readSchemaMode = async command => {
+      const probe = [...command];
+      probe[probe.length - 1] = PURGE_RESTORE_BINDING_PROBE_SQL;
+      const output = (await ctx.runCommand(probe, { env }))?.stdout?.trim();
+      if (output !== 'legacy' && output !== 'current') {
+        throw new Error('Restore drill requires readable current and restored purge schema');
+      }
+      return output;
+    };
+    const liveMode = await readSchemaMode(liveHistoryCommand);
+    const restoredMode = await readSchemaMode(restoredHistoryCommand);
+    if (liveMode !== restoredMode) {
+      throw new Error('Restore drill purge schema versions differ; keep application access closed');
+    }
+    const historySql = liveMode === 'current'
+      ? PURGE_RESTORE_SNAPSHOT_SQL : PURGE_RESTORE_LEGACY_SNAPSHOT_SQL;
+    liveHistoryCommand[liveHistoryCommand.length - 1] = historySql;
     const readHistory = async command => {
       const output = await ctx.runCommand(command, { env });
       try { return JSON.parse(output?.stdout); }
       catch { throw new Error('Restore drill requires readable current and restored purge history'); }
     };
     const authority = await readHistory(liveHistoryCommand);
-    const restoredHistoryCommand = drillRowCensusCommand(containerName);
-    restoredHistoryCommand[restoredHistoryCommand.length - 1] = PURGE_RESTORE_SNAPSHOT_SQL;
+    restoredHistoryCommand[restoredHistoryCommand.length - 1] = historySql;
     const restoredHistory = await readHistory(restoredHistoryCommand);
     const purgeReconciliation = assertPurgeRestoreLedger(authority, restoredHistory);
     const localKeysCommand = [...liveHistoryCommand];
@@ -796,6 +813,10 @@ export async function runRestoreDrill(ctx) {
     // Detect authority changes during comparison. This bounded observation is
     // not a lock or permission to reopen an application after a real restore.
     assertPurgeRestoreLedger(authority, await readHistory(liveHistoryCommand));
+    if (await readSchemaMode(liveHistoryCommand) !== liveMode
+      || await readSchemaMode(restoredHistoryCommand) !== restoredMode) {
+      throw new Error('Restore drill purge schema changed during comparison');
+    }
     return { ok: true, rowCensus: restoredRowCensus, manifestVerification,
       purgeReconciliation, localObjectReconciliation, applicationReopenAuthorized: false };
   } catch (error) {

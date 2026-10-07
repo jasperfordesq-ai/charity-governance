@@ -511,6 +511,7 @@ enum IntegrationStatus {
 model Organisation {
   complaintRecoveryEnforcement ComplaintRecoveryEnforcement?
   documentRecoveryEnforcement DocumentRecoveryEnforcement?
+  documentBytePermitBindings DocumentBytePermitCandidateBinding[]
   complaintHoldRecoveryPreparations ComplaintHoldRecoveryPreparation[]
   id                                      String                      @id @default(cuid())
   name                                    String
@@ -1371,6 +1372,7 @@ model DocumentRecoveryPreparation {
   authorization   DocumentPurgeAuthorization @relation(fields: [authorizationId, organisationId], references: [id, organisationId], onDelete: Restrict)
   execution       DocumentRecoveryExecution?
   outcome         DocumentRecoveryOutcome?
+  bytePermitBinding DocumentBytePermitCandidateBinding?
 
   @@unique([organisationId, operationId])
   @@index([organisationId, recordedAt, id])
@@ -1411,6 +1413,41 @@ model DocumentRecoveryOutcome {
   recordedAt    DateTime @default(now())
   preparation   DocumentRecoveryPreparation @relation(fields: [preparationId], references: [id], onDelete: Restrict)
   claim         DocumentPurgeClaim @relation(fields: [claimId], references: [id], onDelete: Restrict)
+  bytePermitBinding DocumentBytePermitCandidateBinding?
+}
+
+// Owner-only local lineage for a future authenticated candidate caller. This
+// row alone does not prove remote publication or authorize a worker.
+model DocumentBytePermitCandidateBinding {
+  id                     String @id @default(cuid())
+  organisationId         String
+  preparationId          String @unique
+  outcomeId              String @unique
+  claimId                String @unique
+  deletionId             String @unique
+  installationId         String
+  operationId            String
+  writerId               String
+  writerEpoch            Int
+  permitEntryDigest      String
+  permitEnvelopeDigest   String
+  outcomeEntryDigest     String
+  controlRevision        String
+  currentAuthorityDigest String
+  provider               String
+  storagePath            String
+  objectSha256           String
+  fileSize               Int
+  recordedAt             DateTime @default(now())
+  organisation           Organisation @relation(fields: [organisationId], references: [id], onDelete: Restrict)
+  preparation            DocumentRecoveryPreparation @relation(fields: [preparationId], references: [id], onDelete: Restrict)
+  outcome                DocumentRecoveryOutcome @relation(fields: [outcomeId], references: [id], onDelete: Restrict)
+  claim                  DocumentPurgeClaim @relation(fields: [claimId], references: [id], onDelete: Restrict)
+  deletion               DocumentStorageDeletion @relation(fields: [deletionId, organisationId], references: [id, organisationId], onDelete: Restrict)
+
+  @@unique([organisationId, operationId])
+  @@unique([deletionId, organisationId])
+  @@index([organisationId, recordedAt, id])
 }
 
 // Reviewer evidence about an explicitly referenced downstream scope, never a
@@ -1465,6 +1502,7 @@ model DocumentPurgeClaim {
   transactionId   BigInt @default(dbgenerated("txid_current()"))
   claimedAt       DateTime @default(now())
   recoveryOutcome DocumentRecoveryOutcome?
+  bytePermitBinding DocumentBytePermitCandidateBinding?
 
   @@unique([authorizationId, organisationId])
   @@unique([deletionId, organisationId])
@@ -1687,6 +1725,7 @@ model DocumentStorageDeletion {
   attemptEvents           DocumentStorageDeletionAttempt[]
   dataLifecycleLinks      DataLifecycleStorageLink[]
   purgeClaim              DocumentPurgeClaim?
+  bytePermitBinding       DocumentBytePermitCandidateBinding?
 
   @@unique([id, organisationId])
   @@index([organisationId])

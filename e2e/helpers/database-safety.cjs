@@ -141,6 +141,7 @@ const DISPOSABLE_DATABASE_RESET_TABLES = Object.freeze([
   "DocumentRecoveryEnforcement",
   "DocumentRecoveryExecution",
   "DocumentRecoveryOutcome",
+  "DocumentBytePermitCandidateBinding",
   "DocumentPurgeClaim",
   "DocumentPurgeAuthorizationWithdrawal",
   "DocumentPurgeAuthorization",
