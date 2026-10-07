@@ -1,5 +1,18 @@
 # CharityPilot Agent Continuation Handoff
 
+> **7 October 03:18 Dublin source-only document outcome path:** The worktree
+> adds an inactive committed document claim reader, encrypted independent
+> outcome envelope, separate S3 namespace, reserved journal publication and
+> current-history read. It retains the reservation and does not assert byte
+> or copy erasure. Six focused document tests, API build, S3 release refusal,
+> lint, lifecycle-map and retention migration passed. Main API tests passed
+> 2,559/2,559; serial PostgreSQL passed 6/7 because a password-recovery
+> concurrency assertion failed once, then passed in an isolated rerun. The
+> aggregate command is not green. This source is uncommitted/unhosted at this
+> checkpoint; no caller, provider or live binding exists. Read the private
+> `RESUME-HERE.md` before committing or releasing. DPO-05 and the other
+> Nikita acceptance gates remain open. Older checkpoints below are history.
+
 > **7 October 03:10 Dublin active-goal audit:** The existing Nikita goal is
 > active and unblocked; use the operative remaining-work scope and closure
 > rule in `.charitypilot-private/nikita-goal-audit-2026-10-06.md` without

@@ -3,6 +3,7 @@ import { createHash } from 'node:crypto';
 import { Readable } from 'node:stream';
 import { test } from 'node:test';
 import { S3Client, GetObjectCommand, PutObjectCommand } from '@aws-sdk/client-s3';
+import type { PrismaClient } from '@prisma/client';
 import { prepareDocumentRecoveryFacts } from '../services/document-recovery-preparation.js';
 import { openDocumentRecoveryPreparation, preserveDocumentRecoveryPreparation,
   readVerifiedDocumentRecoveryPreparation } from '../services/document-recovery-envelope.js';
@@ -11,6 +12,9 @@ import { publishVerifiedDocumentPreparation,
 import { S3AuthorityObjectStore } from '../services/recovery-authority-s3.js';
 import { RecoveryAuthorityJournal } from '../services/recovery-authority-journal.js';
 import { reserveRecoveryOperation, validateRecoveryControlValue } from '../services/recovery-operation-reservation.js';
+import { readCommittedDocumentOutcome } from '../services/document-recovery-outcome.js';
+import { preserveDocumentOutcome, readVerifiedDocumentOutcome } from '../services/document-outcome-envelope.js';
+import { publishVerifiedDocumentOutcome, readPublishedDocumentOutcome } from '../services/published-document-outcome.js';
 
 function documentFacts() {
   const policy = { id: 'policy', organisationId: 'charity', recordClass: 'VAULT_DRAFT' as const,
@@ -165,4 +169,87 @@ test('document publication refuses missing, changed, foreign and stale facts wit
       f.request, context, f.keys, f.store));
     assert.equal([...f.objects.keys()].filter(key => /\/[0-9]{10}\.json$/.test(key)).length, 0);
   }
+});
+
+test('document claim outcome publishes only the committed result and remains occupied', async () => {
+  const f = await fixture();
+  await preserveDocumentRecoveryPreparation(f.prepared.body, f.context, f.keys, f.store);
+  const prepReceipt = await publishVerifiedDocumentPreparation(f.journal, f.store,
+    f.request, f.context, f.keys, f.store);
+  const preparationEnvelope = await f.store.readDocumentPreparation(f.context.operationId);
+  const preparationEnvelopeDigest = createHash('sha256').update(preparationEnvelope!).digest('hex');
+  const control = await f.store.readControl();
+  const transactionId = 9007199254740993n;
+  const row = { id: 'outcome', transactionId,
+    recordedAt: new Date('2026-10-04T00:02:01.000Z'),
+    preparation: { id: 'preparation', installationId: f.context.installationId,
+      organisationId: f.context.organisationId, operationId: f.context.operationId,
+      writerEpoch: f.context.writerEpoch, authorizationId: f.facts.authorization.id,
+      actorUserId: f.facts.actorUserId, facts: f.prepared.body,
+      factsDigest: f.prepared.digest,
+      execution: { writerId: f.request.writerId, generation: prepReceipt.generation,
+        entryDigest: prepReceipt.digest, envelopeDigest: preparationEnvelopeDigest,
+        controlRevision: control.revision, transactionId } },
+    claim: { id: 'claim', organisationId: f.context.organisationId,
+      authorizationId: f.facts.authorization.id, documentId: f.facts.document.id,
+      deletionId: 'job', actorUserId: f.facts.actorUserId, transactionId,
+      claimedAt: new Date('2026-10-04T00:02:00.000Z'),
+      deletion: { id: 'job', organisationId: f.context.organisationId,
+        sourceDocumentId: f.facts.document.id,
+        storagePath: f.facts.authorization.storagePath,
+        provider: f.facts.authorization.provider } } };
+  const prisma = { documentRecoveryOutcome: { async findFirst() { return row; } } } as unknown as PrismaClient;
+  const committed = await readCommittedDocumentOutcome(prisma, {
+    organisationId: f.context.organisationId, installationId: f.context.installationId,
+    operationId: f.context.operationId });
+  f.loseAck();
+  await assert.rejects(preserveDocumentOutcome(committed.body, f.context, f.keys, f.store), /unresolved/);
+  assert.equal((await preserveDocumentOutcome(committed.body, f.context, f.keys, f.store)).replayed, true);
+  const envelope = await f.store.readDocumentOutcome(f.context.operationId);
+  assert.ok(envelope);
+  assert.equal([...f.objects.keys()].filter(key => key.startsWith('document-outcomes/')).length, 1);
+  assert.equal(await f.store.readOutcome(f.context.operationId), null);
+  assert.doesNotMatch(envelope!, /SENSITIVE_SYNTHETIC_DISPOSAL_REASON|vault\/synthetic-object/);
+  const request = { writerId: f.request.writerId, preparationDigest: f.prepared.digest,
+    preparationGeneration: prepReceipt.generation,
+    preparationEntryDigest: prepReceipt.digest, preparationEnvelopeDigest };
+  const publish = () => publishVerifiedDocumentOutcome(f.journal, f.store,
+    prisma, request, f.context, f.keys, f.store);
+  row.claim.deletion.storagePath = 'foreign';
+  await assert.rejects(publish, /binding mismatch/);
+  row.claim.deletion.storagePath = f.facts.authorization.storagePath;
+  await assert.rejects(publishVerifiedDocumentOutcome(f.journal, f.store,
+    prisma, { ...request, preparationEntryDigest: '0'.repeat(64) },
+    f.context, f.keys, f.store), /committed claim and preparation/);
+  assert.equal([...f.objects.keys()].filter(key => /\/[0-9]{10}\.json$/.test(key)).length, 1);
+  const originalUnwrap = f.keys.unwrap;
+  f.keys.unwrap = async () => {
+    const head = f.objects.get(f.headKey)!, value = JSON.parse(head.body);
+    value.publicationId = '44444444-4444-4444-8444-444444444444';
+    f.objects.set(f.headKey, { body: JSON.stringify(value), version: head.version + 1 });
+    return originalUnwrap();
+  };
+  await assert.rejects(publish, /control changed/);
+  f.keys.unwrap = originalUnwrap;
+  f.loseAck(true);
+  await assert.rejects(publish, /unknown/);
+  assert.equal((await publish()).headPublished, true);
+  const published = await readPublishedDocumentOutcome(f.journal, f.store, f.context, f.keys, f.store);
+  assert.equal(published.body, committed.body);
+  assert.equal(published.actionAuthorized, false);
+  assert.equal((await f.store.readControl()).activeOperation?.operationId, f.context.operationId);
+  f.keys.unwrap = async () => {
+    const head = f.objects.get(f.headKey)!, value = JSON.parse(head.body);
+    value.publicationId = '55555555-5555-4555-8555-555555555555';
+    f.objects.set(f.headKey, { body: JSON.stringify(value), version: head.version + 1 });
+    return originalUnwrap();
+  };
+  await assert.rejects(readPublishedDocumentOutcome(f.journal, f.store,
+    f.context, f.keys, f.store), /changed while reading/);
+  f.keys.unwrap = originalUnwrap;
+  await assert.rejects(f.store.createOutcome(f.context.operationId, envelope!), /envelope/);
+  await assert.rejects(readVerifiedDocumentOutcome('0'.repeat(64), f.context, f.keys, f.store), /unresolved/);
+  for (const key of f.objects.keys()) if (key.startsWith('document-outcomes/')) f.objects.delete(key);
+  await assert.rejects(readPublishedDocumentOutcome(f.journal, f.store,
+    f.context, f.keys, f.store), /unresolved/);
 });

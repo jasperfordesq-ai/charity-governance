@@ -8,6 +8,7 @@ import { validateRecoveryAuthorityEntry } from './recovery-authority-journal.js'
 import { inspectRecoveryPreparationEnvelope } from './recovery-preparation-envelope.js';
 import { inspectHoldPreparationEnvelope } from './hold-recovery-envelope.js';
 import { inspectDocumentRecoveryEnvelope } from './document-recovery-envelope.js';
+import { inspectDocumentOutcomeEnvelope } from './document-outcome-envelope.js';
 import { inspectRecoveryOutcomeEnvelope } from './recovery-outcome-envelope.js';
 import { inspectHoldOutcomeEnvelope } from './hold-outcome-envelope.js';
 import { validateRecoveryControlValue, type RecoveryControlStore, type RecoveryControlValue } from './recovery-operation-reservation.js';
@@ -233,6 +234,32 @@ export class S3AuthorityObjectStore implements AuthorityObjectStore, AuthorityHe
     const request = this.documentPreparationRequest(operationId);
     this.checkDocumentPreparation(operationId, envelope);
     return this.writeObject(request, envelope, { IfNoneMatch: '*' }, 65536);
+  }
+
+  private documentOutcomeRequest(operationId: string) {
+    const request = this.replayRequest(operationId);
+    return { ...request, Key: `document-outcomes/${this.config.installationId}/${this.config.organisationId}/${operationId}.json` };
+  }
+
+  private checkDocumentOutcome(operationId: string, envelope: string) {
+    const context = inspectDocumentOutcomeEnvelope(envelope);
+    if (context.installationId !== this.config.installationId || context.organisationId !== this.config.organisationId
+      || context.operationId !== operationId || context.keyId !== this.config.replayKeyArn) {
+      throw new Error('Document outcome envelope scope mismatch');
+    }
+  }
+
+  async readDocumentOutcome(operationId: string) {
+    const object = await this.readObject(this.documentOutcomeRequest(operationId), undefined, 32768);
+    if (!object) return null;
+    this.checkDocumentOutcome(operationId, object.body);
+    return object.body;
+  }
+
+  async createDocumentOutcome(operationId: string, envelope: string) {
+    const request = this.documentOutcomeRequest(operationId);
+    this.checkDocumentOutcome(operationId, envelope);
+    return this.writeObject(request, envelope, { IfNoneMatch: '*' }, 32768);
   }
 
   private holdOutcomeRequest(operationId: string) {

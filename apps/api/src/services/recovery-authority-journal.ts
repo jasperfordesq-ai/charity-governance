@@ -21,7 +21,7 @@ const identity = z.string().regex(/^[A-Za-z0-9_-]{1,120}$/);
 const digest = z.string().regex(/^[a-f0-9]{64}$/);
 const kinds = z.enum(['DISPOSAL_INTENT', 'DISPOSAL_RESULT', 'PRESERVATION_CHANGE', 'CONTROL_CHANGE',
   'COMPLAINT_PREPARATION_V1', 'COMPLAINT_OUTCOME_V1', 'COMPLAINT_HOLD_PREPARATION_V1', 'COMPLAINT_HOLD_OUTCOME_V1',
-  'COMPLAINT_CANCELLATION_V1', 'COMPLAINT_HOLD_CANCELLATION_V1', 'DOCUMENT_PREPARATION_V1']);
+  'COMPLAINT_CANCELLATION_V1', 'COMPLAINT_HOLD_CANCELLATION_V1', 'DOCUMENT_PREPARATION_V1', 'DOCUMENT_OUTCOME_V1']);
 const bindingSchema = z.object({ installationId: identity, organisationId: identity }).strict();
 const checkpointFields = {
   generation: z.number().int().nonnegative().max(10000), digest: digest.nullable(),
@@ -50,6 +50,7 @@ type Input = z.infer<typeof inputSchema>;
 const preparationKind = (kind: Entry['kind']) => {
   if (kind === 'COMPLAINT_OUTCOME_V1' || kind === 'COMPLAINT_CANCELLATION_V1') return 'COMPLAINT_PREPARATION_V1';
   if (kind === 'COMPLAINT_HOLD_OUTCOME_V1' || kind === 'COMPLAINT_HOLD_CANCELLATION_V1') return 'COMPLAINT_HOLD_PREPARATION_V1';
+  if (kind === 'DOCUMENT_OUTCOME_V1') return 'DOCUMENT_PREPARATION_V1';
   return undefined;
 };
 const hash = (value: string) => createHash('sha256').update(value, 'utf8').digest('hex');
@@ -334,6 +335,10 @@ export class RecoveryAuthorityJournal {
     return this.appendReservedOutcome(raw, control, 'COMPLAINT_OUTCOME_V1');
   }
 
+  async appendReservedDocumentOutcome(raw: unknown, control: RecoveryControlStore) {
+    return this.appendReservedOutcome(raw, control, 'DOCUMENT_OUTCOME_V1');
+  }
+
   async appendReservedHoldOutcome(raw: unknown, control: RecoveryControlStore) {
     return this.appendReservedOutcome(raw, control, 'COMPLAINT_HOLD_OUTCOME_V1');
   }
@@ -347,7 +352,7 @@ export class RecoveryAuthorityJournal {
   }
 
   private async appendReservedOutcome(raw: unknown, control: RecoveryControlStore,
-    kind: 'COMPLAINT_OUTCOME_V1' | 'COMPLAINT_HOLD_OUTCOME_V1' | 'COMPLAINT_CANCELLATION_V1' | 'COMPLAINT_HOLD_CANCELLATION_V1') {
+    kind: 'COMPLAINT_OUTCOME_V1' | 'COMPLAINT_HOLD_OUTCOME_V1' | 'COMPLAINT_CANCELLATION_V1' | 'COMPLAINT_HOLD_CANCELLATION_V1' | 'DOCUMENT_OUTCOME_V1') {
     const request = z.object({ operationId: identity, writerId: identity,
       writerEpoch: z.number().int().positive().max(2147483647), preparationDigest: digest,
       preparationEnvelopeDigest: digest, preparationEntryDigest: digest,

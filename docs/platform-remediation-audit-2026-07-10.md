@@ -1,5 +1,15 @@
 # CharityPilot Full-Platform Remediation Audit
 
+> **7 October 03:18 DPO-05 source progress:** An inactive authenticated
+> document primary-claim outcome publication/read path is in the worktree.
+> It records only a committed row claim and queued byte job, retains the
+> independent reservation and has no production caller. Local focused tests
+> pass; aggregate API testing has one intermittent password-recovery
+> PostgreSQL failure, isolated rerun passed. No hosted or deployed proof for
+> this candidate yet. Keep DPO-05 open for byte-worker and all-copy fences,
+> approved P05/P08 custody and supervised host-loss reopening; preserve
+> Member/export, policy/MFA, replay/C1 and Nikita review gates separately.
+
 > **7 October DPO-05 format-3 restore coverage deployed:** Exact
 > `aa4d529b` hosted CI/E2E, guarded private-VM release, live four-table
 > recovery inventory, restricted role, backup preservation/copies and

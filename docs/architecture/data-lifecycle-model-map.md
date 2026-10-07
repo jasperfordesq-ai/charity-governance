@@ -63,7 +63,11 @@ bytes or descriptive Vault fields. It has no live capture route. The separate
 `DocumentRecoveryOutcome` models are an inactive SQL claim/job transaction
 protocol. They conditionally reject claims that lack a matching local execution
 and require a same-transaction outcome, but do not authenticate remote
-publication, fence storage-byte deletion or cover every copy writer. Their
+publication, fence storage-byte deletion or cover every copy writer. A separate
+source-only document-outcome reader and encrypted publication path now binds a
+committed primary claim and queued deletion job to a reserved independent
+journal entry. It has no live caller and asserts neither byte nor copy erasure;
+the reservation cannot be released by this document-outcome kind. Their
 retention and independent custody require P05/P08 decisions. Source snapshot
 format 3 inventories all four tables as full-row hashes; an operating release
 must deploy and prove that format before any live binding or capture. None of
