@@ -19,7 +19,7 @@ group when its migration is introduced.
 - registers-controls: `BoardMember`, `ConflictRecord`, `RiskRecord`, `RiskChangeAudit`, `RiskControlVerification`, `RiskControlVerificationCounter`, `ComplaintRecord`, `ComplaintResolutionEvidence`, `ComplaintRemoval`, `ComplaintHoldEvent`, `ComplaintPurgeAuthorization`, `ComplaintPurgeAuthorizationWithdrawal`, `ComplaintPurgeClaim`, `ComplaintRecoveryPreparation`, `ComplaintRecoveryOutcome`, `ComplaintRecoveryEnforcement`, `ComplaintRecoveryExecution`, `ComplaintHoldRecoveryPreparation`, `ComplaintHoldRecoveryOutcome`, `ComplaintRecoveryCancellation`, `ComplaintPurgeDispositionEvent`, `ComplaintCopyDispositionAuthority`, `ComplaintCopyHoldEvent`, `GovernanceRegisterChangeAudit`, `OrganisationChangeAudit`, `FundraisingRecord`, `AnnualReportReadiness`, `FinancialControlReview`, `Member`
 - calendar-minutes: `Deadline`, `DeadlineChangeAudit`, `DeadlineReminderLog`, `DeadlineReminderAudit`, `GoverningAct`, `Resolution`, `GoverningActVoid`, `MinuteBookChangeAudit`
 - team-billing: `TeamInvite`, `Subscription`, `BillingCheckoutAttempt`, `StripeWebhookEvent`
-- data-requests: `DataLifecycleRequest`, `DataLifecycleStorageLink`, `DataLifecycleStorageLinkWithdrawal`, `DataLifecycleDocumentLink`, `DataLifecycleDocumentLinkWithdrawal`, `DataLifecycleReviewEvent`, `DataLifecycleTargetEvent`, `DataLifecycleResponseEvent`, `DataLifecycleCoverageEvent`, `DataRetentionPolicyRevision`, `DataRetentionPolicyWithdrawal`, `DocumentPurgeAuthorization`, `DocumentPurgeAuthorizationWithdrawal`, `DocumentPurgeClaim`, `DocumentPurgeDispositionEvent`, `DocumentRecoveryPreparation`, `DocumentCopyDispositionAuthority`, `DocumentCopyHoldEvent`
+- data-requests: `DataLifecycleRequest`, `DataLifecycleStorageLink`, `DataLifecycleStorageLinkWithdrawal`, `DataLifecycleDocumentLink`, `DataLifecycleDocumentLinkWithdrawal`, `DataLifecycleReviewEvent`, `DataLifecycleTargetEvent`, `DataLifecycleResponseEvent`, `DataLifecycleCoverageEvent`, `DataRetentionPolicyRevision`, `DataRetentionPolicyWithdrawal`, `DocumentPurgeAuthorization`, `DocumentPurgeAuthorizationWithdrawal`, `DocumentPurgeClaim`, `DocumentPurgeDispositionEvent`, `DocumentRecoveryPreparation`, `DocumentRecoveryEnforcement`, `DocumentRecoveryExecution`, `DocumentRecoveryOutcome`, `DocumentCopyDispositionAuthority`, `DocumentCopyHoldEvent`
 - platform-operators: `PlatformOperator`, `PlatformOperatorRecoveryCode`, `PlatformOperatorSession`, `OperatorActionApproval`
 <!-- MODEL_INVENTORY_END -->
 
@@ -55,16 +55,19 @@ Live capture/export, external encryption and custody, retention and eventual
 approved disposal of these records remain unresolved. Append-only enforcement
 must not be interpreted as an approved permanent-retention policy.
 
-`DocumentRecoveryPreparation` is likewise an inactive, append-only candidate
-store for bounded document disposal decision facts. It contains actor/reason,
-policy, removal, exact object identity and disposition-plan metadata, but no
-document bytes or descriptive Vault fields. It is not connected to claim or
-storage-worker execution and has no live capture route. Its retention and
-independent custody require P05/P08 decisions. The current pre-migration
-restore inventory cannot safely query a table absent on the serving release;
-include this new table in the versioned post-migration inventory before any
-live capture is enabled. Until then, no preparation row may be relied on as
-restore evidence or permission to reopen.
+`DocumentRecoveryPreparation` is an inactive, append-only candidate store for
+bounded document disposal decision facts. It contains actor/reason, policy,
+removal, exact object identity and disposition-plan metadata, but no document
+bytes or descriptive Vault fields. It has no live capture route. The separate
+`DocumentRecoveryEnforcement`, `DocumentRecoveryExecution` and
+`DocumentRecoveryOutcome` models are an inactive SQL claim/job transaction
+protocol. They conditionally reject claims that lack a matching local execution
+and require a same-transaction outcome, but do not authenticate remote
+publication, fence storage-byte deletion or cover every copy writer. Their
+retention and independent custody require P05/P08 decisions. The preparation
+table is included in the deployed versioned restore comparison; the three new
+tables require a later versioned inventory before live binding or capture.
+None of these rows alone is permission to reopen after host loss.
 
 
 `ComplaintRecoveryOutcome` binds one original preparation to one committed

@@ -510,6 +510,7 @@ enum IntegrationStatus {
 
 model Organisation {
   complaintRecoveryEnforcement ComplaintRecoveryEnforcement?
+  documentRecoveryEnforcement DocumentRecoveryEnforcement?
   complaintHoldRecoveryPreparations ComplaintHoldRecoveryPreparation[]
   id                                      String                      @id @default(cuid())
   name                                    String
@@ -1368,9 +1369,48 @@ model DocumentRecoveryPreparation {
   factsDigest     String
   recordedAt      DateTime @default(now())
   authorization   DocumentPurgeAuthorization @relation(fields: [authorizationId, organisationId], references: [id, organisationId], onDelete: Restrict)
+  execution       DocumentRecoveryExecution?
+  outcome         DocumentRecoveryOutcome?
 
   @@unique([organisationId, operationId])
   @@index([organisationId, recordedAt, id])
+}
+
+// Inactive until the independent provider, writer, byte worker and host-loss
+// gates are approved and proven. These rows do not authorize execution alone.
+model DocumentRecoveryEnforcement {
+  id             String @id @default(cuid())
+  organisationId String @unique
+  installationId String
+  writerId       String
+  writerEpoch    Int
+  recordedAt     DateTime @default(now())
+  organisation   Organisation @relation(fields: [organisationId], references: [id], onDelete: Restrict)
+}
+
+model DocumentRecoveryExecution {
+  id              String @id @default(cuid())
+  preparationId   String @unique
+  writerId        String
+  generation      Int
+  entryDigest     String
+  envelopeDigest  String
+  controlRevision String
+  transactionId   BigInt @default(dbgenerated("txid_current()"))
+  recordedAt      DateTime @default(now())
+  preparation     DocumentRecoveryPreparation @relation(fields: [preparationId], references: [id], onDelete: Restrict)
+}
+
+// Same-transaction claim/job evidence only; remote publication and byte
+// deletion require separate authenticated outcomes.
+model DocumentRecoveryOutcome {
+  id            String @id @default(cuid())
+  preparationId String @unique
+  claimId       String @unique
+  transactionId BigInt @default(dbgenerated("txid_current()"))
+  recordedAt    DateTime @default(now())
+  preparation   DocumentRecoveryPreparation @relation(fields: [preparationId], references: [id], onDelete: Restrict)
+  claim         DocumentPurgeClaim @relation(fields: [claimId], references: [id], onDelete: Restrict)
 }
 
 // Reviewer evidence about an explicitly referenced downstream scope, never a
@@ -1424,6 +1464,7 @@ model DocumentPurgeClaim {
   actorUserId     String
   transactionId   BigInt @default(dbgenerated("txid_current()"))
   claimedAt       DateTime @default(now())
+  recoveryOutcome DocumentRecoveryOutcome?
 
   @@unique([authorizationId, organisationId])
   @@unique([deletionId, organisationId])

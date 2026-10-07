@@ -369,6 +369,57 @@ test('retention policy and recovery-state upgrade preserve documents and enforce
       assert.ok(error.report.differences.some(item => item.table === 'DocumentPurgeClaim' && item.missing === 1));
       return true;
     });
+    // Exercise the inactive document recovery transaction on an isolated copy
+    // of the pre-claim database. These plausible receipt fields prove SQL
+    // ordering only; they do not stand in for authenticated remote publication.
+    const rejectRestored = (statement, pattern) => {
+      const result = docker(['exec', '-i', container, 'psql', '-U', 'postgres', '-d', 'old_restore',
+        '-v', 'ON_ERROR_STOP=1', '-Atq'], statement);
+      assert.notEqual(result.status, 0);
+      assert.match(result.stderr, pattern);
+    };
+    assert.equal(restoredSql('old_restore', `SELECT count(*) FROM "Document" WHERE id='retained-doc';`), '1');
+    restoredSql('old_restore', withdrawal('fixture-future-policy-withdrawn','retention-a','future-retention'));
+    restoredSql('old_restore', `INSERT INTO "DocumentRecoveryEnforcement"
+      (id,"organisationId","installationId","writerId","writerEpoch")
+      VALUES ('binding','retention-a','installation','writer',1);`);
+    rejectRestored(claim('no-recovery-execution'), /same-transaction recovery execution/);
+    assert.equal(restoredSql('old_restore', `SELECT count(*) FROM "DocumentPurgeClaim";
+      SELECT count(*) FROM "DocumentStorageDeletion" WHERE "sourceDocumentId"='retained-doc';`), '0\n0');
+    restoredSql('old_restore', `WITH candidate AS (
+      SELECT jsonb_build_object('format',1,'action','DOCUMENT_PURGE_PREPARATION',
+        'organisationId','retention-a','installationId','installation',
+        'operationId','operation','writerEpoch',1,'actorUserId','owner-a',
+        'authorization',jsonb_build_object('id',a.id,'storagePath',a."storagePath",'provider',a.provider),
+        'document',jsonb_build_object('id',d.id,'updatedAt',
+          to_char(d."updatedAt",'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"'),
+          'fileUrl',d."fileUrl",'storageProvider',d."storageProvider",
+          'recoverySha256',d."recoverySha256",'fileSize',d."fileSize"),
+        'policy',jsonb_build_object('id',a."policyId"))::text AS body
+      FROM "Document" d JOIN "DocumentPurgeAuthorization" a ON a."documentId"=d.id
+      WHERE d.id='retained-doc' AND a.id='expired-authorization')
+      INSERT INTO "DocumentRecoveryPreparation"
+        (id,"organisationId","installationId","operationId","writerEpoch",
+          "authorizationId","actorUserId",facts,"factsDigest")
+      SELECT 'prepared','retention-a','installation','operation',1,
+        'expired-authorization','owner-a',body,
+        encode(sha256(convert_to(body,'UTF8')),'hex') FROM candidate;`);
+    const execution = `INSERT INTO "DocumentRecoveryExecution"
+      (id,"preparationId","writerId",generation,"entryDigest","envelopeDigest","controlRevision")
+      VALUES ('execution','prepared','writer',1,repeat('a',64),repeat('b',64),'synthetic-control');`;
+    rejectRestored(`BEGIN; ${execution} COMMIT;`, /requires atomic claim, job and outcome/);
+    assert.equal(restoredSql('old_restore', `SELECT count(*) FROM "DocumentRecoveryExecution";`), '0');
+    restoredSql('old_restore', `BEGIN;
+      ${execution}
+      ${claim('with-recovery-execution')}
+      INSERT INTO "DocumentRecoveryOutcome" (id,"preparationId","claimId")
+        VALUES ('outcome','prepared','with-recovery-execution');
+      COMMIT;`);
+    assert.equal(restoredSql('old_restore', `SELECT count(*) FROM "DocumentRecoveryExecution";
+      SELECT count(*) FROM "DocumentRecoveryOutcome";
+      SELECT count(*) FROM "DocumentPurgeClaim" WHERE id='with-recovery-execution';
+      SELECT count(*) FROM "DocumentStorageDeletion" WHERE id='job-with-recovery-execution';
+      SELECT count(*) FROM "Document" WHERE id='retained-doc';`), '1\n1\n1\n1\n0');
     const currentBackup = docker(['exec', container, 'pg_dump', '-U', 'postgres', '--no-owner', '--no-privileges', 'postgres']);
     assert.equal(currentBackup.status, 0, currentBackup.stderr);
     restoredSql('current_restore', currentBackup.stdout);

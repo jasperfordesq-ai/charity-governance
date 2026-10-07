@@ -1049,6 +1049,23 @@ export async function verifyAppRuntimeRole(run, deployEnv, fileEnv) {
            OR has_table_privilege(r.oid, to_regclass(format('public.%I', protected.name)), 'REFERENCES')
            OR has_table_privilege(r.oid, to_regclass(format('public.%I', protected.name)), 'TRIGGER')
       )
+      -- New protected tables may be absent before this release's migration.
+      -- If present, the serving runtime must already lack write authority;
+      -- grant reconciliation after migration makes their presence mandatory.
+      AND NOT EXISTS (
+        SELECT 1 FROM (VALUES
+          ('DocumentRecoveryEnforcement'), ('DocumentRecoveryExecution'),
+          ('DocumentRecoveryOutcome')) AS protected(name)
+        WHERE to_regclass(format('public.%I', protected.name)) IS NOT NULL
+          AND (
+            has_table_privilege(r.oid, to_regclass(format('public.%I', protected.name)), 'INSERT')
+            OR has_table_privilege(r.oid, to_regclass(format('public.%I', protected.name)), 'UPDATE')
+            OR has_table_privilege(r.oid, to_regclass(format('public.%I', protected.name)), 'DELETE')
+            OR has_table_privilege(r.oid, to_regclass(format('public.%I', protected.name)), 'TRUNCATE')
+            OR has_table_privilege(r.oid, to_regclass(format('public.%I', protected.name)), 'REFERENCES')
+            OR has_table_privilege(r.oid, to_regclass(format('public.%I', protected.name)), 'TRIGGER')
+          )
+      )
   ) THEN 'safe' ELSE 'unsafe' END`;
   const identity = databaseIdentity(fileEnv);
   const check = await run([...runtimeRoleComposePrefix(fileEnv), 'exec', '-T', 'db', 'psql',

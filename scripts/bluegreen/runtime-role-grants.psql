@@ -18,7 +18,9 @@ BEGIN
       ('ComplaintHoldRecoveryOutcome'),
       ('ComplaintRecoveryExecution'),
       ('ComplaintRecoveryOutcome'),
-      ('ComplaintRecoveryCancellation')) AS protected(name)
+      ('ComplaintRecoveryCancellation'),
+      ('DocumentRecoveryEnforcement'), ('DocumentRecoveryExecution'),
+      ('DocumentRecoveryOutcome')) AS protected(name)
     WHERE to_regclass(format('public.%I', protected.name)) IS NULL
   ) THEN
     RAISE EXCEPTION 'Protected recovery or migration table is missing';
@@ -42,7 +44,9 @@ SELECT CASE WHEN :'runtime_role' = current_user OR EXISTS (
       SELECT 1 FROM (VALUES
         ('_prisma_migrations'), ('ComplaintRecoveryEnforcement'),
         ('ComplaintHoldRecoveryOutcome'), ('ComplaintRecoveryExecution'),
-        ('ComplaintRecoveryOutcome'), ('ComplaintRecoveryCancellation')) AS protected(name)
+        ('ComplaintRecoveryOutcome'), ('ComplaintRecoveryCancellation'),
+        ('DocumentRecoveryEnforcement'), ('DocumentRecoveryExecution'),
+        ('DocumentRecoveryOutcome')) AS protected(name)
       WHERE has_table_privilege(r.oid, to_regclass(format('public.%I', protected.name)),
         'INSERT,UPDATE,DELETE,TRUNCATE,REFERENCES,TRIGGER')
     )
@@ -69,8 +73,8 @@ SELECT format('REVOKE ALL ON ALL TABLES IN SCHEMA public FROM %I', :'runtime_rol
 SELECT format('GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA public TO %I', :'runtime_role') \gexec
 SELECT format('REVOKE ALL ON ALL SEQUENCES IN SCHEMA public FROM %I', :'runtime_role') \gexec
 SELECT format('GRANT USAGE, SELECT ON ALL SEQUENCES IN SCHEMA public TO %I', :'runtime_role') \gexec
-SELECT format('REVOKE ALL ON TABLE public."_prisma_migrations", public."ComplaintRecoveryEnforcement", public."ComplaintHoldRecoveryOutcome", public."ComplaintRecoveryExecution", public."ComplaintRecoveryOutcome", public."ComplaintRecoveryCancellation" FROM %I', :'runtime_role') \gexec
-SELECT format('GRANT SELECT ON TABLE public."_prisma_migrations", public."ComplaintRecoveryEnforcement", public."ComplaintHoldRecoveryOutcome", public."ComplaintRecoveryExecution", public."ComplaintRecoveryOutcome", public."ComplaintRecoveryCancellation" TO %I', :'runtime_role') \gexec
+SELECT format('REVOKE ALL ON TABLE public."_prisma_migrations", public."ComplaintRecoveryEnforcement", public."ComplaintHoldRecoveryOutcome", public."ComplaintRecoveryExecution", public."ComplaintRecoveryOutcome", public."ComplaintRecoveryCancellation", public."DocumentRecoveryEnforcement", public."DocumentRecoveryExecution", public."DocumentRecoveryOutcome" FROM %I', :'runtime_role') \gexec
+SELECT format('GRANT SELECT ON TABLE public."_prisma_migrations", public."ComplaintRecoveryEnforcement", public."ComplaintHoldRecoveryOutcome", public."ComplaintRecoveryExecution", public."ComplaintRecoveryOutcome", public."ComplaintRecoveryCancellation", public."DocumentRecoveryEnforcement", public."DocumentRecoveryExecution", public."DocumentRecoveryOutcome" TO %I', :'runtime_role') \gexec
 
 -- PostgreSQL grants EXECUTE on new functions to PUBLIC by default. A
 -- SECURITY DEFINER function reachable by the app role could bypass the
