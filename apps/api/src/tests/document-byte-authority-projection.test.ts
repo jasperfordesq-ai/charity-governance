@@ -62,7 +62,8 @@ function fixture() {
     lastRecoveryNonce: null, lastRecoveryDisposition: null },
   copyAuthorities: [] as unknown[], copyHolds: [] as unknown[],
   dispositions: [] as unknown[], publications: [] as unknown[],
-  uploadIntents: [] as unknown[], confluenceUploadIntents: [] as unknown[], liveReferences: 0,
+  uploadIntents: [] as unknown[], confluenceUploadIntents: [] as unknown[],
+  pageCreateIntents: [] as unknown[], liveReferences: 0,
   matchingCleanupJobs: [{ id: 'job' }],
   standardLinks: 0, confluenceReferences: 0 };
   const tx = {
@@ -86,6 +87,11 @@ function fixture() {
       assert.deepEqual(args, { where: { organisationId: 'charity', documentId: 'doc' },
         orderBy: { id: 'asc' }, take: 1001 });
       return state.confluenceUploadIntents;
+    } },
+    documentPublicationPageCreateIntent: { findMany: async (args: unknown) => {
+      assert.deepEqual(args, { where: { organisationId: 'charity', documentId: 'doc' },
+        orderBy: { id: 'asc' }, take: 1001 });
+      return state.pageCreateIntents;
     } },
     document: { count: async () => state.liveReferences },
     documentStandardLink: { count: async () => state.standardLinks },
@@ -131,6 +137,13 @@ test('local byte-authority projection changes with policy, copy and mirror state
   assert.notEqual(possibleRemoteCopy.localCopyObservationDigest, initial.localCopyObservationDigest);
   assert.equal(possibleRemoteCopy.localHoldObservationDigest, initial.localHoldObservationDigest);
   f.state.confluenceUploadIntents.pop();
+  f.state.pageCreateIntents.push({ id: 'possible-page', documentId: 'doc',
+    cloudId: 'test-site', spaceId: 'test-space', bodySha256: 'd'.repeat(64) });
+  const possiblePage = await readCurrentDocumentByteAuthority(f.prisma, f.request);
+  assert.notEqual(possiblePage.digest, initial.digest);
+  assert.notEqual(possiblePage.localCopyObservationDigest, initial.localCopyObservationDigest);
+  assert.equal(possiblePage.localHoldObservationDigest, initial.localHoldObservationDigest);
+  f.state.pageCreateIntents.pop();
   Object.assign(f.state.job, { lastError: 'changed worker observation' });
   const jobChanged = await readCurrentDocumentByteAuthority(f.prisma, f.request);
   assert.notEqual(jobChanged.digest, initial.digest);
@@ -151,6 +164,9 @@ test('local byte-authority projection refuses stale owner, claim, target and unb
     (s: ReturnType<typeof fixture>['state']) => { s.copyAuthorities = Array(1001).fill({ id: 'copy' }); },
     (s: ReturnType<typeof fixture>['state']) => {
       s.confluenceUploadIntents = Array(1001).fill({ id: 'possible-remote-copy' });
+    },
+    (s: ReturnType<typeof fixture>['state']) => {
+      s.pageCreateIntents = Array(1001).fill({ id: 'possible-page' });
     },
   ]) {
     const f = fixture(); change(f.state);

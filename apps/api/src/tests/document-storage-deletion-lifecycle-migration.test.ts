@@ -836,3 +836,92 @@ test('real PostgreSQL 16 migration preserves exact Confluence upload intent evid
       WHERE id='${validId}';`, false).stderr, /immutable/);
   } finally { await removeDisposableContainer(container); }
 });
+
+test('real PostgreSQL 16 migration preserves an ambiguous page create and fences purge', { timeout: 120_000 }, async () => {
+  const container = `charitypilot-page-intent-${randomUUID()}`;
+  assertDockerSuccess(docker(['run', '--detach', '--name', container, '--network', 'none',
+    '-e', 'POSTGRES_HOST_AUTH_METHOD=trust', POSTGRES_IMAGE]), 'start page intent fixture');
+  try {
+    await waitForPostgres(container);
+    psql(container, `CREATE TABLE "Organisation" (id TEXT PRIMARY KEY);
+      CREATE TABLE "DocumentPurgeClaim" (id TEXT PRIMARY KEY,
+        "organisationId" TEXT NOT NULL, "documentId" TEXT NOT NULL);
+      CREATE TABLE "Document" (id TEXT PRIMARY KEY, "organisationId" TEXT NOT NULL,
+        "updatedAt" TIMESTAMP(3) NOT NULL, "deletedAt" TIMESTAMP(3),
+        "lifecycleStatus" TEXT NOT NULL, "externalPublicationApproved" BOOLEAN NOT NULL,
+        "externalPublicationSiteId" TEXT, "externalPublicationSpaceId" TEXT);
+      CREATE TABLE "OrganisationIntegration" (id TEXT PRIMARY KEY,
+        "organisationId" TEXT NOT NULL, provider TEXT NOT NULL, status TEXT NOT NULL,
+        config JSONB, "publishSpaceSiteId" TEXT, "publishSpaceId" TEXT,
+        "publishingModel" JSONB);
+      CREATE TABLE "DocumentPublication" (id TEXT PRIMARY KEY,
+        "organisationId" TEXT NOT NULL, "documentId" TEXT NOT NULL,
+        state TEXT NOT NULL, "processedAt" TIMESTAMP(3), "terminalReason" TEXT,
+        "claimedAt" TIMESTAMP(3), "remoteWriteStartedAt" TIMESTAMP(3),
+        "cloudId" TEXT, "spaceId" TEXT, "pageId" TEXT);
+      INSERT INTO "Organisation" VALUES ('org-1');
+      INSERT INTO "Document" VALUES ('doc-1','org-1','2026-10-07T12:00:00Z',NULL,
+        'CURRENT',true,'cloud-1','space-1');
+      INSERT INTO "OrganisationIntegration" VALUES ('integration-1','org-1',
+        'CONFLUENCE','CONNECTED','{"siteId":"cloud-1"}','cloud-1','space-1',NULL);
+      INSERT INTO "DocumentPublication" (id,"organisationId","documentId",state,
+        "claimedAt","remoteWriteStartedAt") VALUES ('pub-1','org-1','doc-1',
+        'PENDING','2026-10-07T12:00:00Z','2026-10-07T12:00:00Z');`);
+    psql(container, readFileSync(new URL(
+      '../../prisma/migrations/20261007210000_document_publication_page_create_intent/migration.sql',
+      import.meta.url,
+    ), 'utf8'));
+    const id = '0123456789abcdef0123456789abcdef';
+    const digest = 'a'.repeat(64);
+    const insert = (opId: string, revision = '2026-10-07T12:00:00Z',
+      cloud = 'cloud-1', parent = 'NULL') => `INSERT INTO "DocumentPublicationPageCreateIntent"
+      (id,"publicationId","organisationId","documentId","claimedAt",
+        "documentRevision","cloudId","spaceId","parentPageId",title,"bodySha256")
+      VALUES ('${opId}','pub-1','org-1','doc-1','2026-10-07T12:00:00Z',
+        '${revision}','${cloud}','space-1',${parent},'Synthetic governance page','${digest}');`;
+    assert.match(psql(container, insert(id)).stdout, /^$/);
+    assert.equal(psql(container, `SELECT "cloudId" || '|' || title || '|' || "bodySha256"
+      FROM "DocumentPublicationPageCreateIntent" WHERE id='${id}';`).stdout.trim(),
+    `cloud-1|Synthetic governance page|${digest}`);
+    assert.match(psql(container, insert('b'.repeat(32)), false).stderr, /duplicate key/);
+    assert.match(psql(container, insert('b'.repeat(32), '2026-10-07T12:01:00Z'), false).stderr,
+      /current claim, approval and connected target/);
+    assert.match(psql(container, insert('b'.repeat(32), '2026-10-07T12:00:00Z', 'other'), false).stderr,
+      /current claim, approval and connected target/);
+    assert.match(psql(container, insert('b'.repeat(32), '2026-10-07T12:00:00Z', 'cloud-1', "'parent'"), false).stderr,
+      /current claim, approval and connected target/);
+    psql(container, `UPDATE "OrganisationIntegration" SET config='{"siteId":"other-site"}'
+      WHERE id='integration-1';`);
+    assert.match(psql(container, insert('b'.repeat(32)), false).stderr,
+      /current claim, approval and connected target/);
+    psql(container, `UPDATE "OrganisationIntegration" SET config='{"siteId":"cloud-1"}'
+      WHERE id='integration-1';
+      UPDATE "Document" SET "externalPublicationApproved"=false WHERE id='doc-1';`);
+    assert.match(psql(container, insert('b'.repeat(32)), false).stderr,
+      /current claim, approval and connected target/);
+    psql(container, `UPDATE "Document" SET "externalPublicationApproved"=true WHERE id='doc-1';`);
+    assert.match(psql(container, `UPDATE "DocumentPublicationPageCreateIntent" SET title='other' WHERE id='${id}';`, false).stderr,
+      /immutable/);
+    assert.match(psql(container, `DELETE FROM "DocumentPublicationPageCreateIntent" WHERE id='${id}';`, false).stderr,
+      /immutable/);
+    psql(container, `INSERT INTO "DocumentPublication" (id,"organisationId","documentId",state,
+      "claimedAt","remoteWriteStartedAt") VALUES ('pub-rollback','org-1','doc-1',
+        'PENDING','2026-10-07T12:02:00Z','2026-10-07T12:02:00Z');
+      BEGIN;
+      INSERT INTO "DocumentPublicationPageCreateIntent"
+        (id,"publicationId","organisationId","documentId","claimedAt",
+          "documentRevision","cloudId","spaceId",title,"bodySha256")
+        VALUES ('${'d'.repeat(32)}','pub-rollback','org-1','doc-1',
+          '2026-10-07T12:02:00Z','2026-10-07T12:00:00Z',
+          'cloud-1','space-1','Rollback probe','${digest}');
+      ROLLBACK;`);
+    assert.equal(psql(container, `SELECT count(*) FROM "DocumentPublicationPageCreateIntent"
+      WHERE "publicationId"='pub-rollback';`).stdout.trim(), '0');
+    assert.match(psql(container, `INSERT INTO "DocumentPurgeClaim" VALUES ('claim-1','org-1','doc-1');`, false).stderr,
+      /requires reconciliation of possible Confluence page/);
+    psql(container, `UPDATE "DocumentPublication" SET "cloudId"='cloud-1',
+      "spaceId"='space-1', "pageId"='page-1' WHERE id='pub-1';
+      INSERT INTO "DocumentPurgeClaim" VALUES ('claim-1','org-1','doc-1');`);
+    assert.match(psql(container, insert('c'.repeat(32)), false).stderr, /fenced by document purge/);
+  } finally { await removeDisposableContainer(container); }
+});

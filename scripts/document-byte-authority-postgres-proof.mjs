@@ -772,8 +772,56 @@ try {
     throw new Error('synthetic upload intent proof rollback');
   }), /synthetic upload intent proof rollback/u);
   assert.equal(await prisma.documentPublicationUploadIntent.count(), 0);
+  // Exercise the production page-intent method, not a copied INSERT. The
+  // target and approval must be current in the fully migrated database.
+  await assert.rejects(prisma.$transaction(async (tx) => {
+    await tx.organisationIntegration.create({ data: {
+      id: 'page-service-integration', organisationId: 'charity',
+      provider: 'CONFLUENCE', status: 'CONNECTED',
+      config: { siteId: 'cloud-1' }, publishSpaceSiteId: 'cloud-1',
+      publishSpaceId: 'space-1', publishSpaceKey: 'TEST',
+      publishSpaceName: 'Synthetic test space',
+    } });
+    const doc = await tx.document.create({ data: {
+      id: 'page-service-proof-doc', organisationId: 'charity',
+      name: 'Synthetic page intent document', category: 'OTHER',
+      lifecycleStatus: 'CURRENT', externalPublicationApproved: true,
+      externalPublicationSiteId: 'cloud-1', externalPublicationSpaceId: 'space-1',
+      fileUrl: 'charity/page-service-proof', storageProvider: 'local',
+      mimeType: 'application/pdf', fileSize: 5,
+    } });
+    await tx.documentPublication.create({ data: {
+      id: 'page-service-proof', organisationId: 'charity',
+      documentId: doc.id,
+    } });
+    await tx.documentPublication.update({ where: { id: 'page-service-proof' },
+      data: { claimedAt } });
+    const publisher = new DocumentPublicationService(tx);
+    assert.equal(await publisher.reserveRemoteWrite('page-service-proof', claimedAt), true);
+    const claimed = await tx.documentPublication.findUniqueOrThrow({
+      where: { id: 'page-service-proof' },
+    });
+    await tx.$executeRaw`SET LOCAL ROLE cp_fixture`;
+    const operationId = await publisher.reservePageCreateIntent(claimed, {
+      documentRevision: doc.updatedAt, cloudId: 'cloud-1', spaceId: 'space-1',
+      parentPageId: null, title: 'Synthetic page', bodySha256: 'b'.repeat(64),
+    });
+    assert.match(operationId, /^[0-9a-f]{32}$/u);
+    const saved = await tx.documentPublicationPageCreateIntent.findUniqueOrThrow({
+      where: { id: operationId },
+    });
+    assert.equal(saved.publicationId, 'page-service-proof');
+    assert.equal(saved.documentRevision.getTime(), doc.updatedAt.getTime());
+    assert.equal(saved.cloudId, 'cloud-1');
+    assert.equal(saved.spaceId, 'space-1');
+    assert.equal(saved.parentPageId, null);
+    assert.equal(saved.title, 'Synthetic page');
+    assert.equal(saved.bodySha256, 'b'.repeat(64));
+    throw new Error('synthetic page intent proof rollback');
+  }), /synthetic page intent proof rollback/u);
+  assert.equal(await prisma.documentPublicationPageCreateIntent.count(), 0);
   process.stdout.write(
-    'current-authority-real-postgres-composition=verified; protected-worker-skip=verified; cleanup-alias-fence=verified; upload-intent-fence=verified; publication-upload-intent-service=verified; copy-evidence-digest=changed; post-claim-local-authority=verified; provider-start-marker=verified; provider-start-race=one-winner; provider-unknown-facts=verified; post-start-ordinary-retry-refused=verified\n',
+    'current-authority-real-postgres-composition=verified; protected-worker-skip=verified; cleanup-alias-fence=verified; upload-intent-fence=verified; publication-upload-intent-service=verified; publication-page-intent-service=verified; copy-evidence-digest=changed; post-claim-local-authority=verified; provider-start-marker=verified; provider-start-race=one-winner; provider-unknown-facts=verified; post-start-ordinary-retry-refused=verified\n',
   );
 } finally {
   await prisma.$disconnect();

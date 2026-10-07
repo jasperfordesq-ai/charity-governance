@@ -352,6 +352,11 @@ export type PublicationAttempt = {
   reserveUploadIntent(input: {
     cloudId: string; spaceId: string; pageId: string; filename: string; sha256: string;
   }): Promise<string>;
+  /** Preserve the exact possible page create before its non-idempotent call. */
+  reservePageCreateIntent(input: {
+    documentRevision: Date; cloudId: string; spaceId: string;
+    parentPageId: string | null; title: string; bodySha256: string;
+  }): Promise<string>;
 };
 
 export type Publisher = (attempt: PublicationAttempt) => Promise<PublicationOutcome>;
@@ -624,6 +629,7 @@ const DEFAULT_OPERATIONS: ConfluencePublishOperations = {
 
 /** Everything the mapping needs, plus where the bytes are and what they are. */
 export type PublicationSource = PublicationDocument & {
+  updatedAt: Date;
   storagePath: string;
   mimeType: string;
 };
@@ -666,14 +672,28 @@ function defaultConnect(deps: ConfluencePublisherDeps): ConfluencePublishConnect
     throw new TypeError('createConfluencePublisher needs either a prisma client or a connect function.');
   }
 
-  return async ({ organisationId, cloudId }) =>
-    createConfluenceClient({
+  return async ({ organisationId, cloudId }) => {
+    const assertConnectedSite = async () => {
+      const current = await confluencePublishTargetForOrganisation(prisma, organisationId);
+      if (current?.cloudId !== cloudId) {
+        throw new AppError(409, 'CONFLUENCE_PUBLISH_TARGET_CHANGED',
+          'The connected Confluence site changed before the provider request.');
+      }
+    };
+    return createConfluenceClient({
       cloudId,
       // A thunk, because a backoff can outlive an access token.
       // `currentAccessTokenForOrganisation` is the only permitted way to take a
       // token outside a route — a job holds a tenant, never an integration id.
-      getAccessToken: () => currentAccessTokenForOrganisation(prisma, { organisationId }, deps.connection),
+      getAccessToken: async () => {
+        await assertConnectedSite();
+        const token = await currentAccessTokenForOrganisation(prisma,
+          { organisationId }, deps.connection);
+        await assertConnectedSite();
+        return token;
+      },
     });
+  };
 }
 
 function defaultReadTarget(
@@ -701,6 +721,7 @@ function defaultReadDocument(
       where: { deletedAt: null, id: documentId, organisationId, lifecycleStatus: 'CURRENT', externalPublicationApproved: true },
       select: {
         id: true,
+        updatedAt: true,
         name: true,
         version: true,
         organisationId: true,
@@ -720,6 +741,7 @@ function defaultReadDocument(
 
     return {
       id: String(doc.id),
+      updatedAt: doc.updatedAt as Date,
       name: String(doc.name),
       version: Number(doc.version),
       organisationId: String(doc.organisationId),
@@ -818,7 +840,26 @@ export function createConfluencePublisher(deps: ConfluencePublisherDeps): Publis
     }
   };
 
-  return async ({ row, signal, recordPage, reserveRemoteWrite, reserveUploadIntent }: PublicationAttempt): Promise<PublicationOutcome> => {
+  const assertCurrentCreateInputs = async (row: DocumentPublicationRecord,
+    doc: PublicationSource, target: ConfluencePublishTarget) => {
+    const currentTarget = await readTarget(row.organisationId);
+    if (currentTarget === null || currentTarget.cloudId !== target.cloudId
+      || currentTarget.spaceId !== target.spaceId
+      || JSON.stringify(currentTarget.publishingModel) !== JSON.stringify(target.publishingModel)) {
+      throw new AppError(409, 'CONFLUENCE_PUBLISH_TARGET_CHANGED',
+        'The Confluence destination or page model changed before page creation.');
+    }
+    await assertStillApproved(row.organisationId, row.documentId, target);
+    const currentDocument = await readDocument({ organisationId: row.organisationId,
+      documentId: row.documentId });
+    if (currentDocument.updatedAt.getTime() !== doc.updatedAt.getTime()) {
+      throw new AppError(409, 'DOCUMENT_PUBLICATION_NOT_APPROVED',
+        'The approved document changed before page creation.');
+    }
+  };
+
+  return async ({ row, signal, recordPage, reserveRemoteWrite, reserveUploadIntent,
+    reservePageCreateIntent }: PublicationAttempt): Promise<PublicationOutcome> => {
     let remoteWriteReserved = false;
     const reserveBeforeWrite = async () => {
       assertNotAborted(signal);
@@ -870,7 +911,9 @@ export function createConfluencePublisher(deps: ConfluencePublisherDeps): Publis
 
     await assertStillApproved(row.organisationId, row.documentId, target);
 
-    const page = await resolvePage({ client, operations, row, target, doc, title, signal, reserveBeforeWrite });
+    const page = await resolvePage({ client, operations, row, target, doc, title, signal,
+      reserveBeforeWrite, reservePageCreateIntent,
+      assertCurrentCreateInputs: () => assertCurrentCreateInputs(row, doc, target) });
 
     // REPUBLISHING A PAGE THAT ALREADY EXISTS.
     //
@@ -1104,8 +1147,11 @@ async function refreshPage(input: {
 }
 
 /**
- * Create-or-adopt. The three ways a page is arrived at, in the order that
- * makes a retry safe. See the module header.
+ * Create-or-adopt for an attempt that has not already become UNKNOWN. The
+ * page-create intent preserves what could have been sent; a title/409 match
+ * does not establish that an ambiguous earlier operation made that page.
+ * Do not use this path to release a quarantined attempt without separate
+ * provider identity and all-copy evidence.
  */
 async function resolvePage(input: {
   client: ConfluenceClient;
@@ -1116,8 +1162,11 @@ async function resolvePage(input: {
   title: string;
   signal?: AbortSignal;
   reserveBeforeWrite(): Promise<void>;
+  reservePageCreateIntent: PublicationAttempt['reservePageCreateIntent'];
+  assertCurrentCreateInputs(): Promise<void>;
 }): Promise<{ id: string; title: string }> {
-  const { client, operations, row, target, doc, title, signal, reserveBeforeWrite } = input;
+  const { client, operations, row, target, doc, title, signal, reserveBeforeWrite,
+    reservePageCreateIntent, assertCurrentCreateInputs } = input;
 
   // 1. A page id this row already recorded. Adopted without a lookup, because
   //    `findPageByTitle` is a search and a page created moments ago is not
@@ -1134,11 +1183,23 @@ async function resolvePage(input: {
 
   assertNotAborted(signal);
   await reserveBeforeWrite();
+  const bodyStorage = publicationBody(doc, target.publishingModel.bodyMode);
+  await reservePageCreateIntent({
+    documentRevision: doc.updatedAt,
+    cloudId: target.cloudId,
+    spaceId: target.spaceId,
+    parentPageId: target.publishingModel.parentPageId,
+    title,
+    bodySha256: createHash('sha256').update(bodyStorage, 'utf8').digest('hex'),
+  });
+  assertNotAborted(signal);
+  await assertCurrentCreateInputs();
+  assertNotAborted(signal);
   try {
     return await operations.createPage(client, {
       spaceId: target.spaceId,
       title,
-      bodyStorage: publicationBody(doc, target.publishingModel.bodyMode),
+      bodyStorage,
       // Files the page under a CharityPilot root page when the charity has
       // chosen one, rather than leaving it loose at the space root. Omitted
       // rather than passed as null when unset: `undefined` is "no parent", and
@@ -1263,6 +1324,40 @@ export class DocumentPublicationService {
       SELECT ${operationId}, eligible.id, eligible."organisationId", eligible."documentId",
         eligible."claimedAt", ${input.cloudId}, ${input.spaceId}, ${input.pageId},
         ${input.filename}, ${input.sha256}
+      FROM eligible
+      RETURNING id
+    `;
+    if (rows.length !== 1 || rows[0]?.id !== operationId) throw claimLost(publication.id);
+    return operationId;
+  }
+
+  /** The local intent is immutable possible-write evidence, not provider proof. */
+  async reservePageCreateIntent(publication: DocumentPublicationRecord, input: {
+    documentRevision: Date; cloudId: string; spaceId: string;
+    parentPageId: string | null; title: string; bodySha256: string;
+  }): Promise<string> {
+    if (publication.claimedAt === null) throw claimLost(publication.id);
+    const operationId = randomBytes(16).toString('hex');
+    const rows = await this.prisma.$queryRaw<Array<{ id: string }>>`
+      WITH eligible AS (
+        SELECT p.id, p."organisationId", p."documentId", p."claimedAt"
+        FROM "DocumentPublication" AS p
+        WHERE p.id = ${publication.id}
+          AND p."organisationId" = ${publication.organisationId}
+          AND p."documentId" = ${publication.documentId}
+          AND p.state = 'PENDING' AND p."processedAt" IS NULL
+          AND p."terminalReason" IS NULL AND p."claimedAt" = ${publication.claimedAt}
+          AND p."remoteWriteStartedAt" IS NOT NULL
+          AND p."cloudId" IS NULL AND p."spaceId" IS NULL AND p."pageId" IS NULL
+        FOR UPDATE
+      )
+      INSERT INTO "DocumentPublicationPageCreateIntent" (
+        "id", "publicationId", "organisationId", "documentId", "claimedAt",
+        "documentRevision", "cloudId", "spaceId", "parentPageId", "title", "bodySha256"
+      )
+      SELECT ${operationId}, eligible.id, eligible."organisationId", eligible."documentId",
+        eligible."claimedAt", ${input.documentRevision}, ${input.cloudId},
+        ${input.spaceId}, ${input.parentPageId}, ${input.title}, ${input.bodySha256}
       FROM eligible
       RETURNING id
     `;
@@ -1627,6 +1722,7 @@ export class DocumentPublicationService {
           if (!reserved) throw claimLost(publication.id);
         },
         reserveUploadIntent: (input) => this.reserveUploadIntent(publication, input),
+        reservePageCreateIntent: (input) => this.reservePageCreateIntent(publication, input),
       }),
     );
     // The attempt outlives a lost race by one call (see `assertNotAborted`), so
