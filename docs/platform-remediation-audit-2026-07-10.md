@@ -1,5 +1,17 @@
 # CharityPilot Full-Platform Remediation Audit
 
+> **7 October DPO-05 upload-intent/purge fence release:** Exact `5dfa72b3`
+> passed hosted CI/E2E and guarded green private-VM cutover. Both new
+> triggers and migration are live; restricted runtime, prior byte/copy
+> guards, five ATTACHED historical intents, zero purge/recovery claims,
+> both front doors, 267 preserved earlier backup hashes, two SHA-verified
+> off-VM sets and isolated 148-migration restore passed. This is one
+> exact-path reservation fence, not a worker byte permit, all-copy proof,
+> independent P05/P08 custody, host-loss reopening or DPO acceptance.
+> P01–P09/MFA, Member/export/deletion, replay/C1 and Nikita review remain
+> open. Private receipt: `release-5dfa72b3-upload-intent-purge-fence-2026-10-07.md`.
+> Older source-only and release checkpoints below are dated history.
+
 > **7 October DPO-05 source-only upload-intent fence:** A new database
 > migration serialises exact-path upload reservations and primary purge
 > claims. Unresolved or different-document intents block a claim; the

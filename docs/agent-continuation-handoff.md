@@ -1,5 +1,19 @@
 # CharityPilot Agent Continuation Handoff
 
+> **7 October ~08:33 Dublin upload-intent/purge fence release:** Exact
+> `5dfa72b3` hosted CI/E2E passed and green serves the guarded private VM;
+> blue `312eb93e` is the previous version. The new migration and both
+> triggers are present. Restricted runtime, prior byte/copy guards, zero
+> recovery and claim rows, five historical ATTACHED intents, format-4
+> inventory and both front doors passed. All 267 earlier backup hashes
+> survived; two new sets, six SHA-verified off-VM files, and isolated
+> 148-migration restore passed. This fences one exact-path upload-reservation
+> race; it is not a worker byte permit, all-copy or historical-copy proof.
+> Independent P05/P08 custody/host-loss and policy, role/export/deletion,
+> replay/C1 and Nikita acceptance gates remain open. Private receipt:
+> `release-5dfa72b3-upload-intent-purge-fence-2026-10-07.md`.
+> Older source-only and release checkpoints below are dated history.
+
 > **7 October source-only upload-intent/purge fence:** A new migration
 > makes a primary claim refuse an unresolved or different-document upload
 > reservation for its exact provider/object path, while preserving the
