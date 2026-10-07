@@ -1,5 +1,18 @@
 # CharityPilot Full-Platform Remediation Audit
 
+> **7 October DPO-05 encrypted candidate release:** Exact `05087bbf`
+> hosted CI/E2E and guarded private-VM cutover passed. Green serves a
+> separately encrypted document byte-permit candidate and authenticated
+> three-entry history read, both non-executable. Restricted runtime, empty
+> recovery/enforcement, both front doors, 231 preserved backup hashes,
+> two verified off-VM sets and isolated 145-migration restore passed.
+> DPO-05 remains open for a verified current-authority publisher, exact
+> database/worker permit and pre-provider checks, all-copy fencing, approved
+> P05/P08 custody and host-loss reopening. P01-P09/MFA, Member/export/
+> deletion, replay/C1 and Nikita review remain open. Private receipt:
+> `release-05087bbf-byte-permit-candidate-2026-10-07.md`; older notes below
+> are dated history.
+
 > **7 October DPO-05 release and remaining-work audit:** Exact `dc10b848`
 > hosted CI/E2E and guarded private-VM cutover passed. Blue serves an inert
 > `DOCUMENT_BYTE_PERMIT_V1` journal stage; no action is authorized. Restricted

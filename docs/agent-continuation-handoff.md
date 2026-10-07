@@ -1,5 +1,18 @@
 # CharityPilot Agent Continuation Handoff
 
+> **7 October ~05:04 Dublin guarded encrypted candidate release:** Exact
+> `05087bbf` hosted CI/E2E succeeded and green now serves the private VM.
+> Restricted runtime, empty recovery/enforcement, byte-fence trigger,
+> format-3 inventory and both front doors passed. All 231 previous backup
+> hashes survived; two new sets were copied and SHA-verified off-VM; an
+> isolated 145-migration restore passed. Blue `dc10b848` is rollbackable.
+> The encrypted candidate and current-history read are non-executable;
+> `actionAuthorized` remains false. No safe local-authority publisher,
+> database/worker permit, all-copy fence, P05/P08 custody or host-loss
+> reopening exists. Keep enforcement inactive and DPO-05 open. Private
+> receipt: `release-05087bbf-byte-permit-candidate-2026-10-07.md`; older
+> source-only/release notes below are dated history.
+
 > **7 October ~04:40 Dublin guarded byte-permit journal release:** Exact
 > `dc10b848` hosted CI/E2E passed and blue now serves the private VM after
 > guarded cutover. Live checks proved restricted `cp_runtime`, shared mount,
