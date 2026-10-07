@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import { createHash } from 'node:crypto';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import test from 'node:test';
@@ -337,6 +338,9 @@ function runPublisher(
     signal?: AbortSignal;
     recordPage?: (page: { pageId: string }) => Promise<void>;
     reserveRemoteWrite?: () => Promise<void>;
+    reserveUploadIntent?: (input: {
+      cloudId: string; spaceId: string; pageId: string; filename: string; sha256: string;
+    }) => Promise<string>;
   } = {},
 ): Promise<PublicationOutcome> {
   const publisher = createConfluencePublisher(deps);
@@ -345,6 +349,7 @@ function runPublisher(
     signal: options.signal,
     recordPage: options.recordPage ?? (async () => undefined),
     reserveRemoteWrite: options.reserveRemoteWrite ?? (async () => undefined),
+    reserveUploadIntent: options.reserveUploadIntent ?? (async () => '0123456789abcdef0123456789abcdef'),
   });
 }
 
@@ -450,6 +455,79 @@ test('a durable reservation precedes page creation and is reused for the attachm
   assert.equal(calls.filter((call) => call === 'reserveRemoteWrite').length, 1);
   assert.ok(calls.indexOf('reserveRemoteWrite') < calls.findIndex((call) => call.startsWith('createPage:')));
   assert.ok(calls.indexOf('reserveRemoteWrite') < calls.findIndex((call) => call.startsWith('uploadAttachment:')));
+});
+
+test('an exact upload intent is committed before bytes leave, and its marker names the same digest', async () => {
+  const calls: string[] = [];
+  const sha256 = createHash('sha256').update(new Uint8Array([1, 2, 3])).digest('hex');
+  let comment: string | undefined;
+  await runPublisher(spyDeps(calls, { operations: {
+    uploadAttachment: async (_client, input) => {
+      comment = input.comment;
+      return ATTACHMENT;
+    },
+  } }), {
+    reserveUploadIntent: async (input) => {
+      calls.push('reserveUploadIntent');
+      assert.deepEqual(input, {
+        cloudId: 'cloud-1', spaceId: 'space-1', pageId: 'page-1',
+        filename: 'Safeguarding Policy', sha256,
+      });
+      return '0123456789abcdef0123456789abcdef';
+    },
+  });
+  assert.equal(comment, `CharityPilot upload v1 0123456789abcdef0123456789abcdef sha256 ${sha256}`);
+  assert.ok(calls.indexOf('downloadFile') < calls.indexOf('reserveUploadIntent'));
+  assert.ok(calls.indexOf('reserveUploadIntent') < calls.indexOf('uploadAttachment:page-1:Safeguarding Policy'));
+});
+
+test('a failed upload-intent commit refuses the attachment call', async () => {
+  const calls: string[] = [];
+  const error = appError(await captureRejection(runPublisher(spyDeps(calls), {
+    reserveUploadIntent: async () => {
+      throw new AppError(409, 'DOCUMENT_PUBLICATION_CLAIM_LOST', 'x');
+    },
+  })));
+  assert.equal(error.code, 'DOCUMENT_PUBLICATION_CLAIM_LOST');
+  assert.equal(calls.some((call) => call.startsWith('uploadAttachment:')), false);
+});
+
+test('the upload-intent insert locks and filters the exact claimed publication', async () => {
+  let sql = '';
+  let bindings: unknown[] = [];
+  const prisma = {
+    $queryRaw: async (parts: TemplateStringsArray, ...values: unknown[]) => {
+      sql = parts.join('?');
+      bindings = values;
+      return [{ id: values[7] }];
+    },
+  };
+  const service = new DocumentPublicationService(prisma as never, () => NOW);
+  const row = publicationRow({ claimedAt: NOW, cloudId: 'cloud-1', spaceId: 'space-1',
+    pageId: 'page-1', remoteWriteStartedAt: NOW });
+  const sha256 = createHash('sha256').update('bytes').digest('hex');
+  const id = await service.reserveUploadIntent(row, {
+    cloudId: 'cloud-1', spaceId: 'space-1', pageId: 'page-1', filename: 'policy.pdf', sha256,
+  });
+  assert.match(id, /^[0-9a-f]{32}$/);
+  assert.match(sql, /WITH eligible AS/);
+  assert.match(sql, /p\."remoteWriteStartedAt" IS NOT NULL/);
+  assert.match(sql, /p\."claimedAt" = \?/);
+  assert.match(sql, /FOR UPDATE/);
+  assert.match(sql, /INSERT INTO "DocumentPublicationUploadIntent"/);
+  assert.deepEqual(bindings.slice(0, 7), [
+    'pub-1', 'org-1', 'doc-1', NOW, 'cloud-1', 'space-1', 'page-1',
+  ]);
+  assert.equal(bindings[7], id);
+  assert.deepEqual(bindings.slice(8), ['cloud-1', 'space-1', 'page-1', 'policy.pdf', sha256]);
+
+  const missing = new DocumentPublicationService({
+    $queryRaw: async () => [],
+  } as never, () => NOW);
+  const error = appError(await captureRejection(missing.reserveUploadIntent(row, {
+    cloudId: 'cloud-1', spaceId: 'space-1', pageId: 'page-1', filename: 'policy.pdf', sha256,
+  })));
+  assert.equal(error.code, 'DOCUMENT_PUBLICATION_CLAIM_LOST');
 });
 
 test('a rejected reservation sends no page or attachment bytes to Confluence', async () => {

@@ -11,6 +11,7 @@ import {
   type AttachmentVersionReadback,
   type AttachmentVersionReadbackInput,
 } from './confluence-attachment-readback.js';
+import { confluenceUploadOperationMarker } from './confluence-upload-operation-marker.js';
 
 const ID = /^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$/;
 const CLOUD_ID = /^[A-Za-z0-9][A-Za-z0-9-]{0,63}$/;
@@ -34,6 +35,8 @@ export type AttachmentVersionObservation = {
   title: string;
   currentVersionNumber: number;
   versions: Array<{ number: number; byteLength: number; sha256: string }>;
+  /** A matching provider message and byte digest is a candidate, not authority. */
+  uploadCandidateVersionNumber?: number | null;
   /** This observation alone never authorizes a publication retry or erasure. */
   actionAuthorized: false;
 };
@@ -41,6 +44,7 @@ export type AttachmentVersionObservation = {
 export type AttachmentVersionObservationInput = Omit<ReadInput, 'versionNumber' | 'maxBytes'> & {
   /** Bounds every download, including the second read of the current version. */
   maxTotalBytes?: number;
+  expectedUpload?: { operationId: string; sha256: string };
   operations?: Partial<AttachmentObservationOperations>;
 };
 
@@ -69,13 +73,19 @@ function versionNumbers(versions: ConfluenceAttachmentVersion[], attachmentId: s
   }
   const numbers = versions.map((version) => {
     if (version.attachmentId !== attachmentId || !Number.isSafeInteger(version.number)
-      || version.number <= 0) throw invalidObservation();
+      || version.number <= 0 || (version.message !== undefined
+        && (typeof version.message !== 'string' || version.message.length > 1024))) throw invalidObservation();
     return version.number;
   }).sort((left, right) => left - right);
   if (new Set(numbers).size !== numbers.length || numbers[numbers.length - 1] !== current) {
     throw invalidObservation();
   }
   return numbers;
+}
+
+function versionMessages(versions: ConfluenceAttachmentVersion[]): string {
+  return JSON.stringify(versions.map((version) => [version.number, version.message ?? null])
+    .sort((left, right) => Number(left[0]) - Number(right[0])));
 }
 
 /**
@@ -96,6 +106,8 @@ export async function observeAttachmentVersionBytes(
     throw new AppError(400, 'CONFLUENCE_ATTACHMENT_OBSERVATION_INPUT_INVALID',
       'An attachment observation requires valid exact identifiers and limits.');
   }
+  const marker = input.expectedUpload === undefined ? null
+    : confluenceUploadOperationMarker(input.expectedUpload.operationId, input.expectedUpload.sha256);
   const operations = { ...DEFAULT_OPERATIONS, ...input.operations };
   const client = createConfluenceClient(
     { cloudId: input.cloudId, getAccessToken: input.getAccessToken },
@@ -105,10 +117,9 @@ export async function observeAttachmentVersionBytes(
     await operations.listAttachments(client, input.pageId), input.attachmentId,
   );
   const firstCurrent = firstAttachment.versionNumber!;
-  const numbers = versionNumbers(
-    await operations.listAttachmentVersions(client, input.attachmentId, MAX_VERSIONS),
-    input.attachmentId, firstCurrent,
-  );
+  const firstListed = await operations.listAttachmentVersions(client, input.attachmentId, MAX_VERSIONS);
+  const numbers = versionNumbers(firstListed, input.attachmentId, firstCurrent);
+  const firstMessages = versionMessages(firstListed);
 
   let totalBytes = 0;
   const versions: AttachmentVersionObservation['versions'] = [];
@@ -143,12 +154,11 @@ export async function observeAttachmentVersionBytes(
     await operations.listAttachments(client, input.pageId), input.attachmentId,
   );
   const secondCurrent = secondAttachment.versionNumber!;
-  const secondNumbers = versionNumbers(
-    await operations.listAttachmentVersions(client, input.attachmentId, MAX_VERSIONS),
-    input.attachmentId, secondCurrent,
-  );
+  const secondListed = await operations.listAttachmentVersions(client, input.attachmentId, MAX_VERSIONS);
+  const secondNumbers = versionNumbers(secondListed, input.attachmentId, secondCurrent);
   if (firstAttachment.title !== secondAttachment.title || firstCurrent !== secondCurrent
-    || JSON.stringify(numbers) !== JSON.stringify(secondNumbers)) throw invalidObservation();
+    || JSON.stringify(numbers) !== JSON.stringify(secondNumbers)
+    || firstMessages !== versionMessages(secondListed)) throw invalidObservation();
 
   const repeatedCurrent = await readVersion(firstCurrent);
   const firstCurrentRead = versions[versions.length - 1];
@@ -159,12 +169,23 @@ export async function observeAttachmentVersionBytes(
     await operations.listAttachments(client, input.pageId), input.attachmentId,
   );
   const finalCurrent = finalAttachment.versionNumber!;
-  const finalNumbers = versionNumbers(
-    await operations.listAttachmentVersions(client, input.attachmentId, MAX_VERSIONS),
-    input.attachmentId, finalCurrent,
-  );
+  const finalListed = await operations.listAttachmentVersions(client, input.attachmentId, MAX_VERSIONS);
+  const finalNumbers = versionNumbers(finalListed, input.attachmentId, finalCurrent);
   if (firstAttachment.title !== finalAttachment.title || firstCurrent !== finalCurrent
-    || JSON.stringify(numbers) !== JSON.stringify(finalNumbers)) throw invalidObservation();
+    || JSON.stringify(numbers) !== JSON.stringify(finalNumbers)
+    || firstMessages !== versionMessages(finalListed)) throw invalidObservation();
+
+  let uploadCandidateVersionNumber: number | null = null;
+  if (marker !== null) {
+    const matches = firstListed.filter((version) => version.message === marker);
+    if (matches.length > 1) throw invalidObservation();
+    const match = matches[0];
+    if (match !== undefined) {
+      const observed = versions.find((version) => version.number === match.number);
+      if (observed?.sha256 !== input.expectedUpload?.sha256) throw invalidObservation();
+      uploadCandidateVersionNumber = match.number;
+    }
+  }
 
   return {
     cloudId: input.cloudId,
@@ -174,6 +195,7 @@ export async function observeAttachmentVersionBytes(
     title: firstAttachment.title,
     currentVersionNumber: firstCurrent,
     versions,
+    ...(marker === null ? {} : { uploadCandidateVersionNumber }),
     actionAuthorized: false,
   };
 }

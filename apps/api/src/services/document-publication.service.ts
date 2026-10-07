@@ -1,5 +1,5 @@
 import type { PrismaClient } from '@prisma/client';
-import { randomUUID } from 'node:crypto';
+import { createHash, randomBytes, randomUUID } from 'node:crypto';
 import { AppError } from '../utils/errors.js';
 import { formatProviderError } from '../utils/provider-errors.js';
 import type { ConfluenceClient } from './confluence-client.js';
@@ -49,6 +49,7 @@ import {
   publicationLabels,
   type PublicationBodyMode,
 } from './confluence-publishing-model.js';
+import { confluenceUploadOperationMarker } from './confluence-upload-operation-marker.js';
 
 /**
  * The publish worker: the sequence that turns a `DocumentPublication` row into
@@ -347,6 +348,10 @@ export type PublicationAttempt = {
   recordPage(page: PublishedPage): Promise<void>;
   /** Commit a one-use possible-remote-write marker before the first write. */
   reserveRemoteWrite(): Promise<void>;
+  /** Commit exact site, page, attempt and byte identity before attachment I/O. */
+  reserveUploadIntent(input: {
+    cloudId: string; spaceId: string; pageId: string; filename: string; sha256: string;
+  }): Promise<string>;
 };
 
 export type Publisher = (attempt: PublicationAttempt) => Promise<PublicationOutcome>;
@@ -813,7 +818,7 @@ export function createConfluencePublisher(deps: ConfluencePublisherDeps): Publis
     }
   };
 
-  return async ({ row, signal, recordPage, reserveRemoteWrite }: PublicationAttempt): Promise<PublicationOutcome> => {
+  return async ({ row, signal, recordPage, reserveRemoteWrite, reserveUploadIntent }: PublicationAttempt): Promise<PublicationOutcome> => {
     let remoteWriteReserved = false;
     const reserveBeforeWrite = async () => {
       assertNotAborted(signal);
@@ -920,13 +925,22 @@ export function createConfluencePublisher(deps: ConfluencePublisherDeps): Publis
     assertNotAborted(signal);
     await assertStillApproved(row.organisationId, row.documentId, target);
     await reserveBeforeWrite();
+    const filename = publicationFilename(doc);
+    const sha256 = createHash('sha256').update(bytes).digest('hex');
+    const operationId = await reserveUploadIntent({
+      cloudId: recorded.cloudId, spaceId: recorded.spaceId,
+      pageId: recorded.pageId, filename, sha256,
+    });
+    const comment = confluenceUploadOperationMarker(operationId, sha256);
+    assertNotAborted(signal);
     let attachment: ConfluenceAttachment;
     try {
       attachment = await operations.uploadAttachment(client, {
         pageId: recorded.pageId,
-        filename: publicationFilename(doc),
+        filename,
         contentType: doc.mimeType,
         bytes,
+        comment,
       });
     } catch (error) {
       if (isForbidden(error)) throw publishForbidden('attach a file to a page', target.spaceKey, error);
@@ -1215,6 +1229,45 @@ export class DocumentPublicationService {
       data: { remoteWriteStartedAt: this.now() },
     });
     return result.count === 1;
+  }
+
+  /** The append-only intent is committed before one non-idempotent upload. */
+  async reserveUploadIntent(publication: DocumentPublicationRecord, input: {
+    cloudId: string; spaceId: string; pageId: string; filename: string; sha256: string;
+  }): Promise<string> {
+    if (publication.claimedAt === null) throw claimLost(publication.id);
+    const operationId = randomBytes(16).toString('hex');
+    // One SQL statement locks and checks the current claimed row before it
+    // inserts the intent. A stale claimant cannot emit a marker or upload.
+    const rows = await this.prisma.$queryRaw<Array<{ id: string }>>`
+      WITH eligible AS (
+        SELECT p.id, p."organisationId", p."documentId", p."claimedAt"
+        FROM "DocumentPublication" AS p
+        WHERE p.id = ${publication.id}
+          AND p."organisationId" = ${publication.organisationId}
+          AND p."documentId" = ${publication.documentId}
+          AND p.state = 'PENDING'
+          AND p."processedAt" IS NULL
+          AND p."terminalReason" IS NULL
+          AND p."claimedAt" = ${publication.claimedAt}
+          AND p."remoteWriteStartedAt" IS NOT NULL
+          AND p."cloudId" = ${input.cloudId}
+          AND p."spaceId" = ${input.spaceId}
+          AND p."pageId" = ${input.pageId}
+        FOR UPDATE
+      )
+      INSERT INTO "DocumentPublicationUploadIntent" (
+        "id", "publicationId", "organisationId", "documentId", "claimedAt",
+        "cloudId", "spaceId", "pageId", "filename", "sha256"
+      )
+      SELECT ${operationId}, eligible.id, eligible."organisationId", eligible."documentId",
+        eligible."claimedAt", ${input.cloudId}, ${input.spaceId}, ${input.pageId},
+        ${input.filename}, ${input.sha256}
+      FROM eligible
+      RETURNING id
+    `;
+    if (rows.length !== 1 || rows[0]?.id !== operationId) throw claimLost(publication.id);
+    return operationId;
   }
 
   /**
@@ -1573,6 +1626,7 @@ export class DocumentPublicationService {
           const reserved = await this.reserveRemoteWrite(publication.id, publication.claimedAt);
           if (!reserved) throw claimLost(publication.id);
         },
+        reserveUploadIntent: (input) => this.reserveUploadIntent(publication, input),
       }),
     );
     // The attempt outlives a lost race by one call (see `assertNotAborted`), so

@@ -776,3 +776,63 @@ test('real PostgreSQL 16 migration preserves an unresolved Confluence write rese
       FROM "DocumentPublication" WHERE id='complete';`).stdout.trim(), 'PENDING|true');
   } finally { await removeDisposableContainer(container); }
 });
+
+test('real PostgreSQL 16 migration preserves exact Confluence upload intent evidence', { timeout: 120_000 }, async () => {
+  const container = `charitypilot-upload-intent-${randomUUID()}`;
+  assertDockerSuccess(docker(['run', '--detach', '--name', container, '--network', 'none',
+    '-e', 'POSTGRES_HOST_AUTH_METHOD=trust', POSTGRES_IMAGE]), 'start upload intent fixture');
+  try {
+    await waitForPostgres(container);
+    psql(container, `CREATE TABLE "DocumentPublication" (
+      id TEXT PRIMARY KEY, "organisationId" TEXT NOT NULL, "documentId" TEXT NOT NULL,
+      state TEXT NOT NULL, "processedAt" TIMESTAMP(3), "terminalReason" TEXT,
+      "claimedAt" TIMESTAMP(3), "remoteWriteStartedAt" TIMESTAMP(3),
+      "cloudId" TEXT, "spaceId" TEXT, "pageId" TEXT
+    );
+    INSERT INTO "DocumentPublication" (id, "organisationId", "documentId", state,
+      "claimedAt", "remoteWriteStartedAt", "cloudId", "spaceId", "pageId")
+    VALUES ('pub-1', 'org-1', 'doc-1', 'PENDING', '2026-10-07T12:00:00Z',
+      '2026-10-07T12:00:00Z', 'cloud-1', 'space-1', 'page-1');`);
+    psql(container, readFileSync(new URL(
+      '../../prisma/migrations/20261007130000_document_publication_upload_intent/migration.sql',
+      import.meta.url,
+    ), 'utf8'));
+    const insert = (id: string, sha256: string, claimedAt = '2026-10-07T12:00:00Z') => `INSERT INTO "DocumentPublicationUploadIntent"
+      (id, "publicationId", "organisationId", "documentId", "claimedAt", "cloudId",
+       "spaceId", "pageId", filename, sha256)
+      VALUES ('${id}', 'pub-1', 'org-1', 'doc-1', '${claimedAt}',
+        'cloud-1', 'space-1', 'page-1', 'policy.pdf', '${sha256}');`;
+    const validId = '0123456789abcdef0123456789abcdef';
+    const validSha = 'a'.repeat(64);
+    assert.equal(psql(container, `WITH eligible AS (
+      SELECT p.id, p."organisationId", p."documentId", p."claimedAt"
+      FROM "DocumentPublication" AS p
+      WHERE p.id='pub-1' AND p."organisationId"='org-1' AND p."documentId"='doc-1'
+        AND p.state='PENDING' AND p."processedAt" IS NULL
+        AND p."terminalReason" IS NULL AND p."claimedAt"='2026-10-07T12:00:00Z'
+        AND p."remoteWriteStartedAt" IS NOT NULL AND p."cloudId"='cloud-1'
+        AND p."spaceId"='space-1' AND p."pageId"='page-1'
+      FOR UPDATE
+    )
+    INSERT INTO "DocumentPublicationUploadIntent" (id, "publicationId", "organisationId",
+      "documentId", "claimedAt", "cloudId", "spaceId", "pageId", filename, sha256)
+    SELECT '${validId}', eligible.id, eligible."organisationId", eligible."documentId",
+      eligible."claimedAt", 'cloud-1', 'space-1', 'page-1', 'policy.pdf', '${validSha}'
+    FROM eligible RETURNING id;`).stdout.trim(), validId);
+    assert.equal(psql(container, `SELECT "cloudId" || '|' || "pageId" || '|' || sha256
+      FROM "DocumentPublicationUploadIntent" WHERE id='${validId}';`).stdout.trim(),
+    `cloud-1|page-1|${validSha}`);
+    assert.match(psql(container, insert(validId, validSha), false).stderr, /duplicate key/);
+    assert.match(psql(container, insert('c'.repeat(32), validSha), false).stderr, /duplicate key/);
+    assert.match(psql(container, insert('b'.repeat(32), 'wrong'), false).stderr,
+      /DocumentPublicationUploadIntent_identity_check/);
+    psql(container, `UPDATE "DocumentPublication" SET "pageId"='page-2',
+      "claimedAt"='2026-10-07T12:01:00Z' WHERE id='pub-1';`);
+    assert.match(psql(container, insert('b'.repeat(32), validSha, '2026-10-07T12:01:00Z'), false).stderr,
+      /requires the current claimed publication and exact target/);
+    assert.match(psql(container, `UPDATE "DocumentPublicationUploadIntent" SET "pageId"='other'
+      WHERE id='${validId}';`, false).stderr, /immutable/);
+    assert.match(psql(container, `DELETE FROM "DocumentPublicationUploadIntent"
+      WHERE id='${validId}';`, false).stderr, /immutable/);
+  } finally { await removeDisposableContainer(container); }
+});
