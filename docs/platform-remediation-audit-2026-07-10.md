@@ -1,5 +1,18 @@
 # CharityPilot Full-Platform Remediation Audit
 
+> **7 October private-VM complaint policy gate:** Exact `38b735c1` is live
+> after hosted CI/E2E and guarded release. If complaint recovery enforcement
+> is later bound, ordinary complaint policy revision/withdrawal fail closed
+> in service and direct SQL; live binding count is zero. Restricted runtime
+> role, migration, front doors, Owner MCP reads, 174 preserved prior backup
+> hashes, two copied/verified sets and 142-migration isolated restore passed.
+> This narrows DPO-05 but does not close it: independent custody/history,
+> alternate published policy operations, all-writer fencing, approved policy
+> and host-loss reopening remain missing. Member/export/replay/C1 and Nikita
+> acceptance gates remain open. Private proof:
+> `.charitypilot-private/release-38b735c1-complaint-policy-gate-2026-10-07.md`.
+> Older release/status blocks below are historical checkpoints.
+
 > **7 October private-VM recovery-gate subtask:** Exact `4d03f890` is live
 > after hosted CI/E2E and guarded cutover. If complaint recovery enforcement
 > is ever bound, ordinary removal/restoration now fail closed at service and

@@ -1,5 +1,18 @@
 # CharityPilot Agent Continuation Handoff
 
+> **7 October complaint policy recovery-gate private VM release:** Blue
+> `38b735c1` is live after exact hosted CI/E2E and guarded cutover. Service
+> and SQL now reject ordinary COMPLAINT retention-policy revisions and
+> withdrawals once independent recovery enforcement is bound; the live
+> binding count remains zero. Restricted `cp_runtime`, migration, loopback/
+> Tailscale, authenticated Owner MCP reads, preservation of 174 prior backup
+> hashes, two copied/verified new sets and a 142-migration isolated restore
+> passed. Green `4d03f890` is stopped/rollbackable. This closes one inactive
+> writer gap, not independent recovery, host-loss authority, approved
+> retention, Member/browser or DPO acceptance. Exact private receipt:
+> `.charitypilot-private/release-38b735c1-complaint-policy-gate-2026-10-07.md`.
+> Earlier live-colour statements below are dated checkpoints.
+
 > **7 October complaint recovery-gate private VM release:** Green `4d03f890`
 > is live after exact hosted CI/E2E and guarded deployment. The new SQL and
 > service gate refuses ordinary complaint removal/restoration if independent
