@@ -827,7 +827,7 @@ test('a property key that could address another resource is refused before any r
 });
 
 // ---------------------------------------------------------------------------
-// findPageByTitle — the caller-side re-read that makes create-or-adopt safe
+// findPageByTitle — a bounded candidate lookup, never page-identity proof
 // ---------------------------------------------------------------------------
 
 test('findPageByTitle returns the page when exactly one match is found', async () => {

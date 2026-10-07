@@ -674,32 +674,34 @@ test('the page id is recorded before a single byte is uploaded to it', async () 
 });
 
 // ---------------------------------------------------------------------------
-// Create-or-adopt: the three ways a page is arrived at, and the one that must
-// never happen twice
+// Page resolution: a recorded id may be reused; a title match is a candidate
+// that cannot authorize document bytes.
 // ---------------------------------------------------------------------------
 
-test('an existing page with this title is adopted and createPage is never called', async () => {
+test('an unrecorded title match is not adopted without exact provider identity', async () => {
   const calls: string[] = [];
-  const outcome = await runPublisher(
+  const error = appError(await captureRejection(runPublisher(
     spyDeps(calls, { operations: { findPageByTitle: async () => PAGE } }),
-  );
+  )));
 
-  assert.equal(outcome.pageId, 'page-1');
+  assert.equal(error.code, 'CONFLUENCE_PAGE_IDENTITY_UNVERIFIED');
   assert.equal(
     calls.filter((call) => call.startsWith('createPage:')).length,
     0,
-    'a page that already exists must be adopted, never created a second time',
+    'a title collision must never cause a second page create',
   );
+  assert.equal(calls.some(call => call.startsWith('uploadAttachment:')), false);
 });
 
-test('adopting an existing page reserves only before its first attachment write', async () => {
+test('an unrecorded title match refuses before any remote-write reservation or attachment', async () => {
   const calls: string[] = [];
-  await runPublisher(spyDeps(calls, { operations: { findPageByTitle: async () => PAGE } }), {
+  const error = appError(await captureRejection(runPublisher(
+    spyDeps(calls, { operations: { findPageByTitle: async () => PAGE } }), {
     reserveRemoteWrite: async () => { calls.push('reserveRemoteWrite'); },
-  });
-  assert.ok(calls.findIndex((call) => call.startsWith('findPageByTitle:')) < calls.indexOf('reserveRemoteWrite'));
-  assert.ok(calls.indexOf('reserveRemoteWrite') < calls.findIndex((call) => call.startsWith('uploadAttachment:')));
-  assert.equal(calls.filter((call) => call === 'reserveRemoteWrite').length, 1);
+  })));
+  assert.equal(error.code, 'CONFLUENCE_PAGE_IDENTITY_UNVERIFIED');
+  assert.equal(calls.includes('reserveRemoteWrite'), false);
+  assert.equal(calls.some(call => call.startsWith('uploadAttachment:')), false);
 });
 
 test('a page id the row already records is adopted without any lookup', async () => {
@@ -727,10 +729,10 @@ test('a page refresh reserves before updating its version', async () => {
   assert.equal(calls.filter((call) => call === 'reserveRemoteWrite').length, 1);
 });
 
-test('a conflict on create adopts the page a previous attempt made, creating only once', async () => {
+test('a conflict on create never adopts a title match without exact identity', async () => {
   const calls: string[] = [];
   let lookups = 0;
-  const outcome = await runPublisher(
+  const error = appError(await captureRejection(runPublisher(
     spyDeps(calls, {
       operations: {
         findPageByTitle: async () => {
@@ -744,9 +746,9 @@ test('a conflict on create adopts the page a previous attempt made, creating onl
         },
       },
     }),
-  );
+  )));
 
-  assert.equal(outcome.pageId, 'page-1');
+  assert.equal(error.code, 'CONFLUENCE_PAGE_IDENTITY_UNVERIFIED');
   assert.equal(
     calls.filter((call) => call.startsWith('createPage:')).length,
     1,
@@ -755,12 +757,13 @@ test('a conflict on create adopts the page a previous attempt made, creating onl
   assert.equal(
     calls.filter((call) => call.startsWith('findPageByTitle:')).length,
     2,
-    'the adopt decision comes from exactly one independent re-read',
+    'one independent re-read may locate a candidate but cannot prove identity',
   );
+  assert.equal(calls.some(call => call.startsWith('uploadAttachment:')), false);
 });
 
 // ---------------------------------------------------------------------------
-// Create-or-adopt against a site that rewrites the title it stores.
+// Page resolution against a site that rewrites the title it stores.
 //
 // A page store rewrites what it is handed in more ways than one, and every one
 // of them has the same consequence: the title this codebase computed and the
@@ -835,7 +838,7 @@ function fakeSite(store: (title: string) => string) {
  * Two attempts for one document whose row never recorded a page id -- the
  * ordinary transport failure this outbox exists for: the create succeeded and
  * the connection dropped before `recordPage` committed. Returns what the site
- * holds afterwards and which page each attempt settled on.
+ * holds afterwards and whether the second attempt refused title-only adoption.
  */
 async function retryAgainstSite(store: (title: string) => string) {
   const site = fakeSite(store);
@@ -843,31 +846,33 @@ async function retryAgainstSite(store: (title: string) => string) {
     spyDeps([], { readDocument: async () => HOSTILE_DOC, operations: site.operations });
 
   const first = await runPublisher(deps());
-  const second = await runPublisher(deps());
+  const secondError = appError(await captureRejection(runPublisher(deps())));
 
-  return { pages: site.pages, first, second };
+  return { pages: site.pages, first, secondError };
 }
 
 for (const { behaviour, store } of STORE_REWRITES) {
   test(`a retried publish creates only one page on a site that ${behaviour}`, async () => {
-    const { pages, first, second } = await retryAgainstSite(store);
+    const { pages, first, secondError } = await retryAgainstSite(store);
 
     assert.equal(
       pages.length,
       1,
       `one board resolution must never become two pages; the site holds ${JSON.stringify(pages.map((page) => page.id))}`,
     );
-    assert.equal(second.pageId, first.pageId, 'the retry must adopt the page the first attempt made');
+    assert.equal(first.pageId, pages[0]?.id);
+    assert.equal(secondError.code, 'CONFLUENCE_PAGE_IDENTITY_UNVERIFIED');
   });
 }
 
-test('CONTROL: the same retry against a site that stores the title verbatim also adopts', async () => {
+test('CONTROL: the same retry against a site storing the title verbatim still refuses adoption', async () => {
   // The canary for the four tests above: if this one ever fails, the harness is
   // broken rather than the behaviour it claims to measure.
-  const { pages, first, second } = await retryAgainstSite((title) => title);
+  const { pages, first, secondError } = await retryAgainstSite((title) => title);
 
   assert.equal(pages.length, 1);
-  assert.equal(second.pageId, first.pageId);
+  assert.equal(first.pageId, pages[0]?.id);
+  assert.equal(secondError.code, 'CONFLUENCE_PAGE_IDENTITY_UNVERIFIED');
 });
 
 test('a conflict whose re-read finds nothing is the one unresolved conflict', async () => {
@@ -1351,6 +1356,18 @@ test('a failure after the committed remote-write marker is UNKNOWN even when the
   assert.equal(mock.row().nextAttemptAt, null);
 });
 
+test('a title collision after a committed create reservation remains UNKNOWN', async () => {
+  const mock = buildFallbackPrisma(publicationRow());
+  const service = new DocumentPublicationService(mock.prisma as never, () => NOW);
+  const result = await service.retryPendingPublications(async ({ reserveRemoteWrite }) => {
+    await reserveRemoteWrite();
+    throw new AppError(409, 'CONFLUENCE_PAGE_IDENTITY_UNVERIFIED', 'title-only match');
+  }, 10);
+  assert.equal(result.newlyDeadLettered, 1);
+  assert.equal(mock.row().terminalReason, 'REMOTE_WRITE_OUTCOME_UNKNOWN');
+  assert.equal(mock.row().nextAttemptAt, null);
+});
+
 test('a stale committed remote-write marker is counted as a dead letter before ordinary claims', async () => {
   const calls: string[] = [];
   const prisma = {
@@ -1509,6 +1526,12 @@ for (const [label, thrown, expectedState, expectedReason] of [
   [
     'an unresolved conflict',
     new AppError(409, 'CONFLUENCE_PUBLISH_CONFLICT_UNRESOLVED', 'x'),
+    'DEAD_LETTER',
+    'PERMANENT_CONFLICT_UNRESOLVED',
+  ],
+  [
+    'a title-only page match before any remote write',
+    new AppError(409, 'CONFLUENCE_PAGE_IDENTITY_UNVERIFIED', 'x'),
     'DEAD_LETTER',
     'PERMANENT_CONFLICT_UNRESOLVED',
   ],
