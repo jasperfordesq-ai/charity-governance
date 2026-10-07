@@ -1,5 +1,16 @@
 # CharityPilot Full-Platform Remediation Audit
 
+> **7 October DPO-05 source-only upload-intent fence:** A new database
+> migration serialises exact-path upload reservations and primary purge
+> claims. Unresolved or different-document intents block a claim; the
+> original `ATTACHED` historical intent is allowed. A new reservation after
+> claim is refused. Disposable PostgreSQL proof, API 2,568 units plus seven
+> migration tests, 1,120 production assertions with four intentional skips,
+> and security scan passed locally. Exact hosted and live evidence are
+> pending; private VM remains `312eb93e`. The worker byte permit, all-copy
+> audit, P05/P08 custody, host-loss reopening and all separate Nikita gates
+> remain open. Older release checkpoints below are dated history.
+
 > **7 October DPO-05 Confluence publication/purge fence release:** Exact
 > `312eb93e` passed hosted CI/E2E and guarded blue private-VM cutover.
 > `DocumentPurgeClaim_publication_fence` and

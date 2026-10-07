@@ -283,6 +283,78 @@ try {
       deletionId: 'job-no-retain', actorUserId: 'owner',
     } });
   }), /approved retention of identified external copy/);
+  // Reservation is written before upload bytes. The claim must refuse a
+  // still-unresolved reservation for its exact provider and object path.
+  await assert.rejects(prisma.$transaction(async (tx) => {
+    await tx.documentUploadIntent.create({ data: {
+      id: 'reserved-before-claim', organisationId: 'charity',
+      storagePath: 'charity/synthetic-proof', provider: 'local',
+    } });
+    await tx.documentRecoveryExecution.create({ data: {
+      id: 'reserved-test-execution', preparationId: 'preparation',
+      writerId: 'host', generation: 1, entryDigest: 'c'.repeat(64),
+      envelopeDigest: 'd'.repeat(64), controlRevision: 'revision',
+    } });
+    await tx.documentPurgeClaim.create({ data: {
+      id: 'reserved-test-claim', organisationId: 'charity',
+      authorizationId: 'auth', documentId: 'doc',
+      deletionId: 'reserved-test-job', actorUserId: 'owner',
+    } });
+  }), /reconciliation of unresolved upload intent/);
+  assert.equal(await prisma.documentUploadIntent.count(), 0);
+  // An ATTACHED intent for another live document on the same object is not
+  // the historical reservation for the document being purged.
+  await assert.rejects(prisma.$transaction(async (tx) => {
+    await tx.document.create({ data: {
+      id: 'other-doc', organisationId: 'charity', name: 'Other synthetic document',
+      category: 'OTHER', lifecycleStatus: 'DRAFT',
+      fileUrl: 'charity/synthetic-proof', storageProvider: 'local',
+      fileSize: 123, mimeType: 'application/pdf',
+    } });
+    await tx.documentUploadIntent.create({ data: {
+      id: 'other-attached-intent', organisationId: 'charity',
+      storagePath: 'charity/synthetic-proof', provider: 'local',
+    } });
+    await tx.documentUploadIntent.update({ where: { id: 'other-attached-intent' },
+      data: { state: 'ATTACHED', documentId: 'other-doc' } });
+    await tx.documentRecoveryExecution.create({ data: {
+      id: 'other-test-execution', preparationId: 'preparation',
+      writerId: 'host', generation: 1, entryDigest: 'c'.repeat(64),
+      envelopeDigest: 'd'.repeat(64), controlRevision: 'revision',
+    } });
+    await tx.documentPurgeClaim.create({ data: {
+      id: 'other-test-claim', organisationId: 'charity',
+      authorizationId: 'auth', documentId: 'doc',
+      deletionId: 'other-test-job', actorUserId: 'owner',
+    } });
+  }), /reconciliation of unresolved upload intent/);
+  assert.equal(await prisma.documentUploadIntent.count(), 0);
+  // The original upload intent attached to this same document is historical
+  // evidence and must not strand its authorized purge. Roll back the
+  // successful synthetic transition so the main claim can proceed below.
+  await assert.rejects(prisma.$transaction(async (tx) => {
+    await tx.documentUploadIntent.create({ data: {
+      id: 'attached-before-claim', organisationId: 'charity',
+      storagePath: 'charity/synthetic-proof', provider: 'local',
+    } });
+    await tx.documentUploadIntent.update({ where: { id: 'attached-before-claim' },
+      data: { state: 'ATTACHED', documentId: 'doc' } });
+    await tx.documentRecoveryExecution.create({ data: {
+      id: 'attached-test-execution', preparationId: 'preparation',
+      writerId: 'host', generation: 1, entryDigest: 'c'.repeat(64),
+      envelopeDigest: 'd'.repeat(64), controlRevision: 'revision',
+    } });
+    await tx.documentPurgeClaim.create({ data: {
+      id: 'attached-test-claim', organisationId: 'charity',
+      authorizationId: 'auth', documentId: 'doc',
+      deletionId: 'attached-test-job', actorUserId: 'owner',
+    } });
+    assert.ok(await tx.documentStorageDeletion.findUnique({
+      where: { id: 'attached-test-job' }, select: { id: true },
+    }));
+    throw new Error('rollback-attached-proof');
+  }), /rollback-attached-proof/);
+  assert.equal(await prisma.documentUploadIntent.count(), 0);
   await prisma.$transaction(async (tx) => {
     await tx.documentRecoveryExecution.create({
       data: {
@@ -355,21 +427,24 @@ try {
     SET attempts=1 WHERE id='job'`);
   assert.equal((await prisma.$queryRaw`SELECT count(*)::integer AS count
     FROM "DocumentBytePermitCandidateBinding"`)[0].count, 1);
-  // A later reservation for the same path is a real writer fact that the
-  // independent permit publisher must notice rather than reusing the digest.
-  await prisma.documentUploadIntent.create({
+  // A later reservation for the same object is refused before bytes can be
+  // written. A changed retained-copy fact still changes current authority.
+  await assert.rejects(prisma.documentUploadIntent.create({
     data: {
       id: 'late-intent',
       organisationId: 'charity',
       storagePath: 'charity/synthetic-proof',
       provider: 'local',
     },
+  }), /upload intent is fenced by primary purge/);
+  await prisma.documentPublication.update({ where: { id: 'retained-mirror' },
+    data: { retiredStoragePath: 'charity/synthetic-proof' },
   });
   const changed = await readCurrentDocumentByteAuthority(prisma, request);
   assert.equal(changed.actionAuthorized, false);
   assert.notEqual(changed.digest, first.digest);
   process.stdout.write(
-    'current-authority-real-postgres-composition=verified; late-writer-digest=changed\n',
+    'current-authority-real-postgres-composition=verified; upload-intent-fence=verified; copy-evidence-digest=changed\n',
   );
 } finally {
   await prisma.$disconnect();

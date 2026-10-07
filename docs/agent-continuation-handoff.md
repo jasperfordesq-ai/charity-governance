@@ -1,5 +1,19 @@
 # CharityPilot Agent Continuation Handoff
 
+> **7 October source-only upload-intent/purge fence:** A new migration
+> makes a primary claim refuse an unresolved or different-document upload
+> reservation for its exact provider/object path, while preserving the
+> historical `ATTACHED` intent for that document. New reservations for a
+> previously claimed target are refused before provider bytes are written.
+> Both trigger paths lock the organisation row; migration refuses an existing
+> conflicting pair. Disposable real-PostgreSQL positive/negative proof,
+> API 2,568 units plus seven migration tests, production checks (1,120 pass,
+> four intentional skips with Git Bash) and security scan pass locally.
+> Exact hosted CI/E2E and guarded release are pending; live remains
+> `312eb93e`. This is another specific writer fence, not a worker byte
+> permit, all-copy proof, provider custody, host-loss reopening or Nikita
+> acceptance. Older release checkpoints below remain dated evidence.
+
 > **7 October ~08:08 Dublin Confluence publication/purge fence release:**
 > Exact `312eb93e` hosted CI/E2E passed and blue serves the guarded private
 > VM; green `9c6e795b` is the previous version. The new migration and both
