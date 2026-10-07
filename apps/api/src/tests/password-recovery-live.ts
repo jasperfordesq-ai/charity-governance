@@ -796,7 +796,7 @@ export async function runPasswordRecoveryConcurrencyProof(postgresImage: string)
       const digest = (label: string) => crypto.createHash('sha256')
         .update(`rotation-${label}-${index}`)
         .digest('hex');
-      await firstClient.passwordRecoveryRequest.create({
+      const createdRequest = await firstClient.passwordRecoveryRequest.create({
         data: {
           id,
           source: 'SELF_SERVICE_EMAIL',
@@ -818,7 +818,11 @@ export async function runPasswordRecoveryConcurrencyProof(postgresImage: string)
         },
       });
       if (state !== 'PENDING') {
-        const claimedAt = new Date();
+        // PostgreSQL and the test process can differ by a millisecond. The
+        // constraint compares the stored creation timestamp, so derive this
+        // fixture's claim from that returned value rather than wall-clock
+        // ordering across processes.
+        const claimedAt = new Date(Math.max(Date.now(), createdRequest.createdAt.getTime()));
         await firstClient.passwordRecoveryRequest.update({
           where: { id },
           data: {
@@ -836,7 +840,7 @@ export async function runPasswordRecoveryConcurrencyProof(postgresImage: string)
             data: {
               deliveryState: 'ACCEPTED',
               claimToken: null,
-              deliveryFinalizedAt: new Date(),
+              deliveryFinalizedAt: new Date(Math.max(Date.now(), claimedAt.getTime())),
               providerMessageId: `rotation-provider-${id}`,
             },
           });
@@ -846,7 +850,7 @@ export async function runPasswordRecoveryConcurrencyProof(postgresImage: string)
             data: {
               deliveryState: 'UNCERTAIN',
               claimToken: null,
-              deliveryFinalizedAt: new Date(),
+              deliveryFinalizedAt: new Date(Math.max(Date.now(), claimedAt.getTime())),
             },
           });
         }

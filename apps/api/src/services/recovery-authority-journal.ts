@@ -22,7 +22,7 @@ const digest = z.string().regex(/^[a-f0-9]{64}$/);
 const kinds = z.enum(['DISPOSAL_INTENT', 'DISPOSAL_RESULT', 'PRESERVATION_CHANGE', 'CONTROL_CHANGE',
   'COMPLAINT_PREPARATION_V1', 'COMPLAINT_OUTCOME_V1', 'COMPLAINT_HOLD_PREPARATION_V1', 'COMPLAINT_HOLD_OUTCOME_V1',
   'COMPLAINT_CANCELLATION_V1', 'COMPLAINT_HOLD_CANCELLATION_V1', 'DOCUMENT_PREPARATION_V1', 'DOCUMENT_OUTCOME_V1',
-  'DOCUMENT_BYTE_PERMIT_V1']);
+  'DOCUMENT_BYTE_PERMIT_V1', 'DOCUMENT_BYTE_EXECUTION_DECISION_V1']);
 const bindingSchema = z.object({ installationId: identity, organisationId: identity }).strict();
 const checkpointFields = {
   generation: z.number().int().nonnegative().max(10000), digest: digest.nullable(),
@@ -53,6 +53,7 @@ const predecessorKind = (kind: Entry['kind']): Entry['kind'] | undefined => {
   if (kind === 'COMPLAINT_HOLD_OUTCOME_V1' || kind === 'COMPLAINT_HOLD_CANCELLATION_V1') return 'COMPLAINT_HOLD_PREPARATION_V1';
   if (kind === 'DOCUMENT_OUTCOME_V1') return 'DOCUMENT_PREPARATION_V1';
   if (kind === 'DOCUMENT_BYTE_PERMIT_V1') return 'DOCUMENT_OUTCOME_V1';
+  if (kind === 'DOCUMENT_BYTE_EXECUTION_DECISION_V1') return 'DOCUMENT_BYTE_PERMIT_V1';
   return undefined;
 };
 const isAncestorKind = (ancestor: Entry['kind'], kind: Entry['kind']) => {
@@ -372,6 +373,29 @@ export class RecoveryAuthorityJournal {
     return this.appendPublished({ operationId: request.operationId, kind: 'DOCUMENT_BYTE_PERMIT_V1',
       factsDigest: request.permitEnvelopeDigest, expectedGeneration: outcome.generation,
       expectedDigest: outcome.digest }, publisher);
+  }
+
+  /** Fourth-stage, distinct independent decision entry. A verified encrypted
+   * decision body must supply the digest; this journal receipt does not let a
+   * worker claim a job or call a provider. Keep the active reservation held. */
+  async appendReservedDocumentByteExecutionDecision(raw: unknown, control: RecoveryControlStore) {
+    const request = z.object({ operationId: identity, writerId: identity,
+      writerEpoch: z.number().int().positive().max(2147483647), preparationDigest: digest,
+      candidateGeneration: z.number().int().positive().max(9999), candidateEntryDigest: digest,
+      candidateEnvelopeDigest: digest, decisionEnvelopeDigest: digest,
+    }).strict().parse(raw);
+    const publisher = await this.complaintPublisher(request, control);
+    const before = await this.readCurrentHead(publisher), rows = await this.history();
+    this.headMatchesHistory(before, rows);
+    const candidate = rows[request.candidateGeneration - 1];
+    if (!candidate || candidate.kind !== 'DOCUMENT_BYTE_PERMIT_V1'
+      || candidate.operationId !== request.operationId || candidate.digest !== request.candidateEntryDigest
+      || candidate.factsDigest !== request.candidateEnvelopeDigest || before.generation < candidate.generation) {
+      throw new Error('Document byte execution decision requires the exact published candidate');
+    }
+    return this.appendPublished({ operationId: request.operationId,
+      kind: 'DOCUMENT_BYTE_EXECUTION_DECISION_V1', factsDigest: request.decisionEnvelopeDigest,
+      expectedGeneration: candidate.generation, expectedDigest: candidate.digest }, publisher);
   }
 
   async appendReservedHoldOutcome(raw: unknown, control: RecoveryControlStore) {

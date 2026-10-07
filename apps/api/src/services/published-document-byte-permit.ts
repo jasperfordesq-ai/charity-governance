@@ -180,7 +180,8 @@ export async function readPublishedDocumentBytePermit(journal: RecoveryAuthority
   }
   return { body: openedPermit.body, outcomeBody: openedOutcome.body,
     preparationBody: prepared.body, entryDigest: permit.entry.digest,
-    envelopeDigest: permit.entry.factsDigest, revision: after.revision,
+    envelopeDigest: permit.entry.factsDigest, generation: permit.entry.generation,
+    revision: after.revision,
     actionAuthorized: false as const };
 }
 

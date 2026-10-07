@@ -18,6 +18,10 @@ import { publishVerifiedDocumentOutcome, readPublishedDocumentOutcome } from '..
 import { prepareDocumentBytePermitFacts } from '../services/document-byte-permit-facts.js';
 import { openDocumentBytePermit, preserveDocumentBytePermit,
   readVerifiedDocumentBytePermit } from '../services/document-byte-permit-envelope.js';
+import { prepareDocumentByteExecutionDecisionFacts } from '../services/document-byte-execution-decision-facts.js';
+import { openDocumentByteExecutionDecision, preserveDocumentByteExecutionDecision,
+  readVerifiedDocumentByteExecutionDecision } from '../services/document-byte-execution-decision-envelope.js';
+import { readPublishedDocumentByteExecutionDecision } from '../services/published-document-byte-execution-decision.js';
 import { bindVerifiedDocumentBytePermitCandidate, compareDocumentBytePermitAuthority,
   publishVerifiedDocumentBytePermitCandidate,
   readPublishedDocumentBytePermit } from '../services/published-document-byte-permit.js';
@@ -261,6 +265,101 @@ test('verified document byte candidate publisher binds the exact outcome and sta
   assert.equal(facts.outcomeGeneration, outcome.generation);
   assert.equal(facts.currentAuthorityDigest, receipt.currentAuthorityDigest);
   assert.equal((await f.store.readControl()).activeOperation?.operationId, f.context.operationId);
+});
+
+test('fourth-stage document byte decision stays distinct, encrypted, immutable and non-executable', async () => {
+  const { f, prisma } = await readyBytePermitPublisher();
+  await publishVerifiedDocumentBytePermitCandidate(prisma,
+    f.journal, f.store, f.context, f.keys, f.store);
+  const candidate = await readPublishedDocumentBytePermit(f.journal, f.store,
+    f.context, f.keys, f.store);
+  const candidateFacts = JSON.parse(candidate.body);
+  const control = await f.store.readControl();
+  const decision = prepareDocumentByteExecutionDecisionFacts({ format: 1,
+    action: 'DOCUMENT_PRIMARY_BYTE_EXECUTION_DECISION',
+    installationId: f.context.installationId, organisationId: f.context.organisationId,
+    operationId: f.context.operationId, writerId: candidateFacts.writerId,
+    writerEpoch: f.context.writerEpoch, sourceRevision: f.context.sourceRevision,
+    preparationDigest: candidateFacts.preparationDigest,
+    candidateBodyDigest: createHash('sha256').update(candidate.body).digest('hex'),
+    candidateEntryDigest: candidate.entryDigest, candidateEnvelopeDigest: candidate.envelopeDigest,
+    candidateGeneration: control.generation, candidateAuthorityDigest: candidateFacts.currentAuthorityDigest,
+    controlRevision: control.revision, outcomeId: candidateFacts.outcomeId,
+    claimId: candidateFacts.claimId, deletionId: candidateFacts.deletionId,
+    authorizationId: candidateFacts.authorizationId, documentId: candidateFacts.documentId,
+    actorUserId: candidateFacts.actorUserId, provider: candidateFacts.provider,
+    storagePath: candidateFacts.storagePath, objectSha256: candidateFacts.objectSha256,
+    fileSize: candidateFacts.fileSize, copyDispositionDigest: 'a'.repeat(64),
+    holdStateDigest: 'b'.repeat(64), providerInventoryDigest: 'c'.repeat(64),
+    decisionEvidenceRef: 'SYNTHETIC-DECISION-001',
+    oneUseAttemptId: '11111111-1111-4111-8111-111111111111',
+    issuedAt: '2026-10-07T08:00:00.000Z' });
+  f.loseAck();
+  await assert.rejects(preserveDocumentByteExecutionDecision(decision.body,
+    f.context, f.keys, f.store), /unresolved/);
+  const preserved = await preserveDocumentByteExecutionDecision(decision.body,
+    f.context, f.keys, f.store);
+  assert.equal(preserved.replayed, true);
+  assert.equal(preserved.actionAuthorized, false);
+  const envelope = await f.store.readDocumentByteExecutionDecision(f.context.operationId);
+  assert.ok(envelope);
+  assert.doesNotMatch(envelope, /DOCUMENT_PRIMARY_BYTE_EXECUTION_DECISION|vault\/synthetic-object/);
+  assert.equal((await readVerifiedDocumentByteExecutionDecision(preserved.digest,
+    f.context, f.keys, f.store)).body, decision.body);
+  await assert.rejects(f.store.createDocumentByteExecutionDecision('other-operation', envelope), /scope mismatch/);
+  await assert.rejects(f.store.createDocumentByteExecutionDecision(f.context.operationId,
+    (await f.store.readDocumentBytePermit(f.context.operationId))!), /envelope/);
+  await assert.rejects(openDocumentByteExecutionDecision(JSON.stringify({ ...JSON.parse(envelope),
+    kind: 'DOCUMENT_BYTE_PERMIT_CANDIDATE' }), f.context, f.keys), /decrypted/);
+  await assert.rejects(readVerifiedDocumentByteExecutionDecision('0'.repeat(64),
+    f.context, f.keys, f.store), /unresolved/);
+  await assert.rejects(preserveDocumentByteExecutionDecision(decision.body.replace(
+    '11111111-1111-4111-8111-111111111111', '22222222-2222-4222-8222-222222222222'),
+    f.context, f.keys, f.store), /unresolved/);
+
+  const publish = () => f.journal.appendReservedDocumentByteExecutionDecision({
+    operationId: f.context.operationId, writerId: candidateFacts.writerId,
+    writerEpoch: f.context.writerEpoch, preparationDigest: candidateFacts.preparationDigest,
+    candidateGeneration: control.generation, candidateEntryDigest: candidate.entryDigest,
+    candidateEnvelopeDigest: candidate.envelopeDigest, decisionEnvelopeDigest: preserved.digest,
+  }, f.store);
+  await assert.rejects(f.journal.appendReservedDocumentByteExecutionDecision({
+    operationId: f.context.operationId, writerId: candidateFacts.writerId,
+    writerEpoch: f.context.writerEpoch, preparationDigest: candidateFacts.preparationDigest,
+    candidateGeneration: control.generation, candidateEntryDigest: '0'.repeat(64),
+    candidateEnvelopeDigest: candidate.envelopeDigest, decisionEnvelopeDigest: preserved.digest,
+  }, f.store), /exact published candidate/);
+  f.loseAck(true);
+  await assert.rejects(publish(), /unknown/);
+  const receipt = await publish();
+  assert.equal(receipt.replayed, true);
+  assert.equal(receipt.actionAuthorized, false);
+  const source = { async readHead() { const value = await f.store.readControl();
+    return { installationId: value.installationId, organisationId: value.organisationId,
+      generation: value.generation, digest: value.digest, revision: value.revision }; } };
+  const published = await f.journal.readPublishedEntry(f.context.operationId,
+    'DOCUMENT_BYTE_EXECUTION_DECISION_V1', source);
+  assert.equal(published.entry.factsDigest, preserved.digest);
+  assert.equal(published.actionAuthorized, false);
+  const verified = await readPublishedDocumentByteExecutionDecision(f.journal,
+    f.store, f.context, f.keys, f.store);
+  assert.equal(verified.body, decision.body);
+  assert.equal(verified.generation, control.generation + 1);
+  assert.equal(verified.actionAuthorized, false);
+  assert.equal((await f.store.readControl()).activeOperation?.operationId, f.context.operationId);
+  assert.equal((await publish()).replayed, true);
+  const candidateKey = [...f.objects.keys()].find(key => key.startsWith('document-byte-permits/'));
+  assert.ok(candidateKey);
+  const candidateObject = f.objects.get(candidateKey)!;
+  f.objects.delete(candidateKey);
+  await assert.rejects(readPublishedDocumentByteExecutionDecision(f.journal,
+    f.store, f.context, f.keys, f.store), /unresolved/);
+  f.objects.set(candidateKey, candidateObject);
+  const decisionKey = [...f.objects.keys()].find(key => key.startsWith('document-byte-execution-decisions/'));
+  assert.ok(decisionKey);
+  f.objects.delete(decisionKey);
+  await assert.rejects(readPublishedDocumentByteExecutionDecision(f.journal,
+    f.store, f.context, f.keys, f.store), /unresolved/);
 });
 
 test('verified document byte candidate publisher refuses changed local facts before journal append', async () => {

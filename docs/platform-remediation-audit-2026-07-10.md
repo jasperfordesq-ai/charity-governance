@@ -1,5 +1,15 @@
 # CharityPilot Full-Platform Remediation Audit
 
+> **7 October DPO-05 source-only fourth-stage protocol:** The encrypted
+> decision object and separate journal kind follow the inert candidate;
+> an authenticated reader verifies the exact candidate and current head
+> but returns `actionAuthorized: false`. Full local API 2,569 plus seven
+> PostgreSQL migration tests and security scan pass. No production
+> publisher, approved copy inventory, one-use SQL lease or byte-worker
+> integration exists. The deployed private VM remains `516f020e`.
+> Independent P05/P08 custody/host-loss, policy/MFA, role/export/deletion,
+> replay/C1, connector test-site and Nikita acceptance remain open.
+
 > **7 October DPO-05 live cleanup-alias fence:** Exact `516f020e`
 > passed hosted CI/E2E, guarded private-VM cutover and postflight. The
 > migration and both triggers are present under restricted `cp_runtime`;

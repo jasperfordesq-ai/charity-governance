@@ -1,5 +1,16 @@
 # CharityPilot Agent Continuation Handoff
 
+> **7 October source-only fourth-stage decision protocol:** A distinct
+> `DOCUMENT_BYTE_EXECUTION_DECISION_V1` journal kind and encrypted immutable
+> object can be checked against the exact candidate and current independent
+> head. The reader never authorizes bytes; there is no production publisher,
+> protected one-use SQL lease or worker caller. Synthetic object/head
+> acknowledgement-loss, substitution, tamper and missing-object tests pass.
+> Full local API 2,569 units plus seven real-PostgreSQL migration tests and
+> security scan pass. No real copy/hold/provider inventory has been
+> approved or published. Live remains `516f020e`; exact hosted/deployment,
+> all-copy, P05/P08/host-loss and human acceptance gates remain open.
+
 > **7 October ~09:19 Dublin cleanup-alias fence live:** Exact source
 > `516f020e` passed hosted CI `37591101119` and E2E `37591101216`.
 > Guarded private-VM cutover now serves blue `516f020e`, with green
