@@ -1,5 +1,5 @@
 import { createHash } from 'node:crypto';
-import type { PrismaClient } from '@prisma/client';
+import type { Prisma, PrismaClient } from '@prisma/client';
 import { z } from 'zod';
 import { readCommittedDocumentOutcome } from './document-recovery-outcome.js';
 import { prepareDocumentRecoveryFacts } from './document-recovery-preparation.js';
@@ -35,6 +35,15 @@ function boundedDigest(value: unknown) {
  * proof that every writer takes the organisation lock, or byte authority.
  * A later permit/worker must re-read and compare this exact projection. */
 export async function readCurrentDocumentByteAuthority(prisma: PrismaClient, raw: unknown) {
+  return withCurrentDocumentByteAuthorityTransaction(prisma, raw, async (_tx, result) => result);
+}
+
+/** The callback runs after the same bounded projection with organisation,
+ * Owner, authorization and job locks held. No independent network I/O belongs
+ * in this serializable transaction. An exception rolls back its writes. */
+export async function withCurrentDocumentByteAuthorityTransaction<T>(prisma: PrismaClient,
+  raw: unknown, callback: (tx: Prisma.TransactionClient,
+    result: { digest: string; actionAuthorized: false }) => Promise<T>) {
   const request: Request = requestSchema.parse(raw);
   return prisma.$transaction(async tx => {
     const locked = await tx.$queryRaw<Array<{ id: string }>>`
@@ -139,6 +148,6 @@ export async function readCurrentDocumentByteAuthority(prisma: PrismaClient, raw
       authorization, policy: policyRows[0], job, copyAuthorities, copyHolds,
       dispositionEvents, publications, uploadIntents,
       liveReferences, standardLinks, confluenceReferences });
-    return { digest, actionAuthorized: false as const };
+    return callback(tx, { digest, actionAuthorized: false as const });
   }, { isolationLevel: 'Serializable', timeout: 30000 });
 }

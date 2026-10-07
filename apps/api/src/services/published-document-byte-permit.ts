@@ -11,8 +11,9 @@ import { readVerifiedDocumentOutcome,
 import { readVerifiedDocumentBytePermit,
   openDocumentBytePermit, preserveDocumentBytePermit,
   type DocumentBytePermitObjects } from './document-byte-permit-envelope.js';
-import { prepareDocumentBytePermitFacts } from './document-byte-permit-facts.js';
-import { readCurrentDocumentByteAuthority } from './document-byte-authority-projection.js';
+import { prepareDocumentBytePermitFacts, type DocumentBytePermitFacts } from './document-byte-permit-facts.js';
+import { readCurrentDocumentByteAuthority,
+  withCurrentDocumentByteAuthorityTransaction } from './document-byte-authority-projection.js';
 import { readPublishedDocumentOutcome } from './published-document-outcome.js';
 
 const hash = (body: string) => createHash('sha256').update(body, 'utf8').digest('hex');
@@ -220,4 +221,70 @@ export async function readMatchedDocumentBytePermitAuthority(prisma: PrismaClien
   return compareDocumentBytePermitAuthority(
     () => readPublishedDocumentBytePermit(journal, control, context, keys, objects),
     () => readCurrentDocumentByteAuthority(prisma, localScope));
+}
+
+/** Record one authenticated candidate against the committed local claim.
+ * This needs a database-owner connection: cp_runtime has SELECT only. A
+ * remote change after commit can leave an inert historical row, so callers
+ * and the future worker must never treat this return as byte authority. */
+export async function bindVerifiedDocumentBytePermitCandidate(prisma: PrismaClient,
+  journal: RecoveryAuthorityJournal, control: RecoveryControlStore,
+  rawContext: RecoveryEnvelopeContext, keys: RecoveryDataKeys, objects: Objects) {
+  const context = validateRecoveryEnvelopeContext(rawContext);
+  const scope = { installationId: context.installationId,
+    organisationId: context.organisationId, operationId: context.operationId };
+  const published = await readPublishedDocumentBytePermit(journal, control,
+    context, keys, objects);
+  const facts: DocumentBytePermitFacts = JSON.parse(
+    prepareDocumentBytePermitFacts(JSON.parse(published.body)).body);
+  const outcome = JSON.parse(published.outcomeBody) as { preparationId: string };
+  const matched = await readMatchedDocumentBytePermitAuthority(prisma,
+    journal, control, context, keys, objects);
+  if (matched.entryDigest !== published.entryDigest
+    || matched.revision !== published.revision
+    || matched.currentAuthorityDigest !== facts.currentAuthorityDigest) {
+    throw new Error('Document byte candidate changed before local binding');
+  }
+  const expected = {
+    organisationId: context.organisationId, preparationId: outcome.preparationId,
+    outcomeId: facts.outcomeId, claimId: facts.claimId, deletionId: facts.deletionId,
+    installationId: context.installationId, operationId: context.operationId,
+    writerId: facts.writerId, writerEpoch: facts.writerEpoch,
+    permitEntryDigest: published.entryDigest,
+    permitEnvelopeDigest: published.envelopeDigest,
+    outcomeEntryDigest: facts.outcomeEntryDigest,
+    controlRevision: published.revision,
+    currentAuthorityDigest: facts.currentAuthorityDigest,
+    provider: facts.provider, storagePath: facts.storagePath,
+    objectSha256: facts.objectSha256, fileSize: facts.fileSize,
+  };
+  const recorded = await withCurrentDocumentByteAuthorityTransaction(prisma,
+    scope, async (tx, local) => {
+      if (local.digest !== facts.currentAuthorityDigest) {
+        throw new Error('Document byte candidate differs from locked local authority');
+      }
+      const existing = await tx.documentBytePermitCandidateBinding.findUnique({
+        where: { organisationId_operationId: {
+          organisationId: context.organisationId, operationId: context.operationId } },
+      });
+      if (existing) {
+        if (Object.entries(expected).some(([key, value]) =>
+          existing[key as keyof typeof expected] !== value)) {
+          throw new Error('Document byte candidate binding differs from committed row');
+        }
+        return { id: existing.id, replayed: true };
+      }
+      const row = await tx.documentBytePermitCandidateBinding.create({ data: expected });
+      return { id: row.id, replayed: false };
+    });
+  // The database lock cannot span independent I/O. A changed or unavailable
+  // head rejects this call; the recorded row remains historical and inert.
+  const after = await readMatchedDocumentBytePermitAuthority(prisma,
+    journal, control, context, keys, objects);
+  if (after.entryDigest !== published.entryDigest || after.revision !== published.revision
+    || after.currentAuthorityDigest !== facts.currentAuthorityDigest) {
+    throw new Error('Document byte authority changed after local binding');
+  }
+  return { bindingId: recorded.id, replayed: recorded.replayed,
+    actionAuthorized: false as const };
 }

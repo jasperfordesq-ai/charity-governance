@@ -18,7 +18,8 @@ import { publishVerifiedDocumentOutcome, readPublishedDocumentOutcome } from '..
 import { prepareDocumentBytePermitFacts } from '../services/document-byte-permit-facts.js';
 import { openDocumentBytePermit, preserveDocumentBytePermit,
   readVerifiedDocumentBytePermit } from '../services/document-byte-permit-envelope.js';
-import { compareDocumentBytePermitAuthority, publishVerifiedDocumentBytePermitCandidate,
+import { bindVerifiedDocumentBytePermitCandidate, compareDocumentBytePermitAuthority,
+  publishVerifiedDocumentBytePermitCandidate,
   readPublishedDocumentBytePermit } from '../services/published-document-byte-permit.js';
 
 function documentFacts() {
@@ -169,7 +170,9 @@ async function readyBytePermitPublisher() {
         sourceDocumentId: f.facts.document.id,
         storagePath: f.facts.authorization.storagePath,
         provider: f.facts.authorization.provider } } };
-  const state = { copyHolds: [] as unknown[], reads: 0, changeAfterFirstRead: false };
+  const state = { copyHolds: [] as unknown[], reads: 0, changeAfterFirstRead: false,
+    mutateAtRead: 0, candidateBinding: null as Record<string, unknown> | null,
+    bindingCreates: 0 };
   const tx = {
     $queryRaw: async () => [{ id: f.context.organisationId }],
     documentRecoveryOutcome: { findFirst: async () => row },
@@ -197,11 +200,20 @@ async function readyBytePermitPublisher() {
     document: { count: async () => 0 },
     documentStandardLink: { count: async () => 0 },
     confluenceReference: { count: async () => 0 },
+    documentBytePermitCandidateBinding: {
+      findUnique: async () => state.candidateBinding,
+      create: async ({ data }: { data: Record<string, unknown> }) => {
+        state.bindingCreates += 1;
+        state.candidateBinding = { id: 'binding', ...data };
+        return state.candidateBinding;
+      },
+    },
   };
   const prisma = { documentRecoveryOutcome: { findFirst: async () => row },
     $transaction: async (callback: (value: typeof tx) => Promise<unknown>) => {
       state.reads += 1;
-      if (state.changeAfterFirstRead && state.reads === 2) {
+      if ((state.changeAfterFirstRead && state.reads === 2)
+        || state.reads === state.mutateAtRead) {
         state.copyHolds.push({ id: 'new-hold', held: true });
       }
       return callback(tx);
@@ -257,6 +269,55 @@ test('verified document byte candidate publisher refuses changed local facts bef
     f.journal, f.store, f.context, f.keys, f.store), /authority changed before publication/);
   assert.equal((await f.store.readControl()).generation, 2);
   assert.ok(await f.store.readDocumentBytePermit(f.context.operationId));
+});
+
+test('authenticated candidate binding is exact, replayable and never authorizes bytes', async () => {
+  const { f, prisma, state } = await readyBytePermitPublisher();
+  await publishVerifiedDocumentBytePermitCandidate(prisma,
+    f.journal, f.store, f.context, f.keys, f.store);
+  const bind = () => bindVerifiedDocumentBytePermitCandidate(prisma,
+    f.journal, f.store, f.context, f.keys, f.store);
+  const first = await bind();
+  assert.deepEqual(first, { bindingId: 'binding', replayed: false, actionAuthorized: false });
+  const published = await readPublishedDocumentBytePermit(f.journal, f.store,
+    f.context, f.keys, f.store);
+  assert.equal(state.candidateBinding?.permitEntryDigest, published.entryDigest);
+  assert.equal(state.candidateBinding?.permitEnvelopeDigest, published.envelopeDigest);
+  assert.equal(state.candidateBinding?.controlRevision, published.revision);
+  assert.equal(state.candidateBinding?.outcomeId, 'outcome');
+  assert.equal(state.candidateBinding?.claimId, 'claim');
+  assert.equal(state.candidateBinding?.deletionId, 'job');
+  assert.equal(state.candidateBinding?.currentAuthorityDigest,
+    JSON.parse(published.body).currentAuthorityDigest);
+  assert.deepEqual(await bind(),
+    { bindingId: 'binding', replayed: true, actionAuthorized: false });
+  assert.equal(state.bindingCreates, 1);
+  state.candidateBinding = { ...state.candidateBinding, objectSha256: '0'.repeat(64) };
+  await assert.rejects(bind(), /differs from committed row/);
+  assert.equal(state.bindingCreates, 1);
+});
+
+test('candidate binding refuses a local change under its transaction lock', async () => {
+  const { f, prisma, state } = await readyBytePermitPublisher();
+  await publishVerifiedDocumentBytePermitCandidate(prisma,
+    f.journal, f.store, f.context, f.keys, f.store);
+  state.reads = 0;
+  state.mutateAtRead = 3;
+  await assert.rejects(bindVerifiedDocumentBytePermitCandidate(prisma,
+    f.journal, f.store, f.context, f.keys, f.store), /differs from locked local authority/);
+  assert.equal(state.bindingCreates, 0);
+});
+
+test('candidate binding reports a post-commit authority change and leaves an inert row', async () => {
+  const { f, prisma, state } = await readyBytePermitPublisher();
+  await publishVerifiedDocumentBytePermitCandidate(prisma,
+    f.journal, f.store, f.context, f.keys, f.store);
+  state.reads = 0;
+  state.mutateAtRead = 4;
+  await assert.rejects(bindVerifiedDocumentBytePermitCandidate(prisma,
+    f.journal, f.store, f.context, f.keys, f.store), /current local authority/);
+  assert.equal(state.bindingCreates, 1);
+  assert.ok(state.candidateBinding);
 });
 
 test('document byte permit candidate uses separate encrypted immutable storage and remains non-executable', async () => {
