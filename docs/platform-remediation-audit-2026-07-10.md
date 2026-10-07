@@ -1,5 +1,17 @@
 # CharityPilot Full-Platform Remediation Audit
 
+> **7 October DPO-05 title-adoption fence release:** Exact merged-master
+> `3f137c36` passed CI `37695270803`, E2E `37695271218` and guarded
+> private-VM green cutover with restricted runtime, zero publication rows,
+> preserved 357 earlier VM backup hashes, SHA-matched workstation copy and
+> isolated 155-migration restore. A title-only page match no longer permits
+> attachment upload; a post-reservation 409 remains UNKNOWN. This is a
+> fail-closed safety slice, not exact provider identity, provider/all-copy
+> reconciliation, independent P05/P08 host-loss recovery, policy approval,
+> role-specific acceptance or DPO-05 closure. Exact private release receipt:
+> `.charitypilot-private/release-3f137c36-title-adoption-fence-2026-10-07.md`.
+> Older checkpoints below are dated history.
+
 > **7 October DPO-05 page-create-intent release:** Exact `a0ab2d0e`
 > passed merged-master CI/E2E, guarded blue private-VM cutover, restricted-
 > runtime and zero-row postflight, enabled page-intent guard/purge fence,
