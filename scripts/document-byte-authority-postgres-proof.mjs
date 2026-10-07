@@ -801,6 +801,7 @@ try {
     const claimed = await tx.documentPublication.findUniqueOrThrow({
       where: { id: 'page-service-proof' },
     });
+    await tx.$executeRaw`SET LOCAL ROLE cp_fixture`;
     const operationId = await publisher.reservePageCreateIntent(claimed, {
       documentRevision: doc.updatedAt, cloudId: 'cloud-1', spaceId: 'space-1',
       parentPageId: null, title: 'Synthetic page', bodySha256: 'b'.repeat(64),
