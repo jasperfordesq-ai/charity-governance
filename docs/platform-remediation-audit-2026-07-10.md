@@ -1,5 +1,14 @@
 # CharityPilot Full-Platform Remediation Audit
 
+> **7 October DPO-06 C1 live negative:** NEXUS production API build
+> `2ff23039` returned 401 `auth_required` with matching build header for
+> unauthenticated synthetic profile ID 0, tenant ID 1. Inspected relevant
+> source matches that deployed commit. This narrows unauthenticated access
+> but does not prove hOUR's delivered notice, Member visibility, broader
+> recipient coverage or historical closure. C1 remains OPEN/zero
+> verification rows pending risk-owner/Nikita decision. See private CTA
+> evidence for exact bounds.
+
 > **7 October DPO-06 C1 CTA source boundary:** At NEXUS source `06850f22`,
 > the ordinary registration-notice numeric-ID profile link is behind login,
 > tenant and profile-privacy checks. It is not Admin-only; another

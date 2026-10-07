@@ -1,5 +1,15 @@
 # CharityPilot Agent Continuation Handoff
 
+> **7 October 13:46 UTC C1 production negative:** NEXUS production API
+> `/version.php` reported build `2ff23039`; unauthenticated GET for
+> synthetic `/api/v2/users/0` with tenant ID 1 returned 401
+> `auth_required`, no personal data and matching `X-Build`. The inspected
+> CTA, auth, tenant and React guard files are identical between that
+> deployed commit and source `06850f22`. This proves one deployed API
+> denial, not hOUR delivered mail, logged-in Member access, frontend
+> redirect or original C1 closure. C1 remains OPEN with zero verification
+> rows; private `c1-cta-source-access-2026-10-07.md` has the receipt.
+
 > **7 October C1 CTA source boundary:** A read-only trace at current NEXUS
 > source `06850f22` found the ordinary registration notice's numeric-ID
 > `/profile/{id}` link behind React login and an authenticated,
