@@ -9,6 +9,7 @@ import { inspectRecoveryPreparationEnvelope } from './recovery-preparation-envel
 import { inspectHoldPreparationEnvelope } from './hold-recovery-envelope.js';
 import { inspectDocumentRecoveryEnvelope } from './document-recovery-envelope.js';
 import { inspectDocumentOutcomeEnvelope } from './document-outcome-envelope.js';
+import { inspectDocumentBytePermitEnvelope } from './document-byte-permit-envelope.js';
 import { inspectRecoveryOutcomeEnvelope } from './recovery-outcome-envelope.js';
 import { inspectHoldOutcomeEnvelope } from './hold-outcome-envelope.js';
 import { validateRecoveryControlValue, type RecoveryControlStore, type RecoveryControlValue } from './recovery-operation-reservation.js';
@@ -259,6 +260,32 @@ export class S3AuthorityObjectStore implements AuthorityObjectStore, AuthorityHe
   async createDocumentOutcome(operationId: string, envelope: string) {
     const request = this.documentOutcomeRequest(operationId);
     this.checkDocumentOutcome(operationId, envelope);
+    return this.writeObject(request, envelope, { IfNoneMatch: '*' }, 32768);
+  }
+
+  private documentBytePermitRequest(operationId: string) {
+    const request = this.replayRequest(operationId);
+    return { ...request, Key: `document-byte-permits/${this.config.installationId}/${this.config.organisationId}/${operationId}.json` };
+  }
+
+  private checkDocumentBytePermit(operationId: string, envelope: string) {
+    const context = inspectDocumentBytePermitEnvelope(envelope);
+    if (context.installationId !== this.config.installationId || context.organisationId !== this.config.organisationId
+      || context.operationId !== operationId || context.keyId !== this.config.replayKeyArn) {
+      throw new Error('Document byte permit envelope scope mismatch');
+    }
+  }
+
+  async readDocumentBytePermit(operationId: string) {
+    const object = await this.readObject(this.documentBytePermitRequest(operationId), undefined, 32768);
+    if (!object) return null;
+    this.checkDocumentBytePermit(operationId, object.body);
+    return object.body;
+  }
+
+  async createDocumentBytePermit(operationId: string, envelope: string) {
+    const request = this.documentBytePermitRequest(operationId);
+    this.checkDocumentBytePermit(operationId, envelope);
     return this.writeObject(request, envelope, { IfNoneMatch: '*' }, 32768);
   }
 

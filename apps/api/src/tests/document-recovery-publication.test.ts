@@ -15,6 +15,10 @@ import { reserveRecoveryOperation, validateRecoveryControlValue } from '../servi
 import { readCommittedDocumentOutcome } from '../services/document-recovery-outcome.js';
 import { preserveDocumentOutcome, readVerifiedDocumentOutcome } from '../services/document-outcome-envelope.js';
 import { publishVerifiedDocumentOutcome, readPublishedDocumentOutcome } from '../services/published-document-outcome.js';
+import { prepareDocumentBytePermitFacts } from '../services/document-byte-permit-facts.js';
+import { openDocumentBytePermit, preserveDocumentBytePermit,
+  readVerifiedDocumentBytePermit } from '../services/document-byte-permit-envelope.js';
+import { readPublishedDocumentBytePermit } from '../services/published-document-byte-permit.js';
 
 function documentFacts() {
   const policy = { id: 'policy', organisationId: 'charity', recordClass: 'VAULT_DRAFT' as const,
@@ -138,6 +142,49 @@ test('document preparation publishes original encrypted bytes under a reserved i
     f.context, f.keys, f.store), /unresolved/);
 });
 
+test('document byte permit candidate uses separate encrypted immutable storage and remains non-executable', async () => {
+  const f = await fixture();
+  const facts = prepareDocumentBytePermitFacts({ format: 1,
+    action: 'DOCUMENT_PRIMARY_BYTE_PERMIT_CANDIDATE',
+    installationId: f.context.installationId, organisationId: f.context.organisationId,
+    operationId: f.context.operationId, writerId: 'host', writerEpoch: f.context.writerEpoch,
+    sourceRevision: f.context.sourceRevision,
+    preparationDigest: f.prepared.digest, preparationEntryDigest: 'a'.repeat(64),
+    preparationEnvelopeDigest: 'b'.repeat(64), preparationGeneration: 1,
+    outcomeBodyDigest: 'c'.repeat(64), outcomeEntryDigest: 'd'.repeat(64),
+    outcomeEnvelopeDigest: 'e'.repeat(64), outcomeGeneration: 2,
+    controlRevision: 'synthetic-revision', currentAuthorityDigest: 'f'.repeat(64),
+    outcomeId: 'outcome', claimId: 'claim', deletionId: 'job',
+    authorizationId: f.facts.authorization.id, documentId: f.facts.document.id,
+    actorUserId: f.facts.actorUserId, provider: f.facts.authorization.provider,
+    storagePath: f.facts.authorization.storagePath,
+    objectSha256: f.facts.authorization.sha256, fileSize: f.facts.authorization.fileSize,
+    issuedAt: '2026-10-04T00:03:00.000Z' });
+  f.loseAck();
+  await assert.rejects(preserveDocumentBytePermit(facts.body, f.context, f.keys, f.store), /unresolved/);
+  const saved = await preserveDocumentBytePermit(facts.body, f.context, f.keys, f.store);
+  assert.equal(saved.replayed, true); assert.equal(saved.actionAuthorized, false);
+  const envelope = await f.store.readDocumentBytePermit(f.context.operationId);
+  assert.ok(envelope);
+  assert.equal([...f.objects.keys()].filter(k => k.startsWith('document-byte-permits/')).length, 1);
+  assert.equal(await f.store.readDocumentOutcome(f.context.operationId), null);
+  assert.doesNotMatch(envelope!, /vault\/synthetic-object|DOCUMENT_PRIMARY_BYTE_PERMIT_CANDIDATE/);
+  const verified = await readVerifiedDocumentBytePermit(saved.digest, f.context, f.keys, f.store);
+  assert.equal(verified.body, facts.body); assert.equal(verified.actionAuthorized, false);
+  assert.equal((await f.store.readControl()).generation, 0);
+  await assert.rejects(f.store.createDocumentOutcome(f.context.operationId, envelope!), /envelope/);
+  await assert.rejects(f.store.createDocumentBytePermit('other-operation', envelope!), /scope mismatch/);
+  await assert.rejects(openDocumentBytePermit(JSON.stringify({ ...JSON.parse(envelope!),
+    kind: 'DOCUMENT_PURGE_OUTCOME' }), f.context, f.keys), /decrypted/);
+  await assert.rejects(readVerifiedDocumentBytePermit('0'.repeat(64), f.context, f.keys, f.store), /unresolved/);
+  await assert.rejects(preserveDocumentBytePermit(facts.body.replace('synthetic-revision', 'changed-revision'),
+    f.context, f.keys, f.store), /unresolved/);
+  for (const key of f.objects.keys()) if (key.startsWith('document-byte-permits/')) f.objects.delete(key);
+  await assert.rejects(readVerifiedDocumentBytePermit(saved.digest, f.context, f.keys, f.store), /unresolved/);
+  assert.throws(() => prepareDocumentBytePermitFacts({ ...JSON.parse(facts.body),
+    outcomeGeneration: 3 }), /Invalid/);
+});
+
 test('document publication refuses missing, changed, foreign and stale facts without journal writes', async () => {
   for (const scenario of ['missing', 'facts', 'foreign', 'control', 'occupied']) {
     const f = await fixture();
@@ -238,11 +285,30 @@ test('document claim outcome publishes only the committed result and remains occ
   assert.equal(published.body, committed.body);
   assert.equal(published.actionAuthorized, false);
   assert.equal((await f.store.readControl()).activeOperation?.operationId, f.context.operationId);
+  const candidateFacts = prepareDocumentBytePermitFacts({ format: 1,
+    action: 'DOCUMENT_PRIMARY_BYTE_PERMIT_CANDIDATE',
+    installationId: f.context.installationId, organisationId: f.context.organisationId,
+    operationId: f.context.operationId, writerId: f.request.writerId,
+    writerEpoch: f.context.writerEpoch, sourceRevision: f.context.sourceRevision,
+    preparationDigest: f.prepared.digest, preparationEntryDigest: prepReceipt.digest,
+    preparationEnvelopeDigest, preparationGeneration: prepReceipt.generation,
+    outcomeBodyDigest: committed.digest, outcomeEntryDigest: published.entryDigest,
+    outcomeEnvelopeDigest: published.envelopeDigest,
+    outcomeGeneration: prepReceipt.generation + 1,
+    controlRevision: (await f.store.readControl()).revision,
+    currentAuthorityDigest: 'f'.repeat(64),
+    outcomeId: row.id, claimId: row.claim.id, deletionId: row.claim.deletionId,
+    authorizationId: row.claim.authorizationId, documentId: row.claim.documentId,
+    actorUserId: row.claim.actorUserId, provider: f.facts.authorization.provider,
+    storagePath: f.facts.authorization.storagePath,
+    objectSha256: f.facts.authorization.sha256, fileSize: f.facts.authorization.fileSize,
+    issuedAt: '2026-10-04T00:03:00.000Z' });
+  const candidate = await preserveDocumentBytePermit(candidateFacts.body, f.context, f.keys, f.store);
   const permitRequest = { writerId: f.request.writerId, writerEpoch: f.context.writerEpoch,
     operationId: f.context.operationId, preparationDigest: f.prepared.digest,
     outcomeGeneration: prepReceipt.generation + 1,
     outcomeEntryDigest: published.entryDigest, outcomeEnvelopeDigest: published.envelopeDigest,
-    permitEnvelopeDigest: 'f'.repeat(64) };
+    permitEnvelopeDigest: candidate.digest };
   await assert.rejects(f.journal.appendReservedDocumentBytePermit({ ...permitRequest,
     outcomeEntryDigest: '0'.repeat(64) }, f.store), /exact published claim outcome/);
   f.loseAck(true);
@@ -253,6 +319,10 @@ test('document claim outcome publishes only the committed result and remains occ
   assert.equal(permit.replayed, true);
   assert.equal((await f.journal.appendReservedDocumentBytePermit(permitRequest, f.store)).replayed, true);
   assert.equal((await f.store.readControl()).activeOperation?.operationId, f.context.operationId);
+  const readPermit = await readPublishedDocumentBytePermit(f.journal, f.store,
+    f.context, f.keys, f.store);
+  assert.equal(readPermit.body, candidateFacts.body);
+  assert.equal(readPermit.actionAuthorized, false);
   assert.equal((await readPublishedDocumentOutcome(f.journal, f.store,
     f.context, f.keys, f.store)).body, committed.body);
   await assert.rejects(f.journal.appendReservedDocumentBytePermit({ ...permitRequest,
@@ -265,10 +335,14 @@ test('document claim outcome publishes only the committed result and remains occ
   };
   await assert.rejects(readPublishedDocumentOutcome(f.journal, f.store,
     f.context, f.keys, f.store), /changed while reading/);
+  await assert.rejects(readPublishedDocumentBytePermit(f.journal, f.store,
+    f.context, f.keys, f.store), /changed while reading/);
   f.keys.unwrap = originalUnwrap;
   await assert.rejects(f.store.createOutcome(f.context.operationId, envelope!), /envelope/);
   await assert.rejects(readVerifiedDocumentOutcome('0'.repeat(64), f.context, f.keys, f.store), /unresolved/);
   for (const key of f.objects.keys()) if (key.startsWith('document-outcomes/')) f.objects.delete(key);
   await assert.rejects(readPublishedDocumentOutcome(f.journal, f.store,
+    f.context, f.keys, f.store), /unresolved/);
+  await assert.rejects(readPublishedDocumentBytePermit(f.journal, f.store,
     f.context, f.keys, f.store), /unresolved/);
 });
