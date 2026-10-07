@@ -661,9 +661,20 @@ try {
   });
   const unknown = await readCommittedDocumentByteProviderUnknown(prisma,
     { ...request, leaseId: 'lease' });
+  const restrictedUnknown = await prisma.$transaction(async tx => {
+    await tx.$executeRaw`SET LOCAL ROLE cp_fixture`;
+    return readCommittedDocumentByteProviderUnknown(tx,
+      { ...request, leaseId: 'lease' });
+  });
+  assert.equal(restrictedUnknown.body, unknown.body);
   const unknownFacts = JSON.parse(unknown.body);
   assert.equal(unknown.actionAuthorized, false);
   assert.equal(unknownFacts.action, 'DOCUMENT_PRIMARY_BYTE_PROVIDER_OUTCOME_UNKNOWN');
+  assert.equal(unknownFacts.writerId, 'host');
+  assert.equal(unknownFacts.writerEpoch, 1);
+  assert.equal(unknownFacts.sourceRevision, 'b'.repeat(40));
+  assert.equal(unknownFacts.preparationDigest, facts.digest);
+  assert.equal(unknownFacts.decisionBodyDigest, '3'.repeat(64));
   assert.equal(unknownFacts.leaseId, 'lease');
   assert.equal(unknownFacts.deletionId, 'job');
   assert.equal(unknownFacts.startedTransactionId, started.startedTransactionId.toString());

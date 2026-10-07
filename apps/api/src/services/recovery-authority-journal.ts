@@ -22,7 +22,8 @@ const digest = z.string().regex(/^[a-f0-9]{64}$/);
 const kinds = z.enum(['DISPOSAL_INTENT', 'DISPOSAL_RESULT', 'PRESERVATION_CHANGE', 'CONTROL_CHANGE',
   'COMPLAINT_PREPARATION_V1', 'COMPLAINT_OUTCOME_V1', 'COMPLAINT_HOLD_PREPARATION_V1', 'COMPLAINT_HOLD_OUTCOME_V1',
   'COMPLAINT_CANCELLATION_V1', 'COMPLAINT_HOLD_CANCELLATION_V1', 'DOCUMENT_PREPARATION_V1', 'DOCUMENT_OUTCOME_V1',
-  'DOCUMENT_BYTE_PERMIT_V1', 'DOCUMENT_BYTE_EXECUTION_DECISION_V1']);
+  'DOCUMENT_BYTE_PERMIT_V1', 'DOCUMENT_BYTE_EXECUTION_DECISION_V1',
+  'DOCUMENT_BYTE_PROVIDER_UNKNOWN_V1']);
 const bindingSchema = z.object({ installationId: identity, organisationId: identity }).strict();
 const checkpointFields = {
   generation: z.number().int().nonnegative().max(10000), digest: digest.nullable(),
@@ -54,6 +55,7 @@ const predecessorKind = (kind: Entry['kind']): Entry['kind'] | undefined => {
   if (kind === 'DOCUMENT_OUTCOME_V1') return 'DOCUMENT_PREPARATION_V1';
   if (kind === 'DOCUMENT_BYTE_PERMIT_V1') return 'DOCUMENT_OUTCOME_V1';
   if (kind === 'DOCUMENT_BYTE_EXECUTION_DECISION_V1') return 'DOCUMENT_BYTE_PERMIT_V1';
+  if (kind === 'DOCUMENT_BYTE_PROVIDER_UNKNOWN_V1') return 'DOCUMENT_BYTE_EXECUTION_DECISION_V1';
   return undefined;
 };
 const isAncestorKind = (ancestor: Entry['kind'], kind: Entry['kind']) => {
@@ -396,6 +398,29 @@ export class RecoveryAuthorityJournal {
     return this.appendPublished({ operationId: request.operationId,
       kind: 'DOCUMENT_BYTE_EXECUTION_DECISION_V1', factsDigest: request.decisionEnvelopeDigest,
       expectedGeneration: candidate.generation, expectedDigest: candidate.digest }, publisher);
+  }
+
+  /** Fifth-stage possible-I/O observation. Its encrypted facts must be
+   * authenticated by the caller and tied to a committed SQL start marker.
+   * This records uncertainty; it never authorizes another call or a retry. */
+  async appendReservedDocumentByteProviderUnknown(raw: unknown, control: RecoveryControlStore) {
+    const request = z.object({ operationId: identity, writerId: identity,
+      writerEpoch: z.number().int().positive().max(2147483647), preparationDigest: digest,
+      decisionGeneration: z.number().int().positive().max(9999), decisionEntryDigest: digest,
+      decisionEnvelopeDigest: digest, unknownEnvelopeDigest: digest,
+    }).strict().parse(raw);
+    const publisher = await this.complaintPublisher(request, control);
+    const before = await this.readCurrentHead(publisher), rows = await this.history();
+    this.headMatchesHistory(before, rows);
+    const decision = rows[request.decisionGeneration - 1];
+    if (!decision || decision.kind !== 'DOCUMENT_BYTE_EXECUTION_DECISION_V1'
+      || decision.operationId !== request.operationId || decision.digest !== request.decisionEntryDigest
+      || decision.factsDigest !== request.decisionEnvelopeDigest || before.generation < decision.generation) {
+      throw new Error('Document byte UNKNOWN requires the exact published decision');
+    }
+    return this.appendPublished({ operationId: request.operationId,
+      kind: 'DOCUMENT_BYTE_PROVIDER_UNKNOWN_V1', factsDigest: request.unknownEnvelopeDigest,
+      expectedGeneration: decision.generation, expectedDigest: decision.digest }, publisher);
   }
 
   async appendReservedHoldOutcome(raw: unknown, control: RecoveryControlStore) {

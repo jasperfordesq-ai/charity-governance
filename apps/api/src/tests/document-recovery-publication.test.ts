@@ -26,6 +26,9 @@ import { readMatchedClaimedDocumentByteDecision,
   readMatchedStartedDocumentByteDecision } from '../services/matched-claimed-document-byte-decision.js';
 import { claimVerifiedDocumentByteExecutionLease } from '../services/claimed-document-byte-execution-lease.js';
 import { startVerifiedDocumentByteProviderAttempt } from '../services/verified-document-byte-provider-start.js';
+import { publishVerifiedDocumentByteProviderUnknown,
+  readPublishedDocumentByteProviderUnknown } from '../services/published-document-byte-provider-unknown.js';
+import { readCommittedDocumentByteProviderUnknown } from '../services/document-byte-provider-unknown.js';
 import { bindVerifiedDocumentBytePermitCandidate, compareDocumentBytePermitAuthority,
   publishVerifiedDocumentBytePermitCandidate,
   readPublishedDocumentBytePermit } from '../services/published-document-byte-permit.js';
@@ -255,6 +258,12 @@ async function readyBytePermitPublisher() {
     },
   };
   const prisma = { documentRecoveryOutcome: { findFirst: async () => row },
+    documentByteExecutionLease: { findUnique: async () => state.lease && ({ ...state.lease,
+      candidateBinding: { ...state.candidateBinding, preparation: {
+        id: 'preparation', installationId: f.context.installationId,
+        organisationId: f.context.organisationId, operationId: f.context.operationId,
+        writerEpoch: f.context.writerEpoch, facts: f.prepared.body,
+        factsDigest: f.prepared.digest } }, providerAttempt: state.attempt }) },
     $queryRaw: tx.$queryRaw,
     $transaction: async (callback: (value: typeof tx) => Promise<unknown>) => {
       state.reads += 1;
@@ -520,6 +529,96 @@ test('fourth-stage document byte decision stays distinct, encrypted, immutable a
   f.objects.delete(f.headKey);
   await assert.rejects(matched());
   await assert.rejects(started());
+});
+
+test('committed provider start publishes one encrypted independent UNKNOWN and recovers a lost head acknowledgement', async () => {
+  const { f, prisma, state } = await readyBytePermitPublisher();
+  const scope = { installationId: f.context.installationId,
+    organisationId: f.context.organisationId, operationId: f.context.operationId };
+  await publishVerifiedDocumentBytePermitCandidate(prisma,
+    f.journal, f.store, f.context, f.keys, f.store);
+  const candidate = await readPublishedDocumentBytePermit(f.journal, f.store,
+    f.context, f.keys, f.store);
+  await bindVerifiedDocumentBytePermitCandidate(prisma,
+    f.journal, f.store, f.context, f.keys, f.store);
+  const local = await readCurrentDocumentByteAuthority(prisma, scope);
+  const prior = JSON.parse(candidate.body);
+  const control = await f.store.readControl();
+  const decision = prepareDocumentByteExecutionDecisionFacts({ format: 1,
+    action: 'DOCUMENT_PRIMARY_BYTE_EXECUTION_DECISION',
+    ...scope, writerId: prior.writerId, writerEpoch: f.context.writerEpoch,
+    sourceRevision: f.context.sourceRevision, preparationDigest: prior.preparationDigest,
+    candidateBodyDigest: createHash('sha256').update(candidate.body).digest('hex'),
+    candidateEntryDigest: candidate.entryDigest, candidateEnvelopeDigest: candidate.envelopeDigest,
+    candidateGeneration: candidate.generation, candidateAuthorityDigest: prior.currentAuthorityDigest,
+    controlRevision: control.revision, outcomeId: prior.outcomeId, claimId: prior.claimId,
+    deletionId: prior.deletionId, authorizationId: prior.authorizationId,
+    documentId: prior.documentId, actorUserId: prior.actorUserId, provider: prior.provider,
+    storagePath: prior.storagePath, objectSha256: prior.objectSha256, fileSize: prior.fileSize,
+    copyDispositionDigest: local.localCopyObservationDigest,
+    holdStateDigest: local.localHoldObservationDigest,
+    providerInventoryDigest: 'c'.repeat(64), decisionEvidenceRef: 'SYNTHETIC-UNKNOWN-001',
+    oneUseAttemptId: '11111111-1111-4111-8111-111111111111',
+    issuedAt: '2026-10-07T08:00:00.000Z' });
+  const preserved = await preserveDocumentByteExecutionDecision(decision.body,
+    f.context, f.keys, f.store);
+  await f.journal.appendReservedDocumentByteExecutionDecision({
+    operationId: f.context.operationId, writerId: prior.writerId,
+    writerEpoch: f.context.writerEpoch, preparationDigest: prior.preparationDigest,
+    candidateGeneration: candidate.generation, candidateEntryDigest: candidate.entryDigest,
+    candidateEnvelopeDigest: candidate.envelopeDigest, decisionEnvelopeDigest: preserved.digest,
+  }, f.store);
+  await claimVerifiedDocumentByteExecutionLease(prisma,
+    f.journal, f.store, f.context, f.keys, f.store);
+  const request = { ...scope, leaseId: 'lease' };
+  await assert.rejects(readCommittedDocumentByteProviderUnknown(prisma, request),
+    /unavailable or mismatched/);
+  const before = await f.store.readControl();
+  await assert.rejects(publishVerifiedDocumentByteProviderUnknown(prisma,
+    f.journal, f.store, f.context, f.keys, f.store, 'lease'), /unavailable or mismatched/);
+  assert.equal((await f.store.readControl()).generation, before.generation);
+  await startVerifiedDocumentByteProviderAttempt(prisma,
+    f.journal, f.store, f.context, f.keys, f.store, 'lease');
+  const bounded = await readCommittedDocumentByteProviderUnknown(prisma, request);
+  assert.equal(JSON.parse(bounded.body).decisionBodyDigest,
+    createHash('sha256').update(decision.body).digest('hex'));
+  assert.doesNotMatch(bounded.body, /vault\/synthetic-object/);
+  const exactDecision = await readPublishedDocumentByteExecutionDecision(f.journal,
+    f.store, f.context, f.keys, f.store);
+  await assert.rejects(f.journal.appendReservedDocumentByteProviderUnknown({
+    operationId: f.context.operationId, writerId: prior.writerId,
+    writerEpoch: f.context.writerEpoch, preparationDigest: prior.preparationDigest,
+    decisionGeneration: exactDecision.generation, decisionEntryDigest: '0'.repeat(64),
+    decisionEnvelopeDigest: exactDecision.envelopeDigest,
+    unknownEnvelopeDigest: '1'.repeat(64),
+  }, f.store), /exact published decision/);
+  assert.equal((await f.store.readControl()).generation, before.generation);
+  f.loseAck(true);
+  await assert.rejects(publishVerifiedDocumentByteProviderUnknown(prisma,
+    f.journal, f.store, f.context, f.keys, f.store, 'lease'), /unknown/);
+  const replay = await publishVerifiedDocumentByteProviderUnknown(prisma,
+    f.journal, f.store, f.context, f.keys, f.store, 'lease');
+  assert.equal(replay.replayed, true);
+  assert.equal(replay.actionAuthorized, false);
+  const read = await readPublishedDocumentByteProviderUnknown(f.journal,
+    f.store, f.context, f.keys, f.store);
+  assert.equal(read.body, bounded.body);
+  assert.equal(read.actionAuthorized, false);
+  assert.equal((await f.store.readControl()).generation, before.generation + 1);
+  const envelope = await f.store.readDocumentByteProviderUnknown(f.context.operationId);
+  assert.ok(envelope);
+  assert.doesNotMatch(envelope, /DOCUMENT_PRIMARY_BYTE_PROVIDER_OUTCOME_UNKNOWN|vault\/synthetic-object/);
+  await assert.rejects(f.store.createDocumentByteProviderUnknown('other-operation', envelope), /scope mismatch/);
+  const unknownKey = [...f.objects.keys()].find(key => key.startsWith('document-byte-provider-unknown/'));
+  assert.ok(unknownKey);
+  const unknownObject = f.objects.get(unknownKey)!;
+  f.objects.delete(unknownKey);
+  await assert.rejects(readPublishedDocumentByteProviderUnknown(f.journal,
+    f.store, f.context, f.keys, f.store), /unresolved/);
+  f.objects.set(unknownKey, unknownObject);
+  await assert.rejects(startVerifiedDocumentByteProviderAttempt(prisma,
+    f.journal, f.store, f.context, f.keys, f.store, 'lease'), /current independent head/);
+  assert.equal(state.startCalls, 1);
 });
 
 test('verified document byte candidate publisher refuses changed local facts before journal append', async () => {

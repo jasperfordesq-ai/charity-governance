@@ -11,6 +11,7 @@ import { inspectDocumentRecoveryEnvelope } from './document-recovery-envelope.js
 import { inspectDocumentOutcomeEnvelope } from './document-outcome-envelope.js';
 import { inspectDocumentBytePermitEnvelope } from './document-byte-permit-envelope.js';
 import { inspectDocumentByteExecutionDecisionEnvelope } from './document-byte-execution-decision-envelope.js';
+import { inspectDocumentByteProviderUnknownEnvelope } from './document-byte-provider-unknown-envelope.js';
 import { inspectRecoveryOutcomeEnvelope } from './recovery-outcome-envelope.js';
 import { inspectHoldOutcomeEnvelope } from './hold-outcome-envelope.js';
 import { validateRecoveryControlValue, type RecoveryControlStore, type RecoveryControlValue } from './recovery-operation-reservation.js';
@@ -315,6 +316,34 @@ export class S3AuthorityObjectStore implements AuthorityObjectStore, AuthorityHe
   async createDocumentByteExecutionDecision(operationId: string, envelope: string) {
     const request = this.documentByteExecutionDecisionRequest(operationId);
     this.checkDocumentByteExecutionDecision(operationId, envelope);
+    return this.writeObject(request, envelope, { IfNoneMatch: '*' }, 32768);
+  }
+
+  private documentByteProviderUnknownRequest(operationId: string) {
+    const request = this.replayRequest(operationId);
+    return { ...request, Key:
+      `document-byte-provider-unknown/${this.config.installationId}/${this.config.organisationId}/${operationId}.json` };
+  }
+
+  private checkDocumentByteProviderUnknown(operationId: string, envelope: string) {
+    const context = inspectDocumentByteProviderUnknownEnvelope(envelope);
+    if (context.installationId !== this.config.installationId
+      || context.organisationId !== this.config.organisationId
+      || context.operationId !== operationId || context.keyId !== this.config.replayKeyArn) {
+      throw new Error('Document byte provider UNKNOWN envelope scope mismatch');
+    }
+  }
+
+  async readDocumentByteProviderUnknown(operationId: string) {
+    const object = await this.readObject(this.documentByteProviderUnknownRequest(operationId), undefined, 32768);
+    if (!object) return null;
+    this.checkDocumentByteProviderUnknown(operationId, object.body);
+    return object.body;
+  }
+
+  async createDocumentByteProviderUnknown(operationId: string, envelope: string) {
+    const request = this.documentByteProviderUnknownRequest(operationId);
+    this.checkDocumentByteProviderUnknown(operationId, envelope);
     return this.writeObject(request, envelope, { IfNoneMatch: '*' }, 32768);
   }
 
