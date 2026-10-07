@@ -1,5 +1,20 @@
 # CharityPilot Agent Continuation Handoff
 
+> **7 October ~11:12 Dublin live SQL claim release:** Green
+> `1fae37fc343bedeb48ded1661b67f309e3dbdd1f` serves after repaired
+> hosted CI `37604105082` and E2E `37604104862` (240 passed), guarded
+> cutover, restricted-role/zero-lease postflight, preservation of 294 older
+> backup hashes, six SHA-verified new workstation copies and isolated
+> format-5 restore (150 migrations, 68 documents). Blue `cc4922b4` is
+> previous. The first `77ac0547` attempt stopped safely after migration at
+> a second runtime-role check; its exact cause and repair are in
+> `.charitypilot-private/release-1fae37fc-one-use-byte-lease-2026-10-07.md`.
+> The live SQL lease table is empty. No production final-fact binder,
+> independent pre-provider check, protected provider worker or UNKNOWN
+> outcome path exists. DPO-05, all-copy, P05/P08 host-loss, P01–P09/MFA,
+> Member/export/deletion, replay/C1, test-site connector and Nikita review
+> remain open. The source-only/failure checkpoints below are dated history.
+
 > **7 October ~10:56 Dublin guarded release repair:** Exact `77ac0547`
 > passed hosted CI `37602214934` and E2E `37602214937` (240 tests).
 > Guarded private-VM deployment applied the lease migration, then stopped

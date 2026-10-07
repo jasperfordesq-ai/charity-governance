@@ -1,5 +1,21 @@
 # CharityPilot Full-Platform Remediation Audit
 
+> **7 October DPO-05 live one-use SQL claim slice:** Exact repaired
+> `1fae37fc` passed hosted CI `37604105082` and E2E `37604104862`
+> (240 tests), guarded private-VM cutover, restricted-role/empty-lease
+> postflight, preservation of 294 older backup hashes, six SHA-verified
+> new workstation copies and isolated 150-migration restore with 68
+> documents. Green serves; blue `cc4922b4` is previous. The first
+> `77ac0547` deploy stopped safely after migration on a second privilege
+> checker; the exact reviewed function exception fixed it. The SQL claim
+> remains inert for real bytes: no final-fact binder, independent
+> pre-provider check, worker caller, UNKNOWN handling, all-copy inventory
+> or independent P05/P08 host-loss recovery. **DPO-05 stays open**, as do
+> P01–P09/MFA, Member/export/deletion, replay/C1, test Confluence first
+> contact and Nikita acceptance. Private exact receipt:
+> `.charitypilot-private/release-1fae37fc-one-use-byte-lease-2026-10-07.md`.
+> Older source-only and release checkpoints below are dated history.
+
 > **7 October DPO-05 local copy/hold observation release:** Exact
 > `cc4922b4` passed hosted CI `37598264337` and E2E `37598264292`
 > (240 tests), then guarded private-VM cutover, restricted-runtime and
