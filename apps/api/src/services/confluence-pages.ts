@@ -171,7 +171,8 @@ function invalidResponse(what: string): AppError {
  * rather than a third vocabulary for the same situation. The core raises it
  * when a non-idempotent 2xx body cannot be *read*; this raises it when the body
  * read fine but was not a page. The instruction to the caller is identical, and
- * it is the instruction that matters: do not reissue, search and adopt.
+ * it is the instruction that matters: do not reissue; establish exact page
+ * identity through independent reconciliation before any bytes are attached.
  */
 function writeAppliedIdentifierLost(what: string): AppError {
   return new AppError(
@@ -179,7 +180,7 @@ function writeAppliedIdentifierLost(what: string): AppError {
     'CONFLUENCE_WRITE_APPLIED_RESPONSE_UNREADABLE',
     `Confluence accepted a page create but answered without a usable ${what}. ` +
       'The page WAS created and only its identifier was lost. Do not reissue it: ' +
-      'search the space for the title that was sent and adopt the page.',
+      'quarantine this outcome and establish exact provider identity before continuing.',
   );
 }
 
@@ -502,23 +503,22 @@ export async function updatePage(
  * More than one page answered the same title in the same space.
  *
  * This is not a parse failure (`CONFLUENCE_RESPONSE_INVALID`) and is
- * deliberately a distinct, pinned code: the whole create-or-adopt design in
- * the module header rests on an assumption that is **not stated** in
+ * deliberately a distinct, pinned code: even using a title lookup to detect
+ * collisions rests on an assumption that is **not stated** in
  * Atlassian's v2 pages documentation and has **never been verified** against a
  * real site — that a title is unique within a space. Confluence's own use of
  * 409 for a duplicate title strongly implies it, but implication is not
  * verification. If the assumption is ever wrong, a caller must find out
- * through a loud, distinct error, not by silently adopting `results[0]` and
- * attaching a charity's governance document to whichever page Confluence
- * happened to list first.
+ * through a loud, distinct error, not by silently selecting `results[0]`.
+ * Even one result remains a candidate, never proof of page identity.
  */
 function titleAmbiguous(spaceId: string, title: string, matchCount: number): AppError {
   return new AppError(
     409,
     'CONFLUENCE_PAGE_TITLE_AMBIGUOUS',
     `Confluence answered ${matchCount} pages titled "${title}" in space ${spaceId}, not one. ` +
-      'The create-or-adopt design assumes a title is unique within a space, which Atlassian\'s ' +
-      "v2 documentation does not state and this client has not verified. Nothing was adopted: " +
+      'A title lookup cannot establish page identity, and Atlassian\'s ' +
+      "v2 documentation does not promise title uniqueness. Nothing was adopted: " +
       'a human must resolve which page (if any) is the real one before a publish can proceed.',
     { spaceId, title, matchCount },
   );

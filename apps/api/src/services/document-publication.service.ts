@@ -62,19 +62,18 @@ import { confluenceUploadOperationMarker } from './confluence-upload-operation-m
  * 429 produces **two pages for one board resolution, with nothing saying which
  * is real.** A durable marker is committed before the first remote write;
  * a crashed or indeterminate marked attempt is held for reconciliation. The
- * sequence for a fresh authorized attempt is **create-or-adopt**:
+ * sequence for a fresh authorized attempt is:
  *
  * 1. A page id this row already recorded is adopted outright — no lookup, no
  *    create.
- * 2. Otherwise `findPageByTitle`. Found → adopt it.
- * 3. Otherwise `createPage`. On `CONFLUENCE_CONFLICT` (409) — which Confluence
- *    also uses for a duplicate title, exactly the case where a previous
- *    attempt already succeeded — **re-read by title once** and adopt what that
- *    attempt made. Only if the re-read finds nothing is the 409 genuine, and
- *    it dead-letters.
+ * 2. Otherwise `findPageByTitle`. A match is an unverified candidate: stop
+ *    without attaching document bytes.
+ * 3. Otherwise `createPage`. On `CONFLUENCE_CONFLICT` (409), re-read by title
+ *    once for diagnosis, but never adopt on title alone. Once a remote write
+ *    has been reserved, its outcome remains UNKNOWN until independently
+ *    reconciled.
  *
- * **The upstream error body is never read to disambiguate.** The adopt
- * decision comes entirely from an independent re-read. Reading the body would
+ * **The upstream error body is never read to disambiguate.** Reading it would
  * carve a hole in the containment rule that exists because a proxy once put a
  * live authorization code in an error body.
  *
@@ -386,8 +385,9 @@ const PERMANENT_PUBLICATION_TERMINAL_REASONS: Record<string, DocumentPublication
   // A 403 on a write. Reconnecting cannot grant a permission the account never
   // had, and no retry acquires one either.
   CONFLUENCE_PUBLISH_FORBIDDEN: 'PERMANENT_PERMISSION_DENIED',
-  // A 409 on the create whose re-read found nothing to adopt.
+  // A 409 on create whose bounded re-read found no page.
   CONFLUENCE_PUBLISH_CONFLICT_UNRESOLVED: 'PERMANENT_CONFLICT_UNRESOLVED',
+  CONFLUENCE_PAGE_IDENTITY_UNVERIFIED: 'PERMANENT_CONFLICT_UNRESOLVED',
   // Two pages already carry this title. Publishing into either is a guess, and
   // a guess attaches one charity's document to an arbitrary page.
   CONFLUENCE_PAGE_TITLE_AMBIGUOUS: 'PERMANENT_CONFLICT_UNRESOLVED',
@@ -467,21 +467,28 @@ function spaceChanged(recordedSpaceId: string | null, currentSpaceId: string): A
 }
 
 /**
- * A 409 on the create whose re-read found no page to adopt.
+ * A 409 on the create whose bounded re-read found no page.
  *
- * This is the only genuinely unresolved conflict: Confluence refused the
- * create and nothing with that title exists to have caused it. Permanent —
- * every further attempt asks the same question and gets the same answer.
+ * The title lookup supplies no verified cause for the conflict. A committed
+ * remote-write reservation overrides this terminal classification with UNKNOWN.
  */
 function conflictUnresolved(spaceId: string, title: string): AppError {
   return new AppError(
     409,
     'CONFLUENCE_PUBLISH_CONFLICT_UNRESOLVED',
     `Confluence refused to create the page "${title}" in space ${spaceId} as a conflict, but a ` +
-      'search of that space found no page with that title to adopt. Nothing was published, and ' +
-      'no second page was created. A human must look at the space.',
+      'search of that space found no page with that title. No document bytes were attached ' +
+      'by this attempt. A human must inspect the site and write outcome.',
     { spaceId, title },
   );
+}
+
+function pageIdentityUnverified(spaceId: string, title: string): AppError {
+  return new AppError(409, 'CONFLUENCE_PAGE_IDENTITY_UNVERIFIED',
+    `A Confluence page titled "${title}" exists in space ${spaceId}, but a title match does not ` +
+    'prove that CharityPilot created or owns it. This attempt attached no document bytes to that page. ' +
+    'An administrator must establish exact page identity before publication can continue.',
+    { spaceId, title });
 }
 
 /**
@@ -511,8 +518,9 @@ function publishForbidden(operation: string, spaceKey: string, cause: unknown): 
 
 /**
  * The attempt was abandoned part-way by the bounded runner. Transient: the row
- * records a failed attempt and the next one resumes, adopting the page this
- * one recorded rather than creating a second.
+ * records a failed attempt. A remote-write reservation keeps an uncertain
+ * outcome quarantined; a recorded page id can be reused only after the
+ * attempt is separately authorized to continue.
  */
 function aborted(): AppError {
   return new AppError(
@@ -563,7 +571,7 @@ function documentRetiredMidAttempt(publicationId: string): AppError {
  * into the calls themselves, so one already-issued call can still complete
  * after the runner gives up. It is bounded by the client's own deadline, and
  * the direction is fail-safe — a page created and recorded, with the attempt
- * marked failed and resumed by adoption next time.
+ * marked failed and held for reconciliation when a remote write was reserved.
  */
 function assertNotAborted(signal: AbortSignal | undefined): void {
   if (signal?.aborted) throw aborted();
@@ -1147,7 +1155,7 @@ async function refreshPage(input: {
 }
 
 /**
- * Create-or-adopt for an attempt that has not already become UNKNOWN. The
+ * Resolve a page for an attempt that has not already become UNKNOWN. The
  * page-create intent preserves what could have been sent; a title/409 match
  * does not establish that an ambiguous earlier operation made that page.
  * Do not use this path to release a quarantined attempt without separate
@@ -1176,10 +1184,10 @@ async function resolvePage(input: {
     return { id: row.pageId, title: row.pageTitle ?? title };
   }
 
-  // 2. A page somebody (or a previous attempt) already made under this title.
+  // 2. A title match alone cannot establish page identity or authorize bytes.
   assertNotAborted(signal);
   const existing = await operations.findPageByTitle(client, target.spaceId, title);
-  if (existing !== null) return existing;
+  if (existing !== null) throw pageIdentityUnverified(target.spaceId, title);
 
   assertNotAborted(signal);
   await reserveBeforeWrite();
@@ -1212,13 +1220,12 @@ async function resolvePage(input: {
     if (isForbidden(error)) throw publishForbidden('create a page', target.spaceKey, error);
     if (!isConflict(error)) throw error;
 
-    // 3. A 409. Confluence uses it for a duplicate title, which is exactly the
-    //    case where a previous attempt already succeeded — so re-read **once**
-    //    and adopt. The upstream error body is not read to decide this.
+    // 3. A 409 may mean another page already has the title. Re-read once for
+    //    a bounded candidate, but never adopt it without exact identity.
     assertNotAborted(signal);
-    const adopted = await operations.findPageByTitle(client, target.spaceId, title);
-    if (adopted === null) throw conflictUnresolved(target.spaceId, title);
-    return adopted;
+    const candidate = await operations.findPageByTitle(client, target.spaceId, title);
+    if (candidate === null) throw conflictUnresolved(target.spaceId, title);
+    throw pageIdentityUnverified(target.spaceId, title);
   }
 }
 

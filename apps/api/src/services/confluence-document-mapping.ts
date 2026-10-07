@@ -12,21 +12,20 @@ import {
  * it. Nothing here calls Confluence; it only decides *what* the publish
  * worker (Task 6) will send.
  *
- * ## Why the title carries the whole create-or-adopt guarantee
+ * ## Why titles are deterministic but never sufficient for adoption
  *
  * `createPage` (`confluence-pages.ts`) is deliberately non-idempotent: a
- * retried create after a dropped connection or a 429 produces two pages for
- * one board resolution, with nothing saying which is real. The worker
- * survives a retry by re-reading `findPageByTitle` and adopting whatever it
- * finds — and that only works if {@link publicationTitle} is:
+ * retried create after a dropped connection or a 429 can produce two pages for
+ * one board resolution. The worker uses a title lookup to detect possible
+ * collisions, then stops without attaching bytes until exact provider
+ * identity is established. {@link publicationTitle} is:
  *
  * - **Deterministic** — the same document always yields the same title, on
  *   every attempt, forever. It is a pure function of `doc.id` and `doc.name`
  *   and touches nothing else (no clock, no random id, no environment).
  * - **Collision-free across documents** — two different documents must never
- *   produce the same title, or a retry would adopt the *wrong* page and
- *   attach one charity's file to another document's page. The document id is
- *   always appended **whole, never truncated**, and CharityPilot document ids
+ *   produce the same title, or a collision could conceal the right page.
+ *   The document id is always appended **whole, never truncated**, and CharityPilot document ids
  *   are unique primary keys, so two distinct documents can never collide even
  *   when their names are identical, or long and identical up to where a fixed
  *   character cap would otherwise cut them both the same way (two documents
@@ -37,11 +36,9 @@ import {
  *   over-limit title to Confluence has two possible outcomes and both are
  *   bad: a rejection dead-letters the publish (loud, recoverable — the good
  *   case), but a silent truncation stores a title different from the one
- *   this module computed, so the next attempt's `findPageByTitle` searches
- *   for a title nothing holds, finds nothing, and calls the deliberately
- *   non-idempotent `createPage` — a second page for one board resolution,
- *   silently. Only the name portion is ever shortened to make room; the id
- *   suffix is fixed-length-appended afterward and never touched, which is
+ *   this module computed, so a later lookup could miss a page and leave an
+ *   ambiguous create outcome. Only the name portion is ever shortened to
+ *   make room; the id suffix is fixed-length-appended afterward and never touched, which is
  *   what keeps this bounded form still collision-free (see above).
  * - **In the form a store will hold verbatim.** Length is not the only rewrite
  *   a page store performs — it also composes, strips invisible characters and
@@ -89,9 +86,7 @@ const TITLE_ID_MARKER = 'CharityPilot doc';
  * A hard ceiling on the title this module produces, independent of and well
  * inside Confluence Cloud's own documented page-title limit (~255
  * characters, never verified against a real site by this codebase). See the
- * module header for why leaving this to Confluence is unsafe: a truncation
- * on Confluence's side would be silent and would break `findPageByTitle`
- * adoption on the very next retry.
+ * module header for why silent store-side truncation is unsafe.
  */
 export const PUBLICATION_TITLE_MAX_LENGTH = 200;
 
@@ -192,17 +187,11 @@ const UNICODE_FORMAT_CHARACTERS = /\p{Cf}/gu;
  * two documents whose names differ *only* in ways this function erases still
  * get two different titles, and normalising cannot make them collide.
  *
- * **What this does not close, and cannot.** Adoption rests on the title this
- * module computes being the title Confluence actually stores, and **no part of
- * this codebase has ever seen what Confluence actually stores** — the
- * Atlassian app install has not landed. Any store-side transformation not
- * anticipated here reopens the duplicate-page failure, and a fake site cannot
- * tell us about one. The way out is to stop keying adoption on the title at
- * all: {@link publicationProperty} already writes the CharityPilot document id
- * onto the page as a content property, and searching for *that* would be exact
- * and immune to title handling entirely. It needs CQL search, which Phase 3
- * did not build, and it needs a real site to verify against — so it is
- * recorded here as the known answer, not built on speculation.
+ * **What this does not close.** No part of this codebase has verified what a
+ * real Confluence site stores. Store-side transformations can defeat a title
+ * lookup. The publisher must never treat a title match as provider identity;
+ * an exact marker and independent readback need real-site verification before
+ * a candidate can authorize continuation.
  */
 function normaliseTitleName(value: string): string {
   const composed = value.normalize('NFC').replace(UNICODE_FORMAT_CHARACTERS, '');

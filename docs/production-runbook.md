@@ -356,9 +356,11 @@ names what is being tested and what a failure means.
    requested, even though the connector audit's scope list included it: the DPO's standing ask is
    narrowest scopes, and the CQL work that would use it is later-tier work — its absence is a decision,
    not an oversight.
-3. Publish a document. Confirm the page is created in the chosen space with the expected title, and
-   that the title Confluence stores is byte-identical to the one CharityPilot computed — adoption
-   depends on it.
+3. On the separately approved disposable site, publish a synthetic document.
+   Confirm the page is created in the chosen space with the expected title and
+   recorded page ID. A matching title alone must not cause CharityPilot to
+   attach bytes to an unrecorded page; any ambiguous create stays quarantined
+   until exact provider identity and every copy are independently reconciled.
 4. Read the page back with `GET /wiki/api/v2/pages/{id}`. Trash it in the UI and read again: confirm
    404. Then confirm `GET /wiki/rest/api/content/{id}?status=trashed` returns 200, which is the only
    way to tell restorable from gone.
