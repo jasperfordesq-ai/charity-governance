@@ -18,7 +18,8 @@ import { publishVerifiedDocumentOutcome, readPublishedDocumentOutcome } from '..
 import { prepareDocumentBytePermitFacts } from '../services/document-byte-permit-facts.js';
 import { openDocumentBytePermit, preserveDocumentBytePermit,
   readVerifiedDocumentBytePermit } from '../services/document-byte-permit-envelope.js';
-import { compareDocumentBytePermitAuthority, readPublishedDocumentBytePermit } from '../services/published-document-byte-permit.js';
+import { compareDocumentBytePermitAuthority, publishVerifiedDocumentBytePermitCandidate,
+  readPublishedDocumentBytePermit } from '../services/published-document-byte-permit.js';
 
 function documentFacts() {
   const policy = { id: 'policy', organisationId: 'charity', recordClass: 'VAULT_DRAFT' as const,
@@ -140,6 +141,122 @@ test('document preparation publishes original encrypted bytes under a reserved i
   for (const key of f.objects.keys()) if (key.startsWith('document-preparations/')) f.objects.delete(key);
   await assert.rejects(readPublishedDocumentPreparation(f.journal, f.store,
     f.context, f.keys, f.store), /unresolved/);
+});
+
+async function readyBytePermitPublisher() {
+  const f = await fixture();
+  await preserveDocumentRecoveryPreparation(f.prepared.body, f.context, f.keys, f.store);
+  const prepReceipt = await publishVerifiedDocumentPreparation(f.journal, f.store,
+    f.request, f.context, f.keys, f.store);
+  const preparationEnvelope = await f.store.readDocumentPreparation(f.context.operationId);
+  const preparationEnvelopeDigest = createHash('sha256').update(preparationEnvelope!).digest('hex');
+  const control = await f.store.readControl();
+  const transactionId = 9007199254740993n;
+  const row = { id: 'outcome', transactionId,
+    recordedAt: new Date('2026-10-04T00:02:01.000Z'),
+    preparation: { id: 'preparation', installationId: f.context.installationId,
+      organisationId: f.context.organisationId, operationId: f.context.operationId,
+      writerEpoch: f.context.writerEpoch, authorizationId: f.facts.authorization.id,
+      actorUserId: f.facts.actorUserId, facts: f.prepared.body, factsDigest: f.prepared.digest,
+      execution: { writerId: f.request.writerId, generation: prepReceipt.generation,
+        entryDigest: prepReceipt.digest, envelopeDigest: preparationEnvelopeDigest,
+        controlRevision: control.revision, transactionId } },
+    claim: { id: 'claim', organisationId: f.context.organisationId,
+      authorizationId: f.facts.authorization.id, documentId: f.facts.document.id,
+      deletionId: 'job', actorUserId: f.facts.actorUserId, transactionId,
+      claimedAt: new Date('2026-10-04T00:02:00.000Z'),
+      deletion: { id: 'job', organisationId: f.context.organisationId,
+        sourceDocumentId: f.facts.document.id,
+        storagePath: f.facts.authorization.storagePath,
+        provider: f.facts.authorization.provider } } };
+  const state = { copyHolds: [] as unknown[], reads: 0, changeAfterFirstRead: false };
+  const tx = {
+    $queryRaw: async () => [{ id: f.context.organisationId }],
+    documentRecoveryOutcome: { findFirst: async () => row },
+    documentRecoveryPreparation: { findFirst: async () => ({ id: 'preparation',
+      facts: f.prepared.body, factsDigest: f.prepared.digest }) },
+    organisation: { findFirst: async () => ({ id: f.context.organisationId,
+      lifecycleStatus: 'ACTIVE', documentStorageProvider: 'local' }) },
+    documentRecoveryEnforcement: { findFirst: async () => ({ id: 'enforcement',
+      installationId: f.context.installationId, writerId: f.request.writerId,
+      writerEpoch: f.context.writerEpoch }) },
+    user: { findFirst: async () => ({ id: f.facts.actorUserId,
+      role: 'OWNER', lifecycleStatus: 'ACTIVE' }) },
+    documentPurgeAuthorization: { findFirst: async () => ({ ...f.facts.authorization,
+      withdrawal: null, claim: { id: row.claim.id, deletionId: row.claim.deletionId } }) },
+    dataRetentionPolicyRevision: { findMany: async () => [f.facts.policy] },
+    documentStorageDeletion: { findFirst: async () => ({ id: row.claim.deletionId,
+      organisationId: f.context.organisationId, sourceDocumentId: f.facts.document.id,
+      storagePath: f.facts.authorization.storagePath, provider: f.facts.authorization.provider,
+      state: 'PENDING', claimedAt: null, processedAt: null, targetRef: null }) },
+    documentCopyDispositionAuthority: { findMany: async () => [] },
+    documentCopyHoldEvent: { findMany: async () => state.copyHolds },
+    documentPurgeDispositionEvent: { findMany: async () => [] },
+    documentPublication: { findMany: async () => [] },
+    documentUploadIntent: { findMany: async () => [] },
+    document: { count: async () => 0 },
+    documentStandardLink: { count: async () => 0 },
+    confluenceReference: { count: async () => 0 },
+  };
+  const prisma = { documentRecoveryOutcome: { findFirst: async () => row },
+    $transaction: async (callback: (value: typeof tx) => Promise<unknown>) => {
+      state.reads += 1;
+      if (state.changeAfterFirstRead && state.reads === 2) {
+        state.copyHolds.push({ id: 'new-hold', held: true });
+      }
+      return callback(tx);
+    } } as unknown as PrismaClient;
+  const committed = await readCommittedDocumentOutcome(prisma, {
+    organisationId: f.context.organisationId, installationId: f.context.installationId,
+    operationId: f.context.operationId });
+  await preserveDocumentOutcome(committed.body, f.context, f.keys, f.store);
+  await publishVerifiedDocumentOutcome(f.journal, f.store, prisma,
+    { writerId: f.request.writerId, preparationDigest: f.prepared.digest,
+      preparationGeneration: prepReceipt.generation,
+      preparationEntryDigest: prepReceipt.digest, preparationEnvelopeDigest },
+    f.context, f.keys, f.store);
+  return { f, prisma, state };
+}
+
+test('verified document byte candidate publisher derives current facts and recovers a lost head acknowledgement', async () => {
+  const { f, prisma } = await readyBytePermitPublisher();
+  const publish = () => publishVerifiedDocumentBytePermitCandidate(prisma,
+    f.journal, f.store, f.context, f.keys, f.store);
+  f.loseAck(true);
+  await assert.rejects(publish(), /unknown/);
+  const replay = await publish();
+  assert.equal(replay.replayed, true);
+  assert.equal(replay.actionAuthorized, false);
+  assert.equal((await f.store.readControl()).activeOperation?.operationId, f.context.operationId);
+  const read = await readPublishedDocumentBytePermit(f.journal, f.store,
+    f.context, f.keys, f.store);
+  assert.equal(JSON.parse(read.body).currentAuthorityDigest, replay.currentAuthorityDigest);
+});
+
+test('verified document byte candidate publisher binds the exact outcome and stays non-authorizing', async () => {
+  const { f, prisma } = await readyBytePermitPublisher();
+  const receipt = await publishVerifiedDocumentBytePermitCandidate(prisma,
+    f.journal, f.store, f.context, f.keys, f.store);
+  assert.equal(receipt.replayed, false);
+  assert.equal(receipt.actionAuthorized, false);
+  const outcome = await readPublishedDocumentOutcome(f.journal, f.store,
+    f.context, f.keys, f.store);
+  const candidate = await readPublishedDocumentBytePermit(f.journal, f.store,
+    f.context, f.keys, f.store);
+  const facts = JSON.parse(candidate.body);
+  assert.equal(facts.outcomeEntryDigest, outcome.entryDigest);
+  assert.equal(facts.outcomeGeneration, outcome.generation);
+  assert.equal(facts.currentAuthorityDigest, receipt.currentAuthorityDigest);
+  assert.equal((await f.store.readControl()).activeOperation?.operationId, f.context.operationId);
+});
+
+test('verified document byte candidate publisher refuses changed local facts before journal append', async () => {
+  const { f, prisma, state } = await readyBytePermitPublisher();
+  state.changeAfterFirstRead = true;
+  await assert.rejects(publishVerifiedDocumentBytePermitCandidate(prisma,
+    f.journal, f.store, f.context, f.keys, f.store), /authority changed before publication/);
+  assert.equal((await f.store.readControl()).generation, 2);
+  assert.ok(await f.store.readDocumentBytePermit(f.context.operationId));
 });
 
 test('document byte permit candidate uses separate encrypted immutable storage and remains non-executable', async () => {

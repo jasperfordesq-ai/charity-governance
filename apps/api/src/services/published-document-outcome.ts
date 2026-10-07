@@ -98,5 +98,9 @@ export async function readPublishedDocumentOutcome(journal: RecoveryAuthorityJou
   }
   return { body: opened.body, preparationBody: prepared.body,
     entryDigest: outcome.entry.digest, envelopeDigest: outcome.entry.factsDigest,
+    generation: outcome.entry.generation,
+    preparationEntryDigest: preparation.entry.digest,
+    preparationEnvelopeDigest: preparation.entry.factsDigest,
+    preparationGeneration: preparation.entry.generation,
     revision: after.revision, actionAuthorized: false as const };
 }

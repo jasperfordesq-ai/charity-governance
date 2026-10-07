@@ -9,14 +9,103 @@ import { readVerifiedDocumentRecoveryPreparation,
 import { readVerifiedDocumentOutcome,
   type DocumentOutcomeObjects } from './document-outcome-envelope.js';
 import { readVerifiedDocumentBytePermit,
+  openDocumentBytePermit, preserveDocumentBytePermit,
   type DocumentBytePermitObjects } from './document-byte-permit-envelope.js';
 import { prepareDocumentBytePermitFacts } from './document-byte-permit-facts.js';
 import { readCurrentDocumentByteAuthority } from './document-byte-authority-projection.js';
+import { readPublishedDocumentOutcome } from './published-document-outcome.js';
 
 const hash = (body: string) => createHash('sha256').update(body, 'utf8').digest('hex');
 type Objects = Pick<DocumentRecoveryObjects, 'readDocumentPreparation'>
   & Pick<DocumentOutcomeObjects, 'readDocumentOutcome'>
   & Pick<DocumentBytePermitObjects, 'readDocumentBytePermit'>;
+type PublishObjects = Objects & Pick<DocumentBytePermitObjects, 'createDocumentBytePermit'>;
+
+/** Bind a candidate derived from the authenticated committed claim and a
+ * current local fact projection. The journal entry is deliberately inert:
+ * this does not assess all copies, create a database permit, or authorize a
+ * worker. An unknown append result keeps the same operation and candidate. */
+export async function publishVerifiedDocumentBytePermitCandidate(prisma: PrismaClient,
+  journal: RecoveryAuthorityJournal, control: RecoveryControlStore,
+  rawContext: RecoveryEnvelopeContext, keys: RecoveryDataKeys, objects: PublishObjects) {
+  const context = validateRecoveryEnvelopeContext(rawContext);
+  const localScope = { installationId: context.installationId,
+    organisationId: context.organisationId, operationId: context.operationId };
+  const outcome = await readPublishedDocumentOutcome(journal, control, context, keys, objects);
+  const claim = JSON.parse(outcome.body), prep = JSON.parse(outcome.preparationBody);
+  const before = validateRecoveryControl(await control.readControl());
+  if (before.installationId !== context.installationId
+    || before.organisationId !== context.organisationId
+    || before.writerId !== claim.writerId || before.writerEpoch !== context.writerEpoch
+    || before.activeOperation?.operationId !== context.operationId
+    || before.activeOperation.preparationDigest !== claim.preparationDigest
+    || claim.writerEpoch !== context.writerEpoch
+    || claim.preparationSourceRevision !== context.sourceRevision) {
+    throw new Error('Document byte permit reservation or claim changed');
+  }
+  // An acknowledgement can be lost after the independent CAS. Retry only by
+  // authenticating the already-published entry and current local authority.
+  if (before.generation === outcome.generation + 1) {
+    const matched = await readMatchedDocumentBytePermitAuthority(prisma,
+      journal, control, context, keys, objects);
+    return { ...matched, replayed: true, actionAuthorized: false as const };
+  }
+  if (before.generation !== outcome.generation || before.digest !== outcome.entryDigest
+    || before.revision !== outcome.revision) {
+    throw new Error('Document byte permit predecessor is not current');
+  }
+  const first = await readCurrentDocumentByteAuthority(prisma, localScope);
+  const existing = await objects.readDocumentBytePermit(context.operationId);
+  const issuedAt = existing === null ? new Date().toISOString()
+    : JSON.parse((await openDocumentBytePermit(existing, context, keys)).body).issuedAt;
+  const candidate = prepareDocumentBytePermitFacts({ format: 1,
+    action: 'DOCUMENT_PRIMARY_BYTE_PERMIT_CANDIDATE',
+    ...localScope, writerId: claim.writerId, writerEpoch: context.writerEpoch,
+    sourceRevision: context.sourceRevision,
+    preparationDigest: claim.preparationDigest,
+    preparationEntryDigest: outcome.preparationEntryDigest,
+    preparationEnvelopeDigest: outcome.preparationEnvelopeDigest,
+    preparationGeneration: outcome.preparationGeneration,
+    outcomeBodyDigest: hash(outcome.body), outcomeEntryDigest: outcome.entryDigest,
+    outcomeEnvelopeDigest: outcome.envelopeDigest,
+    outcomeGeneration: outcome.generation, controlRevision: before.revision,
+    currentAuthorityDigest: first.digest,
+    outcomeId: claim.outcomeId, claimId: claim.claimId, deletionId: claim.deletionId,
+    authorizationId: claim.authorizationId, documentId: claim.documentId,
+    actorUserId: claim.actorUserId, provider: prep.authorization.provider,
+    storagePath: prep.authorization.storagePath,
+    objectSha256: prep.authorization.sha256, fileSize: prep.authorization.fileSize,
+    issuedAt });
+  const preserved = await preserveDocumentBytePermit(candidate.body, context, keys, objects);
+  const opened = await readVerifiedDocumentBytePermit(preserved.digest, context, keys, objects);
+  if (opened.body !== candidate.body) throw new Error('Document byte permit candidate changed');
+  const [outcomeAgain, second] = await Promise.all([
+    readPublishedDocumentOutcome(journal, control, context, keys, objects),
+    readCurrentDocumentByteAuthority(prisma, localScope),
+  ]);
+  const after = validateRecoveryControl(await control.readControl());
+  if (JSON.stringify(outcomeAgain) !== JSON.stringify(outcome)
+    || JSON.stringify(after) !== JSON.stringify(before)
+    || second.digest !== first.digest) {
+    throw new Error('Document byte permit authority changed before publication');
+  }
+  const receipt = await journal.appendReservedDocumentBytePermit({
+    operationId: context.operationId, writerId: claim.writerId,
+    writerEpoch: context.writerEpoch, preparationDigest: claim.preparationDigest,
+    outcomeGeneration: outcome.generation, outcomeEntryDigest: outcome.entryDigest,
+    outcomeEnvelopeDigest: outcome.envelopeDigest,
+    permitEnvelopeDigest: preserved.digest,
+  }, control);
+  const published = await readPublishedDocumentBytePermit(journal, control,
+    context, keys, objects);
+  if (published.body !== candidate.body || published.envelopeDigest !== preserved.digest
+    || published.entryDigest !== receipt.digest) {
+    throw new Error('Published document byte permit did not match the candidate');
+  }
+  const matched = await readMatchedDocumentBytePermitAuthority(prisma,
+    journal, control, context, keys, objects);
+  return { ...matched, replayed: receipt.replayed, actionAuthorized: false as const };
+}
 
 /** Authenticate the candidate against a single current independent history.
  * This does not prove current database policy/copy authority, a worker lease,
