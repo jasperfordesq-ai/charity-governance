@@ -1,5 +1,20 @@
 # CharityPilot Agent Continuation Handoff
 
+> **7 October guarded byte-fence release:** Exact `b0cff53a` hosted CI/E2E
+> passed and blue now serves the private VM. Live postflight proved the
+> `DocumentRecoveryByteFence` migration/trigger, restricted `cp_runtime`,
+> empty recovery/enforcement tables, format-3 inventory, shared document
+> mount and loopback/Tailscale health/login. All 213 prior backup hashes
+> survived; two new sets were copied and SHA-verified off-VM; a 145-migration
+> isolated restore passed. Green `f06075dd` is rollbackable. This is a
+> fail-closed prerequisite only. Do not activate enforcement: there is no
+> verified byte-execution permit, all-copy fence, P05/P08 custody or
+> supervised host-loss reopening. Nikita's separate policy, role/export,
+> replay/C1 and scope-specific review gates remain open. Exact private
+> receipt: `.charitypilot-private/release-b0cff53a-byte-fence-2026-10-07.md`.
+> Older checkpoints below are dated history.
+
+
 > **7 October source-only byte fence candidate:** Migration
 > `20261007040000_document_recovery_byte_fence` serializes document
 > enforcement activation with purge-job updates, refuses activation over

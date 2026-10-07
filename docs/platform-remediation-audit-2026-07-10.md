@@ -1,5 +1,18 @@
 # CharityPilot Full-Platform Remediation Audit
 
+> **7 October DPO-05 byte-fence live release:** Exact `b0cff53a` hosted
+> CI/E2E and guarded private-VM deployment passed. Blue serves the migration;
+> live SQL proves its trigger and zero recovery/enforcement rows. Restricted
+> runtime, both front doors, preservation of 213 previous backup hashes,
+> two copied/SHA-verified new sets and a 145-migration isolated restore
+> passed. This only fails closed against premature guarded byte-job updates;
+> no verified byte-execution permit or all-copy fence exists. P05/P08
+> independent custody and host-loss reopening, controller/Board policy,
+> Member/export/deletion, replay/C1 and Nikita acceptance remain open.
+> Private receipt: `.charitypilot-private/release-b0cff53a-byte-fence-2026-10-07.md`.
+> The source-only checkpoint below is dated history.
+
+
 > **7 October DPO-05 byte-fence source candidate:** A fail-closed migration
 > refuses document enforcement over unfinished purge jobs and blocks direct
 > updates to a guarded storage deletion job. Local real-PostgreSQL and full
