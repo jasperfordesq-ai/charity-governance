@@ -1,5 +1,19 @@
 # CharityPilot Full-Platform Remediation Audit
 
+> **7 October DPO-05 source-only candidate:** A bounded, typed
+> `DocumentRecoveryPreparation` store and append-only SQL guard were added
+> for future document primary-disposal recovery. It retains exact decision
+> and object-identity facts locally without Vault content, but has no live
+> caller, independently published authority, claim/worker result binding or
+> host-loss reopening. Local API build, focused tests, real PostgreSQL guard,
+> full retention migration chain and API suite passed; hosted and deployed
+> evidence remain pending. The pre-migration restore inventory omits this
+> new empty/inactive table until the schema exists on the serving release;
+> restore coverage is required before live capture. DPO-05 and every Member,
+> policy, export, replay/C1 and Nikita acceptance gate remain open. Private
+> design/evidence: `.charitypilot-private/document-recovery-preparation-2026-10-07.md`.
+> Older checkpoints below retain their dated scope.
+
 > **7 October private-VM complaint policy gate:** Exact `38b735c1` is live
 > after hosted CI/E2E and guarded release. If complaint recovery enforcement
 > is later bound, ordinary complaint policy revision/withdrawal fail closed

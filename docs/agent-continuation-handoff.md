@@ -1,5 +1,20 @@
 # CharityPilot Agent Continuation Handoff
 
+> **7 October document recovery preparation, source-only candidate:** A typed,
+> bounded, append-only `DocumentRecoveryPreparation` capture path now records
+> exact Owner authorization, approved/current and original removal policy,
+> removal/withdrawal and object identity facts without document bytes or
+> descriptive Vault fields. It has no live caller, independent publication,
+> execution permit or worker fence. Focused API and real PostgreSQL trigger
+> tests, the full retention migration chain, API build and full API suite
+> passed locally. Hosted CI/E2E and any VM release are pending. The existing
+> pre-migration restore inventory intentionally does not query this new table;
+> update versioned restore coverage after the schema is deployed and before
+> any live capture. This narrows DPO-05 preparation only; independent custody,
+> claim/job/worker outcomes and host-loss reopening remain open. Private
+> source note: `.charitypilot-private/document-recovery-preparation-2026-10-07.md`.
+> Earlier live-release statements below are dated checkpoints.
+
 > **7 October complaint policy recovery-gate private VM release:** Blue
 > `38b735c1` is live after exact hosted CI/E2E and guarded cutover. Service
 > and SQL now reject ordinary COMPLAINT retention-policy revisions and

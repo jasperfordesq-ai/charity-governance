@@ -1344,6 +1344,7 @@ model DocumentPurgeAuthorization {
   authorizedAt       DateTime @default(now())
   withdrawal         DocumentPurgeAuthorizationWithdrawal?
   claim              DocumentPurgeClaim?
+  recoveryPreparations DocumentRecoveryPreparation[]
   dispositionEvents  DocumentPurgeDispositionEvent[]
 
   @@unique([id, organisationId])
@@ -1352,6 +1353,24 @@ model DocumentPurgeAuthorization {
 
   copyHolds DocumentCopyHoldEvent[]
 
+}
+
+// Candidate facts only; no reservation, claim, job or reopen permission.
+model DocumentRecoveryPreparation {
+  id              String @id @default(cuid())
+  organisationId  String
+  installationId  String
+  operationId     String
+  writerEpoch     Int
+  authorizationId String
+  actorUserId     String
+  facts           String @db.Text
+  factsDigest     String
+  recordedAt      DateTime @default(now())
+  authorization   DocumentPurgeAuthorization @relation(fields: [authorizationId, organisationId], references: [id, organisationId], onDelete: Restrict)
+
+  @@unique([organisationId, operationId])
+  @@index([organisationId, recordedAt, id])
 }
 
 // Reviewer evidence about an explicitly referenced downstream scope, never a
