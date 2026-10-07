@@ -4,6 +4,7 @@ import { PrismaClient } from '@prisma/client';
 import { prepareDocumentRecoveryFacts } from '../apps/api/dist/services/document-recovery-preparation.js';
 import { readClaimedDocumentByteAuthority,
   readCurrentDocumentByteAuthority } from '../apps/api/dist/services/document-byte-authority-projection.js';
+import { readCommittedDocumentByteProviderUnknown } from '../apps/api/dist/services/document-byte-provider-unknown.js';
 import { DocumentService } from '../apps/api/dist/services/document.service.js';
 
 // Only the disposable, loopback-published PostgreSQL fixture created by the
@@ -619,6 +620,8 @@ try {
   /changed or cannot be bounded/);
   assert.equal((await prisma.$queryRaw`SELECT count(*)::integer AS count
     FROM "DocumentByteProviderAttempt"`)[0].count, 0);
+  await assert.rejects(readCommittedDocumentByteProviderUnknown(prisma,
+    { ...request, leaseId: 'lease' }), /unavailable or mismatched/);
   await assert.rejects(prisma.$transaction(async tx => {
     await tx.$executeRaw`SET LOCAL ROLE cp_fixture`;
     await tx.$executeRaw`INSERT INTO "DocumentByteProviderAttempt"
@@ -656,6 +659,18 @@ try {
   const started = await prisma.documentByteProviderAttempt.findUniqueOrThrow({
     where: { leaseId: 'lease' },
   });
+  const unknown = await readCommittedDocumentByteProviderUnknown(prisma,
+    { ...request, leaseId: 'lease' });
+  const unknownFacts = JSON.parse(unknown.body);
+  assert.equal(unknown.actionAuthorized, false);
+  assert.equal(unknownFacts.action, 'DOCUMENT_PRIMARY_BYTE_PROVIDER_OUTCOME_UNKNOWN');
+  assert.equal(unknownFacts.leaseId, 'lease');
+  assert.equal(unknownFacts.deletionId, 'job');
+  assert.equal(unknownFacts.startedTransactionId, started.startedTransactionId.toString());
+  assert.equal(unknown.digest, createHash('sha256').update(unknown.body).digest('hex'));
+  assert.doesNotMatch(unknown.body, /charity\/synthetic-proof|synthetic-only/);
+  await assert.rejects(readCommittedDocumentByteProviderUnknown(prisma,
+    { ...request, operationId: 'other-operation', leaseId: 'lease' }), /unavailable or mismatched/);
   assert.equal(started.organisationId, 'charity');
   assert.equal(started.deletionId, 'job');
   assert.equal(started.decisionEntryDigest, '1'.repeat(64));
@@ -705,7 +720,7 @@ try {
   await assert.rejects(prisma.$executeRaw`DELETE FROM "DocumentByteProviderAttempt"
     WHERE "leaseId"='lease'`, /append-only/);
   process.stdout.write(
-    'current-authority-real-postgres-composition=verified; protected-worker-skip=verified; cleanup-alias-fence=verified; upload-intent-fence=verified; copy-evidence-digest=changed; post-claim-local-authority=verified; provider-start-marker=verified; provider-start-race=one-winner; post-start-ordinary-retry-refused=verified\n',
+    'current-authority-real-postgres-composition=verified; protected-worker-skip=verified; cleanup-alias-fence=verified; upload-intent-fence=verified; copy-evidence-digest=changed; post-claim-local-authority=verified; provider-start-marker=verified; provider-start-race=one-winner; provider-unknown-facts=verified; post-start-ordinary-retry-refused=verified\n',
   );
 } finally {
   await prisma.$disconnect();
