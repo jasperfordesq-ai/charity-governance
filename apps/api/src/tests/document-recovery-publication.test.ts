@@ -18,7 +18,7 @@ import { publishVerifiedDocumentOutcome, readPublishedDocumentOutcome } from '..
 import { prepareDocumentBytePermitFacts } from '../services/document-byte-permit-facts.js';
 import { openDocumentBytePermit, preserveDocumentBytePermit,
   readVerifiedDocumentBytePermit } from '../services/document-byte-permit-envelope.js';
-import { readPublishedDocumentBytePermit } from '../services/published-document-byte-permit.js';
+import { compareDocumentBytePermitAuthority, readPublishedDocumentBytePermit } from '../services/published-document-byte-permit.js';
 
 function documentFacts() {
   const policy = { id: 'policy', organisationId: 'charity', recordClass: 'VAULT_DRAFT' as const,
@@ -323,6 +323,24 @@ test('document claim outcome publishes only the committed result and remains occ
     f.context, f.keys, f.store);
   assert.equal(readPermit.body, candidateFacts.body);
   assert.equal(readPermit.actionAuthorized, false);
+  const localDigest = 'f'.repeat(64);
+  const matched = await compareDocumentBytePermitAuthority(
+    async () => readPermit, async () => ({ digest: localDigest, actionAuthorized: false }));
+  assert.equal(matched.currentAuthorityDigest, localDigest);
+  assert.equal(matched.actionAuthorized, false);
+  await assert.rejects(compareDocumentBytePermitAuthority(
+    async () => readPermit, async () => ({ digest: 'e'.repeat(64), actionAuthorized: false })),
+  /differs from current local authority/);
+  let independentReads = 0;
+  await assert.rejects(compareDocumentBytePermitAuthority(
+    async () => ({ ...readPermit, revision: `${readPermit.revision}-${++independentReads}` }),
+    async () => ({ digest: localDigest, actionAuthorized: false })),
+  /changed during local authority read/);
+  let localReads = 0;
+  await assert.rejects(compareDocumentBytePermitAuthority(
+    async () => readPermit,
+    async () => ({ digest: ++localReads === 1 ? localDigest : 'e'.repeat(64),
+      actionAuthorized: false })), /authority changed during independent permit read/);
   assert.equal((await readPublishedDocumentOutcome(f.journal, f.store,
     f.context, f.keys, f.store)).body, committed.body);
   await assert.rejects(f.journal.appendReservedDocumentBytePermit({ ...permitRequest,

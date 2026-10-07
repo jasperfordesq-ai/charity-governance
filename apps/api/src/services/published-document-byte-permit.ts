@@ -1,4 +1,5 @@
 import { createHash } from 'node:crypto';
+import type { PrismaClient } from '@prisma/client';
 import { RecoveryAuthorityJournal } from './recovery-authority-journal.js';
 import { validateRecoveryControl, type RecoveryControlStore } from './recovery-operation-reservation.js';
 import { validateRecoveryEnvelopeContext, type RecoveryEnvelopeContext,
@@ -10,6 +11,7 @@ import { readVerifiedDocumentOutcome,
 import { readVerifiedDocumentBytePermit,
   type DocumentBytePermitObjects } from './document-byte-permit-envelope.js';
 import { prepareDocumentBytePermitFacts } from './document-byte-permit-facts.js';
+import { readCurrentDocumentByteAuthority } from './document-byte-authority-projection.js';
 
 const hash = (body: string) => createHash('sha256').update(body, 'utf8').digest('hex');
 type Objects = Pick<DocumentRecoveryObjects, 'readDocumentPreparation'>
@@ -90,4 +92,43 @@ export async function readPublishedDocumentBytePermit(journal: RecoveryAuthority
     preparationBody: prepared.body, entryDigest: permit.entry.digest,
     envelopeDigest: permit.entry.factsDigest, revision: after.revision,
     actionAuthorized: false as const };
+}
+
+type PublishedRead = Awaited<ReturnType<typeof readPublishedDocumentBytePermit>>;
+type LocalRead = Awaited<ReturnType<typeof readCurrentDocumentByteAuthority>>;
+
+/** Bracket a local observation with authenticated independent reads, then
+ * recheck the local facts. This is a comparison, never a byte-execution
+ * permit: the database transition and worker must repeat current checks. */
+export async function compareDocumentBytePermitAuthority(
+  readPublished: () => Promise<PublishedRead>, readLocal: () => Promise<LocalRead>) {
+  const before = await readPublished();
+  const facts = JSON.parse(prepareDocumentBytePermitFacts(JSON.parse(before.body)).body);
+  const first = await readLocal();
+  if (first.digest !== facts.currentAuthorityDigest) {
+    throw new Error('Published document byte permit differs from current local authority');
+  }
+  const after = await readPublished();
+  if (after.revision !== before.revision || after.entryDigest !== before.entryDigest
+    || after.envelopeDigest !== before.envelopeDigest || after.body !== before.body) {
+    throw new Error('Published document byte permit changed during local authority read');
+  }
+  const second = await readLocal();
+  if (second.digest !== first.digest) {
+    throw new Error('Document byte authority changed during independent permit read');
+  }
+  return { currentAuthorityDigest: second.digest, entryDigest: after.entryDigest,
+    revision: after.revision, actionAuthorized: false as const };
+}
+
+/** Fixed production composition: callers cannot substitute an unauthenticated
+ * independent read or a fabricated local projection. */
+export async function readMatchedDocumentBytePermitAuthority(prisma: PrismaClient,
+  journal: RecoveryAuthorityJournal, control: RecoveryControlStore,
+  context: RecoveryEnvelopeContext, keys: RecoveryDataKeys, objects: Objects) {
+  const localScope = { installationId: context.installationId,
+    organisationId: context.organisationId, operationId: context.operationId };
+  return compareDocumentBytePermitAuthority(
+    () => readPublishedDocumentBytePermit(journal, control, context, keys, objects),
+    () => readCurrentDocumentByteAuthority(prisma, localScope));
 }
