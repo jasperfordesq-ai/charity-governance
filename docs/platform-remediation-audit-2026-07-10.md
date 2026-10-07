@@ -1,5 +1,16 @@
 # CharityPilot Full-Platform Remediation Audit
 
+> **7 October DPO-05 live protocol checkpoint:** Exact `7cd64f4b` passed
+> hosted CI/E2E, guarded green private-VM cutover, restricted runtime and
+> zero-row postflight, preservation of 339 prior backup hashes, three
+> SHA-matched workstation files and isolated 151-migration restore. The
+> source can publish a committed provider-start marker as one encrypted
+> independent UNKNOWN entry, but the path has no production caller or
+> provider I/O. No actual outcome, all-copy authority or independently
+> approved P05/P08 recovery exists. All controller, role, historical,
+> connector and Nikita acceptance gates remain open. See exact private
+> release receipt; prior source checkpoint below is dated history.
+
 > **7 October DPO-05 release evidence:** Exact `6dea7e5a` passed hosted
 > CI/E2E, guarded private-VM blue cutover, restricted runtime and zero-row
 > postflight, preservation of 336 prior backup hashes, three SHA-matched

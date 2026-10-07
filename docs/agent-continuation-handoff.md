@@ -1,5 +1,16 @@
 # CharityPilot Agent Continuation Handoff
 
+> **7 October verified `7cd64f4b` private-VM release:** Exact hosted CI
+> `37638631678` and E2E `37638631629` passed. Guarded green cutover,
+> restricted `cp_runtime`, zero protected rows, both front doors, all 339
+> earlier VM backup hashes, SHA-matched workstation copy of the new set,
+> isolated 151-migration restore and post-restore checks passed. The new
+> encrypted independent UNKNOWN publication path has no production caller,
+> provider I/O, live fact or erasure result. DPO-05, independent P05/P08
+> host-loss, policy/MFA, Member/export/deletion, C1/replay, disposable
+> Confluence test-site and Nikita acceptance remain open. Exact private
+> receipt: `.charitypilot-private/release-7cd64f4b-independent-unknown-2026-10-07.md`.
+
 > **7 October verified `6dea7e5a` private-VM release:** Exact hosted CI
 > `37633656389` and E2E `37633656362` passed. Guarded blue cutover,
 > restricted `cp_runtime`, zero protected rows, both front doors, all 336
