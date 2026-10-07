@@ -1,5 +1,18 @@
 # CharityPilot Full-Platform Remediation Audit
 
+> **8 October DPO-05 readback source and private release:** Exact merged-
+> master `c98c26fb` passed CI `37702538043`, E2E `37702538021` and
+> guarded blue private-VM cutover with restricted runtime, zero protected/
+> publication rows, 360 preserved earlier VM backup hashes, SHA-matched
+> workstation copy and isolated 155-migration restore. The Confluence v2
+> page-storage/parent reader is inert: no production caller, marker write,
+> real provider I/O, exact operation identity, complete copy inventory,
+> UNKNOWN resolution or erasure/retry authority follows. Independent
+> P05/P08 host-loss recovery, controller policy, role-specific testing and
+> Nikita review remain OPEN. Exact private receipt:
+> `.charitypilot-private/release-c98c26fb-page-storage-readback-2026-10-08.md`.
+> Earlier checkpoints below are dated history.
+
 > **7 October DPO-05 title-adoption fence release:** Exact merged-master
 > `3f137c36` passed CI `37695270803`, E2E `37695271218` and guarded
 > private-VM green cutover with restricted runtime, zero publication rows,
