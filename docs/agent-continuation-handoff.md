@@ -1,5 +1,37 @@
 # CharityPilot Agent Continuation Handoff
 
+> **7 October ~04:40 Dublin guarded byte-permit journal release:** Exact
+> `dc10b848` hosted CI/E2E passed and blue now serves the private VM after
+> guarded cutover. Live checks proved restricted `cp_runtime`, shared mount,
+> empty recovery/enforcement tables, byte-fence trigger, format-3 inventory
+> and loopback/Tailscale health/login. All 225 prior backup hashes survived;
+> two new sets were copied and SHA-verified off-VM; a 145-migration isolated
+> restore passed. Green `4adf8aa9` is rollbackable. The new journal stage
+> has `actionAuthorized: false`: no encrypted permit body, SQL permit,
+> worker current-head check, all-copy fence, P05/P08 custody or host-loss
+> reopening exists. Keep enforcement inactive. The operative remaining-work
+> scope and exact evidence are in private `nikita-remaining-goal-audit-2026-10-07.md`
+> and `release-dc10b848-byte-permit-journal-2026-10-07.md`. Older source-only
+> notes below are dated history.
+
+> **7 October source-only byte-permit journal chain:** A distinct
+> `DOCUMENT_BYTE_PERMIT_V1` journal kind can immediately follow the exact
+> `DOCUMENT_OUTCOME_V1` under the same reserved independent control. The
+> journal now verifies the three-entry predecessor chain and exact replay;
+> its receipt still has `actionAuthorized: false`. The S3 release allowlist
+> rejects this kind. API build and 53 focused journal/document/S3 tests pass
+> locally. Source `1065c6f6` is committed/pushed, with exact hosted CI
+> `37566033387` and E2E `37566033470` queued at first observation. CI
+> failed a cancellation-branch assertion; replacement `dc10b848` repairs
+> the regression. Its local full API suite passed 2,559/2,559 plus seven
+> real-PostgreSQL tests. Exact replacement CI `37566595641` and E2E
+> `37566595511` are active. This is not an encrypted permit candidate,
+> database permit, worker callback
+> or deployment. No live enforcement is
+> authorized. Inspect `git status` and private `RESUME-HERE.md` before
+> continuing; the live VM remains green `4adf8aa9`.
+
+
 > **7 October guarded worker claim release:** Exact `4adf8aa9` hosted
 > CI/E2E passed and green serves the private VM. The production SQL worker
 > skips document purge jobs under active recovery enforcement, so an

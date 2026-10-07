@@ -1,5 +1,32 @@
 # CharityPilot Full-Platform Remediation Audit
 
+> **7 October DPO-05 release and remaining-work audit:** Exact `dc10b848`
+> hosted CI/E2E and guarded private-VM cutover passed. Blue serves an inert
+> `DOCUMENT_BYTE_PERMIT_V1` journal stage; no action is authorized. Restricted
+> runtime, empty recovery/enforcement, byte-fence trigger, both front doors,
+> 225 preserved backup hashes, two verified off-VM sets and 145-migration
+> isolated restore passed. DPO-05 remains open for encrypted/current-head
+> permit, SQL and worker guards, all-copy fencing, approved P05/P08 custody
+> and host-loss reopening. P01-P09/MFA, Member/export/deletion, replay/C1
+> and Nikita's scope-specific review also remain open. See private
+> `nikita-remaining-goal-audit-2026-10-07.md` and exact release receipt;
+> the source-only note below is dated history.
+
+> **7 October DPO-05 permit-journal source candidate:** A separate
+> `DOCUMENT_BYTE_PERMIT_V1` entry now requires the exact published document
+> claim outcome as immediate predecessor under the same reservation. Its
+> receipt does not authorize action and S3 explicit release still refuses
+> it. API build and 53 focused tests pass locally. There is no encrypted
+> permit candidate, local permit row/trigger transition, worker current-head
+> check, all-copy fence, provider custody or host-loss proof. This source
+> `1065c6f6` CI `37566033387` failed an existing cancellation exclusivity
+> test after the journal refactor. Replacement `dc10b848` fixes the branch
+> check; local API main 2,559/2,559 and all seven real-PostgreSQL tests
+> passed. Exact replacement CI `37566595641` and E2E `37566595511` are
+> active; neither source is deployed. Keep
+> DPO-05 and enforcement open/inactive.
+
+
 > **7 October DPO-05 guarded worker claim release:** Exact `4adf8aa9`
 > hosted CI/E2E and guarded private-VM release passed. Green serves the
 > SQL claim exclusion for purge jobs under active document enforcement;
