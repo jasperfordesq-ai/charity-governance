@@ -1,5 +1,19 @@
 # CharityPilot Full-Platform Remediation Audit
 
+> **7 October DPO-05 local copy/hold observation release:** Exact
+> `cc4922b4` passed hosted CI `37598264337` and E2E `37598264292`
+> (240 tests), then guarded private-VM cutover, restricted-runtime and
+> prior-fence postflight. Blue serves the new code; green `434ded09` is
+> previous. All 285 prior backup hashes survived, six new files match
+> off-VM copies, and isolated restore passed with 149 migrations. The
+> separate local digests do not prove approved copy disposition, external
+> versions/backups, provider inventory or byte execution. No final publisher,
+> one-use SQL lease or worker caller exists. Keep DPO-05, all-copy,
+> independent P05/P08 host-loss, P01–P09/MFA, Member/export/deletion,
+> replay/C1, test-site connector and Nikita acceptance open. Private
+> receipt: `release-cc4922b4-local-copy-hold-observation-2026-10-07.md`.
+> The source-only checkpoint below is dated history.
+
 > **7 October DPO-05 source-only local copy/hold projection:** Distinct
 > bounded local evidence digests now come from the existing serializable
 > authority read. Unit and disposable PostgreSQL proof check that a

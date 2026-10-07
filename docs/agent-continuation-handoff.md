@@ -1,5 +1,20 @@
 # CharityPilot Agent Continuation Handoff
 
+> **7 October ~10:19 Dublin local copy/hold observation release:** Exact
+> `cc4922b47cd6e2974c454c92e8493ab1a91c64b2` passed hosted CI
+> `37598264337` and E2E `37598264292` (240 tests). Guarded private-VM
+> cutover serves blue `cc4922b4`, with green `434ded09` retained as the
+> previous version. Restricted `cp_runtime`, all prior fences, empty
+> protected claims/aliases, format-4 inventory and both front doors passed.
+> All 285 earlier backup hashes survived, six new off-VM copies match, and
+> isolated restore passed with 149 migrations. The local copy/hold digests
+> are observations only: no approved final publisher, one-use SQL lease,
+> worker caller, provider inventory or independent P05/P08 host-loss proof.
+> All policy/MFA, Member/export/deletion, replay/C1, connector first-contact
+> and Nikita acceptance gates remain open. Private exact receipt:
+> `.charitypilot-private/release-cc4922b4-local-copy-hold-observation-2026-10-07.md`.
+> The source-only checkpoint below is dated history.
+
 > **7 October source-only local copy/hold observation:** The existing
 > serializable document byte-authority transaction now returns distinct
 > bounded digests for its local copy and hold evidence, without changing
