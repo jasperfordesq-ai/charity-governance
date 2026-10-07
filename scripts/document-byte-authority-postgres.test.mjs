@@ -130,14 +130,14 @@ test(
       );
       assert.match(
         output,
-        /current-authority-real-postgres-composition=verified; protected-worker-skip=verified; cleanup-alias-fence=verified; upload-intent-fence=verified; copy-evidence-digest=changed/u,
+        /current-authority-real-postgres-composition=verified; protected-worker-skip=verified; cleanup-alias-fence=verified; upload-intent-fence=verified; copy-evidence-digest=changed; post-claim-local-authority=verified/u,
       );
       const snapshot = JSON.parse(requireSuccess(docker(['exec', name, 'psql', '-U',
         'postgres', '-d', database, '-tA', '-c', PURGE_RESTORE_SNAPSHOT_SQL]),
       'capture format-5 disposable restore inventory'));
       assert.equal(snapshot.format, 5);
       assert.equal(snapshot.tables.DocumentBytePermitCandidateBinding.length, 1);
-      assert.equal(snapshot.tables.DocumentByteExecutionLease.length, 0);
+      assert.equal(snapshot.tables.DocumentByteExecutionLease.length, 1);
     } finally {
       assert.equal(
         requireSuccess(

@@ -2,7 +2,8 @@ import assert from 'node:assert/strict';
 import { createHash, randomUUID } from 'node:crypto';
 import { PrismaClient } from '@prisma/client';
 import { prepareDocumentRecoveryFacts } from '../apps/api/dist/services/document-recovery-preparation.js';
-import { readCurrentDocumentByteAuthority } from '../apps/api/dist/services/document-byte-authority-projection.js';
+import { readClaimedDocumentByteAuthority,
+  readCurrentDocumentByteAuthority } from '../apps/api/dist/services/document-byte-authority-projection.js';
 import { DocumentService } from '../apps/api/dist/services/document.service.js';
 
 // Only the disposable, loopback-published PostgreSQL fixture created by the
@@ -450,7 +451,8 @@ try {
   await insertCandidateBinding('local');
   const attempt = randomUUID();
   const attemptHash = createHash('sha256').update(attempt).digest('hex');
-  const insertLease = (db) => db.$executeRaw`
+  const insertLease = (db, copyDigest = first.localCopyObservationDigest,
+    holdDigest = first.localHoldObservationDigest) => db.$executeRaw`
     INSERT INTO "DocumentByteExecutionLease"
       (id,"organisationId","candidateBindingId","deletionId",
        "decisionEntryDigest","decisionEnvelopeDigest","decisionBodyDigest",
@@ -458,7 +460,7 @@ try {
        "providerInventoryDigest","attemptHash")
     VALUES ('lease','charity','candidate-binding','job',
       ${'1'.repeat(64)},${'2'.repeat(64)},${'3'.repeat(64)},
-      ${first.localCopyObservationDigest},${first.localHoldObservationDigest},
+      ${copyDigest},${holdDigest},
       ${'4'.repeat(64)},${attemptHash})`;
   await assert.rejects(insertLease(prisma), /must be consumed in its insertion transaction/);
   await assert.rejects(prisma.$transaction(async (tx) => {
@@ -582,8 +584,39 @@ try {
   assert.equal((await prisma.documentStorageDeletion.findUniqueOrThrow({
     where: { id: 'privileged-alias' }, select: { state: true, claimedAt: true, attempts: true },
   })).state, 'PENDING');
+  // Finish with a committed synthetic lease so the post-claim reader runs
+  // through a fresh serializable transaction, not a mock or an uncommitted
+  // row. This disposable database is removed by the parent test.
+  await prisma.$transaction(async (tx) => {
+    // Synthetic fixture cleanup only: production deletion rows are
+    // deliberately append-only. The parent destroys this whole temporary DB.
+    await tx.$executeRaw`ALTER TABLE "DocumentStorageDeletion" DISABLE TRIGGER "DocumentStorageDeletion_no_delete"`;
+    try {
+      await tx.documentStorageDeletion.delete({ where: { id: 'privileged-alias' } });
+    } finally {
+      await tx.$executeRaw`ALTER TABLE "DocumentStorageDeletion" ENABLE TRIGGER "DocumentStorageDeletion_no_delete"`;
+    }
+  });
+  const current = await readCurrentDocumentByteAuthority(prisma, request);
+  await prisma.$transaction(async (tx) => {
+    await insertLease(tx, current.localCopyObservationDigest,
+      current.localHoldObservationDigest);
+    await tx.$executeRaw`SET LOCAL ROLE cp_fixture`;
+    const result = await tx.$queryRaw`SELECT public."DocumentByteExecutionLease_claim"('lease', ${attempt}) AS claimed`;
+    assert.equal(result[0].claimed, true);
+  });
+  const postClaim = await readClaimedDocumentByteAuthority(prisma,
+    { ...request, leaseId: 'lease', oneUseAttemptId: attempt });
+  assert.equal(postClaim.actionAuthorized, false);
+  assert.equal(postClaim.localCopyObservationDigest, current.localCopyObservationDigest);
+  assert.equal(postClaim.localHoldObservationDigest, current.localHoldObservationDigest);
+  await assert.rejects(readCurrentDocumentByteAuthority(prisma, request),
+    /changed or cannot be bounded/);
+  await assert.rejects(readClaimedDocumentByteAuthority(prisma,
+    { ...request, leaseId: 'lease', oneUseAttemptId: randomUUID() }),
+  /changed or cannot be bounded/);
   process.stdout.write(
-    'current-authority-real-postgres-composition=verified; protected-worker-skip=verified; cleanup-alias-fence=verified; upload-intent-fence=verified; copy-evidence-digest=changed\n',
+    'current-authority-real-postgres-composition=verified; protected-worker-skip=verified; cleanup-alias-fence=verified; upload-intent-fence=verified; copy-evidence-digest=changed; post-claim-local-authority=verified\n',
   );
 } finally {
   await prisma.$disconnect();

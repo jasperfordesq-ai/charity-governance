@@ -25,6 +25,8 @@ import { readPublishedDocumentByteExecutionDecision } from '../services/publishe
 import { bindVerifiedDocumentBytePermitCandidate, compareDocumentBytePermitAuthority,
   publishVerifiedDocumentBytePermitCandidate,
   readPublishedDocumentBytePermit } from '../services/published-document-byte-permit.js';
+import { readClaimedDocumentByteAuthority,
+  readCurrentDocumentByteAuthority } from '../services/document-byte-authority-projection.js';
 
 function documentFacts() {
   const policy = { id: 'policy', organisationId: 'charity', recordClass: 'VAULT_DRAFT' as const,
@@ -176,7 +178,8 @@ async function readyBytePermitPublisher() {
         provider: f.facts.authorization.provider } } };
   const state = { copyHolds: [] as unknown[], reads: 0, changeAfterFirstRead: false,
     mutateAtRead: 0, candidateBinding: null as Record<string, unknown> | null,
-    bindingCreates: 0 };
+    bindingCreates: 0, claimedAt: null as Date | null,
+    lease: null as Record<string, unknown> | null };
   const tx = {
     $queryRaw: async () => [{ id: f.context.organisationId }],
     documentRecoveryOutcome: { findFirst: async () => row },
@@ -195,8 +198,10 @@ async function readyBytePermitPublisher() {
     documentStorageDeletion: { findFirst: async () => ({ id: row.claim.deletionId,
       organisationId: f.context.organisationId, sourceDocumentId: f.facts.document.id,
       storagePath: f.facts.authorization.storagePath, provider: f.facts.authorization.provider,
-      state: 'PENDING', claimedAt: null, processedAt: null, targetRef: null }),
+      state: 'PENDING', claimedAt: state.claimedAt, processedAt: null,
+      attempts: 0, deadLetteredAt: null, targetRef: null }),
     findMany: async () => [{ id: row.claim.deletionId }] },
+    documentByteExecutionLease: { findUnique: async () => state.lease },
     documentCopyDispositionAuthority: { findMany: async () => [] },
     documentCopyHoldEvent: { findMany: async () => state.copyHolds },
     documentPurgeDispositionEvent: { findMany: async () => [] },
@@ -234,6 +239,43 @@ async function readyBytePermitPublisher() {
     f.context, f.keys, f.store);
   return { f, prisma, state };
 }
+
+test('post-claim local byte observation requires the consumed exact lease and unchanged copy and hold facts', async () => {
+  const { f, prisma, state } = await readyBytePermitPublisher();
+  const scope = { installationId: f.context.installationId,
+    organisationId: f.context.organisationId, operationId: f.context.operationId };
+  const before = await readCurrentDocumentByteAuthority(prisma, scope);
+  const oneUseAttemptId = '12345678-1234-4234-8234-123456789abc';
+  const claimedAt = new Date('2026-10-04T00:03:00.000Z');
+  state.claimedAt = claimedAt;
+  state.lease = { id: 'lease', organisationId: scope.organisationId,
+    deletionId: 'job', candidateBindingId: 'binding', state: 'CLAIMED',
+    claimedAt, insertTransactionId: 123n, claimTransactionId: 123n,
+    attemptHash: createHash('sha256').update(oneUseAttemptId).digest('hex'),
+    localCopyObservationDigest: before.localCopyObservationDigest,
+    localHoldObservationDigest: before.localHoldObservationDigest,
+    candidateBinding: { id: 'binding', organisationId: scope.organisationId,
+      installationId: scope.installationId, operationId: scope.operationId,
+      claimId: 'claim', deletionId: 'job', writerId: f.request.writerId,
+      writerEpoch: f.context.writerEpoch, provider: f.facts.authorization.provider,
+      storagePath: f.facts.authorization.storagePath } };
+  const request = { ...scope, leaseId: 'lease', oneUseAttemptId };
+  const observed = await readClaimedDocumentByteAuthority(prisma, request);
+  assert.equal(observed.actionAuthorized, false);
+  assert.equal(observed.localCopyObservationDigest, before.localCopyObservationDigest);
+  assert.equal(observed.localHoldObservationDigest, before.localHoldObservationDigest);
+  assert.notEqual(observed.digest, before.digest);
+  await assert.rejects(readClaimedDocumentByteAuthority(prisma,
+    { ...request, oneUseAttemptId: '12345678-1234-4234-8234-123456789abd' }),
+  /changed or cannot be bounded/);
+  state.copyHolds.push({ id: 'new-hold', held: true });
+  await assert.rejects(readClaimedDocumentByteAuthority(prisma, request),
+    /copy or hold authority changed/);
+  state.copyHolds.length = 0;
+  state.lease = null;
+  await assert.rejects(readClaimedDocumentByteAuthority(prisma, request),
+    /changed or cannot be bounded/);
+});
 
 test('verified document byte candidate publisher derives current facts and recovers a lost head acknowledgement', async () => {
   const { f, prisma } = await readyBytePermitPublisher();

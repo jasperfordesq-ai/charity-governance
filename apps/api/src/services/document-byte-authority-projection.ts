@@ -8,6 +8,11 @@ const identity = z.string().regex(/^[A-Za-z0-9_-]{1,120}$/);
 const requestSchema = z.object({ installationId: identity, organisationId: identity,
   operationId: identity }).strict();
 type Request = z.infer<typeof requestSchema>;
+const claimedRequestSchema = requestSchema.extend({
+  leaseId: z.string().regex(/^[A-Za-z0-9_-]{1,160}$/),
+  oneUseAttemptId: z.string().regex(/^[a-f0-9]{8}-[a-f0-9]{4}-4[a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}$/),
+}).strict();
+type ClaimedRequest = z.infer<typeof claimedRequestSchema>;
 
 function canonical(value: unknown): string {
   if (value === null || typeof value === 'boolean' || typeof value === 'string') return JSON.stringify(value);
@@ -46,6 +51,26 @@ export async function withCurrentDocumentByteAuthorityTransaction<T>(prisma: Pri
     result: { digest: string; localCopyObservationDigest: string;
       localHoldObservationDigest: string; actionAuthorized: false }) => Promise<T>) {
   const request: Request = requestSchema.parse(raw);
+  return withDocumentByteAuthorityTransaction(prisma, request, null, callback);
+}
+
+/** Observe a consumed SQL lease after claim. The one-use secret is checked
+ * against its stored hash, and copy/hold observations must still match the
+ * lease. This is only local post-claim evidence; it does not authenticate the
+ * independent head or authorize provider I/O. */
+export async function readClaimedDocumentByteAuthority(prisma: PrismaClient, raw: unknown) {
+  const claimed = claimedRequestSchema.parse(raw);
+  const request = requestSchema.parse({ installationId: claimed.installationId,
+    organisationId: claimed.organisationId, operationId: claimed.operationId });
+  return withDocumentByteAuthorityTransaction(prisma, request, claimed,
+    async (_tx, result) => result);
+}
+
+async function withDocumentByteAuthorityTransaction<T>(prisma: PrismaClient,
+  request: Request, claimed: ClaimedRequest | null,
+  callback: (tx: Prisma.TransactionClient,
+    result: { digest: string; localCopyObservationDigest: string;
+      localHoldObservationDigest: string; actionAuthorized: false }) => Promise<T>) {
   return prisma.$transaction(async tx => {
     const locked = await tx.$queryRaw<Array<{ id: string }>>`
       SELECT id FROM "Organisation" WHERE id=${request.organisationId} FOR UPDATE`;
@@ -74,7 +99,7 @@ export async function withCurrentDocumentByteAuthorityTransaction<T>(prisma: Pri
     }
     const [preparation, organisation, enforcement, actor, authorization, policyRows, job,
       copyAuthorities, copyHolds, dispositionEvents, publications,
-      standardLinks, confluenceReferences] = await Promise.all([
+      standardLinks, confluenceReferences, lease] = await Promise.all([
       tx.documentRecoveryPreparation.findFirst({ where: { organisationId: request.organisationId,
         installationId: request.installationId, operationId: request.operationId },
         select: { id: true, facts: true, factsDigest: true } }),
@@ -103,6 +128,9 @@ export async function withCurrentDocumentByteAuthorityTransaction<T>(prisma: Pri
         documentId: claim.documentId }, orderBy: { id: 'asc' }, take: 1001 }),
       tx.documentStandardLink.count({ where: { documentId: claim.documentId } }),
       tx.confluenceReference.count({ where: { documentId: claim.documentId } }),
+      claimed ? tx.documentByteExecutionLease.findUnique({
+        where: { id: claimed.leaseId }, include: { candidateBinding: true },
+      }) : Promise.resolve(null),
     ]);
     if (!authorization) throw new Error('Document byte authority authorization is unavailable');
     const [uploadIntents, liveReferences, matchingCleanupJobs] = await Promise.all([
@@ -139,7 +167,27 @@ export async function withCurrentDocumentByteAuthorityTransaction<T>(prisma: Pri
       || policyRows.length !== 1 || policyRows[0]!.id !== authorization.policyId
       || currentAuthorizationBody !== canonical(original.authorization)
       || currentPolicyBody !== canonical(original.policy)
-      || !job || job.state !== 'PENDING' || job.processedAt !== null || job.claimedAt !== null
+      || !job || job.state !== 'PENDING' || job.processedAt !== null
+      || (claimed ? (
+        !lease || lease.state !== 'CLAIMED' || lease.claimedAt === null
+        || lease.insertTransactionId !== lease.claimTransactionId
+        || lease.organisationId !== request.organisationId
+        || lease.deletionId !== claim.deletionId
+        || lease.candidateBinding.id !== lease.candidateBindingId
+        || lease.candidateBinding.deletionId !== claim.deletionId
+        || lease.candidateBinding.claimId !== claim.claimId
+        || lease.candidateBinding.organisationId !== request.organisationId
+        || lease.candidateBinding.installationId !== request.installationId
+        || lease.candidateBinding.operationId !== request.operationId
+        || lease.candidateBinding.writerId !== claim.writerId
+        || lease.candidateBinding.writerEpoch !== claim.writerEpoch
+        || lease.candidateBinding.provider !== job.provider
+        || lease.candidateBinding.storagePath !== job.storagePath
+        || job.claimedAt?.getTime() !== lease.claimedAt.getTime()
+        || job.attempts !== 0 || job.deadLetteredAt !== null
+        || lease.attemptHash !== createHash('sha256')
+          .update(claimed.oneUseAttemptId, 'utf8').digest('hex')
+      ) : job.claimedAt !== null)
       || job.targetRef !== null
       || job.sourceDocumentId !== claim.documentId
       || job.storagePath !== authorization.storagePath || job.provider !== authorization.provider
@@ -170,6 +218,10 @@ export async function withCurrentDocumentByteAuthorityTransaction<T>(prisma: Pri
       authorizationWithdrawal: authorization.withdrawal,
       preparedDocumentDeletionHold: original.document.deletionHold,
       copyHolds });
+    if (claimed && (lease?.localCopyObservationDigest !== localCopyObservationDigest
+      || lease?.localHoldObservationDigest !== localHoldObservationDigest)) {
+      throw new Error('Document byte lease copy or hold authority changed');
+    }
     return callback(tx, { digest, localCopyObservationDigest,
       localHoldObservationDigest, actionAuthorized: false as const });
   }, { isolationLevel: 'Serializable', timeout: 30000 });
