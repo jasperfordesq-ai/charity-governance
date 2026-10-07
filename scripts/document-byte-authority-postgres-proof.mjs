@@ -649,6 +649,42 @@ try {
   assert.equal(started.organisationId, 'charity');
   assert.equal(started.deletionId, 'job');
   assert.equal(started.decisionEntryDigest, '1'.repeat(64));
+  const protectedClaimedAt = (await prisma.documentStorageDeletion.findUniqueOrThrow({
+    where: { id: 'job' }, select: { claimedAt: true },
+  })).claimedAt;
+  assert.ok(protectedClaimedAt instanceof Date);
+  // A committed start marker means provider I/O may have happened. The
+  // ordinary worker and result helpers must not turn that uncertainty into
+  // an automatic retry or a completed deletion, even after another job runs.
+  await assert.rejects(new DocumentService(prisma).markStorageDeletionProcessed(
+    'job', protectedClaimedAt, new Date(),
+  ), /requires independent permit/);
+  await assert.rejects(new DocumentService(prisma).recordStorageDeletionFailure(
+    'job', new Error('provider acknowledgement lost'), protectedClaimedAt,
+  ), /requires independent permit/);
+  await prisma.documentStorageDeletion.create({ data: {
+    id: 'post-start-ordinary-job', organisationId: 'charity',
+    storagePath: 'charity/post-start-unrelated-orphan', provider: 'local',
+    nextAttemptAt: new Date('2026-01-01T00:00:00Z'),
+  } });
+  const postStartErasedPaths = [];
+  const postStartCleanup = await new DocumentService(prisma).retryPendingStorageDeletions(
+    (provider) => provider === 'local' ? async ({ storagePath }) => {
+      postStartErasedPaths.push(storagePath);
+      return new Date();
+    } : null,
+    10,
+  );
+  assert.equal(postStartCleanup.processed, 1);
+  assert.deepEqual(postStartErasedPaths, ['charity/post-start-unrelated-orphan']);
+  const unresolved = await prisma.documentStorageDeletion.findUniqueOrThrow({
+    where: { id: 'job' },
+    select: { state: true, attempts: true, claimedAt: true, processedAt: true },
+  });
+  assert.equal(unresolved.state, 'PENDING');
+  assert.equal(unresolved.attempts, 0);
+  assert.equal(unresolved.claimedAt?.getTime(), protectedClaimedAt.getTime());
+  assert.equal(unresolved.processedAt, null);
   await assert.rejects(prisma.$transaction(async tx => {
     await tx.$executeRaw`SET LOCAL ROLE cp_fixture`;
     await tx.$queryRaw`SELECT public."DocumentByteProviderAttempt_start"('lease', ${attempt})`;
@@ -659,7 +695,7 @@ try {
   await assert.rejects(prisma.$executeRaw`DELETE FROM "DocumentByteProviderAttempt"
     WHERE "leaseId"='lease'`, /append-only/);
   process.stdout.write(
-    'current-authority-real-postgres-composition=verified; protected-worker-skip=verified; cleanup-alias-fence=verified; upload-intent-fence=verified; copy-evidence-digest=changed; post-claim-local-authority=verified; provider-start-marker=verified\n',
+    'current-authority-real-postgres-composition=verified; protected-worker-skip=verified; cleanup-alias-fence=verified; upload-intent-fence=verified; copy-evidence-digest=changed; post-claim-local-authority=verified; provider-start-marker=verified; post-start-ordinary-retry-refused=verified\n',
   );
 } finally {
   await prisma.$disconnect();
