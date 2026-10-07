@@ -1,5 +1,30 @@
 # CharityPilot Agent Continuation Handoff
 
+> **7 October ~12:15 Dublin verified `cac64564` release:** Exact hosted
+> CI `37611085510` and E2E `37611085454` (240 passed), guarded green
+> private-VM cutover, restricted runtime, zero protected claims/leases and
+> both front doors passed. All 306 earlier backup hashes survived, six
+> new workstation copies matched and isolated restore passed 150
+> migrations/68 documents/zero leases. Blue `00299a59` is previous.
+> The matched claimed-decision reader remains non-authorizing and unused by
+> a provider worker. DPO-05, all-copy, independent P05/P08 host-loss,
+> P01–P09/MFA, Member/export/deletion, replay/C1, test-site connector and
+> Nikita acceptance remain open. Exact private receipt:
+> `.charitypilot-private/release-cac64564-matched-claimed-byte-decision-2026-10-07.md`.
+> The source-only checkpoint below is dated history.
+>
+> **7 October ~12:00 Dublin source-only DPO-05 pair:** Pushed
+> `cac645646c8ca7e68deb966a4ea00944a7154249` adds a non-authorizing
+> matched read of the current authenticated fourth-stage decision and
+> consumed SQL lease, provider target and local copy/hold observations.
+> Focused synthetic negative cases, full API 2,570 plus seven PostgreSQL
+> migrations, build and local security scan pass. Hosted CI/E2E and guarded
+> private-VM release are pending; live is still `00299a59`. No real-facts
+> publisher, protected provider worker, UNKNOWN handler, all-copy proof or
+> independent P05/P08 host-loss authority exists. Policy/MFA,
+> Member/export/deletion, replay/C1, connector and Nikita gates remain open.
+> See the private worker permit contract and goal audit for next steps.
+>
 > **7 October ~11:49 Dublin live post-claim observation release:** Exact
 > `00299a598cbeabe096401d6d4c3245f4e10781c9` passed hosted CI
 > `37607966539` and E2E `37607966538` (240 passed), guarded blue cutover,
