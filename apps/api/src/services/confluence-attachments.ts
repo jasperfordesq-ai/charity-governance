@@ -58,6 +58,14 @@ export type ConfluenceAttachment = {
   mediaType: string;
   fileSize: number;
   downloadUrl: string;
+  /** Present when Confluence supplied a valid current version number. */
+  versionNumber?: number;
+};
+
+export type ConfluenceAttachmentVersion = {
+  number: number;
+  attachmentId: string;
+  createdAt: string;
 };
 
 export type UploadAttachmentInput = {
@@ -213,6 +221,10 @@ function readNonNegativeNumber(value: unknown): number | undefined {
   return typeof value === 'number' && Number.isFinite(value) && value >= 0 ? value : undefined;
 }
 
+function readVersionNumber(value: unknown): number | undefined {
+  return typeof value === 'number' && Number.isSafeInteger(value) && value > 0 ? value : undefined;
+}
+
 /** Joins a relative link onto the `_links.base` Confluence supplied, if any. */
 function absolutise(link: string, base: string): string {
   if (link.length === 0) return '';
@@ -309,12 +321,14 @@ function parseAttachment(
       : undefined) ??
     '';
 
+  const versionNumber = readVersionNumber(asObject(attachment.version)?.number);
   return {
     id,
     title: typeof attachment.title === 'string' ? attachment.title : '',
     mediaType,
     fileSize,
     downloadUrl: absolutise(downloadLink, base),
+    ...(versionNumber === undefined ? {} : { versionNumber }),
   };
 }
 
@@ -331,17 +345,37 @@ function readResults(body: unknown): unknown[] | undefined {
  * upstream response choose the path this client requests next, which is not a
  * decision a response body gets to make.
  */
-function readNextCursor(body: unknown): string | undefined {
-  const next = asObject(asObject(body)?._links)?.next;
-  if (typeof next !== 'string' || next.length === 0) return undefined;
-
+function cursorFromNextUrl(next: string): string {
   try {
     // The base is a placeholder; only the query is read from the result.
     const cursor = new URL(next, 'https://confluence.invalid').searchParams.get('cursor');
-    return cursor !== null && cursor.length > 0 ? cursor : undefined;
+    if (cursor !== null && cursor.length > 0) return cursor;
   } catch {
-    return undefined;
+    // The caller will reject this as an incomplete inventory.
   }
+  throw invalidResponse('attachment pagination cursor');
+}
+
+function readNextCursor(body: unknown, linkHeader?: string): string | undefined {
+  const bodyNext = asObject(asObject(body)?._links)?.next;
+  if (bodyNext !== undefined && bodyNext !== null && (typeof bodyNext !== 'string' || bodyNext.length === 0)) {
+    throw invalidResponse('attachment pagination link');
+  }
+  const bodyCursor = typeof bodyNext === 'string' ? cursorFromNextUrl(bodyNext) : undefined;
+
+  const linkMatches = linkHeader === undefined
+    ? []
+    : Array.from(linkHeader.matchAll(/<([^>]+)>\s*;\s*rel\s*=\s*(?:"next"|next)(?=\s*[,;]|\s*$)/gi));
+  if (linkMatches.length > 1 || (linkMatches.length === 0 && /\brel\s*=\s*"?next\b/i.test(linkHeader ?? ''))) {
+    throw invalidResponse('unambiguous attachment pagination header');
+  }
+  const headerCursor = linkMatches[0]?.[1] === undefined
+    ? undefined
+    : cursorFromNextUrl(linkMatches[0][1]);
+  if (bodyCursor !== undefined && headerCursor !== undefined && bodyCursor !== headerCursor) {
+    throw invalidResponse('matching attachment pagination cursors');
+  }
+  return bodyCursor ?? headerCursor;
 }
 
 // ---------------------------------------------------------------------------
@@ -363,6 +397,7 @@ export async function listAttachments(
   const id = assertPageId(pageId);
 
   const attachments: ConfluenceAttachment[] = [];
+  const seenCursors = new Set<string>();
   let cursor: string | undefined;
 
   for (let page = 0; page < MAX_LIST_PAGES; page += 1) {
@@ -385,8 +420,10 @@ export async function listAttachments(
       attachments.push(parseAttachment(record, base, invalidResponse));
     }
 
-    cursor = readNextCursor(response.body);
+    cursor = readNextCursor(response.body, response.linkHeader);
     if (cursor === undefined) return attachments;
+    if (seenCursors.has(cursor)) throw invalidResponse('non-repeating attachment cursor');
+    seenCursors.add(cursor);
   }
 
   throw new AppError(
@@ -394,6 +431,72 @@ export async function listAttachments(
     'CONFLUENCE_ATTACHMENT_LIST_UNBOUNDED',
     `Confluence kept offering another page of attachments after ${MAX_LIST_PAGES} requests. ` +
       'The list was not read to the end, so it is not safe to treat as complete.',
+  );
+}
+
+/**
+ * Read every recorded version of one attachment. An incomplete, malformed or
+ * contradictory inventory must never be mistaken for proof that an uncertain
+ * upload did not create a version. This is metadata only: it does not verify
+ * the bytes of any version or authorize a publication retry or erasure.
+ */
+export async function listAttachmentVersions(
+  client: ConfluenceClient,
+  attachmentId: string,
+): Promise<ConfluenceAttachmentVersion[]> {
+  if (typeof attachmentId !== 'string' || !ID_PATTERN.test(attachmentId)) {
+    throw new AppError(400, 'CONFLUENCE_ATTACHMENT_ID_INVALID', 'A Confluence attachment id must be a plain identifier.');
+  }
+
+  const versions: ConfluenceAttachmentVersion[] = [];
+  const seenNumbers = new Set<number>();
+  const seenCursors = new Set<string>();
+  let cursor: string | undefined;
+
+  for (let page = 0; page < MAX_LIST_PAGES; page += 1) {
+    const query: Record<string, string> = { limit: String(LIST_PAGE_SIZE) };
+    if (cursor !== undefined) query.cursor = cursor;
+    const response = await client.request({
+      method: 'GET',
+      api: 'v2',
+      path: `attachments/${attachmentId}/versions`,
+      query,
+      idempotent: true,
+    });
+    const results = readResults(response.body);
+    if (results === undefined) throw invalidResponse('attachment version list');
+
+    for (const result of results) {
+      const record = asObject(result);
+      const number = readVersionNumber(record?.number);
+      const observedId = readId(asObject(record?.attachment)?.id);
+      if (number === undefined || observedId !== attachmentId || seenNumbers.has(number)) {
+        throw invalidResponse('complete, matching attachment version');
+      }
+      seenNumbers.add(number);
+      versions.push({
+        number,
+        attachmentId,
+        createdAt: typeof record?.createdAt === 'string' ? record.createdAt : '',
+      });
+    }
+
+    const nextCursor = readNextCursor(response.body, response.linkHeader);
+    if (nextCursor === undefined) {
+      if (versions.length === 0) throw invalidResponse('attachment version history');
+      return versions;
+    }
+    if (seenCursors.has(nextCursor)) {
+      throw invalidResponse('non-repeating attachment version cursor');
+    }
+    seenCursors.add(nextCursor);
+    cursor = nextCursor;
+  }
+
+  throw new AppError(
+    502,
+    'CONFLUENCE_ATTACHMENT_VERSION_LIST_UNBOUNDED',
+    `Confluence kept offering another page of attachment versions after ${MAX_LIST_PAGES} requests. The inventory is incomplete.`,
   );
 }
 

@@ -5,6 +5,7 @@ import type { ConfluenceClient, ConfluenceRequestSpec } from '../services/conflu
 import {
   CONFLUENCE_ATTACHMENT_MAX_BYTES,
   deleteAttachment,
+  listAttachmentVersions,
   listAttachments,
   purgeAttachment,
   uploadAttachment,
@@ -16,7 +17,7 @@ const WEB_BASE = 'https://charity.atlassian.net/wiki';
 const DOWNLOAD = '/download/attachments/123456/board-minutes.pdf?version=1&api=v2';
 const PDF = 'application/pdf';
 
-type Handler = (spec: ConfluenceRequestSpec) => { status: number; body: unknown };
+type Handler = (spec: ConfluenceRequestSpec) => { status: number; body: unknown; linkHeader?: string };
 
 type Harness = { client: ConfluenceClient; specs: ConfluenceRequestSpec[] };
 
@@ -306,6 +307,83 @@ test('listAttachments returns an empty list for a page with no attachments', asy
   assert.deepEqual(await listAttachments(client, PAGE_ID), []);
 });
 
+test('listAttachments preserves the current v2 version when supplied', async () => {
+  const { client } = harness([ok(v2ListBody([{
+    id: 'att789', title: 'board-minutes.pdf', version: { number: 3 },
+  }]))]);
+  const attachments = await listAttachments(client, PAGE_ID);
+  assert.equal(attachments[0]?.versionNumber, 3);
+});
+
+test('listAttachmentVersions follows the entire v2 cursor and binds each version to the attachment', async () => {
+  const first = {
+    results: [{ number: 1, attachment: { id: 'att789' }, createdAt: '2026-10-01T00:00:00Z' }],
+    _links: { next: '/wiki/api/v2/attachments/att789/versions?cursor=SECOND&limit=250' },
+  };
+  const second = {
+    results: [{ number: 2, attachment: { id: 'att789' }, createdAt: '2026-10-02T00:00:00Z' }],
+    _links: {},
+  };
+  const { client, specs } = harness([ok(first), ok(second)]);
+  assert.deepEqual(await listAttachmentVersions(client, 'att789'), [
+    { number: 1, attachmentId: 'att789', createdAt: '2026-10-01T00:00:00Z' },
+    { number: 2, attachmentId: 'att789', createdAt: '2026-10-02T00:00:00Z' },
+  ]);
+  assert.equal(specs[0]?.path, 'attachments/att789/versions');
+  assert.equal(specs[0]?.api, 'v2');
+  assert.equal(specs[0]?.idempotent, true);
+  assert.equal(specs[1]?.query?.cursor, 'SECOND');
+});
+
+test('attachment version inventory follows the Link header when the body omits next', async () => {
+  const { client, specs } = harness([
+    () => ({
+      status: 200,
+      body: { results: [{ number: 1, attachment: { id: 'att789' } }], _links: {} },
+      linkHeader: '<https://charity.atlassian.net/wiki/api/v2/attachments/att789/versions?cursor=NEXT>; rel="next"',
+    }),
+    ok({ results: [{ number: 2, attachment: { id: 'att789' } }], _links: {} }),
+  ]);
+  const versions = await listAttachmentVersions(client, 'att789');
+  assert.deepEqual(versions.map((version) => version.number), [1, 2]);
+  assert.equal(specs[1]?.query?.cursor, 'NEXT');
+});
+
+test('attachment list refuses conflicting body and Link cursors', async () => {
+  const { client } = harness([() => ({
+    status: 200,
+    body: v2ListBody([], { next: '/attachments?cursor=BODY' }),
+    linkHeader: '<https://charity.atlassian.net/wiki/api/v2/pages/123456/attachments?cursor=HEADER>; rel="next"',
+  })]);
+  const error = await rejectsWith(() => listAttachments(client, PAGE_ID));
+  assert.equal(error.code, 'CONFLUENCE_RESPONSE_INVALID');
+});
+
+test('listAttachmentVersions refuses an incomplete or contradictory inventory', async () => {
+  const valid = { number: 1, attachment: { id: 'att789' } };
+  const invalidBodies = [
+    { results: [], _links: {} },
+    { results: [valid], _links: { next: '/versions?cursor=SAME' } },
+    { results: [{ ...valid, attachment: { id: 'different' } }], _links: {} },
+    { results: [{ ...valid, number: 0 }], _links: {} },
+    { results: [valid, valid], _links: {} },
+    { results: [valid], _links: { next: '/versions?limit=250' } },
+    { results: [valid], _links: { next: '' } },
+  ];
+  for (const body of invalidBodies) {
+    const { client } = harness([ok(body)]);
+    const error = await rejectsWith(() => listAttachmentVersions(client, 'att789'));
+    assert.equal(error.code, 'CONFLUENCE_RESPONSE_INVALID');
+  }
+});
+
+test('listAttachmentVersions rejects an unsafe identifier before I/O', async () => {
+  const { client, specs } = harness([]);
+  const error = await rejectsWith(() => listAttachmentVersions(client, '../wrong'));
+  assert.equal(error.code, 'CONFLUENCE_ATTACHMENT_ID_INVALID');
+  assert.equal(specs.length, 0);
+});
+
 for (const [what, body] of [
   ['no results key at all', { _links: { base: WEB_BASE } }],
   // Not a duplicate of the case above: `results` is present and truthy, so a
@@ -337,9 +415,20 @@ test('listAttachments stops rather than following a cursor forever', async () =>
 
   const error = await rejectsWith(() => listAttachments(client, PAGE_ID));
 
-  assert.equal(error.code, 'CONFLUENCE_ATTACHMENT_LIST_UNBOUNDED');
+  assert.equal(error.code, 'CONFLUENCE_RESPONSE_INVALID');
   assert.equal(error.statusCode, 502);
-  assert.ok(specs.length > 1 && specs.length <= 40, `bounded page count, got ${specs.length}`);
+  assert.equal(specs.length, 2, 'repeated cursor is rejected before another read');
+});
+
+test('listAttachments bounds even distinct cursors', async () => {
+  let page = 0;
+  const { client, specs } = harness([() => {
+    page += 1;
+    return { status: 200, body: v2ListBody([], { next: `/attachments?cursor=PAGE${page}` }) };
+  }]);
+  const error = await rejectsWith(() => listAttachments(client, PAGE_ID));
+  assert.equal(error.code, 'CONFLUENCE_ATTACHMENT_LIST_UNBOUNDED');
+  assert.equal(specs.length, 40);
 });
 
 test('an absolute download link is left alone and a link with no base is returned as given', async () => {
