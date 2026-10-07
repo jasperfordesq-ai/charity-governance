@@ -1,5 +1,15 @@
 # CharityPilot Full-Platform Remediation Audit
 
+> **7 October DPO-05 source-only worker baseline:** A disposable real-PG
+> integration proof now runs the production cleanup service with an
+> enforced purge job and an ordinary orphan job. The ordinary job completes;
+> the protected job remains PENDING, unclaimed, zero-attempt, and direct SQL
+> still cannot advance it. No final independent authority or one-use worker
+> permit exists. Live remains `5dfa72b3`; P05/P08, all-copy/host-loss,
+> human decisions and Nikita acceptance remain open. The private
+> `document-worker-permit-contract-2026-10-07.md` sets the next exact
+> implementation and acceptance gates.
+
 > **7 October DPO-05 upload-intent/purge fence release:** Exact `5dfa72b3`
 > passed hosted CI/E2E and guarded green private-VM cutover. Both new
 > triggers and migration are live; restricted runtime, prior byte/copy

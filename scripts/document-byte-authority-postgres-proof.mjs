@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import { PrismaClient } from '@prisma/client';
 import { prepareDocumentRecoveryFacts } from '../apps/api/dist/services/document-recovery-preparation.js';
 import { readCurrentDocumentByteAuthority } from '../apps/api/dist/services/document-byte-authority-projection.js';
+import { DocumentService } from '../apps/api/dist/services/document.service.js';
 
 // Only the disposable, loopback-published PostgreSQL fixture created by the
 // parent test may invoke this process. Never run against a charity database.
@@ -427,6 +428,32 @@ try {
     SET attempts=1 WHERE id='job'`);
   assert.equal((await prisma.$queryRaw`SELECT count(*)::integer AS count
     FROM "DocumentBytePermitCandidateBinding"`)[0].count, 1);
+  // Scheduler and standalone cleanup share this production SQL claimant.
+  // It must skip the enforced purge job without starving an ordinary one.
+  await prisma.documentStorageDeletion.create({ data: {
+    id: 'ordinary-orphan-job', organisationId: 'charity',
+    storagePath: 'charity/unrelated-orphan', provider: 'local',
+    nextAttemptAt: new Date('2026-01-01T00:00:00Z'),
+  } });
+  const erasedPaths = [];
+  const cleanup = await new DocumentService(prisma).retryPendingStorageDeletions(
+    (provider) => provider === 'local' ? async ({ storagePath }) => {
+      erasedPaths.push(storagePath);
+      return new Date();
+    } : null,
+    10,
+  );
+  assert.equal(cleanup.processed, 1);
+  assert.deepEqual(erasedPaths, ['charity/unrelated-orphan']);
+  assert.equal((await prisma.documentStorageDeletion.findUniqueOrThrow({
+    where: { id: 'ordinary-orphan-job' }, select: { state: true },
+  })).state, 'PROCESSED');
+  const protectedJob = await prisma.documentStorageDeletion.findUniqueOrThrow({
+    where: { id: 'job' }, select: { state: true, claimedAt: true, attempts: true },
+  });
+  assert.equal(protectedJob.state, 'PENDING');
+  assert.equal(protectedJob.claimedAt, null);
+  assert.equal(protectedJob.attempts, 0);
   // A later reservation for the same object is refused before bytes can be
   // written. A changed retained-copy fact still changes current authority.
   await assert.rejects(prisma.documentUploadIntent.create({
@@ -444,7 +471,7 @@ try {
   assert.equal(changed.actionAuthorized, false);
   assert.notEqual(changed.digest, first.digest);
   process.stdout.write(
-    'current-authority-real-postgres-composition=verified; upload-intent-fence=verified; copy-evidence-digest=changed\n',
+    'current-authority-real-postgres-composition=verified; protected-worker-skip=verified; upload-intent-fence=verified; copy-evidence-digest=changed\n',
   );
 } finally {
   await prisma.$disconnect();

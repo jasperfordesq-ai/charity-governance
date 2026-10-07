@@ -1,5 +1,16 @@
 # CharityPilot Agent Continuation Handoff
 
+> **7 October source-only worker baseline:** The disposable real-PostgreSQL
+> document byte-authority proof now invokes the production
+> `DocumentService.retryPendingStorageDeletions` claimant shared by both
+> cleanup entry points. Under recovery enforcement, an unrelated orphan
+> job is processed while the exact purge-claim job remains PENDING,
+> unclaimed and at zero attempts; its direct SQL update is still refused.
+> Focused proof passes locally. No worker permit, final independent
+> authority, post-claim current-head check or live byte execution was
+> added. Live remains `5dfa72b3`; the private worker-permit contract records
+> the required exact transition, UNKNOWN outcome and activation gates.
+
 > **7 October ~08:33 Dublin upload-intent/purge fence release:** Exact
 > `5dfa72b3` hosted CI/E2E passed and green serves the guarded private VM;
 > blue `312eb93e` is the previous version. The new migration and both
