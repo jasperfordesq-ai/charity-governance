@@ -1,5 +1,18 @@
 # CharityPilot Full-Platform Remediation Audit
 
+> **7 October DPO-05 live atomic SQL claim composition:** Exact `e3f9d9e4`
+> passed hosted CI/E2E (240 browser tests), guarded blue private-VM
+> cutover, restricted runtime/empty protected rows, preservation of all
+> 324 prior backup hashes, six verified workstation copies and isolated
+> 151-migration restore with 68 documents and zero leases/attempts. The
+> privileged code can compose an authenticated final decision with an
+> atomic SQL lease claim, but no production caller or approved final-facts
+> publisher exists, and it authorizes no provider bytes. Worker/UNKNOWN,
+> all-copy and independent P05/P08 host-loss proof remain absent. DPO-05
+> and every Nikita controller, role, historical, connector and acceptance
+> gate stay open. See the private exact receipt; the source-only checkpoint
+> below is dated history.
+>
 > **7 October DPO-05 source-only claimed-lease composition:** The
 > privileged service composes authenticated current independent decision,
 > recorded candidate and unchanged local facts with one atomic SQL

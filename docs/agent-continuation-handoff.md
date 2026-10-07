@@ -1,5 +1,19 @@
 # CharityPilot Agent Continuation Handoff
 
+> **7 October ~13:45 Dublin verified `e3f9d9e4` release:** Exact hosted
+> CI `37621177956` and E2E `37621177985` (240 browser tests) passed.
+> Guarded blue private-VM cutover, restricted runtime, zero protected rows,
+> both front doors, all 324 prior backup hashes, six SHA-verified
+> workstation copies and isolated 151-migration restore with 68 documents
+> and zero leases/attempts passed. Green `8e88e617` is previous. The
+> privileged final-decision-to-SQL claim composition has no production
+> caller and returns `actionAuthorized: false`. Approved real facts,
+> provider/copy inventory, worker/UNKNOWN handling, all-copy and P05/P08
+> host-loss, P01–P09/MFA, Member/export/deletion, replay/C1, Confluence
+> test-site and Nikita acceptance remain open. Exact private receipt:
+> `.charitypilot-private/release-e3f9d9e4-atomic-byte-claim-2026-10-07.md`.
+> The source-only checkpoint below is dated history.
+>
 > **7 October source-only DPO-05 privileged claim composition:**
 > `claimVerifiedDocumentByteExecutionLease` now requires the authenticated
 > current final decision, unchanged bounded local copy/hold facts and exact
