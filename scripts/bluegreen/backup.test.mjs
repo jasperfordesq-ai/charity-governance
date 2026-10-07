@@ -6,7 +6,7 @@ import { dirname, join } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { test } from 'node:test';
 import { PURGE_RESTORE_TABLES, PURGE_RESTORE_LEGACY_TABLES,
-  PURGE_RESTORE_SNAPSHOT_SQL, PURGE_RESTORE_LEGACY_SNAPSHOT_SQL,
+  PURGE_RESTORE_SNAPSHOT_SQL, PURGE_RESTORE_PREVIOUS_SNAPSHOT_SQL, PURGE_RESTORE_LEGACY_SNAPSHOT_SQL,
   PURGE_RESTORE_BINDING_PROBE_SQL, PURGE_RESTORE_LOCAL_OBJECTS_SQL } from '../purge-restore-reconciliation.mjs';
 
 const scriptsDir = dirname(fileURLToPath(import.meta.url));
@@ -530,8 +530,8 @@ function makeDrillRecordingRunCommand({
   documentHashStdout,
   failOn = null,
   localKeys = [],
-  schema = () => 'current',
-  history = () => ({ format: 4, capturedAt: '2026-09-30T10:00:00.000Z',
+  schema = () => 'lease',
+  history = () => ({ format: 5, capturedAt: '2026-09-30T10:00:00.000Z',
     tables: Object.fromEntries(PURGE_RESTORE_TABLES.map(table => [table, []])), claims: [], documents: [] }),
 }) {
   const calls = [];
@@ -559,7 +559,8 @@ function makeDrillRecordingRunCommand({
       return { stdout: rowCensusStdout };
     }
     if (command.includes(PURGE_RESTORE_BINDING_PROBE_SQL)) return { stdout: schema(command, calls) };
-    if (command.includes(PURGE_RESTORE_SNAPSHOT_SQL) || command.includes(PURGE_RESTORE_LEGACY_SNAPSHOT_SQL)) {
+    if (command.includes(PURGE_RESTORE_SNAPSHOT_SQL) || command.includes(PURGE_RESTORE_PREVIOUS_SNAPSHOT_SQL)
+      || command.includes(PURGE_RESTORE_LEGACY_SNAPSHOT_SQL)) {
       return { stdout: JSON.stringify(history(command, calls)) };
     }
     if (command.includes(PURGE_RESTORE_LOCAL_OBJECTS_SQL)) return { stdout: JSON.stringify(localKeys) };
@@ -578,6 +579,7 @@ function assertNeverTouchesLiveDb(calls) {
   for (const { command } of calls) {
     const line = commandLine(command);
     if (command.includes('compose') && (command.includes(PURGE_RESTORE_SNAPSHOT_SQL)
+      || command.includes(PURGE_RESTORE_PREVIOUS_SNAPSHOT_SQL)
       || command.includes(PURGE_RESTORE_LEGACY_SNAPSHOT_SQL)
       || command.includes(PURGE_RESTORE_BINDING_PROBE_SQL)
       || command.includes(PURGE_RESTORE_LOCAL_OBJECTS_SQL))) {
@@ -707,7 +709,7 @@ test('runRestoreDrill refuses stale, unreadable, changed authority or claimed ar
           const live = command.includes('compose');
           if (live) liveReads++;
           if (scenario === 'unreadable' && live) return undefined;
-          const snapshot = { format: 4, capturedAt: '2026-09-30T10:00:00.000Z',
+          const snapshot = { format: 5, capturedAt: '2026-09-30T10:00:00.000Z',
             tables: Object.fromEntries(PURGE_RESTORE_TABLES.map(table => [table, []])), claims: [], documents: [] };
           if ((scenario === 'stale' && live) || (scenario === 'changed' && liveReads === 2)) {
             snapshot.tables.DocumentPurgeDispositionEvent.push({ id: 'later-review', sha256: 'a'.repeat(64) });

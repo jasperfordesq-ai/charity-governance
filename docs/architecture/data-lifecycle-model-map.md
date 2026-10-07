@@ -19,7 +19,7 @@ group when its migration is introduced.
 - registers-controls: `BoardMember`, `ConflictRecord`, `RiskRecord`, `RiskChangeAudit`, `RiskControlVerification`, `RiskControlVerificationCounter`, `ComplaintRecord`, `ComplaintResolutionEvidence`, `ComplaintRemoval`, `ComplaintHoldEvent`, `ComplaintPurgeAuthorization`, `ComplaintPurgeAuthorizationWithdrawal`, `ComplaintPurgeClaim`, `ComplaintRecoveryPreparation`, `ComplaintRecoveryOutcome`, `ComplaintRecoveryEnforcement`, `ComplaintRecoveryExecution`, `ComplaintHoldRecoveryPreparation`, `ComplaintHoldRecoveryOutcome`, `ComplaintRecoveryCancellation`, `ComplaintPurgeDispositionEvent`, `ComplaintCopyDispositionAuthority`, `ComplaintCopyHoldEvent`, `GovernanceRegisterChangeAudit`, `OrganisationChangeAudit`, `FundraisingRecord`, `AnnualReportReadiness`, `FinancialControlReview`, `Member`
 - calendar-minutes: `Deadline`, `DeadlineChangeAudit`, `DeadlineReminderLog`, `DeadlineReminderAudit`, `GoverningAct`, `Resolution`, `GoverningActVoid`, `MinuteBookChangeAudit`
 - team-billing: `TeamInvite`, `Subscription`, `BillingCheckoutAttempt`, `StripeWebhookEvent`
-- data-requests: `DataLifecycleRequest`, `DataLifecycleStorageLink`, `DataLifecycleStorageLinkWithdrawal`, `DataLifecycleDocumentLink`, `DataLifecycleDocumentLinkWithdrawal`, `DataLifecycleReviewEvent`, `DataLifecycleTargetEvent`, `DataLifecycleResponseEvent`, `DataLifecycleCoverageEvent`, `DataRetentionPolicyRevision`, `DataRetentionPolicyWithdrawal`, `DocumentPurgeAuthorization`, `DocumentPurgeAuthorizationWithdrawal`, `DocumentPurgeClaim`, `DocumentPurgeDispositionEvent`, `DocumentRecoveryPreparation`, `DocumentRecoveryEnforcement`, `DocumentRecoveryExecution`, `DocumentRecoveryOutcome`, `DocumentBytePermitCandidateBinding`, `DocumentCopyDispositionAuthority`, `DocumentCopyHoldEvent`
+- data-requests: `DataLifecycleRequest`, `DataLifecycleStorageLink`, `DataLifecycleStorageLinkWithdrawal`, `DataLifecycleDocumentLink`, `DataLifecycleDocumentLinkWithdrawal`, `DataLifecycleReviewEvent`, `DataLifecycleTargetEvent`, `DataLifecycleResponseEvent`, `DataLifecycleCoverageEvent`, `DataRetentionPolicyRevision`, `DataRetentionPolicyWithdrawal`, `DocumentPurgeAuthorization`, `DocumentPurgeAuthorizationWithdrawal`, `DocumentPurgeClaim`, `DocumentPurgeDispositionEvent`, `DocumentRecoveryPreparation`, `DocumentRecoveryEnforcement`, `DocumentRecoveryExecution`, `DocumentRecoveryOutcome`, `DocumentBytePermitCandidateBinding`, `DocumentByteExecutionLease`, `DocumentCopyDispositionAuthority`, `DocumentCopyHoldEvent`
 - platform-operators: `PlatformOperator`, `PlatformOperatorRecoveryCode`, `PlatformOperatorSession`, `OperatorActionApproval`
 <!-- MODEL_INVENTORY_END -->
 
@@ -72,11 +72,15 @@ retention and independent custody require P05/P08 decisions. The later
 `DocumentBytePermitCandidateBinding` is an owner-only, append-only local
 lineage record for a candidate and exact claim/target. It does not itself
 authenticate remote publication. It has no
-production caller and does not authorize a worker. Restore snapshot format 4
-includes it as a full-row hash; format 3 is accepted only when both the live
-and restored databases have the exact pre-migration schema. Mixed formats
-refuse reconciliation. None of these rows alone is permission to reopen after
-host loss.
+production caller and does not authorize a worker. The later
+`DocumentByteExecutionLease` binds a final-decision digest and one-use
+capability hash to that candidate. The restricted runtime can consume the
+capability only through an exact SQL claim function; it cannot write the lease
+table. The claim still has no provider-byte caller or independent pre-provider
+head check. Restore snapshot format 5 hashes lease rows, format 4 covers the
+candidate binding without the lease, and format 3 covers the older schema.
+Mixed formats refuse reconciliation. None of these rows alone is permission
+to reopen after host loss.
 
 The later document byte-fence migration refuses activation while an older
 purge job is unfinished and refuses direct updates to a purge-claim deletion

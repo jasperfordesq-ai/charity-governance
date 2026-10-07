@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import { createHash, randomUUID } from 'node:crypto';
 import { PrismaClient } from '@prisma/client';
 import { prepareDocumentRecoveryFacts } from '../apps/api/dist/services/document-recovery-preparation.js';
 import { readCurrentDocumentByteAuthority } from '../apps/api/dist/services/document-byte-authority-projection.js';
@@ -447,6 +448,52 @@ try {
   assert.equal((await prisma.$queryRaw`SELECT count(*)::integer AS count
     FROM "DocumentBytePermitCandidateBinding"`)[0].count, 0);
   await insertCandidateBinding('local');
+  const attempt = randomUUID();
+  const attemptHash = createHash('sha256').update(attempt).digest('hex');
+  const insertLease = (db) => db.$executeRaw`
+    INSERT INTO "DocumentByteExecutionLease"
+      (id,"organisationId","candidateBindingId","deletionId",
+       "decisionEntryDigest","decisionEnvelopeDigest","decisionBodyDigest",
+       "localCopyObservationDigest","localHoldObservationDigest",
+       "providerInventoryDigest","attemptHash")
+    VALUES ('lease','charity','candidate-binding','job',
+      ${'1'.repeat(64)},${'2'.repeat(64)},${'3'.repeat(64)},
+      ${first.localCopyObservationDigest},${first.localHoldObservationDigest},
+      ${'4'.repeat(64)},${attemptHash})`;
+  await assert.rejects(insertLease(prisma), /must be consumed in its insertion transaction/);
+  await assert.rejects(prisma.$transaction(async (tx) => {
+    await insertLease(tx);
+    await tx.$executeRaw`UPDATE "DocumentByteExecutionLease"
+      SET state='CLAIMED' WHERE id='lease'`;
+  }), /outside exact claim/);
+  await assert.rejects(prisma.$transaction(async (tx) => {
+    await insertLease(tx);
+    await tx.$executeRaw`DELETE FROM "DocumentByteExecutionLease" WHERE id='lease'`;
+  }), /immutable outside exact claim/);
+  await assert.rejects(prisma.$executeRaw`UPDATE "DocumentStorageDeletion"
+    SET "claimedAt"=now() WHERE id='job'`);
+  await assert.rejects(prisma.$transaction(async (tx) => {
+    await insertLease(tx);
+    await tx.$executeRaw`SET LOCAL ROLE cp_fixture`;
+    await tx.$queryRaw`SELECT public."DocumentByteExecutionLease_claim"('lease', ${randomUUID()})`;
+  }), /capability does not match/);
+  // Exercise the exact runtime grant and same-transaction lease/job claim,
+  // then roll back before the inert production-cleanup baseline below.
+  await assert.rejects(prisma.$transaction(async (tx) => {
+    await insertLease(tx);
+    await tx.$executeRaw`SET LOCAL ROLE cp_fixture`;
+    const result = await tx.$queryRaw`SELECT public."DocumentByteExecutionLease_claim"('lease', ${attempt}) AS claimed`;
+    assert.equal(result[0].claimed, true);
+    const claimed = await tx.documentStorageDeletion.findUniqueOrThrow({ where: { id: 'job' } });
+    assert.ok(claimed.claimedAt);
+    await assert.rejects(tx.$queryRaw`SELECT public."DocumentByteExecutionLease_claim"('lease', ${attempt})`);
+    throw new Error('rollback-exact-lease-proof');
+  }), /rollback-exact-lease-proof/);
+  assert.equal((await prisma.documentStorageDeletion.findUniqueOrThrow({
+    where: { id: 'job' }, select: { claimedAt: true },
+  })).claimedAt, null);
+  assert.equal((await prisma.$queryRaw`SELECT count(*)::integer AS count
+    FROM "DocumentByteExecutionLease"`)[0].count, 0);
   await assert.rejects(prisma.$executeRaw`UPDATE "DocumentBytePermitCandidateBinding"
     SET "writerEpoch"=2 WHERE id='candidate-binding'`);
   await assert.rejects(prisma.$executeRaw`DELETE FROM "DocumentBytePermitCandidateBinding"

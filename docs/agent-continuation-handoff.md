@@ -1,5 +1,23 @@
 # CharityPilot Agent Continuation Handoff
 
+> **7 October ~10:40 Dublin source-only one-use SQL lease:** A new
+> `DocumentByteExecutionLease` migration binds an owner-installed final
+> decision digest, exact candidate and deletion job, and SHA-256 of a
+> one-use UUID capability. The restricted `cp_runtime` role has SELECT-only
+> table access and can claim through one exact, schema-qualified security-
+> definer function. A deferred constraint requires insertion and consumption
+> in the same transaction; the byte fence accepts only that first exact
+> job claim. There is still **no production final-decision binder, provider
+> byte caller, pre-provider independent head check or UNKNOWN-result path**.
+> No live lease or document deletion is authorized. Restore inventory format
+> 5 includes the lease; older formats 3 and 4 remain version-separated.
+> Disposable real PostgreSQL, local API 2,569 + seven migration tests,
+> production-check 1,120 passes (four skips), schema validation and security
+> scan passed. Exact hosted CI/E2E and deployment are pending; the private VM
+> still serves `cc4922b4`. P05/P08 host-loss, all-copy, P01–P09/MFA,
+> Member/export/deletion, replay/C1, connector first contact and Nikita
+> review remain open. See the private worker permit contract and goal audit.
+
 > **7 October ~10:19 Dublin local copy/hold observation release:** Exact
 > `cc4922b47cd6e2974c454c92e8493ab1a91c64b2` passed hosted CI
 > `37598264337` and E2E `37598264292` (240 tests). Guarded private-VM

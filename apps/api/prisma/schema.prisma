@@ -512,6 +512,7 @@ model Organisation {
   complaintRecoveryEnforcement ComplaintRecoveryEnforcement?
   documentRecoveryEnforcement DocumentRecoveryEnforcement?
   documentBytePermitBindings DocumentBytePermitCandidateBinding[]
+  documentByteExecutionLeases DocumentByteExecutionLease[]
   complaintHoldRecoveryPreparations ComplaintHoldRecoveryPreparation[]
   id                                      String                      @id @default(cuid())
   name                                    String
@@ -1444,8 +1445,36 @@ model DocumentBytePermitCandidateBinding {
   outcome                DocumentRecoveryOutcome @relation(fields: [outcomeId], references: [id], onDelete: Restrict)
   claim                  DocumentPurgeClaim @relation(fields: [claimId], references: [id], onDelete: Restrict)
   deletion               DocumentStorageDeletion @relation(fields: [deletionId, organisationId], references: [id, organisationId], onDelete: Restrict)
+  executionLease         DocumentByteExecutionLease?
 
   @@unique([organisationId, operationId])
+  @@unique([deletionId, organisationId])
+  @@index([organisationId, recordedAt, id])
+}
+
+// Owner-bound final-decision lineage. A consumed lease only permits an exact
+// SQL job claim; independent head/current-fact checks still gate provider I/O.
+model DocumentByteExecutionLease {
+  id                         String @id @default(cuid())
+  organisationId             String
+  candidateBindingId         String @unique
+  deletionId                 String @unique
+  decisionEntryDigest        String
+  decisionEnvelopeDigest     String
+  decisionBodyDigest         String
+  localCopyObservationDigest String
+  localHoldObservationDigest String
+  providerInventoryDigest    String
+  attemptHash                String @unique
+  insertTransactionId        BigInt @default(dbgenerated("txid_current()"))
+  state                      String @default("READY")
+  claimTransactionId         BigInt?
+  claimedAt                  DateTime?
+  recordedAt                 DateTime @default(now())
+  organisation               Organisation @relation(fields: [organisationId], references: [id], onDelete: Restrict)
+  candidateBinding           DocumentBytePermitCandidateBinding @relation(fields: [candidateBindingId], references: [id], onDelete: Restrict)
+  deletion                   DocumentStorageDeletion @relation(fields: [deletionId, organisationId], references: [id, organisationId], onDelete: Restrict)
+
   @@unique([deletionId, organisationId])
   @@index([organisationId, recordedAt, id])
 }
@@ -1726,6 +1755,7 @@ model DocumentStorageDeletion {
   dataLifecycleLinks      DataLifecycleStorageLink[]
   purgeClaim              DocumentPurgeClaim?
   bytePermitBinding       DocumentBytePermitCandidateBinding?
+  byteExecutionLease      DocumentByteExecutionLease?
 
   @@unique([id, organisationId])
   @@index([organisationId])

@@ -2,12 +2,12 @@ import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { createHash } from 'node:crypto';
 import { assertNoClaimedLocalObjects } from './purge-restore-reconciliation.mjs';
-import { PURGE_RESTORE_TABLES, PURGE_RESTORE_LEGACY_TABLES,
+import { PURGE_RESTORE_TABLES, PURGE_RESTORE_PREVIOUS_TABLES, PURGE_RESTORE_LEGACY_TABLES,
   reconcilePurgeRestore, assertPurgeRestoreLedger } from './purge-restore-reconciliation.mjs';
 
 function snapshot() {
   return {
-    format: 4, capturedAt: '2026-09-30T10:00:00.000Z',
+    format: 5, capturedAt: '2026-09-30T10:00:00.000Z',
     tables: Object.fromEntries(PURGE_RESTORE_TABLES.map(table => [table, table==='ComplaintPrimaryConflicts'?[]:[{ id: table, sha256: 'a'.repeat(64) }]])),
     claims: [{ organisationId: 'charity-a', documentId: 'removed-document' }], documents: [],
   };
@@ -30,7 +30,7 @@ test('matching database history still requires file and external-copy reconcilia
   assert.equal(result.objectAndExternalCopyReconciliationRequired, true);
 });
 
-test('pre-migration format 3 compares only its exact older inventory and cannot cross to format 4', () => {
+test('older formats compare only their exact inventory and cannot cross schema versions', () => {
   const old = snapshot();
   old.format = 3;
   old.tables = Object.fromEntries(PURGE_RESTORE_LEGACY_TABLES.map(table => [table,
@@ -38,6 +38,12 @@ test('pre-migration format 3 compares only its exact older inventory and cannot 
   assert.equal(assertPurgeRestoreLedger(old, structuredClone(old)).databaseLedgerMatches, true);
   assert.throws(() => assertPurgeRestoreLedger(old, snapshot()), /schema versions differ/u);
   assert.throws(() => assertPurgeRestoreLedger(snapshot(), old), /schema versions differ/u);
+  const previous = snapshot();
+  previous.format = 4;
+  previous.tables = Object.fromEntries(PURGE_RESTORE_PREVIOUS_TABLES.map(table => [table,
+    table === 'ComplaintPrimaryConflicts' ? [] : [{ id: table, sha256: 'a'.repeat(64) }]]));
+  assert.equal(assertPurgeRestoreLedger(previous, structuredClone(previous)).databaseLedgerMatches, true);
+  assert.throws(() => assertPurgeRestoreLedger(previous, snapshot()), /schema versions differ/u);
 });
 
 test('changed decisions, missing evidence and unexpected authority all refuse reconciliation', () => {
@@ -66,8 +72,8 @@ test('restored document preparation must match current independent decision fact
   });
 });
 
-test('document execution, outcome, candidate binding and enforcement rows must match current authority', () => {
-  for (const table of ['DocumentRecoveryEnforcement', 'DocumentRecoveryExecution', 'DocumentRecoveryOutcome', 'DocumentBytePermitCandidateBinding']) {
+test('document execution, outcome, binding, lease and enforcement rows must match current authority', () => {
+  for (const table of ['DocumentRecoveryEnforcement', 'DocumentRecoveryExecution', 'DocumentRecoveryOutcome', 'DocumentBytePermitCandidateBinding', 'DocumentByteExecutionLease']) {
     const restored = snapshot();
     restored.tables[table][0].sha256 = 'b'.repeat(64);
     assert.throws(() => assertPurgeRestoreLedger(snapshot(), restored), error => {
@@ -107,6 +113,7 @@ test('malformed or incomplete evidence fails closed', () => {
     s => { s.format = 2; },
     s => { s.format = 3; },
     s => { delete s.tables.DocumentBytePermitCandidateBinding; },
+    s => { delete s.tables.DocumentByteExecutionLease; },
     s => { delete s.tables.DocumentRecoveryExecution; },
     s => { delete s.tables.ComplaintHoldEvent; },
     s => { delete s.tables.ComplaintRecoveryState; },

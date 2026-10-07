@@ -1056,7 +1056,8 @@ export async function verifyAppRuntimeRole(run, deployEnv, fileEnv) {
         SELECT 1 FROM (VALUES
           ('DocumentRecoveryEnforcement'), ('DocumentRecoveryExecution'),
           ('DocumentRecoveryOutcome'),
-          ('DocumentBytePermitCandidateBinding')) AS protected(name)
+          ('DocumentBytePermitCandidateBinding'),
+          ('DocumentByteExecutionLease')) AS protected(name)
         WHERE to_regclass(format('public.%I', protected.name)) IS NOT NULL
           AND (
             has_table_privilege(r.oid, to_regclass(format('public.%I', protected.name)), 'INSERT')

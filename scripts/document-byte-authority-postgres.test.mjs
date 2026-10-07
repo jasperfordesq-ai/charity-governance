@@ -108,9 +108,16 @@ test(
         '-d', database, '-tA', '-c', `SELECT has_table_privilege('cp_fixture',
           'public."DocumentBytePermitCandidateBinding"','INSERT'),
           has_table_privilege('cp_fixture',
-          'public."DocumentBytePermitCandidateBinding"','SELECT');`]),
+          'public."DocumentBytePermitCandidateBinding"','SELECT'),
+          has_table_privilege('cp_fixture',
+          'public."DocumentByteExecutionLease"','UPDATE'),
+          has_function_privilege('cp_fixture',
+          'public."DocumentByteExecutionLease_claim"(text,text)','EXECUTE'),
+          EXISTS (SELECT 1 FROM aclexplode((SELECT proacl FROM pg_proc WHERE oid =
+            'public."DocumentByteExecutionLease_claim"(text,text)'::regprocedure)) acl
+            WHERE acl.grantee=0 AND acl.privilege_type='EXECUTE');`]),
       'read disposable runtime privileges');
-      assert.equal(privileges, 'f|t');
+      assert.equal(privileges, 'f|t|f|t|f');
       requireSuccess(
         run(process.execPath, ['node_modules/typescript/bin/tsc', '-p', 'apps/api/tsconfig.json'], {
           env,
@@ -127,9 +134,10 @@ test(
       );
       const snapshot = JSON.parse(requireSuccess(docker(['exec', name, 'psql', '-U',
         'postgres', '-d', database, '-tA', '-c', PURGE_RESTORE_SNAPSHOT_SQL]),
-      'capture format-4 disposable restore inventory'));
-      assert.equal(snapshot.format, 4);
+      'capture format-5 disposable restore inventory'));
+      assert.equal(snapshot.format, 5);
       assert.equal(snapshot.tables.DocumentBytePermitCandidateBinding.length, 1);
+      assert.equal(snapshot.tables.DocumentByteExecutionLease.length, 0);
     } finally {
       assert.equal(
         requireSuccess(
