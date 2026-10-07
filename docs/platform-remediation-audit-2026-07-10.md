@@ -1,5 +1,19 @@
 # CharityPilot Full-Platform Remediation Audit
 
+> **7 October DPO-05 release evidence:** Exact `edc9e15d` passed merged-
+> master CI/E2E, guarded green private-VM cutover, restricted-runtime and
+> zero-row postflight, both front doors, preservation of all 351 earlier VM
+> backup hashes, three SHA-matched workstation files and isolated
+> 153-migration/68-document restore. The bounded local-copy digest now
+> includes immutable Confluence attachment-upload intents; older digest
+> envelopes fail closed. No provider first contact, complete remote/local/
+> export/backup copy inventory, UNKNOWN resolution or independent P05/P08
+> recovery follows. The 13 age-review backup sets remain preserved pending
+> an approved retention decision. Controller, role-specific, historical,
+> test-site and Nikita acceptance gates remain OPEN. Exact private receipt:
+> `.charitypilot-private/release-edc9e15d-confluence-upload-intent-observation-2026-10-07.md`.
+> Older source/release checkpoints below are dated history.
+
 > **7 October DPO-05 inert-observer release:** Exact `c4e5040d` passed
 > merged-master CI/E2E, guarded blue private-VM cutover, restricted-runtime
 > and zero-row postflight, both front doors, all 348 older backup hashes,
