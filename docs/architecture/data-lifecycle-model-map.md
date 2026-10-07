@@ -73,6 +73,13 @@ format 3 inventories all four tables as full-row hashes; an operating release
 must deploy and prove that format before any live binding or capture. None of
 these rows alone is permission to reopen after host loss.
 
+The later document byte-fence migration refuses activation while an older
+purge job is unfinished and refuses direct updates to a purge-claim deletion
+job once enforcement is active. It serializes both paths on the organisation
+row. This is deliberately fail-closed: the storage worker has no verified
+independent byte-execution permit yet, so binding enforcement must remain
+inactive until that permit, copy-writer coverage and host-loss controls pass.
+
 
 `ComplaintRecoveryOutcome` binds one original preparation to one committed
 primary complaint claim in the same database transaction. It retains identifiers,

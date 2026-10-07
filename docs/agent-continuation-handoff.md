@@ -1,5 +1,15 @@
 # CharityPilot Agent Continuation Handoff
 
+> **7 October source-only byte fence candidate:** Migration
+> `20261007040000_document_recovery_byte_fence` serializes document
+> enforcement activation with purge-job updates, refuses activation over
+> unfinished legacy purge jobs and blocks direct updates to a guarded job.
+> Dedicated real-PostgreSQL and full retention migration proofs pass locally;
+> CI runs the dedicated test. No independent byte-execution permit, all-copy
+> fence, custody or host-loss proof exists, and enforcement must remain
+> inactive. Check private `RESUME-HERE.md` for commit/hosted/release status.
+> Last proved VM release is green `f06075dd`; older notes below are history.
+
 > **7 October 03:34 Dublin guarded document-outcome release:** Exact
 > `f06075dd` hosted CI/E2E succeeded and green now serves the inactive
 > authenticated document primary-claim outcome publication/read path. Blue

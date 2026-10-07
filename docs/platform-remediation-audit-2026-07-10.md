@@ -1,5 +1,13 @@
 # CharityPilot Full-Platform Remediation Audit
 
+> **7 October DPO-05 byte-fence source candidate:** A fail-closed migration
+> refuses document enforcement over unfinished purge jobs and blocks direct
+> updates to a guarded storage deletion job. Local real-PostgreSQL and full
+> retention migration tests pass; hosted/deployed proof is pending. It has
+> no independent permit that would allow a verified byte deletion, and
+> all-copy writer, P05/P08 custody and host-loss gates remain open. Keep
+> DPO-05 and the separate Nikita acceptance items open.
+
 > **7 October DPO-05 document outcome release:** Exact `f06075dd` hosted
 > CI/E2E and guarded private-VM cutover passed. Green serves inactive,
 > authenticated publication/read code for a committed document primary
