@@ -1,5 +1,19 @@
 # CharityPilot Agent Continuation Handoff
 
+> **7 October ~13:20 Dublin verified `8e88e617` release:** Exact hosted
+> CI `37618385376` and E2E `37618385565` (240 browser tests) passed.
+> Guarded green private-VM cutover, restricted runtime, zero protected
+> rows, both front doors, all 318 prior backup hashes, six SHA-verified
+> workstation copies and isolated 151-migration restore with 68 documents
+> and zero leases/attempts passed. Blue `a9199b59` is previous. The
+> post-start independent/local read always returns
+> `actionAuthorized: false` and has no production worker/provider caller.
+> DPO-05, all-copy, independent P05/P08 host-loss, P01–P09/MFA, Member/
+> export/deletion, replay/C1, test-site connector and Nikita acceptance
+> remain open. Exact private receipt:
+> `.charitypilot-private/release-8e88e617-started-attempt-read-2026-10-07.md`.
+> The source-only checkpoint below is dated history.
+>
 > **7 October source-only DPO-05 started-attempt read:** A new
 > `readMatchedStartedDocumentByteDecision` rechecks the authenticated
 > independent fourth-stage head and current local claimed lease after a

@@ -1,5 +1,18 @@
 # CharityPilot Full-Platform Remediation Audit
 
+> **7 October DPO-05 live post-start current read:** Exact `8e88e617`
+> passed hosted CI/E2E (240 browser tests), guarded green private-VM
+> cutover, restricted runtime/empty protected rows, preservation of all
+> 318 prior backup hashes, six verified workstation copies and isolated
+> 151-migration restore with 68 documents and zero attempts. The new
+> read compares an append-only provider-start marker with the claimed lease
+> and repeats independent current-decision/local facts; it is unused by a
+> production worker and returns `actionAuthorized: false`. Approved final
+> facts, real worker/UNKNOWN handling, all-copy and independent P05/P08
+> host-loss proof remain absent. DPO-05 and every Nikita decision,
+> acceptance, historical and connector gate stay open. See the private
+> exact receipt; the source-only checkpoint below is dated history.
+>
 > **7 October DPO-05 source-only post-start current read:** The proposed
 > read compares an append-only provider-start marker with the claimed lease
 > and repeats the independent final-decision and bounded local-authority
