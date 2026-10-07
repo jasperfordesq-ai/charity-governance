@@ -507,13 +507,15 @@ any failure for diagnostics.
 policy revisions, withdrawals, purge authorizations, claims, disposition
 history and claimed cleanup jobs against fresh read-only snapshots from the
 configured live database. Missing schema or unreadable authority fails closed.
-Snapshot format 2 additionally inventories `DocumentRecoveryPreparation` as
-hashed full rows. It requires migration
-`20261007020000_document_recovery_preparation` on both the current authority
-database and the isolated restored database. A pre-migration backup may be
-preserved but cannot pass this newer comparison merely because it lacks the
-table. A changed, missing or unexpected preparation row refuses the drill;
-the snapshot does not itself authorize a document claim or application reopen.
+Snapshot format 3 inventories `DocumentRecoveryPreparation`,
+`DocumentRecoveryEnforcement`, `DocumentRecoveryExecution` and
+`DocumentRecoveryOutcome` as hashed full rows. It requires migrations
+`20261007020000_document_recovery_preparation` and
+`20261007030000_document_recovery_execution` on both the current authority
+database and the isolated restored database. Older backups remain preserved,
+but a backup without these tables cannot pass this comparison. A changed,
+missing or unexpected row refuses the drill; the snapshot does not itself
+authorize a document claim or application reopen.
 Surviving document rows are compared by database-generated hashes, including
 holds, removal/recovery state, reviewed bytes, access controls and publication
 decisions. Raw document fields are not emitted in the comparison inventory.

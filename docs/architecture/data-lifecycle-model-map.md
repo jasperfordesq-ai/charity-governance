@@ -64,10 +64,10 @@ bytes or descriptive Vault fields. It has no live capture route. The separate
 protocol. They conditionally reject claims that lack a matching local execution
 and require a same-transaction outcome, but do not authenticate remote
 publication, fence storage-byte deletion or cover every copy writer. Their
-retention and independent custody require P05/P08 decisions. The preparation
-table is included in the deployed versioned restore comparison; the three new
-tables require a later versioned inventory before live binding or capture.
-None of these rows alone is permission to reopen after host loss.
+retention and independent custody require P05/P08 decisions. Source snapshot
+format 3 inventories all four tables as full-row hashes; an operating release
+must deploy and prove that format before any live binding or capture. None of
+these rows alone is permission to reopen after host loss.
 
 
 `ComplaintRecoveryOutcome` binds one original preparation to one committed

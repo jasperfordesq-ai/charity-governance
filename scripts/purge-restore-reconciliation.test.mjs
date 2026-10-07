@@ -6,7 +6,7 @@ import { PURGE_RESTORE_TABLES, reconcilePurgeRestore, assertPurgeRestoreLedger }
 
 function snapshot() {
   return {
-    format: 2, capturedAt: '2026-09-30T10:00:00.000Z',
+    format: 3, capturedAt: '2026-09-30T10:00:00.000Z',
     tables: Object.fromEntries(PURGE_RESTORE_TABLES.map(table => [table, table==='ComplaintPrimaryConflicts'?[]:[{ id: table, sha256: 'a'.repeat(64) }]])),
     claims: [{ organisationId: 'charity-a', documentId: 'removed-document' }], documents: [],
   };
@@ -55,6 +55,18 @@ test('restored document preparation must match current independent decision fact
   });
 });
 
+test('document execution, outcome and enforcement rows must match current authority', () => {
+  for (const table of ['DocumentRecoveryEnforcement', 'DocumentRecoveryExecution', 'DocumentRecoveryOutcome']) {
+    const restored = snapshot();
+    restored.tables[table][0].sha256 = 'b'.repeat(64);
+    assert.throws(() => assertPurgeRestoreLedger(snapshot(), restored), error => {
+      assert.equal(error.code, 'PURGE_RESTORE_RECONCILIATION_REQUIRED');
+      assert.deepEqual(error.report.differences, [{ table, missing: 0, changed: 1, unexpected: 0 }]);
+      return true;
+    });
+  }
+});
+
 test('even matching snapshots cannot accept a claimed complaint still present in the primary database',()=>{
   const conflicting=snapshot();
   conflicting.tables.ComplaintPrimaryConflicts=[{id:'claimed-but-present',sha256:'a'.repeat(64)}];
@@ -81,7 +93,8 @@ test('malformed or incomplete evidence fails closed', () => {
     s => { s.tables.DocumentPurgeClaim[0].sha256 = 'invalid'; },
     s => { delete s.tables.DocumentPurgeDispositionEvent; },
     s => { delete s.tables.DocumentRecoveryPreparation; },
-    s => { s.format = 1; },
+    s => { s.format = 2; },
+    s => { delete s.tables.DocumentRecoveryExecution; },
     s => { delete s.tables.ComplaintHoldEvent; },
     s => { delete s.tables.ComplaintRecoveryState; },
     s => { delete s.tables.DocumentRecoveryState; },

@@ -528,7 +528,7 @@ function makeDrillRecordingRunCommand({
   documentHashStdout,
   failOn = null,
   localKeys = [],
-  history = () => ({ format: 2, capturedAt: '2026-09-30T10:00:00.000Z',
+  history = () => ({ format: 3, capturedAt: '2026-09-30T10:00:00.000Z',
     tables: Object.fromEntries(PURGE_RESTORE_TABLES.map(table => [table, []])), claims: [], documents: [] }),
 }) {
   const calls = [];
@@ -688,7 +688,7 @@ test("waitForDrillReadiness timeout carries the LAST probe's error, not an earli
 
 test('runRestoreDrill refuses stale, unreadable, changed authority or claimed archive files and cleans up', async () => {
   const { runRestoreDrill } = await loadBackupModule();
-  for (const scenario of ['stale', 'unreadable', 'changed', 'claimed-file', 'complaint-hold', 'complaint-recovery', 'document-controls']) {
+  for (const scenario of ['stale', 'unreadable', 'changed', 'claimed-file', 'complaint-hold', 'complaint-recovery', 'document-controls', 'document-recovery-execution']) {
     const stateDir = makeTempDir('charitypilot-purge-drill-');
     try {
       const { plan, documentEntries } = writeFixtureBackup(stateDir);
@@ -700,7 +700,7 @@ test('runRestoreDrill refuses stale, unreadable, changed authority or claimed ar
           const live = command.includes('compose');
           if (live) liveReads++;
           if (scenario === 'unreadable' && live) return undefined;
-          const snapshot = { format: 2, capturedAt: '2026-09-30T10:00:00.000Z',
+          const snapshot = { format: 3, capturedAt: '2026-09-30T10:00:00.000Z',
             tables: Object.fromEntries(PURGE_RESTORE_TABLES.map(table => [table, []])), claims: [], documents: [] };
           if ((scenario === 'stale' && live) || (scenario === 'changed' && liveReads === 2)) {
             snapshot.tables.DocumentPurgeDispositionEvent.push({ id: 'later-review', sha256: 'a'.repeat(64) });
@@ -708,6 +708,7 @@ test('runRestoreDrill refuses stale, unreadable, changed authority or claimed ar
           if (scenario === 'complaint-hold' && live) snapshot.tables.ComplaintHoldEvent.push({id:'hold-after-backup',sha256:'a'.repeat(64)});
           if (scenario === 'complaint-recovery' && live) snapshot.tables.ComplaintRecoveryState.push({id:'removed-after-backup',sha256:'b'.repeat(64)});
           if (scenario === 'document-controls') snapshot.tables.DocumentRecoveryState.push({id:'same-document',sha256:(live?'a':'b').repeat(64)});
+          if (scenario === 'document-recovery-execution' && live) snapshot.tables.DocumentRecoveryExecution.push({id:'new-execution',sha256:'a'.repeat(64)});
           return snapshot;
         },
       });
