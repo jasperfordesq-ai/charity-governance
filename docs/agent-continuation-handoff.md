@@ -1,5 +1,18 @@
 # CharityPilot Agent Continuation Handoff
 
+> **7 October ~05:36 Dublin guarded current-authority projection release:**
+> Exact `a5234cca` hosted CI/E2E succeeded and blue serves the private VM.
+> Restricted runtime, empty recovery tables, byte fence, both front doors,
+> 237 unchanged prior backup hashes, two copied/SHA-verified off-VM sets and
+> isolated 145-migration restore passed. Green `05087bbf` is rollbackable.
+> The projection is inert and returns `actionAuthorized: false`; its full
+> composed query still needs disposable real-PostgreSQL proof. There is no
+> publisher, SQL/worker byte permit, complete copy-writer fence, P05/P08
+> custody or supervised host-loss reopening. DPO-05 and policy, live-role,
+> export/deletion, replay/C1 and Nikita acceptance remain open. Private
+> receipt: `release-a5234cca-current-authority-2026-10-07.md`. Older notes
+> below are dated history.
+
 > **7 October ~05:04 Dublin guarded encrypted candidate release:** Exact
 > `05087bbf` hosted CI/E2E succeeded and green now serves the private VM.
 > Restricted runtime, empty recovery/enforcement, byte-fence trigger,
