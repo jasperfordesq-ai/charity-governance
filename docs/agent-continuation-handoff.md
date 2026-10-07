@@ -1,5 +1,17 @@
 # CharityPilot Agent Continuation Handoff
 
+> **7 October format-2 restore gate deployed:** Blue `7a982c8f` serves the
+> private VM; green `c994174f` is rollbackable. The purge restore comparison
+> now includes `DocumentRecoveryPreparation`. Exact hosted CI/E2E, guarded
+> release, live format-2 snapshot, restricted role, 186 preserved prior
+> backup hashes, two verified off-VM copies and 143-migration isolated
+> restore passed. This is not an independent document claim/result, byte
+> worker fence, external custody, host-loss reopening, approved policy,
+> Member journey or DPO acceptance. The private receipt is
+> `.charitypilot-private/release-7a982c8f-restore-inventory-2026-10-07.md`.
+> Older source/release checkpoints below are historical.
+>
+
 > **7 October guarded private-VM release and goal audit:** Exact `c994174f`
 > hosted CI/E2E succeeded, and green now serves the inactive encrypted document
 > recovery preparation. Postflight proved the migration, restricted runtime,

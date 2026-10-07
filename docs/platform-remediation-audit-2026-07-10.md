@@ -1,5 +1,16 @@
 # CharityPilot Full-Platform Remediation Audit
 
+> **7 October DPO-05 format-2 restore comparison deployed:** Exact
+> `7a982c8f` hosted CI/E2E and guarded private-VM release passed. Blue
+> serves a restore drill that compares `DocumentRecoveryPreparation` full-row
+> hashes, and a live format-2 snapshot plus postmigration isolated restore
+> passed. Live preparation and approved draft-policy counts remain zero.
+> Keep DPO-05 open: independently published document claim/result, byte-worker
+> and all-copy fences, external custody and host-loss reopening are missing.
+> Member/export, replay/C1, policy and Nikita acceptance also remain open.
+> Private exact receipt: `.charitypilot-private/release-7a982c8f-restore-inventory-2026-10-07.md`.
+>
+
 > **7 October DPO-05 status after private-VM release:** Exact `c994174f`
 > passed hosted CI/E2E and guarded private-VM cutover. Green serves its
 > inactive document recovery preparation, with new migration, restricted
