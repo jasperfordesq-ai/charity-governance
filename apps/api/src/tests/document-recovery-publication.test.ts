@@ -24,6 +24,7 @@ import { openDocumentByteExecutionDecision, preserveDocumentByteExecutionDecisio
 import { readPublishedDocumentByteExecutionDecision } from '../services/published-document-byte-execution-decision.js';
 import { readMatchedClaimedDocumentByteDecision,
   readMatchedStartedDocumentByteDecision } from '../services/matched-claimed-document-byte-decision.js';
+import { claimVerifiedDocumentByteExecutionLease } from '../services/claimed-document-byte-execution-lease.js';
 import { bindVerifiedDocumentBytePermitCandidate, compareDocumentBytePermitAuthority,
   publishVerifiedDocumentBytePermitCandidate,
   readPublishedDocumentBytePermit } from '../services/published-document-byte-permit.js';
@@ -180,11 +181,21 @@ async function readyBytePermitPublisher() {
         provider: f.facts.authorization.provider } } };
   const state = { copyHolds: [] as unknown[], reads: 0, changeAfterFirstRead: false,
     mutateAtRead: 0, candidateBinding: null as Record<string, unknown> | null,
-    bindingCreates: 0, claimedAt: null as Date | null,
+    bindingCreates: 0, leaseCreates: 0, claimedAt: null as Date | null,
     lease: null as Record<string, unknown> | null,
     attempt: null as Record<string, unknown> | null };
   const tx = {
-    $queryRaw: async () => [{ id: f.context.organisationId }],
+    $queryRaw: async (strings: TemplateStringsArray) => {
+      if (strings.join('').includes('DocumentByteExecutionLease_claim')) {
+        if (!state.lease) throw new Error('Synthetic lease missing');
+        state.claimedAt = new Date('2026-10-07T08:03:00.000Z');
+        state.lease.state = 'CLAIMED';
+        state.lease.claimedAt = state.claimedAt;
+        state.lease.claimTransactionId = 123n;
+        return [{ claimed: true }];
+      }
+      return [{ id: f.context.organisationId }];
+    },
     documentRecoveryOutcome: { findFirst: async () => row },
     documentRecoveryPreparation: { findFirst: async () => ({ id: 'preparation',
       facts: f.prepared.body, factsDigest: f.prepared.digest }) },
@@ -204,7 +215,14 @@ async function readyBytePermitPublisher() {
       state: 'PENDING', claimedAt: state.claimedAt, processedAt: null,
       attempts: 0, deadLetteredAt: null, targetRef: null }),
     findMany: async () => [{ id: row.claim.deletionId }] },
-    documentByteExecutionLease: { findUnique: async () => state.lease },
+    documentByteExecutionLease: { findUnique: async () => state.lease,
+      create: async ({ data }: { data: Record<string, unknown> }) => {
+        state.leaseCreates += 1;
+        state.lease = { id: 'lease', ...data, state: 'READY',
+          insertTransactionId: 123n, claimTransactionId: null,
+          claimedAt: null, candidateBinding: state.candidateBinding };
+        return { id: 'lease' };
+      } },
     documentByteProviderAttempt: { findUnique: async () => state.attempt },
     documentCopyDispositionAuthority: { findMany: async () => [] },
     documentCopyHoldEvent: { findMany: async () => state.copyHolds },
@@ -401,17 +419,25 @@ test('fourth-stage document byte decision stays distinct, encrypted, immutable a
   assert.equal(verified.actionAuthorized, false);
   assert.equal((await f.store.readControl()).activeOperation?.operationId, f.context.operationId);
   assert.equal((await publish()).replayed, true);
-  const claimedAt = new Date('2026-10-07T08:03:00.000Z');
-  state.claimedAt = claimedAt;
-  state.lease = { id: 'lease', organisationId: f.context.organisationId,
-    deletionId: candidateFacts.deletionId, candidateBindingId: 'binding',
-    state: 'CLAIMED', claimedAt, insertTransactionId: 123n, claimTransactionId: 123n,
-    attemptHash: createHash('sha256').update(JSON.parse(decision.body).oneUseAttemptId).digest('hex'),
-    decisionEntryDigest: verified.entryDigest, decisionEnvelopeDigest: verified.envelopeDigest,
-    decisionBodyDigest: createHash('sha256').update(decision.body).digest('hex'),
-    localCopyObservationDigest: localBeforeClaim.localCopyObservationDigest,
-    localHoldObservationDigest: localBeforeClaim.localHoldObservationDigest,
-    providerInventoryDigest: 'c'.repeat(64), candidateBinding: state.candidateBinding };
+  state.copyHolds.push({ id: 'new-hold-before-claim', held: true });
+  await assert.rejects(claimVerifiedDocumentByteExecutionLease(prisma,
+    f.journal, f.store, f.context, f.keys, f.store), /copy or hold facts/);
+  state.copyHolds.length = 0;
+  assert.ok(state.candidateBinding);
+  state.candidateBinding.writerEpoch = 2;
+  await assert.rejects(claimVerifiedDocumentByteExecutionLease(prisma,
+    f.journal, f.store, f.context, f.keys, f.store), /candidate binding differs/);
+  state.candidateBinding.writerEpoch = f.context.writerEpoch;
+  assert.equal(state.leaseCreates, 0);
+  const claimed = await claimVerifiedDocumentByteExecutionLease(prisma,
+    f.journal, f.store, f.context, f.keys, f.store);
+  assert.equal(claimed.leaseId, 'lease');
+  assert.equal(claimed.actionAuthorized, false);
+  assert.equal(state.leaseCreates, 1);
+  assert.ok(state.claimedAt);
+  const lease = state.lease!;
+  await assert.rejects(claimVerifiedDocumentByteExecutionLease(prisma,
+    f.journal, f.store, f.context, f.keys, f.store), /changed or cannot be bounded/);
   const matched = () => readMatchedClaimedDocumentByteDecision(prisma, f.journal,
     f.store, f.context, f.keys, f.store, 'lease', JSON.parse(decision.body).oneUseAttemptId);
   assert.equal((await matched()).actionAuthorized, false);
@@ -435,12 +461,12 @@ test('fourth-stage document byte decision stays distinct, encrypted, immutable a
   state.attempt.deletionId = 'other-job';
   await assert.rejects(started(), /provider start differs/);
   state.attempt.deletionId = candidateFacts.deletionId;
-  state.lease.decisionBodyDigest = '0'.repeat(64);
+  lease.decisionBodyDigest = '0'.repeat(64);
   await assert.rejects(matched(), /differs from current independent decision/);
-  state.lease.decisionBodyDigest = createHash('sha256').update(decision.body).digest('hex');
-  state.lease.providerInventoryDigest = '0'.repeat(64);
+  lease.decisionBodyDigest = createHash('sha256').update(decision.body).digest('hex');
+  lease.providerInventoryDigest = '0'.repeat(64);
   await assert.rejects(matched(), /differs from current independent decision/);
-  state.lease.providerInventoryDigest = 'c'.repeat(64);
+  lease.providerInventoryDigest = 'c'.repeat(64);
   state.copyHolds.push({ id: 'later-hold', held: true });
   await assert.rejects(matched(), /copy or hold authority changed/);
   state.copyHolds.length = 0;

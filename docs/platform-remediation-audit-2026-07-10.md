@@ -1,5 +1,15 @@
 # CharityPilot Full-Platform Remediation Audit
 
+> **7 October DPO-05 source-only claimed-lease composition:** The
+> privileged service composes authenticated current independent decision,
+> recorded candidate and unchanged local facts with one atomic SQL
+> insert/claim, then rechecks the committed result. Synthetic composition
+> and existing disposable PostgreSQL transition proof are separate evidence.
+> There is no production caller or byte permission, and real approved
+> final facts, provider inventory, worker/UNKNOWN handling, all-copy and
+> independent P05/P08 recovery are still missing. Keep DPO-05 and every
+> controller, role, historical, connector and Nikita acceptance gate open.
+>
 > **7 October DPO-05 live post-start current read:** Exact `8e88e617`
 > passed hosted CI/E2E (240 browser tests), guarded green private-VM
 > cutover, restricted runtime/empty protected rows, preservation of all

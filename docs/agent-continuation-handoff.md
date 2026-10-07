@@ -1,5 +1,16 @@
 # CharityPilot Agent Continuation Handoff
 
+> **7 October source-only DPO-05 privileged claim composition:**
+> `claimVerifiedDocumentByteExecutionLease` now requires the authenticated
+> current final decision, unchanged bounded local copy/hold facts and exact
+> recorded candidate binding, then inserts and consumes the protected
+> one-use SQL lease in one transaction. A post-commit independent/local
+> read checks the claimed result. It returns `actionAuthorized: false` and
+> has no production caller or provider I/O. The final facts publisher,
+> approved provider/copy inventory, worker, UNKNOWN reconciliation and
+> P05/P08 host-loss proof remain absent; all other Nikita gates remain
+> open. Hosted CI/E2E and VM release are pending.
+>
 > **7 October ~13:20 Dublin verified `8e88e617` release:** Exact hosted
 > CI `37618385376` and E2E `37618385565` (240 browser tests) passed.
 > Guarded green private-VM cutover, restricted runtime, zero protected
