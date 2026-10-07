@@ -21,7 +21,7 @@ function fixture(overrides: { org?: string; siteId?: string; siteUrl?: string; s
     organisationIntegration: {
       findUnique: async () => {
         calls.push('integration');
-        return { status: overrides.status ?? 'CONNECTED',
+        return { id: 'integration-1', status: overrides.status ?? 'CONNECTED',
           config: { siteId: overrides.siteId ?? 'cloud-1',
             siteUrl: overrides.siteUrl ?? 'https://charity.atlassian.net/wiki' } };
       },
@@ -118,4 +118,40 @@ test('a marker on a differently named attachment cannot become a saved-intent ca
   }, { getAccessToken: async () => 'test-token', operations: f.operations }),
   (error: unknown) => error instanceof AppError
     && error.code === 'CONFLUENCE_UPLOAD_OBSERVATION_ATTACHMENT_INVALID');
+});
+
+test('a site switch during token retrieval stops before provider I/O', async () => {
+  const overrides: { siteId?: string } = {};
+  const f = fixture(overrides);
+  let providerCalls = 0;
+  await assert.rejects(() => observeSavedConfluenceUpload(f.prisma as never, {
+    organisationId: 'org-1', operationId, attachmentId: 'att-1',
+  }, {
+    getAccessToken: async () => { overrides.siteId = 'other-cloud'; return 'test-token'; },
+    fetch: (async () => { providerCalls += 1; throw new Error('provider must not be called'); }) as typeof fetch,
+    operations: { readAttachmentVersionBytes: f.operations.readAttachmentVersionBytes },
+  }), (error: unknown) => error instanceof AppError
+    && error.code === 'CONFLUENCE_UPLOAD_OBSERVATION_BINDING_INVALID');
+  assert.equal(providerCalls, 0);
+});
+
+test('a site switch after the first provider read stops the next request locally', async () => {
+  const overrides: { siteId?: string } = {};
+  const f = fixture(overrides);
+  let providerCalls = 0;
+  await assert.rejects(() => observeSavedConfluenceUpload(f.prisma as never, {
+    organisationId: 'org-1', operationId, attachmentId: 'att-1',
+  }, {
+    getAccessToken: async () => 'test-token',
+    fetch: (async () => {
+      providerCalls += 1;
+      overrides.siteId = 'other-cloud';
+      return new Response(JSON.stringify({ results: [{ id: 'att-1', title: 'policy.pdf',
+        mediaType: 'application/pdf', fileSize: 5, version: { number: 1 } }], _links: {} }), { status: 200,
+        headers: { 'Content-Type': 'application/json' } });
+    }) as typeof fetch,
+    operations: { readAttachmentVersionBytes: f.operations.readAttachmentVersionBytes },
+  }), (error: unknown) => error instanceof AppError
+    && error.code === 'CONFLUENCE_UPLOAD_OBSERVATION_BINDING_INVALID');
+  assert.equal(providerCalls, 1);
 });

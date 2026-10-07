@@ -59,22 +59,37 @@ export async function observeSavedConfluenceUpload(
   if (intent === null) throw invalidBinding();
   const integration = await prisma.organisationIntegration.findUnique({
     where: { organisationId_provider: { organisationId: input.organisationId, provider: 'CONFLUENCE' } },
-    select: { status: true, config: true },
+    select: { id: true, status: true, config: true },
   });
   if (integration?.status !== 'CONNECTED') throw invalidBinding();
   const siteHostname = connectedHostname(integration.config, intent.cloudId);
+  const assertCurrentConnection = async (): Promise<void> => {
+    const current = await prisma.organisationIntegration.findUnique({
+      where: { organisationId_provider: { organisationId: input.organisationId, provider: 'CONFLUENCE' } },
+      select: { id: true, status: true, config: true },
+    });
+    if (current?.id !== integration.id || current.status !== 'CONNECTED'
+      || connectedHostname(current.config, intent.cloudId) !== siteHostname) throw invalidBinding();
+  };
+  const getAccessToken = async (): Promise<string> => {
+    await assertCurrentConnection();
+    const token = await (deps.getAccessToken?.()
+      ?? currentAccessTokenForOrganisation(prisma, { organisationId: input.organisationId }));
+    await assertCurrentConnection();
+    return token;
+  };
   const observation = await observeAttachmentVersionBytes({
     cloudId: intent.cloudId,
     pageId: intent.pageId,
     attachmentId: input.attachmentId,
     siteHostname,
-    getAccessToken: deps.getAccessToken
-      ?? (() => currentAccessTokenForOrganisation(prisma, { organisationId: input.organisationId })),
+    getAccessToken,
     expectedUpload: { operationId: intent.id, sha256: intent.sha256 },
     ...(input.maxTotalBytes === undefined ? {} : { maxTotalBytes: input.maxTotalBytes }),
     ...(deps.fetch === undefined ? {} : { fetch: deps.fetch }),
     ...(deps.operations === undefined ? {} : { operations: deps.operations }),
   });
+  await assertCurrentConnection();
   if (observation.title !== intent.filename) throw invalidAttachment();
   return { ...observation, uploadOperationId: intent.id };
 }
