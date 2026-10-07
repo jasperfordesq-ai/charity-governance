@@ -22,7 +22,8 @@ import { prepareDocumentByteExecutionDecisionFacts } from '../services/document-
 import { openDocumentByteExecutionDecision, preserveDocumentByteExecutionDecision,
   readVerifiedDocumentByteExecutionDecision } from '../services/document-byte-execution-decision-envelope.js';
 import { readPublishedDocumentByteExecutionDecision } from '../services/published-document-byte-execution-decision.js';
-import { readMatchedClaimedDocumentByteDecision } from '../services/matched-claimed-document-byte-decision.js';
+import { readMatchedClaimedDocumentByteDecision,
+  readMatchedStartedDocumentByteDecision } from '../services/matched-claimed-document-byte-decision.js';
 import { bindVerifiedDocumentBytePermitCandidate, compareDocumentBytePermitAuthority,
   publishVerifiedDocumentBytePermitCandidate,
   readPublishedDocumentBytePermit } from '../services/published-document-byte-permit.js';
@@ -180,7 +181,8 @@ async function readyBytePermitPublisher() {
   const state = { copyHolds: [] as unknown[], reads: 0, changeAfterFirstRead: false,
     mutateAtRead: 0, candidateBinding: null as Record<string, unknown> | null,
     bindingCreates: 0, claimedAt: null as Date | null,
-    lease: null as Record<string, unknown> | null };
+    lease: null as Record<string, unknown> | null,
+    attempt: null as Record<string, unknown> | null };
   const tx = {
     $queryRaw: async () => [{ id: f.context.organisationId }],
     documentRecoveryOutcome: { findFirst: async () => row },
@@ -203,6 +205,7 @@ async function readyBytePermitPublisher() {
       attempts: 0, deadLetteredAt: null, targetRef: null }),
     findMany: async () => [{ id: row.claim.deletionId }] },
     documentByteExecutionLease: { findUnique: async () => state.lease },
+    documentByteProviderAttempt: { findUnique: async () => state.attempt },
     documentCopyDispositionAuthority: { findMany: async () => [] },
     documentCopyHoldEvent: { findMany: async () => state.copyHolds },
     documentPurgeDispositionEvent: { findMany: async () => [] },
@@ -412,6 +415,26 @@ test('fourth-stage document byte decision stays distinct, encrypted, immutable a
   const matched = () => readMatchedClaimedDocumentByteDecision(prisma, f.journal,
     f.store, f.context, f.keys, f.store, 'lease', JSON.parse(decision.body).oneUseAttemptId);
   assert.equal((await matched()).actionAuthorized, false);
+  const started = () => readMatchedStartedDocumentByteDecision(prisma, f.journal,
+    f.store, f.context, f.keys, f.store, 'lease', JSON.parse(decision.body).oneUseAttemptId);
+  await assert.rejects(started(), /provider start differs/);
+  state.attempt = { id: 'lease', leaseId: 'lease',
+    organisationId: f.context.organisationId, deletionId: candidateFacts.deletionId,
+    decisionEntryDigest: verified.entryDigest, startedTransactionId: 124n,
+    startedAt: new Date('2026-10-07T08:03:01.000Z') };
+  assert.equal((await started()).actionAuthorized, false);
+  state.attempt.startedTransactionId = 123n;
+  await assert.rejects(started(), /provider start differs/);
+  state.attempt.startedTransactionId = 124n;
+  state.attempt.decisionEntryDigest = '0'.repeat(64);
+  await assert.rejects(started(), /provider start differs/);
+  state.attempt.decisionEntryDigest = verified.entryDigest;
+  state.attempt.startedAt = new Date('2026-10-07T08:02:59.000Z');
+  await assert.rejects(started(), /provider start differs/);
+  state.attempt.startedAt = new Date('2026-10-07T08:03:01.000Z');
+  state.attempt.deletionId = 'other-job';
+  await assert.rejects(started(), /provider start differs/);
+  state.attempt.deletionId = candidateFacts.deletionId;
   state.lease.decisionBodyDigest = '0'.repeat(64);
   await assert.rejects(matched(), /differs from current independent decision/);
   state.lease.decisionBodyDigest = createHash('sha256').update(decision.body).digest('hex');
@@ -440,6 +463,7 @@ test('fourth-stage document byte decision stays distinct, encrypted, immutable a
   f.objects.set(decisionKey, decisionObject);
   f.objects.delete(f.headKey);
   await assert.rejects(matched());
+  await assert.rejects(started());
 });
 
 test('verified document byte candidate publisher refuses changed local facts before journal append', async () => {

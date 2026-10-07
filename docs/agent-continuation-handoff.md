@@ -1,5 +1,17 @@
 # CharityPilot Agent Continuation Handoff
 
+> **7 October source-only DPO-05 started-attempt read:** A new
+> `readMatchedStartedDocumentByteDecision` rechecks the authenticated
+> independent fourth-stage head and current local claimed lease after a
+> durable provider-start marker, including exact marker/lease transaction,
+> target and decision lineage. It still returns `actionAuthorized: false`
+> and has no production worker caller. API build, full unit suite 2,570,
+> seven real PostgreSQL migration tests and focused negative cases pass
+> locally. Hosted CI/E2E and guarded release are pending; live remains
+> `a9199b59`. Approved final facts/inventory, actual worker, UNKNOWN
+> reconciliation, all-copy and P05/P08 host-loss remain open, as do all
+> controller, role, historical, connector and Nikita gates.
+>
 > **7 October ~12:56 Dublin verified `a9199b59` release:** Exact hosted
 > CI `37615526028` and E2E `37615526020` (240 browser tests) passed. The
 > guarded private-VM deployment moved blue live with an append-only,

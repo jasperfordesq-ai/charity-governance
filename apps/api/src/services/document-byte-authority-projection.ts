@@ -20,9 +20,10 @@ type ClaimedLeaseObservation = {
   outcomeEntryDigest: string; provider: string; storagePath: string;
   objectSha256: string; fileSize: number;
 };
+type StartedAttemptObservation = { startedAt: string; startedTransactionId: string };
 type LocalObservation = { digest: string; localCopyObservationDigest: string;
   localHoldObservationDigest: string; actionAuthorized: false;
-  claimedLease?: ClaimedLeaseObservation };
+  claimedLease?: ClaimedLeaseObservation; startedAttempt?: StartedAttemptObservation };
 
 function canonical(value: unknown): string {
   if (value === null || typeof value === 'boolean' || typeof value === 'string') return JSON.stringify(value);
@@ -78,10 +79,28 @@ export async function readClaimedDocumentByteAuthority(prisma: PrismaClient, raw
     });
 }
 
+/** Read a durably started provider attempt against the same bounded local
+ * authority as the claimed lease. A start marker means possible provider
+ * I/O, including after a crash before the call; this observation cannot
+ * authorize a call or classify its result. */
+export async function readStartedDocumentByteAuthority(prisma: PrismaClient, raw: unknown) {
+  const claimed = claimedRequestSchema.parse(raw);
+  const request = requestSchema.parse({ installationId: claimed.installationId,
+    organisationId: claimed.organisationId, operationId: claimed.operationId });
+  return withDocumentByteAuthorityTransaction(prisma, request, claimed,
+    async (_tx, result) => {
+      if (!result.claimedLease || !result.startedAttempt) {
+        throw new Error('Document byte provider start observation is unavailable');
+      }
+      return { ...result, claimedLease: result.claimedLease,
+        startedAttempt: result.startedAttempt };
+    }, true);
+}
+
 async function withDocumentByteAuthorityTransaction<T>(prisma: PrismaClient,
   request: Request, claimed: ClaimedRequest | null,
   callback: (tx: Prisma.TransactionClient,
-    result: LocalObservation) => Promise<T>) {
+    result: LocalObservation) => Promise<T>, requireStarted = false) {
   return prisma.$transaction(async tx => {
     const locked = await tx.$queryRaw<Array<{ id: string }>>`
       SELECT id FROM "Organisation" WHERE id=${request.organisationId} FOR UPDATE`;
@@ -110,7 +129,7 @@ async function withDocumentByteAuthorityTransaction<T>(prisma: PrismaClient,
     }
     const [preparation, organisation, enforcement, actor, authorization, policyRows, job,
       copyAuthorities, copyHolds, dispositionEvents, publications,
-      standardLinks, confluenceReferences, lease] = await Promise.all([
+      standardLinks, confluenceReferences, lease, providerAttempt] = await Promise.all([
       tx.documentRecoveryPreparation.findFirst({ where: { organisationId: request.organisationId,
         installationId: request.installationId, operationId: request.operationId },
         select: { id: true, facts: true, factsDigest: true } }),
@@ -141,6 +160,9 @@ async function withDocumentByteAuthorityTransaction<T>(prisma: PrismaClient,
       tx.confluenceReference.count({ where: { documentId: claim.documentId } }),
       claimed ? tx.documentByteExecutionLease.findUnique({
         where: { id: claimed.leaseId }, include: { candidateBinding: true },
+      }) : Promise.resolve(null),
+      requireStarted && claimed ? tx.documentByteProviderAttempt.findUnique({
+        where: { leaseId: claimed.leaseId },
       }) : Promise.resolve(null),
     ]);
     if (!authorization) throw new Error('Document byte authority authorization is unavailable');
@@ -233,6 +255,15 @@ async function withDocumentByteAuthorityTransaction<T>(prisma: PrismaClient,
       || lease?.localHoldObservationDigest !== localHoldObservationDigest)) {
       throw new Error('Document byte lease copy or hold authority changed');
     }
+    if (requireStarted && (!claimed || !lease || !providerAttempt
+      || providerAttempt.id !== lease.id || providerAttempt.leaseId !== lease.id
+      || providerAttempt.organisationId !== request.organisationId
+      || providerAttempt.deletionId !== claim.deletionId
+      || providerAttempt.decisionEntryDigest !== lease.decisionEntryDigest
+      || providerAttempt.startedTransactionId === lease.claimTransactionId
+      || providerAttempt.startedAt.getTime() < lease.claimedAt!.getTime())) {
+      throw new Error('Document byte provider start differs from claimed lease');
+    }
     const claimedLease: ClaimedLeaseObservation | undefined = claimed && lease ? {
       decisionEntryDigest: lease.decisionEntryDigest,
       decisionEnvelopeDigest: lease.decisionEnvelopeDigest,
@@ -246,7 +277,12 @@ async function withDocumentByteAuthorityTransaction<T>(prisma: PrismaClient,
       objectSha256: lease.candidateBinding.objectSha256,
       fileSize: lease.candidateBinding.fileSize,
     } : undefined;
+    const startedAttempt: StartedAttemptObservation | undefined = requireStarted && providerAttempt ? {
+      startedAt: providerAttempt.startedAt.toISOString(),
+      startedTransactionId: providerAttempt.startedTransactionId.toString(),
+    } : undefined;
     return callback(tx, { digest, localCopyObservationDigest,
-      localHoldObservationDigest, claimedLease, actionAuthorized: false as const });
+      localHoldObservationDigest, claimedLease, startedAttempt,
+      actionAuthorized: false as const });
   }, { isolationLevel: 'Serializable', timeout: 30000 });
 }

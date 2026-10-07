@@ -8,7 +8,8 @@ import type { DocumentOutcomeObjects } from './document-outcome-envelope.js';
 import type { DocumentBytePermitObjects } from './document-byte-permit-envelope.js';
 import type { DocumentByteExecutionDecisionObjects } from './document-byte-execution-decision-envelope.js';
 import { prepareDocumentByteExecutionDecisionFacts } from './document-byte-execution-decision-facts.js';
-import { readClaimedDocumentByteAuthority } from './document-byte-authority-projection.js';
+import { readClaimedDocumentByteAuthority,
+  readStartedDocumentByteAuthority } from './document-byte-authority-projection.js';
 import { readPublishedDocumentByteExecutionDecision } from './published-document-byte-execution-decision.js';
 
 type Objects = Pick<DocumentRecoveryObjects, 'readDocumentPreparation'>
@@ -26,6 +27,28 @@ export async function readMatchedClaimedDocumentByteDecision(prisma: PrismaClien
   journal: RecoveryAuthorityJournal, control: RecoveryControlStore,
   context: RecoveryEnvelopeContext, keys: RecoveryDataKeys, objects: Objects,
   leaseId: string, oneUseAttemptId: string) {
+  return readMatchedDocumentByteDecision(prisma, journal, control, context,
+    keys, objects, leaseId, oneUseAttemptId, false);
+}
+
+/** After the durable start marker, re-authenticate the current independent
+ * decision and local lease/marker together. A later worker must do this
+ * immediately before I/O, but approval and result reconciliation are still
+ * missing, so the result never grants byte authority. */
+export async function readMatchedStartedDocumentByteDecision(prisma: PrismaClient,
+  journal: RecoveryAuthorityJournal, control: RecoveryControlStore,
+  context: RecoveryEnvelopeContext, keys: RecoveryDataKeys, objects: Objects,
+  leaseId: string, oneUseAttemptId: string) {
+  const observed = await readMatchedDocumentByteDecision(prisma, journal, control,
+    context, keys, objects, leaseId, oneUseAttemptId, true);
+  if (!observed.startedAttempt) throw new Error('Document byte provider start observation is unavailable');
+  return { ...observed, startedAttempt: observed.startedAttempt };
+}
+
+async function readMatchedDocumentByteDecision(prisma: PrismaClient,
+  journal: RecoveryAuthorityJournal, control: RecoveryControlStore,
+  context: RecoveryEnvelopeContext, keys: RecoveryDataKeys, objects: Objects,
+  leaseId: string, oneUseAttemptId: string, requireStarted: boolean) {
   const first = await readPublishedDocumentByteExecutionDecision(journal,
     control, context, keys, objects);
   const facts = JSON.parse(prepareDocumentByteExecutionDecisionFacts(JSON.parse(first.body)).body);
@@ -35,7 +58,9 @@ export async function readMatchedClaimedDocumentByteDecision(prisma: PrismaClien
   const scope = { installationId: facts.installationId,
     organisationId: facts.organisationId, operationId: facts.operationId,
     leaseId, oneUseAttemptId };
-  const local = await readClaimedDocumentByteAuthority(prisma, scope);
+  const readLocal = requireStarted ? readStartedDocumentByteAuthority
+    : readClaimedDocumentByteAuthority;
+  const local = await readLocal(prisma, scope);
   const lease = local.claimedLease;
   if (lease.decisionEntryDigest !== first.entryDigest
     || lease.decisionEnvelopeDigest !== first.envelopeDigest
@@ -50,7 +75,7 @@ export async function readMatchedClaimedDocumentByteDecision(prisma: PrismaClien
     || local.localHoldObservationDigest !== facts.holdStateDigest) {
     throw new Error('Claimed document byte lease differs from current independent decision');
   }
-  const localAgain = await readClaimedDocumentByteAuthority(prisma, scope);
+  const localAgain = await readLocal(prisma, scope);
   const second = await readPublishedDocumentByteExecutionDecision(journal,
     control, context, keys, objects);
   if (second.body !== first.body || second.candidateBody !== first.candidateBody
@@ -61,5 +86,6 @@ export async function readMatchedClaimedDocumentByteDecision(prisma: PrismaClien
     throw new Error('Claimed document byte decision or local authority changed while reading');
   }
   return { decisionEntryDigest: first.entryDigest,
-    localAuthorityDigest: local.digest, actionAuthorized: false as const };
+    localAuthorityDigest: local.digest, startedAttempt: local.startedAttempt,
+    actionAuthorized: false as const };
 }

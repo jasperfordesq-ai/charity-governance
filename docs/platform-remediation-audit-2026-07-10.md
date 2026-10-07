@@ -1,5 +1,14 @@
 # CharityPilot Full-Platform Remediation Audit
 
+> **7 October DPO-05 source-only post-start current read:** The proposed
+> read compares an append-only provider-start marker with the claimed lease
+> and repeats the independent final-decision and bounded local-authority
+> checks. It rejects missing/wrong marker transaction, target, digest and
+> stale independent head in local tests; no provider caller or byte authority
+> exists. This is source-only until exact hosted and live verification.
+> DPO-05, all-copy, independent P05/P08 and every Nikita acceptance gate
+> remain open. The live marker release below is the latest deployed code.
+>
 > **7 October DPO-05 live provider-start marker:** Exact `a9199b59` passed
 > hosted CI/E2E (240 browser tests), guarded blue private-VM cutover,
 > restricted-runtime and empty protected-row postflight, preservation of
