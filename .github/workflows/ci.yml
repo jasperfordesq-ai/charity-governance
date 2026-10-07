@@ -202,6 +202,9 @@ jobs:
       - name: Verify document recovery byte fence migration
         run: npm run test:document-recovery-byte-fence
 
+      - name: Verify document byte authority with disposable PostgreSQL
+        run: npm run test:document-byte-authority-postgres
+
       - name: Reliability ledger (API + Web)
         # Runs the apps/api and apps/web unit suites and fails the build if any covered
         # guarantee in docs/reliability/guarantees.json is not linked to a passing test
