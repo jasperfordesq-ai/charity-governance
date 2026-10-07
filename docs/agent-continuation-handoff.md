@@ -1,5 +1,16 @@
 # CharityPilot Agent Continuation Handoff
 
+> **7 October verified `6dea7e5a` private-VM release:** Exact hosted CI
+> `37633656389` and E2E `37633656362` passed. Guarded blue cutover,
+> restricted `cp_runtime`, zero protected rows, both front doors, all 336
+> earlier VM backup hashes, SHA-matched workstation copy of the new set,
+> isolated 151-migration restore and post-restore checks passed. The new
+> committed-start UNKNOWN reader has no production caller, provider I/O or
+> independent result publication. DPO-05, independent P05/P08 host-loss,
+> policy/MFA, Member/export/deletion, C1/replay, disposable Confluence
+> test-site and Nikita acceptance remain open. Exact private receipt:
+> `.charitypilot-private/release-6dea7e5a-unknown-facts-2026-10-07.md`.
+
 > **7 October 13:46 UTC C1 production negative:** NEXUS production API
 > `/version.php` reported build `2ff23039`; unauthenticated GET for
 > synthetic `/api/v2/users/0` with tenant ID 1 returned 401

@@ -1,5 +1,16 @@
 # CharityPilot Full-Platform Remediation Audit
 
+> **7 October DPO-05 release evidence:** Exact `6dea7e5a` passed hosted
+> CI/E2E, guarded private-VM blue cutover, restricted runtime and zero-row
+> postflight, preservation of 336 prior backup hashes, three SHA-matched
+> workstation files and isolated 151-migration restore. It only reads a
+> committed provider-start marker as bounded UNKNOWN facts; it cannot
+> establish a provider call, independently publish an outcome or authorize
+> byte action. Approved final facts/provider inventory, worker and result
+> reconciliation, all-copy fence, independent P05/P08 recovery and every
+> Nikita controller, role, historical, connector and acceptance gate remain
+> open. See exact private release receipt.
+
 > **7 October DPO-06 C1 live negative:** NEXUS production API build
 > `2ff23039` returned 401 `auth_required` with matching build header for
 > unauthenticated synthetic profile ID 0, tenant ID 1. Inspected relevant
