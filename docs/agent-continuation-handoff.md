@@ -1,5 +1,19 @@
 # CharityPilot Agent Continuation Handoff
 
+> **7 October private-VM document claim transaction release:** Exact
+> `20ef847e` hosted CI/E2E and guarded cutover succeeded; green serves and
+> blue `7a982c8f` is rollbackable. Postflight proved the new migration,
+> restricted `cp_runtime` grants, zero recovery operation rows/binding,
+> shared document mount and loopback/Tailscale front doors. All 192 prior
+> backup hashes survived, two new sets were copied and SHA-verified off-VM,
+> and isolated restore passed with 144 migrations. This is inactive local
+> claim/job SQL, not authenticated independent result publication,
+> byte-worker/all-copy fencing, approved custody or host-loss reopening.
+> Extend the versioned restore inventory before live binding. Nikita's
+> policy, Member/export, replay/C1 and DPO acceptance gates remain open.
+> Private receipt: `.charitypilot-private/release-20ef847e-document-claim-2026-10-07.md`.
+> Older source-only notes below are dated checkpoints.
+
 > **7 October 02:30 Dublin Nikita goal audit:** The active goal remains
 > relevant. Its precise remaining-work objective and closure test are at
 > `.charitypilot-private/nikita-goal-audit-2026-10-06.md`; resume from

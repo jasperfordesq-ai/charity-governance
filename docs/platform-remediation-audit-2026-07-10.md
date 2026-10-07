@@ -1,5 +1,16 @@
 # CharityPilot Full-Platform Remediation Audit
 
+> **7 October DPO-05 document claim transaction release:** Exact `20ef847e`
+> hosted CI/E2E, guarded private-VM deployment, restricted runtime, zero
+> inactive recovery rows, backup preservation/off-host copies and
+> 144-migration isolated restore passed. This narrows the document local
+> claim/job gap only. DPO-05 remains open for authenticated independent
+> result publication, byte-worker and all-copy fences, approved custody and
+> host-loss reopening; the three new tables also need versioned restore
+> comparison before live capture. Member/export, policy, replay/C1 and
+> Nikita acceptance items remain open. Exact private receipt:
+> `.charitypilot-private/release-20ef847e-document-claim-2026-10-07.md`.
+
 > **7 October DPO-05 format-2 restore comparison deployed:** Exact
 > `7a982c8f` hosted CI/E2E and guarded private-VM release passed. Blue
 > serves a restore drill that compares `DocumentRecoveryPreparation` full-row
