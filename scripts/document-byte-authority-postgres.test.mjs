@@ -139,7 +139,7 @@ test(
       );
       assert.match(
         output,
-        /current-authority-real-postgres-composition=verified; protected-worker-skip=verified; cleanup-alias-fence=verified; upload-intent-fence=verified; copy-evidence-digest=changed; post-claim-local-authority=verified; provider-start-marker=verified/u,
+        /current-authority-real-postgres-composition=verified; protected-worker-skip=verified; cleanup-alias-fence=verified; upload-intent-fence=verified; copy-evidence-digest=changed; post-claim-local-authority=verified; provider-start-marker=verified; provider-start-race=one-winner; post-start-ordinary-retry-refused=verified/u,
       );
       const snapshot = JSON.parse(requireSuccess(docker(['exec', name, 'psql', '-U',
         'postgres', '-d', database, '-tA', '-c', PURGE_RESTORE_SNAPSHOT_SQL]),

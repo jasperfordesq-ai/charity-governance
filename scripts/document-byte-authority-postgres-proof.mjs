@@ -638,11 +638,21 @@ try {
   }), /rollback-provider-start-proof/);
   assert.equal((await prisma.$queryRaw`SELECT count(*)::integer AS count
     FROM "DocumentByteProviderAttempt"`)[0].count, 0);
-  await prisma.$transaction(async tx => {
-    await tx.$executeRaw`SET LOCAL ROLE cp_fixture`;
-    const result = await tx.$queryRaw`SELECT public."DocumentByteProviderAttempt_start"('lease', ${attempt}) AS started`;
-    assert.equal(result[0].started, true);
-  });
+  // Two separate runtime transactions racing the same one-use capability
+  // must leave exactly one durable possible-I/O marker. A future worker must
+  // treat the losing exception as a hard stop before any provider call.
+  const starts = await Promise.allSettled(Array.from({ length: 2 }, () =>
+    prisma.$transaction(async tx => {
+      await tx.$executeRaw`SET LOCAL ROLE cp_fixture`;
+      const result = await tx.$queryRaw`SELECT public."DocumentByteProviderAttempt_start"('lease', ${attempt}) AS started`;
+      assert.equal(result[0].started, true);
+    }, { maxWait: 15000, timeout: 15000 })));
+  assert.equal(starts.filter(result => result.status === 'fulfilled').length, 1);
+  assert.equal(starts.filter(result => result.status === 'rejected').length, 1);
+  const loser = starts.find(result => result.status === 'rejected');
+  assert.match(String(loser.reason), /23505|unique constraint|duplicate key/i);
+  assert.equal((await prisma.$queryRaw`SELECT count(*)::integer AS count
+    FROM "DocumentByteProviderAttempt" WHERE "leaseId"='lease'`)[0].count, 1);
   const started = await prisma.documentByteProviderAttempt.findUniqueOrThrow({
     where: { leaseId: 'lease' },
   });
@@ -695,7 +705,7 @@ try {
   await assert.rejects(prisma.$executeRaw`DELETE FROM "DocumentByteProviderAttempt"
     WHERE "leaseId"='lease'`, /append-only/);
   process.stdout.write(
-    'current-authority-real-postgres-composition=verified; protected-worker-skip=verified; cleanup-alias-fence=verified; upload-intent-fence=verified; copy-evidence-digest=changed; post-claim-local-authority=verified; provider-start-marker=verified; post-start-ordinary-retry-refused=verified\n',
+    'current-authority-real-postgres-composition=verified; protected-worker-skip=verified; cleanup-alias-fence=verified; upload-intent-fence=verified; copy-evidence-digest=changed; post-claim-local-authority=verified; provider-start-marker=verified; provider-start-race=one-winner; post-start-ordinary-retry-refused=verified\n',
   );
 } finally {
   await prisma.$disconnect();
