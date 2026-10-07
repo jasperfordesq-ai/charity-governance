@@ -6,6 +6,7 @@ import { createHash } from 'node:crypto';
 const tables = [
   'DataRetentionPolicyRevision', 'DataRetentionPolicyWithdrawal',
   'DocumentPurgeAuthorization', 'DocumentPurgeAuthorizationWithdrawal',
+  'DocumentRecoveryPreparation',
   'DocumentPurgeClaim', 'DocumentPurgeDispositionEvent',
   'ComplaintResolutionEvidence', 'ComplaintRemoval', 'ComplaintHoldEvent',
   'ComplaintPurgeAuthorization', 'ComplaintPurgeAuthorizationWithdrawal',
@@ -70,7 +71,7 @@ export function assertNoClaimedLocalObjects(pathHashes, restoredEntries) {
 // authority, policy, object fingerprint, outcome and deadlines. Raw paths,
 // reasons and evidence content never leave PostgreSQL in this result.
 export const PURGE_RESTORE_SNAPSHOT_SQL = `SELECT jsonb_build_object(
- 'format',1,
+ 'format',2,
  'capturedAt',to_char(timezone('UTC',statement_timestamp()),'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"'),
  'tables',(SELECT jsonb_object_agg(name,rows) FROM (${entries.join(' UNION ALL ')}) inventories),
  'claims',COALESCE((SELECT jsonb_agg(jsonb_build_object('organisationId',"organisationId",'documentId',"documentId") ORDER BY "organisationId","documentId") FROM "DocumentPurgeClaim"),'[]'::jsonb),
@@ -97,7 +98,7 @@ function references(rows, label) {
 }
 function validate(snapshot) {
   exact(snapshot, ['format','capturedAt','tables','claims','documents'], 'snapshot');
-  if (snapshot.format !== 1 || typeof snapshot.capturedAt !== 'string' ||
+  if (snapshot.format !== 2 || typeof snapshot.capturedAt !== 'string' ||
     !/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/.test(snapshot.capturedAt) ||
     !Number.isFinite(Date.parse(snapshot.capturedAt)) ||
     new Date(snapshot.capturedAt).toISOString() !== snapshot.capturedAt) throw new Error('Invalid purge restore format or time');

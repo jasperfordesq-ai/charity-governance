@@ -528,7 +528,7 @@ function makeDrillRecordingRunCommand({
   documentHashStdout,
   failOn = null,
   localKeys = [],
-  history = () => ({ format: 1, capturedAt: '2026-09-30T10:00:00.000Z',
+  history = () => ({ format: 2, capturedAt: '2026-09-30T10:00:00.000Z',
     tables: Object.fromEntries(PURGE_RESTORE_TABLES.map(table => [table, []])), claims: [], documents: [] }),
 }) {
   const calls = [];
@@ -700,7 +700,7 @@ test('runRestoreDrill refuses stale, unreadable, changed authority or claimed ar
           const live = command.includes('compose');
           if (live) liveReads++;
           if (scenario === 'unreadable' && live) return undefined;
-          const snapshot = { format: 1, capturedAt: '2026-09-30T10:00:00.000Z',
+          const snapshot = { format: 2, capturedAt: '2026-09-30T10:00:00.000Z',
             tables: Object.fromEntries(PURGE_RESTORE_TABLES.map(table => [table, []])), claims: [], documents: [] };
           if ((scenario === 'stale' && live) || (scenario === 'changed' && liveReads === 2)) {
             snapshot.tables.DocumentPurgeDispositionEvent.push({ id: 'later-review', sha256: 'a'.repeat(64) });
