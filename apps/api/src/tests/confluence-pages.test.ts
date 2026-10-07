@@ -9,6 +9,7 @@ import {
   getContentProperty,
   getContentPropertyRecord,
   getPage,
+  getPageStorage,
   purgePage,
   setContentProperty,
   updatePage,
@@ -354,6 +355,45 @@ test('getPage returns null on 404: a missing page is a normal answer to "does th
   const { client } = harness([throwing(upstreamNotFound())]);
 
   assert.equal(await getPage(client, PAGE_ID), null);
+});
+
+test('getPageStorage asks for storage and preserves exact body and parent for read-only observation', async () => {
+  const { client, specs } = harness([ok(pageBody({
+    parentId: '456',
+    body: { storage: { representation: 'storage', value: '<p>synthetic marker</p>' } },
+  }))]);
+  const observed = await getPageStorage(client, PAGE_ID);
+  assert.equal(specs[0]?.query?.['body-format'], 'storage');
+  assert.equal(specs[0]?.idempotent, true);
+  assert.equal(observed?.page.id, PAGE_ID);
+  assert.equal(observed?.parentId, '456');
+  assert.equal(observed?.bodyStorage, '<p>synthetic marker</p>');
+});
+
+test('getPageStorage fails closed on absent, converted or mismatched body and page identity', async () => {
+  for (const response of [
+    pageBody(),
+    pageBody({ body: { storage: { representation: 'view', value: '<p>x</p>' } } }),
+    pageBody({ id: 'other', body: { storage: { representation: 'storage', value: '<p>x</p>' } } }),
+  ]) {
+    const error = await rejectsWith(() => getPageStorage(harness([ok(response)]).client, PAGE_ID));
+    assert.equal(error.code, 'CONFLUENCE_RESPONSE_INVALID');
+  }
+  assert.equal(await getPageStorage(harness([throwing(upstreamNotFound())]).client, PAGE_ID), null);
+});
+
+test('getPageStorage distinguishes root pages, numeric parent ids and malformed parents', async () => {
+  const body = { storage: { representation: 'storage', value: '<p>x</p>' } };
+  const missing = await getPageStorage(harness([ok(pageBody({ body }))]).client, PAGE_ID);
+  const explicitNull = await getPageStorage(harness([ok(pageBody({ body, parentId: null }))]).client, PAGE_ID);
+  const numeric = await getPageStorage(harness([ok(pageBody({ body, parentId: 456 }))]).client, PAGE_ID);
+  assert.equal(missing?.parentId, null);
+  assert.equal(explicitNull?.parentId, null);
+  assert.equal(numeric?.parentId, '456');
+  const invalid = await rejectsWith(() => getPageStorage(
+    harness([ok(pageBody({ body, parentId: {} }))]).client, PAGE_ID,
+  ));
+  assert.equal(invalid.code, 'CONFLUENCE_RESPONSE_INVALID');
 });
 
 test('getPage does not swallow anything but a 404', async () => {

@@ -333,6 +333,44 @@ export async function getPage(
 }
 
 /**
+ * Read the storage body for independent, read-only page-create observation.
+ * A title search or a missing/converted body is never proof of an operation.
+ * This reader has no publication caller and grants no retry or erasure authority.
+ */
+export async function getPageStorage(
+  client: ConfluenceClient,
+  pageId: string,
+): Promise<{ page: ConfluencePage; bodyStorage: string; parentId: string | null } | null> {
+  const id = assertPageId(pageId);
+  let response;
+  try {
+    response = await client.request({
+      method: 'GET',
+      api: 'v2',
+      path: `pages/${id}`,
+      query: { 'body-format': STORAGE_REPRESENTATION },
+      idempotent: true,
+    });
+  } catch (error) {
+    if (isUpstream(error, 'CONFLUENCE_NOT_FOUND')) return null;
+    throw error;
+  }
+
+  const page = parsePage(response.body);
+  if (page.id !== id) throw invalidResponse('matching page id');
+  const raw = asObject(response.body);
+  const storage = asObject(asObject(raw?.body)?.storage);
+  if (typeof storage?.value !== 'string' || storage.representation !== STORAGE_REPRESENTATION) {
+    throw invalidResponse('storage body');
+  }
+  const parent = raw?.parentId;
+  if (parent !== undefined && parent !== null && readId(parent) === undefined) {
+    throw invalidResponse('parent page id');
+  }
+  return { page, bodyStorage: storage.value, parentId: parent == null ? null : readId(parent)! };
+}
+
+/**
  * v1 content answers a different shape from v2: the space is a nested object
  * rather than a `spaceId` field, and the status is carried explicitly.
  *
