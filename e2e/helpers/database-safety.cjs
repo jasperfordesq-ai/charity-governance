@@ -165,6 +165,9 @@ const DISPOSABLE_DATABASE_RESET_TABLES = Object.freeze([
   // An append-only upload intent is reset only by this disposable database's
   // guarded multi-table TRUNCATE; ordinary production UPDATE/DELETE remain denied.
   "DocumentPublicationUploadIntent",
+  // A possible page create survives ordinary document deletion and must be
+  // reset explicitly on the isolated disposable E2E database.
+  "DocumentPublicationPageCreateIntent",
   // Integration wiring is tenant-owned, so it resets with the tenant.
   // OrganisationIntegration is listed before IntegrationCredential to match the
   // parent-before-child convention used above; the reset emits ONE multi-table

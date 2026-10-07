@@ -1955,6 +1955,29 @@ model DocumentPublicationUploadIntent {
   @@index([cloudId, pageId])
 }
 
+// Append-only evidence of one possible Confluence page create. A lost create
+// response may leave no pageId locally. This row preserves the exact intended
+// target and body digest, but does not prove that Atlassian stored the page or
+// authorize a retry, adoption or erasure.
+model DocumentPublicationPageCreateIntent {
+  id               String   @id
+  publicationId    String
+  organisationId   String
+  documentId       String
+  claimedAt        DateTime
+  documentRevision DateTime
+  cloudId          String
+  spaceId          String
+  parentPageId     String?
+  title            String
+  bodySha256       String
+  createdAt        DateTime @default(now())
+
+  @@unique([publicationId, claimedAt])
+  @@index([organisationId, documentId])
+  @@index([cloudId, spaceId])
+}
+
 model ConflictRecord {
   id              String         @id @default(cuid())
   organisationId  String

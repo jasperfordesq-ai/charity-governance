@@ -24,7 +24,7 @@ import type { ConfluencePage } from '../services/confluence-pages.js';
 import type { ConfluenceAttachment } from '../services/confluence-attachments.js';
 import type { ConfluencePublishTarget } from '../services/confluence-publish-target.service.js';
 import { DEFAULT_PUBLISHING_MODEL } from '../services/confluence-publishing-model.js';
-import { CHARITYPILOT_PROPERTY_KEY, publicationTitle } from '../services/confluence-document-mapping.js';
+import { CHARITYPILOT_PROPERTY_KEY, publicationBody, publicationTitle } from '../services/confluence-document-mapping.js';
 
 const NOW = new Date('2026-09-19T12:00:00.000Z');
 
@@ -78,6 +78,7 @@ const TARGET: ConfluencePublishTarget = {
 
 const DOC: PublicationSource = {
   id: 'doc-1',
+  updatedAt: NOW,
   name: 'Safeguarding Policy',
   version: 3,
   organisationId: 'org-1',
@@ -341,6 +342,10 @@ function runPublisher(
     reserveUploadIntent?: (input: {
       cloudId: string; spaceId: string; pageId: string; filename: string; sha256: string;
     }) => Promise<string>;
+    reservePageCreateIntent?: (input: {
+      documentRevision: Date; cloudId: string; spaceId: string;
+      parentPageId: string | null; title: string; bodySha256: string;
+    }) => Promise<string>;
   } = {},
 ): Promise<PublicationOutcome> {
   const publisher = createConfluencePublisher(deps);
@@ -350,6 +355,7 @@ function runPublisher(
     recordPage: options.recordPage ?? (async () => undefined),
     reserveRemoteWrite: options.reserveRemoteWrite ?? (async () => undefined),
     reserveUploadIntent: options.reserveUploadIntent ?? (async () => '0123456789abcdef0123456789abcdef'),
+    reservePageCreateIntent: options.reservePageCreateIntent ?? (async () => '0123456789abcdef0123456789abcdef'),
   });
 }
 
@@ -412,12 +418,12 @@ test('withdrawn publication approval stops attachment upload after storage I/O',
   deps.prisma = {
     document: { findFirst: async () => {
       approvalReads += 1;
-      return approvalReads <= 2 ? { id: DOC.id } : null;
+      return approvalReads <= 3 ? { id: DOC.id } : null;
     } },
   } as never;
   const error = appError(await captureRejection(runPublisher(deps)));
   assert.equal(error.code, 'DOCUMENT_PUBLICATION_NOT_APPROVED');
-  assert.equal(approvalReads, 3);
+  assert.equal(approvalReads, 4);
   assert.equal(calls.includes('downloadFile'), true);
   assert.equal(calls.some((call) => call.startsWith('uploadAttachment:')), false);
 });
@@ -435,6 +441,8 @@ test('a publication creates the page, records it, attaches the file, then writes
     'readDocument',
     'connect',
     `findPageByTitle:space-1:${TITLE}`,
+    'readTarget',
+    'readDocument',
     `createPage:space-1:${TITLE}`,
     'recordPage:page-1',
     'downloadFile',
@@ -455,6 +463,104 @@ test('a durable reservation precedes page creation and is reused for the attachm
   assert.equal(calls.filter((call) => call === 'reserveRemoteWrite').length, 1);
   assert.ok(calls.indexOf('reserveRemoteWrite') < calls.findIndex((call) => call.startsWith('createPage:')));
   assert.ok(calls.indexOf('reserveRemoteWrite') < calls.findIndex((call) => call.startsWith('uploadAttachment:')));
+});
+
+test('the exact page-create intent commits before the non-idempotent provider call', async () => {
+  const calls: string[] = [];
+  const bodyStorage = publicationBody(DOC, TARGET.publishingModel.bodyMode);
+  await runPublisher(spyDeps(calls), {
+    reservePageCreateIntent: async input => {
+      calls.push('reservePageCreateIntent');
+      assert.deepEqual(input, {
+        documentRevision: NOW,
+        cloudId: 'cloud-1', spaceId: 'space-1', parentPageId: null,
+        title: TITLE,
+        bodySha256: createHash('sha256').update(bodyStorage, 'utf8').digest('hex'),
+      });
+      return '0123456789abcdef0123456789abcdef';
+    },
+  });
+  assert.ok(calls.indexOf('reservePageCreateIntent') < calls.findIndex(call => call.startsWith('createPage:')));
+});
+
+test('failed page-create intent and lost provider response never cause a second create', async () => {
+  const refusedCalls: string[] = [];
+  const error = appError(await captureRejection(runPublisher(spyDeps(refusedCalls), {
+    reservePageCreateIntent: async () => {
+      throw new AppError(409, 'DOCUMENT_PUBLICATION_CLAIM_LOST', 'x');
+    },
+  })));
+  assert.equal(error.code, 'DOCUMENT_PUBLICATION_CLAIM_LOST');
+  assert.equal(refusedCalls.some(call => call.startsWith('createPage:')), false);
+
+  const uncertainCalls: string[] = [];
+  let reserved = false;
+  const uncertain = appError(await captureRejection(runPublisher(spyDeps(uncertainCalls, {
+    operations: { createPage: async () => {
+      throw new AppError(502, 'CONFLUENCE_REQUEST_INDETERMINATE', 'synthetic lost response');
+    } },
+  }), {
+    reservePageCreateIntent: async () => { reserved = true; return '0123456789abcdef0123456789abcdef'; },
+  })));
+  assert.equal(uncertain.code, 'CONFLUENCE_REQUEST_INDETERMINATE');
+  assert.equal(reserved, true);
+  assert.equal(uncertainCalls.filter(call => call.startsWith('createPage:')).length, 1);
+});
+
+test('a changed connected target or document revision stops after the local intent', async () => {
+  for (const change of ['site', 'model', 'document'] as const) {
+    const calls: string[] = [];
+    let targetReads = 0;
+    let documentReads = 0;
+    let reserved = false;
+    const deps = spyDeps(calls, {
+      readTarget: async () => {
+        targetReads += 1;
+        if (targetReads === 1 || change === 'document') return TARGET;
+        if (change === 'site') return { ...TARGET, cloudId: 'other-site' };
+        return { ...TARGET, publishingModel: { ...TARGET.publishingModel,
+          parentPageId: 'other-parent' } };
+      },
+      readDocument: async () => {
+        documentReads += 1;
+        return documentReads === 1 || change !== 'document'
+          ? DOC : { ...DOC, updatedAt: new Date(NOW.getTime() + 1) };
+      },
+    });
+    const error = appError(await captureRejection(runPublisher(deps, {
+      reservePageCreateIntent: async () => { reserved = true; return '0123456789abcdef0123456789abcdef'; },
+    })));
+    assert.equal(reserved, true);
+    assert.equal(error.code, change === 'document'
+      ? 'DOCUMENT_PUBLICATION_NOT_APPROVED' : 'CONFLUENCE_PUBLISH_TARGET_CHANGED');
+    assert.equal(calls.some(call => call.startsWith('createPage:')), false);
+  }
+});
+
+test('the page-create intent insert locks the exact claimed unrecorded publication', async () => {
+  let sql = '';
+  let bindings: unknown[] = [];
+  const prisma = { $queryRaw: async (parts: TemplateStringsArray, ...values: unknown[]) => {
+    sql = parts.join('?'); bindings = values;
+    return [{ id: values[4] }];
+  } };
+  const service = new DocumentPublicationService(prisma as never, () => NOW);
+  const row = publicationRow({ claimedAt: NOW, remoteWriteStartedAt: NOW });
+  const sha256 = createHash('sha256').update('body').digest('hex');
+  const input = { documentRevision: NOW, cloudId: 'cloud-1', spaceId: 'space-1',
+    parentPageId: null, title: TITLE, bodySha256: sha256 };
+  const id = await service.reservePageCreateIntent(row, input);
+  assert.match(id, /^[0-9a-f]{32}$/);
+  assert.match(sql, /INSERT INTO "DocumentPublicationPageCreateIntent"/);
+  assert.match(sql, /p\."remoteWriteStartedAt" IS NOT NULL/);
+  assert.match(sql, /p\."pageId" IS NULL/);
+  assert.match(sql, /FOR UPDATE/);
+  assert.deepEqual(bindings.slice(0, 4), ['pub-1', 'org-1', 'doc-1', NOW]);
+  assert.equal(bindings[4], id);
+  assert.deepEqual(bindings.slice(5), [NOW, 'cloud-1', 'space-1', null, TITLE, sha256]);
+  const missing = new DocumentPublicationService({ $queryRaw: async () => [] } as never, () => NOW);
+  assert.equal(appError(await captureRejection(missing.reservePageCreateIntent(row, input))).code,
+    'DOCUMENT_PUBLICATION_CLAIM_LOST');
 });
 
 test('an exact upload intent is committed before bytes leave, and its marker names the same digest', async () => {
@@ -1084,6 +1190,8 @@ const ABORT_SITES: ReadonlyArray<{
       'readDocument',
       'connect',
       `findPageByTitle:space-1:${TITLE}`,
+      'readTarget',
+      'readDocument',
       `createPage:space-1:${TITLE}`,
     ],
     operations: {
@@ -1100,6 +1208,8 @@ const ABORT_SITES: ReadonlyArray<{
       'readDocument',
       'connect',
       `findPageByTitle:space-1:${TITLE}`,
+      'readTarget',
+      'readDocument',
       `createPage:space-1:${TITLE}`,
       'recordPage:page-1',
     ],
@@ -1112,6 +1222,8 @@ const ABORT_SITES: ReadonlyArray<{
       'readDocument',
       'connect',
       `findPageByTitle:space-1:${TITLE}`,
+      'readTarget',
+      'readDocument',
       `createPage:space-1:${TITLE}`,
       'recordPage:page-1',
       'downloadFile',
@@ -1125,6 +1237,8 @@ const ABORT_SITES: ReadonlyArray<{
       'readDocument',
       'connect',
       `findPageByTitle:space-1:${TITLE}`,
+      'readTarget',
+      'readDocument',
       `createPage:space-1:${TITLE}`,
       'recordPage:page-1',
       'downloadFile',

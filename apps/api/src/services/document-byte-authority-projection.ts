@@ -166,13 +166,17 @@ async function withDocumentByteAuthorityTransaction<T>(prisma: PrismaClient,
       }) : Promise.resolve(null),
     ]);
     if (!authorization) throw new Error('Document byte authority authorization is unavailable');
-    const [uploadIntents, confluenceUploadIntents, liveReferences, matchingCleanupJobs] = await Promise.all([
+    const [uploadIntents, confluenceUploadIntents, pageCreateIntents,
+      liveReferences, matchingCleanupJobs] = await Promise.all([
       tx.documentUploadIntent.findMany({ where: { organisationId: request.organisationId,
         OR: [{ documentId: claim.documentId }, { storagePath: authorization.storagePath }] },
         orderBy: { id: 'asc' }, take: 1001 }),
       // A Confluence upload may have reached Atlassian even when its response
       // was lost. The immutable intent is a separate possible-copy fact.
       tx.documentPublicationUploadIntent.findMany({ where: {
+        organisationId: request.organisationId, documentId: claim.documentId },
+        orderBy: { id: 'asc' }, take: 1001 }),
+      tx.documentPublicationPageCreateIntent.findMany({ where: {
         organisationId: request.organisationId, documentId: claim.documentId },
         orderBy: { id: 'asc' }, take: 1001 }),
       tx.document.count({ where: { organisationId: request.organisationId,
@@ -232,16 +236,17 @@ async function withDocumentByteAuthorityTransaction<T>(prisma: PrismaClient,
       || matchingCleanupJobs.length !== 1 || matchingCleanupJobs[0]?.id !== claim.deletionId
       || liveReferences !== 0 || standardLinks !== 0 || confluenceReferences !== 0
       || [copyAuthorities, copyHolds, dispositionEvents, publications, uploadIntents,
-        confluenceUploadIntents]
+        confluenceUploadIntents, pageCreateIntents]
         .some(rows => rows.length > 1000)) {
       throw new Error('Document byte authority changed or cannot be bounded');
     }
-    // Format 2 includes Confluence upload intents. Old format-1 leases and
-    // independent facts must fail their digest comparison until republished.
-    const digest = boundedDigest({ format: 2, ...request,
+    // Format 3 also includes possible page creates. Older leases and
+    // independent facts fail their digest comparison until republished.
+    const digest = boundedDigest({ format: 3, ...request,
       committedOutcomeDigest: committed.digest, organisation, enforcement, actor,
       authorization, policy: policyRows[0], job, copyAuthorities, copyHolds,
       dispositionEvents, publications, uploadIntents, confluenceUploadIntents,
+      pageCreateIntents,
       matchingCleanupJobs,
       liveReferences, standardLinks, confluenceReferences });
     // Separate, bounded observations make later copy and hold reconciliation
@@ -249,11 +254,12 @@ async function withDocumentByteAuthorityTransaction<T>(prisma: PrismaClient,
     // approval. They cover only rows visible in this transaction. Neither
     // digest inventories provider versions, exports, backups or independent
     // history, and neither is itself a byte-execution decision.
-    const localCopyObservationDigest = boundedDigest({ format: 2, ...request,
+    const localCopyObservationDigest = boundedDigest({ format: 3, ...request,
       authorizationId: claim.authorizationId,
       authorizedDispositionPlan: authorization.dispositionPlan,
       copyAuthorities, dispositionEvents,
-      publications, uploadIntents, confluenceUploadIntents, matchingCleanupJobs, liveReferences,
+      publications, uploadIntents, confluenceUploadIntents, pageCreateIntents,
+      matchingCleanupJobs, liveReferences,
       confluenceReferences });
     const localHoldObservationDigest = boundedDigest({ format: 1, ...request,
       authorizationId: claim.authorizationId, policy: policyRows[0],
