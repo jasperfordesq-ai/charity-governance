@@ -1,5 +1,15 @@
 # CharityPilot Full-Platform Remediation Audit
 
+> **7 October DPO-06 C1 evidence boundary:** Exact live `cdece785`
+> read-only query still shows OPEN revision 2 and zero verification rows.
+> Current NEXUS source `4af219ee` retains the May fix; 11 locale sets,
+> 132 ordinary/pending registration notice fields have no dynamic token
+> other than `community`. This does not establish delivered recipient
+> coverage, numeric-ID CTA access, historical closure or a DPO decision.
+> Keep C1 open; private C1 evidence and decision sheets contain exact
+> scope. The release checkpoint below is unchanged.
+>
+
 > **7 October DPO-05 live checked provider-start composition:** Exact
 > `cdece785` passed hosted CI/E2E (240 browser checks), guarded green
 > private-VM cutover, restricted runtime/empty protected rows, preservation

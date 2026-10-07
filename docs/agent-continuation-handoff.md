@@ -1,5 +1,16 @@
 # CharityPilot Agent Continuation Handoff
 
+> **7 October ~14:19 Dublin C1 read-only evidence:** Exact live
+> `cdece785` still has one C1 risk OPEN at revision 2 and zero control
+> verification rows. Current NEXUS source `4af219ee` retains the May
+> notification fix; all 132 ordinary/pending registration-notice fields
+> across 11 locales have no dynamic token beyond `community`. This is
+> source scope only, not production recipient delivery, CTA access proof
+> or the original closure receipt. The risk-owner/Nikita decision remains
+> pending. See private `c1-evidence-recheck-2026-10-06.md` and
+> `c1-decision-for-review-2026-10-06.md`.
+>
+
 > **7 October ~14:11 Dublin verified `cdece785` release:** Exact hosted
 > CI `37624657895` and E2E `37624658032` (240 browser checks) passed.
 > Guarded green private-VM cutover, restricted runtime, zero protected
