@@ -1,5 +1,18 @@
 # CharityPilot Agent Continuation Handoff
 
+> **7 October verified `fb90a5f2` private-VM release:** Exact merged-master
+> CI `37650977087` and E2E `37650977300` passed. Guarded blue cutover,
+> restricted runtime, zero protected rows, both front doors, preservation of
+> all 342 prior VM backup hashes, three SHA-matched workstation files and
+> isolated 151-migration restore with repeat postflight passed. The new
+> committed-before-write Confluence reservation and UNKNOWN quarantine have
+> zero live publication rows and no provider call. Exact private receipt:
+> `.charitypilot-private/release-fb90a5f2-confluence-write-reservation-2026-10-07.md`.
+> DPO-05, remote-copy/version reconciliation, independent P05/P08 host-loss,
+> controller/MFA, Member/export/deletion, replay/C1, disposable Confluence
+> test-site and Nikita acceptance remain open. Older release checkpoints
+> below are dated history, not current serving-state claims.
+>
 > **7 October verified `7cd64f4b` private-VM release:** Exact hosted CI
 > `37638631678` and E2E `37638631629` passed. Guarded green cutover,
 > restricted `cp_runtime`, zero protected rows, both front doors, all 339

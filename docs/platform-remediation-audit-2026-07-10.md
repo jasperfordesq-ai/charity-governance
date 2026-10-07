@@ -1,5 +1,17 @@
 # CharityPilot Full-Platform Remediation Audit
 
+> **7 October DPO-05 live reservation checkpoint:** Exact `fb90a5f2`
+> passed merged-master hosted CI/E2E, guarded blue private-VM cutover,
+> restricted runtime, zero-row postflight, 342 preserved backup hashes,
+> three workstation copies matched by SHA-256 and isolated 151-migration
+> restore. SQL now commits a possible Confluence write reservation before
+> outbound I/O and preserves ambiguous/stale claims as UNKNOWN. No live
+> publication row or provider I/O was observed; exact remote version/byte
+> reconciliation, all-copy authority and independent P05/P08 recovery are
+> still missing. Controller, role-specific, historical, test-site and Nikita
+> acceptance gates remain OPEN. See the private exact release receipt;
+> earlier checkpoints below are dated history.
+>
 > **7 October DPO-05 live protocol checkpoint:** Exact `7cd64f4b` passed
 > hosted CI/E2E, guarded green private-VM cutover, restricted runtime and
 > zero-row postflight, preservation of 339 prior backup hashes, three
