@@ -129,6 +129,7 @@ function publicationRow(overrides: Partial<DocumentPublicationRecord> = {}): Doc
     requeuedAt: null,
     attempts: 0,
     claimedAt: null,
+    remoteWriteStartedAt: null,
     nextAttemptAt: new Date('2026-09-19T11:00:00.000Z'),
     deadLetteredAt: null,
     terminalReason: null,
@@ -217,6 +218,8 @@ function buildFallbackPrisma(initial: DocumentPublicationRecord, documentExists 
       if (args.where.state && args.where.state !== row.state) return { count: 0 };
       if (typeof args.where.attempts === 'number' && args.where.attempts !== row.attempts) return { count: 0 };
       if (Object.hasOwn(args.where, 'claimedAt') && args.where.claimedAt !== row.claimedAt) return { count: 0 };
+      if (Object.hasOwn(args.where, 'remoteWriteStartedAt') &&
+        args.where.remoteWriteStartedAt !== row.remoteWriteStartedAt) return { count: 0 };
       if (Object.hasOwn(args.where, 'publishedAt') && args.where.publishedAt !== row.publishedAt) {
         return { count: 0 };
       }
@@ -333,6 +336,7 @@ function runPublisher(
     row?: DocumentPublicationRecord;
     signal?: AbortSignal;
     recordPage?: (page: { pageId: string }) => Promise<void>;
+    reserveRemoteWrite?: () => Promise<void>;
   } = {},
 ): Promise<PublicationOutcome> {
   const publisher = createConfluencePublisher(deps);
@@ -340,6 +344,7 @@ function runPublisher(
     row: options.row ?? publicationRow(),
     signal: options.signal,
     recordPage: options.recordPage ?? (async () => undefined),
+    reserveRemoteWrite: options.reserveRemoteWrite ?? (async () => undefined),
   });
 }
 
@@ -437,6 +442,26 @@ test('a publication creates the page, records it, attaches the file, then writes
   assert.equal(outcome.attachmentId, 'att-1');
 });
 
+test('a durable reservation precedes page creation and is reused for the attachment', async () => {
+  const calls: string[] = [];
+  await runPublisher(spyDeps(calls), {
+    reserveRemoteWrite: async () => { calls.push('reserveRemoteWrite'); },
+  });
+  assert.equal(calls.filter((call) => call === 'reserveRemoteWrite').length, 1);
+  assert.ok(calls.indexOf('reserveRemoteWrite') < calls.findIndex((call) => call.startsWith('createPage:')));
+  assert.ok(calls.indexOf('reserveRemoteWrite') < calls.findIndex((call) => call.startsWith('uploadAttachment:')));
+});
+
+test('a rejected reservation sends no page or attachment bytes to Confluence', async () => {
+  const calls: string[] = [];
+  const error = appError(await captureRejection(runPublisher(spyDeps(calls), {
+    reserveRemoteWrite: async () => { throw new AppError(409, 'DOCUMENT_PUBLICATION_CLAIM_LOST', 'x'); },
+  })));
+  assert.equal(error.code, 'DOCUMENT_PUBLICATION_CLAIM_LOST');
+  assert.equal(calls.some((call) => call.startsWith('createPage:')), false);
+  assert.equal(calls.some((call) => call.startsWith('uploadAttachment:')), false);
+});
+
 test('the outcome carries the erasure target in Phase 5 exact shape', async () => {
   const outcome = await runPublisher(spyDeps([]));
 
@@ -483,6 +508,16 @@ test('an existing page with this title is adopted and createPage is never called
   );
 });
 
+test('adopting an existing page reserves only before its first attachment write', async () => {
+  const calls: string[] = [];
+  await runPublisher(spyDeps(calls, { operations: { findPageByTitle: async () => PAGE } }), {
+    reserveRemoteWrite: async () => { calls.push('reserveRemoteWrite'); },
+  });
+  assert.ok(calls.findIndex((call) => call.startsWith('findPageByTitle:')) < calls.indexOf('reserveRemoteWrite'));
+  assert.ok(calls.indexOf('reserveRemoteWrite') < calls.findIndex((call) => call.startsWith('uploadAttachment:')));
+  assert.equal(calls.filter((call) => call === 'reserveRemoteWrite').length, 1);
+});
+
 test('a page id the row already records is adopted without any lookup', async () => {
   const calls: string[] = [];
   const outcome = await runPublisher(spyDeps(calls), {
@@ -496,6 +531,16 @@ test('a page id the row already records is adopted without any lookup', async ()
     'a crash between the create and the attach must resume from the row, not from a search ' +
       'that may not yet see the page — and it must never reach createPage',
   );
+});
+
+test('a page refresh reserves before updating its version', async () => {
+  const calls: string[] = [];
+  await runPublisher(spyDeps(calls), {
+    row: publicationRow({ cloudId: 'cloud-1', spaceId: 'space-1', pageId: 'page-1', pageTitle: 'Earlier title' }),
+    reserveRemoteWrite: async () => { calls.push('reserveRemoteWrite'); },
+  });
+  assert.ok(calls.indexOf('reserveRemoteWrite') < calls.findIndex((call) => call.startsWith('updatePage:')));
+  assert.equal(calls.filter((call) => call === 'reserveRemoteWrite').length, 1);
 });
 
 test('a conflict on create adopts the page a previous attempt made, creating only once', async () => {
@@ -1098,6 +1143,41 @@ test('a successful publication records where it went and is marked processed', a
   assert.equal(row.pageId, 'page-1');
   assert.equal(row.attachmentId, 'att-1');
   assert.equal(row.nextAttemptAt, null);
+});
+
+test('a failure after the committed remote-write marker is UNKNOWN even when the HTTP error looks transient', async () => {
+  const mock = buildFallbackPrisma(publicationRow());
+  const service = new DocumentPublicationService(mock.prisma as never, () => NOW);
+  const result = await service.retryPendingPublications(async ({ reserveRemoteWrite }) => {
+    await reserveRemoteWrite();
+    throw new AppError(502, 'CONFLUENCE_UPSTREAM', 'x');
+  }, 10);
+  assert.equal(result.newlyDeadLettered, 1);
+  assert.equal(mock.row().state, 'DEAD_LETTER');
+  assert.equal(mock.row().terminalReason, 'REMOTE_WRITE_OUTCOME_UNKNOWN');
+  assert.deepEqual(mock.row().remoteWriteStartedAt, NOW);
+  assert.equal(mock.row().nextAttemptAt, null);
+});
+
+test('a stale committed remote-write marker is counted as a dead letter before ordinary claims', async () => {
+  const calls: string[] = [];
+  const prisma = {
+    $queryRaw: async (strings: TemplateStringsArray) => {
+      const sql = strings.join('?');
+      calls.push(sql);
+      assert.match(sql, /"remoteWriteStartedAt" IS NOT NULL/);
+      assert.match(sql, /"terminalReason" = 'REMOTE_WRITE_OUTCOME_UNKNOWN'/);
+      return [{ id: 'abandoned' }];
+    },
+    documentPublication: { findMany: async () => [] },
+  };
+  const service = new DocumentPublicationService(prisma as never, () => NOW);
+  const result = await service.retryPendingPublications(async () => {
+    throw new Error('No ordinary publication should be claimed.');
+  });
+  assert.equal(calls.length, 1);
+  assert.equal(result.newlyDeadLettered, 1);
+  assert.equal(result.failed, 1);
 });
 
 test('the page is written to the row with publishedAt still null, mid-attempt', async () => {

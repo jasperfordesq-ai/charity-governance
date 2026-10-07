@@ -1870,6 +1870,9 @@ model DocumentPublication {
   lastAttemptAt   DateTime?
   nextAttemptAt   DateTime?                          @default(now())
   claimedAt       DateTime?
+  // Committed before the first non-idempotent Confluence write in an attempt.
+  // A stale claimed attempt with this marker must be reconciled, not retried.
+  remoteWriteStartedAt DateTime?
   deadLetteredAt  DateTime?
   terminalReason  DocumentPublicationTerminalReason?
   alertClaimToken String?

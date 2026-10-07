@@ -732,3 +732,47 @@ test('disposable E2E reset inventory includes recovery evidence exactly once', (
     1,
   );
 });
+
+test('real PostgreSQL 16 migration preserves an unresolved Confluence write reservation', { timeout: 120_000 }, async () => {
+  const container = `charitypilot-publication-reservation-${randomUUID()}`;
+  assertDockerSuccess(docker(['run', '--detach', '--name', container, '--network', 'none',
+    '-e', 'POSTGRES_HOST_AUTH_METHOD=trust', POSTGRES_IMAGE]), 'start publication reservation fixture');
+  try {
+    await waitForPostgres(container);
+    psql(container, `
+      CREATE TYPE publication_state AS ENUM ('PENDING','PROCESSED','DEAD_LETTER','RETIRED');
+      CREATE TABLE "DocumentPublication" (
+        id TEXT PRIMARY KEY, state publication_state NOT NULL,
+        "claimedAt" TIMESTAMP(3), "processedAt" TIMESTAMP(3),
+        "terminalReason" TEXT, "pageId" TEXT, "attachmentId" TEXT
+      );
+    `);
+    psql(container, readFileSync(new URL(
+      '../../prisma/migrations/20261007120000_document_publication_remote_write_reservation/migration.sql',
+      import.meta.url,
+    ), 'utf8'));
+    assert.match(psql(container, `INSERT INTO "DocumentPublication" (id,state,"claimedAt","remoteWriteStartedAt")
+      VALUES ('forged','PENDING',now(),now());`, false).stderr, /requires a claimed publication/);
+    psql(container, `INSERT INTO "DocumentPublication" (id,state,"claimedAt") VALUES ('unreserved','PENDING',now());`);
+    assert.match(psql(container, `UPDATE "DocumentPublication" SET state='PROCESSED' WHERE id='unreserved';`, false).stderr,
+      /cannot complete without a committed remote write reservation/);
+    psql(container, `INSERT INTO "DocumentPublication" (id,state,"claimedAt") VALUES ('uncertain','PENDING',now());
+      UPDATE "DocumentPublication" SET "remoteWriteStartedAt"=now() WHERE id='uncertain';`);
+    assert.match(psql(container, `UPDATE "DocumentPublication" SET "remoteWriteStartedAt"=NULL WHERE id='uncertain';`, false).stderr,
+      /cannot be cleared or changed/);
+    assert.match(psql(container, `DELETE FROM "DocumentPublication" WHERE id='uncertain';`, false).stderr,
+      /reservation evidence cannot be deleted/);
+    psql(container, `UPDATE "DocumentPublication" SET state='DEAD_LETTER',
+      "terminalReason"='REMOTE_WRITE_OUTCOME_UNKNOWN', "claimedAt"=NULL WHERE id='uncertain';`);
+    assert.match(psql(container, `UPDATE "DocumentPublication" SET "remoteWriteStartedAt"=NULL WHERE id='uncertain';`, false).stderr,
+      /cannot be cleared or changed/);
+    psql(container, `INSERT INTO "DocumentPublication" (id,state,"claimedAt") VALUES ('complete','PENDING',now());
+      UPDATE "DocumentPublication" SET "remoteWriteStartedAt"=now() WHERE id='complete';
+      UPDATE "DocumentPublication" SET state='PROCESSED', "pageId"='page',
+        "attachmentId"='attachment', "processedAt"=now(), "claimedAt"=NULL WHERE id='complete';
+      UPDATE "DocumentPublication" SET state='PENDING', "remoteWriteStartedAt"=NULL,
+        "processedAt"=NULL WHERE id='complete';`);
+    assert.equal(psql(container, `SELECT state || '|' || ("remoteWriteStartedAt" IS NULL)::text
+      FROM "DocumentPublication" WHERE id='complete';`).stdout.trim(), 'PENDING|true');
+  } finally { await removeDisposableContainer(container); }
+});

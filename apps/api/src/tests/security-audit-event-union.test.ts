@@ -114,7 +114,7 @@ test('enum values are added in their own migration, never alongside a use of the
   // machine of whoever wrote it, which is the worst failure shape there is.
   const statements = migration
     .split('\n')
-    .map((line) => line.replace(/--.*$/, '').trim())
+    .map((line) => line.trim().replace(/--.*$/, '').trim())
     .filter((line) => line.length > 0);
 
   assert.ok(statements.length > 0, 'the migration must contain statements');
