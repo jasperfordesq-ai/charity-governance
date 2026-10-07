@@ -384,6 +384,30 @@ test('listAttachmentVersions rejects an unsafe identifier before I/O', async () 
   assert.equal(specs.length, 0);
 });
 
+test('a bounded version inventory refuses an extra cursor before requesting another page', async () => {
+  const { client, specs } = harness([ok({
+    results: [{ number: 1, attachment: { id: 'att789' } }],
+    _links: { next: '/wiki/api/v2/attachments/att789/versions?cursor=MORE' },
+  })]);
+  const error = await rejectsWith(() => listAttachmentVersions(client, 'att789', 1));
+  assert.equal(error.code, 'CONFLUENCE_ATTACHMENT_VERSION_LIST_UNBOUNDED');
+  assert.equal(specs.length, 1);
+  assert.equal(specs[0]?.query?.limit, '1');
+});
+
+test('a provider page exceeding the bounded version limit is refused', async () => {
+  const { client, specs } = harness([ok({
+    results: [
+      { number: 1, attachment: { id: 'att789' } },
+      { number: 2, attachment: { id: 'att789' } },
+    ],
+    _links: {},
+  })]);
+  const error = await rejectsWith(() => listAttachmentVersions(client, 'att789', 1));
+  assert.equal(error.code, 'CONFLUENCE_ATTACHMENT_VERSION_LIST_UNBOUNDED');
+  assert.equal(specs.length, 1);
+});
+
 for (const [what, body] of [
   ['no results key at all', { _links: { base: WEB_BASE } }],
   // Not a duplicate of the case above: `results` is present and truthy, so a
