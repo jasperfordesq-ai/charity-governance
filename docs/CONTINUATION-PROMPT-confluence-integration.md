@@ -1,5 +1,13 @@
 # CharityPilot × Confluence — handover
 
+> **7 October 2026 supersession:** This September handover records the design
+> at the time and is not the current publication authority. Title-only page
+> adoption is unsafe and is being removed in PR #19; use the current
+> `docs/agent-continuation-handoff.md`,
+> `docs/platform-remediation-audit-2026-07-10.md` and the private Nikita
+> roadmap for release and DPO-05 gates. No live Confluence first contact or
+> DPO acceptance follows from this historical handover.
+
 *Last rewritten 2026-09-19, after Phase 4 closed. Amended 2026-09-20 after the connector audit
 (`docs/superpowers/specs/2026-09-20-confluence-connector-audit.md`). Paste everything below the line
 into a fresh session; it is written to stand alone.*

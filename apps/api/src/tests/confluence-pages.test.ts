@@ -846,7 +846,7 @@ test('findPageByTitle returns the page when exactly one match is found', async (
   assert.equal(specs[0]?.path, 'pages');
 });
 
-test('findPageByTitle returns null when no page matches: a caller told null can adopt nothing and must create', async () => {
+test('findPageByTitle returns null when no page matches: no candidate is established', async () => {
   const { client } = harness([ok({ results: [] })]);
 
   assert.equal(await findPageByTitle(client, SPACE_ID, 'POL - Data Protection Policy'), null);
