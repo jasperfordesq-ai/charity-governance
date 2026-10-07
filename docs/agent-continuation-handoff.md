@@ -1,5 +1,20 @@
 # CharityPilot Agent Continuation Handoff
 
+> **7 October ~08:08 Dublin Confluence publication/purge fence release:**
+> Exact `312eb93e` hosted CI/E2E passed and blue serves the guarded private
+> VM; green `9c6e795b` is the previous version. The new migration and both
+> publication/claim triggers are present. Restricted runtime, empty
+> recovery/publication rows, format-4 inventory and both front doors passed;
+> all 261 earlier backup hashes survived. Two new sets, six SHA-verified
+> off-VM files, and isolated 147-migration restore passed. This fences one
+> known Confluence outbox race, not all document copies or historical remote
+> absence. Byte execution remains disabled; worker lease/current-head,
+> all-copy coverage, independent P05/P08 custody/host-loss reopening and all
+> policy, role/export/deletion, replay/C1 and Nikita acceptance gates remain
+> open. Private receipt:
+> `release-312eb93e-confluence-publication-purge-fence-2026-10-07.md`.
+> Older checkpoints below are dated history.
+
 > **7 October ~07:34 Dublin authenticated inert binding release:** Exact
 > `9c6e795b` hosted CI/E2E passed and green serves the guarded private VM;
 > blue `0e517dfb` remains rollbackable. Restricted runtime, empty binding

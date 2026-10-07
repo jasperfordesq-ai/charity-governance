@@ -1,5 +1,19 @@
 # CharityPilot Full-Platform Remediation Audit
 
+> **7 October DPO-05 Confluence publication/purge fence release:** Exact
+> `312eb93e` passed hosted CI/E2E and guarded blue private-VM cutover.
+> `DocumentPurgeClaim_publication_fence` and
+> `DocumentPublication_purge_fence` are live with zero existing publication
+> and recovery-claim rows. Restricted runtime, byte/binding guards, both
+> front doors, 261 preserved earlier backup hashes, two SHA-verified off-VM
+> sets and isolated 147-migration restore passed. This is one known mirror
+> writer fence, not all-copy proof, a byte permit, independent P05/P08
+> custody, host-loss reopening or DPO acceptance. P01–P09/MFA,
+> Member/export/deletion, replay/C1 and Nikita review remain open. Private
+> exact receipt:
+> `release-312eb93e-confluence-publication-purge-fence-2026-10-07.md`.
+> Older checkpoints below are dated history.
+
 > **7 October DPO-05 inert candidate-binding release:** Exact `0e517dfb`
 > passed hosted CI/E2E and guarded blue private-VM cutover. A protected
 > append-only binding table and format-4 restore inventory are live but
