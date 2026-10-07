@@ -1,5 +1,21 @@
 # CharityPilot Agent Continuation Handoff
 
+> **7 October ~13:55 Dublin source-only provider-start composition:**
+> `startVerifiedDocumentByteProviderAttempt` compares the current
+> authenticated independent decision with the claimed local lease, invokes
+> the existing one-use SQL start marker, then rechecks the started marker
+> and current decision. It has no production caller, provider I/O or byte
+> authorization. Focused synthetic composition, API build and full 2,570
+> unit plus seven PostgreSQL migration tests, separate disposable SQL
+> proof, production-check (1,121 pass/four skips) and security scan pass
+> locally. Exact hosted CI/E2E and guarded VM release are pending; live
+> remains `e3f9d9e4`. A committed marker means possible I/O and must be
+> reconciled as UNKNOWN after failure. Real approved final facts/provider
+> inventory, worker/result state, all-copy and independent P05/P08 host-loss
+> proof, controller/Board policy/MFA, Member/export/deletion, replay/C1,
+> Confluence test-site and Nikita acceptance remain open.
+>
+
 > **7 October ~13:45 Dublin verified `e3f9d9e4` release:** Exact hosted
 > CI `37621177956` and E2E `37621177985` (240 browser tests) passed.
 > Guarded blue private-VM cutover, restricted runtime, zero protected rows,

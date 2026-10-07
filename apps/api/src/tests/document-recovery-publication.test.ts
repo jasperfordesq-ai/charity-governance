@@ -25,6 +25,7 @@ import { readPublishedDocumentByteExecutionDecision } from '../services/publishe
 import { readMatchedClaimedDocumentByteDecision,
   readMatchedStartedDocumentByteDecision } from '../services/matched-claimed-document-byte-decision.js';
 import { claimVerifiedDocumentByteExecutionLease } from '../services/claimed-document-byte-execution-lease.js';
+import { startVerifiedDocumentByteProviderAttempt } from '../services/verified-document-byte-provider-start.js';
 import { bindVerifiedDocumentBytePermitCandidate, compareDocumentBytePermitAuthority,
   publishVerifiedDocumentBytePermitCandidate,
   readPublishedDocumentBytePermit } from '../services/published-document-byte-permit.js';
@@ -181,7 +182,7 @@ async function readyBytePermitPublisher() {
         provider: f.facts.authorization.provider } } };
   const state = { copyHolds: [] as unknown[], reads: 0, changeAfterFirstRead: false,
     mutateAtRead: 0, candidateBinding: null as Record<string, unknown> | null,
-    bindingCreates: 0, leaseCreates: 0, claimedAt: null as Date | null,
+    bindingCreates: 0, leaseCreates: 0, startCalls: 0, claimedAt: null as Date | null,
     lease: null as Record<string, unknown> | null,
     attempt: null as Record<string, unknown> | null };
   const tx = {
@@ -193,6 +194,18 @@ async function readyBytePermitPublisher() {
         state.lease.claimedAt = state.claimedAt;
         state.lease.claimTransactionId = 123n;
         return [{ claimed: true }];
+      }
+      if (strings.join('').includes('DocumentByteProviderAttempt_start')) {
+        state.startCalls += 1;
+        if (!state.lease || !state.claimedAt || state.attempt) {
+          throw new Error('Synthetic provider start refused');
+        }
+        state.attempt = { id: 'lease', leaseId: 'lease',
+          organisationId: f.context.organisationId, deletionId: row.claim.deletionId,
+          decisionEntryDigest: state.lease.decisionEntryDigest,
+          startedTransactionId: 124n,
+          startedAt: new Date('2026-10-07T08:03:01.000Z') };
+        return [{ started: true }];
       }
       return [{ id: f.context.organisationId }];
     },
@@ -242,6 +255,7 @@ async function readyBytePermitPublisher() {
     },
   };
   const prisma = { documentRecoveryOutcome: { findFirst: async () => row },
+    $queryRaw: tx.$queryRaw,
     $transaction: async (callback: (value: typeof tx) => Promise<unknown>) => {
       state.reads += 1;
       if ((state.changeAfterFirstRead && state.reads === 2)
@@ -444,23 +458,39 @@ test('fourth-stage document byte decision stays distinct, encrypted, immutable a
   const started = () => readMatchedStartedDocumentByteDecision(prisma, f.journal,
     f.store, f.context, f.keys, f.store, 'lease', JSON.parse(decision.body).oneUseAttemptId);
   await assert.rejects(started(), /provider start differs/);
-  state.attempt = { id: 'lease', leaseId: 'lease',
-    organisationId: f.context.organisationId, deletionId: candidateFacts.deletionId,
-    decisionEntryDigest: verified.entryDigest, startedTransactionId: 124n,
-    startedAt: new Date('2026-10-07T08:03:01.000Z') };
+  const start = () => startVerifiedDocumentByteProviderAttempt(prisma, f.journal,
+    f.store, f.context, f.keys, f.store, 'lease');
+  state.copyHolds.push({ id: 'new-hold-before-start', held: true });
+  await assert.rejects(start(), /copy or hold authority changed/);
+  assert.equal(state.startCalls, 0);
+  state.copyHolds.length = 0;
+  const head = f.objects.get(f.headKey);
+  assert.ok(head);
+  f.objects.delete(f.headKey);
+  await assert.rejects(start(), /current head is unavailable/);
+  assert.equal(state.startCalls, 0);
+  f.objects.set(f.headKey, head);
+  const marker = await start();
+  assert.equal(marker.actionAuthorized, false);
+  assert.equal(marker.decisionEntryDigest, verified.entryDigest);
+  assert.equal(marker.startedAttempt.startedTransactionId, '124');
+  await assert.rejects(start(), /Synthetic provider start refused/);
+  assert.equal(state.startCalls, 2);
   assert.equal((await started()).actionAuthorized, false);
-  state.attempt.startedTransactionId = 123n;
+  const attempt = state.attempt;
+  assert.ok(attempt);
+  attempt.startedTransactionId = 123n;
   await assert.rejects(started(), /provider start differs/);
-  state.attempt.startedTransactionId = 124n;
-  state.attempt.decisionEntryDigest = '0'.repeat(64);
+  attempt.startedTransactionId = 124n;
+  attempt.decisionEntryDigest = '0'.repeat(64);
   await assert.rejects(started(), /provider start differs/);
-  state.attempt.decisionEntryDigest = verified.entryDigest;
-  state.attempt.startedAt = new Date('2026-10-07T08:02:59.000Z');
+  attempt.decisionEntryDigest = verified.entryDigest;
+  attempt.startedAt = new Date('2026-10-07T08:02:59.000Z');
   await assert.rejects(started(), /provider start differs/);
-  state.attempt.startedAt = new Date('2026-10-07T08:03:01.000Z');
-  state.attempt.deletionId = 'other-job';
+  attempt.startedAt = new Date('2026-10-07T08:03:01.000Z');
+  attempt.deletionId = 'other-job';
   await assert.rejects(started(), /provider start differs/);
-  state.attempt.deletionId = candidateFacts.deletionId;
+  attempt.deletionId = candidateFacts.deletionId;
   lease.decisionBodyDigest = '0'.repeat(64);
   await assert.rejects(matched(), /differs from current independent decision/);
   lease.decisionBodyDigest = createHash('sha256').update(decision.body).digest('hex');

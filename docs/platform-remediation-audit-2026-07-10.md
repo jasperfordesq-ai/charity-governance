@@ -1,5 +1,18 @@
 # CharityPilot Full-Platform Remediation Audit
 
+> **7 October source-only DPO-05 provider-start composition:** A checked
+> service now brackets the one-use SQL possible-I/O marker with authenticated
+> current independent/local reads. No production caller, provider I/O or
+> erasure authority exists. Local focused, full API 2,570 plus seven PG
+> migrations, separate disposable SQL proof, production-check and security
+> scan pass. Hosted and live release evidence is pending; VM still serves
+> `e3f9d9e4`. The marker remains UNKNOWN after crash/timeout. Final real
+> facts/inventory, worker/result reconciliation, all-copy, independent
+> P05/P08 host-loss, policy/MFA, Member/export/deletion, replay/C1,
+> Confluence and Nikita gates stay open. The prior live paragraph below
+> remains the deployed checkpoint.
+>
+
 > **7 October DPO-05 live atomic SQL claim composition:** Exact `e3f9d9e4`
 > passed hosted CI/E2E (240 browser tests), guarded blue private-VM
 > cutover, restricted runtime/empty protected rows, preservation of all
