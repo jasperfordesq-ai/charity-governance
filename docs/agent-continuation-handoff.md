@@ -1,5 +1,20 @@
 # CharityPilot Agent Continuation Handoff
 
+> **7 October ~09:54 Dublin inert decision-protocol release:** Exact
+> `434ded0948d63e1e62660e843c176cfc03b525e5` passed hosted CI
+> `37595114545` and E2E `37595114546` (240 tests). Guarded private-VM
+> cutover serves green `434ded09`, with blue `516f020e` retained as the
+> previous version. Restricted `cp_runtime`, prior database fences, zero
+> protected claims/aliases, format-4 inventory and loopback/Tailscale routes
+> passed read-only postflight. All 279 earlier backup hashes survived; six
+> new files were SHA-verified off the VM; isolated restore passed with 149
+> migrations. The fourth-stage decision protocol remains inert: no real
+> publisher, protected one-use lease or worker caller. DPO-05, all-copy,
+> independent P05/P08 host-loss, policy/MFA, Member/export/deletion,
+> replay/C1, connector first contact and Nikita acceptance remain open.
+> Private receipt: `.charitypilot-private/release-434ded09-final-decision-protocol-2026-10-07.md`.
+> The source-only checkpoint below is dated history.
+
 > **7 October source-only fourth-stage decision protocol:** A distinct
 > `DOCUMENT_BYTE_EXECUTION_DECISION_V1` journal kind and encrypted immutable
 > object can be checked against the exact candidate and current independent

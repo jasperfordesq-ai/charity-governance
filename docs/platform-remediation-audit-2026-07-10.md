@@ -1,5 +1,18 @@
 # CharityPilot Full-Platform Remediation Audit
 
+> **7 October DPO-05 inert decision-protocol release:** Exact `434ded09`
+> passed hosted CI `37595114545` and E2E `37595114546` (240 tests), then
+> guarded private-VM cutover and read-only postflight. Green serves the new
+> source; blue `516f020e` remains previous. Restricted runtime, old fences,
+> zero protected claims/aliases, format-4 inventory and both front doors
+> passed. All 279 older backup hashes survived; six new off-VM copies match;
+> isolated restore passed with 149 migrations. There is no production
+> final-decision publisher, one-use SQL lease or worker caller. Keep DPO-05,
+> all-copy, independent P05/P08 host-loss, P01–P09/MFA, Member/export/
+> deletion, replay/C1, test-site connector and Nikita acceptance open.
+> Private exact receipt: `release-434ded09-final-decision-protocol-2026-10-07.md`.
+> The source-only checkpoint below is dated history.
+
 > **7 October DPO-05 source-only fourth-stage protocol:** The encrypted
 > decision object and separate journal kind follow the inert candidate;
 > an authenticated reader verifies the exact candidate and current head
