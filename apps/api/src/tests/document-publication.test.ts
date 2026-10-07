@@ -44,6 +44,10 @@ const targetWindowMigration = readFileSync(
   new URL(`../../prisma/migrations/${targetWindowDirectoryName}/migration.sql`, import.meta.url),
   'utf8',
 );
+const unknownWriteMigration = readFileSync(
+  new URL('../../prisma/migrations/20261007110000_document_publication_unknown_write/migration.sql', import.meta.url),
+  'utf8',
+);
 
 // PostgreSQL silently truncates an identifier at 63 bytes, and Prisma truncates
 // its derived names to the same limit. A longer name only *appears* to match the
@@ -164,10 +168,11 @@ test('the publication state and terminal-reason enums are pinned exhaustively, r
   const terminalReasons = schema.match(/enum DocumentPublicationTerminalReason \{([\s\S]*?)\}/);
   assert.ok(terminalReasons, 'schema.prisma must declare DocumentPublicationTerminalReason');
   const declared = terminalReasons[1].split('\n').map((line) => line.trim()).filter(Boolean);
-  // One reason per permanent condition the publish failure mapping names, plus
-  // the exhausted-retries reason the backoff engine itself produces.
+  // Permanent conditions, ambiguous writes and exhausted retries each need a
+  // distinct operator disposition.
   assert.deepEqual(declared, [
     'MAX_ATTEMPTS_EXHAUSTED',
+    'REMOTE_WRITE_OUTCOME_UNKNOWN',
     'PERMANENT_APPROVAL_REQUIRED',
     'PERMANENT_CONNECTION_UNAVAILABLE',
     'PERMANENT_PERMISSION_DENIED',
@@ -395,6 +400,7 @@ test(
       // Then the follow-up that opens the create-then-attach window. Applied in
       // order, exactly as `migrate deploy` applies them.
       psql(container, targetWindowMigration);
+      psql(container, unknownWriteMigration);
 
       psql(container, insertPublication({ id: 'pub-1', documentId: 'doc-1' }));
       const defaults = psql(
@@ -562,6 +568,24 @@ test(
              "updatedAt" = CURRENT_TIMESTAMP
          WHERE "id" = 'pub-5';`,
       );
+
+      // An unknown remote write can have created a page or attachment version.
+      // Direct SQL cannot clear the reason, requeue or delete the only evidence.
+      psql(container, `UPDATE "DocumentPublication"
+        SET "terminalReason" = 'REMOTE_WRITE_OUTCOME_UNKNOWN',
+            "alertClaimToken" = NULL, "alertClaimedAt" = NULL
+        WHERE "id" = 'pub-5';`);
+      psql(container, `UPDATE "DocumentPublication"
+        SET "state" = 'PENDING', "terminalReason" = NULL,
+            "deadLetteredAt" = NULL, "nextAttemptAt" = CURRENT_TIMESTAMP
+        WHERE "id" = 'pub-5';`, false);
+      psql(container, `UPDATE "DocumentPublication"
+        SET "terminalReason" = 'MAX_ATTEMPTS_EXHAUSTED'
+        WHERE "id" = 'pub-5';`, false);
+      psql(container, `DELETE FROM "DocumentPublication" WHERE "id" = 'pub-5';`, false);
+      psql(container, `UPDATE "DocumentPublication"
+        SET "lastError" = 'awaiting verified Confluence reconciliation'
+        WHERE "id" = 'pub-5';`);
     } finally {
       await removeDisposableContainer(container);
     }

@@ -383,6 +383,8 @@ export type ConfluencePublicationState =
 
 export type ConfluenceMirror = {
   publication: ConfluencePublicationState;
+  /** A page or attachment write may have completed despite a lost response. */
+  writeOutcomeUnknown?: boolean;
   /** Null/omitted means the response cannot establish whether a page ID was recorded. */
   pageRecorded?: boolean | null;
   /** False means the recorded page belongs to a different site from this connection. */
@@ -469,6 +471,14 @@ function describeConfluenceMirrorBase(mirror: ConfluenceMirror | null): MirrorDi
   }
 
   if (mirror.publication === 'FAILED') {
+    if (mirror.writeOutcomeUnknown === true) {
+      return {
+        label: 'Publishing outcome unclear',
+        detail: 'A Confluence page or attachment write may have completed. Publication is paused until the original site and versions are reconciled.',
+        tone: 'danger',
+        actionable: false,
+      };
+    }
     const recorded = recordedPageState(mirror);
     return {
       label: recorded === true ? 'Page reference recorded' : 'Publishing stopped',
@@ -653,6 +663,14 @@ export function allMirrorCopy(): string[] {
 
   const copy: string[] = [];
   for (const publication of publications) {
+    if (publication === 'FAILED') {
+      for (const isCurrent of [true, false]) {
+        const ambiguous = describeConfluenceMirror({ publication, writeOutcomeUnknown: true,
+          pageRecorded: false, pageUrl: null, remote: null }, isCurrent);
+        copy.push(ambiguous.label, ambiguous.detail,
+          ...(ambiguous.historicalReview ? [ambiguous.historicalReview] : []));
+      }
+    }
     for (const pageRecorded of [false, true, null]) {
       for (const pageSiteMatchesConnection of [true, false, null]) {
         for (const connectionAvailable of [true, false, null]) {

@@ -92,6 +92,7 @@ export function parseDocumentMirror(value: unknown): ConfluenceMirror | null {
 
   return {
     publication: publication as ConfluencePublicationState,
+    writeOutcomeUnknown: record.writeOutcomeUnknown === true,
     // A URL requires both a recorded page ID and a usable site address. An
     // older API omits pageRecorded; a missing URL in that case is unknown,
     // never evidence that no page was created.

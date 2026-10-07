@@ -429,8 +429,12 @@ export async function documentRoutes(app: FastifyInstance) {
         const recorded = await app.prisma.documentPublication.findFirst({
           where: { organisationId: request.user.organisationId,
             documentId: request.params.id, provider: 'confluence', state: 'DEAD_LETTER' },
-          select: { cloudId: true, spaceId: true, pageId: true },
+          select: { cloudId: true, spaceId: true, pageId: true, terminalReason: true },
         });
+        if (recorded?.terminalReason === 'REMOTE_WRITE_OUTCOME_UNKNOWN') {
+          throw new AppError(409, 'DOCUMENT_PUBLICATION_REMOTE_OUTCOME_UNKNOWN',
+            'A Confluence write may have completed. Verify the original page and attachment versions before any new publication attempt.');
+        }
         if (recorded?.cloudId && recorded.cloudId !== target.cloudId) {
           throw new AppError(409, 'DOCUMENT_PUBLICATION_SITE_CHANGED',
             'The recorded Confluence page belongs to another site. Review that copy before retrying publication.');

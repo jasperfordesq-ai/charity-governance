@@ -46,6 +46,7 @@ test('orphan retirement filters missing documents before limiting the batch', as
   const result = await service.retireOrphanedPublications(1);
 
   assert.match(query, /NOT EXISTS\s*\(\s*SELECT 1 FROM "Document"/);
+  assert.match(query, /"terminalReason" IS DISTINCT FROM 'REMOTE_WRITE_OUTCOME_UNKNOWN'/);
   assert.match(query, /'DEAD_LETTER'/, 'a failed publish can still have a real remote page');
   assert.ok(query.indexOf('NOT EXISTS') < query.indexOf('LIMIT'), 'filter missing documents before the batch limit');
   assert.equal(limit, 1);
@@ -1281,16 +1282,17 @@ for (const [label, thrown, expectedState, expectedReason] of [
   [
     'a rate limit on an unsafe retry',
     new AppError(429, 'CONFLUENCE_RATE_LIMITED_UNSAFE_RETRY', 'x'),
-    'PENDING',
-    null,
+    'DEAD_LETTER',
+    'REMOTE_WRITE_OUTCOME_UNKNOWN',
   ],
   ['an unreachable host', new AppError(503, 'CONFLUENCE_UNREACHABLE', 'x'), 'PENDING', null],
   [
     'an indeterminate write',
     new AppError(504, 'CONFLUENCE_REQUEST_INDETERMINATE', 'x'),
-    'PENDING',
-    null,
+    'DEAD_LETTER',
+    'REMOTE_WRITE_OUTCOME_UNKNOWN',
   ],
+  ['an applied write with unreadable response', new AppError(502, 'CONFLUENCE_WRITE_APPLIED_RESPONSE_UNREADABLE', 'x'), 'DEAD_LETTER', 'REMOTE_WRITE_OUTCOME_UNKNOWN'],
   ['a 401 on one request', new AppError(401, 'CONFLUENCE_RECONNECT_REQUIRED', 'x'), 'PENDING', null],
   [
     'a refresh already in flight',
@@ -1335,7 +1337,7 @@ test('a transient failure on the last permitted attempt exhausts rather than ret
   assert.equal(mock.row().nextAttemptAt, null);
 });
 
-test('an attempt that outruns its bound is a failed attempt, not a failed job', async () => {
+test('an attempt that outruns its bound requires remote-write reconciliation', async () => {
   const mock = buildFallbackPrisma(publicationRow());
   const service = new DocumentPublicationService(mock.prisma as never, () => NOW, 20);
 
@@ -1350,7 +1352,8 @@ test('an attempt that outruns its bound is a failed attempt, not a failed job', 
   );
 
   assert.equal(result.processed, 0);
-  assert.equal(mock.row().state, 'PENDING');
+  assert.equal(mock.row().state, 'DEAD_LETTER');
+  assert.equal(mock.row().terminalReason, 'REMOTE_WRITE_OUTCOME_UNKNOWN');
   assert.equal(mock.row().attempts, 1);
 });
 
@@ -1381,7 +1384,8 @@ test('a late rejection from a timed-out publish attempt is observed rather than 
     );
 
     assert.equal(result.processed, 0);
-    assert.equal(mock.row().state, 'PENDING');
+    assert.equal(mock.row().state, 'DEAD_LETTER');
+    assert.equal(mock.row().terminalReason, 'REMOTE_WRITE_OUTCOME_UNKNOWN');
 
     // Past the late rejection, then a full turn of the loop: Node only reports
     // a rejection as unhandled once the microtask queue has drained.

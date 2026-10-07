@@ -32,6 +32,8 @@ export type DocumentMirrorPublicationState =
 
 export type DocumentMirror = {
   publication: DocumentMirrorPublicationState;
+  /** A remote write may have landed; ordinary retry remains fenced. */
+  writeOutcomeUnknown: boolean;
   /** Recorded page ID exists, regardless of whether this connection has a usable site URL. */
   pageRecorded: boolean;
   /** Null means no page or insufficient site identity to compare; false means an old-site page. */
@@ -53,6 +55,7 @@ export type DocumentMirror = {
 type MirrorRow = {
   documentId: unknown;
   state: unknown;
+  terminalReason: unknown;
   cloudId: unknown;
   spaceId: unknown;
   pageId: unknown;
@@ -77,8 +80,8 @@ type MirrorClient = {
  * Maps the outbox state onto what a trustee is told.
  *
  * DEAD_LETTER becomes FAILED rather than being surfaced by its internal name:
- * "dead letter" is a queue term and means nothing to a charity, and the only
- * thing that matters to them is that it stopped and somebody can retry it.
+ * "dead letter" is a queue term and means nothing to a charity. An ambiguous
+ * remote write remains FAILED but carries an explicit no-retry flag.
  */
 function publicationStateOf(state: unknown): DocumentMirrorPublicationState {
   switch (state) {
@@ -124,6 +127,8 @@ function toMirror(row: MirrorRow, siteUrl: string | null, siteId: string | null,
 
   return {
     publication,
+    writeOutcomeUnknown: publication === 'FAILED'
+      && row.terminalReason === 'REMOTE_WRITE_OUTCOME_UNKNOWN',
     pageRecorded: typeof row.pageId === 'string' && row.pageId.length > 0,
     pageSiteMatchesConnection: typeof row.pageId === 'string' && row.pageId.length > 0
       && typeof row.cloudId === 'string' && row.cloudId.length > 0 && activeSiteId !== null
@@ -154,6 +159,7 @@ function toMirror(row: MirrorRow, siteUrl: string | null, siteId: string | null,
 
 export const NOT_PUBLISHED: DocumentMirror = {
   publication: 'NOT_PUBLISHED',
+  writeOutcomeUnknown: false,
   pageRecorded: false,
   pageSiteMatchesConnection: null,
   recordedPageMatchesDestination: null,
@@ -190,6 +196,7 @@ export async function mirrorsForDocuments(
     select: {
       documentId: true,
       state: true,
+      terminalReason: true,
       cloudId: true,
       spaceId: true,
       pageId: true,
@@ -241,8 +248,9 @@ type RetryClient = {
 /**
  * Puts a failed publication back in the queue.
  *
- * Scoped to `DEAD_LETTER` and nothing else, which is what makes this safe to
- * expose. A PENDING row is already queued and re-queueing it would reset a
+ * Scoped to `DEAD_LETTER` with a determinate terminal reason. An ambiguous
+ * remote write needs verified reconciliation and cannot be retried here. A
+ * PENDING row is already queued and re-queueing it would reset a
  * backoff that exists to protect a rate-limited upstream; a PROCESSED row is
  * fine; and a RETIRED row belongs to a deleted document, so republishing it
  * would push a document the charity deleted back to their site — the exact
@@ -263,6 +271,7 @@ export async function retryFailedPublication(
       documentId: input.documentId,
       provider: 'confluence',
       state: 'DEAD_LETTER',
+      terminalReason: { not: 'REMOTE_WRITE_OUTCOME_UNKNOWN' },
     },
     data: {
       state: 'PENDING',

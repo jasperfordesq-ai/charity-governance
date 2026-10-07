@@ -129,9 +129,11 @@ import {
  * site the charity has left, an over-ceiling content property, and a target
  * the erasure parser refuses.
  *
- * Everything else — transport, 5xx, 429, a timeout, a refresh already in
- * flight, a 401 on one request — is transient and goes back through the
- * ordinary claim/backoff loop. A predicate that answered "permanent" to
+ * An ambiguous remote write or whole-attempt timeout needs reconciliation
+ * before another publish: an attachment upload may have made a new version
+ * even if the worker never received its identifier. Other transport, 5xx,
+ * rate-limit, refresh and 401 failures use the ordinary claim/backoff loop.
+ * A predicate that answered "permanent" to
  * everything would satisfy each permanent test above while turning a
  * five-minute Atlassian blip into dead-letters a human clears by hand, so
  * {@link PERMANENT_PUBLICATION_TERMINAL_REASONS} is pinned in both directions.
@@ -152,6 +154,7 @@ export type DocumentPublicationState = 'PENDING' | 'DEAD_LETTER' | 'PROCESSED' |
  */
 export type DocumentPublicationTerminalReason =
   | 'MAX_ATTEMPTS_EXHAUSTED'
+  | 'REMOTE_WRITE_OUTCOME_UNKNOWN'
   | 'PERMANENT_APPROVAL_REQUIRED'
   | 'PERMANENT_CONNECTION_UNAVAILABLE'
   | 'PERMANENT_PERMISSION_DENIED'
@@ -355,6 +358,12 @@ export type Publisher = (attempt: PublicationAttempt) => Promise<PublicationOutc
  * nothing about the stored connection.
  */
 const PERMANENT_PUBLICATION_TERMINAL_REASONS: Record<string, DocumentPublicationTerminalReason> = {
+  // The write may have reached Atlassian. A blind retry can make a duplicate
+  // page or a second attachment version, so require operator reconciliation.
+  DOCUMENT_PUBLICATION_TIMEOUT: 'REMOTE_WRITE_OUTCOME_UNKNOWN',
+  CONFLUENCE_REQUEST_INDETERMINATE: 'REMOTE_WRITE_OUTCOME_UNKNOWN',
+  CONFLUENCE_RATE_LIMITED_UNSAFE_RETRY: 'REMOTE_WRITE_OUTCOME_UNKNOWN',
+  CONFLUENCE_WRITE_APPLIED_RESPONSE_UNREADABLE: 'REMOTE_WRITE_OUTCOME_UNKNOWN',
   DOCUMENT_PUBLICATION_NOT_APPROVED: 'PERMANENT_APPROVAL_REQUIRED',
   // No connection to publish through, and no destination to publish into.
   // Retrying acquires neither; a human reconnects or chooses a space.
@@ -1811,9 +1820,9 @@ export class DocumentPublicationService {
    * identifiers are the only thing that can still address it — the owner's
    * 2026-09-19 ruling is that an ordinary deletion leaves the Confluence page
    * alone, so retiring is the whole of the correct action. A row WITHOUT a
-   * `pageId` addresses nothing at all and is deleted outright; keeping it would
-   * be keeping a record of a charity's document name for no purpose, which is
-   * the sort of thing a DPO is right to ask about.
+   * `pageId` normally addresses nothing and is deleted, but an ambiguous
+   * remote write is preserved even with no recorded page ID: the lost response
+   * may be exactly why the ID was never recorded.
    */
   async retireOrphanedPublications(limit = 100): Promise<{ retired: number; deleted: number }> {
     const bounded = Math.min(100, Math.max(1, Number.isInteger(limit) ? limit : 100));
@@ -1830,6 +1839,7 @@ export class DocumentPublicationService {
       FROM "DocumentPublication" AS p
       WHERE p."state" IN ('PENDING', 'PROCESSED', 'DEAD_LETTER')
         AND p."claimedAt" IS NULL
+        AND (p."pageId" IS NOT NULL OR p."terminalReason" IS DISTINCT FROM 'REMOTE_WRITE_OUTCOME_UNKNOWN')
         AND NOT EXISTS (
           SELECT 1 FROM "Document" AS d
           WHERE d."id" = p."documentId"
@@ -1847,7 +1857,10 @@ export class DocumentPublicationService {
 
       if (row.pageId === null) {
         const removed = await publicationDelegate(this.prisma).deleteMany({
-          where: { id: row.id, pageId: null, claimedAt: null, state: { in: ['PENDING', 'PROCESSED', 'DEAD_LETTER'] } },
+          where: { id: row.id, pageId: null, claimedAt: null,
+            OR: [{ terminalReason: null },
+              { terminalReason: { not: 'REMOTE_WRITE_OUTCOME_UNKNOWN' } }],
+            state: { in: ['PENDING', 'PROCESSED', 'DEAD_LETTER'] } },
         });
         deleted += removed.count;
         continue;

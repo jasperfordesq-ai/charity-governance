@@ -73,6 +73,12 @@ test('recorded page survives a missing site URL and an older response stays unce
     'a URL is constructed only when the API has a matching connected site');
 });
 
+test('an ambiguous remote write remains flagged after parsing', () => {
+  const mirror = parseDocumentMirror(validMirror({ publication: 'FAILED',
+    writeOutcomeUnknown: true }));
+  assert.equal(mirror?.writeOutcomeUnknown, true);
+});
+
 test('a publication state this build has never heard of is dropped, not rendered', () => {
   // A future API value must not reach a trustee's screen as though this build
   // understood it.

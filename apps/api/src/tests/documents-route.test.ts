@@ -471,6 +471,7 @@ test('publication retry refuses a disconnected or different-site target before q
   let recordedSiteId: string | null = 'site-1';
   let recordedSpaceId = 'space-1';
   let recordedPageId: string | null = 'page-1';
+  let recordedTerminalReason: string | null = null;
   let queued = 0;
   const app = await buildDocumentsApp({
     subscription: subscription(),
@@ -492,7 +493,8 @@ test('publication retry refuses a disconnected or different-site target before q
         assert.deepEqual((args as { where: unknown }).where, {
           organisationId: 'org-1', documentId: 'doc-1', provider: 'confluence', state: 'DEAD_LETTER',
         });
-        return { cloudId: recordedSiteId, spaceId: recordedSpaceId, pageId: recordedPageId };
+        return { cloudId: recordedSiteId, spaceId: recordedSpaceId, pageId: recordedPageId,
+          terminalReason: recordedTerminalReason };
       },
       updateMany: async () => { queued += 1; return { count: 1 }; },
     },
@@ -531,6 +533,13 @@ test('publication retry refuses a disconnected or different-site target before q
     assert.equal(queued, 0);
 
     recordedSpaceId = 'space-1';
+    recordedTerminalReason = 'REMOTE_WRITE_OUTCOME_UNKNOWN';
+    const unknown = await retry();
+    assert.equal(unknown.statusCode, 409);
+    assert.equal(unknown.json().code, 'DOCUMENT_PUBLICATION_REMOTE_OUTCOME_UNKNOWN');
+    assert.equal(queued, 0);
+
+    recordedTerminalReason = null;
     const sameSite = await retry();
     assert.equal(sameSite.statusCode, 200);
     assert.equal(sameSite.json().retried, true);

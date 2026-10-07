@@ -28,7 +28,10 @@ function fakePrisma(rows: Row[]) {
       async updateMany(args: { where: Row; data: Row }) {
         updates.push(args);
         const hits = rows.filter((row) =>
-          Object.entries(args.where).every(([key, value]) => row[key] === value),
+          Object.entries(args.where).every(([key, value]) =>
+            value && typeof value === 'object' && 'not' in value
+              ? row[key] !== value.not
+              : row[key] === value),
         );
         for (const row of hits) Object.assign(row, args.data);
         return { count: hits.length };
@@ -248,6 +251,18 @@ test('a retired publication is never revived by a retry', async () => {
   assert.equal(rows[0].state, 'RETIRED');
 });
 
+test('an ambiguous remote write cannot be re-queued without verified reconciliation', async () => {
+  const { prisma, rows } = fakePrisma([publicationRow({
+    state: 'DEAD_LETTER', terminalReason: 'REMOTE_WRITE_OUTCOME_UNKNOWN', attempts: 1,
+  })]);
+  const retried = await retryFailedPublication(prisma, {
+    organisationId: 'org-1', documentId: 'doc-1',
+  });
+  assert.equal(retried, false);
+  assert.equal(rows[0].state, 'DEAD_LETTER');
+  assert.equal(rows[0].terminalReason, 'REMOTE_WRITE_OUTCOME_UNKNOWN');
+});
+
 test('an already-queued publication is not re-queued, which would reset its backoff', async () => {
   const { prisma, rows } = fakePrisma([publicationRow({ state: 'PENDING', attempts: 3 })]);
 
@@ -258,6 +273,14 @@ test('an already-queued publication is not re-queued, which would reset its back
 
   assert.equal(retried, false);
   assert.equal(rows[0].attempts, 3, 'a backoff protecting a rate-limited upstream must survive');
+});
+
+test('the mirror marks an ambiguous remote write for an explicit operator review', async () => {
+  const { prisma } = fakePrisma([publicationRow({ state: 'DEAD_LETTER',
+    terminalReason: 'REMOTE_WRITE_OUTCOME_UNKNOWN' })]);
+  const mirror = await mirrorForDocument(prisma, { organisationId: 'org-1', documentId: 'doc-1' });
+  assert.equal(mirror.publication, 'FAILED');
+  assert.equal(mirror.writeOutcomeUnknown, true);
 });
 
 test('a retry cannot reach another organisation row', async () => {

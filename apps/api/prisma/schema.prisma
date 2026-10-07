@@ -178,11 +178,11 @@ enum DocumentPublicationState {
   RETIRED
 }
 
-// One reason per permanent publish failure, plus the exhausted-retries reason
-// the backoff engine produces on its own. A permanent reason dead-letters on
-// the first attempt because retrying cannot change the answer.
+// Permanent failures and ambiguous remote writes both require operator review.
+// The backoff engine also records exhausted retries.
 enum DocumentPublicationTerminalReason {
   MAX_ATTEMPTS_EXHAUSTED
+  REMOTE_WRITE_OUTCOME_UNKNOWN
   PERMANENT_APPROVAL_REQUIRED
   PERMANENT_CONNECTION_UNAVAILABLE
   PERMANENT_PERMISSION_DENIED

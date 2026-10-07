@@ -509,6 +509,15 @@ test('a recorded page remains explicit when publishing stops before completion',
   assert.doesNotMatch(unknown.detail, /before CharityPilot recorded/);
 });
 
+test('an ambiguous remote write cannot offer an ordinary retry', () => {
+  const display = describeConfluenceMirror({ publication: 'FAILED', writeOutcomeUnknown: true,
+    pageRecorded: false, pageUrl: null, remote: null });
+  assert.equal(display.actionable, false);
+  assert.equal(display.label, 'Publishing outcome unclear');
+  assert.match(display.detail, /page or attachment write may have completed/);
+  assert.match(display.detail, /reconciled/);
+});
+
 test('a page on another Confluence site is not shown as a current healthy copy or retryable job', () => {
   const oldSite = { pageRecorded: true, pageSiteMatchesConnection: false, pageUrl: null,
     remote: { state: 'VISIBLE' as const, title: null, version: 2,
