@@ -1,5 +1,18 @@
 # CharityPilot Full-Platform Remediation Audit
 
+> **7 October DPO-05 verified inert-reader release:** Exact `9f495a15`
+> passed merged-master CI/E2E, guarded green private-VM cutover,
+> restricted-runtime and zero-row postflight, both front doors, 345
+> preserved backup hashes, three SHA-matched workstation copies and
+> isolated 153-migration restore. Version metadata and explicit-version
+> byte-hash readers have no production caller; zero publication rows and
+> no Confluence provider I/O were observed. Exact operation identity,
+> repeat current read, complete remote/local copy inventory, UNKNOWN
+> outcome, independent P05/P08 host-loss and real test-site lifecycle
+> remain missing. Controller, role-specific, historical and Nikita
+> acceptance gates remain OPEN. See the private exact release receipt;
+> earlier source and release checkpoints below are dated history.
+
 > **7 October DPO-05 live reservation checkpoint:** Exact `fb90a5f2`
 > passed merged-master hosted CI/E2E, guarded blue private-VM cutover,
 > restricted runtime, zero-row postflight, 342 preserved backup hashes,

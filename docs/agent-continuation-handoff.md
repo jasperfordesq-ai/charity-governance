@@ -1,5 +1,19 @@
 # CharityPilot Agent Continuation Handoff
 
+> **7 October verified `9f495a15` private-VM release:** Exact merged-master
+> CI `37658637396` and E2E `37658637505` passed. Guarded green cutover,
+> corrected serving postflight, restricted runtime and zero protected
+> rows, loopback/Tailscale checks, preservation of all 345 prior VM
+> backup hashes, three SHA-matched workstation files and isolated
+> 153-migration restore with repeat serving postflight passed. Confluence
+> attachment-version metadata and explicit-version byte-hash readers are
+> deployed but have no production caller or provider use. Private receipt:
+> `.charitypilot-private/release-9f495a15-confluence-version-readback-2026-10-07.md`.
+> DPO-05, identity-bound remote outcome/all-copy reconciliation,
+> independent P05/P08 host-loss, controller/MFA, Member/export/deletion,
+> replay/C1, disposable Confluence test-site and Nikita acceptance remain
+> open. Older release checkpoints below are dated history.
+
 > **7 October verified `fb90a5f2` private-VM release:** Exact merged-master
 > CI `37650977087` and E2E `37650977300` passed. Guarded blue cutover,
 > restricted runtime, zero protected rows, both front doors, preservation of
