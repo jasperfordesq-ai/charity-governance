@@ -186,7 +186,8 @@ export async function readPublishedDocumentBytePermit(journal: RecoveryAuthority
 }
 
 type PublishedRead = Awaited<ReturnType<typeof readPublishedDocumentBytePermit>>;
-type LocalRead = Awaited<ReturnType<typeof readCurrentDocumentByteAuthority>>;
+type LocalRead = Pick<Awaited<ReturnType<typeof readCurrentDocumentByteAuthority>>,
+  'digest' | 'actionAuthorized'>;
 
 /** Bracket a local observation with authenticated independent reads, then
  * recheck the local facts. This is a comparison, never a byte-execution

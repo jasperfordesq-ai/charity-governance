@@ -1,5 +1,16 @@
 # CharityPilot Agent Continuation Handoff
 
+> **7 October source-only local copy/hold observation:** The existing
+> serializable document byte-authority transaction now returns distinct
+> bounded digests for its local copy and hold evidence, without changing
+> its original full digest or `actionAuthorized: false`. Unit and disposable
+> PostgreSQL tests show stable reads and a changed publication affecting
+> the copy digest without changing the hold digest. Full local API 2,569
+> units plus seven migration tests, API build and security scan pass.
+> These are database observations, not approved dispositions or provider
+> inventory; no final publisher, one-use SQL lease or worker permit exists.
+> Exact hosted checks and deployment are pending. Live remains `434ded09`.
+
 > **7 October ~09:54 Dublin inert decision-protocol release:** Exact
 > `434ded0948d63e1e62660e843c176cfc03b525e5` passed hosted CI
 > `37595114545` and E2E `37595114546` (240 tests). Guarded private-VM

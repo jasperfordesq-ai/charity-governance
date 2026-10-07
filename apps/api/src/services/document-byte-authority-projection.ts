@@ -43,7 +43,8 @@ export async function readCurrentDocumentByteAuthority(prisma: PrismaClient, raw
  * in this serializable transaction. An exception rolls back its writes. */
 export async function withCurrentDocumentByteAuthorityTransaction<T>(prisma: PrismaClient,
   raw: unknown, callback: (tx: Prisma.TransactionClient,
-    result: { digest: string; actionAuthorized: false }) => Promise<T>) {
+    result: { digest: string; localCopyObservationDigest: string;
+      localHoldObservationDigest: string; actionAuthorized: false }) => Promise<T>) {
   const request: Request = requestSchema.parse(raw);
   return prisma.$transaction(async tx => {
     const locked = await tx.$queryRaw<Array<{ id: string }>>`
@@ -153,6 +154,23 @@ export async function withCurrentDocumentByteAuthorityTransaction<T>(prisma: Pri
       authorization, policy: policyRows[0], job, copyAuthorities, copyHolds,
       dispositionEvents, publications, uploadIntents, matchingCleanupJobs,
       liveReferences, standardLinks, confluenceReferences });
-    return callback(tx, { digest, actionAuthorized: false as const });
+    // Separate, bounded observations make later copy and hold reconciliation
+    // testable without treating the whole local projection as a disposition
+    // approval. They cover only rows visible in this transaction. Neither
+    // digest inventories provider versions, exports, backups or independent
+    // history, and neither is itself a byte-execution decision.
+    const localCopyObservationDigest = boundedDigest({ format: 1, ...request,
+      authorizationId: claim.authorizationId,
+      authorizedDispositionPlan: authorization.dispositionPlan,
+      copyAuthorities, dispositionEvents,
+      publications, uploadIntents, matchingCleanupJobs, liveReferences,
+      confluenceReferences });
+    const localHoldObservationDigest = boundedDigest({ format: 1, ...request,
+      authorizationId: claim.authorizationId, policy: policyRows[0],
+      authorizationWithdrawal: authorization.withdrawal,
+      preparedDocumentDeletionHold: original.document.deletionHold,
+      copyHolds });
+    return callback(tx, { digest, localCopyObservationDigest,
+      localHoldObservationDigest, actionAuthorized: false as const });
   }, { isolationLevel: 'Serializable', timeout: 30000 });
 }

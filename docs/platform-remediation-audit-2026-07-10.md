@@ -1,5 +1,16 @@
 # CharityPilot Full-Platform Remediation Audit
 
+> **7 October DPO-05 source-only local copy/hold projection:** Distinct
+> bounded local evidence digests now come from the existing serializable
+> authority read. Unit and disposable PostgreSQL proof check that a
+> changed local copy affects the copy digest while the hold digest stays
+> stable; the original full authority digest still changes. API build,
+> 2,569 unit plus seven migration tests and security scan pass locally.
+> The digests do not prove approved disposition, provider versions, exports,
+> backups or independent custody. No final publisher, one-use SQL lease or
+> worker caller exists; exact hosted checks and release remain pending.
+> Keep DPO-05 and all human/Nikita gates open. Live remains `434ded09`.
+
 > **7 October DPO-05 inert decision-protocol release:** Exact `434ded09`
 > passed hosted CI `37595114545` and E2E `37595114546` (240 tests), then
 > guarded private-VM cutover and read-only postflight. Green serves the new

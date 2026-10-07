@@ -100,18 +100,29 @@ test('local byte-authority projection changes with policy, copy and mirror state
   const initial = await readCurrentDocumentByteAuthority(f.prisma, f.request);
   assert.equal(initial.actionAuthorized, false);
   assert.match(initial.digest, /^[a-f0-9]{64}$/);
+  assert.match(initial.localCopyObservationDigest, /^[a-f0-9]{64}$/);
+  assert.match(initial.localHoldObservationDigest, /^[a-f0-9]{64}$/);
   assert.equal((await readCurrentDocumentByteAuthority(f.prisma, f.request)).digest, initial.digest);
   f.state.policies[0]!.revision = 2;
   await assert.rejects(readCurrentDocumentByteAuthority(f.prisma, f.request), /changed or cannot be bounded/);
   f.state.policies[0]!.revision = 1;
   f.state.copyHolds.push({ id: 'hold', held: true, scopeRef: 'BACKUP-1' });
-  assert.notEqual((await readCurrentDocumentByteAuthority(f.prisma, f.request)).digest, initial.digest);
+  const held = await readCurrentDocumentByteAuthority(f.prisma, f.request);
+  assert.notEqual(held.digest, initial.digest);
+  assert.notEqual(held.localHoldObservationDigest, initial.localHoldObservationDigest);
+  assert.equal(held.localCopyObservationDigest, initial.localCopyObservationDigest);
   f.state.copyHolds.pop();
   f.state.publications.push({ id: 'mirror', state: 'PENDING' });
-  assert.notEqual((await readCurrentDocumentByteAuthority(f.prisma, f.request)).digest, initial.digest);
+  const copied = await readCurrentDocumentByteAuthority(f.prisma, f.request);
+  assert.notEqual(copied.digest, initial.digest);
+  assert.notEqual(copied.localCopyObservationDigest, initial.localCopyObservationDigest);
+  assert.equal(copied.localHoldObservationDigest, initial.localHoldObservationDigest);
   f.state.publications.pop();
   Object.assign(f.state.job, { lastError: 'changed worker observation' });
-  assert.notEqual((await readCurrentDocumentByteAuthority(f.prisma, f.request)).digest, initial.digest);
+  const jobChanged = await readCurrentDocumentByteAuthority(f.prisma, f.request);
+  assert.notEqual(jobChanged.digest, initial.digest);
+  assert.equal(jobChanged.localCopyObservationDigest, initial.localCopyObservationDigest);
+  assert.equal(jobChanged.localHoldObservationDigest, initial.localHoldObservationDigest);
 });
 
 test('local byte-authority projection refuses stale owner, claim, target and unbounded history', async () => {

@@ -425,8 +425,12 @@ try {
   const first = await readCurrentDocumentByteAuthority(prisma, request);
   assert.equal(first.actionAuthorized, false);
   assert.match(first.digest, /^[a-f0-9]{64}$/);
+  assert.match(first.localCopyObservationDigest, /^[a-f0-9]{64}$/);
+  assert.match(first.localHoldObservationDigest, /^[a-f0-9]{64}$/);
   const second = await readCurrentDocumentByteAuthority(prisma, request);
   assert.equal(second.digest, first.digest);
+  assert.equal(second.localCopyObservationDigest, first.localCopyObservationDigest);
+  assert.equal(second.localHoldObservationDigest, first.localHoldObservationDigest);
   const insertCandidateBinding = (provider) => prisma.$executeRaw`
     INSERT INTO "DocumentBytePermitCandidateBinding"
       (id,"organisationId","preparationId","outcomeId","claimId","deletionId",
@@ -494,6 +498,8 @@ try {
   const changed = await readCurrentDocumentByteAuthority(prisma, request);
   assert.equal(changed.actionAuthorized, false);
   assert.notEqual(changed.digest, first.digest);
+  assert.notEqual(changed.localCopyObservationDigest, first.localCopyObservationDigest);
+  assert.equal(changed.localHoldObservationDigest, first.localHoldObservationDigest);
   // Simulate a privileged historical repair that bypassed the insertion
   // trigger. The projection and production worker must still refuse this
   // exact-key alias; the trigger is reenabled before either read.
