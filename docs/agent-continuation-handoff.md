@@ -1,5 +1,21 @@
 # CharityPilot Agent Continuation Handoff
 
+> **7 October verified `a0ab2d0e` private-VM release:** PR #16's immutable
+> local Confluence page-create intent, bounded copy digest and unresolved-
+> page purge fence passed exact merged-master CI `37688978306` and E2E
+> `37688978258`. Guarded blue cutover, restricted runtime, zero protected
+> and publication rows, enabled page-intent guard/purge fence, both front
+> doors, all 354 prior VM backup hashes, three SHA-matched workstation
+> copies and isolated 154-migration/68-document restore with repeat serving
+> postflight passed. Green `edc9e15d` is previous. Thirteen backup sets were
+> flagged for approved age review; none were deleted. Private exact receipt:
+> `.charitypilot-private/release-a0ab2d0e-confluence-page-create-intent-2026-10-07.md`.
+> No real Confluence provider call, provider-visible page identity, complete
+> all-copy/UNKNOWN outcome, retry or erasure authority follows. DPO-05,
+> C01–C05/P01–P09, privileged MFA, independent P05/P08 host-loss,
+> Member/export/deletion, replay/C1 and Nikita acceptance remain OPEN.
+> Older release checkpoints below are dated history.
+
 > **7 October verified `edc9e15d` private-VM release:** PR #15's bounded
 > local-copy observation includes immutable Confluence attachment-upload
 > intents and advances its digest format so older leases/facts fail closed.
