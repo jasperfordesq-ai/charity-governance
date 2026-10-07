@@ -162,6 +162,9 @@ const DISPOSABLE_DATABASE_RESET_TABLES = Object.freeze([
   // its own right; the reset emits ONE multi-table TRUNCATE ... RESTRICT, so a
   // publication left behind would leak a previous suite's pageId into the next.
   "DocumentPublication",
+  // An append-only upload intent is reset only by this disposable database's
+  // guarded multi-table TRUNCATE; ordinary production UPDATE/DELETE remain denied.
+  "DocumentPublicationUploadIntent",
   // Integration wiring is tenant-owned, so it resets with the tenant.
   // OrganisationIntegration is listed before IntegrationCredential to match the
   // parent-before-child convention used above; the reset emits ONE multi-table
