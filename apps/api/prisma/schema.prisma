@@ -1934,6 +1934,27 @@ model DocumentPublication {
   @@index([provider, state, nextAttemptAt])
 }
 
+// Append-only record committed before one attachment upload. The provider-visible
+// comment carries id + digest; neither this row nor a matching version message
+// grants retry, release, erasure or proof that every remote copy was found.
+model DocumentPublicationUploadIntent {
+  id             String   @id
+  publicationId  String
+  organisationId String
+  documentId     String
+  claimedAt      DateTime
+  cloudId        String
+  spaceId        String
+  pageId         String
+  filename       String
+  sha256         String
+  createdAt      DateTime @default(now())
+
+  @@unique([publicationId, claimedAt])
+  @@index([organisationId, documentId])
+  @@index([cloudId, pageId])
+}
+
 model ConflictRecord {
   id              String         @id @default(cuid())
   organisationId  String
