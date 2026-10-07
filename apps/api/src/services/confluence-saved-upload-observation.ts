@@ -15,6 +15,11 @@ function invalidBinding(): AppError {
     'The saved upload intent is not bound to the connected Confluence site.');
 }
 
+function invalidAttachment(): AppError {
+  return new AppError(502, 'CONFLUENCE_UPLOAD_OBSERVATION_ATTACHMENT_INVALID',
+    'The observed attachment title does not match the saved upload intent.');
+}
+
 function connectedHostname(config: unknown, cloudId: string): string {
   if (config === null || typeof config !== 'object' || Array.isArray(config)) throw invalidBinding();
   const values = config as Record<string, unknown>;
@@ -49,7 +54,7 @@ export async function observeSavedConfluenceUpload(
     || input.organisationId.length === 0) throw invalidBinding();
   const intent = await prisma.documentPublicationUploadIntent.findFirst({
     where: { id: input.operationId, organisationId: input.organisationId },
-    select: { id: true, cloudId: true, pageId: true, sha256: true },
+    select: { id: true, cloudId: true, pageId: true, filename: true, sha256: true },
   });
   if (intent === null) throw invalidBinding();
   const integration = await prisma.organisationIntegration.findUnique({
@@ -70,5 +75,6 @@ export async function observeSavedConfluenceUpload(
     ...(deps.fetch === undefined ? {} : { fetch: deps.fetch }),
     ...(deps.operations === undefined ? {} : { operations: deps.operations }),
   });
+  if (observation.title !== intent.filename) throw invalidAttachment();
   return { ...observation, uploadOperationId: intent.id };
 }

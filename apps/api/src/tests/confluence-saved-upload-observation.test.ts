@@ -15,7 +15,7 @@ function fixture(overrides: { org?: string; siteId?: string; siteUrl?: string; s
       findFirst: async (args: { where: { id: string; organisationId: string } }) => {
         calls.push('intent');
         assert.deepEqual(args.where, { id: operationId, organisationId: overrides.org ?? 'org-1' });
-        return { id: operationId, cloudId: 'cloud-1', pageId: 'page-1', sha256 };
+        return { id: operationId, cloudId: 'cloud-1', pageId: 'page-1', filename: 'policy.pdf', sha256 };
       },
     },
     organisationIntegration: {
@@ -104,4 +104,18 @@ test('an absent tenant-scoped intent cannot select a connected site or read prov
   }), (error: unknown) => error instanceof AppError
     && error.code === 'CONFLUENCE_UPLOAD_OBSERVATION_BINDING_INVALID');
   assert.equal(integrationReads, 0);
+});
+
+test('a marker on a differently named attachment cannot become a saved-intent candidate', async () => {
+  const f = fixture();
+  f.operations.listAttachments = async () => {
+    f.calls.push('attachments');
+    return [{ id: 'att-1', title: 'other.pdf', mediaType: 'application/pdf',
+      fileSize: 5, downloadUrl: '', versionNumber: 1 }];
+  };
+  await assert.rejects(() => observeSavedConfluenceUpload(f.prisma as never, {
+    organisationId: 'org-1', operationId, attachmentId: 'att-1',
+  }, { getAccessToken: async () => 'test-token', operations: f.operations }),
+  (error: unknown) => error instanceof AppError
+    && error.code === 'CONFLUENCE_UPLOAD_OBSERVATION_ATTACHMENT_INVALID');
 });
