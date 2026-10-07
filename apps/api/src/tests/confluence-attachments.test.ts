@@ -17,7 +17,7 @@ const WEB_BASE = 'https://charity.atlassian.net/wiki';
 const DOWNLOAD = '/download/attachments/123456/board-minutes.pdf?version=1&api=v2';
 const PDF = 'application/pdf';
 
-type Handler = (spec: ConfluenceRequestSpec) => { status: number; body: unknown };
+type Handler = (spec: ConfluenceRequestSpec) => { status: number; body: unknown; linkHeader?: string };
 
 type Harness = { client: ConfluenceClient; specs: ConfluenceRequestSpec[] };
 
@@ -335,6 +335,30 @@ test('listAttachmentVersions follows the entire v2 cursor and binds each version
   assert.equal(specs[1]?.query?.cursor, 'SECOND');
 });
 
+test('attachment version inventory follows the Link header when the body omits next', async () => {
+  const { client, specs } = harness([
+    () => ({
+      status: 200,
+      body: { results: [{ number: 1, attachment: { id: 'att789' } }], _links: {} },
+      linkHeader: '<https://charity.atlassian.net/wiki/api/v2/attachments/att789/versions?cursor=NEXT>; rel="next"',
+    }),
+    ok({ results: [{ number: 2, attachment: { id: 'att789' } }], _links: {} }),
+  ]);
+  const versions = await listAttachmentVersions(client, 'att789');
+  assert.deepEqual(versions.map((version) => version.number), [1, 2]);
+  assert.equal(specs[1]?.query?.cursor, 'NEXT');
+});
+
+test('attachment list refuses conflicting body and Link cursors', async () => {
+  const { client } = harness([() => ({
+    status: 200,
+    body: v2ListBody([], { next: '/attachments?cursor=BODY' }),
+    linkHeader: '<https://charity.atlassian.net/wiki/api/v2/pages/123456/attachments?cursor=HEADER>; rel="next"',
+  })]);
+  const error = await rejectsWith(() => listAttachments(client, PAGE_ID));
+  assert.equal(error.code, 'CONFLUENCE_RESPONSE_INVALID');
+});
+
 test('listAttachmentVersions refuses an incomplete or contradictory inventory', async () => {
   const valid = { number: 1, attachment: { id: 'att789' } };
   const invalidBodies = [
@@ -391,9 +415,20 @@ test('listAttachments stops rather than following a cursor forever', async () =>
 
   const error = await rejectsWith(() => listAttachments(client, PAGE_ID));
 
-  assert.equal(error.code, 'CONFLUENCE_ATTACHMENT_LIST_UNBOUNDED');
+  assert.equal(error.code, 'CONFLUENCE_RESPONSE_INVALID');
   assert.equal(error.statusCode, 502);
-  assert.ok(specs.length > 1 && specs.length <= 40, `bounded page count, got ${specs.length}`);
+  assert.equal(specs.length, 2, 'repeated cursor is rejected before another read');
+});
+
+test('listAttachments bounds even distinct cursors', async () => {
+  let page = 0;
+  const { client, specs } = harness([() => {
+    page += 1;
+    return { status: 200, body: v2ListBody([], { next: `/attachments?cursor=PAGE${page}` }) };
+  }]);
+  const error = await rejectsWith(() => listAttachments(client, PAGE_ID));
+  assert.equal(error.code, 'CONFLUENCE_ATTACHMENT_LIST_UNBOUNDED');
+  assert.equal(specs.length, 40);
 });
 
 test('an absolute download link is left alone and a link with no base is returned as given', async () => {

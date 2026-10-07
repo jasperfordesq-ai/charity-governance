@@ -155,6 +155,8 @@ export type ConfluenceResponse = {
   status: number;
   /** The parsed JSON body, or `undefined` for a 204/empty/non-JSON response. */
   body: unknown;
+  /** Raw pagination Link header, when Confluence supplies one. Never use it as a request URL. */
+  linkHeader?: string;
 };
 
 export type ConfluenceClient = {
@@ -662,7 +664,12 @@ export function createConfluenceClient(
       }
 
       if (response.ok) {
-        return { status: response.status, body: await parseSuccessBody(response, idempotent) };
+        const linkHeader = response.headers.get('Link');
+        return {
+          status: response.status,
+          body: await parseSuccessBody(response, idempotent),
+          ...(linkHeader === null ? {} : { linkHeader }),
+        };
       }
 
       const status = response.status;

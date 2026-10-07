@@ -113,6 +113,16 @@ function assertNoTokenLeak(err: AppError): void {
 }
 
 const GET_PAGE: ConfluenceRequestSpec = { method: 'GET', api: 'v2', path: 'pages/42', idempotent: true };
+
+test('a successful read preserves the pagination Link header without following its URL', async () => {
+  const h = harness([jsonStep(200, { results: [] }, {
+    Link: '<https://charity.atlassian.net/wiki/api/v2/pages?cursor=NEXT>; rel="next"',
+  })]);
+  const result = await h.request(GET_PAGE);
+  assert.equal((result as { linkHeader?: string }).linkHeader,
+    '<https://charity.atlassian.net/wiki/api/v2/pages?cursor=NEXT>; rel="next"');
+  assert.equal(h.calls.length, 1);
+});
 const CREATE_PAGE: ConfluenceRequestSpec = {
   method: 'POST',
   api: 'v2',

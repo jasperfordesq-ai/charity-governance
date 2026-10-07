@@ -345,17 +345,37 @@ function readResults(body: unknown): unknown[] | undefined {
  * upstream response choose the path this client requests next, which is not a
  * decision a response body gets to make.
  */
-function readNextCursor(body: unknown): string | undefined {
-  const next = asObject(asObject(body)?._links)?.next;
-  if (typeof next !== 'string' || next.length === 0) return undefined;
-
+function cursorFromNextUrl(next: string): string {
   try {
     // The base is a placeholder; only the query is read from the result.
     const cursor = new URL(next, 'https://confluence.invalid').searchParams.get('cursor');
-    return cursor !== null && cursor.length > 0 ? cursor : undefined;
+    if (cursor !== null && cursor.length > 0) return cursor;
   } catch {
-    return undefined;
+    // The caller will reject this as an incomplete inventory.
   }
+  throw invalidResponse('attachment pagination cursor');
+}
+
+function readNextCursor(body: unknown, linkHeader?: string): string | undefined {
+  const bodyNext = asObject(asObject(body)?._links)?.next;
+  if (bodyNext !== undefined && bodyNext !== null && (typeof bodyNext !== 'string' || bodyNext.length === 0)) {
+    throw invalidResponse('attachment pagination link');
+  }
+  const bodyCursor = typeof bodyNext === 'string' ? cursorFromNextUrl(bodyNext) : undefined;
+
+  const linkMatches = linkHeader === undefined
+    ? []
+    : Array.from(linkHeader.matchAll(/<([^>]+)>\s*;\s*rel\s*=\s*(?:"next"|next)(?=\s*[,;]|\s*$)/gi));
+  if (linkMatches.length > 1 || (linkMatches.length === 0 && /\brel\s*=\s*"?next\b/i.test(linkHeader ?? ''))) {
+    throw invalidResponse('unambiguous attachment pagination header');
+  }
+  const headerCursor = linkMatches[0]?.[1] === undefined
+    ? undefined
+    : cursorFromNextUrl(linkMatches[0][1]);
+  if (bodyCursor !== undefined && headerCursor !== undefined && bodyCursor !== headerCursor) {
+    throw invalidResponse('matching attachment pagination cursors');
+  }
+  return bodyCursor ?? headerCursor;
 }
 
 // ---------------------------------------------------------------------------
@@ -377,6 +397,7 @@ export async function listAttachments(
   const id = assertPageId(pageId);
 
   const attachments: ConfluenceAttachment[] = [];
+  const seenCursors = new Set<string>();
   let cursor: string | undefined;
 
   for (let page = 0; page < MAX_LIST_PAGES; page += 1) {
@@ -399,8 +420,10 @@ export async function listAttachments(
       attachments.push(parseAttachment(record, base, invalidResponse));
     }
 
-    cursor = readNextCursor(response.body);
+    cursor = readNextCursor(response.body, response.linkHeader);
     if (cursor === undefined) return attachments;
+    if (seenCursors.has(cursor)) throw invalidResponse('non-repeating attachment cursor');
+    seenCursors.add(cursor);
   }
 
   throw new AppError(
@@ -458,15 +481,12 @@ export async function listAttachmentVersions(
       });
     }
 
-    const next = asObject(asObject(response.body)?._links)?.next;
-    if (next === undefined || next === null) {
+    const nextCursor = readNextCursor(response.body, response.linkHeader);
+    if (nextCursor === undefined) {
       if (versions.length === 0) throw invalidResponse('attachment version history');
       return versions;
     }
-    if (next === '') throw invalidResponse('attachment version cursor');
-    if (typeof next !== 'string') throw invalidResponse('attachment version cursor');
-    const nextCursor = readNextCursor(response.body);
-    if (nextCursor === undefined || seenCursors.has(nextCursor)) {
+    if (seenCursors.has(nextCursor)) {
       throw invalidResponse('non-repeating attachment version cursor');
     }
     seenCursors.add(nextCursor);
