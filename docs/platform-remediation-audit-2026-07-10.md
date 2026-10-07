@@ -1,5 +1,17 @@
 # CharityPilot Full-Platform Remediation Audit
 
+> **7 October DPO-05 status after private-VM release:** Exact `c994174f`
+> passed hosted CI/E2E and guarded private-VM cutover. Green serves its
+> inactive document recovery preparation, with new migration, restricted
+> runtime, backup preservation/copies and isolated restore verified. The
+> live preparation, approved policy and complaint recovery binding counts
+> remain zero. Independent document claim/result, byte-worker and all-copy
+> fences, external custody and host-loss reopening are still missing; keep
+> DPO-05 and Member/export/replay/C1/Nikita acceptance items open. The
+> operative private goal audit and release receipt are under
+> `.charitypilot-private/`. Older source-only checkpoints below are dated.
+>
+
 > **7 October document recovery publication candidate:** The source-only
 > `DocumentRecoveryPreparation` now has an encrypted, domain-separated
 > candidate envelope, separate provider namespace and reserved independent

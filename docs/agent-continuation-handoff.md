@@ -1,5 +1,18 @@
 # CharityPilot Agent Continuation Handoff
 
+> **7 October guarded private-VM release and goal audit:** Exact `c994174f`
+> hosted CI/E2E succeeded, and green now serves the inactive encrypted document
+> recovery preparation. Postflight proved the migration, restricted runtime,
+> document mount and front doors; 180 prior backup hashes survived, two new
+> sets were copied and verified, and a 143-migration isolated restore passed.
+> This is not independent live document recovery, provider custody, host-loss
+> reopening, approved retention/export, Member or DPO acceptance. The active
+> Nikita goal remains relevant; its current remaining-work statement is in
+> `.charitypilot-private/nikita-goal-audit-2026-10-06.md`, and the exact release
+> receipt is `.charitypilot-private/release-c994174f-document-preparation-2026-10-07.md`.
+> Older source-only and release-pending checkpoints below are historical.
+>
+
 > **7 October document recovery publication source continuation:** The inactive
 > document preparation now has a domain-separated encrypted envelope, a
 > distinct S3 object namespace and `DOCUMENT_PREPARATION_V1` reserved journal
