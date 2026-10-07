@@ -980,8 +980,12 @@ export class DocumentService {
       const approvalPublication = data.externalPublicationApproved === true
         ? await tx.documentPublication.findFirst({
           where: { organisationId, documentId: id, provider: 'confluence' },
-          select: { id: true, state: true, cloudId: true, spaceId: true, pageId: true },
+          select: { id: true, state: true, terminalReason: true, cloudId: true, spaceId: true, pageId: true },
         }) : null;
+      if (approvalPublication?.terminalReason === 'REMOTE_WRITE_OUTCOME_UNKNOWN') {
+        throw new AppError(409, 'DOCUMENT_PUBLICATION_REMOTE_OUTCOME_UNKNOWN',
+          'The previous Confluence write may have completed. Reconcile that copy before approving another publication.');
+      }
       if (approvalPublication?.pageId && (approvalPublication.cloudId !== approvalTarget!.cloudId ||
         approvalPublication.spaceId !== approvalTarget!.spaceId)) {
         throw new AppError(409, 'DOCUMENT_PUBLICATION_DESTINATION_CHANGED',
@@ -1119,6 +1123,7 @@ export class DocumentService {
             data: {
               state: 'PENDING', reason: 'METADATA', requeuedAt: this.now(), attempts: 0,
               lastError: null, nextAttemptAt: this.now(), claimedAt: null, deadLetteredAt: null,
+              remoteWriteStartedAt: null,
               terminalReason: null, alertClaimToken: null, alertClaimedAt: null, alertedAt: null, processedAt: null,
             },
           });
@@ -1323,6 +1328,7 @@ export class DocumentService {
           lastError: null,
           nextAttemptAt: new Date(),
           claimedAt: null,
+          remoteWriteStartedAt: null,
           deadLetteredAt: null,
           terminalReason: null,
           alertClaimToken: null,

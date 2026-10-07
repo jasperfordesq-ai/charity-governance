@@ -2257,6 +2257,34 @@ test('document lifecycle and external publication are separately reviewed and au
   }
 });
 
+test('an UNKNOWN Confluence write blocks renewed publication approval before any document change', async () => {
+  let writes = 0;
+  const app = await buildDocumentsApp({
+    ...patchPrisma({
+      existing: { id: 'doc-1', updatedAt: new Date('2026-06-08T00:00:00.000Z'),
+        visibility: 'RESTRICTED', lifecycleStatus: 'CURRENT', externalPublicationApproved: false },
+      onUpdate: () => { writes += 1; },
+    }),
+    organisationIntegration: { findUnique: async () => ({
+      status: 'CONNECTED', config: { siteId: 'site-abc' }, publishSpaceId: 'space-1',
+      publishSpaceKey: 'SPACE1', publishSpaceName: 'Governance', publishSpaceSiteId: 'site-abc',
+    }) },
+    documentPublication: { findFirst: async () => ({ id: 'publication-1', state: 'DEAD_LETTER',
+      terminalReason: 'REMOTE_WRITE_OUTCOME_UNKNOWN', cloudId: 'site-abc', spaceId: 'space-1', pageId: null }) },
+  } as never);
+  try {
+    const response = await app.inject({ method: 'PATCH', url: '/doc-1',
+      headers: { authorization: authHeader }, payload: {
+        externalPublicationApproved: true,
+        publicationApprovalReason: 'Reviewed the selected publication audience.',
+        reviewedPublicationSiteId: 'site-abc', reviewedPublicationSpaceId: 'space-1',
+      } });
+    assert.equal(response.statusCode, 409);
+    assert.equal(response.json().code, 'DOCUMENT_PUBLICATION_REMOTE_OUTCOME_UNKNOWN');
+    assert.equal(writes, 0);
+  } finally { await app.close(); }
+});
+
 test('a changed Confluence space needs a reasoned destination reapproval even while the old boolean is true', async () => {
   const audits: Record<string, unknown>[] = [];
   let written: Record<string, unknown> = {};

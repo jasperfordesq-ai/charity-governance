@@ -59,8 +59,9 @@ import {
  * `createPage` is deliberately **non-idempotent** (`confluence-pages.ts` says
  * so and pins it), because a retried create after a dropped connection or a
  * 429 produces **two pages for one board resolution, with nothing saying which
- * is real.** This module puts that call behind a retrying outbox, so the
- * sequence here is **create-or-adopt**, never create-and-retry:
+ * is real.** A durable marker is committed before the first remote write;
+ * a crashed or indeterminate marked attempt is held for reconciliation. The
+ * sequence for a fresh authorized attempt is **create-or-adopt**:
  *
  * 1. A page id this row already recorded is adopted outright — no lookup, no
  *    create.
@@ -79,11 +80,10 @@ import {
  * ## The page id is recorded before the attachment upload
  *
  * {@link PublicationAttempt.recordPage} is called the moment a page id is
- * known and **before** anything is uploaded to it. A page id learned and then
- * lost is the one way this pipeline duplicates: `findPageByTitle` is a search,
- * and a page created seconds ago is not promised to be visible to it yet, so a
- * crash between create and attach must not depend on the search to recover.
- * The row remembers instead.
+ * known and **before** anything is uploaded to it. `findPageByTitle` is a
+ * search, and a page created seconds ago is not promised to be visible to it.
+ * A crashed attempt cannot rely on that search as proof of absence: the
+ * committed marker retains uncertainty, and a returned page id is recorded.
  *
  * That write deliberately carries **no abort guard**: recording a page that
  * exists is fail-safe in the only direction that matters, and refusing to
@@ -132,7 +132,9 @@ import {
  * An ambiguous remote write or whole-attempt timeout needs reconciliation
  * before another publish: an attachment upload may have made a new version
  * even if the worker never received its identifier. Other transport, 5xx,
- * rate-limit, refresh and 401 failures use the ordinary claim/backoff loop.
+ * rate-limit, refresh and 401 failures use the ordinary claim/backoff loop
+ * only before a remote-write marker is committed. After that marker, every
+ * failure needs reconciliation of the possible provider outcome.
  * A predicate that answered "permanent" to
  * everything would satisfy each permanent test above while turning a
  * five-minute Atlassian blip into dead-letters a human clears by hand, so
@@ -183,6 +185,7 @@ export type DocumentPublicationRecord = {
   requeuedAt?: Date | null;
   attempts: number;
   claimedAt: Date | null;
+  remoteWriteStartedAt: Date | null;
   nextAttemptAt: Date | null;
   deadLetteredAt: Date | null;
   terminalReason: DocumentPublicationTerminalReason | null;
@@ -342,6 +345,8 @@ export type PublicationAttempt = {
    * mid-flight must stop the sequence, not upload on another worker's behalf.
    */
   recordPage(page: PublishedPage): Promise<void>;
+  /** Commit a one-use possible-remote-write marker before the first write. */
+  reserveRemoteWrite(): Promise<void>;
 };
 
 export type Publisher = (attempt: PublicationAttempt) => Promise<PublicationOutcome>;
@@ -351,11 +356,10 @@ export type Publisher = (attempt: PublicationAttempt) => Promise<PublicationOutc
 // ---------------------------------------------------------------------------
 
 /**
- * Permanent failures, and the terminal reason each maps to. Everything absent
- * from this table is transient — including every code the HTTP core raises for
- * a 5xx, a rate limit, an indeterminate write or an unreachable host, and
- * including `CONFLUENCE_RECONNECT_REQUIRED` raised by one 401, which says
- * nothing about the stored connection.
+ * Permanent failures, and the terminal reason each maps to. Before a remote
+ * write reservation, codes absent from this table remain transient. Once a
+ * reservation is committed, `recordPublicationFailure` treats every error as
+ * unknown regardless of this table because a remote write may have landed.
  */
 const PERMANENT_PUBLICATION_TERMINAL_REASONS: Record<string, DocumentPublicationTerminalReason> = {
   // The write may have reached Atlassian. A blind retry can make a duplicate
@@ -809,7 +813,16 @@ export function createConfluencePublisher(deps: ConfluencePublisherDeps): Publis
     }
   };
 
-  return async ({ row, signal, recordPage }: PublicationAttempt): Promise<PublicationOutcome> => {
+  return async ({ row, signal, recordPage, reserveRemoteWrite }: PublicationAttempt): Promise<PublicationOutcome> => {
+    let remoteWriteReserved = false;
+    const reserveBeforeWrite = async () => {
+      assertNotAborted(signal);
+      if (!remoteWriteReserved) {
+        await reserveRemoteWrite();
+        remoteWriteReserved = true;
+      }
+      assertNotAborted(signal);
+    };
     assertNotAborted(signal);
 
     const target = await readTarget(row.organisationId);
@@ -852,7 +865,7 @@ export function createConfluencePublisher(deps: ConfluencePublisherDeps): Publis
 
     await assertStillApproved(row.organisationId, row.documentId, target);
 
-    const page = await resolvePage({ client, operations, row, target, doc, title, signal });
+    const page = await resolvePage({ client, operations, row, target, doc, title, signal, reserveBeforeWrite });
 
     // REPUBLISHING A PAGE THAT ALREADY EXISTS.
     //
@@ -882,6 +895,7 @@ export function createConfluencePublisher(deps: ConfluencePublisherDeps): Publis
             // first metadata edit.
             bodyMode: model.bodyMode,
             signal,
+            reserveBeforeWrite,
           });
 
     const recorded: PublishedPage = {
@@ -905,6 +919,7 @@ export function createConfluencePublisher(deps: ConfluencePublisherDeps): Publis
 
     assertNotAborted(signal);
     await assertStillApproved(row.organisationId, row.documentId, target);
+    await reserveBeforeWrite();
     let attachment: ConfluenceAttachment;
     try {
       attachment = await operations.uploadAttachment(client, {
@@ -1029,8 +1044,9 @@ async function refreshPage(input: {
   spaceKey: string;
   bodyMode: PublicationBodyMode;
   signal?: AbortSignal;
+  reserveBeforeWrite(): Promise<void>;
 }): Promise<{ id: string; title: string }> {
-  const { client, operations, pageId, doc, title, spaceKey, bodyMode, signal } = input;
+  const { client, operations, pageId, doc, title, spaceKey, bodyMode, signal, reserveBeforeWrite } = input;
 
   const attemptRefresh = async (): Promise<{ id: string; title: string }> => {
     assertNotAborted(signal);
@@ -1052,6 +1068,7 @@ async function refreshPage(input: {
     }
 
     assertNotAborted(signal);
+    await reserveBeforeWrite();
     const updated = await operations.updatePage(client, {
       pageId,
       title,
@@ -1084,8 +1101,9 @@ async function resolvePage(input: {
   doc: PublicationSource;
   title: string;
   signal?: AbortSignal;
+  reserveBeforeWrite(): Promise<void>;
 }): Promise<{ id: string; title: string }> {
-  const { client, operations, row, target, doc, title, signal } = input;
+  const { client, operations, row, target, doc, title, signal, reserveBeforeWrite } = input;
 
   // 1. A page id this row already recorded. Adopted without a lookup, because
   //    `findPageByTitle` is a search and a page created moments ago is not
@@ -1101,6 +1119,7 @@ async function resolvePage(input: {
   if (existing !== null) return existing;
 
   assertNotAborted(signal);
+  await reserveBeforeWrite();
   try {
     return await operations.createPage(client, {
       spaceId: target.spaceId,
@@ -1178,6 +1197,22 @@ export class DocumentPublicationService {
         pageId: page.pageId,
         pageTitle: page.pageTitle,
       },
+    });
+    return result.count === 1;
+  }
+
+  /** Commit possible remote I/O before the first page or attachment write. */
+  async reserveRemoteWrite(id: string, claimedAt: Date | null): Promise<boolean> {
+    if (claimedAt === null) return false;
+    const result = await publicationDelegate(this.prisma).updateMany({
+      where: {
+        id,
+        state: 'PENDING',
+        processedAt: null,
+        claimedAt,
+        remoteWriteStartedAt: null,
+      },
+      data: { remoteWriteStartedAt: this.now() },
     });
     return result.count === 1;
   }
@@ -1312,7 +1347,7 @@ export class DocumentPublicationService {
     const recordFailure = async (tx: DocumentPublicationClient) => {
       const current = await publicationDelegate(tx).findFirst({
         where: { id, state: 'PENDING', processedAt: null, claimedAt },
-        select: { id: true, attempts: true, claimedAt: true },
+        select: { id: true, attempts: true, claimedAt: true, remoteWriteStartedAt: true },
       });
       if (!current) {
         return { status: 'ignored' as const, attempts: null, nextAttemptAt: null, terminalReason: null };
@@ -1320,7 +1355,9 @@ export class DocumentPublicationService {
 
       const attempt = current.attempts + 1;
       const now = this.now();
-      const permanentReason = permanentPublicationTerminalReason(error);
+      const permanentReason = current.remoteWriteStartedAt != null
+        ? 'REMOTE_WRITE_OUTCOME_UNKNOWN'
+        : permanentPublicationTerminalReason(error);
       const deadLettered = permanentReason !== null || attempt >= DOCUMENT_PUBLICATION_MAX_ATTEMPTS;
       const terminalReason: DocumentPublicationTerminalReason | null =
         permanentReason ?? (deadLettered ? 'MAX_ATTEMPTS_EXHAUSTED' : null);
@@ -1371,6 +1408,40 @@ export class DocumentPublicationService {
     return client.$transaction ? client.$transaction(recordFailure) : recordFailure(client);
   }
 
+  /** A crashed worker may have written remotely after this durable marker. */
+  private async deadLetterAbandonedRemoteWrites(limit: number): Promise<number> {
+    const client = this.prisma as unknown as DocumentPublicationClient;
+    if (!client.$queryRaw) return 0;
+    const rows = await client.$queryRaw<Array<{ id: string }>>`
+      UPDATE "DocumentPublication"
+      SET state = 'DEAD_LETTER',
+          "terminalReason" = 'REMOTE_WRITE_OUTCOME_UNKNOWN',
+          "lastError" = 'Remote write reservation outlived the publication claim; reconcile the site before another attempt.',
+          "lastAttemptAt" = CURRENT_TIMESTAMP,
+          "nextAttemptAt" = NULL,
+          "deadLetteredAt" = CURRENT_TIMESTAMP,
+          "claimedAt" = NULL,
+          "alertClaimToken" = NULL,
+          "alertClaimedAt" = NULL,
+          "alertedAt" = NULL,
+          "updatedAt" = CURRENT_TIMESTAMP,
+          attempts = attempts + 1
+      WHERE id IN (
+        SELECT id FROM "DocumentPublication"
+        WHERE state = 'PENDING'
+          AND "processedAt" IS NULL
+          AND "remoteWriteStartedAt" IS NOT NULL
+          AND ("claimedAt" IS NULL OR
+            "claimedAt" < CURRENT_TIMESTAMP - (${PUBLICATION_CLAIM_STALE_AFTER_MS} * INTERVAL '1 millisecond'))
+        ORDER BY "remoteWriteStartedAt" ASC
+        LIMIT ${limit}
+        FOR UPDATE SKIP LOCKED
+      )
+      RETURNING id
+    `;
+    return rows.length;
+  }
+
   /**
    * Claims a batch of due publications and runs `publish` against each,
    * mirroring `retryPendingStorageDeletions`'s shape so that the two outboxes
@@ -1384,11 +1455,11 @@ export class DocumentPublicationService {
       DOCUMENT_PUBLICATION_MAX_CLAIM_BATCH,
       Math.max(1, Number.isInteger(limit) ? limit : 25),
     );
+    let newlyDeadLettered = await this.deadLetterAbandonedRemoteWrites(boundedLimit);
     const pending = await this.claimPendingPublications(boundedLimit);
 
     let processed = 0;
     let retryScheduled = 0;
-    let newlyDeadLettered = 0;
 
     for (const publication of pending) {
       let outcome: PublicationOutcome;
@@ -1498,6 +1569,10 @@ export class DocumentPublicationService {
             publication.organisationId,
           );
         },
+        reserveRemoteWrite: async () => {
+          const reserved = await this.reserveRemoteWrite(publication.id, publication.claimedAt);
+          if (!reserved) throw claimLost(publication.id);
+        },
       }),
     );
     // The attempt outlives a lost race by one call (see `assertNotAborted`), so
@@ -1544,6 +1619,7 @@ export class DocumentPublicationService {
             FROM "DocumentPublication"
             WHERE "state" = 'PENDING'
               AND "processedAt" IS NULL
+              AND "remoteWriteStartedAt" IS NULL
               AND "attempts" < ${DOCUMENT_PUBLICATION_MAX_ATTEMPTS}
               AND "nextAttemptAt" <= CURRENT_TIMESTAMP
               AND (
@@ -1568,6 +1644,7 @@ export class DocumentPublicationService {
             "state",
             "attempts",
             "claimedAt",
+            "remoteWriteStartedAt",
             "nextAttemptAt",
             "deadLetteredAt",
             "terminalReason",
@@ -1584,6 +1661,7 @@ export class DocumentPublicationService {
       where: {
         state: 'PENDING',
         processedAt: null,
+        remoteWriteStartedAt: null,
         attempts: { lt: DOCUMENT_PUBLICATION_MAX_ATTEMPTS },
         nextAttemptAt: { lte: now },
         OR: [{ claimedAt: null }, { claimedAt: { lt: staleBefore } }],
@@ -1599,6 +1677,7 @@ export class DocumentPublicationService {
           id: candidate.id,
           state: 'PENDING',
           processedAt: null,
+          remoteWriteStartedAt: null,
           attempts: candidate.attempts,
           nextAttemptAt: { lte: now },
           OR: [{ claimedAt: null }, { claimedAt: { lt: staleBefore } }],

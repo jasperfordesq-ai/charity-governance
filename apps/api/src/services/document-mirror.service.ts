@@ -279,6 +279,7 @@ export async function retryFailedPublication(
       lastError: null,
       nextAttemptAt: at,
       claimedAt: null,
+      remoteWriteStartedAt: null,
       deadLetteredAt: null,
       terminalReason: null,
       alertClaimToken: null,
