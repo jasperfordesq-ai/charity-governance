@@ -1,5 +1,22 @@
 # CharityPilot Agent Continuation Handoff
 
+> **7 October verified `edc9e15d` private-VM release:** PR #15's bounded
+> local-copy observation includes immutable Confluence attachment-upload
+> intents and advances its digest format so older leases/facts fail closed.
+> Exact merged-master CI `37685855309` and E2E `37685855311` passed.
+> Guarded green cutover, restricted `cp_runtime` roles, zero protected and
+> publication rows, enabled upload-intent guard, both front doors, all 351
+> prior VM backup SHA/path entries, three SHA-matched workstation copies and
+> isolated 153-migration/68-document restore with repeat serving postflight
+> passed. Blue `c4e5040d` is previous. The deployer flagged 13 older backup
+> sets for approved age review and deleted none. Private exact receipt:
+> `.charitypilot-private/release-edc9e15d-confluence-upload-intent-observation-2026-10-07.md`.
+> There was no real Confluence provider use; this adds no all-copy proof,
+> UNKNOWN disposition, retry or erasure authority. DPO-05, C01–C05/P01–P09,
+> privileged MFA, independent P05/P08 host-loss, Member/export/deletion,
+> replay/C1 and Nikita acceptance remain OPEN. Older release checkpoints
+> below are dated history.
+
 > **7 October verified `c4e5040d` private-VM release:** PR #12's bounded
 > repeat Confluence attachment-version observation passed exact PR and
 > merged-master CI/E2E (240 browser tests on merged master). Guarded blue
