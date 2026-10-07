@@ -1,5 +1,19 @@
 # CharityPilot Agent Continuation Handoff
 
+> **7 October 02:30 Dublin Nikita goal audit:** The active goal remains
+> relevant. Its precise remaining-work objective and closure test are at
+> `.charitypilot-private/nikita-goal-audit-2026-10-06.md`; resume from
+> `.charitypilot-private/RESUME-HERE.md`. Last proven private-VM release is
+> blue `7a982c8f`. Current uncommitted document claim/result SQL and Prisma
+> candidate passed Prisma validation and one synthetic real-PostgreSQL
+> retention migration proof only. It has no authenticated independent
+> publication, byte-worker fence, all-copy coverage, approved custody or
+> host-loss acceptance. The three new models still need lifecycle-map and
+> disposable E2E reset inventory entries, then final local/hosted checks.
+> Nikita's 3 October Admin-only review remains his latest substantive
+> CharityPilot acceptance email; Member, policy, export, replay/C1 and DPO
+> review gates remain open. Older checkpoints below are dated history.
+
 > **7 October format-2 restore gate deployed:** Blue `7a982c8f` serves the
 > private VM; green `c994174f` is rollbackable. The purge restore comparison
 > now includes `DocumentRecoveryPreparation`. Exact hosted CI/E2E, guarded
