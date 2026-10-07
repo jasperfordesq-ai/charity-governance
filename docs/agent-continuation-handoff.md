@@ -1,5 +1,21 @@
 # CharityPilot Agent Continuation Handoff
 
+> **7 October ~14:11 Dublin verified `cdece785` release:** Exact hosted
+> CI `37624657895` and E2E `37624658032` (240 browser checks) passed.
+> Guarded green private-VM cutover, restricted runtime, zero protected
+> rows, both front doors, all 330 prior backup hashes, six SHA-verified
+> workstation copies and isolated 151-migration restore with 68 documents
+> and zero leases/attempts passed. Blue `e3f9d9e4` is previous. The
+> checked provider-start composition has no production caller, provider
+> I/O or byte authority; a committed marker requires UNKNOWN
+> reconciliation. Approved final facts/inventory, worker/results,
+> all-copy, independent P05/P08 host-loss, P01–P09/MFA, Member/export/
+> deletion, replay/C1, Confluence test-site and Nikita acceptance remain
+> open. Exact private receipt:
+> `.charitypilot-private/release-cdece785-provider-start-composition-2026-10-07.md`.
+> The source-only checkpoint below is dated history.
+>
+
 > **7 October ~13:55 Dublin source-only provider-start composition:**
 > `startVerifiedDocumentByteProviderAttempt` compares the current
 > authenticated independent decision with the claimed local lease, invokes

@@ -1,5 +1,19 @@
 # CharityPilot Full-Platform Remediation Audit
 
+> **7 October DPO-05 live checked provider-start composition:** Exact
+> `cdece785` passed hosted CI/E2E (240 browser checks), guarded green
+> private-VM cutover, restricted runtime/empty protected rows, preservation
+> of all 330 prior backup hashes, six verified workstation copies and an
+> isolated 151-migration restore with 68 documents and zero leases/attempts.
+> The source can bracket a one-use possible-I/O SQL marker with current
+> independent/local reads, but has no production caller or provider byte
+> action. A marker remains UNKNOWN after failure. Real approved facts,
+> worker/result reconciliation, all-copy, independent P05/P08 host-loss
+> and every Nikita controller, role, historical, connector and acceptance
+> gate remain open. See exact private release receipt. The source-only
+> checkpoint below is dated history.
+>
+
 > **7 October source-only DPO-05 provider-start composition:** A checked
 > service now brackets the one-use SQL possible-I/O marker with authenticated
 > current independent/local reads. No production caller, provider I/O or
