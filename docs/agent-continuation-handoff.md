@@ -1,5 +1,20 @@
 # CharityPilot Agent Continuation Handoff
 
+> **7 October ~07:08 Dublin inert candidate-binding release:** Exact
+> `0e517dfb` hosted CI/E2E and guarded blue private-VM cutover passed.
+> Green `b25128d7` is rollbackable. The owner-only binding table is empty,
+> `cp_runtime` cannot write it, both byte and binding guards are present,
+> format-4 restore inventory passes, and loopback/Tailscale health/login
+> return 200. All 249 prior backup hashes survived; two new sets were
+> SHA-verified off-VM and isolated restore passed 146 migrations. The
+> binding has no production caller or worker execution authority. DPO-05
+> still needs authenticated insertion, exact worker lease/pre-provider
+> checks, all-copy fencing, P05/P08 custody and host-loss reopening. All
+> policy, role/export/deletion, replay/C1 and Nikita acceptance gates stay
+> open. Private exact receipt:
+> `release-0e517dfb-inert-candidate-binding-2026-10-07.md`.
+> Older checkpoints below are dated history.
+
 > **7 October ~06:27 Dublin inert byte-candidate publisher release:** Exact
 > `b25128d7` hosted CI/E2E and guarded private-VM cutover passed. Green
 > serves it; blue `a5234cca` is rollbackable. Restricted runtime, empty

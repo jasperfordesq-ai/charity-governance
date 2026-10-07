@@ -1,5 +1,18 @@
 # CharityPilot Full-Platform Remediation Audit
 
+> **7 October DPO-05 inert candidate-binding release:** Exact `0e517dfb`
+> passed hosted CI/E2E and guarded blue private-VM cutover. A protected
+> append-only binding table and format-4 restore inventory are live but
+> empty; `cp_runtime` has no write privilege and the existing byte fence
+> remains denying. All 249 prior backup hashes survived; two new sets
+> were verified off-VM and isolated restore passed 146 migrations. There
+> is no authenticated production insertion caller, worker byte permit,
+> all-copy fence, approved P05/P08 custody or host-loss reopening.
+> DPO-05 and P01–P09/MFA, Member/export/deletion, replay/C1 and Nikita
+> acceptance remain open. Private receipt:
+> `release-0e517dfb-inert-candidate-binding-2026-10-07.md`.
+> Older checkpoints below are dated history.
+
 > **7 October DPO-05 inert publisher release:** Exact `b25128d7` passed
 > hosted CI/E2E and guarded green private-VM cutover. Restricted runtime,
 > empty recovery, byte fence, both front doors, 243 preserved prior backup
