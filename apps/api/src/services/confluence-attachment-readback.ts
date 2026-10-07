@@ -106,7 +106,12 @@ export async function readAttachmentVersionBytes(
   }
   if (response.status !== 200 || response.body === null) throw invalidProviderResponse();
   const declaredLength = response.headers.get('Content-Length');
-  if (declaredLength !== null && /^\d+$/.test(declaredLength) && Number(declaredLength) > maxBytes) {
+  if (declaredLength !== null && (!/^\d+$/.test(declaredLength)
+    || !Number.isSafeInteger(Number(declaredLength)))) {
+    await response.body.cancel();
+    throw invalidProviderResponse();
+  }
+  if (declaredLength !== null && Number(declaredLength) > maxBytes) {
     await response.body.cancel();
     throw new AppError(502, 'CONFLUENCE_READBACK_TOO_LARGE', 'The attachment version exceeds the approved readback size limit.');
   }
@@ -131,7 +136,7 @@ export async function readAttachmentVersionBytes(
   } finally {
     reader.releaseLock();
   }
-  if (declaredLength !== null && /^\d+$/.test(declaredLength) && Number(declaredLength) !== byteLength) {
+  if (declaredLength !== null && Number(declaredLength) !== byteLength) {
     throw invalidProviderResponse();
   }
   return {

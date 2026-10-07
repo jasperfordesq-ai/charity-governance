@@ -94,6 +94,14 @@ test('rejects a second redirect, excess streamed bytes and a false declared leng
   ]);
   assert.equal((await failure(() => readAttachmentVersionBytes(input(wrongLength.fetchImpl)))).code,
     'CONFLUENCE_READBACK_RESPONSE_INVALID');
+
+  for (const declaredLength of ['unknown', '-1', '9007199254740992']) {
+    const malformedLength = scriptedFetch([
+      redirect(), new Response(bytes, { status: 200, headers: { 'Content-Length': declaredLength } }),
+    ]);
+    assert.equal((await failure(() => readAttachmentVersionBytes(input(malformedLength.fetchImpl)))).code,
+      'CONFLUENCE_READBACK_RESPONSE_INVALID');
+  }
 });
 
 test('invalid identifiers and tenant host fail before token or network use', async () => {
