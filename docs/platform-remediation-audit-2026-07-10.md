@@ -1,5 +1,14 @@
 # CharityPilot Full-Platform Remediation Audit
 
+> **7 October DPO-05 format-3 restore coverage deployed:** Exact
+> `aa4d529b` hosted CI/E2E, guarded private-VM release, live four-table
+> recovery inventory, restricted role, backup preservation/copies and
+> isolated restore passed. Keep DPO-05 open for authenticated independent
+> document claim/result, byte-worker/all-copy fences, approved custody and
+> host-loss reopening. Member/export, policy, replay/C1 and Nikita review
+> remain open. Private receipt:
+> `.charitypilot-private/release-aa4d529b-restore-format3-2026-10-07.md`.
+
 > **7 October DPO-05 document claim transaction release:** Exact `20ef847e`
 > hosted CI/E2E, guarded private-VM deployment, restricted runtime, zero
 > inactive recovery rows, backup preservation/off-host copies and

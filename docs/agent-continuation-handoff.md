@@ -1,5 +1,18 @@
 # CharityPilot Agent Continuation Handoff
 
+> **7 October format-3 private-VM release:** Exact `aa4d529b` hosted CI/E2E
+> and guarded cutover passed. Blue serves a live format-3 purge restore
+> comparison that hashes all four document recovery tables; their row
+> counts are zero. Restricted runtime, front doors, preservation of 198
+> prior backup hashes, two copied/SHA-verified workstation sets and a
+> 144-migration isolated restore passed. Green `20ef847e` is rollbackable.
+> This closes the current restore-inventory subtask, not authenticated
+> independent claim/result publication, byte-worker/all-copy fencing,
+> approved custody, host-loss reopening, Member/export/policy journeys,
+> replay/C1 or Nikita DPO acceptance. Private receipt:
+> `.charitypilot-private/release-aa4d529b-restore-format3-2026-10-07.md`.
+> Older checkpoints below are dated history.
+
 > **7 October private-VM document claim transaction release:** Exact
 > `20ef847e` hosted CI/E2E and guarded cutover succeeded; green serves and
 > blue `7a982c8f` is rollbackable. Postflight proved the new migration,
