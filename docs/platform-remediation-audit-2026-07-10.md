@@ -1,5 +1,14 @@
 # CharityPilot Full-Platform Remediation Audit
 
+> **7 October DPO-05 source-only cleanup-alias fence:** A matching ordinary
+> cleanup job is now fenced against the exact primary purge provider key;
+> worker and current-authority reads also refuse a synthetic privileged
+> alias. Disposable PostgreSQL positive/negative proof, full local API
+> 2,568 units plus seven migration tests, Prisma validation and security
+> scan pass. Exact hosted checks and guarded live release are pending; live
+> remains `5dfa72b3`. Final independent byte decision/lease, every-copy
+> coverage, P05/P08 host-loss and all human/acceptance gates remain open.
+
 > **7 October DPO-05 source-only worker baseline:** A disposable real-PG
 > integration proof now runs the production cleanup service with an
 > enforced purge job and an ordinary orphan job. The ordinary job completes;

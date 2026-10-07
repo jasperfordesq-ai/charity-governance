@@ -178,7 +178,7 @@ test('Postgres claim query selects only due bounded pending rows with skip-locke
   assert.match(pendingQuery.sql, /"nextAttemptAt" <= CURRENT_TIMESTAMP/);
   assert.match(pendingQuery.sql, /"attempts" < \?/);
   assert.match(pendingQuery.sql, /ORDER BY candidate\."nextAttemptAt" ASC, candidate\."createdAt" ASC/);
-  assert.match(pendingQuery.sql, /NOT EXISTS \([\s\S]*"DocumentPurgeClaim" claim[\s\S]*JOIN "DocumentRecoveryEnforcement" binding[\s\S]*claim\."deletionId" = candidate\."id"/);
+  assert.match(pendingQuery.sql, /NOT EXISTS \([\s\S]*"DocumentPurgeClaim" claim[\s\S]*JOIN "DocumentRecoveryEnforcement" binding[\s\S]*JOIN "DocumentPurgeAuthorization" auth[\s\S]*candidate\."provider" = auth\."provider"[\s\S]*candidate\."storagePath" = auth\."storagePath"/);
   assert.match(pendingQuery.sql, /FOR UPDATE SKIP LOCKED/);
   assert.match(pendingQuery.sql, /RETURNING[\s\S]*"claimedAt"/);
   assert.deepEqual(pendingQuery.values, [DOCUMENT_STORAGE_DELETION_MAX_ATTEMPTS, 600000, 10]);

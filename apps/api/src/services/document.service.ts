@@ -585,15 +585,19 @@ export class DocumentService {
                 candidate."claimedAt" IS NULL OR
                 candidate."claimedAt" < CURRENT_TIMESTAMP - (${STORAGE_DELETION_CLAIM_STALE_AFTER_MS} * INTERVAL '1 millisecond')
               )
-              -- The byte permit is not yet available. Leave a purge-claim job
-              -- pending under active recovery enforcement so ordinary cleanup
-              -- in the same batch can continue. The database update trigger
-              -- remains the authority for an activation/claim race.
+              -- The byte permit is not yet available. Leave every job for
+              -- the enforced purge's exact provider key pending, including
+              -- an unexpected ordinary alias. Unrelated cleanup continues.
+              -- Database triggers remain the activation/claim race authority.
               AND NOT EXISTS (
                 SELECT 1 FROM "DocumentPurgeClaim" claim
                 JOIN "DocumentRecoveryEnforcement" binding
                   ON binding."organisationId" = claim."organisationId"
-                WHERE claim."deletionId" = candidate."id"
+                JOIN "DocumentPurgeAuthorization" auth
+                  ON auth."id" = claim."authorizationId"
+                WHERE candidate."organisationId" = claim."organisationId"
+                  AND candidate."provider" = auth."provider"
+                  AND candidate."storagePath" = auth."storagePath"
               )
             ORDER BY candidate."nextAttemptAt" ASC, candidate."createdAt" ASC
             LIMIT ${limit}

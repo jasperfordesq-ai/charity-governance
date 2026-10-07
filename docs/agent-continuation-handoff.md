@@ -1,5 +1,17 @@
 # CharityPilot Agent Continuation Handoff
 
+> **7 October source-only cleanup-alias fence:** A new migration makes a
+> primary purge claim refuse another cleanup job for the exact provider
+> key, and refuses a new matching job after claim. The production worker
+> skips any exact-key alias under recovery enforcement; current byte
+> authority also rejects one. Disposable real-PostgreSQL proof covers
+> pre/post-claim refusal, a privileged synthetic alias, worker exclusion
+> and unrelated cleanup. Local API suite 2,568 + seven migration tests,
+> focused PostgreSQL proof, Prisma validation and security scan pass.
+> Exact hosted checks and private-VM release are pending; live remains
+> `5dfa72b3`. This closes one cleanup alias route, not the final one-use
+> byte permit, all-copy audit, P05/P08 custody or Nikita acceptance.
+
 > **7 October source-only worker baseline:** The disposable real-PostgreSQL
 > document byte-authority proof now invokes the production
 > `DocumentService.retryPendingStorageDeletions` claimant shared by both

@@ -104,12 +104,16 @@ export async function withCurrentDocumentByteAuthorityTransaction<T>(prisma: Pri
       tx.confluenceReference.count({ where: { documentId: claim.documentId } }),
     ]);
     if (!authorization) throw new Error('Document byte authority authorization is unavailable');
-    const [uploadIntents, liveReferences] = await Promise.all([
+    const [uploadIntents, liveReferences, matchingCleanupJobs] = await Promise.all([
       tx.documentUploadIntent.findMany({ where: { organisationId: request.organisationId,
         OR: [{ documentId: claim.documentId }, { storagePath: authorization.storagePath }] },
         orderBy: { id: 'asc' }, take: 1001 }),
       tx.document.count({ where: { organisationId: request.organisationId,
         OR: [{ id: claim.documentId }, { fileUrl: authorization.storagePath }] } }),
+      tx.documentStorageDeletion.findMany({ where: {
+        organisationId: request.organisationId, provider: authorization.provider,
+        storagePath: authorization.storagePath },
+      select: { id: true }, take: 2 }),
     ]);
     if (!preparation || preparation.id !== claim.preparationId
       || preparation.factsDigest !== claim.preparationDigest) {
@@ -138,6 +142,7 @@ export async function withCurrentDocumentByteAuthorityTransaction<T>(prisma: Pri
       || job.targetRef !== null
       || job.sourceDocumentId !== claim.documentId
       || job.storagePath !== authorization.storagePath || job.provider !== authorization.provider
+      || matchingCleanupJobs.length !== 1 || matchingCleanupJobs[0]?.id !== claim.deletionId
       || liveReferences !== 0 || standardLinks !== 0 || confluenceReferences !== 0
       || [copyAuthorities, copyHolds, dispositionEvents, publications, uploadIntents]
         .some(rows => rows.length > 1000)) {
@@ -146,7 +151,7 @@ export async function withCurrentDocumentByteAuthorityTransaction<T>(prisma: Pri
     const digest = boundedDigest({ format: 1, ...request,
       committedOutcomeDigest: committed.digest, organisation, enforcement, actor,
       authorization, policy: policyRows[0], job, copyAuthorities, copyHolds,
-      dispositionEvents, publications, uploadIntents,
+      dispositionEvents, publications, uploadIntents, matchingCleanupJobs,
       liveReferences, standardLinks, confluenceReferences });
     return callback(tx, { digest, actionAuthorized: false as const });
   }, { isolationLevel: 'Serializable', timeout: 30000 });

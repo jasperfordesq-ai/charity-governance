@@ -356,6 +356,26 @@ try {
     throw new Error('rollback-attached-proof');
   }), /rollback-attached-proof/);
   assert.equal(await prisma.documentUploadIntent.count(), 0);
+  // An ordinary cleanup row aimed at the same provider key could erase the
+  // bytes without touching the protected purge job. Refuse the claim even if
+  // that other row is pending before the claim transaction starts.
+  await assert.rejects(prisma.$transaction(async (tx) => {
+    await tx.documentStorageDeletion.create({ data: {
+      id: 'alias-before-claim', organisationId: 'charity',
+      storagePath: 'charity/synthetic-proof', provider: 'local',
+    } });
+    await tx.documentRecoveryExecution.create({ data: {
+      id: 'alias-test-execution', preparationId: 'preparation',
+      writerId: 'host', generation: 1, entryDigest: 'c'.repeat(64),
+      envelopeDigest: 'd'.repeat(64), controlRevision: 'revision',
+    } });
+    await tx.documentPurgeClaim.create({ data: {
+      id: 'alias-test-claim', organisationId: 'charity',
+      authorizationId: 'auth', documentId: 'doc',
+      deletionId: 'alias-test-job', actorUserId: 'owner',
+    } });
+  }), /reconciliation of matching cleanup job/);
+  assert.equal(await prisma.documentStorageDeletion.count(), 0);
   await prisma.$transaction(async (tx) => {
     await tx.documentRecoveryExecution.create({
       data: {
@@ -386,6 +406,10 @@ try {
     data: { id: 'mirror-after-claim', organisationId: 'charity',
       documentId: 'doc', provider: 'confluence' },
   }), /fenced by primary purge/);
+  await assert.rejects(prisma.documentStorageDeletion.create({ data: {
+    id: 'alias-after-claim', organisationId: 'charity',
+    storagePath: 'charity/synthetic-proof', provider: 'local',
+  } }), /fenced by primary purge target/);
   await assert.rejects(prisma.documentPublication.update({
     where: { id: 'retained-mirror' }, data: { pageTitle: 'Unexpected republish' },
   }), /fenced by primary purge/);
@@ -470,8 +494,43 @@ try {
   const changed = await readCurrentDocumentByteAuthority(prisma, request);
   assert.equal(changed.actionAuthorized, false);
   assert.notEqual(changed.digest, first.digest);
+  // Simulate a privileged historical repair that bypassed the insertion
+  // trigger. The projection and production worker must still refuse this
+  // exact-key alias; the trigger is reenabled before either read.
+  await prisma.$transaction(async (tx) => {
+    await tx.$executeRaw`ALTER TABLE "DocumentStorageDeletion" DISABLE TRIGGER "DocumentStorageDeletion_purge_alias_fence"`;
+    try {
+      await tx.documentStorageDeletion.create({ data: {
+        id: 'privileged-alias', organisationId: 'charity',
+        storagePath: 'charity/synthetic-proof', provider: 'local',
+        nextAttemptAt: new Date('2026-01-01T00:00:00Z'),
+      } });
+    } finally {
+      await tx.$executeRaw`ALTER TABLE "DocumentStorageDeletion" ENABLE TRIGGER "DocumentStorageDeletion_purge_alias_fence"`;
+    }
+  });
+  await assert.rejects(readCurrentDocumentByteAuthority(prisma, request),
+    /changed or cannot be bounded/);
+  await prisma.documentStorageDeletion.create({ data: {
+    id: 'second-ordinary-job', organisationId: 'charity',
+    storagePath: 'charity/second-unrelated-orphan', provider: 'local',
+    nextAttemptAt: new Date('2026-01-01T00:00:00Z'),
+  } });
+  const nextErasedPaths = [];
+  const secondCleanup = await new DocumentService(prisma).retryPendingStorageDeletions(
+    (provider) => provider === 'local' ? async ({ storagePath }) => {
+      nextErasedPaths.push(storagePath);
+      return new Date();
+    } : null,
+    10,
+  );
+  assert.equal(secondCleanup.processed, 1);
+  assert.deepEqual(nextErasedPaths, ['charity/second-unrelated-orphan']);
+  assert.equal((await prisma.documentStorageDeletion.findUniqueOrThrow({
+    where: { id: 'privileged-alias' }, select: { state: true, claimedAt: true, attempts: true },
+  })).state, 'PENDING');
   process.stdout.write(
-    'current-authority-real-postgres-composition=verified; protected-worker-skip=verified; upload-intent-fence=verified; copy-evidence-digest=changed\n',
+    'current-authority-real-postgres-composition=verified; protected-worker-skip=verified; cleanup-alias-fence=verified; upload-intent-fence=verified; copy-evidence-digest=changed\n',
   );
 } finally {
   await prisma.$disconnect();
