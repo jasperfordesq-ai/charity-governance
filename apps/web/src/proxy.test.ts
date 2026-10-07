@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { createHash } from "node:crypto";
 import { afterEach, test } from "node:test";
 import { NextRequest } from "next/server";
 import { proxy } from "./proxy";
@@ -79,6 +80,14 @@ test('the public session-renew page has sensitive no-store headers', async () =>
 test("parallel protected route checks share only an in-flight auth validation", { timeout: 5_000 }, async () => {
   Object.assign(process.env, { NODE_ENV: "production" });
   process.env.NEXT_PUBLIC_API_URL = "https://api.charitypilot.ie";
+  const subtle = globalThis.crypto.subtle;
+  const originalDigest = subtle.digest;
+  // Resolve both credential digests in this event-loop turn. A real WebCrypto
+  // worker can start the second validation after the first fetch is released,
+  // which would test scheduling rather than the in-flight map.
+  subtle.digest = async (_algorithm, data) => Uint8Array.from(
+    createHash("sha256").update(Buffer.from(data as Uint8Array)).digest(),
+  ).buffer;
 
   let finishValidation: ((response: Response) => void) | undefined;
   const pendingValidation = new Promise<Response>((resolve) => {
@@ -104,6 +113,7 @@ test("parallel protected route checks share only an in-flight auth validation", 
   const second = proxy(request());
   try {
     await validationStarted;
+    await new Promise<void>((resolve) => setImmediate(resolve));
     assert.equal(validationCalls, 1);
     const otherCredential = await proxy(new NextRequest("https://app.charitypilot.ie/dashboard", {
       headers: { cookie: "charitypilot_access=other-access" },
@@ -121,6 +131,7 @@ test("parallel protected route checks share only an in-flight auth validation", 
     assert.equal(later.status, 307);
     assert.equal(validationCalls, 3);
   } finally {
+    subtle.digest = originalDigest;
     finishValidation?.(new Response(null, { status: 503 }));
     await Promise.allSettled([first, second]);
   }
