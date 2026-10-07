@@ -1,5 +1,18 @@
 # CharityPilot Agent Continuation Handoff
 
+> **7 October 03:10 Dublin active-goal audit:** The existing Nikita goal is
+> active and unblocked; use the operative remaining-work scope and closure
+> rule in `.charitypilot-private/nikita-goal-audit-2026-10-06.md` without
+> marking it complete merely to change wording. Last proved private-VM
+> release is `aa4d529b`. After source baseline `9d881f95`, two untracked
+> document-outcome source/test files pass an API build and three local tests,
+> but are not committed, hosted, deployed or independently published.
+> Continue result publication, worker/copy fences and P05/P08 custody and
+> host-loss proof. P01–P09/MFA, Member/approved export and deletion journeys,
+> replay/C1 and Nikita's scope-specific review remain open. Read
+> `.charitypilot-private/RESUME-HERE.md` first. Older checkpoints below are
+> dated history.
+
 > **7 October format-3 private-VM release:** Exact `aa4d529b` hosted CI/E2E
 > and guarded cutover passed. Blue serves a live format-3 purge restore
 > comparison that hashes all four document recovery tables; their row
