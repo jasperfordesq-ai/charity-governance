@@ -21,7 +21,7 @@ const identity = z.string().regex(/^[A-Za-z0-9_-]{1,120}$/);
 const digest = z.string().regex(/^[a-f0-9]{64}$/);
 const kinds = z.enum(['DISPOSAL_INTENT', 'DISPOSAL_RESULT', 'PRESERVATION_CHANGE', 'CONTROL_CHANGE',
   'COMPLAINT_PREPARATION_V1', 'COMPLAINT_OUTCOME_V1', 'COMPLAINT_HOLD_PREPARATION_V1', 'COMPLAINT_HOLD_OUTCOME_V1',
-  'COMPLAINT_CANCELLATION_V1', 'COMPLAINT_HOLD_CANCELLATION_V1']);
+  'COMPLAINT_CANCELLATION_V1', 'COMPLAINT_HOLD_CANCELLATION_V1', 'DOCUMENT_PREPARATION_V1']);
 const bindingSchema = z.object({ installationId: identity, organisationId: identity }).strict();
 const checkpointFields = {
   generation: z.number().int().nonnegative().max(10000), digest: digest.nullable(),
@@ -311,8 +311,12 @@ export class RecoveryAuthorityJournal {
     return this.appendReservedPreparation(raw, control, 'COMPLAINT_HOLD_PREPARATION_V1');
   }
 
+  async appendReservedDocumentPreparation(raw: unknown, control: RecoveryControlStore) {
+    return this.appendReservedPreparation(raw, control, 'DOCUMENT_PREPARATION_V1');
+  }
+
   private async appendReservedPreparation(raw: unknown, control: RecoveryControlStore,
-    kind: 'COMPLAINT_PREPARATION_V1' | 'COMPLAINT_HOLD_PREPARATION_V1') {
+    kind: 'COMPLAINT_PREPARATION_V1' | 'COMPLAINT_HOLD_PREPARATION_V1' | 'DOCUMENT_PREPARATION_V1') {
     const request = z.object({ operationId: identity, writerId: identity,
       writerEpoch: z.number().int().positive().max(2147483647), preparationDigest: digest,
       envelopeDigest: digest, expectedGeneration: z.number().int().nonnegative().max(9999),

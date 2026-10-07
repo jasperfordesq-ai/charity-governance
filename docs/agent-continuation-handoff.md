@@ -1,5 +1,18 @@
 # CharityPilot Agent Continuation Handoff
 
+> **7 October document recovery publication source continuation:** The inactive
+> document preparation now has a domain-separated encrypted envelope, a
+> distinct S3 object namespace and `DOCUMENT_PREPARATION_V1` reserved journal
+> kind. Publication verifies the original ciphertext against the exact
+> reservation; reads require current independently verified history and
+> authenticated original bytes. Local API build, 2 focused publication tests,
+> 2,555 API application tests and 7 real PostgreSQL tests passed. This does
+> not bind a document claim, storage worker, preservation/copy writer, live
+> provider or host-loss reopening. Hosted checks and deployment of this new
+> source are pending; no P05/P08 or DPO approval is inferred. Private scope:
+> `.charitypilot-private/document-recovery-preparation-2026-10-07.md`.
+
+
 > **7 October document recovery preparation, source-only candidate:** A typed,
 > bounded, append-only `DocumentRecoveryPreparation` capture path now records
 > exact Owner authorization, approved/current and original removal policy,

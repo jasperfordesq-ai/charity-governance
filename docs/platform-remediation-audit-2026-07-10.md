@@ -1,5 +1,15 @@
 # CharityPilot Full-Platform Remediation Audit
 
+> **7 October document recovery publication candidate:** The source-only
+> `DocumentRecoveryPreparation` now has an encrypted, domain-separated
+> candidate envelope, separate provider namespace and reserved independent
+> journal preparation type. The current-head reader refuses missing/replaced
+> payload and changed history. Local build, focused tests and full API suite
+> passed; hosted/deployed proof is pending. No document claim, byte-worker,
+> copy/hold writer, real custody or host-loss fence is complete. Keep the
+> retention/erasure and DPO acceptance items open.
+
+
 > **7 October DPO-05 source-only candidate:** A bounded, typed
 > `DocumentRecoveryPreparation` store and append-only SQL guard were added
 > for future document primary-disposal recovery. It retains exact decision

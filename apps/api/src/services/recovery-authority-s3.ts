@@ -7,6 +7,7 @@ import type { AuthorityObjectStore, AuthorityHeadPublisher, AuthorityCheckpoint 
 import { validateRecoveryAuthorityEntry } from './recovery-authority-journal.js';
 import { inspectRecoveryPreparationEnvelope } from './recovery-preparation-envelope.js';
 import { inspectHoldPreparationEnvelope } from './hold-recovery-envelope.js';
+import { inspectDocumentRecoveryEnvelope } from './document-recovery-envelope.js';
 import { inspectRecoveryOutcomeEnvelope } from './recovery-outcome-envelope.js';
 import { inspectHoldOutcomeEnvelope } from './hold-outcome-envelope.js';
 import { validateRecoveryControlValue, type RecoveryControlStore, type RecoveryControlValue } from './recovery-operation-reservation.js';
@@ -206,6 +207,32 @@ export class S3AuthorityObjectStore implements AuthorityObjectStore, AuthorityHe
   async createHoldPreparation(operationId: string, envelope: string) {
     const request = this.holdPreparationRequest(operationId); this.checkHoldPreparation(operationId, envelope);
     return this.writeObject(request, envelope, { IfNoneMatch: '*' }, 32768);
+  }
+
+  private documentPreparationRequest(operationId: string) {
+    const request = this.replayRequest(operationId);
+    return { ...request, Key: `document-preparations/${this.config.installationId}/${this.config.organisationId}/${operationId}.json` };
+  }
+
+  private checkDocumentPreparation(operationId: string, envelope: string) {
+    const context = inspectDocumentRecoveryEnvelope(envelope);
+    if (context.installationId !== this.config.installationId || context.organisationId !== this.config.organisationId
+      || context.operationId !== operationId || context.keyId !== this.config.replayKeyArn) {
+      throw new Error('Document preparation envelope scope mismatch');
+    }
+  }
+
+  async readDocumentPreparation(operationId: string) {
+    const object = await this.readObject(this.documentPreparationRequest(operationId), undefined, 65536);
+    if (!object) return null;
+    this.checkDocumentPreparation(operationId, object.body);
+    return object.body;
+  }
+
+  async createDocumentPreparation(operationId: string, envelope: string) {
+    const request = this.documentPreparationRequest(operationId);
+    this.checkDocumentPreparation(operationId, envelope);
+    return this.writeObject(request, envelope, { IfNoneMatch: '*' }, 65536);
   }
 
   private holdOutcomeRequest(operationId: string) {
