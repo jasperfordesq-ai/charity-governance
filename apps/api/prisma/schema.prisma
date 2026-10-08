@@ -1292,6 +1292,7 @@ model DataRetentionPolicyRevision {
   retentionMode       String
   retentionAnchor     String?
   retentionDays       Int?
+  retentionYears      Int?
   recoveryDays        Int
   createdById         String
   createdAt           DateTime @default(now())

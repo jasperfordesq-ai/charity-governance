@@ -1,5 +1,13 @@
 # CharityPilot Full-Platform Remediation Audit
 
+> **8 October 23:47 Dublin P04 shape, issue OPEN:** Local schema/migration
+> now distinguish `retentionYears` from `retentionDays`; disposable PG16
+> upgrade and invalid-shape tests passed, as did generated Prisma types
+> and API build. The activation fence still blocks year-mode policy
+> creation. No approved term, elapsed-cutoff guard, UI, live deployment
+> or Nikita acceptance exists; do not treat the schema addition as
+> operational retention.
+
 > **8 October 23:45 Dublin P04 accidental-activation gate:** Local
 > `20261008030000_retention_policy_mode_fence` refuses unknown policy modes
 > even if the old period constraint is relaxed. Full disposable PostgreSQL

@@ -1,5 +1,15 @@
 # CharityPilot Agent Continuation Handoff
 
+> **8 October 23:47 Dublin P04 policy shape, still inactive:** Prisma and a
+> forward migration add nullable `retentionYears`, separate from the
+> existing `retentionDays`. The strengthened period constraint rejects
+> mixed, missing, zero and excessive year terms. Full disposable
+> PostgreSQL migration proof passed, including original day-row
+> preservation and synthetic schema-only probes with the mode fence
+> temporarily disabled inside rolled-back transactions. Prisma generation
+> and API build passed. The fence remains installed; API input still
+> rejects the year mode, and no SQL disposal path uses the new field.
+
 > **8 October 23:45 Dublin P04 activation fence:** Forward migration
 > `20261008030000_retention_policy_mode_fence` prevents creation of an
 > unknown retention mode independently of the original policy constraint.

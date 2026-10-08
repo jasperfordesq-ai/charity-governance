@@ -338,6 +338,20 @@ test('retention policy and recovery-state upgrade preserve documents and enforce
     assert.equal(sql(`SELECT count(*) FROM "DataRetentionPolicyRevision" WHERE id='unknown-calendar-mode';`), '0');
     sql(`BEGIN; INSERT INTO "DataRetentionPolicyRevision" (id,"organisationId","recordClass",revision,"retentionMode","recoveryDays","createdById")
       VALUES ('known-review-mode','retention-a','VAULT_DRAFT',200,'REVIEW_REQUIRED',30,'owner-a'); ROLLBACK;`);
+    assert.equal(sql(`SELECT count(*) FROM "DataRetentionPolicyRevision" WHERE "retentionYears" IS NOT NULL;`), '0',
+      'existing day-based policies must not acquire invented year terms');
+    const calendarInsert = (years, days = 'NULL', anchor = "'CREATED_AT'") => `BEGIN;
+      ALTER TABLE "DataRetentionPolicyRevision" DISABLE TRIGGER "DataRetentionPolicyRevision_01_mode_fence";
+      INSERT INTO "DataRetentionPolicyRevision" (id,"organisationId","recordClass",revision,"retentionMode",
+        "retentionAnchor","retentionDays","retentionYears","recoveryDays","createdById")
+      VALUES ('calendar-shape','retention-a','VAULT_DRAFT',200,'AFTER_CALENDAR_YEARS',${anchor},${days},${years},30,'owner-a');
+      ROLLBACK;`;
+    sql(calendarInsert('6'));
+    for (const invalid of [calendarInsert('NULL'), calendarInsert('0'), calendarInsert('101'),
+      calendarInsert('6', '2190'), calendarInsert('6', 'NULL', 'NULL')]) {
+      sql(invalid, /DataRetentionPolicyRevision_period_valid/);
+    }
+    assert.equal(sql(`SELECT count(*) FROM "DataRetentionPolicyRevision" WHERE id='calendar-shape';`), '0');
     proveCopyAuthority(sql, {kind:'Document',organisation:'retention-a',actor:'owner-a',foreignActor:'owner-b',authorization:'expired-authorization',scope:'BACKUP-SET-001',observationRevision:1});
     // The earlier primary-retention scenario deliberately left two approvals.
     // New original-plan copy evidence must reject that ambiguity until reviewed.
