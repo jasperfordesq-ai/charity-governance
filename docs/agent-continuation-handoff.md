@@ -1,5 +1,14 @@
 # CharityPilot Agent Continuation Handoff
 
+> **9 October 00:55 Dublin C1 broader isolated run:** NEXUS branch
+> `7f69208dc` passed a combined recipient, Admin Users, profile and
+> onboarding PHPUnit run in a fresh disposable MariaDB/PHP environment:
+> 99 tests, 272 assertions, 12 pre-existing quarantined fan-out skips.
+> The exact database/network were removed. This is stronger local
+> branch evidence but does not prove skipped fan-out, hosted email/bell
+> delivery, recipient-wide minimisation or C1 risk-owner/DPO closure.
+> The branch remains unpushed/unmerged/undeployed.
+
 > **9 October 00:49 Dublin retention removal policy shape:** Local
 > document and complaint removal services now refuse contradictory
 > REVIEW_REQUIRED/day/year terms; document removal also refuses an invalid

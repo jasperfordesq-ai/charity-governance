@@ -1,5 +1,12 @@
 # CharityPilot Full-Platform Remediation Audit
 
+> **9 October 00:55 Dublin C1, OPEN:** Broader isolated NEXUS branch
+> PHPUnit run passed 99 tests/272 assertions in disposable MariaDB;
+> 12 older fan-out tests remain quarantined and skipped. The branch is
+> unpushed/unmerged/undeployed. A hosted exact-build registration and
+> email/bell journey, full-recipient assessment, original C1 closure
+> evidence and risk-owner/Nikita verification still remain.
+
 > **9 October 00:49 Dublin P04 removal defense, OPEN:** Document and
 > complaint removal now reject malformed mixed retention terms at the
 > service boundary. Document removal also validates the recovery window
