@@ -397,15 +397,17 @@ function readNextCursor(body: unknown, linkHeader?: string): string | undefined 
 export async function listAttachments(
   client: ConfluenceClient,
   pageId: string,
+  signal?: AbortSignal,
 ): Promise<ConfluenceAttachment[]> {
   const id = assertPageId(pageId);
 
-  return listAttachmentsAtPath(client, `pages/${id}/attachments`);
+  return listAttachmentsAtPath(client, `pages/${id}/attachments`, signal);
 }
 
 async function listAttachmentsAtPath(
   client: ConfluenceClient,
   path: string,
+  signal?: AbortSignal,
 ): Promise<ConfluenceAttachment[]> {
 
   const attachments: ConfluenceAttachment[] = [];
@@ -413,6 +415,10 @@ async function listAttachmentsAtPath(
   let cursor: string | undefined;
 
   for (let page = 0; page < MAX_LIST_PAGES; page += 1) {
+    if (signal?.aborted) {
+      throw new AppError(504, 'CONFLUENCE_ERASURE_ABORTED',
+        'The Confluence attachment inventory stopped before the next page was read.');
+    }
     const query: Record<string, string> = { limit: String(LIST_PAGE_SIZE) };
     if (cursor !== undefined) query.cursor = cursor;
 

@@ -368,6 +368,21 @@ test('cancellation between trash pages stops the next provider request', async (
   assert.equal(specs.length, 1);
 });
 
+test('cancellation between current page attachment pages stops the next provider request', async () => {
+  const controller = new AbortController();
+  const first = v2ListBody([], {
+    base: WEB_BASE,
+    next: '/wiki/api/v2/pages/123456/attachments?cursor=NEXT&limit=250',
+  });
+  const { client, specs } = harness([() => {
+    controller.abort();
+    return { status: 200, body: first };
+  }]);
+  const error = await rejectsWith(() => listAttachments(client, PAGE_ID, controller.signal));
+  assert.equal(error.code, 'CONFLUENCE_ERASURE_ABORTED');
+  assert.equal(specs.length, 1);
+});
+
 test('listAttachments preserves the current v2 version when supplied', async () => {
   const { client } = harness([ok(v2ListBody([{
     id: 'att789', title: 'board-minutes.pdf', version: { number: 3 },
