@@ -1,5 +1,14 @@
 # CharityPilot Full-Platform Remediation Audit
 
+> **8 October restricted DB login evidence, scoped private VM:** On the
+> serving `96c8b1e8` release, a read-only pinned check proved actual API
+> and scheduler SQL login as `cp_runtime`, current role restrictions and
+> SELECT-only grants on 12 named protected tables. The web service also
+> configures that role. The result is a current private-host control check;
+> it does not approve public multi-tenant launch, independent host-loss
+> recovery or Nikita's review. Private receipt:
+> `.charitypilot-private/live-runtime-role-current-2026-10-08.md`.
+
 > **8 October 21:25 UTC C1 residual profile audience; issue OPEN:** The selected
 > broader synthetic check found an ordinary same-tenant Member could read
 > a pending registrant's first name and location from NEXUS staging

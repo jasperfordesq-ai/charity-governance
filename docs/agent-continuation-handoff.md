@@ -1,5 +1,16 @@
 # CharityPilot Agent Continuation Handoff
 
+> **8 October 21:28 UTC restricted runtime database role, private VM:** A
+> pinned read-only check on serving green `96c8b1e8` confirmed active
+> API/web/scheduler configuration names `cp_runtime`, and actual SQL
+> `current_user` from the API and scheduler is `cp_runtime`. Eleven
+> restrictive login/database/schema flags passed; the role had no
+> memberships, public-object or database ownership, or unexpected
+> executable SECURITY DEFINER functions. All 12 named protected tables
+> had SELECT and no write-like grant. This is point-in-time evidence on
+> the private VM, not a public-production or independent DPO sign-off.
+> Exact private receipt: `.charitypilot-private/live-runtime-role-current-2026-10-08.md`.
+
 > **8 October 21:25 UTC C1 audience fix strengthened; source local only:**
 > Synthetic NEXUS staging `2ff23039c` returned HTTP 200 to an ordinary
 > same-tenant Member for a pending registrant's numeric profile, exposing
