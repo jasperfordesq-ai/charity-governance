@@ -1,5 +1,19 @@
 # CharityPilot Agent Continuation Handoff
 
+> **8 October synthetic minimised-export workflow (real acceptance open):**
+> In the isolated C01 tenant, the Owner filled three missing standard
+> explanations and the conditional profile with labelled synthetic data.
+> The UI then saved test-only approved snapshot #1 and exposed `Open
+> minimised draft for audience review`; clicking it opened a tab titled
+> `Minimised Compliance Record draft`. Browser policy blocked inspection
+> of that local `blob:` tab, so its exact fields were not observed in this
+> browser run. Eight focused API export tests passed separately, including
+> snapshot verification and omission of narrative/approver particulars.
+> The reviewed hOUR tenant still has no approved Board snapshot. A genuine
+> Board decision, field-level recipient review and Nikita acceptance remain
+> open. Exact private receipt:
+> `.charitypilot-private/minimised-export-c01-2026-10-08.md`.
+
 > **8 October C01 restored attachment bytes (DPO-05 still open):** A
 > signed-in download from the restricted Confluence sandbox returned the
 > restored `att524289` attachment as 243 bytes. Its SHA-256 was
