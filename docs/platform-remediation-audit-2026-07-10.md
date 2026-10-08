@@ -1,5 +1,22 @@
 # CharityPilot Full-Platform Remediation Audit
 
+> **8 October Confluence erasure readback release:** PR #33 revised head
+> `24d5a6f7` passed exact CI/E2E and automated review; merged master
+> `05d4d975` passed CI `37733998701` and E2E `37733998665`, then guarded
+> blue private-VM cutover and restricted-runtime/front-door/zero-row
+> postflight. All 384 earlier backup hashes were preserved; both new sets
+> were copied off-VM with matching SHA-256 and restored in isolation
+> (156 migrations, 68 documents); final inventory remained 390 files.
+> Page readback now distinguishes normal from trashed via the established
+> v1 trash reader, and recorded attachment IDs are checked directly and
+> against a bounded, abort-aware site trash inventory. Source/fake-provider
+> checks do not prove real Atlassian behavior, undiscovered copies or backup
+> erasure. No protected provider purge was activated. DPO-05 all-copy/
+> UNKNOWN, C01–C05/P01–P09/MFA, independent P05/P08, Member/export/
+> deletion, replay/C1 and Nikita acceptance remain OPEN. Private receipt:
+> `.charitypilot-private/release-05d4d975-erasure-readback-2026-10-08.md`.
+> Older checkpoints below are dated history.
+
 > **8 October DPO-05 erasure-stamp integrity release:** Exact merged-master
 > `2f7aec1d` passed CI `37727955227` and E2E `37727955387`, then guarded
 > green private-VM cutover with restricted runtime, both front doors,

@@ -1,5 +1,23 @@
 # CharityPilot Agent Continuation Handoff
 
+> **8 October verified `05d4d975` private-VM release:** PR #33 revised head
+> `24d5a6f7` passed exact CI `37732949371`, E2E `37732949376` and
+> automated review after correcting the v2 trash-read and cancelled
+> pagination findings. Merged master `05d4d975` passed exact CI
+> `37733998701` and E2E `37733998665`. Guarded blue cutover,
+> restricted-runtime/front-door/zero-row postflight, preservation of all
+> 384 earlier backup hashes, SHA-matched workstation copies of deployment
+> and post-activation sets, and isolated restores of both (156 migrations,
+> 68 documents) passed. Final 390-file backup inventory was unchanged after
+> restore. Private receipt:
+> `.charitypilot-private/release-05d4d975-erasure-readback-2026-10-08.md`.
+> The eraser now checks recorded page and attachment IDs after purge using
+> direct and trash reads, with bounded, cancellable pagination. This is not
+> real provider proof or complete copy discovery. DPO-05 all-copy/UNKNOWN,
+> C01–C05/P01–P09/MFA, independent P05/P08, Member/export/deletion,
+> replay/C1 and Nikita acceptance remain OPEN. Older checkpoints below are
+> dated history.
+
 > **8 October verified `2f7aec1d` private-VM release:** PR #31's
 > Confluence erasure-request stamp guard passed exact-head and merged-master
 > CI/E2E and automated review. Guarded green cutover, restricted runtime,
