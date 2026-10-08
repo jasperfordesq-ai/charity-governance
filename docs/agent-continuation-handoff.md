@@ -1,5 +1,16 @@
 # CharityPilot Agent Continuation Handoff
 
+> **8 October minimised export accuracy correction in review:** The
+> minimised draft aggregate previously skipped snapshot standards with no
+> record, while the full report rendered them as NOT STARTED. A focused
+> regression reproduced that discrepancy; branch
+> `codex/minimised-report-missing-status` counts them as NOT_STARTED and
+> passes 9/9 focused export tests and API TypeScript checking. This is source
+> evidence pending PR/CI/merge and, if released, live verification. The
+> reviewed tenant has no genuine Board-approved snapshot; field-by-field
+> controller/DPO acceptance and external-disclosure authority remain open.
+> Private field review: `.charitypilot-private/minimised-export-field-review-2026-10-08.md`.
+
 > **8 October live Member certificate test, acceptance still open:**
 > With Jasper's exact-file controller approval and separate upload/access
 > confirmations, Owner created `cmuzx67s40006o901zappjqgm` as a local

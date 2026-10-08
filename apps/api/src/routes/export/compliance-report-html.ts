@@ -271,8 +271,8 @@ export function buildMinimisedComplianceReportHtml(
   const statuses = ['COMPLIANT', 'WORKING_TOWARDS', 'NOT_STARTED', 'NOT_APPLICABLE', 'EXPLAIN'] as const;
   const counts = new Map(statuses.map((status) => [status, 0]));
   for (const entry of snapshot.evidence.standards) {
-    const status = entry.record?.status;
-    if (status && counts.has(status)) counts.set(status, (counts.get(status) ?? 0) + 1);
+    const status = entry.record?.status ?? 'NOT_STARTED';
+    counts.set(status, (counts.get(status) ?? 0) + 1);
   }
   const rows = statuses.map((status) => `<tr><th scope="row">${status.replace(/_/g, ' ')}</th><td>${counts.get(status)}</td></tr>`).join('');
   return `<!doctype html>
