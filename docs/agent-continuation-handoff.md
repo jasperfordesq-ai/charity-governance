@@ -1,5 +1,20 @@
 # CharityPilot Agent Continuation Handoff
 
+> **8 October 23:24 Dublin C1 additional local route fix:** The separate
+> NEXUS `codex/c1-pending-profile` branch now has tip `a6e90fd62`, two
+> commits above fetched `origin/main` `05c17bf94`; `cfdc4e00f` below is
+> its first commit. Red synthetic tests reproduced an ordinary Member 200
+> for a pending target's activity dashboard and pending/unapproved entries
+> in connection suggestions. The shared by-ID profile gate and raw
+> suggestion query now require an active, approved target for ordinary
+> viewers. Activity, availability, suggestion and main-profile suites
+> passed 85 tests/195 assertions; staged hook passed 27/45 twice. Branch
+> clean and **unpushed, unmerged, undeployed**. C1 remains OPEN; hosted
+> synthetic retest, original closure evidence, risk-owner and DPO review
+> remain outstanding. Private receipt and NEXUS register E-098/F-573 hold
+> detail. The older 23:17 source checkpoint below remains valid for its
+> first commit but is not the current branch tip.
+
 > **8 October 23:17 Dublin C1 source continuation, local only:** The
 > separate clean NEXUS branch `codex/c1-pending-profile` now points to
 > `cfdc4e00f` (one commit above fetched `origin/main`), superseding the

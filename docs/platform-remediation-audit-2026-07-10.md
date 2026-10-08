@@ -1,5 +1,15 @@
 # CharityPilot Full-Platform Remediation Audit
 
+> **8 October 23:24 Dublin C1 follow-on, issue OPEN:** Separate NEXUS
+> branch `codex/c1-pending-profile` now ends at local commit `a6e90fd62`
+> after `cfdc4e00f` below. Additional red synthetic tests exposed pending
+> profile activity by numeric ID and pending/unapproved people in
+> connection suggestions; the shared profile visibility gate and raw
+> suggestion query now deny those ordinary Member paths. Activity,
+> availability, suggestions and main-profile local suites passed 85/195;
+> exact staged hook passed 27/45. **No push, merge, deployment, hosted
+> retest, C1 verification or Nikita acceptance.**
+
 > **8 October 23:17 Dublin C1 residual discovery, issue OPEN:** Separate
 > NEXUS local branch `codex/c1-pending-profile` is now `cfdc4e00f`,
 > superseding the older hash below. It blocks pending/unapproved profiles
