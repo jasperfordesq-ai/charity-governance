@@ -18,7 +18,8 @@ function fixture() {
     lifecycleStatus: 'DRAFT', deletionHold: false, approvalAsserted: false, approvedByResolutionId: null,
     storageProvider: 'local', fileUrl: 'org-a/draft.txt', fileSize: 4,
     visibility: 'RESTRICTED', contentAccessClass: 'UNASSESSED' };
-  let policy: Record<string, any> | null = { id: 'policy-a', retentionMode: 'REVIEW_REQUIRED', recoveryDays: 30 };
+  let policy: Record<string, any> | null = { id: 'policy-a', retentionMode: 'REVIEW_REQUIRED',
+    retentionAnchor: null, retentionDays: null, retentionYears: null, recoveryDays: 30 };
   let actor = true;
   let linked = false;
   let competingPolicy = false;
@@ -135,6 +136,27 @@ test('ambiguous active policies refuse removal before reading stored bytes',asyn
   const service=new DocumentRecoveryService(f.prisma,async()=>{reads++;return Buffer.from('test');});
   await assert.rejects(service.remove(input),{statusCode:409,code:'DOCUMENT_RECOVERY_POLICY_REQUIRED'});
   assert.equal(reads,0);assert.equal(f.doc.deletedAt,null);assert.equal(f.audits.length,0);
+});
+
+test('contradictory retention terms and invalid recovery window refuse removal before byte reads', async () => {
+  const base = { id: 'policy-a', retentionMode: 'REVIEW_REQUIRED', retentionAnchor: null,
+    retentionDays: null, retentionYears: null, recoveryDays: 30 };
+  const policies = [
+    { ...base, retentionYears: 6 },
+    { ...base, recoveryDays: 0 },
+    { ...base, retentionMode: 'AFTER_ANCHOR', retentionAnchor: 'CREATED_AT',
+      retentionDays: 1, retentionYears: 6 },
+  ];
+  for (const policy of policies) {
+    const f = fixture(); f.setPolicy(policy);
+    let reads = 0;
+    const service = new DocumentRecoveryService(f.prisma, async () => { reads += 1; return Buffer.from('test'); });
+    await assert.rejects(service.remove(input),
+      (error: any) => error.code === 'DOCUMENT_RECOVERY_POLICY_REQUIRED');
+    assert.equal(reads, 0);
+    assert.equal(f.doc.deletedAt, null);
+    assert.equal(f.audits.length, 0);
+  }
 });
 
 test('calendar document removal uses the UTC anniversary and refuses an early draft', async () => {

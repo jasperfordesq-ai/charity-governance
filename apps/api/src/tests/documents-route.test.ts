@@ -1557,7 +1557,8 @@ test('ordinary DELETE retains the draft and refuses missing policy, stale revisi
             return scenario === 'competing-policy' ? { id: 'policy-2' } : null;
           }
           assert.equal(where.id, 'policy-1');
-          return scenario === 'policy' ? null : { id: 'policy-1', retentionMode: 'REVIEW_REQUIRED', recoveryDays: 30 };
+          return scenario === 'policy' ? null : { id: 'policy-1', retentionMode: 'REVIEW_REQUIRED',
+            retentionAnchor: null, retentionDays: null, retentionYears: null, recoveryDays: 30 };
         } },
         documentStorageDeletion: { create: async () => { destructiveCalls++; throw new Error('Unexpected cleanup job'); } },
         documentControlAudit: { create: async ({ data }: any) => {

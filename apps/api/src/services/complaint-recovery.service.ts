@@ -56,12 +56,17 @@ export class ComplaintRecoveryService {
       if (!policy || policy.id !== input.policyId || !['REVIEW_REQUIRED', 'AFTER_ANCHOR', 'AFTER_CALENDAR_YEARS'].includes(policy.retentionMode)) {
         throw new AppError(409, 'COMPLAINT_POLICY_CHANGED', 'Review the current approved complaint policy before removal.');
       }
+      if (policy.retentionMode === 'REVIEW_REQUIRED' && (policy.retentionAnchor !== null
+        || policy.retentionDays !== null || policy.retentionYears !== null)) {
+        throw new AppError(409, 'COMPLAINT_POLICY_CHANGED', 'Review the current approved complaint policy before removal.');
+      }
       const evidence = await tx.complaintResolutionEvidence.findFirst({ where: { organisationId: input.organisationId,
         complaintId: input.complaintId }, orderBy: { revision: 'desc' } });
       if ((evidence?.revision ?? 0) !== input.expectedEvidenceRevision) throw new AppError(409, 'COMPLAINT_RESOLUTION_CONFLICT', 'Resolution evidence changed. Reload the review.');
       const [clock] = await tx.$queryRaw<Array<{ now: Date }>>`SELECT timezone('UTC', statement_timestamp())::timestamp(3) AS now`;
       if (policy.retentionMode === 'AFTER_ANCHOR' && (policy.retentionAnchor !== 'RESOLVED_AT' ||
         !Number.isInteger(policy.retentionDays) || policy.retentionDays! < 1 || policy.retentionDays! > 36525 ||
+        policy.retentionYears !== null ||
         !evidence?.resolvedAt || evidence.resolvedAt < complaint.receivedDate || evidence.state !== 'RECORDED'
         || evidence.recordRevision !== complaint.revision ||
         evidence.resolvedAt.getTime() + policy.retentionDays! * 86400000 > clock!.now.getTime())) {

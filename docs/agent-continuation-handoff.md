@@ -1,5 +1,16 @@
 # CharityPilot Agent Continuation Handoff
 
+> **9 October 00:49 Dublin retention removal policy shape:** Local
+> document and complaint removal services now refuse contradictory
+> REVIEW_REQUIRED/day/year terms; document removal also refuses an invalid
+> recovery window before reading file bytes. This supplements the existing
+> PostgreSQL policy constraints. Focused tests and the complete API package
+> passed: 2,683 main tests and 11 disposable PostgreSQL migration tests.
+> The first full run exposed stale policy mocks (10 failures); corrected
+> current-row fixtures and the green rerun are logged privately. This is
+> source-only, with year-mode creation still fenced and no controller
+> retention rule, live policy, erasure or DPO acceptance established.
+
 > **9 October 00:41 Dublin document-byte projection correction:** A full
 > current-migration disposable PostgreSQL proof initially failed because
 > its synthetic signed policy omitted the nullable `retentionYears` field

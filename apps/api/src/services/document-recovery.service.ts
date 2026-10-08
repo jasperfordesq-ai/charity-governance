@@ -80,8 +80,14 @@ export class DocumentRecoveryService {
       }, select: { id: true } });
       if (!policy || competingPolicy || !['REVIEW_REQUIRED', 'AFTER_ANCHOR', 'AFTER_CALENDAR_YEARS'].includes(policy.retentionMode)) throw new AppError(409,
         'DOCUMENT_RECOVERY_POLICY_REQUIRED', 'An approved current draft-removal policy is required.');
+      if (!Number.isInteger(policy.recoveryDays) || policy.recoveryDays < 1 || policy.recoveryDays > 3650
+        || (policy.retentionMode === 'REVIEW_REQUIRED' && (policy.retentionAnchor !== null
+          || policy.retentionDays !== null || policy.retentionYears !== null))) {
+        throw new AppError(409, 'DOCUMENT_RECOVERY_POLICY_REQUIRED', 'The approved draft-removal policy is invalid.');
+      }
       if (policy.retentionMode === 'AFTER_ANCHOR' && (policy.retentionAnchor !== 'CREATED_AT'
-        || !Number.isInteger(policy.retentionDays) || policy.retentionDays! < 1 || policy.retentionDays! > 36525)) {
+        || !Number.isInteger(policy.retentionDays) || policy.retentionDays! < 1 || policy.retentionDays! > 36525
+        || policy.retentionYears !== null)) {
         throw new AppError(409, 'DOCUMENT_RECOVERY_POLICY_REQUIRED', 'The approved draft-removal policy is invalid.');
       }
       if (policy.retentionMode === 'AFTER_CALENDAR_YEARS' && (policy.retentionAnchor !== 'CREATED_AT'

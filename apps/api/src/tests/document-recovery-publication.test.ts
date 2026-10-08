@@ -224,7 +224,9 @@ async function readyBytePermitPublisher() {
       role: 'OWNER', lifecycleStatus: 'ACTIVE' }) },
     documentPurgeAuthorization: { findFirst: async () => ({ ...f.facts.authorization,
       withdrawal: null, claim: { id: row.claim.id, deletionId: row.claim.deletionId } }) },
-    dataRetentionPolicyRevision: { findMany: async () => [f.facts.policy] },
+    // Signed pre-migration facts omitted retentionYears; a current Prisma row
+    // includes the nullable field after migration.
+    dataRetentionPolicyRevision: { findMany: async () => [{ ...f.facts.policy, retentionYears: null }] },
     documentStorageDeletion: { findFirst: async () => ({ id: row.claim.deletionId,
       organisationId: f.context.organisationId, sourceDocumentId: f.facts.document.id,
       storagePath: f.facts.authorization.storagePath, provider: f.facts.authorization.provider,

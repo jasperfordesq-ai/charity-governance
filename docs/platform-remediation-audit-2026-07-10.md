@@ -1,5 +1,14 @@
 # CharityPilot Full-Platform Remediation Audit
 
+> **9 October 00:49 Dublin P04 removal defense, OPEN:** Document and
+> complaint removal now reject malformed mixed retention terms at the
+> service boundary. Document removal also validates the recovery window
+> before file read or retained-removal write. Existing SQL constraints
+> remain the primary row invariant. Focused tests, 2,683 main API tests
+> and 11 disposable PostgreSQL migration tests pass after updating
+> current-policy fixtures. Controller terms, creation activation, live
+> release and independent DPO review remain open.
+
 > **9 October 00:41 Dublin P05/P08 projection compatibility, OPEN:**
 > Current full-migration synthetic PostgreSQL proof found a stale fixture
 > missing `retentionYears`; corrected fixture and narrow comparison of
