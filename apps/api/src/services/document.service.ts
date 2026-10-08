@@ -255,7 +255,7 @@ const publicDocumentInclude = {
 
 const lifecycleNext: Record<string, readonly string[]> = {
   UNREVIEWED: ['DRAFT', 'CURRENT', 'SUPERSEDED', 'RETIRED', 'HISTORICAL'],
-  DRAFT: ['CURRENT', 'RETIRED'],
+  DRAFT: ['CURRENT', 'RETIRED', 'HISTORICAL'],
   CURRENT: ['SUPERSEDED', 'RETIRED'],
   SUPERSEDED: ['HISTORICAL'],
   RETIRED: ['HISTORICAL'],

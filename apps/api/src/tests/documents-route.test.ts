@@ -2188,6 +2188,28 @@ test('a working draft cannot be released to Members before lifecycle review', as
   } finally { await app.close(); }
 });
 
+test('a restricted upload can be classified as historical without claiming it was current', async () => {
+  const audits: Record<string, unknown>[] = [];
+  let written: Record<string, unknown> = {};
+  const app = await buildDocumentsApp(patchPrisma({
+    existing: { id: 'doc-1', updatedAt: new Date('2026-06-08T00:00:00.000Z'),
+      visibility: 'RESTRICTED', lifecycleStatus: 'DRAFT', externalPublicationApproved: false },
+    onUpdate: ({ data }) => { written = data; },
+    onControlAudit: ({ data }) => { audits.push(data); },
+  }) as never);
+  try {
+    const response = await app.inject({ method: 'PATCH', url: '/doc-1', headers: { authorization: authHeader },
+      payload: { lifecycleStatus: 'HISTORICAL',
+        lifecycleReason: 'Reviewed this dated incorporation instrument as historical evidence.' } });
+    assert.equal(response.statusCode, 200);
+    assert.equal(written.lifecycleStatus, 'HISTORICAL');
+    assert.equal(written.visibility, undefined);
+    assert.equal(written.externalPublicationApproved, false);
+    assert.deepEqual(audits.map(({ kind, previous, next }) => [kind, previous, next]),
+      [['LIFECYCLE', 'DRAFT', 'HISTORICAL']]);
+  } finally { await app.close(); }
+});
+
 test('a concurrent visibility change returns a conflict and writes no decision audit', async () => {
   const originalDownloadFile = StorageService.prototype.downloadFile;
   StorageService.prototype.downloadFile = async () => Buffer.from('reviewed');
