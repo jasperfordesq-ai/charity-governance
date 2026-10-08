@@ -73,6 +73,8 @@ test('Dashboard gives members review language while preserving legitimate naviga
   const summaries = dashboard('dashboard', 'dashboard-summary-cards.tsx');
   const actions = dashboard('dashboard', 'dashboard-action-lists.tsx');
   const progress = dashboard('dashboard', 'dashboard-progress-panels.tsx');
+  const layout = dashboard('layout.tsx');
+  const regulator = dashboard('regulator', 'page.tsx');
 
   assert.match(workflow, /const canManage = canManageGovernance\(user\?\.role\)/);
   assert.match(workflow, /const canManageBilling = user\?\.role === 'OWNER'/);
@@ -80,9 +82,11 @@ test('Dashboard gives members review language while preserving legitimate naviga
   assert.match(page, /Ask an owner or administrator to make changes/);
   assert.match(page, /View billing status/);
   assert.match(page, /\{canManageBilling \? 'Manage billing' : 'View billing status'\}/);
-  assert.match(summaries, /canManage \? 'Manage sign-off' : 'View sign-off'/);
+  assert.match(summaries, /\{canManage && \([\s\S]*?Manage sign-off/);
   assert.match(actions, /canManage \? 'Add board members' : 'View board register'/);
   assert.match(progress, /review recorded progress and evidence gaps/);
   assert.match(page, /href="\/compliance"/);
-  assert.match(page, /href="\/export"/);
+  assert.match(page, /\{canManage && \([\s\S]*?href="\/export"/);
+  assert.match(regulator, /\{canManage && \([\s\S]*?Export Pack/);
+  assert.match(layout, /item\.href !== '\/export' \|\| canManageGovernance\(user\?\.role\)/);
 });
