@@ -6,7 +6,7 @@ process.env.JWT_SECRET = process.env.JWT_SECRET ?? 'export-snapshot-test-secret'
 const [
   { default: Fastify },
   { exportRoutes },
-  { buildComplianceReportHtml },
+  { buildComplianceReportHtml, buildMinimisedComplianceReportHtml },
   { hashComplianceSnapshot },
   { signAccessToken },
 ] = await Promise.all([
@@ -258,6 +258,24 @@ test('minimised export uses the verified approved snapshot and omits narrative a
   } finally {
     await app.close();
   }
+});
+
+test('minimised status totals include standards without a recorded status', () => {
+  const payload = snapshotPayload() as unknown as Parameters<typeof buildMinimisedComplianceReportHtml>[0];
+  payload.evidence.standards.push({
+    principle: payload.evidence.standards[0].principle,
+    standard: {
+      ...payload.evidence.standards[0].standard,
+      id: 'standard-2',
+      code: '1.2',
+      sortOrder: 2,
+    },
+    record: null,
+  });
+  const html = buildMinimisedComplianceReportHtml(payload);
+  assert.match(html, /COMPLIANT<\/th><td>1/);
+  assert.match(html, /NOT STARTED<\/th><td>1/);
+  assert.equal(html.includes('standard-2'), false);
 });
 
 test('approved snapshot is withheld after session revocation during snapshot verification', async () => {
