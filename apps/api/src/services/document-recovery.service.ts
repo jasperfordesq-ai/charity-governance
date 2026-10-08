@@ -77,15 +77,19 @@ export class DocumentRecoveryService {
         id: { not: input.policyId }, organisationId: input.organisationId,
         recordClass: 'VAULT_DRAFT', state: 'APPROVED', withdrawal: { is: null },
       }, select: { id: true } });
-      if (!policy || competingPolicy || policy.retentionMode === 'PERMANENT') throw new AppError(409,
+      if (!policy || competingPolicy || !['REVIEW_REQUIRED', 'AFTER_ANCHOR'].includes(policy.retentionMode)) throw new AppError(409,
         'DOCUMENT_RECOVERY_POLICY_REQUIRED', 'An approved current draft-removal policy is required.');
+      if (policy.retentionMode === 'AFTER_ANCHOR' && (policy.retentionAnchor !== 'CREATED_AT'
+        || !Number.isInteger(policy.retentionDays) || policy.retentionDays! < 1 || policy.retentionDays! > 36525)) {
+        throw new AppError(409, 'DOCUMENT_RECOVERY_POLICY_REQUIRED', 'The approved draft-removal policy is invalid.');
+      }
       const bytes = await this.readFile(input.organisationId, doc.fileUrl, doc.storageProvider!);
       if (bytes.length !== doc.fileSize) throw new AppError(409,
         'DOCUMENT_RECOVERY_FILE_MISMATCH', 'The stored file does not match its recorded size.');
       const [clock] = await tx.$queryRaw<Array<{ now: Date }>>`SELECT timezone('UTC', statement_timestamp())::timestamp(3) AS now`;
       const now = clock!.now;
-      if (policy.retentionMode === 'AFTER_ANCHOR' && (policy.retentionAnchor !== 'CREATED_AT'
-        || doc.createdAt.getTime() + policy.retentionDays! * 86400000 > now.getTime())) {
+      if (policy.retentionMode === 'AFTER_ANCHOR'
+        && doc.createdAt.getTime() + policy.retentionDays! * 86400000 > now.getTime()) {
         throw new AppError(409, 'DOCUMENT_RETENTION_NOT_REACHED', 'The approved retention period has not elapsed.');
       }
       const result = await tx.document.update({ where: { id: doc.id, organisationId: input.organisationId }, data: {

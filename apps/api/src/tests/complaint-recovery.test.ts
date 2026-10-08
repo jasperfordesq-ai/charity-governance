@@ -76,6 +76,7 @@ test('complaint recovery refuses missing authority, stale revisions, board evide
     (f: any) => { f.policies = []; },
     (f: any) => { f.policies.push(f.policies[0]); },
     (f: any) => { f.policies[0].retentionMode = 'PERMANENT'; },
+    (f: any) => { f.policies[0].retentionMode = 'AFTER_CALENDAR_YEARS'; },
     (f: any) => { f.policies[0].retentionDays = null; },
     (f: any) => { f.policies[0].retentionAnchor = null; },
     (f: any) => { f.evidence.revision++; },

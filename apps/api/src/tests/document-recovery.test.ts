@@ -95,10 +95,12 @@ test('removal and restore preserve actual local bytes, identity and holds withou
   }
 });
 
-test('unapproved policy, held or linked record, inactive actor and stale revision refuse removal', async () => {
-  for (const scenario of ['policy', 'hold', 'linked', 'actor', 'revision', 'tenant']) {
+test('unapproved or unknown policy, held or linked record, inactive actor and stale revision refuse removal', async () => {
+  for (const scenario of ['policy', 'unknown-policy', 'bad-period', 'hold', 'linked', 'actor', 'revision', 'tenant']) {
     const f = fixture();
     if (scenario === 'policy') f.setPolicy(null);
+    if (scenario === 'unknown-policy') f.setPolicy({ id: 'policy-a', retentionMode: 'AFTER_CALENDAR_YEARS', recoveryDays: 30 });
+    if (scenario === 'bad-period') f.setPolicy({ id: 'policy-a', retentionMode: 'AFTER_ANCHOR', retentionAnchor: 'CREATED_AT', retentionDays: null, recoveryDays: 30 });
     if (scenario === 'hold') f.doc.deletionHold = true;
     if (scenario === 'linked') f.link();
     if (scenario === 'actor') f.disableActor();

@@ -1,5 +1,13 @@
 # CharityPilot Full-Platform Remediation Audit
 
+> **8 October 23:42 Dublin P04 issue OPEN:** Local PostgreSQL cutoff
+> function passed disposable PG16 leap-day/exact-boundary/invalid-input
+> proof; API removal paths now fail closed on unknown modes, with focused
+> tests and explicit recovery-list allowlist. This is a prerequisite only.
+> No year-based policy may be created until every direct database guard and
+> report/recovery/copy consumer applies the same cutoff and synthetic
+> early-write tests pass. No approved category rule or live rollout exists.
+
 > **8 October 23:38 Dublin P04 calendar proof, issue OPEN:** A disposable
 > PostgreSQL 16 arithmetic probe confirmed leap-day year-clamp parity with
 > the inert helper and a one-day difference from `365*6` days. Private

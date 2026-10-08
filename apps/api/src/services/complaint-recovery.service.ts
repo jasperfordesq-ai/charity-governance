@@ -52,7 +52,7 @@ export class ComplaintRecoveryService {
       const policies = await tx.dataRetentionPolicyRevision.findMany({ where: { organisationId: input.organisationId,
         recordClass: 'COMPLAINT', state: 'APPROVED', withdrawal: { is: null } }, take: 2 });
       const policy = policies.length === 1 ? policies[0] : null;
-      if (!policy || policy.id !== input.policyId || policy.retentionMode === 'PERMANENT') {
+      if (!policy || policy.id !== input.policyId || !['REVIEW_REQUIRED', 'AFTER_ANCHOR'].includes(policy.retentionMode)) {
         throw new AppError(409, 'COMPLAINT_POLICY_CHANGED', 'Review the current approved complaint policy before removal.');
       }
       const evidence = await tx.complaintResolutionEvidence.findFirst({ where: { organisationId: input.organisationId,

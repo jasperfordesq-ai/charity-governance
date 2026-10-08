@@ -1,5 +1,15 @@
 # CharityPilot Agent Continuation Handoff
 
+> **8 October 23:42 Dublin P04 safe preparation, source only:** Isolated
+> `retention-calendar-years` checkout adds a PostgreSQL UTC calendar-year
+> cutoff helper, with disposable PostgreSQL 16 leap-day, millisecond and
+> invalid-input proof. Document and complaint removal now reject an unknown
+> policy mode; the document policy shape is checked before file reads, and
+> the recovery-policy listing uses an explicit allowlist. Focused API tests
+> pass. The helper adds **no creatable calendar policy or disposal authority**.
+> Direct database removal/purge/copy guards, schema/input/review contracts,
+> controller decisions, deployment and DPO acceptance remain outstanding.
+
 > **8 October 23:38 Dublin P04 calendar parity:** Disposable PostgreSQL
 > 16 `make_interval(years => 6)` and local UTC helper both yield
 > 2030-02-28 for a 2024-02-29 anchor at the same time; `365*6` days yields
