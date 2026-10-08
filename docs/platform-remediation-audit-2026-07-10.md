@@ -1,5 +1,28 @@
 # CharityPilot Full-Platform Remediation Audit
 
+> **Later 8 October DPO Member positive-file test, issue still OPEN:** In
+> the disposable C01 tenant, the synthetic Owner uploaded and downloaded
+> a 95-byte fixture, then set CURRENT / MEMBER_SUITABLE / MEMBER_VISIBLE
+> with the byte-bound review receipt. A synthetic Member saw that one
+> reviewed file and downloaded matching SHA-256 bytes (HTTP 200), while
+> the restricted file stayed concealed (404). The test Member was removed
+> through the supported service. This is not real-record classification,
+> reviewed private-VM behavior, browser acceptance or DPO sign-off. Exact
+> receipt: `.charitypilot-private/member-boundary-isolated-2026-10-08.md`.
+
+> **Later 8 October DPO Member-access test, issue still OPEN:** A
+> disposable local CharityPilot tenant was exercised with a synthetic
+> Member and Owner control. The Member saw three trustees with minimal
+> fields and zero of five Owner-visible Vault records, while protected
+> statutory membership, conflicts, complaints, deletion/audit views and
+> full report returned 403. An exact retired/restricted synthetic Vault
+> download returned 404; the Owner control reached the same routes with
+> 200. All temporary Member identities were removed and their sessions
+> revoked. A later isolated positive fixture check is above. This does
+> not test the reviewed private VM, every sensitive classification or Nikita's
+> independent acceptance. Private exact matrix:
+> `.charitypilot-private/member-boundary-isolated-2026-10-08.md`.
+
 > **Later 8 October C01/DPO-05 sandbox readback, issue still OPEN:** Jasper
 > approved restoration of only synthetic page `491521` to restricted
 > `CPC01SYN`. The provider's current-page read returned version 2 and
