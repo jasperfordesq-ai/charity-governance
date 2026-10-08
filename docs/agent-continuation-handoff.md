@@ -1,5 +1,16 @@
 # CharityPilot Agent Continuation Handoff
 
+> **8 October 23:27 Dublin C1 numeric-ID connection follow-on:** NEXUS
+> `codex/c1-pending-profile` now has local tip `7d6059b5a`, three commits
+> above fetched `origin/main` `05c17bf94`. Red synthetic route test
+> proved an ordinary Member could create a connection request to a
+> pending registrant by guessed/forwarded ID (HTTP 201). The service now
+> checks active/approved/tenant state under its locked user rows, before
+> creation; both pending and active-but-unapproved targets receive a
+> generic refusal without a new connection. Controller/service suites
+> passed 47/130, staged hook 28/61. **Unpushed, unmerged, undeployed; C1
+> OPEN.** No live, original closure or Nikita acceptance proof followed.
+
 > **8 October 23:24 Dublin C1 additional local route fix:** The separate
 > NEXUS `codex/c1-pending-profile` branch now has tip `a6e90fd62`, two
 > commits above fetched `origin/main` `05c17bf94`; `cfdc4e00f` below is

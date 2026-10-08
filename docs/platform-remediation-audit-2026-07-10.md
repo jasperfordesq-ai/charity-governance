@@ -1,5 +1,15 @@
 # CharityPilot Full-Platform Remediation Audit
 
+> **8 October 23:27 Dublin C1 connection request, issue OPEN:** NEXUS
+> local tip `7d6059b5a` adds a third C1 commit after `a6e90fd62` and
+> `cfdc4e00f`. A red synthetic test received HTTP 201 when an ordinary
+> Member requested a connection to a pending registrant by ID. The
+> recipient status/approval/tenant decision now occurs under the user-row
+> lock; pending and active-but-unapproved targets are refused without a
+> new connection. Local controller/service suites passed 47/130; staged
+> hook 28/61. **No push, merge, deploy, hosted retest, C1 verification or
+> Nikita acceptance.**
+
 > **8 October 23:24 Dublin C1 follow-on, issue OPEN:** Separate NEXUS
 > branch `codex/c1-pending-profile` now ends at local commit `a6e90fd62`
 > after `cfdc4e00f` below. Additional red synthetic tests exposed pending
