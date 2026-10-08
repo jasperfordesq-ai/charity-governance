@@ -1,5 +1,16 @@
 # CharityPilot Full-Platform Remediation Audit
 
+> **Later 8 October C01/DPO-05 sandbox readback, issue still OPEN:** Jasper
+> approved restoration of only synthetic page `491521` to restricted
+> `CPC01SYN`. The provider's current-page read returned version 2 and
+> attachment `att524289`; the recoverable Trash became empty. The isolated
+> CharityPilot reconciliation recorded `PROCESSED|VISIBLE|2|` with no
+> error. No real erasure worker or permanent purge ran. Earlier notes
+> below describing the page in Trash are dated evidence, not its present
+> state. Retained published Vault disposal, all-copy/UNKNOWN evidence,
+> controller policy, independent recovery and Nikita acceptance remain
+> unresolved. Private receipt: `.charitypilot-private/c01-runtime/README.md`.
+
 > **8 October C01/DPO-05 source correction deployed, issue still OPEN:**
 > PR #38 merged as `32a09fc1` after exact head and merged-master CI/E2E
 > and automated review. Guarded blue private-VM release, two front doors,

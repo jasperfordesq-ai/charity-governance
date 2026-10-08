@@ -1,5 +1,19 @@
 # CharityPilot Agent Continuation Handoff
 
+> **Later 8 October C01 sandbox restoration (goal still open):** With Jasper's
+> specific approval, only synthetic page `491521` was restored from
+> recoverable Trash into restricted `CPC01SYN`. The sandbox Trash then had
+> no items. A live Confluence v2 read returned `status=current`, version 2,
+> and attachment inventory `[att524289]`; while trashed, the same page's
+> attachment list had returned `[]`. The isolated CharityPilot tenant's
+> read-only reconciliation recorded `PROCESSED|VISIBLE|2|` with no error.
+> No permanent purge or erasure worker ran. Earlier notes below saying the
+> page remains trashed describe prior checkpoints. This restores current
+> attachment visibility for one synthetic page; retained published Vault
+> disposal, all-copy/UNKNOWN evidence, controller policy, independent
+> recovery and Nikita acceptance remain open. Private exact receipt:
+> `.charitypilot-private/c01-runtime/README.md`.
+
 > **8 October verified C01 v2 trash source release:** PR #38 revised head
 > `bc97b1b6` passed exact CI `37758626399`, E2E `37758626354` and
 > automated review after two fail-closed corrections. Merged master
