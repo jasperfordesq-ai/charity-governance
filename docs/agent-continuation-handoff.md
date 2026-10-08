@@ -1,5 +1,18 @@
 # CharityPilot Agent Continuation Handoff
 
+> **8 October verified `e566870d` private-VM release:** PR #23's
+> saved-intent Confluence page content-candidate observer passed exact
+> PR-head and merged-master CI/E2E plus automated review, then guarded green
+> cutover, restricted-runtime/zero-row postflight, both front doors,
+> preservation of 363 earlier VM backup hashes, SHA-matched three-file
+> workstation copy, isolated 155-migration/68-document restore and repeat
+> postflight. Blue `c98c26fb` is previous. Private receipt:
+> `.charitypilot-private/release-e566870d-saved-page-candidate-2026-10-08.md`.
+> This reader has no production caller or provider use; content similarity
+> is not exact operation identity. DPO-05 all-copy/UNKNOWN, C01–C05/P01–P09/
+> MFA, independent P05/P08, Member/export/deletion, replay/C1 and Nikita
+> acceptance remain OPEN. Older checkpoints below are dated history.
+
 > **8 October verified `c98c26fb` private-VM release:** PR #21's inert
 > Confluence page-storage/parent reader passed exact updated-head CI/E2E
 > and automated review, then exact merged-master CI `37702538043` and E2E
