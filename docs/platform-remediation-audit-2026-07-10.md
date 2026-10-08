@@ -1,5 +1,12 @@
 # CharityPilot Full-Platform Remediation Audit
 
+> **8 October 23:59 Dublin P04 copy SQL partial, OPEN:** Local shared
+> copy-policy validator now checks the UTC calendar cutoff for document
+> and complaint copies. The full disposable PG16 migration test passed
+> early/elapsed direct function cases for both classes, all rolled back.
+> Integrated authority/observation, complaint purge, API/UI, controller
+> approval and live/DPO proof still remain; the mode fence stays active.
+
 > **8 October 23:57 Dublin P04 complaint removal partial, OPEN:** Local
 > SQL now checks six calendar years from matching recorded complaint
 > resolution before direct removal. Disposable migration test proved

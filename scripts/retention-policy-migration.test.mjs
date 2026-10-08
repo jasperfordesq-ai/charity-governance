@@ -411,6 +411,24 @@ test('retention policy and recovery-state upgrade preserve documents and enforce
     sql(calendarClaim('2024-02-29 12:34:56.789'), /must wait for calendar-year retention expiry/);
     assert.equal(sql(calendarClaim('2020-02-29 12:34:56.789')), '1');
     assert.equal(sql(`SELECT count(*) FROM "DocumentPurgeClaim" WHERE id='calendar-claim';`), '0');
+    const calendarCopy = (recordClass, anchor) => `BEGIN;
+      INSERT INTO "Organisation" (id,name,"updatedAt") VALUES ('retention-calendar','Synthetic calendar charity',CURRENT_TIMESTAMP);
+      INSERT INTO "User" (id,email,name,"passwordHash",role,"organisationId","updatedAt")
+        VALUES ('calendar-owner','calendar-owner@example.invalid','Synthetic calendar owner','fixture-password-hash',
+          'OWNER','retention-calendar',CURRENT_TIMESTAMP);
+      ALTER TABLE "DataRetentionPolicyRevision" DISABLE TRIGGER "DataRetentionPolicyRevision_01_mode_fence";
+      INSERT INTO "DataRetentionPolicyRevision" (id,"organisationId","recordClass",revision,state,"retentionMode",
+        "retentionAnchor","retentionYears","recoveryDays","createdById","approvedById","approvedAt","approvalEvidenceRef")
+        VALUES ('calendar-copy','retention-calendar','${recordClass}',1,'APPROVED','AFTER_CALENDAR_YEARS',
+          'CREATED_AT',6,30,'calendar-owner','calendar-owner',CURRENT_TIMESTAMP,'CALENDAR-COPY-001');
+      ALTER TABLE "DataRetentionPolicyRevision" ENABLE TRIGGER "DataRetentionPolicyRevision_01_mode_fence";
+      SELECT "CopyPolicy_validate_fn"('retention-calendar','calendar-copy','${recordClass}',
+        'DISPOSE','${anchor}'::timestamp(3),timezone('UTC',clock_timestamp())::timestamp(3));
+      SELECT 'accepted'; ROLLBACK;`;
+    for (const recordClass of ['DOCUMENT_COPY', 'COMPLAINT_COPY']) {
+      sql(calendarCopy(recordClass, '2024-02-29 12:34:56.789'), /Copy retention has not expired/);
+      assert.equal(sql(calendarCopy(recordClass, '2020-02-29 12:34:56.789')), 'accepted');
+    }
     proveCopyAuthority(sql, {kind:'Document',organisation:'retention-a',actor:'owner-a',foreignActor:'owner-b',authorization:'expired-authorization',scope:'BACKUP-SET-001',observationRevision:1});
     // The earlier primary-retention scenario deliberately left two approvals.
     // New original-plan copy evidence must reject that ambiguity until reviewed.

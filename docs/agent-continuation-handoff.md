@@ -1,5 +1,15 @@
 # CharityPilot Agent Continuation Handoff
 
+> **8 October 23:59 Dublin P04 copy cutoff:** Forward migration
+> `20261008070000_copy_calendar_cutoff_guard` updates the shared SQL
+> copy-policy validator used by document and complaint copy authority
+> and observation paths. Full disposable PostgreSQL migration proof
+> passed: both copy classes refused premature six-year disposal and
+> accepted elapsed retention in rolled-back synthetic transactions.
+> This is direct function proof; integrated copy-authority and
+> observation tests for the year mode remain. The policy activation
+> fence, complaint purge and API/UI/controller gates remain open.
+
 > **8 October 23:57 Dublin P04 complaint removal, still fenced:** Forward
 > migration `20261008060000_complaint_calendar_removal_guard` evaluates
 > the recorded `RESOLVED_AT` evidence with the UTC year cutoff. Full
