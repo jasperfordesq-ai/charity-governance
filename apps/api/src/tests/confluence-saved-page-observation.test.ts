@@ -8,17 +8,18 @@ const operationId = '0123456789abcdef0123456789abcdef';
 const body = '<p>Disposable policy</p>';
 const bodySha256 = createHash('sha256').update(body).digest('hex');
 
-function fixture() {
+function fixture(savedBody = body) {
   const state: { siteId: string; status: string; parentId: string | null;
     title: string; body: string; version: number; reads: number } = {
     siteId: 'cloud-1', status: 'CONNECTED', parentId: 'parent-1',
-    title: 'Policy', body, version: 1, reads: 0,
+    title: 'Policy', body: savedBody, version: 1, reads: 0,
   };
   const prisma = {
     documentPublicationPageCreateIntent: { findFirst: async (args: { where: unknown }) => {
       assert.deepEqual(args.where, { id: operationId, organisationId: 'org-1' });
       return { id: operationId, cloudId: 'cloud-1', spaceId: 'space-1',
-        parentPageId: 'parent-1', title: 'Policy', bodySha256 };
+        parentPageId: 'parent-1', title: 'Policy',
+        bodySha256: createHash('sha256').update(savedBody).digest('hex') };
     } },
     organisationIntegration: { findUnique: async () => ({
       id: 'integration-1', status: state.status,
@@ -51,8 +52,35 @@ test('saved page intent yields only a twice-read content candidate', async () =>
   assert.equal(result.pageCreateOperationId, operationId);
   assert.equal(result.bodySha256, bodySha256);
   assert.equal(result.contentCandidate, true);
+  assert.equal(result.operationMarkerCandidate, false);
   assert.equal(result.operationIdentityVerified, false);
   assert.equal(result.actionAuthorized, false);
+});
+
+test('exact trailing page-create marker is only a non-authorizing candidate', async () => {
+  const marker = `<p>CharityPilot page-create operation v1: ${operationId}</p>`;
+  const f = fixture(`${body}${marker}`);
+  const result = await observe(f);
+  assert.equal(f.state.reads, 2);
+  assert.equal(result.operationMarkerCandidate, true);
+  assert.equal(result.contentCandidate, true);
+  assert.equal(result.operationIdentityVerified, false);
+  assert.equal(result.actionAuthorized, false);
+});
+
+test('wrong, embedded or repeated markers never become operation candidates', async () => {
+  const marker = `<p>CharityPilot page-create operation v1: ${operationId}</p>`;
+  for (const savedBody of [
+    `${body}<p>CharityPilot page-create operation v1: ${'f'.repeat(32)}</p>`,
+    `${marker}${body}`,
+    `${body}${marker}${marker}`,
+  ]) {
+    const result = await observe(fixture(savedBody));
+    assert.equal(result.contentCandidate, true);
+    assert.equal(result.operationMarkerCandidate, false);
+    assert.equal(result.operationIdentityVerified, false);
+    assert.equal(result.actionAuthorized, false);
+  }
 });
 
 test('wrong target, parent, title or body cannot become a candidate', async () => {

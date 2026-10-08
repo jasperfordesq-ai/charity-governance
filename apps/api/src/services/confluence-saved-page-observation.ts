@@ -4,6 +4,7 @@ import { AppError } from '../utils/errors.js';
 import { currentAccessTokenForOrganisation } from './confluence-connection.service.js';
 import { createConfluenceClient } from './confluence-client.js';
 import { getPageStorage } from './confluence-pages.js';
+import { confluencePageCreateOperationMarker } from './confluence-page-operation-marker.js';
 
 const OPERATION_ID = /^[0-9a-f]{32}$/;
 const PAGE_ID = /^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$/;
@@ -34,8 +35,10 @@ function connectedHostname(config: unknown, cloudId: string): string {
 /**
  * Read-only content candidate for one immutable page-create intent. A matching
  * title, parent and body digest do not identify the operation that created a
- * page: no provider-visible marker has yet been validated. Never use this
- * result to adopt a page, retry a write, erase content or close all-copy work.
+ * page. An exact trailing marker is only a candidate until actual provider
+ * storage and version-history behavior is validated on the C01 test site.
+ * Never use this result to adopt a page, retry a write, erase content or
+ * close all-copy work.
  */
 export async function observeSavedConfluencePageCreate(
   prisma: PrismaClient,
@@ -44,7 +47,8 @@ export async function observeSavedConfluencePageCreate(
 ): Promise<{
   pageCreateOperationId: string; cloudId: string; pageId: string;
   siteHostname: string; version: number; bodySha256: string;
-  contentCandidate: true; operationIdentityVerified: false; actionAuthorized: false;
+  contentCandidate: true; operationMarkerCandidate: boolean;
+  operationIdentityVerified: false; actionAuthorized: false;
 }> {
   if (typeof input.organisationId !== 'string' || input.organisationId.length === 0
     || !OPERATION_ID.test(input.operationId) || !PAGE_ID.test(input.pageId)) throw invalidBinding();
@@ -88,12 +92,17 @@ export async function observeSavedConfluencePageCreate(
     if (bytes > MAX_BODY_BYTES) throw invalidCandidate();
     const digest = createHash('sha256').update(result.bodyStorage, 'utf8').digest('hex');
     if (digest !== intent.bodySha256) throw invalidCandidate();
-    return { version: result.page.version, digest };
+    const marker = confluencePageCreateOperationMarker(intent.id);
+    const operationMarkerCandidate = result.bodyStorage.endsWith(marker)
+      && result.bodyStorage.indexOf(marker) === result.bodyStorage.length - marker.length;
+    return { version: result.page.version, digest, operationMarkerCandidate };
   };
   const first = await read();
   const second = await read();
-  if (second.version !== first.version || second.digest !== first.digest) throw invalidCandidate();
+  if (second.version !== first.version || second.digest !== first.digest
+    || second.operationMarkerCandidate !== first.operationMarkerCandidate) throw invalidCandidate();
   return { pageCreateOperationId: intent.id, cloudId: intent.cloudId, pageId: input.pageId,
     siteHostname, version: first.version, bodySha256: first.digest,
-    contentCandidate: true, operationIdentityVerified: false, actionAuthorized: false };
+    contentCandidate: true, operationMarkerCandidate: first.operationMarkerCandidate,
+    operationIdentityVerified: false, actionAuthorized: false };
 }
