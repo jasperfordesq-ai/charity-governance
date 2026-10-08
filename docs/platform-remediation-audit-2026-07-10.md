@@ -1,5 +1,12 @@
 # CharityPilot Full-Platform Remediation Audit
 
+> **9 October 00:10 Dublin P04 copy UI partial, OPEN:** Local copy
+> authority review now represents a calendar-year term and creation
+> anchor; malformed/unknown terms fail closed in the panel. Web type
+> check and 554 tests pass. The SQL validator governs actual cutoff.
+> Integrated calendar copy events, remaining policy input/display,
+> verifier, controller decision, release and DPO review remain open.
+
 > **9 October 00:09 Dublin P04 preparation partial, OPEN:** Local
 > document and complaint signed recovery preparation now accepts
 > well-shaped calendar year terms for both current and removal policies,

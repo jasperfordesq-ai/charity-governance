@@ -1,5 +1,14 @@
 # CharityPilot Agent Continuation Handoff
 
+> **9 October 00:10 Dublin P04 copy review UI, still fenced:** The local
+> copy authority panel now recognises bounded year terms, shows calendar
+> years from copy creation, requires the reviewed creation timestamp for
+> a calendar policy, and refuses malformed or unknown terms before a
+> decision or observation selection. Web TypeScript check and all 554
+> web tests pass. The SQL copy validator remains the authoritative
+> cutoff check. No integrated year-mode event/observation or live proof;
+> policy creation and human/controller approval remain closed.
+
 > **9 October 00:09 Dublin P04 recovery preparation, still inactive:**
 > Document and complaint signed preparation parsers now carry a valid
 > `AFTER_CALENDAR_YEARS` policy and non-null 1–100 year term for both
