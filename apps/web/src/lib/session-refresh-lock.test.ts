@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { coordinateSessionRefresh, SessionRefreshLockUnavailableError } from './session-refresh-lock';
+import { coordinateSessionLogout, coordinateSessionRefresh, SessionRefreshLockUnavailableError } from './session-refresh-lock';
 
 function crossTabFixture() {
   let tail: Promise<unknown> = Promise.resolve();
@@ -29,6 +29,49 @@ test('simultaneous tabs share one successful cookie rotation without storing cre
   ]);
   assert.equal(calls, 1);
   assert.equal(storage.getItem('charitypilot:session-refresh-stamp'), 'rotation-1');
+});
+
+test('sign-out waits for an in-flight refresh before revoking the replacement cookie', async () => {
+  const { locks, storage } = crossTabFixture();
+  const order: string[] = [];
+  let finishRefresh!: () => void;
+  const refreshGate = new Promise<void>((resolve) => { finishRefresh = resolve; });
+  const refreshing = coordinateSessionRefresh(async () => {
+    order.push('refresh-start');
+    await refreshGate;
+    order.push('refresh-end');
+  }, locks, storage, () => 'rotation');
+  await Promise.resolve();
+  const signingOut = coordinateSessionLogout(async () => { order.push('logout'); }, locks, storage,
+    () => 'logout');
+  assert.deepEqual(order, ['refresh-start']);
+  finishRefresh();
+  await Promise.all([refreshing, signingOut]);
+  assert.deepEqual(order, ['refresh-start', 'refresh-end', 'logout']);
+  assert.equal(storage.getItem('charitypilot:session-refresh-stamp'), 'logout');
+});
+
+test('a refresh queued behind successful sign-out never presents the spent cookie', async () => {
+  const { locks, storage } = crossTabFixture();
+  let finishLogout!: () => void;
+  const logoutGate = new Promise<void>((resolve) => { finishLogout = resolve; });
+  let refreshes = 0;
+  const signingOut = coordinateSessionLogout(async () => { await logoutGate; }, locks, storage,
+    () => 'logout');
+  await Promise.resolve();
+  const refreshing = coordinateSessionRefresh(async () => { refreshes += 1; }, locks, storage,
+    () => 'rotation');
+  finishLogout();
+  await Promise.all([signingOut, refreshing]);
+  assert.equal(refreshes, 0);
+  assert.equal(storage.getItem('charitypilot:session-refresh-stamp'), 'logout');
+});
+
+test('failed sign-out leaves the shared stamp unchanged for a later renewal', async () => {
+  const { locks, storage } = crossTabFixture();
+  await assert.rejects(coordinateSessionLogout(async () => { throw new Error('logout failed'); },
+    locks, storage, () => 'logout'), /logout failed/);
+  assert.equal(storage.getItem('charitypilot:session-refresh-stamp'), null);
 });
 
 test('a failed rotation leaves the next tab able to retry', async () => {

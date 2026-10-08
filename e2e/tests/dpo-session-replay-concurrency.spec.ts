@@ -119,6 +119,69 @@ test.describe('DPO session replay concurrency', () => {
     expect(await replayCount()).toBe(beforeReplayCount);
   });
 
+  test('a second tab cannot refresh a cookie while browser sign-out is finishing', async ({
+    owner,
+    newFencedContext,
+    browserOriginFence,
+  }) => {
+    test.setTimeout(120_000);
+    const replayCount = () => withDb(async (client) => {
+      const result = await client.query<{ count: number }>(
+        `SELECT COUNT(*)::INTEGER AS count FROM "SecurityAuditEvent"
+          WHERE "organisationId" = $1 AND "type" = 'SESSION_REPLAY_DETECTED'`,
+        [owner.organisationId],
+      );
+      return result.rows[0]?.count ?? 0;
+    });
+    const before = await replayCount();
+    const storageState = await createAuthenticatedStorageState({
+      userId: owner.userId,
+      organisationId: owner.organisationId,
+      role: 'OWNER',
+    });
+    const context = await newFencedContext({ storageState });
+    const signingOutPage = await context.newPage();
+    const waitingPage = await context.newPage();
+    for (const page of [signingOutPage, waitingPage]) {
+      await gotoWithDevServerRetry(page, '/security-data');
+      await expect(page.getByRole('heading', { name: 'Session replay diagnostics' })).toBeVisible();
+    }
+    expect(await signingOutPage.evaluate(() => Boolean(navigator.locks && localStorage))).toBe(true);
+
+    let logoutReached!: () => void;
+    const serverRevoked = new Promise<void>((resolve) => { logoutReached = resolve; });
+    let finishLogout!: () => void;
+    const deliverLogout = new Promise<void>((resolve) => { finishLogout = resolve; });
+    // Let the server revoke the session, but hold the browser response (and
+    // its cookie clearance) until the other tab has received a 401. This
+    // reproduces the narrow post-logout window without copying a token.
+    await signingOutPage.route('**/api/v1/auth/logout', async (route) => {
+      const response = await route.fetch();
+      expect(response.status()).toBe(200);
+      logoutReached();
+      await deliverLogout;
+      await route.fulfill({ response });
+    });
+    let refreshes = 0;
+    waitingPage.on('request', (request) => {
+      if (new URL(request.url()).pathname === '/api/v1/auth/refresh') refreshes += 1;
+    });
+
+    const logoutClick = signingOutPage.getByRole('button', { name: 'Logout', exact: true }).click();
+    await serverRevoked;
+    const unauthorised = waitingPage.waitForResponse((response) =>
+      response.url().startsWith(`${browserOriginFence.apiOrigin}/api/v1/team/replay-diagnostics`)
+      && response.status() === 401);
+    await waitingPage.getByRole('button', { name: 'Refresh', exact: true }).click();
+    await unauthorised;
+    finishLogout();
+    await logoutClick;
+    await expect(signingOutPage).toHaveURL(/\/login(?:\?|$)/);
+    await expect(waitingPage).toHaveURL(/\/login/);
+    expect(refreshes).toBe(0);
+    expect(await replayCount()).toBe(before);
+  });
+
   test('an expired protected page renews in the browser without a proxy replay', async ({
     owner,
     newFencedContext,

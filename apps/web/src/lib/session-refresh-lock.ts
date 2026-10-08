@@ -26,6 +26,29 @@ function readStamp(storage: StorageLike | undefined): string | null {
   }
 }
 
+/** Keep logout's server revocation and cookie clearance in the same
+ * cross-tab critical section as refresh. The stamp tells a refresh that was
+ * already waiting on the lock to retry its original request without
+ * presenting the just-revoked single-use token. It contains no credential.
+ */
+export async function coordinateSessionLogout(
+  logout: () => Promise<void>,
+  locks: LockManagerLike | undefined,
+  storage: StorageLike | undefined,
+  newStamp: () => string = () => crypto.randomUUID(),
+): Promise<void> {
+  const perform = async () => {
+    await logout();
+    try {
+      storage?.setItem(REFRESH_STAMP_KEY, newStamp());
+    } catch {
+      // A held Web Lock still serializes callers when storage is unavailable.
+    }
+  };
+  if (locks) await locks.request(REFRESH_LOCK_NAME, perform);
+  else await perform();
+}
+
 export async function coordinateSessionRefresh(
   refresh: () => Promise<void>,
   locks: LockManagerLike | undefined,
