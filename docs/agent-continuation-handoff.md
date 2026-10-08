@@ -1,6 +1,24 @@
 # CharityPilot Agent Continuation Handoff
 
-> **8 October minimised export accuracy correction in review:** The
+> **8 October minimised aggregate release, DPO acceptance OPEN:** PR #55
+> exact head `67948218` passed CI `37834828825`, E2E `37834828822`
+> and Greptile, then merged as master `96c8b1e8`. Exact merged-master
+> CI `37836687158` and E2E `37836687440` passed. A guarded private-VM
+> blue-green cutover put green live at `96c8b1e8` with blue rollback;
+> restricted runtime role, protection guards, profile parity and both
+> loopback/Tailscale health and login passed. Deploy backup set
+> `2026-10-08T20-17-32-892Z` passed isolated restore and same-host
+> three-file hash matching. The correction counts an unrecorded snapshot
+> standard as NOT STARTED in the minimised draft. The reviewed tenant
+> still has zero genuine approved Board snapshots, zero approved
+> VAULT_DRAFT policies, nine historical session-replay events and zero
+> risk-control verifications. Real report audience/field acceptance,
+> independent recovery, retention/erasure decisions, replay/C1 review and
+> Nikita's independent sign-off remain open. Jasper kept the temporary
+> Member active for more testing. Private receipt:
+> `.charitypilot-private/release-96c8b1e8-minimised-count-2026-10-08.md`.
+
+> **Earlier 8 October source checkpoint, superseded by release above:** The
 > minimised draft aggregate previously skipped snapshot standards with no
 > record, while the full report rendered them as NOT STARTED. A focused
 > regression reproduced that discrepancy; branch

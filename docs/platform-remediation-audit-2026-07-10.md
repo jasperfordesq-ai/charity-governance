@@ -1,5 +1,21 @@
 # CharityPilot Full-Platform Remediation Audit
 
+> **8 October report-minimisation source correction released; issue OPEN:**
+> PR #55 corrected minimised aggregate counting for snapshot standards
+> without records; exact head CI/E2E/review, merged-master CI/E2E and
+> guarded private-VM green cutover passed at `96c8b1e8`. Postflight
+> verified restricted `cp_runtime`, protection guards and both private
+> health origins. Its backup set passed isolated restore and same-host
+> SHA-256 copy. The reviewed charity still has no genuine Board-approved
+> snapshot, so no real minimised artifact or controller/DPO field and
+> audience approval can be claimed. The isolated C01 `blob:` artifact
+> remains uninspected and C01 services were down at the last review.
+> External disclosure remains prohibited pending recipient-specific
+> approval. See the private field review and release receipt. The
+> temporary Member remains active for further access tests by Jasper's
+> decision; nine historical replay events, C1 evidence and independent
+> recovery are still open.
+
 > **8 October DPO Member access, live positive download; issue OPEN:**
 > With exact-file controller approval and separate action-time upload and
 > access grants, Owner uploaded `cmuzx67s40006o901zappjqgm` through
