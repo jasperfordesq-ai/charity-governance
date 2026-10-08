@@ -1,14 +1,17 @@
 # CharityPilot Agent Continuation Handoff
 
-> **8 October C1 pending-profile audience finding; source fix local only:**
+> **8 October 21:25 UTC C1 audience fix strengthened; source local only:**
 > Synthetic NEXUS staging `2ff23039c` returned HTTP 200 to an ordinary
 > same-tenant Member for a pending registrant's numeric profile, exposing
 > first name and location, while anonymous and foreign-tenant requests were
 > denied and private contact/DOB fields were absent. A local NEXUS branch
-> `codex/c1-pending-profile` commit `c6cb952ef` now guards non-active
-> profiles from ordinary Members, with staff and activation controls tested
-> (full profile suite 56/130; pre-commit inventory and staged-test gates
-> passed). The branch is **unpushed, unmerged and undeployed**; hosted
+> `codex/c1-pending-profile` commit `a276322a0` now guards both non-active
+> and active-but-unapproved profiles from ordinary Members, with approved
+> staff and activation controls tested (full profile suite 57/136; native
+> producer inventory 237 calls; schema-skip and staged credential checks
+> passed). The worktree's generated Git hook shim was absent; the scoped
+> tests and checks were run explicitly, not through that shim. The branch
+> is **unpushed, unmerged and undeployed**; hosted
 > behavior remains the staging finding. Product/risk-owner and Nikita
 > review, CI/release-bound retest and the original C1 closure evidence are
 > pending. CharityPilot C1 stays OPEN with zero verification rows. Full

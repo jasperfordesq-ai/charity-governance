@@ -1,12 +1,15 @@
 # CharityPilot Full-Platform Remediation Audit
 
-> **8 October C1 residual profile audience; issue OPEN:** The selected
+> **8 October 21:25 UTC C1 residual profile audience; issue OPEN:** The selected
 > broader synthetic check found an ordinary same-tenant Member could read
 > a pending registrant's first name and location from NEXUS staging
 > `/api/v2/users/{id}` (200); anonymous was 401, foreign tenant 404 and
 > surname/email/phone/DOB absent. A local NEXUS fix in unpushed/unmerged
-> branch `codex/c1-pending-profile` (`c6cb952ef`) passed the focused/full
-> profile tests and pre-commit checks, but is **not deployed**. This does
+> branch `codex/c1-pending-profile` (`a276322a0`) also withholds
+> active-but-unapproved profiles and passed the full 57-test/136-assertion
+> profile suite, worktree producer inventory, schema-skip budget and staged
+> credential check. Its generated Git hook shim was absent, so these gates
+> were run explicitly. The branch is **not deployed**. This does
 > not verify or close the separate CharityPilot C1 risk. The product/risk
 > owner and Nikita must decide the pending-profile audience and review a
 > release-bound retest; original C1 closure evidence remains missing.
