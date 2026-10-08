@@ -112,3 +112,33 @@ test('invalid identity is refused before database and provider reads', async () 
     && error.code === 'CONFLUENCE_PAGE_OBSERVATION_BINDING_INVALID');
   assert.equal(f.state.reads, 0);
 });
+
+test('an absent tenant-scoped intent cannot select a connected site', async () => {
+  const f = fixture();
+  let integrationReads = 0;
+  const prisma = {
+    documentPublicationPageCreateIntent: { findFirst: async (args: { where: unknown }) => {
+      assert.deepEqual(args.where, { id: operationId, organisationId: 'other-org' });
+      return null;
+    } },
+    organisationIntegration: { findUnique: async () => {
+      integrationReads += 1;
+      throw new Error('must not select a site');
+    } },
+  };
+  await assert.rejects(() => observeSavedConfluencePageCreate(prisma as never,
+    { organisationId: 'other-org', operationId, pageId: 'page-1' },
+    { getAccessToken: async () => 'token', fetch: f.fetchPage }),
+  (error: unknown) => error instanceof AppError
+    && error.code === 'CONFLUENCE_PAGE_OBSERVATION_BINDING_INVALID');
+  assert.equal(integrationReads, 0);
+  assert.equal(f.state.reads, 0);
+});
+
+test('a disconnected integration refuses provider read', async () => {
+  const f = fixture();
+  f.state.status = 'DISCONNECTED';
+  await assert.rejects(() => observe(f), (error: unknown) => error instanceof AppError
+    && error.code === 'CONFLUENCE_PAGE_OBSERVATION_BINDING_INVALID');
+  assert.equal(f.state.reads, 0);
+});
