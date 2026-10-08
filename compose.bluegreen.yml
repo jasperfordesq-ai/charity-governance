@@ -181,6 +181,11 @@ services:
         # past its hosted-only default: this one-origin topology's canonical API
         # origin IS the front door, so the override equals BLUEGREEN_ORIGIN.
         NEXT_PUBLIC_CHARITYPILOT_CANONICAL_API_ORIGIN: ${BLUEGREEN_ORIGIN:?Set BLUEGREEN_ORIGIN to the single origin Caddy serves web and api on}
+        NEXT_PUBLIC_CHARITYPILOT_DEPLOYMENT_MODE: ${BLUEGREEN_WEB_DEPLOYMENT_MODE:-}
+        NEXT_PUBLIC_CHARITYPILOT_TENANCY: ${BLUEGREEN_WEB_TENANCY:-}
+        NEXT_PUBLIC_CHARITYPILOT_REGISTRATION: ${BLUEGREEN_WEB_REGISTRATION:-}
+        NEXT_PUBLIC_CHARITYPILOT_EMAIL_DELIVERY: ${BLUEGREEN_WEB_EMAIL_DELIVERY:-}
+        NEXT_PUBLIC_CHARITYPILOT_BILLING: ${BLUEGREEN_WEB_BILLING:-}
         CHARITYPILOT_BUILD_COMMIT: ${BLUEGREEN_BLUE_TAG:?Set BLUEGREEN_BLUE_TAG to the blue colour's built commit}
     restart: unless-stopped
     depends_on:
@@ -198,6 +203,11 @@ services:
       # process.env) via the same NEXT_PUBLIC_* mechanism as NEXT_PUBLIC_API_URL,
       # so it must carry the identical value here, not just at build time.
       NEXT_PUBLIC_CHARITYPILOT_CANONICAL_API_ORIGIN: ${BLUEGREEN_ORIGIN:?Set BLUEGREEN_ORIGIN to the single origin Caddy serves web and api on}
+      NEXT_PUBLIC_CHARITYPILOT_DEPLOYMENT_MODE: ${BLUEGREEN_WEB_DEPLOYMENT_MODE:-}
+      NEXT_PUBLIC_CHARITYPILOT_TENANCY: ${BLUEGREEN_WEB_TENANCY:-}
+      NEXT_PUBLIC_CHARITYPILOT_REGISTRATION: ${BLUEGREEN_WEB_REGISTRATION:-}
+      NEXT_PUBLIC_CHARITYPILOT_EMAIL_DELIVERY: ${BLUEGREEN_WEB_EMAIL_DELIVERY:-}
+      NEXT_PUBLIC_CHARITYPILOT_BILLING: ${BLUEGREEN_WEB_BILLING:-}
       # Colour-matched internal hop: the public front-door override above
       # (NEXT_PUBLIC_CHARITYPILOT_CANONICAL_API_ORIGIN) is unreachable from
       # inside this container network, so server-to-server calls are pinned
@@ -240,6 +250,11 @@ services:
         # past its hosted-only default: this one-origin topology's canonical API
         # origin IS the front door, so the override equals BLUEGREEN_ORIGIN.
         NEXT_PUBLIC_CHARITYPILOT_CANONICAL_API_ORIGIN: ${BLUEGREEN_ORIGIN:?Set BLUEGREEN_ORIGIN to the single origin Caddy serves web and api on}
+        NEXT_PUBLIC_CHARITYPILOT_DEPLOYMENT_MODE: ${BLUEGREEN_WEB_DEPLOYMENT_MODE:-}
+        NEXT_PUBLIC_CHARITYPILOT_TENANCY: ${BLUEGREEN_WEB_TENANCY:-}
+        NEXT_PUBLIC_CHARITYPILOT_REGISTRATION: ${BLUEGREEN_WEB_REGISTRATION:-}
+        NEXT_PUBLIC_CHARITYPILOT_EMAIL_DELIVERY: ${BLUEGREEN_WEB_EMAIL_DELIVERY:-}
+        NEXT_PUBLIC_CHARITYPILOT_BILLING: ${BLUEGREEN_WEB_BILLING:-}
         CHARITYPILOT_BUILD_COMMIT: ${BLUEGREEN_GREEN_TAG:?Set BLUEGREEN_GREEN_TAG to the green colour's built commit}
     restart: unless-stopped
     depends_on:
@@ -257,6 +272,11 @@ services:
       # process.env) via the same NEXT_PUBLIC_* mechanism as NEXT_PUBLIC_API_URL,
       # so it must carry the identical value here, not just at build time.
       NEXT_PUBLIC_CHARITYPILOT_CANONICAL_API_ORIGIN: ${BLUEGREEN_ORIGIN:?Set BLUEGREEN_ORIGIN to the single origin Caddy serves web and api on}
+      NEXT_PUBLIC_CHARITYPILOT_DEPLOYMENT_MODE: ${BLUEGREEN_WEB_DEPLOYMENT_MODE:-}
+      NEXT_PUBLIC_CHARITYPILOT_TENANCY: ${BLUEGREEN_WEB_TENANCY:-}
+      NEXT_PUBLIC_CHARITYPILOT_REGISTRATION: ${BLUEGREEN_WEB_REGISTRATION:-}
+      NEXT_PUBLIC_CHARITYPILOT_EMAIL_DELIVERY: ${BLUEGREEN_WEB_EMAIL_DELIVERY:-}
+      NEXT_PUBLIC_CHARITYPILOT_BILLING: ${BLUEGREEN_WEB_BILLING:-}
       # Colour-matched internal hop: the public front-door override above
       # (NEXT_PUBLIC_CHARITYPILOT_CANONICAL_API_ORIGIN) is unreachable from
       # inside this container network, so server-to-server calls are pinned

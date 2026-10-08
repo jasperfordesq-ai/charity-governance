@@ -700,7 +700,12 @@ function composePrefix({ projectDirectory } = {}) {
   return prefix;
 }
 
-function baseComposeEnv({ processEnv, resolvedEnvFilePath, fileEnv, blueTag, greenTag, activeTag }) {
+export function baseComposeEnv({ processEnv, resolvedEnvFilePath, fileEnv, blueTag, greenTag, activeTag }) {
+  // NEXT_PUBLIC_* values are baked into the browser bundle. Read the same
+  // restricted app env file used by the API, rather than ambient shell values.
+  const appEnv = fileEnv.BLUEGREEN_APP_ENV_FILE
+    ? parseEnvFile(fileEnv.BLUEGREEN_APP_ENV_FILE)
+    : fileEnv;
   return {
     ...processEnv,
     BLUEGREEN_ENV_FILE: resolvedEnvFilePath,
@@ -709,6 +714,11 @@ function baseComposeEnv({ processEnv, resolvedEnvFilePath, fileEnv, blueTag, gre
     BLUEGREEN_GREEN_TAG: greenTag,
     BLUEGREEN_ACTIVE_TAG: activeTag,
     BLUEGREEN_ORIGIN: fileEnv.BLUEGREEN_ORIGIN ?? '',
+    BLUEGREEN_WEB_DEPLOYMENT_MODE: appEnv.CHARITYPILOT_DEPLOYMENT_MODE ?? '',
+    BLUEGREEN_WEB_TENANCY: appEnv.CHARITYPILOT_TENANCY ?? '',
+    BLUEGREEN_WEB_REGISTRATION: appEnv.CHARITYPILOT_REGISTRATION ?? '',
+    BLUEGREEN_WEB_EMAIL_DELIVERY: appEnv.CHARITYPILOT_EMAIL_DELIVERY ?? '',
+    BLUEGREEN_WEB_BILLING: appEnv.CHARITYPILOT_BILLING ?? '',
     // M2 fix: '' counts as unset (project convention — matches preflight's
     // own frontPortValue check and compose's ${BLUEGREEN_FRONT_PORT:-8080}
     // shell default, both of which already treat '' as "not set"). `??`

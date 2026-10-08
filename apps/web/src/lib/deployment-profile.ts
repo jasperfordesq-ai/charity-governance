@@ -26,7 +26,7 @@
 // error. Docker `ARG X` / `ENV X=$X` pairs (see apps/web/Dockerfile) have no
 // way to express "unset" — an ARG that isn't passed at build time makes the
 // ENV value the empty string, not absent. Every build that doesn't pass these
-// build args (which is every build today) would otherwise fail `next build`
+// build args would otherwise fail `next build`
 // (the prerendered sitemap route reads these at build time) or throw at
 // render in the shipped client bundle. Whitespace-only and misspelled values
 // are NOT treated as unset — those still throw; only exactly '' derives the

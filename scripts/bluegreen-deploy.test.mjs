@@ -24,6 +24,33 @@ async function loadDeployRunner() {
   return (args, dependencies = {}) => module.runBluegreenDeployFromArgs(args, dependencies);
 }
 
+test('web build profile follows the API app env, ignoring ambient profile overrides', async () => {
+  const dir = makeFixtureDir('charitypilot-web-profile-');
+  try {
+    const appPath = join(dir, 'app.env');
+    writeFileSync(appPath, [
+      'CHARITYPILOT_TENANCY=multi',
+      'CHARITYPILOT_REGISTRATION=closed',
+      'CHARITYPILOT_EMAIL_DELIVERY=manual-link',
+      'CHARITYPILOT_BILLING=none',
+      '',
+    ].join('\n'));
+    const { baseComposeEnv } = await loadDeployModule();
+    const env = baseComposeEnv({
+      processEnv: { BLUEGREEN_WEB_EMAIL_DELIVERY: 'provider' },
+      resolvedEnvFilePath: join(dir, 'control.env'),
+      fileEnv: { BLUEGREEN_APP_ENV_FILE: appPath, CHARITYPILOT_EMAIL_DELIVERY: 'provider' },
+      blueTag: 'blue', greenTag: 'green', activeTag: 'blue',
+    });
+    assert.equal(env.BLUEGREEN_WEB_EMAIL_DELIVERY, 'manual-link');
+    assert.equal(env.BLUEGREEN_WEB_TENANCY, 'multi');
+    assert.equal(env.BLUEGREEN_WEB_REGISTRATION, 'closed');
+    assert.equal(env.BLUEGREEN_WEB_BILLING, 'none');
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
 // -----------------------------------------------------------------------------
 // Fixture scaffolding: a scratch state dir + env file + (fake) release
 // worktree containing a real migrations directory, so migration-gate.mjs
