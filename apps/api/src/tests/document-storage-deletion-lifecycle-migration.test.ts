@@ -799,6 +799,16 @@ test('real PostgreSQL 16 migration makes a Confluence erasure request stamp one-
     assert.match(psql(container, `UPDATE "DocumentPublication" SET
       "erasureRequestedAt"=now(), "erasureDeletionId"='job-live' WHERE id='live';`, false).stderr,
     /requires a retired publication/);
+    assert.match(psql(container, `UPDATE "DocumentPublication" SET state='RETIRED',
+      "erasureRequestedAt"=now(), "erasureDeletionId"='job-live' WHERE id='live';`, false).stderr,
+    /requires a retired publication/);
+    for (const partialStamp of [
+      `"erasureRequestedAt"=now()`,
+      `"erasureDeletionId"='job-partial'`,
+    ]) {
+      assert.match(psql(container, `UPDATE "DocumentPublication" SET ${partialStamp}
+        WHERE id='retired';`, false).stderr, /requires a retired publication and complete request/);
+    }
     psql(container, `UPDATE "DocumentPublication" SET
       "erasureRequestedAt"='2026-10-08T04:00:00Z', "erasureDeletionId"='job-1' WHERE id='retired';`);
     for (const rewrite of [
