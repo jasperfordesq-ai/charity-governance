@@ -466,7 +466,7 @@ test('retention policy and recovery-state upgrade preserve documents and enforce
       assert.equal(error.code, 'PURGE_RESTORE_RECONCILIATION_REQUIRED');
       assert.equal(error.report.resurrectedDocuments, 1);
       assert.ok(error.report.differences.some(item => item.table === 'DocumentCopyHoldEvent' && item.missing === 7));
-      assert.ok(error.report.differences.some(item => item.table === 'DocumentCopyDispositionAuthority' && item.missing === 11));
+      assert.ok(error.report.differences.some(item => item.table === 'DocumentCopyDispositionAuthority' && item.missing === 12));
       assert.ok(error.report.differences.some(item => item.table === 'DocumentPurgeClaim' && item.missing === 1));
       return true;
     });

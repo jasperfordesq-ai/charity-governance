@@ -1,5 +1,14 @@
 # CharityPilot Full-Platform Remediation Audit
 
+> **9 October 00:13 Dublin P04 integrated copy proof, OPEN:** Both full
+> disposable PostgreSQL migration suites pass a calendar copy authority
+> and bound observation path, including missing/early anchor rejection
+> and elapsed leap-day acceptance. Only synthetic policy insertion
+> bypassed the creation fence; the fence was restored before events.
+> Backup-manifest `retentionDays` is a separate custody control, so it
+> does not verify application policy years. No approved term, live
+> release, independent custody or DPO acceptance exists.
+
 > **9 October 00:10 Dublin P04 copy UI partial, OPEN:** Local copy
 > authority review now represents a calendar-year term and creation
 > anchor; malformed/unknown terms fail closed in the panel. Web type

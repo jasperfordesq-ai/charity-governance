@@ -1,5 +1,18 @@
 # CharityPilot Agent Continuation Handoff
 
+> **9 October 00:13 Dublin P04 integrated copy proof, still fenced:**
+> Disposable full PostgreSQL document and complaint migration suites now
+> each test a calendar copy policy through real authority and observation
+> triggers: missing anchor and early leap-day term rejected; elapsed term
+> authorized and bound to verified absence. Both suites pass after the
+> document reconciliation fixture expected one additional authority.
+> The year-policy insertion bypasses only the activation trigger inside
+> disposable test databases, restores it immediately, and never touches
+> live data. The general document-recovery manifest's `retentionDays`
+> describes backup custody, not this application policy; do not rewrite
+> that manifest as a year-term verifier. Policy input/UI, approved term,
+> release and independent DPO review remain open.
+
 > **9 October 00:10 Dublin P04 copy review UI, still fenced:** The local
 > copy authority panel now recognises bounded year terms, shows calendar
 > years from copy creation, requires the reviewed creation timestamp for
