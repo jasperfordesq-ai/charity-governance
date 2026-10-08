@@ -1,5 +1,20 @@
 # CharityPilot Full-Platform Remediation Audit
 
+> **8 October DPO-05 saved-page candidate release:** Exact merged-master
+> `e566870d` passed CI `37707084587`, E2E `37707084621` and guarded green
+> private-VM cutover with restricted runtime, zero protected/publication
+> rows, 363 preserved prior backup hashes, SHA-matched workstation copy and
+> isolated 155-migration/68-document restore. The new saved-intent observer
+> compares tenant/site/space/parent/title/body digest and repeat page
+> version. It has no production caller or real provider use, and returns
+> only a content candidate. Provider-visible operation identity, complete
+> remote/local/export/backup copy inventory, UNKNOWN disposition, separate
+> C01 first contact, independent P05/P08 host-loss, controller/Board
+> decisions, role-specific acceptance and Nikita review remain OPEN. Exact
+> private receipt:
+> `.charitypilot-private/release-e566870d-saved-page-candidate-2026-10-08.md`.
+> Earlier checkpoints below are dated history.
+
 > **8 October DPO-05 readback source and private release:** Exact merged-
 > master `c98c26fb` passed CI `37702538043`, E2E `37702538021` and
 > guarded blue private-VM cutover with restricted runtime, zero protected/
