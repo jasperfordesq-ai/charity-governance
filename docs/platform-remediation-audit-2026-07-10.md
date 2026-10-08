@@ -1,5 +1,19 @@
 # CharityPilot Full-Platform Remediation Audit
 
+> **8 October DPO-05 erasure-stamp integrity release:** Exact merged-master
+> `2f7aec1d` passed CI `37727955227` and E2E `37727955387`, then guarded
+> green private-VM cutover with restricted runtime, both front doors,
+> active `DocumentPublication_erasure_stamp_guard`, 378 preserved prior
+> backup-file hashes, SHA-matched workstation copies and isolated
+> pre-upgrade/current restores (155/156 migrations, 68 documents). The
+> first erasure-request timestamp and job ID can no longer be cleared or
+> redirected after stamping. This does not activate provider purge or
+> prove real Confluence first contact. DPO-05 all-copy/UNKNOWN,
+> C01-C05/P01-P09/MFA, independent P05/P08, Member/export/deletion,
+> replay/C1 and Nikita acceptance remain OPEN. Private receipt:
+> `.charitypilot-private/release-2f7aec1d-erasure-stamp-2026-10-08.md`.
+> Earlier checkpoints below are dated history.
+
 > **8 October DPO-05 marker-observer release:** Exact merged-master
 > `58bfc20f` passed CI `37722085135`, E2E `37722085141` and guarded blue
 > private-VM cutover with restricted runtime, zero provider/publication
