@@ -1,5 +1,15 @@
 # CharityPilot Full-Platform Remediation Audit
 
+> **8 October DPO report-minimisation check, issue still OPEN:** An isolated
+> C01 Owner resolved four readiness blockers using labelled synthetic
+> inputs, saved a test-only approved snapshot and opened the minimised
+> draft tab. Browser policy blocked reading that `blob:` artifact; eight
+> focused source export tests passed separately. The live reviewed charity
+> still has no genuine Board-approved snapshot, so its full versus
+> minimised outputs cannot yet be compared with Nikita or approved for a
+> recipient. This synthetic result is no publication authority. Private
+> receipt: `.charitypilot-private/minimised-export-c01-2026-10-08.md`.
+
 > **8 October C01/DPO-05 restored-byte check, issue still OPEN:** The
 > restricted sandbox's signed-in Confluence download returned synthetic
 > attachment `att524289` (243 bytes), and its SHA-256 matched the original
