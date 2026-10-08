@@ -1,5 +1,18 @@
 # CharityPilot Agent Continuation Handoff
 
+> **8 October verified `2dd0a427` private-VM release:** PR #25's
+> page-create operation-ID source prerequisite passed exact merged-master
+> CI `37713125501` and E2E `37713125382`, then guarded blue cutover,
+> restricted-runtime/zero-row postflight, both front doors, preservation of
+> 366 prior backup hashes, SHA-matched workstation copy, isolated
+> 155-migration/68-document restore and repeat postflight. Green
+> `e566870d` is previous. Private receipt:
+> `.charitypilot-private/release-2dd0a427-page-create-id-prerequisite-2026-10-08.md`.
+> The outbound page body has no provider-visible marker and there has been
+> no real Confluence call. DPO-05 all-copy/UNKNOWN, C01–C05/P01–P09/MFA,
+> independent P05/P08, Member/export/deletion, replay/C1 and Nikita
+> acceptance remain OPEN. Older checkpoints below are dated history.
+
 > **8 October verified `e566870d` private-VM release:** PR #23's
 > saved-intent Confluence page content-candidate observer passed exact
 > PR-head and merged-master CI/E2E plus automated review, then guarded green
