@@ -1,5 +1,18 @@
 # CharityPilot Full-Platform Remediation Audit
 
+> **8 October DPO Member-access live UI check, issue still OPEN:** Jasper
+> signed into the reviewed private VM as the temporary Member. The Team
+> page identified the Member role; Board showed minimal trustee evidence,
+> Vault listed zero available documents, and full report, Governance
+> Audit, Minute Book and charity-wide security/data content were withheld.
+> Risk summaries and Team names/roles remained visible for Nikita's
+> audience review. The browser client rejected direct API navigation,
+> which is not a server denial result. Previous C01 403/404 checks are
+> isolated evidence only. Real-file suitability/positive download,
+> temporary-account cleanup and independent Nikita acceptance remain
+> outstanding. Private receipt:
+> `.charitypilot-private/member-live-ui-2026-10-08.md`.
+
 > **8 October DPO report-minimisation check, issue still OPEN:** An isolated
 > C01 Owner resolved four readiness blockers using labelled synthetic
 > inputs, saved a test-only approved snapshot and opened the minimised

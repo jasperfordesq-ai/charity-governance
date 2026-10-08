@@ -1,5 +1,20 @@
 # CharityPilot Agent Continuation Handoff
 
+> **8 October signed-in live Member UI checkpoint (acceptance open):**
+> Jasper used the accepted temporary Member account in the reviewed
+> private VM through Codex's in-app browser. Team identified the account
+> as `Member`. The Board page displayed only ordinary trustee evidence
+> fields; the Vault listed zero available documents. The full report,
+> Governance Audit, Minute Book and charity-wide Security & Data panels
+> withheld content. Registers showed risk summaries and fundraising
+> status while withholding conflicts, complaints and detailed risk notes.
+> The in-app browser blocked direct `/api/v1` navigation, so this is UI
+> evidence, not a live API 403 matrix. Nikita must assess whether Team
+> names/roles and risk summary fields suit this Member audience. A
+> positive real-file download requires exact-byte classification first;
+> temporary-account cleanup and independent DPO acceptance remain open.
+> Private receipt: `.charitypilot-private/member-live-ui-2026-10-08.md`.
+
 > **8 October synthetic minimised-export workflow (real acceptance open):**
 > In the isolated C01 tenant, the Owner filled three missing standard
 > explanations and the conditional profile with labelled synthetic data.
