@@ -14,7 +14,9 @@
 > CharityPilot test tenant, OAuth connection and C01 first-contact remain
 > untested. DPO-05, C01–C05/P01–P09/MFA, independent P05/P08,
 > Member/export/deletion, replay/C1 and Nikita acceptance stay OPEN. Private
-> ignored release/decision records hold exact site and backup identifiers.
+> ignored release receipt
+> `.charitypilot-private/release-21370791-current-inventory-2026-10-08.md`
+> and C01 decision sheet hold exact site and backup identifiers.
 
 > **8 October Confluence erasure readback release:** PR #33 revised head
 > `24d5a6f7` passed exact CI/E2E and automated review; merged master

@@ -15,7 +15,9 @@
 > test or DPO acceptance occurred. An empty separate Confluence sandbox is
 > online with no production-data copy; the separate CharityPilot test tenant,
 > OAuth connection and C01 first-contact exercise remain open. See the
-> private ignored release receipt and C01 decision sheet for identifiers.
+> private ignored release receipt
+> `.charitypilot-private/release-21370791-current-inventory-2026-10-08.md`
+> and C01 decision sheet for identifiers.
 > DPO-05, C01–C05/P01–P09/MFA, independent P05/P08, Member/export/deletion,
 > replay/C1 and Nikita acceptance remain OPEN.
 
