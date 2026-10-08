@@ -494,6 +494,49 @@ test('the exact page-create intent commits before the non-idempotent provider ca
   assert.ok(calls.indexOf('reservePageCreateIntent') < calls.findIndex(call => call.startsWith('createPage:')));
 });
 
+test('a scoped synthetic page marker is in the exact reserved and outbound create body', async () => {
+  const calls: string[] = [];
+  let sentBody = '';
+  let reservedId = '';
+  let reservedDigest = '';
+  const deps = {
+    ...spyDeps(calls, { operations: { createPage: async (_client, input) => {
+      sentBody = input.bodyStorage;
+      return PAGE;
+    } } }),
+    pageCreateMarkerProbe: { organisationId: 'org-1', cloudId: 'cloud-1', spaceId: 'space-1' },
+  };
+  await runPublisher(deps, { reservePageCreateIntent: async input => {
+    calls.push('reservePageCreateIntent');
+    reservedId = input.operationId;
+    reservedDigest = input.bodySha256;
+    return input.operationId;
+  } });
+  assert.match(reservedId, /^[0-9a-f]{32}$/);
+  assert.equal(sentBody, publicationBody(DOC, TARGET.publishingModel.bodyMode)
+    + `<p>CharityPilot page-create operation v1: ${reservedId}</p>`);
+  assert.equal(reservedDigest, createHash('sha256').update(sentBody, 'utf8').digest('hex'));
+  assert.ok(calls.indexOf('reservePageCreateIntent') < calls.findIndex(call => call.startsWith('createPage:')));
+});
+
+test('a synthetic page marker probe refuses another destination before connection or provider I/O', async () => {
+  for (const pageCreateMarkerProbe of [
+    { organisationId: 'other-org', cloudId: 'cloud-1', spaceId: 'space-1' },
+    { organisationId: 'org-1', cloudId: 'other-cloud', spaceId: 'space-1' },
+    { organisationId: 'org-1', cloudId: 'cloud-1', spaceId: 'other-space' },
+  ]) {
+    const calls: string[] = [];
+    const error = appError(await captureRejection(runPublisher({
+      ...spyDeps(calls), pageCreateMarkerProbe,
+    })));
+    assert.equal(error.code, 'CONFLUENCE_PAGE_MARKER_PROBE_SCOPE_MISMATCH');
+    assert.deepEqual(calls, ['readTarget']);
+  }
+  assert.throws(() => createConfluencePublisher({ ...spyDeps([]),
+    pageCreateMarkerProbe: { organisationId: '*', cloudId: 'cloud-1', spaceId: 'space-1' },
+  }), TypeError);
+});
+
 test('a reservation returning a different operation id refuses the page create', async () => {
   const calls: string[] = [];
   const error = appError(await captureRejection(runPublisher(spyDeps(calls), {
