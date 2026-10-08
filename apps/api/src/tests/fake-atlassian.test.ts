@@ -59,7 +59,7 @@ test('a refresh rotates the refresh token, and the old one is then rejected', as
   assert.equal(replay.status, 403);
 });
 
-test('v2 cannot tell a trashed page from a purged one, but v1 can', async () => {
+test('v2 status distinguishes trash from purge while the removed v1 endpoint returns 410', async () => {
   const site = createFakeAtlassian();
   site.addSpace({ id: 'space-1', key: 'GOV', name: 'Governance' });
   const base = `https://api.atlassian.com/ex/confluence/${site.cloudId}`;
@@ -74,17 +74,20 @@ test('v2 cannot tell a trashed page from a purged one, but v1 can', async () => 
 
   await site.fetch(`${base}/wiki/api/v2/pages/${page.id}`, { method: 'DELETE', headers: auth });
 
-  assert.equal((await site.fetch(`${base}/wiki/api/v2/pages/${page.id}`, { headers: auth })).status, 404);
+  const normal = await site.fetch(`${base}/wiki/api/v2/pages/${page.id}`, { headers: auth });
+  assert.equal(normal.status, 200);
+  assert.equal(((await normal.json()) as { status: string }).status, 'trashed');
   assert.equal(
-    (await site.fetch(`${base}/wiki/rest/api/content/${page.id}?status=trashed`, { headers: auth })).status,
+    (await site.fetch(`${base}/wiki/api/v2/pages/${page.id}?status=trashed`, { headers: auth })).status,
     200,
   );
+  assert.equal((await site.fetch(`${base}/wiki/rest/api/content/${page.id}?status=trashed`, { headers: auth })).status, 410);
 
   await site.fetch(`${base}/wiki/api/v2/pages/${page.id}?purge=true`, { method: 'DELETE', headers: auth });
 
   assert.equal((await site.fetch(`${base}/wiki/api/v2/pages/${page.id}`, { headers: auth })).status, 404);
   assert.equal(
-    (await site.fetch(`${base}/wiki/rest/api/content/${page.id}?status=trashed`, { headers: auth })).status,
+    (await site.fetch(`${base}/wiki/api/v2/pages/${page.id}?status=trashed`, { headers: auth })).status,
     404,
   );
 });
@@ -329,7 +332,7 @@ test('a findPageByTitle-shaped query resolves via the hyphenated space-id', asyn
   assert.equal(foundBody.results[0]?.spaceId, 'space-1');
 });
 
-test('v1 content returns v1\'s own body shape, not v2\'s', async () => {
+test('removed v1 content endpoint returns 410', async () => {
   const site = createFakeAtlassian();
   site.addSpace({ id: 'space-1', key: 'GOV', name: 'Governance' });
   const base = `https://api.atlassian.com/ex/confluence/${site.cloudId}`;
@@ -345,12 +348,7 @@ test('v1 content returns v1\'s own body shape, not v2\'s', async () => {
   await site.fetch(`${base}/wiki/api/v2/pages/${page.id}`, { method: 'DELETE', headers: auth });
 
   const trashed = await site.fetch(`${base}/wiki/rest/api/content/${page.id}?status=trashed`, { headers: auth });
-  const trashedBody = (await trashed.json()) as Record<string, unknown>;
-
-  assert.equal(trashedBody.type, 'page');
-  assert.equal(trashedBody.status, 'trashed');
-  assert.deepEqual(trashedBody.space, { id: 'space-1', key: 'GOV' });
-  assert.equal((trashedBody as { spaceId?: unknown }).spaceId, undefined);
+  assert.equal(trashed.status, 410);
 });
 
 // --- Final fix wave (whole-phase review) --------------------------------

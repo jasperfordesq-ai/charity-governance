@@ -1,5 +1,23 @@
 # CharityPilot Agent Continuation Handoff
 
+> **Later 8 October C01 real sandbox correction, source only:** A separate
+> loopback synthetic CharityPilot tenant published a 243-byte fixture to
+> restricted Confluence sandbox space `CPC01SYN` (page `491521`, attachment
+> `att524289`). Provider UI confirmed the attachment hash; a synthetic
+> external edit raised the page to version 2. The source Document was
+> classified RETIRED, withdrawing approval; the page was moved to
+> recoverable Trash, **not purged**. Real v2 page GET returned HTTP 200
+> with `status=trashed`; v2 `?status=trashed` also worked, while the old v1
+> trash endpoint returned 410. The deployed reader incorrectly reported
+> VISIBLE. Branch `codex/c01-v2-trash-readback` changes normal/status-
+> filtered readback and the fake provider; API build and 160 focused tests
+> pass. The patched disposable runtime read-only probe and reconcile
+> observed TRASHED version 2. **Uncommitted and undeployed** at this
+> checkpoint. A retained formerly published Document still has no
+> supported disposal/erasure request journey. Private exact receipt:
+> `.charitypilot-private/c01-runtime/README.md`. C01/DPO-05, policy,
+> historical copies, independent review and Nikita acceptance remain OPEN.
+
 > **8 October current-page attachment preflight release:** PR #35 revised
 > head `0190fe88` passed exact CI `37740754874`, E2E `37740754893` and
 > automated review after a later-page regression was added. Merged master

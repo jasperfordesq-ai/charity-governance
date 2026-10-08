@@ -316,7 +316,7 @@ test('the sequence restarts cleanly after a crash, because every step is idempot
     'DELETE pages/p1',
     'DELETE pages/p1?purge=true',
     'GET pages/p1',
-    'GET content/p1?status=trashed',
+    'GET pages/p1?status=trashed',
     'GET attachments/a1',
     'GET attachments?status=trashed',
   ]);

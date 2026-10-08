@@ -400,9 +400,11 @@ export function createFakeAtlassian(options: FakeAtlassianOptions = {}): FakeAtl
     return jsonResponse(200, pageJson(page));
   }
 
-  function getPageHandler(pageId: string): Response {
+  function getPageHandler(pageId: string, url: URL): Response {
     const page = pages.get(pageId);
-    if (page === undefined || page.status !== 'current') return notFound();
+    if (page === undefined || page.status === 'purged') return notFound();
+    const requestedStatus = url.searchParams.get('status');
+    if (requestedStatus !== null && requestedStatus !== page.status) return notFound();
     return jsonResponse(200, pageJson(page));
   }
 
@@ -544,33 +546,6 @@ export function createFakeAtlassian(options: FakeAtlassianOptions = {}): FakeAtl
    * `spaceId`, and carries `type: 'page'`. Trash detection is the next
    * consumer of this route, so the shape matters, not just the status code.
    */
-  function contentV1Json(page: FakePage): Record<string, unknown> {
-    const space = spaces.find((entry) => entry.id === page.spaceId);
-    return {
-      id: page.id,
-      type: 'page',
-      status: page.status,
-      title: page.title,
-      space: { id: page.spaceId, key: space?.key ?? '' },
-      version: { number: page.version },
-      _links: { base: wikiBase(), webui: webuiPath(page.spaceId, page.id, page.title) },
-    };
-  }
-
-  function getContentV1Handler(pageId: string, url: URL): Response {
-    const page = pages.get(pageId);
-    if (page === undefined) return notFound();
-
-    const status = url.searchParams.get('status');
-    if (status === 'trashed') {
-      if (page.status !== 'trashed') return notFound();
-      return jsonResponse(200, contentV1Json(page));
-    }
-
-    if (page.status !== 'current') return notFound();
-    return jsonResponse(200, contentV1Json(page));
-  }
-
   function route(method: string, url: URL, headers: Headers, bodyText: string | undefined): Response {
     if (url.hostname === AUTH_HOST && url.pathname === TOKEN_PATH) {
       if (method === 'POST') return handleToken(bodyText);
@@ -605,7 +580,7 @@ export function createFakeAtlassian(options: FakeAtlassianOptions = {}): FakeAtl
       const pageIdMatch = /^\/wiki\/api\/v2\/pages\/([^/]+)$/.exec(rest);
       if (pageIdMatch) {
         const pageId = pageIdMatch[1];
-        if (method === 'GET') return withAuth(headers, () => getPageHandler(pageId));
+        if (method === 'GET') return withAuth(headers, () => getPageHandler(pageId, url));
         if (method === 'PUT') return withAuth(headers, () => updatePageHandler(pageId, bodyText));
         if (method === 'DELETE') return withAuth(headers, () => deletePageHandler(pageId, url));
       }
@@ -626,8 +601,7 @@ export function createFakeAtlassian(options: FakeAtlassianOptions = {}): FakeAtl
 
       const contentMatch = /^\/wiki\/rest\/api\/content\/([^/]+)$/.exec(rest);
       if (contentMatch) {
-        const pageId = contentMatch[1];
-        if (method === 'GET') return withAuth(headers, () => getContentV1Handler(pageId, url));
+        if (method === 'GET') return withAuth(headers, () => jsonResponse(410, { message: 'Endpoint removed' }));
       }
     }
 
