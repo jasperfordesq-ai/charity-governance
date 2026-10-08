@@ -50,6 +50,7 @@ import {
   type PublicationBodyMode,
 } from './confluence-publishing-model.js';
 import { confluenceUploadOperationMarker } from './confluence-upload-operation-marker.js';
+import { confluencePageCreateOperationMarker } from './confluence-page-operation-marker.js';
 
 /**
  * The publish worker: the sequence that turns a `DocumentPublication` row into
@@ -1216,7 +1217,7 @@ async function resolvePage(input: {
   const operationId = randomBytes(16).toString('hex');
   const bodyStorage = publicationBody(doc, target.publishingModel.bodyMode)
     + (pageCreateMarkerProbe
-      ? `<p>CharityPilot page-create operation v1: ${operationId}</p>`
+      ? confluencePageCreateOperationMarker(operationId)
       : '');
   const reservedOperationId = await reservePageCreateIntent({
     operationId,
