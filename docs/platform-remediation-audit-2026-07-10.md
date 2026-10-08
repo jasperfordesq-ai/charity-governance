@@ -1,5 +1,15 @@
 # CharityPilot Full-Platform Remediation Audit
 
+> **9 October 00:30 Dublin overnight validation, OPEN:** The clean local
+> CharityPilot source at `6093fa9f` passed its full API test command,
+> including 11 disposable PostgreSQL migration tests, plus branch diff
+> whitespace check. None of the 33 local commits is pushed or deployed.
+> The separate NEXUS C1 neutral-alert route improvement at `2600751b8`
+> is likewise local only; syntax/JSON/routing smoke passed but isolated
+> Laravel and hosted end-to-end evidence, risk-owner decision and Nikita
+> acceptance remain. Live Member checks, policy approval, independent
+> recovery and other DPO-05 gates are still open.
+
 > **9 October 00:20 Dublin P04 claim response, OPEN:** Local document
 > purge now maps SQL calendar cutoff and unsupported-mode refusals to
 > controlled 409 responses. API build and 17 focused tests pass;

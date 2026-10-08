@@ -1,5 +1,19 @@
 # CharityPilot Agent Continuation Handoff
 
+> **9 October 00:30 Dublin overnight source checkpoint:** Clean local
+> CharityPilot `master` `6093fa9f` remains 33 commits ahead of origin,
+> unpushed/undeployed. The accumulated change passed
+> `git diff --check origin/master...HEAD` and the complete API test
+> command, including 11 serial disposable PostgreSQL migration tests.
+> In the separate NEXUS C1 worktree, clean local `2600751b8` routes
+> neutral registration alerts to staff member lists while preserving
+> pending-approval routes and profile privacy. PHP syntax, locale JSON,
+> six direct routing cases and diff checks passed; full isolated Laravel
+> and hosted C1 journeys remain. No new Nikita email was found after
+> 8 October. Login-dependent Member/Owner checks, controller retention
+> rules, independent custody/replay, release and DPO acceptance remain.
+> Private resume and C1 decision notes contain the exact next steps.
+
 > **9 October 00:20 Dublin P04 claim error parity:** The local document
 > purge service now translates the new database calendar cutoff refusal
 > to its existing `PURGE_NOT_DUE` 409 response, and an unsupported mode
