@@ -1,5 +1,21 @@
 # CharityPilot Full-Platform Remediation Audit
 
+> **8 October DPO Member report-navigation release, issue still OPEN:**
+> PR #47 merged as `9696fb5b` with exact merged-master CI/E2E
+> `37805072036`/`37805072114` passing. Guarded private-VM blue cutover,
+> final postflight, two same-host SHA-matched backup copies and two
+> isolated restore drills passed. In one signed-in live Member session,
+> dashboard, sidebar and regulator report-export/sign-off actions were
+> absent; direct `/export` remained restricted. This closes the observed
+> misleading Member navigation for that release, not Nikita's full access
+> acceptance. Direct API probing, a positive classified real-file download,
+> risk/Team audience decisions, temporary-account cleanup, approved real
+> report/audience review, independent host-loss recovery and DPO acceptance
+> remain outstanding. The live tenant had 72 document rows, four more than
+> the earlier 68-count checkpoint; this release did not classify those
+> additional rows. See private release receipt
+> `.charitypilot-private/release-9696fb5b-member-navigation-2026-10-08.md`.
+
 > **8 October DPO Member-access live UI check, issue still OPEN:** Jasper
 > signed into the reviewed private VM as the temporary Member. The Team
 > page identified the Member role; Board showed minimal trustee evidence,
