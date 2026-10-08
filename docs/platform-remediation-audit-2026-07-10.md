@@ -9,9 +9,11 @@
 > A current page with an attachment absent from the recorded erasure target
 > now fails before deletion, including when that ID is on a later provider
 > page. This is a bounded source/private-host control, not historical or
-> all-copy/UNKNOWN reconciliation or real provider proof. One empty separate
-> Confluence sandbox is online without a production-data copy; separate
-> CharityPilot test tenant, OAuth connection and C01 first-contact remain
+> all-copy/UNKNOWN reconciliation or real provider proof. One separate
+> Confluence-only sandbox is online and marked Never copied from production;
+> it has Atlassian starter content and a restricted synthetic space
+> (`CPC01SYN`). Its Users list includes two Atlassian app principals as Admin.
+> Separate CharityPilot test tenant, OAuth connection and C01 first-contact remain
 > untested. DPO-05, C01–C05/P01–P09/MFA, independent P05/P08,
 > Member/export/deletion, replay/C1 and Nikita acceptance stay OPEN. Private
 > ignored release receipt

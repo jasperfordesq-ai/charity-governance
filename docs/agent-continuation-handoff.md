@@ -12,9 +12,12 @@
 > refuses an unrecorded attachment found anywhere in the current page's
 > paginated list before delete/purge. It does not reconcile historical,
 > already trashed, backup or UNKNOWN copies, and no real Confluence provider
-> test or DPO acceptance occurred. An empty separate Confluence sandbox is
-> online with no production-data copy; the separate CharityPilot test tenant,
-> OAuth connection and C01 first-contact exercise remain open. See the
+> test or DPO acceptance occurred. A separate Confluence-only sandbox is
+> online and marked Never copied from production. It contains Atlassian
+> starter content and a restricted synthetic space (`CPC01SYN`). Its Users
+> list includes two Atlassian app principals as Admin. The separate
+> CharityPilot test tenant, OAuth connection and C01 first-contact exercise
+> remain open. See the
 > private ignored release receipt
 > `.charitypilot-private/release-21370791-current-inventory-2026-10-08.md`
 > and C01 decision sheet for identifiers.
