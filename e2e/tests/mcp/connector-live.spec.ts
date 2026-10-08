@@ -25,6 +25,11 @@ import {
   type McpFixture,
 } from '../../helpers/mcp-seed';
 
+// This harness runs the built connector. Node 22 can require its ESM output;
+// source imports here supply types without executing a different build.
+const { Session, NotConnectedError } = require('../../../mcp/dist/session.js') as typeof import('../../../mcp/src/session');
+const { createMemoryStore } = require('../../../mcp/dist/credentials.js') as typeof import('../../../mcp/src/credentials');
+
 /**
  * Concern: the MCP connector against a real API. Every other connector test
  * stubs fetch, so this is the only place the sign-in, refresh rotation,
@@ -247,6 +252,50 @@ test.describe('MCP connector lifecycle', () => {
       containsNone(connector.stderr(), [before!, after!]),
       'no refresh token may reach stderr',
     ).toBe(true);
+  });
+
+  test('a lost connector refresh response does not replay its server-spent token', async () => {
+    const store = createMemoryStore();
+    let refreshCalls = 0;
+    const session = new Session({
+      baseUrl: API_BASE_URL,
+      store,
+      fetchImpl: async (input, init) => {
+        const response = await fetch(input, init);
+        if (String(input).endsWith('/api/v1/auth/connector/refresh')) {
+          refreshCalls += 1;
+          expect(response.status).toBe(200);
+          // The database committed rotation, but the connector cannot read
+          // either replacement token from this deliberately lost response.
+          throw new Error('synthetic connector response loss');
+        }
+        return response;
+      },
+    });
+    await session.login(fixture.owner.email, fixture.owner.password);
+    const spentToken = store.read();
+    expect(spentToken).toBeTruthy();
+    const spentHash = createHash('sha256').update(spentToken!).digest('hex');
+    const replayCount = async () => withDb(async (client) => {
+      const result = await client.query<{ count: number }>(
+        `SELECT COUNT(*)::INTEGER AS count FROM "SecurityAuditEvent"
+          WHERE "organisationId" = $1 AND "type" = 'SESSION_REPLAY_DETECTED'`,
+        [fixture.owner.organisationId],
+      );
+      return result.rows[0]?.count ?? 0;
+    });
+    const before = await replayCount();
+    session.invalidateAccessToken();
+    await expect(session.accessToken()).rejects.toBeInstanceOf(NotConnectedError);
+    expect(store.read()).toBeNull();
+    await expect(session.accessToken()).rejects.toBeInstanceOf(NotConnectedError);
+    expect(refreshCalls).toBe(1);
+    const rotation = await withDb(async (client) => client.query<{ reason: string }>(
+      `SELECT "revocationReason" AS reason FROM "AuthSession"
+        WHERE "refreshTokenHash" = $1`, [spentHash]));
+    expect(rotation.rows).toHaveLength(1);
+    expect(rotation.rows[0]?.reason).toBe('ROTATED');
+    expect(await replayCount()).toBe(before);
   });
 
   test('an unknown tool is a clean error', async () => {
