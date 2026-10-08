@@ -108,10 +108,10 @@ export function DocumentListPanel({
         />
       ) : documents.length === 0 ? (
         <EmptyState
-          title="No documents uploaded yet"
+          title={canManage ? 'No documents uploaded yet' : 'No documents available to you'}
           description={canManage
             ? 'Upload the governing document, board conduct records, minutes, accounts, policies, and other evidence before the annual review.'
-            : 'No governance documents are available to review or download yet.'}
+            : 'No governance documents are currently available to review or download with your access level.'}
           action={canManage ? (
             <Button size="sm" className={primaryActionButtonClassName} onPress={onUploadFirst}>
               Upload first document
