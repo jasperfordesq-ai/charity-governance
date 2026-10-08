@@ -128,3 +128,21 @@ test('eraser cannot complete when the fake provider leaves a page in trash', asy
   }), (error: unknown) => (error as AppError).code === 'CONFLUENCE_ERASURE_UNVERIFIED');
   assert.equal(site.getPage(page.id)?.status, 'trashed');
 });
+
+test('eraser refuses an already trashed page before any destructive request', async () => {
+  const site = createFakeAtlassian();
+  site.addSpace({ id: 'space-1', key: 'GOV', name: 'Governance' });
+  const client = clientFor(site);
+  const page = await createPage(client, {
+    spaceId: 'space-1', title: 'Synthetic formerly published page', bodyStorage: '<p>test</p>',
+  });
+  await deletePage(client, page.id);
+  const before = site.calls.length;
+  const eraser = createConfluenceEraser({ connect: async () => client });
+  await assert.rejects(() => eraser({
+    organisationId: 'org-1', storagePath: 'org-1/test',
+    targetRef: { kind: 'confluence', cloudId: site.cloudId, pageId: page.id, attachmentIds: [] },
+  }), (error: unknown) => (error as AppError).code === 'CONFLUENCE_ERASURE_TRASH_INVENTORY_UNAVAILABLE');
+  assert.equal(site.calls.slice(before).some((call) => call.method === 'DELETE'), false);
+  assert.equal(site.getPage(page.id)?.status, 'trashed');
+});

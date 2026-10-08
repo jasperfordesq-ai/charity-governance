@@ -16,6 +16,14 @@
 > proof or Nikita acceptance. Private receipt:
 > `.charitypilot-private/c01-runtime/README.md`.
 
+> **Later PR #38 review gate:** An invalid v2 status is a per-page UNKNOWN
+> reconciliation result, preserving later reads. An already trashed page
+> now blocks the eraser before destructive calls because its attachment
+> inventory cannot be proved complete; the synthetic provider's trashed
+> page attachment listing returned empty after a known upload. Restoration
+> and review are required before any permanent erasure. Revised source and
+> exact-head CI/release are still pending; DPO-05 remains open.
+
 > **8 October current-page Confluence attachment preflight release:** PR #35
 > revised head `0190fe88` passed CI `37740754874`, E2E `37740754893` and
 > review; merged master `21370791` passed exact CI `37742234421` and E2E

@@ -18,6 +18,17 @@
 > `.charitypilot-private/c01-runtime/README.md`. C01/DPO-05, policy,
 > historical copies, independent review and Nikita acceptance remain OPEN.
 
+> **PR #38 review follow-up, later 8 October:** Automated review found that
+> an invalid provider status could stop a reconciliation batch and that
+> treating a trashed page as absent could skip the eraser's attachment
+> preflight. The revised source records such malformed page reads as
+> per-page UNKNOWN and continues. It refuses permanent erasure of an
+> already trashed page until the page is restored and its current attachment
+> inventory can be checked. Live synthetic trash-page attachment listing
+> returned an empty list despite an earlier attached file, confirming that
+> list is not safe as completeness proof. This is fail-closed source work,
+> pending revised PR tests/CI/review and release; no purge was attempted.
+
 > **8 October current-page attachment preflight release:** PR #35 revised
 > head `0190fe88` passed exact CI `37740754874`, E2E `37740754893` and
 > automated review after a later-page regression was added. Merged master

@@ -300,6 +300,16 @@ export function createConfluenceReconciler(deps: ConfluenceReconcilerDeps): Conf
           firstPage = false;
           continue;
         }
+        if (error instanceof AppError && error.code === 'CONFLUENCE_RESPONSE_INVALID') {
+          // A provider shape/status change is a page-level unknown, not a
+          // reason to abandon other pages in this tenant's bounded batch.
+          readings.push({ publicationId: publication.id, reading: {
+            state: 'UNKNOWN', determinate: false, version: null, title: null,
+            errorCode: 'CONFLUENCE_RESPONSE_INVALID',
+          } });
+          firstPage = false;
+          continue;
+        }
         throw error;
       }
 

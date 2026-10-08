@@ -9,6 +9,7 @@ import {
 } from '../services/confluence-reconcile.service.js';
 import type { ConfluenceClient } from '../services/confluence-client.js';
 import type { ConfluencePage } from '../services/confluence-pages.js';
+import { getPage as readProviderPage } from '../services/confluence-pages.js';
 import { AppError } from '../utils/app-error.js';
 
 const SITE_ID = 'site-1';
@@ -235,6 +236,22 @@ test('an unexpected v2 page status is UNKNOWN rather than VISIBLE', async () => 
   const result = await h.reconcile({ tenant: TENANT, publications: rows('page-1') });
   assert.equal(result.readings[0].reading.state, 'UNKNOWN');
   assert.equal(result.readings[0].reading.determinate, false);
+});
+
+test('real page reader missing status marks only that row UNKNOWN and continues', async () => {
+  const client = { request: async (spec: { path: string }) => ({ status: 200, body: {
+    id: spec.path.split('/').at(-1), title: 'Synthetic', spaceId: 'space-1',
+    version: { number: 1 },
+    ...(spec.path.endsWith('page-2') ? {} : { status: 'current' }),
+  } }) } as unknown as ConfluenceClient;
+  const h = harness({ getPage: (_client, pageId) => readProviderPage(client, pageId) });
+  const result = await h.reconcile({ tenant: TENANT, publications: rows('page-1', 'page-2', 'page-3') });
+  assert.equal(result.outcome, 'OK');
+  assert.deepEqual(result.readings.map(({ reading }) => [reading.state, reading.determinate]), [
+    ['VISIBLE', true], ['UNKNOWN', false], ['VISIBLE', true],
+  ]);
+  assert.deepEqual(h.pageReads, ['page-1', 'page-2', 'page-3']);
+  assert.equal(result.readings[1].reading.errorCode, 'CONFLUENCE_RESPONSE_INVALID');
 });
 
 // ---------------------------------------------------------------------------
