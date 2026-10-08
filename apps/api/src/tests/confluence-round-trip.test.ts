@@ -71,7 +71,7 @@ test('the real client publishes, reads back and then erases a page on the fake',
   assert.equal(site.getPage(page.id)?.status, 'purged');
 });
 
-test('only the v1 trashed read separates a restorable page from one that is gone', async () => {
+test('v2 status-filtered read separates a restorable page from one that is gone', async () => {
   const site = createFakeAtlassian();
   site.addSpace({ id: 'space-1', key: 'GOV', name: 'Governance' });
   const client = clientFor(site);
@@ -82,9 +82,8 @@ test('only the v1 trashed read separates a restorable page from one that is gone
     bodyStorage: '<p>Managed by CharityPilot.</p>',
   });
 
-  // A live page is invisible to this endpoint. It is filtered to trashed
-  // content, so `null` here is not an existence answer — the reconciler is
-  // only ever entitled to read it as "gone" because v2 has already 404ed.
+  // A live page is invisible to the trash-filtered endpoint. The reconciler
+  // first checks the normal read before interpreting null here as gone.
   assert.equal(
     await getTrashedPage(client, page.id),
     null,
@@ -94,21 +93,21 @@ test('only the v1 trashed read separates a restorable page from one that is gone
 
   await deletePage(client, page.id);
 
-  // The whole point. Both reads are 404 through v2; only v1 tells them apart.
-  assert.equal(await getPage(client, page.id), null, 'v2 cannot see a trashed page');
+  // The normal v2 read can return 200 with status=trashed; getPage excludes it.
+  assert.equal(await getPage(client, page.id), null, 'a trashed page is not current');
   const trashed = await getTrashedPage(client, page.id);
-  assert.equal(trashed?.id, page.id, 'v1 finds it in the trash — restorable, not gone');
+  assert.equal(trashed?.id, page.id, 'v2 finds it in the trash — restorable, not gone');
   assert.equal(trashed?.title, 'Conflict of Interest Policy');
   assert.equal(trashed?.version, 1, 'the version survives the trip to the trash');
-  assert.equal(trashed?.spaceId, 'space-1', 'v1 nests the space; the parse must still find it');
+  assert.equal(trashed?.spaceId, 'space-1');
 
   await purgePage(client, page.id);
 
-  assert.equal(await getPage(client, page.id), null, 'v2 answers the same 404 as before');
+  assert.equal(await getPage(client, page.id), null, 'purged page is absent');
   assert.equal(
     await getTrashedPage(client, page.id),
     null,
-    'and now v1 agrees it is gone — this difference is the only signal there is',
+    'the trash-filtered v2 read now agrees it is gone',
   );
 });
 
@@ -127,5 +126,23 @@ test('eraser cannot complete when the fake provider leaves a page in trash', asy
     organisationId: 'org-1', storagePath: 'org-1/test',
     targetRef: { kind: 'confluence', cloudId: site.cloudId, pageId: page.id, attachmentIds: [] },
   }), (error: unknown) => (error as AppError).code === 'CONFLUENCE_ERASURE_UNVERIFIED');
+  assert.equal(site.getPage(page.id)?.status, 'trashed');
+});
+
+test('eraser refuses an already trashed page before any destructive request', async () => {
+  const site = createFakeAtlassian();
+  site.addSpace({ id: 'space-1', key: 'GOV', name: 'Governance' });
+  const client = clientFor(site);
+  const page = await createPage(client, {
+    spaceId: 'space-1', title: 'Synthetic formerly published page', bodyStorage: '<p>test</p>',
+  });
+  await deletePage(client, page.id);
+  const before = site.calls.length;
+  const eraser = createConfluenceEraser({ connect: async () => client });
+  await assert.rejects(() => eraser({
+    organisationId: 'org-1', storagePath: 'org-1/test',
+    targetRef: { kind: 'confluence', cloudId: site.cloudId, pageId: page.id, attachmentIds: [] },
+  }), (error: unknown) => (error as AppError).code === 'CONFLUENCE_ERASURE_TRASH_INVENTORY_UNAVAILABLE');
+  assert.equal(site.calls.slice(before).some((call) => call.method === 'DELETE'), false);
   assert.equal(site.getPage(page.id)?.status, 'trashed');
 });

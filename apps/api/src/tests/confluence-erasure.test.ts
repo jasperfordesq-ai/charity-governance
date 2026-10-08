@@ -87,6 +87,7 @@ test('attachments are erased before the page, and each is trashed before it is p
 
   assert.deepEqual(calls, [
     'getPage:p1',
+    'isPageInTrash:p1',
     'deleteAttachment:a1',
     'purgeAttachment:a1',
     'deleteAttachment:a2',
@@ -109,7 +110,7 @@ test('normal and trash reads must both show absence', async () => {
 
   await eraser(target());
 
-  assert.deepEqual(calls, ['getPage:p1', 'deletePage:p1', 'purgePage:p1', 'getPage:p1', 'isPageInTrash:p1']);
+  assert.deepEqual(calls, ['getPage:p1', 'isPageInTrash:p1', 'deletePage:p1', 'purgePage:p1', 'getPage:p1', 'isPageInTrash:p1']);
 });
 
 test('an unrecorded current attachment blocks every destructive request', async () => {
@@ -192,9 +193,14 @@ test('erasure passes its cancellation signal into the current attachment invento
   assert.deepEqual(calls, [], 'no destructive provider request follows cancellation');
 });
 
-test('a page left in trash does not complete erasure after an ordinary 404', async () => {
-  const eraser = createConfluenceEraser(spyDeps([], { isPageInTrash: async () => true }));
-  await assert.rejects(() => eraser(target()), (error: unknown) => (error as AppError).code === 'CONFLUENCE_ERASURE_UNVERIFIED');
+test('a page already in trash refuses purge before any destructive request', async () => {
+  const calls: string[] = [];
+  const eraser = createConfluenceEraser(spyDeps(calls, {
+    isPageInTrash: async (_client, id) => { calls.push(`isPageInTrash:${id}`); return true; },
+  }));
+  await assert.rejects(() => eraser(target()),
+    (error: unknown) => (error as AppError).code === 'CONFLUENCE_ERASURE_TRASH_INVENTORY_UNAVAILABLE');
+  assert.deepEqual(calls, ['getPage:p1', 'isPageInTrash:p1']);
 });
 
 test('an attachment left in trash prevents completion after page purge', async () => {
@@ -311,12 +317,13 @@ test('the sequence restarts cleanly after a crash, because every step is idempot
   // crash at any point inside it.
   assert.deepEqual(paths, [
     'GET pages/p1',
+    'GET pages/p1?status=trashed',
     'DELETE attachments/a1',
     'DELETE attachments/a1?purge=true',
     'DELETE pages/p1',
     'DELETE pages/p1?purge=true',
     'GET pages/p1',
-    'GET content/p1?status=trashed',
+    'GET pages/p1?status=trashed',
     'GET attachments/a1',
     'GET attachments?status=trashed',
   ]);
@@ -359,6 +366,7 @@ function spyDepsAbortingAfter(
 /** The full sequence a two-attachment row issues, in order. */
 const SEQUENCE = [
   'getPage:p1',
+  'isPageInTrash:p1',
   'deleteAttachment:a1',
   'purgeAttachment:a1',
   'deleteAttachment:a2',

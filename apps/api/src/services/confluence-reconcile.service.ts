@@ -300,6 +300,16 @@ export function createConfluenceReconciler(deps: ConfluenceReconcilerDeps): Conf
           firstPage = false;
           continue;
         }
+        if (error instanceof AppError && error.code === 'CONFLUENCE_RESPONSE_INVALID') {
+          // A provider shape/status change is a page-level unknown, not a
+          // reason to abandon other pages in this tenant's bounded batch.
+          readings.push({ publicationId: publication.id, reading: {
+            state: 'UNKNOWN', determinate: false, version: null, title: null,
+            errorCode: 'CONFLUENCE_RESPONSE_INVALID',
+          } });
+          firstPage = false;
+          continue;
+        }
         throw error;
       }
 
@@ -314,11 +324,10 @@ export function createConfluenceReconciler(deps: ConfluenceReconcilerDeps): Conf
 /**
  * One page's remote state.
  *
- * The two-call shape is forced by the platform: v2 answers 404 for a trashed
- * page and for a purged one alike, so a single read cannot distinguish
- * "restorable by the charity, in their own trash" from "gone". Only the v1
- * trashed read separates them, and the difference is the entire product value
- * of this job.
+ * The first v2 read may return HTTP 200 with status=trashed; getPage treats
+ * that as absent from the current view. The second, status-filtered v2 read
+ * establishes whether the page is recoverable in trash or absent. A live C01
+ * sandbox check showed the old v1 trash endpoint returning HTTP 410.
  */
 async function readRemoteState(
   operations: ConfluenceReconcileOperations,
@@ -327,13 +336,12 @@ async function readRemoteState(
 ): Promise<RemoteStateReading> {
   const page = await operations.getPage(client, pageId);
   if (page !== null) {
+    if (page.status !== undefined && page.status !== 'current' && page.status !== 'archived') {
+      return { state: 'UNKNOWN', determinate: false, version: null, title: null,
+        errorCode: 'CONFLUENCE_PAGE_STATUS_UNRECOGNISED' };
+    }
     return {
-      // v2 reports an archived page as an ordinary read with `status`
-      // "archived". `getPage` does not surface status today, so an archived
-      // page reads as VISIBLE until it does — recorded here rather than
-      // silently, because ARCHIVED exists in the enum and a reader would
-      // otherwise assume it is reachable.
-      state: 'VISIBLE',
+      state: page.status === 'archived' ? 'ARCHIVED' : 'VISIBLE',
       determinate: true,
       version: page.version,
       title: page.title.length > 0 ? page.title : null,

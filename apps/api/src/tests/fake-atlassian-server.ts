@@ -17,8 +17,8 @@
  *
  * WHY NOT A MOCK SERVER LIBRARY. Because then the end-to-end test would be
  * exercising a second, differently-written fake, and the five Atlassian
- * behaviours this one models — a v2 404 hiding both trash and purge, purge
- * refused unless already trashed, PUT requiring version + 1, refresh-token
+ * behaviours this one models — v2 status distinguishing trash from purge,
+ * the removed v1 endpoint, purge refused unless already trashed, PUT requiring version + 1, refresh-token
  * rotation, per-space title uniqueness — would have to be reimplemented and
  * kept in step. One fake, two transports.
  */

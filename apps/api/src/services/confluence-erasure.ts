@@ -29,7 +29,9 @@ import type { Eraser, ErasureTarget } from './document-erasure.js';
  *
  * ## Order is a correctness property, not a style choice
  *
- * 1. For a current page, refuse any attachment absent from the target.
+ * 1. For a current page, refuse any attachment absent from the target. A page
+ *    already in Trash cannot supply a trustworthy current attachment list,
+ *    so stop before any purge until it is restored for inventory.
  * 2. Every recorded attachment, `delete` then `purge`.
  * 3. Then the page, `delete` then `purge`.
  * 4. Read the page in both normal and trashed status, and each recorded
@@ -64,11 +66,11 @@ import type { Eraser, ErasureTarget } from './document-erasure.js';
  *
  * ## No persisted sub-state
  *
- * Every step is idempotent because absence is the goal: a 404 is success at
- * each one. So a crash anywhere in the middle is recovered by running the
- * whole sequence again from the top, and the row needs to remember nothing
- * beyond what it already carries. This is the exact inverse of the publish
- * side, where a retried create duplicates a governance document.
+ * Repeating each delete is safe because absence is the goal: a 404 is
+ * success. If an earlier attempt has moved the page to Trash before purge,
+ * however, a retry cannot prove the attachment inventory and stops for
+ * restoration/review. This trades automatic completion for no false proof of
+ * erasure when a page had an unrecorded attachment.
  *
  * ## Permanent versus transient
  *
@@ -293,6 +295,15 @@ export function createConfluenceEraser(deps: ConfluenceEraserDeps): Eraser {
       const current = await operations.listAttachments(client, target.pageId, signal);
       const recorded = new Set(target.attachmentIds);
       if (current.some((attachment) => !recorded.has(attachment.id))) throw incompleteTarget();
+    } else {
+      // A trashed page's attachment list can read as empty even when files
+      // existed before trashing. Refuse page purge until the page is restored
+      // and its complete current attachment inventory can be checked.
+      assertNotAborted(signal);
+      if (await operations.isPageInTrash(client, target.pageId)) {
+        throw new AppError(409, 'CONFLUENCE_ERASURE_TRASH_INVENTORY_UNAVAILABLE',
+          'The Confluence page is already in Trash. Restore it and review its attachments before permanent erasure.');
+      }
     }
 
     // Attachments first, and each trashed before it is purged. See the module

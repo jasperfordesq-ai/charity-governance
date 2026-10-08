@@ -348,8 +348,28 @@ test('getPage returns the parsed page', async () => {
     title: 'POL - Data Protection Policy',
     spaceId: SPACE_ID,
     version: 3,
+    status: 'current',
     webUrl: `${WEB_BASE}${WEB_UI}`,
   });
+});
+
+test('v2 HTTP 200 with status trashed is absent from the current-page read', async () => {
+  const { client } = harness([ok(pageBody({ status: 'trashed' }))]);
+  assert.equal(await getPage(client, PAGE_ID), null);
+});
+
+test('a current-page read without provider status fails closed', async () => {
+  const { client } = harness([ok(pageBody({ status: undefined }))]);
+  const error = await rejectsWith(() => getPage(client, PAGE_ID));
+  assert.equal(error.code, 'CONFLUENCE_RESPONSE_INVALID');
+});
+
+test('a draft or unknown page status is not mistaken for a published page', async () => {
+  for (const status of ['draft', 'mystery']) {
+    const { client } = harness([ok(pageBody({ status }))]);
+    const error = await rejectsWith(() => getPage(client, PAGE_ID));
+    assert.equal(error.code, 'CONFLUENCE_RESPONSE_INVALID');
+  }
 });
 
 test('getPage returns null on 404: a missing page is a normal answer to "does this exist"', async () => {
@@ -358,14 +378,20 @@ test('getPage returns null on 404: a missing page is a normal answer to "does th
   assert.equal(await getPage(client, PAGE_ID), null);
 });
 
-test('erasure checks trash explicitly after a normal page 404', async () => {
-  const { client, specs } = harness([ok(pageBody({ status: 'trashed', space: { id: SPACE_ID } }))]);
+test('erasure checks v2 trash status explicitly after a current-page miss', async () => {
+  const { client, specs } = harness([ok(pageBody({ status: 'trashed' }))]);
   assert.equal(await isPageInTrash(client, PAGE_ID), true);
-  assert.equal(specs[0]?.path, `content/${PAGE_ID}`);
-  assert.equal(specs[0]?.api, 'v1');
+  assert.equal(specs[0]?.path, `pages/${PAGE_ID}`);
+  assert.equal(specs[0]?.api, 'v2');
   assert.equal(specs[0]?.query?.status, 'trashed');
   assert.equal(specs[0]?.idempotent, true);
   assert.equal(await isPageInTrash(harness([throwing(upstreamNotFound())]).client, PAGE_ID), false);
+});
+
+test('trash reader refuses a non-trashed response rather than claiming purge', async () => {
+  const { client } = harness([ok(pageBody({ status: 'current' }))]);
+  const error = await rejectsWith(() => isPageInTrash(client, PAGE_ID));
+  assert.equal(error.code, 'CONFLUENCE_RESPONSE_INVALID');
 });
 
 test('getPageStorage asks for storage and preserves exact body and parent for read-only observation', async () => {
@@ -891,6 +917,7 @@ test('findPageByTitle returns the page when exactly one match is found', async (
     title: 'POL - Data Protection Policy',
     spaceId: SPACE_ID,
     version: 3,
+    status: 'current',
     webUrl: `${WEB_BASE}${WEB_UI}`,
   });
   assert.equal(specs[0]?.method, 'GET');

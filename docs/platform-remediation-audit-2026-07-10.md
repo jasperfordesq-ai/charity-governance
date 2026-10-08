@@ -1,5 +1,29 @@
 # CharityPilot Full-Platform Remediation Audit
 
+> **8 October C01/DPO-05 live-provider finding, open:** A synthetic page and
+> attachment were published only to restricted Confluence sandbox
+> `CPC01SYN`. After an external edit to page version 2, the page entered
+> recoverable Trash; no purge or erasure worker ran. Live v2 GET page by ID
+> returned HTTP 200 with body `status=trashed`, v2 `?status=trashed` worked,
+> and the previous v1 trash endpoint returned 410. The deployed source
+> could mark this trashed page VISIBLE and could not use its v1 trash
+> reader. Branch `codex/c01-v2-trash-readback` fixes readback; API build,
+> 160 focused tests and disposable live read-only reconciliation pass, but
+> the branch is uncommitted/undeployed. A retained formerly published
+> Document cannot currently reach supported disposal/erasure request;
+> controller retention, holds, authority and all-copy policy are unresolved.
+> This is bounded synthetic evidence, not C01/DPO-05 closure, hosted fix
+> proof or Nikita acceptance. Private receipt:
+> `.charitypilot-private/c01-runtime/README.md`.
+
+> **Later PR #38 review gate:** An invalid v2 status is a per-page UNKNOWN
+> reconciliation result, preserving later reads. An already trashed page
+> now blocks the eraser before destructive calls because its attachment
+> inventory cannot be proved complete; the synthetic provider's trashed
+> page attachment listing returned empty after a known upload. Restoration
+> and review are required before any permanent erasure. Revised source and
+> exact-head CI/release are still pending; DPO-05 remains open.
+
 > **8 October current-page Confluence attachment preflight release:** PR #35
 > revised head `0190fe88` passed CI `37740754874`, E2E `37740754893` and
 > review; merged master `21370791` passed exact CI `37742234421` and E2E
