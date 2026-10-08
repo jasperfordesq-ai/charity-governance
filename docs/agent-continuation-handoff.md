@@ -1,5 +1,26 @@
 # CharityPilot Agent Continuation Handoff
 
+> **8 October current-page attachment preflight release:** PR #35 revised
+> head `0190fe88` passed exact CI `37740754874`, E2E `37740754893` and
+> automated review after a later-page regression was added. Merged master
+> `213707913b1892279bc8f340a8cf55d11e682e44` passed CI `37742234421`
+> and E2E `37742234386`. A guarded private-VM release moved serving from
+> blue `05d4d975` to green `21370791`; postflight, loopback/Tailscale checks,
+> restricted runtime, two SHA-matched workstation backup copies and two
+> isolated restores passed. All 390 prior backup SHA/path entries were
+> preserved; final inventory has 396 unchanged entries. The new preflight
+> refuses an unrecorded attachment found anywhere in the current page's
+> paginated list before delete/purge. It does not reconcile historical,
+> already trashed, backup or UNKNOWN copies, and no real Confluence provider
+> test or DPO acceptance occurred. An empty separate Confluence sandbox is
+> online with no production-data copy; the separate CharityPilot test tenant,
+> OAuth connection and C01 first-contact exercise remain open. See the
+> private ignored release receipt
+> `.charitypilot-private/release-21370791-current-inventory-2026-10-08.md`
+> and C01 decision sheet for identifiers.
+> DPO-05, C01–C05/P01–P09/MFA, independent P05/P08, Member/export/deletion,
+> replay/C1 and Nikita acceptance remain OPEN.
+
 > **8 October verified `05d4d975` private-VM release:** PR #33 revised head
 > `24d5a6f7` passed exact CI `37732949371`, E2E `37732949376` and
 > automated review after correcting the v2 trash-read and cancelled

@@ -1,5 +1,23 @@
 # CharityPilot Full-Platform Remediation Audit
 
+> **8 October current-page Confluence attachment preflight release:** PR #35
+> revised head `0190fe88` passed CI `37740754874`, E2E `37740754893` and
+> review; merged master `21370791` passed exact CI `37742234421` and E2E
+> `37742234386`. Guarded green private-VM cutover, postflight, two
+> SHA-matched workstation backup copies and two isolated restores passed.
+> Prior inventory 390 was preserved; final 396 entries remained unchanged.
+> A current page with an attachment absent from the recorded erasure target
+> now fails before deletion, including when that ID is on a later provider
+> page. This is a bounded source/private-host control, not historical or
+> all-copy/UNKNOWN reconciliation or real provider proof. One empty separate
+> Confluence sandbox is online without a production-data copy; separate
+> CharityPilot test tenant, OAuth connection and C01 first-contact remain
+> untested. DPO-05, C01–C05/P01–P09/MFA, independent P05/P08,
+> Member/export/deletion, replay/C1 and Nikita acceptance stay OPEN. Private
+> ignored release receipt
+> `.charitypilot-private/release-21370791-current-inventory-2026-10-08.md`
+> and C01 decision sheet hold exact site and backup identifiers.
+
 > **8 October Confluence erasure readback release:** PR #33 revised head
 > `24d5a6f7` passed exact CI/E2E and automated review; merged master
 > `05d4d975` passed CI `37733998701` and E2E `37733998665`, then guarded
