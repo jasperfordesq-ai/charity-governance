@@ -1,5 +1,16 @@
 # CharityPilot Agent Continuation Handoff
 
+> **8 October 21:59 UTC DPO-02 connector failure path, source local only:**
+> Commit `437dabdc` clears the exact MCP connector credential after a
+> thrown refresh request or ambiguous HTTP outcome; a later process
+> cannot offer the possibly spent token when the store clears normally.
+> The full connector suite passed 413 tests with two existing skips, and
+> an isolated real-API test proved committed rotation, client response
+> loss, one refresh attempt and zero added replay events. This is
+> **unpushed and undeployed**. The historical connector event remains
+> unattributed; risk-owner/Nikita incident review is open. Private
+> receipt: `.charitypilot-private/replay-connector-uncertain-response-2026-10-08.md`.
+
 > **8 October 21:54 UTC DPO-02 failure-path mitigation, source local only:**
 > Commit `3be71c53` extends the Web Lock sign-out mitigation with a
 > noncredential reauthentication fence after ambiguous logout or refresh

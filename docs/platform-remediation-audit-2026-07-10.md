@@ -1,5 +1,15 @@
 # CharityPilot Full-Platform Remediation Audit
 
+> **8 October DPO-02 connector response-loss guard, issue OPEN:** Local
+> commit `437dabdc` removes a possibly spent connector refresh credential
+> after transport loss or ambiguous HTTP status while preserving a
+> successor stored by another process. MCP tests passed 413 with two
+> skips; isolated API/database proof showed committed rotation, no
+> repeated refresh and no new replay audit row. The fix is unpushed/
+> undeployed, and the 23 September connector event remains unattributed
+> without initiating-client evidence or independent incident disposition.
+> Private receipt: `.charitypilot-private/replay-connector-uncertain-response-2026-10-08.md`.
+
 > **8 October DPO-02 uncertain-response guard, issue OPEN:** Local commit
 > `3be71c53` prevents browser renewal after a lost logout/refresh response
 > until a fresh login, and fails closed without Web Locks or shared storage.
