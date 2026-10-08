@@ -1,5 +1,18 @@
 # CharityPilot Agent Continuation Handoff
 
+> **8 October 23:17 Dublin C1 source continuation, local only:** The
+> separate clean NEXUS branch `codex/c1-pending-profile` now points to
+> `cfdc4e00f` (one commit above fetched `origin/main`), superseding the
+> `a276322a0` hash below. It extends the pending/unapproved profile guard
+> to member search, ordinary and ranked directories, nearby results and
+> mention autocomplete. A stale search-index result containing no eligible
+> hit falls back to current SQL so an approved member remains findable.
+> Final local affected suites passed 83 tests/231 assertions with three
+> skips; the explicit staged hook passed 64/190, schema-skip and credential
+> gates. The branch is **unpushed, unmerged and undeployed**. Private NEXUS
+> security register E-098/F-573 and CharityPilot C1 receipt hold the
+> details. No hosted retest, C1 verification row or Nikita acceptance followed.
+
 > **8 October 21:59 UTC DPO-02 connector failure path, source local only:**
 > Commit `437dabdc` clears the exact MCP connector credential after a
 > thrown refresh request or ambiguous HTTP outcome; a later process

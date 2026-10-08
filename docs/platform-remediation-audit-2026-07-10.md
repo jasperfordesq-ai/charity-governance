@@ -1,5 +1,16 @@
 # CharityPilot Full-Platform Remediation Audit
 
+> **8 October 23:17 Dublin C1 residual discovery, issue OPEN:** Separate
+> NEXUS local branch `codex/c1-pending-profile` is now `cfdc4e00f`,
+> superseding the older hash below. It blocks pending/unapproved profiles
+> across member search, plain/ranked directory, nearby and mention discovery
+> in addition to the numeric profile route; current SQL backs up a wholly
+> stale search-index result. Local synthetic affected suites passed
+> 83 tests/231 assertions (three skips); explicit staged hook passed
+> 64/190 and schema-skip/credential checks. Private NEXUS register
+> E-098/F-573 and CharityPilot C1 receipt have exact evidence. **No push,
+> merge, deployment, hosted retest, risk verification or DPO acceptance**.
+
 > **8 October DPO-02 connector response-loss guard, issue OPEN:** Local
 > commit `437dabdc` removes a possibly spent connector refresh credential
 > after transport loss or ambiguous HTTP status while preserving a
