@@ -1,5 +1,35 @@
 # CharityPilot Full-Platform Remediation Audit
 
+> **8 October DPO Member access, live positive download; issue OPEN:**
+> With exact-file controller approval and separate action-time upload and
+> access grants, Owner uploaded `cmuzx67s40006o901zappjqgm` through
+> Vault with `local` provenance, classified it HISTORICAL with a reason,
+> and marked it MEMBER_SUITABLE / MEMBER_VISIBLE. Guarded read-only rows
+> and audit events confirm the changes. The old null-provider certificate
+> remains RESTRICTED / UNASSESSED, and the smaller scan has no all-Member
+> approval. There are 75 active documents. The separately authenticated
+> temporary Member's Vault listed only the new reviewed certificate and
+> concealed the old row. Its authenticated download returned HTTP 200
+> PDF, 120,955 bytes and SHA-256
+> `85b24b00d4302a50f3de18d842ac0009b9002511090acd7dc1a8b6d68c602d1e`,
+> matching the controller-approved source; a guarded audit reread
+> recorded MEMBER_VISIBLE download preparation. The browser client
+> blocked direct legacy-file navigation, so a live server-side 404 is
+> **not** established. Jasper chose to keep the temporary Member active
+> for further testing; its removal dialog was cancelled. Later cleanup,
+> broader role/audience
+> review, risk/export/retention/C1/replay gates and independent Nikita
+> acceptance remain open. See the private certificate review note.
+
+> **8 October post-grant recovery evidence; P05/P08 OPEN:** A guarded
+> standalone backup after the Member-visible certificate change and
+> positive download produced a new set; isolated restore drill passed
+> with 75 documents and 156 migrations. Three files copied to the
+> established workstation path matched VM SHA-256. This is same-host
+> recovery evidence only. Independent host-loss authority, approved
+> retention/disposal and restored-app reopening remain open. Private
+> receipt: `.charitypilot-private/post-member-backup-acceptance-2026-10-08.md`.
+
 > **8 October DPO document lifecycle, private release verified; issue
 > still OPEN:** PR #52's reasoned DRAFT-to-HISTORICAL path passed exact
 > head CI/E2E/review, merged as `1d9a9d0066cbe9911c1db9b20e42d82ed671517f`,

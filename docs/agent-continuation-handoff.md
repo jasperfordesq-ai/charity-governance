@@ -1,5 +1,40 @@
 # CharityPilot Agent Continuation Handoff
 
+> **8 October live Member certificate test, acceptance still open:**
+> With Jasper's exact-file controller approval and separate upload/access
+> confirmations, Owner created `cmuzx67s40006o901zappjqgm` as a local
+> Vault copy, verified its 120,955 bytes, classified it HISTORICAL with
+> a reason, and granted MEMBER_SUITABLE / MEMBER_VISIBLE. A guarded live
+> database read and control/visibility audits confirmed these changes;
+> the old null-provider row `cmtfks26m003ypb01ao66i8gk` remained
+> restricted/unassessed. The separate smaller scan was not approved.
+> There are 75 active Vault rows. A separate signed-in in-app session
+> showed `Jasper test account.` as Member in Team. Its Vault listed only
+> the reviewed certificate; the restricted legacy row was absent. The
+> authenticated Member download returned HTTP 200 PDF, 120,955 bytes and
+> SHA-256 `85b24b00d4302a50f3de18d842ac0009b9002511090acd7dc1a8b6d68c602d1e`,
+> matching the controller-approved source. The read-only audit reread
+> recorded MEMBER_VISIBLE download preparation. Direct negative
+> navigation was blocked by the browser client before an HTTP response;
+> no live server-side 404 is claimed. Complete that check through a
+> supported path if possible. Jasper explicitly chose to keep the
+> temporary Member active for further testing; its removal dialog was
+> cancelled. No public/Confluence publication or
+> independent Nikita acceptance is inferred. Exact private receipts:
+> `.charitypilot-private/member-certificate-candidate-review-2026-10-08.md`,
+> `read-only-new-certificate-postgrant-20261008.txt`, and
+> `read-only-certificate-audit-postmember-20261008.txt`.
+
+> **8 October post-grant recovery checkpoint:** A guarded standalone
+> blue-green backup after the live certificate grant produced set
+> `2026-10-08T19-29-08-832Z`. The isolated newest-set restore drill
+> passed with 75 document rows and 156 migrations. All three set files
+> copied to the established workstation backup path matched VM hashes.
+> This is still on one physical host; independent host-loss recovery,
+> approved retention/disposal and restored-application reopening remain
+> open. Private receipt:
+> `.charitypilot-private/post-member-backup-acceptance-2026-10-08.md`.
+
 > **8 October historical-document lifecycle release (Member acceptance
 > open):** PR #52 added a reasoned DRAFT-to-HISTORICAL transition for
 > uploaded dated evidence, without relaxing provider, byte-review,
