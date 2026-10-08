@@ -1,5 +1,28 @@
 # CharityPilot Agent Continuation Handoff
 
+> **8 October historical-document lifecycle release (Member acceptance
+> open):** PR #52 added a reasoned DRAFT-to-HISTORICAL transition for
+> uploaded dated evidence, without relaxing provider, byte-review,
+> content-assessment, Member-visibility or publication gates. Its exact
+> head passed CI `37823760144`, E2E `37823759791` and review. Squash-
+> merged master `1d9a9d0066cbe9911c1db9b20e42d82ed671517f` passed
+> CI `37825550618` and E2E `37825550637`. A guarded private-VM blue
+> cutover, restricted-runtime/profile postflight, copied SHA-matched
+> recovery set and isolated restore drill passed. The copy is on the
+> same physical host, so independent host-loss recovery remains open.
+> The reviewed charity still had 74 Vault rows, zero approved snapshots,
+> zero approved VAULT_DRAFT policies, nine historical replay events and
+> zero risk-control verifications. Jasper approved the exact reviewed
+> incorporation certificate's all-Member audience as controller, but
+> **no certificate was uploaded or made Member-visible** at the release
+> checkpoint. The old null-provider row remains restricted; a supported
+> new exact-byte upload, truthful historical classification, authenticated
+> byte review, content assessment, separate access-grant confirmation,
+> live Member positive/negative tests and Nikita's independent review are
+> still required. Exact private receipts:
+> `.charitypilot-private/release-1d9a9d00-historical-lifecycle-2026-10-08.md`
+> and `.charitypilot-private/member-certificate-candidate-review-2026-10-08.md`.
+
 > **8 October DPO MFA scope decision (public gate open):** Jasper confirmed
 > personal opt-in MFA for the current private working demo and mandatory
 > Owner/Admin MFA before public multi-tenant reliance, consistent with

@@ -1,5 +1,22 @@
 # CharityPilot Full-Platform Remediation Audit
 
+> **8 October DPO document lifecycle, private release verified; issue
+> still OPEN:** PR #52's reasoned DRAFT-to-HISTORICAL path passed exact
+> head CI/E2E/review, merged as `1d9a9d0066cbe9911c1db9b20e42d82ed671517f`,
+> passed merged-master CI `37825550618` and E2E `37825550637`, and was
+> deployed through the guarded private-VM blue cutover. Postflight and
+> isolated restore of a SHA-matched same-host recovery copy passed. This
+> provides a truthful lifecycle route for a freshly uploaded historical
+> copy; it does not classify the existing 74 records or resolve their
+> legacy null-provider custody. Jasper approved one exact certificate
+> byte sequence for authenticated all-Member access, subject to guarded
+> upload and review. No new copy, Member grant or live positive download
+> occurred at the checkpoint. Retention/erasure policy, independent
+> host-loss recovery, nine historical replay events, C1 verification,
+> temporary Member cleanup and Nikita's acceptance remain open. Private
+> evidence: `.charitypilot-private/release-1d9a9d00-historical-lifecycle-2026-10-08.md`
+> and `.charitypilot-private/member-certificate-candidate-review-2026-10-08.md`.
+
 > **8 October DPO privileged MFA, public gate OPEN:** Jasper confirmed
 > optional personal MFA for the current private working demo, with
 > mandatory Owner/Admin MFA before public multi-tenant reliance. A
