@@ -1,5 +1,20 @@
 # CharityPilot Agent Continuation Handoff
 
+> **8 October verified `2f7aec1d` private-VM release:** PR #31's
+> Confluence erasure-request stamp guard passed exact-head and merged-master
+> CI/E2E and automated review. Guarded green cutover, restricted runtime,
+> trigger/migration postflight and both front doors passed. All 378
+> precutover backup-file hashes were preserved; deployment and
+> post-activation sets were copied to the workstation with matching hashes.
+> Isolated restores passed for the 155-migration pre-upgrade and
+> 156-migration current sets, each with 68 documents. Blue `58bfc20f` is
+> previous. Private receipt:
+> `.charitypilot-private/release-2f7aec1d-erasure-stamp-2026-10-08.md`.
+> This makes the first Confluence erasure stamp immutable but does not
+> authorize provider purge. DPO-05 all-copy/UNKNOWN, C01-C05/P01-P09/MFA,
+> independent P05/P08, Member/export/deletion, replay/C1 and Nikita
+> acceptance remain OPEN. Older checkpoints below are dated history.
+
 > **8 October verified `58bfc20f` private-VM release:** PR #29's
 > read-only Confluence saved-page marker candidate passed exact PR-head and
 > merged-master CI/E2E plus automated review. Guarded blue cutover,
