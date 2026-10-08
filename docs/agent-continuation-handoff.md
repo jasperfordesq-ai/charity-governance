@@ -1,5 +1,17 @@
 # CharityPilot Agent Continuation Handoff
 
+> **9 October 00:09 Dublin P04 recovery preparation, still inactive:**
+> Document and complaint signed preparation parsers now carry a valid
+> `AFTER_CALENDAR_YEARS` policy and non-null 1–100 year term for both
+> current and original removal policy identities. They reject mixed
+> day/year terms, absent year/anchor and missing or withdrawn complaint
+> resolution evidence. Older signed preparations without `retentionYears`
+> still parse and retain their original bytes. API build and 17 focused
+> tests pass. Copy review service delegates cutoff enforcement to the
+> shared SQL validator; integrated event/observation proof remains.
+> The policy activation fence, input/listing, human UI, recovery verifier,
+> controller decision, release and DPO review remain open. No live data changed.
+
 > **9 October 00:06 Dublin P04 API cutoff parity, still inactive:**
 > Document removal, complaint removal and complaint retention assessment
 > now use the shared UTC calendar-year cutoff for a valid year-mode policy.

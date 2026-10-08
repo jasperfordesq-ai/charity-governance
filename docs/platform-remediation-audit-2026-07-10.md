@@ -1,5 +1,14 @@
 # CharityPilot Full-Platform Remediation Audit
 
+> **9 October 00:09 Dublin P04 preparation partial, OPEN:** Local
+> document and complaint signed recovery preparation now accepts
+> well-shaped calendar year terms for both current and removal policies,
+> preserving old missing-field facts and checking complaint resolution
+> dependencies. API build and 17 focused tests passed. Copy review
+> delegates to the SQL cutoff guard but its integrated event path is
+> untested. Policy creation remains fenced; input/listing/UI, verifier,
+> controller approval, release and independent DPO proof are open.
+
 > **9 October 00:06 Dublin P04 API partial, issue OPEN:** Local
 > document/complaint removal and complaint assessment use the UTC
 > calendar-year cutoff; resolution must follow complaint receipt.

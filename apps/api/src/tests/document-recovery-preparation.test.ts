@@ -82,6 +82,27 @@ test('document preparation preserves distinct removal and current policy while r
   assert.throws(() => prepareDocumentRecoveryFacts(source));
 });
 
+test('document preparation preserves legacy facts and validates both calendar policy identities', () => {
+  const source = fixture();
+  assert.equal('retentionYears' in JSON.parse(prepareDocumentRecoveryFacts(source).body).policy, false);
+  for (const policy of [source.policy, source.removalPolicy]) {
+    Object.assign(policy, { retentionMode: 'AFTER_CALENDAR_YEARS', retentionAnchor: 'CREATED_AT',
+      retentionDays: null, retentionYears: 6 });
+  }
+  const body = JSON.parse(prepareDocumentRecoveryFacts(source).body);
+  assert.equal(body.policy.retentionYears, 6);
+  assert.equal(body.removalPolicy.retentionYears, 6);
+  for (const change of [
+    { retentionYears: null }, { retentionDays: 10 }, { retentionAnchor: null },
+    { retentionYears: 0 }, { retentionYears: 101 },
+  ]) {
+    const invalid = structuredClone(source);
+    Object.assign(invalid.policy, change);
+    Object.assign(invalid.removalPolicy, change);
+    assert.throws(() => prepareDocumentRecoveryFacts(invalid));
+  }
+});
+
 test('document preparation captures only selected facts and retries the same immutable operation', async () => {
   const source = fixture(); let saved: Record<string, unknown> | null = null;
   let writes = 0, authReads = 0, activeOwner = true;

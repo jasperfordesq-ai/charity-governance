@@ -10,9 +10,9 @@ const reason = z.string().min(10).max(1000).refine(v => Array.from(v).length <= 
 const provenance = { actorUserId: id, evidenceRef: evidence, reason };
 const scoped = { id, organisationId: id };
 const policy = z.object({ ...scoped, recordClass: z.literal('COMPLAINT'), revision,
-  state: z.literal('APPROVED'), retentionMode: z.enum(['REVIEW_REQUIRED', 'AFTER_ANCHOR']),
+  state: z.literal('APPROVED'), retentionMode: z.enum(['REVIEW_REQUIRED', 'AFTER_ANCHOR', 'AFTER_CALENDAR_YEARS']),
   retentionAnchor: z.literal('RESOLVED_AT').nullable(), retentionDays: z.number().int().min(1).max(36525).nullable(),
-  // Older signed preparations lack this field; new database rows include null.
+  // Older signed preparations lack this field; new rows include null or a year term.
   retentionYears: z.number().int().min(1).max(100).nullable().optional(),
   recoveryDays: z.number().int().min(1).max(3650), createdById: id, createdAt: time,
   approvedById: id, approvedAt: time, approvalEvidenceRef: evidence,
@@ -64,19 +64,21 @@ const schema = z.object({ format: z.literal(1), action: z.literal('COMPLAINT_PUR
     || (v.latestHold && (v.latestHold.complaintId !== c.id || v.latestHold.recordRevision > c.revision))) {
     fail('Mismatched hold dependency');
   }
-  for (const p of [v.policy, v.removalPolicy]) if (p.retentionYears != null
-    || (p.retentionMode === 'AFTER_ANCHOR') !== (p.retentionDays !== null)
-    || (p.retentionMode === 'AFTER_ANCHOR' ? p.retentionAnchor !== 'RESOLVED_AT' : p.retentionAnchor !== null)) {
+  for (const p of [v.policy, v.removalPolicy]) if (
+    (p.retentionMode === 'AFTER_ANCHOR') !== (p.retentionDays !== null)
+    || (p.retentionMode === 'AFTER_CALENDAR_YEARS') !== (p.retentionYears != null)
+    || (p.retentionMode !== 'REVIEW_REQUIRED' ? p.retentionAnchor !== 'RESOLVED_AT' : p.retentionAnchor !== null)) {
     fail('Inconsistent policy terms');
   }
   if (v.resolution && (v.resolution.complaintId !== c.id
-    || (p.retentionMode === 'AFTER_ANCHOR' && (v.resolution.recordRevision !== r.recordRevision
+    || (p.retentionMode !== 'REVIEW_REQUIRED' && (v.resolution.recordRevision !== r.recordRevision
       || v.resolution.state !== 'RECORDED')))) fail('Mismatched resolution dependency');
   if (v.removalResolution && (v.removalResolution.id !== r.resolutionEvidenceId
     || v.removalResolution.complaintId !== c.id || v.removalResolution.recordRevision !== r.recordRevision
     || v.removalResolution.state !== 'RECORDED')) fail('Mismatched original resolution dependency');
   if ((r.resolutionEvidenceId !== null) !== (v.removalResolution !== null)
-    || (p.retentionMode === 'AFTER_ANCHOR' && !v.resolution)) fail('Missing resolution dependency');
+    || (p.retentionMode !== 'REVIEW_REQUIRED' && !v.resolution)
+    || (v.removalPolicy.retentionMode !== 'REVIEW_REQUIRED' && !v.removalResolution)) fail('Missing resolution dependency');
 });
 
 export type ComplaintRecoveryFacts = z.infer<typeof schema>;
