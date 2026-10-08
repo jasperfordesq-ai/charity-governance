@@ -48,6 +48,7 @@ const policyKeys = [
   'retentionMode',
   'retentionAnchor',
   'retentionDays',
+  'retentionYears',
   'recoveryDays',
   'createdById',
   'createdAt',

@@ -4,10 +4,11 @@ import type { PrismaClient } from '@prisma/client';
 import { prepareDocumentRecoveryFacts } from '../services/document-recovery-preparation.js';
 import { readCurrentDocumentByteAuthority } from '../services/document-byte-authority-projection.js';
 
-function fixture() {
+function fixture(preparationHasRetentionYears = false) {
   const policy = { id: 'policy', organisationId: 'charity', recordClass: 'VAULT_DRAFT' as const,
     revision: 1, state: 'APPROVED' as const, retentionMode: 'REVIEW_REQUIRED' as const,
     retentionAnchor: null, retentionDays: null, recoveryDays: 30,
+    ...(preparationHasRetentionYears ? { retentionYears: null } : {}),
     createdById: 'owner', createdAt: '2026-09-01T00:00:00.000Z', approvedById: 'owner',
     approvedAt: '2026-09-02T00:00:00.000Z', approvalEvidenceRef: 'POLICY-001' };
   const disposition = { disposition: 'RETAIN_APPROVED' as const, evidenceRef: 'COPY-001' };
@@ -54,7 +55,7 @@ function fixture() {
     installationId: 'synthetic-install', writerId: 'host', writerEpoch: 1 },
   actor: { id: 'owner', role: 'OWNER', lifecycleStatus: 'ACTIVE' },
   authorization: { ...authorization, claim: { id: 'claim', deletionId: 'job' }, withdrawal: null },
-  policies: [{ ...policy }],
+  policies: [{ ...policy, retentionYears: null as number | null }],
   job: { id: 'job', organisationId: 'charity', sourceDocumentId: 'doc',
     storagePath: document.fileUrl, provider: 'local', targetRef: null,
     state: 'PENDING', attempts: 0, claimedAt: null as Date | null, processedAt: null,
@@ -149,6 +150,17 @@ test('local byte-authority projection changes with policy, copy and mirror state
   assert.notEqual(jobChanged.digest, initial.digest);
   assert.equal(jobChanged.localCopyObservationDigest, initial.localCopyObservationDigest);
   assert.equal(jobChanged.localHoldObservationDigest, initial.localHoldObservationDigest);
+});
+
+test('current nullable year field matches both new and legacy signed policy facts only while null', async () => {
+  for (const hasYearField of [false, true]) {
+    const f = fixture(hasYearField);
+    const initial = await readCurrentDocumentByteAuthority(f.prisma, f.request);
+    assert.match(initial.digest, /^[a-f0-9]{64}$/);
+    f.state.policies[0]!.retentionYears = 5;
+    await assert.rejects(readCurrentDocumentByteAuthority(f.prisma, f.request),
+      /changed or cannot be bounded/);
+  }
 });
 
 test('local byte-authority projection refuses stale owner, claim, target and unbounded history', async () => {

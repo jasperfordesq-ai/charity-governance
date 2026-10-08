@@ -199,6 +199,12 @@ async function withDocumentByteAuthorityTransaction<T>(prisma: PrismaClient,
     const currentAuthorizationBody = canonical(JSON.parse(JSON.stringify(currentAuthorization)));
     const currentPolicyBody = policyRows.length === 1
       ? canonical(JSON.parse(JSON.stringify(policyRows[0]))) : null;
+    // Preparations signed before retentionYears was added omit that field.
+    // The migrated policy row contains null. Treat only that legacy omission
+    // as equivalent; a year term or any other policy change still fails.
+    const originalPolicy = original.policy as Record<string, unknown>;
+    const preparedPolicyBody = canonical(Object.hasOwn(originalPolicy, 'retentionYears')
+      ? originalPolicy : { ...originalPolicy, retentionYears: null });
     if (!organisation || organisation.lifecycleStatus !== 'ACTIVE'
       || !enforcement || enforcement.installationId !== request.installationId
       || enforcement.writerId !== claim.writerId || enforcement.writerEpoch !== claim.writerEpoch
@@ -208,7 +214,7 @@ async function withDocumentByteAuthorityTransaction<T>(prisma: PrismaClient,
       || authorization.claim?.id !== claim.claimId || authorization.claim.deletionId !== claim.deletionId
       || policyRows.length !== 1 || policyRows[0]!.id !== authorization.policyId
       || currentAuthorizationBody !== canonical(original.authorization)
-      || currentPolicyBody !== canonical(original.policy)
+      || currentPolicyBody !== preparedPolicyBody
       || !job || job.state !== 'PENDING' || job.processedAt !== null
       || (claimed ? (
         !lease || lease.state !== 'CLAIMED' || lease.claimedAt === null

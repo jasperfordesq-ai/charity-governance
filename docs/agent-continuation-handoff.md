@@ -1,5 +1,17 @@
 # CharityPilot Agent Continuation Handoff
 
+> **9 October 00:41 Dublin document-byte projection correction:** A full
+> current-migration disposable PostgreSQL proof initially failed because
+> its synthetic signed policy omitted the nullable `retentionYears` field
+> now returned by Prisma. The proof fixture now includes that field.
+> The projection also treats a missing field in an older signed preparation
+> as equivalent to current `null` only; a non-null year term or other policy
+> change still refuses. API build, three focused projection tests and the
+> full current-migration disposable PostgreSQL byte-authority proof passed.
+> Original failure and successful rerun logs are private. This remains
+> local, non-authorizing evidence, with no independent custody, all-writer
+> execution fence, live release or DPO acceptance.
+
 > **9 October 00:36 Dublin isolated C1 source proof:** The separate
 > NEXUS C1 branch is clean at `7f69208dc`, six local commits ahead,
 > unpushed/unmerged/undeployed. In a disposable MariaDB 10.11 database,

@@ -1,5 +1,14 @@
 # CharityPilot Full-Platform Remediation Audit
 
+> **9 October 00:41 Dublin P05/P08 projection compatibility, OPEN:**
+> Current full-migration synthetic PostgreSQL proof found a stale fixture
+> missing `retentionYears`; corrected fixture and narrow comparison of
+> legacy signed omission with current null now pass. New and legacy
+> preparation unit cases reject a changed non-null year term; full
+> disposable PostgreSQL proof passes. This does not authorize byte
+> deletion or resolve independent history/provider custody, all-writer
+> fencing, host-loss recovery or human retention approval.
+
 > **9 October 00:36 Dublin C1 isolated test, OPEN:** NEXUS C1 branch
 > `7f69208dc` is six ahead and unmerged/undeployed. Disposable MariaDB
 > Laravel proof passed 23 registration-alert tests/38 assertions and a
