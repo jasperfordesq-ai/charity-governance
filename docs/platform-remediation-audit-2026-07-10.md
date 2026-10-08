@@ -1,5 +1,12 @@
 # CharityPilot Full-Platform Remediation Audit
 
+> **9 October 00:06 Dublin P04 API partial, issue OPEN:** Local
+> document/complaint removal and complaint assessment use the UTC
+> calendar-year cutoff; resolution must follow complaint receipt.
+> API build and ten focused tests pass. New policy input and UI are still
+> fenced, and recovery preparation, copy review, end-to-end release,
+> controller approval and DPO acceptance remain unverified.
+
 > **9 October 00:04 Dublin P04 complaint purge SQL, issue OPEN:** Local
 > forward migration checks calendar resolution evidence at purge review
 > and rechecks elapsed UTC years at claim. The disposable full complaint

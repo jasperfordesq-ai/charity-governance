@@ -1,6 +1,7 @@
 import type { Prisma, PrismaClient } from '@prisma/client';
 import { AppError } from '../utils/errors.js';
 import { lockOrganisationForUpdate } from './organisation-lock.js';
+import { calendarYearRetentionCutoffUtc } from './retention-calendar.js';
 
 type Input = { organisationId: string; complaintId: string; actorUserId: string; expectedRevision: number };
 const summary = { id: true, summary: true, receivedDate: true, revision: true, removedAt: true,
@@ -52,7 +53,7 @@ export class ComplaintRecoveryService {
       const policies = await tx.dataRetentionPolicyRevision.findMany({ where: { organisationId: input.organisationId,
         recordClass: 'COMPLAINT', state: 'APPROVED', withdrawal: { is: null } }, take: 2 });
       const policy = policies.length === 1 ? policies[0] : null;
-      if (!policy || policy.id !== input.policyId || !['REVIEW_REQUIRED', 'AFTER_ANCHOR'].includes(policy.retentionMode)) {
+      if (!policy || policy.id !== input.policyId || !['REVIEW_REQUIRED', 'AFTER_ANCHOR', 'AFTER_CALENDAR_YEARS'].includes(policy.retentionMode)) {
         throw new AppError(409, 'COMPLAINT_POLICY_CHANGED', 'Review the current approved complaint policy before removal.');
       }
       const evidence = await tx.complaintResolutionEvidence.findFirst({ where: { organisationId: input.organisationId,
@@ -61,14 +62,23 @@ export class ComplaintRecoveryService {
       const [clock] = await tx.$queryRaw<Array<{ now: Date }>>`SELECT timezone('UTC', statement_timestamp())::timestamp(3) AS now`;
       if (policy.retentionMode === 'AFTER_ANCHOR' && (policy.retentionAnchor !== 'RESOLVED_AT' ||
         !Number.isInteger(policy.retentionDays) || policy.retentionDays! < 1 || policy.retentionDays! > 36525 ||
-        !evidence?.resolvedAt || evidence.state !== 'RECORDED' || evidence.recordRevision !== complaint.revision ||
+        !evidence?.resolvedAt || evidence.resolvedAt < complaint.receivedDate || evidence.state !== 'RECORDED'
+        || evidence.recordRevision !== complaint.revision ||
         evidence.resolvedAt.getTime() + policy.retentionDays! * 86400000 > clock!.now.getTime())) {
+        throw new AppError(409, 'COMPLAINT_RETENTION_NOT_REACHED', 'Current resolution evidence and elapsed retention are required.');
+      }
+      if (policy.retentionMode === 'AFTER_CALENDAR_YEARS' && (policy.retentionAnchor !== 'RESOLVED_AT' ||
+        !Number.isInteger(policy.retentionYears) || policy.retentionYears! < 1 || policy.retentionYears! > 100 ||
+        policy.retentionDays !== null || !evidence?.resolvedAt || evidence.resolvedAt < complaint.receivedDate
+        || evidence.state !== 'RECORDED' ||
+        evidence.recordRevision !== complaint.revision ||
+        calendarYearRetentionCutoffUtc(evidence.resolvedAt, policy.retentionYears!) > clock!.now)) {
         throw new AppError(409, 'COMPLAINT_RETENTION_NOT_REACHED', 'Current resolution evidence and elapsed retention are required.');
       }
       const decision = await tx.complaintRemoval.create({ data: {
         organisationId: input.organisationId, complaintId: complaint.id, recordRevision: complaint.revision,
         actorUserId: input.actorUserId, policyId: policy.id,
-        resolutionEvidenceId: policy.retentionMode === 'AFTER_ANCHOR' ? evidence!.id : null,
+        resolutionEvidenceId: ['AFTER_ANCHOR', 'AFTER_CALENDAR_YEARS'].includes(policy.retentionMode) ? evidence!.id : null,
         evidenceRef: input.evidenceRef, reason: input.reason,
       } });
       const row = await tx.complaintRecord.update({ where: { id: complaint.id, organisationId: input.organisationId },

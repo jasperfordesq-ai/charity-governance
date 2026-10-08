@@ -9,7 +9,8 @@ function fixture() {
     enforced: false,
     held: false,
     row: { id: 'complaint', organisationId: 'org', revision: 4, status: 'CLOSED', summary: 'Private complaint narrative',
-      reviewedByBoard: false, boardMinuteReference: null, removedAt: null, removal: null } as any,
+      receivedDate: new Date('2026-01-01'), reviewedByBoard: false, boardMinuteReference: null,
+      removedAt: null, removal: null } as any,
     policies: [{ id: 'policy', retentionMode: 'AFTER_ANCHOR', retentionAnchor: 'RESOLVED_AT', retentionDays: 1 }] as any[],
     evidence: { id: 'evidence', revision: 2, recordRevision: 4, state: 'RECORDED', resolvedAt: new Date('2026-09-01') } as any,
     decisions: [] as any[], audits: [] as any[], writes: 0,
@@ -109,4 +110,20 @@ test('enforced charity refuses ordinary removal and restoration before any decis
     assert.equal(f.writes, 0);
     assert.equal(f.audits.length, 0);
   }
+});
+
+test('calendar complaint removal uses recorded resolution anniversary and refuses early disposal', async () => {
+  const { service, f } = fixture();
+  f.policies[0] = { id: 'policy', retentionMode: 'AFTER_CALENDAR_YEARS', retentionAnchor: 'RESOLVED_AT',
+    retentionDays: null, retentionYears: 6 };
+  f.row.receivedDate = new Date('2020-01-01');
+  f.evidence.resolvedAt = new Date('2020-02-29T12:00:00Z');
+  await service.remove(input);
+  assert.equal(f.decisions[0].resolutionEvidenceId, 'evidence');
+  const early = fixture();
+  early.f.policies[0] = { ...f.policies[0] };
+  early.f.row.receivedDate = new Date('2024-01-01');
+  early.f.evidence.resolvedAt = new Date('2024-02-29T12:00:00Z');
+  await assert.rejects(early.service.remove(input), (error: any) => error.code === 'COMPLAINT_RETENTION_NOT_REACHED');
+  assert.equal(early.f.writes, 0);
 });

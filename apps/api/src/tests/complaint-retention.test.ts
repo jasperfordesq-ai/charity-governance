@@ -9,7 +9,8 @@ test('complaint retention uses only the latest matching resolution and a single 
   let policies: any[] = [];
   let held = false;
   let enforced = false;
-  const policy = { id: 'policy', retentionMode: 'AFTER_ANCHOR', retentionAnchor: 'RESOLVED_AT', retentionDays: 10 };
+  const policy = { id: 'policy', retentionMode: 'AFTER_ANCHOR', retentionAnchor: 'RESOLVED_AT',
+    retentionDays: 10 as number | null, retentionYears: null as number | null };
   const tx = {
     complaintHoldEvent: { findFirst: async () => ({ held }) },
     $queryRaw: async (strings: TemplateStringsArray) => strings.join('').includes('statement_timestamp') ? [{ now }] : [{ id: 'org' }],
@@ -55,6 +56,16 @@ test('complaint retention uses only the latest matching resolution and a single 
   assert.equal((await state()).state, 'PERMANENT_RETENTION');
   policy.retentionMode = 'REVIEW_REQUIRED'; complaint.status = 'CLOSED';
   assert.equal((await state()).state, 'INDIVIDUAL_REVIEW_REQUIRED');
+  policy.retentionMode = 'AFTER_CALENDAR_YEARS'; policy.retentionDays = null; policy.retentionYears = 6;
+  complaint.receivedDate = new Date('2020-01-01');
+  evidence = { id: 'evidence', revision: 4, recordRevision: 4, state: 'RECORDED',
+    resolvedAt: new Date('2020-02-29T12:00:00Z') };
+  assert.equal((await state()).state, 'READY_FOR_REMOVAL_REVIEW');
+  policy.retentionYears = 7;
+  assert.equal((await state()).state, 'RETENTION_NOT_REACHED');
+  policy.retentionYears = null;
+  assert.equal((await state()).state, 'POLICY_REVIEW_REQUIRED');
+  policy.retentionMode = 'REVIEW_REQUIRED';
   enforced = true;
   assert.equal((await state()).state, 'INDEPENDENT_RECOVERY_REQUIRED');
   enforced = false;

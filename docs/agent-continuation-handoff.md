@@ -1,5 +1,15 @@
 # CharityPilot Agent Continuation Handoff
 
+> **9 October 00:06 Dublin P04 API cutoff parity, still inactive:**
+> Document removal, complaint removal and complaint retention assessment
+> now use the shared UTC calendar-year cutoff for a valid year-mode policy.
+> Complaint removal also matches the SQL requirement that recorded
+> resolution cannot precede receipt. API build and 10 focused tests pass,
+> including early/elapsed leap-day cases. The mode creation fence,
+> policy input, recovery preparation for non-null years, copy review
+> service, recovery-policy listing, human UI, controller decision,
+> release and Nikita review remain open. No live data changed.
+
 > **9 October 00:04 Dublin P04 complaint purge SQL:** Forward migration
 > `20261009010000_complaint_calendar_purge_guards` extends effective
 > complaint purge authorization and claim functions to validate a

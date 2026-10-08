@@ -136,3 +136,20 @@ test('ambiguous active policies refuse removal before reading stored bytes',asyn
   await assert.rejects(service.remove(input),{statusCode:409,code:'DOCUMENT_RECOVERY_POLICY_REQUIRED'});
   assert.equal(reads,0);assert.equal(f.doc.deletedAt,null);assert.equal(f.audits.length,0);
 });
+
+test('calendar document removal uses the UTC anniversary and refuses an early draft', async () => {
+  const elapsed = fixture();
+  elapsed.setPolicy({ id: 'policy-a', retentionMode: 'AFTER_CALENDAR_YEARS', retentionAnchor: 'CREATED_AT',
+    retentionDays: null, retentionYears: 6, recoveryDays: 30 });
+  elapsed.doc.createdAt = new Date('2020-02-29T12:00:00Z');
+  const service = new DocumentRecoveryService(elapsed.prisma, async () => Buffer.from('test'));
+  await service.remove(input);
+  assert.notEqual(elapsed.doc.deletedAt, null);
+  const early = fixture();
+  early.setPolicy({ id: 'policy-a', retentionMode: 'AFTER_CALENDAR_YEARS', retentionAnchor: 'CREATED_AT',
+    retentionDays: null, retentionYears: 6, recoveryDays: 30 });
+  early.doc.createdAt = new Date('2024-02-29T12:00:00Z');
+  await assert.rejects(new DocumentRecoveryService(early.prisma, async () => Buffer.from('test')).remove(input),
+    (error: any) => error.code === 'DOCUMENT_RETENTION_NOT_REACHED');
+  assert.equal(early.doc.deletedAt, null);
+});

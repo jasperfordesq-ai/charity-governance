@@ -1,6 +1,7 @@
 import { createHash } from 'node:crypto';
 import type { PrismaClient, Prisma } from '@prisma/client';
 import { AppError } from '../utils/errors.js';
+import { calendarYearRetentionCutoffUtc } from './retention-calendar.js';
 
 type RecoveryInput = {
   organisationId: string; documentId: string; actorUserId: string;
@@ -77,10 +78,15 @@ export class DocumentRecoveryService {
         id: { not: input.policyId }, organisationId: input.organisationId,
         recordClass: 'VAULT_DRAFT', state: 'APPROVED', withdrawal: { is: null },
       }, select: { id: true } });
-      if (!policy || competingPolicy || !['REVIEW_REQUIRED', 'AFTER_ANCHOR'].includes(policy.retentionMode)) throw new AppError(409,
+      if (!policy || competingPolicy || !['REVIEW_REQUIRED', 'AFTER_ANCHOR', 'AFTER_CALENDAR_YEARS'].includes(policy.retentionMode)) throw new AppError(409,
         'DOCUMENT_RECOVERY_POLICY_REQUIRED', 'An approved current draft-removal policy is required.');
       if (policy.retentionMode === 'AFTER_ANCHOR' && (policy.retentionAnchor !== 'CREATED_AT'
         || !Number.isInteger(policy.retentionDays) || policy.retentionDays! < 1 || policy.retentionDays! > 36525)) {
+        throw new AppError(409, 'DOCUMENT_RECOVERY_POLICY_REQUIRED', 'The approved draft-removal policy is invalid.');
+      }
+      if (policy.retentionMode === 'AFTER_CALENDAR_YEARS' && (policy.retentionAnchor !== 'CREATED_AT'
+        || !Number.isInteger(policy.retentionYears) || policy.retentionYears! < 1 || policy.retentionYears! > 100
+        || policy.retentionDays !== null)) {
         throw new AppError(409, 'DOCUMENT_RECOVERY_POLICY_REQUIRED', 'The approved draft-removal policy is invalid.');
       }
       const bytes = await this.readFile(input.organisationId, doc.fileUrl, doc.storageProvider!);
@@ -90,6 +96,10 @@ export class DocumentRecoveryService {
       const now = clock!.now;
       if (policy.retentionMode === 'AFTER_ANCHOR'
         && doc.createdAt.getTime() + policy.retentionDays! * 86400000 > now.getTime()) {
+        throw new AppError(409, 'DOCUMENT_RETENTION_NOT_REACHED', 'The approved retention period has not elapsed.');
+      }
+      if (policy.retentionMode === 'AFTER_CALENDAR_YEARS'
+        && calendarYearRetentionCutoffUtc(doc.createdAt, policy.retentionYears!) > now) {
         throw new AppError(409, 'DOCUMENT_RETENTION_NOT_REACHED', 'The approved retention period has not elapsed.');
       }
       const result = await tx.document.update({ where: { id: doc.id, organisationId: input.organisationId }, data: {
