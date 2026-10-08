@@ -1,5 +1,18 @@
 # CharityPilot Full-Platform Remediation Audit
 
+> **8 October DPO Member Vault copy, issue still OPEN:** PR #49 changed
+> the Member's zero-visible-document empty state to describe available
+> access accurately. Exact merged-master CI/E2E passed at `679dd1bd`;
+> guarded private-VM green cutover, final postflight, two copied hash-
+> matched backup sets and two isolated restores passed. After Jasper
+> signed in again as the temporary Member, the live Vault showed zero
+> available documents and the corrected access-level empty state; direct
+> `/export` still withheld the full report. This is UI evidence only. The
+> access boundary, real-file classification/positive download, temporary
+> account cleanup and independent Nikita acceptance remain open. Same-host
+> copies do not satisfy independent host-loss recovery. Private receipt:
+> `.charitypilot-private/release-679dd1bd-member-vault-copy-2026-10-08.md`.
+
 > **8 October DPO Member report-navigation release, issue still OPEN:**
 > PR #47 merged as `9696fb5b` with exact merged-master CI/E2E
 > `37805072036`/`37805072114` passing. Guarded private-VM blue cutover,
