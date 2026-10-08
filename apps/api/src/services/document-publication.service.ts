@@ -672,6 +672,13 @@ export type ConfluencePublisherDeps = {
   readTarget?: (organisationId: string) => Promise<ConfluencePublishTarget | null>;
   readDocument?: (input: { organisationId: string; documentId: string }) => Promise<PublicationSource>;
   operations?: Partial<ConfluencePublishOperations>;
+  /**
+   * Explicit synthetic first-contact probe only. The production scheduler
+   * does not supply this option. A mismatched tenant/site/space is refused
+   * before a provider request, rather than silently publishing an unmarked
+   * page. Do not use for real governance records before C01/C05 review.
+   */
+  pageCreateMarkerProbe?: { organisationId: string; cloudId: string; spaceId: string };
 };
 
 function defaultConnect(deps: ConfluencePublisherDeps): ConfluencePublishConnect {
@@ -831,6 +838,11 @@ export function publicationFilename(doc: { id: string; name: string }): string {
  * `createConfluenceClient` + `currentAccessTokenForOrganisation` underneath.
  */
 export function createConfluencePublisher(deps: ConfluencePublisherDeps): Publisher {
+  const markerProbe = deps.pageCreateMarkerProbe;
+  if (markerProbe && ![markerProbe.organisationId, markerProbe.cloudId, markerProbe.spaceId]
+    .every(value => typeof value === 'string' && /^[A-Za-z0-9_-]{1,120}$/.test(value))) {
+    throw new TypeError('A page marker probe requires one exact tenant, site and space.');
+  }
   const connect = deps.connect ?? defaultConnect(deps);
   const readTarget = deps.readTarget ?? defaultReadTarget(deps);
   const readDocument = deps.readDocument ?? defaultReadDocument(deps);
@@ -881,6 +893,11 @@ export function createConfluencePublisher(deps: ConfluencePublisherDeps): Publis
 
     const target = await readTarget(row.organisationId);
     if (target === null) throw destinationMissing(row.organisationId);
+    if (markerProbe && (row.organisationId !== markerProbe.organisationId
+      || target.cloudId !== markerProbe.cloudId || target.spaceId !== markerProbe.spaceId)) {
+      throw new AppError(409, 'CONFLUENCE_PAGE_MARKER_PROBE_SCOPE_MISMATCH',
+        'The synthetic page marker probe is not bound to this tenant and destination.');
+    }
 
     // Before a connection is opened, exactly as Phase 5's eraser validates its
     // target before opening one. `pageId` is not known yet, so what can be
@@ -921,6 +938,7 @@ export function createConfluencePublisher(deps: ConfluencePublisherDeps): Publis
 
     const page = await resolvePage({ client, operations, row, target, doc, title, signal,
       reserveBeforeWrite, reservePageCreateIntent,
+      pageCreateMarkerProbe: markerProbe !== undefined,
       assertCurrentCreateInputs: () => assertCurrentCreateInputs(row, doc, target) });
 
     // REPUBLISHING A PAGE THAT ALREADY EXISTS.
@@ -1171,10 +1189,11 @@ async function resolvePage(input: {
   signal?: AbortSignal;
   reserveBeforeWrite(): Promise<void>;
   reservePageCreateIntent: PublicationAttempt['reservePageCreateIntent'];
+  pageCreateMarkerProbe: boolean;
   assertCurrentCreateInputs(): Promise<void>;
 }): Promise<{ id: string; title: string }> {
   const { client, operations, row, target, doc, title, signal, reserveBeforeWrite,
-    reservePageCreateIntent, assertCurrentCreateInputs } = input;
+    reservePageCreateIntent, pageCreateMarkerProbe, assertCurrentCreateInputs } = input;
 
   // 1. A page id this row already recorded. Adopted without a lookup, because
   //    `findPageByTitle` is a search and a page created moments ago is not
@@ -1191,11 +1210,14 @@ async function resolvePage(input: {
 
   assertNotAborted(signal);
   await reserveBeforeWrite();
-  // Allocate identity before constructing the exact page body. The current
-  // body has no provider-visible marker; a future validated marker must be
-  // part of these same bytes before their digest is reserved.
+  // Allocate identity before constructing the exact page body. The opt-in
+  // synthetic probe appends one visible marker in the same create request;
+  // its provider storage/visibility still requires C01/C05 acceptance.
   const operationId = randomBytes(16).toString('hex');
-  const bodyStorage = publicationBody(doc, target.publishingModel.bodyMode);
+  const bodyStorage = publicationBody(doc, target.publishingModel.bodyMode)
+    + (pageCreateMarkerProbe
+      ? `<p>CharityPilot page-create operation v1: ${operationId}</p>`
+      : '');
   const reservedOperationId = await reservePageCreateIntent({
     operationId,
     documentRevision: doc.updatedAt,
