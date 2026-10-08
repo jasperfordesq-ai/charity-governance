@@ -1,5 +1,19 @@
 # CharityPilot Agent Continuation Handoff
 
+> **9 October 00:59 Dublin C1 actual bell fan-out proof:** Separate NEXUS
+> worktree `C:\platforms\htdocs\staging-codex-c1-pending`, branch
+> `codex/c1-pending-profile`, now includes test-only commit `73490953e`.
+> A new integration test invokes the real registration listener and checks
+> persisted notifications for role Admin, flag-only Admin and Coordinator,
+> exclusion of ordinary/inactive/foreign-tenant users, correct staff links,
+> tenant binding and duplicate suppression. Its synthetic `.example` mail
+> addresses are rejected before provider contact. Fresh disposable MariaDB
+> 10.11/PHP 8.2.30 run passed 24 tests/44 assertions with no skips; log and
+> repeatable runner are private. This replaces one quarantined fan-out
+> assertion with real bell persistence evidence. It does not prove delivered
+> mail, hosted registration, all recipients/locales, or C1 closure. Both
+> repositories remain unpushed/undeployed; no live identity was used.
+
 > **9 October 00:55 Dublin C1 broader isolated run:** NEXUS branch
 > `7f69208dc` passed a combined recipient, Admin Users, profile and
 > onboarding PHPUnit run in a fresh disposable MariaDB/PHP environment:
