@@ -1,5 +1,13 @@
 # CharityPilot Agent Continuation Handoff
 
+> **8 October 23:37 Dublin P04 calendar primitive, source only:** Local
+> commit `3b9e12f4` adds a UTC whole-year anniversary calculation using
+> the shared civil-date clamp. API build and 3/3 focused tests passed,
+> including leap-day and exact cutoff cases. No policy input, schema,
+> SQL guard, API preview, UI or disposal path uses it; no live policy or
+> controller approval exists. The P04 calendar/class implementation and
+> P05–P08 independent recovery/erasure decisions remain open.
+
 > **8 October 23:34 Dublin P04–P08 decision preparation:** The private
 > `nikita-retention-recovery-morning-decisions-2026-10-08.md` consolidates
 > the charity's 24-row schedule/V2 evidence and current code into a

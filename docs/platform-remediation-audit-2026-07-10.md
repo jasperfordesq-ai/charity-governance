@@ -1,5 +1,12 @@
 # CharityPilot Full-Platform Remediation Audit
 
+> **8 October 23:37 Dublin P04 prerequisite only:** Local `3b9e12f4`
+> provides a tested UTC calendar-year cutoff helper (API build, three
+> focused tests). It is not yet an operational retention mode: current
+> policies, database triggers, recovery services and UI still use elapsed
+> days, and no controller/Board category term is approved or active.
+> Keep retention, erasure and independent recovery issues OPEN.
+
 > **8 October 23:34 Dublin retention/recovery gate unchanged:** A private
 > P04–P08 Board/controller decision brief now identifies exact schedule,
 > calendar-anchor, recovery-window, hold, copy/backup and independent
