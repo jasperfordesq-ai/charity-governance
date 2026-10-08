@@ -104,7 +104,10 @@ test('approval cannot omit authority or evidence, and periods cannot be silently
   const f = fixture();
   for (const input of [{ ...approved, authorityConfirmed: false }, { ...approved, approvalEvidenceRef: '' },
     { ...draft, recoveryDays: 0 }, { ...draft, retentionMode: 'AFTER_ANCHOR' },
-    { ...draft, retentionDays: 30 }, { ...draft, recordClass: 'COMPLAINTS' }]) {
+    { ...draft, retentionDays: 30 }, { ...draft, recordClass: 'COMPLAINTS' },
+    { ...draft, retentionMode: 'AFTER_CALENDAR_YEARS', retentionDays: null, retentionYears: 6 },
+    { ...approved, retentionMode: 'AFTER_CALENDAR_YEARS', retentionDays: null, retentionYears: 6 },
+    { ...draft, retentionYears: 6 }]) {
     await assert.rejects(f.service.create('org-a', 'actor-a', input));
   }
   assert.equal(f.rows.length, 0);
@@ -125,6 +128,19 @@ test('complaint approvals use resolution anchors and cannot replace or withdraw 
     evidenceRef: 'WITHDRAW-001', reason: 'This belongs to a different record class.',
   }), (error: any) => error.statusCode === 404);
   assert.deepEqual(f.withdrawals.map(row => row.policyId), ['policy-2']);
+});
+
+test('calendar-year policy creation remains fenced for every record class', async () => {
+  const f = fixture();
+  for (const service of [f.service, f.complaints, f.documentCopies, f.complaintCopies]) {
+    for (const state of ['DRAFT', 'APPROVED'] as const) {
+      const input = { ...(state === 'DRAFT' ? draft : approved), retentionMode: 'AFTER_CALENDAR_YEARS',
+        retentionDays: null, retentionYears: 6 };
+      await assert.rejects(service.create('org-a', 'actor-a', input));
+    }
+  }
+  assert.equal(f.rows.length, 0);
+  assert.equal(f.locks.length, 0);
 });
 
 test('independent recovery binding freezes complaint policy revisions and withdrawals only', async () => {

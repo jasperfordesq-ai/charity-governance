@@ -1,5 +1,14 @@
 # CharityPilot Agent Continuation Handoff
 
+> **9 October 00:18 Dublin P04 activation-fence regression:** A focused
+> API test now proves that both DRAFT and APPROVED calendar-year creation
+> requests are rejected before any database lock/write for each of the
+> four retention classes. API build and nine policy tests pass. The
+> separate SQL activation trigger remains; neither gate is approval of
+> a live term. Review of older day-only SQL found later calendar guards
+> on the effective document/complaint disposal paths. Independent
+> recovery custody remains a separate unimplemented live gate.
+
 > **9 October 00:15 Dublin P04 read-only policy display, still fenced:**
 > The document recovery-policy listing now includes valid year-mode
 > candidates and their `retentionYears` field for Owner review. The

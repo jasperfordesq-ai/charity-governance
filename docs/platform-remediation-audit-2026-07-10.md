@@ -1,5 +1,11 @@
 # CharityPilot Full-Platform Remediation Audit
 
+> **9 October 00:18 Dublin P04 mode fence, OPEN:** API regression now
+> checks calendar policy creation refusal for draft and approved states
+> in all four record classes before a database write. API build and
+> nine policy tests pass. The SQL fence still applies. No controller
+> terms, provider custody, live release or DPO acceptance were added.
+
 > **9 October 00:15 Dublin P04 policy review display, OPEN:** Local
 > API listing and Owner screens now expose/display a calendar-year term
 > if one exists, with 69 route tests and both app type checks passing.
