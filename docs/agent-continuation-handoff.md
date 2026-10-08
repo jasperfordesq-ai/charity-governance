@@ -1,6 +1,6 @@
 # CharityPilot Agent Continuation Handoff
 
-> **8 October 23:54 Dublin P04 claim cutoff proof:** The full disposable
+> **8 October 23:53 Dublin P04 claim cutoff proof:** The full disposable
 > PostgreSQL migration test now isolates the new `DocumentPurgeClaim`
 > calendar trigger. A 2024 leap-day + six-year early claim is refused;
 > a 2020 leap-day + six-year elapsed claim passes the cutoff trigger.

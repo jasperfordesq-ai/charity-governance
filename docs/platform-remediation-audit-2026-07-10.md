@@ -1,6 +1,6 @@
 # CharityPilot Full-Platform Remediation Audit
 
-> **8 October 23:54 Dublin P04 document claim probe:** Full disposable
+> **8 October 23:53 Dublin P04 document claim probe:** Full disposable
 > PG16 migration proof now covers the calendar claim trigger's early
 > refusal and elapsed acceptance with synthetic rolled-back fixtures.
 > Other claim user triggers were intentionally isolated; end-to-end
