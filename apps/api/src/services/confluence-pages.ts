@@ -332,22 +332,9 @@ export async function getPage(
   return parsePage(response.body);
 }
 
-/** A normal 404 cannot distinguish purge from trash; query trash explicitly. */
+/** A normal 404 cannot distinguish purge from trash; use the v1 trash reader. */
 export async function isPageInTrash(client: ConfluenceClient, pageId: string): Promise<boolean> {
-  const id = assertPageId(pageId);
-  try {
-    await client.request({
-      method: 'GET',
-      api: 'v2',
-      path: `pages/${id}`,
-      query: { status: 'trashed' },
-      idempotent: true,
-    });
-    return true;
-  } catch (error) {
-    if (isUpstream(error, 'CONFLUENCE_NOT_FOUND')) return false;
-    throw error;
-  }
+  return (await getTrashedPage(client, pageId)) !== null;
 }
 
 /**

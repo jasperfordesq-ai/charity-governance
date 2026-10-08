@@ -447,12 +447,19 @@ async function listAttachmentsAtPath(
 }
 
 /** Enumerate the site trash to the end, returning only validated ids. */
-export async function listTrashedAttachmentIds(client: ConfluenceClient): Promise<string[]> {
+export async function listTrashedAttachmentIds(
+  client: ConfluenceClient,
+  signal?: AbortSignal,
+): Promise<string[]> {
   const ids: string[] = [];
   const seenCursors = new Set<string>();
   let cursor: string | undefined;
 
   for (let page = 0; page < MAX_LIST_PAGES; page += 1) {
+    if (signal?.aborted) {
+      throw new AppError(504, 'CONFLUENCE_ERASURE_ABORTED',
+        'The Confluence erasure attempt was aborted before the next trash page was read.');
+    }
     const query: Record<string, string> = { limit: String(LIST_PAGE_SIZE), status: 'trashed' };
     if (cursor !== undefined) query.cursor = cursor;
     const response = await client.request({ method: 'GET', api: 'v2', path: 'attachments', query, idempotent: true });

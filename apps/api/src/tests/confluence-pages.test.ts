@@ -359,9 +359,10 @@ test('getPage returns null on 404: a missing page is a normal answer to "does th
 });
 
 test('erasure checks trash explicitly after a normal page 404', async () => {
-  const { client, specs } = harness([ok({ id: PAGE_ID })]);
+  const { client, specs } = harness([ok(pageBody({ status: 'trashed', space: { id: SPACE_ID } }))]);
   assert.equal(await isPageInTrash(client, PAGE_ID), true);
-  assert.equal(specs[0]?.path, `pages/${PAGE_ID}`);
+  assert.equal(specs[0]?.path, `content/${PAGE_ID}`);
+  assert.equal(specs[0]?.api, 'v1');
   assert.equal(specs[0]?.query?.status, 'trashed');
   assert.equal(specs[0]?.idempotent, true);
   assert.equal(await isPageInTrash(harness([throwing(upstreamNotFound())]).client, PAGE_ID), false);

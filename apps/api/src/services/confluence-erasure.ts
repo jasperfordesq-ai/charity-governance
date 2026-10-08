@@ -88,7 +88,7 @@ export type ConfluenceErasureOperations = {
   deleteAttachment(client: ConfluenceClient, attachmentId: string): Promise<void>;
   purgeAttachment(client: ConfluenceClient, attachmentId: string): Promise<void>;
   getAttachment(client: ConfluenceClient, attachmentId: string): Promise<boolean>;
-  listTrashedAttachments(client: ConfluenceClient): Promise<string[]>;
+  listTrashedAttachments(client: ConfluenceClient, signal?: AbortSignal): Promise<string[]>;
   deletePage(client: ConfluenceClient, pageId: string): Promise<void>;
   purgePage(client: ConfluenceClient, pageId: string): Promise<void>;
   getPage(client: ConfluenceClient, pageId: string): Promise<ConfluencePage | null>;
@@ -296,7 +296,7 @@ export function createConfluenceEraser(deps: ConfluenceEraserDeps): Eraser {
     }
     if (target.attachmentIds.length > 0) {
       assertNotAborted(signal);
-      const trashed = await operations.listTrashedAttachments(client);
+      const trashed = await operations.listTrashedAttachments(client, signal);
       const recorded = new Set(target.attachmentIds);
       const present = trashed.find((id) => recorded.has(id));
       if (present) throw unverified(present);

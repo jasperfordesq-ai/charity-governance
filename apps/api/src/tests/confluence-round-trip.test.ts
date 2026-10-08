@@ -4,6 +4,8 @@ import { createFakeAtlassian } from './fake-atlassian.js';
 import { createConfluenceClient } from '../services/confluence-client.js';
 import { createPage, getPage, getTrashedPage, deletePage, purgePage } from '../services/confluence-pages.js';
 import { listSpaces } from '../services/confluence-spaces.js';
+import { createConfluenceEraser } from '../services/confluence-erasure.js';
+import { AppError } from '../utils/errors.js';
 
 function clientFor(site: ReturnType<typeof createFakeAtlassian>) {
   return createConfluenceClient(
@@ -108,4 +110,22 @@ test('only the v1 trashed read separates a restorable page from one that is gone
     null,
     'and now v1 agrees it is gone — this difference is the only signal there is',
   );
+});
+
+test('eraser cannot complete when the fake provider leaves a page in trash', async () => {
+  const site = createFakeAtlassian();
+  site.addSpace({ id: 'space-1', key: 'GOV', name: 'Governance' });
+  const client = clientFor(site);
+  const page = await createPage(client, {
+    spaceId: 'space-1', title: 'Disposable policy', bodyStorage: '<p>test</p>',
+  });
+  const eraser = createConfluenceEraser({
+    connect: async () => client,
+    operations: { purgePage: async () => undefined },
+  });
+  await assert.rejects(() => eraser({
+    organisationId: 'org-1', storagePath: 'org-1/test',
+    targetRef: { kind: 'confluence', cloudId: site.cloudId, pageId: page.id, attachmentIds: [] },
+  }), (error: unknown) => (error as AppError).code === 'CONFLUENCE_ERASURE_UNVERIFIED');
+  assert.equal(site.getPage(page.id)?.status, 'trashed');
 });

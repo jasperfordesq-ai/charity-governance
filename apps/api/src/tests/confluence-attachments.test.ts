@@ -353,6 +353,21 @@ test('erasure refuses a trash inventory with a non-trash record or an unfinished
   assert.equal(cursorError.code, 'CONFLUENCE_RESPONSE_INVALID');
 });
 
+test('cancellation between trash pages stops the next provider request', async () => {
+  const controller = new AbortController();
+  const first = v2ListBody([], {
+    base: WEB_BASE,
+    next: '/wiki/api/v2/attachments?cursor=NEXT&status=trashed',
+  });
+  const { client, specs } = harness([() => {
+    controller.abort();
+    return { status: 200, body: first };
+  }]);
+  const error = await rejectsWith(() => listTrashedAttachmentIds(client, controller.signal));
+  assert.equal(error.code, 'CONFLUENCE_ERASURE_ABORTED');
+  assert.equal(specs.length, 1);
+});
+
 test('listAttachments preserves the current v2 version when supplied', async () => {
   const { client } = harness([ok(v2ListBody([{
     id: 'att789', title: 'board-minutes.pdf', version: { number: 3 },
