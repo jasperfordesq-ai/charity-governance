@@ -1,5 +1,19 @@
 # CharityPilot Full-Platform Remediation Audit
 
+> **8 October DPO-05 synthetic page-marker release:** Exact merged-master
+> `bd804986` passed CI `37718274108`, E2E `37718274291` and guarded green
+> private-VM cutover with restricted runtime, zero provider/publication
+> rows, 372 preserved precutover backup hashes, SHA-matched workstation
+> copies of both new sets and isolated 155-migration/68-document restore.
+> The optional marker is bound to one tenant/site/space and the immutable
+> reserved body digest; production scheduler callers do not enable it.
+> There has been no real Confluence call or marker readback. DPO-05
+> provider/all-copy/UNKNOWN, C01-C05/P01-P09/MFA, independent P05/P08,
+> Member/export/deletion, replay/C1 and Nikita acceptance remain OPEN.
+> Exact private receipt:
+> `.charitypilot-private/release-bd804986-page-marker-probe-2026-10-08.md`.
+> Earlier checkpoints below are dated history.
+
 > **8 October DPO-05 operation-ID prerequisite release:** Exact merged-
 > master `2dd0a427` passed CI `37713125501`, E2E `37713125382` and
 > guarded blue private-VM cutover with restricted runtime, zero provider/
