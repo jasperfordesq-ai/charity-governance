@@ -332,6 +332,11 @@ export async function getPage(
   return parsePage(response.body);
 }
 
+/** A normal 404 cannot distinguish purge from trash; use the v1 trash reader. */
+export async function isPageInTrash(client: ConfluenceClient, pageId: string): Promise<boolean> {
+  return (await getTrashedPage(client, pageId)) !== null;
+}
+
 /**
  * Read the storage body for independent, read-only page-create observation.
  * A title search or a missing/converted body is never proof of an operation.

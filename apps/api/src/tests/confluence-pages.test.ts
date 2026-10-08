@@ -10,6 +10,7 @@ import {
   getContentPropertyRecord,
   getPage,
   getPageStorage,
+  isPageInTrash,
   purgePage,
   setContentProperty,
   updatePage,
@@ -355,6 +356,16 @@ test('getPage returns null on 404: a missing page is a normal answer to "does th
   const { client } = harness([throwing(upstreamNotFound())]);
 
   assert.equal(await getPage(client, PAGE_ID), null);
+});
+
+test('erasure checks trash explicitly after a normal page 404', async () => {
+  const { client, specs } = harness([ok(pageBody({ status: 'trashed', space: { id: SPACE_ID } }))]);
+  assert.equal(await isPageInTrash(client, PAGE_ID), true);
+  assert.equal(specs[0]?.path, `content/${PAGE_ID}`);
+  assert.equal(specs[0]?.api, 'v1');
+  assert.equal(specs[0]?.query?.status, 'trashed');
+  assert.equal(specs[0]?.idempotent, true);
+  assert.equal(await isPageInTrash(harness([throwing(upstreamNotFound())]).client, PAGE_ID), false);
 });
 
 test('getPageStorage asks for storage and preserves exact body and parent for read-only observation', async () => {

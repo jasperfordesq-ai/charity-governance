@@ -3,11 +3,14 @@ import type { ConfluenceClient } from './confluence-client.js';
 import { createConfluenceClient } from './confluence-client.js';
 import {
   deleteAttachment as deleteAttachmentDefault,
+  getAttachment as getAttachmentDefault,
+  listTrashedAttachmentIds as listTrashedAttachmentIdsDefault,
   purgeAttachment as purgeAttachmentDefault,
 } from './confluence-attachments.js';
 import {
   deletePage as deletePageDefault,
   getPage as getPageDefault,
+  isPageInTrash as isPageInTrashDefault,
   purgePage as purgePageDefault,
   type ConfluencePage,
 } from './confluence-pages.js';
@@ -27,7 +30,8 @@ import type { Eraser, ErasureTarget } from './document-erasure.js';
  *
  * 1. Every attachment, `delete` then `purge`.
  * 2. Then the page, `delete` then `purge`.
- * 3. Then a read of the page, which must 404.
+ * 3. Read the page in both normal and trashed status, and each recorded
+ *    attachment directly and in the site's trashed-attachment inventory.
  *
  * **Attachments before the page**, because Atlassian does not promise that
  * deleting a page erases the files attached to it. If it does cascade, the
@@ -46,9 +50,13 @@ import type { Eraser, ErasureTarget } from './document-erasure.js';
  * The pipeline exists so that erasure is provable, and the worst thing it can
  * produce is a *false proof* — a row marked PROCESSED for content still
  * sitting in a charity's space. Issuing four DELETEs proves only that four
- * requests were sent. The final `getPage` is what is actually known: a 404 is
- * the evidence, and anything else fails the attempt
- * (`CONFLUENCE_ERASURE_UNVERIFIED`), which is **transient** — the page may be
+ * requests were sent. A normal 404 alone can mean trash, so the verification
+ * reads both normal and trashed status. A bounded site-trash attachment
+ * inventory must also exclude each recorded attachment id. These checks cover
+ * the recorded target ids, not undiscovered provider copies or backups; real
+ * provider behavior still needs the separate test-site acceptance. A recorded
+ * id that remains visible fails the attempt (`CONFLUENCE_ERASURE_UNVERIFIED`),
+ * which is **transient** — the page may be
  * gone by the next attempt, and a five-minute Atlassian blip must not become a
  * dead-letter a human has to clear by hand.
  *
@@ -75,13 +83,16 @@ import type { Eraser, ErasureTarget } from './document-erasure.js';
  * holds the codes.
  */
 
-/** The five primitives the sequence is built from. Injectable so a test can watch the order. */
+/** Injectable primitives so tests can check the exact delete/read order. */
 export type ConfluenceErasureOperations = {
   deleteAttachment(client: ConfluenceClient, attachmentId: string): Promise<void>;
   purgeAttachment(client: ConfluenceClient, attachmentId: string): Promise<void>;
+  getAttachment(client: ConfluenceClient, attachmentId: string): Promise<boolean>;
+  listTrashedAttachments(client: ConfluenceClient, signal?: AbortSignal): Promise<string[]>;
   deletePage(client: ConfluenceClient, pageId: string): Promise<void>;
   purgePage(client: ConfluenceClient, pageId: string): Promise<void>;
   getPage(client: ConfluenceClient, pageId: string): Promise<ConfluencePage | null>;
+  isPageInTrash(client: ConfluenceClient, pageId: string): Promise<boolean>;
 };
 
 /**
@@ -105,16 +116,19 @@ export type ConfluenceEraserDeps = {
   connection?: ConfluenceConnectionDeps;
   /** Overrides the default connection path entirely. Exists for tests. */
   connect?: ConfluenceConnect;
-  /** Overrides any of the five primitives. Exists for tests. */
+  /** Overrides individual primitives. Exists for tests. */
   operations?: Partial<ConfluenceErasureOperations>;
 };
 
 const DEFAULT_OPERATIONS: ConfluenceErasureOperations = {
   deleteAttachment: deleteAttachmentDefault,
   purgeAttachment: purgeAttachmentDefault,
+  getAttachment: getAttachmentDefault,
+  listTrashedAttachments: listTrashedAttachmentIdsDefault,
   deletePage: deletePageDefault,
   purgePage: purgePageDefault,
   getPage: getPageDefault,
+  isPageInTrash: isPageInTrashDefault,
 };
 
 /**
@@ -204,13 +218,13 @@ function assertNotAborted(signal: AbortSignal | undefined): void {
  * the one thing that must never happen is marking this row PROCESSED. It is
  * not marked PROCESSED, so the attempt is simply retried.
  */
-function unverified(pageId: string): AppError {
+function unverified(contentId: string): AppError {
   return new AppError(
     502,
     'CONFLUENCE_ERASURE_UNVERIFIED',
-    `Confluence still returns page ${pageId} after it was deleted and purged, so this erasure ` +
+    `Confluence still returns content ${contentId} after it was deleted and purged, so this erasure ` +
       'is not proven and has not been recorded as complete. The attempt will be retried.',
-    { pageId },
+    { contentId },
   );
 }
 
@@ -273,5 +287,19 @@ export function createConfluenceEraser(deps: ConfluenceEraserDeps): Eraser {
     assertNotAborted(signal);
     const page = await operations.getPage(client, target.pageId);
     if (page !== null) throw unverified(target.pageId);
+    assertNotAborted(signal);
+    if (await operations.isPageInTrash(client, target.pageId)) throw unverified(target.pageId);
+
+    for (const attachmentId of target.attachmentIds) {
+      assertNotAborted(signal);
+      if (await operations.getAttachment(client, attachmentId)) throw unverified(attachmentId);
+    }
+    if (target.attachmentIds.length > 0) {
+      assertNotAborted(signal);
+      const trashed = await operations.listTrashedAttachments(client, signal);
+      const recorded = new Set(target.attachmentIds);
+      const present = trashed.find((id) => recorded.has(id));
+      if (present) throw unverified(present);
+    }
   };
 }

@@ -5,8 +5,10 @@ import type { ConfluenceClient, ConfluenceRequestSpec } from '../services/conflu
 import {
   CONFLUENCE_ATTACHMENT_MAX_BYTES,
   deleteAttachment,
+  getAttachment,
   listAttachmentVersions,
   listAttachments,
+  listTrashedAttachmentIds,
   purgeAttachment,
   uploadAttachment,
 } from '../services/confluence-attachments.js';
@@ -322,6 +324,48 @@ test('listAttachments follows the v2 cursor so a long list is not silently trunc
 test('listAttachments returns an empty list for a page with no attachments', async () => {
   const { client } = harness([ok(v2ListBody([]))]);
   assert.deepEqual(await listAttachments(client, PAGE_ID), []);
+});
+
+test('erasure reads the site trash through its final cursor and checks direct attachment access', async () => {
+  const first = v2ListBody([], { base: WEB_BASE, next: '/wiki/api/v2/attachments?cursor=NEXT&status=trashed' });
+  const second = v2ListBody([{ id: 'att789', status: 'trashed' }]);
+  const { client, specs } = harness([ok(first), ok(second), throwing(upstreamNotFound())]);
+  const trashed = await listTrashedAttachmentIds(client);
+  assert.deepEqual(trashed, ['att789']);
+  assert.deepEqual(specs.slice(0, 2).map((spec) => [spec.path, spec.query?.status, spec.query?.cursor]), [
+    ['attachments', 'trashed', undefined],
+    ['attachments', 'trashed', 'NEXT'],
+  ]);
+  assert.equal(await getAttachment(client, 'att789'), false);
+  assert.equal(specs[2]?.path, 'attachments/att789');
+});
+
+test('erasure refuses a trash inventory with a non-trash record or an unfinished cursor', async () => {
+  const wrongStatus = harness([ok(v2ListBody([{ id: 'att789', status: 'current' }]))]);
+  const invalid = await rejectsWith(() => listTrashedAttachmentIds(wrongStatus.client));
+  assert.equal(invalid.code, 'CONFLUENCE_RESPONSE_INVALID');
+
+  const repeating = harness([ok(v2ListBody([], {
+    base: WEB_BASE,
+    next: '/wiki/api/v2/attachments?cursor=SAME&status=trashed',
+  }))]);
+  const cursorError = await rejectsWith(() => listTrashedAttachmentIds(repeating.client));
+  assert.equal(cursorError.code, 'CONFLUENCE_RESPONSE_INVALID');
+});
+
+test('cancellation between trash pages stops the next provider request', async () => {
+  const controller = new AbortController();
+  const first = v2ListBody([], {
+    base: WEB_BASE,
+    next: '/wiki/api/v2/attachments?cursor=NEXT&status=trashed',
+  });
+  const { client, specs } = harness([() => {
+    controller.abort();
+    return { status: 200, body: first };
+  }]);
+  const error = await rejectsWith(() => listTrashedAttachmentIds(client, controller.signal));
+  assert.equal(error.code, 'CONFLUENCE_ERASURE_ABORTED');
+  assert.equal(specs.length, 1);
 });
 
 test('listAttachments preserves the current v2 version when supplied', async () => {
