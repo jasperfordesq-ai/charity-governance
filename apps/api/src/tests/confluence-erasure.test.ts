@@ -11,7 +11,7 @@ import {
 } from '../services/confluence-erasure.js';
 import type { ConfluenceClient } from '../services/confluence-client.js';
 import type { ConfluencePage } from '../services/confluence-pages.js';
-import { purgeAttachment } from '../services/confluence-attachments.js';
+import { listAttachments, purgeAttachment } from '../services/confluence-attachments.js';
 import { purgePage } from '../services/confluence-pages.js';
 import { createErasureDispatcher } from '../services/document-erasure.js';
 import type { ErasureTarget } from '../services/document-erasure.js';
@@ -124,6 +124,38 @@ test('an unrecorded current attachment blocks every destructive request', async 
   await assert.rejects(() => eraser(targetWith(['a1'])),
     (error: unknown) => (error as AppError).code === 'CONFLUENCE_ERASURE_TARGET_INCOMPLETE');
   assert.deepEqual(calls, ['getPage:p1', 'listAttachments:p1']);
+});
+
+test('a later provider page with an unrecorded attachment blocks erasure before deletion', async () => {
+  const calls: string[] = [];
+  const client = {
+    request: async (spec: { method: string; path: string; query?: Record<string, string> }) => {
+      calls.push(`${spec.method}:${spec.path}:${spec.query?.cursor ?? 'first'}`);
+      assert.equal(spec.method, 'GET');
+      assert.equal(spec.path, 'pages/p1/attachments');
+      const id = spec.query?.cursor === 'SECOND' ? 'unexpected' : 'a1';
+      return {
+        status: 200,
+        body: {
+          results: [{ id, title: `${id}.pdf`, mediaType: 'application/pdf', fileSize: 1,
+            downloadLink: `/download/${id}.pdf` }],
+          _links: spec.query?.cursor === 'SECOND' ? {}
+            : { next: '/wiki/api/v2/pages/p1/attachments?cursor=SECOND' },
+        },
+      };
+    },
+  } as unknown as ConfluenceClient;
+  const deps = spyDeps(calls, {
+    getPage: async () => PAGE,
+    listAttachments,
+  });
+  deps.connect = async () => client;
+  await assert.rejects(() => createConfluenceEraser(deps)(targetWith(['a1'])),
+    (error: unknown) => (error as AppError).code === 'CONFLUENCE_ERASURE_TARGET_INCOMPLETE');
+  assert.deepEqual(calls, [
+    'GET:pages/p1/attachments:first',
+    'GET:pages/p1/attachments:SECOND',
+  ]);
 });
 
 test('a complete current attachment inventory permits the recorded erasure', async () => {
