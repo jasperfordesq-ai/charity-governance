@@ -1,5 +1,19 @@
 # CharityPilot Agent Continuation Handoff
 
+> **8 October verified `58bfc20f` private-VM release:** PR #29's
+> read-only Confluence saved-page marker candidate passed exact PR-head and
+> merged-master CI/E2E plus automated review. Guarded blue cutover,
+> restricted-runtime/zero-row postflight, both front doors, preservation of
+> 375 precutover backup hashes, SHA-matched workstation copy, isolated
+> 155-migration/68-document restore and repeat postflight passed. Green
+> `bd804986` is previous. Private receipt:
+> `.charitypilot-private/release-58bfc20f-page-marker-observer-2026-10-08.md`.
+> The observer has no production caller or real Confluence provider use;
+> a marker match is non-authorizing. C01-C05/P01-P09/MFA, DPO-05
+> all-copy/UNKNOWN, independent P05/P08, Member/export/deletion,
+> replay/C1 and Nikita acceptance remain OPEN. Older checkpoints below
+> are dated history.
+
 > **8 October verified `bd804986` private-VM release:** PR #27's opt-in
 > synthetic Confluence page-create body marker passed exact PR-head and
 > merged-master CI/E2E plus automated review. Guarded green cutover,
