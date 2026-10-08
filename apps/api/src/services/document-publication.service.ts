@@ -353,7 +353,7 @@ export type PublicationAttempt = {
   }): Promise<string>;
   /** Preserve the exact possible page create before its non-idempotent call. */
   reservePageCreateIntent(input: {
-    documentRevision: Date; cloudId: string; spaceId: string;
+    operationId: string; documentRevision: Date; cloudId: string; spaceId: string;
     parentPageId: string | null; title: string; bodySha256: string;
   }): Promise<string>;
 };
@@ -1191,8 +1191,13 @@ async function resolvePage(input: {
 
   assertNotAborted(signal);
   await reserveBeforeWrite();
+  // Allocate identity before constructing the exact page body. The current
+  // body has no provider-visible marker; a future validated marker must be
+  // part of these same bytes before their digest is reserved.
+  const operationId = randomBytes(16).toString('hex');
   const bodyStorage = publicationBody(doc, target.publishingModel.bodyMode);
-  await reservePageCreateIntent({
+  const reservedOperationId = await reservePageCreateIntent({
+    operationId,
     documentRevision: doc.updatedAt,
     cloudId: target.cloudId,
     spaceId: target.spaceId,
@@ -1200,6 +1205,7 @@ async function resolvePage(input: {
     title,
     bodySha256: createHash('sha256').update(bodyStorage, 'utf8').digest('hex'),
   });
+  if (reservedOperationId !== operationId) throw claimLost(row.id);
   assertNotAborted(signal);
   await assertCurrentCreateInputs();
   assertNotAborted(signal);
@@ -1340,11 +1346,11 @@ export class DocumentPublicationService {
 
   /** The local intent is immutable possible-write evidence, not provider proof. */
   async reservePageCreateIntent(publication: DocumentPublicationRecord, input: {
-    documentRevision: Date; cloudId: string; spaceId: string;
+    operationId: string; documentRevision: Date; cloudId: string; spaceId: string;
     parentPageId: string | null; title: string; bodySha256: string;
   }): Promise<string> {
     if (publication.claimedAt === null) throw claimLost(publication.id);
-    const operationId = randomBytes(16).toString('hex');
+    if (!/^[0-9a-f]{32}$/.test(input.operationId)) throw claimLost(publication.id);
     const rows = await this.prisma.$queryRaw<Array<{ id: string }>>`
       WITH eligible AS (
         SELECT p.id, p."organisationId", p."documentId", p."claimedAt"
@@ -1362,14 +1368,14 @@ export class DocumentPublicationService {
         "id", "publicationId", "organisationId", "documentId", "claimedAt",
         "documentRevision", "cloudId", "spaceId", "parentPageId", "title", "bodySha256"
       )
-      SELECT ${operationId}, eligible.id, eligible."organisationId", eligible."documentId",
+      SELECT ${input.operationId}, eligible.id, eligible."organisationId", eligible."documentId",
         eligible."claimedAt", ${input.documentRevision}, ${input.cloudId},
         ${input.spaceId}, ${input.parentPageId}, ${input.title}, ${input.bodySha256}
       FROM eligible
       RETURNING id
     `;
-    if (rows.length !== 1 || rows[0]?.id !== operationId) throw claimLost(publication.id);
-    return operationId;
+    if (rows.length !== 1 || rows[0]?.id !== input.operationId) throw claimLost(publication.id);
+    return input.operationId;
   }
 
   /**

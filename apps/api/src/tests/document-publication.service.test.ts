@@ -343,7 +343,7 @@ function runPublisher(
       cloudId: string; spaceId: string; pageId: string; filename: string; sha256: string;
     }) => Promise<string>;
     reservePageCreateIntent?: (input: {
-      documentRevision: Date; cloudId: string; spaceId: string;
+      operationId: string; documentRevision: Date; cloudId: string; spaceId: string;
       parentPageId: string | null; title: string; bodySha256: string;
     }) => Promise<string>;
   } = {},
@@ -355,7 +355,7 @@ function runPublisher(
     recordPage: options.recordPage ?? (async () => undefined),
     reserveRemoteWrite: options.reserveRemoteWrite ?? (async () => undefined),
     reserveUploadIntent: options.reserveUploadIntent ?? (async () => '0123456789abcdef0123456789abcdef'),
-    reservePageCreateIntent: options.reservePageCreateIntent ?? (async () => '0123456789abcdef0123456789abcdef'),
+    reservePageCreateIntent: options.reservePageCreateIntent ?? (async input => input.operationId),
   });
 }
 
@@ -468,19 +468,39 @@ test('a durable reservation precedes page creation and is reused for the attachm
 test('the exact page-create intent commits before the non-idempotent provider call', async () => {
   const calls: string[] = [];
   const bodyStorage = publicationBody(DOC, TARGET.publishingModel.bodyMode);
-  await runPublisher(spyDeps(calls), {
+  let sentBody: string | null = null;
+  let reservedBodySha256: string | null = null;
+  await runPublisher(spyDeps(calls, { operations: { createPage: async (_client, input) => {
+    sentBody = input.bodyStorage;
+    return PAGE;
+  } } }), {
     reservePageCreateIntent: async input => {
       calls.push('reservePageCreateIntent');
-      assert.deepEqual(input, {
+      reservedBodySha256 = input.bodySha256;
+      const { operationId, ...exactInput } = input;
+      assert.match(operationId, /^[0-9a-f]{32}$/);
+      assert.deepEqual(exactInput, {
         documentRevision: NOW,
         cloudId: 'cloud-1', spaceId: 'space-1', parentPageId: null,
         title: TITLE,
         bodySha256: createHash('sha256').update(bodyStorage, 'utf8').digest('hex'),
       });
-      return '0123456789abcdef0123456789abcdef';
+      return operationId;
     },
   });
+  assert.ok(sentBody);
+  assert.equal(sentBody, bodyStorage);
+  assert.equal(reservedBodySha256, createHash('sha256').update(sentBody, 'utf8').digest('hex'));
   assert.ok(calls.indexOf('reservePageCreateIntent') < calls.findIndex(call => call.startsWith('createPage:')));
+});
+
+test('a reservation returning a different operation id refuses the page create', async () => {
+  const calls: string[] = [];
+  const error = appError(await captureRejection(runPublisher(spyDeps(calls), {
+    reservePageCreateIntent: async input => `${input.operationId[0] === '0' ? '1' : '0'}${input.operationId.slice(1)}`,
+  })));
+  assert.equal(error.code, 'DOCUMENT_PUBLICATION_CLAIM_LOST');
+  assert.equal(calls.some(call => call.startsWith('createPage:')), false);
 });
 
 test('failed page-create intent and lost provider response never cause a second create', async () => {
@@ -500,7 +520,7 @@ test('failed page-create intent and lost provider response never cause a second 
       throw new AppError(502, 'CONFLUENCE_REQUEST_INDETERMINATE', 'synthetic lost response');
     } },
   }), {
-    reservePageCreateIntent: async () => { reserved = true; return '0123456789abcdef0123456789abcdef'; },
+    reservePageCreateIntent: async input => { reserved = true; return input.operationId; },
   })));
   assert.equal(uncertain.code, 'CONFLUENCE_REQUEST_INDETERMINATE');
   assert.equal(reserved, true);
@@ -528,7 +548,7 @@ test('a changed connected target or document revision stops after the local inte
       },
     });
     const error = appError(await captureRejection(runPublisher(deps, {
-      reservePageCreateIntent: async () => { reserved = true; return '0123456789abcdef0123456789abcdef'; },
+      reservePageCreateIntent: async input => { reserved = true; return input.operationId; },
     })));
     assert.equal(reserved, true);
     assert.equal(error.code, change === 'document'
@@ -547,10 +567,11 @@ test('the page-create intent insert locks the exact claimed unrecorded publicati
   const service = new DocumentPublicationService(prisma as never, () => NOW);
   const row = publicationRow({ claimedAt: NOW, remoteWriteStartedAt: NOW });
   const sha256 = createHash('sha256').update('body').digest('hex');
-  const input = { documentRevision: NOW, cloudId: 'cloud-1', spaceId: 'space-1',
+  const operationId = '0123456789abcdef0123456789abcdef';
+  const input = { operationId, documentRevision: NOW, cloudId: 'cloud-1', spaceId: 'space-1',
     parentPageId: null, title: TITLE, bodySha256: sha256 };
   const id = await service.reservePageCreateIntent(row, input);
-  assert.match(id, /^[0-9a-f]{32}$/);
+  assert.equal(id, operationId);
   assert.match(sql, /INSERT INTO "DocumentPublicationPageCreateIntent"/);
   assert.match(sql, /p\."remoteWriteStartedAt" IS NOT NULL/);
   assert.match(sql, /p\."pageId" IS NULL/);
@@ -561,6 +582,8 @@ test('the page-create intent insert locks the exact claimed unrecorded publicati
   const missing = new DocumentPublicationService({ $queryRaw: async () => [] } as never, () => NOW);
   assert.equal(appError(await captureRejection(missing.reservePageCreateIntent(row, input))).code,
     'DOCUMENT_PUBLICATION_CLAIM_LOST');
+  assert.equal(appError(await captureRejection(service.reservePageCreateIntent(row,
+    { ...input, operationId: 'invalid' }))).code, 'DOCUMENT_PUBLICATION_CLAIM_LOST');
 });
 
 test('an exact upload intent is committed before bytes leave, and its marker names the same digest', async () => {

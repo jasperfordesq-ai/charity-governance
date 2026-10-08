@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { createHash, randomUUID } from 'node:crypto';
+import { createHash, randomBytes, randomUUID } from 'node:crypto';
 import { PrismaClient } from '@prisma/client';
 import { prepareDocumentRecoveryFacts } from '../apps/api/dist/services/document-recovery-preparation.js';
 import { readClaimedDocumentByteAuthority,
@@ -802,14 +802,17 @@ try {
       where: { id: 'page-service-proof' },
     });
     await tx.$executeRaw`SET LOCAL ROLE cp_fixture`;
+    const requestedOperationId = randomBytes(16).toString('hex');
     const operationId = await publisher.reservePageCreateIntent(claimed, {
+      operationId: requestedOperationId,
       documentRevision: doc.updatedAt, cloudId: 'cloud-1', spaceId: 'space-1',
       parentPageId: null, title: 'Synthetic page', bodySha256: 'b'.repeat(64),
     });
-    assert.match(operationId, /^[0-9a-f]{32}$/u);
+    assert.equal(operationId, requestedOperationId);
     const saved = await tx.documentPublicationPageCreateIntent.findUniqueOrThrow({
       where: { id: operationId },
     });
+    assert.equal(saved.id, requestedOperationId);
     assert.equal(saved.publicationId, 'page-service-proof');
     assert.equal(saved.documentRevision.getTime(), doc.updatedAt.getTime());
     assert.equal(saved.cloudId, 'cloud-1');
