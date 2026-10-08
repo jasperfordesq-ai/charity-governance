@@ -777,6 +777,44 @@ test('real PostgreSQL 16 migration preserves an unresolved Confluence write rese
   } finally { await removeDisposableContainer(container); }
 });
 
+test('real PostgreSQL 16 migration makes a Confluence erasure request stamp one-way', { timeout: 120_000 }, async () => {
+  const container = `charitypilot-erasure-stamp-${randomUUID()}`;
+  assertDockerSuccess(docker(['run', '--detach', '--name', container, '--network', 'none',
+    '-e', 'POSTGRES_HOST_AUTH_METHOD=trust', POSTGRES_IMAGE]), 'start erasure stamp fixture');
+  try {
+    await waitForPostgres(container);
+    psql(container, `CREATE TABLE "DocumentPublication" (
+      id TEXT PRIMARY KEY, state TEXT NOT NULL, "erasureRequestedAt" TIMESTAMP(3),
+      "erasureDeletionId" TEXT, "reconcileError" TEXT
+    );`);
+    psql(container, readFileSync(new URL(
+      '../../prisma/migrations/20261008010000_confluence_erasure_stamp_immutable/migration.sql',
+      import.meta.url,
+    ), 'utf8'));
+    assert.match(psql(container, `INSERT INTO "DocumentPublication" VALUES
+      ('pre-stamped','RETIRED',now(),'job-0',NULL);`, false).stderr,
+    /requires an existing retired publication/);
+    psql(container, `INSERT INTO "DocumentPublication" (id,state) VALUES
+      ('retired','RETIRED'), ('live','PROCESSED');`);
+    assert.match(psql(container, `UPDATE "DocumentPublication" SET
+      "erasureRequestedAt"=now(), "erasureDeletionId"='job-live' WHERE id='live';`, false).stderr,
+    /requires a retired publication/);
+    psql(container, `UPDATE "DocumentPublication" SET
+      "erasureRequestedAt"='2026-10-08T04:00:00Z', "erasureDeletionId"='job-1' WHERE id='retired';`);
+    for (const rewrite of [
+      `"erasureDeletionId"='job-2'`,
+      `"erasureDeletionId"=NULL, "erasureRequestedAt"=NULL`,
+      `"erasureRequestedAt"='2026-10-08T05:00:00Z'`,
+    ]) {
+      assert.match(psql(container, `UPDATE "DocumentPublication" SET ${rewrite} WHERE id='retired';`, false).stderr,
+        /erasure stamp is immutable/);
+    }
+    psql(container, `UPDATE "DocumentPublication" SET "reconcileError"='REMOTE_403' WHERE id='retired';`);
+    assert.equal(psql(container, `SELECT "erasureDeletionId" || '|' || "reconcileError"
+      FROM "DocumentPublication" WHERE id='retired';`).stdout.trim(), 'job-1|REMOTE_403');
+  } finally { await removeDisposableContainer(container); }
+});
+
 test('real PostgreSQL 16 migration preserves exact Confluence upload intent evidence', { timeout: 120_000 }, async () => {
   const container = `charitypilot-upload-intent-${randomUUID()}`;
   assertDockerSuccess(docker(['run', '--detach', '--name', container, '--network', 'none',
