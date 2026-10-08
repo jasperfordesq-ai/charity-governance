@@ -61,6 +61,32 @@ test('complaint recovery migration preserves records and enforces reviewed remov
       sql(readFileSync(`${migrations}/${name}/migration.sql`, 'utf8'));
     }
     assert.equal(sql(`SELECT (row_to_json(c)::jsonb - ARRAY['removedAt','removalId'])::text FROM "ComplaintRecord" c;`), before);
+    const calendarRemoval = year => `BEGIN;
+      INSERT INTO "Organisation" (id,name,"updatedAt") VALUES ('calendar-org','Synthetic calendar charity',CURRENT_TIMESTAMP);
+      INSERT INTO "User" (id,email,name,"passwordHash",role,"organisationId","updatedAt")
+        VALUES ('calendar-owner','calendar-complaint@example.invalid','Synthetic owner','fixture','OWNER','calendar-org',CURRENT_TIMESTAMP);
+      INSERT INTO "ComplaintRecord" (id,"organisationId","receivedDate",summary,status,"updatedAt")
+        VALUES ('calendar-complaint','calendar-org','${year}-01-01','Synthetic calendar complaint','CLOSED',CURRENT_TIMESTAMP);
+      ALTER TABLE "DataRetentionPolicyRevision" DISABLE TRIGGER "DataRetentionPolicyRevision_01_mode_fence";
+      INSERT INTO "DataRetentionPolicyRevision" (id,"organisationId","recordClass",revision,state,"retentionMode",
+        "retentionAnchor","retentionYears","recoveryDays","createdById","approvedById","approvedAt","approvalEvidenceRef")
+        VALUES ('calendar-policy','calendar-org','COMPLAINT',1,'APPROVED','AFTER_CALENDAR_YEARS',
+          'RESOLVED_AT',6,30,'calendar-owner','calendar-owner',CURRENT_TIMESTAMP,'CALENDAR-POLICY-001');
+      ALTER TABLE "DataRetentionPolicyRevision" ENABLE TRIGGER "DataRetentionPolicyRevision_01_mode_fence";
+      INSERT INTO "ComplaintResolutionEvidence" (id,"organisationId","complaintId",revision,"recordRevision",state,
+        "resolvedAt","evidenceRef",reason,"actorUserId")
+        VALUES ('calendar-resolution','calendar-org','calendar-complaint',1,1,'RECORDED',
+          '${year}-02-29 12:34:56.789'::timestamp(3),'CALENDAR-RESOLUTION-001',
+          'Reviewed synthetic calendar resolution','calendar-owner');
+      INSERT INTO "ComplaintRemoval" (id,"organisationId","complaintId","recordRevision","actorUserId",
+        "policyId","resolutionEvidenceId","evidenceRef",reason)
+        VALUES ('calendar-removal','calendar-org','calendar-complaint',1,'calendar-owner',
+          'calendar-policy','calendar-resolution','CALENDAR-REMOVAL-001','Reviewed synthetic calendar removal');
+      SELECT count(*) FROM "ComplaintRemoval" WHERE id='calendar-removal';
+      ROLLBACK;`;
+    sql(calendarRemoval(2024), /elapsed retention and current resolution evidence/);
+    assert.equal(sql(calendarRemoval(2020)), '1');
+    assert.equal(sql(`SELECT count(*) FROM "ComplaintRemoval" WHERE id='calendar-removal';`), '0');
     sql(`INSERT INTO "DataRetentionPolicyRevision" (id,"organisationId","recordClass",revision,state,"retentionMode","retentionAnchor","retentionDays","recoveryDays","createdById","approvedById","approvedAt","approvalEvidenceRef")
       VALUES ('policy','a','COMPLAINT',1,'APPROVED','AFTER_ANCHOR','RESOLVED_AT',1,30,'admin-a','admin-a',now(),'POLICY-001'),
       ('vault','a','VAULT_DRAFT',1,'APPROVED','REVIEW_REQUIRED',NULL,NULL,30,'admin-a','admin-a',now(),'POLICY-002');

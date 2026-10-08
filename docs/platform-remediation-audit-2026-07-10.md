@@ -1,5 +1,14 @@
 # CharityPilot Full-Platform Remediation Audit
 
+> **8 October 23:57 Dublin P04 complaint removal partial, OPEN:** Local
+> SQL now checks six calendar years from matching recorded complaint
+> resolution before direct removal. Disposable migration test proved
+> early refusal and elapsed acceptance, with rollback. The new year
+> column also required compatibility updates to strict document and
+> complaint recovery-preparation parsers; API build and 14 focused tests
+> pass. Calendar mode remains fenced; complaint purge/copy and all live
+> decision/review gates are unresolved.
+
 > **8 October 23:53 Dublin P04 document claim probe:** Full disposable
 > PG16 migration proof now covers the calendar claim trigger's early
 > refusal and elapsed acceptance with synthetic rolled-back fixtures.

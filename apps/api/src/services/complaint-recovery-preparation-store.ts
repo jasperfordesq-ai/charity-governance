@@ -8,7 +8,7 @@ const captureInput = z.object({ installationId: identity, operationId: identity,
   writerEpoch: z.number().int().positive().max(2147483647), authorizationId: identity,
   sourceRevision: z.string().regex(/^[a-f0-9]{40}$/) }).strict();
 const policySelect = { id: true, organisationId: true, recordClass: true, revision: true, state: true,
-  retentionMode: true, retentionAnchor: true, retentionDays: true, recoveryDays: true,
+  retentionMode: true, retentionAnchor: true, retentionDays: true, retentionYears: true, recoveryDays: true,
   createdById: true, createdAt: true, approvedById: true, approvedAt: true, approvalEvidenceRef: true } as const;
 const provenanceSelect = { actorUserId: true, evidenceRef: true, reason: true } as const;
 const resolutionSelect = { id: true, organisationId: true, complaintId: true, revision: true, recordRevision: true,

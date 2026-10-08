@@ -16,6 +16,8 @@ const policy = z.object({ id, organisationId: id, recordClass: z.literal('VAULT_
   retentionMode: z.enum(['REVIEW_REQUIRED', 'AFTER_ANCHOR']),
   retentionAnchor: z.literal('CREATED_AT').nullable(),
   retentionDays: z.number().int().min(1).max(36525).nullable(),
+  // Older signed preparations lack this field; new database rows include null.
+  retentionYears: z.number().int().min(1).max(100).nullable().optional(),
   recoveryDays: z.number().int().min(1).max(3650),
   createdById: id, createdAt: time, approvedById: id, approvedAt: time,
   approvalEvidenceRef: evidence }).strict();
@@ -58,7 +60,7 @@ const schema = z.object({ format: z.literal(1), action: z.literal('DOCUMENT_PURG
     || v.removalPolicyWithdrawal.policyId !== v.removalPolicy.id
     || v.removalPolicy.id === v.policy.id)) fail();
   for (const p of [v.policy, v.removalPolicy]) {
-    if ((p.retentionMode === 'AFTER_ANCHOR') !== (p.retentionDays !== null)
+    if (p.retentionYears != null || (p.retentionMode === 'AFTER_ANCHOR') !== (p.retentionDays !== null)
       || (p.retentionMode === 'AFTER_ANCHOR' ? p.retentionAnchor !== 'CREATED_AT' : p.retentionAnchor !== null)) fail();
   }
 });

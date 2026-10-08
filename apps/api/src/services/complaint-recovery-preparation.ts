@@ -12,6 +12,8 @@ const scoped = { id, organisationId: id };
 const policy = z.object({ ...scoped, recordClass: z.literal('COMPLAINT'), revision,
   state: z.literal('APPROVED'), retentionMode: z.enum(['REVIEW_REQUIRED', 'AFTER_ANCHOR']),
   retentionAnchor: z.literal('RESOLVED_AT').nullable(), retentionDays: z.number().int().min(1).max(36525).nullable(),
+  // Older signed preparations lack this field; new database rows include null.
+  retentionYears: z.number().int().min(1).max(100).nullable().optional(),
   recoveryDays: z.number().int().min(1).max(3650), createdById: id, createdAt: time,
   approvedById: id, approvedAt: time, approvalEvidenceRef: evidence,
 }).strict();
@@ -62,7 +64,8 @@ const schema = z.object({ format: z.literal(1), action: z.literal('COMPLAINT_PUR
     || (v.latestHold && (v.latestHold.complaintId !== c.id || v.latestHold.recordRevision > c.revision))) {
     fail('Mismatched hold dependency');
   }
-  for (const p of [v.policy, v.removalPolicy]) if ((p.retentionMode === 'AFTER_ANCHOR') !== (p.retentionDays !== null)
+  for (const p of [v.policy, v.removalPolicy]) if (p.retentionYears != null
+    || (p.retentionMode === 'AFTER_ANCHOR') !== (p.retentionDays !== null)
     || (p.retentionMode === 'AFTER_ANCHOR' ? p.retentionAnchor !== 'RESOLVED_AT' : p.retentionAnchor !== null)) {
     fail('Inconsistent policy terms');
   }

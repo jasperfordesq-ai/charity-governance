@@ -1,5 +1,17 @@
 # CharityPilot Agent Continuation Handoff
 
+> **8 October 23:57 Dublin P04 complaint removal, still fenced:** Forward
+> migration `20261008060000_complaint_calendar_removal_guard` evaluates
+> the recorded `RESOLVED_AT` evidence with the UTC year cutoff. Full
+> disposable complaint migration proof rejects a 2024 leap-day + six-year
+> early removal and accepts a 2020 leap-day + six-year elapsed removal,
+> both rolled back. The added nullable `retentionYears` field initially
+> broke strict recovery-preparation parsing; both document and complaint
+> parsers/stores now handle new null fields while allowing older signed
+> facts to omit it. API build, complaint migration and 14 focused
+> preparation tests pass. Complaint purge, copy, API decision/UI parity
+> and the activation fence remain open; no live policy changed.
+
 > **8 October 23:53 Dublin P04 claim cutoff proof:** The full disposable
 > PostgreSQL migration test now isolates the new `DocumentPurgeClaim`
 > calendar trigger. A 2024 leap-day + six-year early claim is refused;
