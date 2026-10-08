@@ -700,7 +700,26 @@ function composePrefix({ projectDirectory } = {}) {
   return prefix;
 }
 
-function baseComposeEnv({ processEnv, resolvedEnvFilePath, fileEnv, blueTag, greenTag, activeTag }) {
+function webProfileValue(appEnv, name, allowed) {
+  const raw = appEnv[name] ?? '';
+  if (raw === '') return '';
+  // Compose treats whitespace followed by # as an inline comment in env_file.
+  // The deploy parser intentionally preserves raw values for other settings,
+  // so normalise only these public enum flags before baking the web bundle.
+  const match = /^(?:"([^"]*)"|'([^']*)'|([^\s#]+))(?:\s+#.*)?$/.exec(raw);
+  const value = match?.[1] ?? match?.[2] ?? match?.[3];
+  if (!value || (allowed && !allowed.includes(value))) {
+    throw new Error(`Invalid ${name} in app environment`);
+  }
+  return value;
+}
+
+export function baseComposeEnv({ processEnv, resolvedEnvFilePath, fileEnv, blueTag, greenTag, activeTag }) {
+  // NEXT_PUBLIC_* values are baked into the browser bundle. Read the same
+  // restricted app env file used by the API, rather than ambient shell values.
+  const appEnv = fileEnv.BLUEGREEN_APP_ENV_FILE
+    ? parseEnvFile(fileEnv.BLUEGREEN_APP_ENV_FILE)
+    : fileEnv;
   return {
     ...processEnv,
     BLUEGREEN_ENV_FILE: resolvedEnvFilePath,
@@ -709,6 +728,11 @@ function baseComposeEnv({ processEnv, resolvedEnvFilePath, fileEnv, blueTag, gre
     BLUEGREEN_GREEN_TAG: greenTag,
     BLUEGREEN_ACTIVE_TAG: activeTag,
     BLUEGREEN_ORIGIN: fileEnv.BLUEGREEN_ORIGIN ?? '',
+    BLUEGREEN_WEB_DEPLOYMENT_MODE: webProfileValue(appEnv, 'CHARITYPILOT_DEPLOYMENT_MODE'),
+    BLUEGREEN_WEB_TENANCY: webProfileValue(appEnv, 'CHARITYPILOT_TENANCY', ['multi', 'single']),
+    BLUEGREEN_WEB_REGISTRATION: webProfileValue(appEnv, 'CHARITYPILOT_REGISTRATION', ['open', 'closed']),
+    BLUEGREEN_WEB_EMAIL_DELIVERY: webProfileValue(appEnv, 'CHARITYPILOT_EMAIL_DELIVERY', ['provider', 'manual-link']),
+    BLUEGREEN_WEB_BILLING: webProfileValue(appEnv, 'CHARITYPILOT_BILLING', ['stripe', 'none']),
     // M2 fix: '' counts as unset (project convention — matches preflight's
     // own frontPortValue check and compose's ${BLUEGREEN_FRONT_PORT:-8080}
     // shell default, both of which already treat '' as "not set"). `??`

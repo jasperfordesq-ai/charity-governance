@@ -135,6 +135,23 @@ test('the canonical-API-origin override also reaches the runner as a real runtim
   }
 });
 
+test('both web colours bake and run with the same API deployment profile', () => {
+  for (const svc of ['web-blue', 'web-green']) {
+    const section = serviceSection(svc);
+    for (const [axis, source] of [
+      ['DEPLOYMENT_MODE', 'DEPLOYMENT_MODE'],
+      ['TENANCY', 'TENANCY'],
+      ['REGISTRATION', 'REGISTRATION'],
+      ['EMAIL_DELIVERY', 'EMAIL_DELIVERY'],
+      ['BILLING', 'BILLING'],
+    ]) {
+      const setting = `NEXT_PUBLIC_CHARITYPILOT_${axis}: ` + '${BLUEGREEN_WEB_' + source + ':-}';
+      assert.ok(section.split('    restart:')[0].includes(setting), `${svc} must bake ${axis}`);
+      assert.ok(section.split('    environment:')[1]?.includes(setting), `${svc} must run with ${axis}`);
+    }
+  }
+});
+
 test("each web colour pins its internal API hop to its OWN colour's api service, not the other colour's", () => {
   for (const [svc, expectedApiColour] of [
     ['web-blue', 'blue'],
