@@ -1,5 +1,13 @@
 # CharityPilot Full-Platform Remediation Audit
 
+> **8 October 23:51 Dublin P04 document enforcement partial, OPEN:**
+> Local forward SQL now checks calendar cutoff on direct document removal
+> and purge claim. The full migrated PostgreSQL fixture proved early
+> direct removal refusal and elapsed removal success for leap-day anchors;
+> purge-claim behavior itself still lacks a direct before/at cutoff test.
+> The mode fence remains active. Complaint/copy guards, API parity,
+> controller approval, deployment and DPO verification are outstanding.
+
 > **8 October 23:47 Dublin P04 shape, issue OPEN:** Local schema/migration
 > now distinguish `retentionYears` from `retentionDays`; disposable PG16
 > upgrade and invalid-shape tests passed, as did generated Prisma types

@@ -1,5 +1,16 @@
 # CharityPilot Agent Continuation Handoff
 
+> **8 October 23:51 Dublin P04 document SQL guard:** Forward migration
+> `20261008050000_document_calendar_cutoff_guards` adds a UTC calendar
+> cutoff check to direct document removal and purge claims, without
+> changing existing day-mode logic or lifting the mode fence. Full
+> disposable PostgreSQL migration test passed. A synthetic direct removal
+> before the six-year leap-day cutoff was rejected; a separate elapsed
+> six-year case entered Deleted Items inside a rolled-back transaction.
+> The purge-claim trigger installed but still needs an explicit full
+> claim before/at cutoff fixture. Complaint/copy SQL guards and all API/
+> review consumers remain open. No live data or approved policy changed.
+
 > **8 October 23:47 Dublin P04 policy shape, still inactive:** Prisma and a
 > forward migration add nullable `retentionYears`, separate from the
 > existing `retentionDays`. The strengthened period constraint rejects
