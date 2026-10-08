@@ -400,6 +400,14 @@ export async function listAttachments(
 ): Promise<ConfluenceAttachment[]> {
   const id = assertPageId(pageId);
 
+  return listAttachmentsAtPath(client, `pages/${id}/attachments`);
+}
+
+async function listAttachmentsAtPath(
+  client: ConfluenceClient,
+  path: string,
+): Promise<ConfluenceAttachment[]> {
+
   const attachments: ConfluenceAttachment[] = [];
   const seenCursors = new Set<string>();
   let cursor: string | undefined;
@@ -411,7 +419,7 @@ export async function listAttachments(
     const response = await client.request({
       method: 'GET',
       api: 'v2',
-      path: `pages/${id}/attachments`,
+      path,
       query,
       idempotent: true,
     });
@@ -436,6 +444,48 @@ export async function listAttachments(
     `Confluence kept offering another page of attachments after ${MAX_LIST_PAGES} requests. ` +
       'The list was not read to the end, so it is not safe to treat as complete.',
   );
+}
+
+/** Enumerate the site trash to the end, returning only validated ids. */
+export async function listTrashedAttachmentIds(client: ConfluenceClient): Promise<string[]> {
+  const ids: string[] = [];
+  const seenCursors = new Set<string>();
+  let cursor: string | undefined;
+
+  for (let page = 0; page < MAX_LIST_PAGES; page += 1) {
+    const query: Record<string, string> = { limit: String(LIST_PAGE_SIZE), status: 'trashed' };
+    if (cursor !== undefined) query.cursor = cursor;
+    const response = await client.request({ method: 'GET', api: 'v2', path: 'attachments', query, idempotent: true });
+    const results = readResults(response.body);
+    if (results === undefined) throw invalidResponse('trashed attachment list');
+    for (const value of results) {
+      const record = asObject(value);
+      const id = record?.id;
+      if (record?.status !== 'trashed' || typeof id !== 'string' || !ID_PATTERN.test(id)) {
+        throw invalidResponse('trashed attachment id and status');
+      }
+      ids.push(id);
+    }
+    cursor = readNextCursor(response.body, response.linkHeader);
+    if (cursor === undefined) return ids;
+    if (seenCursors.has(cursor)) throw invalidResponse('non-repeating trashed attachment cursor');
+    seenCursors.add(cursor);
+  }
+
+  throw new AppError(502, 'CONFLUENCE_ATTACHMENT_LIST_UNBOUNDED',
+    `Confluence kept offering another page of trashed attachments after ${MAX_LIST_PAGES} requests.`);
+}
+
+/** A direct read checks whether an attachment is still normally accessible. */
+export async function getAttachment(client: ConfluenceClient, attachmentId: string): Promise<boolean> {
+  const id = assertPageId(attachmentId);
+  try {
+    await client.request({ method: 'GET', api: 'v2', path: `attachments/${id}`, idempotent: true });
+    return true;
+  } catch (error) {
+    if (isUpstream(error, 'CONFLUENCE_NOT_FOUND')) return false;
+    throw error;
+  }
 }
 
 /**

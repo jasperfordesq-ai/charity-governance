@@ -51,8 +51,8 @@ function targetWith(attachmentIds: string[]): ErasureTarget {
 }
 
 /**
- * Deps whose five primitives record the call they were asked to make, in
- * order. `getPage` answers `null` — the 404 that is the proof of erasure —
+ * Deps whose primitives record the call they were asked to make, in
+ * order. Reads answer absent for both normal and trashed status
  * unless a test overrides it.
  */
 function spyDeps(calls: string[], overrides: Partial<ConfluenceErasureOperations> = {}): ConfluenceEraserDeps {
@@ -64,12 +64,15 @@ function spyDeps(calls: string[], overrides: Partial<ConfluenceErasureOperations
     operations: {
       deleteAttachment: record('deleteAttachment'),
       purgeAttachment: record('purgeAttachment'),
+      getAttachment: async (_client, id) => { calls.push(`getAttachment:${id}`); return false; },
+      listTrashedAttachments: async () => { calls.push('listTrashedAttachments'); return []; },
       deletePage: record('deletePage'),
       purgePage: record('purgePage'),
       getPage: async (_client: ConfluenceClient, id: string) => {
         calls.push(`getPage:${id}`);
         return null;
       },
+      isPageInTrash: async (_client, id) => { calls.push(`isPageInTrash:${id}`); return false; },
       ...overrides,
     },
   };
@@ -89,10 +92,14 @@ test('attachments are erased before the page, and each is trashed before it is p
     'deletePage:p1',
     'purgePage:p1',
     'getPage:p1',
+    'isPageInTrash:p1',
+    'getAttachment:a1',
+    'getAttachment:a2',
+    'listTrashedAttachments',
   ]);
 });
 
-test('a 404 on the verification read is the proof of erasure', async () => {
+test('normal and trash reads must both show absence', async () => {
   const calls: string[] = [];
   // `getPage` answers null for a 404 (confluence-pages.ts), which is what the
   // spy deps already do. The attempt resolving is the whole assertion.
@@ -100,7 +107,27 @@ test('a 404 on the verification read is the proof of erasure', async () => {
 
   await eraser(target());
 
-  assert.deepEqual(calls, ['deletePage:p1', 'purgePage:p1', 'getPage:p1']);
+  assert.deepEqual(calls, ['deletePage:p1', 'purgePage:p1', 'getPage:p1', 'isPageInTrash:p1']);
+});
+
+test('a page left in trash does not complete erasure after an ordinary 404', async () => {
+  const eraser = createConfluenceEraser(spyDeps([], { isPageInTrash: async () => true }));
+  await assert.rejects(() => eraser(target()), (error: unknown) => (error as AppError).code === 'CONFLUENCE_ERASURE_UNVERIFIED');
+});
+
+test('an attachment left in trash prevents completion after page purge', async () => {
+  const calls: string[] = [];
+  const eraser = createConfluenceEraser(spyDeps(calls, {
+    listTrashedAttachments: async () => ['a1'],
+  }));
+  await assert.rejects(() => eraser(targetWith(['a1'])), (error: unknown) => (error as AppError).code === 'CONFLUENCE_ERASURE_UNVERIFIED');
+  assert.equal(calls.includes('deletePage:p1'), true);
+});
+
+test('a normally readable attachment prevents completion after page purge', async () => {
+  const eraser = createConfluenceEraser(spyDeps([], { getAttachment: async () => true }));
+  await assert.rejects(() => eraser(targetWith(['a1'])),
+    (error: unknown) => (error as AppError).code === 'CONFLUENCE_ERASURE_UNVERIFIED');
 });
 
 test('an attempt fails when the page still reads back after the purge', async () => {
@@ -181,7 +208,8 @@ function depsWhereEverythingIsAlready404(paths: string[]): ConfluenceEraserDeps 
     connect: async () =>
       ({
         request: async (spec: { method: string; path: string; query?: Record<string, string> }) => {
-          paths.push(`${spec.method} ${spec.path}${spec.query?.purge === 'true' ? '?purge=true' : ''}`);
+          paths.push(`${spec.method} ${spec.path}${spec.query?.purge === 'true' ? '?purge=true' : spec.query?.status === 'trashed' ? '?status=trashed' : ''}`);
+          if (spec.path === 'attachments' && spec.method === 'GET') return { status: 200, body: { results: [] } };
           throw new AppError(404, 'CONFLUENCE_NOT_FOUND', 'Confluence request failed with status 404.', {
             status: 404,
           });
@@ -205,6 +233,9 @@ test('the sequence restarts cleanly after a crash, because every step is idempot
     'DELETE pages/p1',
     'DELETE pages/p1?purge=true',
     'GET pages/p1',
+    'GET pages/p1?status=trashed',
+    'GET attachments/a1',
+    'GET attachments?status=trashed',
   ]);
 });
 
@@ -227,9 +258,16 @@ function spyDepsAbortingAfter(
     operations: {
       deleteAttachment: wrap(operations.deleteAttachment),
       purgeAttachment: wrap(operations.purgeAttachment),
+      getAttachment: wrap(operations.getAttachment),
+      listTrashedAttachments: async (client) => {
+        const result = await operations.listTrashedAttachments(client);
+        if (calls.length >= after) controller.abort();
+        return result;
+      },
       deletePage: wrap(operations.deletePage),
       purgePage: wrap(operations.purgePage),
       getPage: wrap(operations.getPage),
+      isPageInTrash: wrap(operations.isPageInTrash),
     },
   };
 }
@@ -243,6 +281,10 @@ const SEQUENCE = [
   'deletePage:p1',
   'purgePage:p1',
   'getPage:p1',
+  'isPageInTrash:p1',
+  'getAttachment:a1',
+  'getAttachment:a2',
+  'listTrashedAttachments',
 ];
 
 /**
