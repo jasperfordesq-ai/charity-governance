@@ -1,5 +1,14 @@
 # CharityPilot Full-Platform Remediation Audit
 
+> **9 October 00:04 Dublin P04 complaint purge SQL, issue OPEN:** Local
+> forward migration checks calendar resolution evidence at purge review
+> and rechecks elapsed UTC years at claim. The disposable full complaint
+> migration test passed early refusal and elapsed full claim/delete after
+> a review-policy removal was replaced by a calendar approval. Only the
+> fixture recovery deadline was aged under a temporary append-only
+> trigger bypass, inside rolled-back transactions. No live policy exists;
+> API/UI, preparation and controller/DPO gates remain. Keep mode fence.
+
 > **8 October 23:59 Dublin P04 copy SQL partial, OPEN:** Local shared
 > copy-policy validator now checks the UTC calendar cutoff for document
 > and complaint copies. The full disposable PG16 migration test passed

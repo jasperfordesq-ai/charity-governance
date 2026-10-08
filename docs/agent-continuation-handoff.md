@@ -1,5 +1,19 @@
 # CharityPilot Agent Continuation Handoff
 
+> **9 October 00:04 Dublin P04 complaint purge SQL:** Forward migration
+> `20261009010000_complaint_calendar_purge_guards` extends effective
+> complaint purge authorization and claim functions to validate a
+> current calendar policy and matching recorded resolution, with the
+> UTC cutoff rechecked at claim time. Full disposable PostgreSQL
+> complaint migration test passed an original review-policy removal,
+> withdrawal/replacement by a calendar policy, early claim refusal and
+> elapsed full claim/delete, all rolled back. The fixture briefly aged
+> its immutable recovery deadline with only that append-only trigger
+> disabled so the claim could isolate retention; all normal claim and
+> dispatch triggers ran. The mode fence remains; API decisions, recovery
+> preparation format, human review, controller policy, release and DPO
+> acceptance are still open.
+
 > **8 October 23:59 Dublin P04 copy cutoff:** Forward migration
 > `20261008070000_copy_calendar_cutoff_guard` updates the shared SQL
 > copy-policy validator used by document and complaint copy authority
