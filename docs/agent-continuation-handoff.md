@@ -1,5 +1,25 @@
 # CharityPilot Agent Continuation Handoff
 
+> **8 October Member report-navigation release (DPO acceptance open):** PR
+> #47 merged as `9696fb5b7e344975210e38de08ec040a22fcde11` after
+> exact merged-master CI `37805072036` and E2E `37805072114` passed.
+> A guarded private-VM blue cutover completed at 16:12:46 UTC; green
+> `937b8b9a` remains the rollback colour. Final postflight proved restricted
+> runtime roles, configured profile parity, database guards and health on
+> loopback and the exact Tailscale origin. In the signed-in temporary Member
+> browser, dashboard report/export and sign-off actions, sidebar Export,
+> and regulator Export Pack were absent; direct `/export` still withheld
+> the full internal report. This is live UI evidence for one Member, not
+> direct API probing or a positive classified-document download. Two new
+> backup sets copied to the same physical host matched remote SHA-256 and
+> passed isolated restore; final 414-file inventory was unchanged. These
+> copies do not prove independent VM-loss recovery. The reviewed charity
+> still has zero approved report snapshots or approved VAULT_DRAFT policies.
+> Real-record classification, recipient review, historical replay/C1
+> disposition, policy and independent recovery, temporary Member removal
+> and Nikita's sign-off remain open. Exact private receipt:
+> `.charitypilot-private/release-9696fb5b-member-navigation-2026-10-08.md`.
+
 > **8 October signed-in live Member UI checkpoint (acceptance open):**
 > Jasper used the accepted temporary Member account in the reviewed
 > private VM through Codex's in-app browser. Team identified the account
