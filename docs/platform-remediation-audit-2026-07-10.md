@@ -1,5 +1,11 @@
 # CharityPilot Full-Platform Remediation Audit
 
+> **9 October 00:20 Dublin P04 claim response, OPEN:** Local document
+> purge now maps SQL calendar cutoff and unsupported-mode refusals to
+> controlled 409 responses. API build and 17 focused tests pass;
+> arbitrary SQL details remain hidden. Creation fence, approved policy,
+> release, live claim proof and DPO acceptance remain open.
+
 > **9 October 00:18 Dublin P04 mode fence, OPEN:** API regression now
 > checks calendar policy creation refusal for draft and approved states
 > in all four record classes before a database write. API build and

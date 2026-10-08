@@ -1,5 +1,13 @@
 # CharityPilot Agent Continuation Handoff
 
+> **9 October 00:20 Dublin P04 claim error parity:** The local document
+> purge service now translates the new database calendar cutoff refusal
+> to its existing `PURGE_NOT_DUE` 409 response, and an unsupported mode
+> to a safe review-conflict 409. Focused tests simulate the real Prisma
+> unknown-request error shape and ensure arbitrary database details are
+> not returned. API build and all 17 document purge tests pass. This is
+> response parity behind the policy creation fence, not a live purge.
+
 > **9 October 00:18 Dublin P04 activation-fence regression:** A focused
 > API test now proves that both DRAFT and APPROVED calendar-year creation
 > requests are rejected before any database lock/write for each of the

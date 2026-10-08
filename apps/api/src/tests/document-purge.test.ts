@@ -107,6 +107,12 @@ test('real Prisma trigger error shape reports an expiry refusal without masking 
   const failure = (message: string) => Object.assign(new Error(message), { name: 'PrismaClientUnknownRequestError' });
   state.databaseFailure = failure('Database error: Purge claim must wait for retention and recovery expiry');
   await assert.rejects(service.claim('org-a', 'owner-a', 'auth-a', { confirmPermanentPurge: true }), { statusCode: 409, code: 'PURGE_NOT_DUE' });
+  state.databaseFailure = failure('Database error: Document purge claim must wait for calendar-year retention expiry SECRET');
+  await assert.rejects(service.claim('org-a', 'owner-a', 'auth-a', { confirmPermanentPurge: true }),
+    (error: any) => error.statusCode === 409 && error.code === 'PURGE_NOT_DUE' && !error.message.includes('SECRET'));
+  state.databaseFailure = failure('Database error: Unsupported document retention policy mode SECRET');
+  await assert.rejects(service.claim('org-a', 'owner-a', 'auth-a', { confirmPermanentPurge: true }),
+    (error: any) => error.statusCode === 409 && error.code === 'PURGE_REVIEW_CHANGED' && !error.message.includes('SECRET'));
   state.databaseFailure = failure('Database error: Purge claim requires an unheld removed draft');
   await assert.rejects(service.claim('org-a', 'owner-a', 'auth-a', { confirmPermanentPurge: true }), { statusCode: 409, code: 'PURGE_REVIEW_CHANGED' });
   state.databaseFailure = failure('Unexpected database engine failure');

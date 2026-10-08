@@ -60,8 +60,12 @@ export class DocumentPurgeService {
       // PostgreSQL RAISE EXCEPTION (P0001) arrives as an unknown-request error,
       // not P2004, with this Prisma engine. Translate only named purge guards.
       if (error instanceof Error && error.name === 'PrismaClientUnknownRequestError') {
-        if (error.message.includes('Purge claim must wait for retention and recovery expiry')) {
+        if (error.message.includes('Purge claim must wait for retention and recovery expiry')
+          || error.message.includes('Document purge claim must wait for calendar-year retention expiry')) {
           throw new AppError(409, 'PURGE_NOT_DUE', 'The approved retention and recovery periods must both expire before primary disposal.');
+        }
+        if (error.message.includes('Unsupported document retention policy mode')) {
+          throw new AppError(409, 'PURGE_REVIEW_CHANGED', 'Disposal could not proceed. Refresh the record, policy, holds and authorization before reviewing again.');
         }
         if (error.message.includes('Purge disposition observation must be between claim and recording')) {
           throw new AppError(409, 'PURGE_OBSERVATION_TIME_INVALID', 'The observation time must be after the primary disposal claim and no later than the server time. Check the date, local time and device clock.');
