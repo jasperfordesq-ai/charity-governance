@@ -1,5 +1,25 @@
 # CharityPilot Agent Continuation Handoff
 
+> **8 October verified C01 v2 trash source release:** PR #38 revised head
+> `bc97b1b6` passed exact CI `37758626399`, E2E `37758626354` and
+> automated review after two fail-closed corrections. Merged master
+> `32a09fc1` passed CI `37760142983` and E2E `37760143036`, then a
+> guarded private-VM cutover moved serving to blue at `32a09fc1`.
+> Restricted runtime, loopback/Tailscale health/login, protected count and
+> trigger checks, preservation of all 396 preceding backup SHA/path
+> entries, SHA-matched workstation copies of two new recovery sets and
+> isolated restores of both (156 migrations, 68 documents) passed. Final
+> inventory held 402 unchanged entries. The deployed code recognises v2
+> `status=trashed`, marks malformed reads per-page UNKNOWN and refuses
+> permanent erasure of an already-trashed page without a complete current
+> attachment inventory. Synthetic Confluence page `491521` remains in
+> recoverable sandbox Trash; **no purge or real erasure worker ran**.
+> Production has zero Confluence integration/publication rows. The private
+> receipt is `.charitypilot-private/release-32a09fc1-c01-v2-trash-2026-10-08.md`.
+> C01/DPO-05 retained-document disposal, all-copy/unknown outcomes,
+> controller policy, independent recovery and Nikita acceptance remain OPEN.
+> Earlier uncommitted/undeployed checkpoints below are dated history.
+
 > **Later 8 October C01 real sandbox correction, source only:** A separate
 > loopback synthetic CharityPilot tenant published a 243-byte fixture to
 > restricted Confluence sandbox space `CPC01SYN` (page `491521`, attachment
