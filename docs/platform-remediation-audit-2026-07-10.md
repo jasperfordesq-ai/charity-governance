@@ -1,5 +1,21 @@
 # CharityPilot Full-Platform Remediation Audit
 
+> **8 October C01/DPO-05 source correction deployed, issue still OPEN:**
+> PR #38 merged as `32a09fc1` after exact head and merged-master CI/E2E
+> and automated review. Guarded blue private-VM release, two front doors,
+> restricted runtime, two SHA-matched workstation backup copies, two
+> isolated restores and final 402-entry backup inventory passed. The
+> source recognises live v2 `status=trashed`, records malformed page reads
+> as per-page UNKNOWN, and refuses permanent erasure of an already-trashed
+> page until restoration and current attachment inventory. The real
+> synthetic sandbox page remains recoverably trashed; **no purge or real
+> erasure worker ran**. Production has zero Confluence integration and
+> publication rows. Retained published Vault disposal, external/unknown
+> copies, controller policies, independent recovery and Nikita acceptance
+> remain unresolved. Private receipt:
+> `.charitypilot-private/release-32a09fc1-c01-v2-trash-2026-10-08.md`.
+> Earlier source-only notes below are dated history.
+
 > **8 October C01/DPO-05 live-provider finding, open:** A synthetic page and
 > attachment were published only to restricted Confluence sandbox
 > `CPC01SYN`. After an external edit to page version 2, the page entered
