@@ -1,5 +1,14 @@
 # CharityPilot Full-Platform Remediation Audit
 
+> **8 October 23:34 Dublin retention/recovery gate unchanged:** A private
+> P04–P08 Board/controller decision brief now identifies exact schedule,
+> calendar-anchor, recovery-window, hold, copy/backup and independent
+> custody/reopen choices. It does not approve a policy or activate erasure.
+> Source still accepts day counts, the current journal prototype retains
+> its bounded full-scan/capacity limits, and host-loss freshness has not
+> been independently rehearsed. See the private morning decision brief;
+> keep Nikita's advisory review separate from controller approval.
+
 > **8 October 23:32 Dublin C1 connection reads, issue OPEN:** Final
 > NEXUS local tip `4a096b27e` (four commits above fetched `origin/main`)
 > blocks two additional synthetic pending-registrant read paths:

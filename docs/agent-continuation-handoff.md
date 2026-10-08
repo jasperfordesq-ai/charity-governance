@@ -1,5 +1,15 @@
 # CharityPilot Agent Continuation Handoff
 
+> **8 October 23:34 Dublin P04–P08 decision preparation:** The private
+> `nikita-retention-recovery-morning-decisions-2026-10-08.md` consolidates
+> the charity's 24-row schedule/V2 evidence and current code into a
+> controller/Board review brief. It records missing anchors/calendar
+> semantics, recovery window, primary/copy disposal, holds, independent
+> custody and reopening authority. This is **not approval**; no live
+> retention setting, provider account or deletion changed. The current
+> day-based service, 10,000-entry full-scan journal cap and independent
+> host-loss proof remain technical gaps before activation.
+
 > **8 October 23:32 Dublin C1 connection read paths:** Separate NEXUS
 > branch `codex/c1-pending-profile` now ends at amended local commit
 > `4a096b27e`, four ahead of fetched `origin/main` `05c17bf94`.
