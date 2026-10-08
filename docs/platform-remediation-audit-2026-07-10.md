@@ -1,5 +1,12 @@
 # CharityPilot Full-Platform Remediation Audit
 
+> **9 October 00:15 Dublin P04 policy review display, OPEN:** Local
+> API listing and Owner screens now expose/display a calendar-year term
+> if one exists, with 69 route tests and both app type checks passing.
+> Year-mode creation remains absent from the form and SQL-fenced;
+> no controller-approved term, production release, live access check or
+> independent DPO acceptance follows from this source-only change.
+
 > **9 October 00:13 Dublin P04 integrated copy proof, OPEN:** Both full
 > disposable PostgreSQL migration suites pass a calendar copy authority
 > and bound observation path, including missing/early anchor rejection

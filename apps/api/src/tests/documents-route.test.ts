@@ -1859,6 +1859,25 @@ test('Admin connector cannot read dashboard-only Vault control and deletion hist
   } finally { await app.close(); }
 });
 
+test('Owner review listing includes calendar policy terms without opening policy creation', async () => {
+  let query: Record<string, unknown> | null = null;
+  const app = await buildDocumentsApp({ ...patchPrisma(),
+    dataRetentionPolicyRevision: { findMany: async (args: Record<string, unknown>) => {
+      query = args;
+      return [{ id: 'calendar-policy', revision: 2, retentionMode: 'AFTER_CALENDAR_YEARS',
+        retentionAnchor: 'CREATED_AT', retentionDays: null, retentionYears: 6, recoveryDays: 30 }];
+    } },
+  } as never);
+  try {
+    const response = await app.inject({ method: 'GET', url: '/recovery-policies', headers: { authorization: authHeader } });
+    assert.equal(response.statusCode, 200);
+    assert.equal(response.json().data[0].retentionYears, 6);
+    assert.equal((query!.select as Record<string, boolean>).retentionYears, true);
+    assert.deepEqual((query!.where as { retentionMode: { in: string[] } }).retentionMode.in,
+      ['REVIEW_REQUIRED', 'AFTER_ANCHOR', 'AFTER_CALENDAR_YEARS']);
+  } finally { await app.close(); }
+});
+
 test('Admin connector cannot directly retry a publication or requeue a storage deletion', async () => {
   const app = await buildDocumentsApp({
     ...patchPrisma(),

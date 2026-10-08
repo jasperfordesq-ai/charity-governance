@@ -1,5 +1,15 @@
 # CharityPilot Agent Continuation Handoff
 
+> **9 October 00:15 Dublin P04 read-only policy display, still fenced:**
+> The document recovery-policy listing now includes valid year-mode
+> candidates and their `retentionYears` field for Owner review. The
+> retention history, document disposal policy selector and complaint
+> purge review show calendar years explicitly. The policy form does not
+> offer year-mode creation and cannot copy a historical year term into
+> that form; the SQL activation fence is unchanged. API build, web
+> TypeScript check and 69 document route tests pass. No live policy,
+> approval, release or DPO evidence changed.
+
 > **9 October 00:13 Dublin P04 integrated copy proof, still fenced:**
 > Disposable full PostgreSQL document and complaint migration suites now
 > each test a calendar copy policy through real authority and observation

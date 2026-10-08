@@ -15,7 +15,7 @@ type Area = typeof areas[number];
 type Disposition = '' | 'DISPOSE' | 'RETAIN_APPROVED' | 'NOT_APPLICABLE';
 type Plan = Record<Area, { disposition: Disposition; evidenceRef: string }>;
 type Document = { id: string; name: string; updatedAt: string; recoveryUntil: string; deletionHold: boolean };
-type Policy = { id: string; revision: number; retentionMode: string; retentionDays: number | null };
+type Policy = { id: string; revision: number; retentionMode: string; retentionDays: number | null; retentionYears: number | null };
 type Authorization = { id: string; documentId: string; reason: string; evidenceRef: string; recoveryUntil: string;
   authorizedAt: string; dispositionPlan: Plan; withdrawal: { evidenceRef: string } | null;
   claim: { deletionId: string; claimedAt: string; deletion: { state: string; activeObjectAbsentAt: string | null } } | null };
@@ -98,7 +98,7 @@ export function DocumentPurgeReview({ document, onClaimed }: { document: Documen
       <p className="text-sm">Recovery deadline: {new Date(document.recoveryUntil).toLocaleString('en-IE')}. {document.deletionHold ? 'A deletion hold blocks authorization.' : 'The server checks current holds and file contents again.'}</p>
       <label className="block text-sm">Disposal policy<select aria-label="Disposal policy" className="mt-1 block w-full rounded border p-2" value={policyId} disabled={busy} onChange={event => setPolicyId(event.target.value)}>
         <option value="">Load decisions, then choose an approved policy</option>
-        {policies.map(policy => <option key={policy.id} value={policy.id}>Revision {policy.revision}: {policy.retentionMode === 'AFTER_ANCHOR' ? `${policy.retentionDays} days from creation` : 'Individual disposition review'}</option>)}
+        {policies.map(policy => <option key={policy.id} value={policy.id}>Revision {policy.revision}: {policy.retentionMode === 'AFTER_ANCHOR' ? `${policy.retentionDays} days from creation` : policy.retentionMode === 'AFTER_CALENDAR_YEARS' ? `${policy.retentionYears} calendar years from creation` : 'Individual disposition review'}</option>)}
       </select></label>
       {areas.map(area => <fieldset key={area} className="rounded border p-3">
         <legend className="px-1 text-sm font-medium">{labels[area]}</legend>

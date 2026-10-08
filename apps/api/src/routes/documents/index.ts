@@ -164,9 +164,9 @@ export async function documentRoutes(app: FastifyInstance) {
   app.get('/recovery-policies', { preHandler: [requireAdmin, requireWebSession] }, async (request, reply) => {
     const policies = await app.prisma.dataRetentionPolicyRevision.findMany({ where: {
       organisationId: request.user.organisationId, recordClass: 'VAULT_DRAFT', state: 'APPROVED',
-      retentionMode: { in: ['REVIEW_REQUIRED', 'AFTER_ANCHOR'] }, withdrawal: { is: null },
+      retentionMode: { in: ['REVIEW_REQUIRED', 'AFTER_ANCHOR', 'AFTER_CALENDAR_YEARS'] }, withdrawal: { is: null },
     }, select: { id: true, revision: true, recoveryDays: true, retentionMode: true,
-      retentionAnchor: true, retentionDays: true, approvalEvidenceRef: true },
+      retentionAnchor: true, retentionDays: true, retentionYears: true, approvalEvidenceRef: true },
     orderBy: { revision: 'desc' }, take: 100 });
     return sendSuccess(reply, policies);
   });
