@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { coordinateSessionLogout, coordinateSessionRefresh, SessionRefreshLockUnavailableError } from './session-refresh-lock';
+import { coordinateSessionLogout, coordinateSessionRefresh, markSessionEstablished,
+  SessionReauthenticationRequiredError, SessionRefreshLockUnavailableError } from './session-refresh-lock';
 
 function crossTabFixture() {
   let tail: Promise<unknown> = Promise.resolve();
@@ -48,7 +49,7 @@ test('sign-out waits for an in-flight refresh before revoking the replacement co
   finishRefresh();
   await Promise.all([refreshing, signingOut]);
   assert.deepEqual(order, ['refresh-start', 'refresh-end', 'logout']);
-  assert.equal(storage.getItem('charitypilot:session-refresh-stamp'), 'logout');
+  assert.equal(storage.getItem('charitypilot:session-refresh-stamp'), 'logout:logout');
 });
 
 test('a refresh queued behind successful sign-out never presents the spent cookie', async () => {
@@ -62,19 +63,37 @@ test('a refresh queued behind successful sign-out never presents the spent cooki
   const refreshing = coordinateSessionRefresh(async () => { refreshes += 1; }, locks, storage,
     () => 'rotation');
   finishLogout();
-  await Promise.all([signingOut, refreshing]);
+  await signingOut;
+  await assert.rejects(refreshing, SessionReauthenticationRequiredError);
   assert.equal(refreshes, 0);
-  assert.equal(storage.getItem('charitypilot:session-refresh-stamp'), 'logout');
+  assert.equal(storage.getItem('charitypilot:session-refresh-stamp'), 'logout:logout');
 });
 
-test('failed sign-out leaves the shared stamp unchanged for a later renewal', async () => {
+test('ambiguous sign-out failure still fences a queued refresh of a possibly revoked cookie', async () => {
   const { locks, storage } = crossTabFixture();
-  await assert.rejects(coordinateSessionLogout(async () => { throw new Error('logout failed'); },
-    locks, storage, () => 'logout'), /logout failed/);
-  assert.equal(storage.getItem('charitypilot:session-refresh-stamp'), null);
+  let failLogout!: () => void;
+  const responseLost = new Promise<void>((_resolve, reject) => {
+    failLogout = () => reject(new Error('logout response lost after server revocation'));
+  });
+  const signingOut = coordinateSessionLogout(() => responseLost, locks, storage, () => 'logout-attempt');
+  await Promise.resolve();
+  let refreshes = 0;
+  const waitingRefresh = coordinateSessionRefresh(async () => { refreshes += 1; },
+    locks, storage, () => 'rotation');
+  failLogout();
+  await assert.rejects(signingOut, /logout response lost/);
+  await assert.rejects(waitingRefresh, SessionReauthenticationRequiredError);
+  assert.equal(refreshes, 0);
+  assert.equal(storage.getItem('charitypilot:session-refresh-stamp'), 'logout:logout-attempt');
+  await assert.rejects(coordinateSessionRefresh(async () => { refreshes += 1; },
+    locks, storage, () => 'later'), SessionReauthenticationRequiredError);
+  assert.equal(refreshes, 0);
+  markSessionEstablished(storage, () => 'new-login');
+  await coordinateSessionRefresh(async () => { refreshes += 1; }, locks, storage, () => 'rotation');
+  assert.equal(refreshes, 1);
 });
 
-test('a failed rotation leaves the next tab able to retry', async () => {
+test('an uncertain refresh response requires a new login before any later renewal', async () => {
   const { locks, storage } = crossTabFixture();
   let calls = 0;
   const refresh = async () => {
@@ -85,40 +104,36 @@ test('a failed rotation leaves the next tab able to retry', async () => {
     coordinateSessionRefresh(refresh, locks, storage, () => 'failed'),
     coordinateSessionRefresh(refresh, locks, storage, () => 'succeeded'),
   ]);
-  assert.deepEqual(results.map((result) => result.status), ['rejected', 'fulfilled']);
+  assert.deepEqual(results.map((result) => result.status), ['rejected', 'rejected']);
+  assert.equal(calls, 1);
+  assert.equal(storage.getItem('charitypilot:session-refresh-stamp'), 'refresh-uncertain:failed');
+  await assert.rejects(coordinateSessionRefresh(refresh, locks, storage, () => 'later'),
+    SessionReauthenticationRequiredError);
+  assert.equal(calls, 1);
+  markSessionEstablished(storage, () => 'new-login');
+  await coordinateSessionRefresh(refresh, locks, storage, () => 'succeeded');
   assert.equal(calls, 2);
   assert.equal(storage.getItem('charitypilot:session-refresh-stamp'), 'succeeded');
 });
 
-test('unavailable shared storage still serializes refreshes without skipping them', async () => {
+test('unavailable shared storage fails closed instead of presenting a possibly spent token', async () => {
   const { locks } = crossTabFixture();
-  let active = 0;
-  let maximumActive = 0;
-  const refresh = async () => {
-    active += 1;
-    maximumActive = Math.max(maximumActive, active);
-    await Promise.resolve();
-    active -= 1;
-  };
-  await Promise.all([
-    coordinateSessionRefresh(refresh, locks, undefined),
-    coordinateSessionRefresh(refresh, locks, undefined),
-  ]);
-  assert.equal(maximumActive, 1);
+  let refreshes = 0;
+  await assert.rejects(coordinateSessionRefresh(async () => { refreshes += 1; },
+    locks, undefined), SessionRefreshLockUnavailableError);
+  assert.equal(refreshes, 0);
 });
 
-test('reactive tabs without shared storage probe the rotated cookie under the lock', async () => {
+test('reactive retry without shared storage accepts a current access session but not an expired one', async () => {
   const { locks } = crossTabFixture();
-  let current = false;
   let refreshes = 0;
   let probes = 0;
-  const refresh = async () => { refreshes += 1; current = true; };
-  const isSessionCurrent = async () => { probes += 1; return current; };
-  await Promise.all([
-    coordinateSessionRefresh(refresh, locks, undefined, undefined, isSessionCurrent),
-    coordinateSessionRefresh(refresh, locks, undefined, undefined, isSessionCurrent),
-  ]);
-  assert.equal(refreshes, 1);
+  const refresh = async () => { refreshes += 1; };
+  await coordinateSessionRefresh(refresh, locks, undefined, undefined,
+    async () => { probes += 1; return true; });
+  await assert.rejects(coordinateSessionRefresh(refresh, locks, undefined, undefined,
+    async () => { probes += 1; return false; }), SessionRefreshLockUnavailableError);
+  assert.equal(refreshes, 0);
   assert.equal(probes, 2);
 });
 
@@ -135,22 +150,26 @@ test('reactive retry sees a proxy rotation even when the stored stamp is unchang
   assert.equal(refreshes, 0);
 });
 
-test('reactive tabs avoid replay when a refresh succeeded but its stamp write failed', async () => {
+test('an unwritable shared stamp blocks refresh before presenting the cookie', async () => {
   const { locks, storage } = crossTabFixture();
   storage.setItem('charitypilot:session-refresh-stamp', 'older-browser-rotation');
   const unwritableStorage = {
     getItem: storage.getItem,
     setItem: () => { throw new Error('storage unavailable'); },
   };
-  let current = false;
   let refreshes = 0;
-  await Promise.all([
-    coordinateSessionRefresh(async () => { refreshes += 1; current = true; }, locks, unwritableStorage,
-      undefined, async () => current),
-    coordinateSessionRefresh(async () => { refreshes += 1; current = true; }, locks, unwritableStorage,
-      undefined, async () => current),
-  ]);
-  assert.equal(refreshes, 1);
+  await assert.rejects(coordinateSessionRefresh(async () => { refreshes += 1; }, locks,
+    unwritableStorage, undefined, async () => false), SessionRefreshLockUnavailableError);
+  assert.equal(refreshes, 0);
+});
+
+test('an unreadable shared stamp blocks refresh before presenting the cookie', async () => {
+  const { locks } = crossTabFixture();
+  let refreshes = 0;
+  await assert.rejects(coordinateSessionRefresh(async () => { refreshes += 1; }, locks,
+    { getItem: () => { throw new Error('read blocked'); }, setItem: () => undefined }),
+  SessionRefreshLockUnavailableError);
+  assert.equal(refreshes, 0);
 });
 
 test('a failed session probe cannot present a possibly rotated refresh token', async () => {
@@ -170,9 +189,9 @@ test('a failed session probe cannot present a possibly rotated refresh token', a
 });
 
 test('proactive renewal still refreshes when no shared stamp exists', async () => {
-  const { locks } = crossTabFixture();
+  const { locks, storage } = crossTabFixture();
   let refreshes = 0;
-  await coordinateSessionRefresh(async () => { refreshes += 1; }, locks, undefined);
+  await coordinateSessionRefresh(async () => { refreshes += 1; }, locks, storage);
   assert.equal(refreshes, 1);
 });
 

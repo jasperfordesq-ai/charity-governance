@@ -29,11 +29,23 @@ function fail401(config: unknown): never {
 
 async function withNavigatorLocks<T>(locks: unknown, run: () => Promise<T>): Promise<T> {
   const previous = Object.getOwnPropertyDescriptor(globalThis, 'navigator');
+  const globals = globalThis as unknown as { window?: unknown };
+  const previousWindow = globals.window;
+  const values = new Map<string, string>();
+  globals.window = {
+    localStorage: {
+      getItem: (key: string) => values.get(key) ?? null,
+      setItem: (key: string, value: string) => { values.set(key, value); },
+    },
+    location: { origin: 'https://app.charitypilot.ie', pathname: '/documents', search: '', href: '' },
+  };
   Object.defineProperty(globalThis, 'navigator', { configurable: true, value: { locks } });
   try { return await run(); }
   finally {
     if (previous) Object.defineProperty(globalThis, 'navigator', previous);
     else Reflect.deleteProperty(globalThis, 'navigator');
+    if (previousWindow === undefined) delete globals.window;
+    else globals.window = previousWindow;
   }
 }
 
@@ -140,6 +152,32 @@ test('does not refresh or retry when skipAuthRefresh is set', async () => {
   // not a silent refresh/redirect.
   assert.equal(refreshCount, 0, 'no refresh is attempted');
   assert.equal(attempts, 1, 'the request is tried once and rejected, not retried');
+});
+
+test('only successful login or invite acceptance clears an ambiguous sign-out fence', async () => {
+  const key = 'charitypilot:session-refresh-stamp';
+  const values = new Map([[key, 'logout:possibly-revoked']]);
+  const globals = globalThis as unknown as { window?: { localStorage: { getItem: (key: string) => string | null; setItem: (key: string, value: string) => void } } };
+  const previousWindow = globals.window;
+  globals.window = { localStorage: {
+    getItem: (name) => values.get(name) ?? null,
+    setItem: (name, value) => { values.set(name, value); },
+  } };
+  try {
+    api.defaults.adapter = async (config) => fail401(config);
+    await assert.rejects(api.post('/auth/login', {}, { skipAuthRefresh: true, skipAuthRedirect: true }));
+    assert.equal(values.get(key), 'logout:possibly-revoked');
+
+    api.defaults.adapter = async (config) => ok(config) as never;
+    await api.post('/auth/login', {});
+    assert.match(values.get(key) ?? '', /^login:/);
+    values.set(key, 'logout:another-attempt');
+    await api.post('/team/accept-invite', {});
+    assert.match(values.get(key) ?? '', /^login:/);
+  } finally {
+    if (previousWindow === undefined) delete globals.window;
+    else globals.window = previousWindow;
+  }
 });
 
 test('unwraps a single-resource { data } envelope so callers read the resource directly', async () => {

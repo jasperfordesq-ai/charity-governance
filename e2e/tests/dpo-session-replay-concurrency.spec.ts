@@ -182,6 +182,144 @@ test.describe('DPO session replay concurrency', () => {
     expect(await replayCount()).toBe(before);
   });
 
+  test('a lost sign-out response fences a possibly revoked cookie in the other tab', async ({
+    owner,
+    newFencedContext,
+    browserOriginFence,
+    request,
+  }) => {
+    test.setTimeout(120_000);
+    const before = await withDb(async (client) => {
+      const result = await client.query<{ count: number }>(
+        `SELECT COUNT(*)::INTEGER AS count FROM "SecurityAuditEvent"
+          WHERE "organisationId" = $1 AND "type" = 'SESSION_REPLAY_DETECTED'`,
+        [owner.organisationId],
+      );
+      return result.rows[0]?.count ?? 0;
+    });
+    const storageState = await createAuthenticatedStorageState({
+      userId: owner.userId,
+      organisationId: owner.organisationId,
+      role: 'OWNER',
+    });
+    const refreshToken = storageState.cookies.find((cookie) => cookie.name === 'charitypilot_refresh')?.value;
+    if (!refreshToken) throw new Error('Disposable session has no refresh cookie');
+    const context = await newFencedContext({ storageState });
+    const signingOutPage = await context.newPage();
+    const waitingPage = await context.newPage();
+    for (const page of [signingOutPage, waitingPage]) {
+      await gotoWithDevServerRetry(page, '/security-data');
+      await expect(page.getByRole('heading', { name: 'Session replay diagnostics' })).toBeVisible();
+    }
+    expect(await signingOutPage.evaluate(() => Boolean(navigator.locks && localStorage))).toBe(true);
+
+    let signalRevocation!: () => void;
+    const serverRevoked = new Promise<void>((resolve) => { signalRevocation = resolve; });
+    let dropResponse!: () => void;
+    const responseLoss = new Promise<void>((resolve) => { dropResponse = resolve; });
+    await signingOutPage.route('**/api/v1/auth/logout', async (route) => {
+      const response = await request.post(`${browserOriginFence.apiOrigin}/api/v1/auth/logout`, {
+        data: { refreshToken }, headers: { origin: browserOriginFence.webOrigin },
+      });
+      expect(response.status()).toBe(200);
+      signalRevocation();
+      await responseLoss;
+      await route.abort('failed');
+    });
+    let refreshes = 0;
+    waitingPage.on('request', (request) => {
+      if (new URL(request.url()).pathname === '/api/v1/auth/refresh') refreshes += 1;
+    });
+
+    const logoutClick = signingOutPage.getByRole('button', { name: 'Logout', exact: true }).click();
+    await serverRevoked;
+    const unauthorised = waitingPage.waitForResponse((response) =>
+      response.url().startsWith(`${browserOriginFence.apiOrigin}/api/v1/team/replay-diagnostics`)
+      && response.status() === 401);
+    await waitingPage.getByRole('button', { name: 'Refresh', exact: true }).click();
+    await unauthorised;
+    dropResponse();
+    await logoutClick;
+    await expect(waitingPage).toHaveURL(/\/login/);
+    expect(await signingOutPage.evaluate(() =>
+      localStorage.getItem('charitypilot:session-refresh-stamp')?.startsWith('logout:'))).toBe(true);
+    expect(refreshes).toBe(0);
+    const after = await withDb(async (client) => {
+      const result = await client.query<{ count: number }>(
+        `SELECT COUNT(*)::INTEGER AS count FROM "SecurityAuditEvent"
+          WHERE "organisationId" = $1 AND "type" = 'SESSION_REPLAY_DETECTED'`,
+        [owner.organisationId],
+      );
+      return result.rows[0]?.count ?? 0;
+    });
+    expect(after).toBe(before);
+  });
+
+  test('a lost refresh response requires login without replaying its spent token', async ({
+    owner,
+    newFencedContext,
+    browserOriginFence,
+    request,
+  }) => {
+    test.setTimeout(120_000);
+    const before = await withDb(async (client) => {
+      const result = await client.query<{ count: number }>(
+        `SELECT COUNT(*)::INTEGER AS count FROM "SecurityAuditEvent"
+          WHERE "organisationId" = $1 AND "type" = 'SESSION_REPLAY_DETECTED'`,
+        [owner.organisationId],
+      );
+      return result.rows[0]?.count ?? 0;
+    });
+    const storageState = await createAuthenticatedStorageState({
+      userId: owner.userId,
+      organisationId: owner.organisationId,
+      role: 'OWNER',
+    });
+    const context = await newFencedContext({ storageState });
+    const page = await context.newPage();
+    await gotoWithDevServerRetry(page, '/security-data');
+    await expect(page.getByRole('heading', { name: 'Session replay diagnostics' })).toBeVisible();
+    const accessCookie = storageState.cookies.find((cookie) => cookie.name === 'charitypilot_access');
+    if (!accessCookie) throw new Error('Disposable session has no access cookie');
+    const refreshToken = storageState.cookies.find((cookie) => cookie.name === 'charitypilot_refresh')?.value;
+    if (!refreshToken) throw new Error('Disposable session has no refresh cookie');
+    await context.addCookies([{ ...accessCookie, value: 'expired-access-token' }]);
+
+    let refreshes = 0;
+    await page.route('**/api/v1/auth/refresh', async (route) => {
+      refreshes += 1;
+      // Spend the browser's old cookie from an independent request context;
+      // route.fetch() may apply Set-Cookie to the browser despite aborting.
+      const response = await request.post(`${browserOriginFence.apiOrigin}/api/v1/auth/refresh`, {
+        data: { refreshToken }, headers: { origin: browserOriginFence.webOrigin },
+      });
+      expect(response.status()).toBe(200);
+      // The server spent the old refresh token, but the browser never receives
+      // the replacement Set-Cookie header or success response.
+      await route.abort('failed');
+    });
+    const unauthorised = page.waitForResponse((response) =>
+      response.url().startsWith(`${browserOriginFence.apiOrigin}/api/v1/team/replay-diagnostics`)
+      && response.status() === 401);
+    await page.getByRole('button', { name: 'Refresh', exact: true }).click();
+    await unauthorised;
+    await expect(page).toHaveURL(/\/login/);
+    expect(await page.evaluate(() =>
+      localStorage.getItem('charitypilot:session-refresh-stamp')?.startsWith('refresh-uncertain:'))).toBe(true);
+    await page.goto(`${browserOriginFence.webOrigin}/security-data`);
+    await expect(page).toHaveURL(/\/login/);
+    expect(refreshes).toBe(1);
+    const after = await withDb(async (client) => {
+      const result = await client.query<{ count: number }>(
+        `SELECT COUNT(*)::INTEGER AS count FROM "SecurityAuditEvent"
+          WHERE "organisationId" = $1 AND "type" = 'SESSION_REPLAY_DETECTED'`,
+        [owner.organisationId],
+      );
+      return result.rows[0]?.count ?? 0;
+    });
+    expect(after).toBe(before);
+  });
+
   test('an expired protected page renews in the browser without a proxy replay', async ({
     owner,
     newFencedContext,
