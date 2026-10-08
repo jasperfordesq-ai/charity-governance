@@ -1,5 +1,15 @@
 # CharityPilot Full-Platform Remediation Audit
 
+> **8 October DPO privileged MFA, public gate OPEN:** Jasper confirmed
+> optional personal MFA for the current private working demo, with
+> mandatory Owner/Admin MFA before public multi-tenant reliance. A
+> read-only count on the serving private VM found no active Owner/Admin
+> factor enrolled; it did not modify account settings. The scoped
+> private-demo decision does not implement or waive public privileged
+> enforcement, lost-all-factors recovery, key-rotation handling,
+> invitation/promotion/session coverage or independent DPO acceptance.
+> Exact count and decision evidence are in the gitignored MFA pack.
+
 > **8 October DPO Member Vault copy, issue still OPEN:** PR #49 changed
 > the Member's zero-visible-document empty state to describe available
 > access accurately. Exact merged-master CI/E2E passed at `679dd1bd`;

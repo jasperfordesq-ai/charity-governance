@@ -89,6 +89,20 @@ hashing and immediately before consumption. Failures use the same generic
 invalid-invite response so tenant, account, and capacity state are not disclosed
 through a public token endpoint.
 
+## Privileged MFA operating scope
+
+On 8 October 2026, the charity Owner confirmed that personal MFA may remain
+optional for the current private working demo. Owner and Admin MFA must be
+mandatory before public multi-tenant reliance. This matches the DPO's scoped
+30 September advice; it is an operating-mode decision, not an assertion that
+role-wide enforcement exists today or that the public launch gate has passed.
+Account-level enrollment still protects that account's browser and connector
+sign-in once activated. The public rule needs a governed lost-all-factors
+recovery path, key-rotation procedure, invitation/promotion and existing-
+session behavior, disposable role-journey proof, live deployment evidence and
+independent DPO review. The live enrollment count and exact decision receipt
+are held in the private DPO review pack.
+
 ## Password recovery integrity
 
 Personal two-step sign-in has a last-code recovery path: a browser session

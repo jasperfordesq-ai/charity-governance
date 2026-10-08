@@ -1,5 +1,16 @@
 # CharityPilot Agent Continuation Handoff
 
+> **8 October DPO MFA scope decision (public gate open):** Jasper confirmed
+> personal opt-in MFA for the current private working demo and mandatory
+> Owner/Admin MFA before public multi-tenant reliance, consistent with
+> Nikita's 30 September scoped advice. A guarded read-only query of the
+> reviewed private VM found no enrolled factor among its active Owner,
+> Admin or temporary Member accounts; no account was changed. This is a
+> current operating choice, not implementation of role-wide enforcement.
+> Lost-all-factors recovery, key rotation, actual enrollment, public role
+> journeys and independent Nikita acceptance remain open. Exact count and
+> decision evidence stay in the gitignored private MFA pack.
+
 > **8 October Member Vault copy release (live wording checked):** PR
 > #49 merged as `679dd1bdd3d3ced29dd5fc707cd122922336bd01` after exact
 > merged-master CI `37812122754` and E2E `37812122603` passed. A guarded
