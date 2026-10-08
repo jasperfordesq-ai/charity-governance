@@ -594,6 +594,14 @@ export function createFakeAtlassian(options: FakeAtlassianOptions = {}): FakeAtl
         return withAuth(headers, () => listSpacesHandler(url));
       }
 
+      const pageAttachmentsMatch = /^\/wiki\/api\/v2\/pages\/([^/]+)\/attachments$/.exec(rest);
+      if (pageAttachmentsMatch && method === 'GET') {
+        return withAuth(headers, () => {
+          const page = pages.get(pageAttachmentsMatch[1]);
+          return page?.status === 'current' ? jsonResponse(200, { results: [] }) : notFound();
+        });
+      }
+
       const pageIdMatch = /^\/wiki\/api\/v2\/pages\/([^/]+)$/.exec(rest);
       if (pageIdMatch) {
         const pageId = pageIdMatch[1];

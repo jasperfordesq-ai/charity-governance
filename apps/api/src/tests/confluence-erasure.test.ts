@@ -62,6 +62,7 @@ function spyDeps(calls: string[], overrides: Partial<ConfluenceErasureOperations
   return {
     connect: async () => CLIENT,
     operations: {
+      listAttachments: async (_client, id) => { calls.push(`listAttachments:${id}`); return []; },
       deleteAttachment: record('deleteAttachment'),
       purgeAttachment: record('purgeAttachment'),
       getAttachment: async (_client, id) => { calls.push(`getAttachment:${id}`); return false; },
@@ -85,6 +86,7 @@ test('attachments are erased before the page, and each is trashed before it is p
   await eraser(targetWith(['a1', 'a2']));
 
   assert.deepEqual(calls, [
+    'getPage:p1',
     'deleteAttachment:a1',
     'purgeAttachment:a1',
     'deleteAttachment:a2',
@@ -107,7 +109,55 @@ test('normal and trash reads must both show absence', async () => {
 
   await eraser(target());
 
-  assert.deepEqual(calls, ['deletePage:p1', 'purgePage:p1', 'getPage:p1', 'isPageInTrash:p1']);
+  assert.deepEqual(calls, ['getPage:p1', 'deletePage:p1', 'purgePage:p1', 'getPage:p1', 'isPageInTrash:p1']);
+});
+
+test('an unrecorded current attachment blocks every destructive request', async () => {
+  const calls: string[] = [];
+  const eraser = createConfluenceEraser(spyDeps(calls, {
+    getPage: async (_client, id) => { calls.push(`getPage:${id}`); return PAGE; },
+    listAttachments: async (_client, id) => {
+      calls.push(`listAttachments:${id}`);
+      return [{ id: 'a1' }, { id: 'unexpected' }];
+    },
+  }));
+  await assert.rejects(() => eraser(targetWith(['a1'])),
+    (error: unknown) => (error as AppError).code === 'CONFLUENCE_ERASURE_TARGET_INCOMPLETE');
+  assert.deepEqual(calls, ['getPage:p1', 'listAttachments:p1']);
+});
+
+test('a complete current attachment inventory permits the recorded erasure', async () => {
+  const calls: string[] = [];
+  let pageReads = 0;
+  const eraser = createConfluenceEraser(spyDeps(calls, {
+    getPage: async (_client, id) => {
+      calls.push(`getPage:${id}`);
+      pageReads += 1;
+      return pageReads === 1 ? PAGE : null;
+    },
+    listAttachments: async (_client, id) => {
+      calls.push(`listAttachments:${id}`);
+      return [{ id: 'a1' }];
+    },
+  }));
+  await eraser(targetWith(['a1']));
+  assert.deepEqual(calls.slice(0, 4), ['getPage:p1', 'listAttachments:p1', 'deleteAttachment:a1', 'purgeAttachment:a1']);
+});
+
+test('erasure passes its cancellation signal into the current attachment inventory', async () => {
+  const calls: string[] = [];
+  const controller = new AbortController();
+  const eraser = createConfluenceEraser(spyDeps(calls, {
+    getPage: async () => PAGE,
+    listAttachments: async (_client, _id, signal) => {
+      assert.equal(signal, controller.signal);
+      controller.abort();
+      return [];
+    },
+  }));
+  await assert.rejects(() => eraser(target(), controller.signal),
+    (error: unknown) => (error as AppError).code === 'CONFLUENCE_ERASURE_ABORTED');
+  assert.deepEqual(calls, [], 'no destructive provider request follows cancellation');
 });
 
 test('a page left in trash does not complete erasure after an ordinary 404', async () => {
@@ -228,6 +278,7 @@ test('the sequence restarts cleanly after a crash, because every step is idempot
   // makes re-running the whole sequence from the top a valid recovery from a
   // crash at any point inside it.
   assert.deepEqual(paths, [
+    'GET pages/p1',
     'DELETE attachments/a1',
     'DELETE attachments/a1?purge=true',
     'DELETE pages/p1',
@@ -256,6 +307,7 @@ function spyDepsAbortingAfter(
   return {
     ...deps,
     operations: {
+      listAttachments: wrap(operations.listAttachments),
       deleteAttachment: wrap(operations.deleteAttachment),
       purgeAttachment: wrap(operations.purgeAttachment),
       getAttachment: wrap(operations.getAttachment),
@@ -274,6 +326,7 @@ function spyDepsAbortingAfter(
 
 /** The full sequence a two-attachment row issues, in order. */
 const SEQUENCE = [
+  'getPage:p1',
   'deleteAttachment:a1',
   'purgeAttachment:a1',
   'deleteAttachment:a2',
@@ -554,6 +607,7 @@ for (const [label, thrown, expectedState] of [
   // true for everything would satisfy the first three and quietly turn a
   // five-minute Atlassian outage into a dead-letter cleared by hand.
   ['an unverified erasure', new AppError(502, 'CONFLUENCE_ERASURE_UNVERIFIED', 'x'), 'PENDING'],
+  ['an incomplete current attachment target', new AppError(409, 'CONFLUENCE_ERASURE_TARGET_INCOMPLETE', 'x'), 'PENDING'],
   ['an upstream outage', new AppError(503, 'CONFLUENCE_UPSTREAM', 'x'), 'PENDING'],
   ['an aborted attempt', new AppError(504, 'CONFLUENCE_ERASURE_ABORTED', 'x'), 'PENDING'],
 ] as const) {

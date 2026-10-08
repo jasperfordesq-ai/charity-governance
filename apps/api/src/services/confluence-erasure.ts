@@ -4,6 +4,7 @@ import { createConfluenceClient } from './confluence-client.js';
 import {
   deleteAttachment as deleteAttachmentDefault,
   getAttachment as getAttachmentDefault,
+  listAttachments as listAttachmentsDefault,
   listTrashedAttachmentIds as listTrashedAttachmentIdsDefault,
   purgeAttachment as purgeAttachmentDefault,
 } from './confluence-attachments.js';
@@ -28,9 +29,10 @@ import type { Eraser, ErasureTarget } from './document-erasure.js';
  *
  * ## Order is a correctness property, not a style choice
  *
- * 1. Every attachment, `delete` then `purge`.
- * 2. Then the page, `delete` then `purge`.
- * 3. Read the page in both normal and trashed status, and each recorded
+ * 1. For a current page, refuse any attachment absent from the target.
+ * 2. Every recorded attachment, `delete` then `purge`.
+ * 3. Then the page, `delete` then `purge`.
+ * 4. Read the page in both normal and trashed status, and each recorded
  *    attachment directly and in the site's trashed-attachment inventory.
  *
  * **Attachments before the page**, because Atlassian does not promise that
@@ -77,14 +79,16 @@ import type { Eraser, ErasureTarget } from './document-erasure.js';
  * - `ERASURE_TARGET_MALFORMED` — a well-formed row,
  * - `CONFLUENCE_NOT_CONNECTED` — a connection.
  *
- * Everything else — an unverified read, a 5xx, a timeout, a rate limit, a
- * refresh already in flight — is transient and goes back through the ordinary
+ * Everything else — including an incomplete current attachment inventory,
+ * an unverified read, a 5xx, a timeout, a rate limit or a refresh already in
+ * flight — goes back through the ordinary
  * claim/backoff loop. `document.service.ts` holds the mapping; this module
  * holds the codes.
  */
 
 /** Injectable primitives so tests can check the exact delete/read order. */
 export type ConfluenceErasureOperations = {
+  listAttachments(client: ConfluenceClient, pageId: string, signal?: AbortSignal): Promise<Array<{ id: string }>>;
   deleteAttachment(client: ConfluenceClient, attachmentId: string): Promise<void>;
   purgeAttachment(client: ConfluenceClient, attachmentId: string): Promise<void>;
   getAttachment(client: ConfluenceClient, attachmentId: string): Promise<boolean>;
@@ -121,6 +125,7 @@ export type ConfluenceEraserDeps = {
 };
 
 const DEFAULT_OPERATIONS: ConfluenceErasureOperations = {
+  listAttachments: listAttachmentsDefault,
   deleteAttachment: deleteAttachmentDefault,
   purgeAttachment: purgeAttachmentDefault,
   getAttachment: getAttachmentDefault,
@@ -228,6 +233,15 @@ function unverified(contentId: string): AppError {
   );
 }
 
+function incompleteTarget(): AppError {
+  return new AppError(
+    409,
+    'CONFLUENCE_ERASURE_TARGET_INCOMPLETE',
+    'The Confluence page has an attachment absent from the recorded erasure target. ' +
+      'No deletion was issued; a human must reconcile the page inventory before this job can proceed.',
+  );
+}
+
 function defaultConnect(deps: ConfluenceEraserDeps): ConfluenceConnect {
   const prisma = deps.prisma;
   if (!prisma) {
@@ -266,6 +280,19 @@ export function createConfluenceEraser(deps: ConfluenceEraserDeps): Eraser {
     } catch (error) {
       if (isConnectionUnusable(error)) throw notConnected(row.organisationId, error);
       throw error;
+    }
+
+    // A live page can contain a manually added or previously unrecorded file.
+    // Deleting the page without noticing it could strand those bytes while the
+    // recorded IDs read back absent. This is a preflight only: a previously
+    // purged page cannot supply a current inventory, so full copy discovery
+    // still needs the separate provider reconciliation protocol.
+    assertNotAborted(signal);
+    if (await operations.getPage(client, target.pageId)) {
+      assertNotAborted(signal);
+      const current = await operations.listAttachments(client, target.pageId, signal);
+      const recorded = new Set(target.attachmentIds);
+      if (current.some((attachment) => !recorded.has(attachment.id))) throw incompleteTarget();
     }
 
     // Attachments first, and each trashed before it is purged. See the module
