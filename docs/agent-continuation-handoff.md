@@ -1,5 +1,21 @@
 # CharityPilot Agent Continuation Handoff
 
+> **8 October Member Vault copy release (live wording checked):** PR
+> #49 merged as `679dd1bdd3d3ced29dd5fc707cd122922336bd01` after exact
+> merged-master CI `37812122754` and E2E `37812122603` passed. A guarded
+> private-VM green cutover completed at 17:05:40 UTC, retaining blue
+> `9696fb5b` for rollback. Initial/final postflight, two same-host copied
+> and SHA-matched backup sets, and two isolated restore drills passed;
+> final backup inventory was 420 files with prior hashes unchanged. The
+> role-specific Vault empty-state wording was then observed in the
+> signed-in temporary Member's live `/documents` page: zero available
+> documents and `No documents available to you` with the access-level
+> explanation. Direct `/export` still withheld the internal report. This
+> is one UI role check, not a direct API probe. The release did not
+> change visibility rules, approve a real file for Members, settle policy
+> or establish Nikita's acceptance. Private receipt:
+> `.charitypilot-private/release-679dd1bd-member-vault-copy-2026-10-08.md`.
+
 > **8 October Member report-navigation release (DPO acceptance open):** PR
 > #47 merged as `9696fb5b7e344975210e38de08ec040a22fcde11` after
 > exact merged-master CI `37805072036` and E2E `37805072114` passed.
