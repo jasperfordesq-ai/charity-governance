@@ -295,6 +295,8 @@ for the current implementation checkpoints and remaining acceptance gates.
 
 Working drafts cannot be released to Members. A reasoned visibility decision may expose a classified lifecycle state, but new `DRAFT`/`MEMBER_VISIBLE` writes are rejected by the API and migration `20260929340000_draft_member_visibility_guard`'s `NOT VALID` CHECK. Member queries and the post-storage download check also withhold a legacy row in that combination. Existing violating rows are not automatically changed or validated; their contents and audience need review.
 
+A newly uploaded restricted draft can move directly to `HISTORICAL` with an actor-bound lifecycle reason when the file is dated evidence that was never a current policy. This does not grant Member access or external-publication approval; those remain separate controls with their own review gates.
+
 The obsolete `DocumentService.remove` immediate-delete path has been removed.
 `DocumentRecoveryService` handles retained removal and restoration;
 `DocumentPurgeService` handles reviewed authority and claim. Unknown legacy
