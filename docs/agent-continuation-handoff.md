@@ -1,5 +1,16 @@
 # CharityPilot Agent Continuation Handoff
 
+> **8 October C01 restored attachment bytes (DPO-05 still open):** A
+> signed-in download from the restricted Confluence sandbox returned the
+> restored `att524289` attachment as 243 bytes. Its SHA-256 was
+> `148bb885a9cbafe13cab35c131d11eb9d60d1a701fca3881eff8dd8e48829242`,
+> matching the original synthetic upload digest. The exact downloaded
+> bytes are retained in the ignored private C01 evidence folder. This
+> closes the earlier restored-byte equality gap for that one attachment;
+> it does not exercise permanent erasure, prove all-copy reconciliation,
+> authorize a retention decision, or establish Nikita acceptance. See
+> `.charitypilot-private/c01-runtime/README.md` for the bounded receipt.
+
 > **8 October live Member prerequisite and profile release (acceptance open):**
 > A user-controlled, temporary Member invitation was accepted in the
 > reviewed hOUR Timebank CLG workspace. A read-only VM check confirmed the
