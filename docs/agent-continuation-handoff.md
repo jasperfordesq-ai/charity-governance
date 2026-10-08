@@ -1,5 +1,27 @@
 # CharityPilot Agent Continuation Handoff
 
+> **8 October live Member prerequisite and profile release (acceptance open):**
+> A user-controlled, temporary Member invitation was accepted in the
+> reviewed hOUR Timebank CLG workspace. A read-only VM check confirmed the
+> accepted MEMBER invite and matching User; the Owner Team page listed it.
+> The API had been configured for manual invitation links while the web
+> build omitted the matching public profile flags, discarded a one-time
+> link and showed an email-sent toast. CharityPilot sent no email: the
+> replacement link was delivered through Jasper's separate Gmail account.
+> Its first version was invalidated after appearing in browser tool output;
+> the correction email's link was accepted. PR #42 fixed blue-green web/API
+> profile parity and inline-comment parsing. Exact PR-head CI, E2E and
+> review passed; merged master `937b8b9a` passed CI `37776127169` and E2E
+> `37776126994`. A guarded green private-VM cutover passed final web/API
+> profile, restricted-runtime, loopback/Tailscale, 408-file backup inventory
+> and two SHA-matched copied/isolated-restored recovery sets. The prior
+> 402 backup hashes were unchanged. Private exact receipt:
+> `.charitypilot-private/release-937b8b9a-email-profile-2026-10-08.md`.
+> A signed-in live Member route/UI matrix, real Vault classification and
+> positive reviewed-file check, temporary-account cleanup, independent
+> host-loss recovery and Nikita acceptance remain OPEN. This private-profile
+> release is not public-production evidence.
+
 > **Later 8 October isolated positive Member Vault check (acceptance still open):**
 > In the disposable C01 tenant, the synthetic Owner uploaded a 95-byte
 > plain-text fixture, downloaded its exact bytes to create the review

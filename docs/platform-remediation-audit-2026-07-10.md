@@ -1,5 +1,24 @@
 # CharityPilot Full-Platform Remediation Audit
 
+> **8 October DPO Member-access checkpoint, issue still OPEN:** A controlled
+> Member invite was accepted in the reviewed private VM, and a read-only
+> database check plus Owner Team page confirmed the Member exists. The
+> blue-green web build had omitted the API's manual-link delivery profile;
+> the first one-time URL was discarded behind a misleading email-sent toast.
+> No CharityPilot email provider is configured. PR #42 repaired build/runtime
+> profile parity, including Compose-style inline comments. Exact PR-head
+> and merged-master CI/E2E/review passed; master `937b8b9a` is now serving
+> green with web/API flags `multi / closed / manual-link / none`. Final
+> loopback/Tailscale, restricted-runtime, recovery-set copy/hash and two
+> isolated restore checks passed; all 402 earlier backup hashes survived.
+> The first manually mailed bearer link was rotated after exposure in tool
+> output; only the correction email's link was accepted. **No signed-in
+> live Member permission matrix, real-record classification, positive live
+> Member-suitable Vault download or Nikita acceptance is established.**
+> Temporary test-account cleanup and independent host-loss recovery remain
+> open. Exact private receipt:
+> `.charitypilot-private/release-937b8b9a-email-profile-2026-10-08.md`.
+
 > **Later 8 October DPO Member positive-file test, issue still OPEN:** In
 > the disposable C01 tenant, the synthetic Owner uploaded and downloaded
 > a 95-byte fixture, then set CURRENT / MEMBER_SUITABLE / MEMBER_VISIBLE
