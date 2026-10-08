@@ -1,5 +1,19 @@
 # CharityPilot Full-Platform Remediation Audit
 
+> **8 October DPO-05 operation-ID prerequisite release:** Exact merged-
+> master `2dd0a427` passed CI `37713125501`, E2E `37713125382` and
+> guarded blue private-VM cutover with restricted runtime, zero provider/
+> publication intents, 366 preserved prior backup hashes, SHA-matched
+> workstation copy and isolated 155-migration/68-document restore.
+> Page-create operation ID allocation now precedes body construction and
+> binds the immutable reservation, but the outbound body has no
+> provider-visible marker and there has been no real Confluence use.
+> Provider/all-copy/UNKNOWN, C01–C05/P01–P09/MFA, independent P05/P08,
+> Member/export/deletion, replay/C1 and Nikita acceptance remain OPEN.
+> Exact private receipt:
+> `.charitypilot-private/release-2dd0a427-page-create-id-prerequisite-2026-10-08.md`.
+> Earlier checkpoints below are dated history.
+
 > **8 October DPO-05 saved-page candidate release:** Exact merged-master
 > `e566870d` passed CI `37707084587`, E2E `37707084621` and guarded green
 > private-VM cutover with restricted runtime, zero protected/publication
