@@ -4,6 +4,8 @@ import Link from 'next/link';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Button } from '@heroui/react';
 import { api } from '@/lib/api';
+import { useAuth } from '@/lib/auth-context';
+import { canManageGovernance } from '@/lib/governance-permissions';
 import { apiErrorMessage, isApiNotFoundError } from '@/lib/errors';
 import { logClientError } from '@/lib/client-logger';
 import { useDocumentTitle } from '@/lib/use-title';
@@ -40,6 +42,8 @@ const reviewFlagLabels: Record<ProfessionalReviewFlag, string> = {
 
 export default function RegulatorGuidePage() {
   useDocumentTitle('Regulator Guide');
+  const { user } = useAuth();
+  const canManage = canManageGovernance(user?.role);
   const [organisation, setOrganisation] = useState<OrganisationResponse | null>(null);
   const [organisationProfileError, setOrganisationProfileError] = useState('');
 
@@ -107,9 +111,11 @@ export default function RegulatorGuidePage() {
           <Button as={Link} href="/documents" variant="flat">
             Evidence Vault
           </Button>
-          <Button as={Link} href="/export" variant="flat">
-            Export Pack
-          </Button>
+          {canManage && (
+            <Button as={Link} href="/export" variant="flat">
+              Export Pack
+            </Button>
+          )}
         </>
       )}
     >

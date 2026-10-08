@@ -5,6 +5,7 @@ import { useRouter, usePathname } from 'next/navigation';
 import { dashboardBody, dashboardRedirect } from '@/lib/dashboard-session-gate';
 import { Button } from '@heroui/react';
 import { useAuth } from '@/lib/auth-context';
+import { canManageGovernance } from '@/lib/governance-permissions';
 import { webBillingMode } from '@/lib/deployment-profile';
 import Link from 'next/link';
 import { Breadcrumbs } from '@/components/breadcrumbs';
@@ -178,6 +179,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   const billingEnabled = webBillingMode() !== 'none';
   const visibleNavItems = NAV_ITEMS.filter((item) =>
     (billingEnabled || item.href !== '/billing') &&
+    (item.href !== '/export' || canManageGovernance(user?.role)) &&
     (!['/governance-audit', '/data-lifecycle', '/minute-book'].includes(item.href) || user?.role === 'OWNER' || user?.role === 'ADMIN'),
   );
 

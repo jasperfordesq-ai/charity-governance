@@ -89,9 +89,11 @@ export function DashboardSummaryCards({ canManage, loading, registerSummary, sig
               </p>
             ) : null}
           </div>
-          <Button as={Link} href="/export" size="sm" variant="flat">
-            {canManage ? 'Manage sign-off' : 'View sign-off'}
-          </Button>
+          {canManage && (
+            <Button as={Link} href="/export" size="sm" variant="flat">
+              Manage sign-off
+            </Button>
+          )}
         </div>
       </Card>
 
