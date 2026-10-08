@@ -31,8 +31,8 @@ test('web build profile follows the API app env, ignoring ambient profile overri
     writeFileSync(appPath, [
       'CHARITYPILOT_TENANCY=multi',
       'CHARITYPILOT_REGISTRATION=closed',
-      'CHARITYPILOT_EMAIL_DELIVERY=manual-link',
-      'CHARITYPILOT_BILLING=none',
+      'CHARITYPILOT_EMAIL_DELIVERY="manual-link" # links are delivered manually',
+      'CHARITYPILOT_BILLING=none # no provider configured',
       '',
     ].join('\n'));
     const { baseComposeEnv } = await loadDeployModule();
