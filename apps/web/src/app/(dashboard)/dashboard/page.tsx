@@ -45,9 +45,11 @@ export default function DashboardPage() {
           <Button as={Link} href="/compliance" size="sm" variant="flat">
             Compliance workspace
           </Button>
-          <Button as={Link} href="/export" size="sm" className={primaryActionButtonClassName}>
-            Export report
-          </Button>
+          {canManage && (
+            <Button as={Link} href="/export" size="sm" className={primaryActionButtonClassName}>
+              Export report
+            </Button>
+          )}
         </>
       )}
     >
@@ -73,9 +75,11 @@ export default function DashboardPage() {
             <Button as={Link} href="/documents" size="sm" variant="flat">
               Evidence pack
             </Button>
-            <Button as={Link} href="/export" size="sm" className={primaryActionButtonClassName}>
-              Export report
-            </Button>
+            {canManage && (
+              <Button as={Link} href="/export" size="sm" className={primaryActionButtonClassName}>
+                Export report
+              </Button>
+            )}
           </div>
         </div>
       </section>
@@ -87,8 +91,8 @@ export default function DashboardPage() {
             ? 'Resolve these before the board sign-off can be approved.'
             : 'An owner or administrator must resolve these before the board sign-off can be approved.'}`}
           action={(
-            <Button as={Link} href="/export" size="sm" variant="flat">
-              Review blockers
+            <Button as={Link} href={canManage ? '/export' : '/compliance'} size="sm" variant="flat">
+              {canManage ? 'Review blockers' : 'View compliance'}
             </Button>
           )}
         />
