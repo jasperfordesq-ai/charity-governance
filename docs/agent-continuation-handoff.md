@@ -1,5 +1,16 @@
 # CharityPilot Agent Continuation Handoff
 
+> **8 October 21:54 UTC DPO-02 failure-path mitigation, source local only:**
+> Commit `3be71c53` extends the Web Lock sign-out mitigation with a
+> noncredential reauthentication fence after ambiguous logout or refresh
+> response loss. Renewal fails closed without Web Locks or usable shared
+> storage. Thirty focused web tests and three isolated PostgreSQL/
+> Chromium browser cases passed, including server-spent/browser-stale
+> cookies and zero added replay audit rows. This is **unpushed and
+> undeployed**. The nine historic live events, especially the connector
+> case, remain unattributed and require risk-owner/Nikita disposition.
+> Private receipt: `.charitypilot-private/replay-uncertain-response-fence-2026-10-08.md`.
+
 > **8 October 21:37 UTC DPO-02 logout/refresh race, source local only:**
 > Browser refreshes already shared a cross-tab Web Lock; sign-out did not.
 > Local `master` commit `ebf72ebd` holds the same lock through logout and

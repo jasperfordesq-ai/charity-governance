@@ -1,5 +1,14 @@
 # CharityPilot Full-Platform Remediation Audit
 
+> **8 October DPO-02 uncertain-response guard, issue OPEN:** Local commit
+> `3be71c53` prevents browser renewal after a lost logout/refresh response
+> until a fresh login, and fails closed without Web Locks or shared storage.
+> Thirty focused tests and three isolated browser/database cases passed
+> with zero new synthetic replay events. The source is unpushed and
+> undeployed; the nine historical events and MCP connector case still need
+> initiating-client evidence and independent incident disposition. Private
+> receipt: `.charitypilot-private/replay-uncertain-response-fence-2026-10-08.md`.
+
 > **8 October DPO-02 source mitigation, issue OPEN:** Local commit
 > `ebf72ebd` serializes browser sign-out with refresh under one cross-tab
 > Web Lock. Focused unit and isolated two-tab browser/database checks
