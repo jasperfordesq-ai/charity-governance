@@ -1,5 +1,13 @@
 # CharityPilot Full-Platform Remediation Audit
 
+> **9 October 00:36 Dublin C1 isolated test, OPEN:** NEXUS C1 branch
+> `7f69208dc` is six ahead and unmerged/undeployed. Disposable MariaDB
+> Laravel proof passed 23 registration-alert tests/38 assertions and a
+> one-test/seven-assertion Admin/Broker/Coordinator staff-list audience
+> check with ordinary Member denied. The temporary infrastructure was
+> removed. Hosted self-serve notice click, recipient-wide verification,
+> original C1 closure evidence and risk-owner/Nikita acceptance remain.
+
 > **9 October 00:30 Dublin overnight validation, OPEN:** The clean local
 > CharityPilot source at `6093fa9f` passed its full API test command,
 > including 11 disposable PostgreSQL migration tests, plus branch diff

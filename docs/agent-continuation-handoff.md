@@ -1,5 +1,15 @@
 # CharityPilot Agent Continuation Handoff
 
+> **9 October 00:36 Dublin isolated C1 source proof:** The separate
+> NEXUS C1 branch is clean at `7f69208dc`, six local commits ahead,
+> unpushed/unmerged/undeployed. In a disposable MariaDB 10.11 database,
+> its registration-alert PHPUnit class passed 23 tests/38 assertions.
+> A new staff-list API test passed 1 test/7 assertions for Admin,
+> Broker and Coordinator finding an incomplete private registrant and
+> ordinary Member denial. The synthetic resources were removed. This
+> supports the neutral alert's staff-list route but does not prove
+> hosted email/bell delivery, broad C1 closure or DPO acceptance.
+
 > **9 October 00:30 Dublin overnight source checkpoint:** Clean local
 > CharityPilot `master` `6093fa9f` remains 33 commits ahead of origin,
 > unpushed/undeployed. The accumulated change passed
