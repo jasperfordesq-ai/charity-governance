@@ -1,5 +1,32 @@
 # CharityPilot Agent Continuation Handoff
 
+> **Later 8 October isolated positive Member Vault check (acceptance still open):**
+> In the disposable C01 tenant, the synthetic Owner uploaded a 95-byte
+> plain-text fixture, downloaded its exact bytes to create the review
+> receipt, and classified it CURRENT / MEMBER_SUITABLE / MEMBER_VISIBLE.
+> A synthetic Member then saw the one reviewed fixture and downloaded it
+> with HTTP 200; the returned bytes matched the fixture SHA-256 digest.
+> The same Member's restricted synthetic Vault download remained a
+> concealing 404. The test Member was removed through the supported
+> lifecycle service. This is isolated API evidence, not classification
+> of real records, live VM/Member UI proof or Nikita acceptance. Exact
+> receipt: `.charitypilot-private/member-boundary-isolated-2026-10-08.md`.
+
+> **Later 8 October isolated Member route check (acceptance still open):**
+> In the disposable C01 CharityPilot tenant, a synthetic Member signed in
+> through the application service and received a three-trustee minimal
+> view, with no address, birth date, email or phone keys. Its Vault list
+> had zero of five Owner-visible documents. The Member received 403 for
+> statutory membership, conflicts, complaints, deleted items, document
+> control audit, governance audit and full Compliance Record; an exact
+> retired/restricted synthetic Vault download returned a concealing 404.
+> A synthetic Owner control received 200 on every compared route. Five
+> temporary synthetic Member accounts were removed through the supported
+> lifecycle service, leaving no active test sessions. This is isolated
+> API evidence from the C01 snapshot, **not** a live VM/Member UI check
+> or Nikita acceptance. A later isolated positive fixture test is above. Private
+> matrix: `.charitypilot-private/member-boundary-isolated-2026-10-08.md`.
+
 > **Later 8 October C01 sandbox restoration (goal still open):** With Jasper's
 > specific approval, only synthetic page `491521` was restored from
 > recoverable Trash into restricted `CPC01SYN`. The sandbox Trash then had
