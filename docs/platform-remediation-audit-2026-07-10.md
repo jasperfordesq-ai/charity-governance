@@ -1,5 +1,15 @@
 # CharityPilot Full-Platform Remediation Audit
 
+> **8 October 23:32 Dublin C1 connection reads, issue OPEN:** Final
+> NEXUS local tip `4a096b27e` (four commits above fetched `origin/main`)
+> blocks two additional synthetic pending-registrant read paths:
+> `connections/status/{id}` no longer confirms existence to ordinary
+> Members, and old connection rows no longer reveal pending/unapproved
+> name, bio or location. Approved private-recipient and coordinator
+> controls pass. Final connection suites 50/142, staged hook 31/73.
+> Earlier `3298f2ffe` was amended and is obsolete. **No push, merge,
+> deploy, hosted retest, risk verification or Nikita acceptance.**
+
 > **8 October 23:27 Dublin C1 connection request, issue OPEN:** NEXUS
 > local tip `7d6059b5a` adds a third C1 commit after `a6e90fd62` and
 > `cfdc4e00f`. A red synthetic test received HTTP 201 when an ordinary

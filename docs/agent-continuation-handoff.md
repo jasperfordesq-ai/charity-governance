@@ -1,5 +1,16 @@
 # CharityPilot Agent Continuation Handoff
 
+> **8 October 23:32 Dublin C1 connection read paths:** Separate NEXUS
+> branch `codex/c1-pending-profile` now ends at amended local commit
+> `4a096b27e`, four ahead of fetched `origin/main` `05c17bf94`.
+> Synthetic red tests reproduced pending-ID confirmation (connection
+> status 200) and first name/bio/location in a legacy connection row.
+> Ordinary Members now get NOT_FOUND for status and no such partner card;
+> approved private recipients and coordinator review remain available.
+> Final connection suites passed 50/142, staged hook 31/73. The
+> pre-amend `3298f2ffe` hash is obsolete. **No push, merge, deployment,
+> hosted C1 retest or DPO acceptance; C1 OPEN.**
+
 > **8 October 23:27 Dublin C1 numeric-ID connection follow-on:** NEXUS
 > `codex/c1-pending-profile` now has local tip `7d6059b5a`, three commits
 > above fetched `origin/main` `05c17bf94`. Red synthetic route test
