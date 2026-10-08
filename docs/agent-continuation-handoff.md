@@ -1,5 +1,14 @@
 # CharityPilot Agent Continuation Handoff
 
+> **8 October 23:54 Dublin P04 claim cutoff proof:** The full disposable
+> PostgreSQL migration test now isolates the new `DocumentPurgeClaim`
+> calendar trigger. A 2024 leap-day + six-year early claim is refused;
+> a 2020 leap-day + six-year elapsed claim passes the cutoff trigger.
+> Other claim/dispatch user triggers were disabled only inside those
+> rolled-back synthetic transactions, so this proves the cutoff decision,
+> not an end-to-end purge. The full migration test passed. The mode fence
+> and all remaining complaint/copy/API/UI gates stay open.
+
 > **8 October 23:51 Dublin P04 document SQL guard:** Forward migration
 > `20261008050000_document_calendar_cutoff_guards` adds a UTC calendar
 > cutoff check to direct document removal and purge claims, without

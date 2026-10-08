@@ -1,5 +1,12 @@
 # CharityPilot Full-Platform Remediation Audit
 
+> **8 October 23:54 Dublin P04 document claim probe:** Full disposable
+> PG16 migration proof now covers the calendar claim trigger's early
+> refusal and elapsed acceptance with synthetic rolled-back fixtures.
+> Other claim user triggers were intentionally isolated; end-to-end
+> authorization, recovery expiry and dispatch still require separate
+> proof. The overall year-mode feature and retention issue remain OPEN.
+
 > **8 October 23:51 Dublin P04 document enforcement partial, OPEN:**
 > Local forward SQL now checks calendar cutoff on direct document removal
 > and purge claim. The full migrated PostgreSQL fixture proved early

@@ -377,6 +377,40 @@ test('retention policy and recovery-state upgrade preserve documents and enforce
     sql(calendarRemoval('2024-02-29 12:34:56.789'), /calendar-year retention period has not been satisfied/);
     assert.equal(sql(calendarRemoval('2020-02-29 12:34:56.789')), 't');
     assert.equal(sql(`SELECT count(*) FROM "Document" WHERE id='calendar-doc';`), '0');
+    // Isolate the new claim trigger from the existing claim dispatch and
+    // custody guards. Both cases roll back; this tests its cutoff decision,
+    // not permission to run a real purge.
+    const calendarClaim = createdAt => `BEGIN;
+      INSERT INTO "Organisation" (id,name,"updatedAt") VALUES ('retention-calendar','Synthetic calendar charity',CURRENT_TIMESTAMP);
+      INSERT INTO "User" (id,email,name,"passwordHash",role,"organisationId","updatedAt")
+        VALUES ('calendar-owner','calendar-owner@example.invalid','Synthetic calendar owner','fixture-password-hash',
+          'OWNER','retention-calendar',CURRENT_TIMESTAMP);
+      ALTER TABLE "DataRetentionPolicyRevision" DISABLE TRIGGER "DataRetentionPolicyRevision_01_mode_fence";
+      INSERT INTO "DataRetentionPolicyRevision" (id,"organisationId","recordClass",revision,state,"retentionMode",
+        "retentionAnchor","retentionYears","recoveryDays","createdById","approvedById","approvedAt","approvalEvidenceRef")
+        VALUES ('calendar-approved','retention-calendar','VAULT_DRAFT',1,'APPROVED','AFTER_CALENDAR_YEARS',
+          'CREATED_AT',6,30,'calendar-owner','calendar-owner',CURRENT_TIMESTAMP,'CALENDAR-TEST-001');
+      ALTER TABLE "DataRetentionPolicyRevision" ENABLE TRIGGER "DataRetentionPolicyRevision_01_mode_fence";
+      INSERT INTO "Document" (id,"organisationId",name,category,"fileUrl","fileSize","mimeType",
+        "createdAt","updatedAt","lifecycleStatus","storageProvider")
+        VALUES ('calendar-doc','retention-calendar','Synthetic calendar draft','OTHER','retention-calendar/doc.pdf',
+          4,'application/pdf','${createdAt}'::timestamp(3),CURRENT_TIMESTAMP,'DRAFT','local');
+      ALTER TABLE "DocumentPurgeAuthorization" DISABLE TRIGGER USER;
+      INSERT INTO "DocumentPurgeAuthorization" (id,"organisationId","documentId","documentRevision","policyId",
+        "actorUserId","evidenceRef",reason,"storagePath",provider,sha256,"fileSize","recoveryUntil","dispositionPlan")
+        VALUES ('calendar-auth','retention-calendar','calendar-doc',CURRENT_TIMESTAMP,'calendar-approved',
+          'calendar-owner','CALENDAR-AUTH-001','Synthetic claim cutoff isolation',
+          'retention-calendar/doc.pdf','local',repeat('a',64),4,CURRENT_TIMESTAMP,'{}'::jsonb);
+      ALTER TABLE "DocumentPurgeAuthorization" ENABLE TRIGGER USER;
+      ALTER TABLE "DocumentPurgeClaim" DISABLE TRIGGER USER;
+      ALTER TABLE "DocumentPurgeClaim" ENABLE TRIGGER "DocumentPurgeClaim_calendar_guard";
+      INSERT INTO "DocumentPurgeClaim" (id,"organisationId","authorizationId","documentId","deletionId","actorUserId")
+        VALUES ('calendar-claim','retention-calendar','calendar-auth','calendar-doc','calendar-job','calendar-owner');
+      SELECT count(*) FROM "DocumentPurgeClaim" WHERE id='calendar-claim';
+      ROLLBACK;`;
+    sql(calendarClaim('2024-02-29 12:34:56.789'), /must wait for calendar-year retention expiry/);
+    assert.equal(sql(calendarClaim('2020-02-29 12:34:56.789')), '1');
+    assert.equal(sql(`SELECT count(*) FROM "DocumentPurgeClaim" WHERE id='calendar-claim';`), '0');
     proveCopyAuthority(sql, {kind:'Document',organisation:'retention-a',actor:'owner-a',foreignActor:'owner-b',authorization:'expired-authorization',scope:'BACKUP-SET-001',observationRevision:1});
     // The earlier primary-retention scenario deliberately left two approvals.
     // New original-plan copy evidence must reject that ambiguity until reviewed.
