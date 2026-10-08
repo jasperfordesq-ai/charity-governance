@@ -1,5 +1,15 @@
 # CharityPilot Full-Platform Remediation Audit
 
+> **8 October C01/DPO-05 restored-byte check, issue still OPEN:** The
+> restricted sandbox's signed-in Confluence download returned synthetic
+> attachment `att524289` (243 bytes), and its SHA-256 matched the original
+> upload digest. This establishes restored provider-byte equality for that
+> exact attachment only. No permanent purge or erasure worker ran, and
+> retained published Vault disposal, other copies/UNKNOWN outcomes,
+> controller policy, independent recovery and Nikita acceptance remain
+> unresolved. Private exact evidence:
+> `.charitypilot-private/c01-runtime/README.md`.
+
 > **8 October DPO Member-access checkpoint, issue still OPEN:** A controlled
 > Member invite was accepted in the reviewed private VM, and a read-only
 > database check plus Owner Team page confirmed the Member exists. The
