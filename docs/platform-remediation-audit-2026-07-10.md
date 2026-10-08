@@ -1,5 +1,13 @@
 # CharityPilot Full-Platform Remediation Audit
 
+> **8 October DPO-02 source mitigation, issue OPEN:** Local commit
+> `ebf72ebd` serializes browser sign-out with refresh under one cross-tab
+> Web Lock. Focused unit and isolated two-tab browser/database checks
+> passed, including zero synthetic replay events in the induced race.
+> The source is unpushed/undeployed and cannot retrospectively explain
+> the nine live replay events. Hosted retest, the connector event,
+> historical log gaps and independent incident review remain open.
+
 > **8 October restricted DB login evidence, scoped private VM:** On the
 > serving `96c8b1e8` release, a read-only pinned check proved actual API
 > and scheduler SQL login as `cp_runtime`, current role restrictions and

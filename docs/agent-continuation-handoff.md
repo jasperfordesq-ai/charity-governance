@@ -1,5 +1,17 @@
 # CharityPilot Agent Continuation Handoff
 
+> **8 October 21:37 UTC DPO-02 logout/refresh race, source local only:**
+> Browser refreshes already shared a cross-tab Web Lock; sign-out did not.
+> Local `master` commit `ebf72ebd` holds the same lock through logout and
+> noncredential completion signalling. A disposable PostgreSQL/Chromium
+> two-tab journey held the logout response after server revocation and
+> triggered a second-tab 401: zero refresh POSTs and zero new replay
+> events. Twenty-eight focused unit tests, web production build, edited
+> lint and E2E typecheck pass. The fix is **unpushed and undeployed**.
+> The nine historical events, particularly the MCP connector event,
+> remain unattributed and require risk-owner/Nikita incident disposition.
+> Private receipt: `.charitypilot-private/replay-logout-lock-2026-10-08.md`.
+
 > **8 October 21:28 UTC restricted runtime database role, private VM:** A
 > pinned read-only check on serving green `96c8b1e8` confirmed active
 > API/web/scheduler configuration names `cp_runtime`, and actual SQL
