@@ -328,6 +328,16 @@ test('retention policy and recovery-state upgrade preserve documents and enforce
     for (const name of names.filter(name => name > '20260930070000_document_purge_disposition')) {
       sql(readFileSync(`${migrations}/${name}/migration.sql`, 'utf8'));
     }
+    // Exercise the explicit activation fence independently of the existing
+    // period constraint. A later schema expansion alone must not let a new
+    // mode through to day-only disposal guards.
+    sql(`BEGIN; ALTER TABLE "DataRetentionPolicyRevision" DROP CONSTRAINT "DataRetentionPolicyRevision_period_valid";
+      INSERT INTO "DataRetentionPolicyRevision" (id,"organisationId","recordClass",revision,"retentionMode","recoveryDays","createdById")
+      VALUES ('unknown-calendar-mode','retention-a','VAULT_DRAFT',200,'AFTER_CALENDAR_YEARS',30,'owner-a');
+      ROLLBACK;`, /Unsupported retention policy mode/);
+    assert.equal(sql(`SELECT count(*) FROM "DataRetentionPolicyRevision" WHERE id='unknown-calendar-mode';`), '0');
+    sql(`BEGIN; INSERT INTO "DataRetentionPolicyRevision" (id,"organisationId","recordClass",revision,"retentionMode","recoveryDays","createdById")
+      VALUES ('known-review-mode','retention-a','VAULT_DRAFT',200,'REVIEW_REQUIRED',30,'owner-a'); ROLLBACK;`);
     proveCopyAuthority(sql, {kind:'Document',organisation:'retention-a',actor:'owner-a',foreignActor:'owner-b',authorization:'expired-authorization',scope:'BACKUP-SET-001',observationRevision:1});
     // The earlier primary-retention scenario deliberately left two approvals.
     // New original-plan copy evidence must reject that ambiguity until reviewed.

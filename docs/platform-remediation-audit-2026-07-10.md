@@ -1,5 +1,13 @@
 # CharityPilot Full-Platform Remediation Audit
 
+> **8 October 23:45 Dublin P04 accidental-activation gate:** Local
+> `20261008030000_retention_policy_mode_fence` refuses unknown policy modes
+> even if the old period constraint is relaxed. Full disposable PostgreSQL
+> retention migration proof passed with a rolled-back direct-write probe.
+> The calendar-year mode is still not implemented or approved; every
+> document, complaint and copy direct-write cutoff guard remains an OPEN
+> prerequisite to removing this fence. No live migration was applied.
+
 > **8 October 23:42 Dublin P04 issue OPEN:** Local PostgreSQL cutoff
 > function passed disposable PG16 leap-day/exact-boundary/invalid-input
 > proof; API removal paths now fail closed on unknown modes, with focused

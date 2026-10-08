@@ -1,5 +1,16 @@
 # CharityPilot Agent Continuation Handoff
 
+> **8 October 23:45 Dublin P04 activation fence:** Forward migration
+> `20261008030000_retention_policy_mode_fence` prevents creation of an
+> unknown retention mode independently of the original policy constraint.
+> The full disposable PostgreSQL retention migration test passed after
+> deliberately dropping that old constraint inside a rolled-back synthetic
+> attempt: `AFTER_CALENDAR_YEARS` still failed, while an existing
+> `REVIEW_REQUIRED` policy succeeded. A future calendar mode must replace
+> this fence only in the same releasable change that updates every direct
+> SQL disposal guard and API/review consumer. This is local source proof,
+> not approved policy, deployed migration or live erasure support.
+
 > **8 October 23:42 Dublin P04 safe preparation, source only:** Isolated
 > `retention-calendar-years` checkout adds a PostgreSQL UTC calendar-year
 > cutoff helper, with disposable PostgreSQL 16 leap-day, millisecond and
