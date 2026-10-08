@@ -1,5 +1,13 @@
 # CharityPilot Agent Continuation Handoff
 
+> **8 October 23:38 Dublin P04 calendar parity:** Disposable PostgreSQL
+> 16 `make_interval(years => 6)` and local UTC helper both yield
+> 2030-02-28 for a 2024-02-29 anchor at the same time; `365*6` days yields
+> 2030-02-27. Private `calendar-retention-parity-and-guard-map-2026-10-08.md`
+> lists the effective document, complaint and copy database guards plus
+> API/UI consumers. A year mode must not become creatable until all guards
+> reject premature direct writes. No live DB, policy or disposal changed.
+
 > **8 October 23:37 Dublin P04 calendar primitive, source only:** Local
 > commit `3b9e12f4` adds a UTC whole-year anniversary calculation using
 > the shared civil-date clamp. API build and 3/3 focused tests passed,

@@ -1,5 +1,12 @@
 # CharityPilot Full-Platform Remediation Audit
 
+> **8 October 23:38 Dublin P04 calendar proof, issue OPEN:** A disposable
+> PostgreSQL 16 arithmetic probe confirmed leap-day year-clamp parity with
+> the inert helper and a one-day difference from `365*6` days. Private
+> guard map names every current day-based SQL/API/UI enforcement point.
+> Year-based policy creation, direct-write safeguards, migration proof,
+> controller decision, release and Nikita acceptance are still missing.
+
 > **8 October 23:37 Dublin P04 prerequisite only:** Local `3b9e12f4`
 > provides a tested UTC calendar-year cutoff helper (API build, three
 > focused tests). It is not yet an operational retention mode: current
