@@ -1,5 +1,12 @@
 # CharityPilot Full-Platform Remediation Audit
 
+> **9 October C1 bell replay reduction, OPEN:** A local NEXUS branch commit
+> `3cbea98e8` deduplicates staff bells and associated push on forced
+> registration-event replay using a persistent recipient key; disposable
+> MariaDB tests passed 4/145. This does not repair email partial-recipient
+> retry or provider-UNKNOWN outcomes. The branch is not merged, pushed or
+> deployed, and C1 still needs hosted proof and risk-owner/DPO review.
+
 > **9 October C1 retry gap, OPEN:** Disposable MariaDB/Mailpit reproduction
 > confirmed that a failed Admin recipient is skipped on ordinary registration
 > event replay, while clearing the whole-event cache duplicates successful

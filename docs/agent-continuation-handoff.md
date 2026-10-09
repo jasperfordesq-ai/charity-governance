@@ -1,5 +1,14 @@
 # CharityPilot Agent Continuation Handoff
 
+> **9 October C1 bell/push replay repair, local only:** NEXUS isolated
+> `codex/c1-pending-profile` commit `3cbea98e8` uses the existing unique
+> per-recipient notification key so forced event replay cannot add a second
+> staff bell or trigger another push. Disposable real-MariaDB tests passed
+> 4/145. Branch is unmerged, unpushed and undeployed. The email channel still
+> has a confirmed partial-recipient retry gap and ambiguous provider outcome;
+> C1 remains OPEN. Exact private receipt:
+> `.charitypilot-private/c1-bell-replay-repair-2026-10-09.md`.
+
 > **9 October C1 failed-recipient retry, local reproduction:** An isolated
 > synthetic MariaDB/Mailpit run confirmed that the NEXUS admin-registration
 > listener marks an event done after one recipient fails: ordinary replay
