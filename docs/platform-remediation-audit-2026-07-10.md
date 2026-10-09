@@ -1,5 +1,12 @@
 # CharityPilot Full-Platform Remediation Audit
 
+> **9 October 00:39 UTC DPO-02, OPEN:** Read-only private-VM replay
+> metadata remains nine rows, latest 30 September 08:54 UTC, with no
+> new table row. This is bounded monitoring evidence only. Historical
+> client/token attribution, especially the 23 September connector
+> event, and risk-owner/Nikita disposition remain unresolved. The
+> prospective client mitigations are still local and undeployed.
+
 > **9 October ~01:37 Dublin privileged MFA page boundary, OPEN:**
 > Source now redirects verified, unenrolled public Owner/Admin sessions
 > at the Next.js proxy before protected pages render. The setup path

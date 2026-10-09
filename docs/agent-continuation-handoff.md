@@ -1,5 +1,16 @@
 # CharityPilot Agent Continuation Handoff
 
+> **9 October 00:39 UTC DPO-02 live recheck, OPEN:** The clean private
+> VM still serves `96c8b1e8`. A guarded local-Unix-Docker, PostgreSQL
+> `BEGIN READ ONLY` metadata query returned nine historical
+> `SESSION_REPLAY_DETECTED` rows, latest 30 September 08:54 UTC, with
+> no newer row in that table. The old seven lack decisive diagnostics;
+> the two later WEB rows retain 137/134 ms prior-LOGOUT gaps; the
+> connector event remains unattributed. The query printed no subject
+> or credential identifier. Exact private receipt:
+> `replay-read-only-recheck-2026-10-09.md`. Risk-owner and Nikita
+> incident disposition remains OPEN; local client fixes are undeployed.
+
 > **9 October ~01:37 Dublin public MFA page-boundary follow-up, OPEN:**
 > The API `/auth/me` now sends a no-store setup header for a verified,
 > unenrolled Owner/Admin under required public MFA. The Next.js protected
