@@ -1,5 +1,14 @@
 # CharityPilot Full-Platform Remediation Audit
 
+> **9 October 01:07 UTC P04/P05 four-class policy freeze, OPEN:**
+> Local API and SQL now refuse ordinary retention-policy changes for
+> `VAULT_DRAFT`/`DOCUMENT_COPY` under document recovery binding and
+> `COMPLAINT`/`COMPLAINT_COPY` under complaint binding. Full API
+> 2,690 plus 11 PostgreSQL and two disposable retention proofs pass.
+> CI now runs those proofs. No binding was activated or deployed;
+> all-writer execution, replay, independent custody, approved policy
+> terms, live/host-loss checks and Nikita acceptance remain OPEN.
+
 > **9 October 00:57 UTC C1 adjacent staff-exemption fix, OPEN:**
 > NEXUS local `621a3c415` requires active, approved Admin-tier
 > viewer status before shared member-profile privacy exemption.

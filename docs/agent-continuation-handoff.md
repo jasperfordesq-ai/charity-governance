@@ -1,5 +1,17 @@
 # CharityPilot Agent Continuation Handoff
 
+> **9 October 01:07 UTC P04/P05 policy-writer boundary, OPEN:** A
+> local forward migration and `RetentionPolicyService` guard now
+> refuse policy revisions/withdrawals for all four supported classes
+> after the corresponding document or complaint recovery binding.
+> The full API package passed 2,690 tests plus 11 real PostgreSQL
+> migration tests; the combined disposable retention proof passed
+> 2/2 and is wired to CI. This is inactive source, not a live binding,
+> controller policy, complete writer/replay fence or independent
+> recovery acceptance. Both available CharityPilot browser tabs were
+> at `/login` at 00:58 UTC; live Member checks wait for Jasper.
+> Private receipt: `recovery-bound-policy-four-class-2026-10-09.md`.
+
 > **9 October 00:57 UTC C1-adjacent profile Admin exemption, OPEN:**
 > NEXUS isolated local `621a3c415` makes shared profile visibility
 > grant its Admin exemption only to active, approved staff. A
