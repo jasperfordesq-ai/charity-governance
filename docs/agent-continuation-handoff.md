@@ -1,5 +1,14 @@
 # CharityPilot Agent Continuation Handoff
 
+> **9 October 01:43 UTC P05/P07 complaint resolution writer, OPEN:**
+> Local forward SQL and API now refuse `ComplaintResolutionEvidence`
+> recording or withdrawal after complaint recovery binding. A focused
+> 35/35 suite, direct PostgreSQL migration proof 1/1, and full API
+> 2,701 plus 11 PostgreSQL tests passed. Complaint record edits and
+> existing-fact activation replay remain unresolved. This is inactive
+> local source, not independent recovery or Nikita acceptance. See
+> private `recovery-bound-complaint-resolution-2026-10-09.md`.
+
 > **9 October 01:36 UTC C1 adjacent private-profile visibility, OPEN:**
 > In isolated NEXUS branch `codex/c1-pending-profile`, local commit
 > `336b6f1a1` fixes red-tested directory/search disclosure of a

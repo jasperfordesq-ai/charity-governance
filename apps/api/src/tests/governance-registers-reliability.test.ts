@@ -1189,6 +1189,7 @@ test('complaint resolution API binds actor and charity, rejects injected fields 
       assert.deepEqual(where, { id: 'complaint-1', organisationId: 'org-1', removedAt: null });
       return { id: 'complaint-1', revision: recordRevision, status: 'CLOSED', receivedDate: new Date('2026-01-01') };
     } },
+    complaintRecoveryEnforcement: { findUnique: async () => null },
     complaintResolutionEvidence: {
       findFirst: async () => evidenceRevision ? { revision: evidenceRevision, state: 'RECORDED' } : null,
       create: async ({ data }: { data: Record<string, unknown> }) => { created.push(data); evidenceRevision++; return data; },
@@ -1259,6 +1260,7 @@ test('complaint resolution refuses missing records, invalid dates, open records 
   const tx = {
     $queryRaw: async () => [{ id: 'org-1' }],
     complaintRecord: { findFirst: async () => complaint },
+    complaintRecoveryEnforcement: { findUnique: async () => null },
     complaintResolutionEvidence: { findFirst: async () => null, create: async () => { writes++; } },
   };
   const service = new GovernanceRegisterService({ $transaction: async (work: (value: unknown) => Promise<unknown>) => work(tx) } as never);
@@ -1274,6 +1276,43 @@ test('complaint resolution refuses missing records, invalid dates, open records 
   }
   await assert.rejects(service.recordComplaintResolutionEvidence({ ...input, state: 'WITHDRAWN' }), /no current recorded/);
   assert.equal(writes, 0);
+});
+
+test('bound complaint recovery refuses both resolution decisions before a write', async () => {
+  let writes = 0;
+  const tx = {
+    $queryRaw: async () => [{ id: 'org-1' }],
+    complaintRecord: { findFirst: async () => ({ id: 'complaint-1', revision: 1, status: 'CLOSED',
+      receivedDate: new Date('2026-01-01') }) },
+    complaintRecoveryEnforcement: { findUnique: async () => ({ id: 'binding' }) },
+    complaintResolutionEvidence: { findFirst: async () => ({ revision: 1, state: 'RECORDED' }),
+      create: async () => { writes++; } },
+  };
+  const service = new GovernanceRegisterService({ $transaction: async (work: (value: unknown) => Promise<unknown>) => work(tx) } as never);
+  const input = { organisationId: 'org-1', complaintId: 'complaint-1', actorUserId: 'u1',
+    expectedRecordRevision: 1, expectedEvidenceRevision: 1, state: 'WITHDRAWN' as const,
+    evidenceRef: 'CASE-001', reason: 'Reviewed controlled case evidence' };
+  for (const state of ['WITHDRAWN', 'RECORDED'] as const) {
+    await assert.rejects(service.recordComplaintResolutionEvidence({ ...input, state,
+      ...(state === 'RECORDED' ? { resolvedAt: '2026-01-02T10:00:00.000Z' } : {}) }),
+    { statusCode: 409, code: 'COMPLAINT_RESOLUTION_RECOVERY_REQUIRED' });
+  }
+  assert.equal(writes, 0);
+});
+
+test('resolution binding race returns a safe conflict without database detail', async () => {
+  const error = Object.assign(new Error('Complaint resolution requires independent recovery authority SECRET'),
+    { name: 'PrismaClientUnknownRequestError' });
+  const service = new GovernanceRegisterService({ $transaction: async () => { throw error; } } as never);
+  await assert.rejects(service.recordComplaintResolutionEvidence({ organisationId: 'org-1',
+    complaintId: 'complaint-1', actorUserId: 'u1', expectedRecordRevision: 1,
+    expectedEvidenceRevision: 0, state: 'RECORDED', resolvedAt: '2026-01-02T10:00:00.000Z',
+    evidenceRef: 'CASE-001', reason: 'Reviewed controlled case evidence' }), (caught: any) => {
+    assert.equal(caught.statusCode, 409);
+    assert.equal(caught.code, 'COMPLAINT_RESOLUTION_RECOVERY_REQUIRED');
+    assert.doesNotMatch(caught.message, /SECRET/);
+    return true;
+  });
 });
 
 test('complaint resolution history is bounded and tenant-scoped after source removal', async () => {

@@ -1,5 +1,12 @@
 # CharityPilot Full-Platform Remediation Audit
 
+> **9 October 01:43 UTC P05/P07 resolution evidence, OPEN:** The local
+> API and SQL fence resolution recording/withdrawal after complaint
+> recovery binding. Focused 35/35, direct PostgreSQL 1/1 and full API
+> 2,701 plus 11 PostgreSQL tests passed. Existing evidence and source
+> complaint edits have no independent replay proof; policy, release,
+> hosted checks and Nikita review remain open. See private receipt.
+
 > **9 October 01:36 UTC C1 adjacent F-574, OPEN:** The separate NEXUS
 > branch `codex/c1-pending-profile` locally fixes a reproduced
 > private-profile directory/search bypass for an active unapproved

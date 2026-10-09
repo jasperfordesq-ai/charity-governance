@@ -9,7 +9,7 @@ import { validateLocalDockerEndpoint } from './personal-server-docker-boundary.m
 const migrations = fileURLToPath(new URL('../apps/api/prisma/migrations/', import.meta.url));
 const image = 'postgres@sha256:5660c2cbfea50c7a9127d17dc4e48543eedd3d7a41a595a2dfa572471e37e64c';
 
-test('bound recovery freezes policy classes and document holds at the database boundary', { timeout: 240_000 }, async () => {
+test('bound recovery freezes policy, hold and complaint resolution decisions at the database boundary', { timeout: 240_000 }, async () => {
   const context = spawnSync('docker', ['context', 'inspect', '--format', '{{json .Endpoints.docker}}'],
     { encoding: 'utf8', timeout: 10_000 });
   assert.equal(context.status, 0, context.stderr);
@@ -82,6 +82,25 @@ test('bound recovery freezes policy classes and document holds at the database b
     query(`INSERT INTO "ComplaintRecoveryEnforcement"
       (id,"organisationId","installationId","writerId","writerEpoch")
       VALUES ('complaint-binding','complaint-org','synthetic-installation','synthetic-writer',1);`);
+    query(`INSERT INTO "ComplaintRecord" (id,"organisationId","receivedDate",summary,status,"updatedAt") VALUES
+      ('bound-complaint','complaint-org','2026-01-01','Synthetic closed complaint','CLOSED',CURRENT_TIMESTAMP),
+      ('free-complaint','free-org','2026-01-01','Synthetic closed complaint','CLOSED',CURRENT_TIMESTAMP);`);
+    const resolution = (org, complaint, owner) => `INSERT INTO "ComplaintResolutionEvidence"
+      (id,"organisationId","complaintId",revision,"recordRevision",state,"resolvedAt",
+        "evidenceRef",reason,"actorUserId") VALUES
+      ('${complaint}-resolution','${org}','${complaint}',1,1,'RECORDED','2026-01-02',
+        'SYNTHETIC-RESOLUTION-001','Reviewed synthetic resolution evidence','${owner}');`;
+    query(resolution('complaint-org', 'bound-complaint', 'complaint-owner'),
+      /Complaint resolution requires independent recovery authority/);
+    query(`INSERT INTO "ComplaintResolutionEvidence"
+      (id,"organisationId","complaintId",revision,"recordRevision",state,"resolvedAt",
+        "evidenceRef",reason,"actorUserId") VALUES
+      ('bound-complaint-withdraw','complaint-org','bound-complaint',2,1,'WITHDRAWN',NULL,
+        'SYNTHETIC-RESOLUTION-002','Reviewed synthetic resolution withdrawal','complaint-owner');`,
+      /Complaint resolution requires independent recovery authority/);
+    query(resolution('free-org', 'free-complaint', 'free-owner'));
+    assert.equal(query(`SELECT count(*) FROM "ComplaintResolutionEvidence" WHERE "complaintId"='bound-complaint';`), '0');
+    assert.equal(query(`SELECT count(*) FROM "ComplaintResolutionEvidence" WHERE "complaintId"='free-complaint';`), '1');
     // Each insert has a complete row shape but a deliberately nonexistent
     // authorization. The A_* gate must run first and reject the bound family;
     // this tests direct SQL even when callers bypass the API.
