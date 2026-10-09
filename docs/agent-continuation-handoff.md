@@ -1,5 +1,16 @@
 # CharityPilot Agent Continuation Handoff
 
+> **9 October ~07:43 Dublin live restricted-role recheck:** A guarded
+> read-only VM script on serving green `96c8b1e8` exited zero:
+> API/web/scheduler configure `cp_runtime`, API/scheduler actual SQL
+> `current_user` is `cp_runtime`, 11/11 role restrictions passed,
+> no memberships or public object/database ownership, no unexpected
+> executable SECURITY DEFINER, and all 12 protected tables have
+> SELECT but no broad write. Exact private output is
+> `.charitypilot-private/runtime-role-morning-20261009.txt`.
+> Recheck after the pending migrations/release; this is private-VM
+> evidence, not public-production or Nikita acceptance.
+
 > **9 October 07:40 Dublin DPO replay recheck:** Guarded read-only SQL
 > on the clean serving `96c8b1e8` VM still returned nine historical
 > `SESSION_REPLAY_DETECTED` rows, latest 30 September 08:54:30 UTC.
