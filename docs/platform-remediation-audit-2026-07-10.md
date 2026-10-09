@@ -1,5 +1,15 @@
 # CharityPilot Full-Platform Remediation Audit
 
+> **9 October C1 ambiguous-primary fallback, OPEN:** NEXUS local
+> `b7386e811` blocks SMTP fallback after an unconfirmed Postmark/Gmail
+> `admin_new_registration` attempt; the ledger holds UNKNOWN. Synthetic
+> mailer tests prove no second SMTP call for that category and preserve
+> unrelated fallback. Disposable MariaDB suite passed 45/145. Branch
+> unmerged/unpushed/undeployed. Typed outcomes, UNKNOWN/claimed
+> reconciliation, retention, hosted exact-build proof, original closure
+> evidence and DPO/risk-owner decision remain OPEN. See private
+> `c1-primary-provider-no-fallback-2026-10-09.md`.
+
 > **9 October C1 captured-row recovery, OPEN:** NEXUS local `69702e326`
 > schedules bounded recovery of never-attempted staff-alert intent. It
 > checks current registrant and staff eligibility, cancels no-longer-

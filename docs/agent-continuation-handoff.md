@@ -1,5 +1,15 @@
 # CharityPilot Agent Continuation Handoff
 
+> **9 October C1 provider-fallback boundary, local only:** NEXUS isolated
+> `b7386e811` withholds SMTP fallback for unconfirmed Postmark/Gmail
+> registration staff-alert attempts. The per-recipient row remains UNKNOWN
+> rather than issuing a second automatic provider call. Other categories
+> retain fallback. Disposable MariaDB suite passed 45 tests/145 assertions;
+> exact retained log/hash and limits: private
+> `.charitypilot-private/c1-primary-provider-no-fallback-2026-10-09.md`.
+> Branch unmerged/unpushed/undeployed. Typed outcome, operator/provider
+> reconciliation, retention, hosted proof and C1/Nikita disposition OPEN.
+
 > **9 October C1 lost-event recovery, local only:** NEXUS isolated commit
 > `69702e326` schedules bounded recovery of never-attempted captured
 > staff-alert rows, rechecks registrant/staff eligibility and cancels
