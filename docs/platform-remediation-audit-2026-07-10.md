@@ -1,5 +1,12 @@
 # CharityPilot Full-Platform Remediation Audit
 
+> **9 October complaint source transport, OPEN:** Local `2e21d2eb`
+> provides scoped S3 candidate read/create methods for encrypted case
+> facts. Fake-provider conditional-write, bucket-owner, KMS and operation
+> scope checks pass (six focused tests; API build passes). No real provider
+> or independent head, approved retention, complete baseline, replay,
+> all-writer enforcement, release or Nikita acceptance is proved.
+
 > **9 October complaint source readback, OPEN:** Local `1d80444b`
 > exercises immutable candidate publication/retry and exact digest-bound
 > reading with a synthetic store (five focused tests, API build pass).

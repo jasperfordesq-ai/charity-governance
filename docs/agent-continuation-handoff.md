@@ -1,5 +1,13 @@
 # CharityPilot Agent Continuation Handoff
 
+> **9 October ~03:11 Dublin complaint source S3 candidate, OPEN:** Local
+> `2e21d2eb` adds a separate scoped object prefix for encrypted source
+> candidates, with structural binding checks and the existing explicit
+> bucket-owner, conditional-create and SSE-KMS metadata rules. Fake-S3
+> transport, API build and six focused tests pass. No real AWS contact,
+> controller-approved data custody, current head, source-writer binding,
+> baseline, replay or host-loss acceptance. See private source receipt.
+
 > **9 October ~03:10 Dublin complaint candidate readback, OPEN:** Local
 > `1d80444b` adds atomic create-if-absent candidate semantics, readback
 > after creation and an expected-digest read. A synthetic lost-acknowledgement
