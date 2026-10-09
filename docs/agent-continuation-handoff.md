@@ -1,5 +1,15 @@
 # CharityPilot Agent Continuation Handoff
 
+> **9 October ~03:04 Dublin C1-adjacent sender eligibility, OPEN:**
+> Separate NEXUS isolated branch `codex/c1-pending-profile` commit
+> `19c17b6a9` checks both locked connection participants are active,
+> approved and in the same tenant. An active unapproved Admin's synthetic
+> request returned 201 before the fix; after it, 422 with no row. Focused
+> red/green and disposable 32-test/75-assertion controller suite passed.
+> Provisional NEXUS F-576; branch 13 ahead, unpushed/unmerged/undeployed.
+> This is not hosted token, original C1 admin-email, or Nikita acceptance
+> evidence. See private `c1-unapproved-connection-sender-2026-10-09.md`.
+
 > **9 October 01:54 UTC C1 adjacent stale ranked-cache visibility,
 > OPEN:** Separate NEXUS isolated branch `codex/c1-pending-profile`
 > commit `d1e55c525` rechecks a ranked candidate's current privacy,

@@ -1,5 +1,12 @@
 # CharityPilot Full-Platform Remediation Audit
 
+> **9 October C1-adjacent F-576, OPEN:** NEXUS isolated local
+> `19c17b6a9` refuses connection requests from active unapproved Admin
+> accounts after locking both users. Synthetic route reproduced HTTP 201
+> before and HTTP 422 after; full connection controller suite passed
+> 32 tests/75 assertions on disposable MariaDB. No push, hosted replay,
+> original admin-email verification or DPO acceptance. C1 stays OPEN.
+
 > **9 October 01:54 UTC C1 adjacent F-575, OPEN:** A three-minute
 > cached CommunityRank ID could reveal a profile after the member
 > became private or ineligible. Separate NEXUS local commit
