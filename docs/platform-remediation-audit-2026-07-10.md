@@ -1,5 +1,15 @@
 # CharityPilot Full-Platform Remediation Audit
 
+> **9 October C1 redacted review, OPEN:** NEXUS local `a90051123` adds
+> a read-only, tenant-required host review of unresolved staff-email
+> states and exact mail-log counts without recipient email/name/body or
+> claim token. Disposable MariaDB suite passed 50/178; branch unmerged/
+> unpushed/undeployed. A CLI evidence inventory is not a DPO decision,
+> provider proof or authorised retry. Typed non-acceptance, audited
+> disposition, retention, hosted checks, historical closure receipt and
+> DPO/risk-owner acceptance remain OPEN. See private
+> `c1-redacted-review-command-2026-10-09.md`.
+
 > **9 October C1 exact mail receipt, OPEN:** NEXUS local `902517daa`
 > reconciles an UNKNOWN row to accepted only from one exact positive
 > application mail-log receipt, recording its evidence ID/time without

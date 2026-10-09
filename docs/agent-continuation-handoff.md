@@ -1,5 +1,15 @@
 # CharityPilot Agent Continuation Handoff
 
+> **9 October C1 redacted host review, local only:** NEXUS isolated
+> `a90051123` adds a read-only required-tenant CLI for unresolved
+> per-recipient delivery states and exact mail-log counts, omitting names,
+> recipient email, rendered body and claim token. Disposable MariaDB suite
+> passed 50 tests/178 assertions; exact retained log/hash and limits in
+> private `.charitypilot-private/c1-redacted-review-command-2026-10-09.md`.
+> Branch unmerged/unpushed/undeployed. Provider evidence, audited human
+> disposition/retry, typed non-acceptance, retention, hosted proof and
+> C1/Nikita decision remain OPEN.
+
 > **9 October C1 exact positive mail-log receipt, local only:** NEXUS
 > isolated `902517daa` reconciles UNKNOWN staff-email rows to accepted
 > only from one exact `sent`/`delivered` application mail-log receipt,
