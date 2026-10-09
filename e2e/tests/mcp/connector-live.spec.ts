@@ -966,10 +966,13 @@ test.describe('Connector session posture', () => {
 
   test('a write-level session is allowed the same request, so the refusal was the level', async () => {
     const credentialFile = credentialFileFor('posture-write');
+    // Earlier lifecycle and data-gate cases spend the first Owner's sign-in
+    // budget. This already seeded second-charity Owner has the same route
+    // authority while preserving the real per-email limiter in this suite.
     const result = await connectConnector({
       apiUrl: API_BASE_URL,
-      email: fixture.owner.email,
-      password: fixture.owner.password,
+      email: fixture.orgB.email,
+      password: fixture.orgB.password,
       credentialFile,
       accessLevel: 'write',
     });

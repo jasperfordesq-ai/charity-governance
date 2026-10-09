@@ -1,5 +1,13 @@
 # CharityPilot Full-Platform Remediation Audit
 
+> **9 October full isolated E2E gate, OPEN live:** Current source passed
+> 245/245 Chromium tests after correcting two cross-test fixtures, with
+> 71/71 focused, 116/116 contract and E2E TypeScript checks also green.
+> The initial 208-pass/2-fail/35-unrun attempt is retained in the private
+> evidence. These are synthetic local checks, not hosted or DPO acceptance.
+> Live Member classification, genuine Board report approval, field/recipient
+> review, historical replay/C1 and approved retention/recovery remain open.
+
 > **9 October DPO retention/erasure isolated browser proof, OPEN policy:**
 > Current disposable Chromium journeys passed 3/3 for document recovery,
 > document primary purge and complaint primary purge. They exercise

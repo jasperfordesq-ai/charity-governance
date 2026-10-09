@@ -1,5 +1,19 @@
 # CharityPilot Agent Continuation Handoff
 
+> **9 October complete isolated browser gate, local only:** The full
+> current-source Chromium suite passed 245/245 after two test fixtures were
+> corrected. The first full attempt passed 208, failed two and left 35
+> unrun: the new minimised-export case reused a charity already populated
+> by an earlier compliance case, and a connector case exhausted the real
+> per-email sign-in limit after earlier tests. The export case now creates
+> its own verified synthetic Owner/charity; the connector case uses its
+> already seeded second-charity Owner. The focused rerun passed 71/71,
+> the complete rerun passed 245/245, E2E TypeScript and all 116 contract
+> checks passed. The disposable stack was removed. These results do not
+> establish hosted deployment, real Member/Owner acceptance, real Board
+> approval or DPO sign-off. Private logs and the morning handoff retain
+> the failed first attempt and final run.
+
 > **9 October isolated disposal browser gate, local only:** On clean
 > `d828f497`, a fresh disposable stack passed all three existing browser
 > journeys: draft Deleted Items/byte-identical restricted restore with

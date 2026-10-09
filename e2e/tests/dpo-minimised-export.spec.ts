@@ -1,12 +1,20 @@
-import { test, expect } from '../fixtures';
-import { withDb } from '../helpers/db';
+import { test, expect, uniqueEmail, TEST_PASSWORD } from '../fixtures';
+import { createAuthenticatedStorageState, createVerifiedOwner, withDb } from '../helpers/db';
 import { gotoWithDevServerRetry } from '../helpers/navigation';
 
 const year = new Date().getFullYear();
 
 test.describe('DPO minimised export', () => {
-  test('a recorded synthetic Board approval exposes the minimised draft without internal narrative', async ({ owner, ownerPage }) => {
+  test('a recorded synthetic Board approval exposes the minimised draft without internal narrative', async ({ newFencedContext }) => {
     test.setTimeout(120_000);
+    const owner = await createVerifiedOwner({
+      email: uniqueEmail('dpo-minimised-export'), password: TEST_PASSWORD,
+      name: 'Synthetic Report Owner', organisationName: 'Isolated Synthetic Report Charity',
+    });
+    const context = await newFencedContext({
+      storageState: await createAuthenticatedStorageState({ ...owner, role: 'OWNER' }),
+    });
+    const ownerPage = await context.newPage();
     const marker = Date.now();
     const privateAction = `SYNTHETIC_INTERNAL_ACTION_${marker}`;
     const privateEvidence = `SYNTHETIC_INTERNAL_EVIDENCE_${marker}`;
