@@ -1,5 +1,15 @@
 # CharityPilot Full-Platform Remediation Audit
 
+> **9 October C1 rebased local retest, OPEN:** NEXUS C1 work was rebased
+> onto a newer origin/main and its changelog notes restored to Unreleased
+> (`af8e90f94`). On that exact rebased code, 32 synthetic captured notices
+> passed privacy checks and a disposable MariaDB suite passed 232 tests/
+> 759 assertions with 12 existing skips. Three more upstream commits
+> appeared during the run; branch is 25 ahead/3 behind, unmerged/unpushed/
+> undeployed. No live C1 verification row or risk status changed. Exact
+> hashes and limits: private
+> `.charitypilot-private/c1-current-main-rebase-and-retest-2026-10-09.md`.
+
 > **9 October original C1 privacy finding, OPEN:** Nikita asked for dated
 > verification that admin signup notices no longer disclose registrant
 > name/email. The 2 May NEXUS source fix is in isolated local `b1acf9554`;

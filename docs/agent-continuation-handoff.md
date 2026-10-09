@@ -1,5 +1,16 @@
 # CharityPilot Agent Continuation Handoff
 
+> **9 October C1 branch rebase and retest, local only:** Isolated NEXUS C1
+> work was rebased onto a newer `origin/main`; its release notes were
+> corrected into `[Unreleased]` at local `af8e90f94`. Fresh disposable
+> Mailpit capture passed 32/32 notice privacy checks and scoped MariaDB
+> regression passed 232 tests/759 assertions (12 existing skips). Origin
+> advanced three further commits during testing; branch is 25 ahead/
+> 3 behind, unmerged/unpushed/undeployed. The exact tested code, hashes,
+> limits and recovery ref are in private
+> `.charitypilot-private/c1-current-main-rebase-and-retest-2026-10-09.md`.
+> Live C1 is still OPEN; hosted and independent verification remain.
+
 > **9 October original C1 privacy scope, OPEN:** The C1 finding concerns
 > registrant particulars in admin signup notices and the missing dated
 > verification of the earlier fix. The 2 May NEXUS source fix is present
