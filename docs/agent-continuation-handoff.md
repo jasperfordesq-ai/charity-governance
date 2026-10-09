@@ -1,5 +1,17 @@
 # CharityPilot Agent Continuation Handoff
 
+> **9 October Member/DPO isolated browser gate, local only:** A disposable
+> current-source Chromium run passed `authz.spec.ts` and
+> `dpo-review-navigation.spec.ts` together, 23/23. The first run found
+> two stale Confluence-copy fixtures: newer SQL correctly rejects a
+> publication created without a live same-charity document. Each fixture
+> now creates the source, records the copy, then removes the source to
+> exercise the historical missing-Vault case. Focused 2/2 and full 23/23
+> reruns passed. The ordinary document/compliance smoke also passed 3/3,
+> but that smoke does not prove the minimised report. Live Member access,
+> approved snapshot/export audience, hosted deployment and Nikita review
+> remain separate gates.
+
 > **9 October isolated replay browser verification, local only:** Clean
 > `e56ef16c` built a disposable API/web/database stack with all current
 > migrations and ran `tests/dpo-session-replay-concurrency.spec.ts` in

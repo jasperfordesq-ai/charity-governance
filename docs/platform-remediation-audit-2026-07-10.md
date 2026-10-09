@@ -1,5 +1,14 @@
 # CharityPilot Full-Platform Remediation Audit
 
+> **9 October DPO access/copy-review local browser proof, OPEN live:** The
+> current isolated Chromium Member authorization and DPO navigation suite
+> passed 23/23 after two historical orphan-copy fixtures were updated to
+> satisfy the newer same-charity source insert guard. It covers synthetic
+> Member restricted/download behavior, file-content assessment, audit
+> navigation, hold and Confluence-copy review. The live retained Member
+> session, real-record classifications, genuine approved snapshot and
+> minimised export recipient/field acceptance remain unverified.
+
 > **9 October DPO replay local browser proof, OPEN for hosted review:** The
 > current `e56ef16c` isolated Chromium replay suite passed all 8 tests
 > against fresh API/web/database images and was cleaned up. This checks
