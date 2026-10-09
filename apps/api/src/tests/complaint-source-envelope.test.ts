@@ -2,7 +2,8 @@ import assert from 'node:assert/strict';
 import { randomBytes } from 'node:crypto';
 import { test } from 'node:test';
 import { prepareComplaintSourceFact } from '../services/complaint-source-fact.js';
-import { openComplaintSourceFact, sealComplaintSourceFact } from '../services/complaint-source-envelope.js';
+import { openComplaintSourceFact, preserveComplaintSourceCandidate,
+  readVerifiedComplaintSourceFact, sealComplaintSourceFact } from '../services/complaint-source-envelope.js';
 import type { RecoveryDataKeys } from '../services/recovery-preparation-envelope.js';
 
 const keyId = 'arn:aws:kms:eu-west-1:123456789012:key/11111111-1111-4111-8111-111111111111';
@@ -42,4 +43,42 @@ test('synthetic complaint source envelope hides narrative and binds exact contex
   const altered = JSON.parse(sealed.envelope);
   altered.sealed.ciphertext = 'AAAA' + altered.sealed.ciphertext.slice(4);
   await assert.rejects(() => openComplaintSourceFact(JSON.stringify(altered), f.context, f.keys), /could not be decrypted/);
+});
+
+test('unknown candidate write retries same identity and a trusted digest selects exact bytes', async () => {
+  const f = fixture(); let saved: string | null = null; let loseAck = true;
+  const store = { async readSourceFact() { return saved; },
+    async createSourceFact(_id: string, envelope: string) {
+      if (saved !== null) return false;
+      saved = envelope;
+      if (loseAck) { loseAck = false; throw new Error('lost acknowledgement'); }
+      return true;
+    } };
+  await assert.rejects(() => preserveComplaintSourceCandidate(f.body, f.context, f.keys, store), /unresolved/);
+  const original = saved!;
+  const retry = await preserveComplaintSourceCandidate(f.body, f.context, f.keys, store);
+  assert.equal(retry.replayed, true);
+  assert.equal(retry.bindingAuthorized, false);
+  assert.equal(saved, original);
+  assert.equal((await readVerifiedComplaintSourceFact(retry.digest, f.context, f.keys, store)).body, f.body);
+  await assert.rejects(() => readVerifiedComplaintSourceFact('0'.repeat(64), f.context, f.keys, store), /unresolved/);
+  const changed = JSON.parse(f.body); changed.record.summary = 'Different synthetic complaint';
+  await assert.rejects(() => preserveComplaintSourceCandidate(
+    prepareComplaintSourceFact(changed).body, f.context, f.keys, store), /unresolved/);
+  assert.equal(saved, original);
+  saved = null;
+  await assert.rejects(() => readVerifiedComplaintSourceFact(retry.digest, f.context, f.keys, store), /unresolved/);
+});
+
+test('competing candidate creators observe one immutable winning envelope', async () => {
+  const f = fixture(); let saved: string | null = null;
+  const store = { async readSourceFact() { return saved; },
+    async createSourceFact(_id: string, envelope: string) {
+      if (saved !== null) return false;
+      saved = envelope; return true;
+    } };
+  const results = await Promise.all([1, 2].map(() =>
+    preserveComplaintSourceCandidate(f.body, f.context, f.keys, store)));
+  assert.equal(results[0]!.digest, results[1]!.digest);
+  assert.equal(results.filter(result => result.replayed).length, 1);
 });

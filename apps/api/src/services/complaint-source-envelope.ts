@@ -75,3 +75,49 @@ export async function openComplaintSourceFact(envelope: string, rawContext: Reco
   } catch { throw new Error('Complaint source fact could not be decrypted'); }
   finally { if (Buffer.isBuffer(key)) key.fill(0); }
 }
+
+/** Immutable candidate storage. createSourceFact must be provider-atomic
+ * create-if-absent; a read-then-overwrite implementation is forbidden. */
+export interface ComplaintSourceCandidateObjects {
+  readSourceFact(operationId: string): Promise<string | null>;
+  createSourceFact(operationId: string, envelope: string): Promise<boolean>;
+}
+
+/** Candidate publication does not advance a trusted head or authorize a
+ * source mutation. Unknown writes must retry the same operation identity. */
+export async function preserveComplaintSourceCandidate(body: string,
+  rawContext: RecoveryEnvelopeContext, keys: RecoveryDataKeys, store: ComplaintSourceCandidateObjects) {
+  try {
+    const context = validateRecoveryEnvelopeContext(rawContext);
+    requireFact(body, context);
+    let envelope = await store.readSourceFact(context.operationId);
+    let replayed = envelope !== null;
+    if (envelope === null) {
+      const candidate = await sealComplaintSourceFact(body, context, keys);
+      replayed = !(await store.createSourceFact(context.operationId, candidate.envelope));
+      envelope = await store.readSourceFact(context.operationId);
+    }
+    if (envelope === null || (await openComplaintSourceFact(envelope, context, keys)).body !== body) {
+      throw new Error('conflict');
+    }
+    return { digest: createHash('sha256').update(envelope, 'utf8').digest('hex'),
+      replayed, bindingAuthorized: false as const };
+  } catch { throw new Error('Complaint source candidate preservation is unresolved'); }
+}
+
+/** The digest must come from separately authenticated history. Never derive it
+ * from the fetched envelope or a restored local database alone. */
+export async function readVerifiedComplaintSourceFact(expectedDigest: string,
+  rawContext: RecoveryEnvelopeContext, keys: RecoveryDataKeys,
+  store: Pick<ComplaintSourceCandidateObjects, 'readSourceFact'>) {
+  try {
+    const context = validateRecoveryEnvelopeContext(rawContext);
+    if (!/^[a-f0-9]{64}$/.test(expectedDigest)) throw new Error('digest');
+    const envelope = await store.readSourceFact(context.operationId);
+    if (envelope === null || Buffer.byteLength(envelope, 'utf8') > 65536
+      || createHash('sha256').update(envelope, 'utf8').digest('hex') !== expectedDigest) {
+      throw new Error('missing or replaced');
+    }
+    return await openComplaintSourceFact(envelope, context, keys);
+  } catch { throw new Error('Referenced complaint source fact is unresolved'); }
+}
