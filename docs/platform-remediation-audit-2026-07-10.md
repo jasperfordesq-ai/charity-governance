@@ -1,5 +1,14 @@
 # CharityPilot Full-Platform Remediation Audit
 
+> **9 October 00:42 UTC restricted database role, OPEN for review:**
+> Current private-VM API and scheduler SQL clients still use
+> `cp_runtime`; the pinned read-only role/grant checker passed its
+> 11 role assertions, no membership/ownership/unexpected definer
+> checks, and `12|0|12|0` protected-table check. This is live
+> point-in-time evidence for the deployed build `96c8b1e8` only.
+> Eight local migrations remain unapplied to that VM; future release
+> must repeat the check, and Nikita's independent review is pending.
+
 > **9 October 00:41 UTC DPO-04, OPEN:** The current compiled
 > minimised-review renderer reproduces both synthetic HTML samples
 > byte for byte and nine focused export tests pass. The clean private

@@ -1,5 +1,17 @@
 # CharityPilot Agent Continuation Handoff
 
+> **9 October 00:42 UTC restricted DB login, OPEN for DPO review:**
+> The pinned read-only live checker on clean green private VM
+> `96c8b1e8` verified active API and scheduler `current_user =
+> cp_runtime`, 11/11 role restrictions, zero memberships/ownership
+> and unexpected executable definers, and twelve protected tables
+> present/selectable with zero write-like role privileges. The web
+> configuration also names `cp_runtime`. Eight local SQL migrations
+> remain undeployed; repeat exact role/grant checks after any release.
+> This proves a point-in-time restricted login, not read-only database
+> operation or Nikita's independent acceptance. Private receipt:
+> `runtime-role-recheck-2026-10-09.md`.
+
 > **9 October 00:41 UTC DPO-04 current export prerequisite, OPEN:**
 > Clean local `d6d611d3` rebuilt the API; the compiled minimised
 > renderer reproduced both invented review HTML hashes exactly, and
