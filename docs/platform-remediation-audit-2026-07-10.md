@@ -1,5 +1,14 @@
 # CharityPilot Full-Platform Remediation Audit
 
+> **9 October C1 captured-row recovery, OPEN:** NEXUS local `69702e326`
+> schedules bounded recovery of never-attempted staff-alert intent. It
+> checks current registrant and staff eligibility, cancels no-longer-
+> eligible captured rows, and never auto-retries claimed or UNKNOWN rows.
+> Disposable MariaDB suite passed 43/133. Branch unmerged/unpushed/
+> undeployed. Typed provider outcomes, safe reconciliation, retention,
+> hosted proof, original C1 closure evidence and DPO/risk-owner decision
+> remain OPEN. See private `c1-captured-recovery-2026-10-09.md`.
+
 > **9 October C1 inline recipient claim, OPEN:** Local NEXUS `9f0e4e913`
 > claims transactionally captured recipient intent before an inline send,
 > records a confirmed transport return as accepted and an unconfirmed result

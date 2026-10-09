@@ -1,5 +1,15 @@
 # CharityPilot Agent Continuation Handoff
 
+> **9 October C1 lost-event recovery, local only:** NEXUS isolated commit
+> `69702e326` schedules bounded recovery of never-attempted captured
+> staff-alert rows, rechecks registrant/staff eligibility and cancels
+> ineligible unsent rows. It does not retry ambiguous or claimed sends.
+> Disposable MariaDB related suite passed 43 tests/133 assertions;
+> exact retained log/hash and limits are in private
+> `.charitypilot-private/c1-captured-recovery-2026-10-09.md`. Branch is
+> unmerged/unpushed/undeployed. Typed provider outcome, UNKNOWN/claimed
+> reconciliation, retention, hosted proof and C1/Nikita decision remain OPEN.
+
 > **9 October C1 inline per-recipient claim, local only:** NEXUS isolated
 > commit `9f0e4e913` atomically claims captured staff-email intent before
 > the inline transport, records `accepted` or conservative `unknown`, and
