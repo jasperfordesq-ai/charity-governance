@@ -1,5 +1,13 @@
 # CharityPilot Full-Platform Remediation Audit
 
+> **9 October 00:41 UTC DPO-04, OPEN:** The current compiled
+> minimised-review renderer reproduces both synthetic HTML samples
+> byte for byte and nine focused export tests pass. The clean private
+> VM still has zero genuine approved snapshots/current approved
+> signoffs in its single charity, shown by a guarded read-only count.
+> A real Board snapshot, controller-approved recipient/field policy,
+> real full-versus-minimised comparison and Nikita review remain OPEN.
+
 > **9 October 00:39 UTC DPO-02, OPEN:** Read-only private-VM replay
 > metadata remains nine rows, latest 30 September 08:54 UTC, with no
 > new table row. This is bounded monitoring evidence only. Historical

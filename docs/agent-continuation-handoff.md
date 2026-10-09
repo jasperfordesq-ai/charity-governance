@@ -1,5 +1,15 @@
 # CharityPilot Agent Continuation Handoff
 
+> **9 October 00:41 UTC DPO-04 current export prerequisite, OPEN:**
+> Clean local `d6d611d3` rebuilt the API; the compiled minimised
+> renderer reproduced both invented review HTML hashes exactly, and
+> the focused export suite passed 9/9. A guarded read-only query on
+> clean serving VM `96c8b1e8` counted one charity, zero genuine
+> approved snapshots and zero current approved signoffs. No live
+> report, Board approval or disclosure was created. Field, recipient
+> and small-count decisions plus Nikita acceptance remain OPEN.
+> Private receipt: `minimised-export-current-state-2026-10-09.md`.
+
 > **9 October 00:39 UTC DPO-02 live recheck, OPEN:** The clean private
 > VM still serves `96c8b1e8`. A guarded local-Unix-Docker, PostgreSQL
 > `BEGIN READ ONLY` metadata query returned nine historical
