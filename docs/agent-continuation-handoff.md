@@ -1,5 +1,13 @@
 # CharityPilot Agent Continuation Handoff
 
+> **9 October 00:52 UTC C1 test follow-up:** NEXUS isolated local
+> commit `1345a4f15` adds an accepted-connection regression for the
+> pending-profile bulk gate. The focused disposable MariaDB run
+> passed 1 test/5 assertions. The branch is now nine ahead of
+> origin/main, unpushed/unmerged/undeployed. The 110-test broad run
+> below covered the preceding source commit `cc8537c7f`; C1 remains
+> OPEN for hosted, original-evidence and independent review gates.
+
 > **9 October 00:49 UTC C1-adjacent NEXUS source checkpoint, OPEN:**
 > Isolated `codex/c1-pending-profile` local commit `cc8537c7f`
 > closes a bulk-profile predicate gap that allowed a pending/public

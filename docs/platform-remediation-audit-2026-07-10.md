@@ -1,5 +1,12 @@
 # CharityPilot Full-Platform Remediation Audit
 
+> **9 October 00:52 UTC C1 source-test checkpoint:** NEXUS local
+> `1345a4f15` adds a focused accepted-connection pending-profile
+> regression, passing 1/1 with five assertions on isolated MariaDB.
+> It is nine commits ahead of origin/main, unpushed/unmerged/
+> undeployed. The broader 110-test run below preceded this test-only
+> commit. C1 hosted and DPO acceptance remain OPEN.
+
 > **9 October 00:49 UTC C1 adjacent profile-discovery gap, OPEN:**
 > NEXUS isolated branch `codex/c1-pending-profile` local commit
 > `cc8537c7f` enforces active/approved status in the shared
