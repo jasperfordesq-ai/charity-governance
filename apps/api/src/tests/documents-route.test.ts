@@ -1541,6 +1541,7 @@ test('ordinary DELETE retains the draft and refuses missing policy, stale revisi
       const audits: Record<string, unknown>[] = [];
       const mock: any = {
         subscription: subscription(),
+        documentRecoveryEnforcement: { findUnique: async () => null },
         $queryRaw: async (strings: TemplateStringsArray) => strings.join('').includes('statement_timestamp')
           ? [{ now: new Date('2026-09-30T12:01:00Z') }] : [{ id: 'locked' }],
         document: {
@@ -1864,6 +1865,30 @@ test('Admin connector cannot read dashboard-only Vault control and deletion hist
   } finally { await app.close(); }
 });
 
+test('bound charity storage review stops before provider inspection', { concurrency: false }, async () => {
+  const originalInspect = StorageService.prototype.inspectActiveObject;
+  let inspections = 0;
+  StorageService.prototype.inspectActiveObject = async () => {
+    inspections += 1;
+    throw new Error('provider must not be inspected');
+  };
+  const app = await buildDocumentsApp({
+    subscription: subscription(), document: {},
+    documentRecoveryEnforcement: { findUnique: async () => ({ id: 'binding' }) },
+  });
+  try {
+    const response = await app.inject({ method: 'POST', url: '/doc-legacy/verify-storage-provider',
+      headers: { authorization: authHeader },
+      payload: { expectedUpdatedAt: '2026-09-29T10:00:00.000Z' } });
+    assert.equal(response.statusCode, 409);
+    assert.equal(response.json().code, 'DOCUMENT_SOURCE_RECOVERY_REQUIRED');
+    assert.equal(inspections, 0);
+  } finally {
+    StorageService.prototype.inspectActiveObject = originalInspect;
+    await app.close();
+  }
+});
+
 test('document upload refuses a recovery-bound charity before reserving or writing bytes', { concurrency: false }, async () => {
   const originalUpload = StorageService.prototype.uploadFile;
   let calledProvider = false;
@@ -1998,6 +2023,24 @@ test('document metadata edit records actor, fields and revisions without retaini
   } finally {
     await app.close();
   }
+});
+
+test('bound charity metadata edit returns a conflict before reading or writing the document', async () => {
+  let reads = 0;
+  const app = await buildDocumentsApp({
+    subscription: subscription(),
+    documentRecoveryEnforcement: { findUnique: async () => ({ id: 'binding' }) },
+    document: { findFirst: async () => { reads++; return null; } },
+  });
+  try {
+    const response = await app.inject({
+      method: 'PATCH', url: '/doc-1', headers: { authorization: authHeader },
+      payload: { name: 'Updated safeguarding policy', expectedUpdatedAt: '2026-06-08T00:00:00.000Z' },
+    });
+    assert.equal(response.statusCode, 409);
+    assert.equal(response.json().code, 'DOCUMENT_SOURCE_RECOVERY_REQUIRED');
+    assert.equal(reads, 0);
+  } finally { await app.close(); }
 });
 
 test('editing assessed document metadata withdraws Member access and resets the assessment', async () => {

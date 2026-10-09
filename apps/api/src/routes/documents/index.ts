@@ -531,6 +531,12 @@ export async function documentRoutes(app: FastifyInstance) {
         throw new AppError(403, 'WEB_SESSION_REQUIRED',
           'Review document access, lifecycle and publication in the dashboard.');
       }
+      if (await app.prisma.documentRecoveryEnforcement.findUnique({
+        where: { organisationId: request.user.organisationId }, select: { id: true },
+      })) {
+        throw new AppError(409, 'DOCUMENT_SOURCE_RECOVERY_REQUIRED',
+          'Document edits require independent recovery authority for this charity.');
+      }
       let verifiedSha256: string | undefined;
       if (data.contentAccessClass === 'MEMBER_SUITABLE' || data.visibility === 'MEMBER_VISIBLE') {
         const descriptor = await service.getDownloadDescriptor(request.user.organisationId, request.params.id, request.user.role);
@@ -586,6 +592,12 @@ export async function documentRoutes(app: FastifyInstance) {
   }, async (request, reply) => {
     try {
       const input = verifyStorageProviderSchema.parse(request.body);
+      if (await app.prisma.documentRecoveryEnforcement.findUnique({
+        where: { organisationId: request.user.organisationId }, select: { id: true },
+      })) {
+        throw new AppError(409, 'DOCUMENT_SOURCE_RECOVERY_REQUIRED',
+          'Document source changes require independent recovery authority for this charity.');
+      }
       return sendSuccess(reply, await service.verifyWrittenStorageProvider({
         organisationId: request.user.organisationId,
         documentId: request.params.id,

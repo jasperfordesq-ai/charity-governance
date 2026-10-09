@@ -1,5 +1,13 @@
 # CharityPilot Full-Platform Remediation Audit
 
+> **9 October Vault source API responses, OPEN:** Already-bound Document
+> metadata edit, written-provider review, Board approval and Deleted Items
+> remove/restore now return a 409 before provider work; the latter uses the
+> charity transaction lock. Full API 2,716 and 14 serial PostgreSQL tests
+> pass. A binding race after route precheck remains a generic API error but
+> is rejected by SQL. This is local only; source custody/replay, approved
+> retention policy, live release and Nikita acceptance remain OPEN.
+
 > **9 October Vault source/upload writer gate, OPEN:** Local SQL now freezes
 > Document INSERT/UPDATE and new upload-intent reservations under recovery
 > binding, and refuses binding over unresolved upload intents so an in-flight

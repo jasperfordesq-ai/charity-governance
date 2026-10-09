@@ -15,6 +15,15 @@ const summary = { id: true, name: true, category: true, deletedAt: true,
 export class DocumentRecoveryService {
   constructor(private readonly prisma: PrismaClient, private readonly readFile: ReadFile) {}
 
+  private async requireUnboundSource(tx: Prisma.TransactionClient, organisationId: string): Promise<void> {
+    if (await tx.documentRecoveryEnforcement.findUnique({
+      where: { organisationId }, select: { id: true },
+    })) {
+      throw new AppError(409, 'DOCUMENT_SOURCE_RECOVERY_REQUIRED',
+        'Document removal and restoration require independent recovery authority for this charity.');
+    }
+  }
+
   private async actor(tx: Prisma.TransactionClient, input: RecoveryInput) {
     const actor = await tx.user.findFirst({ where: { id: input.actorUserId,
       organisationId: input.organisationId, role: { in: ['OWNER', 'ADMIN'] }, lifecycleStatus: 'ACTIVE' }, select: { id: true } });
@@ -54,6 +63,7 @@ export class DocumentRecoveryService {
     }
     return this.prisma.$transaction(async (tx) => {
       await tx.$queryRaw`SELECT id FROM "Organisation" WHERE id=${input.organisationId} FOR UPDATE`;
+      await this.requireUnboundSource(tx, input.organisationId);
       await this.actor(tx, input);
       const doc = await this.locked(tx, input, false);
       if (doc.deletionHold || doc.lifecycleStatus !== 'DRAFT' || doc.approvalAsserted || doc.approvedByResolutionId) {
@@ -127,6 +137,7 @@ export class DocumentRecoveryService {
   async restore(input: RecoveryInput) {
     return this.prisma.$transaction(async (tx) => {
       await tx.$queryRaw`SELECT id FROM "Organisation" WHERE id=${input.organisationId} FOR UPDATE`;
+      await this.requireUnboundSource(tx, input.organisationId);
       await this.actor(tx, input);
       const doc = await this.locked(tx, input, true);
       // Restoring preserves a hold. A hold forbids destruction, not recovery.

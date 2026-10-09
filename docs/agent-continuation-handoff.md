@@ -1,5 +1,15 @@
 # CharityPilot Agent Continuation Handoff
 
+> **9 October ~03:57 Dublin Vault writer responses, OPEN:** Local API
+> now returns `DOCUMENT_SOURCE_RECOVERY_REQUIRED` 409 for already-bound
+> metadata edits, provider review, Board approval and Deleted Items
+> remove/restore. The latter checks under the charity lock before reading
+> bytes. Full API 2,716/2,716 and 14/14 serial PostgreSQL tests pass.
+> SQL remains the race authority; a bind after a route precheck can still
+> surface a generic API error. This is unreleased and binding inactive.
+> Independent source history/replay, policy, release and Nikita review remain
+> OPEN. See private `document-source-api-response-2026-10-09.md`.
+
 > **9 October ~03:46 Dublin Vault source/upload boundary, OPEN:** Local
 > `20261009110000_document_source_upload_recovery_gate` serializes future
 > document recovery binding with upload reservations, refuses binding while

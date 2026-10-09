@@ -23,9 +23,11 @@ function fixture() {
   let actor = true;
   let linked = false;
   let competingPolicy = false;
+  let bound = false;
   const audits: any[] = [];
   const locks: string[] = [];
   const tx = {
+    documentRecoveryEnforcement: { findUnique: async () => bound ? { id: 'binding' } : null },
     user: { findFirst: async ({ where }: any) => actor && where.organisationId === 'org-a' ? { id: 'admin-a' } : null },
     document: {
       findFirst: async ({ where }: any) => {
@@ -57,10 +59,25 @@ function fixture() {
     try { return await callback(tx); } catch (error) { document = saved; audits.length = count; throw error; }
   } } as unknown as PrismaClient;
   return { prisma, audits, locks, get doc() { return document; },
+    bindRecovery: () => { bound = true; },
     setPolicy: (value: typeof policy) => { policy = value; },
     setCompetingPolicy: () => { competingPolicy = true; },
     disableActor: () => { actor = false; }, link: () => { linked = true; } };
 }
+
+test('bound document recovery refuses remove and restore before reading provider bytes', async () => {
+  const f = fixture();
+  f.bindRecovery();
+  let reads = 0;
+  const service = new DocumentRecoveryService(f.prisma, async () => { reads++; return Buffer.from('test'); });
+  await assert.rejects(service.remove(input),
+    (error: any) => error.statusCode === 409 && error.code === 'DOCUMENT_SOURCE_RECOVERY_REQUIRED');
+  f.doc.deletedAt = now;
+  await assert.rejects(service.restore(input),
+    (error: any) => error.statusCode === 409 && error.code === 'DOCUMENT_SOURCE_RECOVERY_REQUIRED');
+  assert.equal(reads, 0);
+  assert.equal(f.audits.length, 0);
+});
 
 test('removal and restore preserve actual local bytes, identity and holds without reviving sharing', async () => {
   const root = await mkdtemp(join(tmpdir(), 'charitypilot-recovery-'));

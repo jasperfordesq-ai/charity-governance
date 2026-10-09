@@ -50,6 +50,7 @@ async function buildApp(
   const prisma = {
     ...authModels(role, subscription),
     minuteBookChangeAudit: { create: async () => ({ id: 'audit-1' }) },
+    documentRecoveryEnforcement: { findUnique: async () => null },
     ...prismaOverrides,
   } as Record<string, unknown>;
   prisma.$transaction ??= async (callback: (tx: typeof prisma) => Promise<unknown>) => callback(prisma);
@@ -1121,6 +1122,23 @@ test('Admin reading one act scopes the lookup to the caller’s charity and brin
   assert.deepEqual(seen.include, { resolutions: true });
   assert.equal(response.json().data.resolutions.length, 1);
   await app.close();
+});
+
+test('bound charity Board approval patch returns a conflict before document writes', async () => {
+  let documentRead = false;
+  const app = await buildApp({
+    documentRecoveryEnforcement: { findUnique: async () => ({ id: 'binding' }) },
+    document: { findFirst: async () => { documentRead = true; return null; } },
+  });
+  try {
+    const response = await app.inject({
+      method: 'PATCH', url: `${PREFIX}/documents/doc-1/approval`, headers: { authorization: tokenFor('ADMIN') },
+      payload: { expectedUpdatedAt: NOW.toISOString(), approvalAsserted: true },
+    });
+    assert.equal(response.statusCode, 409);
+    assert.equal(response.json().code, 'DOCUMENT_SOURCE_RECOVERY_REQUIRED');
+    assert.equal(documentRead, false);
+  } finally { await app.close(); }
 });
 
 test('an act belonging to another charity reads as missing, not as forbidden', async () => {
