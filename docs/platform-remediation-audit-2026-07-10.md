@@ -1,5 +1,14 @@
 # CharityPilot Full-Platform Remediation Audit
 
+> **9 October DPO-05/08 release review, OPEN live:** A full-schema
+> red/green test exposed and closed a direct-SQL publication row-ID
+> mutation path that could detach upload/page-create intent history.
+> Existing SQL already froze charity/document/provider identity; the new
+> forward migration freezes only the missing ID boundary. Full API
+> 2,717/2,717, serial PostgreSQL 14/14, full-schema proof 1/1 and
+> production-check 1,123 passed (five platform skips). CI, deployment,
+> independent provider custody and Nikita acceptance remain open.
+
 > **9 October full isolated E2E gate, OPEN live:** Current source passed
 > 245/245 Chromium tests after correcting two cross-test fixtures, with
 > 71/71 focused, 116/116 contract and E2E TypeScript checks also green.

@@ -1,5 +1,17 @@
 # CharityPilot Agent Continuation Handoff
 
+> **9 October publication row-ID fence, local only:** Cumulative SQL
+> review confirmed the earlier purge fence already makes a publication's
+> charity, source document and provider immutable. A full-schema
+> PostgreSQL test then demonstrated that its primary row ID could still
+> change, detaching the append-only upload/page-create intents that name
+> that ID. Forward migration
+> `20261009130000_document_publication_row_id_immutable` refuses that
+> UPDATE. The full-schema test failed before the migration and passed
+> after it; API 2,717/2,717, serial PostgreSQL 14/14 and production-check
+> 1,123 passed with five platform skips. This is local source evidence,
+> not a hosted migration, independent Confluence history or DPO approval.
+
 > **9 October complete isolated browser gate, local only:** The full
 > current-source Chromium suite passed 245/245 after two test fixtures were
 > corrected. The first full attempt passed 208, failed two and left 35

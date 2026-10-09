@@ -197,6 +197,14 @@ try {
     await tx.documentPublication.update({ where: { id: 'identity-probe' },
       data: { documentId: 'another-document' } });
   }), /publication identity cannot be changed/);
+  await assert.rejects(prisma.$transaction(async (tx) => {
+    await tx.documentPublication.create({ data: {
+      id: 'row-id-probe', organisationId: 'publication-charity',
+      documentId: 'publication-purge-doc', provider: 'confluence',
+    } });
+    await tx.documentPublication.update({ where: { id: 'row-id-probe' },
+      data: { id: 'renamed-row-id-probe' } });
+  }), /publication row ID cannot be changed/);
   await prisma.documentPublication.create({ data: {
     id: 'pending-publication', organisationId: 'publication-charity',
     documentId: 'publication-purge-doc', provider: 'confluence',
