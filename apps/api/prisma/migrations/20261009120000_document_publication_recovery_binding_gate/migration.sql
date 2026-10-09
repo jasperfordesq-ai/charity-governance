@@ -1,6 +1,8 @@
 BEGIN;
 -- Keep the preflight and trigger installation in one stable DML window.
-LOCK TABLE "DocumentRecoveryEnforcement", "DocumentPublication" IN SHARE ROW EXCLUSIVE MODE;
+LOCK TABLE "DocumentRecoveryEnforcement", "DocumentPublication",
+  "DocumentPublicationUploadIntent", "DocumentPublicationPageCreateIntent"
+  IN SHARE ROW EXCLUSIVE MODE;
 -- Rows survive deletion of their Document so that remote erasure can still
 -- identify old pages. A surviving live Document must nevertheless agree on
 -- charity; investigate any mismatch before adding the insert-time fence.
@@ -10,6 +12,20 @@ BEGIN
     JOIN "Document" document ON document.id=publication."documentId"
     WHERE publication."organisationId"<>document."organisationId") THEN
     RAISE EXCEPTION 'Existing document publication charity mismatch requires review';
+  END IF;
+END;
+$$;
+-- The normal remote-write guards retain a publication row alongside each
+-- append-only intent. An orphan can still exist after a privileged repair or
+-- malformed restore; never bind while that possible-copy evidence remains.
+DO $$
+BEGIN
+  IF EXISTS (SELECT 1 FROM "DocumentRecoveryEnforcement" binding
+    WHERE EXISTS (SELECT 1 FROM "DocumentPublicationUploadIntent" intent
+      WHERE intent."organisationId"=binding."organisationId")
+      OR EXISTS (SELECT 1 FROM "DocumentPublicationPageCreateIntent" intent
+        WHERE intent."organisationId"=binding."organisationId")) THEN
+    RAISE EXCEPTION 'Existing document recovery binding has publication intent history requiring review';
   END IF;
 END;
 $$;
@@ -35,6 +51,12 @@ BEGIN
   IF EXISTS (SELECT 1 FROM "DocumentPublication"
     WHERE "organisationId"=NEW."organisationId") THEN
     RAISE EXCEPTION 'Document recovery binding requires independent publication history';
+  END IF;
+  IF EXISTS (SELECT 1 FROM "DocumentPublicationUploadIntent"
+    WHERE "organisationId"=NEW."organisationId")
+    OR EXISTS (SELECT 1 FROM "DocumentPublicationPageCreateIntent"
+      WHERE "organisationId"=NEW."organisationId") THEN
+    RAISE EXCEPTION 'Document recovery binding requires independent publication intent history';
   END IF;
   RETURN NEW;
 END;

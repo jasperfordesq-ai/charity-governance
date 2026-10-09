@@ -1,5 +1,15 @@
 # CharityPilot Agent Continuation Handoff
 
+> **9 October publication intent binding completeness, local only:** The
+> eighteenth unreleased migration now checks append-only Confluence upload
+> and page-create intent tables in its existing-binding preflight and new
+> binding trigger. Current ordinary SQL guards retain parent publication
+> rows; the additional check fails closed for malformed or privileged
+> historical data. Focused red/green PostgreSQL and current full-schema
+> composition passed. Pinned read-only VM counts found zero publication,
+> intent and binding rows at 156/174 migrations. Repeat before release;
+> independent copy recovery and Nikita acceptance remain OPEN.
+
 > **9 October bound upload-intent mutation fix, local only:** Review of the
 > unreleased source/upload migration found that old reconciled upload intents
 > could be changed or deleted after recovery binding. A red direct-SQL test

@@ -1,5 +1,13 @@
 # CharityPilot Full-Platform Remediation Audit
 
+> **9 October Confluence intent binding preflight, OPEN for release:** The
+> provisional publication recovery fence now refuses binding when either
+> append-only remote-write intent table has rows, even if a malformed or
+> privileged restore omitted its publication parent. Focused PostgreSQL and
+> full-schema disposable proofs pass. Live read-only count inventory found
+> zero rows in both intent tables and zero bound charities on the clean VM;
+> this is a snapshot, not deployment or independent copy-history closure.
+
 > **9 October upload-intent post-binding fence, OPEN for release:** The
 > seventeenth local forward migration previously rejected only new intent
 > INSERT. A disposable direct-SQL regression showed UPDATE of a reconciled
