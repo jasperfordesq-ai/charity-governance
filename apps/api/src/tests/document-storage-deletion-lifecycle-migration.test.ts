@@ -882,6 +882,76 @@ test('real PostgreSQL document source gate stops bound reservations and edits wh
   } finally { await removeDisposableContainer(container); }
 });
 
+test('real PostgreSQL publication binding gate refuses unsafe history and serializes a new queue row', { timeout: 120_000 }, async () => {
+  const container = `charitypilot-publication-binding-gate-${randomUUID()}`;
+  assertDockerSuccess(docker(['run', '--detach', '--name', container, '--network', 'none',
+    '-e', 'POSTGRES_HOST_AUTH_METHOD=trust', POSTGRES_IMAGE]), 'start publication binding fixture');
+  try {
+    await waitForPostgres(container);
+    psql(container, `
+      CREATE TABLE "Organisation" (id TEXT PRIMARY KEY);
+      INSERT INTO "Organisation" VALUES ('charity'), ('other'), ('race-a'), ('race-b');
+      CREATE TABLE "DocumentRecoveryEnforcement" (id TEXT PRIMARY KEY, "organisationId" TEXT UNIQUE);
+      CREATE TABLE "Document" (id TEXT PRIMARY KEY, "organisationId" TEXT NOT NULL,
+        "deletedAt" TIMESTAMP);
+      INSERT INTO "Document" VALUES ('charity-doc','charity',NULL),
+        ('other-doc','other',NULL), ('race-a-doc','race-a',NULL), ('race-b-doc','race-b',NULL);
+      CREATE TABLE "DocumentPublication" (id TEXT PRIMARY KEY, "organisationId" TEXT NOT NULL,
+        "documentId" TEXT NOT NULL, state TEXT NOT NULL);
+      INSERT INTO "DocumentPublication" VALUES ('existing','charity','charity-doc','PROCESSED');
+      INSERT INTO "DocumentRecoveryEnforcement" VALUES ('unsafe','charity');
+    `);
+    const migration = readFileSync(new URL(
+      '../../prisma/migrations/20261009120000_document_publication_recovery_binding_gate/migration.sql',
+      import.meta.url,
+    ), 'utf8');
+    assert.match(psql(container, migration, false).stderr,
+      /Existing document recovery binding has publication history requiring review/);
+    psql(container, `DELETE FROM "DocumentRecoveryEnforcement" WHERE id='unsafe';`);
+    psql(container, `INSERT INTO "DocumentPublication" VALUES
+      ('mismatch','charity','other-doc','PENDING');`);
+    assert.match(psql(container, migration, false).stderr,
+      /Existing document publication charity mismatch requires review/);
+    psql(container, `DELETE FROM "DocumentPublication" WHERE id='mismatch';`);
+    psql(container, migration);
+    assert.match(psql(container, `INSERT INTO "DocumentRecoveryEnforcement"
+      VALUES ('binding','charity');`, false).stderr,
+    /binding requires independent publication history/);
+    assert.match(psql(container, `INSERT INTO "DocumentPublication" VALUES
+      ('cross-charity','other','charity-doc','PENDING');`, false).stderr,
+    /publication requires a live same-charity source/);
+    assert.match(psql(container, `INSERT INTO "DocumentPublication" VALUES
+      ('orphan','other','missing-doc','PENDING');`, false).stderr,
+    /publication requires a live same-charity source/);
+    psql(container, `INSERT INTO "DocumentPublication" VALUES ('other-pub','other','other-doc','PENDING');
+      UPDATE "DocumentPublication" SET state='PROCESSED' WHERE id='other-pub';
+      DELETE FROM "DocumentPublication" WHERE id='other-pub';
+      INSERT INTO "DocumentPublication" VALUES ('historical','other','other-doc','PROCESSED');
+      DELETE FROM "Document" WHERE id='other-doc';
+      UPDATE "DocumentPublication" SET state='RETIRED' WHERE id='historical';
+      DELETE FROM "DocumentPublication" WHERE id='historical';
+      DELETE FROM "DocumentPublication" WHERE id='existing';
+      INSERT INTO "DocumentRecoveryEnforcement" VALUES ('binding','charity');`);
+    assert.match(psql(container, `INSERT INTO "DocumentPublication"
+      VALUES ('blocked','charity','charity-doc','PENDING');`, false).stderr,
+    /publication change requires independent recovery authority/);
+    for (const [charity, publicationFirst] of [['race-a', true], ['race-b', false]] as const) {
+      const publicationSql = `BEGIN; INSERT INTO "DocumentPublication"
+        VALUES ('${charity}-publication','${charity}','${charity}-doc','PENDING'); SELECT pg_sleep(1); COMMIT;`;
+      const bindingSql = `BEGIN; INSERT INTO "DocumentRecoveryEnforcement"
+        VALUES ('${charity}-binding','${charity}'); SELECT pg_sleep(1); COMMIT;`;
+      const first = psqlAsync(container, publicationFirst ? publicationSql : bindingSql);
+      await new Promise((resolve) => setTimeout(resolve, 250));
+      const second = await psqlAsync(container, publicationFirst ? bindingSql : publicationSql);
+      const firstResult = await first;
+      assert.equal([firstResult.status, second.status].filter((status) => status === 0).length, 1);
+      assert.equal(psql(container, `SELECT count(*) FROM "DocumentPublication" publication
+        JOIN "DocumentRecoveryEnforcement" binding ON binding."organisationId"=publication."organisationId"
+        WHERE publication."organisationId"='${charity}';`).stdout.trim(), '0');
+    }
+  } finally { await removeDisposableContainer(container); }
+});
+
 test('real PostgreSQL 16 migration freezes only complaint policy facts after recovery enforcement', { timeout: 120_000 }, async () => {
   const container = `charitypilot-policy-gate-${randomUUID()}`;
   assertDockerSuccess(docker(['run', '--detach', '--name', container, '--network', 'none',

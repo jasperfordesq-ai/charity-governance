@@ -1,5 +1,15 @@
 # CharityPilot Full-Platform Remediation Audit
 
+> **9 October Confluence publication provisional fence, OPEN:** Local
+> eighteenth migration refuses recovery binding while any publication row
+> exists and freezes publication DML once bound, including direct SQL.
+> A legacy bound/publication pair or cross-charity source mismatch aborts
+> migration for review; new rows require a live same-charity Document.
+> A focused
+> two-order race test and full API 2,717 plus serial PG 14 passed. Independent publication
+> facts, complete baseline, UNKNOWN/provider reconciliation, host-loss replay,
+> live release and Nikita review remain OPEN.
+
 > **9 October Confluence mirror recovery binding, OPEN:** A publication
 > already PENDING or later requeued can still be worked after a future
 > document recovery binding, creating a page/attachment absent from a stale

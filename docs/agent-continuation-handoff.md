@@ -1,5 +1,18 @@
 # CharityPilot Agent Continuation Handoff
 
+> **9 October Confluence publication interim gate, OPEN:** Local
+> `20261009120000_document_publication_recovery_binding_gate` rejects a
+> charity's binding if any publication row exists, freezes publication DML
+> after binding and refuses legacy coexistence or cross-charity publication
+> source mismatches during migration. New publication rows require a live
+> same-charity Document; historical rows may outlive source deletion. Inspect
+> live mismatches before release. It
+> serializes binding and new queue rows on the Organisation lock. A focused
+> real PostgreSQL two-order race test and full API 2,717 plus serial PG 14
+> tests passed, including blank full-schema migration. This
+> provisional freeze is not independently replayable copy history, does not
+> authorize activation and is not Nikita acceptance.
+
 > **9 October Confluence publication binding gap, OPEN:** Source audit found
 > that a PENDING or requeued `DocumentPublication` can still lead to a remote
 > page/attachment write after future document recovery binding. Existing
