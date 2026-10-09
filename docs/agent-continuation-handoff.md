@@ -14,7 +14,11 @@
 > returning 409 when binding wins between the route precheck and reservation,
 > before any provider write. The upload-focused 113/113, full API 2,721/2,721,
 > serial PostgreSQL 14/14 and production-check 1,123 passed (five Windows
-> skips). See the private 9 October document-source API response note.
+> skips). The complete isolated Chromium suite then passed 245/245 on
+> exact runtime commit `1bfe6a3f`, with its disposable stack removed.
+> See the private 9 October document-source API response note and release
+> diff gate. Hosted CI, deployment, live role checks and Nikita acceptance
+> remain separate.
 
 > **9 October publication row-ID fence, local only:** Cumulative SQL
 > review confirmed the earlier purge fence already makes a publication's
