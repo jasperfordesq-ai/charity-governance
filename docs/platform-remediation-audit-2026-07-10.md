@@ -1,5 +1,12 @@
 # CharityPilot Full-Platform Remediation Audit
 
+> **9 October complaint source atomicity, OPEN:** The new encrypted
+> candidate and a local `ComplaintRecord` transaction have no atomic
+> cross-system commit. A candidate may outlive rollback; a DB-first
+> change may be lost before publication. The private decision memo
+> requires a controller-approved `UNKNOWN` rule and synthetic crash/
+> replay proof before source-writer wiring or recovery binding.
+
 > **9 October complaint source transport, OPEN:** Local `2e21d2eb`
 > provides scoped S3 candidate read/create methods for encrypted case
 > facts. Fake-provider conditional-write, bucket-owner, KMS and operation

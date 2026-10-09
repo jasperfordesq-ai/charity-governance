@@ -1,5 +1,14 @@
 # CharityPilot Agent Continuation Handoff
 
+> **9 October ~03:13 Dublin complaint source commit boundary, OPEN:**
+> Source review confirms the local complaint PostgreSQL transaction
+> cannot commit atomically with the separate encrypted S3 candidate.
+> DB-first can lose a committed edit on VM loss; candidate-first can
+> leave an uncommitted fact. The private commit-protocol decision memo
+> defines `UNKNOWN` fail-closed recovery and the controller choice
+> needed before a writer or replay integration. Do not treat candidate
+> objects as committed records or activate recovery binding.
+
 > **9 October ~03:11 Dublin complaint source S3 candidate, OPEN:** Local
 > `2e21d2eb` adds a separate scoped object prefix for encrypted source
 > candidates, with structural binding checks and the existing explicit
