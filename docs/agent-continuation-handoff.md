@@ -1,5 +1,15 @@
 # CharityPilot Agent Continuation Handoff
 
+> **9 October C1 failed-recipient retry, local reproduction:** An isolated
+> synthetic MariaDB/Mailpit run confirmed that the NEXUS admin-registration
+> listener marks an event done after one recipient fails: ordinary replay
+> misses that recipient, and clearing the whole-event cache duplicates a
+> previously successful recipient's email and bell. The branch was unchanged
+> and remains unpushed/undeployed. Exact private receipt:
+> `.charitypilot-private/c1-partial-failure-replay-receipt-2026-10-09.md`.
+> Historical C1 delivery, hosted exact-build verification, a replay-safe
+> per-recipient repair and Nikita/risk-owner decision remain OPEN.
+
 > **9 October restored-backup ACL fix, local only:** An isolated restore of
 > the 8 October serving-VM dump followed by actual candidate Prisma migrations
 > made restricted-role grant reconciliation fail closed: the ACL-free restore

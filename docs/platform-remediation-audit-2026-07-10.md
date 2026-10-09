@@ -1,5 +1,13 @@
 # CharityPilot Full-Platform Remediation Audit
 
+> **9 October C1 retry gap, OPEN:** Disposable MariaDB/Mailpit reproduction
+> confirmed that a failed Admin recipient is skipped on ordinary registration
+> event replay, while clearing the whole-event cache duplicates successful
+> recipients' email and bell. See the private C1 partial-failure receipt.
+> This is local NEXUS branch evidence, not a demonstrated historical loss,
+> hosted release, risk-control verification or DPO acceptance. A durable
+> per-recipient recovery design remains required for delivery assurance.
+
 > **9 October restricted-role restored-ACL repair, OPEN live:** The
 > 8 October backup's ACL-free restore caused local grant reconciliation
 > to fail safely because two byte-authority SECURITY DEFINER functions
