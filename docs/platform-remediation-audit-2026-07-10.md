@@ -1,5 +1,14 @@
 # CharityPilot Full-Platform Remediation Audit
 
+> **9 October C1 abandoned claims, OPEN:** NEXUS local `d06caf0af`
+> holds claims over twenty minutes as UNKNOWN without resend and links an
+> inline attempt to mail metadata through a separate dispatch UUID.
+> Disposable MariaDB suite passed 46/156. Branch unmerged/unpushed/
+> undeployed. Evidence-linked provider/operator reconciliation, typed
+> outcomes, retention, hosted proof, historical C1 closure evidence and
+> DPO/risk-owner decision remain OPEN. See private
+> `c1-stale-claim-reconciliation-2026-10-09.md`.
+
 > **9 October C1 ambiguous-primary fallback, OPEN:** NEXUS local
 > `b7386e811` blocks SMTP fallback after an unconfirmed Postmark/Gmail
 > `admin_new_registration` attempt; the ledger holds UNKNOWN. Synthetic

@@ -1,5 +1,14 @@
 # CharityPilot Agent Continuation Handoff
 
+> **9 October C1 abandoned claim hold, local only:** NEXUS isolated
+> `d06caf0af` moves staff-email claims older than twenty minutes to UNKNOWN
+> without retry, and stores a separate dispatch UUID in the ledger and mail
+> metadata for later evidence matching. Disposable MariaDB suite passed
+> 46 tests/156 assertions; exact retained log/hash and limits are in private
+> `.charitypilot-private/c1-stale-claim-reconciliation-2026-10-09.md`.
+> Branch unmerged/unpushed/undeployed. Provider/operator reconciliation,
+> typed outcomes, retention, hosted proof and C1/Nikita decision remain OPEN.
+
 > **9 October C1 provider-fallback boundary, local only:** NEXUS isolated
 > `b7386e811` withholds SMTP fallback for unconfirmed Postmark/Gmail
 > registration staff-alert attempts. The per-recipient row remains UNKNOWN
