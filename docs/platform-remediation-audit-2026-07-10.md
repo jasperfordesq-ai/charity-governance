@@ -1,5 +1,13 @@
 # CharityPilot Full-Platform Remediation Audit
 
+> **9 October Vault standard-link writer, OPEN:** Local API and SQL
+> freeze ordinary standard-link add/edit/remove after document recovery
+> binding, and prohibit direct Document charity reassignment. Full API
+> 2,710 and 14 serial real-PG tests passed. This sixteenth forward
+> migration is not on the private VM; independent link facts, baseline,
+> replay, controller retention decisions, hosted proof and Nikita
+> acceptance remain unresolved.
+
 > **9 October existing-page citation tenant/recovery gate, OPEN:** Local
 > SQL now binds `ConfluenceReference` to its document's charity and
 > refuses any existing mismatch for operator review before migration.

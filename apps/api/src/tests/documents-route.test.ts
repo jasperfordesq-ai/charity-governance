@@ -62,6 +62,7 @@ type PrismaMock = {
   };
   documentStandardLink?: {
     create?: (args: unknown) => Promise<unknown>;
+    deleteMany?: (args: unknown) => Promise<{ count: number }>;
   };
   organisationIntegration?: {
     findUnique?: (args: unknown) => Promise<Record<string, unknown> | null>;
@@ -122,6 +123,7 @@ async function buildDocumentsApp(prisma: PrismaMock, limits = DOCUMENT_UPLOAD_MU
   const app = Fastify({ logger: false });
   const decoratedPrisma = { ...authModels(), ...prisma };
   decoratedPrisma.$transaction ??= async (callback: (tx: PrismaMock) => Promise<unknown>) => callback(decoratedPrisma);
+  decoratedPrisma.documentRecoveryEnforcement ??= { findUnique: async () => null };
   decoratedPrisma.document.aggregate ??= async () => ({ _sum: { fileSize: 0 } });
   // The storage resolver looks up organisation preference on every storage
   // call now that documentRoutes wires it in. Default to "no preference
@@ -1859,6 +1861,33 @@ test('Admin connector cannot read dashboard-only Vault control and deletion hist
       assert.equal(response.statusCode, 403, path);
       assert.equal(response.json().code, 'WEB_SESSION_REQUIRED');
     }
+  } finally { await app.close(); }
+});
+
+test('bound document recovery refuses standard link and unlink before writing evidence', async () => {
+  let writes = 0;
+  const app = await buildDocumentsApp({
+    subscription: subscription(),
+    document: { findFirst: async () => ({ id: 'doc-1', organisationId: 'org-1', lifecycleStatus: 'CURRENT' }) },
+    organisation: { findUniqueOrThrow: async () => ({ complexity: 'SIMPLE' }) },
+    governanceStandard: { findUnique: async () => ({ id: 'standard-1', isCore: true }) },
+    documentRecoveryEnforcement: { findUnique: async () => ({ id: 'binding' }) },
+    documentStandardLink: {
+      create: async () => { writes += 1; return {}; },
+      deleteMany: async () => { writes += 1; return { count: 1 }; },
+    },
+    documentControlAudit: { create: async () => { writes += 1; return {}; } },
+  });
+  try {
+    const add = await app.inject({ method: 'POST', url: '/doc-1/standards',
+      headers: { authorization: authHeader }, payload: { standardId: 'standard-1' } });
+    const remove = await app.inject({ method: 'DELETE', url: '/doc-1/standards/standard-1',
+      headers: { authorization: authHeader } });
+    assert.equal(add.statusCode, 409);
+    assert.equal(add.json().code, 'DOCUMENT_STANDARD_LINK_RECOVERY_REQUIRED');
+    assert.equal(remove.statusCode, 409);
+    assert.equal(remove.json().code, 'DOCUMENT_STANDARD_LINK_RECOVERY_REQUIRED');
+    assert.equal(writes, 0);
   } finally { await app.close(); }
 });
 

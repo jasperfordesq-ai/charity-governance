@@ -774,6 +774,47 @@ test('real PostgreSQL 16 migration binds citations to their document charity and
   } finally { await removeDisposableContainer(container); }
 });
 
+test('real PostgreSQL 16 migration freezes standard links and document charity after recovery binding', { timeout: 120_000 }, async () => {
+  const container = `charitypilot-standard-link-gate-${randomUUID()}`;
+  assertDockerSuccess(docker(['run', '--detach', '--name', container, '--network', 'none',
+    '-e', 'POSTGRES_HOST_AUTH_METHOD=trust', POSTGRES_IMAGE]), 'start standard link gate fixture');
+  try {
+    await waitForPostgres(container);
+    psql(container, `
+      CREATE TABLE "Organisation" (id TEXT PRIMARY KEY);
+      INSERT INTO "Organisation" VALUES ('charity'), ('other');
+      CREATE TABLE "Document" (id TEXT PRIMARY KEY, "organisationId" TEXT NOT NULL
+        REFERENCES "Organisation"(id));
+      INSERT INTO "Document" VALUES ('charity-doc','charity'), ('other-doc','other');
+      CREATE TABLE "DocumentRecoveryEnforcement" (id TEXT PRIMARY KEY, "organisationId" TEXT UNIQUE);
+      CREATE TABLE "DocumentStandardLink" (id TEXT PRIMARY KEY, "documentId" TEXT NOT NULL
+        REFERENCES "Document"(id), "standardId" TEXT NOT NULL);
+      INSERT INTO "DocumentStandardLink" VALUES ('existing','charity-doc','standard-1');
+    `);
+    psql(container, readFileSync(new URL(
+      '../../prisma/migrations/20261009100000_document_standard_link_recovery_gate/migration.sql',
+      import.meta.url,
+    ), 'utf8'));
+    psql(container, `INSERT INTO "DocumentStandardLink" VALUES ('before','charity-doc','standard-2');
+      UPDATE "DocumentStandardLink" SET "standardId"='standard-3' WHERE id='before';`);
+    psql(container, `INSERT INTO "DocumentRecoveryEnforcement" VALUES ('binding','charity');`);
+    assert.match(psql(container, `UPDATE "Document" SET "organisationId"='other'
+      WHERE id='charity-doc';`, false).stderr, /charity identity is immutable/);
+    for (const statement of [
+      `INSERT INTO "DocumentStandardLink" VALUES ('blocked','charity-doc','standard-4');`,
+      `UPDATE "DocumentStandardLink" SET "standardId"='rewritten' WHERE id='existing';`,
+      `UPDATE "DocumentStandardLink" SET "documentId"='other-doc' WHERE id='existing';`,
+      `DELETE FROM "DocumentStandardLink" WHERE id='existing';`,
+    ]) assert.match(psql(container, statement, false).stderr, /standard link change requires independent recovery authority/);
+    psql(container, `INSERT INTO "DocumentStandardLink" VALUES ('other-link','other-doc','standard-1');`);
+    assert.match(psql(container, `UPDATE "DocumentStandardLink" SET "documentId"='charity-doc'
+      WHERE id='other-link';`, false).stderr, /standard link change requires independent recovery authority/);
+    psql(container, `UPDATE "DocumentStandardLink" SET "standardId"='other-standard' WHERE id='other-link';
+      DELETE FROM "DocumentStandardLink" WHERE id='other-link';`);
+    assert.equal(psql(container, `SELECT count(*) FROM "DocumentStandardLink" WHERE "documentId"='charity-doc';`).stdout.trim(), '2');
+  } finally { await removeDisposableContainer(container); }
+});
+
 test('real PostgreSQL 16 migration freezes only complaint policy facts after recovery enforcement', { timeout: 120_000 }, async () => {
   const container = `charitypilot-policy-gate-${randomUUID()}`;
   assertDockerSuccess(docker(['run', '--detach', '--name', container, '--network', 'none',

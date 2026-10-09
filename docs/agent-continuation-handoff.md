@@ -1,5 +1,15 @@
 # CharityPilot Agent Continuation Handoff
 
+> **9 October ~03:36 Dublin Vault standard-link gate, OPEN:** Local
+> `20261009100000_document_standard_link_recovery_gate` freezes
+> `DocumentStandardLink` INSERT/UPDATE/DELETE after document recovery
+> binding, including direct SQL retargets; Document charity identity is
+> immutable. The supported API returns 409 before writing linked evidence.
+> Full API 2,710 and 14 serial real-PostgreSQL tests passed, including
+> a current blank-schema migration chain. This sixteenth forward
+> migration is undeployed. Link baseline/replay, controller policy,
+> release and Nikita acceptance remain OPEN. See private receipt.
+
 > **9 October ~03:29 Dublin Confluence citation boundary, OPEN:** Local
 > migration `20261009090000_confluence_reference_recovery_tenant`
 > refuses pre-existing cross-charity citation/document mismatches, adds

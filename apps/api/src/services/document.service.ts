@@ -14,6 +14,7 @@ import {
 } from './confluence-publish-target.service.js';
 import { publicationErasureTarget } from './document-publication.service.js';
 import { parseConfluenceErasureTarget } from './confluence-erasure-target.js';
+import { lockOrganisationForUpdate } from './organisation-lock.js';
 
 /**
  * An absent field leaves the column alone; an explicit null clears it.
@@ -2099,6 +2100,13 @@ export class DocumentService {
 
     try {
       return await this.prisma.$transaction(async (tx) => {
+        await lockOrganisationForUpdate(tx, organisationId);
+        if (await tx.documentRecoveryEnforcement.findUnique({
+          where: { organisationId }, select: { id: true },
+        })) {
+          throw new AppError(409, 'DOCUMENT_STANDARD_LINK_RECOVERY_REQUIRED',
+            'Standard-link changes require independent recovery authority for this charity.');
+        }
         const link = await tx.documentStandardLink.create({ data: { documentId, standardId } });
         await tx.documentControlAudit.create({ data: {
           organisationId, documentId, actorUserId, kind: 'STANDARD_LINK',
@@ -2130,6 +2138,13 @@ export class DocumentService {
     }
 
     await this.prisma.$transaction(async (tx) => {
+      await lockOrganisationForUpdate(tx, organisationId);
+      if (await tx.documentRecoveryEnforcement.findUnique({
+        where: { organisationId }, select: { id: true },
+      })) {
+        throw new AppError(409, 'DOCUMENT_STANDARD_LINK_RECOVERY_REQUIRED',
+          'Standard-link changes require independent recovery authority for this charity.');
+      }
       const removed = await tx.documentStandardLink.deleteMany({ where: { documentId, standardId } });
       if (removed.count > 0) {
         await tx.documentControlAudit.create({ data: {
