@@ -1,5 +1,14 @@
 # CharityPilot Full-Platform Remediation Audit
 
+> **9 October 01:19 UTC P05/P07 copy writer boundary, OPEN:** The
+> local API and forward SQL freeze six document/complaint copy
+> authority, hold and observation insert paths when the relevant
+> recovery binding exists. Synthetic service and direct-SQL proofs
+> passed; full API 2,695 plus 11 PG passed, followed by a rebuilt
+> focused API 39/39 after race-error translation. Independent publisher,
+> off-host replay, remaining writers, controller policy, hosted
+> release and Nikita review remain outstanding.
+
 > **9 October 01:14 UTC P05/P07 Vault hold writer, OPEN:** The local
 > service and forward SQL trigger refuse ordinary Vault hold changes
 > under document recovery binding. Synthetic API and direct-SQL tests

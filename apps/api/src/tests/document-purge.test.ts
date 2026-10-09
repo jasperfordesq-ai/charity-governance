@@ -14,13 +14,14 @@ const input = { documentId: 'doc-a', policyId: 'policy-a', expectedUpdatedAt: da
   evidenceRef: 'AUTH-001', reason: 'Synthetic evidence reviewed for disposal.', authorityConfirmed: true, dispositionPlan: plan };
 
 function fixture() {
-  const state = { role: 'OWNER', bytes, auth: null as any, writes: [] as any[], claims: 0,
+  const state = { role: 'OWNER', bytes, auth: null as any, bound: false, writes: [] as any[], claims: 0,
     document: { id: 'doc-a', organisationId: 'org-a', updatedAt: date, deletedAt: date,
       deletionHold: false, fileUrl: 'org-a/pinned.txt', storageProvider: 'local', fileSize: bytes.length,
       recoverySha256: createHash('sha256').update(bytes).digest('hex'), recoveryUntil: date } as any,
     databaseFailure: null as any, listArgs: null as any, dispositionArgs: null as any, dispositionRows: [] as any[] };
   const tx: any = {
     $queryRaw: async () => [],
+    documentRecoveryEnforcement: { findUnique: async () => state.bound ? { id: 'binding' } : null },
     user: { findFirst: async ({ where }: any) => where.id === 'owner-a' && where.organisationId === 'org-a' && state.role === 'OWNER' ? { id: 'owner-a' } : null },
     document: { findFirst: async ({ where }: any) => state.document?.id === where.id && where.organisationId === 'org-a' ? state.document : null },
     documentPurgeAuthorization: {
@@ -186,6 +187,19 @@ test('recording downstream evidence is scoped, Owner-only, post-claim and cannot
   await assert.rejects(service.recordDisposition('org-a', 'owner-a', 'auth-a', disposition), { statusCode: 409, code: 'PURGE_DISPOSITION_REVIEW_CHANGED' });
   state.databaseFailure = Object.assign(new Error('Purge disposition observation must be between claim and recording'), { name: 'PrismaClientUnknownRequestError' });
   await assert.rejects(service.recordDisposition('org-a', 'owner-a', 'auth-a', disposition), { statusCode: 409, code: 'PURGE_OBSERVATION_TIME_INVALID' });
+  state.databaseFailure = Object.assign(new Error('Document copy change requires independent recovery authority SECRET'), { name: 'PrismaClientUnknownRequestError' });
+  await assert.rejects(service.recordDisposition('org-a', 'owner-a', 'auth-a', disposition), { statusCode: 409, code: 'COPY_RECOVERY_AUTHORITY_REQUIRED' });
+});
+
+test('document recovery binding freezes copy observation writes while preserving history', async () => {
+  const { service, state } = fixture();
+  await service.authorize('org-a', 'owner-a', input);
+  await service.claim('org-a', 'owner-a', 'auth-a', { confirmPermanentPurge: true });
+  state.bound = true;
+  await assert.rejects(service.recordDisposition('org-a', 'owner-a', 'auth-a', disposition),
+    { statusCode: 409, code: 'COPY_RECOVERY_AUTHORITY_REQUIRED' });
+  assert.equal(state.dispositionArgs, null);
+  await service.listDispositions('org-a', 'auth-a', {});
 });
 
 test('downstream history paginates within one charity and authorization without claiming complete erasure', async () => {

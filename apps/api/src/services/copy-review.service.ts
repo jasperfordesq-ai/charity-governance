@@ -35,6 +35,9 @@ export class CopyReviewService {
   private async transaction<T>(work:(tx:Prisma.TransactionClient)=>Promise<T>):Promise<T> {
     try{return await this.prisma.$transaction(work);}
     catch(error){
+      if(error instanceof Error&&error.name==='PrismaClientUnknownRequestError'
+        &&/(?:Document|Complaint) copy change requires independent recovery authority/.test(error.message))
+        throw new AppError(409,'COPY_RECOVERY_AUTHORITY_REQUIRED','Copy changes require independent recovery authority for this charity.');
       if(error instanceof Error&&error.name==='PrismaClientUnknownRequestError'&&/Copy (?:authority|hold|review|withdrawal|retention)|Permanent copy retention|Untimed copy policy/.test(error.message))
         throw new AppError(409,'COPY_REVIEW_CHANGED','Refresh the scope, policy, hold and current review before submitting again.');
       if(error&&typeof error==='object'&&'code' in error&&['P2002','P2003','P2004','P2010','P2034'].includes(String(error.code)))
@@ -55,6 +58,13 @@ export class CopyReviewService {
     const parent=this.kind==='DOCUMENT'?await tx.documentPurgeAuthorization.findFirst(args):await tx.complaintPurgeAuthorization.findFirst(args);
     if(!parent)throw new AppError(404,'COPY_PARENT_NOT_FOUND','Disposal review not found.');
     if(!parent.claim)throw new AppError(409,'COPY_PRIMARY_NOT_CLAIMED','Review copies against a completed primary disposal claim.');
+  }
+  private async assertRecoveryUnbound(tx:Prisma.TransactionClient,organisationId:string) {
+    const binding=this.kind==='DOCUMENT'
+      ?await tx.documentRecoveryEnforcement.findUnique({where:{organisationId},select:{id:true}})
+      :await tx.complaintRecoveryEnforcement.findUnique({where:{organisationId},select:{id:true}});
+    if(binding)throw new AppError(409,'COPY_RECOVERY_AUTHORITY_REQUIRED',
+      'Copy changes require independent recovery authority for this charity.');
   }
   async list(organisationId:string,actorUserId:string,authorizationId:string,history:History,raw:unknown) {
     const {before}=z.object({before:id.optional()}).strict().parse(raw);
@@ -92,6 +102,7 @@ export class CopyReviewService {
     const input=reviewInput.parse(raw);this.area(input.area);
     return this.transaction(async tx=>{
       await this.parent(tx,organisationId,actorUserId,authorizationId,true);
+      await this.assertRecoveryUnbound(tx,organisationId);
       const {authorityConfirmed:_confirmation,...fields}=input;
       const data={...fields,organisationId,actorUserId,authorizationId,
         disposition:input.state==='AUTHORIZED'?input.disposition:null,policyId:input.state==='AUTHORIZED'?input.policyId:null,
@@ -108,6 +119,7 @@ export class CopyReviewService {
     const {holdConfirmed:_confirmation,...input}=holdInput.parse(raw);this.area(input.area);
     return this.transaction(async tx=>{
       await this.parent(tx,organisationId,actorUserId,authorizationId,false);
+      await this.assertRecoveryUnbound(tx,organisationId);
       const data={...input,organisationId,actorUserId,authorizationId};
       return this.kind==='DOCUMENT'?tx.documentCopyHoldEvent.create({data,select:holdView}):tx.complaintCopyHoldEvent.create({data,select:holdView});
     });

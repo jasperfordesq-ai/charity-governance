@@ -46,6 +46,10 @@ export class ComplaintPurgeService {
   private async transaction<T>(work:(tx:Prisma.TransactionClient)=>Promise<T>):Promise<T> {
     try {return await this.prisma.$transaction(work);}
     catch(error) {
+      if(error instanceof Error&&error.name==='PrismaClientUnknownRequestError'
+        &&error.message.includes('Complaint copy change requires independent recovery authority')) {
+        throw new AppError(409,'COPY_RECOVERY_AUTHORITY_REQUIRED','Copy changes require independent recovery authority for this charity.');
+      }
       if(error instanceof Error&&error.name==='PrismaClientUnknownRequestError'&&(error.message.includes('Complaint purge disposition')||/Copy (?:observation|review|retention)|Permanent copy retention|Untimed copy policy/.test(error.message))) {
         throw new AppError(409,'COMPLAINT_DISPOSITION_REVIEW_CHANGED','Refresh the copy history and review its current authority, policy, hold, expiry, observation time and follow-up date.');
       }
@@ -84,6 +88,9 @@ export class ComplaintPurgeService {
       const auth=await tx.complaintPurgeAuthorization.findFirst({where:{id:authorizationId,organisationId},select:{id:true,claim:{select:{id:true}}}});
       if(!auth)throw new AppError(404,'COMPLAINT_PURGE_NOT_FOUND','Disposal review not found.');
       if(!auth.claim)throw new AppError(409,'COMPLAINT_PURGE_NOT_CLAIMED','Record copy evidence against a completed primary disposal receipt.');
+      if(await tx.complaintRecoveryEnforcement.findUnique({where:{organisationId},select:{id:true}})) {
+        throw new AppError(409,'COPY_RECOVERY_AUTHORITY_REQUIRED','Copy changes require independent recovery authority for this charity.');
+      }
       // These observations never dispatch deletion or assert aggregate erasure.
       return tx.complaintPurgeDispositionEvent.create({data:{...input,organisationId,actorUserId,authorizationId,
         observedAt:new Date(observedAt),nextReviewAt:nextReviewAt?new Date(nextReviewAt):null},select:observationReview});

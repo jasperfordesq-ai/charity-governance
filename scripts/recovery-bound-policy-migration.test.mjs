@@ -82,6 +82,23 @@ test('bound recovery freezes policy classes and document holds at the database b
     query(`INSERT INTO "ComplaintRecoveryEnforcement"
       (id,"organisationId","installationId","writerId","writerEpoch")
       VALUES ('complaint-binding','complaint-org','synthetic-installation','synthetic-writer',1);`);
+    // Each insert has a complete row shape but a deliberately nonexistent
+    // authorization. The A_* gate must run first and reject the bound family;
+    // this tests direct SQL even when callers bypass the API.
+    for (const [family, org, tables] of [
+      ['Document', 'doc-org', ['DocumentCopyDispositionAuthority', 'DocumentCopyHoldEvent', 'DocumentPurgeDispositionEvent']],
+      ['Complaint', 'complaint-org', ['ComplaintCopyDispositionAuthority', 'ComplaintCopyHoldEvent', 'ComplaintPurgeDispositionEvent']],
+    ]) {
+      for (const [index, table] of tables.entries()) {
+        const common = `(id,"organisationId","authorizationId",area,"scopeRef",revision,"actorUserId","evidenceRef",reason`;
+        const prefix = `('synthetic-${family}-${index}','${org}','missing-auth','BACKUPS','SYNTHETIC-SCOPE-001',1,'${family.toLowerCase()}-owner','SYNTHETIC-EVIDENCE-001','Synthetic direct SQL check'`;
+        const suffix = index === 0 ? ',"observationRevision",state) VALUES ' + prefix + ",1,'WITHDRAWN');"
+          : index === 1 ? ',"observationRevision",held) VALUES ' + prefix + ',1,true);'
+          : ',status,"observedAt") VALUES ' + prefix + ",'NEEDS_REVIEW',CURRENT_TIMESTAMP);";
+        query(`INSERT INTO "${table}" ${common}${suffix}`,
+          new RegExp(`${family} copy change requires independent recovery authority`));
+      }
+    }
     query(`UPDATE "Document" SET "deletionHold"=true WHERE id='doc-unheld';`,
       /Document deletion hold requires independent recovery authority/);
     query(`UPDATE "Document" SET "deletionHold"=false WHERE id='doc-held';`,

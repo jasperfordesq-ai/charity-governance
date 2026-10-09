@@ -60,6 +60,9 @@ export class DocumentPurgeService {
       // PostgreSQL RAISE EXCEPTION (P0001) arrives as an unknown-request error,
       // not P2004, with this Prisma engine. Translate only named purge guards.
       if (error instanceof Error && error.name === 'PrismaClientUnknownRequestError') {
+        if (error.message.includes('Document copy change requires independent recovery authority')) {
+          throw new AppError(409, 'COPY_RECOVERY_AUTHORITY_REQUIRED', 'Copy changes require independent recovery authority for this charity.');
+        }
         if (error.message.includes('Purge claim must wait for retention and recovery expiry')
           || error.message.includes('Document purge claim must wait for calendar-year retention expiry')) {
           throw new AppError(409, 'PURGE_NOT_DUE', 'The approved retention and recovery periods must both expire before primary disposal.');
@@ -129,6 +132,9 @@ export class DocumentPurgeService {
       const auth = await tx.documentPurgeAuthorization.findFirst({ where: { id: authorizationId, organisationId }, select: { id: true, claim: { select: { id: true } } } });
       if (!auth) throw new AppError(404, 'PURGE_AUTHORIZATION_NOT_FOUND', 'Authorization not found');
       if (!auth.claim) throw new AppError(409, 'PURGE_NOT_CLAIMED', 'Record disposal evidence against a claimed authorization.');
+      if (await tx.documentRecoveryEnforcement.findUnique({ where: { organisationId }, select: { id: true } })) {
+        throw new AppError(409, 'COPY_RECOVERY_AUTHORITY_REQUIRED', 'Copy changes require independent recovery authority for this charity.');
+      }
       return tx.documentPurgeDispositionEvent.create({ data: { ...input, organisationId, actorUserId, authorizationId,
         observedAt: new Date(observedAt), nextReviewAt: nextReviewAt ? new Date(nextReviewAt) : null }, select: dispositionReview });
     });

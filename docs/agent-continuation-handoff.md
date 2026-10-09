@@ -1,5 +1,15 @@
 # CharityPilot Agent Continuation Handoff
 
+> **9 October 01:19 UTC P05/P07 copy writer fence, OPEN:** A local
+> forward migration and API guards now refuse document/complaint
+> copy authority, hold and observation inserts after the matching
+> recovery binding. Focused API 39/39 and disposable PostgreSQL
+> direct-SQL proof for six tables passed. Full API 2,695 plus 11 PG
+> passed before a safe race-error translation was rebuilt and
+> retested in the focused suite.
+> No live activation, deployment, independent custody/replay or
+> Nikita acceptance is implied. See the private copy writer receipt.
+
 > **9 October 01:14 UTC P05/P07 document hold, OPEN:** Local API and
 > forward database trigger now refuse ordinary Vault deletion-hold
 > placement and release after document recovery binding. The

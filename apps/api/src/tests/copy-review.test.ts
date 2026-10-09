@@ -9,17 +9,27 @@ const authority={area:'BACKUPS',scopeRef:'BACKUP-001',revision:1,previousId:null
 const hold={area:'BACKUPS',scopeRef:'BACKUP-001',revision:1,observationRevision:1,held:true,
   evidenceRef:'HOLD-001',reason:'Preserve synthetic copy scope',holdConfirmed:true};
 function fixture(kind:'DOCUMENT'|'COMPLAINT') {
-  const state={allowed:true,parent:true,claimed:true,writes:[] as any[],actorQueries:[] as any[],rows:[] as any[],reads:[] as any[],error:null as Error|null};
+  const state={allowed:true,parent:true,claimed:true,bound:false,writes:[] as any[],actorQueries:[] as any[],rows:[] as any[],reads:[] as any[],error:null as Error|null};
   const history={findFirst:async({where}:any)=>state.rows.find(row=>row.id===where.id&&row.organisationId===where.organisationId&&row.authorizationId===where.authorizationId)??null,findMany:async(args:any)=>{state.reads.push(args);return state.rows;},
     create:async({data,select}:any)=>{if(state.error)throw state.error;state.writes.push({data,select});return data;}};
   const parent={findFirst:async({where}:any)=>{assert.deepEqual(where,{id:'auth',organisationId:'org'});return state.parent?{id:'auth',claim:state.claimed?{id:'claim'}:null}:null;}};
   const tx:any={$queryRaw:async()=>[],user:{findFirst:async(args:any)=>{state.actorQueries.push(args);return state.allowed?{id:'actor'}:null;}},
     documentPurgeAuthorization:parent,complaintPurgeAuthorization:parent,
+    documentRecoveryEnforcement:{findUnique:async()=>state.bound?{id:'binding'}:null},
+    complaintRecoveryEnforcement:{findUnique:async()=>state.bound?{id:'binding'}:null},
     documentCopyDispositionAuthority:history,complaintCopyDispositionAuthority:history,
     documentCopyHoldEvent:history,complaintCopyHoldEvent:history,documentPurgeDispositionEvent:history,complaintPurgeDispositionEvent:history};
   return {state,service:new CopyReviewService({...tx,$transaction:async(fn:any)=>fn(tx)} as any,kind)};
 }
 for(const kind of ['DOCUMENT','COMPLAINT'] as const) {
+  test(`${kind} recovery binding freezes copy writes but keeps history readable`,async()=>{
+    const {state,service}=fixture(kind);state.bound=true;
+    await assert.rejects(service.review('org','actor','auth',authority),{statusCode:409,code:'COPY_RECOVERY_AUTHORITY_REQUIRED'});
+    await assert.rejects(service.hold('org','actor','auth',hold),{statusCode:409,code:'COPY_RECOVERY_AUTHORITY_REQUIRED'});
+    assert.equal(state.writes.length,0);
+    await service.list('org','actor','auth','authorities',{});
+    await service.scopes('org','actor','auth',{});
+  });
   test(`${kind} scoped review preserves explicit policy, actor and expiry`,async()=>{
     const {state,service}=fixture(kind);
     await service.review('org','actor','auth',authority);
@@ -59,6 +69,10 @@ for(const kind of ['DOCUMENT','COMPLAINT'] as const) {
     assert.deepEqual(state.reads.at(-1).where.OR,[{occurredAt:{lt:state.rows[49].occurredAt}},{occurredAt:state.rows[49].occurredAt,id:{lt:'row-49'}}]);
     state.error=Object.assign(new Error('Copy authority revision changed SECRET'),{name:'PrismaClientUnknownRequestError'});
     await assert.rejects(service.review('org','actor','auth',authority),(error:any)=>{assert.equal(error.statusCode,409);assert.doesNotMatch(error.message,/SECRET/);return true;});
+    state.error=Object.assign(new Error(`${kind==='DOCUMENT'?'Document':'Complaint'} copy change requires independent recovery authority SECRET`),
+      {name:'PrismaClientUnknownRequestError'});
+    await assert.rejects(service.review('org','actor','auth',authority),{statusCode:409,code:'COPY_RECOVERY_AUTHORITY_REQUIRED'});
+    await assert.rejects(service.hold('org','actor','auth',hold),{statusCode:409,code:'COPY_RECOVERY_AUTHORITY_REQUIRED'});
   });
 }
 
