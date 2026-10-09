@@ -1,5 +1,15 @@
 # CharityPilot Full-Platform Remediation Audit
 
+> **9 October retention/recovery migration gate, still OPEN:** The 19
+> forward SQL files applied without error to a networkless disposable
+> restore of the 8 October serving-VM database backup (156 baseline
+> migrations, 75 documents). This is populated-data compatibility
+> evidence only. Calendar-year policy creation remains fenced, and
+> exact candidate-image/Prisma rehearsal, fresh VM preflight, guarded
+> deployment, approved retention terms, independent recovery and DPO
+> acceptance are still required. Private exact log:
+> `.charitypilot-private/forward-sql-live-backup-rehearsal-2026-10-09.md`.
+
 > **9 October 07:37 Dublin C1 evidence update, OPEN:** The adjacent
 > local NEXUS C1 branch is now clean at `45f3cce50` after a rebase
 > onto updated `origin/main=378f36e90`; 231 disposable MariaDB tests,

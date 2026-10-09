@@ -1,5 +1,15 @@
 # CharityPilot Agent Continuation Handoff
 
+> **9 October ~07:57 Dublin populated SQL rehearsal, local only:** A
+> manifest-hash-verified 8 October backup of serving `96c8b1e8` was
+> restored into a networkless, portless disposable PostgreSQL 16
+> container. Its 156-migration baseline accepted all 19 candidate
+> forward SQL files in order with stop-on-error. The container and
+> anonymous volume were removed. Exact private log and scope are in
+> `.charitypilot-private/forward-sql-live-backup-rehearsal-2026-10-09.md`.
+> This checks populated snapshot SQL compatibility, not Prisma/image
+> release, current cutover data, live behavior or Nikita acceptance.
+
 > **9 October 07:47 Dublin four new governance-file reviews:**
 > Existing 8 October recovery copies supplied bounded content checks
 > for the circulated CWR-2026-10B resolution, AGM position note,
