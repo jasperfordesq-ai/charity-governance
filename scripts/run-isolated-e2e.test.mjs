@@ -2903,6 +2903,33 @@ test("standalone compose and bootstrap SQL contain the exact non-personal isolat
     )
     .map((name) => readFileSync(join(ROOT, "e2e", "tests", name), "utf8"))
     .join("\n");
+  const nonInterceptingSpecSources = readdirSync(join(ROOT, "e2e", "tests"))
+    .filter((name) =>
+      name.endsWith(".spec.ts") &&
+      name !== "personal-local-readiness.spec.ts" &&
+      name !== "dpo-session-replay-concurrency.spec.ts")
+    .map((name) => readFileSync(join(ROOT, "e2e", "tests", name), "utf8"))
+    .join("\n");
+  // The replay regression deliberately drops real auth responses to simulate
+  // network loss. Its only interception points are the three exact auth
+  // requests below; all other isolated specs remain free of routing mocks.
+  const replayFaultSpec = readFileSync(
+    join(ROOT, "e2e", "tests", "dpo-session-replay-concurrency.spec.ts"),
+    "utf8",
+  );
+  const replayFaultCode = replayFaultSpec.split("\n")
+    .filter((line) => !line.trimStart().startsWith("//"))
+    .join("\n");
+  assert.deepEqual(
+    [...replayFaultCode.matchAll(/\.route\('([^']+)'/g)].map((match) => match[1]),
+    ['**/api/v1/auth/logout', '**/api/v1/auth/logout', '**/api/v1/auth/refresh'],
+  );
+  assert.equal((replayFaultCode.match(/route\.fetch\(/g) ?? []).length, 1);
+  assert.equal((replayFaultCode.match(/request\.post\(/g) ?? []).length, 4);
+  assert.equal((replayFaultCode.match(/route\.abort\('failed'\)/g) ?? []).length, 2);
+  assert.equal((replayFaultCode.match(/route\.fulfill\(\{ response \}\)/g) ?? []).length, 1);
+  assert.doesNotMatch(replayFaultCode, /\.(?:unroute|routeWebSocket|unrouteAll)\(/);
+  assert.doesNotMatch(replayFaultCode, /route\.fulfill\(\{(?!\s*response\s*\})/);
   const manualContextSpecs = [
     "auth-session.spec.ts",
     "authz.spec.ts",
@@ -3134,7 +3161,7 @@ test("standalone compose and bootstrap SQL contain the exact non-personal isolat
     /browser\.newContext\(|browser\.newPage\(/,
   );
   assert.doesNotMatch(
-    isolatedSpecSources,
+    nonInterceptingSpecSources,
     /\.(?:route|unroute|routeWebSocket|unrouteAll)\(/,
   );
   assert.doesNotMatch(

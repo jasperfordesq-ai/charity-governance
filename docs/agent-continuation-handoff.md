@@ -1,5 +1,17 @@
 # CharityPilot Agent Continuation Handoff
 
+> **9 October production-check gate repair, local only:** The first current
+> `test:production-check` run exposed 19 failures: synthetic public deploy
+> fixtures lacked the now-required production/MFA fields; the isolated E2E
+> static contract rejected three explicit auth-response fault injections in
+> the replay spec; and Windows exposed a WSL `bash` launcher with no Linux
+> `/bin/bash`. Test fixtures now exercise the strict production requirement,
+> the route exception is confined to the exact replay requests and real
+> backend responses, and the Bash syntax test skips only that missing WSL
+> interpreter. The full suite now passes 1,123, fails 0, skips 5 on this
+> Windows host; focused tests pass 116, fail 0, skip 1. The five skips are
+> environment-specific and do not constitute Linux/hosted acceptance.
+
 > **9 October current-candidate API verification, local only:** On clean
 > `9e75cc86`, `npm.cmd test` in `apps/api` completed with exit 0: TypeScript
 > and seed builds passed, 2,717 API tests passed, and all 14 serial real

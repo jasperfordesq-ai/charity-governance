@@ -14,6 +14,8 @@ const productionSupabaseUrl = 'https://xjvdkmqbtczrnlqpswfa.supabase.co';
 function completeDeployEnv(overrides = {}) {
   const values = {
     NODE_ENV: 'production',
+    CHARITYPILOT_DEPLOYMENT_MODE: 'production',
+    CHARITYPILOT_PRIVILEGED_MFA_MODE: 'required',
     PORT: '3002',
     TRUSTED_PROXY_ADDRESSES: '10.0.0.10',
     READINESS_API_KEY: 'r7Nq2Xc9Lm4Pz8Va6Ys3Td5He1Bw0UkF',
