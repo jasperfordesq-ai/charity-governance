@@ -1,5 +1,14 @@
 # Document recovery and purge implementation contract
 
+> **9 October journal capacity admission, local only:** A fresh document
+> preparation requires room for its five-entry decision chain; complaint,
+> hold and generic disposal starts require two slots. The journal refuses
+> them before creating an intent if its 10,000-entry ceiling would cut the
+> chain short. Existing operations may finish and one-entry preservation
+> decisions may use the final slot. This does not provide rollover,
+> independent custody or host-loss recovery; do not activate binding on
+> the strength of this admission check.
+
 > **9 October 2026 complaint source host-loss boundary, OPEN:**
 > `ComplaintRecord` creation and ordinary edits still have no
 > independently recoverable source revision. The register change audit

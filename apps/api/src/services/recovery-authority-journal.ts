@@ -49,6 +49,15 @@ const entrySchema = z.object({ format: z.literal(1), installationId: identity, o
 }).strict();
 type Entry = z.infer<typeof entrySchema>;
 type Input = z.infer<typeof inputSchema>;
+// Admit a multi-entry operation only when its longest required decision chain
+// fits before the current journal ceiling. This is a stopgap until a reviewed
+// rollover protocol exists; unused slots are not an authorization to act.
+const admissionSlots: Partial<Record<Entry['kind'], number>> = {
+  DISPOSAL_INTENT: 2,
+  COMPLAINT_PREPARATION_V1: 2,
+  COMPLAINT_HOLD_PREPARATION_V1: 2,
+  DOCUMENT_PREPARATION_V1: 5,
+};
 const predecessorKind = (kind: Entry['kind']): Entry['kind'] | undefined => {
   if (kind === 'COMPLAINT_OUTCOME_V1' || kind === 'COMPLAINT_CANCELLATION_V1') return 'COMPLAINT_PREPARATION_V1';
   if (kind === 'COMPLAINT_HOLD_OUTCOME_V1' || kind === 'COMPLAINT_HOLD_CANCELLATION_V1') return 'COMPLAINT_HOLD_PREPARATION_V1';
@@ -491,6 +500,9 @@ export class RecoveryAuthorityJournal {
     if (previous) return this.receipt(previous, true);
     if (input.expectedGeneration !== rows.length || input.expectedDigest !== (rows.at(-1)?.digest ?? null)) {
       throw new Error('Recovery authority generation changed; review current decisions.');
+    }
+    if (rows.length + (admissionSlots[input.kind] ?? 1) > 10000) {
+      throw new Error('Recovery authority capacity cannot admit the complete operation; keep dependent actions closed.');
     }
     const expectedPredecessor = predecessorKind(input.kind);
     if (expectedPredecessor !== undefined && (rows.at(-1)?.kind !== expectedPredecessor

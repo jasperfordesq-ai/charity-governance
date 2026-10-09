@@ -1,5 +1,16 @@
 # CharityPilot Full-Platform Remediation Audit
 
+> **9 October P05/P08 recovery capacity guard, OPEN:** Synthetic
+> near-limit tests exposed that a new document recovery preparation could
+> start without enough remaining journal entries for its five-stage
+> decision chain. A local admission check now refuses that start before
+> writing an intent; complaint/hold and generic disposal starts reserve
+> two slots. Focused 33/33 passes, with API 2,724/2,724 and serial real
+> PostgreSQL 14/14 on the initial implementation. The final generic-intent
+> case passed after rebuild in the focused suite. This does not supply
+> rollover, trusted independent checkpoint custody, resumable full
+> recovery, provider acceptance or deployment. P05/P08 remain OPEN.
+
 > **9 October DPO-05/08 release review, OPEN live:** A full-schema
 > red/green test exposed and closed a direct-SQL publication row-ID
 > mutation path that could detach upload/page-create intent history.

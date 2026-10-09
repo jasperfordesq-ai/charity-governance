@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import { createHash } from 'node:crypto';
 import { test } from 'node:test';
 import { RecoveryAuthorityJournal, type AuthorityObjectStore, type AuthorityCheckpoint } from '../services/recovery-authority-journal.js';
 
@@ -379,4 +380,66 @@ test('invalidating prefix reuse does not forget a later history already verified
   await assert.rejects(() => f.journal.appendPublished({ ...intent, operationId: 'replacement',
     expectedGeneration: first.generation, expectedDigest: first.digest }, f.publisher), /verified history/);
   assert.equal(f.rows.size, 1);
+});
+
+function nearCapacityFixture(generation: number) {
+  const rows = new Map<string, string>();
+  let previousDigest: string | null = null;
+  for (let i = 1; i <= generation; i++) {
+    const facts: { format: number; installationId: string; organisationId: string;
+      generation: number; previousDigest: string | null; operationId: string;
+      kind: string; factsDigest: string } = { format: 1, ...binding, generation: i, previousDigest,
+      operationId: `prior-${i}`, kind: 'PRESERVATION_CHANGE', factsDigest: 'a'.repeat(64) };
+    const digest: string = createHash('sha256').update(JSON.stringify(facts)).digest('hex');
+    rows.set(`authority/${binding.installationId}/${binding.organisationId}/${String(i).padStart(10, '0')}.json`,
+      JSON.stringify({ ...facts, digest }));
+    previousDigest = digest;
+  }
+  let creates = 0;
+  const store: AuthorityObjectStore = {
+    async read(key) { return rows.get(key) ?? null; },
+    async create(key, body) { creates++; if (rows.has(key)) return false; rows.set(key, body); return true; },
+  };
+  return { rows, store, lastDigest: previousDigest, creates: () => creates,
+    journal: new RecoveryAuthorityJournal(store, binding,
+      { ...binding, generation, digest: previousDigest }) };
+}
+
+test('near capacity refuses a new document chain before storing its preparation', async () => {
+  const f = nearCapacityFixture(9996);
+  await assert.rejects(() => f.journal.append({ ...intent,
+    operationId: 'document-near-capacity', kind: 'DOCUMENT_PREPARATION_V1',
+    expectedGeneration: 9996, expectedDigest: f.lastDigest,
+  }), /capacity/);
+  assert.equal(f.creates(), 0);
+  assert.equal(f.rows.size, 9996);
+});
+
+test('a document chain admitted at the boundary can occupy its five reserved entries', async () => {
+  const f = nearCapacityFixture(9995);
+  let generation = 9995;
+  let digest = f.lastDigest!;
+  for (const kind of ['DOCUMENT_PREPARATION_V1', 'DOCUMENT_OUTCOME_V1', 'DOCUMENT_BYTE_PERMIT_V1',
+    'DOCUMENT_BYTE_EXECUTION_DECISION_V1', 'DOCUMENT_BYTE_PROVIDER_UNKNOWN_V1'] as const) {
+    const receipt = await f.journal.append({ ...intent, operationId: 'document-at-capacity', kind,
+      expectedGeneration: generation, expectedDigest: digest });
+    generation = receipt.generation; digest = receipt.digest;
+  }
+  assert.equal(generation, 10000);
+  assert.equal(f.creates(), 5);
+  assert.equal((await f.journal.inspect()).digest, digest);
+});
+
+test('the last slot remains available for a standalone decision but not a complaint chain', async () => {
+  const f = nearCapacityFixture(9999);
+  const digest = f.lastDigest!;
+  for (const kind of ['DISPOSAL_INTENT', 'COMPLAINT_PREPARATION_V1', 'COMPLAINT_HOLD_PREPARATION_V1'] as const) {
+    await assert.rejects(() => f.journal.append({ ...intent, operationId: `new-${kind}`, kind,
+      expectedGeneration: 9999, expectedDigest: digest }), /capacity/);
+  }
+  assert.equal(f.creates(), 0);
+  const decision = await f.journal.append({ ...intent, operationId: 'standalone-final',
+    kind: 'PRESERVATION_CHANGE', expectedGeneration: 9999, expectedDigest: digest });
+  assert.equal(decision.generation, 10000);
+  assert.equal(f.creates(), 1);
 });

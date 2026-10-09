@@ -1,5 +1,19 @@
 # CharityPilot Agent Continuation Handoff
 
+> **9 October recovery-journal capacity admission, local only:** The
+> 10,000-entry journal now refuses a new document preparation unless all
+> five possible decision-chain entries fit, and refuses a new complaint,
+> complaint-hold or generic disposal intent unless two entries fit. A
+> red/green synthetic near-limit test proved the former could previously
+> start with too little capacity; boundary tests prove a five-entry document
+> chain can finish at the cap and a standalone decision can use the final
+> slot. API 2,724/2,724 and serial real PostgreSQL 14/14 passed on the
+> first implementation; the final added generic-intent case passed in the
+> 33/33 journal suite after rebuild. This is a fail-closed admission guard,
+> not a rollover, independently trusted checkpoint, provider acceptance,
+> host-loss replay or approval to activate independent recovery. Keep
+> P05/P08/DPO retention and erasure gates OPEN.
+
 > **9 October retained publication erasure design, OPEN:** The C01
 > synthetic formerly published source remains a retained Document.
 > `DocumentRecoveryService.remove()` accepts only unheld, unapproved
