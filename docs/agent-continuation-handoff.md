@@ -1,5 +1,17 @@
 # CharityPilot Agent Continuation Handoff
 
+> **9 October 07:13 Dublin C1 adjacent NEXUS branch, local only:**
+> The isolated `codex/c1-pending-profile` branch in
+> `C:\platforms\htdocs\staging-codex-c1-pending` was rebased on current
+> `origin/main` and is clean at `b8fddbbf6` (14 ahead, zero behind).
+> A fresh disposable MariaDB 10.11 run passed 231 tests/756 assertions
+> with 12 previously quarantined alias-mock tests skipped. The branch
+> remains unpushed, unmerged and undeployed; this is neither exact-build
+> hosted delivery proof nor Nikita's acceptance. The original C1 closure
+> receipt, hosted recipient and profile-link checks, risk-owner review and
+> the live C1 verification row remain OPEN. Private evidence and the
+> rebase/test log are in `.charitypilot-private/c1-decision-for-review-2026-10-06.md`.
+
 > **9 October recovery-journal capacity admission, local only:** The
 > 10,000-entry journal now refuses a new document preparation unless all
 > five possible decision-chain entries fit, and refuses a new complaint,

@@ -1,5 +1,16 @@
 # CharityPilot Full-Platform Remediation Audit
 
+> **9 October C1 adjacent local NEXUS checkpoint, OPEN:** Isolated
+> `codex/c1-pending-profile` was rebased on current `origin/main`; clean
+> local tip `b8fddbbf6` is 14 commits ahead, zero behind. A fresh
+> disposable MariaDB run passed 231 tests/756 assertions with 12 existing
+> quarantined tests skipped. The branch is unpushed, unmerged and
+> undeployed. Original C1 admin-email closure evidence, exact-build hosted
+> recipient-wide delivery and profile-click checks, risk-owner decision
+> and Nikita review remain outstanding; do not close live C1 from this
+> local evidence. Private exact log and runner are cited in the
+> continuation handoff.
+
 > **9 October P05/P08 recovery capacity guard, OPEN:** Synthetic
 > near-limit tests exposed that a new document recovery preparation could
 > start without enough remaining journal entries for its five-stage
