@@ -1,5 +1,17 @@
 # CharityPilot Agent Continuation Handoff
 
+> **9 October retained publication erasure design, OPEN:** The C01
+> synthetic formerly published source remains a retained Document.
+> `DocumentRecoveryService.remove()` accepts only unheld, unapproved
+> DRAFT records under `VAULT_DRAFT`; Confluence erasure requires a RETIRED
+> publication with no local Document row. The existing refusal is sound,
+> but a reviewed path for remote-copy disposition while retaining the
+> governance source, and a separate approved path for eventual retained
+> record disposal, are still missing. The private
+> `retained-published-document-erasure-decision-2026-10-09.md` sets out
+> the exact two-object controller decisions and end-to-end gates. No
+> policy or erasure was activated; C01/DPO-05/P04/P08 stay open.
+
 > **9 October morning source review and correspondence boundary:** A
 > focused review of the cumulative privileged-MFA and document-source
 > migration diff found no additional bypass in the inspected paths. The
