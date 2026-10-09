@@ -50,6 +50,7 @@ type PrismaMock = {
     create?: (args: unknown) => Promise<{ id: string }>;
     updateMany?: (args: unknown) => Promise<{ count: number }>;
   };
+  documentRecoveryEnforcement?: { findUnique: (args: unknown) => Promise<{ id: string } | null> };
   governanceStandard?: {
     findUnique?: (args: unknown) => Promise<unknown>;
   };
@@ -112,6 +113,7 @@ async function buildDocumentsApp(prisma: PrismaMock, role: Role = 'ADMIN', limit
   const app = Fastify({ logger: false });
   const decoratedPrisma = { ...authModels(role), ...prisma };
   decoratedPrisma.$transaction ??= async (callback: (tx: PrismaMock) => Promise<unknown>) => callback(decoratedPrisma);
+  decoratedPrisma.documentRecoveryEnforcement ??= { findUnique: async () => null };
   decoratedPrisma.document.aggregate ??= async () => ({ _sum: { fileSize: 0 } });
   // The storage resolver looks up organisation preference on every storage
   // call now that documentRoutes wires it in. Default to "no preference

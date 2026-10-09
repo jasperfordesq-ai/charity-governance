@@ -1864,6 +1864,37 @@ test('Admin connector cannot read dashboard-only Vault control and deletion hist
   } finally { await app.close(); }
 });
 
+test('document upload refuses a recovery-bound charity before reserving or writing bytes', { concurrency: false }, async () => {
+  const originalUpload = StorageService.prototype.uploadFile;
+  let calledProvider = false;
+  let reserved = false;
+  StorageService.prototype.uploadFile = async () => {
+    calledProvider = true;
+    throw new Error('provider must not be called');
+  };
+  const app = await buildDocumentsApp({
+    subscription: subscription(),
+    document: {},
+    documentRecoveryEnforcement: { findUnique: async () => ({ id: 'binding' }) },
+    documentUploadIntent: { create: async () => { reserved = true; return { id: 'unexpected' }; } },
+  });
+  try {
+    const request = multipartRequest(baseFields, {
+      filename: 'policy.pdf', mimetype: 'application/pdf', content: Buffer.from('%PDF-1.7\n%%EOF'),
+    });
+    const response = await app.inject({
+      method: 'POST', url: '/', headers: { ...request.headers, authorization: authHeader }, payload: request.payload,
+    });
+    assert.equal(response.statusCode, 409);
+    assert.equal(response.json().code, 'DOCUMENT_SOURCE_RECOVERY_REQUIRED');
+    assert.equal(calledProvider, false);
+    assert.equal(reserved, false);
+  } finally {
+    StorageService.prototype.uploadFile = originalUpload;
+    await app.close();
+  }
+});
+
 test('bound document recovery refuses standard link and unlink before writing evidence', async () => {
   let writes = 0;
   const app = await buildDocumentsApp({

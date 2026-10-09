@@ -815,6 +815,73 @@ test('real PostgreSQL 16 migration freezes standard links and document charity a
   } finally { await removeDisposableContainer(container); }
 });
 
+test('real PostgreSQL document source gate stops bound reservations and edits while preserving cleanup and purge', { timeout: 120_000 }, async () => {
+  const container = `charitypilot-document-source-gate-${randomUUID()}`;
+  assertDockerSuccess(docker(['run', '--detach', '--name', container, '--network', 'none',
+    '-e', 'POSTGRES_HOST_AUTH_METHOD=trust', POSTGRES_IMAGE]), 'start document source gate fixture');
+  try {
+    await waitForPostgres(container);
+    psql(container, `
+      CREATE TABLE "Organisation" (id TEXT PRIMARY KEY);
+      INSERT INTO "Organisation" VALUES ('charity'), ('other'), ('race-a'), ('race-b');
+      CREATE TABLE "DocumentRecoveryEnforcement" (id TEXT PRIMARY KEY, "organisationId" TEXT UNIQUE);
+      CREATE TABLE "Document" (id TEXT PRIMARY KEY, "organisationId" TEXT NOT NULL, name TEXT NOT NULL);
+      CREATE TABLE "DocumentStorageDeletion" (id TEXT PRIMARY KEY, state TEXT NOT NULL,
+        "processedAt" TIMESTAMP);
+      CREATE TABLE "DocumentUploadIntent" (id TEXT PRIMARY KEY, "organisationId" TEXT NOT NULL,
+        state TEXT NOT NULL, "cleanupDeletionId" TEXT);
+      INSERT INTO "Document" VALUES ('existing','charity','original');
+      INSERT INTO "DocumentUploadIntent" VALUES ('old-intent','charity','RESERVED');
+    `);
+    psql(container, readFileSync(new URL(
+      '../../prisma/migrations/20261009110000_document_source_upload_recovery_gate/migration.sql',
+      import.meta.url,
+    ), 'utf8'));
+    psql(container, `INSERT INTO "Document" VALUES ('before','charity','allowed');
+      INSERT INTO "DocumentUploadIntent" (id,"organisationId",state)
+        VALUES ('before-intent','charity','RESERVED');`);
+    assert.match(psql(container, `INSERT INTO "DocumentRecoveryEnforcement" VALUES
+      ('binding','charity');`, false).stderr, /requires reconciled upload intents/);
+    psql(container, `INSERT INTO "DocumentStorageDeletion" VALUES
+      ('clean-old','PROCESSED',now()), ('clean-before','PROCESSED',now());
+      UPDATE "DocumentUploadIntent" SET state='CLEANUP_PENDING', "cleanupDeletionId"='clean-old'
+        WHERE id='old-intent';
+      UPDATE "DocumentUploadIntent" SET state='CLEANUP_PENDING', "cleanupDeletionId"='clean-before'
+        WHERE id='before-intent';`);
+    psql(container, `INSERT INTO "DocumentRecoveryEnforcement" VALUES ('binding','charity');`);
+    assert.match(psql(container, `INSERT INTO "DocumentUploadIntent"
+      VALUES ('blocked-intent','charity','RESERVED');`, false).stderr,
+    /upload reservation requires independent recovery authority/);
+    for (const statement of [
+      `INSERT INTO "Document" VALUES ('blocked','charity','not allowed');`,
+      `UPDATE "Document" SET name='edited' WHERE id='existing';`,
+    ]) assert.match(psql(container, statement, false).stderr,
+      /source change requires independent recovery authority/);
+    psql(container, `DELETE FROM "Document" WHERE id='before';
+      INSERT INTO "Document" VALUES ('other-doc','other','allowed');
+      UPDATE "Document" SET name='edited' WHERE id='other-doc';
+      INSERT INTO "DocumentUploadIntent" (id,"organisationId",state)
+        VALUES ('other-intent','other','RESERVED');`);
+    assert.equal(psql(container, `SELECT state FROM "DocumentUploadIntent" WHERE id='old-intent';`).stdout.trim(), 'CLEANUP_PENDING');
+    assert.equal(psql(container, `SELECT name FROM "Document" WHERE id='existing';`).stdout.trim(), 'original');
+    for (const [charity, reservationFirst] of [['race-a', true], ['race-b', false]] as const) {
+      const reservationSql = `BEGIN; INSERT INTO "DocumentUploadIntent" (id,"organisationId",state)
+        VALUES ('${charity}-intent','${charity}','RESERVED'); SELECT pg_sleep(1); COMMIT;`;
+      const bindingSql = `BEGIN; INSERT INTO "DocumentRecoveryEnforcement"
+        VALUES ('${charity}-binding','${charity}'); SELECT pg_sleep(1); COMMIT;`;
+      const first = psqlAsync(container, reservationFirst ? reservationSql : bindingSql);
+      await new Promise((resolve) => setTimeout(resolve, 250));
+      const second = await psqlAsync(container, reservationFirst ? bindingSql : reservationSql);
+      const firstResult = await first;
+      assert.equal([firstResult.status, second.status].filter((status) => status === 0).length, 1,
+        'exactly one of a racing reservation and binding must commit');
+      assert.equal(psql(container, `SELECT count(*) FROM "DocumentUploadIntent" intent
+        JOIN "DocumentRecoveryEnforcement" binding ON binding."organisationId"=intent."organisationId"
+        WHERE intent."organisationId"='${charity}' AND intent.state='RESERVED';`).stdout.trim(), '0');
+    }
+  } finally { await removeDisposableContainer(container); }
+});
+
 test('real PostgreSQL 16 migration freezes only complaint policy facts after recovery enforcement', { timeout: 120_000 }, async () => {
   const container = `charitypilot-policy-gate-${randomUUID()}`;
   assertDockerSuccess(docker(['run', '--detach', '--name', container, '--network', 'none',

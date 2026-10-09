@@ -815,6 +815,15 @@ export async function documentRoutes(app: FastifyInstance) {
         });
       }
 
+      // This check gives the normal API a stable 409 before provider I/O.
+      // The upload-intent SQL trigger serialises a concurrent recovery bind.
+      if (await app.prisma.documentRecoveryEnforcement.findUnique({
+        where: { organisationId: request.user.organisationId }, select: { id: true },
+      })) {
+        throw new AppError(409, 'DOCUMENT_SOURCE_RECOVERY_REQUIRED',
+          'Document uploads require independent recovery authority for this charity.');
+      }
+
       let uploadIntentId: string | null = null;
       const uploaded = await storageService.uploadFile(
         request.user.organisationId,

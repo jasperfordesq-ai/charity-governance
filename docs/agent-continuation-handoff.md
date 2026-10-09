@@ -1,5 +1,17 @@
 # CharityPilot Agent Continuation Handoff
 
+> **9 October ~03:46 Dublin Vault source/upload boundary, OPEN:** Local
+> `20261009110000_document_source_upload_recovery_gate` serializes future
+> document recovery binding with upload reservations, refuses binding while
+> reservations or unfinished cleanup are present, and freezes ordinary
+> Document INSERT/UPDATE and new reservations after binding. The upload API
+> returns 409 before provider I/O for an already-bound charity. Full API
+> 2,712/2,712 and serial real PostgreSQL 14/14 passed; a separate focused
+> two-order reservation/binding race passed. This seventeenth forward
+> migration is undeployed and binding remains inactive. Other Document
+> writer API responses, independent source history/baseline/replay, policy,
+> release and Nikita acceptance remain OPEN. See private receipt.
+
 > **9 October ~03:36 Dublin Vault standard-link gate, OPEN:** Local
 > `20261009100000_document_standard_link_recovery_gate` freezes
 > `DocumentStandardLink` INSERT/UPDATE/DELETE after document recovery

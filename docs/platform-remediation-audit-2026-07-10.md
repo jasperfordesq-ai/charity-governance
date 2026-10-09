@@ -1,5 +1,15 @@
 # CharityPilot Full-Platform Remediation Audit
 
+> **9 October Vault source/upload writer gate, OPEN:** Local SQL now freezes
+> Document INSERT/UPDATE and new upload-intent reservations under recovery
+> binding, and refuses binding over unresolved upload intents so an in-flight
+> provider write cannot be grandfathered. The normal upload route returns
+> 409 before provider I/O. Full API 2,712 and 14 serial PostgreSQL tests
+> passed, plus a focused two-order race test. This seventeenth forward
+> migration is not on the private VM; source facts, baseline/replay,
+> controller policy, API responses for other Document writers, hosted proof
+> and Nikita review remain OPEN.
+
 > **9 October Vault standard-link writer, OPEN:** Local API and SQL
 > freeze ordinary standard-link add/edit/remove after document recovery
 > binding, and prohibit direct Document charity reassignment. Full API
