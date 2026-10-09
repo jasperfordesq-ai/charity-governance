@@ -1,5 +1,15 @@
 # CharityPilot Agent Continuation Handoff
 
+> **9 October 07:47 Dublin four new governance-file reviews:**
+> Existing 8 October recovery copies supplied bounded content checks
+> for the circulated CWR-2026-10B resolution, AGM position note,
+> invoice register and strategic-plan status note. Exact hashes and
+> limitations are in the private Vault candidate-review notes.
+> The copies do not prove current live bytes, subsequent Board action,
+> legal correctness, lifecycle or Member audience approval. All four
+> live rows remain restricted/unassessed; the exact reviewed
+> certificate remains the sole Member-visible file.
+
 > **9 October 07:44 Dublin count-only live state:** The clean serving
 > `96c8b1e8` VM has 1 active Owner, 2 Admins, 1 retained test Member,
 > 74 restricted/unassessed Vault rows and one reviewed Member-visible
