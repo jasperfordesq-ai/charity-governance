@@ -69,6 +69,29 @@ test('a rejected protected page without a refresh cookie still goes to login', a
   assert.equal(new URL(response.headers.get('location') ?? '').pathname, '/login');
 });
 
+test('pending privileged MFA redirects before rendering protected pages but permits setup and callback', async () => {
+  Object.assign(process.env, { NODE_ENV: 'production' });
+  process.env.NEXT_PUBLIC_API_URL = 'https://api.charitypilot.ie';
+  globalThis.fetch = (async () => new Response(null, {
+    status: 200, headers: { 'X-CharityPilot-Mfa-Enrolment-Required': '1' },
+  })) as typeof fetch;
+  const request = (pathname: string) => new NextRequest(
+    `https://app.charitypilot.ie${pathname}`,
+    { headers: { cookie: 'charitypilot_access=pending-mfa' } },
+  );
+
+  const denied = await proxy(request('/documents?code=one-use&state=private'));
+  assert.equal(denied.status, 307);
+  assert.equal(denied.headers.get('location'), 'https://app.charitypilot.ie/security-data');
+  assert.match(denied.headers.get('cache-control') ?? '', /no-store/);
+  assert.equal(denied.headers.get('referrer-policy'), 'no-referrer');
+
+  const setup = await proxy(request('/security-data'));
+  assert.equal(setup.status, 200);
+  const callback = await proxy(request('/integrations/confluence/callback?code=one-use&state=private'));
+  assert.equal(callback.status, 200);
+});
+
 test('the public session-renew page has sensitive no-store headers', async () => {
   Object.assign(process.env, { NODE_ENV: 'production' });
   const response = await proxy(new NextRequest('https://app.charitypilot.ie/session-renew?next=%2Fdashboard'));

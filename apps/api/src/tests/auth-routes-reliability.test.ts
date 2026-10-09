@@ -268,11 +268,14 @@ test('GET /me exposes only the public privileged-MFA setup requirement when enab
     const pending = await app.inject({ method: 'GET', url: '/auth/me', headers });
     assert.equal(pending.statusCode, 200);
     assert.equal(pending.json().mfaEnrolmentRequired, true);
+    assert.equal(pending.headers['x-charitypilot-mfa-enrolment-required'], '1');
+    assert.equal(pending.headers['cache-control'], 'no-store');
 
     enrolledAt = new Date('2026-10-09T00:00:00.000Z');
     const enrolled = await app.inject({ method: 'GET', url: '/auth/me', headers });
     assert.equal(enrolled.statusCode, 200);
     assert.equal(Object.hasOwn(enrolled.json(), 'mfaEnrolmentRequired'), false);
+    assert.equal(enrolled.headers['x-charitypilot-mfa-enrolment-required'], undefined);
   } finally {
     await app.close();
     if (priorNodeEnv === undefined) delete process.env.NODE_ENV;

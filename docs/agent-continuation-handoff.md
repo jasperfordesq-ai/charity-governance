@@ -1,5 +1,15 @@
 # CharityPilot Agent Continuation Handoff
 
+> **9 October ~01:37 Dublin public MFA page-boundary follow-up, OPEN:**
+> The API `/auth/me` now sends a no-store setup header for a verified,
+> unenrolled Owner/Admin under required public MFA. The Next.js protected
+> route proxy uses it to redirect a pending session to `/security-data`
+> before rendering other protected pages; Confluence's self-renewing
+> callback still runs in place without copying OAuth code/state to a
+> redirect. The focused API route tests (6/6), web suite (557/557), API
+> build and edited-file lint pass locally. This remains unpushed,
+> undeployed and unreviewed independently.
+
 > **9 October ~01:34 Dublin public privileged MFA increment, OPEN:**
 > Local source now requires `CHARITYPILOT_PRIVILEGED_MFA_MODE=required`
 > for the explicit public `CHARITYPILOT_DEPLOYMENT_MODE=production` profile.

@@ -37,6 +37,7 @@ const ISOLATED_E2E_MODE = "local-disposable";
 
 type ProtectedAuthSession =
   | { state: "authenticated" }
+  | { state: "mfa-setup" }
   | { state: "unauthenticated" }
   | { state: "unavailable"; retryAfter: string };
 
@@ -152,7 +153,9 @@ async function validateProtectedAuthSession(
   const response = await validation;
   if (!response) return unavailableAuthSession();
   if (response.status === 200) {
-    return { state: "authenticated" };
+    return response.headers.get('x-charitypilot-mfa-enrolment-required') === '1'
+      ? { state: 'mfa-setup' }
+      : { state: "authenticated" };
   }
   if (response.status !== 401) return unavailableAuthSession(response);
 
@@ -302,6 +305,16 @@ function redirectToSessionRenew(request: NextRequest, csp: string): NextResponse
   );
 }
 
+function redirectToMfaSetup(request: NextRequest, csp: string): NextResponse {
+  const setupUrl = externalRequestUrl(request);
+  setupUrl.pathname = '/security-data';
+  setupUrl.search = '';
+  setupUrl.hash = '';
+  return addContentSecurityPolicy(
+    addSensitiveAuthHeaders(NextResponse.redirect(setupUrl)), csp,
+  );
+}
+
 /**
  * Render a protected route: the CSP request headers, the protected no-store
  * headers. Session rotation happens only in the browser renewal flow.
@@ -423,6 +436,11 @@ export async function proxy(request: NextRequest) {
     return request.cookies.get(REFRESH_COOKIE_NAME)?.value
       ? redirectToSessionRenew(request, csp)
       : redirectToLogin(request, csp);
+  }
+
+  if (authSession.state === 'mfa-setup' && pathname !== '/security-data' &&
+      !renewsItsOwnSession(pathname)) {
+    return redirectToMfaSetup(request, csp);
   }
 
   return protectedPassThrough(request, nonce, csp);

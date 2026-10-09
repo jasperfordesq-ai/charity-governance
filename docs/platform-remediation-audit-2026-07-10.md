@@ -1,5 +1,13 @@
 # CharityPilot Full-Platform Remediation Audit
 
+> **9 October ~01:37 Dublin privileged MFA page boundary, OPEN:**
+> Source now redirects verified, unenrolled public Owner/Admin sessions
+> at the Next.js proxy before protected pages render. The setup path
+> remains reachable; the Confluence callback preserves its self-renewal
+> behavior and does not redirect one-use OAuth values. Focused API 6/6,
+> web 557/557, API build and edited-file lint passed. No public hosted
+> journey, deployment, recovery procedure or DPO acceptance followed.
+
 > **9 October ~01:34 Dublin privileged MFA, OPEN:** Explicit public
 > production source now fails configuration preflight without required
 > Owner/Admin MFA and fences privileged API actions for unenrolled accounts,

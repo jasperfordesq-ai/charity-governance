@@ -296,7 +296,10 @@ export async function authRoutes(app: FastifyInstance) {
       try {
         const user = await authService.getMe(request.user.userId);
         const enrolmentRequired = await privilegedMfaEnrolmentRequired(app, user);
-        return reply.send({ ...publicUser(user),
+        if (enrolmentRequired && user.emailVerified) {
+          reply.header('X-CharityPilot-Mfa-Enrolment-Required', '1');
+        }
+        return reply.header('Cache-Control', 'no-store').send({ ...publicUser(user),
           ...(enrolmentRequired ? { mfaEnrolmentRequired: true } : {}) });
       } catch (err) {
         return handleError(reply, err);

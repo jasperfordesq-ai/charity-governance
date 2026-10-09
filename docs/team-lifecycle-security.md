@@ -104,7 +104,9 @@ routes; the login page sends it to Security & Data. An unenrolled privileged
 connector is refused before session issuance. The normal request guard reads
 the live account role and factor state, so invitation acceptance, promotion
 and existing sessions cannot retain privileged API access without an enrolled
-factor. The current private VM omits this mode and keeps Jasper's optional
+factor. The web proxy also redirects verified pending Owner/Admin sessions
+to setup before protected pages render, while preserving the self-renewing
+Confluence callback path. The current private VM omits this mode and keeps Jasper's optional
 policy. This source is unpushed, undeployed and has no public role journey or
 independent acceptance yet.
 Account-level enrollment still protects that account's browser and connector
