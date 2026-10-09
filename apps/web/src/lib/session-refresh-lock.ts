@@ -57,8 +57,9 @@ export function markSessionEstablished(
 }
 
 /** Keep logout's server revocation and cookie clearance in the same
- * cross-tab critical section as refresh. A lost response cannot establish
- * whether the server revoked the token, so fence refresh even on failure.
+ * cross-tab critical section as refresh. Persist the fence before the
+ * request so another tab cannot retry a spent token if this tab closes
+ * while the response is in flight. Reassert it after any outcome.
  * Only a successful new login clears this noncredential fence.
  */
 export async function coordinateSessionLogout(
@@ -68,13 +69,19 @@ export async function coordinateSessionLogout(
   newStamp: () => string = () => crypto.randomUUID(),
 ): Promise<void> {
   const perform = async () => {
+    const fence = `${LOGOUT_FENCE_PREFIX}${newStamp()}`;
+    try {
+      storage?.setItem(REFRESH_STAMP_KEY, fence);
+    } catch {
+      // If shared storage stays unwritable, renewal fails before token use.
+    }
     try {
       await logout();
     } finally {
       try {
-        storage?.setItem(REFRESH_STAMP_KEY, `${LOGOUT_FENCE_PREFIX}${newStamp()}`);
+        storage?.setItem(REFRESH_STAMP_KEY, fence);
       } catch {
-        // Renewal without shared storage fails closed; keep the logout result.
+        // A persistently unwritable shared stamp blocks renewal.
       }
     }
   };

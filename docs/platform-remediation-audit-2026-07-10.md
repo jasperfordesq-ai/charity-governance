@@ -1,5 +1,11 @@
 # CharityPilot Full-Platform Remediation Audit
 
+> **9 October DPO session replay mitigation, OPEN for release:** The web
+> logout fence is now persisted before sending revocation, rather than only
+> after its response. A focused red/green ordering test, 558 web tests and
+> edited-file lint pass locally. Historical event attribution, deployment,
+> hosted concurrency checks and DPO review remain unresolved.
+
 > **9 October Confluence intent binding preflight, OPEN for release:** The
 > provisional publication recovery fence now refuses binding when either
 > append-only remote-write intent table has rows, even if a malformed or

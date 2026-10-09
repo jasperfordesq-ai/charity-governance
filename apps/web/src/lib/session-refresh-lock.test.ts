@@ -69,6 +69,22 @@ test('a refresh queued behind successful sign-out never presents the spent cooki
   assert.equal(storage.getItem('charitypilot:session-refresh-stamp'), 'logout:logout');
 });
 
+test('sign-out persists its cross-tab fence before sending the revocation request', async () => {
+  const { locks, storage } = crossTabFixture();
+  let started!: () => void;
+  let finishLogout!: () => void;
+  const requestStarted = new Promise<void>((resolve) => { started = resolve; });
+  const logoutGate = new Promise<void>((resolve) => { finishLogout = resolve; });
+  const signingOut = coordinateSessionLogout(async () => {
+    started();
+    await logoutGate;
+  }, locks, storage, () => 'before-request');
+  await requestStarted;
+  assert.equal(storage.getItem('charitypilot:session-refresh-stamp'), 'logout:before-request');
+  finishLogout();
+  await signingOut;
+});
+
 test('ambiguous sign-out failure still fences a queued refresh of a possibly revoked cookie', async () => {
   const { locks, storage } = crossTabFixture();
   let failLogout!: () => void;

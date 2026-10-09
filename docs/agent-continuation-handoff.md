@@ -1,5 +1,14 @@
 # CharityPilot Agent Continuation Handoff
 
+> **9 October browser logout ordering, local only:** A red cross-tab test
+> showed the shared logout stamp was absent while revocation was in flight.
+> The web coordinator now writes the stamp before the request under the
+> refresh lock and reasserts it afterward. Focused session tests 15/15,
+> web suite 558/558 and edited-file lint pass. This narrows a future
+> tab-exit replay window; it does not attribute the nine historical events,
+> prove hosted behavior or constitute Nikita's disposition. See private
+> `logout-fence-before-request-2026-10-09.md`.
+
 > **9 October publication intent binding completeness, local only:** The
 > eighteenth unreleased migration now checks append-only Confluence upload
 > and page-create intent tables in its existing-binding preflight and new
