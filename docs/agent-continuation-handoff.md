@@ -1,5 +1,16 @@
 # CharityPilot Agent Continuation Handoff
 
+> **9 October 07:40 Dublin DPO replay recheck:** Guarded read-only SQL
+> on the clean serving `96c8b1e8` VM still returned nine historical
+> `SESSION_REPLAY_DETECTED` rows, latest 30 September 08:54:30 UTC.
+> The two 30 September WEB rows retain 137/134 ms prior-LOGOUT gaps;
+> seven older rows lack later diagnostics. Current API containers were
+> created after those events and bounded Caddy log windows returned
+> zero lines. Private exact evidence and limits are in
+> `.charitypilot-private/live-replay-review-2026-09-30.md`.
+> Initiating clients, credential provenance, risk-owner disposition and
+> Nikita's independent review remain OPEN.
+
 > **9 October 07:37 Dublin adjacent C1 source gate, still OPEN:** The
 > separate NEXUS branch `codex/c1-pending-profile` was rebased over
 > seven newer `origin/main` commits (`378f36e90`) and is clean at
