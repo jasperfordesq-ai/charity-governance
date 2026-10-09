@@ -1,5 +1,13 @@
 # CharityPilot Full-Platform Remediation Audit
 
+> **9 October DPO retention/erasure isolated browser proof, OPEN policy:**
+> Current disposable Chromium journeys passed 3/3 for document recovery,
+> document primary purge and complaint primary purge. They exercise
+> synthetic approved policies and copy plans, including recovery-byte
+> equality and retained audit. Charity-specific controller terms, real
+> provider and backup disposition, host-loss recovery, deployment and
+> Nikita acceptance remain unverified.
+
 > **9 October DPO minimised-export synthetic demonstration, OPEN live:** A
 > new isolated browser journey passes through app readiness, Owner sign-off,
 > retained snapshot creation and both full/minimised export buttons.

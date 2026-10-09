@@ -1,5 +1,14 @@
 # CharityPilot Agent Continuation Handoff
 
+> **9 October isolated disposal browser gate, local only:** On clean
+> `d828f497`, a fresh disposable stack passed all three existing browser
+> journeys: draft Deleted Items/byte-identical restricted restore with
+> retained audit, reviewed primary document disposal with cancellation,
+> and reviewed complaint primary disposal. The tests use synthetic
+> policies, expiry and retained-copy decisions; they do not approve
+> hOUR Timebank policy periods, prove provider/backups erased, establish
+> independent recovery or authorize a live purge. No live state changed.
+
 > **9 October minimised export synthetic browser demonstration, local only:**
 > New isolated `dpo-minimised-export.spec.ts` seeds only a disposable
 > charity's annual compliance evidence, uses the ordinary Owner Board
