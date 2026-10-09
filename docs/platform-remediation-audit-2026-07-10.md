@@ -1,5 +1,13 @@
 # CharityPilot Full-Platform Remediation Audit
 
+> **9 October restricted-role/byte-authority local proof, OPEN:** The
+> current full-schema disposable PostgreSQL test now separates unbound
+> publication/purge behavior from bound recovery byte authority. All 174
+> migrations and runtime role grants succeeded, followed by the composed
+> test 1/1 and exact disposable teardown. This repairs a stale fixture;
+> live runtime role proof after the 18 pending migrations, independent copy
+> history, release and Nikita's review remain OPEN.
+
 > **9 October Confluence migration preflight, snapshot only:** Read-only
 > count inventory on clean private VM `96c8b1e8` found no citation,
 > publication or document recovery binding rows. The VM has 156 applied

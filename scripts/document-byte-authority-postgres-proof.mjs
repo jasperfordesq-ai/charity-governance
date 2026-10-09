@@ -79,12 +79,25 @@ try {
     await tx.organisation.create({
       data: { id: 'charity', name: 'Synthetic proof charity', documentStorageProvider: 'local' },
     });
+    await tx.organisation.create({
+      data: { id: 'publication-charity', name: 'Synthetic publication charity', documentStorageProvider: 'local' },
+    });
     await tx.user.create({
       data: {
         id: 'owner',
         organisationId: 'charity',
         email: 'synthetic-owner@example.invalid',
         name: 'Synthetic Owner',
+        passwordHash: 'not-a-login',
+        role: 'OWNER',
+      },
+    });
+    await tx.user.create({
+      data: {
+        id: 'publication-owner',
+        organisationId: 'publication-charity',
+        email: 'synthetic-publication-owner@example.invalid',
+        name: 'Synthetic Publication Owner',
         passwordHash: 'not-a-login',
         role: 'OWNER',
       },
@@ -121,13 +134,14 @@ try {
       updatedAt: old,
     },
   });
-  // The existing orphan-cleanup route may remove a no-page row while no
-  // recovery enforcement or claim exists. The new fence must preserve it.
+  // An unbound charity may remove a no-page queue row while its source
+  // document is still live. The publication gate requires that source at
+  // INSERT; the purge/cleanup fences must still permit this DELETE.
   await prisma.documentPublication.create({ data: {
-    id: 'ordinary-no-page-orphan', organisationId: 'charity',
-    documentId: 'missing-document', provider: 'confluence',
+    id: 'ordinary-no-page-queue', organisationId: 'charity',
+    documentId: 'doc', provider: 'confluence',
   } });
-  await prisma.documentPublication.delete({ where: { id: 'ordinary-no-page-orphan' } });
+  await prisma.documentPublication.delete({ where: { id: 'ordinary-no-page-queue' } });
   await prisma.$transaction(async (tx) => {
     // This fixture needs an already-expired recovery window. Backdate only
     // its synthetic removed row, then restore the trigger before testing the
@@ -148,6 +162,149 @@ try {
     AUDIT: { disposition: 'RETAIN_APPROVED', evidenceRef: 'TEST-COPY-001' },
     BACKUPS: { disposition: 'RETAIN_APPROVED', evidenceRef: 'TEST-COPY-001' },
   };
+  // Publication and primary purge remain available to an unbound charity.
+  // Keep their older safety proofs separate from the recovery-bound charity,
+  // which now refuses every publication queue row.
+  await prisma.dataRetentionPolicyRevision.create({ data: {
+    id: 'publication-policy', organisationId: 'publication-charity',
+    recordClass: 'VAULT_DRAFT', revision: 1, state: 'APPROVED',
+    retentionMode: 'REVIEW_REQUIRED', recoveryDays: 1,
+    createdById: 'publication-owner', approvedById: 'publication-owner',
+    approvedAt: old, approvalEvidenceRef: 'TEST-PUBLICATION-POLICY',
+  } });
+  await prisma.document.create({ data: {
+    id: 'publication-purge-doc', organisationId: 'publication-charity',
+    name: 'Synthetic publication purge document', category: 'OTHER',
+    lifecycleStatus: 'DRAFT', fileUrl: 'publication-charity/purge-proof',
+    storageProvider: 'local', mimeType: 'application/pdf', fileSize: 123,
+    createdAt: old, updatedAt: old,
+  } });
+  await assert.rejects(prisma.$transaction(async (tx) => {
+    await tx.documentPublication.create({ data: {
+      id: 'identified-copy-probe', organisationId: 'publication-charity',
+      documentId: 'publication-purge-doc', provider: 'confluence',
+      state: 'PROCESSED', cloudId: 'synthetic-cloud', pageId: 'synthetic-page',
+      pageTitle: 'Synthetic page', publishedAt: new Date(),
+      processedAt: new Date(), nextAttemptAt: null,
+    } });
+    await tx.documentPublication.delete({ where: { id: 'identified-copy-probe' } });
+  }), /publication evidence cannot be deleted/);
+  await assert.rejects(prisma.$transaction(async (tx) => {
+    await tx.documentPublication.create({ data: {
+      id: 'identity-probe', organisationId: 'publication-charity',
+      documentId: 'publication-purge-doc', provider: 'confluence',
+    } });
+    await tx.documentPublication.update({ where: { id: 'identity-probe' },
+      data: { documentId: 'another-document' } });
+  }), /publication identity cannot be changed/);
+  await prisma.documentPublication.create({ data: {
+    id: 'pending-publication', organisationId: 'publication-charity',
+    documentId: 'publication-purge-doc', provider: 'confluence',
+  } });
+  await prisma.$transaction(async (tx) => {
+    await tx.$executeRaw`ALTER TABLE "Document" DISABLE TRIGGER "Document_recovery_state_guard"`;
+    try {
+      await tx.$executeRaw`UPDATE "Document" SET "deletedAt"=${new Date('2026-01-02T00:00:00Z')},
+        "deletedById"='publication-owner', "removedFromRevision"=${old},
+        "removalEvidenceRef"='TEST-PUBLICATION-REMOVAL',
+        "recoveryUntil"=${new Date('2026-01-03T00:00:00Z')},
+        "recoveryPolicyId"='publication-policy', "recoverySha256"=${'a'.repeat(64)},
+        "updatedAt"=${new Date('2026-01-02T00:00:00Z')}
+        WHERE id='publication-purge-doc'`;
+    } finally {
+      await tx.$executeRaw`ALTER TABLE "Document" ENABLE TRIGGER "Document_recovery_state_guard"`;
+    }
+  });
+  const publicationDoc = await prisma.document.findUniqueOrThrow({ where: { id: 'publication-purge-doc' } });
+  await prisma.documentPurgeAuthorization.create({ data: {
+    id: 'publication-auth', organisationId: 'publication-charity',
+    documentId: publicationDoc.id, documentRevision: publicationDoc.updatedAt,
+    policyId: 'publication-policy', actorUserId: 'publication-owner',
+    evidenceRef: 'TEST-PUBLICATION-PURGE', reason: 'Synthetic pending copy refusal',
+    storagePath: publicationDoc.fileUrl, provider: 'local',
+    sha256: publicationDoc.recoverySha256, fileSize: publicationDoc.fileSize,
+    recoveryUntil: publicationDoc.recoveryUntil, dispositionPlan: plan,
+  } });
+  await assert.rejects(prisma.documentPurgeClaim.create({ data: {
+    id: 'publication-claim', organisationId: 'publication-charity',
+    authorizationId: 'publication-auth', documentId: publicationDoc.id,
+    deletionId: 'publication-job', actorUserId: 'publication-owner',
+  } }), /reconciliation of unresolved publication/);
+  assert.equal(await prisma.documentPurgeClaim.count({ where: { organisationId: 'publication-charity' } }), 0);
+  const publicationClaimedAt = new Date('2026-10-07T12:00:00Z');
+  await prisma.documentPublication.update({ where: { id: 'pending-publication' },
+    data: { claimedAt: publicationClaimedAt } });
+  await prisma.documentPublication.update({ where: { id: 'pending-publication' },
+    data: { remoteWriteStartedAt: publicationClaimedAt } });
+  await prisma.documentPublication.update({ where: { id: 'pending-publication' },
+    data: { state: 'PROCESSED', cloudId: 'synthetic-cloud', pageId: 'synthetic-page',
+      pageTitle: 'Synthetic identified page', publishedAt: new Date(),
+      processedAt: new Date(), nextAttemptAt: null, claimedAt: null } });
+  await prisma.documentPurgeAuthorization.create({ data: {
+    id: 'publication-no-retain-auth', organisationId: 'publication-charity',
+    documentId: publicationDoc.id, documentRevision: publicationDoc.updatedAt,
+    policyId: 'publication-policy', actorUserId: 'publication-owner',
+    evidenceRef: 'TEST-PUBLICATION-NO-RETAIN', reason: 'Synthetic refused retained copy plan',
+    storagePath: publicationDoc.fileUrl, provider: 'local',
+    sha256: publicationDoc.recoverySha256, fileSize: publicationDoc.fileSize,
+    recoveryUntil: publicationDoc.recoveryUntil,
+    dispositionPlan: { ...plan, CONFLUENCE: {
+      disposition: 'NOT_APPLICABLE', evidenceRef: 'TEST-COPY-001' } },
+  } });
+  await assert.rejects(prisma.documentPurgeClaim.create({ data: {
+    id: 'publication-no-retain-claim', organisationId: 'publication-charity',
+    authorizationId: 'publication-no-retain-auth', documentId: publicationDoc.id,
+    deletionId: 'publication-no-retain-job', actorUserId: 'publication-owner',
+  } }), /approved retention of identified external copy/);
+  assert.equal(await prisma.documentPurgeClaim.count({ where: { organisationId: 'publication-charity' } }), 0);
+  await assert.rejects(prisma.$transaction(async (tx) => {
+    await tx.documentUploadIntent.create({ data: {
+      id: 'publication-reserved-intent', organisationId: 'publication-charity',
+      storagePath: publicationDoc.fileUrl, provider: 'local',
+    } });
+    await tx.documentPurgeClaim.create({ data: {
+      id: 'publication-reserved-claim', organisationId: 'publication-charity',
+      authorizationId: 'publication-auth', documentId: publicationDoc.id,
+      deletionId: 'publication-reserved-job', actorUserId: 'publication-owner',
+    } });
+  }), /reconciliation of unresolved upload intent/);
+  await assert.rejects(prisma.$transaction(async (tx) => {
+    await tx.document.create({ data: {
+      id: 'publication-other-doc', organisationId: 'publication-charity',
+      name: 'Other synthetic document', category: 'OTHER', lifecycleStatus: 'DRAFT',
+      fileUrl: publicationDoc.fileUrl, storageProvider: 'local',
+      fileSize: 123, mimeType: 'application/pdf',
+    } });
+    await tx.documentUploadIntent.create({ data: {
+      id: 'publication-other-intent', organisationId: 'publication-charity',
+      storagePath: publicationDoc.fileUrl, provider: 'local',
+    } });
+    await tx.documentUploadIntent.update({ where: { id: 'publication-other-intent' },
+      data: { state: 'ATTACHED', documentId: 'publication-other-doc' } });
+    await tx.documentPurgeClaim.create({ data: {
+      id: 'publication-other-claim', organisationId: 'publication-charity',
+      authorizationId: 'publication-auth', documentId: publicationDoc.id,
+      deletionId: 'publication-other-job', actorUserId: 'publication-owner',
+    } });
+  }), /reconciliation of unresolved upload intent/);
+  await assert.rejects(prisma.$transaction(async (tx) => {
+    await tx.documentUploadIntent.create({ data: {
+      id: 'publication-attached-intent', organisationId: 'publication-charity',
+      storagePath: publicationDoc.fileUrl, provider: 'local',
+    } });
+    await tx.documentUploadIntent.update({ where: { id: 'publication-attached-intent' },
+      data: { state: 'ATTACHED', documentId: publicationDoc.id } });
+    await tx.documentPurgeClaim.create({ data: {
+      id: 'publication-attached-claim', organisationId: 'publication-charity',
+      authorizationId: 'publication-auth', documentId: publicationDoc.id,
+      deletionId: 'publication-attached-job', actorUserId: 'publication-owner',
+    } });
+    assert.ok(await tx.documentStorageDeletion.findUnique({
+      where: { id: 'publication-attached-job' }, select: { id: true },
+    }));
+    throw new Error('rollback-attached-publication-proof');
+  }), /rollback-attached-publication-proof/);
+  assert.equal(await prisma.documentUploadIntent.count({ where: { organisationId: 'publication-charity' } }), 0);
   await prisma.documentPurgeAuthorization.create({
     data: {
       id: 'auth',
@@ -205,161 +362,17 @@ try {
       writerEpoch: 1,
     },
   });
-  await assert.rejects(prisma.$transaction(async (tx) => {
-    await tx.documentPublication.create({
-      data: { id: 'mirror-delete-attempt', organisationId: 'charity',
-        documentId: 'doc', provider: 'confluence' },
-    });
-    await tx.documentPublication.delete({ where: { id: 'mirror-delete-attempt' } });
-  }), /publication evidence cannot be deleted/);
-  await assert.rejects(prisma.$transaction(async (tx) => {
-    await tx.documentPublication.create({
-      data: { id: 'mirror-redirect-attempt', organisationId: 'charity',
-        documentId: 'doc', provider: 'confluence' },
-    });
-    await tx.documentPublication.update({ where: { id: 'mirror-redirect-attempt' },
-      data: { documentId: 'different-document' } });
-  }), /publication identity cannot be changed/);
-  assert.equal(await prisma.documentPublication.count(), 0);
-  // A publication row exists before remote I/O. Even a PENDING row may be a
-  // timed-out page/attachment write, so the exact primary claim must refuse
-  // it. The rejected transaction rolls back the synthetic mirror and
-  // execution, leaving the normal committed-claim proof below untouched.
-  await assert.rejects(prisma.$transaction(async (tx) => {
-    await tx.documentPublication.create({
-      data: { id: 'mirror-before-claim', organisationId: 'charity',
-        documentId: 'doc', provider: 'confluence' },
-    });
-    await tx.documentRecoveryExecution.create({
-      data: { id: 'mirror-test-execution', preparationId: 'preparation',
-        writerId: 'host', generation: 1, entryDigest: 'c'.repeat(64),
-        envelopeDigest: 'd'.repeat(64), controlRevision: 'revision' },
-    });
-    await tx.documentPurgeClaim.create({
-      data: { id: 'mirror-test-claim', organisationId: 'charity',
-        authorizationId: 'auth', documentId: 'doc', deletionId: 'mirror-test-job',
-        actorUserId: 'owner' },
-    });
-  }), /reconciliation of unresolved publication/);
-  assert.equal(await prisma.documentPublication.count(), 0);
-  assert.equal(await prisma.documentRecoveryExecution.count(), 0);
-  // A stable, named remote copy can be retained under an explicit Owner
-  // disposition. The separate Confluence erasure path is after local removal.
-  await prisma.documentPublication.create({
-    data: { id: 'retained-mirror', organisationId: 'charity',
-      documentId: 'doc', provider: 'confluence', state: 'PROCESSED',
-      cloudId: 'synthetic-cloud', spaceId: 'synthetic-space', pageId: 'synthetic-page',
-      pageTitle: 'Synthetic proof page', publishedAt: new Date(),
-      processedAt: new Date(), nextAttemptAt: null },
-  });
-  const noRetainAuthorization = await prisma.documentPurgeAuthorization.create({ data: {
-    id: 'auth-no-retain', organisationId: 'charity', documentId: 'doc',
-    documentRevision: doc.updatedAt, policyId: 'policy', actorUserId: 'owner',
-    evidenceRef: 'TEST-PURGE-NO-RETAIN', reason: 'Synthetic refused copy plan',
-    storagePath: doc.fileUrl, provider: 'local', sha256: doc.recoverySha256,
-    fileSize: doc.fileSize, recoveryUntil: doc.recoveryUntil,
-    dispositionPlan: { ...plan, CONFLUENCE: {
-      disposition: 'NOT_APPLICABLE', evidenceRef: 'TEST-COPY-001' } },
-  } });
-  const noRetainFacts = prepareDocumentRecoveryFacts({
-    format: 1, action: 'DOCUMENT_PURGE_PREPARATION',
-    installationId: 'synthetic-install', organisationId: 'charity',
-    operationId: 'operation-no-retain', writerEpoch: 1, actorUserId: 'owner',
-    preparedAt: new Date().toISOString(), sourceRevision: 'b'.repeat(40),
-    document: pick(doc, documentKeys),
-    authorization: pick(noRetainAuthorization, authorizationKeys),
-    policy: pick(policy, policyKeys), removalPolicy: pick(policy, policyKeys),
-    removalPolicyWithdrawal: null,
-  });
-  await prisma.documentRecoveryPreparation.create({ data: {
-    id: 'preparation-no-retain', organisationId: 'charity',
-    installationId: 'synthetic-install', operationId: 'operation-no-retain',
-    writerEpoch: 1, authorizationId: 'auth-no-retain', actorUserId: 'owner',
-    facts: noRetainFacts.body, factsDigest: noRetainFacts.digest,
-  } });
-  await assert.rejects(prisma.$transaction(async (tx) => {
-    await tx.documentRecoveryExecution.create({ data: {
-      id: 'execution-no-retain', preparationId: 'preparation-no-retain',
-      writerId: 'host', generation: 1, entryDigest: 'c'.repeat(64),
-      envelopeDigest: 'd'.repeat(64), controlRevision: 'revision',
-    } });
-    await tx.documentPurgeClaim.create({ data: {
-      id: 'claim-no-retain', organisationId: 'charity',
-      authorizationId: 'auth-no-retain', documentId: 'doc',
-      deletionId: 'job-no-retain', actorUserId: 'owner',
-    } });
-  }), /approved retention of identified external copy/);
-  // Reservation is written before upload bytes. The claim must refuse a
-  // still-unresolved reservation for its exact provider and object path.
-  await assert.rejects(prisma.$transaction(async (tx) => {
-    await tx.documentUploadIntent.create({ data: {
-      id: 'reserved-before-claim', organisationId: 'charity',
-      storagePath: 'charity/synthetic-proof', provider: 'local',
-    } });
-    await tx.documentRecoveryExecution.create({ data: {
-      id: 'reserved-test-execution', preparationId: 'preparation',
-      writerId: 'host', generation: 1, entryDigest: 'c'.repeat(64),
-      envelopeDigest: 'd'.repeat(64), controlRevision: 'revision',
-    } });
-    await tx.documentPurgeClaim.create({ data: {
-      id: 'reserved-test-claim', organisationId: 'charity',
-      authorizationId: 'auth', documentId: 'doc',
-      deletionId: 'reserved-test-job', actorUserId: 'owner',
-    } });
-  }), /reconciliation of unresolved upload intent/);
-  assert.equal(await prisma.documentUploadIntent.count(), 0);
-  // An ATTACHED intent for another live document on the same object is not
-  // the historical reservation for the document being purged.
-  await assert.rejects(prisma.$transaction(async (tx) => {
-    await tx.document.create({ data: {
-      id: 'other-doc', organisationId: 'charity', name: 'Other synthetic document',
-      category: 'OTHER', lifecycleStatus: 'DRAFT',
-      fileUrl: 'charity/synthetic-proof', storageProvider: 'local',
-      fileSize: 123, mimeType: 'application/pdf',
-    } });
-    await tx.documentUploadIntent.create({ data: {
-      id: 'other-attached-intent', organisationId: 'charity',
-      storagePath: 'charity/synthetic-proof', provider: 'local',
-    } });
-    await tx.documentUploadIntent.update({ where: { id: 'other-attached-intent' },
-      data: { state: 'ATTACHED', documentId: 'other-doc' } });
-    await tx.documentRecoveryExecution.create({ data: {
-      id: 'other-test-execution', preparationId: 'preparation',
-      writerId: 'host', generation: 1, entryDigest: 'c'.repeat(64),
-      envelopeDigest: 'd'.repeat(64), controlRevision: 'revision',
-    } });
-    await tx.documentPurgeClaim.create({ data: {
-      id: 'other-test-claim', organisationId: 'charity',
-      authorizationId: 'auth', documentId: 'doc',
-      deletionId: 'other-test-job', actorUserId: 'owner',
-    } });
-  }), /reconciliation of unresolved upload intent/);
-  assert.equal(await prisma.documentUploadIntent.count(), 0);
-  // The original upload intent attached to this same document is historical
-  // evidence and must not strand its authorized purge. Roll back the
-  // successful synthetic transition so the main claim can proceed below.
-  await assert.rejects(prisma.$transaction(async (tx) => {
-    await tx.documentUploadIntent.create({ data: {
-      id: 'attached-before-claim', organisationId: 'charity',
-      storagePath: 'charity/synthetic-proof', provider: 'local',
-    } });
-    await tx.documentUploadIntent.update({ where: { id: 'attached-before-claim' },
-      data: { state: 'ATTACHED', documentId: 'doc' } });
-    await tx.documentRecoveryExecution.create({ data: {
-      id: 'attached-test-execution', preparationId: 'preparation',
-      writerId: 'host', generation: 1, entryDigest: 'c'.repeat(64),
-      envelopeDigest: 'd'.repeat(64), controlRevision: 'revision',
-    } });
-    await tx.documentPurgeClaim.create({ data: {
-      id: 'attached-test-claim', organisationId: 'charity',
-      authorizationId: 'auth', documentId: 'doc',
-      deletionId: 'attached-test-job', actorUserId: 'owner',
-    } });
-    assert.ok(await tx.documentStorageDeletion.findUnique({
-      where: { id: 'attached-test-job' }, select: { id: true },
-    }));
-    throw new Error('rollback-attached-proof');
-  }), /rollback-attached-proof/);
+  // The interim recovery gate makes a bound-plus-publication fixture
+  // impossible. A bound charity cannot queue a page or reserve new bytes.
+  await assert.rejects(prisma.documentPublication.create({ data: {
+    id: 'mirror-after-binding', organisationId: 'charity',
+    documentId: 'doc', provider: 'confluence',
+  } }), /publication requires a live same-charity source/);
+  await assert.rejects(prisma.documentUploadIntent.create({ data: {
+    id: 'reservation-after-binding', organisationId: 'charity',
+    storagePath: 'charity/synthetic-proof', provider: 'local',
+  } }), /upload reservation requires independent recovery authority/);
+  assert.equal(await prisma.documentPublication.count({ where: { organisationId: 'charity' } }), 0);
   assert.equal(await prisma.documentUploadIntent.count(), 0);
   // An ordinary cleanup row aimed at the same provider key could erase the
   // bytes without touching the protected purge job. Refuse the claim even if
@@ -410,18 +423,12 @@ try {
   await assert.rejects(prisma.documentPublication.create({
     data: { id: 'mirror-after-claim', organisationId: 'charity',
       documentId: 'doc', provider: 'confluence' },
-  }), /fenced by primary purge/);
+  }), /publication requires a live same-charity source/);
   await assert.rejects(prisma.documentStorageDeletion.create({ data: {
     id: 'alias-after-claim', organisationId: 'charity',
     storagePath: 'charity/synthetic-proof', provider: 'local',
   } }), /fenced by primary purge target/);
-  await assert.rejects(prisma.documentPublication.update({
-    where: { id: 'retained-mirror' }, data: { pageTitle: 'Unexpected republish' },
-  }), /fenced by primary purge/);
-  await prisma.documentPublication.update({ where: { id: 'retained-mirror' },
-    data: { state: 'RETIRED', retiredAt: new Date(), nextAttemptAt: null },
-  });
-  assert.equal(await prisma.documentPublication.count(), 1);
+  assert.equal(await prisma.documentPublication.count({ where: { organisationId: 'charity' } }), 0);
   const request = {
     installationId: 'synthetic-install',
     organisationId: 'charity',
@@ -536,8 +543,9 @@ try {
   assert.equal(protectedJob.state, 'PENDING');
   assert.equal(protectedJob.claimedAt, null);
   assert.equal(protectedJob.attempts, 0);
-  // A later reservation for the same object is refused before bytes can be
-  // written. A changed retained-copy fact still changes current authority.
+  // A bound charity cannot reserve another upload for this object. With
+  // publication/copy writers also frozen, the local copy observation stays
+  // stable until an independently authorized recovery protocol exists.
   await assert.rejects(prisma.documentUploadIntent.create({
     data: {
       id: 'late-intent',
@@ -545,14 +553,11 @@ try {
       storagePath: 'charity/synthetic-proof',
       provider: 'local',
     },
-  }), /upload intent is fenced by primary purge/);
-  await prisma.documentPublication.update({ where: { id: 'retained-mirror' },
-    data: { retiredStoragePath: 'charity/synthetic-proof' },
-  });
+  }), /upload reservation requires independent recovery authority/);
   const changed = await readCurrentDocumentByteAuthority(prisma, request);
   assert.equal(changed.actionAuthorized, false);
-  assert.notEqual(changed.digest, first.digest);
-  assert.notEqual(changed.localCopyObservationDigest, first.localCopyObservationDigest);
+  assert.equal(changed.digest, first.digest);
+  assert.equal(changed.localCopyObservationDigest, first.localCopyObservationDigest);
   assert.equal(changed.localHoldObservationDigest, first.localHoldObservationDigest);
   // Simulate a privileged historical repair that bypassed the insertion
   // trigger. The projection and production worker must still refuse this
@@ -738,13 +743,13 @@ try {
   const claimedAt = new Date('2026-10-07T12:00:00Z');
   await assert.rejects(prisma.$transaction(async (tx) => {
     await tx.document.create({ data: {
-      id: 'upload-service-proof-doc', organisationId: 'charity',
+      id: 'upload-service-proof-doc', organisationId: 'publication-charity',
       name: 'Synthetic upload intent document', category: 'OTHER',
-      lifecycleStatus: 'DRAFT', fileUrl: 'charity/upload-service-proof',
+      lifecycleStatus: 'DRAFT', fileUrl: 'publication-charity/upload-service-proof',
       storageProvider: 'local', mimeType: 'application/pdf', fileSize: 5,
     } });
     await tx.documentPublication.create({ data: {
-      id: 'upload-service-proof', organisationId: 'charity',
+      id: 'upload-service-proof', organisationId: 'publication-charity',
       documentId: 'upload-service-proof-doc',
     } });
     await tx.documentPublication.update({ where: { id: 'upload-service-proof' },
@@ -766,7 +771,7 @@ try {
       where: { id: operationId },
     });
     assert.equal(saved.publicationId, 'upload-service-proof');
-    assert.equal(saved.organisationId, 'charity');
+    assert.equal(saved.organisationId, 'publication-charity');
     assert.equal(saved.pageId, 'page-1');
     assert.equal(saved.filename, 'synthetic.pdf');
     assert.equal(saved.sha256, 'a'.repeat(64));
@@ -777,22 +782,22 @@ try {
   // target and approval must be current in the fully migrated database.
   await assert.rejects(prisma.$transaction(async (tx) => {
     await tx.organisationIntegration.create({ data: {
-      id: 'page-service-integration', organisationId: 'charity',
+      id: 'page-service-integration', organisationId: 'publication-charity',
       provider: 'CONFLUENCE', status: 'CONNECTED',
       config: { siteId: 'cloud-1' }, publishSpaceSiteId: 'cloud-1',
       publishSpaceId: 'space-1', publishSpaceKey: 'TEST',
       publishSpaceName: 'Synthetic test space',
     } });
     const doc = await tx.document.create({ data: {
-      id: 'page-service-proof-doc', organisationId: 'charity',
+      id: 'page-service-proof-doc', organisationId: 'publication-charity',
       name: 'Synthetic page intent document', category: 'OTHER',
       lifecycleStatus: 'CURRENT', externalPublicationApproved: true,
       externalPublicationSiteId: 'cloud-1', externalPublicationSpaceId: 'space-1',
-      fileUrl: 'charity/page-service-proof', storageProvider: 'local',
+      fileUrl: 'publication-charity/page-service-proof', storageProvider: 'local',
       mimeType: 'application/pdf', fileSize: 5,
     } });
     await tx.documentPublication.create({ data: {
-      id: 'page-service-proof', organisationId: 'charity',
+      id: 'page-service-proof', organisationId: 'publication-charity',
       documentId: doc.id,
     } });
     await tx.documentPublication.update({ where: { id: 'page-service-proof' },
@@ -825,7 +830,7 @@ try {
   }), /synthetic page intent proof rollback/u);
   assert.equal(await prisma.documentPublicationPageCreateIntent.count(), 0);
   process.stdout.write(
-    'current-authority-real-postgres-composition=verified; protected-worker-skip=verified; cleanup-alias-fence=verified; upload-intent-fence=verified; publication-upload-intent-service=verified; publication-page-intent-service=verified; copy-evidence-digest=changed; post-claim-local-authority=verified; provider-start-marker=verified; provider-start-race=one-winner; provider-unknown-facts=verified; post-start-ordinary-retry-refused=verified\n',
+    'current-authority-real-postgres-composition=verified; protected-worker-skip=verified; cleanup-alias-fence=verified; upload-intent-fence=verified; publication-upload-intent-service=verified; publication-page-intent-service=verified; copy-evidence-digest=stable; post-claim-local-authority=verified; provider-start-marker=verified; provider-start-race=one-winner; provider-unknown-facts=verified; post-start-ordinary-retry-refused=verified\n',
   );
 } finally {
   await prisma.$disconnect();

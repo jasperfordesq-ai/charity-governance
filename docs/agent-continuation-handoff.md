@@ -1,5 +1,15 @@
 # CharityPilot Agent Continuation Handoff
 
+> **9 October full-schema restricted-role composition, local only:** The
+> disposable byte-authority PostgreSQL proof was updated for the interim
+> publication recovery gate. An unbound synthetic charity retains
+> publication/purge tests; a separate bound charity exercises byte authority
+> and refuses new publication/upload reservations. All 174 migrations,
+> restricted runtime grants and composed proof passed 1/1; the disposable
+> container was removed. The VM still lacks 18 migrations and its actual
+> runtime role must be rechecked after release. See private
+> `full-schema-byte-proof-2026-10-09.md`.
+
 > **9 October 04:10 Dublin private VM read-only preflight snapshot:** The
 > clean VM at `96c8b1e8` has zero `ConfluenceReference`, zero
 > `DocumentPublication` and zero `DocumentRecoveryEnforcement` rows, with
