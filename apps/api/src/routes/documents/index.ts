@@ -1,6 +1,7 @@
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import { createHash } from 'node:crypto';
 import { DocumentService } from '../../services/document.service.js';
+import { assertDocumentSourceUnbound } from '../../services/document-source-recovery-guard.js';
 import { DocumentRecoveryService } from '../../services/document-recovery.service.js';
 import { RetentionPolicyService } from '../../services/retention-policy.service.js';
 import { DocumentPurgeService } from '../../services/document-purge.service.js';
@@ -843,9 +844,12 @@ export async function documentRoutes(app: FastifyInstance) {
         uploadedFile.buffer,
         uploadedFile.mimetype,
         async (prepared) => {
-          const intent = await app.prisma.documentUploadIntent.create({
-            data: { organisationId: request.user.organisationId, ...prepared, state: 'RESERVED' },
-            select: { id: true },
+          const intent = await app.prisma.$transaction(async (tx) => {
+            await assertDocumentSourceUnbound(tx, request.user.organisationId);
+            return tx.documentUploadIntent.create({
+              data: { organisationId: request.user.organisationId, ...prepared, state: 'RESERVED' },
+              select: { id: true },
+            });
           });
           uploadIntentId = intent.id;
         },

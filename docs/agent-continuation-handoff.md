@@ -10,7 +10,11 @@
 > API suite passed 2,720/2,720 plus 14/14 serial real PostgreSQL migration
 > tests. Upload-reservation error mapping and independent document-source
 > replay still need work; no recovery binding, push or live deployment was
-> performed. See the private 9 October document-source API response note.
+> performed. A follow-up now also reserves uploads under that same lock,
+> returning 409 when binding wins between the route precheck and reservation,
+> before any provider write. The upload-focused 113/113, full API 2,721/2,721,
+> serial PostgreSQL 14/14 and production-check 1,123 passed (five Windows
+> skips). See the private 9 October document-source API response note.
 
 > **9 October publication row-ID fence, local only:** Cumulative SQL
 > review confirmed the earlier purge fence already makes a publication's

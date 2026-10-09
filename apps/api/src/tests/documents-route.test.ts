@@ -1920,6 +1920,40 @@ test('document upload refuses a recovery-bound charity before reserving or writi
   }
 });
 
+test('document upload refuses recovery binding after precheck and before provider write', { concurrency: false }, async () => {
+  const originalUpload = StorageService.prototype.uploadFile;
+  let checks = 0;
+  let reservations = 0;
+  let wroteBytes = false;
+  StorageService.prototype.uploadFile = async (_organisationId, _filename, _buffer, _mimeType, beforeWrite) => {
+    await beforeWrite?.({ storagePath: 'org-1/race.pdf', provider: 'local' });
+    wroteBytes = true;
+    return { storagePath: 'org-1/race.pdf', provider: 'local' };
+  };
+  const app = await buildDocumentsApp({
+    subscription: subscription(),
+    document: {},
+    documentRecoveryEnforcement: { findUnique: async () => (++checks === 1 ? null : { id: 'binding' }) },
+    documentUploadIntent: { create: async () => { reservations += 1; return { id: 'intent-1' }; } },
+  });
+  try {
+    const request = multipartRequest(baseFields, {
+      filename: 'policy.pdf', mimetype: 'application/pdf', content: Buffer.from('%PDF-1.7\n%%EOF'),
+    });
+    const response = await app.inject({
+      method: 'POST', url: '/', headers: { ...request.headers, authorization: authHeader }, payload: request.payload,
+    });
+    assert.equal(response.statusCode, 409);
+    assert.equal(response.json().code, 'DOCUMENT_SOURCE_RECOVERY_REQUIRED');
+    assert.equal(checks, 2);
+    assert.equal(reservations, 0);
+    assert.equal(wroteBytes, false);
+  } finally {
+    StorageService.prototype.uploadFile = originalUpload;
+    await app.close();
+  }
+});
+
 test('bound document recovery refuses standard link and unlink before writing evidence', async () => {
   let writes = 0;
   const app = await buildDocumentsApp({
