@@ -1,5 +1,15 @@
 # CharityPilot Agent Continuation Handoff
 
+> **9 October recovery script compatibility, local only:** Current
+> disposable retention/bound-policy tests passed 1/1 each, composed
+> complaint recovery passed 1/1, and document byte-fence passed 2/2 after
+> fixtures were aligned with the new source, upload-intent and copy gates.
+> The historical complaint-copy section bypasses only those new gates in a
+> labelled synthetic privileged scenario, then restores and rechecks them;
+> ordinary bound copy writes remain forbidden. See private
+> `recovery-script-matrix-2026-10-09.md`. Live release and independent
+> recovery/DPO evidence remain OPEN.
+
 > **9 October full-schema restricted-role composition, local only:** The
 > disposable byte-authority PostgreSQL proof was updated for the interim
 > publication recovery gate. An unbound synthetic charity retains

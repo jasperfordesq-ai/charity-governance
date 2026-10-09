@@ -481,6 +481,19 @@ test('retention policy and recovery-state upgrade preserve documents and enforce
     };
     assert.equal(restoredSql('old_restore', `SELECT count(*) FROM "Document" WHERE id='retained-doc';`), '1');
     restoredSql('old_restore', withdrawal('fixture-future-policy-withdrawn','retention-a','future-retention'));
+    // The old backup intentionally contains an unresolved upload reservation.
+    // Current binding must refuse it. Reconcile it to an exact same-charity
+    // source before exercising the separate recovery transaction ordering.
+    rejectRestored(`INSERT INTO "DocumentRecoveryEnforcement"
+      (id,"organisationId","installationId","writerId","writerEpoch")
+      VALUES ('binding','retention-a','installation','writer',1);`,
+    /requires reconciled upload intents/);
+    restoredSql('old_restore', `INSERT INTO "Document"
+      (id,"organisationId",name,category,"fileUrl","fileSize","mimeType","updatedAt")
+      VALUES ('reconciled-intent-doc','retention-a','Synthetic attached upload','OTHER',
+        'retention-a/reserved.pdf',12,'application/pdf',CURRENT_TIMESTAMP);
+      UPDATE "DocumentUploadIntent" SET state='ATTACHED',"documentId"='reconciled-intent-doc'
+      WHERE id='retained-intent';`);
     restoredSql('old_restore', `INSERT INTO "DocumentRecoveryEnforcement"
       (id,"organisationId","installationId","writerId","writerEpoch")
       VALUES ('binding','retention-a','installation','writer',1);`);

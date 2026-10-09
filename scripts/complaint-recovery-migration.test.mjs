@@ -492,8 +492,17 @@ test('complaint recovery migration preserves records and enforces reviewed remov
       const value={organisation:'a',authorization:'fresh-purge',actor:'admin-a',area:'BACKUPS',revision:1,
         status:'RETAINED_APPROVED',observed:"timezone('UTC',clock_timestamp())",next:"timezone('UTC',now())+INTERVAL '30 days'",...overrides};
       return `INSERT INTO "ComplaintPurgeDispositionEvent" (id,"organisationId","authorizationId",area,"scopeRef",revision,status,"actorUserId","evidenceRef",reason,"observedAt","nextReviewAt")
-        VALUES ('${id}','${value.organisation}','${value.authorization}','${value.area}','SYNTHETIC-BACKUP-SET',${value.revision},'${value.status}','${value.actor}','COPY-EVIDENCE-001','Reviewed synthetic retained backup scope',${value.observed},${value.next});`;
+         VALUES ('${id}','${value.organisation}','${value.authorization}','${value.area}','SYNTHETIC-BACKUP-SET',${value.revision},'${value.status}','${value.actor}','COPY-EVIDENCE-001','Reviewed synthetic retained backup scope',${value.observed},${value.next});`;
     };
+    sql(disposition('bound-copy-refused'), /Complaint copy change requires independent recovery authority/);
+    // These pre-existing copy-consistency proofs exercise hypothetical
+    // privileged historical facts. Normal bound writers remain frozen above.
+    // Restore all five gates before the backup/reconciliation comparison.
+    sql(`ALTER TABLE "ComplaintPurgeDispositionEvent" DISABLE TRIGGER "A_ComplaintCopyObservation_recovery_gate";
+      ALTER TABLE "ComplaintCopyDispositionAuthority" DISABLE TRIGGER "A_ComplaintCopyAuthority_recovery_gate";
+      ALTER TABLE "ComplaintCopyHoldEvent" DISABLE TRIGGER "A_ComplaintCopyHold_recovery_gate";
+      ALTER TABLE "DataRetentionPolicyRevision" DISABLE TRIGGER "DataRetentionPolicyRevision_01_recovery_gate";
+      ALTER TABLE "DataRetentionPolicyWithdrawal" DISABLE TRIGGER "DataRetentionPolicyWithdrawal_01_recovery_gate";`);
     sql(disposition('member-copy',{actor:'member-a'}),/active charity owner/);
     sql(disposition('foreign-copy',{organisation:'b',actor:'admin-b'}),/authorization not found/);
     sql(disposition('unclaimed-copy',{authorization:'timed-authorization'}),/committed purge claim/);
@@ -526,8 +535,18 @@ test('complaint recovery migration preserves records and enforces reviewed remov
       scopedAuthority.hold('hold-after-review',{revision:7}));
     assert.equal(sql(`SELECT "holdRevision" FROM "ComplaintCopyDispositionAuthority" WHERE id='review-before-hold';`),'6');
     assert.equal(sql(`SELECT held FROM "ComplaintCopyHoldEvent" WHERE id='hold-after-review';`),'t');
-    await proveCopyBinding(sql,{kind:'Complaint',organisation:'a',actor:'admin-a',authorization:'fresh-purge',
-      originalPolicyFrozenAfterRecoveryBinding:true},orderedRace);
+    await proveCopyBinding(sql,{kind:'Complaint',organisation:'a',actor:'admin-a',authorization:'fresh-purge'},orderedRace);
+    sql(`ALTER TABLE "ComplaintPurgeDispositionEvent" ENABLE TRIGGER "A_ComplaintCopyObservation_recovery_gate";
+      ALTER TABLE "ComplaintCopyDispositionAuthority" ENABLE TRIGGER "A_ComplaintCopyAuthority_recovery_gate";
+      ALTER TABLE "ComplaintCopyHoldEvent" ENABLE TRIGGER "A_ComplaintCopyHold_recovery_gate";
+      ALTER TABLE "DataRetentionPolicyRevision" ENABLE TRIGGER "DataRetentionPolicyRevision_01_recovery_gate";
+      ALTER TABLE "DataRetentionPolicyWithdrawal" ENABLE TRIGGER "DataRetentionPolicyWithdrawal_01_recovery_gate";`);
+    sql(disposition('bound-copy-refused-after-restore'),
+      /Complaint copy change requires independent recovery authority/);
+    sql(`INSERT INTO "DataRetentionPolicyRevision" (id,"organisationId","recordClass",revision,
+      "retentionMode","recoveryDays","createdById") VALUES
+      ('bound-copy-policy-refused','a','COMPLAINT_COPY',99,'REVIEW_REQUIRED',30,'admin-a');`,
+    /Policy revision requires independent recovery authority/);
     const authority = JSON.parse(sql(PURGE_RESTORE_SNAPSHOT_SQL));
     assert.doesNotMatch(JSON.stringify(authority), /Private original narrative|Reviewed synthetic administrative hold|HOLD-001/);
     const currentBackup = docker(['exec',container,'pg_dump','-U','postgres','--no-owner','--no-privileges','postgres']);

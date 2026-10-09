@@ -76,15 +76,17 @@ test('bound recovery freezes policy, hold and complaint resolution decisions at 
         query(initial(org, owner, recordClass));
       }
     }
+    // Complaint source creation is frozen after binding. Establish both
+    // records first, then test the bound resolution/hold decisions below.
+    query(`INSERT INTO "ComplaintRecord" (id,"organisationId","receivedDate",summary,status,"updatedAt") VALUES
+      ('bound-complaint','complaint-org','2026-01-01','Synthetic closed complaint','CLOSED',CURRENT_TIMESTAMP),
+      ('free-complaint','free-org','2026-01-01','Synthetic closed complaint','CLOSED',CURRENT_TIMESTAMP);`);
     query(`INSERT INTO "DocumentRecoveryEnforcement"
       (id,"organisationId","installationId","writerId","writerEpoch")
       VALUES ('doc-binding','doc-org','synthetic-installation','synthetic-writer',1);`);
     query(`INSERT INTO "ComplaintRecoveryEnforcement"
       (id,"organisationId","installationId","writerId","writerEpoch")
       VALUES ('complaint-binding','complaint-org','synthetic-installation','synthetic-writer',1);`);
-    query(`INSERT INTO "ComplaintRecord" (id,"organisationId","receivedDate",summary,status,"updatedAt") VALUES
-      ('bound-complaint','complaint-org','2026-01-01','Synthetic closed complaint','CLOSED',CURRENT_TIMESTAMP),
-      ('free-complaint','free-org','2026-01-01','Synthetic closed complaint','CLOSED',CURRENT_TIMESTAMP);`);
     const resolution = (org, complaint, owner) => `INSERT INTO "ComplaintResolutionEvidence"
       (id,"organisationId","complaintId",revision,"recordRevision",state,"resolvedAt",
         "evidenceRef",reason,"actorUserId") VALUES
@@ -128,9 +130,9 @@ test('bound recovery freezes policy, hold and complaint resolution decisions at 
       }
     }
     query(`UPDATE "Document" SET "deletionHold"=true WHERE id='doc-unheld';`,
-      /Document deletion hold requires independent recovery authority/);
+      /Document source change requires independent recovery authority/);
     query(`UPDATE "Document" SET "deletionHold"=false WHERE id='doc-held';`,
-      /Document deletion hold requires independent recovery authority/);
+      /Document source change requires independent recovery authority/);
     query(`UPDATE "Document" SET "deletionHold"=true WHERE id='free-doc';`);
     assert.equal(query(`SELECT id || ':' || "deletionHold" FROM "Document"
       WHERE id IN ('doc-unheld','doc-held','free-doc') ORDER BY id;`),

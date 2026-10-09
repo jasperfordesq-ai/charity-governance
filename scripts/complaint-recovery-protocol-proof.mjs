@@ -160,9 +160,16 @@ try {
           revision: 1, recordRevision: 2, held: true, actorUserId: 'admin-a', evidenceRef: 'EXECUTION-HOLD-001',
           reason: 'Preserve before the claim' } });
       } else {
+        // Ordinary withdrawal is now frozen after binding. Simulate a
+        // privileged historical repair to retain the separate claim-time
+        // revalidation proof, then restore the trigger before the claim.
+        await tx.$executeRaw`ALTER TABLE "ComplaintPurgeAuthorizationWithdrawal"
+          DISABLE TRIGGER "A_ComplaintPurgeWithdrawal_recovery_gate"`;
         await tx.complaintPurgeAuthorizationWithdrawal.create({ data: { organisationId: 'a',
           authorizationId: 'recovery-protocol-authority', actorUserId: 'admin-a', evidenceRef: 'EXECUTION-WITHDRAW-001',
           reason: 'Withdraw before the claim' } });
+        await tx.$executeRaw`ALTER TABLE "ComplaintPurgeAuthorizationWithdrawal"
+          ENABLE TRIGGER "A_ComplaintPurgeWithdrawal_recovery_gate"`;
       }
       await tx.complaintPurgeClaim.create({ data: { organisationId: 'a', actorUserId: 'admin-a',
         authorizationId: 'recovery-protocol-authority', complaintId: 'recovery-protocol' } });
@@ -293,6 +300,12 @@ try {
   const hc = { ...context, ...hb, operationId: 'published-hold' };
   await prisma.complaintRecord.create({ data: { id: 'published-hold-complaint', organisationId: 'b',
     receivedDate: new Date(), summary: 'Synthetic integration complaint' } });
+  // Recovery binding freezes ordinary source INSERT. Prepare the later
+  // cancellation-race records while this synthetic charity is still unbound.
+  for (const id of ['cancel-first', 'execute-first']) {
+    await prisma.complaintRecord.create({ data: { id, organisationId: 'b',
+      receivedDate: new Date(), summary: 'Synthetic cancellation race' } });
+  }
   // An ordinary restricted app writer may prepare the hold, but the
   // separately privileged publisher still owns the committed outcome.
   const runtimeForPreparation = new PrismaClient({ datasources: { db: { url: runtimeUrl.toString() } } });
@@ -449,7 +462,6 @@ try {
   await assert.rejects(prisma.complaintRecoveryCancellation.create({ data: { ...holdCancelData, holdPreparationId: hp.id } }), /cannot be cancelled/);
   for (const cancelFirst of [true, false]) {
     const suffix = cancelFirst ? 'cancel-first' : 'execute-first';
-    await prisma.complaintRecord.create({ data: { id: suffix, organisationId: 'b', receivedDate: new Date(), summary: 'Synthetic cancellation race' } });
     const prepared = await holdPreparations.capture('b', suffix, 'admin-b', { ...holdInput,
       installationId: hb.installationId, operationId: suffix, expectedRecordRevision: 1, expectedHoldRevision: 0, held: true });
     const cancel = tx => tx.complaintRecoveryCancellation.create({ data: { ...holdCancelData, holdPreparationId: prepared.id } });

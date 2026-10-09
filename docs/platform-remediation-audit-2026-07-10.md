@@ -1,5 +1,14 @@
 # CharityPilot Full-Platform Remediation Audit
 
+> **9 October recovery script matrix, local only:** Disposable retention,
+> bound-policy, complaint-recovery and byte-fence tests now pass 1/1, 1/1,
+> 1/1 and 2/2 under the current local migration chain. Their previous
+> failures came from fixtures that crossed new recovery binding gates.
+> Complaint copy consistency after binding is tested only as labelled
+> synthetic privileged history, with normal bound refusal verified before
+> and after. Independent copy facts/replay, deployment, hosted checks and
+> Nikita acceptance remain OPEN.
+
 > **9 October restricted-role/byte-authority local proof, OPEN:** The
 > current full-schema disposable PostgreSQL test now separates unbound
 > publication/purge behavior from bound recovery byte authority. All 174
