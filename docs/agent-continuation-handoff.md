@@ -1,5 +1,18 @@
 # CharityPilot Agent Continuation Handoff
 
+> **9 October original C1 privacy scope, OPEN:** The C1 finding concerns
+> registrant particulars in admin signup notices and the missing dated
+> verification of the earlier fix. The 2 May NEXUS source fix is present
+> in isolated local `b1acf9554`; a fresh disposable Mailpit matrix captured
+> 32 notices across nine recipient classes and 11 locales without
+> registrant particulars or numeric profile links. The live hOUR Timebank
+> CLG risk is still OPEN revision 2 with zero verification rows on serving
+> CharityPilot VM `96c8b1e8`. The NEXUS branch is unmerged/unpushed/
+> undeployed and 18 behind origin/main. The recent delivery-ledger work
+> addresses adjacent reliability, not C1 privacy closure. Exact hashes,
+> test limits and next evidence decision are in private
+> `.charitypilot-private/c1-original-privacy-scope-current-branch-2026-10-09.md`.
+
 > **9 October C1 definite pre-transport refusal, local only:** NEXUS
 > isolated `b1acf9554` marks a captured staff alert `definite_failure`
 > when its address is structurally unroutable, before any provider call.

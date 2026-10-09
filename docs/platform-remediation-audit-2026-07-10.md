@@ -1,5 +1,19 @@
 # CharityPilot Full-Platform Remediation Audit
 
+> **9 October original C1 privacy finding, OPEN:** Nikita asked for dated
+> verification that admin signup notices no longer disclose registrant
+> name/email. The 2 May NEXUS source fix is in isolated local `b1acf9554`;
+> a fresh 32-message synthetic Mailpit matrix across nine recipient classes
+> and 11 locales found no registrant particulars or numeric profile links.
+> The live hOUR Timebank CLG C1 record remains OPEN revision 2 with zero
+> verification rows on VM `96c8b1e8`. The original dated closure receipt
+> and exact-build hosted recipient/content/link proof are missing; risk
+> owner and Nikita must review a dated evidence package. NEXUS delivery
+> ledger/recovery work below is adjacent reliability work, not original C1
+> privacy closure. The branch is unmerged/unpushed/undeployed and 18 behind
+> origin/main. Private receipt:
+> `.charitypilot-private/c1-original-privacy-scope-current-branch-2026-10-09.md`.
+
 > **9 October C1 definite pre-send refusal, OPEN:** NEXUS local
 > `b1acf9554` classifies structurally unroutable captured staff addresses
 > as definite failure with no provider call; other false transport results
