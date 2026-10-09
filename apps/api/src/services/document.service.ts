@@ -1370,6 +1370,15 @@ export class DocumentService {
     reason: string;
   }): Promise<{ id: string; deletionHold: boolean; updatedAt: Date }> {
     return this.prisma.$transaction(async (tx) => {
+      // Serialize the ordinary hold path with recovery binding. Until hold
+      // decisions have independent replay facts, neither placement nor
+      // release may proceed after this charity is bound.
+      await tx.$queryRaw`SELECT id FROM "Organisation" WHERE id=${input.organisationId} FOR UPDATE`;
+      const enforcement = await tx.documentRecoveryEnforcement.findUnique({
+        where: { organisationId: input.organisationId }, select: { id: true },
+      });
+      if (enforcement) throw new AppError(409, 'DOCUMENT_HOLD_RECOVERY_REQUIRED',
+        'This charity requires an independently recorded document hold decision.');
       const existing = await tx.document.findFirst({
         where: { id: input.documentId, organisationId: input.organisationId },
         select: { id: true, deletionHold: true, updatedAt: true },

@@ -79,6 +79,7 @@ type PrismaMock = {
     findFirst?: (args: unknown) => Promise<unknown>;
   };
   documentControlAudit?: { create: (args: unknown) => Promise<unknown> };
+  documentRecoveryEnforcement?: { findUnique: (args: unknown) => Promise<{ id: string } | null> };
 };
 
 type MultipartFile = {
@@ -154,6 +155,7 @@ async function buildDocumentsApp(prisma: PrismaMock, limits = DOCUMENT_UPLOAD_MU
     ...decoratedPrisma.documentPublication,
   };
   decoratedPrisma.documentControlAudit ??= { create: async () => ({ id: 'audit-upload-1' }) };
+  decoratedPrisma.documentRecoveryEnforcement ??= { findUnique: async () => null };
   decoratedPrisma.documentDownloadPreparationAudit = {
     create: async () => ({ id: 'download-audit-1' }),
     findFirst: async () => null,
@@ -1857,6 +1859,28 @@ test('Admin connector cannot read dashboard-only Vault control and deletion hist
       assert.equal(response.statusCode, 403, path);
       assert.equal(response.json().code, 'WEB_SESSION_REQUIRED');
     }
+  } finally { await app.close(); }
+});
+
+test('ordinary document hold changes refuse a bound recovery charity before reading or writing a document', async () => {
+  let documentReads = 0;
+  const app = await buildDocumentsApp({
+    user: { findUnique: async () => ({ id: 'user-1', organisationId: 'org-1', role: 'ADMIN', emailVerified: true }) },
+    subscription: subscription(),
+    documentRecoveryEnforcement: { findUnique: async () => ({ id: 'binding' }) },
+    document: { findFirst: async () => { documentReads += 1; throw new Error('Bound hold reached document'); } },
+  } as never);
+  try {
+    for (const held of [true, false]) {
+      const response = await app.inject({ method: 'POST', url: '/doc-1/deletion-hold',
+        headers: { authorization: authHeader }, payload: {
+          expectedUpdatedAt: '2026-09-29T10:00:00.000Z', held,
+          reason: 'Independent recovery binding requires a separately recorded decision.',
+        } });
+      assert.equal(response.statusCode, 409);
+      assert.equal(response.json().code, 'DOCUMENT_HOLD_RECOVERY_REQUIRED');
+    }
+    assert.equal(documentReads, 0);
   } finally { await app.close(); }
 });
 

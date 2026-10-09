@@ -1,5 +1,13 @@
 # CharityPilot Full-Platform Remediation Audit
 
+> **9 October 01:14 UTC P05/P07 Vault hold writer, OPEN:** The local
+> service and forward SQL trigger refuse ordinary Vault hold changes
+> under document recovery binding. Synthetic API and direct-SQL tests
+> cover placement, release and an unbound charity; the full API
+> package passed 2,691 plus 11 PostgreSQL migration tests. Other
+> preservation/copy writers, independent custody and host-loss replay,
+> controller policy, live release and Nikita review remain OPEN.
+
 > **9 October 01:07 UTC P04/P05 four-class policy freeze, OPEN:**
 > Local API and SQL now refuse ordinary retention-policy changes for
 > `VAULT_DRAFT`/`DOCUMENT_COPY` under document recovery binding and

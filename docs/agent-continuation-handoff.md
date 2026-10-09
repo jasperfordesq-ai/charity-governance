@@ -1,5 +1,15 @@
 # CharityPilot Agent Continuation Handoff
 
+> **9 October 01:14 UTC P05/P07 document hold, OPEN:** Local API and
+> forward database trigger now refuse ordinary Vault deletion-hold
+> placement and release after document recovery binding. The
+> disposable direct-SQL proof covers both transitions and an unbound
+> charity; combined retention proofs passed 2/2. Full API passed
+> 2,691 tests plus 11 real PostgreSQL migration tests. This is an
+> inactive partial writer guard, not independent recovery activation,
+> approved preservation policy, hosted evidence or Nikita acceptance.
+> Private receipt: `recovery-bound-document-hold-2026-10-09.md`.
+
 > **9 October 01:07 UTC P04/P05 policy-writer boundary, OPEN:** A
 > local forward migration and `RetentionPolicyService` guard now
 > refuse policy revisions/withdrawals for all four supported classes

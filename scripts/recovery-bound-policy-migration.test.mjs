@@ -9,7 +9,7 @@ import { validateLocalDockerEndpoint } from './personal-server-docker-boundary.m
 const migrations = fileURLToPath(new URL('../apps/api/prisma/migrations/', import.meta.url));
 const image = 'postgres@sha256:5660c2cbfea50c7a9127d17dc4e48543eedd3d7a41a595a2dfa572471e37e64c';
 
-test('bound recovery freezes all four policy classes at the database boundary', { timeout: 240_000 }, async () => {
+test('bound recovery freezes policy classes and document holds at the database boundary', { timeout: 240_000 }, async () => {
   const context = spawnSync('docker', ['context', 'inspect', '--format', '{{json .Endpoints.docker}}'],
     { encoding: 'utf8', timeout: 10_000 });
   assert.equal(context.status, 0, context.stderr);
@@ -60,6 +60,11 @@ test('bound recovery freezes all four policy classes at the database boundary', 
           VALUES ('${owner}','${owner}@example.invalid','Synthetic Owner','fixture-password-hash','OWNER','${org}',CURRENT_TIMESTAMP);
         COMMIT;`);
     }
+    query(`INSERT INTO "Document" (id,"organisationId",name,category,"fileUrl","fileSize","mimeType","updatedAt") VALUES
+      ('doc-unheld','doc-org','Synthetic unheld','OTHER','doc-org/unheld.pdf',12,'application/pdf',CURRENT_TIMESTAMP),
+      ('doc-held','doc-org','Synthetic held','OTHER','doc-org/held.pdf',12,'application/pdf',CURRENT_TIMESTAMP),
+      ('free-doc','free-org','Synthetic unbound','OTHER','free-org/free.pdf',12,'application/pdf',CURRENT_TIMESTAMP);
+      UPDATE "Document" SET "deletionHold"=true WHERE id='doc-held';`);
     const initial = (org, owner, recordClass) => `INSERT INTO "DataRetentionPolicyRevision"
       (id,"organisationId","recordClass",revision,state,"retentionMode","recoveryDays",
         "createdById","approvedById","approvedAt","approvalEvidenceRef")
@@ -77,6 +82,14 @@ test('bound recovery freezes all four policy classes at the database boundary', 
     query(`INSERT INTO "ComplaintRecoveryEnforcement"
       (id,"organisationId","installationId","writerId","writerEpoch")
       VALUES ('complaint-binding','complaint-org','synthetic-installation','synthetic-writer',1);`);
+    query(`UPDATE "Document" SET "deletionHold"=true WHERE id='doc-unheld';`,
+      /Document deletion hold requires independent recovery authority/);
+    query(`UPDATE "Document" SET "deletionHold"=false WHERE id='doc-held';`,
+      /Document deletion hold requires independent recovery authority/);
+    query(`UPDATE "Document" SET "deletionHold"=true WHERE id='free-doc';`);
+    assert.equal(query(`SELECT id || ':' || "deletionHold" FROM "Document"
+      WHERE id IN ('doc-unheld','doc-held','free-doc') ORDER BY id;`),
+    'doc-held:true\ndoc-unheld:false\nfree-doc:true');
     const proposed = (org, owner, recordClass) => `INSERT INTO "DataRetentionPolicyRevision"
       (id,"organisationId","recordClass",revision,"retentionMode","recoveryDays","createdById")
       VALUES ('${org}-${recordClass}-next','${org}','${recordClass}',2,'REVIEW_REQUIRED',30,'${owner}');`;
