@@ -1,5 +1,18 @@
 # CharityPilot Agent Continuation Handoff
 
+> **9 October morning source review and correspondence boundary:** A
+> focused review of the cumulative privileged-MFA and document-source
+> migration diff found no additional bypass in the inspected paths. The
+> public boot profile requires privileged MFA; unenrolled web sessions are
+> restricted to factor setup, and privileged connector issuance is refused.
+> Document charity/publication identity freezes close the apparent
+> old/new-charity trigger gaps. This is a bounded review, not full diff or
+> hosted acceptance; details are in the private release gate. A fresh
+> read-only search of Nikita's connected mailbox found no newer
+> CharityPilot-specific incoming instruction after his 3 October acceptance
+> email. Both available CharityPilot browser tabs were at `/login`, so live
+> Owner/Member acceptance still needs a new sign-in when Jasper returns.
+
 > **9 October C1 delivery-failure scope, local source review:** The
 > separate clean NEXUS C1 branch at `19c17b6a9` still marks registration
 > admin fanout done for 24 hours after logging an individual recipient email
