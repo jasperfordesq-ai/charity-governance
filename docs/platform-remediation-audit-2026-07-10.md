@@ -1,5 +1,14 @@
 # CharityPilot Full-Platform Remediation Audit
 
+> **9 October ~01:34 Dublin privileged MFA, OPEN:** Explicit public
+> production source now fails configuration preflight without required
+> Owner/Admin MFA and fences privileged API actions for unenrolled accounts,
+> including existing sessions, role changes and connector login. The web
+> directs an unenrolled Owner/Admin to authenticator setup. Local API,
+> web, preflight, build and lint gates pass; private-demo opt-in remains
+> the controller-approved scope. Public live/browser/connector rollout,
+> lost-all-factors recovery, key rotation and DPO review remain OPEN.
+
 > **9 October ~01:18 Dublin cleanup identity gate, OPEN:** The complete
 > local API command at commit `12ab8719` passed 2,683 main tests and
 > all 11 serial real-PostgreSQL migration tests with no failures/skips.

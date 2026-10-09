@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { AppError } from '../utils/errors.js';
-import { assertDeploymentProfile } from '../utils/deployment-profile.js';
+import { assertDeploymentProfile, isPrivilegedMfaRequired } from '../utils/deployment-profile.js';
 import { validateRuntimeEnv } from '../utils/personal-server-env.js';
 
 const APPLIANCE_DEFAULT = { CHARITYPILOT_DEPLOYMENT_MODE: 'personal-server' };
@@ -10,6 +10,19 @@ const STANDARD_DEFAULT = {};
 test('both default profiles are coherent: neither the appliance nor the standard default throws', () => {
   assert.doesNotThrow(() => assertDeploymentProfile(APPLIANCE_DEFAULT));
   assert.doesNotThrow(() => assertDeploymentProfile(STANDARD_DEFAULT));
+});
+
+test('public production requires privileged MFA while the private VM remains optional', () => {
+  const publicProfile = { NODE_ENV: 'production', CHARITYPILOT_DEPLOYMENT_MODE: 'production' };
+  assert.throws(() => assertDeploymentProfile(publicProfile), /CHARITYPILOT_PRIVILEGED_MFA_MODE=required/);
+  assert.throws(() => assertDeploymentProfile({ ...publicProfile,
+    CHARITYPILOT_PRIVILEGED_MFA_MODE: 'optional' }), /CHARITYPILOT_PRIVILEGED_MFA_MODE=required/);
+  assert.doesNotThrow(() => assertDeploymentProfile({ ...publicProfile,
+    CHARITYPILOT_PRIVILEGED_MFA_MODE: 'required' }));
+  assert.equal(isPrivilegedMfaRequired({ ...publicProfile, CHARITYPILOT_PRIVILEGED_MFA_MODE: 'required' }), true);
+  assert.equal(isPrivilegedMfaRequired({ NODE_ENV: 'production', CHARITYPILOT_TENANCY: 'multi' }), false);
+  assert.throws(() => assertDeploymentProfile({ CHARITYPILOT_PRIVILEGED_MFA_MODE: 'off' }),
+    /CHARITYPILOT_PRIVILEGED_MFA_MODE/);
 });
 
 test('open registration with manual-link email delivery is refused, naming both axes', () => {
@@ -78,6 +91,7 @@ const RUNTIME_ENV_KEYS = [
   'CHARITYPILOT_REGISTRATION',
   'CHARITYPILOT_EMAIL_DELIVERY',
   'CHARITYPILOT_BILLING',
+  'CHARITYPILOT_PRIVILEGED_MFA_MODE',
 ] as const;
 
 function withRuntimeEnv(vars: Partial<Record<(typeof RUNTIME_ENV_KEYS)[number], string | undefined>>, run: () => void) {

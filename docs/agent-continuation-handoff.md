@@ -1,5 +1,20 @@
 # CharityPilot Agent Continuation Handoff
 
+> **9 October ~01:34 Dublin public privileged MFA increment, OPEN:**
+> Local source now requires `CHARITYPILOT_PRIVILEGED_MFA_MODE=required`
+> for the explicit public `CHARITYPILOT_DEPLOYMENT_MODE=production` profile.
+> The public Compose API fixes both values and preflight rejects absent or
+> optional MFA. Owner/Admin privileged requests check current role and
+> enrolled factor; unenrolled browser sessions reach only authenticator
+> setup and account bootstrap, and unenrolled connector login is denied.
+> Login and session reload direct pending users to setup without rendering
+> other dashboard pages. The current private VM's optional MFA scope is
+> unchanged. Full API (2,688 plus 11 PostgreSQL migration tests), web
+> (556), public preflight (181), production builds and edited-file lint
+> pass locally. No push, deployment, live public journey, governed lost-
+> factors recovery, key-rotation rehearsal or Nikita sign-off has occurred.
+> See private `nikita-mfa-decision-pack-2026-10-06.md` for exact scope.
+
 > **9 October ~01:18 Dublin cleanup migration broad gate:** Exact clean
 > local commit `12ab8719` passed the full API test command after the
 > cleanup-job charity identity migration: 2,683 main tests and 11

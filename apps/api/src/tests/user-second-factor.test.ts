@@ -16,6 +16,13 @@ const { generateTotpSecret, fromBase32, totp, matchingTotpStep } = await import(
 
 const actor = { id: 'user-1', organisationId: 'org-1', name: 'Test Trustee' };
 
+test('a required privileged connector cannot mint a session before authenticator enrolment', async () => {
+  const client = { $queryRaw: async () => [] } as never;
+  assert.equal(await verifyUserLoginSecondFactor(client, actor, {}), null);
+  assert.equal((await verifyUserLoginSecondFactor(client, actor, {}, undefined, true))?.code,
+    'PRIVILEGED_MFA_ENROLMENT_REQUIRED');
+});
+
 function fakeFactorClient(secret: string, enrolled = true) {
   const factor = {
     userId: actor.id,
@@ -148,6 +155,37 @@ test('a failed MFA attempt commits its shared budget without creating a session'
   assert.equal(sessionsCreated, 0);
 });
 
+test('public privileged connector login refuses session issuance without an enrolled factor', async () => {
+  const saved = { NODE_ENV: process.env.NODE_ENV,
+    CHARITYPILOT_DEPLOYMENT_MODE: process.env.CHARITYPILOT_DEPLOYMENT_MODE,
+    CHARITYPILOT_PRIVILEGED_MFA_MODE: process.env.CHARITYPILOT_PRIVILEGED_MFA_MODE };
+  process.env.NODE_ENV = 'production';
+  process.env.CHARITYPILOT_DEPLOYMENT_MODE = 'production';
+  process.env.CHARITYPILOT_PRIVILEGED_MFA_MODE = 'required';
+  let sessionsCreated = 0;
+  const transaction = {
+    $queryRaw: async (strings: TemplateStringsArray) =>
+      String(strings[0]).includes('principal_organisation')
+        ? [{ id: actor.id, organisationId: actor.organisationId, role: 'ADMIN',
+          passwordHash: 'hash', userLifecycleStatus: 'ACTIVE', organisationLifecycleStatus: 'ACTIVE' }]
+        : [],
+    authSession: { create: async () => { sessionsCreated++; return { id: 'session-new' }; } },
+  };
+  const prisma = { $transaction: async (work: (tx: unknown) => Promise<unknown>) => work(transaction) };
+  try {
+    await assert.rejects(() => issueLoginSessionTokens(prisma as never, {
+      id: actor.id, organisationId: actor.organisationId, role: 'ADMIN',
+      passwordHash: 'hash', name: actor.name,
+    }, { clientKind: 'MCP_CONNECTOR', accessLevel: 'ADMIN', dataScope: 'FULL' }),
+    (error: { code?: string }) => error.code === 'PRIVILEGED_MFA_ENROLMENT_REQUIRED');
+    assert.equal(sessionsCreated, 0);
+  } finally {
+    for (const [key, value] of Object.entries(saved)) {
+      if (value === undefined) delete process.env[key]; else process.env[key] = value;
+    }
+  }
+});
+
 test('a recent recovery-authenticated browser family can remove MFA with its password; another family cannot', async () => {
   const { client } = fakeFactorClient(generateTotpSecret());
   let deleted = false;
@@ -220,4 +258,54 @@ test('account-factor settings refuse connector sessions while allowing the same 
     assert.equal(browserChange.statusCode, 400);
     assert.equal(browserChange.json().code, 'VALIDATION_ERROR');
   } finally { await app.close(); }
+});
+
+test('public unenrolled Owner can reach authenticator setup but no other authenticated auth action', async () => {
+  const [{ default: Fastify }, { authRoutes }, { signAccessToken }] = await Promise.all([
+    import('fastify'), import('../routes/auth/index.js'), import('../utils/jwt.js'),
+  ]);
+  const saved = { NODE_ENV: process.env.NODE_ENV,
+    CHARITYPILOT_DEPLOYMENT_MODE: process.env.CHARITYPILOT_DEPLOYMENT_MODE,
+    CHARITYPILOT_PRIVILEGED_MFA_MODE: process.env.CHARITYPILOT_PRIVILEGED_MFA_MODE };
+  process.env.NODE_ENV = 'production';
+  process.env.CHARITYPILOT_DEPLOYMENT_MODE = 'production';
+  process.env.CHARITYPILOT_PRIVILEGED_MFA_MODE = 'required';
+  const app = Fastify({ logger: false });
+  app.decorate('prisma', {
+    authSession: { findFirst: async () => ({ id: 'session-1', familyId: 'family-1',
+      clientKind: 'WEB', accessLevel: 'ADMIN', dataScope: 'FULL' }) },
+    user: { findUnique: async () => ({ id: actor.id, organisationId: actor.organisationId,
+      role: 'OWNER', emailVerified: true, lifecycleStatus: 'ACTIVE',
+      organisation: { lifecycleStatus: 'ACTIVE' } }) },
+    userSecondFactor: { findUnique: async () => null },
+  } as never);
+  try {
+    await app.register(authRoutes, { prefix: '/api/v1/auth' });
+    const token = signAccessToken({ userId: actor.id, organisationId: actor.organisationId,
+      role: 'OWNER', sessionId: 'session-1' });
+    const headers = { authorization: `Bearer ${token}` };
+    const state = await app.inject({ method: 'GET', url: '/api/v1/auth/second-factor', headers });
+    assert.equal(state.statusCode, 200);
+    assert.equal(state.json().enrolled, false);
+    const begin = await app.inject({ method: 'POST', url: '/api/v1/auth/second-factor/begin',
+      headers, payload: {} });
+    assert.equal(begin.statusCode, 400);
+    assert.equal(begin.json().code, 'VALIDATION_ERROR');
+    const complete = await app.inject({ method: 'POST', url: '/api/v1/auth/second-factor/complete',
+      headers, payload: {} });
+    assert.equal(complete.statusCode, 400);
+    assert.equal(complete.json().code, 'VALIDATION_ERROR');
+    const remove = await app.inject({ method: 'POST', url: '/api/v1/auth/second-factor/remove',
+      headers, payload: {} });
+    assert.equal(remove.statusCode, 403);
+    assert.equal(remove.json().code, 'PRIVILEGED_MFA_ENROLMENT_REQUIRED');
+    const approvals = await app.inject({ method: 'GET', url: '/api/v1/auth/approvals', headers });
+    assert.equal(approvals.statusCode, 403);
+    assert.equal(approvals.json().code, 'PRIVILEGED_MFA_ENROLMENT_REQUIRED');
+  } finally {
+    await app.close();
+    for (const [key, value] of Object.entries(saved)) {
+      if (value === undefined) delete process.env[key]; else process.env[key] = value;
+    }
+  }
 });

@@ -15,6 +15,7 @@ The tables below group every documented variable by concern. "Required in produc
 | Var | Used by | Purpose | Required in production? |
 | --- | --- | --- | --- |
 | `NODE_ENV` | API + web | Switches on the production validator and hardening; the validator no-ops unless this is `production` (`apps/api/src/utils/env.ts:409`) | Yes (`.env.production.example:8`) |
+| `CHARITYPILOT_DEPLOYMENT_MODE` | API/profile preflight | `production` identifies the public stack for the mandatory privileged-MFA startup gate; the private VM intentionally leaves it unset, and `personal-server` has its separate operating contract. | `production` in the public deployment template and preflight |
 | `PORT` | API | Listen port; parsed via `parsePort` with default `3002` (`apps/api/src/utils/env.ts:414-418`) | Yes — must be present and a valid 1–65535 port |
 | `HOST` | API | Bind address (e.g. `0.0.0.0`) (`.env.example:13`) | No (not validated) |
 | `TRUSTED_PROXY_ADDRESSES` | API | Comma-separated reverse-proxy IPs/CIDRs so rate limits trust forwarded client IPs; rejects `true`/`false`/`*`/`0.0.0.0/0`/`::/0` and non-IP values (`apps/api/src/utils/env.ts:281-314`) | Yes — must list explicit IPs or CIDRs |
@@ -37,6 +38,7 @@ A narrow CI escape hatch relaxes the localhost/TLS rules: when `CHARITYPILOT_ALL
 | `REFRESH_TOKEN_TTL_DAYS` | API | Refresh-token TTL; integer 1–30 (`apps/api/src/utils/env.ts:266-279`) | No, but validated if set; default `7` (`.env.example:20`) |
 | `JWT_REFRESH_SECRET` | API | Listed in Turbo's `globalEnv` for cache keying (`turbo.json:10`) | Not enforced by `validateProductionEnv` |
 | `AUTH_RECOVERY_SECRET` | API, authentication-delivery worker, supported personal-server rotation lifecycle, and internal replacement-host rebind | Independent canonical 32-64 byte root secret for versioned recovery tokens and keyed abuse-control subjects. It must differ from `JWT_SECRET` and `READINESS_API_KEY`; normal-host incidents use the receipt-backed invalidate-before-replace lifecycle, while blank replacement recovery atomically retires the restored binding and binds a new host secret before API startup. | Yes |
+| `CHARITYPILOT_PRIVILEGED_MFA_MODE` | API auth guard and public preflight | `required` makes unenrolled Owner/Admin browser sessions usable only for personal authenticator setup; privileged connector login refuses an unenrolled account. Public `production` mode refuses startup and preflight unless this is `required`. The private VM omits it and remains optional under Jasper's 8 October scope decision. | `required` for the public stack; optional in the private demo |
 | `AUTH_COOKIE_DOMAIN` | API | Cookie scope for the canonical split-host deployment; production should use `.charitypilot.ie`, must not be a URL, must be an approved CharityPilot host, and must cover both `FRONTEND_URL` and `NEXT_PUBLIC_API_URL` (`apps/api/src/utils/env.ts`) | Yes for the canonical production deployment |
 
 ### Public origins / frontend

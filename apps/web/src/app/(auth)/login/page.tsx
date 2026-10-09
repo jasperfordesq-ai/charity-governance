@@ -13,9 +13,10 @@ import { authCardClassName } from '@/components/ui/auth-card-loading';
 import { FormAlert } from '@/components/ui/form-alert';
 import { PasswordVisibilityButton } from '@/components/ui/password-visibility-button';
 
-function loginDestination(user: { emailVerified: boolean }): string {
+function loginDestination(user: { emailVerified: boolean; mfaEnrolmentRequired?: boolean }): string {
   const nextPath = new URLSearchParams(window.location.search).get('next');
-  return user.emailVerified ? safeNextPath(nextPath) : '/verify-email';
+  if (!user.emailVerified) return '/verify-email';
+  return user.mfaEnrolmentRequired ? '/security-data' : safeNextPath(nextPath);
 }
 
 export default function LoginPage() {

@@ -43,7 +43,7 @@ import { safeNextValue } from './url-security';
 
 export type DashboardSession = {
   isLoading: boolean;
-  user: { emailVerified: boolean } | null;
+  user: { emailVerified: boolean; mfaEnrolmentRequired?: boolean } | null;
 };
 
 export type DashboardLocation = {
@@ -68,6 +68,9 @@ export function dashboardBody(
   pathname: string,
 ): DashboardBody {
   if (session.isLoading) return 'loading';
+  if (session.user?.mfaEnrolmentRequired && pathname !== '/security-data') {
+    return renewsItsOwnSession(pathname) ? 'renew-in-place' : 'blank';
+  }
   if (session.user && session.user.emailVerified) return 'dashboard';
 
   // No usable session. A page that renews its own session has to be allowed to
@@ -103,6 +106,10 @@ export function dashboardRedirect(
   }
 
   if (!session.user.emailVerified) return '/verify-email';
+
+  if (session.user.mfaEnrolmentRequired && location.pathname !== '/security-data') {
+    return '/security-data';
+  }
 
   return null;
 }
