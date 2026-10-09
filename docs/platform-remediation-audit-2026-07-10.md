@@ -1,5 +1,21 @@
 # CharityPilot Full-Platform Remediation Audit
 
+> **9 October DPO-01 live Member UI, scoped pass:** The retained signed-in
+> Member saw one reviewed certificate, reduced trustee and risk views,
+> and Owner/Admin restrictions on full export, governance audit, Minute
+> Book and charity-wide security administration. Prior exact-byte Member
+> certificate download is positive evidence; a new click had no exposed
+> HTTP receipt. Direct hosted 403/404 for a restricted named resource,
+> classification of the other real Vault files and Nikita's audience
+> acceptance remain OPEN. Private `member-live-readonly-2026-10-09.md`.
+>
+> **9 October local exact-head release gate, not deployment:** Clean
+> `69e14b69` passed 2,724 API tests, 14 serial PostgreSQL migration
+> tests and 1,123 production checks with five platform skips. Source
+> remains unpushed/undeployed. Hosted CI/E2E, cumulative review and
+> fresh pre/post-cutover proof remain open. Private log hashes:
+> `release-exact-head-gates-2026-10-09.md`.
+
 > **9 October C1 rebased local retest, OPEN:** NEXUS C1 work was rebased
 > onto a newer origin/main and its changelog notes restored to Unreleased
 > (`af8e90f94`). On that exact rebased code, 32 synthetic captured notices

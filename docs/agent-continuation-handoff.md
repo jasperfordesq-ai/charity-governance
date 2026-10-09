@@ -1,5 +1,22 @@
 # CharityPilot Agent Continuation Handoff
 
+> **9 October retained Member live UI check:** A fresh signed-in
+> `Jasper test account.` Member session showed one reviewed HISTORICAL
+> certificate in Vault, minimal Board cards, risk summaries without
+> detailed notes, and Owner/Admin restrictions on full export, audit,
+> Minute Book and charity-wide security controls. The 8 October exact-
+> byte certificate download remains positive proof; today's click gave
+> no new HTTP receipt. Direct hosted denial for a named restricted
+> resource and Nikita's audience/classification acceptance remain OPEN.
+> Exact observed scope: private `member-live-readonly-2026-10-09.md`.
+>
+> **9 October exact local release checks:** Clean `69e14b69` passed
+> 2,724 API tests, 14 serial PostgreSQL migration tests and 1,123
+> production checks (five platform skips). Log hashes and limits are
+> in private `release-exact-head-gates-2026-10-09.md`. The local
+> candidate remains unpushed/undeployed; hosted CI/E2E, full cumulative
+> review, fresh cutover preflight and post-cutover checks remain.
+
 > **9 October C1 branch rebase and retest, local only:** Isolated NEXUS C1
 > work was rebased onto a newer `origin/main`; its release notes were
 > corrected into `[Unreleased]` at local `af8e90f94`. Fresh disposable
