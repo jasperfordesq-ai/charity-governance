@@ -1,5 +1,16 @@
 # CharityPilot Agent Continuation Handoff
 
+> **9 October C1 delivery-failure scope, local source review:** The
+> separate clean NEXUS C1 branch at `19c17b6a9` still marks registration
+> admin fanout done for 24 hours after logging an individual recipient email
+> failure or exception. Repeat-event suppression therefore does not
+> establish failed-recipient retry. Earlier successful synthetic Mailpit
+> checks prove only the success path; provider-failure/replay assurance
+> needs a separate test and durable delivery design if required for the
+> scoped review. This does not itself establish a hosted delivery failure,
+> privacy disclosure or C1 closure. The original receipt and risk-owner/DPO
+> decision remain outstanding. Private detail is in the C1 decision note.
+
 > **9 October restricted database role reconciliation, local only:** The
 > grant script's existing-role preflight now includes
 > `DocumentByteProviderAttempt` in both its required-table and unsafe-write
