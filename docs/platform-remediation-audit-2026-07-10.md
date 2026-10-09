@@ -1,5 +1,13 @@
 # CharityPilot Full-Platform Remediation Audit
 
+> **9 October Confluence migration preflight, snapshot only:** Read-only
+> count inventory on clean private VM `96c8b1e8` found no citation,
+> publication or document recovery binding rows. The VM has 156 applied
+> migration names, matching the local prefix; 18 later migrations are
+> absent. This clears the two cross-charity preflight checks only as of
+> the query. Repeat before deployment. It does not close independent
+> recovery, hosted release, retention-policy or DPO acceptance gates.
+
 > **9 October Confluence publication provisional fence, OPEN:** Local
 > eighteenth migration refuses recovery binding while any publication row
 > exists and freezes publication DML once bound, including direct SQL.

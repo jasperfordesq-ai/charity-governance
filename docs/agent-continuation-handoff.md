@@ -1,5 +1,15 @@
 # CharityPilot Agent Continuation Handoff
 
+> **9 October 04:10 Dublin private VM read-only preflight snapshot:** The
+> clean VM at `96c8b1e8` has zero `ConfluenceReference`, zero
+> `DocumentPublication` and zero `DocumentRecoveryEnforcement` rows, with
+> 75 Vault documents. Applied migration names match the first 156 of 174
+> local directories; the final 18 remain undeployed. The two Confluence
+> mismatch checks are clear only at this snapshot; repeat before release.
+> Count-only PostgreSQL ran inside a read-only transaction on the pinned
+> local Docker socket. See the gitignored
+> `publication-live-inventory-2026-10-09.md`. No binding was activated.
+
 > **9 October Confluence publication interim gate, OPEN:** Local
 > `20261009120000_document_publication_recovery_binding_gate` rejects a
 > charity's binding if any publication row exists, freezes publication DML
