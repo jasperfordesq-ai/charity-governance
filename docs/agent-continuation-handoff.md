@@ -1,5 +1,17 @@
 # CharityPilot Agent Continuation Handoff
 
+> **9 October exact local release tests after final journal mapping:**
+> Source `46058716` passed the full API package command: 2,724 API tests
+> and 14 serial real PostgreSQL 16 migration tests, exit 0. The local
+> production-check suite passed 1,123 with zero failures and five
+> platform skips. Private exact logs are
+> `.charitypilot-private/release-api-exact-46058716-2026-10-09.log`
+> and `.charitypilot-private/production-check-exact-46058716-2026-10-09.log`.
+> These cover the final generic-disposal admission mapping that had
+> previously received focused tests only. Hosted exact-head CI/E2E,
+> cumulative review, live migration/cutover, Owner/Member checks and
+> Nikita's acceptance remain open; this source is unpushed/undeployed.
+
 > **9 October 07:13 Dublin C1 adjacent NEXUS branch, local only:**
 > The isolated `codex/c1-pending-profile` branch in
 > `C:\platforms\htdocs\staging-codex-c1-pending` was rebased on current

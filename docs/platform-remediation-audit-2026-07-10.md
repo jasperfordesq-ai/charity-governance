@@ -1,5 +1,13 @@
 # CharityPilot Full-Platform Remediation Audit
 
+> **9 October exact local gate, OPEN hosted:** The clean `46058716`
+> source passed 2,724/2,724 API tests, 14/14 serial real PostgreSQL 16
+> migration tests and 1,123 production-check passes (five platform
+> skips). This includes the final recovery-journal capacity mapping.
+> The candidate is unpushed/undeployed and still requires hosted CI/E2E,
+> full cumulative review, guarded migration and cutover, independent
+> custody/provider proof, live Member and DPO acceptance.
+
 > **9 October C1 adjacent local NEXUS checkpoint, OPEN:** Isolated
 > `codex/c1-pending-profile` was rebased on current `origin/main`; clean
 > local tip `b8fddbbf6` is 14 commits ahead, zero behind. A fresh
