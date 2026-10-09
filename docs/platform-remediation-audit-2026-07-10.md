@@ -1,5 +1,12 @@
 # CharityPilot Full-Platform Remediation Audit
 
+> **9 October complaint source readback, OPEN:** Local `1d80444b`
+> exercises immutable candidate publication/retry and exact digest-bound
+> reading with a synthetic store (five focused tests, API build pass).
+> The caller's digest has no independently authenticated provenance;
+> provider atomicity, current head, baseline/replay, all-writer fence,
+> controller policy and Nikita acceptance remain unproved.
+
 > **9 October complaint source candidate, OPEN:** Local `3871fd73`
 > validates a full versioned complaint source fact and encrypts it as
 > a candidate envelope for synthetic tests. API build and three focused

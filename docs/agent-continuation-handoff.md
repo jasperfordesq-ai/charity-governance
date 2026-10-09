@@ -1,5 +1,14 @@
 # CharityPilot Agent Continuation Handoff
 
+> **9 October ~03:10 Dublin complaint candidate readback, OPEN:** Local
+> `1d80444b` adds atomic create-if-absent candidate semantics, readback
+> after creation and an expected-digest read. A synthetic lost-acknowledgement
+> retry, changed-fact conflict, concurrent winner and missing/replaced
+> object cases pass; API build and five focused tests pass. The digest in
+> those tests is local, not an independently authenticated current head.
+> There is no real provider adapter, policy, baseline, replay, writer
+> gate or live binding. See private source-candidate receipt.
+
 > **9 October ~03:08 Dublin complaint source candidate, OPEN:** Local
 > `3871fd73` defines a strict versioned full `ComplaintRecord` source
 > fact and an encrypted candidate envelope bound to installation,
