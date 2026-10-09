@@ -26,7 +26,8 @@ function page(overrides: Partial<ConfluencePage> = {}): ConfluencePage {
   };
 }
 
-function fakePrisma(options: { documentExists?: boolean; rows?: Array<Record<string, unknown>> } = {}) {
+function fakePrisma(options: { documentExists?: boolean; recoveryBound?: boolean;
+  rows?: Array<Record<string, unknown>> } = {}) {
   const rows = options.rows ?? [];
   const created: Array<Record<string, unknown>> = [];
   const deletes: Array<Record<string, unknown>> = [];
@@ -34,6 +35,10 @@ function fakePrisma(options: { documentExists?: boolean; rows?: Array<Record<str
 
   const prisma = {
     async $transaction<T>(callback: (tx: unknown) => Promise<T>) { return callback(prisma); },
+    $queryRaw: async () => [{ id: 'org-1' }],
+    documentRecoveryEnforcement: {
+      findUnique: async () => options.recoveryBound ? { id: 'binding' } : null,
+    },
     documentControlAudit: {
       async create(args: { data: Record<string, unknown> }) {
         audits.push(args.data);
@@ -100,6 +105,24 @@ test('citing a page records the version it was cited at', async () => {
     reason: 'Confluence page citation added.',
   });
   assert.doesNotMatch(JSON.stringify(fake.audits[0]), /Conflicts of Interest Policy|atlassian\.net|page-1/);
+});
+
+test('recovery binding refuses citation changes before provider read or local mutation', async () => {
+  const fake = fakePrisma({ recoveryBound: true,
+    rows: [{ id: 'ref-1', organisationId: 'org-1', documentId: 'doc-1' }] });
+  let providerReads = 0;
+  const blocked = (error: unknown) => error instanceof AppError
+    && error.code === 'CONFLUENCE_REFERENCE_RECOVERY_REQUIRED';
+  await assert.rejects(citeConfluencePage(fake.prisma, CLIENT, INPUT, {
+    getPage: async () => { providerReads += 1; return page(); },
+  }), blocked);
+  await assert.rejects(removeConfluenceReference(fake.prisma, {
+    organisationId: 'org-1', referenceId: 'ref-1', actorUserId: 'user-1',
+  }), blocked);
+  assert.equal(providerReads, 0);
+  assert.deepEqual(fake.created, []);
+  assert.deepEqual(fake.deletes, []);
+  assert.deepEqual(fake.audits, []);
 });
 
 test('the page is READ before it is cited, and a page that is not there is refused', async () => {

@@ -1,5 +1,15 @@
 # CharityPilot Full-Platform Remediation Audit
 
+> **9 October existing-page citation tenant/recovery gate, OPEN:** Local
+> SQL now binds `ConfluenceReference` to its document's charity and
+> refuses any existing mismatch for operator review before migration.
+> Citation INSERT/UPDATE/DELETE are frozen after document recovery
+> binding, with an API 409 guard. Full API 2,709 and 13 serial real-PG
+> tests pass, including blank full-schema migration. The fifteenth
+> forward migration is not on the private VM; live mismatch inventory,
+> independent citation history/replay, release and Nikita review are
+> still required.
+
 > **9 October complaint source writer gate, OPEN:** Local API and
 > `20261009080000_recovery_bound_complaint_source` refuse ordinary
 > `ComplaintRecord` create/update after complaint recovery binding;

@@ -33,6 +33,7 @@ import type { PrismaClient } from '@prisma/client';
 import { AppError } from '../utils/app-error.js';
 import type { ConfluenceClient } from './confluence-client.js';
 import { getPage as getPageDefault, type ConfluencePage } from './confluence-pages.js';
+import { lockOrganisationForUpdate } from './organisation-lock.js';
 
 export type ConfluenceReference = {
   id: string;
@@ -123,6 +124,12 @@ export async function citeConfluencePage(
   if (document === null) {
     throw new AppError(404, 'DOCUMENT_NOT_FOUND', 'Document not found');
   }
+  if (await prisma.documentRecoveryEnforcement.findUnique({
+    where: { organisationId: input.organisationId }, select: { id: true },
+  })) {
+    throw new AppError(409, 'CONFLUENCE_REFERENCE_RECOVERY_REQUIRED',
+      'Citation changes require independent recovery authority for this charity.');
+  }
 
   const page = await getPage(client, input.pageId);
   if (page === null) {
@@ -138,6 +145,13 @@ export async function citeConfluencePage(
 
   const citedAt = input.now ?? new Date();
   const created = await prisma.$transaction(async (tx) => {
+    await lockOrganisationForUpdate(tx, input.organisationId);
+    if (await tx.documentRecoveryEnforcement.findUnique({
+      where: { organisationId: input.organisationId }, select: { id: true },
+    })) {
+      throw new AppError(409, 'CONFLUENCE_REFERENCE_RECOVERY_REQUIRED',
+        'Citation changes require independent recovery authority for this charity.');
+    }
     const reference = await tx.confluenceReference.create({
       data: {
         organisationId: input.organisationId,
@@ -237,11 +251,18 @@ export async function removeConfluenceReference(
   input: { organisationId: string; referenceId: string; actorUserId: string },
 ): Promise<boolean> {
   return prisma.$transaction(async (tx) => {
+    await lockOrganisationForUpdate(tx, input.organisationId);
     const reference = await tx.confluenceReference.findFirst({
       where: { id: input.referenceId, organisationId: input.organisationId },
       select: { id: true, documentId: true },
     });
     if (!reference) return false;
+    if (await tx.documentRecoveryEnforcement.findUnique({
+      where: { organisationId: input.organisationId }, select: { id: true },
+    })) {
+      throw new AppError(409, 'CONFLUENCE_REFERENCE_RECOVERY_REQUIRED',
+        'Citation changes require independent recovery authority for this charity.');
+    }
     const result = await tx.confluenceReference.deleteMany({
       where: { id: reference.id, organisationId: input.organisationId, documentId: reference.documentId },
     });

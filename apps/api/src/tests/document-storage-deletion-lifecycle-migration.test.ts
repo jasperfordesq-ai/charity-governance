@@ -729,6 +729,51 @@ test('real PostgreSQL 16 migration freezes complaint source inserts and edits af
   } finally { await removeDisposableContainer(container); }
 });
 
+test('real PostgreSQL 16 migration binds citations to their document charity and freezes bound changes', { timeout: 120_000 }, async () => {
+  const container = `charitypilot-citation-gate-${randomUUID()}`;
+  assertDockerSuccess(docker(['run', '--detach', '--name', container, '--network', 'none',
+    '-e', 'POSTGRES_HOST_AUTH_METHOD=trust', POSTGRES_IMAGE]), 'start citation gate fixture');
+  try {
+    await waitForPostgres(container);
+    psql(container, `
+      CREATE TABLE "Organisation" (id TEXT PRIMARY KEY);
+      INSERT INTO "Organisation" VALUES ('charity'), ('other');
+      CREATE TABLE "Document" (id TEXT PRIMARY KEY, "organisationId" TEXT NOT NULL,
+        UNIQUE (id, "organisationId"));
+      INSERT INTO "Document" VALUES ('charity-doc','charity'), ('other-doc','other');
+      CREATE TABLE "DocumentRecoveryEnforcement" (id TEXT PRIMARY KEY, "organisationId" TEXT UNIQUE);
+      CREATE TABLE "ConfluenceReference" (id TEXT PRIMARY KEY, "organisationId" TEXT NOT NULL,
+        "documentId" TEXT NOT NULL, "pageTitle" TEXT NOT NULL,
+        CONSTRAINT "ConfluenceReference_documentId_fkey" FOREIGN KEY ("documentId")
+          REFERENCES "Document"(id) ON DELETE CASCADE ON UPDATE CASCADE);
+      INSERT INTO "ConfluenceReference" VALUES ('valid','charity','charity-doc','initial'),
+        ('mismatch','charity','other-doc','wrong charity');
+    `);
+    const migration = readFileSync(new URL(
+      '../../prisma/migrations/20261009090000_confluence_reference_recovery_tenant/migration.sql',
+      import.meta.url,
+    ), 'utf8');
+    assert.match(psql(container, migration, false).stderr, /charity\/document mismatch requires review/);
+    psql(container, `DELETE FROM "ConfluenceReference" WHERE id='mismatch';`);
+    psql(container, migration);
+    assert.match(psql(container, `INSERT INTO "ConfluenceReference" VALUES
+      ('forged','charity','other-doc','cross-charity');`, false).stderr, /foreign key constraint/);
+    psql(container, `INSERT INTO "ConfluenceReference" VALUES
+      ('before','charity','charity-doc','allowed');
+      UPDATE "ConfluenceReference" SET "pageTitle"='still allowed' WHERE id='before';`);
+    psql(container, `INSERT INTO "DocumentRecoveryEnforcement" VALUES ('binding','charity');`);
+    for (const statement of [
+      `INSERT INTO "ConfluenceReference" VALUES ('blocked','charity','charity-doc','blocked');`,
+      `UPDATE "ConfluenceReference" SET "pageTitle"='rewritten' WHERE id='valid';`,
+      `DELETE FROM "ConfluenceReference" WHERE id='valid';`,
+    ]) assert.match(psql(container, statement, false).stderr, /reference change requires independent recovery authority/);
+    psql(container, `INSERT INTO "ConfluenceReference" VALUES ('other-ref','other','other-doc','allowed');
+      UPDATE "ConfluenceReference" SET "pageTitle"='other changed' WHERE id='other-ref';
+      DELETE FROM "ConfluenceReference" WHERE id='other-ref';`);
+    assert.equal(psql(container, `SELECT count(*) FROM "ConfluenceReference" WHERE "organisationId"='charity';`).stdout.trim(), '2');
+  } finally { await removeDisposableContainer(container); }
+});
+
 test('real PostgreSQL 16 migration freezes only complaint policy facts after recovery enforcement', { timeout: 120_000 }, async () => {
   const container = `charitypilot-policy-gate-${randomUUID()}`;
   assertDockerSuccess(docker(['run', '--detach', '--name', container, '--network', 'none',

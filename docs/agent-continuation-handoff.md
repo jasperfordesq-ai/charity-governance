@@ -1,5 +1,17 @@
 # CharityPilot Agent Continuation Handoff
 
+> **9 October ~03:29 Dublin Confluence citation boundary, OPEN:** Local
+> migration `20261009090000_confluence_reference_recovery_tenant`
+> refuses pre-existing cross-charity citation/document mismatches, adds
+> a same-charity composite foreign key, and freezes citation add/edit/
+> remove under document recovery binding. The API refuses an already
+> bound cite before provider read and checks again under the charity
+> lock. Prisma validation and API build passed; full local API 2,709 and
+> 13 serial PostgreSQL tests passed, including a blank full-chain
+> migration. This fifteenth forward migration is undeployed. Live
+> mismatch inventory, independent citation replay, policy, release and
+> Nikita acceptance remain OPEN. See private receipt.
+
 > **9 October ~03:23 Dublin complaint source writer fence, OPEN:** Local
 > API and forward SQL now refuse ordinary `ComplaintRecord` create/update
 > after a charity's recovery binding, including direct database writes.
