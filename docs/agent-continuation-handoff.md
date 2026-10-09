@@ -1,5 +1,16 @@
 # CharityPilot Agent Continuation Handoff
 
+> **9 October ~03:13 Dublin complaint source candidate, OPEN:** Local
+> `3871fd73` defines a strict versioned full `ComplaintRecord` source
+> fact and an encrypted candidate envelope bound to installation,
+> charity, operation, writer epoch, source revision and KMS key ID.
+> Synthetic create/baseline/update, malformed and tamper checks pass
+> (three focused tests); API TypeScript build passes. No provider call,
+> source-writer integration, head, complete baseline, replay, database
+> fence, controller policy, release or host-loss proof exists. The
+> `ComplaintRecoveryEnforcement` rows must remain unused. See private
+> `complaint-source-candidate-2026-10-09.md` and the host-loss contract.
+
 > **9 October ~03:04 Dublin C1-adjacent sender eligibility, OPEN:**
 > Separate NEXUS isolated branch `codex/c1-pending-profile` commit
 > `19c17b6a9` checks both locked connection participants are active,

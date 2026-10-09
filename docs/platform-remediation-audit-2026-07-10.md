@@ -1,5 +1,12 @@
 # CharityPilot Full-Platform Remediation Audit
 
+> **9 October complaint source candidate, OPEN:** Local `3871fd73`
+> validates a full versioned complaint source fact and encrypts it as
+> a candidate envelope for synthetic tests. API build and three focused
+> tests pass. There is no live source export, independently durable
+> publisher/head, all-writer fence, baseline/replay or controller-approved
+> retention rule. This cannot authorize recovery binding or erasure.
+
 > **9 October C1-adjacent F-576, OPEN:** NEXUS isolated local
 > `19c17b6a9` refuses connection requests from active unapproved Admin
 > accounts after locking both users. Synthetic route reproduced HTTP 201
