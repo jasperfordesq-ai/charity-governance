@@ -15,6 +15,7 @@ import {
   type Resolution,
 } from '@prisma/client';
 import { AppError } from '../utils/errors.js';
+import { assertDocumentSourceUnbound } from './document-source-recovery-guard.js';
 
 const toDate = (value?: string | null) => (value ? new Date(value) : null);
 const auditSnapshot = (value: unknown): Prisma.InputJsonValue => JSON.parse(JSON.stringify(value)) as Prisma.InputJsonValue;
@@ -419,6 +420,7 @@ export class GoverningActService {
     const expectedInstant = new Date(expectedUpdatedAt);
 
     await this.prisma.$transaction(async (tx) => {
+    await assertDocumentSourceUnbound(tx, organisationId);
     const doc = await tx.document.findFirst({ where: { deletedAt: null, id: documentId, organisationId } });
     if (!doc) throw new AppError(404, 'DOCUMENT_NOT_FOUND', 'Document not found');
     if (doc.updatedAt.getTime() !== expectedInstant.getTime()) {

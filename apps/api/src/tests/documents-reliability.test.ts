@@ -113,6 +113,7 @@ async function buildDocumentsApp(prisma: PrismaMock, role: Role = 'ADMIN', limit
   const app = Fastify({ logger: false });
   const decoratedPrisma = { ...authModels(role), ...prisma };
   decoratedPrisma.$transaction ??= async (callback: (tx: PrismaMock) => Promise<unknown>) => callback(decoratedPrisma);
+  decoratedPrisma.$queryRaw ??= async () => [{ id: 'org-1' }];
   decoratedPrisma.documentRecoveryEnforcement ??= { findUnique: async () => null };
   decoratedPrisma.document.aggregate ??= async () => ({ _sum: { fileSize: 0 } });
   // The storage resolver looks up organisation preference on every storage

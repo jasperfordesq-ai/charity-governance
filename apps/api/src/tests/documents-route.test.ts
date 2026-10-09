@@ -2043,6 +2043,25 @@ test('bound charity metadata edit returns a conflict before reading or writing t
   } finally { await app.close(); }
 });
 
+test('document edit refuses a recovery binding committed after the route precheck', async () => {
+  let checks = 0;
+  let writes = 0;
+  const app = await buildDocumentsApp({
+    ...patchPrisma({ onUpdate: () => { writes += 1; } }),
+    documentRecoveryEnforcement: { findUnique: async () => (++checks === 1 ? null : { id: 'binding' }) },
+  } as never);
+  try {
+    const response = await app.inject({
+      method: 'PATCH', url: '/doc-1', headers: { authorization: authHeader },
+      payload: { name: 'Revised policy', expectedUpdatedAt: '2026-06-08T00:00:00.000Z' },
+    });
+    assert.equal(response.statusCode, 409);
+    assert.equal(response.json().code, 'DOCUMENT_SOURCE_RECOVERY_REQUIRED');
+    assert.equal(checks, 2);
+    assert.equal(writes, 0);
+  } finally { await app.close(); }
+});
+
 test('editing assessed document metadata withdraws Member access and resets the assessment', async () => {
   const writes: Array<{ where: Record<string, unknown>; data: Record<string, unknown> }> = [];
   const visibilityAudits: Record<string, unknown>[] = [];

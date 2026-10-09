@@ -15,6 +15,7 @@ import {
 import { publicationErasureTarget } from './document-publication.service.js';
 import { parseConfluenceErasureTarget } from './confluence-erasure-target.js';
 import { lockOrganisationForUpdate } from './organisation-lock.js';
+import { assertDocumentSourceUnbound } from './document-source-recovery-guard.js';
 
 /**
  * An absent field leaves the column alone; an explicit null clears it.
@@ -839,6 +840,7 @@ export class DocumentService {
     const includeAdditionalStandards = await documentStandardLinkScope(this.prisma, organisationId);
 
     const updated = await this.prisma.$transaction(async (tx) => {
+      await assertDocumentSourceUnbound(tx, organisationId);
       const existing = await tx.document.findFirst({
         where: { deletedAt: null, id, organisationId },
         select: { id: true, updatedAt: true, category: true, visibility: true, contentAccessClass: true,
@@ -1448,6 +1450,7 @@ export class DocumentService {
     const provider = present[0]![0];
 
     return this.prisma.$transaction(async (tx) => {
+      await assertDocumentSourceUnbound(tx, input.organisationId);
       let updated;
       try {
         updated = await tx.document.update({

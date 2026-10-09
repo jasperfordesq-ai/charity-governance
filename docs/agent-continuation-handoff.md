@@ -1,5 +1,17 @@
 # CharityPilot Agent Continuation Handoff
 
+> **9 October document-source binding race, local only:** Document metadata
+> edits, storage-provider verification and document Board-approval changes
+> now acquire the charity's Organisation row lock inside their write
+> transaction, then recheck `DocumentRecoveryEnforcement`. This serialises
+> them with a concurrent recovery binding and returns the intended 409 if
+> binding committed after the route precheck. The SQL source trigger remains
+> the direct-writer fence. Focused tests passed 152/152, and the complete
+> API suite passed 2,720/2,720 plus 14/14 serial real PostgreSQL migration
+> tests. Upload-reservation error mapping and independent document-source
+> replay still need work; no recovery binding, push or live deployment was
+> performed. See the private 9 October document-source API response note.
+
 > **9 October publication row-ID fence, local only:** Cumulative SQL
 > review confirmed the earlier purge fence already makes a publication's
 > charity, source document and provider immutable. A full-schema
