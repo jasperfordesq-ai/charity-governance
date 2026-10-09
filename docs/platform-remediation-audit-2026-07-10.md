@@ -1,5 +1,11 @@
 # CharityPilot Full-Platform Remediation Audit
 
+> **9 October C1 per-recipient ledger, OPEN:** NEXUS local `cf6dafd87`
+> introduces an inert unique staff-email claim ledger with explicit UNKNOWN;
+> disposable MariaDB migration/tests pass 4/30. No registration/sender
+> integration, retry, provider reconciliation, retention decision, hosted
+> proof or risk-owner/DPO acceptance exists. Preserve C1 as OPEN.
+
 > **9 October C1 bell replay reduction, OPEN:** A local NEXUS branch commit
 > `3cbea98e8` deduplicates staff bells and associated push on forced
 > registration-event replay using a persistent recipient key; disposable

@@ -1,5 +1,14 @@
 # CharityPilot Agent Continuation Handoff
 
+> **9 October C1 durable-ledger foundation, local only:** NEXUS isolated
+> `codex/c1-pending-profile` commit `cf6dafd87` adds a tenant-scoped unique
+> per-recipient email claim table/service with an UNKNOWN terminal state.
+> Disposable MariaDB migration and tests passed 4/30. It is not wired into
+> registration or email sending; the failed-recipient retry defect remains.
+> Branch is unmerged/unpushed/undeployed. Decide ledger retention and prove
+> the registration commit and provider outcome boundary before wiring.
+> Private receipt: `.charitypilot-private/c1-email-delivery-ledger-local-2026-10-09.md`.
+
 > **9 October C1 bell/push replay repair, local only:** NEXUS isolated
 > `codex/c1-pending-profile` commit `3cbea98e8` uses the existing unique
 > per-recipient notification key so forced event replay cannot add a second
