@@ -16,6 +16,17 @@ const envelopeSchema = z.object({
     tag: base64(24), ciphertext: base64(43692) }).strict(),
 }).strict();
 
+/** Structural scope check only; opening still requires the wrapped data key
+ * and a digest from separately authenticated history. */
+export function inspectComplaintSourceEnvelope(envelope: string) {
+  try {
+    if (Buffer.byteLength(envelope, 'utf8') > 65536) throw new Error('oversized');
+    const value = envelopeSchema.parse(JSON.parse(envelope));
+    if (JSON.stringify(value) !== envelope) throw new Error('noncanonical');
+    return validateRecoveryEnvelopeContext(value.context);
+  } catch { throw new Error('Invalid complaint source envelope'); }
+}
+
 function requireFact(body: string, context: RecoveryEnvelopeContext) {
   const prepared = prepareComplaintSourceFact(JSON.parse(body));
   const fact = JSON.parse(prepared.body) as { installationId: string; organisationId: string;

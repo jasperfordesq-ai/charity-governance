@@ -1,9 +1,12 @@
 import assert from 'node:assert/strict';
 import { randomBytes } from 'node:crypto';
+import { Readable } from 'node:stream';
 import { test } from 'node:test';
+import { GetObjectCommand, PutObjectCommand, S3Client } from '@aws-sdk/client-s3';
 import { prepareComplaintSourceFact } from '../services/complaint-source-fact.js';
 import { openComplaintSourceFact, preserveComplaintSourceCandidate,
   readVerifiedComplaintSourceFact, sealComplaintSourceFact } from '../services/complaint-source-envelope.js';
+import { S3AuthorityObjectStore } from '../services/recovery-authority-s3.js';
 import type { RecoveryDataKeys } from '../services/recovery-preparation-envelope.js';
 
 const keyId = 'arn:aws:kms:eu-west-1:123456789012:key/11111111-1111-4111-8111-111111111111';
@@ -81,4 +84,41 @@ test('competing candidate creators observe one immutable winning envelope', asyn
     preserveComplaintSourceCandidate(f.body, f.context, f.keys, store)));
   assert.equal(results[0]!.digest, results[1]!.digest);
   assert.equal(results.filter(result => result.replayed).length, 1);
+});
+
+test('S3 candidate transport enforces exact scope, conditional creation and KMS metadata', async () => {
+  const f = fixture(); const sealed = await sealComplaintSourceFact(f.body, f.context, f.keys);
+  const objects = new Map<string, string>();
+  const credentials = { accessKeyId: 'synthetic', secretAccessKey: 'synthetic' };
+  const client = new S3Client({ region: 'eu-west-1', credentials });
+  const storageKey = `complaint-source/install/charity/${f.context.operationId}.json`;
+  const kmsKeyArn = keyId.replace('11111111-1111-4111-8111-111111111111',
+    '22222222-2222-4222-8222-222222222222');
+  let calls = 0;
+  client.send = (async (command: GetObjectCommand | PutObjectCommand) => {
+    calls++;
+    assert.equal(command.input.Key, storageKey);
+    assert.equal(command.input.ExpectedBucketOwner, '123456789012');
+    if (command instanceof GetObjectCommand) {
+      const body = objects.get(command.input.Key!);
+      if (!body) throw { name: 'NoSuchKey', $metadata: { httpStatusCode: 404 } };
+      return { VersionId: 'synthetic-version', ServerSideEncryption: 'aws:kms',
+        SSEKMSKeyId: kmsKeyArn, ContentLength: Buffer.byteLength(body),
+        Body: Readable.from([Buffer.from(body)]) };
+    }
+    assert.equal(command.input.IfNoneMatch, '*');
+    assert.equal(command.input.SSEKMSKeyId, kmsKeyArn);
+    assert.ok(!String(command.input.Body).includes('Synthetic private complaint narrative'));
+    if (objects.has(command.input.Key!)) throw { name: 'PreconditionFailed', $metadata: { httpStatusCode: 412 } };
+    objects.set(command.input.Key!, String(command.input.Body));
+    return { VersionId: 'synthetic-version', ServerSideEncryption: 'aws:kms', SSEKMSKeyId: kmsKeyArn };
+  }) as typeof client.send;
+  const store = new S3AuthorityObjectStore({ bucket: 'synthetic-source', accountId: '123456789012',
+    kmsKeyArn, replayKeyArn: keyId, installationId: 'install', organisationId: 'charity' }, credentials, client);
+  assert.equal(await store.createSourceFact(f.context.operationId, sealed.envelope), true);
+  assert.equal(await store.createSourceFact(f.context.operationId, sealed.envelope), false);
+  assert.equal(await store.readSourceFact(f.context.operationId), sealed.envelope);
+  await assert.rejects(() => store.createSourceFact('wrong-operation', sealed.envelope), /scope mismatch/);
+  assert.equal(calls, 3);
+  client.destroy();
 });
