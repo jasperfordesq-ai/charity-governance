@@ -1,5 +1,15 @@
 # CharityPilot Agent Continuation Handoff
 
+> **9 October 01:36 UTC C1 adjacent private-profile visibility, OPEN:**
+> In isolated NEXUS branch `codex/c1-pending-profile`, local commit
+> `336b6f1a1` fixes red-tested directory/search disclosure of a
+> connections-only profile to an active unapproved Admin account.
+> Broader synthetic suite passed 136/382; final focused search and
+> surname check passed 1/11. Branch is 11 ahead of origin/main,
+> unpushed/unmerged/undeployed. This is provisional NEXUS F-574;
+> original C1 closure evidence, hosted proof and Nikita/risk-owner
+> decision remain OPEN. See private C1 receipt.
+
 > **9 October 01:25 UTC P05/P07 primary disposal decisions, OPEN:**
 > Local forward SQL and API guards now refuse document/complaint purge
 > authorization and withdrawal inserts after the matching recovery

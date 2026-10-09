@@ -1,5 +1,13 @@
 # CharityPilot Full-Platform Remediation Audit
 
+> **9 October 01:36 UTC C1 adjacent F-574, OPEN:** The separate NEXUS
+> branch `codex/c1-pending-profile` locally fixes a reproduced
+> private-profile directory/search bypass for an active unapproved
+> Admin, at `336b6f1a1`. Synthetic route red/green, broader 136/382
+> and final focused 1/11 passed. No push, release, hosted token
+> behavior, original admin-email closure evidence or Nikita acceptance.
+> CharityPilot C1 must stay OPEN.
+
 > **9 October 01:25 UTC P05/P07 primary decision writer, OPEN:**
 > Local API and SQL now refuse document/complaint disposal authority
 > or withdrawal inserts under recovery binding. Claims retain their
