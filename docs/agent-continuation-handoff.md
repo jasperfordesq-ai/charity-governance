@@ -1,5 +1,14 @@
 # CharityPilot Agent Continuation Handoff
 
+> **9 October C1 definite pre-transport refusal, local only:** NEXUS
+> isolated `b1acf9554` marks a captured staff alert `definite_failure`
+> when its address is structurally unroutable, before any provider call.
+> Ambiguous false transport returns stay UNKNOWN. Disposable MariaDB suite
+> passed 51 tests/182 assertions; exact retained log/hash and limits in
+> private `.charitypilot-private/c1-definite-pretransport-refusal-2026-10-09.md`.
+> Branch unmerged/unpushed/undeployed. Reviewed corrected-address retry,
+> typed outcomes, retention, hosted proof and C1/Nikita decision OPEN.
+
 > **9 October C1 redacted host review, local only:** NEXUS isolated
 > `a90051123` adds a read-only required-tenant CLI for unresolved
 > per-recipient delivery states and exact mail-log counts, omitting names,

@@ -1,5 +1,14 @@
 # CharityPilot Full-Platform Remediation Audit
 
+> **9 October C1 definite pre-send refusal, OPEN:** NEXUS local
+> `b1acf9554` classifies structurally unroutable captured staff addresses
+> as definite failure with no provider call; other false transport results
+> remain UNKNOWN. Disposable MariaDB suite passed 51/182; branch
+> unmerged/unpushed/undeployed. Corrected-address retry, typed outcomes,
+> provider evidence, retention, hosted proof, original C1 closure record
+> and DPO/risk-owner disposition remain OPEN. See private
+> `c1-definite-pretransport-refusal-2026-10-09.md`.
+
 > **9 October C1 redacted review, OPEN:** NEXUS local `a90051123` adds
 > a read-only, tenant-required host review of unresolved staff-email
 > states and exact mail-log counts without recipient email/name/body or
