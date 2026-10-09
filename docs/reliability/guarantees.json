@@ -1086,7 +1086,7 @@
     "guarantee": "Recoverable removal refuses missing approved policy, a held or linked record, inactive actor, stale revision or foreign charity before storage inspection; the retained record and success-audit history remain unchanged.",
     "status": "covered",
     "testFile": "apps/api/src/tests/document-recovery.test.ts",
-    "testTitle": "unapproved policy, held or linked record, inactive actor and stale revision refuse removal",
+    "testTitle": "unapproved or unknown policy, held or linked record, inactive actor and stale revision refuse removal",
     "linkResolved": true,
     "gapDescription": "",
     "surface": "api"
