@@ -1,5 +1,16 @@
 # CharityPilot Agent Continuation Handoff
 
+> **9 October 10:17 Dublin C1 current-main retest, local only:** The
+> isolated NEXUS branch `codex/c1-pending-profile` rebased cleanly over
+> three upstream commits to exact `877658042` (25 ahead/zero behind at
+> observation). The synthetic 32-message Mailpit privacy capture and
+> scoped disposable MariaDB 232-test/759-assertion suite passed with 12
+> existing skips; semver/version checks passed. Previous tip is preserved
+> locally. No push, PR, merge, hosted proof or deployment followed. Live
+> C1 remains OPEN pending exact-build recipient/content/link evidence and
+> dated risk-owner/Nikita disposition. Full hashes and scope: private
+> `.charitypilot-private/c1-second-upstream-integration-2026-10-09.md`.
+
 > **9 October retained Member live UI check:** A fresh signed-in
 > `Jasper test account.` Member session showed one reviewed HISTORICAL
 > certificate in Vault, minimal Board cards, risk summaries without

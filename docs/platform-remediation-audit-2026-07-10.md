@@ -1,5 +1,15 @@
 # CharityPilot Full-Platform Remediation Audit
 
+> **9 October C1 second rebase and exact-head local retest, OPEN:** NEXUS
+> isolated `codex/c1-pending-profile` at clean `877658042` is 25 ahead/
+> zero behind fetched `origin/main`. Synthetic capture checked 32 staff
+> notices across nine recipient classes/11 locales for omission of
+> registrant particulars and numeric profile links; disposable suite
+> passed 232 tests/759 assertions with 12 existing skips. Source remains
+> unpushed/unmerged/undeployed. This does not close the live C1 risk or
+> prove hosted delivery and profile-link access. Private evidence:
+> `.charitypilot-private/c1-second-upstream-integration-2026-10-09.md`.
+
 > **9 October DPO-01 live Member UI, scoped pass:** The retained signed-in
 > Member saw one reviewed certificate, reduced trustee and risk views,
 > and Owner/Admin restrictions on full export, governance audit, Minute
