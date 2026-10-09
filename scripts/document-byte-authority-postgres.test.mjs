@@ -104,6 +104,22 @@ test(
         '-e', 'CHARITYPILOT_RUNTIME_PASSWORD=synthetic-only', name,
         'psql', '-U', 'postgres', '-d', database], { input: grants }),
       'restrict disposable runtime role');
+      requireSuccess(docker(['exec', name, 'psql', '-U', 'postgres', '-d', database,
+        '-c', 'GRANT INSERT ON public."DocumentByteProviderAttempt" TO cp_fixture']),
+      'simulate unsafe existing provider-attempt grant');
+      const unsafeReconcile = docker(['exec', '-i', '-e', 'CHARITYPILOT_RUNTIME_ROLE=cp_fixture',
+        '-e', 'CHARITYPILOT_RUNTIME_PASSWORD=synthetic-only', name,
+        'psql', '-U', 'postgres', '-d', database], { input: grants });
+      assert.notEqual(unsafeReconcile.status, 0,
+        'grant reconciliation must refuse an elevated existing provider-attempt role');
+      assert.match(unsafeReconcile.stderr, /unsafe existing runtime role/);
+      assert.equal(requireSuccess(docker(['exec', name, 'psql', '-U', 'postgres',
+        '-d', database, '-tA', '-c', `SELECT has_table_privilege('cp_fixture',
+          'public."DocumentByteProviderAttempt"','INSERT')`]),
+      'check failed reconciliation preserved the unsafe grant'), 't');
+      requireSuccess(docker(['exec', name, 'psql', '-U', 'postgres', '-d', database,
+        '-c', 'REVOKE INSERT ON public."DocumentByteProviderAttempt" FROM cp_fixture']),
+      'remove synthetic unsafe grant');
       const privileges = requireSuccess(docker(['exec', name, 'psql', '-U', 'postgres',
         '-d', database, '-tA', '-c', `SELECT has_table_privilege('cp_fixture',
           'public."DocumentBytePermitCandidateBinding"','INSERT'),

@@ -22,7 +22,8 @@ BEGIN
       ('DocumentRecoveryEnforcement'), ('DocumentRecoveryExecution'),
       ('DocumentRecoveryOutcome'),
       ('DocumentBytePermitCandidateBinding'),
-      ('DocumentByteExecutionLease')) AS protected(name)
+      ('DocumentByteExecutionLease'),
+      ('DocumentByteProviderAttempt')) AS protected(name)
     WHERE to_regclass(format('public.%I', protected.name)) IS NULL
   ) THEN
     RAISE EXCEPTION 'Protected recovery or migration table is missing';
@@ -50,7 +51,8 @@ SELECT CASE WHEN :'runtime_role' = current_user OR EXISTS (
         ('DocumentRecoveryEnforcement'), ('DocumentRecoveryExecution'),
         ('DocumentRecoveryOutcome'),
         ('DocumentBytePermitCandidateBinding'),
-        ('DocumentByteExecutionLease')) AS protected(name)
+        ('DocumentByteExecutionLease'),
+        ('DocumentByteProviderAttempt')) AS protected(name)
       WHERE has_table_privilege(r.oid, to_regclass(format('public.%I', protected.name)),
         'INSERT,UPDATE,DELETE,TRUNCATE,REFERENCES,TRIGGER')
     )

@@ -1,5 +1,17 @@
 # CharityPilot Agent Continuation Handoff
 
+> **9 October restricted database role reconciliation, local only:** The
+> grant script's existing-role preflight now includes
+> `DocumentByteProviderAttempt` in both its required-table and unsafe-write
+> checks, matching its final SELECT-only grant list. A disposable full-schema
+> PostgreSQL run proved that an intentionally elevated INSERT grant causes
+> reconciliation to fail before silently changing it; the legitimate
+> restricted grant and document-byte composition still pass. Role/deploy
+> tests passed 94 with two platform skips and production-check passed 1,123
+> with five Windows skips. The serving VM's `cp_runtime` evidence remains
+> from the older release; repeat it after any deployment of these pending
+> migrations. No live grant or host configuration changed.
+
 > **9 October document-source binding race, local only:** Document metadata
 > edits, storage-provider verification and document Board-approval changes
 > now acquire the charity's Organisation row lock inside their write
