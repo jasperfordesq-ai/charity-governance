@@ -1,5 +1,14 @@
 # CharityPilot Agent Continuation Handoff
 
+> **9 October isolated replay browser verification, local only:** Clean
+> `e56ef16c` built a disposable API/web/database stack with all current
+> migrations and ran `tests/dpo-session-replay-concurrency.spec.ts` in
+> Chromium. All 8 scenarios passed, including two-tab refresh, sign-out
+> races, lost logout/refresh responses, Web Locks absence and a rejected
+> invalid cookie. The isolated Docker project was removed after exit 0.
+> This verifies synthetic current-source behavior, not attribution of the
+> nine historical VM `SESSION_REPLAY_DETECTED` events or hosted acceptance.
+
 > **9 October production-check gate repair, local only:** The first current
 > `test:production-check` run exposed 19 failures: synthetic public deploy
 > fixtures lacked the now-required production/MFA fields; the isolated E2E

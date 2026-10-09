@@ -1,5 +1,12 @@
 # CharityPilot Full-Platform Remediation Audit
 
+> **9 October DPO replay local browser proof, OPEN for hosted review:** The
+> current `e56ef16c` isolated Chromium replay suite passed all 8 tests
+> against fresh API/web/database images and was cleaned up. This checks
+> concurrent refresh, logout and lost-response behavior locally. The nine
+> historical live replay events are still unattributed; deployment, hosted
+> verification and Nikita's disposition remain open.
+
 > **9 October retention verification gate, OPEN:** The CI retention command
 > now includes the existing disposable SQL UTC calendar-year cutoff test.
 > Its local three-test run passes, including recovery-bound policy and
