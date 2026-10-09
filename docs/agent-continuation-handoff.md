@@ -1,5 +1,17 @@
 # CharityPilot Agent Continuation Handoff
 
+> **9 October ~08:00 Dublin candidate migration-image rehearsal:** A
+> second disposable restore of the verified 8 October serving-VM dump
+> ran `prisma migrate deploy` from a locally built candidate
+> `migration-runner` image. The database had no network or host port;
+> the migration process shared only its container namespace. All 19
+> forward migrations applied, giving 175 finished and zero incomplete
+> history rows. Disposable containers and data volume were removed.
+> Private image ID and log SHA are in
+> `.charitypilot-private/forward-sql-live-backup-rehearsal-2026-10-09.md`.
+> This is local populated-data release rehearsal, not hosted CI,
+> fresh-cutover proof, deployment or DPO acceptance.
+
 > **9 October ~07:57 Dublin populated SQL rehearsal, local only:** A
 > manifest-hash-verified 8 October backup of serving `96c8b1e8` was
 > restored into a networkless, portless disposable PostgreSQL 16

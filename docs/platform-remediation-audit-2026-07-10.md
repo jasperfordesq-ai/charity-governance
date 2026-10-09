@@ -1,5 +1,14 @@
 # CharityPilot Full-Platform Remediation Audit
 
+> **9 October local migration-image gate, OPEN live:** On a second
+> networkless disposable restore of the verified 8 October VM backup,
+> the locally built migration-runner image's actual Prisma entrypoint
+> applied all 19 candidate forward migrations (175 finished, zero
+> incomplete history rows). This strengthens the populated-data
+> migration evidence below. Hosted CI, a fresh VM preflight, guarded
+> cutover, live role/Member checks, controller terms, independent
+> recovery and Nikita's review still require separate evidence.
+
 > **9 October retention/recovery migration gate, still OPEN:** The 19
 > forward SQL files applied without error to a networkless disposable
 > restore of the 8 October serving-VM database backup (156 baseline
