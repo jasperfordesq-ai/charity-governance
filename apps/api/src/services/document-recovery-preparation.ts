@@ -13,9 +13,11 @@ const disposition = z.object({ disposition: z.enum(['DISPOSE', 'RETAIN_APPROVED'
   evidenceRef: evidence }).strict();
 const policy = z.object({ id, organisationId: id, recordClass: z.literal('VAULT_DRAFT'),
   revision: z.number().int().positive().max(2147483647), state: z.literal('APPROVED'),
-  retentionMode: z.enum(['REVIEW_REQUIRED', 'AFTER_ANCHOR']),
+  retentionMode: z.enum(['REVIEW_REQUIRED', 'AFTER_ANCHOR', 'AFTER_CALENDAR_YEARS']),
   retentionAnchor: z.literal('CREATED_AT').nullable(),
   retentionDays: z.number().int().min(1).max(36525).nullable(),
+  // Older signed preparations lack this field; new rows include null or a year term.
+  retentionYears: z.number().int().min(1).max(100).nullable().optional(),
   recoveryDays: z.number().int().min(1).max(3650),
   createdById: id, createdAt: time, approvedById: id, approvedAt: time,
   approvalEvidenceRef: evidence }).strict();
@@ -59,7 +61,8 @@ const schema = z.object({ format: z.literal(1), action: z.literal('DOCUMENT_PURG
     || v.removalPolicy.id === v.policy.id)) fail();
   for (const p of [v.policy, v.removalPolicy]) {
     if ((p.retentionMode === 'AFTER_ANCHOR') !== (p.retentionDays !== null)
-      || (p.retentionMode === 'AFTER_ANCHOR' ? p.retentionAnchor !== 'CREATED_AT' : p.retentionAnchor !== null)) fail();
+      || (p.retentionMode === 'AFTER_CALENDAR_YEARS') !== (p.retentionYears != null)
+      || (p.retentionMode !== 'REVIEW_REQUIRED' ? p.retentionAnchor !== 'CREATED_AT' : p.retentionAnchor !== null)) fail();
   }
 });
 

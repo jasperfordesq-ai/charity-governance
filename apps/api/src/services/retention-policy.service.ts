@@ -46,10 +46,8 @@ export class RetentionPolicyService {
         role: { in: input.state === 'APPROVED' ? ['OWNER'] : ['OWNER', 'ADMIN'] } }, select: { id: true } });
       if (!actor) throw new AppError(403, 'RETENTION_POLICY_AUTHORITY_REQUIRED',
         input.state === 'APPROVED' ? 'Only the active charity Owner can approve a policy.' : 'An active charity administrator is required.');
-      if (this.recordClass === 'COMPLAINT' && await tx.complaintRecoveryEnforcement.findUnique({
-        where: { organisationId }, select: { id: true },
-      })) throw new AppError(409, 'RETENTION_POLICY_RECOVERY_REQUIRED',
-        'Complaint policy changes require an independently recorded recovery decision.');
+      if (await this.recoveryBound(tx, organisationId)) throw new AppError(409, 'RETENTION_POLICY_RECOVERY_REQUIRED',
+        'Policy changes require an independently recorded recovery decision.');
       const latest = await tx.dataRetentionPolicyRevision.findFirst({ where: { organisationId, recordClass: this.recordClass },
         orderBy: { revision: 'desc' }, select: { revision: true } });
       const revision = (latest?.revision ?? 0) + 1;
@@ -92,11 +90,21 @@ export class RetentionPolicyService {
       const actor = await tx.user.findFirst({ where: { id: actorUserId, organisationId,
         lifecycleStatus: 'ACTIVE', role: 'OWNER' }, select: { id: true } });
       if (!actor) throw new AppError(403, 'RETENTION_POLICY_AUTHORITY_REQUIRED', 'Only the active charity Owner can withdraw a policy.');
-      if (this.recordClass === 'COMPLAINT' && await tx.complaintRecoveryEnforcement.findUnique({
-        where: { organisationId }, select: { id: true },
-      })) throw new AppError(409, 'RETENTION_POLICY_RECOVERY_REQUIRED',
-        'Complaint policy changes require an independently recorded recovery decision.');
+      if (await this.recoveryBound(tx, organisationId)) throw new AppError(409, 'RETENTION_POLICY_RECOVERY_REQUIRED',
+        'Policy changes require an independently recorded recovery decision.');
       return tx.dataRetentionPolicyWithdrawal.create({ data: { organisationId, policyId, actorUserId, ...input } });
     });
+  }
+
+  private async recoveryBound(tx: Pick<PrismaClient, 'complaintRecoveryEnforcement' | 'documentRecoveryEnforcement'>,
+    organisationId: string): Promise<boolean> {
+    if (this.recordClass === 'COMPLAINT' || this.recordClass === 'COMPLAINT_COPY') {
+      return Boolean(await tx.complaintRecoveryEnforcement.findUnique({
+        where: { organisationId }, select: { id: true },
+      }));
+    }
+    return Boolean(await tx.documentRecoveryEnforcement.findUnique({
+      where: { organisationId }, select: { id: true },
+    }));
   }
 }

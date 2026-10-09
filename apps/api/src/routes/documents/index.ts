@@ -1,6 +1,7 @@
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import { createHash } from 'node:crypto';
 import { DocumentService } from '../../services/document.service.js';
+import { assertDocumentSourceUnbound } from '../../services/document-source-recovery-guard.js';
 import { DocumentRecoveryService } from '../../services/document-recovery.service.js';
 import { RetentionPolicyService } from '../../services/retention-policy.service.js';
 import { DocumentPurgeService } from '../../services/document-purge.service.js';
@@ -164,9 +165,9 @@ export async function documentRoutes(app: FastifyInstance) {
   app.get('/recovery-policies', { preHandler: [requireAdmin, requireWebSession] }, async (request, reply) => {
     const policies = await app.prisma.dataRetentionPolicyRevision.findMany({ where: {
       organisationId: request.user.organisationId, recordClass: 'VAULT_DRAFT', state: 'APPROVED',
-      retentionMode: { not: 'PERMANENT' }, withdrawal: { is: null },
+      retentionMode: { in: ['REVIEW_REQUIRED', 'AFTER_ANCHOR', 'AFTER_CALENDAR_YEARS'] }, withdrawal: { is: null },
     }, select: { id: true, revision: true, recoveryDays: true, retentionMode: true,
-      retentionAnchor: true, retentionDays: true, approvalEvidenceRef: true },
+      retentionAnchor: true, retentionDays: true, retentionYears: true, approvalEvidenceRef: true },
     orderBy: { revision: 'desc' }, take: 100 });
     return sendSuccess(reply, policies);
   });
@@ -531,6 +532,12 @@ export async function documentRoutes(app: FastifyInstance) {
         throw new AppError(403, 'WEB_SESSION_REQUIRED',
           'Review document access, lifecycle and publication in the dashboard.');
       }
+      if (await app.prisma.documentRecoveryEnforcement.findUnique({
+        where: { organisationId: request.user.organisationId }, select: { id: true },
+      })) {
+        throw new AppError(409, 'DOCUMENT_SOURCE_RECOVERY_REQUIRED',
+          'Document edits require independent recovery authority for this charity.');
+      }
       let verifiedSha256: string | undefined;
       if (data.contentAccessClass === 'MEMBER_SUITABLE' || data.visibility === 'MEMBER_VISIBLE') {
         const descriptor = await service.getDownloadDescriptor(request.user.organisationId, request.params.id, request.user.role);
@@ -586,6 +593,12 @@ export async function documentRoutes(app: FastifyInstance) {
   }, async (request, reply) => {
     try {
       const input = verifyStorageProviderSchema.parse(request.body);
+      if (await app.prisma.documentRecoveryEnforcement.findUnique({
+        where: { organisationId: request.user.organisationId }, select: { id: true },
+      })) {
+        throw new AppError(409, 'DOCUMENT_SOURCE_RECOVERY_REQUIRED',
+          'Document source changes require independent recovery authority for this charity.');
+      }
       return sendSuccess(reply, await service.verifyWrittenStorageProvider({
         organisationId: request.user.organisationId,
         documentId: request.params.id,
@@ -815,6 +828,15 @@ export async function documentRoutes(app: FastifyInstance) {
         });
       }
 
+      // This check gives the normal API a stable 409 before provider I/O.
+      // The upload-intent SQL trigger serialises a concurrent recovery bind.
+      if (await app.prisma.documentRecoveryEnforcement.findUnique({
+        where: { organisationId: request.user.organisationId }, select: { id: true },
+      })) {
+        throw new AppError(409, 'DOCUMENT_SOURCE_RECOVERY_REQUIRED',
+          'Document uploads require independent recovery authority for this charity.');
+      }
+
       let uploadIntentId: string | null = null;
       const uploaded = await storageService.uploadFile(
         request.user.organisationId,
@@ -822,9 +844,12 @@ export async function documentRoutes(app: FastifyInstance) {
         uploadedFile.buffer,
         uploadedFile.mimetype,
         async (prepared) => {
-          const intent = await app.prisma.documentUploadIntent.create({
-            data: { organisationId: request.user.organisationId, ...prepared, state: 'RESERVED' },
-            select: { id: true },
+          const intent = await app.prisma.$transaction(async (tx) => {
+            await assertDocumentSourceUnbound(tx, request.user.organisationId);
+            return tx.documentUploadIntent.create({
+              data: { organisationId: request.user.organisationId, ...prepared, state: 'RESERVED' },
+              select: { id: true },
+            });
           });
           uploadIntentId = intent.id;
         },

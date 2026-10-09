@@ -8,11 +8,12 @@ const input={expectedRecordRevision:2,expectedHoldRevision:0,policyId:'policy',r
   recoveryUntil:'2026-09-01T00:00:00.000Z',authorityConfirmed:true,
   evidenceRef:'REVIEW-001',reason:'Reviewed complaint disposal authority',dispositionPlan:plan};
 function fixture() {
-  const f={owner:true,record:{id:'complaint',revision:2,removalId:'removal',removal:{recoveryUntil:new Date(input.recoveryUntil)}} as any,
+  const f={owner:true,bound:false,record:{id:'complaint',revision:2,removalId:'removal',removal:{recoveryUntil:new Date(input.recoveryUntil)}} as any,
     auth:{id:'auth',actorUserId:'actor',complaintId:'complaint',withdrawal:null,claim:null} as any,
     rows:[] as any[],reads:[] as any[],writes:[] as any[],error:null as Error|null};
   const tx={
     $queryRaw:async()=>[],
+    complaintRecoveryEnforcement:{findUnique:async()=>f.bound?{id:'binding'}:null},
     user:{findFirst:async({where}:any)=>{
       assert.deepEqual(where,{id:'actor',organisationId:'org',role:'OWNER',lifecycleStatus:'ACTIVE'});
       return f.owner?{id:'actor'}:null;
@@ -23,7 +24,7 @@ function fixture() {
     complaintPurgeAuthorization:{
       findFirst:async({where}:any)=>{assert.equal(where.organisationId,'org');return f.auth;},
       findMany:async(args:any)=>{f.reads.push(args);return f.rows;},
-      create:async({data,select}:any)=>{assert.equal(select.claim.select.transactionId,undefined);f.writes.push(data);return data;},
+      create:async({data,select}:any)=>{if(f.error)throw f.error;assert.equal(select.claim.select.transactionId,undefined);f.writes.push(data);return data;},
     },
     complaintPurgeClaim:{create:async({data,select}:any)=>{
       assert.equal(select.transactionId,undefined);if(f.error)throw f.error;
@@ -52,6 +53,25 @@ test('complaint purge requires reviewed exact revision, original deadline and si
     const sample=fixture();mutate(sample.f);
     await assert.rejects(sample.service.authorize('org','complaint','actor',input));assert.equal(sample.f.writes.length,0);
   }
+});
+test('complaint recovery binding freezes disposal authorization and withdrawal decisions',async()=>{
+  const {f,service}=fixture();f.bound=true;
+  await assert.rejects(service.authorize('org','complaint','actor',input),
+    {statusCode:409,code:'PURGE_RECOVERY_AUTHORITY_REQUIRED'});
+  assert.equal(f.writes.length,0);
+  f.bound=false;await service.authorize('org','complaint','actor',input);
+  f.bound=true;
+  await assert.rejects(service.withdraw('org','actor','auth',
+    {evidenceRef:'WITHDRAW-001',reason:'Synthetic decision changed.'}),
+    {statusCode:409,code:'PURGE_RECOVERY_AUTHORITY_REQUIRED'});
+  assert.equal(f.writes.length,1);
+});
+test('complaint disposal race returns a safe recovery-authority conflict',async()=>{
+  const {f,service}=fixture();f.error=new Error('Complaint disposal decision requires independent recovery authority SECRET');
+  f.error.name='PrismaClientUnknownRequestError';
+  await assert.rejects(service.authorize('org','complaint','actor',input),(error:any)=>{
+    assert.equal(error.code,'PURGE_RECOVERY_AUTHORITY_REQUIRED');assert.doesNotMatch(error.message,/SECRET/);return true;
+  });
 });
 test('claim requires explicit confirmation, current Owner and unwithdrawn same-Owner authority',async()=>{
   for(const mutate of [(f:any)=>{f.owner=false;},(f:any)=>{f.auth=null;},
@@ -121,6 +141,13 @@ test('copy observations require confirmation, scoped claim and active Owner with
   f.owner=false;
   await assert.rejects(service.recordDisposition('org','actor','auth',observation));
 });
+test('complaint recovery binding freezes copy observation writes while preserving history',async()=>{
+  const {f,service}=fixture();f.auth.claim={id:'claim'};f.bound=true;
+  await assert.rejects(service.recordDisposition('org','actor','auth',observation),
+    {statusCode:409,code:'COPY_RECOVERY_AUTHORITY_REQUIRED'});
+  assert.equal(f.writes.length,0);
+  await service.listDispositions('org','actor','auth',{});
+});
 test('copy history is bounded within authorization and rejects foreign cursors',async()=>{
   const {f,service}=fixture();f.rows=Array.from({length:51},(_,i)=>({id:`copy-${i}`}));
   const page=await service.listDispositions('org','actor','auth',{});
@@ -136,6 +163,9 @@ test('copy evidence conflicts return safe review guidance',async()=>{
   await assert.rejects(service.recordDisposition('org','actor','auth',observation),(error:any)=>{
     assert.equal(error.statusCode,409);assert.doesNotMatch(error.message,/SECRET/);return true;
   });
+  f.error=new Error('Complaint copy change requires independent recovery authority SECRET');f.error.name='PrismaClientUnknownRequestError';
+  await assert.rejects(service.recordDisposition('org','actor','auth',observation),
+    {statusCode:409,code:'COPY_RECOVERY_AUTHORITY_REQUIRED'});
 });
 
 

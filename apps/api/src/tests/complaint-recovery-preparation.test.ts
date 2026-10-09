@@ -59,6 +59,43 @@ test('timed retention preparation requires the actual linked resolution evidence
   assert.throws(() => prepareComplaintRecoveryFacts(input));
 });
 
+test('complaint preparation validates calendar terms and recorded resolution dependencies', () => {
+  const input = fixture();
+  assert.equal('retentionYears' in JSON.parse(prepareComplaintRecoveryFacts(input).body).policy, false);
+  input.policy.id = 'calendar-policy'; input.authorization.policyId = 'calendar-policy';
+  Object.assign(input.policy, { retentionMode: 'AFTER_CALENDAR_YEARS',
+    retentionAnchor: 'RESOLVED_AT', retentionDays: null, retentionYears: 6 });
+  assert.throws(() => prepareComplaintRecoveryFacts(input));
+  input.resolution = { id: 'resolution', organisationId: 'charity', complaintId: 'complaint', revision: 1,
+    recordRevision: 1, actorUserId: 'owner', evidenceRef: 'RESOLUTION-1', reason: 'Synthetic resolution reason',
+    state: 'RECORDED', resolvedAt: '2026-08-01T00:00:00.000Z', occurredAt: '2026-08-01T00:00:00.000Z' };
+  assert.equal(JSON.parse(prepareComplaintRecoveryFacts(input).body).policy.retentionYears, 6);
+  for (const change of [
+    { retentionYears: null }, { retentionDays: 10 }, { retentionAnchor: null },
+    { retentionYears: 0 }, { retentionYears: 101 },
+  ]) {
+    const invalid = structuredClone(input);
+    Object.assign(invalid.policy, change);
+    assert.throws(() => prepareComplaintRecoveryFacts(invalid));
+  }
+  input.resolution.state = 'WITHDRAWN'; input.resolution.resolvedAt = null;
+  assert.throws(() => prepareComplaintRecoveryFacts(input));
+});
+
+test('calendar policy used at complaint removal requires the original linked resolution', () => {
+  const input = fixture();
+  Object.assign(input.removalPolicy, { retentionMode: 'AFTER_CALENDAR_YEARS',
+    retentionAnchor: 'RESOLVED_AT', retentionDays: null, retentionYears: 6 });
+  input.policy = { ...input.policy, id: 'later-policy' };
+  input.authorization.policyId = 'later-policy';
+  assert.throws(() => prepareComplaintRecoveryFacts(input));
+  input.removal.resolutionEvidenceId = 'resolution';
+  input.removalResolution = { id: 'resolution', organisationId: 'charity', complaintId: 'complaint', revision: 1,
+    recordRevision: 1, actorUserId: 'owner', evidenceRef: 'RESOLUTION-1', reason: 'Synthetic resolution reason',
+    state: 'RECORDED', resolvedAt: '2026-08-01T00:00:00.000Z', occurredAt: '2026-08-01T00:00:00.000Z' };
+  assert.equal(JSON.parse(prepareComplaintRecoveryFacts(input).body).removalPolicy.retentionYears, 6);
+});
+
 test('one dependency identity cannot carry conflicting facts', () => {
   const input = fixture();
   input.removalPolicy.recoveryDays = 2;

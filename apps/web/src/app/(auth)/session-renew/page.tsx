@@ -5,7 +5,7 @@ import { Button, Card, CardBody } from '@heroui/react';
 import { api, refreshSession } from '@/lib/api';
 import { safeNextPath } from '@/lib/safe-next-path';
 import { safeNextValue } from '@/lib/url-security';
-import { SessionRefreshLockUnavailableError } from '@/lib/session-refresh-lock';
+import { SessionReauthenticationRequiredError, SessionRefreshLockUnavailableError } from '@/lib/session-refresh-lock';
 
 function destination(): string {
   const offered = new URLSearchParams(window.location.search).get('next');
@@ -32,6 +32,10 @@ export default function SessionRenewPage() {
         if (!active) return;
         if (cause instanceof SessionRefreshLockUnavailableError) {
           window.location.replace(`/login?next=${encodeURIComponent(next)}&session=renewal-unavailable`);
+          return;
+        }
+        if (cause instanceof SessionReauthenticationRequiredError) {
+          window.location.replace(`/login?next=${encodeURIComponent(next)}`);
           return;
         }
         const status = (cause as { response?: { status?: number } })?.response?.status;

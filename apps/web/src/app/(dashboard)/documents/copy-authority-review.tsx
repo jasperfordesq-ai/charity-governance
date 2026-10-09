@@ -5,7 +5,7 @@ import { Button, Checkbox, Input, Textarea } from '@heroui/react';
 import { api } from '@/lib/api';
 import { apiErrorMessage } from '@/lib/errors';
 import { currentCopyHold } from '@/lib/copy-hold-review';
-import { currentCopyPolicy, latestCopyAuthority, type CopyAuthority, type CopyPolicy } from '@/lib/copy-authority-review';
+import { copyPolicyDescription, copyPolicyNeedsAnchor, copyPolicyTermsValid, currentCopyPolicy, latestCopyAuthority, type CopyAuthority, type CopyPolicy } from '@/lib/copy-authority-review';
 
 type Hold = { area: string; scopeRef: string; revision: number; held: boolean };
 type Props = { kind: 'document' | 'complaint'; authorizationId: string; area: string; scopeRef: string;
@@ -54,10 +54,10 @@ export function CopyAuthorityReview({ kind, authorizationId, area, scopeRef, obs
     finally { pending.current = false; setBusy(false); }
   };
   const evidenceValid = validRef(form.evidenceRef) && form.reason.trim().length >= 10 && form.reason.trim().length <= 500;
-  const grantValid = policy && hold && !hold.held && form.disposition &&
+  const grantValid = policy && copyPolicyTermsValid(policy) && hold && !hold.held && form.disposition &&
     (policy.retentionMode !== 'PERMANENT' || form.disposition === 'RETAIN_APPROVED') &&
     validRef(form.retentionEvidenceRef) && validRef(form.holdEvidenceRef) && validDate(form.validUntil) &&
-    (policy.retentionMode !== 'AFTER_ANCHOR' || validDate(form.retentionAnchorAt));
+    (!copyPolicyNeedsAnchor(policy) || validDate(form.retentionAnchorAt));
   const save = async (withdraw: boolean) => {
     if (pending.current || !data || !confirmed || !evidenceValid || (withdraw ? current?.state !== 'AUTHORIZED' : !grantValid)) return;
     pending.current = true; setBusy(true); setError(''); setNotice(''); onSelect(null);
@@ -67,7 +67,7 @@ export function CopyAuthorityReview({ kind, authorizationId, area, scopeRef, obs
       await api.post(`${parent}/copy-authorities`, withdraw ? { ...input, state: 'WITHDRAWN' } : {
         ...input, state: 'AUTHORIZED', disposition: form.disposition, policyId: policy!.id, holdRevision: hold!.revision,
         retentionEvidenceRef: form.retentionEvidenceRef, holdEvidenceRef: form.holdEvidenceRef,
-        retentionAnchorAt: policy!.retentionMode === 'AFTER_ANCHOR' ? new Date(form.retentionAnchorAt).toISOString() : null,
+        retentionAnchorAt: copyPolicyNeedsAnchor(policy!) ? new Date(form.retentionAnchorAt).toISOString() : null,
         validUntil: new Date(form.validUntil).toISOString(),
       });
       setForm(fresh()); setNotice(withdraw ? 'Copy authority withdrawn; history retained.' : 'Copy authority recorded. Reload review to bind it to a later observation. No copy was erased.');
@@ -75,7 +75,8 @@ export function CopyAuthorityReview({ kind, authorizationId, area, scopeRef, obs
     finally { setData(null); setConfirmed(false); pending.current = false; setBusy(false); }
   };
   const selectable = current?.state === 'AUTHORIZED' && current.validUntil && new Date(current.validUntil).getTime() > checkedAt
-    && hold && !hold.held && current.holdRevision === hold.revision && policy?.id === current.policyId;
+    && hold && !hold.held && current.holdRevision === hold.revision && policy?.id === current.policyId
+    && copyPolicyTermsValid(policy);
   return <section aria-label="Scoped copy authority" className="mt-3 space-y-3 rounded border p-3">
     <h5 className="font-medium">Owner authority for {scopeRef}</h5>
     <p>Review this scope against observation revision {observationRevision}. Approval records a decision; it does not delete copies. The server rechecks current policy, retention, holds and expiry.</p>
@@ -87,7 +88,7 @@ export function CopyAuthorityReview({ kind, authorizationId, area, scopeRef, obs
         <p>Recorded {new Date(row.occurredAt).toLocaleString('en-IE')}{row.validUntil ? `; expires ${new Date(row.validUntil).toLocaleString('en-IE')}` : ''}</p>
       </li>)}</ul>
       {selectable ? <Button size="sm" isDisabled={busy} onPress={() => onSelect(current)}>Use current copy authority for observation</Button> : null}
-      <p>{policy ? `Current copy policy: revision ${policy.revision}, ${policy.retentionMode}, ${policy.retentionDays ?? 'no fixed'} retention days.` : 'One current approved copy policy is required. Review the copy policies panel.'}</p>
+      <p>{policy ? `Current copy policy: revision ${policy.revision}, ${copyPolicyDescription(policy)}.` : 'One current approved copy policy is required. Review the copy policies panel.'}</p>
       <p>{hold?.held ? 'This scope is held. New authority cannot be granted.' : `Loaded hold revision: ${hold?.revision ?? 0}.`}</p>
       <label className="block">Reviewed copy decision<select aria-label="Reviewed copy decision" className="block rounded border p-2" value={form.disposition} disabled={busy} onChange={event => edit('disposition', event.target.value)}>
         <option value="">Select decision</option><option value="DISPOSE">Dispose after reviewed retention</option><option value="RETAIN_APPROVED">Retain with authority</option><option value="NOT_APPLICABLE">Not applicable to this scope</option>
@@ -96,7 +97,7 @@ export function CopyAuthorityReview({ kind, authorizationId, area, scopeRef, obs
       <Textarea label="Reason for copy authority decision" value={form.reason} maxLength={500} isDisabled={busy} onValueChange={value => edit('reason', value)} />
       <Input label="Copy retention review reference" value={form.retentionEvidenceRef} maxLength={120} isDisabled={busy} onValueChange={value => edit('retentionEvidenceRef', value)} />
       <Input label="Copy hold review reference" value={form.holdEvidenceRef} maxLength={120} isDisabled={busy} onValueChange={value => edit('holdEvidenceRef', value)} />
-      {policy?.retentionMode === 'AFTER_ANCHOR' ? <label className="block">Reviewed copy creation time (local)<input aria-label="Reviewed copy creation time" type="datetime-local" step="0.001" value={form.retentionAnchorAt} disabled={busy} onChange={event => edit('retentionAnchorAt', event.target.value)} /></label> : null}
+      {policy && copyPolicyNeedsAnchor(policy) ? <label className="block">Reviewed copy creation time (local)<input aria-label="Reviewed copy creation time" type="datetime-local" step="0.001" value={form.retentionAnchorAt} disabled={busy} onChange={event => edit('retentionAnchorAt', event.target.value)} /></label> : null}
       <label className="block">Authority expiry (local)<input aria-label="Copy authority expiry" type="datetime-local" step="0.001" value={form.validUntil} disabled={busy} onChange={event => edit('validUntil', event.target.value)} /></label>
       <Checkbox isSelected={confirmed} onValueChange={setConfirmed} isDisabled={busy}>I have authority and reviewed the evidence for this exact copy decision.</Checkbox>
       <Button size="sm" isDisabled={busy || !evidenceValid || !confirmed || !grantValid} onPress={() => save(false)}>Record scoped copy authority</Button>

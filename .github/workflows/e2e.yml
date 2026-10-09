@@ -68,6 +68,12 @@ jobs:
         run: npm ci
         working-directory: e2e
 
+      # The E2E TypeScript project imports connector source. Resolve its
+      # native keyring package from mcp/node_modules before that type-check.
+      - name: Build the MCP connector
+        run: npm ci && npm run build
+        working-directory: mcp
+
       - name: Install Playwright browsers
         run: npm run install:browsers:ci
         working-directory: e2e
@@ -81,10 +87,6 @@ jobs:
 
       - name: Validate standalone disposable Compose model
         run: npm run test:e2e:isolated:validate
-
-      - name: Build the MCP connector
-        run: npm ci && npm run build
-        working-directory: mcp
 
       - name: Run managed isolated E2E tests
         run: npm run test:e2e

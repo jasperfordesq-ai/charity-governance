@@ -56,8 +56,26 @@ export async function proveCopyBinding(sql,{kind,organisation,actor,authorizatio
   sql(grant('timed-authority',{scope:'TIMED-COPY',policy:"'copy-timed'",anchor:"timezone('UTC',clock_timestamp())-INTERVAL '2 days'"}));
   sql(observation('timed-absent',{scope:'TIMED-COPY',revision:2,status:'VERIFIED_ABSENT',binding:"'timed-authority'"}));
   sql(withdrawPolicy('copy-timed'));
+  // The calendar mode is still blocked for normal policy creation. Bypass
+  // only that fence for this disposable fixture, then restore it before
+  // exercising the real copy authority and observation triggers.
+  sql(`ALTER TABLE "DataRetentionPolicyRevision" DISABLE TRIGGER "DataRetentionPolicyRevision_01_mode_fence";
+    INSERT INTO "DataRetentionPolicyRevision" (id,"organisationId","recordClass",revision,state,"retentionMode",
+      "retentionAnchor","retentionYears","recoveryDays","createdById","approvedById","approvedAt","approvalEvidenceRef")
+    VALUES ('copy-calendar','${organisation}','${kind.toUpperCase()}_COPY',3,'APPROVED','AFTER_CALENDAR_YEARS',
+      'CREATED_AT',6,30,'${actor}','${actor}',now(),'COPY-CALENDAR-001');
+    ALTER TABLE "DataRetentionPolicyRevision" ENABLE TRIGGER "DataRetentionPolicyRevision_01_mode_fence";`);
+  sql(observation('calendar-original',{scope:'CALENDAR-COPY'}));
+  sql(grant('calendar-no-anchor',{scope:'CALENDAR-COPY',policy:"'copy-calendar'"}),/reviewed copy anchor/);
+  sql(grant('calendar-early',{scope:'CALENDAR-COPY',policy:"'copy-calendar'",
+    anchor:"'2024-02-29 12:34:56.789'::timestamp(3)"}),/Copy retention has not expired/);
+  sql(grant('calendar-authority',{scope:'CALENDAR-COPY',policy:"'copy-calendar'",
+    anchor:"'2020-02-29 12:34:56.789'::timestamp(3)"}));
+  sql(observation('calendar-absent',{scope:'CALENDAR-COPY',revision:2,status:'VERIFIED_ABSENT',binding:"'calendar-authority'"}));
+  assert.equal(sql(`SELECT "copyAuthorityId" FROM "${kind}PurgeDispositionEvent" WHERE id='calendar-absent';`),'calendar-authority');
+  sql(withdrawPolicy('copy-calendar'));
   sql(`INSERT INTO "DataRetentionPolicyRevision" (id,"organisationId","recordClass",revision,state,"retentionMode","recoveryDays","createdById","approvedById","approvedAt","approvalEvidenceRef")
-    VALUES ('copy-permanent','${organisation}','${kind.toUpperCase()}_COPY',3,'APPROVED','PERMANENT',30,'${actor}','${actor}',now(),'COPY-PERMANENT-001');`);
+    VALUES ('copy-permanent','${organisation}','${kind.toUpperCase()}_COPY',4,'APPROVED','PERMANENT',30,'${actor}','${actor}',now(),'COPY-PERMANENT-001');`);
   sql(observation('permanent-original',{scope:'PERMANENT-COPY'}));
   sql(grant('permanent-disposal',{scope:'PERMANENT-COPY',policy:"'copy-permanent'"}),/Permanent copy retention/);
   sql(grant('permanent-retain',{scope:'PERMANENT-COPY',policy:"'copy-permanent'",disposition:"'RETAIN_APPROVED'"}));

@@ -61,6 +61,85 @@ test('complaint recovery migration preserves records and enforces reviewed remov
       sql(readFileSync(`${migrations}/${name}/migration.sql`, 'utf8'));
     }
     assert.equal(sql(`SELECT (row_to_json(c)::jsonb - ARRAY['removedAt','removalId'])::text FROM "ComplaintRecord" c;`), before);
+    const calendarRemoval = year => `BEGIN;
+      INSERT INTO "Organisation" (id,name,"updatedAt") VALUES ('calendar-org','Synthetic calendar charity',CURRENT_TIMESTAMP);
+      INSERT INTO "User" (id,email,name,"passwordHash",role,"organisationId","updatedAt")
+        VALUES ('calendar-owner','calendar-complaint@example.invalid','Synthetic owner','fixture','OWNER','calendar-org',CURRENT_TIMESTAMP);
+      INSERT INTO "ComplaintRecord" (id,"organisationId","receivedDate",summary,status,"updatedAt")
+        VALUES ('calendar-complaint','calendar-org','${year}-01-01','Synthetic calendar complaint','CLOSED',CURRENT_TIMESTAMP);
+      ALTER TABLE "DataRetentionPolicyRevision" DISABLE TRIGGER "DataRetentionPolicyRevision_01_mode_fence";
+      INSERT INTO "DataRetentionPolicyRevision" (id,"organisationId","recordClass",revision,state,"retentionMode",
+        "retentionAnchor","retentionYears","recoveryDays","createdById","approvedById","approvedAt","approvalEvidenceRef")
+        VALUES ('calendar-policy','calendar-org','COMPLAINT',1,'APPROVED','AFTER_CALENDAR_YEARS',
+          'RESOLVED_AT',6,30,'calendar-owner','calendar-owner',CURRENT_TIMESTAMP,'CALENDAR-POLICY-001');
+      ALTER TABLE "DataRetentionPolicyRevision" ENABLE TRIGGER "DataRetentionPolicyRevision_01_mode_fence";
+      INSERT INTO "ComplaintResolutionEvidence" (id,"organisationId","complaintId",revision,"recordRevision",state,
+        "resolvedAt","evidenceRef",reason,"actorUserId")
+        VALUES ('calendar-resolution','calendar-org','calendar-complaint',1,1,'RECORDED',
+          '${year}-02-29 12:34:56.789'::timestamp(3),'CALENDAR-RESOLUTION-001',
+          'Reviewed synthetic calendar resolution','calendar-owner');
+      INSERT INTO "ComplaintRemoval" (id,"organisationId","complaintId","recordRevision","actorUserId",
+        "policyId","resolutionEvidenceId","evidenceRef",reason)
+        VALUES ('calendar-removal','calendar-org','calendar-complaint',1,'calendar-owner',
+          'calendar-policy','calendar-resolution','CALENDAR-REMOVAL-001','Reviewed synthetic calendar removal');
+      SELECT count(*) FROM "ComplaintRemoval" WHERE id='calendar-removal';
+      ROLLBACK;`;
+    sql(calendarRemoval(2024), /elapsed retention and current resolution evidence/);
+    assert.equal(sql(calendarRemoval(2020)), '1');
+    assert.equal(sql(`SELECT count(*) FROM "ComplaintRemoval" WHERE id='calendar-removal';`), '0');
+    const calendarPlan = Object.fromEntries(['PRIMARY','SNAPSHOTS','EXPORTS','AUDIT','BACKUPS','OTHER_COPIES'].map(area =>
+      [area, { disposition: area === 'PRIMARY' ? 'DISPOSE' : 'RETAIN_APPROVED', evidenceRef: `PLAN-${area.replaceAll('_', '-')}-001` }]));
+    const calendarPurge = year => `BEGIN;
+      INSERT INTO "Organisation" (id,name,"updatedAt") VALUES ('calendar-org','Synthetic calendar charity',CURRENT_TIMESTAMP);
+      INSERT INTO "User" (id,email,name,"passwordHash",role,"organisationId","updatedAt")
+        VALUES ('calendar-owner','calendar-complaint@example.invalid','Synthetic owner','fixture','OWNER','calendar-org',CURRENT_TIMESTAMP);
+      INSERT INTO "ComplaintRecord" (id,"organisationId","receivedDate",summary,status,"updatedAt")
+        VALUES ('calendar-complaint','calendar-org','${year}-01-01','Synthetic calendar complaint','CLOSED',CURRENT_TIMESTAMP);
+      INSERT INTO "ComplaintResolutionEvidence" (id,"organisationId","complaintId",revision,"recordRevision",state,
+        "resolvedAt","evidenceRef",reason,"actorUserId")
+        VALUES ('calendar-resolution','calendar-org','calendar-complaint',1,1,'RECORDED',
+          '${year}-02-29 12:34:56.789'::timestamp(3),'CALENDAR-RESOLUTION-001',
+          'Reviewed synthetic calendar resolution','calendar-owner');
+      INSERT INTO "DataRetentionPolicyRevision" (id,"organisationId","recordClass",revision,state,"retentionMode",
+        "recoveryDays","createdById","approvedById","approvedAt","approvalEvidenceRef")
+        VALUES ('calendar-review','calendar-org','COMPLAINT',1,'APPROVED','REVIEW_REQUIRED',30,
+          'calendar-owner','calendar-owner',CURRENT_TIMESTAMP,'CALENDAR-REVIEW-001');
+      INSERT INTO "ComplaintRemoval" (id,"organisationId","complaintId","recordRevision","actorUserId",
+        "policyId","evidenceRef",reason)
+        VALUES ('calendar-removal','calendar-org','calendar-complaint',1,'calendar-owner',
+          'calendar-review','CALENDAR-REMOVAL-001','Reviewed synthetic removal under old policy');
+      UPDATE "ComplaintRecord" SET "removalId"='calendar-removal',
+        "removedAt"=(SELECT "occurredAt" FROM "ComplaintRemoval" WHERE id='calendar-removal')
+        WHERE id='calendar-complaint';
+      INSERT INTO "DataRetentionPolicyWithdrawal" (id,"organisationId","policyId","actorUserId",reason,"evidenceRef")
+        VALUES ('calendar-review-withdrawn','calendar-org','calendar-review','calendar-owner',
+          'Replace with synthetic calendar policy','CALENDAR-WITHDRAW-001');
+      ALTER TABLE "DataRetentionPolicyRevision" DISABLE TRIGGER "DataRetentionPolicyRevision_01_mode_fence";
+      INSERT INTO "DataRetentionPolicyRevision" (id,"organisationId","recordClass",revision,state,"retentionMode",
+        "retentionAnchor","retentionYears","recoveryDays","createdById","approvedById","approvedAt","approvalEvidenceRef")
+        VALUES ('calendar-policy','calendar-org','COMPLAINT',2,'APPROVED','AFTER_CALENDAR_YEARS',
+          'RESOLVED_AT',6,30,'calendar-owner','calendar-owner',CURRENT_TIMESTAMP,'CALENDAR-POLICY-001');
+      ALTER TABLE "DataRetentionPolicyRevision" ENABLE TRIGGER "DataRetentionPolicyRevision_01_mode_fence";
+      -- Age only this disposable fixture's immutable recovery fact so the
+      -- claim test can isolate retention independently of the 30-day wait.
+      ALTER TABLE "ComplaintRemoval" DISABLE TRIGGER "ComplaintRemoval_append_only";
+      UPDATE "ComplaintRemoval" SET "recoveryUntil"=timezone('UTC',clock_timestamp())-INTERVAL '1 day'
+        WHERE id='calendar-removal';
+      ALTER TABLE "ComplaintRemoval" ENABLE TRIGGER "ComplaintRemoval_append_only";
+      INSERT INTO "ComplaintPurgeAuthorization" (id,"organisationId","complaintId","recordRevision",
+        "holdRevision","removalId","policyId","actorUserId","recoveryUntil","dispositionPlan","evidenceRef",reason)
+        SELECT 'calendar-auth','calendar-org','calendar-complaint',c.revision,0,'calendar-removal',
+          'calendar-policy','calendar-owner',r."recoveryUntil",'${JSON.stringify(calendarPlan)}'::jsonb,
+          'CALENDAR-AUTH-001','Reviewed synthetic six-area purge plan'
+          FROM "ComplaintRecord" c JOIN "ComplaintRemoval" r ON r.id='calendar-removal'
+          WHERE c.id='calendar-complaint';
+      INSERT INTO "ComplaintPurgeClaim" (id,"organisationId","authorizationId","complaintId","actorUserId")
+        VALUES ('calendar-claim','calendar-org','calendar-auth','calendar-complaint','calendar-owner');
+      SELECT count(*) FROM "ComplaintPurgeClaim" WHERE id='calendar-claim';
+      ROLLBACK;`;
+    sql(calendarPurge(2024), /elapsed matching resolution retention/);
+    assert.equal(sql(calendarPurge(2020)), '1');
+    assert.equal(sql(`SELECT count(*) FROM "ComplaintPurgeClaim" WHERE id='calendar-claim';`), '0');
     sql(`INSERT INTO "DataRetentionPolicyRevision" (id,"organisationId","recordClass",revision,state,"retentionMode","retentionAnchor","retentionDays","recoveryDays","createdById","approvedById","approvedAt","approvalEvidenceRef")
       VALUES ('policy','a','COMPLAINT',1,'APPROVED','AFTER_ANCHOR','RESOLVED_AT',1,30,'admin-a','admin-a',now(),'POLICY-001'),
       ('vault','a','VAULT_DRAFT',1,'APPROVED','REVIEW_REQUIRED',NULL,NULL,30,'admin-a','admin-a',now(),'POLICY-002');
@@ -413,8 +492,17 @@ test('complaint recovery migration preserves records and enforces reviewed remov
       const value={organisation:'a',authorization:'fresh-purge',actor:'admin-a',area:'BACKUPS',revision:1,
         status:'RETAINED_APPROVED',observed:"timezone('UTC',clock_timestamp())",next:"timezone('UTC',now())+INTERVAL '30 days'",...overrides};
       return `INSERT INTO "ComplaintPurgeDispositionEvent" (id,"organisationId","authorizationId",area,"scopeRef",revision,status,"actorUserId","evidenceRef",reason,"observedAt","nextReviewAt")
-        VALUES ('${id}','${value.organisation}','${value.authorization}','${value.area}','SYNTHETIC-BACKUP-SET',${value.revision},'${value.status}','${value.actor}','COPY-EVIDENCE-001','Reviewed synthetic retained backup scope',${value.observed},${value.next});`;
+         VALUES ('${id}','${value.organisation}','${value.authorization}','${value.area}','SYNTHETIC-BACKUP-SET',${value.revision},'${value.status}','${value.actor}','COPY-EVIDENCE-001','Reviewed synthetic retained backup scope',${value.observed},${value.next});`;
     };
+    sql(disposition('bound-copy-refused'), /Complaint copy change requires independent recovery authority/);
+    // These pre-existing copy-consistency proofs exercise hypothetical
+    // privileged historical facts. Normal bound writers remain frozen above.
+    // Restore all five gates before the backup/reconciliation comparison.
+    sql(`ALTER TABLE "ComplaintPurgeDispositionEvent" DISABLE TRIGGER "A_ComplaintCopyObservation_recovery_gate";
+      ALTER TABLE "ComplaintCopyDispositionAuthority" DISABLE TRIGGER "A_ComplaintCopyAuthority_recovery_gate";
+      ALTER TABLE "ComplaintCopyHoldEvent" DISABLE TRIGGER "A_ComplaintCopyHold_recovery_gate";
+      ALTER TABLE "DataRetentionPolicyRevision" DISABLE TRIGGER "DataRetentionPolicyRevision_01_recovery_gate";
+      ALTER TABLE "DataRetentionPolicyWithdrawal" DISABLE TRIGGER "DataRetentionPolicyWithdrawal_01_recovery_gate";`);
     sql(disposition('member-copy',{actor:'member-a'}),/active charity owner/);
     sql(disposition('foreign-copy',{organisation:'b',actor:'admin-b'}),/authorization not found/);
     sql(disposition('unclaimed-copy',{authorization:'timed-authorization'}),/committed purge claim/);
@@ -447,8 +535,18 @@ test('complaint recovery migration preserves records and enforces reviewed remov
       scopedAuthority.hold('hold-after-review',{revision:7}));
     assert.equal(sql(`SELECT "holdRevision" FROM "ComplaintCopyDispositionAuthority" WHERE id='review-before-hold';`),'6');
     assert.equal(sql(`SELECT held FROM "ComplaintCopyHoldEvent" WHERE id='hold-after-review';`),'t');
-    await proveCopyBinding(sql,{kind:'Complaint',organisation:'a',actor:'admin-a',authorization:'fresh-purge',
-      originalPolicyFrozenAfterRecoveryBinding:true},orderedRace);
+    await proveCopyBinding(sql,{kind:'Complaint',organisation:'a',actor:'admin-a',authorization:'fresh-purge'},orderedRace);
+    sql(`ALTER TABLE "ComplaintPurgeDispositionEvent" ENABLE TRIGGER "A_ComplaintCopyObservation_recovery_gate";
+      ALTER TABLE "ComplaintCopyDispositionAuthority" ENABLE TRIGGER "A_ComplaintCopyAuthority_recovery_gate";
+      ALTER TABLE "ComplaintCopyHoldEvent" ENABLE TRIGGER "A_ComplaintCopyHold_recovery_gate";
+      ALTER TABLE "DataRetentionPolicyRevision" ENABLE TRIGGER "DataRetentionPolicyRevision_01_recovery_gate";
+      ALTER TABLE "DataRetentionPolicyWithdrawal" ENABLE TRIGGER "DataRetentionPolicyWithdrawal_01_recovery_gate";`);
+    sql(disposition('bound-copy-refused-after-restore'),
+      /Complaint copy change requires independent recovery authority/);
+    sql(`INSERT INTO "DataRetentionPolicyRevision" (id,"organisationId","recordClass",revision,
+      "retentionMode","recoveryDays","createdById") VALUES
+      ('bound-copy-policy-refused','a','COMPLAINT_COPY',99,'REVIEW_REQUIRED',30,'admin-a');`,
+    /Policy revision requires independent recovery authority/);
     const authority = JSON.parse(sql(PURGE_RESTORE_SNAPSHOT_SQL));
     assert.doesNotMatch(JSON.stringify(authority), /Private original narrative|Reviewed synthetic administrative hold|HOLD-001/);
     const currentBackup = docker(['exec',container,'pg_dump','-U','postgres','--no-owner','--no-privileges','postgres']);

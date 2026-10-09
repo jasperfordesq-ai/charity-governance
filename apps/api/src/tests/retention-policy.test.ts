@@ -10,6 +10,7 @@ function fixture() {
   let withdrawals: any[] = [];
   let role = 'OWNER';
   let enforced = false;
+  let documentEnforced = false;
   let failCreate = false;
   const locks: string[] = [];
   const tx = {
@@ -24,6 +25,7 @@ function fixture() {
     user: { findFirst: async ({ where }: any) => where.organisationId === 'org-a'
       && (typeof where.role === 'string' ? where.role === role : where.role.in.includes(role)) ? { id: 'actor-a' } : null },
     complaintRecoveryEnforcement: { findUnique: async () => enforced ? { id: 'binding' } : null },
+    documentRecoveryEnforcement: { findUnique: async () => documentEnforced ? { id: 'binding' } : null },
     dataRetentionPolicyRevision: {
       findFirst: async ({ where }: any) => {
         const row = [...rows].reverse().find(row => row.organisationId === where.organisationId
@@ -46,6 +48,7 @@ function fixture() {
   return { documentCopies: new RetentionPolicyService(prisma,'DOCUMENT_COPY'), complaintCopies: new RetentionPolicyService(prisma,'COMPLAINT_COPY'), service: new RetentionPolicyService(prisma), complaints: new RetentionPolicyService(prisma, 'COMPLAINT'), locks,
     get rows() { return rows; }, get withdrawals() { return withdrawals; },
     setRole: (next: string) => { role = next; }, setEnforced: (next: boolean) => { enforced = next; },
+    setDocumentEnforced: (next: boolean) => { documentEnforced = next; },
     fail: () => { failCreate = true; } };
 }
 
@@ -104,7 +107,10 @@ test('approval cannot omit authority or evidence, and periods cannot be silently
   const f = fixture();
   for (const input of [{ ...approved, authorityConfirmed: false }, { ...approved, approvalEvidenceRef: '' },
     { ...draft, recoveryDays: 0 }, { ...draft, retentionMode: 'AFTER_ANCHOR' },
-    { ...draft, retentionDays: 30 }, { ...draft, recordClass: 'COMPLAINTS' }]) {
+    { ...draft, retentionDays: 30 }, { ...draft, recordClass: 'COMPLAINTS' },
+    { ...draft, retentionMode: 'AFTER_CALENDAR_YEARS', retentionDays: null, retentionYears: 6 },
+    { ...approved, retentionMode: 'AFTER_CALENDAR_YEARS', retentionDays: null, retentionYears: 6 },
+    { ...draft, retentionYears: 6 }]) {
     await assert.rejects(f.service.create('org-a', 'actor-a', input));
   }
   assert.equal(f.rows.length, 0);
@@ -127,7 +133,20 @@ test('complaint approvals use resolution anchors and cannot replace or withdraw 
   assert.deepEqual(f.withdrawals.map(row => row.policyId), ['policy-2']);
 });
 
-test('independent recovery binding freezes complaint policy revisions and withdrawals only', async () => {
+test('calendar-year policy creation remains fenced for every record class', async () => {
+  const f = fixture();
+  for (const service of [f.service, f.complaints, f.documentCopies, f.complaintCopies]) {
+    for (const state of ['DRAFT', 'APPROVED'] as const) {
+      const input = { ...(state === 'DRAFT' ? draft : approved), retentionMode: 'AFTER_CALENDAR_YEARS',
+        retentionDays: null, retentionYears: 6 };
+      await assert.rejects(service.create('org-a', 'actor-a', input));
+    }
+  }
+  assert.equal(f.rows.length, 0);
+  assert.equal(f.locks.length, 0);
+});
+
+test('independent recovery binding freezes complaint and complaint-copy policies', async () => {
   const f = fixture();
   await f.complaints.create('org-a', 'actor-a', approved);
   f.setEnforced(true);
@@ -138,11 +157,35 @@ test('independent recovery binding freezes complaint policy revisions and withdr
   }
   await assert.rejects(f.complaints.withdraw('org-a', 'actor-a', 'policy-1', input),
     (error: any) => error?.code === 'RETENTION_POLICY_RECOVERY_REQUIRED');
+  await assert.rejects(f.complaintCopies.create('org-a', 'actor-a', draft),
+    (error: any) => error?.code === 'RETENTION_POLICY_RECOVERY_REQUIRED');
   assert.equal(f.rows.length, 1);
   assert.equal(f.withdrawals.length, 0);
   await f.service.create('org-a', 'actor-a', draft);
   await f.documentCopies.create('org-a', 'actor-a', draft);
   assert.deepEqual(f.rows.map(row => row.recordClass), ['COMPLAINT', 'VAULT_DRAFT', 'DOCUMENT_COPY']);
+});
+
+test('document recovery binding freezes Vault and document-copy policy revisions and withdrawals', async () => {
+  const f = fixture();
+  await f.service.create('org-a', 'actor-a', approved);
+  await f.documentCopies.create('org-a', 'actor-a', approved);
+  f.setDocumentEnforced(true);
+  const withdrawal = { evidenceRef: 'WITHDRAW-001', reason: 'Review changed document disposal authority.' };
+  for (const service of [f.service, f.documentCopies]) {
+    for (const policy of [draft, approved]) {
+      await assert.rejects(service.create('org-a', 'actor-a', policy),
+        (error: any) => error?.code === 'RETENTION_POLICY_RECOVERY_REQUIRED');
+    }
+  }
+  for (const policyId of ['policy-1', 'policy-2']) {
+    const service = policyId === 'policy-1' ? f.service : f.documentCopies;
+    await assert.rejects(service.withdraw('org-a', 'actor-a', policyId, withdrawal),
+      (error: any) => error?.code === 'RETENTION_POLICY_RECOVERY_REQUIRED');
+  }
+  assert.equal(f.rows.length, 2);
+  assert.equal(f.withdrawals.length, 0);
+  await f.complaintCopies.create('org-a', 'actor-a', draft);
 });
 
 

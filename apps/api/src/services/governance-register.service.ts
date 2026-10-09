@@ -548,33 +548,48 @@ export class GovernanceRegisterService {
     state: 'RECORDED' | 'WITHDRAWN'; resolvedAt?: string;
     evidenceRef: string; reason: string;
   }) {
-    return this.prisma.$transaction(async (tx) => {
-      await lockOrganisationForUpdate(tx, input.organisationId);
-      const complaint = await tx.complaintRecord.findFirst({
-        where: { id: input.complaintId, organisationId: input.organisationId, removedAt: null },
+    try {
+      return await this.prisma.$transaction(async (tx) => {
+        await lockOrganisationForUpdate(tx, input.organisationId);
+        const complaint = await tx.complaintRecord.findFirst({
+          where: { id: input.complaintId, organisationId: input.organisationId, removedAt: null },
+        });
+        if (!complaint) throw new AppError(404, 'COMPLAINT_NOT_FOUND', 'Complaint record not found');
+        if (await tx.complaintRecoveryEnforcement.findUnique({
+          where: { organisationId: input.organisationId }, select: { id: true },
+        })) {
+          throw new AppError(409, 'COMPLAINT_RESOLUTION_RECOVERY_REQUIRED',
+            'Resolution changes require independent recovery authority for this charity.');
+        }
+        const latest = await tx.complaintResolutionEvidence.findFirst({
+          where: { organisationId: input.organisationId, complaintId: input.complaintId },
+          orderBy: { revision: 'desc' },
+        });
+        if (complaint.revision !== input.expectedRecordRevision || (latest?.revision ?? 0) !== input.expectedEvidenceRevision) {
+          throw new AppError(409, 'COMPLAINT_RESOLUTION_CONFLICT', 'The complaint or its resolution evidence changed. Reload and review it again.');
+        }
+        const resolvedAt = input.state === 'RECORDED' && input.resolvedAt ? new Date(input.resolvedAt) : null;
+        if (input.state === 'RECORDED' && (complaint.status !== 'CLOSED' || !resolvedAt ||
+          !Number.isFinite(resolvedAt.getTime()) || resolvedAt < complaint.receivedDate || resolvedAt.getTime() > Date.now())) {
+          throw new AppError(400, 'COMPLAINT_RESOLUTION_INVALID', 'Review a closed complaint and a resolution time between receipt and now.');
+        }
+        if (input.state === 'WITHDRAWN' && latest?.state !== 'RECORDED') {
+          throw new AppError(409, 'COMPLAINT_RESOLUTION_NOT_RECORDED', 'There is no current recorded resolution evidence to withdraw.');
+        }
+        return tx.complaintResolutionEvidence.create({ data: {
+          organisationId: input.organisationId, complaintId: input.complaintId, actorUserId: input.actorUserId,
+          revision: input.expectedEvidenceRevision + 1, recordRevision: complaint.revision,
+          state: input.state, resolvedAt, evidenceRef: input.evidenceRef, reason: input.reason,
+        } });
       });
-      if (!complaint) throw new AppError(404, 'COMPLAINT_NOT_FOUND', 'Complaint record not found');
-      const latest = await tx.complaintResolutionEvidence.findFirst({
-        where: { organisationId: input.organisationId, complaintId: input.complaintId },
-        orderBy: { revision: 'desc' },
-      });
-      if (complaint.revision !== input.expectedRecordRevision || (latest?.revision ?? 0) !== input.expectedEvidenceRevision) {
-        throw new AppError(409, 'COMPLAINT_RESOLUTION_CONFLICT', 'The complaint or its resolution evidence changed. Reload and review it again.');
+    } catch (error) {
+      if (error instanceof Error && error.name === 'PrismaClientUnknownRequestError'
+        && error.message.includes('Complaint resolution requires independent recovery authority')) {
+        throw new AppError(409, 'COMPLAINT_RESOLUTION_RECOVERY_REQUIRED',
+          'Resolution changes require independent recovery authority for this charity.');
       }
-      const resolvedAt = input.state === 'RECORDED' && input.resolvedAt ? new Date(input.resolvedAt) : null;
-      if (input.state === 'RECORDED' && (complaint.status !== 'CLOSED' || !resolvedAt ||
-        !Number.isFinite(resolvedAt.getTime()) || resolvedAt < complaint.receivedDate || resolvedAt.getTime() > Date.now())) {
-        throw new AppError(400, 'COMPLAINT_RESOLUTION_INVALID', 'Review a closed complaint and a resolution time between receipt and now.');
-      }
-      if (input.state === 'WITHDRAWN' && latest?.state !== 'RECORDED') {
-        throw new AppError(409, 'COMPLAINT_RESOLUTION_NOT_RECORDED', 'There is no current recorded resolution evidence to withdraw.');
-      }
-      return tx.complaintResolutionEvidence.create({ data: {
-        organisationId: input.organisationId, complaintId: input.complaintId, actorUserId: input.actorUserId,
-        revision: input.expectedEvidenceRevision + 1, recordRevision: complaint.revision,
-        state: input.state, resolvedAt, evidenceRef: input.evidenceRef, reason: input.reason,
-      } });
-    });
+      throw error;
+    }
   }
 
   async listRegisterAudit(organisationId: string, before?: string) {
@@ -598,6 +613,12 @@ export class GovernanceRegisterService {
   createComplaint(organisationId: string, data: CreateComplaintRecordRequest, actorUserId: string) {
     return this.prisma.$transaction(async (tx) => {
       await lockOrganisationForUpdate(tx, organisationId);
+      if (await tx.complaintRecoveryEnforcement.findUnique({
+        where: { organisationId }, select: { id: true },
+      })) {
+        throw new AppError(409, 'COMPLAINT_SOURCE_RECOVERY_REQUIRED',
+          'Complaint changes require independent recovery authority for this charity.');
+      }
       const row = await tx.complaintRecord.create({
         data: {
           organisationId,
@@ -624,6 +645,12 @@ export class GovernanceRegisterService {
       await lockOrganisationForUpdate(tx, organisationId);
       const existing = await tx.complaintRecord.findFirst({ where: { id, organisationId, removedAt: null } });
       if (!existing) throw new AppError(404, 'COMPLAINT_NOT_FOUND', 'Complaint record not found');
+      if (await tx.complaintRecoveryEnforcement.findUnique({
+        where: { organisationId }, select: { id: true },
+      })) {
+        throw new AppError(409, 'COMPLAINT_SOURCE_RECOVERY_REQUIRED',
+          'Complaint changes require independent recovery authority for this charity.');
+      }
       assertUnchanged(existing, expectedUpdatedAt, 'REGISTER_UPDATE_CONFLICT');
       const row = await tx.complaintRecord.update({
         where: { id },

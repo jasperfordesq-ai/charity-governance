@@ -191,6 +191,9 @@ jobs:
       - name: Test
         run: npm run test
 
+      - name: Verify retention policy migrations and recovery bindings
+        run: npm run test:retention-policy
+
       - name: Verify complaint retention migrations
         run: |
           npm run test:complaint-resolution

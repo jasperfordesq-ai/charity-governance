@@ -94,13 +94,27 @@ through a public token endpoint.
 On 8 October 2026, the charity Owner confirmed that personal MFA may remain
 optional for the current private working demo. Owner and Admin MFA must be
 mandatory before public multi-tenant reliance. This matches the DPO's scoped
-30 September advice; it is an operating-mode decision, not an assertion that
-role-wide enforcement exists today or that the public launch gate has passed.
+30 September advice; it is an operating-mode decision, not public-launch
+approval. Local source now has a public-profile enforcement gate:
+`CHARITYPILOT_DEPLOYMENT_MODE=production` requires
+`CHARITYPILOT_PRIVILEGED_MFA_MODE=required` at API startup and public
+preflight. An unenrolled Owner/Admin browser session may call only the
+authenticator state/begin/complete routes among ordinary authenticated
+routes; the login page sends it to Security & Data. An unenrolled privileged
+connector is refused before session issuance. The normal request guard reads
+the live account role and factor state, so invitation acceptance, promotion
+and existing sessions cannot retain privileged API access without an enrolled
+factor. The web proxy also redirects verified pending Owner/Admin sessions
+to setup before protected pages render, while preserving the self-renewing
+Confluence callback path. The current private VM omits this mode and keeps Jasper's optional
+policy. This source is unpushed, undeployed and has no public role journey or
+independent acceptance yet.
 Account-level enrollment still protects that account's browser and connector
 sign-in once activated. The public rule needs a governed lost-all-factors
 recovery path, key-rotation procedure, invitation/promotion and existing-
-session behavior, disposable role-journey proof, live deployment evidence and
-independent DPO review. The live enrollment count and exact decision receipt
+session behavior beyond the source gate, disposable browser/connector role-
+journey proof, live deployment evidence and independent DPO review. The live
+enrollment count and exact decision receipt
 are held in the private DPO review pack.
 
 ## Password recovery integrity

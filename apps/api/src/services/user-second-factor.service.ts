@@ -200,9 +200,13 @@ async function verifyLockedFactorProof(tx: Tx, user: {
 /** A failed proof returns an error so its account-wide attempt count can commit. */
 export async function verifyUserLoginSecondFactor(tx: Tx, user: {
   id: string; organisationId: string; name: string;
-}, offered: OfferedSecondFactor, sessionFamilyId?: string): Promise<AppError | null> {
+}, offered: OfferedSecondFactor, sessionFamilyId?: string,
+  enrolmentRequired = false): Promise<AppError | null> {
   const factor = await lockedFactor(tx, user.id);
-  if (!factor?.enrolledAt) return null;
+  if (!factor?.enrolledAt) return enrolmentRequired
+    ? new AppError(403, 'PRIVILEGED_MFA_ENROLMENT_REQUIRED',
+      'Enroll an authenticator in a browser before using a privileged connector.')
+    : null;
   return verifyLockedFactorProof(tx, user, factor, offered, 'sign-in', sessionFamilyId);
 }
 

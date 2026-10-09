@@ -9,6 +9,7 @@ test('complaint create and edit retain actor metadata; legacy deletion cannot by
   const audits: Array<Record<string, unknown>> = [];
   const tx = {
     $queryRaw: async () => [{ id: 'org-1' }],
+    complaintRecoveryEnforcement: { findUnique: async () => null },
     complaintRecord: {
       create: async ({ data }: { data: Record<string, unknown> }) => {
         row = { ...data, id: 'complaint-1', updatedAt: time };
@@ -41,6 +42,7 @@ test('complaint create and edit retain actor metadata; legacy deletion cannot by
 test('a complaint audit write failure fails the create operation', async () => {
   const tx = {
     $queryRaw: async () => [{ id: 'org-1' }],
+    complaintRecoveryEnforcement: { findUnique: async () => null },
     complaintRecord: { create: async () => ({ id: 'complaint-1', status: 'OPEN' }) },
     governanceRegisterChangeAudit: { create: async () => { throw new Error('audit unavailable'); } },
   };
@@ -49,6 +51,33 @@ test('a complaint audit write failure fails the create operation', async () => {
     service.createComplaint('org-1', { receivedDate: '2026-09-01', summary: 'Private complaint' }, 'actor-1'),
     /audit unavailable/,
   );
+});
+
+test('recovery binding refuses ordinary complaint source create and edit before mutation', async () => {
+  let writes = 0;
+  const now = new Date('2026-09-28T10:00:00.000Z');
+  const tx = {
+    $queryRaw: async () => [{ id: 'org-1' }],
+    complaintRecoveryEnforcement: { findUnique: async () => ({ id: 'bound' }) },
+    complaintRecord: {
+      findFirst: async () => ({ id: 'complaint-1', organisationId: 'org-1',
+        removedAt: null, updatedAt: now }),
+      create: async () => { writes += 1; },
+      update: async () => { writes += 1; },
+    },
+    governanceRegisterChangeAudit: { create: async () => { writes += 1; } },
+  };
+  const service = new GovernanceRegisterService({
+    $transaction: async (work: (client: unknown) => Promise<unknown>) => work(tx),
+  } as never);
+  const blocked = (error: unknown) => (error as { code?: string }).code === 'COMPLAINT_SOURCE_RECOVERY_REQUIRED';
+  await assert.rejects(service.createComplaint('org-1', {
+    receivedDate: '2026-09-01', summary: 'Synthetic complaint',
+  }, 'actor-1'), blocked);
+  await assert.rejects(service.updateComplaint('org-1', 'complaint-1', {
+    summary: 'Synthetic changed complaint',
+  }, now.toISOString(), 'actor-1'), blocked);
+  assert.equal(writes, 0);
 });
 
 test('conflict and fundraising actions retain actor and status history without sensitive field values', async () => {

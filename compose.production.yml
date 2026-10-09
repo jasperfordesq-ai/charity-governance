@@ -37,6 +37,8 @@ services:
     restart: unless-stopped
     environment:
       NODE_ENV: production
+      CHARITYPILOT_DEPLOYMENT_MODE: production
+      CHARITYPILOT_PRIVILEGED_MFA_MODE: required
       PORT: 3002
       HOST: 0.0.0.0
       ENABLE_IN_PROCESS_JOBS: "false"

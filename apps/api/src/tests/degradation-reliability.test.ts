@@ -351,6 +351,7 @@ test('document upload returns 503 STORAGE_NOT_CONFIGURED and persists nothing wh
     authSession: { findFirst: async () => ({ id: 'session-1' }) },
     user: { findUnique: async () => ({ id: 'user-1', organisationId: 'org-1', role: 'ADMIN', emailVerified: true }) },
     subscription: { findUnique: async () => ({ status: 'ACTIVE', trialEndsAt: null, currentPeriodEnd: null, plan: 'ESSENTIALS' }) },
+    documentRecoveryEnforcement: { findUnique: async () => null },
     document: {
       aggregate: async () => ({ _sum: { fileSize: 0 } }),
       create: async () => {

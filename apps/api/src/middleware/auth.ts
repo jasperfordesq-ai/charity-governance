@@ -1,6 +1,7 @@
 import type { FastifyRequest, FastifyReply } from "fastify";
 import { verifyAccessToken, type TokenPayload } from "../utils/jwt.js";
 import { getAccessTokenFromRequest } from "../utils/auth-request-credential.js";
+import { isPrivilegedMfaRequired } from "../utils/deployment-profile.js";
 
 /**
  * The posture of the session behind this request: which client it belongs to
@@ -47,7 +48,7 @@ const SAFE_METHODS = new Set(["GET", "HEAD", "OPTIONS"]);
 async function authenticateRequest(
   request: FastifyRequest,
   reply: FastifyReply,
-  options: { allowUnverified: boolean },
+  options: { allowUnverified: boolean; allowMfaEnrolment?: boolean },
 ): Promise<void> {
   const token = getAccessTokenFromRequest(request);
 
@@ -125,6 +126,19 @@ async function authenticateRequest(
     });
   }
 
+  if (isPrivilegedMfaRequired() && (user.role === 'OWNER' || user.role === 'ADMIN') &&
+    !options.allowUnverified) {
+    const factor = await request.server.prisma.userSecondFactor.findUnique({
+      where: { userId: user.id }, select: { enrolledAt: true },
+    });
+    if (!factor?.enrolledAt && !(options.allowMfaEnrolment && (session.clientKind ?? 'WEB') === 'WEB')) {
+      return reply.status(403).send({
+        error: 'Enroll an authenticator before using privileged CharityPilot controls.',
+        code: 'PRIVILEGED_MFA_ENROLMENT_REQUIRED',
+      });
+    }
+  }
+
   request.user = {
     userId: user.id,
     organisationId: user.organisationId,
@@ -162,6 +176,15 @@ export async function authGuard(
   reply: FastifyReply,
 ): Promise<void> {
   await authenticateRequest(request, reply, { allowUnverified: false });
+}
+
+/** Only the personal authenticator setup routes may use an unenrolled
+ * privileged browser session in the public profile. */
+export async function authMfaEnrolmentGuard(
+  request: FastifyRequest,
+  reply: FastifyReply,
+): Promise<void> {
+  await authenticateRequest(request, reply, { allowUnverified: false, allowMfaEnrolment: true });
 }
 
 export async function authIdentityGuard(

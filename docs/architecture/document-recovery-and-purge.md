@@ -1,5 +1,25 @@
 # Document recovery and purge implementation contract
 
+> **9 October journal capacity admission, local only:** A fresh document
+> preparation requires room for its five-entry decision chain; complaint,
+> hold and generic disposal starts require two slots. The journal refuses
+> them before creating an intent if its 10,000-entry ceiling would cut the
+> chain short. Existing operations may finish and one-entry preservation
+> decisions may use the final slot. This does not provide rollover,
+> independent custody or host-loss recovery; do not activate binding on
+> the strength of this admission check.
+
+> **9 October 2026 complaint source host-loss boundary, OPEN:**
+> `ComplaintRecord` creation and ordinary edits still have no
+> independently recoverable source revision. The register change audit
+> records metadata, not the sensitive field values needed to rebuild a
+> case. The current intent journal is bounded to 10,000 entries and
+> 4,096-byte objects and is not an approved per-edit case journal.
+> Binding a charity therefore needs a controller-approved encrypted
+> source baseline, scalable revision publication, database writer gate
+> and stale-backup replay proof in addition to the existing purge/hold
+> protocols. See private `complaint-source-host-loss-contract-2026-10-09.md`.
+
 Status: implementation and acceptance in progress, 30 September 2026. Local
 proof now covers policy administration, recoverable Vault removal and exact-byte
 restore, reviewed purge claims, the local primary-file worker and downstream

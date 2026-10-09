@@ -16,7 +16,7 @@ type Plan=Record<Area,{disposition:Disposition|'';evidenceRef:string}>;
 const emptyPlan=():Plan=>Object.fromEntries(areas.map(area=>[area,{disposition:area==='PRIMARY'?'DISPOSE':'',evidenceRef:''}])) as Plan;
 const label=(area:Area)=>({PRIMARY:'Primary complaint record',SNAPSHOTS:'Approved report snapshots',EXPORTS:'Downloaded and shared exports',AUDIT:'Audit and retained evidence',BACKUPS:'Backups',OTHER_COPIES:'Other copies and attachments'})[area];
 type Removed={id:string;summary:string;revision:number;removal:{id:string;recoveryUntil:string;evidenceRef:string}};
-type Policy={id:string;revision:number;state:string;retentionMode:string;withdrawal:unknown};
+type Policy={id:string;revision:number;state:string;retentionMode:string;retentionDays:number|null;retentionYears:number|null;withdrawal:unknown};
 type Authorization={id:string;complaintId:string;recordRevision:number;holdRevision:number;removalId:string;policyId:string;
   recoveryUntil:string;dispositionPlan:Plan;evidenceRef:string;reason:string;authorizedAt:string;
   withdrawal:{evidenceRef:string;reason:string}|null;claim:{id:string;claimedAt:string}|null};
@@ -110,7 +110,7 @@ function OwnerComplaintPurgePanel({onDisposed}:{onDisposed:()=>void}) {
     {record?<div className="space-y-3">
       <p>Original recovery deadline: {new Date(record.removal.recoveryUntil).toLocaleString()}. Removal reference: {record.removal.evidenceRef}.</p>
       <p>{hold?.held?'An administrative hold blocks disposal.':hold?'No active administrative hold at this review.':'Checking current hold…'}</p>
-      <p>{policy?`Current approved policy: revision ${policy.revision} (${policy.retentionMode}).`:'A current approved complaint policy is required.'}</p>
+      <p>{policy?`Current approved policy: revision ${policy.revision} (${policy.retentionMode==='AFTER_CALENDAR_YEARS'?`${policy.retentionYears} calendar years from reviewed resolution`:policy.retentionMode==='AFTER_ANCHOR'?`${policy.retentionDays} days from reviewed resolution`:policy.retentionMode==='REVIEW_REQUIRED'?'individual disposition review':policy.retentionMode}).`:'A current approved complaint policy is required.'}</p>
       {areas.map(area=><fieldset key={area} className="rounded border p-2"><legend>{label(area)}</legend>
         <label>Planned disposition — {label(area)}<select aria-label={`Planned disposition — ${label(area)}`} className="block rounded border p-2" value={plan[area].disposition} disabled={busy||area==='PRIMARY'} onChange={event=>setPlan(current=>({...current,[area]:{...current[area],disposition:event.target.value as Disposition}}))}>
           <option value="">Choose after reviewing this scope</option><option value="DISPOSE">Dispose</option><option value="RETAIN_APPROVED">Retain under reviewed authority</option><option value="NOT_APPLICABLE">Not applicable after review</option>

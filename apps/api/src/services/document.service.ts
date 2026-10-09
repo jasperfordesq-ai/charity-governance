@@ -14,6 +14,8 @@ import {
 } from './confluence-publish-target.service.js';
 import { publicationErasureTarget } from './document-publication.service.js';
 import { parseConfluenceErasureTarget } from './confluence-erasure-target.js';
+import { lockOrganisationForUpdate } from './organisation-lock.js';
+import { assertDocumentSourceUnbound } from './document-source-recovery-guard.js';
 
 /**
  * An absent field leaves the column alone; an explicit null clears it.
@@ -838,6 +840,7 @@ export class DocumentService {
     const includeAdditionalStandards = await documentStandardLinkScope(this.prisma, organisationId);
 
     const updated = await this.prisma.$transaction(async (tx) => {
+      await assertDocumentSourceUnbound(tx, organisationId);
       const existing = await tx.document.findFirst({
         where: { deletedAt: null, id, organisationId },
         select: { id: true, updatedAt: true, category: true, visibility: true, contentAccessClass: true,
@@ -1370,6 +1373,15 @@ export class DocumentService {
     reason: string;
   }): Promise<{ id: string; deletionHold: boolean; updatedAt: Date }> {
     return this.prisma.$transaction(async (tx) => {
+      // Serialize the ordinary hold path with recovery binding. Until hold
+      // decisions have independent replay facts, neither placement nor
+      // release may proceed after this charity is bound.
+      await tx.$queryRaw`SELECT id FROM "Organisation" WHERE id=${input.organisationId} FOR UPDATE`;
+      const enforcement = await tx.documentRecoveryEnforcement.findUnique({
+        where: { organisationId: input.organisationId }, select: { id: true },
+      });
+      if (enforcement) throw new AppError(409, 'DOCUMENT_HOLD_RECOVERY_REQUIRED',
+        'This charity requires an independently recorded document hold decision.');
       const existing = await tx.document.findFirst({
         where: { id: input.documentId, organisationId: input.organisationId },
         select: { id: true, deletionHold: true, updatedAt: true },
@@ -1438,6 +1450,7 @@ export class DocumentService {
     const provider = present[0]![0];
 
     return this.prisma.$transaction(async (tx) => {
+      await assertDocumentSourceUnbound(tx, input.organisationId);
       let updated;
       try {
         updated = await tx.document.update({
@@ -2090,6 +2103,13 @@ export class DocumentService {
 
     try {
       return await this.prisma.$transaction(async (tx) => {
+        await lockOrganisationForUpdate(tx, organisationId);
+        if (await tx.documentRecoveryEnforcement.findUnique({
+          where: { organisationId }, select: { id: true },
+        })) {
+          throw new AppError(409, 'DOCUMENT_STANDARD_LINK_RECOVERY_REQUIRED',
+            'Standard-link changes require independent recovery authority for this charity.');
+        }
         const link = await tx.documentStandardLink.create({ data: { documentId, standardId } });
         await tx.documentControlAudit.create({ data: {
           organisationId, documentId, actorUserId, kind: 'STANDARD_LINK',
@@ -2121,6 +2141,13 @@ export class DocumentService {
     }
 
     await this.prisma.$transaction(async (tx) => {
+      await lockOrganisationForUpdate(tx, organisationId);
+      if (await tx.documentRecoveryEnforcement.findUnique({
+        where: { organisationId }, select: { id: true },
+      })) {
+        throw new AppError(409, 'DOCUMENT_STANDARD_LINK_RECOVERY_REQUIRED',
+          'Standard-link changes require independent recovery authority for this charity.');
+      }
       const removed = await tx.documentStandardLink.deleteMany({ where: { documentId, standardId } });
       if (removed.count > 0) {
         await tx.documentControlAudit.create({ data: {

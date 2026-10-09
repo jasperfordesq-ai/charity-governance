@@ -693,6 +693,296 @@ test('real PostgreSQL 16 migration freezes ordinary complaint removal and restor
   } finally { await removeDisposableContainer(container); }
 });
 
+test('real PostgreSQL 16 migration freezes complaint source inserts and edits after recovery binding', { timeout: 120_000 }, async () => {
+  const container = `charitypilot-complaint-source-gate-${randomUUID()}`;
+  assertDockerSuccess(docker(['run', '--detach', '--name', container, '--network', 'none',
+    '-e', 'POSTGRES_HOST_AUTH_METHOD=trust', POSTGRES_IMAGE]), 'start complaint source gate fixture');
+  try {
+    await waitForPostgres(container);
+    psql(container, `
+      CREATE TABLE "Organisation" (id TEXT PRIMARY KEY);
+      INSERT INTO "Organisation" VALUES ('charity'), ('other');
+      CREATE TABLE "ComplaintRecoveryEnforcement" (id TEXT PRIMARY KEY, "organisationId" TEXT UNIQUE);
+      CREATE TABLE "ComplaintRecord" (id TEXT PRIMARY KEY, "organisationId" TEXT NOT NULL
+        REFERENCES "Organisation"(id), summary TEXT NOT NULL);
+      INSERT INTO "ComplaintRecord" VALUES ('before','charity','original');
+    `);
+    psql(container, readFileSync(new URL(
+      '../../prisma/migrations/20261009080000_recovery_bound_complaint_source/migration.sql',
+      import.meta.url,
+    ), 'utf8'));
+    psql(container, `INSERT INTO "ComplaintRecord" VALUES ('still-unbound','charity','allowed');
+      UPDATE "ComplaintRecord" SET summary='still allowed' WHERE id='before';`);
+    psql(container, `INSERT INTO "ComplaintRecoveryEnforcement" VALUES ('binding','charity');`);
+    assert.match(psql(container, `INSERT INTO "ComplaintRecord" VALUES ('blocked','charity','private');`, false).stderr,
+      /source change requires independent recovery authority/);
+    assert.match(psql(container, `UPDATE "ComplaintRecord" SET summary='changed' WHERE id='before';`, false).stderr,
+      /source change requires independent recovery authority/);
+    assert.match(psql(container, `UPDATE "ComplaintRecord" SET summary='changed' WHERE id='still-unbound';`, false).stderr,
+      /source change requires independent recovery authority/);
+    psql(container, `INSERT INTO "ComplaintRecord" VALUES ('other-record','other','allowed');
+      UPDATE "ComplaintRecord" SET summary='other edit' WHERE id='other-record';`);
+    assert.equal(psql(container, `SELECT count(*) FROM "ComplaintRecord" WHERE "organisationId"='charity';`).stdout.trim(), '2');
+    // The separate recovery execution and purge-claim gates govern DELETE.
+    // This source fence must not make their accepted deletion unreachable.
+    psql(container, `DELETE FROM "ComplaintRecord" WHERE id='before';`);
+  } finally { await removeDisposableContainer(container); }
+});
+
+test('real PostgreSQL 16 migration binds citations to their document charity and freezes bound changes', { timeout: 120_000 }, async () => {
+  const container = `charitypilot-citation-gate-${randomUUID()}`;
+  assertDockerSuccess(docker(['run', '--detach', '--name', container, '--network', 'none',
+    '-e', 'POSTGRES_HOST_AUTH_METHOD=trust', POSTGRES_IMAGE]), 'start citation gate fixture');
+  try {
+    await waitForPostgres(container);
+    psql(container, `
+      CREATE TABLE "Organisation" (id TEXT PRIMARY KEY);
+      INSERT INTO "Organisation" VALUES ('charity'), ('other');
+      CREATE TABLE "Document" (id TEXT PRIMARY KEY, "organisationId" TEXT NOT NULL,
+        UNIQUE (id, "organisationId"));
+      INSERT INTO "Document" VALUES ('charity-doc','charity'), ('other-doc','other');
+      CREATE TABLE "DocumentRecoveryEnforcement" (id TEXT PRIMARY KEY, "organisationId" TEXT UNIQUE);
+      CREATE TABLE "ConfluenceReference" (id TEXT PRIMARY KEY, "organisationId" TEXT NOT NULL,
+        "documentId" TEXT NOT NULL, "pageTitle" TEXT NOT NULL,
+        CONSTRAINT "ConfluenceReference_documentId_fkey" FOREIGN KEY ("documentId")
+          REFERENCES "Document"(id) ON DELETE CASCADE ON UPDATE CASCADE);
+      INSERT INTO "ConfluenceReference" VALUES ('valid','charity','charity-doc','initial'),
+        ('mismatch','charity','other-doc','wrong charity');
+    `);
+    const migration = readFileSync(new URL(
+      '../../prisma/migrations/20261009090000_confluence_reference_recovery_tenant/migration.sql',
+      import.meta.url,
+    ), 'utf8');
+    assert.match(psql(container, migration, false).stderr, /charity\/document mismatch requires review/);
+    psql(container, `DELETE FROM "ConfluenceReference" WHERE id='mismatch';`);
+    psql(container, migration);
+    assert.match(psql(container, `INSERT INTO "ConfluenceReference" VALUES
+      ('forged','charity','other-doc','cross-charity');`, false).stderr, /foreign key constraint/);
+    psql(container, `INSERT INTO "ConfluenceReference" VALUES
+      ('before','charity','charity-doc','allowed');
+      UPDATE "ConfluenceReference" SET "pageTitle"='still allowed' WHERE id='before';`);
+    psql(container, `INSERT INTO "DocumentRecoveryEnforcement" VALUES ('binding','charity');`);
+    for (const statement of [
+      `INSERT INTO "ConfluenceReference" VALUES ('blocked','charity','charity-doc','blocked');`,
+      `UPDATE "ConfluenceReference" SET "pageTitle"='rewritten' WHERE id='valid';`,
+      `DELETE FROM "ConfluenceReference" WHERE id='valid';`,
+    ]) assert.match(psql(container, statement, false).stderr, /reference change requires independent recovery authority/);
+    psql(container, `INSERT INTO "ConfluenceReference" VALUES ('other-ref','other','other-doc','allowed');
+      UPDATE "ConfluenceReference" SET "pageTitle"='other changed' WHERE id='other-ref';
+      DELETE FROM "ConfluenceReference" WHERE id='other-ref';`);
+    assert.equal(psql(container, `SELECT count(*) FROM "ConfluenceReference" WHERE "organisationId"='charity';`).stdout.trim(), '2');
+  } finally { await removeDisposableContainer(container); }
+});
+
+test('real PostgreSQL 16 migration freezes standard links and document charity after recovery binding', { timeout: 120_000 }, async () => {
+  const container = `charitypilot-standard-link-gate-${randomUUID()}`;
+  assertDockerSuccess(docker(['run', '--detach', '--name', container, '--network', 'none',
+    '-e', 'POSTGRES_HOST_AUTH_METHOD=trust', POSTGRES_IMAGE]), 'start standard link gate fixture');
+  try {
+    await waitForPostgres(container);
+    psql(container, `
+      CREATE TABLE "Organisation" (id TEXT PRIMARY KEY);
+      INSERT INTO "Organisation" VALUES ('charity'), ('other');
+      CREATE TABLE "Document" (id TEXT PRIMARY KEY, "organisationId" TEXT NOT NULL
+        REFERENCES "Organisation"(id));
+      INSERT INTO "Document" VALUES ('charity-doc','charity'), ('other-doc','other');
+      CREATE TABLE "DocumentRecoveryEnforcement" (id TEXT PRIMARY KEY, "organisationId" TEXT UNIQUE);
+      CREATE TABLE "DocumentStandardLink" (id TEXT PRIMARY KEY, "documentId" TEXT NOT NULL
+        REFERENCES "Document"(id), "standardId" TEXT NOT NULL);
+      INSERT INTO "DocumentStandardLink" VALUES ('existing','charity-doc','standard-1');
+    `);
+    psql(container, readFileSync(new URL(
+      '../../prisma/migrations/20261009100000_document_standard_link_recovery_gate/migration.sql',
+      import.meta.url,
+    ), 'utf8'));
+    psql(container, `INSERT INTO "DocumentStandardLink" VALUES ('before','charity-doc','standard-2');
+      UPDATE "DocumentStandardLink" SET "standardId"='standard-3' WHERE id='before';`);
+    psql(container, `INSERT INTO "DocumentRecoveryEnforcement" VALUES ('binding','charity');`);
+    assert.match(psql(container, `UPDATE "Document" SET "organisationId"='other'
+      WHERE id='charity-doc';`, false).stderr, /charity identity is immutable/);
+    for (const statement of [
+      `INSERT INTO "DocumentStandardLink" VALUES ('blocked','charity-doc','standard-4');`,
+      `UPDATE "DocumentStandardLink" SET "standardId"='rewritten' WHERE id='existing';`,
+      `UPDATE "DocumentStandardLink" SET "documentId"='other-doc' WHERE id='existing';`,
+      `DELETE FROM "DocumentStandardLink" WHERE id='existing';`,
+    ]) assert.match(psql(container, statement, false).stderr, /standard link change requires independent recovery authority/);
+    psql(container, `INSERT INTO "DocumentStandardLink" VALUES ('other-link','other-doc','standard-1');`);
+    assert.match(psql(container, `UPDATE "DocumentStandardLink" SET "documentId"='charity-doc'
+      WHERE id='other-link';`, false).stderr, /standard link change requires independent recovery authority/);
+    psql(container, `UPDATE "DocumentStandardLink" SET "standardId"='other-standard' WHERE id='other-link';
+      DELETE FROM "DocumentStandardLink" WHERE id='other-link';`);
+    assert.equal(psql(container, `SELECT count(*) FROM "DocumentStandardLink" WHERE "documentId"='charity-doc';`).stdout.trim(), '2');
+  } finally { await removeDisposableContainer(container); }
+});
+
+test('real PostgreSQL document source gate stops bound reservations and edits while preserving cleanup and purge', { timeout: 120_000 }, async () => {
+  const container = `charitypilot-document-source-gate-${randomUUID()}`;
+  assertDockerSuccess(docker(['run', '--detach', '--name', container, '--network', 'none',
+    '-e', 'POSTGRES_HOST_AUTH_METHOD=trust', POSTGRES_IMAGE]), 'start document source gate fixture');
+  try {
+    await waitForPostgres(container);
+    psql(container, `
+      CREATE TABLE "Organisation" (id TEXT PRIMARY KEY);
+      INSERT INTO "Organisation" VALUES ('charity'), ('other'), ('race-a'), ('race-b');
+      CREATE TABLE "DocumentRecoveryEnforcement" (id TEXT PRIMARY KEY, "organisationId" TEXT UNIQUE);
+      CREATE TABLE "Document" (id TEXT PRIMARY KEY, "organisationId" TEXT NOT NULL, name TEXT NOT NULL);
+      CREATE TABLE "DocumentStorageDeletion" (id TEXT PRIMARY KEY, state TEXT NOT NULL,
+        "processedAt" TIMESTAMP);
+      CREATE TABLE "DocumentUploadIntent" (id TEXT PRIMARY KEY, "organisationId" TEXT NOT NULL,
+        state TEXT NOT NULL, "cleanupDeletionId" TEXT);
+      INSERT INTO "Document" VALUES ('existing','charity','original');
+      INSERT INTO "DocumentUploadIntent" VALUES ('old-intent','charity','RESERVED');
+    `);
+    psql(container, readFileSync(new URL(
+      '../../prisma/migrations/20261009110000_document_source_upload_recovery_gate/migration.sql',
+      import.meta.url,
+    ), 'utf8'));
+    psql(container, `INSERT INTO "Document" VALUES ('before','charity','allowed');
+      INSERT INTO "DocumentUploadIntent" (id,"organisationId",state)
+        VALUES ('before-intent','charity','RESERVED');`);
+    assert.match(psql(container, `INSERT INTO "DocumentRecoveryEnforcement" VALUES
+      ('binding','charity');`, false).stderr, /requires reconciled upload intents/);
+    psql(container, `INSERT INTO "DocumentStorageDeletion" VALUES
+      ('clean-old','PROCESSED',now()), ('clean-before','PROCESSED',now());
+      UPDATE "DocumentUploadIntent" SET state='CLEANUP_PENDING', "cleanupDeletionId"='clean-old'
+        WHERE id='old-intent';
+      UPDATE "DocumentUploadIntent" SET state='CLEANUP_PENDING', "cleanupDeletionId"='clean-before'
+        WHERE id='before-intent';`);
+    psql(container, `INSERT INTO "DocumentRecoveryEnforcement" VALUES ('binding','charity');`);
+    assert.match(psql(container, `INSERT INTO "DocumentUploadIntent"
+      VALUES ('blocked-intent','charity','RESERVED');`, false).stderr,
+    /upload reservation requires independent recovery authority/);
+    for (const statement of [
+      `UPDATE "DocumentUploadIntent" SET state='RESERVED' WHERE id='old-intent';`,
+      `UPDATE "DocumentUploadIntent" SET "organisationId"='other' WHERE id='old-intent';`,
+      `DELETE FROM "DocumentUploadIntent" WHERE id='old-intent';`,
+    ]) assert.match(psql(container, statement, false).stderr,
+      /upload intent change requires independent recovery authority/);
+    for (const statement of [
+      `INSERT INTO "Document" VALUES ('blocked','charity','not allowed');`,
+      `UPDATE "Document" SET name='edited' WHERE id='existing';`,
+    ]) assert.match(psql(container, statement, false).stderr,
+      /source change requires independent recovery authority/);
+    psql(container, `DELETE FROM "Document" WHERE id='before';
+      INSERT INTO "Document" VALUES ('other-doc','other','allowed');
+      UPDATE "Document" SET name='edited' WHERE id='other-doc';
+      INSERT INTO "DocumentUploadIntent" (id,"organisationId",state)
+        VALUES ('other-intent','other','RESERVED');
+      UPDATE "DocumentUploadIntent" SET state='ATTACHED' WHERE id='other-intent';`);
+    assert.match(psql(container, `UPDATE "DocumentUploadIntent" SET "organisationId"='charity'
+      WHERE id='other-intent';`, false).stderr,
+    /upload intent change requires independent recovery authority/);
+    psql(container, `DELETE FROM "DocumentUploadIntent" WHERE id='other-intent';`);
+    assert.equal(psql(container, `SELECT state FROM "DocumentUploadIntent" WHERE id='old-intent';`).stdout.trim(), 'CLEANUP_PENDING');
+    assert.equal(psql(container, `SELECT name FROM "Document" WHERE id='existing';`).stdout.trim(), 'original');
+    for (const [charity, reservationFirst] of [['race-a', true], ['race-b', false]] as const) {
+      const reservationSql = `BEGIN; INSERT INTO "DocumentUploadIntent" (id,"organisationId",state)
+        VALUES ('${charity}-intent','${charity}','RESERVED'); SELECT pg_sleep(1); COMMIT;`;
+      const bindingSql = `BEGIN; INSERT INTO "DocumentRecoveryEnforcement"
+        VALUES ('${charity}-binding','${charity}'); SELECT pg_sleep(1); COMMIT;`;
+      const first = psqlAsync(container, reservationFirst ? reservationSql : bindingSql);
+      await new Promise((resolve) => setTimeout(resolve, 250));
+      const second = await psqlAsync(container, reservationFirst ? bindingSql : reservationSql);
+      const firstResult = await first;
+      assert.equal([firstResult.status, second.status].filter((status) => status === 0).length, 1,
+        'exactly one of a racing reservation and binding must commit');
+      assert.equal(psql(container, `SELECT count(*) FROM "DocumentUploadIntent" intent
+        JOIN "DocumentRecoveryEnforcement" binding ON binding."organisationId"=intent."organisationId"
+        WHERE intent."organisationId"='${charity}' AND intent.state='RESERVED';`).stdout.trim(), '0');
+    }
+  } finally { await removeDisposableContainer(container); }
+});
+
+test('real PostgreSQL publication binding gate refuses unsafe history and serializes a new queue row', { timeout: 120_000 }, async () => {
+  const container = `charitypilot-publication-binding-gate-${randomUUID()}`;
+  assertDockerSuccess(docker(['run', '--detach', '--name', container, '--network', 'none',
+    '-e', 'POSTGRES_HOST_AUTH_METHOD=trust', POSTGRES_IMAGE]), 'start publication binding fixture');
+  try {
+    await waitForPostgres(container);
+    psql(container, `
+      CREATE TABLE "Organisation" (id TEXT PRIMARY KEY);
+      INSERT INTO "Organisation" VALUES ('charity'), ('other'), ('race-a'), ('race-b');
+      CREATE TABLE "DocumentRecoveryEnforcement" (id TEXT PRIMARY KEY, "organisationId" TEXT UNIQUE);
+      CREATE TABLE "Document" (id TEXT PRIMARY KEY, "organisationId" TEXT NOT NULL,
+        "deletedAt" TIMESTAMP);
+      INSERT INTO "Document" VALUES ('charity-doc','charity',NULL),
+        ('other-doc','other',NULL), ('race-a-doc','race-a',NULL), ('race-b-doc','race-b',NULL);
+      CREATE TABLE "DocumentPublication" (id TEXT PRIMARY KEY, "organisationId" TEXT NOT NULL,
+        "documentId" TEXT NOT NULL, state TEXT NOT NULL);
+      CREATE TABLE "DocumentPublicationUploadIntent" (id TEXT PRIMARY KEY,
+        "organisationId" TEXT NOT NULL, "publicationId" TEXT NOT NULL);
+      CREATE TABLE "DocumentPublicationPageCreateIntent" (id TEXT PRIMARY KEY,
+        "organisationId" TEXT NOT NULL, "publicationId" TEXT NOT NULL);
+      INSERT INTO "DocumentPublication" VALUES ('existing','charity','charity-doc','PROCESSED');
+      INSERT INTO "DocumentRecoveryEnforcement" VALUES ('unsafe','charity');
+    `);
+    const migration = readFileSync(new URL(
+      '../../prisma/migrations/20261009120000_document_publication_recovery_binding_gate/migration.sql',
+      import.meta.url,
+    ), 'utf8');
+    assert.match(psql(container, migration, false).stderr,
+      /Existing document recovery binding has publication history requiring review/);
+    psql(container, `DELETE FROM "DocumentPublication" WHERE id='existing';
+      INSERT INTO "DocumentPublicationPageCreateIntent" VALUES ('legacy-page','charity','existing');`);
+    assert.match(psql(container, migration, false).stderr,
+      /Existing document recovery binding has publication intent history requiring review/);
+    psql(container, `DELETE FROM "DocumentPublicationPageCreateIntent" WHERE id='legacy-page';
+      INSERT INTO "DocumentPublication" VALUES ('existing','charity','charity-doc','PROCESSED');`);
+    psql(container, `DELETE FROM "DocumentRecoveryEnforcement" WHERE id='unsafe';`);
+    psql(container, `INSERT INTO "DocumentPublication" VALUES
+      ('mismatch','charity','other-doc','PENDING');`);
+    assert.match(psql(container, migration, false).stderr,
+      /Existing document publication charity mismatch requires review/);
+    psql(container, `DELETE FROM "DocumentPublication" WHERE id='mismatch';`);
+    psql(container, migration);
+    assert.match(psql(container, `INSERT INTO "DocumentRecoveryEnforcement"
+      VALUES ('binding','charity');`, false).stderr,
+    /binding requires independent publication history/);
+    assert.match(psql(container, `INSERT INTO "DocumentPublication" VALUES
+      ('cross-charity','other','charity-doc','PENDING');`, false).stderr,
+    /publication requires a live same-charity source/);
+    assert.match(psql(container, `INSERT INTO "DocumentPublication" VALUES
+      ('orphan','other','missing-doc','PENDING');`, false).stderr,
+    /publication requires a live same-charity source/);
+    psql(container, `INSERT INTO "DocumentPublication" VALUES ('other-pub','other','other-doc','PENDING');
+      UPDATE "DocumentPublication" SET state='PROCESSED' WHERE id='other-pub';
+      DELETE FROM "DocumentPublication" WHERE id='other-pub';
+      INSERT INTO "DocumentPublication" VALUES ('historical','other','other-doc','PROCESSED');
+      DELETE FROM "Document" WHERE id='other-doc';
+      UPDATE "DocumentPublication" SET state='RETIRED' WHERE id='historical';
+      DELETE FROM "DocumentPublication" WHERE id='historical';
+      DELETE FROM "DocumentPublication" WHERE id='existing';
+      INSERT INTO "DocumentPublicationPageCreateIntent" VALUES ('orphan-page','charity','existing');
+      INSERT INTO "DocumentPublicationUploadIntent" VALUES ('orphan-upload','other','other-pub');`);
+    assert.match(psql(container, `INSERT INTO "DocumentRecoveryEnforcement"
+      VALUES ('binding','charity');`, false).stderr,
+    /binding requires independent publication intent history/);
+    assert.match(psql(container, `INSERT INTO "DocumentRecoveryEnforcement"
+      VALUES ('other-binding','other');`, false).stderr,
+    /binding requires independent publication intent history/);
+    psql(container, `DELETE FROM "DocumentPublicationPageCreateIntent" WHERE id='orphan-page';
+      DELETE FROM "DocumentPublicationUploadIntent" WHERE id='orphan-upload';
+      INSERT INTO "DocumentRecoveryEnforcement" VALUES ('binding','charity');`);
+    assert.match(psql(container, `INSERT INTO "DocumentPublication"
+      VALUES ('blocked','charity','charity-doc','PENDING');`, false).stderr,
+    /publication change requires independent recovery authority/);
+    for (const [charity, publicationFirst] of [['race-a', true], ['race-b', false]] as const) {
+      const publicationSql = `BEGIN; INSERT INTO "DocumentPublication"
+        VALUES ('${charity}-publication','${charity}','${charity}-doc','PENDING'); SELECT pg_sleep(1); COMMIT;`;
+      const bindingSql = `BEGIN; INSERT INTO "DocumentRecoveryEnforcement"
+        VALUES ('${charity}-binding','${charity}'); SELECT pg_sleep(1); COMMIT;`;
+      const first = psqlAsync(container, publicationFirst ? publicationSql : bindingSql);
+      await new Promise((resolve) => setTimeout(resolve, 250));
+      const second = await psqlAsync(container, publicationFirst ? bindingSql : publicationSql);
+      const firstResult = await first;
+      assert.equal([firstResult.status, second.status].filter((status) => status === 0).length, 1);
+      assert.equal(psql(container, `SELECT count(*) FROM "DocumentPublication" publication
+        JOIN "DocumentRecoveryEnforcement" binding ON binding."organisationId"=publication."organisationId"
+        WHERE publication."organisationId"='${charity}';`).stdout.trim(), '0');
+    }
+  } finally { await removeDisposableContainer(container); }
+});
+
 test('real PostgreSQL 16 migration freezes only complaint policy facts after recovery enforcement', { timeout: 120_000 }, async () => {
   const container = `charitypilot-policy-gate-${randomUUID()}`;
   assertDockerSuccess(docker(['run', '--detach', '--name', container, '--network', 'none',

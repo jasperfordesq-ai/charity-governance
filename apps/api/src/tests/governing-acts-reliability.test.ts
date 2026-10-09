@@ -19,6 +19,10 @@ type Role = 'OWNER' | 'ADMIN' | 'MEMBER';
 
 const PREFIX = '/governing-acts';
 const NOW = new Date('2026-08-07T12:00:00.000Z');
+const unboundDocumentSource = {
+  $queryRaw: async () => [{ id: 'org-1' }],
+  documentRecoveryEnforcement: { findUnique: async () => null },
+};
 
 function tokenFor(role: Role) {
   return `Bearer ${signAccessToken({ userId: 'u1', organisationId: 'org-1', role, sessionId: 'sess-1' })}`;
@@ -50,6 +54,8 @@ async function buildApp(
   const prisma = {
     ...authModels(role, subscription),
     minuteBookChangeAudit: { create: async () => ({ id: 'audit-1' }) },
+    documentRecoveryEnforcement: { findUnique: async () => null },
+    $queryRaw: async () => [{ id: 'org-1' }],
     ...prismaOverrides,
   } as Record<string, unknown>;
   prisma.$transaction ??= async (callback: (tx: typeof prisma) => Promise<unknown>) => callback(prisma);
@@ -244,6 +250,7 @@ test('board submissions with resolution text are restricted to Admin before docu
 test('setDocumentApproval rejects a resolution whose governing act is DRAFT', async () => {
 
   const draftModels = {
+    ...unboundDocumentSource,
     document: {
       findFirst: async () => ({ id: 'doc-1', organisationId: 'org-1', updatedAt: NOW }),
       updateMany: async () => ({ count: 1 }),
@@ -274,6 +281,7 @@ test('setDocumentApproval accepts a resolution from an APPROVED governing act', 
   let updated = false;
   const auditEntries: Record<string, unknown>[] = [];
   const approvedModels = {
+    ...unboundDocumentSource,
     document: {
       findFirst: async () => ({ id: 'doc-1', organisationId: 'org-1', updatedAt: NOW,
         approvedByResolutionId: null, approvalAsserted: false }),
@@ -315,6 +323,7 @@ test('repeating an unchanged Board approval does not create a false change event
   let writes = 0;
   let audits = 0;
   const models = {
+    ...unboundDocumentSource,
     document: {
       findFirst: async () => ({ id: 'doc-1', organisationId: 'org-1', updatedAt: NOW,
         approvedByResolutionId: null, approvalAsserted: true }),
@@ -716,6 +725,7 @@ test('setDocumentApproval reports a conflict when the guarded write matches no r
   // be the one that reports success after writing nothing.
   let updateArgs: unknown;
   const racingModels = {
+    ...unboundDocumentSource,
     document: {
       findFirst: async () => ({ id: 'doc-1', organisationId: 'org-1', updatedAt: NOW }),
       updateMany: async (args: unknown) => {
@@ -1121,6 +1131,42 @@ test('Admin reading one act scopes the lookup to the caller’s charity and brin
   assert.deepEqual(seen.include, { resolutions: true });
   assert.equal(response.json().data.resolutions.length, 1);
   await app.close();
+});
+
+test('bound charity Board approval patch returns a conflict before document writes', async () => {
+  let documentRead = false;
+  const app = await buildApp({
+    documentRecoveryEnforcement: { findUnique: async () => ({ id: 'binding' }) },
+    document: { findFirst: async () => { documentRead = true; return null; } },
+  });
+  try {
+    const response = await app.inject({
+      method: 'PATCH', url: `${PREFIX}/documents/doc-1/approval`, headers: { authorization: tokenFor('ADMIN') },
+      payload: { expectedUpdatedAt: NOW.toISOString(), approvalAsserted: true },
+    });
+    assert.equal(response.statusCode, 409);
+    assert.equal(response.json().code, 'DOCUMENT_SOURCE_RECOVERY_REQUIRED');
+    assert.equal(documentRead, false);
+  } finally { await app.close(); }
+});
+
+test('Board approval refuses a recovery binding committed after the route precheck', async () => {
+  let checks = 0;
+  let reads = 0;
+  const app = await buildApp({
+    documentRecoveryEnforcement: { findUnique: async () => (++checks === 1 ? null : { id: 'binding' }) },
+    document: { findFirst: async () => { reads += 1; return null; } },
+  });
+  try {
+    const response = await app.inject({
+      method: 'PATCH', url: `${PREFIX}/documents/doc-1/approval`, headers: { authorization: tokenFor('ADMIN') },
+      payload: { expectedUpdatedAt: NOW.toISOString(), approvalAsserted: true },
+    });
+    assert.equal(response.statusCode, 409);
+    assert.equal(response.json().code, 'DOCUMENT_SOURCE_RECOVERY_REQUIRED');
+    assert.equal(checks, 2);
+    assert.equal(reads, 0);
+  } finally { await app.close(); }
 });
 
 test('an act belonging to another charity reads as missing, not as forbidden', async () => {

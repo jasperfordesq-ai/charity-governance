@@ -2,7 +2,8 @@ import axios from 'axios';
 import { getApiBaseUrl } from './api-config';
 import { isProtectedAppPath, renewsItsOwnSession } from './protected-routes';
 import { safeNextValue } from './url-security';
-import { coordinateSessionRefresh, SessionRefreshLockUnavailableError } from './session-refresh-lock';
+import { coordinateSessionLogout, coordinateSessionRefresh, markSessionEstablished,
+  SessionRefreshLockUnavailableError } from './session-refresh-lock';
 
 declare module 'axios' {
   export interface AxiosRequestConfig {
@@ -129,11 +130,30 @@ export const api = axios.create({
 // Logout must never renew the credential it is trying to revoke. Callers wait
 // for this response (including cookie clearance) before leaving the page.
 export async function logoutSession(): Promise<void> {
-  await api.post('/auth/logout', {}, { skipAuthRefresh: true, skipAuthRedirect: true });
+  let storage: Storage | undefined;
+  try {
+    storage = typeof window === 'undefined' ? undefined : window.localStorage;
+  } catch {
+    // The shared Web Lock still serializes logout and refresh.
+  }
+  await coordinateSessionLogout(
+    () => api.post('/auth/logout', {}, { skipAuthRefresh: true, skipAuthRedirect: true }).then(() => undefined),
+    typeof navigator === 'undefined' ? undefined : navigator.locks,
+    storage,
+  );
 }
 
 api.interceptors.response.use(
   (response) => {
+    // A successful login or invitation acceptance issues a fresh session.
+    // Clear an earlier ambiguous sign-out fence only after that response.
+    if (response.config.url === '/auth/login' || response.config.url === '/team/accept-invite') {
+      try {
+        markSessionEstablished(typeof window === 'undefined' ? undefined : window.localStorage);
+      } catch {
+        // Browser storage can be unavailable; cookies remain server-owned.
+      }
+    }
     // Only the single-field transport wrapper is unwrapped. Cursor and other
     // metadata belong to the response, even when a page also has a `data` field.
     if (

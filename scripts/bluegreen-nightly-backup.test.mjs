@@ -37,8 +37,14 @@ test('nightly wrapper: --install-cron replaces BOTH the appliance entry and any 
   assert.match(script, /^ {6}echo "30 3 \* \* \* \$HOME\/bin\/bluegreen-nightly-backup\.sh >\/dev\/null 2>&1" \) \| crontab -$/m);
 });
 
-test('nightly wrapper: parses under bash -n when bash is available', () => {
+test('nightly wrapper: parses under bash -n when bash is available', (context) => {
   const result = spawnSync('bash', ['-n', scriptPath], { encoding: 'utf8' });
   if (result.error?.code === 'ENOENT') return;
+  // Windows can expose the WSL bash launcher even when no Linux distribution
+  // provides /bin/bash. That is an unavailable parser, not a syntax failure.
+  if (process.platform === 'win32' && /WSL .*execvpe\(\/bin\/bash\) failed: No such file or directory/.test(result.stderr)) {
+    context.skip('WSL has no /bin/bash installed');
+    return;
+  }
   assert.equal(result.status, 0, result.stderr);
 });

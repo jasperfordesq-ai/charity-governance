@@ -1,4 +1,5 @@
 import { inspectCancellationEnvelope } from './cancellation-envelope.js';
+import { inspectComplaintSourceEnvelope } from './complaint-source-envelope.js';
 import { createHash, randomUUID } from 'node:crypto';
 import { Readable } from 'node:stream';
 import { GetObjectCommand, PutObjectCommand, S3Client, type S3ClientConfig } from '@aws-sdk/client-s3';
@@ -236,6 +237,36 @@ export class S3AuthorityObjectStore implements AuthorityObjectStore, AuthorityHe
   async createDocumentPreparation(operationId: string, envelope: string) {
     const request = this.documentPreparationRequest(operationId);
     this.checkDocumentPreparation(operationId, envelope);
+    return this.writeObject(request, envelope, { IfNoneMatch: '*' }, 65536);
+  }
+
+  private complaintSourceRequest(operationId: string) {
+    const request = this.replayRequest(operationId);
+    return { ...request,
+      Key: `complaint-source/${this.config.installationId}/${this.config.organisationId}/${operationId}.json` };
+  }
+
+  private checkComplaintSource(operationId: string, envelope: string) {
+    const context = inspectComplaintSourceEnvelope(envelope);
+    if (context.installationId !== this.config.installationId
+      || context.organisationId !== this.config.organisationId
+      || context.operationId !== operationId || context.keyId !== this.config.replayKeyArn) {
+      throw new Error('Complaint source envelope scope mismatch');
+    }
+  }
+
+  /** Transport for an encrypted candidate only. No caller activates this
+   * path; the independent source head and controller policy are unresolved. */
+  async readSourceFact(operationId: string) {
+    const object = await this.readObject(this.complaintSourceRequest(operationId), undefined, 65536);
+    if (!object) return null;
+    this.checkComplaintSource(operationId, object.body);
+    return object.body;
+  }
+
+  async createSourceFact(operationId: string, envelope: string) {
+    const request = this.complaintSourceRequest(operationId);
+    this.checkComplaintSource(operationId, envelope);
     return this.writeObject(request, envelope, { IfNoneMatch: '*' }, 65536);
   }
 

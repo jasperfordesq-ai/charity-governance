@@ -16,6 +16,13 @@ export default function SecurityDataPage() {
   const { user } = useAuth();
   const canReview = user?.role === 'OWNER' || user?.role === 'ADMIN';
 
+  if (user?.mfaEnrolmentRequired) {
+    return <AppPage eyebrow="Account security" title="Set up your authenticator"
+      description="An authenticator is required for Owner and Admin access in this public workspace.">
+      <PersonalSecondFactorPanel />
+    </AppPage>;
+  }
+
   return (
     <AppPage
       eyebrow="Account & administration"

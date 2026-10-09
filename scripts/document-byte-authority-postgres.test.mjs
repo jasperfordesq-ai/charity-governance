@@ -100,10 +100,29 @@ test(
         'apply all Prisma migrations',
       );
       const grants = readFileSync('scripts/bluegreen/runtime-role-grants.psql', 'utf8');
+      requireSuccess(docker(['exec', name, 'psql', '-U', 'postgres', '-d', database,
+        '-c', 'GRANT EXECUTE ON FUNCTION public."DocumentByteExecutionLease_claim"(text,text), public."DocumentByteProviderAttempt_start"(text,text) TO PUBLIC']),
+      'simulate ACL-free backup restore defaults');
       requireSuccess(docker(['exec', '-i', '-e', 'CHARITYPILOT_RUNTIME_ROLE=cp_fixture',
         '-e', 'CHARITYPILOT_RUNTIME_PASSWORD=synthetic-only', name,
         'psql', '-U', 'postgres', '-d', database], { input: grants }),
       'restrict disposable runtime role');
+      requireSuccess(docker(['exec', name, 'psql', '-U', 'postgres', '-d', database,
+        '-c', 'GRANT INSERT ON public."DocumentByteProviderAttempt" TO cp_fixture']),
+      'simulate unsafe existing provider-attempt grant');
+      const unsafeReconcile = docker(['exec', '-i', '-e', 'CHARITYPILOT_RUNTIME_ROLE=cp_fixture',
+        '-e', 'CHARITYPILOT_RUNTIME_PASSWORD=synthetic-only', name,
+        'psql', '-U', 'postgres', '-d', database], { input: grants });
+      assert.notEqual(unsafeReconcile.status, 0,
+        'grant reconciliation must refuse an elevated existing provider-attempt role');
+      assert.match(unsafeReconcile.stderr, /unsafe existing runtime role/);
+      assert.equal(requireSuccess(docker(['exec', name, 'psql', '-U', 'postgres',
+        '-d', database, '-tA', '-c', `SELECT has_table_privilege('cp_fixture',
+          'public."DocumentByteProviderAttempt"','INSERT')`]),
+      'check failed reconciliation preserved the unsafe grant'), 't');
+      requireSuccess(docker(['exec', name, 'psql', '-U', 'postgres', '-d', database,
+        '-c', 'REVOKE INSERT ON public."DocumentByteProviderAttempt" FROM cp_fixture']),
+      'remove synthetic unsafe grant');
       const privileges = requireSuccess(docker(['exec', name, 'psql', '-U', 'postgres',
         '-d', database, '-tA', '-c', `SELECT has_table_privilege('cp_fixture',
           'public."DocumentBytePermitCandidateBinding"','INSERT'),
@@ -139,7 +158,7 @@ test(
       );
       assert.match(
         output,
-        /current-authority-real-postgres-composition=verified; protected-worker-skip=verified; cleanup-alias-fence=verified; upload-intent-fence=verified; publication-upload-intent-service=verified; publication-page-intent-service=verified; copy-evidence-digest=changed; post-claim-local-authority=verified; provider-start-marker=verified; provider-start-race=one-winner; provider-unknown-facts=verified; post-start-ordinary-retry-refused=verified/u,
+        /current-authority-real-postgres-composition=verified; protected-worker-skip=verified; cleanup-alias-fence=verified; upload-intent-fence=verified; publication-upload-intent-service=verified; publication-page-intent-service=verified; copy-evidence-digest=stable; post-claim-local-authority=verified; provider-start-marker=verified; provider-start-race=one-winner; provider-unknown-facts=verified; post-start-ordinary-retry-refused=verified/u,
       );
       const snapshot = JSON.parse(requireSuccess(docker(['exec', name, 'psql', '-U',
         'postgres', '-d', database, '-tA', '-c', PURGE_RESTORE_SNAPSHOT_SQL]),

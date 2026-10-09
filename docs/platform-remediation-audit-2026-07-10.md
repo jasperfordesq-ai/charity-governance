@@ -1,5 +1,928 @@
 # CharityPilot Full-Platform Remediation Audit
 
+> **9 October DPO-01 and DPO-05 scoped recheck, OPEN:** A renewed live
+> Member UI showed one approved certificate, redacted risk summaries and
+> minimal trustee cards. A local disposable PostgreSQL regression proved
+> that existing identity triggers reject direct cross-charity `Document`
+> and `DocumentPublication` UPDATEs; a follow-up direct `ComplaintRecord`
+> cross-charity UPDATE was likewise rejected. Neither check establishes a direct
+> hosted Member denial, all-file classification, independent recovery
+> provider, host-loss drill, release readiness or Nikita acceptance.
+
+> **9 October DPO-02/restricted DB live recheck, OPEN:** Guarded read-only
+> checks on serving `96c8b1e8` confirmed `cp_runtime` as configured and
+> actual API/scheduler SQL user; 11/11 restriction flags and zero
+> protected-table write grants passed. Replay-event count remains nine,
+> latest 30 September, with unresolved older diagnostics and MCP event.
+> Repeat DB evidence after the undeployed release; obtain dated incident
+> and Nikita disposition. Private receipt:
+> `.charitypilot-private/role-and-replay-live-recheck-2026-10-09.md`.
+
+> **9 October DPO-01 live Vault inventory, scoped:** Guarded read-only
+> private-VM metadata at serving `96c8b1e8` found 75 active files with
+> no field or ID drift from 8 October: 74 restricted/unassessed and the
+> one reviewed Member-visible certificate. Private base/addendum
+> worksheets reconcile 75/75 IDs. File-specific byte/authority decisions
+> for the restricted queue and Nikita's acceptance remain OPEN.
+> Receipt: `.charitypilot-private/vault-inventory-refresh-2026-10-09.md`.
+
+> **9 October DPO-04 Member export browser gate, local only:** The
+> synthetic approved-snapshot Chromium journey now also signs in a
+> separate Member from the same disposable charity. It passed 1/1:
+> restricted-report explanation visible; full and minimised export
+> buttons absent. E2E TypeScript passed. This verifies the rendered
+> Member UI on the local candidate, not a live HTTP 403, an approved
+> disclosure audience or independent DPO acceptance.
+
+> **9 October DPO-04 synthetic report sample, OPEN for audience approval:**
+> An isolated Owner browser test passed the ordinary Board sign-off and
+> full/minimised approved-export comparison. The passing minimised HTML
+> was saved as a labelled synthetic draft; it exposes organisation name,
+> RCN, year, approval sequence/time and five aggregate counts while
+> omitting planted internal narratives and identities. This supplies an
+> actual field-review artifact, not a real Board snapshot or permission
+> to disclose. Controller/Nikita audience and field decisions, hosted
+> release/live checks and independent acceptance remain OPEN. Private
+> receipt: `.charitypilot-private/dpo-minimised-export-synthetic-sample-2026-10-09.md`.
+
+> **9 October C1 live-build source observation, OPEN:** Public NEXUS API
+> health reported `X-Build: 05c17bf94db6`. This exact source descends
+> from the 2 May admin-notice redaction; all 11 locale neutral/pending
+> notice templates have only the `community` placeholder, and the
+> listener does not inject a registrant name/email. A numeric neutral
+> profile CTA remains in the reported live source. There is no captured
+> live delivered-message or authenticated link-journey proof, and no
+> dated CharityPilot C1 verification row. Keep the risk OPEN pending
+> exact hosted synthetic and Nikita/risk-owner review. Private receipt:
+> `.charitypilot-private/c1-live-build-source-observation-2026-10-09.md`.
+
+> **9 October C1 second rebase and exact-head local retest, OPEN:** NEXUS
+> isolated `codex/c1-pending-profile` at clean `877658042` is 25 ahead/
+> zero behind fetched `origin/main`. Synthetic capture checked 32 staff
+> notices across nine recipient classes/11 locales for omission of
+> registrant particulars and numeric profile links; disposable suite
+> passed 232 tests/759 assertions with 12 existing skips. Source remains
+> unpushed/unmerged/undeployed. This does not close the live C1 risk or
+> prove hosted delivery and profile-link access. Private evidence:
+> `.charitypilot-private/c1-second-upstream-integration-2026-10-09.md`.
+
+> **9 October DPO-01 live Member UI, scoped pass:** The retained signed-in
+> Member saw one reviewed certificate, reduced trustee and risk views,
+> and Owner/Admin restrictions on full export, governance audit, Minute
+> Book and charity-wide security administration. Prior exact-byte Member
+> certificate download is positive evidence; a new click had no exposed
+> HTTP receipt. Direct hosted 403/404 for a restricted named resource,
+> classification of the other real Vault files and Nikita's audience
+> acceptance remain OPEN. Private `member-live-readonly-2026-10-09.md`.
+>
+> **9 October local exact-head release gate, not deployment:** Clean
+> `69e14b69` passed 2,724 API tests, 14 serial PostgreSQL migration
+> tests and 1,123 production checks with five platform skips. Source
+> remains unpushed/undeployed. Hosted CI/E2E, cumulative review and
+> fresh pre/post-cutover proof remain open. Private log hashes:
+> `release-exact-head-gates-2026-10-09.md`.
+
+> **9 October C1 rebased local retest, OPEN:** NEXUS C1 work was rebased
+> onto a newer origin/main and its changelog notes restored to Unreleased
+> (`af8e90f94`). On that exact rebased code, 32 synthetic captured notices
+> passed privacy checks and a disposable MariaDB suite passed 232 tests/
+> 759 assertions with 12 existing skips. Three more upstream commits
+> appeared during the run; branch is 25 ahead/3 behind, unmerged/unpushed/
+> undeployed. No live C1 verification row or risk status changed. Exact
+> hashes and limits: private
+> `.charitypilot-private/c1-current-main-rebase-and-retest-2026-10-09.md`.
+
+> **9 October original C1 privacy finding, OPEN:** Nikita asked for dated
+> verification that admin signup notices no longer disclose registrant
+> name/email. The 2 May NEXUS source fix is in isolated local `b1acf9554`;
+> a fresh 32-message synthetic Mailpit matrix across nine recipient classes
+> and 11 locales found no registrant particulars or numeric profile links.
+> The live hOUR Timebank CLG C1 record remains OPEN revision 2 with zero
+> verification rows on VM `96c8b1e8`. The original dated closure receipt
+> and exact-build hosted recipient/content/link proof are missing; risk
+> owner and Nikita must review a dated evidence package. NEXUS delivery
+> ledger/recovery work below is adjacent reliability work, not original C1
+> privacy closure. The branch is unmerged/unpushed/undeployed and 18 behind
+> origin/main. Private receipt:
+> `.charitypilot-private/c1-original-privacy-scope-current-branch-2026-10-09.md`.
+
+> **9 October C1 definite pre-send refusal, OPEN:** NEXUS local
+> `b1acf9554` classifies structurally unroutable captured staff addresses
+> as definite failure with no provider call; other false transport results
+> remain UNKNOWN. Disposable MariaDB suite passed 51/182; branch
+> unmerged/unpushed/undeployed. Corrected-address retry, typed outcomes,
+> provider evidence, retention, hosted proof, original C1 closure record
+> and DPO/risk-owner disposition remain OPEN. See private
+> `c1-definite-pretransport-refusal-2026-10-09.md`.
+
+> **9 October C1 redacted review, OPEN:** NEXUS local `a90051123` adds
+> a read-only, tenant-required host review of unresolved staff-email
+> states and exact mail-log counts without recipient email/name/body or
+> claim token. Disposable MariaDB suite passed 50/178; branch unmerged/
+> unpushed/undeployed. A CLI evidence inventory is not a DPO decision,
+> provider proof or authorised retry. Typed non-acceptance, audited
+> disposition, retention, hosted checks, historical closure receipt and
+> DPO/risk-owner acceptance remain OPEN. See private
+> `c1-redacted-review-command-2026-10-09.md`.
+
+> **9 October C1 exact mail receipt, OPEN:** NEXUS local `902517daa`
+> reconciles an UNKNOWN row to accepted only from one exact positive
+> application mail-log receipt, recording its evidence ID/time without
+> resending. Failed, missing or conflicting receipts stay UNKNOWN.
+> Disposable MariaDB suite passed 48/168; branch unmerged/unpushed/
+> undeployed. This is not independent provider proof. Operator/provider
+> review, typed non-acceptance, retention, hosted checks, original C1
+> closure record and DPO/risk-owner decision remain OPEN. See private
+> `c1-exact-mail-receipt-reconciliation-2026-10-09.md`.
+
+> **9 October C1 abandoned claims, OPEN:** NEXUS local `d06caf0af`
+> holds claims over twenty minutes as UNKNOWN without resend and links an
+> inline attempt to mail metadata through a separate dispatch UUID.
+> Disposable MariaDB suite passed 46/156. Branch unmerged/unpushed/
+> undeployed. Evidence-linked provider/operator reconciliation, typed
+> outcomes, retention, hosted proof, historical C1 closure evidence and
+> DPO/risk-owner decision remain OPEN. See private
+> `c1-stale-claim-reconciliation-2026-10-09.md`.
+
+> **9 October C1 ambiguous-primary fallback, OPEN:** NEXUS local
+> `b7386e811` blocks SMTP fallback after an unconfirmed Postmark/Gmail
+> `admin_new_registration` attempt; the ledger holds UNKNOWN. Synthetic
+> mailer tests prove no second SMTP call for that category and preserve
+> unrelated fallback. Disposable MariaDB suite passed 45/145. Branch
+> unmerged/unpushed/undeployed. Typed outcomes, UNKNOWN/claimed
+> reconciliation, retention, hosted exact-build proof, original closure
+> evidence and DPO/risk-owner decision remain OPEN. See private
+> `c1-primary-provider-no-fallback-2026-10-09.md`.
+
+> **9 October C1 captured-row recovery, OPEN:** NEXUS local `69702e326`
+> schedules bounded recovery of never-attempted staff-alert intent. It
+> checks current registrant and staff eligibility, cancels no-longer-
+> eligible captured rows, and never auto-retries claimed or UNKNOWN rows.
+> Disposable MariaDB suite passed 43/133. Branch unmerged/unpushed/
+> undeployed. Typed provider outcomes, safe reconciliation, retention,
+> hosted proof, original C1 closure evidence and DPO/risk-owner decision
+> remain OPEN. See private `c1-captured-recovery-2026-10-09.md`.
+
+> **9 October C1 inline recipient claim, OPEN:** Local NEXUS `9f0e4e913`
+> claims transactionally captured recipient intent before an inline send,
+> records a confirmed transport return as accepted and an unconfirmed result
+> as unknown. A stale done key cannot hide captured rows; two-recipient
+> replay did not duplicate sends. Disposable MariaDB suite passed 38/112.
+> No lost-event scanner, current-staff cancellation, typed provider outcome,
+> UNKNOWN reconciliation, retention decision, hosted proof, original C1
+> closure evidence or DPO/risk-owner acceptance. Branch unmerged/unpushed/
+> undeployed. See private `c1-inline-claim-replay-2026-10-09.md`.
+
+> **9 October C1 atomic registration intent, OPEN:** Local NEXUS commit
+> `23f3df70c` captures non-sendable per-recipient staff-email intent with
+> account creation and invite redemption. A lost invite race rolls back;
+> affected-row bugs were fixed. Disposable MariaDB related suite passed
+> 34 tests/92 assertions. This does not repair the reproduced inline
+> failed-recipient retry defect or ambiguous provider outcome. The branch
+> is unmerged/unpushed/undeployed; retention, hosted proof, original C1
+> closure evidence and Nikita/risk-owner disposition remain open. See
+> `.charitypilot-private/c1-registration-intent-atomic-2026-10-09.md`.
+
+> **9 October C1 per-recipient ledger, OPEN:** NEXUS local `cf6dafd87`
+> introduced a unique staff-email claim ledger with explicit UNKNOWN;
+> disposable MariaDB migration/tests passed 4/30 at that checkpoint. The
+> later `23f3df70c` commit captures non-sendable registration intent;
+> sender integration, retry, provider reconciliation, retention decision, hosted
+> proof or risk-owner/DPO acceptance exists. Preserve C1 as OPEN.
+
+> **9 October C1 bell replay reduction, OPEN:** A local NEXUS branch commit
+> `3cbea98e8` deduplicates staff bells and associated push on forced
+> registration-event replay using a persistent recipient key; disposable
+> MariaDB tests passed 4/145. This does not repair email partial-recipient
+> retry or provider-UNKNOWN outcomes. The branch is not merged, pushed or
+> deployed, and C1 still needs hosted proof and risk-owner/DPO review.
+
+> **9 October C1 retry gap, OPEN:** Disposable MariaDB/Mailpit reproduction
+> confirmed that a failed Admin recipient is skipped on ordinary registration
+> event replay, while clearing the whole-event cache duplicates successful
+> recipients' email and bell. See the private C1 partial-failure receipt.
+> This is local NEXUS branch evidence, not a demonstrated historical loss,
+> hosted release, risk-control verification or DPO acceptance. A durable
+> per-recipient recovery design remains required for delivery assurance.
+
+> **9 October restricted-role restored-ACL repair, OPEN live:** The
+> 8 October backup's ACL-free restore caused local grant reconciliation
+> to fail safely because two byte-authority SECURITY DEFINER functions
+> regained default PUBLIC EXECUTE. The grant script now revokes those
+> two exact public grants transactionally. Isolated migrated-backup role
+> rehearsal and real PostgreSQL regression pass, including actual restricted
+> login and 12 protected SELECT-only tables. This local fix requires hosted
+> CI, guarded release, live postrelease role proof and Nikita review before
+> closure. Private details: `.charitypilot-private/runtime-role-restored-acl-repair-2026-10-09.md`.
+
+> **9 October local migration-image gate, OPEN live:** On a second
+> networkless disposable restore of the verified 8 October VM backup,
+> the locally built migration-runner image's actual Prisma entrypoint
+> applied all 19 candidate forward migrations (175 finished, zero
+> incomplete history rows). This strengthens the populated-data
+> migration evidence below. Hosted CI, a fresh VM preflight, guarded
+> cutover, live role/Member checks, controller terms, independent
+> recovery and Nikita's review still require separate evidence.
+
+> **9 October retention/recovery migration gate, still OPEN:** The 19
+> forward SQL files applied without error to a networkless disposable
+> restore of the 8 October serving-VM database backup (156 baseline
+> migrations, 75 documents). This is populated-data compatibility
+> evidence only. Calendar-year policy creation remains fenced, and
+> exact candidate-image/Prisma rehearsal, fresh VM preflight, guarded
+> deployment, approved retention terms, independent recovery and DPO
+> acceptance are still required. Private exact log:
+> `.charitypilot-private/forward-sql-live-backup-rehearsal-2026-10-09.md`.
+
+> **9 October 07:37 Dublin C1 evidence update, OPEN:** The adjacent
+> local NEXUS C1 branch is now clean at `45f3cce50` after a rebase
+> onto updated `origin/main=378f36e90`; 231 disposable MariaDB tests,
+> 756 assertions and 12 existing skips passed. It retains the
+> staff-list registration-alert link across seven upstream commits.
+> The branch is still unpushed/unmerged/undeployed. No hosted
+> recipient-wide delivery/profile-click proof, original closure
+> receipt, failed-recipient retry, risk-owner or Nikita acceptance has
+> been established; keep C1 OPEN.
+
+> **9 October exact local gate, OPEN hosted:** The clean `46058716`
+> source passed 2,724/2,724 API tests, 14/14 serial real PostgreSQL 16
+> migration tests and 1,123 production-check passes (five platform
+> skips). This includes the final recovery-journal capacity mapping.
+> The candidate is unpushed/undeployed and still requires hosted CI/E2E,
+> full cumulative review, guarded migration and cutover, independent
+> custody/provider proof, live Member and DPO acceptance.
+
+> **9 October C1 adjacent local NEXUS checkpoint, OPEN:** Isolated
+> `codex/c1-pending-profile` was rebased on current `origin/main`; clean
+> local tip `b8fddbbf6` is 14 commits ahead, zero behind. A fresh
+> disposable MariaDB run passed 231 tests/756 assertions with 12 existing
+> quarantined tests skipped. The branch is unpushed, unmerged and
+> undeployed. Original C1 admin-email closure evidence, exact-build hosted
+> recipient-wide delivery and profile-click checks, risk-owner decision
+> and Nikita review remain outstanding; do not close live C1 from this
+> local evidence. Private exact log and runner are cited in the
+> continuation handoff.
+
+> **9 October P05/P08 recovery capacity guard, OPEN:** Synthetic
+> near-limit tests exposed that a new document recovery preparation could
+> start without enough remaining journal entries for its five-stage
+> decision chain. A local admission check now refuses that start before
+> writing an intent; complaint/hold and generic disposal starts reserve
+> two slots. Focused 33/33 passes, with API 2,724/2,724 and serial real
+> PostgreSQL 14/14 on the initial implementation. The final generic-intent
+> case passed after rebuild in the focused suite. This does not supply
+> rollover, trusted independent checkpoint custody, resumable full
+> recovery, provider acceptance or deployment. P05/P08 remain OPEN.
+
+> **9 October DPO-05/08 release review, OPEN live:** A full-schema
+> red/green test exposed and closed a direct-SQL publication row-ID
+> mutation path that could detach upload/page-create intent history.
+> Existing SQL already froze charity/document/provider identity; the new
+> forward migration freezes only the missing ID boundary. Full API
+> 2,717/2,717, serial PostgreSQL 14/14, full-schema proof 1/1 and
+> production-check 1,123 passed (five platform skips). CI, deployment,
+> independent provider custody and Nikita acceptance remain open.
+
+> **9 October full isolated E2E gate, OPEN live:** Current source passed
+> 245/245 Chromium tests after correcting two cross-test fixtures, with
+> 71/71 focused, 116/116 contract and E2E TypeScript checks also green.
+> The initial 208-pass/2-fail/35-unrun attempt is retained in the private
+> evidence. These are synthetic local checks, not hosted or DPO acceptance.
+> Live Member classification, genuine Board report approval, field/recipient
+> review, historical replay/C1 and approved retention/recovery remain open.
+
+> **9 October DPO retention/erasure isolated browser proof, OPEN policy:**
+> Current disposable Chromium journeys passed 3/3 for document recovery,
+> document primary purge and complaint primary purge. They exercise
+> synthetic approved policies and copy plans, including recovery-byte
+> equality and retained audit. Charity-specific controller terms, real
+> provider and backup disposition, host-loss recovery, deployment and
+> Nikita acceptance remain unverified.
+
+> **9 October DPO minimised-export synthetic demonstration, OPEN live:** A
+> new isolated browser journey passes through app readiness, Owner sign-off,
+> retained snapshot creation and both full/minimised export buttons.
+> Synthetic internal narrative, minute and approver markers appear in the
+> full approved HTML and are absent from the aggregate-only minimised HTML.
+> E2E 1/1, contract 116/116 and typecheck pass. No real Board snapshot or
+> recipient/field decision has been approved; no live tenant export has
+> been disclosed or accepted by Nikita.
+
+> **9 October DPO access/copy-review local browser proof, OPEN live:** The
+> current isolated Chromium Member authorization and DPO navigation suite
+> passed 23/23 after two historical orphan-copy fixtures were updated to
+> satisfy the newer same-charity source insert guard. It covers synthetic
+> Member restricted/download behavior, file-content assessment, audit
+> navigation, hold and Confluence-copy review. The live retained Member
+> session, real-record classifications, genuine approved snapshot and
+> minimised export recipient/field acceptance remain unverified.
+
+> **9 October DPO replay local browser proof, OPEN for hosted review:** The
+> current `e56ef16c` isolated Chromium replay suite passed all 8 tests
+> against fresh API/web/database images and was cleaned up. This checks
+> concurrent refresh, logout and lost-response behavior locally. The nine
+> historical live replay events are still unattributed; deployment, hosted
+> verification and Nikita's disposition remain open.
+
+> **9 October retention verification gate, OPEN:** The CI retention command
+> now includes the existing disposable SQL UTC calendar-year cutoff test.
+> Its local three-test run passes, including recovery-bound policy and
+> populated upgrade proofs. This verifies arithmetic and enforcement
+> fixtures only; approved charity terms, live release and independent
+> recovery evidence are still missing.
+
+> **9 October DPO session replay mitigation, OPEN for release:** The web
+> logout fence is now persisted before sending revocation, rather than only
+> after its response. A focused red/green ordering test, 558 web tests and
+> edited-file lint pass locally. Historical event attribution, deployment,
+> hosted concurrency checks and DPO review remain unresolved.
+
+> **9 October Confluence intent binding preflight, OPEN for release:** The
+> provisional publication recovery fence now refuses binding when either
+> append-only remote-write intent table has rows, even if a malformed or
+> privileged restore omitted its publication parent. Focused PostgreSQL and
+> full-schema disposable proofs pass. Live read-only count inventory found
+> zero rows in both intent tables and zero bound charities on the clean VM;
+> this is a snapshot, not deployment or independent copy-history closure.
+
+> **9 October upload-intent post-binding fence, OPEN for release:** The
+> seventeenth local forward migration previously rejected only new intent
+> INSERT. A disposable direct-SQL regression showed UPDATE of a reconciled
+> bound intent succeeded, risking an altered byte-authority inventory. It now
+> rejects bound INSERT/UPDATE/DELETE, including retargeting across the charity
+> boundary; focused and adjacent PostgreSQL proofs pass. This remains
+> unreleased and does not provide independent custody or host-loss replay.
+
+> **9 October recovery script matrix, local only:** Disposable retention,
+> bound-policy, complaint-recovery and byte-fence tests now pass 1/1, 1/1,
+> 1/1 and 2/2 under the current local migration chain. Their previous
+> failures came from fixtures that crossed new recovery binding gates.
+> Complaint copy consistency after binding is tested only as labelled
+> synthetic privileged history, with normal bound refusal verified before
+> and after. Independent copy facts/replay, deployment, hosted checks and
+> Nikita acceptance remain OPEN.
+
+> **9 October restricted-role/byte-authority local proof, OPEN:** The
+> current full-schema disposable PostgreSQL test now separates unbound
+> publication/purge behavior from bound recovery byte authority. All 174
+> migrations and runtime role grants succeeded, followed by the composed
+> test 1/1 and exact disposable teardown. This repairs a stale fixture;
+> live runtime role proof after the 18 pending migrations, independent copy
+> history, release and Nikita's review remain OPEN.
+
+> **9 October Confluence migration preflight, snapshot only:** Read-only
+> count inventory on clean private VM `96c8b1e8` found no citation,
+> publication or document recovery binding rows. The VM has 156 applied
+> migration names, matching the local prefix; 18 later migrations are
+> absent. This clears the two cross-charity preflight checks only as of
+> the query. Repeat before deployment. It does not close independent
+> recovery, hosted release, retention-policy or DPO acceptance gates.
+
+> **9 October Confluence publication provisional fence, OPEN:** Local
+> eighteenth migration refuses recovery binding while any publication row
+> exists and freezes publication DML once bound, including direct SQL.
+> A legacy bound/publication pair or cross-charity source mismatch aborts
+> migration for review; new rows require a live same-charity Document.
+> A focused
+> two-order race test and full API 2,717 plus serial PG 14 passed. Independent publication
+> facts, complete baseline, UNKNOWN/provider reconciliation, host-loss replay,
+> live release and Nikita review remain OPEN.
+
+> **9 October Confluence mirror recovery binding, OPEN:** A publication
+> already PENDING or later requeued can still be worked after a future
+> document recovery binding, creating a page/attachment absent from a stale
+> off-host source snapshot. Current SQL purge/identity fences do not close
+> this host-loss history gap. Activation quiescence, worker fencing,
+> independent copy/UNKNOWN facts and synthetic stale-backup replay are
+> required. No binding or provider action occurred in this source audit.
+
+> **9 October Vault source API responses, OPEN:** Already-bound Document
+> metadata edit, written-provider review, Board approval and Deleted Items
+> remove/restore now return a 409 before provider work; the latter uses the
+> charity transaction lock. Full API 2,716 and 14 serial PostgreSQL tests
+> pass. A binding race after route precheck remains a generic API error but
+> is rejected by SQL. This is local only; source custody/replay, approved
+> retention policy, live release and Nikita acceptance remain OPEN.
+
+> **9 October Vault source/upload writer gate, OPEN:** Local SQL now freezes
+> Document INSERT/UPDATE and new upload-intent reservations under recovery
+> binding, and refuses binding over unresolved upload intents so an in-flight
+> provider write cannot be grandfathered. The normal upload route returns
+> 409 before provider I/O. Full API 2,712 and 14 serial PostgreSQL tests
+> passed, plus a focused two-order race test. This seventeenth forward
+> migration is not on the private VM; source facts, baseline/replay,
+> controller policy, API responses for other Document writers, hosted proof
+> and Nikita review remain OPEN.
+
+> **9 October Vault standard-link writer, OPEN:** Local API and SQL
+> freeze ordinary standard-link add/edit/remove after document recovery
+> binding, and prohibit direct Document charity reassignment. Full API
+> 2,710 and 14 serial real-PG tests passed. This sixteenth forward
+> migration is not on the private VM; independent link facts, baseline,
+> replay, controller retention decisions, hosted proof and Nikita
+> acceptance remain unresolved.
+
+> **9 October existing-page citation tenant/recovery gate, OPEN:** Local
+> SQL now binds `ConfluenceReference` to its document's charity and
+> refuses any existing mismatch for operator review before migration.
+> Citation INSERT/UPDATE/DELETE are frozen after document recovery
+> binding, with an API 409 guard. Full API 2,709 and 13 serial real-PG
+> tests pass, including blank full-schema migration. The fifteenth
+> forward migration is not on the private VM; live mismatch inventory,
+> independent citation history/replay, release and Nikita review are
+> still required.
+
+> **9 October complaint source writer gate, OPEN:** Local API and
+> `20261009080000_recovery_bound_complaint_source` refuse ordinary
+> `ComplaintRecord` create/update after complaint recovery binding;
+> unbound work and separately controlled purge remain. Full API 2,708
+> and 12 serial PostgreSQL migration tests passed. The migration is
+> undeployed, binding remains inactive, and independent source custody,
+> commit/UNKNOWN proof, baseline/replay, controller policy and Nikita
+> acceptance remain OPEN.
+
+> **9 October complaint source atomicity, OPEN:** The new encrypted
+> candidate and a local `ComplaintRecord` transaction have no atomic
+> cross-system commit. A candidate may outlive rollback; a DB-first
+> change may be lost before publication. The private decision memo
+> requires a controller-approved `UNKNOWN` rule and synthetic crash/
+> replay proof before source-writer wiring or recovery binding.
+
+> **9 October complaint source transport, OPEN:** Local `2e21d2eb`
+> provides scoped S3 candidate read/create methods for encrypted case
+> facts. Fake-provider conditional-write, bucket-owner, KMS and operation
+> scope checks pass (six focused tests; API build passes). No real provider
+> or independent head, approved retention, complete baseline, replay,
+> all-writer enforcement, release or Nikita acceptance is proved.
+
+> **9 October complaint source readback, OPEN:** Local `1d80444b`
+> exercises immutable candidate publication/retry and exact digest-bound
+> reading with a synthetic store (five focused tests, API build pass).
+> The caller's digest has no independently authenticated provenance;
+> provider atomicity, current head, baseline/replay, all-writer fence,
+> controller policy and Nikita acceptance remain unproved.
+
+> **9 October complaint source candidate, OPEN:** Local `3871fd73`
+> validates a full versioned complaint source fact and encrypts it as
+> a candidate envelope for synthetic tests. API build and three focused
+> tests pass. There is no live source export, independently durable
+> publisher/head, all-writer fence, baseline/replay or controller-approved
+> retention rule. This cannot authorize recovery binding or erasure.
+
+> **9 October C1-adjacent F-576, OPEN:** NEXUS isolated local
+> `19c17b6a9` refuses connection requests from active unapproved Admin
+> accounts after locking both users. Synthetic route reproduced HTTP 201
+> before and HTTP 422 after; full connection controller suite passed
+> 32 tests/75 assertions on disposable MariaDB. No push, hosted replay,
+> original admin-email verification or DPO acceptance. C1 stays OPEN.
+
+> **9 October 01:54 UTC C1 adjacent F-575, OPEN:** A three-minute
+> cached CommunityRank ID could reveal a profile after the member
+> became private or ineligible. Separate NEXUS local commit
+> `d1e55c525` rechecks current visibility in the ranked detail query.
+> Synthetic route red/green and affected 137/398 passed; no push,
+> release, hosted replay or Nikita acceptance. CharityPilot C1 stays
+> OPEN; see private F-575 receipt.
+
+> **9 October complaint source replay, OPEN:** Current source lets
+> `ComplaintRecord` create/update advance state without independent
+> replay facts, while the register audit omits case values. Recovery
+> binding is therefore still unsafe as an activation step. Required:
+> approved encrypted baseline, bounded independent revision stream,
+> all-writer database gate and stale-backup replay. Private contract:
+> `complaint-source-host-loss-contract-2026-10-09.md`.
+
+> **9 October 01:43 UTC P05/P07 resolution evidence, OPEN:** The local
+> API and SQL fence resolution recording/withdrawal after complaint
+> recovery binding. Focused 35/35, direct PostgreSQL 1/1 and full API
+> 2,701 plus 11 PostgreSQL tests passed. Existing evidence and source
+> complaint edits have no independent replay proof; policy, release,
+> hosted checks and Nikita review remain open. See private receipt.
+
+> **9 October 01:36 UTC C1 adjacent F-574, OPEN:** The separate NEXUS
+> branch `codex/c1-pending-profile` locally fixes a reproduced
+> private-profile directory/search bypass for an active unapproved
+> Admin, at `336b6f1a1`. Synthetic route red/green, broader 136/382
+> and final focused 1/11 passed. No push, release, hosted token
+> behavior, original admin-email closure evidence or Nikita acceptance.
+> CharityPilot C1 must stay OPEN.
+
+> **9 October 01:25 UTC P05/P07 primary decision writer, OPEN:**
+> Local API and SQL now refuse document/complaint disposal authority
+> or withdrawal inserts under recovery binding. Claims retain their
+> existing same-transaction published execution gate. Focused API
+> 31/31, direct-SQL migration proof 1/1 and full API 2,699 plus
+> 11 real PG tests passed.
+> Off-host custody/replay, remaining writers, controller policy,
+> release and Nikita acceptance are still outstanding.
+
+> **9 October 01:19 UTC P05/P07 copy writer boundary, OPEN:** The
+> local API and forward SQL freeze six document/complaint copy
+> authority, hold and observation insert paths when the relevant
+> recovery binding exists. Synthetic service and direct-SQL proofs
+> passed; full API 2,695 plus 11 PG passed, followed by a rebuilt
+> focused API 39/39 after race-error translation. Independent publisher,
+> off-host replay, remaining writers, controller policy, hosted
+> release and Nikita review remain outstanding.
+
+> **9 October 01:14 UTC P05/P07 Vault hold writer, OPEN:** The local
+> service and forward SQL trigger refuse ordinary Vault hold changes
+> under document recovery binding. Synthetic API and direct-SQL tests
+> cover placement, release and an unbound charity; the full API
+> package passed 2,691 plus 11 PostgreSQL migration tests. Other
+> preservation/copy writers, independent custody and host-loss replay,
+> controller policy, live release and Nikita review remain OPEN.
+
+> **9 October 01:07 UTC P04/P05 four-class policy freeze, OPEN:**
+> Local API and SQL now refuse ordinary retention-policy changes for
+> `VAULT_DRAFT`/`DOCUMENT_COPY` under document recovery binding and
+> `COMPLAINT`/`COMPLAINT_COPY` under complaint binding. Full API
+> 2,690 plus 11 PostgreSQL and two disposable retention proofs pass.
+> CI now runs those proofs. No binding was activated or deployed;
+> all-writer execution, replay, independent custody, approved policy
+> terms, live/host-loss checks and Nikita acceptance remain OPEN.
+
+> **9 October 00:57 UTC C1 adjacent staff-exemption fix, OPEN:**
+> NEXUS local `621a3c415` requires active, approved Admin-tier
+> viewer status before shared member-profile privacy exemption.
+> Synthetic red case reproduced suspended-admin elevation; corrected
+> suites passed 134 tests/373 assertions on isolated MariaDB. This
+> source remains unpushed/unmerged/undeployed. Hosted access,
+> original C1 admin-email evidence and Nikita review remain OPEN.
+
+> **9 October 00:52 UTC C1 source-test checkpoint:** NEXUS local
+> `1345a4f15` adds a focused accepted-connection pending-profile
+> regression, passing 1/1 with five assertions on isolated MariaDB.
+> It is nine commits ahead of origin/main, unpushed/unmerged/
+> undeployed. The broader 110-test run below preceded this test-only
+> commit. C1 hosted and DPO acceptance remain OPEN.
+
+> **9 October 00:49 UTC C1 adjacent profile-discovery gap, OPEN:**
+> NEXUS isolated branch `codex/c1-pending-profile` local commit
+> `cc8537c7f` enforces active/approved status in the shared
+> bulk-profile SQL predicate. A synthetic pre-fix query returned a
+> pending/public account to another member; corrected affected suites
+> passed 110 tests/272 assertions with disposable MariaDB. The
+> NEXUS fix remains unpushed/unmerged/undeployed. This does not
+> establish C1 admin-email closure or hosted DPO acceptance; original
+> evidence, recipient-wide and profile access checks, risk-owner and
+> Nikita review remain OPEN.
+
+> **9 October 00:42 UTC restricted database role, OPEN for review:**
+> Current private-VM API and scheduler SQL clients still use
+> `cp_runtime`; the pinned read-only role/grant checker passed its
+> 11 role assertions, no membership/ownership/unexpected definer
+> checks, and `12|0|12|0` protected-table check. This is live
+> point-in-time evidence for the deployed build `96c8b1e8` only.
+> Eight local migrations remain unapplied to that VM; future release
+> must repeat the check, and Nikita's independent review is pending.
+
+> **9 October 00:41 UTC DPO-04, OPEN:** The current compiled
+> minimised-review renderer reproduces both synthetic HTML samples
+> byte for byte and nine focused export tests pass. The clean private
+> VM still has zero genuine approved snapshots/current approved
+> signoffs in its single charity, shown by a guarded read-only count.
+> A real Board snapshot, controller-approved recipient/field policy,
+> real full-versus-minimised comparison and Nikita review remain OPEN.
+
+> **9 October 00:39 UTC DPO-02, OPEN:** Read-only private-VM replay
+> metadata remains nine rows, latest 30 September 08:54 UTC, with no
+> new table row. This is bounded monitoring evidence only. Historical
+> client/token attribution, especially the 23 September connector
+> event, and risk-owner/Nikita disposition remain unresolved. The
+> prospective client mitigations are still local and undeployed.
+
+> **9 October ~01:37 Dublin privileged MFA page boundary, OPEN:**
+> Source now redirects verified, unenrolled public Owner/Admin sessions
+> at the Next.js proxy before protected pages render. The setup path
+> remains reachable; the Confluence callback preserves its self-renewal
+> behavior and does not redirect one-use OAuth values. Focused API 6/6,
+> web 557/557, API build and edited-file lint passed. No public hosted
+> journey, deployment, recovery procedure or DPO acceptance followed.
+
+> **9 October ~01:34 Dublin privileged MFA, OPEN:** Explicit public
+> production source now fails configuration preflight without required
+> Owner/Admin MFA and fences privileged API actions for unenrolled accounts,
+> including existing sessions, role changes and connector login. The web
+> directs an unenrolled Owner/Admin to authenticator setup. Local API,
+> web, preflight, build and lint gates pass; private-demo opt-in remains
+> the controller-approved scope. Public live/browser/connector rollout,
+> lost-all-factors recovery, key rotation and DPO review remain OPEN.
+
+> **9 October ~01:18 Dublin cleanup identity gate, OPEN:** The complete
+> local API command at commit `12ab8719` passed 2,683 main tests and
+> all 11 serial real-PostgreSQL migration tests with no failures/skips.
+> This broadens source compatibility evidence for the new immutable
+> cleanup-job charity trigger. Live migration, all-writer byte execution,
+> independent custody, retention policy and Nikita acceptance remain
+> separate and OPEN.
+
+> **9 October ~01:20 Dublin DPO-05/P05/P08, OPEN:** Red PostgreSQL proof
+> showed `DocumentStorageDeletion.organisationId` could change while the
+> provider/path stayed fixed, bypassing the existing purge alias trigger
+> fast path and creating an invalid cross-charity cleanup target. Local
+> migration `20261009020000_document_storage_deletion_org_immutable`
+> rejects that move; focused red/green, two combined fence tests and
+> full current-migration byte-authority proof passed in disposable DBs.
+> See private `document-cleanup-organisation-fence-2026-10-09.md`.
+> The migration is unpushed/undeployed; all-writer byte execution,
+> independent custody, approved retention and DPO acceptance stay OPEN.
+
+> **9 October ~01:11 Dublin C1, OPEN:** The disposable local C1 recipient
+> matrix now exercises all nine listener staff-selection classes across
+> neutral and approval-required registrations, excludes ordinary,
+> suspended and foreign accounts, and captures 32 real SMTP messages.
+> Full-message checks cover localized subjects for all 11 catalogs,
+> absence of synthetic registrant particulars and numeric profile links,
+> and correct staff destinations. Test transactions rolled back and
+> containers were removed. The NEXUS branch remains unpushed/unmerged/
+> undeployed. Exact hosted delivery, real tenant inventory, original
+> closure evidence and risk-owner/Nikita review keep C1 OPEN. Private
+> receipt: `c1-local-recipient-matrix-receipt-2026-10-09.md`.
+
+> **9 October ~01:05 Dublin C1, OPEN:** The current isolated NEXUS branch
+> passed two local synthetic registration HTTP routes and captured four
+> actual SMTP staff notices in disposable Mailpit. Bell/email-log counts,
+> recipient scope, rollback, subject/body minimisation and staff-list
+> links passed for ordinary and approval-required Admin/Broker variants.
+> This does not establish exact hosted release delivery, full recipient
+> and locale coverage, recovered historical closure evidence or Nikita's
+> verification. No live status or deployment changed. Private receipt:
+> `c1-local-route-mailpit-receipt-2026-10-09.md`.
+
+> **9 October 00:55 Dublin C1, OPEN:** Broader isolated NEXUS branch
+> PHPUnit run passed 99 tests/272 assertions in disposable MariaDB;
+> 12 older fan-out tests remain quarantined and skipped. The branch is
+> unpushed/unmerged/undeployed. A hosted exact-build registration and
+> email/bell journey, full-recipient assessment, original C1 closure
+> evidence and risk-owner/Nikita verification still remain.
+
+> **9 October 00:49 Dublin P04 removal defense, OPEN:** Document and
+> complaint removal now reject malformed mixed retention terms at the
+> service boundary. Document removal also validates the recovery window
+> before file read or retained-removal write. Existing SQL constraints
+> remain the primary row invariant. Focused tests, 2,683 main API tests
+> and 11 disposable PostgreSQL migration tests pass after updating
+> current-policy fixtures. Controller terms, creation activation, live
+> release and independent DPO review remain open.
+
+> **9 October 00:41 Dublin P05/P08 projection compatibility, OPEN:**
+> Current full-migration synthetic PostgreSQL proof found a stale fixture
+> missing `retentionYears`; corrected fixture and narrow comparison of
+> legacy signed omission with current null now pass. New and legacy
+> preparation unit cases reject a changed non-null year term; full
+> disposable PostgreSQL proof passes. This does not authorize byte
+> deletion or resolve independent history/provider custody, all-writer
+> fencing, host-loss recovery or human retention approval.
+
+> **9 October 00:36 Dublin C1 isolated test, OPEN:** NEXUS C1 branch
+> `7f69208dc` is six ahead and unmerged/undeployed. Disposable MariaDB
+> Laravel proof passed 23 registration-alert tests/38 assertions and a
+> one-test/seven-assertion Admin/Broker/Coordinator staff-list audience
+> check with ordinary Member denied. The temporary infrastructure was
+> removed. Hosted self-serve notice click, recipient-wide verification,
+> original C1 closure evidence and risk-owner/Nikita acceptance remain.
+
+> **9 October 00:30 Dublin overnight validation, OPEN:** The clean local
+> CharityPilot source at `6093fa9f` passed its full API test command,
+> including 11 disposable PostgreSQL migration tests, plus branch diff
+> whitespace check. None of the 33 local commits is pushed or deployed.
+> The separate NEXUS C1 neutral-alert route improvement at `2600751b8`
+> is likewise local only; syntax/JSON/routing smoke passed but isolated
+> Laravel and hosted end-to-end evidence, risk-owner decision and Nikita
+> acceptance remain. Live Member checks, policy approval, independent
+> recovery and other DPO-05 gates are still open.
+
+> **9 October 00:20 Dublin P04 claim response, OPEN:** Local document
+> purge now maps SQL calendar cutoff and unsupported-mode refusals to
+> controlled 409 responses. API build and 17 focused tests pass;
+> arbitrary SQL details remain hidden. Creation fence, approved policy,
+> release, live claim proof and DPO acceptance remain open.
+
+> **9 October 00:18 Dublin P04 mode fence, OPEN:** API regression now
+> checks calendar policy creation refusal for draft and approved states
+> in all four record classes before a database write. API build and
+> nine policy tests pass. The SQL fence still applies. No controller
+> terms, provider custody, live release or DPO acceptance were added.
+
+> **9 October 00:15 Dublin P04 policy review display, OPEN:** Local
+> API listing and Owner screens now expose/display a calendar-year term
+> if one exists, with 69 route tests and both app type checks passing.
+> Year-mode creation remains absent from the form and SQL-fenced;
+> no controller-approved term, production release, live access check or
+> independent DPO acceptance follows from this source-only change.
+
+> **9 October 00:13 Dublin P04 integrated copy proof, OPEN:** Both full
+> disposable PostgreSQL migration suites pass a calendar copy authority
+> and bound observation path, including missing/early anchor rejection
+> and elapsed leap-day acceptance. Only synthetic policy insertion
+> bypassed the creation fence; the fence was restored before events.
+> Backup-manifest `retentionDays` is a separate custody control, so it
+> does not verify application policy years. No approved term, live
+> release, independent custody or DPO acceptance exists.
+
+> **9 October 00:10 Dublin P04 copy UI partial, OPEN:** Local copy
+> authority review now represents a calendar-year term and creation
+> anchor; malformed/unknown terms fail closed in the panel. Web type
+> check and 554 tests pass. The SQL validator governs actual cutoff.
+> Integrated calendar copy events, remaining policy input/display,
+> verifier, controller decision, release and DPO review remain open.
+
+> **9 October 00:09 Dublin P04 preparation partial, OPEN:** Local
+> document and complaint signed recovery preparation now accepts
+> well-shaped calendar year terms for both current and removal policies,
+> preserving old missing-field facts and checking complaint resolution
+> dependencies. API build and 17 focused tests passed. Copy review
+> delegates to the SQL cutoff guard but its integrated event path is
+> untested. Policy creation remains fenced; input/listing/UI, verifier,
+> controller approval, release and independent DPO proof are open.
+
+> **9 October 00:06 Dublin P04 API partial, issue OPEN:** Local
+> document/complaint removal and complaint assessment use the UTC
+> calendar-year cutoff; resolution must follow complaint receipt.
+> API build and ten focused tests pass. New policy input and UI are still
+> fenced, and recovery preparation, copy review, end-to-end release,
+> controller approval and DPO acceptance remain unverified.
+
+> **9 October 00:04 Dublin P04 complaint purge SQL, issue OPEN:** Local
+> forward migration checks calendar resolution evidence at purge review
+> and rechecks elapsed UTC years at claim. The disposable full complaint
+> migration test passed early refusal and elapsed full claim/delete after
+> a review-policy removal was replaced by a calendar approval. Only the
+> fixture recovery deadline was aged under a temporary append-only
+> trigger bypass, inside rolled-back transactions. No live policy exists;
+> API/UI, preparation and controller/DPO gates remain. Keep mode fence.
+
+> **8 October 23:59 Dublin P04 copy SQL partial, OPEN:** Local shared
+> copy-policy validator now checks the UTC calendar cutoff for document
+> and complaint copies. The full disposable PG16 migration test passed
+> early/elapsed direct function cases for both classes, all rolled back.
+> Integrated authority/observation, complaint purge, API/UI, controller
+> approval and live/DPO proof still remain; the mode fence stays active.
+
+> **8 October 23:57 Dublin P04 complaint removal partial, OPEN:** Local
+> SQL now checks six calendar years from matching recorded complaint
+> resolution before direct removal. Disposable migration test proved
+> early refusal and elapsed acceptance, with rollback. The new year
+> column also required compatibility updates to strict document and
+> complaint recovery-preparation parsers; API build and 14 focused tests
+> pass. Calendar mode remains fenced; complaint purge/copy and all live
+> decision/review gates are unresolved.
+
+> **8 October 23:53 Dublin P04 document claim probe:** Full disposable
+> PG16 migration proof now covers the calendar claim trigger's early
+> refusal and elapsed acceptance with synthetic rolled-back fixtures.
+> Other claim user triggers were intentionally isolated; end-to-end
+> authorization, recovery expiry and dispatch still require separate
+> proof. The overall year-mode feature and retention issue remain OPEN.
+
+> **8 October 23:51 Dublin P04 document enforcement partial, OPEN:**
+> Local forward SQL now checks calendar cutoff on direct document removal
+> and purge claim. The full migrated PostgreSQL fixture proved early
+> direct removal refusal and elapsed removal success for leap-day anchors;
+> purge-claim behavior itself still lacks a direct before/at cutoff test.
+> The mode fence remains active. Complaint/copy guards, API parity,
+> controller approval, deployment and DPO verification are outstanding.
+
+> **8 October 23:47 Dublin P04 shape, issue OPEN:** Local schema/migration
+> now distinguish `retentionYears` from `retentionDays`; disposable PG16
+> upgrade and invalid-shape tests passed, as did generated Prisma types
+> and API build. The activation fence still blocks year-mode policy
+> creation. No approved term, elapsed-cutoff guard, UI, live deployment
+> or Nikita acceptance exists; do not treat the schema addition as
+> operational retention.
+
+> **8 October 23:45 Dublin P04 accidental-activation gate:** Local
+> `20261008030000_retention_policy_mode_fence` refuses unknown policy modes
+> even if the old period constraint is relaxed. Full disposable PostgreSQL
+> retention migration proof passed with a rolled-back direct-write probe.
+> The calendar-year mode is still not implemented or approved; every
+> document, complaint and copy direct-write cutoff guard remains an OPEN
+> prerequisite to removing this fence. No live migration was applied.
+
+> **8 October 23:42 Dublin P04 issue OPEN:** Local PostgreSQL cutoff
+> function passed disposable PG16 leap-day/exact-boundary/invalid-input
+> proof; API removal paths now fail closed on unknown modes, with focused
+> tests and explicit recovery-list allowlist. This is a prerequisite only.
+> No year-based policy may be created until every direct database guard and
+> report/recovery/copy consumer applies the same cutoff and synthetic
+> early-write tests pass. No approved category rule or live rollout exists.
+
+> **8 October 23:38 Dublin P04 calendar proof, issue OPEN:** A disposable
+> PostgreSQL 16 arithmetic probe confirmed leap-day year-clamp parity with
+> the inert helper and a one-day difference from `365*6` days. Private
+> guard map names every current day-based SQL/API/UI enforcement point.
+> Year-based policy creation, direct-write safeguards, migration proof,
+> controller decision, release and Nikita acceptance are still missing.
+
+> **8 October 23:37 Dublin P04 prerequisite only:** Local `3b9e12f4`
+> provides a tested UTC calendar-year cutoff helper (API build, three
+> focused tests). It is not yet an operational retention mode: current
+> policies, database triggers, recovery services and UI still use elapsed
+> days, and no controller/Board category term is approved or active.
+> Keep retention, erasure and independent recovery issues OPEN.
+
+> **8 October 23:34 Dublin retention/recovery gate unchanged:** A private
+> P04–P08 Board/controller decision brief now identifies exact schedule,
+> calendar-anchor, recovery-window, hold, copy/backup and independent
+> custody/reopen choices. It does not approve a policy or activate erasure.
+> Source still accepts day counts, the current journal prototype retains
+> its bounded full-scan/capacity limits, and host-loss freshness has not
+> been independently rehearsed. See the private morning decision brief;
+> keep Nikita's advisory review separate from controller approval.
+
+> **8 October 23:32 Dublin C1 connection reads, issue OPEN:** Final
+> NEXUS local tip `4a096b27e` (four commits above fetched `origin/main`)
+> blocks two additional synthetic pending-registrant read paths:
+> `connections/status/{id}` no longer confirms existence to ordinary
+> Members, and old connection rows no longer reveal pending/unapproved
+> name, bio or location. Approved private-recipient and coordinator
+> controls pass. Final connection suites 50/142, staged hook 31/73.
+> Earlier `3298f2ffe` was amended and is obsolete. **No push, merge,
+> deploy, hosted retest, risk verification or Nikita acceptance.**
+
+> **8 October 23:27 Dublin C1 connection request, issue OPEN:** NEXUS
+> local tip `7d6059b5a` adds a third C1 commit after `a6e90fd62` and
+> `cfdc4e00f`. A red synthetic test received HTTP 201 when an ordinary
+> Member requested a connection to a pending registrant by ID. The
+> recipient status/approval/tenant decision now occurs under the user-row
+> lock; pending and active-but-unapproved targets are refused without a
+> new connection. Local controller/service suites passed 47/130; staged
+> hook 28/61. **No push, merge, deploy, hosted retest, C1 verification or
+> Nikita acceptance.**
+
+> **8 October 23:24 Dublin C1 follow-on, issue OPEN:** Separate NEXUS
+> branch `codex/c1-pending-profile` now ends at local commit `a6e90fd62`
+> after `cfdc4e00f` below. Additional red synthetic tests exposed pending
+> profile activity by numeric ID and pending/unapproved people in
+> connection suggestions; the shared profile visibility gate and raw
+> suggestion query now deny those ordinary Member paths. Activity,
+> availability, suggestions and main-profile local suites passed 85/195;
+> exact staged hook passed 27/45. **No push, merge, deployment, hosted
+> retest, C1 verification or Nikita acceptance.**
+
+> **8 October 23:17 Dublin C1 residual discovery, issue OPEN:** Separate
+> NEXUS local branch `codex/c1-pending-profile` is now `cfdc4e00f`,
+> superseding the older hash below. It blocks pending/unapproved profiles
+> across member search, plain/ranked directory, nearby and mention discovery
+> in addition to the numeric profile route; current SQL backs up a wholly
+> stale search-index result. Local synthetic affected suites passed
+> 83 tests/231 assertions (three skips); explicit staged hook passed
+> 64/190 and schema-skip/credential checks. Private NEXUS register
+> E-098/F-573 and CharityPilot C1 receipt have exact evidence. **No push,
+> merge, deployment, hosted retest, risk verification or DPO acceptance**.
+
+> **8 October DPO-02 connector response-loss guard, issue OPEN:** Local
+> commit `437dabdc` removes a possibly spent connector refresh credential
+> after transport loss or ambiguous HTTP status while preserving a
+> successor stored by another process. MCP tests passed 413 with two
+> skips; isolated API/database proof showed committed rotation, no
+> repeated refresh and no new replay audit row. The fix is unpushed/
+> undeployed, and the 23 September connector event remains unattributed
+> without initiating-client evidence or independent incident disposition.
+> Private receipt: `.charitypilot-private/replay-connector-uncertain-response-2026-10-08.md`.
+
+> **8 October DPO-02 uncertain-response guard, issue OPEN:** Local commit
+> `3be71c53` prevents browser renewal after a lost logout/refresh response
+> until a fresh login, and fails closed without Web Locks or shared storage.
+> Thirty focused tests and three isolated browser/database cases passed
+> with zero new synthetic replay events. The source is unpushed and
+> undeployed; the nine historical events and MCP connector case still need
+> initiating-client evidence and independent incident disposition. Private
+> receipt: `.charitypilot-private/replay-uncertain-response-fence-2026-10-08.md`.
+
+> **8 October DPO-02 source mitigation, issue OPEN:** Local commit
+> `ebf72ebd` serializes browser sign-out with refresh under one cross-tab
+> Web Lock. Focused unit and isolated two-tab browser/database checks
+> passed, including zero synthetic replay events in the induced race.
+> The source is unpushed/undeployed and cannot retrospectively explain
+> the nine live replay events. Hosted retest, the connector event,
+> historical log gaps and independent incident review remain open.
+
+> **8 October restricted DB login evidence, scoped private VM:** On the
+> serving `96c8b1e8` release, a read-only pinned check proved actual API
+> and scheduler SQL login as `cp_runtime`, current role restrictions and
+> SELECT-only grants on 12 named protected tables. The web service also
+> configures that role. The result is a current private-host control check;
+> it does not approve public multi-tenant launch, independent host-loss
+> recovery or Nikita's review. Private receipt:
+> `.charitypilot-private/live-runtime-role-current-2026-10-08.md`.
+
+> **8 October 21:25 UTC C1 residual profile audience; issue OPEN:** The selected
+> broader synthetic check found an ordinary same-tenant Member could read
+> a pending registrant's first name and location from NEXUS staging
+> `/api/v2/users/{id}` (200); anonymous was 401, foreign tenant 404 and
+> surname/email/phone/DOB absent. A local NEXUS fix in unpushed/unmerged
+> branch `codex/c1-pending-profile` (`a276322a0`) also withholds
+> active-but-unapproved profiles and passed the full 57-test/136-assertion
+> profile suite, worktree producer inventory, schema-skip budget and staged
+> credential check. Its generated Git hook shim was absent, so these gates
+> were run explicitly. The branch is **not deployed**. This does
+> not verify or close the separate CharityPilot C1 risk. The product/risk
+> owner and Nikita must decide the pending-profile audience and review a
+> release-bound retest; original C1 closure evidence remains missing.
+> Private receipt: `.charitypilot-private/c1-pending-profile-access-2026-10-08.md`.
+
 > **8 October report-minimisation source correction released; issue OPEN:**
 > PR #55 corrected minimised aggregate counting for snapshot standards
 > without records; exact head CI/E2E/review, merged-master CI/E2E and

@@ -9,12 +9,18 @@ import { statusPanelClassName } from '@/components/ui/status';
 import { ConfirmActionModal } from '@/components/ui/confirm-action-modal';
 
 type Terms = { retentionMode: 'REVIEW_REQUIRED' | 'PERMANENT' | 'AFTER_ANCHOR'; retentionDays: number | null; recoveryDays: number };
-type Revision = Terms & { id: string; revision: number; state: 'DRAFT' | 'APPROVED';
+type Revision = Omit<Terms, 'retentionMode'> & { retentionMode: string; retentionYears: number | null;
+  id: string; revision: number; state: 'DRAFT' | 'APPROVED';
   approvedAt: string | null; approvalEvidenceRef: string | null; withdrawal: { reason: string; evidenceRef: string } | null };
-function describe(terms: Terms, anchor = 'document creation', copy = false) {
+function describe(terms: Terms | Revision, anchor = 'document creation', copy = false) {
   const retention = terms.retentionMode === 'PERMANENT' ? 'Permanent retention: removal is prohibited.'
     : terms.retentionMode === 'AFTER_ANCHOR' ? `Retain for ${terms.retentionDays} days from ${anchor} before reviewing removal.`
-    : 'Each removal requires a recorded, individual review decision.';
+    : terms.retentionMode === 'AFTER_CALENDAR_YEARS' && 'retentionYears' in terms
+      && Number.isInteger(terms.retentionYears) && terms.retentionYears! >= 1 && terms.retentionYears! <= 100
+      && terms.retentionDays === null
+      ? `Retain for ${terms.retentionYears} calendar years from ${anchor} before reviewing removal.`
+      : terms.retentionMode === 'REVIEW_REQUIRED' ? 'Each removal requires a recorded, individual review decision.'
+        : 'Policy terms need review before use.';
   return `${retention} ${copy ? 'Recorded recovery term (does not establish provider recovery)' : 'Recovery window after authorised removal'}: ${terms.recoveryDays} days.`;
 }
 
@@ -108,10 +114,11 @@ export function RetentionPolicies({ recordClass }: { recordClass: 'VAULT_DRAFT' 
     {rows?.length ? <ol className="mt-4 space-y-3">{rows.map(row => <li key={row.id} className="rounded border p-3 text-sm">
       <h3 className="font-medium">Revision {row.revision}: {row.withdrawal ? 'Withdrawn' : row.state === 'APPROVED' ? 'Approved' : 'Proposal'}</h3>
       <p>{describe(row, anchor, copy)}</p>
+      {row.retentionMode === 'AFTER_CALENDAR_YEARS' ? <p>Calendar-year terms are shown for review; creating another policy with these terms remains unavailable pending approval and release.</p> : null}
       {row.approvalEvidenceRef ? <p>Approval evidence: {row.approvalEvidenceRef}</p> : null}
       {row.withdrawal ? <p>Withdrawal: {row.withdrawal.reason} Evidence: {row.withdrawal.evidenceRef}</p> : null}
       <div className="mt-2 flex flex-wrap gap-2">
-        <Button size="sm" variant="flat" isDisabled={busy} onPress={() => { setMode(row.retentionMode); setRetention(row.retentionDays?.toString() ?? ''); setRecovery(String(row.recoveryDays)); }}>Copy terms into form</Button>
+        <Button size="sm" variant="flat" isDisabled={busy || !['REVIEW_REQUIRED', 'PERMANENT', 'AFTER_ANCHOR'].includes(row.retentionMode)} onPress={() => { setMode(row.retentionMode as Terms['retentionMode']); setRetention(row.retentionDays?.toString() ?? ''); setRecovery(String(row.recoveryDays)); }}>Copy terms into form</Button>
         {isOwner && row.state === 'APPROVED' && !row.withdrawal ? <Button size="sm" variant="flat" isDisabled={busy}
           onPress={() => { setWithdraw(row); setEvidence(''); setReason(''); setError(''); }}>Review withdrawal</Button> : null}
       </div>

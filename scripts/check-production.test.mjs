@@ -247,6 +247,8 @@ function runPreflight(args, envOverrides = {}) {
 function completeProductionEnv(overrides = {}) {
   const values = {
     NODE_ENV: 'production',
+    CHARITYPILOT_DEPLOYMENT_MODE: 'production',
+    CHARITYPILOT_PRIVILEGED_MFA_MODE: 'required',
     PORT: '3002',
     TRUSTED_PROXY_ADDRESSES: '10.0.0.10',
     READINESS_API_KEY: 'r7Nq2Xc9Lm4Pz8Va6Ys3Td5He1Bw0UkF',
@@ -286,6 +288,22 @@ function completeProductionEnv(overrides = {}) {
     .map(([key, value]) => `${key}=${value}`)
     .join('\n')}\n`;
 }
+
+test('public preflight refuses absent or optional privileged MFA enforcement', () => {
+  for (const mode of ['', 'optional']) {
+    const issues = validateProductionEnvContent(completeProductionEnv({ CHARITYPILOT_PRIVILEGED_MFA_MODE: mode }),
+      validRuntimeWebApiUrlEnv);
+    assert.ok(issues.some((issue) => issue.includes('CHARITYPILOT_PRIVILEGED_MFA_MODE')), issues.join('\n'));
+  }
+  const wrongProfile = validateProductionEnvContent(completeProductionEnv({
+    CHARITYPILOT_DEPLOYMENT_MODE: 'personal-server',
+  }), validRuntimeWebApiUrlEnv);
+  assert.ok(wrongProfile.some((issue) => issue.includes('CHARITYPILOT_DEPLOYMENT_MODE')),
+    wrongProfile.join('\n'));
+  const api = composeServiceBlock(readRepoFile('compose.production.yml'), 'api');
+  assert.match(api, /CHARITYPILOT_DEPLOYMENT_MODE:\s+production/);
+  assert.match(api, /CHARITYPILOT_PRIVILEGED_MFA_MODE:\s+required/);
+});
 
 test('production preflight rejects unknown options before reading configuration', () => {
   const result = runPreflight(['--production-env-file=.env.production', '--surprise']);
@@ -502,6 +520,8 @@ test('passes when the selected env file contains complete production values', ()
     envPath,
     [
       'NODE_ENV=production',
+      'CHARITYPILOT_DEPLOYMENT_MODE=production',
+      'CHARITYPILOT_PRIVILEGED_MFA_MODE=required',
       'PORT=3002',
       'TRUSTED_PROXY_ADDRESSES=10.0.0.10',
       'READINESS_API_KEY=r7Nq2Xc9Lm4Pz8Va6Ys3Td5He1Bw0UkF',
@@ -4345,7 +4365,8 @@ test('web email verification flow supports generic registration and unverified s
   const verifyEmailPage = readRepoFile('apps/web/src/app/(auth)/verify-email/page.tsx');
   const refreshUserBlock = authContext.match(/const refreshUser = useCallback[\s\S]*?\n  }, \[\]\);/)?.[0] ?? '';
 
-  assert.match(authContext, /login:\s*\([^)]*\)\s*=>\s*Promise<UserResponse>/);
+  assert.match(authContext, /login:\s*\([^)]*\)\s*=>\s*Promise<UserResponse(?:\s*&\s*\{[^}]*\})?>/);
+  assert.match(loginPage, /return user\.mfaEnrolmentRequired \? '\/security-data'/);
   assert.match(authContext, /register:\s*\([^)]*\)\s*=>\s*Promise<void>/);
   assert.ok(refreshUserBlock, 'auth context must define refreshUser');
   assert.doesNotMatch(
@@ -4364,7 +4385,7 @@ test('web email verification flow supports generic registration and unverified s
   assert.match(safeNextPathTest, /\/%5C%5Cevil\.example/);
   assert.match(safeNextPathTest, /\/%2F%2Fevil\.example/);
   assert.match(loginPage, /new URLSearchParams\(window\.location\.search\)\.get\('next'\)/);
-  assert.match(loginPage, /user\.emailVerified\s*\?\s*safeNextPath\(nextPath\)\s*:\s*'\/verify-email'/);
+  assert.match(loginPage, /if \(!user\.emailVerified\) return '\/verify-email';[\s\S]*?safeNextPath\(nextPath\)/);
   assert.match(loginPage, /router\.push\(loginDestination\(user\)\)/);
   assert.match(registerPage, /await register\(\{ name, email, password, organisationName \}\)/);
   assert.match(registerPage, /router\.push\('\/verify-email'\)/);

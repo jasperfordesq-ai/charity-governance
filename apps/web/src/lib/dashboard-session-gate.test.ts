@@ -17,6 +17,7 @@ const CALLBACK_SEARCH = `?code=${LIVE_CODE}&state=${LIVE_STATE}`;
 const DEAD_SESSION = { isLoading: false, user: null } as const;
 const UNVERIFIED_SESSION = { isLoading: false, user: { emailVerified: false } } as const;
 const LIVE_SESSION = { isLoading: false, user: { emailVerified: true } } as const;
+const MFA_SETUP_SESSION = { isLoading: false, user: { emailVerified: true, mfaEnrolmentRequired: true } } as const;
 const STILL_LOADING = { isLoading: true, user: null } as const;
 
 /** Everything the layout would act on, so a leak into either half is caught. */
@@ -143,6 +144,21 @@ test('a verified session renders the dashboard and is never redirected', () => {
   assert.equal(dashboardBody(LIVE_SESSION, '/dashboard'), 'dashboard');
   // Including on the callback path, which is the ordinary successful connect.
   assert.equal(dashboardBody(LIVE_SESSION, CALLBACK_PATH), 'dashboard');
+});
+
+test('a verified privileged user needing MFA can render setup but no other dashboard page', () => {
+  assert.equal(dashboardRedirect(MFA_SETUP_SESSION, { pathname: '/documents', search: '' }), '/security-data');
+  assert.equal(dashboardBody(MFA_SETUP_SESSION, '/documents'), 'blank');
+  assert.equal(dashboardRedirect(MFA_SETUP_SESSION, { pathname: '/security-data', search: '' }), null);
+  assert.equal(dashboardBody(MFA_SETUP_SESSION, '/security-data'), 'dashboard');
+  assert.equal(dashboardRedirect(MFA_SETUP_SESSION, { pathname: CALLBACK_PATH, search: CALLBACK_SEARCH }), null);
+  assert.equal(dashboardBody(MFA_SETUP_SESSION, CALLBACK_PATH), 'renew-in-place');
+});
+
+test('email verification remains the first setup step', () => {
+  const session = { isLoading: false, user: { emailVerified: false, mfaEnrolmentRequired: true } };
+  assert.equal(dashboardRedirect(session, { pathname: '/dashboard', search: '' }), '/verify-email');
+  assert.equal(dashboardBody(session, '/dashboard'), 'blank');
 });
 
 // ── the layout must actually be wired to this module ───────────────────────

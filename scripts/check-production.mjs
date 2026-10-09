@@ -30,6 +30,8 @@ const COPIED_PLACEHOLDER_PATTERN = /secret[-_]?store/i;
 
 const REQUIRED = [
   'NODE_ENV',
+  'CHARITYPILOT_DEPLOYMENT_MODE',
+  'CHARITYPILOT_PRIVILEGED_MFA_MODE',
   'PORT',
   'TRUSTED_PROXY_ADDRESSES',
   'READINESS_API_KEY',
@@ -779,6 +781,8 @@ export function validateProductionEnvironment(env, processEnv = process.env) {
   }
 
   requireExactValue(env, 'NODE_ENV', 'production', issues);
+  requireExactValue(env, 'CHARITYPILOT_DEPLOYMENT_MODE', 'production', issues);
+  requireExactValue(env, 'CHARITYPILOT_PRIVILEGED_MFA_MODE', 'required', issues);
   requireTrustedProxyAddresses(env, issues);
   requireIntegerPort(env, 'PORT', issues);
   requireDatabaseUrl(env, 'DATABASE_URL', issues);

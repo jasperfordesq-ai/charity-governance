@@ -1,7 +1,7 @@
 import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
 import { z, ZodError } from "zod";
 import { AuthService } from "../../services/auth.service.js";
-import { authGuard, authIdentityGuard } from "../../middleware/auth.js";
+import { authGuard, authIdentityGuard, authMfaEnrolmentGuard } from "../../middleware/auth.js";
 import { requireAdmin } from "../../middleware/roles.js";
 import { requireWebSession as requireDashboardWebSession } from "../../middleware/session-level.js";
 import {
@@ -32,7 +32,7 @@ import {
   bodyIdentifierRateLimit,
   refreshTokenRateLimit,
 } from "../../utils/identifier-rate-limit.js";
-import { isRegistrationOpen, emailDeliveryMode } from "../../utils/deployment-profile.js";
+import { isRegistrationOpen, emailDeliveryMode, isPrivilegedMfaRequired } from "../../utils/deployment-profile.js";
 import {
   beginUserSecondFactor,
   completeUserSecondFactor,
@@ -80,19 +80,28 @@ async function providerEmailAuthGuard(
   return reply.status(404).send({ error: "Not found", code: "NOT_FOUND" });
 }
 
+async function privilegedMfaEnrolmentRequired(app: FastifyInstance,
+  user: { id: string; role: 'OWNER' | 'ADMIN' | 'MEMBER' }): Promise<boolean> {
+  if (!isPrivilegedMfaRequired() || user.role === 'MEMBER') return false;
+  const factor = await app.prisma.userSecondFactor.findUnique({
+    where: { userId: user.id }, select: { enrolledAt: true },
+  });
+  return !factor?.enrolledAt;
+}
+
 export async function authRoutes(app: FastifyInstance) {
   const authService = new AuthService(app.prisma);
   const checkAuthMeCoarseIpRateLimit = app.hasDecorator("createRateLimit")
     ? app.createRateLimit(authMeCoarseIpRateLimit())
     : null;
 
-  app.get('/second-factor', { preHandler: [authGuard, requireWebSession] }, async (request, reply) => {
+  app.get('/second-factor', { preHandler: [authMfaEnrolmentGuard, requireWebSession] }, async (request, reply) => {
     try { return reply.header('Cache-Control', 'no-store').send(await userSecondFactorState(app.prisma, request.user.userId)); }
     catch (err) { return handleError(reply, err); }
   });
 
   app.post('/second-factor/begin', {
-    preHandler: [authGuard, requireWebSession], config: { rateLimit: authCredentialRateLimit(5) },
+    preHandler: [authMfaEnrolmentGuard, requireWebSession], config: { rateLimit: authCredentialRateLimit(5) },
   }, async (request, reply) => {
     try {
       const body = factorPasswordSchema.parse(request.body);
@@ -104,7 +113,7 @@ export async function authRoutes(app: FastifyInstance) {
   });
 
   app.post('/second-factor/complete', {
-    preHandler: [authGuard, requireWebSession], config: { rateLimit: authCredentialRateLimit(5) },
+    preHandler: [authMfaEnrolmentGuard, requireWebSession], config: { rateLimit: authCredentialRateLimit(5) },
   }, async (request, reply) => {
     try {
       const body = factorProofSchema.parse(request.body);
@@ -179,8 +188,9 @@ export async function authRoutes(app: FastifyInstance) {
         const body = loginSchema.parse(request.body);
         const result = await authService.login(body);
 
+        const enrolmentRequired = await privilegedMfaEnrolmentRequired(app, result.user);
         setAuthCookies(reply, result);
-        return reply.send({ user: publicUser(result.user) });
+        return reply.send({ user: publicUser(result.user), mfaEnrolmentRequired: enrolmentRequired });
       } catch (err) {
         if (err instanceof ZodError) {
           return reply.status(400).send(formatZodError(err));
@@ -285,7 +295,12 @@ export async function authRoutes(app: FastifyInstance) {
     async (request, reply) => {
       try {
         const user = await authService.getMe(request.user.userId);
-        return reply.send(publicUser(user));
+        const enrolmentRequired = await privilegedMfaEnrolmentRequired(app, user);
+        if (enrolmentRequired && user.emailVerified) {
+          reply.header('X-CharityPilot-Mfa-Enrolment-Required', '1');
+        }
+        return reply.header('Cache-Control', 'no-store').send({ ...publicUser(user),
+          ...(enrolmentRequired ? { mfaEnrolmentRequired: true } : {}) });
       } catch (err) {
         return handleError(reply, err);
       }

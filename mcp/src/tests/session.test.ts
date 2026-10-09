@@ -370,19 +370,45 @@ test('a rotated credential that cannot be persisted is cleared before another re
   assert.equal(calls, 1);
 });
 
-test('a 500 on refresh keeps the credential instead of logging the user out', async () => {
+test('a 500 on refresh discards a possibly spent credential before any retry', async () => {
   const store = createMemoryStore('refresh1');
+  let calls = 0;
   const session = new Session({
     baseUrl: 'https://example.test',
     store,
-    fetchImpl: async () => new Response('{}', { status: 500 }),
+    fetchImpl: async () => { calls += 1; return new Response('{}', { status: 500 }); },
   });
 
-  await assert.rejects(() => session.accessToken(), (err: unknown) => {
-    assert.ok(!(err instanceof NotConnectedError), 'a server error is not a dead session');
-    return true;
+  await assert.rejects(() => session.accessToken(), NotConnectedError);
+  assert.equal(store.read(), null);
+  await assert.rejects(() => session.accessToken(), NotConnectedError);
+  assert.equal(calls, 1, 'a later call must not replay the possibly spent token');
+});
+
+test('a lost connector refresh response does not offer its old credential again', async () => {
+  const store = createMemoryStore('refresh1');
+  let calls = 0;
+  const session = new Session({
+    baseUrl: 'https://example.test', store,
+    fetchImpl: async () => { calls += 1; throw new Error('response lost after rotation'); },
   });
-  assert.equal(store.read(), 'refresh1', 'a transient server error must not destroy the credential');
+  await assert.rejects(() => session.accessToken(), NotConnectedError);
+  assert.equal(store.read(), null);
+  await assert.rejects(() => session.accessToken(), NotConnectedError);
+  assert.equal(calls, 1);
+});
+
+test('a lost connector response preserves a successor stored by another process', async () => {
+  const store = createMemoryStore('spent');
+  const session = new Session({
+    baseUrl: 'https://example.test', store,
+    fetchImpl: async () => {
+      store.write('successor');
+      throw new Error('response lost after another process saved its successor');
+    },
+  });
+  await assert.rejects(() => session.accessToken(), NotConnectedError);
+  assert.equal(store.read(), 'successor');
 });
 
 test('accessToken with no stored token reports NOT_CONNECTED without any request', async () => {

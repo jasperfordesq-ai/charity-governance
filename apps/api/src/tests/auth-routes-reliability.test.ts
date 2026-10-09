@@ -240,3 +240,49 @@ test('GET /me requires authentication and returns only the caller\'s public user
     await app.close();
   }
 });
+
+test('GET /me exposes only the public privileged-MFA setup requirement when enabled', async () => {
+  const priorNodeEnv = process.env.NODE_ENV;
+  const priorMode = process.env.CHARITYPILOT_DEPLOYMENT_MODE;
+  const priorMfaMode = process.env.CHARITYPILOT_PRIVILEGED_MFA_MODE;
+  process.env.NODE_ENV = 'production';
+  process.env.CHARITYPILOT_DEPLOYMENT_MODE = 'production';
+  process.env.CHARITYPILOT_PRIVILEGED_MFA_MODE = 'required';
+  let enrolledAt: Date | null = null;
+  const app = Fastify({ logger: false });
+  app.decorate('prisma', {
+    authSession: { findFirst: async () => ({ id: 'sess-1' }) },
+    user: { findUnique: async () => ({
+      id: 'u1', email: 'owner@example.org', name: 'Owner One', role: 'OWNER',
+      emailVerified: true, organisationId: 'org-1',
+      organisation: { id: 'org-1', name: 'Org One', updatedAt: new Date('2026-07-10T00:00:00.000Z') },
+    }) },
+    userSecondFactor: { findUnique: async () => enrolledAt ? { enrolledAt } : null },
+  } as never);
+  try {
+    await app.register(authRoutes, { prefix: '/auth' });
+    const token = signAccessToken({
+      userId: 'u1', organisationId: 'org-1', role: 'OWNER', sessionId: 'sess-1',
+    });
+    const headers = { authorization: `Bearer ${token}` };
+    const pending = await app.inject({ method: 'GET', url: '/auth/me', headers });
+    assert.equal(pending.statusCode, 200);
+    assert.equal(pending.json().mfaEnrolmentRequired, true);
+    assert.equal(pending.headers['x-charitypilot-mfa-enrolment-required'], '1');
+    assert.equal(pending.headers['cache-control'], 'no-store');
+
+    enrolledAt = new Date('2026-10-09T00:00:00.000Z');
+    const enrolled = await app.inject({ method: 'GET', url: '/auth/me', headers });
+    assert.equal(enrolled.statusCode, 200);
+    assert.equal(Object.hasOwn(enrolled.json(), 'mfaEnrolmentRequired'), false);
+    assert.equal(enrolled.headers['x-charitypilot-mfa-enrolment-required'], undefined);
+  } finally {
+    await app.close();
+    if (priorNodeEnv === undefined) delete process.env.NODE_ENV;
+    else process.env.NODE_ENV = priorNodeEnv;
+    if (priorMode === undefined) delete process.env.CHARITYPILOT_DEPLOYMENT_MODE;
+    else process.env.CHARITYPILOT_DEPLOYMENT_MODE = priorMode;
+    if (priorMfaMode === undefined) delete process.env.CHARITYPILOT_PRIVILEGED_MFA_MODE;
+    else process.env.CHARITYPILOT_PRIVILEGED_MFA_MODE = priorMfaMode;
+  }
+});

@@ -5,10 +5,12 @@ import { Button, Input } from '@heroui/react';
 import { api } from '@/lib/api';
 import { apiErrorMessage } from '@/lib/errors';
 import { AppSection } from '@/components/ui/app-page';
+import { useAuth } from '@/lib/auth-context';
 
 type State = { enrolled: boolean; enrolmentPending: boolean; recoveryCodesRemaining: number };
 
 export function PersonalSecondFactorPanel() {
+  const { user } = useAuth();
   const [state, setState] = useState<State | null>(null);
   const [offer, setOffer] = useState<{ secret: string; uri: string } | null>(null);
   const [recoveryCodes, setRecoveryCodes] = useState<string[] | null>(null);
@@ -39,7 +41,9 @@ export function PersonalSecondFactorPanel() {
       <div className="space-y-4 text-sm">
         <p className="text-gray-600 dark:text-gray-300">
           An authenticator adds a code to your password for browser and connector sign-in.
-          This is your account setting; the charity has not adopted a role-wide MFA requirement.
+          {user?.mfaEnrolmentRequired
+            ? 'Your Owner or Admin role requires an enrolled authenticator before you can use this workspace.'
+            : 'This account setting may be required by your workspace policy.'}
         </p>
         {error ? <p role="alert" className="text-danger">{error}</p> : null}
         {!state ? <p>Loading sign-in security…</p> : (

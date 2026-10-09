@@ -1,6 +1,7 @@
 import { createHash } from 'node:crypto';
 import type { PrismaClient, Prisma } from '@prisma/client';
 import { AppError } from '../utils/errors.js';
+import { calendarYearRetentionCutoffUtc } from './retention-calendar.js';
 
 type RecoveryInput = {
   organisationId: string; documentId: string; actorUserId: string;
@@ -13,6 +14,15 @@ const summary = { id: true, name: true, category: true, deletedAt: true,
 /** Files remain in their pinned store. No cleanup job is created by this service. */
 export class DocumentRecoveryService {
   constructor(private readonly prisma: PrismaClient, private readonly readFile: ReadFile) {}
+
+  private async requireUnboundSource(tx: Prisma.TransactionClient, organisationId: string): Promise<void> {
+    if (await tx.documentRecoveryEnforcement.findUnique({
+      where: { organisationId }, select: { id: true },
+    })) {
+      throw new AppError(409, 'DOCUMENT_SOURCE_RECOVERY_REQUIRED',
+        'Document removal and restoration require independent recovery authority for this charity.');
+    }
+  }
 
   private async actor(tx: Prisma.TransactionClient, input: RecoveryInput) {
     const actor = await tx.user.findFirst({ where: { id: input.actorUserId,
@@ -53,6 +63,7 @@ export class DocumentRecoveryService {
     }
     return this.prisma.$transaction(async (tx) => {
       await tx.$queryRaw`SELECT id FROM "Organisation" WHERE id=${input.organisationId} FOR UPDATE`;
+      await this.requireUnboundSource(tx, input.organisationId);
       await this.actor(tx, input);
       const doc = await this.locked(tx, input, false);
       if (doc.deletionHold || doc.lifecycleStatus !== 'DRAFT' || doc.approvalAsserted || doc.approvedByResolutionId) {
@@ -77,15 +88,34 @@ export class DocumentRecoveryService {
         id: { not: input.policyId }, organisationId: input.organisationId,
         recordClass: 'VAULT_DRAFT', state: 'APPROVED', withdrawal: { is: null },
       }, select: { id: true } });
-      if (!policy || competingPolicy || policy.retentionMode === 'PERMANENT') throw new AppError(409,
+      if (!policy || competingPolicy || !['REVIEW_REQUIRED', 'AFTER_ANCHOR', 'AFTER_CALENDAR_YEARS'].includes(policy.retentionMode)) throw new AppError(409,
         'DOCUMENT_RECOVERY_POLICY_REQUIRED', 'An approved current draft-removal policy is required.');
+      if (!Number.isInteger(policy.recoveryDays) || policy.recoveryDays < 1 || policy.recoveryDays > 3650
+        || (policy.retentionMode === 'REVIEW_REQUIRED' && (policy.retentionAnchor !== null
+          || policy.retentionDays !== null || policy.retentionYears !== null))) {
+        throw new AppError(409, 'DOCUMENT_RECOVERY_POLICY_REQUIRED', 'The approved draft-removal policy is invalid.');
+      }
+      if (policy.retentionMode === 'AFTER_ANCHOR' && (policy.retentionAnchor !== 'CREATED_AT'
+        || !Number.isInteger(policy.retentionDays) || policy.retentionDays! < 1 || policy.retentionDays! > 36525
+        || policy.retentionYears !== null)) {
+        throw new AppError(409, 'DOCUMENT_RECOVERY_POLICY_REQUIRED', 'The approved draft-removal policy is invalid.');
+      }
+      if (policy.retentionMode === 'AFTER_CALENDAR_YEARS' && (policy.retentionAnchor !== 'CREATED_AT'
+        || !Number.isInteger(policy.retentionYears) || policy.retentionYears! < 1 || policy.retentionYears! > 100
+        || policy.retentionDays !== null)) {
+        throw new AppError(409, 'DOCUMENT_RECOVERY_POLICY_REQUIRED', 'The approved draft-removal policy is invalid.');
+      }
       const bytes = await this.readFile(input.organisationId, doc.fileUrl, doc.storageProvider!);
       if (bytes.length !== doc.fileSize) throw new AppError(409,
         'DOCUMENT_RECOVERY_FILE_MISMATCH', 'The stored file does not match its recorded size.');
       const [clock] = await tx.$queryRaw<Array<{ now: Date }>>`SELECT timezone('UTC', statement_timestamp())::timestamp(3) AS now`;
       const now = clock!.now;
-      if (policy.retentionMode === 'AFTER_ANCHOR' && (policy.retentionAnchor !== 'CREATED_AT'
-        || doc.createdAt.getTime() + policy.retentionDays! * 86400000 > now.getTime())) {
+      if (policy.retentionMode === 'AFTER_ANCHOR'
+        && doc.createdAt.getTime() + policy.retentionDays! * 86400000 > now.getTime()) {
+        throw new AppError(409, 'DOCUMENT_RETENTION_NOT_REACHED', 'The approved retention period has not elapsed.');
+      }
+      if (policy.retentionMode === 'AFTER_CALENDAR_YEARS'
+        && calendarYearRetentionCutoffUtc(doc.createdAt, policy.retentionYears!) > now) {
         throw new AppError(409, 'DOCUMENT_RETENTION_NOT_REACHED', 'The approved retention period has not elapsed.');
       }
       const result = await tx.document.update({ where: { id: doc.id, organisationId: input.organisationId }, data: {
@@ -107,6 +137,7 @@ export class DocumentRecoveryService {
   async restore(input: RecoveryInput) {
     return this.prisma.$transaction(async (tx) => {
       await tx.$queryRaw`SELECT id FROM "Organisation" WHERE id=${input.organisationId} FOR UPDATE`;
+      await this.requireUnboundSource(tx, input.organisationId);
       await this.actor(tx, input);
       const doc = await this.locked(tx, input, true);
       // Restoring preserves a hold. A hold forbids destruction, not recovery.

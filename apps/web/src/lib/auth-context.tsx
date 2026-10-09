@@ -5,9 +5,9 @@ import { api, logoutSession } from './api';
 import type { UserResponse } from '@charitypilot/shared';
 
 interface AuthContextType {
-  user: UserResponse | null;
+  user: (UserResponse & { mfaEnrolmentRequired?: boolean }) | null;
   isLoading: boolean;
-  login: (email: string, password: string, secondFactor?: string) => Promise<UserResponse>;
+  login: (email: string, password: string, secondFactor?: string) => Promise<UserResponse & { mfaEnrolmentRequired?: boolean }>;
   register: (data: { email: string; password: string; name: string; organisationName: string }) => Promise<void>;
   logout: () => Promise<void>;
   refreshUser: () => Promise<void>;
@@ -16,7 +16,7 @@ interface AuthContextType {
 const AuthContext = createContext<AuthContextType | null>(null);
 
 export function AuthProvider({ children }: { children: ReactNode }) {
-  const [user, setUser] = useState<UserResponse | null>(null);
+  const [user, setUser] = useState<(UserResponse & { mfaEnrolmentRequired?: boolean }) | null>(null);
   const [isLoading, setIsLoading] = useState(true);
 
   const refreshUser = useCallback(async () => {
@@ -43,8 +43,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       skipAuthRefresh: true,
       skipAuthRedirect: true,
     });
-    setUser(data.user);
-    return data.user;
+    const loggedInUser = { ...data.user, mfaEnrolmentRequired: data.mfaEnrolmentRequired === true };
+    setUser(loggedInUser);
+    return loggedInUser;
   };
 
   const register = async (regData: {

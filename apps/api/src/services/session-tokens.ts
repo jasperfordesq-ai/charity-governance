@@ -7,6 +7,7 @@ import {
 import { signAccessToken, type TokenPayload } from '../utils/jwt.js';
 import { AppError } from '../utils/errors.js';
 import { verifyUserLoginSecondFactor, type OfferedSecondFactor } from './user-second-factor.service.js';
+import { isPrivilegedMfaRequired } from '../utils/deployment-profile.js';
 
 type SessionUser = {
   id: string;
@@ -279,7 +280,9 @@ async function issueSessionTokensWithClient(
   if (loginFactor) {
     const failure = await verifyUserLoginSecondFactor(client as Prisma.TransactionClient, {
       id: user.id, organisationId: user.organisationId, name: loginFactor.actorName,
-    }, loginFactor.offered, familyId);
+    }, loginFactor.offered, familyId,
+    isPrivilegedMfaRequired() && posture.clientKind === 'MCP_CONNECTOR' &&
+      (user.role === 'OWNER' || user.role === 'ADMIN'));
     if (failure) return failure;
   }
   const session = await client.authSession.create({

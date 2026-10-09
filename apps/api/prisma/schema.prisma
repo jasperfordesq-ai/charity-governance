@@ -1292,6 +1292,7 @@ model DataRetentionPolicyRevision {
   retentionMode       String
   retentionAnchor     String?
   retentionDays       Int?
+  retentionYears      Int?
   recoveryDays        Int
   createdById         String
   createdAt           DateTime @default(now())
@@ -1703,7 +1704,7 @@ model ConfluenceReference {
   organisationId String
   organisation   Organisation @relation(fields: [organisationId], references: [id], onDelete: Cascade)
   documentId     String
-  document       Document     @relation(fields: [documentId], references: [id], onDelete: Cascade)
+  document       Document     @relation(fields: [documentId, organisationId], references: [id, organisationId], onDelete: Cascade, onUpdate: Cascade, map: "ConfluenceReference_documentId_organisationId_fkey")
   // Recorded, never re-resolved: a page id means nothing without its site.
   cloudId        String
   pageId         String

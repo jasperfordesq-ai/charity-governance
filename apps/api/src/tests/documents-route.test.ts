@@ -62,6 +62,7 @@ type PrismaMock = {
   };
   documentStandardLink?: {
     create?: (args: unknown) => Promise<unknown>;
+    deleteMany?: (args: unknown) => Promise<{ count: number }>;
   };
   organisationIntegration?: {
     findUnique?: (args: unknown) => Promise<Record<string, unknown> | null>;
@@ -79,6 +80,7 @@ type PrismaMock = {
     findFirst?: (args: unknown) => Promise<unknown>;
   };
   documentControlAudit?: { create: (args: unknown) => Promise<unknown> };
+  documentRecoveryEnforcement?: { findUnique: (args: unknown) => Promise<{ id: string } | null> };
 };
 
 type MultipartFile = {
@@ -121,6 +123,7 @@ async function buildDocumentsApp(prisma: PrismaMock, limits = DOCUMENT_UPLOAD_MU
   const app = Fastify({ logger: false });
   const decoratedPrisma = { ...authModels(), ...prisma };
   decoratedPrisma.$transaction ??= async (callback: (tx: PrismaMock) => Promise<unknown>) => callback(decoratedPrisma);
+  decoratedPrisma.documentRecoveryEnforcement ??= { findUnique: async () => null };
   decoratedPrisma.document.aggregate ??= async () => ({ _sum: { fileSize: 0 } });
   // The storage resolver looks up organisation preference on every storage
   // call now that documentRoutes wires it in. Default to "no preference
@@ -154,6 +157,7 @@ async function buildDocumentsApp(prisma: PrismaMock, limits = DOCUMENT_UPLOAD_MU
     ...decoratedPrisma.documentPublication,
   };
   decoratedPrisma.documentControlAudit ??= { create: async () => ({ id: 'audit-upload-1' }) };
+  decoratedPrisma.documentRecoveryEnforcement ??= { findUnique: async () => null };
   decoratedPrisma.documentDownloadPreparationAudit = {
     create: async () => ({ id: 'download-audit-1' }),
     findFirst: async () => null,
@@ -1537,6 +1541,7 @@ test('ordinary DELETE retains the draft and refuses missing policy, stale revisi
       const audits: Record<string, unknown>[] = [];
       const mock: any = {
         subscription: subscription(),
+        documentRecoveryEnforcement: { findUnique: async () => null },
         $queryRaw: async (strings: TemplateStringsArray) => strings.join('').includes('statement_timestamp')
           ? [{ now: new Date('2026-09-30T12:01:00Z') }] : [{ id: 'locked' }],
         document: {
@@ -1557,7 +1562,8 @@ test('ordinary DELETE retains the draft and refuses missing policy, stale revisi
             return scenario === 'competing-policy' ? { id: 'policy-2' } : null;
           }
           assert.equal(where.id, 'policy-1');
-          return scenario === 'policy' ? null : { id: 'policy-1', retentionMode: 'REVIEW_REQUIRED', recoveryDays: 30 };
+          return scenario === 'policy' ? null : { id: 'policy-1', retentionMode: 'REVIEW_REQUIRED',
+            retentionAnchor: null, retentionDays: null, retentionYears: null, recoveryDays: 30 };
         } },
         documentStorageDeletion: { create: async () => { destructiveCalls++; throw new Error('Unexpected cleanup job'); } },
         documentControlAudit: { create: async ({ data }: any) => {
@@ -1859,6 +1865,163 @@ test('Admin connector cannot read dashboard-only Vault control and deletion hist
   } finally { await app.close(); }
 });
 
+test('bound charity storage review stops before provider inspection', { concurrency: false }, async () => {
+  const originalInspect = StorageService.prototype.inspectActiveObject;
+  let inspections = 0;
+  StorageService.prototype.inspectActiveObject = async () => {
+    inspections += 1;
+    throw new Error('provider must not be inspected');
+  };
+  const app = await buildDocumentsApp({
+    subscription: subscription(), document: {},
+    documentRecoveryEnforcement: { findUnique: async () => ({ id: 'binding' }) },
+  });
+  try {
+    const response = await app.inject({ method: 'POST', url: '/doc-legacy/verify-storage-provider',
+      headers: { authorization: authHeader },
+      payload: { expectedUpdatedAt: '2026-09-29T10:00:00.000Z' } });
+    assert.equal(response.statusCode, 409);
+    assert.equal(response.json().code, 'DOCUMENT_SOURCE_RECOVERY_REQUIRED');
+    assert.equal(inspections, 0);
+  } finally {
+    StorageService.prototype.inspectActiveObject = originalInspect;
+    await app.close();
+  }
+});
+
+test('document upload refuses a recovery-bound charity before reserving or writing bytes', { concurrency: false }, async () => {
+  const originalUpload = StorageService.prototype.uploadFile;
+  let calledProvider = false;
+  let reserved = false;
+  StorageService.prototype.uploadFile = async () => {
+    calledProvider = true;
+    throw new Error('provider must not be called');
+  };
+  const app = await buildDocumentsApp({
+    subscription: subscription(),
+    document: {},
+    documentRecoveryEnforcement: { findUnique: async () => ({ id: 'binding' }) },
+    documentUploadIntent: { create: async () => { reserved = true; return { id: 'unexpected' }; } },
+  });
+  try {
+    const request = multipartRequest(baseFields, {
+      filename: 'policy.pdf', mimetype: 'application/pdf', content: Buffer.from('%PDF-1.7\n%%EOF'),
+    });
+    const response = await app.inject({
+      method: 'POST', url: '/', headers: { ...request.headers, authorization: authHeader }, payload: request.payload,
+    });
+    assert.equal(response.statusCode, 409);
+    assert.equal(response.json().code, 'DOCUMENT_SOURCE_RECOVERY_REQUIRED');
+    assert.equal(calledProvider, false);
+    assert.equal(reserved, false);
+  } finally {
+    StorageService.prototype.uploadFile = originalUpload;
+    await app.close();
+  }
+});
+
+test('document upload refuses recovery binding after precheck and before provider write', { concurrency: false }, async () => {
+  const originalUpload = StorageService.prototype.uploadFile;
+  let checks = 0;
+  let reservations = 0;
+  let wroteBytes = false;
+  StorageService.prototype.uploadFile = async (_organisationId, _filename, _buffer, _mimeType, beforeWrite) => {
+    await beforeWrite?.({ storagePath: 'org-1/race.pdf', provider: 'local' });
+    wroteBytes = true;
+    return { storagePath: 'org-1/race.pdf', provider: 'local' };
+  };
+  const app = await buildDocumentsApp({
+    subscription: subscription(),
+    document: {},
+    documentRecoveryEnforcement: { findUnique: async () => (++checks === 1 ? null : { id: 'binding' }) },
+    documentUploadIntent: { create: async () => { reservations += 1; return { id: 'intent-1' }; } },
+  });
+  try {
+    const request = multipartRequest(baseFields, {
+      filename: 'policy.pdf', mimetype: 'application/pdf', content: Buffer.from('%PDF-1.7\n%%EOF'),
+    });
+    const response = await app.inject({
+      method: 'POST', url: '/', headers: { ...request.headers, authorization: authHeader }, payload: request.payload,
+    });
+    assert.equal(response.statusCode, 409);
+    assert.equal(response.json().code, 'DOCUMENT_SOURCE_RECOVERY_REQUIRED');
+    assert.equal(checks, 2);
+    assert.equal(reservations, 0);
+    assert.equal(wroteBytes, false);
+  } finally {
+    StorageService.prototype.uploadFile = originalUpload;
+    await app.close();
+  }
+});
+
+test('bound document recovery refuses standard link and unlink before writing evidence', async () => {
+  let writes = 0;
+  const app = await buildDocumentsApp({
+    subscription: subscription(),
+    document: { findFirst: async () => ({ id: 'doc-1', organisationId: 'org-1', lifecycleStatus: 'CURRENT' }) },
+    organisation: { findUniqueOrThrow: async () => ({ complexity: 'SIMPLE' }) },
+    governanceStandard: { findUnique: async () => ({ id: 'standard-1', isCore: true }) },
+    documentRecoveryEnforcement: { findUnique: async () => ({ id: 'binding' }) },
+    documentStandardLink: {
+      create: async () => { writes += 1; return {}; },
+      deleteMany: async () => { writes += 1; return { count: 1 }; },
+    },
+    documentControlAudit: { create: async () => { writes += 1; return {}; } },
+  });
+  try {
+    const add = await app.inject({ method: 'POST', url: '/doc-1/standards',
+      headers: { authorization: authHeader }, payload: { standardId: 'standard-1' } });
+    const remove = await app.inject({ method: 'DELETE', url: '/doc-1/standards/standard-1',
+      headers: { authorization: authHeader } });
+    assert.equal(add.statusCode, 409);
+    assert.equal(add.json().code, 'DOCUMENT_STANDARD_LINK_RECOVERY_REQUIRED');
+    assert.equal(remove.statusCode, 409);
+    assert.equal(remove.json().code, 'DOCUMENT_STANDARD_LINK_RECOVERY_REQUIRED');
+    assert.equal(writes, 0);
+  } finally { await app.close(); }
+});
+
+test('ordinary document hold changes refuse a bound recovery charity before reading or writing a document', async () => {
+  let documentReads = 0;
+  const app = await buildDocumentsApp({
+    user: { findUnique: async () => ({ id: 'user-1', organisationId: 'org-1', role: 'ADMIN', emailVerified: true }) },
+    subscription: subscription(),
+    documentRecoveryEnforcement: { findUnique: async () => ({ id: 'binding' }) },
+    document: { findFirst: async () => { documentReads += 1; throw new Error('Bound hold reached document'); } },
+  } as never);
+  try {
+    for (const held of [true, false]) {
+      const response = await app.inject({ method: 'POST', url: '/doc-1/deletion-hold',
+        headers: { authorization: authHeader }, payload: {
+          expectedUpdatedAt: '2026-09-29T10:00:00.000Z', held,
+          reason: 'Independent recovery binding requires a separately recorded decision.',
+        } });
+      assert.equal(response.statusCode, 409);
+      assert.equal(response.json().code, 'DOCUMENT_HOLD_RECOVERY_REQUIRED');
+    }
+    assert.equal(documentReads, 0);
+  } finally { await app.close(); }
+});
+
+test('Owner review listing includes calendar policy terms without opening policy creation', async () => {
+  let query: Record<string, unknown> | null = null;
+  const app = await buildDocumentsApp({ ...patchPrisma(),
+    dataRetentionPolicyRevision: { findMany: async (args: Record<string, unknown>) => {
+      query = args;
+      return [{ id: 'calendar-policy', revision: 2, retentionMode: 'AFTER_CALENDAR_YEARS',
+        retentionAnchor: 'CREATED_AT', retentionDays: null, retentionYears: 6, recoveryDays: 30 }];
+    } },
+  } as never);
+  try {
+    const response = await app.inject({ method: 'GET', url: '/recovery-policies', headers: { authorization: authHeader } });
+    assert.equal(response.statusCode, 200);
+    assert.equal(response.json().data[0].retentionYears, 6);
+    assert.equal((query!.select as Record<string, boolean>).retentionYears, true);
+    assert.deepEqual((query!.where as { retentionMode: { in: string[] } }).retentionMode.in,
+      ['REVIEW_REQUIRED', 'AFTER_ANCHOR', 'AFTER_CALENDAR_YEARS']);
+  } finally { await app.close(); }
+});
+
 test('Admin connector cannot directly retry a publication or requeue a storage deletion', async () => {
   const app = await buildDocumentsApp({
     ...patchPrisma(),
@@ -1894,6 +2057,43 @@ test('document metadata edit records actor, fields and revisions without retaini
   } finally {
     await app.close();
   }
+});
+
+test('bound charity metadata edit returns a conflict before reading or writing the document', async () => {
+  let reads = 0;
+  const app = await buildDocumentsApp({
+    subscription: subscription(),
+    documentRecoveryEnforcement: { findUnique: async () => ({ id: 'binding' }) },
+    document: { findFirst: async () => { reads++; return null; } },
+  });
+  try {
+    const response = await app.inject({
+      method: 'PATCH', url: '/doc-1', headers: { authorization: authHeader },
+      payload: { name: 'Updated safeguarding policy', expectedUpdatedAt: '2026-06-08T00:00:00.000Z' },
+    });
+    assert.equal(response.statusCode, 409);
+    assert.equal(response.json().code, 'DOCUMENT_SOURCE_RECOVERY_REQUIRED');
+    assert.equal(reads, 0);
+  } finally { await app.close(); }
+});
+
+test('document edit refuses a recovery binding committed after the route precheck', async () => {
+  let checks = 0;
+  let writes = 0;
+  const app = await buildDocumentsApp({
+    ...patchPrisma({ onUpdate: () => { writes += 1; } }),
+    documentRecoveryEnforcement: { findUnique: async () => (++checks === 1 ? null : { id: 'binding' }) },
+  } as never);
+  try {
+    const response = await app.inject({
+      method: 'PATCH', url: '/doc-1', headers: { authorization: authHeader },
+      payload: { name: 'Revised policy', expectedUpdatedAt: '2026-06-08T00:00:00.000Z' },
+    });
+    assert.equal(response.statusCode, 409);
+    assert.equal(response.json().code, 'DOCUMENT_SOURCE_RECOVERY_REQUIRED');
+    assert.equal(checks, 2);
+    assert.equal(writes, 0);
+  } finally { await app.close(); }
 });
 
 test('editing assessed document metadata withdraws Member access and resets the assessment', async () => {

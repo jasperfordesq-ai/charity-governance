@@ -81,6 +81,65 @@ test('authGuard uses current database role and organisation instead of stale JWT
   });
 });
 
+test('public privileged access requires current enrolment while a browser may reach only setup', async () => {
+  const { authGuard, authMfaEnrolmentGuard } = await import('../middleware/auth.js');
+  const { signAccessToken } = await import('../utils/jwt.js');
+  const saved = {
+    NODE_ENV: process.env.NODE_ENV,
+    CHARITYPILOT_DEPLOYMENT_MODE: process.env.CHARITYPILOT_DEPLOYMENT_MODE,
+    CHARITYPILOT_PRIVILEGED_MFA_MODE: process.env.CHARITYPILOT_PRIVILEGED_MFA_MODE,
+  };
+  process.env.NODE_ENV = 'production';
+  process.env.CHARITYPILOT_DEPLOYMENT_MODE = 'production';
+  process.env.CHARITYPILOT_PRIVILEGED_MFA_MODE = 'required';
+  try {
+    const token = signAccessToken({ userId: 'user-1', organisationId: 'org-1',
+      role: 'MEMBER', sessionId: 'session-1' });
+    const run = async (role: 'OWNER' | 'ADMIN' | 'MEMBER', enrolled: boolean,
+      clientKind: 'WEB' | 'MCP_CONNECTOR', enrolmentRoute = false) => {
+      let factorReads = 0;
+      const request = {
+        method: 'GET', headers: { authorization: `Bearer ${token}` },
+        server: { prisma: {
+          authSession: { findFirst: async () => ({ id: 'session-1', familyId: 'family-1',
+            clientKind, accessLevel: 'ADMIN', dataScope: 'FULL' }) },
+          user: { findUnique: async () => ({ id: 'user-1', organisationId: 'org-1', role,
+            emailVerified: true, lifecycleStatus: 'ACTIVE',
+            organisation: { lifecycleStatus: 'ACTIVE' } }) },
+          userSecondFactor: { findUnique: async () => { factorReads++; return enrolled
+            ? { enrolledAt: new Date('2026-10-01T00:00:00Z') } : null; } },
+        } },
+      };
+      const reply = createReply();
+      await (enrolmentRoute ? authMfaEnrolmentGuard : authGuard)(request as never, reply as never);
+      return { reply, factorReads };
+    };
+    for (const role of ['OWNER', 'ADMIN'] as const) {
+      const denied = await run(role, false, 'WEB');
+      assert.equal(denied.reply.statusCode, 403);
+      assert.deepEqual(denied.reply.payload, {
+        error: 'Enroll an authenticator before using privileged CharityPilot controls.',
+        code: 'PRIVILEGED_MFA_ENROLMENT_REQUIRED',
+      });
+      assert.equal((await run(role, false, 'WEB', true)).reply.statusCode, 200);
+      assert.equal((await run(role, false, 'MCP_CONNECTOR', true)).reply.statusCode, 403);
+      assert.equal((await run(role, true, 'WEB')).reply.statusCode, 200);
+    }
+    const member = await run('MEMBER', false, 'WEB');
+    assert.equal(member.reply.statusCode, 200);
+    assert.equal(member.factorReads, 0);
+    delete process.env.CHARITYPILOT_DEPLOYMENT_MODE;
+    delete process.env.CHARITYPILOT_PRIVILEGED_MFA_MODE;
+    const privateDemo = await run('OWNER', false, 'WEB');
+    assert.equal(privateDemo.reply.statusCode, 200);
+    assert.equal(privateDemo.factorReads, 0);
+  } finally {
+    for (const [key, value] of Object.entries(saved)) {
+      if (value === undefined) delete process.env[key]; else process.env[key] = value;
+    }
+  }
+});
+
 test('authGuard rejects access tokens whose backing session has been revoked', async () => {
   const { authGuard } = await import('../middleware/auth.js');
   const { signAccessToken } = await import('../utils/jwt.js');

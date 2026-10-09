@@ -74,6 +74,15 @@ export function billingMode(env: DeploymentEnv = process.env): 'stripe' | 'none'
   return axis(env, 'CHARITYPILOT_BILLING', ['stripe', 'none'] as const, 'none', 'stripe');
 }
 
+export function privilegedMfaMode(env: DeploymentEnv = process.env): 'required' | 'optional' {
+  return axis(env, 'CHARITYPILOT_PRIVILEGED_MFA_MODE', ['required', 'optional'] as const,
+    'optional', 'optional');
+}
+
+export function isPrivilegedMfaRequired(env: DeploymentEnv = process.env): boolean {
+  return isProductionEnv(env) && privilegedMfaMode(env) === 'required';
+}
+
 // Boot-time validation for the whole profile. Two jobs:
 //
 // 1. Call every axis function so an invalid value fails HERE, at boot, with
@@ -92,6 +101,11 @@ export function assertDeploymentProfile(env: DeploymentEnv = process.env): void 
   const registrationOpen = isRegistrationOpen(env);
   const emailDelivery = emailDeliveryMode(env);
   billingMode(env);
+  const mfaMode = privilegedMfaMode(env);
+
+  if (isProductionEnv(env) && env.CHARITYPILOT_DEPLOYMENT_MODE === 'production' && mfaMode !== 'required') {
+    throw new Error('FATAL: public production requires CHARITYPILOT_PRIVILEGED_MFA_MODE=required');
+  }
 
   if (registrationOpen && emailDelivery === 'manual-link') {
     throw new Error(

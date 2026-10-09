@@ -9,7 +9,7 @@ const captureInput = z.object({ installationId: controlIdentity, operationId: co
   writerEpoch: z.number().int().positive().max(2147483647), authorizationId: identity,
   sourceRevision: z.string().regex(/^[a-f0-9]{40}$/) }).strict();
 const policySelect = { id: true, organisationId: true, recordClass: true, revision: true,
-  state: true, retentionMode: true, retentionAnchor: true, retentionDays: true,
+  state: true, retentionMode: true, retentionAnchor: true, retentionDays: true, retentionYears: true,
   recoveryDays: true, createdById: true, createdAt: true, approvedById: true,
   approvedAt: true, approvalEvidenceRef: true } as const;
 const documentSelect = { id: true, organisationId: true, updatedAt: true, createdAt: true,

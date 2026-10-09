@@ -21,7 +21,7 @@ import { subscriptionGuard } from '../../middleware/subscription.js';
 import { requireCompletePlan } from '../../middleware/plan.js';
 import { requireAdmin } from '../../middleware/roles.js';
 import { GoverningActService } from '../../services/governing-act.service.js';
-import { handleError } from '../../utils/errors.js';
+import { AppError, handleError } from '../../utils/errors.js';
 import { sendCreated, sendSuccess } from '../../utils/response.js';
 
 function validationError(reply: FastifyReply, err: ZodError) {
@@ -185,6 +185,12 @@ export async function governingActRoutes(app: FastifyInstance) {
     async (request, reply) => {
       try {
         const data = setDocumentApprovalSchema.parse(request.body);
+        if (await app.prisma.documentRecoveryEnforcement.findUnique({
+          where: { organisationId: request.user.organisationId }, select: { id: true },
+        })) {
+          throw new AppError(409, 'DOCUMENT_SOURCE_RECOVERY_REQUIRED',
+            'Document Board approval changes require independent recovery authority for this charity.');
+        }
         await service.setDocumentApproval(
           request.user.organisationId,
           request.params.documentId,

@@ -1,6 +1,7 @@
 import type { PrismaClient } from '@prisma/client';
 import { AppError } from '../utils/errors.js';
 import { lockOrganisationForUpdate } from './organisation-lock.js';
+import { calendarYearRetentionCutoffUtc } from './retention-calendar.js';
 
 /** Read-only assessment. Removal must repeat these checks inside its own transaction. */
 export class ComplaintRetentionService {
@@ -37,15 +38,22 @@ export class ComplaintRetentionService {
       if (policy.retentionMode === 'REVIEW_REQUIRED') return { ...base,
         state: enforcement ? 'INDEPENDENT_RECOVERY_REQUIRED' as const : 'INDIVIDUAL_REVIEW_REQUIRED' as const,
         retentionUntil: null };
-      if (policy.retentionMode !== 'AFTER_ANCHOR' || policy.retentionAnchor !== 'RESOLVED_AT' ||
-        !Number.isInteger(policy.retentionDays) || policy.retentionDays! < 1 || policy.retentionDays! > 36525) {
+      const timedDays = policy.retentionMode === 'AFTER_ANCHOR';
+      const timedYears = policy.retentionMode === 'AFTER_CALENDAR_YEARS';
+      if ((!timedDays && !timedYears) || policy.retentionAnchor !== 'RESOLVED_AT' ||
+        (timedDays && (!Number.isInteger(policy.retentionDays) || policy.retentionDays! < 1 || policy.retentionDays! > 36525
+          || policy.retentionYears != null)) ||
+        (timedYears && (!Number.isInteger(policy.retentionYears) || policy.retentionYears! < 1 || policy.retentionYears! > 100
+          || policy.retentionDays !== null))) {
         return { ...base, state: 'POLICY_REVIEW_REQUIRED' as const, retentionUntil: null };
       }
       if (!latest || latest.state !== 'RECORDED' || latest.recordRevision !== complaint.revision ||
         !latest.resolvedAt || latest.resolvedAt < complaint.receivedDate || latest.resolvedAt > clock!.now) {
         return { ...base, state: 'RESOLUTION_REVIEW_REQUIRED' as const, retentionUntil: null };
       }
-      const retentionUntil = new Date(latest.resolvedAt.getTime() + policy.retentionDays! * 86400000);
+      const retentionUntil = timedYears
+        ? calendarYearRetentionCutoffUtc(latest.resolvedAt, policy.retentionYears!)
+        : new Date(latest.resolvedAt.getTime() + policy.retentionDays! * 86400000);
       return { ...base, state: retentionUntil > clock!.now ? 'RETENTION_NOT_REACHED' as const
         : enforcement ? 'INDEPENDENT_RECOVERY_REQUIRED' as const : 'READY_FOR_REMOVAL_REVIEW' as const,
         retentionUntil };

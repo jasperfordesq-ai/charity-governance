@@ -324,22 +324,22 @@ export class Session {
       throw new NotConnectedError(message);
     };
 
-    const response = await this.#post(`${this.#prefix}/refresh`, { refreshToken });
+    // A rejected fetch does not prove that the server never saw the token.
+    // It may have committed the rotation while the response was lost. The
+    // old single-use credential cannot safely be offered by a later process.
+    const response = await this.#post(`${this.#prefix}/refresh`, { refreshToken })
+      .catch(() => endConsumedRefresh('Session renewal could not be confirmed. Sign in again.'));
     if (!response.ok) {
-      // Only a 401 means the stored credential was actually rejected. A 403 here
-      // says nothing about the credential's validity — it is the non-browser
-      // guard refusing before the token is even looked at. Treating that the
-      // same as a dead credential would clear a perfectly good refresh token
-      // because of a header problem. A 5xx or gateway error is the same story:
-      // the server had a problem, and clearing here would turn a transient blip
-      // into a permanent logout.
-      if (response.status !== 401) {
+      // The non-browser guard, route lookup, input validation and rate limit
+      // refuse before the token can rotate. Other outcomes, including a 5xx
+      // after a committed transaction, do not prove it is still safe to use.
+      if ([400, 403, 404, 429].includes(response.status)) {
         throw new Error(
           `Could not refresh the session: CharityPilot returned ${response.status}. `
             + 'The stored credential has been kept — try again.',
         );
       }
-      endConsumedRefresh('Session ended. Run: charitypilot-mcp connect');
+      endConsumedRefresh('Session renewal was rejected or could not be confirmed. Sign in again.');
     }
     let payload: unknown;
     try {

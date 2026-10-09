@@ -14,13 +14,14 @@ const input = { documentId: 'doc-a', policyId: 'policy-a', expectedUpdatedAt: da
   evidenceRef: 'AUTH-001', reason: 'Synthetic evidence reviewed for disposal.', authorityConfirmed: true, dispositionPlan: plan };
 
 function fixture() {
-  const state = { role: 'OWNER', bytes, auth: null as any, writes: [] as any[], claims: 0,
+  const state = { role: 'OWNER', bytes, auth: null as any, bound: false, writes: [] as any[], claims: 0,
     document: { id: 'doc-a', organisationId: 'org-a', updatedAt: date, deletedAt: date,
       deletionHold: false, fileUrl: 'org-a/pinned.txt', storageProvider: 'local', fileSize: bytes.length,
       recoverySha256: createHash('sha256').update(bytes).digest('hex'), recoveryUntil: date } as any,
     databaseFailure: null as any, listArgs: null as any, dispositionArgs: null as any, dispositionRows: [] as any[] };
   const tx: any = {
     $queryRaw: async () => [],
+    documentRecoveryEnforcement: { findUnique: async () => state.bound ? { id: 'binding' } : null },
     user: { findFirst: async ({ where }: any) => where.id === 'owner-a' && where.organisationId === 'org-a' && state.role === 'OWNER' ? { id: 'owner-a' } : null },
     document: { findFirst: async ({ where }: any) => state.document?.id === where.id && where.organisationId === 'org-a' ? state.document : null },
     documentPurgeAuthorization: {
@@ -107,6 +108,12 @@ test('real Prisma trigger error shape reports an expiry refusal without masking 
   const failure = (message: string) => Object.assign(new Error(message), { name: 'PrismaClientUnknownRequestError' });
   state.databaseFailure = failure('Database error: Purge claim must wait for retention and recovery expiry');
   await assert.rejects(service.claim('org-a', 'owner-a', 'auth-a', { confirmPermanentPurge: true }), { statusCode: 409, code: 'PURGE_NOT_DUE' });
+  state.databaseFailure = failure('Database error: Document purge claim must wait for calendar-year retention expiry SECRET');
+  await assert.rejects(service.claim('org-a', 'owner-a', 'auth-a', { confirmPermanentPurge: true }),
+    (error: any) => error.statusCode === 409 && error.code === 'PURGE_NOT_DUE' && !error.message.includes('SECRET'));
+  state.databaseFailure = failure('Database error: Unsupported document retention policy mode SECRET');
+  await assert.rejects(service.claim('org-a', 'owner-a', 'auth-a', { confirmPermanentPurge: true }),
+    (error: any) => error.statusCode === 409 && error.code === 'PURGE_REVIEW_CHANGED' && !error.message.includes('SECRET'));
   state.databaseFailure = failure('Database error: Purge claim requires an unheld removed draft');
   await assert.rejects(service.claim('org-a', 'owner-a', 'auth-a', { confirmPermanentPurge: true }), { statusCode: 409, code: 'PURGE_REVIEW_CHANGED' });
   state.databaseFailure = failure('Unexpected database engine failure');
@@ -180,6 +187,44 @@ test('recording downstream evidence is scoped, Owner-only, post-claim and cannot
   await assert.rejects(service.recordDisposition('org-a', 'owner-a', 'auth-a', disposition), { statusCode: 409, code: 'PURGE_DISPOSITION_REVIEW_CHANGED' });
   state.databaseFailure = Object.assign(new Error('Purge disposition observation must be between claim and recording'), { name: 'PrismaClientUnknownRequestError' });
   await assert.rejects(service.recordDisposition('org-a', 'owner-a', 'auth-a', disposition), { statusCode: 409, code: 'PURGE_OBSERVATION_TIME_INVALID' });
+  state.databaseFailure = Object.assign(new Error('Document copy change requires independent recovery authority SECRET'), { name: 'PrismaClientUnknownRequestError' });
+  await assert.rejects(service.recordDisposition('org-a', 'owner-a', 'auth-a', disposition), { statusCode: 409, code: 'COPY_RECOVERY_AUTHORITY_REQUIRED' });
+});
+
+test('document recovery binding freezes disposal authorization and withdrawal decisions', async () => {
+  const { service, state } = fixture();
+  state.bound = true;
+  await assert.rejects(service.authorize('org-a', 'owner-a', input),
+    { statusCode: 409, code: 'PURGE_RECOVERY_AUTHORITY_REQUIRED' });
+  assert.equal(state.writes.length, 0);
+  state.bound = false;
+  await service.authorize('org-a', 'owner-a', input);
+  state.bound = true;
+  await assert.rejects(service.withdraw('org-a', 'owner-a', 'auth-a',
+    { evidenceRef: 'WITHDRAW-001', reason: 'Synthetic decision changed.' }),
+    { statusCode: 409, code: 'PURGE_RECOVERY_AUTHORITY_REQUIRED' });
+  assert.equal(state.writes.length, 1);
+});
+test('document disposal race returns a safe recovery-authority conflict', async () => {
+  const { service, state } = fixture();
+  state.databaseFailure = Object.assign(new Error('Document disposal decision requires independent recovery authority SECRET'),
+    { name: 'PrismaClientUnknownRequestError' });
+  await assert.rejects(service.authorize('org-a', 'owner-a', input), (error: any) => {
+    assert.equal(error.code, 'PURGE_RECOVERY_AUTHORITY_REQUIRED');
+    assert.doesNotMatch(error.message, /SECRET/);
+    return true;
+  });
+});
+
+test('document recovery binding freezes copy observation writes while preserving history', async () => {
+  const { service, state } = fixture();
+  await service.authorize('org-a', 'owner-a', input);
+  await service.claim('org-a', 'owner-a', 'auth-a', { confirmPermanentPurge: true });
+  state.bound = true;
+  await assert.rejects(service.recordDisposition('org-a', 'owner-a', 'auth-a', disposition),
+    { statusCode: 409, code: 'COPY_RECOVERY_AUTHORITY_REQUIRED' });
+  assert.equal(state.dispositionArgs, null);
+  await service.listDispositions('org-a', 'auth-a', {});
 });
 
 test('downstream history paginates within one charity and authorization without claiming complete erasure', async () => {

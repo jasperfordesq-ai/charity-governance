@@ -432,6 +432,14 @@ test.describe('DPO review navigation', () => {
         [`dpo-integration-${stamp}`, owner.organisationId],
       );
       await client.query(
+        `INSERT INTO "Document"
+          ("id", "organisationId", "name", "category", "visibility", "lifecycleStatus",
+           "fileUrl", "fileSize", "mimeType", "createdAt", "updatedAt")
+         VALUES ($1, $2, $3, 'POLICY', 'RESTRICTED', 'RETIRED',
+           $4, 12, 'text/plain', NOW(), NOW())`,
+        [documentId, owner.organisationId, `Removed policy ${stamp}`, `${owner.organisationId}/removed-${stamp}.txt`],
+      );
+      await client.query(
         `INSERT INTO "DocumentPublication"
           ("id", "organisationId", "documentId", "provider", "cloudId", "pageId", "pageTitle",
            "publishedAt", "state", "retiredAt", "retiredStoragePath", "nextAttemptAt")
@@ -439,6 +447,8 @@ test.describe('DPO review navigation', () => {
            CURRENT_TIMESTAMP, 'RETIRED', CURRENT_TIMESTAMP, $6, NULL)`,
         [publicationId, owner.organisationId, documentId, `page-${stamp}`, title, `${owner.organisationId}/retired-${stamp}.pdf`],
       );
+      await client.query(`DELETE FROM "Document" WHERE "id" = $1 AND "organisationId" = $2`,
+        [documentId, owner.organisationId]);
     });
     await gotoWithDevServerRetry(ownerPage, '/integrations');
     const section = ownerPage.locator('section').filter({
@@ -476,15 +486,26 @@ test.describe('DPO review navigation', () => {
     const title = `Synthetic recorded copy ${stamp}`;
     const currentDocumentId = `dpo-current-${stamp}`;
     const mismatchedTitle = `Synthetic old-space copy ${stamp}`;
+    const missingDocumentId = `missing-document-${stamp}`;
     await withDb(async (client) => {
+      await client.query(
+        `INSERT INTO "Document"
+          ("id", "organisationId", "name", "category", "visibility", "lifecycleStatus",
+           "fileUrl", "fileSize", "mimeType", "createdAt", "updatedAt")
+         VALUES ($1, $2, $3, 'POLICY', 'RESTRICTED', 'CURRENT',
+           $4, 12, 'text/plain', NOW(), NOW())`,
+        [missingDocumentId, owner.organisationId, `Former source ${stamp}`, `${owner.organisationId}/former-${stamp}.txt`],
+      );
       await client.query(
         `INSERT INTO "DocumentPublication"
           ("id", "organisationId", "documentId", "provider", "cloudId", "pageId", "pageTitle",
            "publishedAt", "processedAt", "state", "nextAttemptAt")
          VALUES ($1, $2, $3, 'confluence', 'fake-cloud-id', $4, $5,
            CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, 'PROCESSED', NULL)`,
-        [publicationId, owner.organisationId, `missing-document-${stamp}`, `page-${stamp}`, title],
+        [publicationId, owner.organisationId, missingDocumentId, `page-${stamp}`, title],
       );
+      await client.query(`DELETE FROM "Document" WHERE "id" = $1 AND "organisationId" = $2`,
+        [missingDocumentId, owner.organisationId]);
       await client.query(
         `INSERT INTO "Document"
           ("id", "organisationId", "name", "category", "visibility", "lifecycleStatus",
