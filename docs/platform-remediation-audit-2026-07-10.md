@@ -1,5 +1,15 @@
 # CharityPilot Full-Platform Remediation Audit
 
+> **9 October restricted-role restored-ACL repair, OPEN live:** The
+> 8 October backup's ACL-free restore caused local grant reconciliation
+> to fail safely because two byte-authority SECURITY DEFINER functions
+> regained default PUBLIC EXECUTE. The grant script now revokes those
+> two exact public grants transactionally. Isolated migrated-backup role
+> rehearsal and real PostgreSQL regression pass, including actual restricted
+> login and 12 protected SELECT-only tables. This local fix requires hosted
+> CI, guarded release, live postrelease role proof and Nikita review before
+> closure. Private details: `.charitypilot-private/runtime-role-restored-acl-repair-2026-10-09.md`.
+
 > **9 October local migration-image gate, OPEN live:** On a second
 > networkless disposable restore of the verified 8 October VM backup,
 > the locally built migration-runner image's actual Prisma entrypoint

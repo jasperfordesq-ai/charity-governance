@@ -1,5 +1,16 @@
 # CharityPilot Agent Continuation Handoff
 
+> **9 October restored-backup ACL fix, local only:** An isolated restore of
+> the 8 October serving-VM dump followed by actual candidate Prisma migrations
+> made restricted-role grant reconciliation fail closed: the ACL-free restore
+> reinstated PostgreSQL default `PUBLIC EXECUTE` on two byte-authority
+> SECURITY DEFINER functions. The grant script now revokes those exact
+> public grants transactionally before granting the runtime role. A repeat
+> rehearsal passed actual restricted login, 75 Document rows and 12 protected
+> SELECT-only tables; the real PostgreSQL regression passed 1/1. Exact
+> private evidence: `.charitypilot-private/runtime-role-restored-acl-repair-2026-10-09.md`.
+> Source is local only; deploy-time and post-release live checks remain OPEN.
+
 > **9 October ~08:00 Dublin candidate migration-image rehearsal:** A
 > second disposable restore of the verified 8 October serving-VM dump
 > ran `prisma migrate deploy` from a locally built candidate

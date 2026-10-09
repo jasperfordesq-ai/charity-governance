@@ -100,6 +100,9 @@ test(
         'apply all Prisma migrations',
       );
       const grants = readFileSync('scripts/bluegreen/runtime-role-grants.psql', 'utf8');
+      requireSuccess(docker(['exec', name, 'psql', '-U', 'postgres', '-d', database,
+        '-c', 'GRANT EXECUTE ON FUNCTION public."DocumentByteExecutionLease_claim"(text,text), public."DocumentByteProviderAttempt_start"(text,text) TO PUBLIC']),
+      'simulate ACL-free backup restore defaults');
       requireSuccess(docker(['exec', '-i', '-e', 'CHARITYPILOT_RUNTIME_ROLE=cp_fixture',
         '-e', 'CHARITYPILOT_RUNTIME_PASSWORD=synthetic-only', name,
         'psql', '-U', 'postgres', '-d', database], { input: grants }),
