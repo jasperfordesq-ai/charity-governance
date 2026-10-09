@@ -1,5 +1,13 @@
 # CharityPilot Full-Platform Remediation Audit
 
+> **9 October DPO-01 and DPO-05 scoped recheck, OPEN:** A renewed live
+> Member UI showed one approved certificate, redacted risk summaries and
+> minimal trustee cards. A local disposable PostgreSQL regression proved
+> that existing identity triggers reject direct cross-charity `Document`
+> and `DocumentPublication` UPDATEs. Neither check establishes a direct
+> hosted Member denial, all-file classification, independent recovery
+> provider, host-loss drill, release readiness or Nikita acceptance.
+
 > **9 October DPO-02/restricted DB live recheck, OPEN:** Guarded read-only
 > checks on serving `96c8b1e8` confirmed `cp_runtime` as configured and
 > actual API/scheduler SQL user; 11/11 restriction flags and zero

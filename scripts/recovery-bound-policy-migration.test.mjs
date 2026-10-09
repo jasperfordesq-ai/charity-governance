@@ -134,6 +134,12 @@ test('bound recovery freezes policy, hold and complaint resolution decisions at 
     query(`UPDATE "Document" SET "deletionHold"=false WHERE id='doc-held';`,
       /Document source change requires independent recovery authority/);
     query(`UPDATE "Document" SET "deletionHold"=true WHERE id='free-doc';`);
+    query(`UPDATE "Document" SET "organisationId"='doc-org' WHERE id='free-doc';`,
+      /Document charity identity is immutable/);
+    query(`INSERT INTO "DocumentPublication" (id,"organisationId","documentId")
+      VALUES ('free-publication','free-org','free-doc');`);
+    query(`UPDATE "DocumentPublication" SET "organisationId"='complaint-org'
+      WHERE id='free-publication';`, /Document publication identity cannot be changed/);
     assert.equal(query(`SELECT id || ':' || "deletionHold" FROM "Document"
       WHERE id IN ('doc-unheld','doc-held','free-doc') ORDER BY id;`),
     'doc-held:true\ndoc-unheld:false\nfree-doc:true');
