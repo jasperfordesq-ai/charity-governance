@@ -1,5 +1,16 @@
 # CharityPilot Agent Continuation Handoff
 
+> **9 October minimised export synthetic browser demonstration, local only:**
+> New isolated `dpo-minimised-export.spec.ts` seeds only a disposable
+> charity's annual compliance evidence, uses the ordinary Owner Board
+> sign-off workflow, verifies one retained hashed approval snapshot, then
+> opens both approved report audiences. The full internal HTML contains
+> synthetic action/evidence/minute/approver markers; the minimised HTML
+> contains aggregate statuses and omits those markers and register detail.
+> Chromium 1/1, E2E contract 116/116 and E2E TypeScript passed. A real
+> Board-approved snapshot, external/regulator audience and field approval,
+> hosted release and Nikita acceptance are still open.
+
 > **9 October Member/DPO isolated browser gate, local only:** A disposable
 > current-source Chromium run passed `authz.spec.ts` and
 > `dpo-review-navigation.spec.ts` together, 23/23. The first run found

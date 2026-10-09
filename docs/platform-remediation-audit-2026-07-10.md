@@ -1,5 +1,14 @@
 # CharityPilot Full-Platform Remediation Audit
 
+> **9 October DPO minimised-export synthetic demonstration, OPEN live:** A
+> new isolated browser journey passes through app readiness, Owner sign-off,
+> retained snapshot creation and both full/minimised export buttons.
+> Synthetic internal narrative, minute and approver markers appear in the
+> full approved HTML and are absent from the aggregate-only minimised HTML.
+> E2E 1/1, contract 116/116 and typecheck pass. No real Board snapshot or
+> recipient/field decision has been approved; no live tenant export has
+> been disclosed or accepted by Nikita.
+
 > **9 October DPO access/copy-review local browser proof, OPEN live:** The
 > current isolated Chromium Member authorization and DPO navigation suite
 > passed 23/23 after two historical orphan-copy fixtures were updated to
