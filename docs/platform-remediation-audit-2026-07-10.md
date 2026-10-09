@@ -4,7 +4,8 @@
 > Member UI showed one approved certificate, redacted risk summaries and
 > minimal trustee cards. A local disposable PostgreSQL regression proved
 > that existing identity triggers reject direct cross-charity `Document`
-> and `DocumentPublication` UPDATEs. Neither check establishes a direct
+> and `DocumentPublication` UPDATEs; a follow-up direct `ComplaintRecord`
+> cross-charity UPDATE was likewise rejected. Neither check establishes a direct
 > hosted Member denial, all-file classification, independent recovery
 > provider, host-loss drill, release readiness or Nikita acceptance.
 

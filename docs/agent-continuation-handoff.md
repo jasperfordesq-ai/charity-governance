@@ -7,6 +7,8 @@
 > obtained. In the undeployed candidate, direct cross-charity `Document`
 > and `DocumentPublication` UPDATEs were rejected by existing identity
 > triggers in disposable PostgreSQL; the focused regression passed 1/1.
+> A follow-up direct `ComplaintRecord` cross-charity UPDATE was also
+> rejected by its earlier revision trigger in the same focused test.
 > This closes a review suspicion, not independent recovery or release.
 > Private receipts: `member-live-readonly-2026-10-09.md` and
 > `recovery-identity-review-2026-10-09.md`.

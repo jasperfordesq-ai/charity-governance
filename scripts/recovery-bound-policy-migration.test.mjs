@@ -103,6 +103,8 @@ test('bound recovery freezes policy, hold and complaint resolution decisions at 
     query(resolution('free-org', 'free-complaint', 'free-owner'));
     assert.equal(query(`SELECT count(*) FROM "ComplaintResolutionEvidence" WHERE "complaintId"='bound-complaint';`), '0');
     assert.equal(query(`SELECT count(*) FROM "ComplaintResolutionEvidence" WHERE "complaintId"='free-complaint';`), '1');
+    query(`UPDATE "ComplaintRecord" SET "organisationId"='complaint-org'
+      WHERE id='free-complaint';`, /Complaint identity and charity cannot change/);
     // Each insert has a complete row shape but a deliberately nonexistent
     // authorization. The A_* gate must run first and reject the bound family;
     // this tests direct SQL even when callers bypass the API.
