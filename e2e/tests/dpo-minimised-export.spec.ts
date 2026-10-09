@@ -102,5 +102,8 @@ test.describe('DPO minimised export', () => {
       'Snapshot SHA-256', 'Trustee Register', 'Conflicts Register']) {
       expect(html).not.toContain(value);
     }
+    await test.info().attach('synthetic-minimised-review-draft.html', {
+      body: Buffer.from(html, 'utf8'), contentType: 'text/html',
+    });
   });
 });

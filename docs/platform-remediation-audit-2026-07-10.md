@@ -1,5 +1,16 @@
 # CharityPilot Full-Platform Remediation Audit
 
+> **9 October DPO-04 synthetic report sample, OPEN for audience approval:**
+> An isolated Owner browser test passed the ordinary Board sign-off and
+> full/minimised approved-export comparison. The passing minimised HTML
+> was saved as a labelled synthetic draft; it exposes organisation name,
+> RCN, year, approval sequence/time and five aggregate counts while
+> omitting planted internal narratives and identities. This supplies an
+> actual field-review artifact, not a real Board snapshot or permission
+> to disclose. Controller/Nikita audience and field decisions, hosted
+> release/live checks and independent acceptance remain OPEN. Private
+> receipt: `.charitypilot-private/dpo-minimised-export-synthetic-sample-2026-10-09.md`.
+
 > **9 October C1 live-build source observation, OPEN:** Public NEXUS API
 > health reported `X-Build: 05c17bf94db6`. This exact source descends
 > from the 2 May admin-notice redaction; all 11 locale neutral/pending

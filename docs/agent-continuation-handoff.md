@@ -1,5 +1,17 @@
 # CharityPilot Agent Continuation Handoff
 
+> **9 October 10:28 Dublin minimised export sample, local only:** The
+> isolated synthetic Owner browser journey passed 1/1 and retained a
+> hashed Board-approved fixture snapshot. It compared full internal and
+> minimised approved-report HTML; planted internal markers appeared only
+> in the full version. A test-only attachment yielded a standalone
+> minimised HTML sample with explicit draft warning for field review.
+> E2E TypeScript passed; no disposable containers remain. Sample hash,
+> exact logs/fields and limits: private
+> `.charitypilot-private/dpo-minimised-export-synthetic-sample-2026-10-09.md`.
+> The real reviewed charity has no genuine approved snapshot or agreed
+> external audience/field list; no report disclosure or Nikita acceptance.
+
 > **9 October 10:19 Dublin C1 reported live source, OPEN:** Public NEXUS
 > API health returned dynamic `X-Build: 05c17bf94db6`, resolving to a
 > Git commit that contains the original 2 May admin-notice redaction.
