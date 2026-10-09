@@ -1,5 +1,12 @@
 # CharityPilot Agent Continuation Handoff
 
+> **9 October calendar retention SQL test gate, local only:** The existing
+> disposable PostgreSQL UTC anniversary proof was not included in the CI
+> retention command. It now runs through `test:retention-policy`, which
+> passed 3/3 with populated upgrade and recovery-bound policy proofs.
+> Controller policy approval, live migration and independent recovery
+> remain OPEN; see private `calendar-retention-ci-gate-2026-10-09.md`.
+
 > **9 October browser logout ordering, local only:** A red cross-tab test
 > showed the shared logout stamp was absent while revocation was in flight.
 > The web coordinator now writes the stamp before the request under the

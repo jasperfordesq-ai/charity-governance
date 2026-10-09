@@ -1,5 +1,12 @@
 # CharityPilot Full-Platform Remediation Audit
 
+> **9 October retention verification gate, OPEN:** The CI retention command
+> now includes the existing disposable SQL UTC calendar-year cutoff test.
+> Its local three-test run passes, including recovery-bound policy and
+> populated upgrade proofs. This verifies arithmetic and enforcement
+> fixtures only; approved charity terms, live release and independent
+> recovery evidence are still missing.
+
 > **9 October DPO session replay mitigation, OPEN for release:** The web
 > logout fence is now persisted before sending revocation, rather than only
 > after its response. A focused red/green ordering test, 558 web tests and
