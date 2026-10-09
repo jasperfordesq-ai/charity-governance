@@ -1,5 +1,15 @@
 # CharityPilot Full-Platform Remediation Audit
 
+> **9 October C1 exact mail receipt, OPEN:** NEXUS local `902517daa`
+> reconciles an UNKNOWN row to accepted only from one exact positive
+> application mail-log receipt, recording its evidence ID/time without
+> resending. Failed, missing or conflicting receipts stay UNKNOWN.
+> Disposable MariaDB suite passed 48/168; branch unmerged/unpushed/
+> undeployed. This is not independent provider proof. Operator/provider
+> review, typed non-acceptance, retention, hosted checks, original C1
+> closure record and DPO/risk-owner decision remain OPEN. See private
+> `c1-exact-mail-receipt-reconciliation-2026-10-09.md`.
+
 > **9 October C1 abandoned claims, OPEN:** NEXUS local `d06caf0af`
 > holds claims over twenty minutes as UNKNOWN without resend and links an
 > inline attempt to mail metadata through a separate dispatch UUID.

@@ -1,5 +1,16 @@
 # CharityPilot Agent Continuation Handoff
 
+> **9 October C1 exact positive mail-log receipt, local only:** NEXUS
+> isolated `902517daa` reconciles UNKNOWN staff-email rows to accepted
+> only from one exact `sent`/`delivered` application mail-log receipt,
+> matched by tenant, category, dispatch ID and recipient key, recording
+> its ID/time. No second send is made; missing, failed or conflicting
+> receipts remain UNKNOWN. Disposable MariaDB suite passed 48/168;
+> exact retained log/hash and limits: private
+> `.charitypilot-private/c1-exact-mail-receipt-reconciliation-2026-10-09.md`.
+> Branch unmerged/unpushed/undeployed. Operator/provider reconciliation,
+> typed non-acceptance, retention, hosted proof and C1/Nikita review OPEN.
+
 > **9 October C1 abandoned claim hold, local only:** NEXUS isolated
 > `d06caf0af` moves staff-email claims older than twenty minutes to UNKNOWN
 > without retry, and stores a separate dispatch UUID in the ledger and mail
