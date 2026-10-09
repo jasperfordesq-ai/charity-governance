@@ -1,10 +1,22 @@
 # CharityPilot Agent Continuation Handoff
 
+> **9 October C1 registration transaction, local only:** NEXUS isolated
+> `codex/c1-pending-profile` commit `23f3df70c` commits non-sendable
+> per-recipient `captured` staff-email intent with the registrant and invite
+> redemption. A lost invite race rolls back the account; invite redemption
+> and deactivation use proper affected-row checks. Disposable MariaDB
+> related suite passed 34 tests/92 assertions. Exact private evidence:
+> `.charitypilot-private/c1-registration-intent-atomic-2026-10-09.md`.
+> The branch is unmerged/unpushed/undeployed. The inline email sender still
+> has the reproduced partial-recipient retry defect; provider UNKNOWN,
+> ledger retention, hosted proof and C1/Nikita disposition remain OPEN.
+
 > **9 October C1 durable-ledger foundation, local only:** NEXUS isolated
 > `codex/c1-pending-profile` commit `cf6dafd87` adds a tenant-scoped unique
 > per-recipient email claim table/service with an UNKNOWN terminal state.
-> Disposable MariaDB migration and tests passed 4/30. It is not wired into
-> registration or email sending; the failed-recipient retry defect remains.
+> Disposable MariaDB migration and tests passed 4/30. At this checkpoint
+> it was not wired into registration or email sending; later `23f3df70c`
+> captures non-sendable intent. The failed-recipient retry defect remains.
 > Branch is unmerged/unpushed/undeployed. Decide ledger retention and prove
 > the registration commit and provider outcome boundary before wiring.
 > Private receipt: `.charitypilot-private/c1-email-delivery-ledger-local-2026-10-09.md`.

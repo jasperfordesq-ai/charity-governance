@@ -1,9 +1,20 @@
 # CharityPilot Full-Platform Remediation Audit
 
+> **9 October C1 atomic registration intent, OPEN:** Local NEXUS commit
+> `23f3df70c` captures non-sendable per-recipient staff-email intent with
+> account creation and invite redemption. A lost invite race rolls back;
+> affected-row bugs were fixed. Disposable MariaDB related suite passed
+> 34 tests/92 assertions. This does not repair the reproduced inline
+> failed-recipient retry defect or ambiguous provider outcome. The branch
+> is unmerged/unpushed/undeployed; retention, hosted proof, original C1
+> closure evidence and Nikita/risk-owner disposition remain open. See
+> `.charitypilot-private/c1-registration-intent-atomic-2026-10-09.md`.
+
 > **9 October C1 per-recipient ledger, OPEN:** NEXUS local `cf6dafd87`
-> introduces an inert unique staff-email claim ledger with explicit UNKNOWN;
-> disposable MariaDB migration/tests pass 4/30. No registration/sender
-> integration, retry, provider reconciliation, retention decision, hosted
+> introduced a unique staff-email claim ledger with explicit UNKNOWN;
+> disposable MariaDB migration/tests passed 4/30 at that checkpoint. The
+> later `23f3df70c` commit captures non-sendable registration intent;
+> sender integration, retry, provider reconciliation, retention decision, hosted
 > proof or risk-owner/DPO acceptance exists. Preserve C1 as OPEN.
 
 > **9 October C1 bell replay reduction, OPEN:** A local NEXUS branch commit
