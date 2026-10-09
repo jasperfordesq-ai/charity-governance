@@ -1,5 +1,14 @@
 # CharityPilot Agent Continuation Handoff
 
+> **9 October 01:54 UTC C1 adjacent stale ranked-cache visibility,
+> OPEN:** Separate NEXUS isolated branch `codex/c1-pending-profile`
+> commit `d1e55c525` rechecks a ranked candidate's current privacy,
+> search opt-in, approval and status before selecting profile fields.
+> Red synthetic route disclosed a newly private cached member; broader
+> green suites passed 137/398. Branch is 12 ahead of origin/main,
+> unpushed/unmerged/undeployed. Provisional NEXUS F-575; original C1,
+> hosted replay and Nikita review remain OPEN. See private receipt.
+
 > **9 October complaint source-state audit, OPEN:** The current
 > complaint recovery protocol does not independently preserve ordinary
 > complaint creates or edits. Register audit has only field names;

@@ -1,5 +1,13 @@
 # CharityPilot Full-Platform Remediation Audit
 
+> **9 October 01:54 UTC C1 adjacent F-575, OPEN:** A three-minute
+> cached CommunityRank ID could reveal a profile after the member
+> became private or ineligible. Separate NEXUS local commit
+> `d1e55c525` rechecks current visibility in the ranked detail query.
+> Synthetic route red/green and affected 137/398 passed; no push,
+> release, hosted replay or Nikita acceptance. CharityPilot C1 stays
+> OPEN; see private F-575 receipt.
+
 > **9 October complaint source replay, OPEN:** Current source lets
 > `ComplaintRecord` create/update advance state without independent
 > replay facts, while the register audit omits case values. Recovery
