@@ -1,5 +1,15 @@
 # CharityPilot Agent Continuation Handoff
 
+> **9 October 07:44 Dublin count-only live state:** The clean serving
+> `96c8b1e8` VM has 1 active Owner, 2 Admins, 1 retained test Member,
+> 74 restricted/unassessed Vault rows and one reviewed Member-visible
+> certificate. The same read-only checks found zero approved report
+> snapshots/current sign-offs and zero retention-policy revisions.
+> Exact outputs are in `.charitypilot-private/*-morning-20261009.txt`.
+> Both accessible browser sessions are at sign-in. Live Member denial,
+> actual Board approval, policy decisions and Nikita acceptance remain
+> open.
+
 > **9 October ~07:43 Dublin live restricted-role recheck:** A guarded
 > read-only VM script on serving green `96c8b1e8` exited zero:
 > API/web/scheduler configure `cp_runtime`, API/scheduler actual SQL
