@@ -1,5 +1,15 @@
 # CharityPilot Full-Platform Remediation Audit
 
+> **9 October 07:37 Dublin C1 evidence update, OPEN:** The adjacent
+> local NEXUS C1 branch is now clean at `45f3cce50` after a rebase
+> onto updated `origin/main=378f36e90`; 231 disposable MariaDB tests,
+> 756 assertions and 12 existing skips passed. It retains the
+> staff-list registration-alert link across seven upstream commits.
+> The branch is still unpushed/unmerged/undeployed. No hosted
+> recipient-wide delivery/profile-click proof, original closure
+> receipt, failed-recipient retry, risk-owner or Nikita acceptance has
+> been established; keep C1 OPEN.
+
 > **9 October exact local gate, OPEN hosted:** The clean `46058716`
 > source passed 2,724/2,724 API tests, 14/14 serial real PostgreSQL 16
 > migration tests and 1,123 production-check passes (five platform

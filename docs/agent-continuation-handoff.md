@@ -1,5 +1,18 @@
 # CharityPilot Agent Continuation Handoff
 
+> **9 October 07:37 Dublin adjacent C1 source gate, still OPEN:** The
+> separate NEXUS branch `codex/c1-pending-profile` was rebased over
+> seven newer `origin/main` commits (`378f36e90`) and is clean at
+> `45f3cce50`, 14 ahead/zero behind. This preserves the C1 staff-list
+> alert destination after upstream restored a numeric profile CTA.
+> Disposable MariaDB 10.11 tests passed 231/231, 756 assertions, 12
+> existing skips; native push inventory, semver and version checks
+> passed. Exact private evidence is in
+> `.charitypilot-private/c1-decision-for-review-2026-10-06.md`.
+> Neither branch nor CharityPilot's pending source was pushed or
+> deployed. C1 delivery retry, hosted checks, original closure receipt
+> and risk-owner/DPO acceptance remain open.
+
 > **9 October exact local release tests after final journal mapping:**
 > Source `46058716` passed the full API package command: 2,724 API tests
 > and 14 serial real PostgreSQL 16 migration tests, exit 0. The local
