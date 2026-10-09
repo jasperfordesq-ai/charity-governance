@@ -1,5 +1,13 @@
 # CharityPilot Agent Continuation Handoff
 
+> **9 October current-candidate API verification, local only:** On clean
+> `9e75cc86`, `npm.cmd test` in `apps/api` completed with exit 0: TypeScript
+> and seed builds passed, 2,717 API tests passed, and all 14 serial real
+> PostgreSQL migration tests passed. This refreshes the earlier API-suite
+> result after the recent SQL/web changes. It is local source evidence;
+> exact release CI, hosted migration, role checks and Nikita acceptance
+> remain open. See private `overnight-handoff-2026-10-09.md`.
+
 > **9 October calendar retention SQL test gate, local only:** The existing
 > disposable PostgreSQL UTC anniversary proof was not included in the CI
 > retention command. It now runs through `test:retention-policy`, which
