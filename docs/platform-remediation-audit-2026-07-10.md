@@ -1,5 +1,14 @@
 # CharityPilot Full-Platform Remediation Audit
 
+> **9 October complaint source writer gate, OPEN:** Local API and
+> `20261009080000_recovery_bound_complaint_source` refuse ordinary
+> `ComplaintRecord` create/update after complaint recovery binding;
+> unbound work and separately controlled purge remain. Full API 2,708
+> and 12 serial PostgreSQL migration tests passed. The migration is
+> undeployed, binding remains inactive, and independent source custody,
+> commit/UNKNOWN proof, baseline/replay, controller policy and Nikita
+> acceptance remain OPEN.
+
 > **9 October complaint source atomicity, OPEN:** The new encrypted
 > candidate and a local `ComplaintRecord` transaction have no atomic
 > cross-system commit. A candidate may outlive rollback; a DB-first

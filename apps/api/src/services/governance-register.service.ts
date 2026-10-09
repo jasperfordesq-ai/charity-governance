@@ -613,6 +613,12 @@ export class GovernanceRegisterService {
   createComplaint(organisationId: string, data: CreateComplaintRecordRequest, actorUserId: string) {
     return this.prisma.$transaction(async (tx) => {
       await lockOrganisationForUpdate(tx, organisationId);
+      if (await tx.complaintRecoveryEnforcement.findUnique({
+        where: { organisationId }, select: { id: true },
+      })) {
+        throw new AppError(409, 'COMPLAINT_SOURCE_RECOVERY_REQUIRED',
+          'Complaint changes require independent recovery authority for this charity.');
+      }
       const row = await tx.complaintRecord.create({
         data: {
           organisationId,
@@ -639,6 +645,12 @@ export class GovernanceRegisterService {
       await lockOrganisationForUpdate(tx, organisationId);
       const existing = await tx.complaintRecord.findFirst({ where: { id, organisationId, removedAt: null } });
       if (!existing) throw new AppError(404, 'COMPLAINT_NOT_FOUND', 'Complaint record not found');
+      if (await tx.complaintRecoveryEnforcement.findUnique({
+        where: { organisationId }, select: { id: true },
+      })) {
+        throw new AppError(409, 'COMPLAINT_SOURCE_RECOVERY_REQUIRED',
+          'Complaint changes require independent recovery authority for this charity.');
+      }
       assertUnchanged(existing, expectedUpdatedAt, 'REGISTER_UPDATE_CONFLICT');
       const row = await tx.complaintRecord.update({
         where: { id },

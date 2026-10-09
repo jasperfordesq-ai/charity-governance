@@ -1,5 +1,16 @@
 # CharityPilot Agent Continuation Handoff
 
+> **9 October ~03:23 Dublin complaint source writer fence, OPEN:** Local
+> API and forward SQL now refuse ordinary `ComplaintRecord` create/update
+> after a charity's recovery binding, including direct database writes.
+> Unbound charities continue; separately guarded permanent purge remains
+> reachable. Full local API 2,708 and 12 serial disposable PostgreSQL
+> migration tests passed. This fourteenth forward migration is not on the
+> private VM. No independently committed source fact, baseline, trusted
+> head, approved custody, host-loss replay, live binding or Nikita
+> acceptance exists. See private
+> `recovery-bound-complaint-source-gate-2026-10-09.md`.
+
 > **9 October ~03:20 Dublin unattended source review:** A bounded review of
 > the unreleased browser refresh/logout/MFA paths and selected recovery and
 > calendar-retention migrations at `e78be948` found no new concrete bypass

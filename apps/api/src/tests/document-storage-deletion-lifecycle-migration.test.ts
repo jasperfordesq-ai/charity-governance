@@ -693,6 +693,42 @@ test('real PostgreSQL 16 migration freezes ordinary complaint removal and restor
   } finally { await removeDisposableContainer(container); }
 });
 
+test('real PostgreSQL 16 migration freezes complaint source inserts and edits after recovery binding', { timeout: 120_000 }, async () => {
+  const container = `charitypilot-complaint-source-gate-${randomUUID()}`;
+  assertDockerSuccess(docker(['run', '--detach', '--name', container, '--network', 'none',
+    '-e', 'POSTGRES_HOST_AUTH_METHOD=trust', POSTGRES_IMAGE]), 'start complaint source gate fixture');
+  try {
+    await waitForPostgres(container);
+    psql(container, `
+      CREATE TABLE "Organisation" (id TEXT PRIMARY KEY);
+      INSERT INTO "Organisation" VALUES ('charity'), ('other');
+      CREATE TABLE "ComplaintRecoveryEnforcement" (id TEXT PRIMARY KEY, "organisationId" TEXT UNIQUE);
+      CREATE TABLE "ComplaintRecord" (id TEXT PRIMARY KEY, "organisationId" TEXT NOT NULL
+        REFERENCES "Organisation"(id), summary TEXT NOT NULL);
+      INSERT INTO "ComplaintRecord" VALUES ('before','charity','original');
+    `);
+    psql(container, readFileSync(new URL(
+      '../../prisma/migrations/20261009080000_recovery_bound_complaint_source/migration.sql',
+      import.meta.url,
+    ), 'utf8'));
+    psql(container, `INSERT INTO "ComplaintRecord" VALUES ('still-unbound','charity','allowed');
+      UPDATE "ComplaintRecord" SET summary='still allowed' WHERE id='before';`);
+    psql(container, `INSERT INTO "ComplaintRecoveryEnforcement" VALUES ('binding','charity');`);
+    assert.match(psql(container, `INSERT INTO "ComplaintRecord" VALUES ('blocked','charity','private');`, false).stderr,
+      /source change requires independent recovery authority/);
+    assert.match(psql(container, `UPDATE "ComplaintRecord" SET summary='changed' WHERE id='before';`, false).stderr,
+      /source change requires independent recovery authority/);
+    assert.match(psql(container, `UPDATE "ComplaintRecord" SET summary='changed' WHERE id='still-unbound';`, false).stderr,
+      /source change requires independent recovery authority/);
+    psql(container, `INSERT INTO "ComplaintRecord" VALUES ('other-record','other','allowed');
+      UPDATE "ComplaintRecord" SET summary='other edit' WHERE id='other-record';`);
+    assert.equal(psql(container, `SELECT count(*) FROM "ComplaintRecord" WHERE "organisationId"='charity';`).stdout.trim(), '2');
+    // The separate recovery execution and purge-claim gates govern DELETE.
+    // This source fence must not make their accepted deletion unreachable.
+    psql(container, `DELETE FROM "ComplaintRecord" WHERE id='before';`);
+  } finally { await removeDisposableContainer(container); }
+});
+
 test('real PostgreSQL 16 migration freezes only complaint policy facts after recovery enforcement', { timeout: 120_000 }, async () => {
   const container = `charitypilot-policy-gate-${randomUUID()}`;
   assertDockerSuccess(docker(['run', '--detach', '--name', container, '--network', 'none',
