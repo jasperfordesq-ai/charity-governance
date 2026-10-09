@@ -1,5 +1,16 @@
 # CharityPilot Full-Platform Remediation Audit
 
+> **9 October 00:49 UTC C1 adjacent profile-discovery gap, OPEN:**
+> NEXUS isolated branch `codex/c1-pending-profile` local commit
+> `cc8537c7f` enforces active/approved status in the shared
+> bulk-profile SQL predicate. A synthetic pre-fix query returned a
+> pending/public account to another member; corrected affected suites
+> passed 110 tests/272 assertions with disposable MariaDB. The
+> NEXUS fix remains unpushed/unmerged/undeployed. This does not
+> establish C1 admin-email closure or hosted DPO acceptance; original
+> evidence, recipient-wide and profile access checks, risk-owner and
+> Nikita review remain OPEN.
+
 > **9 October 00:42 UTC restricted database role, OPEN for review:**
 > Current private-VM API and scheduler SQL clients still use
 > `cp_runtime`; the pinned read-only role/grant checker passed its

@@ -1,5 +1,17 @@
 # CharityPilot Agent Continuation Handoff
 
+> **9 October 00:49 UTC C1-adjacent NEXUS source checkpoint, OPEN:**
+> Isolated `codex/c1-pending-profile` local commit `cc8537c7f`
+> closes a bulk-profile predicate gap that allowed a pending/public
+> account into member-visible SQL results despite direct-profile
+> and directory gates. A synthetic pre-fix test reproduced the leak;
+> corrected affected suites passed 110 tests/272 assertions on a
+> disposable MariaDB 10.11 network. The NEXUS branch is eight commits
+> ahead of origin/main, unpushed, unmerged and undeployed. The
+> original C1 admin-email evidence, hosted recipient/visibility
+> checks and risk-owner/Nikita disposition remain OPEN. Private
+> receipt: `c1-bulk-profile-visibility-2026-10-09.md`.
+
 > **9 October 00:42 UTC restricted DB login, OPEN for DPO review:**
 > The pinned read-only live checker on clean green private VM
 > `96c8b1e8` verified active API and scheduler `current_user =
