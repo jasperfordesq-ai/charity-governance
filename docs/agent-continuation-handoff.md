@@ -1,5 +1,15 @@
 # CharityPilot Agent Continuation Handoff
 
+> **9 October 00:57 UTC C1-adjacent profile Admin exemption, OPEN:**
+> NEXUS isolated local `621a3c415` makes shared profile visibility
+> grant its Admin exemption only to active, approved staff. A
+> suspended-admin synthetic regression failed before the fix; the
+> corrected affected suites passed 134 tests/373 assertions on
+> disposable MariaDB. The branch is ten ahead of origin/main,
+> unpushed/unmerged/undeployed. This is no hosted session-revocation,
+> C1 mail or DPO acceptance proof. Private receipt:
+> `c1-bulk-profile-visibility-2026-10-09.md`.
+
 > **9 October 00:52 UTC C1 test follow-up:** NEXUS isolated local
 > commit `1345a4f15` adds an accepted-connection regression for the
 > pending-profile bulk gate. The focused disposable MariaDB run

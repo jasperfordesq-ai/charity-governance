@@ -1,5 +1,13 @@
 # CharityPilot Full-Platform Remediation Audit
 
+> **9 October 00:57 UTC C1 adjacent staff-exemption fix, OPEN:**
+> NEXUS local `621a3c415` requires active, approved Admin-tier
+> viewer status before shared member-profile privacy exemption.
+> Synthetic red case reproduced suspended-admin elevation; corrected
+> suites passed 134 tests/373 assertions on isolated MariaDB. This
+> source remains unpushed/unmerged/undeployed. Hosted access,
+> original C1 admin-email evidence and Nikita review remain OPEN.
+
 > **9 October 00:52 UTC C1 source-test checkpoint:** NEXUS local
 > `1345a4f15` adds a focused accepted-connection pending-profile
 > regression, passing 1/1 with five assertions on isolated MariaDB.
