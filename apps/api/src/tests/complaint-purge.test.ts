@@ -24,7 +24,7 @@ function fixture() {
     complaintPurgeAuthorization:{
       findFirst:async({where}:any)=>{assert.equal(where.organisationId,'org');return f.auth;},
       findMany:async(args:any)=>{f.reads.push(args);return f.rows;},
-      create:async({data,select}:any)=>{assert.equal(select.claim.select.transactionId,undefined);f.writes.push(data);return data;},
+      create:async({data,select}:any)=>{if(f.error)throw f.error;assert.equal(select.claim.select.transactionId,undefined);f.writes.push(data);return data;},
     },
     complaintPurgeClaim:{create:async({data,select}:any)=>{
       assert.equal(select.transactionId,undefined);if(f.error)throw f.error;
@@ -53,6 +53,25 @@ test('complaint purge requires reviewed exact revision, original deadline and si
     const sample=fixture();mutate(sample.f);
     await assert.rejects(sample.service.authorize('org','complaint','actor',input));assert.equal(sample.f.writes.length,0);
   }
+});
+test('complaint recovery binding freezes disposal authorization and withdrawal decisions',async()=>{
+  const {f,service}=fixture();f.bound=true;
+  await assert.rejects(service.authorize('org','complaint','actor',input),
+    {statusCode:409,code:'PURGE_RECOVERY_AUTHORITY_REQUIRED'});
+  assert.equal(f.writes.length,0);
+  f.bound=false;await service.authorize('org','complaint','actor',input);
+  f.bound=true;
+  await assert.rejects(service.withdraw('org','actor','auth',
+    {evidenceRef:'WITHDRAW-001',reason:'Synthetic decision changed.'}),
+    {statusCode:409,code:'PURGE_RECOVERY_AUTHORITY_REQUIRED'});
+  assert.equal(f.writes.length,1);
+});
+test('complaint disposal race returns a safe recovery-authority conflict',async()=>{
+  const {f,service}=fixture();f.error=new Error('Complaint disposal decision requires independent recovery authority SECRET');
+  f.error.name='PrismaClientUnknownRequestError';
+  await assert.rejects(service.authorize('org','complaint','actor',input),(error:any)=>{
+    assert.equal(error.code,'PURGE_RECOVERY_AUTHORITY_REQUIRED');assert.doesNotMatch(error.message,/SECRET/);return true;
+  });
 });
 test('claim requires explicit confirmation, current Owner and unwithdrawn same-Owner authority',async()=>{
   for(const mutate of [(f:any)=>{f.owner=false;},(f:any)=>{f.auth=null;},

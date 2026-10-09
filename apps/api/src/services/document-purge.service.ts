@@ -60,6 +60,9 @@ export class DocumentPurgeService {
       // PostgreSQL RAISE EXCEPTION (P0001) arrives as an unknown-request error,
       // not P2004, with this Prisma engine. Translate only named purge guards.
       if (error instanceof Error && error.name === 'PrismaClientUnknownRequestError') {
+        if (error.message.includes('Document disposal decision requires independent recovery authority')) {
+          throw new AppError(409, 'PURGE_RECOVERY_AUTHORITY_REQUIRED', 'Disposal decisions require independent recovery authority for this charity.');
+        }
         if (error.message.includes('Document copy change requires independent recovery authority')) {
           throw new AppError(409, 'COPY_RECOVERY_AUTHORITY_REQUIRED', 'Copy changes require independent recovery authority for this charity.');
         }
@@ -96,6 +99,12 @@ export class DocumentPurgeService {
     const bytes = await this.readFile(organisationId, doc.fileUrl, doc.storageProvider!);
     if (bytes.length !== doc.fileSize || createHash('sha256').update(bytes).digest('hex') !== doc.recoverySha256) {
       throw new AppError(409, 'PURGE_FILE_CHANGED', 'The stored bytes differ from the removed file. Investigate before disposal.');
+    }
+  }
+
+  private async assertDecisionUnbound(tx: Prisma.TransactionClient, organisationId: string) {
+    if (await tx.documentRecoveryEnforcement.findUnique({ where: { organisationId }, select: { id: true } })) {
+      throw new AppError(409, 'PURGE_RECOVERY_AUTHORITY_REQUIRED', 'Disposal decisions require independent recovery authority for this charity.');
     }
   }
 
@@ -144,6 +153,7 @@ export class DocumentPurgeService {
     const input = purgeAuthorizationInput.parse(raw);
     return this.transaction(async tx => {
       await this.owner(tx, organisationId, actorUserId);
+      await this.assertDecisionUnbound(tx, organisationId);
       await tx.$queryRaw`SELECT id FROM "Document" WHERE id=${input.documentId} AND "organisationId"=${organisationId} FOR UPDATE`;
       const doc = await tx.document.findFirst({ where: { id: input.documentId, organisationId, deletedAt: { not: null } } });
       if (!doc) throw new AppError(404, 'DOCUMENT_NOT_FOUND', 'Deleted document not found');
@@ -162,6 +172,7 @@ export class DocumentPurgeService {
     const input = retentionWithdrawalInput.parse(raw);
     return this.transaction(async tx => {
       await this.owner(tx, organisationId, actorUserId);
+      await this.assertDecisionUnbound(tx, organisationId);
       await tx.$queryRaw`SELECT id FROM "DocumentPurgeAuthorization" WHERE id=${authorizationId} AND "organisationId"=${organisationId} FOR UPDATE`;
       const auth = await tx.documentPurgeAuthorization.findFirst({ where: { id: authorizationId, organisationId }, select: review });
       if (!auth) throw new AppError(404, 'PURGE_AUTHORIZATION_NOT_FOUND', 'Authorization not found');

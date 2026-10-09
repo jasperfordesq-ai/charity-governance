@@ -99,6 +99,15 @@ test('bound recovery freezes policy classes and document holds at the database b
           new RegExp(`${family} copy change requires independent recovery authority`));
       }
     }
+    for (const [family, org, tables] of [
+      ['Document', 'doc-org', ['DocumentPurgeAuthorization', 'DocumentPurgeAuthorizationWithdrawal']],
+      ['Complaint', 'complaint-org', ['ComplaintPurgeAuthorization', 'ComplaintPurgeAuthorizationWithdrawal']],
+    ]) {
+      for (const [index, table] of tables.entries()) {
+        query(`INSERT INTO "${table}" (id,"organisationId") VALUES ('synthetic-${family}-decision-${index}','${org}');`,
+          new RegExp(`${family} disposal decision requires independent recovery authority`));
+      }
+    }
     query(`UPDATE "Document" SET "deletionHold"=true WHERE id='doc-unheld';`,
       /Document deletion hold requires independent recovery authority/);
     query(`UPDATE "Document" SET "deletionHold"=false WHERE id='doc-held';`,

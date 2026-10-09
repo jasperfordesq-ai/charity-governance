@@ -1,5 +1,14 @@
 # CharityPilot Full-Platform Remediation Audit
 
+> **9 October 01:25 UTC P05/P07 primary decision writer, OPEN:**
+> Local API and SQL now refuse document/complaint disposal authority
+> or withdrawal inserts under recovery binding. Claims retain their
+> existing same-transaction published execution gate. Focused API
+> 31/31, direct-SQL migration proof 1/1 and full API 2,699 plus
+> 11 real PG tests passed.
+> Off-host custody/replay, remaining writers, controller policy,
+> release and Nikita acceptance are still outstanding.
+
 > **9 October 01:19 UTC P05/P07 copy writer boundary, OPEN:** The
 > local API and forward SQL freeze six document/complaint copy
 > authority, hold and observation insert paths when the relevant

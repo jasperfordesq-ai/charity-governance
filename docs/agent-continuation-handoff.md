@@ -1,5 +1,13 @@
 # CharityPilot Agent Continuation Handoff
 
+> **9 October 01:25 UTC P05/P07 primary disposal decisions, OPEN:**
+> Local forward SQL and API guards now refuse document/complaint purge
+> authorization and withdrawal inserts after the matching recovery
+> binding. Existing same-transaction claim execution remains. Focused
+> API 31/31, synthetic direct-SQL migration proof 1/1 and full API
+> 2,699 plus 11 real PG tests passed. This is inactive local source, not live
+> recovery or DPO acceptance. See the private decision receipt.
+
 > **9 October 01:19 UTC P05/P07 copy writer fence, OPEN:** A local
 > forward migration and API guards now refuse document/complaint
 > copy authority, hold and observation inserts after the matching

@@ -191,6 +191,31 @@ test('recording downstream evidence is scoped, Owner-only, post-claim and cannot
   await assert.rejects(service.recordDisposition('org-a', 'owner-a', 'auth-a', disposition), { statusCode: 409, code: 'COPY_RECOVERY_AUTHORITY_REQUIRED' });
 });
 
+test('document recovery binding freezes disposal authorization and withdrawal decisions', async () => {
+  const { service, state } = fixture();
+  state.bound = true;
+  await assert.rejects(service.authorize('org-a', 'owner-a', input),
+    { statusCode: 409, code: 'PURGE_RECOVERY_AUTHORITY_REQUIRED' });
+  assert.equal(state.writes.length, 0);
+  state.bound = false;
+  await service.authorize('org-a', 'owner-a', input);
+  state.bound = true;
+  await assert.rejects(service.withdraw('org-a', 'owner-a', 'auth-a',
+    { evidenceRef: 'WITHDRAW-001', reason: 'Synthetic decision changed.' }),
+    { statusCode: 409, code: 'PURGE_RECOVERY_AUTHORITY_REQUIRED' });
+  assert.equal(state.writes.length, 1);
+});
+test('document disposal race returns a safe recovery-authority conflict', async () => {
+  const { service, state } = fixture();
+  state.databaseFailure = Object.assign(new Error('Document disposal decision requires independent recovery authority SECRET'),
+    { name: 'PrismaClientUnknownRequestError' });
+  await assert.rejects(service.authorize('org-a', 'owner-a', input), (error: any) => {
+    assert.equal(error.code, 'PURGE_RECOVERY_AUTHORITY_REQUIRED');
+    assert.doesNotMatch(error.message, /SECRET/);
+    return true;
+  });
+});
+
 test('document recovery binding freezes copy observation writes while preserving history', async () => {
   const { service, state } = fixture();
   await service.authorize('org-a', 'owner-a', input);

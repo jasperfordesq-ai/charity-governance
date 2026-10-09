@@ -47,6 +47,10 @@ export class ComplaintPurgeService {
     try {return await this.prisma.$transaction(work);}
     catch(error) {
       if(error instanceof Error&&error.name==='PrismaClientUnknownRequestError'
+        &&error.message.includes('Complaint disposal decision requires independent recovery authority')) {
+        throw new AppError(409,'PURGE_RECOVERY_AUTHORITY_REQUIRED','Disposal decisions require independent recovery authority for this charity.');
+      }
+      if(error instanceof Error&&error.name==='PrismaClientUnknownRequestError'
         &&error.message.includes('Complaint copy change requires independent recovery authority')) {
         throw new AppError(409,'COPY_RECOVERY_AUTHORITY_REQUIRED','Copy changes require independent recovery authority for this charity.');
       }
@@ -61,6 +65,12 @@ export class ComplaintPurgeService {
         throw new AppError(409,'COMPLAINT_PURGE_REVIEW_CHANGED','The disposal review changed. Refresh its current state before continuing.');
       }
       throw error;
+    }
+  }
+
+  private async assertDecisionUnbound(tx:Prisma.TransactionClient,organisationId:string) {
+    if(await tx.complaintRecoveryEnforcement.findUnique({where:{organisationId},select:{id:true}})) {
+      throw new AppError(409,'PURGE_RECOVERY_AUTHORITY_REQUIRED','Disposal decisions require independent recovery authority for this charity.');
     }
   }
 
@@ -116,6 +126,7 @@ export class ComplaintPurgeService {
     const input=complaintPurgeAuthorizationInput.parse(raw);
     return this.transaction(async tx=>{
       await this.owner(tx,organisationId,actorUserId);
+      await this.assertDecisionUnbound(tx,organisationId);
       await tx.$queryRaw`SELECT id FROM "ComplaintRecord" WHERE id=${complaintId} AND "organisationId"=${organisationId} FOR UPDATE`;
       const record=await tx.complaintRecord.findFirst({where:{id:complaintId,organisationId,removedAt:{not:null}},include:{removal:true}});
       if(!record) throw new AppError(404,'COMPLAINT_NOT_FOUND','Recoverable complaint not found.');
@@ -136,6 +147,7 @@ export class ComplaintPurgeService {
     id.parse(authorizationId);const input=retentionWithdrawalInput.parse(raw);
     return this.transaction(async tx=>{
       await this.owner(tx,organisationId,actorUserId);
+      await this.assertDecisionUnbound(tx,organisationId);
       await tx.$queryRaw`SELECT id FROM "ComplaintPurgeAuthorization" WHERE id=${authorizationId} AND "organisationId"=${organisationId} FOR UPDATE`;
       const auth=await tx.complaintPurgeAuthorization.findFirst({where:{id:authorizationId,organisationId},select:review});
       if(!auth) throw new AppError(404,'COMPLAINT_PURGE_NOT_FOUND','Disposal review not found.');
