@@ -1,5 +1,17 @@
 # CharityPilot Full-Platform Remediation Audit
 
+> **9 October ~01:11 Dublin C1, OPEN:** The disposable local C1 recipient
+> matrix now exercises all nine listener staff-selection classes across
+> neutral and approval-required registrations, excludes ordinary,
+> suspended and foreign accounts, and captures 32 real SMTP messages.
+> Full-message checks cover localized subjects for all 11 catalogs,
+> absence of synthetic registrant particulars and numeric profile links,
+> and correct staff destinations. Test transactions rolled back and
+> containers were removed. The NEXUS branch remains unpushed/unmerged/
+> undeployed. Exact hosted delivery, real tenant inventory, original
+> closure evidence and risk-owner/Nikita review keep C1 OPEN. Private
+> receipt: `c1-local-recipient-matrix-receipt-2026-10-09.md`.
+
 > **9 October ~01:05 Dublin C1, OPEN:** The current isolated NEXUS branch
 > passed two local synthetic registration HTTP routes and captured four
 > actual SMTP staff notices in disposable Mailpit. Bell/email-log counts,

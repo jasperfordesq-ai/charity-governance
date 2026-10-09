@@ -1,5 +1,18 @@
 # CharityPilot Agent Continuation Handoff
 
+> **9 October ~01:11 Dublin C1 local recipient matrix:** At the same
+> isolated, unpushed NEXUS commit `73490953e`, two synthetic registration
+> routes exercised all nine staff recipient-selection classes, seven
+> additional locale samples, and ordinary/suspended/foreign exclusions.
+> Each variant persisted 16 bells and 16 sent email-log rows, then rolled
+> back to zero fixture rows. All 32 Mailpit messages passed exact
+> recipient, localized-subject (11 catalogs), synthetic-particulars
+> omission and usable staff-link checks. The final test explicitly loaded
+> all locales; the default testing preload only includes en/ga/de.
+> Disposable resources were removed. Exact private receipt/log/runner:
+> `c1-local-recipient-matrix-receipt-2026-10-09.md`. This still does not
+> prove hosted delivery, historic C1 closure or independent DPO review.
+
 > **9 October ~01:05 Dublin C1 full local route/capture proof:** At exact
 > unpushed NEXUS commit `73490953e`, two disposable HTTP-kernel
 > registrations (ordinary and approval-required) returned 201 and each
