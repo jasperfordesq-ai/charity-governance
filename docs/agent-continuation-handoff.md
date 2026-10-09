@@ -1,5 +1,15 @@
 # CharityPilot Agent Continuation Handoff
 
+> **9 October bound upload-intent mutation fix, local only:** Review of the
+> unreleased source/upload migration found that old reconciled upload intents
+> could be changed or deleted after recovery binding. A red direct-SQL test
+> reproduced it. The migration now fences INSERT, UPDATE and DELETE for a
+> bound charity and checks both old and new charities on retargeting. Focused
+> PostgreSQL 1/1, composed byte authority 1/1, retention 2/2 and byte fence
+> 2/2 passed locally. See private
+> `upload-intent-bound-update-review-2026-10-09.md`. VM release, independent
+> recovery authority and Nikita acceptance remain OPEN.
+
 > **9 October recovery script compatibility, local only:** Current
 > disposable retention/bound-policy tests passed 1/1 each, composed
 > complaint recovery passed 1/1, and document byte-fence passed 2/2 after

@@ -853,6 +853,12 @@ test('real PostgreSQL document source gate stops bound reservations and edits wh
       VALUES ('blocked-intent','charity','RESERVED');`, false).stderr,
     /upload reservation requires independent recovery authority/);
     for (const statement of [
+      `UPDATE "DocumentUploadIntent" SET state='RESERVED' WHERE id='old-intent';`,
+      `UPDATE "DocumentUploadIntent" SET "organisationId"='other' WHERE id='old-intent';`,
+      `DELETE FROM "DocumentUploadIntent" WHERE id='old-intent';`,
+    ]) assert.match(psql(container, statement, false).stderr,
+      /upload intent change requires independent recovery authority/);
+    for (const statement of [
       `INSERT INTO "Document" VALUES ('blocked','charity','not allowed');`,
       `UPDATE "Document" SET name='edited' WHERE id='existing';`,
     ]) assert.match(psql(container, statement, false).stderr,
@@ -861,7 +867,12 @@ test('real PostgreSQL document source gate stops bound reservations and edits wh
       INSERT INTO "Document" VALUES ('other-doc','other','allowed');
       UPDATE "Document" SET name='edited' WHERE id='other-doc';
       INSERT INTO "DocumentUploadIntent" (id,"organisationId",state)
-        VALUES ('other-intent','other','RESERVED');`);
+        VALUES ('other-intent','other','RESERVED');
+      UPDATE "DocumentUploadIntent" SET state='ATTACHED' WHERE id='other-intent';`);
+    assert.match(psql(container, `UPDATE "DocumentUploadIntent" SET "organisationId"='charity'
+      WHERE id='other-intent';`, false).stderr,
+    /upload intent change requires independent recovery authority/);
+    psql(container, `DELETE FROM "DocumentUploadIntent" WHERE id='other-intent';`);
     assert.equal(psql(container, `SELECT state FROM "DocumentUploadIntent" WHERE id='old-intent';`).stdout.trim(), 'CLEANUP_PENDING');
     assert.equal(psql(container, `SELECT name FROM "Document" WHERE id='existing';`).stdout.trim(), 'original');
     for (const [charity, reservationFirst] of [['race-a', true], ['race-b', false]] as const) {

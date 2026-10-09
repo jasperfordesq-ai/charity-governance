@@ -1,5 +1,13 @@
 # CharityPilot Full-Platform Remediation Audit
 
+> **9 October upload-intent post-binding fence, OPEN for release:** The
+> seventeenth local forward migration previously rejected only new intent
+> INSERT. A disposable direct-SQL regression showed UPDATE of a reconciled
+> bound intent succeeded, risking an altered byte-authority inventory. It now
+> rejects bound INSERT/UPDATE/DELETE, including retargeting across the charity
+> boundary; focused and adjacent PostgreSQL proofs pass. This remains
+> unreleased and does not provide independent custody or host-loss replay.
+
 > **9 October recovery script matrix, local only:** Disposable retention,
 > bound-policy, complaint-recovery and byte-fence tests now pass 1/1, 1/1,
 > 1/1 and 2/2 under the current local migration chain. Their previous

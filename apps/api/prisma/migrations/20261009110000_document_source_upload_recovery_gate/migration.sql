@@ -1,20 +1,37 @@
 BEGIN;
 -- A reservation precedes provider I/O. Refuse new reservations under a
--- recovery binding before any new bytes can be written. Existing intent
--- updates remain available for reconciliation of earlier attempts.
+-- recovery binding before any new bytes can be written. Once bound, freeze
+-- old intents too: their state and storage identity are byte-authority facts.
 CREATE FUNCTION "DocumentUploadIntent_source_recovery_gate_fn"() RETURNS trigger AS $$
 BEGIN
-  PERFORM 1 FROM "Organisation" WHERE id=NEW."organisationId" FOR UPDATE;
-  IF NOT FOUND THEN RAISE EXCEPTION 'Document upload intent organisation is unavailable'; END IF;
+  IF TG_OP='INSERT' THEN
+    PERFORM 1 FROM "Organisation" WHERE id=NEW."organisationId" FOR UPDATE;
+    IF NOT FOUND THEN RAISE EXCEPTION 'Document upload intent organisation is unavailable'; END IF;
+    IF EXISTS (SELECT 1 FROM "DocumentRecoveryEnforcement"
+      WHERE "organisationId"=NEW."organisationId") THEN
+      RAISE EXCEPTION 'Document upload reservation requires independent recovery authority';
+    END IF;
+    RETURN NEW;
+  END IF;
+  IF TG_OP='DELETE' THEN
+    PERFORM 1 FROM "Organisation" WHERE id=OLD."organisationId" FOR UPDATE;
+    IF EXISTS (SELECT 1 FROM "DocumentRecoveryEnforcement"
+      WHERE "organisationId"=OLD."organisationId") THEN
+      RAISE EXCEPTION 'Document upload intent change requires independent recovery authority';
+    END IF;
+    RETURN OLD;
+  END IF;
+  PERFORM 1 FROM "Organisation"
+    WHERE id IN (OLD."organisationId", NEW."organisationId") ORDER BY id FOR UPDATE;
   IF EXISTS (SELECT 1 FROM "DocumentRecoveryEnforcement"
-    WHERE "organisationId"=NEW."organisationId") THEN
-    RAISE EXCEPTION 'Document upload reservation requires independent recovery authority';
+    WHERE "organisationId" IN (OLD."organisationId", NEW."organisationId")) THEN
+    RAISE EXCEPTION 'Document upload intent change requires independent recovery authority';
   END IF;
   RETURN NEW;
 END;
 $$ LANGUAGE plpgsql;
 CREATE TRIGGER "A_DocumentUploadIntent_source_recovery_gate"
-  BEFORE INSERT ON "DocumentUploadIntent"
+  BEFORE INSERT OR UPDATE OR DELETE ON "DocumentUploadIntent"
   FOR EACH ROW EXECUTE FUNCTION "DocumentUploadIntent_source_recovery_gate_fn"();
 
 -- A reservation may commit before its provider write starts. Binding must
