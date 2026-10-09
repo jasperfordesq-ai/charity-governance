@@ -1,5 +1,16 @@
 # Document recovery and purge implementation contract
 
+> **9 October 2026 complaint source host-loss boundary, OPEN:**
+> `ComplaintRecord` creation and ordinary edits still have no
+> independently recoverable source revision. The register change audit
+> records metadata, not the sensitive field values needed to rebuild a
+> case. The current intent journal is bounded to 10,000 entries and
+> 4,096-byte objects and is not an approved per-edit case journal.
+> Binding a charity therefore needs a controller-approved encrypted
+> source baseline, scalable revision publication, database writer gate
+> and stale-backup replay proof in addition to the existing purge/hold
+> protocols. See private `complaint-source-host-loss-contract-2026-10-09.md`.
+
 Status: implementation and acceptance in progress, 30 September 2026. Local
 proof now covers policy administration, recoverable Vault removal and exact-byte
 restore, reviewed purge claims, the local primary-file worker and downstream

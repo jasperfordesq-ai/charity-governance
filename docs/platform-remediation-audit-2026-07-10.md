@@ -1,5 +1,13 @@
 # CharityPilot Full-Platform Remediation Audit
 
+> **9 October complaint source replay, OPEN:** Current source lets
+> `ComplaintRecord` create/update advance state without independent
+> replay facts, while the register audit omits case values. Recovery
+> binding is therefore still unsafe as an activation step. Required:
+> approved encrypted baseline, bounded independent revision stream,
+> all-writer database gate and stale-backup replay. Private contract:
+> `complaint-source-host-loss-contract-2026-10-09.md`.
+
 > **9 October 01:43 UTC P05/P07 resolution evidence, OPEN:** The local
 > API and SQL fence resolution recording/withdrawal after complaint
 > recovery binding. Focused 35/35, direct PostgreSQL 1/1 and full API

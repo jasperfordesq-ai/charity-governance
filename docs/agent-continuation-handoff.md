@@ -1,5 +1,13 @@
 # CharityPilot Agent Continuation Handoff
 
+> **9 October complaint source-state audit, OPEN:** The current
+> complaint recovery protocol does not independently preserve ordinary
+> complaint creates or edits. Register audit has only field names;
+> source snapshot comparison needs a surviving current database.
+> Existing intent-journal capacity and data classification do not
+> support reusing it as a case-edit journal. No activation or provider
+> change was made. See private host-loss contract before new gates.
+
 > **9 October 01:43 UTC P05/P07 complaint resolution writer, OPEN:**
 > Local forward SQL and API now refuse `ComplaintResolutionEvidence`
 > recording or withdrawal after complaint recovery binding. A focused
