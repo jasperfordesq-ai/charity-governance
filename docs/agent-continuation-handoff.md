@@ -1,5 +1,15 @@
 # CharityPilot Agent Continuation Handoff
 
+> **9 October 10:44 Dublin live role/replay recheck:** On the still-serving
+> clean green `96c8b1e8` VM, guarded read-only checks passed the
+> `cp_runtime` restricted-login assertions (11/11, zero memberships,
+> zero protected-table write grants). Security Audit still has nine
+> replay detections, none after 30 September; the two latest WEB rows
+> followed LOGOUT by 137/134 ms, while the older connector and WEB
+> events lack diagnostics. This is current scoped VM evidence, not
+> historical-cause resolution, post-release proof or Nikita acceptance.
+> Private receipt: `role-and-replay-live-recheck-2026-10-09.md`.
+
 > **9 October 10:43 Dublin live Vault metadata refresh:** A guarded,
 > read-only private-VM query at serving `96c8b1e8` returned 75 active
 > files. All 75 IDs and fields matched the 8 October inventory: 74

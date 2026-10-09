@@ -1,5 +1,14 @@
 # CharityPilot Full-Platform Remediation Audit
 
+> **9 October DPO-02/restricted DB live recheck, OPEN:** Guarded read-only
+> checks on serving `96c8b1e8` confirmed `cp_runtime` as configured and
+> actual API/scheduler SQL user; 11/11 restriction flags and zero
+> protected-table write grants passed. Replay-event count remains nine,
+> latest 30 September, with unresolved older diagnostics and MCP event.
+> Repeat DB evidence after the undeployed release; obtain dated incident
+> and Nikita disposition. Private receipt:
+> `.charitypilot-private/role-and-replay-live-recheck-2026-10-09.md`.
+
 > **9 October DPO-01 live Vault inventory, scoped:** Guarded read-only
 > private-VM metadata at serving `96c8b1e8` found 75 active files with
 > no field or ID drift from 8 October: 74 restricted/unassessed and the
