@@ -1,5 +1,15 @@
 # CharityPilot Full-Platform Remediation Audit
 
+> **9 October ~01:05 Dublin C1, OPEN:** The current isolated NEXUS branch
+> passed two local synthetic registration HTTP routes and captured four
+> actual SMTP staff notices in disposable Mailpit. Bell/email-log counts,
+> recipient scope, rollback, subject/body minimisation and staff-list
+> links passed for ordinary and approval-required Admin/Broker variants.
+> This does not establish exact hosted release delivery, full recipient
+> and locale coverage, recovered historical closure evidence or Nikita's
+> verification. No live status or deployment changed. Private receipt:
+> `c1-local-route-mailpit-receipt-2026-10-09.md`.
+
 > **9 October 00:55 Dublin C1, OPEN:** Broader isolated NEXUS branch
 > PHPUnit run passed 99 tests/272 assertions in disposable MariaDB;
 > 12 older fan-out tests remain quarantined and skipped. The branch is

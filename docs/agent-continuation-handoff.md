@@ -1,5 +1,18 @@
 # CharityPilot Agent Continuation Handoff
 
+> **9 October ~01:05 Dublin C1 full local route/capture proof:** At exact
+> unpushed NEXUS commit `73490953e`, two disposable HTTP-kernel
+> registrations (ordinary and approval-required) returned 201 and each
+> produced two scoped staff bells and two sent email-log rows. A private
+> Mailpit captured all four SMTP notices; full subject/HTML/text checks
+> found no synthetic registrant name/address or numeric profile link,
+> and both Admin/Broker destinations matched the intended lists. Both
+> database fixtures rolled back to zero rows; disposable containers and
+> network were removed. Receipt, log and guarded rerun script are in
+> `.charitypilot-private/`. This adds local route-to-capture evidence,
+> not hosted delivery, every recipient/locale or C1 closure. Branch
+> remains unpushed, unmerged and undeployed; risk-owner/DPO gates remain.
+
 > **9 October 00:59 Dublin C1 actual bell fan-out proof:** Separate NEXUS
 > worktree `C:\platforms\htdocs\staging-codex-c1-pending`, branch
 > `codex/c1-pending-profile`, now includes test-only commit `73490953e`.
