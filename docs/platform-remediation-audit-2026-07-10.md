@@ -1,5 +1,13 @@
 # CharityPilot Full-Platform Remediation Audit
 
+> **9 October ~01:18 Dublin cleanup identity gate, OPEN:** The complete
+> local API command at commit `12ab8719` passed 2,683 main tests and
+> all 11 serial real-PostgreSQL migration tests with no failures/skips.
+> This broadens source compatibility evidence for the new immutable
+> cleanup-job charity trigger. Live migration, all-writer byte execution,
+> independent custody, retention policy and Nikita acceptance remain
+> separate and OPEN.
+
 > **9 October ~01:20 Dublin DPO-05/P05/P08, OPEN:** Red PostgreSQL proof
 > showed `DocumentStorageDeletion.organisationId` could change while the
 > provider/path stayed fixed, bypassing the existing purge alias trigger

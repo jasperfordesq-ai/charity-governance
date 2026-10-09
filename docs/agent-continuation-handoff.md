@@ -1,5 +1,13 @@
 # CharityPilot Agent Continuation Handoff
 
+> **9 October ~01:18 Dublin cleanup migration broad gate:** Exact clean
+> local commit `12ab8719` passed the full API test command after the
+> cleanup-job charity identity migration: 2,683 main tests and 11
+> serial real-PostgreSQL migration tests, zero failures/skips in both
+> phases. Private log: `document-cleanup-org-api-suite-2026-10-09.log`.
+> This is local integration evidence; no push, deployment, live policy,
+> independent recovery provider or DPO review followed.
+
 > **9 October ~01:20 Dublin document cleanup identity fence:** A red
 > disposable PostgreSQL test proved an unclaimed cleanup job could be
 > moved from charity A to charity B without changing provider/path,
