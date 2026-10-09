@@ -1,5 +1,13 @@
 # CharityPilot Full-Platform Remediation Audit
 
+> **9 October DPO-01 live Vault inventory, scoped:** Guarded read-only
+> private-VM metadata at serving `96c8b1e8` found 75 active files with
+> no field or ID drift from 8 October: 74 restricted/unassessed and the
+> one reviewed Member-visible certificate. Private base/addendum
+> worksheets reconcile 75/75 IDs. File-specific byte/authority decisions
+> for the restricted queue and Nikita's acceptance remain OPEN.
+> Receipt: `.charitypilot-private/vault-inventory-refresh-2026-10-09.md`.
+
 > **9 October DPO-04 Member export browser gate, local only:** The
 > synthetic approved-snapshot Chromium journey now also signs in a
 > separate Member from the same disposable charity. It passed 1/1:

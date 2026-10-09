@@ -1,5 +1,14 @@
 # CharityPilot Agent Continuation Handoff
 
+> **9 October 10:43 Dublin live Vault metadata refresh:** A guarded,
+> read-only private-VM query at serving `96c8b1e8` returned 75 active
+> files. All 75 IDs and fields matched the 8 October inventory: 74
+> restricted/unassessed, one expressly reviewed Member-visible
+> certificate. The 63+5+7 private decision worksheets cover every ID.
+> This is fresh metadata evidence, not file-byte review, approval of
+> the other audiences or a hosted direct Member 403/404. Exact hashes
+> and method: private `vault-inventory-refresh-2026-10-09.md`.
+
 > **9 October 10:37 Dublin Member export browser gate, local only:**
 > The isolated synthetic Board sign-off/report journey now also signs in
 > a separate Member from the same disposable charity after the approved
