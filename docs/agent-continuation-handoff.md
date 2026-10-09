@@ -1,5 +1,16 @@
 # CharityPilot Agent Continuation Handoff
 
+> **9 October 10:19 Dublin C1 reported live source, OPEN:** Public NEXUS
+> API health returned dynamic `X-Build: 05c17bf94db6`, resolving to a
+> Git commit that contains the original 2 May admin-notice redaction.
+> The exact-build listener interpolates no registrant name/email into its
+> notice copy; all 11 locale templates use only `community`. The neutral
+> CTA still points to a numeric profile route, and the later list-link
+> fix remains local. This is source provenance, not delivered-message,
+> recipient-wide or link-access proof. C1 still needs exact hosted
+> synthetic checks and dated risk-owner/Nikita disposition. Private
+> receipt: `.charitypilot-private/c1-live-build-source-observation-2026-10-09.md`.
+
 > **9 October 10:17 Dublin C1 current-main retest, local only:** The
 > isolated NEXUS branch `codex/c1-pending-profile` rebased cleanly over
 > three upstream commits to exact `877658042` (25 ahead/zero behind at

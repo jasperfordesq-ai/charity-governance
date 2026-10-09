@@ -1,5 +1,16 @@
 # CharityPilot Full-Platform Remediation Audit
 
+> **9 October C1 live-build source observation, OPEN:** Public NEXUS API
+> health reported `X-Build: 05c17bf94db6`. This exact source descends
+> from the 2 May admin-notice redaction; all 11 locale neutral/pending
+> notice templates have only the `community` placeholder, and the
+> listener does not inject a registrant name/email. A numeric neutral
+> profile CTA remains in the reported live source. There is no captured
+> live delivered-message or authenticated link-journey proof, and no
+> dated CharityPilot C1 verification row. Keep the risk OPEN pending
+> exact hosted synthetic and Nikita/risk-owner review. Private receipt:
+> `.charitypilot-private/c1-live-build-source-observation-2026-10-09.md`.
+
 > **9 October C1 second rebase and exact-head local retest, OPEN:** NEXUS
 > isolated `codex/c1-pending-profile` at clean `877658042` is 25 ahead/
 > zero behind fetched `origin/main`. Synthetic capture checked 32 staff
