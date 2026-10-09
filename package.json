@@ -24,7 +24,7 @@
     "test:complaint-resolution": "node --test scripts/complaint-resolution-migration.test.mjs",
     "test:complaint-recovery": "node --test scripts/complaint-recovery-migration.test.mjs",
     "test:document-recovery-preparation": "node --test scripts/document-recovery-preparation-migration.test.mjs",
-    "test:document-recovery-byte-fence": "node --test scripts/document-recovery-byte-fence-migration.test.mjs",
+    "test:document-recovery-byte-fence": "node --test scripts/document-recovery-byte-fence-migration.test.mjs scripts/document-cleanup-organisation-fence-migration.test.mjs",
     "test:document-byte-authority-postgres": "node --test scripts/document-byte-authority-postgres.test.mjs",
     "test:local-docker:smoke": "node scripts/smoke-local-docker.mjs",
     "personal:ready": "node scripts/personal-local-ready.mjs",

@@ -1,5 +1,16 @@
 # CharityPilot Full-Platform Remediation Audit
 
+> **9 October ~01:20 Dublin DPO-05/P05/P08, OPEN:** Red PostgreSQL proof
+> showed `DocumentStorageDeletion.organisationId` could change while the
+> provider/path stayed fixed, bypassing the existing purge alias trigger
+> fast path and creating an invalid cross-charity cleanup target. Local
+> migration `20261009020000_document_storage_deletion_org_immutable`
+> rejects that move; focused red/green, two combined fence tests and
+> full current-migration byte-authority proof passed in disposable DBs.
+> See private `document-cleanup-organisation-fence-2026-10-09.md`.
+> The migration is unpushed/undeployed; all-writer byte execution,
+> independent custody, approved retention and DPO acceptance stay OPEN.
+
 > **9 October ~01:11 Dublin C1, OPEN:** The disposable local C1 recipient
 > matrix now exercises all nine listener staff-selection classes across
 > neutral and approval-required registrations, excludes ordinary,

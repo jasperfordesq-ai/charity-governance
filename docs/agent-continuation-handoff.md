@@ -1,5 +1,16 @@
 # CharityPilot Agent Continuation Handoff
 
+> **9 October ~01:20 Dublin document cleanup identity fence:** A red
+> disposable PostgreSQL test proved an unclaimed cleanup job could be
+> moved from charity A to charity B without changing provider/path,
+> bypassing the old alias trigger's fast path. A new local migration
+> makes the job's `organisationId` immutable. The isolated green test,
+> combined byte-fence tests (2/2) and full current-migration document
+> byte-authority PostgreSQL proof passed. Receipt and red/green logs are
+> private. This is source-only: the live database lacks this migration,
+> and independent provider custody, complete all-writer byte execution,
+> controller policy and DPO acceptance remain OPEN.
+
 > **9 October ~01:11 Dublin C1 local recipient matrix:** At the same
 > isolated, unpushed NEXUS commit `73490953e`, two synthetic registration
 > routes exercised all nine staff recipient-selection classes, seven
