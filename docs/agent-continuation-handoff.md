@@ -1,5 +1,14 @@
 # CharityPilot Agent Continuation Handoff
 
+> **9 October ~03:20 Dublin unattended source review:** A bounded review of
+> the unreleased browser refresh/logout/MFA paths and selected recovery and
+> calendar-retention migrations at `e78be948` found no new concrete bypass
+> in its sampled scope. See private
+> `unreleased-auth-retention-review-2026-10-09.md` for files and limits.
+> This is not full release review, CI, hosted proof or DPO sign-off; the
+> private VM remains 13 migrations behind. No login, push or live change
+> was made overnight.
+
 > **9 October ~03:13 Dublin complaint source commit boundary, OPEN:**
 > Source review confirms the local complaint PostgreSQL transaction
 > cannot commit atomically with the separate encrypted S3 candidate.
