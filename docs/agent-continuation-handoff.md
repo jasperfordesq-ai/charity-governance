@@ -1,5 +1,16 @@
 # CharityPilot Agent Continuation Handoff
 
+> **9 October C1 inline per-recipient claim, local only:** NEXUS isolated
+> commit `9f0e4e913` atomically claims captured staff-email intent before
+> the inline transport, records `accepted` or conservative `unknown`, and
+> prevents a stale event-wide done key from hiding unsent captured recipients.
+> A two-recipient partial-result replay made no duplicate provider call.
+> Disposable MariaDB related suite passed 38 tests/112 assertions; exact
+> preserved log/hash: `.charitypilot-private/c1-inline-claim-replay-2026-10-09.md`.
+> Branch is unmerged/unpushed/undeployed. Lost-event recovery, current-staff
+> cancellation, typed provider outcome, UNKNOWN reconciliation, retention,
+> hosted proof and C1/Nikita decision remain OPEN.
+
 > **9 October C1 registration transaction, local only:** NEXUS isolated
 > `codex/c1-pending-profile` commit `23f3df70c` commits non-sendable
 > per-recipient `captured` staff-email intent with the registrant and invite

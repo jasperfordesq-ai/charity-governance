@@ -1,5 +1,15 @@
 # CharityPilot Full-Platform Remediation Audit
 
+> **9 October C1 inline recipient claim, OPEN:** Local NEXUS `9f0e4e913`
+> claims transactionally captured recipient intent before an inline send,
+> records a confirmed transport return as accepted and an unconfirmed result
+> as unknown. A stale done key cannot hide captured rows; two-recipient
+> replay did not duplicate sends. Disposable MariaDB suite passed 38/112.
+> No lost-event scanner, current-staff cancellation, typed provider outcome,
+> UNKNOWN reconciliation, retention decision, hosted proof, original C1
+> closure evidence or DPO/risk-owner acceptance. Branch unmerged/unpushed/
+> undeployed. See private `c1-inline-claim-replay-2026-10-09.md`.
+
 > **9 October C1 atomic registration intent, OPEN:** Local NEXUS commit
 > `23f3df70c` captures non-sendable per-recipient staff-email intent with
 > account creation and invite redemption. A lost invite race rolls back;
