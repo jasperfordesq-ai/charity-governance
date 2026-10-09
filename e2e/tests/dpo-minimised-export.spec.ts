@@ -1,5 +1,5 @@
 import { test, expect, uniqueEmail, TEST_PASSWORD } from '../fixtures';
-import { createAuthenticatedStorageState, createVerifiedOwner, withDb } from '../helpers/db';
+import { createAuthenticatedStorageState, createVerifiedMember, createVerifiedOwner, withDb } from '../helpers/db';
 import { gotoWithDevServerRetry } from '../helpers/navigation';
 
 const year = new Date().getFullYear();
@@ -105,5 +105,21 @@ test.describe('DPO minimised export', () => {
     await test.info().attach('synthetic-minimised-review-draft.html', {
       body: Buffer.from(html, 'utf8'), contentType: 'text/html',
     });
+
+    const member = await createVerifiedMember({
+      email: uniqueEmail('dpo-minimised-member'),
+      name: 'Synthetic Report Member',
+      organisationId: owner.organisationId,
+    });
+    const memberContext = await newFencedContext({
+      storageState: await createAuthenticatedStorageState({
+        userId: member.userId, organisationId: member.organisationId, role: 'MEMBER',
+      }),
+    });
+    const memberPage = await memberContext.newPage();
+    await gotoWithDevServerRetry(memberPage, '/export');
+    await expect(memberPage.getByText('The full internal report is available to owners and administrators.')).toBeVisible();
+    await expect(memberPage.getByRole('button', { name: 'Open minimised draft for audience review' })).toHaveCount(0);
+    await expect(memberPage.getByRole('button', { name: 'Open full internal approved snapshot' })).toHaveCount(0);
   });
 });

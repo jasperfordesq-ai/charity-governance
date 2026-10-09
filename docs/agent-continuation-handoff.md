@@ -1,5 +1,14 @@
 # CharityPilot Agent Continuation Handoff
 
+> **9 October 10:37 Dublin Member export browser gate, local only:**
+> The isolated synthetic Board sign-off/report journey now also signs in
+> a separate Member from the same disposable charity after the approved
+> snapshot exists. Chromium 1/1 and E2E TypeScript passed: the Member saw
+> the restricted internal-report explanation and neither the full approved
+> nor minimised draft export button. This is rendered UI evidence in a
+> disposable stack; API authorization has separate focused tests. It is
+> not a hosted direct denial, external-audience approval or Nikita sign-off.
+
 > **9 October 10:28 Dublin minimised export sample, local only:** The
 > isolated synthetic Owner browser journey passed 1/1 and retained a
 > hashed Board-approved fixture snapshot. It compared full internal and

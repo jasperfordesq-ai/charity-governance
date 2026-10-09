@@ -1,5 +1,13 @@
 # CharityPilot Full-Platform Remediation Audit
 
+> **9 October DPO-04 Member export browser gate, local only:** The
+> synthetic approved-snapshot Chromium journey now also signs in a
+> separate Member from the same disposable charity. It passed 1/1:
+> restricted-report explanation visible; full and minimised export
+> buttons absent. E2E TypeScript passed. This verifies the rendered
+> Member UI on the local candidate, not a live HTTP 403, an approved
+> disclosure audience or independent DPO acceptance.
+
 > **9 October DPO-04 synthetic report sample, OPEN for audience approval:**
 > An isolated Owner browser test passed the ordinary Board sign-off and
 > full/minimised approved-export comparison. The passing minimised HTML
