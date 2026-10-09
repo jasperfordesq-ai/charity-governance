@@ -1,6 +1,6 @@
 # CharityPilot Agent Continuation Handoff
 
-> **9 October ~03:13 Dublin complaint source candidate, OPEN:** Local
+> **9 October ~03:08 Dublin complaint source candidate, OPEN:** Local
 > `3871fd73` defines a strict versioned full `ComplaintRecord` source
 > fact and an encrypted candidate envelope bound to installation,
 > charity, operation, writer epoch, source revision and KMS key ID.
