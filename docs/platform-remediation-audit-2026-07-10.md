@@ -1,5 +1,13 @@
 # CharityPilot Full-Platform Remediation Audit
 
+> **9 October Confluence mirror recovery binding, OPEN:** A publication
+> already PENDING or later requeued can still be worked after a future
+> document recovery binding, creating a page/attachment absent from a stale
+> off-host source snapshot. Current SQL purge/identity fences do not close
+> this host-loss history gap. Activation quiescence, worker fencing,
+> independent copy/UNKNOWN facts and synthetic stale-backup replay are
+> required. No binding or provider action occurred in this source audit.
+
 > **9 October Vault source API responses, OPEN:** Already-bound Document
 > metadata edit, written-provider review, Board approval and Deleted Items
 > remove/restore now return a 409 before provider work; the latter uses the

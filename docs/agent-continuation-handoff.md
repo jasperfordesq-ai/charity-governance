@@ -1,5 +1,14 @@
 # CharityPilot Agent Continuation Handoff
 
+> **9 October Confluence publication binding gap, OPEN:** Source audit found
+> that a PENDING or requeued `DocumentPublication` can still lead to a remote
+> page/attachment write after future document recovery binding. Existing
+> purge/identity fences do not give independent host-loss copy history.
+> Before binding, prove publication quiescence, a writer/worker fence and
+> authenticated copy/UNKNOWN replay in synthetic Confluence. This is a
+> source finding, not a live incident or Nikita acceptance. See private
+> `document-publication-recovery-binding-gap-2026-10-09.md`.
+
 > **9 October ~03:57 Dublin Vault writer responses, OPEN:** Local API
 > now returns `DOCUMENT_SOURCE_RECOVERY_REQUIRED` 409 for already-bound
 > metadata edits, provider review, Board approval and Deleted Items
