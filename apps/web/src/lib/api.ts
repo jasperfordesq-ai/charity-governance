@@ -2,7 +2,7 @@ import axios from 'axios';
 import { getApiBaseUrl } from './api-config';
 import { isProtectedAppPath, renewsItsOwnSession } from './protected-routes';
 import { safeNextValue } from './url-security';
-import { coordinateSessionLogout, coordinateSessionRefresh, markSessionEstablished,
+import { coordinateSessionEstablishment, coordinateSessionLogout, coordinateSessionRefresh,
   SessionRefreshLockUnavailableError } from './session-refresh-lock';
 
 declare module 'axios' {
@@ -113,6 +113,7 @@ export function refreshSession(afterUnauthorised = false): Promise<void> {
         });
         return response.status === 200;
       } : undefined,
+      (error) => axios.isAxiosError(error) && error.response?.status === 429,
     )
       .finally(() => {
         refreshPromise = null;
@@ -126,6 +127,22 @@ export const api = axios.create({
   headers: { 'Content-Type': 'application/json' },
   withCredentials: true,
 });
+
+/** Keep every browser session-issuing request under the shared refresh lock.
+ * Call this around login and invitation acceptance, not merely after them. */
+export async function establishSession<T>(request: () => Promise<T>): Promise<T> {
+  let storage: Storage | undefined;
+  try {
+    storage = typeof window === 'undefined' ? undefined : window.localStorage;
+  } catch {
+    // The server remains responsible for cookies when storage is unavailable.
+  }
+  return coordinateSessionEstablishment(
+    request,
+    typeof navigator === 'undefined' ? undefined : navigator.locks,
+    storage,
+  );
+}
 
 // Logout must never renew the credential it is trying to revoke. Callers wait
 // for this response (including cookie clearance) before leaving the page.
@@ -145,15 +162,6 @@ export async function logoutSession(): Promise<void> {
 
 api.interceptors.response.use(
   (response) => {
-    // A successful login or invitation acceptance issues a fresh session.
-    // Clear an earlier ambiguous sign-out fence only after that response.
-    if (response.config.url === '/auth/login' || response.config.url === '/team/accept-invite') {
-      try {
-        markSessionEstablished(typeof window === 'undefined' ? undefined : window.localStorage);
-      } catch {
-        // Browser storage can be unavailable; cookies remain server-owned.
-      }
-    }
     // Only the single-field transport wrapper is unwrapped. Cursor and other
     // metadata belong to the response, even when a page also has a `data` field.
     if (
