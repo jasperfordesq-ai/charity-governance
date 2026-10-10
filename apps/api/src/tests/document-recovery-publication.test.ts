@@ -206,12 +206,14 @@ async function readyBytePermitPublisher(storageProvider: 'local' | 'supabase' = 
     observationView: null as ((row: Record<string, unknown>) => Record<string, unknown>) | null,
     completion: null as Record<string, unknown> | null, completionCalls: 0,
     completionNotRecorded: false, duringCompletion: null as (() => void) | null,
+    beforeCompletion: null as (() => void) | null,
     completionView: null as ((row: Record<string, unknown>) => Record<string, unknown>) | null,
     job: { state: 'PENDING', processedAt: null as Date | null, activeObjectAbsentAt: null as Date | null } };
   const tx = {
     $queryRaw: async (strings: TemplateStringsArray, ...values: unknown[]) => {
       if (strings.join('').includes('DocumentBytePrimaryCompletion_record')) {
         state.completionCalls += 1;
+        state.beforeCompletion?.();
         if (state.expectedAttempt !== undefined && values[1] !== state.expectedAttempt) {
           throw new Error('Synthetic attempt capability does not match');
         }
@@ -1088,6 +1090,28 @@ test('finalizing a primary completion processes only its job, needs the capabili
   // Other copies are not covered: the recovery operation stays reserved.
   const reservation = await f.store.readControl();
   assert.equal(reservation.activeOperation?.operationId, f.context.operationId);
+});
+
+test('a finalize that loses an overlapping race reports the winning completion instead of failing', async () => {
+  const { state, publish, finalize } = await observedAndUnknown();
+  const published = await publish();
+  // The other call commits first; this call's SQL then refuses the lease.
+  state.beforeCompletion = () => {
+    state.beforeCompletion = null;
+    state.completion = { id: 'lease', leaseId: 'lease', observationId: 'lease',
+      organisationId: 'charity', deletionId: 'job',
+      decisionEntryDigest: state.observation!.decisionEntryDigest,
+      completionEntryDigest: published.entryDigest, completionEnvelopeDigest: published.envelopeDigest,
+      completionBodyDigest: createHash('sha256').update(published.body).digest('hex'),
+      scope: 'PRIMARY_ACTIVE_OBJECT_ONLY', completedTransactionId: 127n,
+      recordedAt: new Date('2026-10-07T09:29:59.000Z') };
+    state.job = { state: 'PROCESSED', processedAt: new Date('2026-10-07T09:30:00.000Z'),
+      activeObjectAbsentAt: state.observation!.providerObservedAt as Date };
+  };
+  const result = await finalize();
+  assert.deepEqual([result.replayed, result.completionEntryDigest, result.deletionId],
+    [true, published.entryDigest, 'job']);
+  assert.equal(state.completionCalls, 1);
 });
 
 test('a primary completion whose head is lost after the local commit is refused, then reported on replay', async () => {

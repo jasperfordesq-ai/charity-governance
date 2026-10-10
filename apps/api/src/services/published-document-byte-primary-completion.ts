@@ -198,13 +198,19 @@ export async function finalizeVerifiedDocumentBytePrimaryCompletion(prisma: Pris
   const existing = await prisma.documentBytePrimaryCompletion.findUnique({ where: { leaseId } });
   let replayed = existing !== null;
   if (!existing) {
-    const recorded = await prisma.$queryRaw<Array<{ recorded: boolean }>>`
-      SELECT public."DocumentBytePrimaryCompletion_record"(${leaseId}, ${oneUseAttemptId},
-        ${published.entryDigest}, ${published.envelopeDigest}, ${bodyDigest}) AS recorded`;
-    if (recorded.length !== 1 || recorded[0]?.recorded !== true) {
-      throw new Error('Document byte completion did not commit');
+    try {
+      const recorded = await prisma.$queryRaw<Array<{ recorded: boolean }>>`
+        SELECT public."DocumentBytePrimaryCompletion_record"(${leaseId}, ${oneUseAttemptId},
+          ${published.entryDigest}, ${published.envelopeDigest}, ${bodyDigest}) AS recorded`;
+      if (recorded.length !== 1 || recorded[0]?.recorded !== true) {
+        throw new Error('Document byte completion did not commit');
+      }
+    } catch (error) {
+      // An overlapping call may have completed this lease first. Its row is
+      // then checked below exactly like a replay; anything else is refused.
+      if (!(await prisma.documentBytePrimaryCompletion.findUnique({ where: { leaseId } }))) throw error;
+      replayed = true;
     }
-    replayed = false;
   }
   const after = await readPublishedDocumentBytePrimaryCompletion(journal,
     control, context, keys, objects);
