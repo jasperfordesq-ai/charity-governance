@@ -7,7 +7,7 @@ import type { DocumentOutcomeObjects } from './document-outcome-envelope.js';
 import type { DocumentBytePermitObjects } from './document-byte-permit-envelope.js';
 import type { DocumentByteExecutionDecisionObjects } from './document-byte-execution-decision-envelope.js';
 import type { DocumentByteProviderUnknownObjects } from './document-byte-provider-unknown-envelope.js';
-import type { Eraser } from './document-erasure.js';
+import type { Eraser, ErasureDispatcher } from './document-erasure.js';
 import { prepareDocumentByteExecutionDecisionFacts } from './document-byte-execution-decision-facts.js';
 import { readPublishedDocumentByteExecutionDecision } from './published-document-byte-execution-decision.js';
 import { readMatchedStartedDocumentByteDecision } from './matched-claimed-document-byte-decision.js';
@@ -27,7 +27,7 @@ type Objects = Pick<DocumentRecoveryObjects, 'readDocumentPreparation'>
 export const PROTECTED_PRIMARY_DELETION_TIMEOUT_MS = 10_000;
 
 export type ProtectedPrimaryDeletionUnknownReason =
-  | 'PRE_IO_RECHECK_FAILED' | 'PROVIDER_ERROR' | 'PROVIDER_TIMEOUT'
+  | 'START_OUTCOME_UNREADABLE' | 'PRE_IO_RECHECK_FAILED' | 'PROVIDER_ERROR' | 'PROVIDER_TIMEOUT'
   | 'NO_ABSENCE_OBSERVATION' | 'OBSERVATION_NOT_RECORDED';
 
 export type ProtectedPrimaryDeletionResult =
@@ -73,7 +73,7 @@ async function boundedErase(erase: Eraser, target: Parameters<Eraser>[0], timeou
 export async function executeVerifiedDocumentBytePrimaryDeletion(prisma: PrismaClient,
   journal: RecoveryAuthorityJournal, control: RecoveryControlStore,
   context: RecoveryEnvelopeContext, keys: RecoveryDataKeys, objects: Objects,
-  erase: Eraser, timeoutMs = PROTECTED_PRIMARY_DELETION_TIMEOUT_MS,
+  dispatch: ErasureDispatcher, timeoutMs = PROTECTED_PRIMARY_DELETION_TIMEOUT_MS,
 ): Promise<ProtectedPrimaryDeletionResult> {
   if (!Number.isInteger(timeoutMs) || timeoutMs < 10 || timeoutMs > PROTECTED_PRIMARY_DELETION_TIMEOUT_MS) {
     throw new TypeError(`Protected primary deletion timeout must be 10-${PROTECTED_PRIMARY_DELETION_TIMEOUT_MS} ms`);
@@ -82,6 +82,10 @@ export async function executeVerifiedDocumentBytePrimaryDeletion(prisma: PrismaC
     control, context, keys, objects);
   const facts = JSON.parse(prepareDocumentByteExecutionDecisionFacts(
     JSON.parse(decision.body)).body);
+  // The eraser is chosen from the decided provider, never supplied loose,
+  // so another backend's absence can never be recorded against this one.
+  const erase = dispatch(facts.provider);
+  if (!erase) throw new Error(`No eraser is registered for decided provider "${facts.provider}"`);
   // A failure before the start marker commits leaves no possible I/O, so it
   // surfaces as an error.
   const { leaseId } = await claimVerifiedDocumentByteExecutionLease(prisma,
@@ -108,7 +112,14 @@ export async function executeVerifiedDocumentBytePrimaryDeletion(prisma: PrismaC
   } catch (error) {
     // The start service re-reads authority after committing its marker. If
     // that marker exists, the failure is post-start: UNKNOWN, provider not called.
-    const marker = await prisma.documentByteProviderAttempt.findUnique({ where: { leaseId } });
+    let marker: unknown;
+    try {
+      marker = await prisma.documentByteProviderAttempt.findUnique({ where: { leaseId } });
+    } catch {
+      // Whether the marker committed cannot be read. Keep the lease as an
+      // uncertain attempt rather than losing it in a thrown error.
+      return unknown('START_OUTCOME_UNREADABLE', false);
+    }
     if (!marker) throw error;
     return unknown('PRE_IO_RECHECK_FAILED', false);
   }

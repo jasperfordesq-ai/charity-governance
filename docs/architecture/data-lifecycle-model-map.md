@@ -91,7 +91,7 @@ and does not relax the byte fence, so the job stays PENDING and UNKNOWN until a
 separate independent completion permit exists. No production worker calls it.
 `executeVerifiedDocumentBytePrimaryDeletion` composes the lease claim, start
 marker, an immediate pre-provider re-check of the independent decision, one
-bounded eraser call for the decided target, and the absence observation.
+bounded call to the eraser selected by the decided provider, and the absence observation.
 Every failure after the marker is UNKNOWN, published where possible and
 never retried. It changes no job and has no production caller.
 Restore snapshot format 7 hashes this observation, format 6 covers the marker

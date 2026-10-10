@@ -26,7 +26,8 @@ import { readMatchedClaimedDocumentByteDecision,
   readMatchedStartedDocumentByteDecision } from '../services/matched-claimed-document-byte-decision.js';
 import { claimVerifiedDocumentByteExecutionLease } from '../services/claimed-document-byte-execution-lease.js';
 import { startVerifiedDocumentByteProviderAttempt } from '../services/verified-document-byte-provider-start.js';
-import { executeVerifiedDocumentBytePrimaryDeletion } from '../services/verified-document-byte-primary-execution.js';
+import { executeVerifiedDocumentBytePrimaryDeletion as executeWithDispatcher } from '../services/verified-document-byte-primary-execution.js';
+import type { Eraser } from '../services/document-erasure.js';
 import { recordVerifiedDocumentBytePrimaryAbsence,
   recordReconciledDocumentBytePrimaryAbsence } from '../services/verified-document-byte-provider-observation.js';
 import { publishVerifiedDocumentByteProviderUnknown,
@@ -38,7 +39,7 @@ import { bindVerifiedDocumentBytePermitCandidate, compareDocumentBytePermitAutho
 import { readClaimedDocumentByteAuthority,
   readCurrentDocumentByteAuthority } from '../services/document-byte-authority-projection.js';
 
-function documentFacts() {
+function documentFacts(storageProvider: 'local' | 'supabase' = 'local') {
   const policy = { id: 'policy', organisationId: 'charity', recordClass: 'VAULT_DRAFT' as const,
     revision: 1, state: 'APPROVED' as const, retentionMode: 'REVIEW_REQUIRED' as const,
     retentionAnchor: null, retentionDays: null, recoveryDays: 30, createdById: 'owner',
@@ -52,7 +53,7 @@ function documentFacts() {
     deletedById: 'owner', removedFromRevision: '2026-09-02T00:00:00.000Z',
     removalEvidenceRef: 'REMOVAL-001', recoveryPolicyId: 'policy',
     recoveryUntil: '2026-10-03T00:00:00.000Z', recoverySha256: 'a'.repeat(64),
-    fileUrl: 'vault/synthetic-object', storageProvider: 'local' as const, fileSize: 123 };
+    fileUrl: 'vault/synthetic-object', storageProvider, fileSize: 123 };
   const authorization = { id: 'auth', organisationId: 'charity', documentId: 'doc',
     documentRevision: document.updatedAt, policyId: 'policy', actorUserId: 'owner',
     evidenceRef: 'PURGE-001', reason: 'SENSITIVE_SYNTHETIC_DISPOSAL_REASON',
@@ -69,8 +70,8 @@ function documentFacts() {
     removalPolicy: { ...policy }, removalPolicyWithdrawal: null };
 }
 
-async function fixture() {
-  const facts = documentFacts(), prepared = prepareDocumentRecoveryFacts(facts);
+async function fixture(storageProvider: 'local' | 'supabase' = 'local') {
+  const facts = documentFacts(storageProvider), prepared = prepareDocumentRecoveryFacts(facts);
   const binding = { installationId: facts.installationId, organisationId: facts.organisationId };
   const context = { ...binding, operationId: facts.operationId, writerEpoch: 1,
     sourceRevision: facts.sourceRevision,
@@ -160,8 +161,8 @@ test('document preparation publishes original encrypted bytes under a reserved i
     f.context, f.keys, f.store), /unresolved/);
 });
 
-async function readyBytePermitPublisher() {
-  const f = await fixture();
+async function readyBytePermitPublisher(storageProvider: 'local' | 'supabase' = 'local') {
+  const f = await fixture(storageProvider);
   await preserveDocumentRecoveryPreparation(f.prepared.body, f.context, f.keys, f.store);
   const prepReceipt = await publishVerifiedDocumentPreparation(f.journal, f.store,
     f.request, f.context, f.keys, f.store);
@@ -712,8 +713,19 @@ test('primary absence observation needs a durable start, never authorizes comple
   await assert.rejects(reconcile(capability, later), /Synthetic provider observation refused/);
 });
 
-async function decidedBytePermit() {
-  const { f, prisma, state } = await readyBytePermitPublisher();
+// Adapter for the cases below: wraps one eraser in a dispatcher that records
+// which provider the executor asked for.
+const dispatchedProviders: string[] = [];
+type ExecuteArgs = Parameters<typeof executeWithDispatcher>;
+function executeVerifiedDocumentBytePrimaryDeletion(prisma: ExecuteArgs[0], journal: ExecuteArgs[1],
+  control: ExecuteArgs[2], context: ExecuteArgs[3], keys: ExecuteArgs[4], objects: ExecuteArgs[5],
+  erase: Eraser, timeoutMs?: number) {
+  return executeWithDispatcher(prisma, journal, control, context, keys, objects,
+    (provider) => { dispatchedProviders.push(provider); return erase; }, timeoutMs);
+}
+
+async function decidedBytePermit(storageProvider: 'local' | 'supabase' = 'local') {
+  const { f, prisma, state } = await readyBytePermitPublisher(storageProvider);
   const scope = { installationId: f.context.installationId,
     organisationId: f.context.organisationId, operationId: f.context.operationId };
   await publishVerifiedDocumentBytePermitCandidate(prisma,
@@ -770,6 +782,49 @@ test('protected primary deletion calls the eraser once for the exact decided tar
   assert.equal(state.observeCalls, 1);
   assert.equal(state.observation?.outcome, 'PRIMARY_ACTIVE_OBJECT_ABSENT');
   assert.equal(state.boundAttempt, facts.oneUseAttemptId);
+});
+
+test('protected primary deletion selects the eraser by the decided provider and refuses an unregistered one before any claim', async () => {
+  for (const storageProvider of ['local', 'supabase'] as const) {
+    const { f, prisma, decision } = await decidedBytePermit(storageProvider);
+    const decided = JSON.parse(decision.body).provider;
+    assert.equal(decided, storageProvider);
+    const asked: string[] = [];
+    let localCalls = 0; let supabaseCalls = 0;
+    const result = await executeWithDispatcher(prisma, f.journal, f.store, f.context, f.keys, f.store,
+      (provider) => {
+        asked.push(provider);
+        if (provider === 'local') return async () => { localCalls += 1; return new Date('2026-10-07T08:03:02.000Z'); };
+        if (provider === 'supabase') return async () => { supabaseCalls += 1; return new Date('2026-10-07T08:03:02.000Z'); };
+        return undefined;
+      });
+    assert.equal(result.outcome, 'PRIMARY_ABSENCE_OBSERVED');
+    assert.deepEqual(asked, [decided]);
+    assert.equal(localCalls + supabaseCalls, 1);
+    assert.equal(decided === 'local' ? localCalls : supabaseCalls, 1);
+  }
+  {
+    const { f, prisma, state } = await decidedBytePermit();
+    await assert.rejects(executeWithDispatcher(prisma, f.journal, f.store, f.context, f.keys, f.store,
+      () => undefined), /No eraser is registered for decided provider/);
+    assert.equal(state.leaseCreates, 0);
+    assert.equal(state.startCalls, 0);
+  }
+});
+
+test('protected primary deletion keeps the lease as UNKNOWN when the start marker cannot be read back', async () => {
+  const { f, prisma, state } = await decidedBytePermit();
+  state.refuseStartBeforeMarker = true;
+  (prisma as unknown as { documentByteProviderAttempt: { findUnique: () => Promise<unknown> } })
+    .documentByteProviderAttempt.findUnique = async () => { throw new Error('database unavailable'); };
+  let eraseCalls = 0;
+  const result = await executeVerifiedDocumentBytePrimaryDeletion(prisma, f.journal,
+    f.store, f.context, f.keys, f.store, async () => { eraseCalls += 1; return new Date(); });
+  assert.equal(result.outcome, 'UNKNOWN');
+  assert.equal(result.outcome === 'UNKNOWN' && result.reason, 'START_OUTCOME_UNREADABLE');
+  assert.equal(result.leaseId, 'lease');
+  assert.equal(result.providerCalled, false);
+  assert.equal(eraseCalls, 0);
 });
 
 test('protected primary deletion leaves every post-start failure UNKNOWN, publishes it and never retries the provider', async () => {
