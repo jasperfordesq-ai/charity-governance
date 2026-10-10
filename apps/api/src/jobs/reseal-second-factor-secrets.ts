@@ -14,9 +14,11 @@ import { resealOperatorSecondFactorSecrets } from '../services/operator-second-f
  *
  * One run walks every row in pages of --batch, so memory and each database
  * read stay bounded, and a row that fails never stops the rows after it.
- * Repeat until `remaining` is 0, then remove the *_PREVIOUS variable. An
- * authenticator also re-seals itself on its next successful sign-in. Output is
- * counts and row ids only; no secret is printed.
+ * Repeat until `remaining` is 0, then remove the *_PREVIOUS variable. A
+ * charity user's authenticator also re-seals itself on its next successful
+ * sign-in; an operator's does not, so the operator realm must be run before
+ * OWNER_JWT_SECRET_PREVIOUS is removed. Output is counts and row ids only; no
+ * secret is printed.
  */
 export function parseResealArgs(argv: string[]): { realm: 'user' | 'operator'; batch: number } {
   const [realm, ...rest] = argv;

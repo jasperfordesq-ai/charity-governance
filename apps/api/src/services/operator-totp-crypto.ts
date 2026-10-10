@@ -27,8 +27,9 @@ export type SealedTotpSecret = TotpEnvelope;
  * the two cannot be confused even though they share a root.
  *
  * Rotating OWNER_JWT_SECRET no longer forces operators to enrol again: set the
- * old value as OWNER_JWT_SECRET_PREVIOUS until every secret has been re-sealed
- * (on next successful use, or by the batch re-seal).
+ * old value as OWNER_JWT_SECRET_PREVIOUS until the batch re-seal reports none
+ * remaining. Unlike a charity user's, an operator's sign-in does not re-seal,
+ * so the batch job is the only way to finish an operator rotation.
  */
 const OPERATOR_TOTP_REALM: TotpRealm = {
   rootEnv: 'OWNER_JWT_SECRET',

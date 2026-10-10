@@ -13,8 +13,9 @@ import { AppError } from '../utils/app-error.js';
  *    status count can tell which secret sealed a row without decrypting it;
  *  - while a rotation is in progress the old signing secret is configured as
  *    `<ROOT>_PREVIOUS`, and envelopes sealed under it still open;
- *  - a stale envelope is re-sealed on its next successful use, or by the batch
- *    re-seal command, after which the previous secret can be removed.
+ *  - a stale envelope is re-sealed by the batch re-seal command (and a charity
+ *    user's also on its next successful sign-in), after which the previous
+ *    secret can be removed.
  * v1 envelopes (no key id) are still read: current secret first, then previous.
  */
 export type TotpEnvelopeV1 = { v: 1; iv: string; tag: string; ciphertext: string };
