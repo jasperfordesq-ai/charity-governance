@@ -30,7 +30,8 @@ export type OperationalErrorAlertInput = {
     | 'document-publication'
     | 'document-reconcile'
     | 'auth-email-delivery'
-    | 'risk-control-review';
+    | 'risk-control-review'
+    | 'session-security-trace-retention';
   code:
     | 'DEADLINE_REMINDERS_FAILED'
     | 'DOCUMENT_STORAGE_CLEANUP_FAILED'
@@ -44,7 +45,8 @@ export type OperationalErrorAlertInput = {
     // would send somebody looking for a queue that does not exist.
     | 'DOCUMENT_RECONCILE_FAILED'
     | 'AUTH_EMAIL_DELIVERY_FAILED'
-    | 'RISK_CONTROL_REVIEW_SCAN_FAILED';
+    | 'RISK_CONTROL_REVIEW_SCAN_FAILED'
+    | 'SESSION_SECURITY_TRACE_PRUNE_FAILED';
   error: unknown;
   affectedCount?: number;
 };

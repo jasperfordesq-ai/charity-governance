@@ -211,6 +211,9 @@ jobs:
       - name: Verify installation-wide session revocation with disposable PostgreSQL
         run: npm run test:installation-session-revocation-postgres
 
+      - name: Verify session security trace bounds with disposable PostgreSQL
+        run: npm run test:session-security-trace
+
       - name: Reliability ledger (API + Web)
         # Runs the apps/api and apps/web unit suites and fails the build if any covered
         # guarantee in docs/reliability/guarantees.json is not linked to a passing test

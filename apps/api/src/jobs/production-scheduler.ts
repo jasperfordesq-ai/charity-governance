@@ -52,6 +52,7 @@ import {
 } from '../services/auth-email-delivery.service.js';
 import { requireAuthRecoveryControlForRuntime } from '../services/auth-recovery-control.js';
 import { RiskControlReviewService } from '../services/risk-control-review.service.js';
+import { pruneSessionSecurityTrace, sessionTraceRetentionDays } from '../services/session-security-trace.js';
 
 const DEFAULT_DEADLINE_REMINDERS_INTERVAL_MS = 24 * 60 * 60 * 1000;
 const DEFAULT_DOCUMENT_STORAGE_CLEANUP_INTERVAL_MS = 60 * 60 * 1000;
@@ -788,6 +789,35 @@ export async function runRiskControlReviewScan(input: {
   }
 }
 
+const SESSION_SECURITY_TRACE_PRUNE_INTERVAL_MS = 6 * 60 * 60 * 1000;
+
+/** Removes session trace rows older than the configured retention. Runs only
+ * while tracing is on; the trace itself is off unless a period is set. */
+export async function runSessionSecurityTracePrune(input: {
+  prisma: Parameters<typeof pruneSessionSecurityTrace>[0];
+  retentionDays: number;
+  logger: SchedulerLogger;
+  alertSender?: AlertSender;
+}): Promise<boolean> {
+  try {
+    const removed = await pruneSessionSecurityTrace(input.prisma, input.retentionDays);
+    input.logger.info(`[ProductionScheduler] Session security trace retention removed ${removed} row(s).`);
+    return false;
+  } catch (error) {
+    logSchedulerError(input.logger, '[ProductionScheduler] Session security trace retention failed.', error);
+    // Rows past the chosen period are personal data kept too long; an operator
+    // has to hear about it, not find it in a log.
+    await sendJobFailureAlert({
+      job: 'session-security-trace-retention',
+      code: 'SESSION_SECURITY_TRACE_PRUNE_FAILED',
+      error,
+      logger: input.logger,
+      alertSender: input.alertSender,
+    });
+    return true;
+  }
+}
+
 export async function runProductionSchedulerOnce(input: {
   deadlineService: DeadlineReminderRunner;
   documentService: DocumentStorageCleanupRunner;
@@ -882,7 +912,8 @@ export async function sendJobFailureAlert(input: {
     | 'document-publication'
     | 'document-reconcile'
     | 'auth-email-delivery'
-    | 'risk-control-review';
+    | 'risk-control-review'
+    | 'session-security-trace-retention';
   code:
     | 'DEADLINE_REMINDERS_FAILED'
     | 'DOCUMENT_STORAGE_CLEANUP_FAILED'
@@ -892,7 +923,8 @@ export async function sendJobFailureAlert(input: {
     | 'DOCUMENT_PUBLICATION_DEAD_LETTERED'
     | 'DOCUMENT_RECONCILE_FAILED'
     | 'AUTH_EMAIL_DELIVERY_FAILED'
-    | 'RISK_CONTROL_REVIEW_SCAN_FAILED';
+    | 'RISK_CONTROL_REVIEW_SCAN_FAILED'
+    | 'SESSION_SECURITY_TRACE_PRUNE_FAILED';
   error: unknown;
   logger: SchedulerLogger;
   alertSender?: AlertSender;
@@ -1125,6 +1157,13 @@ async function main(): Promise<void> {
     logger,
     run: () => runRiskControlReviewScan({ riskControlReviewService, logger }),
   });
+  const traceRetentionDays = sessionTraceRetentionDays();
+  const sessionTracePruneJob = traceRetentionDays === null ? null : startRecurringJob({
+    name: 'Session security trace retention',
+    intervalMs: SESSION_SECURITY_TRACE_PRUNE_INTERVAL_MS,
+    logger,
+    run: () => runSessionSecurityTracePrune({ prisma, retentionDays: traceRetentionDays, logger }),
+  });
 
   let shutdownStarted = false;
   const shutdown = async (signal: NodeJS.Signals) => {
@@ -1139,6 +1178,7 @@ async function main(): Promise<void> {
         documentReconcileJob,
         authEmailDeliveryJob,
         riskControlReviewJob,
+        ...(sessionTracePruneJob ? [sessionTracePruneJob] : []),
       ],
       config.shutdownTimeoutMs,
     );

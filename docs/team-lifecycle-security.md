@@ -163,6 +163,35 @@ A charity administrator can still revoke one member's sessions from the team
 page. The lost-all-factors recovery path and the other public-rule items above
 remain open.
 
+## Session security trace (off until a retention period is decided)
+
+Nine `SESSION_REPLAY_DETECTED` events between 21 and 30 September could not
+be attributed. Request logs live inside containers, and every blue-green deploy
+replaces them. The session security trace keeps a minimal, time-bounded record
+in the database instead.
+
+It is **off** unless `SESSION_SECURITY_TRACE_RETENTION_DAYS` is set to a whole
+number of days from 1 to 90. Production refuses any other value. A personal
+server refuses any value at all, because it has no scheduler to remove expired
+rows. The period is a data-protection decision (decision sheet P08/C05), not an
+application default.
+
+When it is on, each sign-in, refresh and sign-out request writes one row, on
+both the web and the connector routes. Each row records:
+
+- the time, the matched route, the status code and the request ID;
+- a one-way fingerprint of the presented refresh token;
+- the client's network prefix (IPv4 /24, IPv6 /48);
+- a digest of the user agent.
+
+No user, charity, session or token value is stored. Each replay event now
+carries the same `presentedTokenFingerprint`. A reviewer can therefore compare
+the replaying request with the earlier legitimate presentation of the same
+token: was it the same network and the same client? A row is never rewritten,
+and none younger than a day can be deleted. Every six hours the scheduler
+removes rows older than the period, judged by the database clock. If that ever
+fails, it raises a job alert.
+
 ## Password recovery integrity
 
 Personal two-step sign-in has a last-code recovery path: a browser session

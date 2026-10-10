@@ -516,6 +516,7 @@ model Organisation {
   documentByteExecutionLeases DocumentByteExecutionLease[]
   documentByteProviderAttempts DocumentByteProviderAttempt[]
   documentByteProviderObservations DocumentByteProviderObservation[]
+  documentBytePrimaryCompletions DocumentBytePrimaryCompletion[]
   complaintHoldRecoveryPreparations ComplaintHoldRecoveryPreparation[]
   id                                      String                      @id @default(cuid())
   name                                    String
@@ -1480,6 +1481,7 @@ model DocumentByteExecutionLease {
   deletion                   DocumentStorageDeletion @relation(fields: [deletionId, organisationId], references: [id, organisationId], onDelete: Restrict)
   providerAttempt            DocumentByteProviderAttempt?
   providerObservation        DocumentByteProviderObservation?
+  primaryCompletion          DocumentBytePrimaryCompletion?
 
   @@unique([deletionId, organisationId])
   @@index([organisationId, recordedAt, id])
@@ -1522,6 +1524,34 @@ model DocumentByteProviderObservation {
   attempt               DocumentByteProviderAttempt @relation(fields: [attemptId], references: [id], onDelete: Restrict)
   organisation          Organisation @relation(fields: [organisationId], references: [id], onDelete: Restrict)
   deletion              DocumentStorageDeletion @relation(fields: [deletionId, organisationId], references: [id, organisationId], onDelete: Restrict)
+  completion            DocumentBytePrimaryCompletion?
+
+  @@unique([deletionId, organisationId])
+  @@index([organisationId, recordedAt, leaseId])
+}
+
+// The local half of a reconciled primary-object completion. It is written,
+// with the deletion job's move to PROCESSED, only by one capability-checked
+// security-definer function, after the independent completion entry is the
+// current head. It covers the primary active object only: versions,
+// Confluence copies, exports and backups are not certified by it.
+model DocumentBytePrimaryCompletion {
+  id                       String @id
+  leaseId                  String @unique
+  observationId            String @unique
+  organisationId           String
+  deletionId               String @unique
+  decisionEntryDigest      String
+  completionEntryDigest    String
+  completionEnvelopeDigest String
+  completionBodyDigest     String
+  scope                    String
+  completedTransactionId   BigInt
+  recordedAt               DateTime
+  lease                    DocumentByteExecutionLease @relation(fields: [leaseId], references: [id], onDelete: Restrict)
+  observation              DocumentByteProviderObservation @relation(fields: [observationId], references: [id], onDelete: Restrict)
+  organisation             Organisation @relation(fields: [organisationId], references: [id], onDelete: Restrict)
+  deletion                 DocumentStorageDeletion @relation(fields: [deletionId, organisationId], references: [id, organisationId], onDelete: Restrict)
 
   @@unique([deletionId, organisationId])
   @@index([organisationId, recordedAt, leaseId])
@@ -1806,6 +1836,7 @@ model DocumentStorageDeletion {
   byteExecutionLease      DocumentByteExecutionLease?
   byteProviderAttempt      DocumentByteProviderAttempt?
   byteProviderObservation  DocumentByteProviderObservation?
+  bytePrimaryCompletion    DocumentBytePrimaryCompletion?
 
   @@unique([id, organisationId])
   @@index([organisationId])
@@ -3018,6 +3049,24 @@ model InstallationSessionCutoff {
   userFamiliesBefore     DateTime
   operatorFamiliesBefore DateTime
   updatedAt              DateTime
+}
+
+/// Minimal session request trace, written only while
+/// SESSION_SECURITY_TRACE_RETENTION_DAYS is set (a data-protection decision).
+/// No user, charity, session or token value; see session-security-trace.ts.
+model SessionSecurityTrace {
+  id                        String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  occurredAt                DateTime @default(now())
+  routePattern              String
+  statusCode                Int
+  requestId                 String?
+  presentedTokenFingerprint String?
+  networkPrefix             String?
+  userAgentDigest           String?
+
+  @@index([occurredAt])
+  @@index([presentedTokenFingerprint, occurredAt])
+  @@index([requestId])
 }
 
 model PlatformOperatorSession {
