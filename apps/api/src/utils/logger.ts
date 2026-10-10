@@ -59,6 +59,7 @@ export const API_LOG_REDACT_PATHS = [
   'env.ERROR_ALERT_WEBHOOK_URL',
   'env.ATLASSIAN_CLIENT_SECRET',
   'env.INTEGRATION_ENCRYPTION_KEY',
+  'env.INTEGRATION_ENCRYPTION_KEY_PREVIOUS',
 ] as const;
 
 function errorField(error: unknown, field: string): string | number | undefined {

@@ -403,6 +403,7 @@ function fakePrisma(options: FakeOptions = {}) {
     integrationSecretControl: {
       findUnique: async () => ({ id: 1, generation: 1, activeKeyFingerprint: KEY_FINGERPRINT }),
       upsert: async () => ({}),
+      updateMany: async () => ({ count: 1 }),
     },
   };
 
