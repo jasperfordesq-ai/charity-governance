@@ -74,15 +74,35 @@ try {
       data: { revokedAt: new Date(), revocationReason: 'ROTATED' } });
     await tx.authSession.create({ data: { userId: user.id, refreshTokenHash: '8'.repeat(64),
       familyId: family2, familyCreatedAt: login2.familyCreatedAt, expiresAt } });
-  }, { timeout: 30_000 }).then(() => 'committed', () => 'aborted');
+  }, { timeout: 30_000 }).then(() => ({ committed: true, error: null }), (error) => ({ committed: false, error }));
   await locked;
-  const deadlocked = revokeInstallationSessions(prisma, { realm: 'user', reason, confirm: true });
-  await new Promise((resolve) => setTimeout(resolve, 700));
+  // Count the job's transaction attempts, so a retry is observed, not assumed.
+  let jobAttempts = 0;
+  const counted = { $transaction: (...args) => { jobAttempts += 1; return prisma.$transaction(...args); } };
+  const deadlocked = revokeInstallationSessions(counted, { realm: 'user', reason, confirm: true });
+  // Release the refresh only once the job is blocked on the refresh's row,
+  // which it reaches after taking the cutoff: the cycle is then certain.
+  let blocked = false;
+  for (let i = 0; i < 100 && !blocked; i += 1) {
+    const waiting = await prisma.$queryRaw`SELECT count(*)::integer AS count FROM pg_stat_activity
+      WHERE wait_event_type = 'Lock' AND query ILIKE '%UPDATE%"AuthSession"%'`;
+    blocked = waiting[0].count > 0;
+    if (!blocked) await new Promise((resolve) => setTimeout(resolve, 50));
+  }
+  assert.ok(blocked, 'the job must be waiting on the refresh before the refresh continues');
   releaseRefresh();
   const [refreshOutcome, deadlockRun] = await Promise.all([refresh2, deadlocked]);
   assert.equal(deadlockRun.confirmed, true);
+  // PostgreSQL aborts one side. Either the refresh failed with a deadlock and
+  // the job finished first time, or the job was aborted and retried.
+  if (refreshOutcome.committed) {
+    assert.ok(jobAttempts >= 2, `the aborted job must have been retried (attempts ${jobAttempts})`);
+  } else {
+    assert.match(String(refreshOutcome.error?.message ?? refreshOutcome.error), /deadlock/i);
+    assert.equal(jobAttempts, 1);
+  }
   assert.equal(await prisma.authSession.count({ where: { familyId: family2, revokedAt: null } }), 0,
-    `no live session after the deadlock (refresh ${refreshOutcome})`);
+    'no live session after the deadlock');
 
   // Operators: the same for an operator family.
   const operator = await prisma.platformOperator.create({ data: { email: 'operator@example.org',
