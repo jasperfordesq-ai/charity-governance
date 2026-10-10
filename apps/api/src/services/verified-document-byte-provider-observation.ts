@@ -9,6 +9,9 @@ import type { DocumentByteExecutionDecisionObjects } from './document-byte-execu
 import { prepareDocumentByteExecutionDecisionFacts } from './document-byte-execution-decision-facts.js';
 import { readPublishedDocumentByteExecutionDecision } from './published-document-byte-execution-decision.js';
 import { readMatchedStartedDocumentByteDecision } from './matched-claimed-document-byte-decision.js';
+import { readCommittedDocumentByteProviderUnknown } from './document-byte-provider-unknown.js';
+import { readPublishedDocumentByteProviderUnknown } from './published-document-byte-provider-unknown.js';
+import type { DocumentByteProviderUnknownObjects } from './document-byte-provider-unknown-envelope.js';
 
 type Objects = Pick<DocumentRecoveryObjects, 'readDocumentPreparation'>
   & Pick<DocumentOutcomeObjects, 'readDocumentOutcome'>
@@ -59,6 +62,59 @@ export async function recordVerifiedDocumentBytePrimaryAbsence(prisma: PrismaCli
     throw new Error('Document byte provider observation is unavailable or mismatched');
   }
   return { leaseId, decisionEntryDigest: decision.entryDigest,
+    outcome: 'PRIMARY_ACTIVE_OBJECT_ABSENT' as const,
+    providerObservedAt: observation.providerObservedAt,
+    recordedAt: observation.recordedAt, actionAuthorized: false as const };
+}
+
+/** Reconciliation after a crash: once the independent UNKNOWN is the current
+ * head, record a later primary-absence observation only while that published
+ * UNKNOWN still equals the committed local marker on both sides of the call.
+ * The one-use capability is checked by SQL against the claimed lease. The
+ * UNKNOWN stays the head, and nothing here retries, finalizes or authorizes. */
+export async function recordReconciledDocumentBytePrimaryAbsence(prisma: PrismaClient,
+  journal: RecoveryAuthorityJournal, control: RecoveryControlStore,
+  context: RecoveryEnvelopeContext, keys: RecoveryDataKeys,
+  objects: Objects & DocumentByteProviderUnknownObjects,
+  leaseId: string, oneUseAttemptId: string, providerObservedAt: Date) {
+  if (!(providerObservedAt instanceof Date) || !Number.isFinite(providerObservedAt.getTime())) {
+    throw new Error('Document byte provider observation time is invalid');
+  }
+  const request = { installationId: context.installationId,
+    organisationId: context.organisationId, operationId: context.operationId, leaseId };
+  const readBoth = async () => {
+    const published = await readPublishedDocumentByteProviderUnknown(journal,
+      control, context, keys, objects);
+    const local = await readCommittedDocumentByteProviderUnknown(prisma, request);
+    if (published.body !== local.body) {
+      throw new Error('Published document byte UNKNOWN differs from local marker');
+    }
+    return published;
+  };
+  const before = await readBoth();
+  const facts = JSON.parse(before.body);
+  const recorded = await prisma.$queryRaw<Array<{ recorded: boolean }>>`
+    SELECT public."DocumentByteProviderObservation_recordAbsent"(${leaseId},
+      ${oneUseAttemptId}, ${providerObservedAt.toISOString()}::timestamptz) AS recorded`;
+  if (recorded.length !== 1 || recorded[0]?.recorded !== true) {
+    throw new Error('Document byte provider observation did not commit');
+  }
+  // Re-authenticating the head is the after-check: it must still be this
+  // operation's only UNKNOWN entry and equal the committed local marker.
+  const after = await readBoth();
+  const observation = await prisma.documentByteProviderObservation.findUnique({
+    where: { leaseId },
+  });
+  if (!observation || observation.attemptId !== leaseId || observation.id !== leaseId
+    || observation.deletionId !== facts.deletionId
+    || observation.decisionEntryDigest !== facts.decisionEntryDigest
+    || observation.outcome !== 'PRIMARY_ACTIVE_OBJECT_ABSENT'
+    || observation.providerObservedAt.getTime() < Date.parse(facts.startedAt)
+    || observation.providerObservedAt.getTime() !== providerObservedAt.getTime()) {
+    throw new Error('Document byte provider observation is unavailable or mismatched');
+  }
+  return { leaseId, unknownEntryDigest: after.entryDigest,
+    decisionEntryDigest: facts.decisionEntryDigest as string,
     outcome: 'PRIMARY_ACTIVE_OBJECT_ABSENT' as const,
     providerObservedAt: observation.providerObservedAt,
     recordedAt: observation.recordedAt, actionAuthorized: false as const };

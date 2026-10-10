@@ -26,7 +26,8 @@ import { readMatchedClaimedDocumentByteDecision,
   readMatchedStartedDocumentByteDecision } from '../services/matched-claimed-document-byte-decision.js';
 import { claimVerifiedDocumentByteExecutionLease } from '../services/claimed-document-byte-execution-lease.js';
 import { startVerifiedDocumentByteProviderAttempt } from '../services/verified-document-byte-provider-start.js';
-import { recordVerifiedDocumentBytePrimaryAbsence } from '../services/verified-document-byte-provider-observation.js';
+import { recordVerifiedDocumentBytePrimaryAbsence,
+  recordReconciledDocumentBytePrimaryAbsence } from '../services/verified-document-byte-provider-observation.js';
 import { publishVerifiedDocumentByteProviderUnknown,
   readPublishedDocumentByteProviderUnknown } from '../services/published-document-byte-provider-unknown.js';
 import { readCommittedDocumentByteProviderUnknown } from '../services/document-byte-provider-unknown.js';
@@ -191,6 +192,7 @@ async function readyBytePermitPublisher() {
     attempt: null as Record<string, unknown> | null,
     observation: null as Record<string, unknown> | null, observeCalls: 0,
     boundAttempt: undefined as unknown, observationNotRecorded: false,
+    expectedAttempt: undefined as unknown, duringObserve: null as (() => void) | null,
     observationView: null as ((row: Record<string, unknown>) => Record<string, unknown>) | null };
   const tx = {
     $queryRaw: async (strings: TemplateStringsArray, ...values: unknown[]) => {
@@ -200,6 +202,9 @@ async function readyBytePermitPublisher() {
         if (!state.lease || !state.attempt || state.observation) {
           throw new Error('Synthetic provider observation refused');
         }
+        if (state.expectedAttempt !== undefined && values[1] !== state.expectedAttempt) {
+          throw new Error('Synthetic attempt capability does not match');
+        }
         if (state.observationNotRecorded) return [{ recorded: false }];
         state.observation = { id: 'lease', leaseId: 'lease', attemptId: 'lease',
           organisationId: f.context.organisationId, deletionId: row.claim.deletionId,
@@ -207,6 +212,7 @@ async function readyBytePermitPublisher() {
           outcome: 'PRIMARY_ACTIVE_OBJECT_ABSENT',
           providerObservedAt: new Date(String(values[2])),
           observedTransactionId: 125n, recordedAt: new Date('2026-10-07T08:03:03.000Z') };
+        state.duringObserve?.();
         return [{ recorded: true }];
       }
       if (strings.join('').includes('DocumentByteExecutionLease_claim')) {
@@ -642,6 +648,64 @@ test('primary absence observation needs a durable start, never authorizes comple
   const callsBefore = state.observeCalls;
   await assert.rejects(observe(at), /current independent head/);
   assert.equal(state.observeCalls, callsBefore);
+  // Reconciliation path: the published UNKNOWN must remain the head and equal
+  // the committed local marker; the SQL capability check stays authoritative.
+  const capability = JSON.parse(decision.body).oneUseAttemptId as string;
+  state.expectedAttempt = capability;
+  const reconcile = (attemptId: string, when: Date) =>
+    recordReconciledDocumentBytePrimaryAbsence(prisma, f.journal, f.store,
+      f.context, f.keys, f.store, 'lease', attemptId, when);
+  const later = new Date('2026-10-07T09:00:00.000Z');
+  await assert.rejects(reconcile(capability, new Date(Number.NaN)), /observation time is invalid/);
+  await assert.rejects(reconcile('22222222-2222-4222-8222-222222222222', later),
+    /capability does not match/);
+  assert.equal(state.observation, null);
+  const attemptRow = state.attempt!;
+  attemptRow.startedTransactionId = 999n;
+  const callsBeforeMismatch = state.observeCalls;
+  await assert.rejects(reconcile(capability, later), /differs from local marker/);
+  assert.equal(state.observeCalls, callsBeforeMismatch);
+  attemptRow.startedTransactionId = 124n;
+  const unknownHeadKey = f.headKey;
+  const savedHead = f.objects.get(unknownHeadKey)!;
+  f.objects.delete(unknownHeadKey);
+  await assert.rejects(reconcile(capability, later));
+  assert.equal(state.observeCalls, callsBeforeMismatch);
+  f.objects.set(unknownHeadKey, savedHead);
+  for (const change of [
+    { providerObservedAt: new Date('2026-10-07T09:00:00.500Z') },
+    { attemptId: 'other-lease' }, { id: 'other-lease' }, { deletionId: 'other-job' },
+    { decisionEntryDigest: '0'.repeat(64) }, { outcome: 'COMPLETED' },
+  ]) {
+    state.observation = null;
+    state.observationView = row => ({ ...row, ...change });
+    await assert.rejects(reconcile(capability, later), /unavailable or mismatched/);
+  }
+  state.observationView = null;
+  state.observation = null;
+  await assert.rejects(reconcile(capability, new Date('2026-10-07T08:03:00.500Z')),
+    /unavailable or mismatched/);
+  // The head is re-authenticated after the SQL call: losing it there refuses
+  // the result even though the database accepted the row.
+  state.observation = null;
+  state.duringObserve = () => { f.objects.delete(unknownHeadKey); };
+  await assert.rejects(reconcile(capability, later));
+  assert.ok(state.observation);
+  state.duringObserve = null;
+  f.objects.set(unknownHeadKey, savedHead);
+  state.observation = null;
+  state.observationNotRecorded = true;
+  await assert.rejects(reconcile(capability, later), /did not commit/);
+  state.observationNotRecorded = false;
+  const reconciled = await reconcile(capability, later);
+  assert.equal(reconciled.actionAuthorized, false);
+  assert.equal(reconciled.outcome, 'PRIMARY_ACTIVE_OBJECT_ABSENT');
+  assert.equal(reconciled.providerObservedAt.getTime(), later.getTime());
+  assert.equal(reconciled.decisionEntryDigest, observed.decisionEntryDigest);
+  const head = await readPublishedDocumentByteProviderUnknown(f.journal,
+    f.store, f.context, f.keys, f.store);
+  assert.equal(reconciled.unknownEntryDigest, head.entryDigest);
+  await assert.rejects(reconcile(capability, later), /Synthetic provider observation refused/);
 });
 
 test('committed provider start publishes one encrypted independent UNKNOWN and recovers a lost head acknowledgement', async () => {
