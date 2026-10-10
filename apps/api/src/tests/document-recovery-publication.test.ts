@@ -1092,6 +1092,40 @@ test('finalizing a primary completion processes only its job, needs the capabili
   assert.equal(reservation.activeOperation?.operationId, f.context.operationId);
 });
 
+// Crash between writing the completion entry and advancing the head.
+async function interruptedCompletion() {
+  const setup = await observedAndUnknown();
+  const store = setup.f.store as unknown as { compareAndSwapControl: (...args: unknown[]) => Promise<boolean> };
+  const original = store.compareAndSwapControl.bind(store);
+  store.compareAndSwapControl = async () => {
+    store.compareAndSwapControl = original;
+    throw new Error('synthetic crash before the head moved');
+  };
+  const before = await setup.f.store.readControl();
+  await assert.rejects(setup.publish());
+  assert.equal((await setup.f.store.readControl()).generation, before.generation, 'the head did not move');
+  await assert.rejects(readPublishedDocumentBytePrimaryCompletion(setup.f.journal, setup.f.store,
+    setup.f.context, setup.f.keys, setup.f.store), /does not match its current head/);
+  return { ...setup, before };
+}
+
+test('a completion interrupted before the head moved is verified against local facts and resumed', async () => {
+  const { f, publish, finalize, unknown, before } = await interruptedCompletion();
+  const resumed = await publish();
+  assert.equal(resumed.replayed, true);
+  assert.equal((await f.store.readControl()).generation, before.generation + 1);
+  assert.equal(JSON.parse(resumed.body).unknownEntryDigest, unknown.entryDigest);
+  assert.equal((await finalize()).scope, 'PRIMARY_ACTIVE_OBJECT_ONLY');
+});
+
+test('a pending completion that no longer matches the local observation is not resumed', async () => {
+  const { f, state, publish, before } = await interruptedCompletion();
+  state.observationView = row => ({ ...row, providerObservedAt: new Date('2026-10-07T08:03:02.500Z') });
+  await assert.rejects(publish(), /Pending document byte completion differs from local observation/);
+  state.observationView = null;
+  assert.equal((await f.store.readControl()).generation, before.generation, 'the head was not advanced');
+});
+
 test('a finalize that loses an overlapping race reports the winning completion instead of failing', async () => {
   const { state, publish, finalize } = await observedAndUnknown();
   const published = await publish();

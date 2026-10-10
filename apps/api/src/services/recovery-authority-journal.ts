@@ -247,6 +247,31 @@ export class RecoveryAuthorityJournal {
     return { entry: { ...entry }, revision, actionAuthorized: false as const };
   }
 
+  /** A reserved append writes its entry, then advances the head. A crash
+   * between the two leaves one entry beyond the head, and every reader above
+   * refuses that history. This returns that pending entry and the head entry
+   * it follows, only when it is the exact next generation for this operation
+   * and kind. It says nothing about the entry's facts: the caller must
+   * authenticate its envelope before resuming the same append. */
+  async readPendingEntry(operationId: string, kind: z.infer<typeof kinds>, source: AuthorityHeadSource) {
+    identity.parse(operationId); kinds.parse(kind);
+    const before = await this.readCurrentHead(source);
+    const rows = await this.history();
+    this.headMatchesHistory(before, rows);
+    const pending = rows[before.generation];
+    if (rows.length !== before.generation + 1 || !pending
+      || pending.operationId !== operationId || pending.kind !== kind) {
+      throw new Error('No exact pending recovery entry');
+    }
+    const after = await this.readCurrentHead(source);
+    if (after.revision !== before.revision || after.generation !== before.generation) {
+      throw new Error('Recovery authority current head changed during verification');
+    }
+    const head = rows[before.generation - 1];
+    return { pending: { ...pending }, head: head ? { ...head } : null, revision: before.revision,
+      actionAuthorized: false as const };
+  }
+
   private async currentHistory(source: AuthorityHeadSource) {
     const before = await this.readCurrentHead(source);
     const rows = await this.history();

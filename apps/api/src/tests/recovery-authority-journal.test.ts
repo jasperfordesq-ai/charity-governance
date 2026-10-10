@@ -450,3 +450,34 @@ test('the last slot remains available for a standalone decision but not a compla
   assert.equal(decision.generation, 10000);
   assert.equal(f.creates(), 1);
 });
+
+test('a pending entry is returned only when it is the exact next entry for that operation and kind', async () => {
+  const f = publisherFixture();
+  const first = await f.journal.appendPublished(intent, f.publisher);
+  await assert.rejects(() => f.journal.readPendingEntry(intent.operationId, intent.kind, f.publisher),
+    /No exact pending/, 'nothing beyond the head');
+  // An intent stored without its head moving: what a crash between the two leaves.
+  const next = { ...intent, operationId: 'operation-b', expectedGeneration: 1, expectedDigest: first.digest };
+  await f.journal.append(next);
+  const read = await f.journal.readPendingEntry('operation-b', intent.kind, f.publisher);
+  assert.deepEqual([read.pending.generation, read.pending.operationId, read.head?.digest, read.actionAuthorized],
+    [2, 'operation-b', first.digest, false]);
+  await assert.rejects(() => f.journal.readPendingEntry('operation-a', intent.kind, f.publisher), /No exact pending/);
+  await assert.rejects(() => f.journal.readPendingEntry('operation-b', 'DISPOSAL_RESULT', f.publisher), /No exact pending/);
+  // Two entries beyond the head are not one exact pending entry.
+  const pendingDigest = read.pending.digest;
+  await f.journal.append({ ...intent, operationId: 'operation-c', expectedGeneration: 2, expectedDigest: pendingDigest });
+  await assert.rejects(() => f.journal.readPendingEntry('operation-b', intent.kind, f.publisher), /No exact pending/);
+});
+
+test('a pending entry read refuses a head that moves while it reads', async () => {
+  const f = publisherFixture();
+  const first = await f.journal.appendPublished(intent, f.publisher);
+  await f.journal.append({ ...intent, operationId: 'operation-b', expectedGeneration: 1, expectedDigest: first.digest });
+  const original = f.publisher.readHead;
+  let reads = 0;
+  f.publisher.readHead = async () => ({ ...await original(), revision: `changed-${++reads}` });
+  await assert.rejects(() => f.journal.readPendingEntry('operation-b', intent.kind, f.publisher), /changed/);
+  f.publisher.readHead = original;
+  assert.equal((await f.journal.readPendingEntry('operation-b', intent.kind, f.publisher)).pending.operationId, 'operation-b');
+});

@@ -137,6 +137,9 @@ export async function publishVerifiedDocumentBytePrimaryCompletion(prisma: Prism
     }
     return { ...already, replayed: true, actionAuthorized: false as const };
   } catch (error) {
+    if (error instanceof Error && error.message === 'Recovery authority history does not match its current head') {
+      return resumePendingCompletion(journal, control, context, keys, objects, local);
+    }
     if (!(error instanceof Error) || error.message !== 'Requested recovery entry is not published') throw error;
   }
   const unknown = await readPublishedDocumentByteProviderUnknown(journal,
@@ -168,6 +171,36 @@ export async function publishVerifiedDocumentBytePrimaryCompletion(prisma: Prism
     throw new Error('Published document byte completion changed after append');
   }
   return { ...published, replayed: receipt.replayed, actionAuthorized: false as const };
+}
+
+/** The completion entry was written but the head never advanced. The
+ * verified history already places it directly after this operation's UNKNOWN,
+ * which was published only after matching the same immutable local marker.
+ * Resume only if the pending envelope is exactly the completion the local
+ * observation produces; the journal then republishes that same entry. */
+async function resumePendingCompletion(journal: RecoveryAuthorityJournal,
+  control: RecoveryControlStore, context: RecoveryEnvelopeContext, keys: RecoveryDataKeys,
+  objects: Objects, local: RecordedObservation) {
+  const { pending, head } = await journal.readPendingEntry(context.operationId,
+    'DOCUMENT_BYTE_PRIMARY_COMPLETION_V1', sourceFor(control));
+  if (!head) throw new Error('Pending document byte completion has no UNKNOWN before it');
+  const openedUnknown = await readVerifiedDocumentByteProviderUnknown(head.factsDigest, context, keys, objects);
+  const expected = completionFor(context, local, { body: openedUnknown.body,
+    entryDigest: head.digest, envelopeDigest: head.factsDigest });
+  const opened = await readVerifiedDocumentBytePrimaryCompletion(pending.factsDigest, context, keys, objects);
+  if (opened.body !== expected.body) {
+    throw new Error('Pending document byte completion differs from local observation');
+  }
+  const marker = JSON.parse(openedUnknown.body);
+  await journal.appendReservedDocumentBytePrimaryCompletion({
+    operationId: context.operationId, writerId: marker.writerId,
+    writerEpoch: marker.writerEpoch, preparationDigest: marker.preparationDigest,
+    unknownGeneration: head.generation, unknownEntryDigest: head.digest,
+    unknownEnvelopeDigest: head.factsDigest, completionEnvelopeDigest: pending.factsDigest,
+  }, control);
+  const published = await readPublishedDocumentBytePrimaryCompletion(journal,
+    control, context, keys, objects);
+  return { ...published, replayed: true, actionAuthorized: false as const };
 }
 
 /** Apply a published completion locally: one capability-checked SQL call
