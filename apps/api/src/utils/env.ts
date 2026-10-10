@@ -442,6 +442,26 @@ function requireAuthRecoverySecret(issues: string[]): void {
   }
 }
 
+/**
+ * JWT_SECRET_PREVIOUS / OWNER_JWT_SECRET_PREVIOUS exist only while a signing
+ * secret is being rotated, so stored authenticator secrets sealed under the old
+ * value still open until they are re-sealed. When set, each must be long enough
+ * and must not repeat a current signing secret.
+ */
+export function requireSigningSecretRotationValues(
+  issues: string[],
+  env: NodeJS.ProcessEnv = process.env,
+): void {
+  for (const name of ['JWT_SECRET_PREVIOUS', 'OWNER_JWT_SECRET_PREVIOUS'] as const) {
+    const value = env[name];
+    if (typeof value !== 'string' || value.length === 0) continue;
+    if (value.length < 32) issues.push(`${name} must be at least 32 characters`);
+    if (value === env.JWT_SECRET || value === env.OWNER_JWT_SECRET) {
+      issues.push(`${name} must differ from the current JWT_SECRET and OWNER_JWT_SECRET`);
+    }
+  }
+}
+
 export function requireIntegrationEncryptionKey(
   issues: string[],
   env: NodeJS.ProcessEnv = process.env,
@@ -933,6 +953,7 @@ export function validateProductionEnv(): void {
       issues.push('OWNER_JWT_SECRET must be distinct from JWT_SECRET');
     }
   }
+  requireSigningSecretRotationValues(issues);
   requireAuthRecoverySecret(issues);
   requireIntegrationEncryptionKey(issues);
   requireAtlassianOAuthClient(issues);
