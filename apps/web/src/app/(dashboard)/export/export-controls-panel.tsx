@@ -5,6 +5,7 @@ import { Download } from 'lucide-react';
 import { primaryActionButtonClassName } from '@/components/ui/action-button';
 import { ReviewWarningState } from '@/components/ui/states';
 import { statusPanelClassName } from '@/components/ui/status';
+import { selectOption } from '@/lib/select-option';
 import type { ComplianceApprovalSnapshotSummary } from '@charitypilot/shared';
 
 export function ExportControlsPanel({
@@ -49,8 +50,8 @@ export function ExportControlsPanel({
           <Select
             label="Reporting Year"
             selectedKeys={new Set([String(year)])}
-            onSelectionChange={(keys) => {
-              const val = Array.from(keys)[0];
+            onChange={(e) => {
+              const val = selectOption(e.target.value, yearOptions.map(String));
               if (val) onYearChange(Number(val));
             }}
             className="w-48"

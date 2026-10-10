@@ -5,6 +5,7 @@ import { FileUploadField } from '@/components/ui/file-upload-field';
 import { ModalFormActions } from '@/components/ui/modal-form-actions';
 import { Input, Modal, ModalBody, ModalContent, ModalHeader, Select, SelectItem, Textarea } from '@heroui/react';
 import { DocumentCategory } from '@charitypilot/shared';
+import { selectOption } from '@/lib/select-option';
 
 export const MAX_FILE_SIZE = 10 * 1024 * 1024;
 
@@ -83,9 +84,9 @@ export function DocumentUploadModal({
                 <Select
                   label="Category"
                   selectedKeys={new Set([uploadCategory])}
-                  onSelectionChange={(keys) => {
-                    const value = Array.from(keys)[0] as DocumentCategory | undefined;
-                    if (value) setUploadCategory(value);
+                  onChange={(e) => {
+                    const value = selectOption(e.target.value, categoryOptions.map(([key]) => key));
+                    if (value) setUploadCategory(value as DocumentCategory);
                   }}
                 >
                   {categoryOptions.map(([key, label]) => (

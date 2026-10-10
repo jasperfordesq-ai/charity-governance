@@ -9,6 +9,7 @@ import {
   SelectItem,
 } from '@heroui/react';
 import { FormHint } from '@/components/ui/forms';
+import { selectOption } from '@/lib/select-option';
 import { ModalFormActions } from '@/components/ui/modal-form-actions';
 import type { DocumentResponse, GovernanceStandardResponse } from '@charitypilot/shared';
 
@@ -49,8 +50,8 @@ export function DocumentLinkModal({
                 label="Standard"
                 aria-describedby="link-disabled-hint"
                 selectedKeys={linkStandardId ? new Set([linkStandardId]) : new Set()}
-                onSelectionChange={(keys) => {
-                  const value = Array.from(keys)[0] as string | undefined;
+                onChange={(e) => {
+                  const value = selectOption(e.target.value, standards.map((standard) => standard.id));
                   if (value) setLinkStandardId(value);
                 }}
                 isDisabled={Boolean(standardsError) || standards.length === 0}

@@ -9,6 +9,7 @@ import {
 import { primaryActionButtonClassName } from '@/components/ui/action-button';
 import { FormAlert } from '@/components/ui/form-alert';
 import { SaveStatusIndicator } from '@/components/ui/states';
+import { selectOption } from '@/lib/select-option';
 import { StatusChip, statusPanelClassName, type StatusTone } from '@/components/ui/status';
 
 export type ExportSignoffForm = {
@@ -189,9 +190,9 @@ export function ExportBoardApprovalPanel({
           label="Approval status"
           isDisabled={!canManageSignoff}
           selectedKeys={new Set([signoffForm.status])}
-          onSelectionChange={(keys) => {
+          onChange={(e) => {
             if (!canManageSignoff) return;
-            const value = Array.from(keys)[0] as ComplianceSignoffStatus | undefined;
+            const value = selectOption(e.target.value, Object.keys(signoffStatusLabels) as ComplianceSignoffStatus[]);
             if (value) setSignoffForm((prev) => ({ ...prev, status: value }));
           }}
         >

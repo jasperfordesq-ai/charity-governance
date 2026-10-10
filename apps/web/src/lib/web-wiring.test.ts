@@ -2813,7 +2813,7 @@ test('phase 6C team page clarifies permissions, disabled states, and invite feed
   assert.match(src, /useEffect\(\(\) => \{[\s\S]*?!allowedInviteRoles\.includes\(role\)[\s\S]*?setRole\(UserRole\.MEMBER\)/);
   assert.match(src, /if \(!allowedInviteRoles\.includes\(role\)\) return 'Choose an invite role available to your account\.'/);
   assert.match(src, /<SelectItem key=\{UserRole\.ADMIN\} isDisabled=\{!canInviteAdmin\}>Admin<\/SelectItem>/);
-  assert.match(src, /if \(next && allowedInviteRoles\.includes\(next\)\) setRole\(next\);/);
+  assert.match(src, /const next = selectOption\(e\.target\.value, allowedInviteRoles\);\s*if \(next\) setRole\(next\);/);
   assert.match(src, /isLoading=\{revokeInviteId === invite\.id\}/);
 });
 

@@ -28,6 +28,7 @@ import { Button, Select, SelectItem } from '@heroui/react';
 import { api } from '@/lib/api';
 import { apiErrorMessage } from '@/lib/errors';
 import { logClientError } from '@/lib/client-logger';
+import { selectOption } from '@/lib/select-option';
 import { useDocumentTitle } from '@/lib/use-title';
 import { AppPage, AppSection } from '@/components/ui/app-page';
 import { ConfirmActionModal } from '@/components/ui/confirm-action-modal';
@@ -297,9 +298,9 @@ export default function IntegrationsPage() {
                       className="max-w-sm"
                       label="Confluence space"
                       selectedKeys={selectedSpaceId ? new Set([selectedSpaceId]) : new Set<string>()}
-                      onSelectionChange={(keys) => {
-                        const value = Array.from(keys)[0] as string | undefined;
-                        setSelectedSpaceId(value ?? null);
+                      onChange={(e) => {
+                        const value = selectOption(e.target.value, ['', ...spaces.map((space) => space.id)]);
+                        if (value !== undefined) setSelectedSpaceId(value || null);
                       }}
                     >
                       {spaces.map((space) => (

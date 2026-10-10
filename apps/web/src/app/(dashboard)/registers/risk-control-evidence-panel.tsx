@@ -6,6 +6,7 @@ import type { RiskRecordResponse } from '@charitypilot/shared';
 import { api } from '@/lib/api';
 import { apiErrorMessage } from '@/lib/errors';
 import { statusPanelClassName } from '@/components/ui/status';
+import { selectOption } from '@/lib/select-option';
 import { riskReviewAttention } from './risk-review-attention';
 import { activeVerifiedClaimIds, riskClaimRevisionCue } from './risk-claim-revision';
 
@@ -249,18 +250,19 @@ export function RiskControlEvidencePanel({ risks }: { risks: RiskRecordResponse[
         <p className="mt-2 text-xs">Use Edit in the Risk register to update the review date and wording. Record any verified control with its date, actor and evidence reference below.</p>
       </div>
       <div className="mt-4 grid gap-3 md:grid-cols-2">
-        <Select label="Risk" selectedKeys={riskId ? new Set([riskId]) : new Set()} onSelectionChange={(keys) => {
-          const value = Array.from(keys)[0];
-          setRiskId(value ? String(value) : '');
+        <Select label="Risk" selectedKeys={riskId ? new Set([riskId]) : new Set()} onChange={(e) => {
+          const value = selectOption(e.target.value, ['', ...risks.map((risk) => risk.id)]);
+          if (value === undefined) return;
+          setRiskId(value);
           setRiskHistory(null);
           setHistoryError('');
         }}>
           {risks.map((risk) => <SelectItem key={risk.id}>{risk.title}</SelectItem>)}
         </Select>
         <Input label="Control reference" value={controlReference} onValueChange={setControlReference} description="Use the same reference for later withdrawal or reverification." />
-        <Select label="Evidence state" selectedKeys={new Set([state])} onSelectionChange={(keys) => {
-          const value = Array.from(keys)[0];
-          if (value === 'VERIFIED' || value === 'WITHDRAWN') setState(value);
+        <Select label="Evidence state" selectedKeys={new Set([state])} onChange={(e) => {
+          const value = selectOption(e.target.value, ['VERIFIED', 'WITHDRAWN'] as const);
+          if (value) setState(value);
         }}>
           <SelectItem key="VERIFIED">Record verification</SelectItem>
           <SelectItem key="WITHDRAWN">Withdraw verification</SelectItem>

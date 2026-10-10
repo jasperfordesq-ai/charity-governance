@@ -14,6 +14,7 @@ import { primaryActionButtonClassName } from '@/components/ui/action-button';
 import { FieldGroup, FormHint, StickyFormActions, ValidationSummary } from '@/components/ui/forms';
 import { StatusChip, statusPanelClassName } from '@/components/ui/status';
 import { PermissionHint, SaveStatusIndicator } from '@/components/ui/states';
+import { selectOption } from '@/lib/select-option';
 import type { ConditionalObligationProfile } from '@charitypilot/shared';
 import {
   CHARITABLE_PURPOSE_LABELS,
@@ -192,9 +193,9 @@ export function OrganisationProfileForm({
                 placeholder="Choose the confirmed legal form"
                 isDisabled={!canManage}
                 classNames={{ value: 'text-gray-700 dark:text-gray-300' }}
-                onSelectionChange={(keys) => {
-                  const value = Array.from(keys)[0] as LegalForm | undefined;
-                  if (value) handleLegalFormChange(value);
+                onChange={(e) => {
+                  const value = selectOption(e.target.value, legalFormOptions.map(([key]) => key));
+                  if (value) handleLegalFormChange(value as LegalForm);
                 }}
               >
                 {legalFormOptions.map(([key, label]) => (
@@ -339,9 +340,9 @@ export function OrganisationProfileForm({
                     isDisabled={!canManage}
                     classNames={{ value: 'text-gray-700 dark:text-gray-300' }}
                     aria-describedby="cpwr-hint"
-                    onSelectionChange={(keys) => {
-                      const value = Array.from(keys)[0] as 'true' | 'false' | undefined;
-                      setConstitutionPermitsWrittenResolutions(value ?? '');
+                    onChange={(e) => {
+                      const value = selectOption(e.target.value, ['', 'true', 'false'] as const);
+                      if (value !== undefined) setConstitutionPermitsWrittenResolutions(value);
                     }}
                   >
                     <SelectItem key="true">Yes — constitution permits (e.g. Art. 20)</SelectItem>

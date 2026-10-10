@@ -9,6 +9,7 @@ import {
 import { StatusChip, StatusDot, statusPanelClassName, type StatusTone } from '@/components/ui/status';
 import { SaveStatusIndicator } from '@/components/ui/states';
 import { ConfirmActionModal } from '@/components/ui/confirm-action-modal';
+import { selectOption } from '@/lib/select-option';
 
 export interface StandardFormState {
   status: ComplianceStatus;
@@ -182,9 +183,9 @@ export function StandardEditorCard({
           onBlur={() => {
             if (canManageRecords) void flushSave(standard.id);
           }}
-          onSelectionChange={(keys) => {
+          onChange={(e) => {
             if (!canManageRecords) return;
-            const val = Array.from(keys)[0] as ComplianceStatus;
+            const val = selectOption(e.target.value, statusOptions.map((option) => option.key));
             if (val) updateField(standard.id, 'status', val);
           }}
           size="sm"

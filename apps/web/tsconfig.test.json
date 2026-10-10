@@ -98,6 +98,8 @@
     "src/lib/form-schema-parity.test.ts",
     "src/lib/password-recovery-ui.test.ts",
     "src/lib/web-wiring.test.ts",
+    "src/lib/select-option.ts",
+    "src/lib/select-option.test.ts",
     "src/components/ui/app-page.tsx",
     "src/components/ui/status.tsx",
     "src/components/ui/states.tsx",
