@@ -19,7 +19,7 @@ group when its migration is introduced.
 - registers-controls: `BoardMember`, `ConflictRecord`, `RiskRecord`, `RiskChangeAudit`, `RiskControlVerification`, `RiskControlVerificationCounter`, `ComplaintRecord`, `ComplaintResolutionEvidence`, `ComplaintRemoval`, `ComplaintHoldEvent`, `ComplaintPurgeAuthorization`, `ComplaintPurgeAuthorizationWithdrawal`, `ComplaintPurgeClaim`, `ComplaintRecoveryPreparation`, `ComplaintRecoveryOutcome`, `ComplaintRecoveryEnforcement`, `ComplaintRecoveryExecution`, `ComplaintHoldRecoveryPreparation`, `ComplaintHoldRecoveryOutcome`, `ComplaintRecoveryCancellation`, `ComplaintPurgeDispositionEvent`, `ComplaintCopyDispositionAuthority`, `ComplaintCopyHoldEvent`, `GovernanceRegisterChangeAudit`, `OrganisationChangeAudit`, `FundraisingRecord`, `AnnualReportReadiness`, `FinancialControlReview`, `Member`
 - calendar-minutes: `Deadline`, `DeadlineChangeAudit`, `DeadlineReminderLog`, `DeadlineReminderAudit`, `GoverningAct`, `Resolution`, `GoverningActVoid`, `MinuteBookChangeAudit`
 - team-billing: `TeamInvite`, `Subscription`, `BillingCheckoutAttempt`, `StripeWebhookEvent`
-- data-requests: `DataLifecycleRequest`, `DataLifecycleStorageLink`, `DataLifecycleStorageLinkWithdrawal`, `DataLifecycleDocumentLink`, `DataLifecycleDocumentLinkWithdrawal`, `DataLifecycleReviewEvent`, `DataLifecycleTargetEvent`, `DataLifecycleResponseEvent`, `DataLifecycleCoverageEvent`, `DataRetentionPolicyRevision`, `DataRetentionPolicyWithdrawal`, `DocumentPurgeAuthorization`, `DocumentPurgeAuthorizationWithdrawal`, `DocumentPurgeClaim`, `DocumentPurgeDispositionEvent`, `DocumentRecoveryPreparation`, `DocumentRecoveryEnforcement`, `DocumentRecoveryExecution`, `DocumentRecoveryOutcome`, `DocumentBytePermitCandidateBinding`, `DocumentByteExecutionLease`, `DocumentByteProviderAttempt`, `DocumentCopyDispositionAuthority`, `DocumentCopyHoldEvent`
+- data-requests: `DataLifecycleRequest`, `DataLifecycleStorageLink`, `DataLifecycleStorageLinkWithdrawal`, `DataLifecycleDocumentLink`, `DataLifecycleDocumentLinkWithdrawal`, `DataLifecycleReviewEvent`, `DataLifecycleTargetEvent`, `DataLifecycleResponseEvent`, `DataLifecycleCoverageEvent`, `DataRetentionPolicyRevision`, `DataRetentionPolicyWithdrawal`, `DocumentPurgeAuthorization`, `DocumentPurgeAuthorizationWithdrawal`, `DocumentPurgeClaim`, `DocumentPurgeDispositionEvent`, `DocumentRecoveryPreparation`, `DocumentRecoveryEnforcement`, `DocumentRecoveryExecution`, `DocumentRecoveryOutcome`, `DocumentBytePermitCandidateBinding`, `DocumentByteExecutionLease`, `DocumentByteProviderAttempt`, `DocumentByteProviderObservation`, `DocumentCopyDispositionAuthority`, `DocumentCopyHoldEvent`
 - platform-operators: `PlatformOperator`, `PlatformOperatorRecoveryCode`, `PlatformOperatorSession`, `OperatorActionApproval`
 <!-- MODEL_INVENTORY_END -->
 
@@ -81,8 +81,16 @@ head check. `DocumentByteProviderAttempt` is a separate append-only,
 one-use marker for a committed claimed lease. It records that provider I/O
 was about to start, not whether it reached the provider or removed bytes.
 The runtime can create it only through the exact capability-checked SQL
-function; no production worker calls it yet. Restore snapshot format 6
-hashes this marker, format 5 covers leases without it, format 4 covers the
+function; no production worker calls it yet.
+`DocumentByteProviderObservation` is one append-only observation per committed
+marker: the primary active object was observed absent at a provider time no
+earlier than the marker. The marker must have committed in an earlier
+transaction, and the same one-use capability must be presented to a separate
+SQL function. It is not an all-copy erasure result. It changes no deletion job
+and does not relax the byte fence, so the job stays PENDING and UNKNOWN until a
+separate independent completion permit exists. No production worker calls it.
+Restore snapshot format 7 hashes this observation, format 6 covers the marker
+without it, format 5 covers leases without a marker, format 4 covers the
 candidate binding without a lease, and format 3 covers the older schema.
 Mixed formats refuse reconciliation. None of these rows alone is permission
 to reopen after host loss.

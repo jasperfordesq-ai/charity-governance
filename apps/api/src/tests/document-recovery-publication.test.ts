@@ -26,6 +26,7 @@ import { readMatchedClaimedDocumentByteDecision,
   readMatchedStartedDocumentByteDecision } from '../services/matched-claimed-document-byte-decision.js';
 import { claimVerifiedDocumentByteExecutionLease } from '../services/claimed-document-byte-execution-lease.js';
 import { startVerifiedDocumentByteProviderAttempt } from '../services/verified-document-byte-provider-start.js';
+import { recordVerifiedDocumentBytePrimaryAbsence } from '../services/verified-document-byte-provider-observation.js';
 import { publishVerifiedDocumentByteProviderUnknown,
   readPublishedDocumentByteProviderUnknown } from '../services/published-document-byte-provider-unknown.js';
 import { readCommittedDocumentByteProviderUnknown } from '../services/document-byte-provider-unknown.js';
@@ -187,9 +188,27 @@ async function readyBytePermitPublisher() {
     mutateAtRead: 0, candidateBinding: null as Record<string, unknown> | null,
     bindingCreates: 0, leaseCreates: 0, startCalls: 0, claimedAt: null as Date | null,
     lease: null as Record<string, unknown> | null,
-    attempt: null as Record<string, unknown> | null };
+    attempt: null as Record<string, unknown> | null,
+    observation: null as Record<string, unknown> | null, observeCalls: 0,
+    boundAttempt: undefined as unknown, observationNotRecorded: false,
+    observationView: null as ((row: Record<string, unknown>) => Record<string, unknown>) | null };
   const tx = {
-    $queryRaw: async (strings: TemplateStringsArray) => {
+    $queryRaw: async (strings: TemplateStringsArray, ...values: unknown[]) => {
+      if (strings.join('').includes('DocumentByteProviderObservation_recordAbsent')) {
+        state.observeCalls += 1;
+        state.boundAttempt = values[1];
+        if (!state.lease || !state.attempt || state.observation) {
+          throw new Error('Synthetic provider observation refused');
+        }
+        if (state.observationNotRecorded) return [{ recorded: false }];
+        state.observation = { id: 'lease', leaseId: 'lease', attemptId: 'lease',
+          organisationId: f.context.organisationId, deletionId: row.claim.deletionId,
+          decisionEntryDigest: state.lease.decisionEntryDigest,
+          outcome: 'PRIMARY_ACTIVE_OBJECT_ABSENT',
+          providerObservedAt: new Date(String(values[2])),
+          observedTransactionId: 125n, recordedAt: new Date('2026-10-07T08:03:03.000Z') };
+        return [{ recorded: true }];
+      }
       if (strings.join('').includes('DocumentByteExecutionLease_claim')) {
         if (!state.lease) throw new Error('Synthetic lease missing');
         state.claimedAt = new Date('2026-10-07T08:03:00.000Z');
@@ -268,6 +287,8 @@ async function readyBytePermitPublisher() {
         organisationId: f.context.organisationId, operationId: f.context.operationId,
         writerEpoch: f.context.writerEpoch, facts: f.prepared.body,
         factsDigest: f.prepared.digest } }, providerAttempt: state.attempt }) },
+    documentByteProviderObservation: { findUnique: async () => state.observation
+      && (state.observationView ? state.observationView(state.observation) : state.observation) },
     $queryRaw: tx.$queryRaw,
     $transaction: async (callback: (value: typeof tx) => Promise<unknown>) => {
       state.reads += 1;
@@ -533,6 +554,94 @@ test('fourth-stage document byte decision stays distinct, encrypted, immutable a
   f.objects.delete(f.headKey);
   await assert.rejects(matched());
   await assert.rejects(started());
+});
+
+test('primary absence observation needs a durable start, never authorizes completion, and stops once UNKNOWN is the head', async () => {
+  const { f, prisma, state } = await readyBytePermitPublisher();
+  const scope = { installationId: f.context.installationId,
+    organisationId: f.context.organisationId, operationId: f.context.operationId };
+  await publishVerifiedDocumentBytePermitCandidate(prisma,
+    f.journal, f.store, f.context, f.keys, f.store);
+  const candidate = await readPublishedDocumentBytePermit(f.journal, f.store,
+    f.context, f.keys, f.store);
+  await bindVerifiedDocumentBytePermitCandidate(prisma,
+    f.journal, f.store, f.context, f.keys, f.store);
+  const local = await readCurrentDocumentByteAuthority(prisma, scope);
+  const prior = JSON.parse(candidate.body);
+  const control = await f.store.readControl();
+  const decision = prepareDocumentByteExecutionDecisionFacts({ format: 1,
+    action: 'DOCUMENT_PRIMARY_BYTE_EXECUTION_DECISION',
+    ...scope, writerId: prior.writerId, writerEpoch: f.context.writerEpoch,
+    sourceRevision: f.context.sourceRevision, preparationDigest: prior.preparationDigest,
+    candidateBodyDigest: createHash('sha256').update(candidate.body).digest('hex'),
+    candidateEntryDigest: candidate.entryDigest, candidateEnvelopeDigest: candidate.envelopeDigest,
+    candidateGeneration: candidate.generation, candidateAuthorityDigest: prior.currentAuthorityDigest,
+    controlRevision: control.revision, outcomeId: prior.outcomeId, claimId: prior.claimId,
+    deletionId: prior.deletionId, authorizationId: prior.authorizationId,
+    documentId: prior.documentId, actorUserId: prior.actorUserId, provider: prior.provider,
+    storagePath: prior.storagePath, objectSha256: prior.objectSha256, fileSize: prior.fileSize,
+    copyDispositionDigest: local.localCopyObservationDigest,
+    holdStateDigest: local.localHoldObservationDigest,
+    providerInventoryDigest: 'c'.repeat(64), decisionEvidenceRef: 'SYNTHETIC-UNKNOWN-001',
+    oneUseAttemptId: '11111111-1111-4111-8111-111111111111',
+    issuedAt: '2026-10-07T08:00:00.000Z' });
+  const preserved = await preserveDocumentByteExecutionDecision(decision.body,
+    f.context, f.keys, f.store);
+  await f.journal.appendReservedDocumentByteExecutionDecision({
+    operationId: f.context.operationId, writerId: prior.writerId,
+    writerEpoch: f.context.writerEpoch, preparationDigest: prior.preparationDigest,
+    candidateGeneration: candidate.generation, candidateEntryDigest: candidate.entryDigest,
+    candidateEnvelopeDigest: candidate.envelopeDigest, decisionEnvelopeDigest: preserved.digest,
+  }, f.store);
+  await claimVerifiedDocumentByteExecutionLease(prisma,
+    f.journal, f.store, f.context, f.keys, f.store);
+  const observe = (at: Date) => recordVerifiedDocumentBytePrimaryAbsence(prisma,
+    f.journal, f.store, f.context, f.keys, f.store, 'lease', at);
+  const at = new Date('2026-10-07T08:03:02.000Z');
+  await assert.rejects(observe(new Date(Number.NaN)), /observation time is invalid/);
+  await assert.rejects(observe(at), /provider start differs|start observation is unavailable/);
+  assert.equal(state.observeCalls, 0);
+  await startVerifiedDocumentByteProviderAttempt(prisma,
+    f.journal, f.store, f.context, f.keys, f.store, 'lease');
+  state.copyHolds.push({ id: 'hold-before-observation', held: true });
+  await assert.rejects(observe(at), /copy or hold authority changed/);
+  assert.equal(state.observeCalls, 0);
+  state.copyHolds.length = 0;
+  state.observationNotRecorded = true;
+  await assert.rejects(observe(at), /did not commit/);
+  state.observationNotRecorded = false;
+  const observed = await observe(at);
+  assert.equal(observed.actionAuthorized, false);
+  assert.equal(observed.outcome, 'PRIMARY_ACTIVE_OBJECT_ABSENT');
+  assert.equal(observed.providerObservedAt.getTime(), at.getTime());
+  assert.equal(state.observeCalls, 2);
+  assert.equal(state.boundAttempt, JSON.parse(decision.body).oneUseAttemptId);
+  await assert.rejects(observe(at), /Synthetic provider observation refused/);
+  // A stored row that differs from the requested observation is refused
+  // rather than reported back as if it were this observation.
+  for (const change of [
+    { providerObservedAt: new Date('2026-10-07T08:03:02.500Z') },
+    { providerObservedAt: new Date('2026-10-07T08:03:00.500Z') },
+    { attemptId: 'other-lease' }, { id: 'other-lease' },
+    { decisionEntryDigest: '0'.repeat(64) }, { outcome: 'COMPLETED' },
+  ]) {
+    state.observation = null;
+    state.observationView = row => ({ ...row, ...change });
+    await assert.rejects(observe(at), /unavailable or mismatched/);
+  }
+  state.observationView = null;
+  // A provider time before the durable start cannot be reported, even if the
+  // database row echoes it.
+  state.observation = null;
+  await assert.rejects(observe(new Date('2026-10-07T08:03:00.500Z')), /unavailable or mismatched/);
+  // Once the independent UNKNOWN entry is the head, this immediate path is
+  // closed; a later observation must go through a reconciliation reader.
+  state.observation = null;
+  await publishVerifiedDocumentByteProviderUnknown(prisma,
+    f.journal, f.store, f.context, f.keys, f.store, 'lease');
+  const callsBefore = state.observeCalls;
+  await assert.rejects(observe(at), /current independent head/);
+  assert.equal(state.observeCalls, callsBefore);
 });
 
 test('committed provider start publishes one encrypted independent UNKNOWN and recovers a lost head acknowledgement', async () => {
