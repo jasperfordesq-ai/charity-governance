@@ -6,6 +6,7 @@ import { isConfiguredSecret } from './secrets.js';
 import { billingMode, emailDeliveryMode, isMultiTenant } from './deployment-profile.js';
 import { envDefaultProviderId } from '../services/document-storage-resolution.js';
 import { decodeIntegrationKey } from '../services/integration-crypto.js';
+import { MAX_SESSION_TRACE_RETENTION_DAYS, sessionTraceRetentionDays } from '../services/session-security-trace.js';
 
 export { isConfiguredSecret } from './secrets.js';
 export { isProductionEnv } from './deployment-profile.js';
@@ -448,6 +449,20 @@ function requireAuthRecoverySecret(issues: string[]): void {
  * value still open until they are re-sealed. When set, each must be long enough
  * and must not repeat a current signing secret.
  */
+/** Optional: when set, the session security trace is on for this many days
+ * (a data-protection decision, P08/C05). An unusable value turns it off, so
+ * production refuses to start rather than silently tracing nothing. */
+export function requireSessionSecurityTraceRetention(
+  issues: string[],
+  env: NodeJS.ProcessEnv = process.env,
+): void {
+  const raw = env.SESSION_SECURITY_TRACE_RETENTION_DAYS;
+  if (raw === undefined || raw === '') return;
+  if (sessionTraceRetentionDays(env) === null) {
+    issues.push(`SESSION_SECURITY_TRACE_RETENTION_DAYS must be a whole number of days from 1 to ${MAX_SESSION_TRACE_RETENTION_DAYS}`);
+  }
+}
+
 export function requireSigningSecretRotationValues(
   issues: string[],
   env: NodeJS.ProcessEnv = process.env,
@@ -954,6 +969,7 @@ export function validateProductionEnv(): void {
     }
   }
   requireSigningSecretRotationValues(issues);
+  requireSessionSecurityTraceRetention(issues);
   requireAuthRecoverySecret(issues);
   requireIntegrationEncryptionKey(issues);
   requireAtlassianOAuthClient(issues);

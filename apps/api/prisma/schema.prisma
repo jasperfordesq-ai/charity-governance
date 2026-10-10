@@ -3039,6 +3039,24 @@ enum OperatorSessionAccessLevel {
   ADMIN
 }
 
+/// Minimal session request trace, written only while
+/// SESSION_SECURITY_TRACE_RETENTION_DAYS is set (a data-protection decision).
+/// No user, charity, session or token value; see session-security-trace.ts.
+model SessionSecurityTrace {
+  id                        String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  occurredAt                DateTime @default(now())
+  routePattern              String
+  statusCode                Int
+  requestId                 String?
+  presentedTokenFingerprint String?
+  networkPrefix             String?
+  userAgentDigest           String?
+
+  @@index([occurredAt])
+  @@index([presentedTokenFingerprint, occurredAt])
+  @@index([requestId])
+}
+
 model PlatformOperatorSession {
   id         String           @id @default(cuid())
   operatorId String

@@ -21,6 +21,7 @@ const ENV_KEYS = [
   'LOCAL_FILE_STORAGE_DIR',
   'AUTH_COOKIE_DOMAIN',
   'SELF_REGISTRATION_ENABLED',
+  'SESSION_SECURITY_TRACE_RETENTION_DAYS',
   'STRIPE_SECRET_KEY',
   'RESEND_API_KEY',
   'SUPABASE_URL',
@@ -146,8 +147,12 @@ test('personal-server requires production mode, distinct strong secrets, local s
     DOCUMENT_STORAGE_DRIVER: 'supabase',
     AUTH_COOKIE_DOMAIN: '.example.test',
     SELF_REGISTRATION_ENABLED: 'true',
+    SESSION_SECURITY_TRACE_RETENTION_DAYS: '30d',
   }, () => {
     const issues = personalIssues(() => validatePersonalServerEnv());
+    // Any value, a typo included: nothing on a personal server would remove expired rows.
+    assert.ok(issues.includes('SESSION_SECURITY_TRACE_RETENTION_DAYS is not supported in personal-server mode: '
+      + 'it has no scheduler to remove expired rows'));
     assert.ok(issues.includes('NODE_ENV must be production for personal-server mode'));
     assert.ok(issues.includes('JWT_SECRET must be a configured secret of at least 32 characters'));
     assert.ok(issues.includes('READINESS_API_KEY must be a configured secret of at least 32 characters'));

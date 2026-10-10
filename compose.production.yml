@@ -125,6 +125,8 @@ services:
       DOCUMENT_STORAGE_CLEANUP_LIMIT: ${DOCUMENT_STORAGE_CLEANUP_LIMIT:-25}
       DEADLINE_REMINDERS_INTERVAL_MS: ${DEADLINE_REMINDERS_INTERVAL_MS:-86400000}
       RISK_CONTROL_REVIEW_INTERVAL_MS: ${RISK_CONTROL_REVIEW_INTERVAL_MS:-86400000}
+      # Retention for the session security trace; unset means the trace is off.
+      SESSION_SECURITY_TRACE_RETENTION_DAYS: ${SESSION_SECURITY_TRACE_RETENTION_DAYS:-}
       DOCUMENT_STORAGE_CLEANUP_INTERVAL_MS: ${DOCUMENT_STORAGE_CLEANUP_INTERVAL_MS:-3600000}
       # The Confluence publisher refreshes an Atlassian token and the eraser
       # opens a sealed credential; both fail without these. This service uses an
