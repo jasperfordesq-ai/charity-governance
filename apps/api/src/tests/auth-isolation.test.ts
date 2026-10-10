@@ -1314,17 +1314,21 @@ test('refresh token replay revokes active sessions for the affected user', async
   assert.equal(auditedReplays[0].actorKind, 'SYSTEM', 'no human did this');
   assert.equal(auditedReplays[0].subjectUserId, 'user-1');
   assert.equal(auditedReplays[0].organisationId, 'org-1');
+  // The same fingerprint the session security trace records for every
+  // request that presented this token, when the trace is on.
+  const { presentedTokenFingerprint } = await import('../services/session-security-trace.js');
+  const tokenFingerprint = presentedTokenFingerprint('replayed-refresh-token');
   assert.deepEqual(auditedReplays[0].context, {
     clientKind: 'WEB', accessLevel: 'ADMIN', requestId: 'request-123', previousRevocationReason: 'ROTATED',
     presentedSessionRevokedAt: revokedAt.toISOString(),
     presentedSessionFingerprint: createHash('sha256').update('old-session').digest('hex').slice(0, 12).toUpperCase(),
-    newlyQuarantinedSessionCount: 1,
+    newlyQuarantinedSessionCount: 1, presentedTokenFingerprint: tokenFingerprint,
   });
   assert.deepEqual(auditedReplays[1].context, {
     clientKind: 'WEB', accessLevel: 'ADMIN', requestId: 'request-456', previousRevocationReason: 'ROTATED',
     presentedSessionRevokedAt: revokedAt.toISOString(),
     presentedSessionFingerprint: createHash('sha256').update('old-session').digest('hex').slice(0, 12).toUpperCase(),
-    newlyQuarantinedSessionCount: 0,
+    newlyQuarantinedSessionCount: 0, presentedTokenFingerprint: tokenFingerprint,
   });
 });
 

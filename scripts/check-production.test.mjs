@@ -5749,6 +5749,8 @@ const PRODUCTION_ENV_GUARD_VARIABLES = new Map([
   // JWT_SECRET_PREVIOUS / OWNER_JWT_SECRET_PREVIOUS exist only during a
   // signing-secret rotation; the guard checks them only when set.
   ['requireSigningSecretRotationValues', []],
+  // Optional: the session security trace is off unless a period is set.
+  ['requireSessionSecurityTraceRetention', []],
   ['validateAuthDeliveryNumericEnv', []],
   // Driven by DOCUMENT_STORAGE_DRIVER, which both workflows leave unset, so the
   // Supabase branch runs and its variables arrive as literals above.

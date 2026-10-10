@@ -52,6 +52,7 @@ import {
 } from '../services/auth-email-delivery.service.js';
 import { requireAuthRecoveryControlForRuntime } from '../services/auth-recovery-control.js';
 import { RiskControlReviewService } from '../services/risk-control-review.service.js';
+import { pruneSessionSecurityTrace, sessionTraceRetentionDays } from '../services/session-security-trace.js';
 
 const DEFAULT_DEADLINE_REMINDERS_INTERVAL_MS = 24 * 60 * 60 * 1000;
 const DEFAULT_DOCUMENT_STORAGE_CLEANUP_INTERVAL_MS = 60 * 60 * 1000;
@@ -788,6 +789,26 @@ export async function runRiskControlReviewScan(input: {
   }
 }
 
+const SESSION_SECURITY_TRACE_PRUNE_INTERVAL_MS = 6 * 60 * 60 * 1000;
+
+/** Removes session trace rows older than the configured retention. Runs only
+ * while tracing is on; the trace itself is off unless a period is set. */
+export async function runSessionSecurityTracePrune(input: {
+  prisma: Parameters<typeof pruneSessionSecurityTrace>[0];
+  retentionDays: number;
+  logger: SchedulerLogger;
+  now?: Date;
+}): Promise<boolean> {
+  try {
+    const removed = await pruneSessionSecurityTrace(input.prisma, input.retentionDays, input.now);
+    input.logger.info(`[ProductionScheduler] Session security trace retention removed ${removed} row(s).`);
+    return false;
+  } catch (error) {
+    logSchedulerError(input.logger, '[ProductionScheduler] Session security trace retention failed.', error);
+    return true;
+  }
+}
+
 export async function runProductionSchedulerOnce(input: {
   deadlineService: DeadlineReminderRunner;
   documentService: DocumentStorageCleanupRunner;
@@ -1125,6 +1146,13 @@ async function main(): Promise<void> {
     logger,
     run: () => runRiskControlReviewScan({ riskControlReviewService, logger }),
   });
+  const traceRetentionDays = sessionTraceRetentionDays();
+  const sessionTracePruneJob = traceRetentionDays === null ? null : startRecurringJob({
+    name: 'Session security trace retention',
+    intervalMs: SESSION_SECURITY_TRACE_PRUNE_INTERVAL_MS,
+    logger,
+    run: () => runSessionSecurityTracePrune({ prisma, retentionDays: traceRetentionDays, logger }),
+  });
 
   let shutdownStarted = false;
   const shutdown = async (signal: NodeJS.Signals) => {
@@ -1139,6 +1167,7 @@ async function main(): Promise<void> {
         documentReconcileJob,
         authEmailDeliveryJob,
         riskControlReviewJob,
+        ...(sessionTracePruneJob ? [sessionTracePruneJob] : []),
       ],
       config.shutdownTimeoutMs,
     );

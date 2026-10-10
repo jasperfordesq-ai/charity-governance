@@ -185,6 +185,7 @@ const DISPOSABLE_DATABASE_RESET_TABLES = Object.freeze([
   "ConfluenceReference",
   "IntegrationCredential",
   "IntegrationSecretControl",
+  "SessionSecurityTrace",
   "ConflictRecord",
   "RiskRecord",
   "RiskChangeAudit",

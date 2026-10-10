@@ -41,6 +41,8 @@ x-api-environment: &api-environment
   JWT_SECRET: ${JWT_SECRET:?Set JWT_SECRET in .env.personal-server}
   # Set only while rotating JWT_SECRET, so enrolled authenticators still open.
   JWT_SECRET_PREVIOUS: ${JWT_SECRET_PREVIOUS:-}
+  # Session security trace retention in days; unset means the trace is off.
+  SESSION_SECURITY_TRACE_RETENTION_DAYS: ${SESSION_SECURITY_TRACE_RETENTION_DAYS:-}
   AUTH_RECOVERY_SECRET: ${AUTH_RECOVERY_SECRET:?Set AUTH_RECOVERY_SECRET in .env.personal-server}
   JWT_EXPIRY: ${JWT_EXPIRY:-15m}
   REFRESH_TOKEN_TTL_DAYS: ${REFRESH_TOKEN_TTL_DAYS:-7}

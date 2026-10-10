@@ -8,6 +8,7 @@ import { signAccessToken, type TokenPayload } from '../utils/jwt.js';
 import { AppError } from '../utils/errors.js';
 import { verifyUserLoginSecondFactor, type OfferedSecondFactor } from './user-second-factor.service.js';
 import { isPrivilegedMfaRequired } from '../utils/deployment-profile.js';
+import { presentedTokenFingerprintFromHash } from './session-security-trace.js';
 
 type SessionUser = {
   id: string;
@@ -447,6 +448,11 @@ export async function rotateSessionTokens(
             presentedSessionFingerprint: crypto.createHash('sha256')
               .update(session.sessionId).digest('hex').slice(0, 12).toUpperCase(),
             newlyQuarantinedSessionCount: newlyQuarantined.count,
+            // Links this event to the session security trace, when it is on:
+            // the same one-way fingerprint is recorded for every request that
+            // presented this token, so the replaying request can be compared
+            // with the earlier legitimate one.
+            presentedTokenFingerprint: presentedTokenFingerprintFromHash(refreshTokenHash),
           },
         },
       });
