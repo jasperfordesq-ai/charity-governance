@@ -4,6 +4,7 @@ import { AppError } from '../utils/errors.js';
 import {
   requireAtlassianOAuthClient,
   requireIntegrationEncryptionKey,
+  requireSigningSecretRotationValues,
   requireUsableDocumentStorageDefault,
   validateAuthDeliveryEnv,
   validateDeadlineRemindersEnv,
@@ -1515,6 +1516,28 @@ test('a valid, distinct INTEGRATION_ENCRYPTION_KEY raises no issue', () => {
     AUTH_RECOVERY_SECRET: 'ef'.repeat(32),
   } as NodeJS.ProcessEnv);
   assert.deepEqual(issues, []);
+});
+
+test('signing-secret rotation values are optional, long enough, and never a current secret', () => {
+  const current = { JWT_SECRET: 'j'.repeat(40), OWNER_JWT_SECRET: 'o'.repeat(40) };
+  const none: string[] = [];
+  requireSigningSecretRotationValues(none, { ...current } as NodeJS.ProcessEnv);
+  assert.deepEqual(none, []);
+  const ok: string[] = [];
+  requireSigningSecretRotationValues(ok, { ...current, JWT_SECRET_PREVIOUS: 'p'.repeat(40),
+    OWNER_JWT_SECRET_PREVIOUS: 'q'.repeat(40) } as NodeJS.ProcessEnv);
+  assert.deepEqual(ok, []);
+  for (const [name, value, expected] of [
+    ['JWT_SECRET_PREVIOUS', 'short', 'at least 32'],
+    ['JWT_SECRET_PREVIOUS', 'j'.repeat(40), 'must differ'],
+    ['JWT_SECRET_PREVIOUS', 'o'.repeat(40), 'must differ'],
+    ['OWNER_JWT_SECRET_PREVIOUS', 'o'.repeat(40), 'must differ'],
+    ['OWNER_JWT_SECRET_PREVIOUS', 'tiny', 'at least 32'],
+  ] as const) {
+    const issues: string[] = [];
+    requireSigningSecretRotationValues(issues, { ...current, [name]: value } as NodeJS.ProcessEnv);
+    assert.equal(issues.some((issue) => issue.startsWith(name) && issue.includes(expected)), true, `${name}=${value}`);
+  }
 });
 
 // --- the Atlassian OAuth client: validated when configured, never required ---

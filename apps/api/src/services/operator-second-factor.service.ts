@@ -13,7 +13,7 @@ import { createHash, randomBytes, timingSafeEqual } from 'node:crypto';
 import { Prisma, type PrismaClient } from '@prisma/client';
 import { AppError } from '../utils/errors.js';
 import { generateTotpSecret, totpEnrolmentUri, verifyTotp } from '../utils/totp.js';
-import { openTotpSecret, sealTotpSecret, type SealedTotpSecret } from './operator-totp-crypto.js';
+import { openTotpSecret, operatorTotpSecretIsCurrent, sealTotpSecret, type SealedTotpSecret } from './operator-totp-crypto.js';
 
 // The sealing crypto lives in ./operator-totp-crypto.ts, which imports nothing
 // but node:crypto, because the E2E harness has to seal a secret with exactly
@@ -256,4 +256,42 @@ export function recoveryCodeMatches(stored: string, offered: string): boolean {
   const a = Buffer.from(stored, 'utf8');
   const b = Buffer.from(hashRecoveryCode(offered), 'utf8');
   return a.length === b.length && timingSafeEqual(a, b);
+}
+
+/**
+ * Re-seal, under the current OWNER_JWT_SECRET, every operator authenticator
+ * secret still sealed under a previous one, so OWNER_JWT_SECRET_PREVIOUS can be
+ * removed without operators enrolling again. A row that changed since it was
+ * read is skipped; one that cannot be opened is reported by operator id only.
+ */
+export async function resealOperatorSecondFactorSecrets(prisma: Pick<PrismaClient, 'platformOperator'>, batch = 100) {
+  if (!Number.isInteger(batch) || batch < 1 || batch > 1000) {
+    throw new AppError(400, 'OPERATOR_SECOND_FACTOR_RESEAL_BATCH_INVALID', 'Batch size must be between 1 and 1000');
+  }
+  const rows = (await prisma.platformOperator.findMany({
+    where: { totpSecret: { not: Prisma.AnyNull } },
+    select: { id: true, totpSecret: true, updatedAt: true },
+    orderBy: { id: 'asc' },
+  })).filter((row) => row.totpSecret !== null);
+  const stale = rows.filter((row) => !operatorTotpSecretIsCurrent(row.totpSecret));
+  let resealed = 0;
+  let skippedChanged = 0;
+  const failed: string[] = [];
+  for (const row of stale.slice(0, batch)) {
+    let plaintext: string;
+    try {
+      plaintext = openTotpSecret(row.totpSecret);
+    } catch {
+      failed.push(row.id);
+      continue;
+    }
+    const written = await prisma.platformOperator.updateMany({
+      where: { id: row.id, updatedAt: row.updatedAt },
+      data: { totpSecret: sealTotpSecret(plaintext) as unknown as Prisma.InputJsonObject },
+    });
+    if (written.count === 1) resealed += 1;
+    else skippedChanged += 1;
+  }
+  return { total: rows.length, staleBefore: stale.length, resealed, skippedChanged, failed,
+    remaining: stale.length - resealed };
 }

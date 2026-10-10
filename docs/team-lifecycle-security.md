@@ -117,6 +117,31 @@ journey proof, live deployment evidence and independent DPO review. The live
 enrollment count and exact decision receipt
 are held in the private DPO review pack.
 
+### Signing-secret rotation without locking out authenticators (October 2026)
+
+Authenticator secrets are sealed under a key derived from the realm's signing
+secret: `JWT_SECRET` for charity users, `OWNER_JWT_SECRET` for operators.
+Rotating that secret, for example after a suspected exposure, used to make every
+enrolled authenticator unreadable at once, leaving only recovery codes. Now:
+
+- New envelopes record which secret sealed them, by fingerprint. Older envelopes
+  without one are still read.
+- During a rotation, set the old value as `JWT_SECRET_PREVIOUS` (or
+  `OWNER_JWT_SECRET_PREVIOUS`). Existing authenticators keep working.
+- A charity user's authenticator re-seals itself under the new secret on its next
+  successful code. A failed code never re-seals.
+- `npm --prefix apps/api run jobs:reseal-second-factor-secrets user` (or
+  `operator`) re-seals the rest in bounded batches. It skips any row that changed
+  meanwhile and reports unopenable rows by id. Repeat until `remaining` is 0, then
+  remove the `*_PREVIOUS` value.
+- Production validation requires a configured previous secret to be at least 32
+  characters and different from both current signing secrets. All four values
+  are redacted from logs.
+
+Rotating `JWT_SECRET` still ends every browser session, as it should. Only the
+stored authenticators survive it. The lost-all-factors recovery path and the
+other public-rule items above remain open.
+
 ## Password recovery integrity
 
 Personal two-step sign-in has a last-code recovery path: a browser session

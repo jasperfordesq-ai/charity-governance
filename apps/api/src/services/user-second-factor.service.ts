@@ -3,7 +3,7 @@ import bcrypt from 'bcryptjs';
 import { Prisma, type PrismaClient } from '@prisma/client';
 import { AppError } from '../utils/errors.js';
 import { generateTotpSecret, matchingTotpStep, totpEnrolmentUri } from '../utils/totp.js';
-import { openUserTotpSecret, sealUserTotpSecret } from './user-totp-crypto.js';
+import { openUserTotpSecret, sealUserTotpSecret, userTotpSecretIsCurrent } from './user-totp-crypto.js';
 
 type Tx = Prisma.TransactionClient;
 export type OfferedSecondFactor = { code?: string | undefined; recoveryCode?: string | undefined };
@@ -176,10 +176,14 @@ async function verifyLockedFactorProof(tx: Tx, user: {
     }
   }
   if (offered.code) {
-    const step = matchingTotpStep(openUserTotpSecret(factor.secret), offered.code);
+    const secret = openUserTotpSecret(factor.secret);
+    const step = matchingTotpStep(secret, offered.code);
     if (step !== null && (factor.lastUsedStep === null || step > factor.lastUsedStep)) {
       await tx.userSecondFactor.update({ where: { userId: user.id }, data: {
         lastUsedStep: step, failedAttempts: 0, failedWindowAt: null, blockedUntil: null,
+        // A secret still sealed under a previous JWT_SECRET moves to the
+        // current one on its first successful use after a rotation.
+        ...(userTotpSecretIsCurrent(factor.secret) ? {} : { secret: sealUserTotpSecret(secret) }),
       } });
       return null;
     }
@@ -251,4 +255,42 @@ export async function removeUserSecondFactor(prisma: PrismaClient, userId: strin
     } });
   });
   if (outcome instanceof AppError) throw outcome;
+}
+
+/**
+ * Re-seal, under the current JWT_SECRET, every stored authenticator secret
+ * still sealed under a previous one, so JWT_SECRET_PREVIOUS can be removed
+ * without locking anyone out. A row that changed since it was read is skipped
+ * for the next run; one that cannot be opened is reported by user id only.
+ * Decrypts in memory; returns counts and ids, never a secret.
+ */
+export async function resealUserSecondFactorSecrets(prisma: Pick<PrismaClient, 'userSecondFactor'>, batch = 100) {
+  if (!Number.isInteger(batch) || batch < 1 || batch > 1000) {
+    throw new AppError(400, 'SECOND_FACTOR_RESEAL_BATCH_INVALID', 'Batch size must be between 1 and 1000');
+  }
+  const rows = await prisma.userSecondFactor.findMany({
+    select: { userId: true, secret: true, updatedAt: true },
+    orderBy: { userId: 'asc' },
+  });
+  const stale = rows.filter((row) => !userTotpSecretIsCurrent(row.secret));
+  let resealed = 0;
+  let skippedChanged = 0;
+  const failed: string[] = [];
+  for (const row of stale.slice(0, batch)) {
+    let plaintext: string;
+    try {
+      plaintext = openUserTotpSecret(row.secret);
+    } catch {
+      failed.push(row.userId);
+      continue;
+    }
+    const written = await prisma.userSecondFactor.updateMany({
+      where: { userId: row.userId, updatedAt: row.updatedAt },
+      data: { secret: sealUserTotpSecret(plaintext) },
+    });
+    if (written.count === 1) resealed += 1;
+    else skippedChanged += 1;
+  }
+  return { total: rows.length, staleBefore: stale.length, resealed, skippedChanged, failed,
+    remaining: stale.length - resealed };
 }
