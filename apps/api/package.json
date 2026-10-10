@@ -22,6 +22,7 @@
     "jobs:auth-email-delivery": "node dist/jobs/process-auth-email-delivery.js",
     "jobs:rotate-auth-recovery-secret": "node dist/jobs/rotate-auth-recovery-secret.js",
     "jobs:rotate-integration-encryption-key": "node dist/jobs/rotate-integration-encryption-key.js",
+    "jobs:revoke-all-sessions": "node dist/jobs/revoke-all-sessions.js",
     "jobs:recover-document-storage-deletion": "node dist/jobs/recover-document-storage-deletion.js",
     "jobs:recover-team-ownership": "node dist/jobs/recover-team-ownership.js",
     "jobs:reconcile-billing-authority": "node dist/jobs/reconcile-billing-authority.js",

@@ -310,6 +310,7 @@ enum AuthSessionRevocationReason {
   OWNERSHIP_CHANGED
   ORGANISATION_INACTIVE
   LEGACY_UNSPECIFIED
+  INSTALLATION_SESSIONS_REVOKED
 }
 
 /// What kind of client a session belongs to. Derived from the route that
