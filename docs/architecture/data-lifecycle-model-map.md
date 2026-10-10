@@ -19,7 +19,7 @@ group when its migration is introduced.
 - registers-controls: `BoardMember`, `ConflictRecord`, `RiskRecord`, `RiskChangeAudit`, `RiskControlVerification`, `RiskControlVerificationCounter`, `ComplaintRecord`, `ComplaintResolutionEvidence`, `ComplaintRemoval`, `ComplaintHoldEvent`, `ComplaintPurgeAuthorization`, `ComplaintPurgeAuthorizationWithdrawal`, `ComplaintPurgeClaim`, `ComplaintRecoveryPreparation`, `ComplaintRecoveryOutcome`, `ComplaintRecoveryEnforcement`, `ComplaintRecoveryExecution`, `ComplaintHoldRecoveryPreparation`, `ComplaintHoldRecoveryOutcome`, `ComplaintRecoveryCancellation`, `ComplaintPurgeDispositionEvent`, `ComplaintCopyDispositionAuthority`, `ComplaintCopyHoldEvent`, `GovernanceRegisterChangeAudit`, `OrganisationChangeAudit`, `FundraisingRecord`, `AnnualReportReadiness`, `FinancialControlReview`, `Member`
 - calendar-minutes: `Deadline`, `DeadlineChangeAudit`, `DeadlineReminderLog`, `DeadlineReminderAudit`, `GoverningAct`, `Resolution`, `GoverningActVoid`, `MinuteBookChangeAudit`
 - team-billing: `TeamInvite`, `Subscription`, `BillingCheckoutAttempt`, `StripeWebhookEvent`
-- data-requests: `DataLifecycleRequest`, `DataLifecycleStorageLink`, `DataLifecycleStorageLinkWithdrawal`, `DataLifecycleDocumentLink`, `DataLifecycleDocumentLinkWithdrawal`, `DataLifecycleReviewEvent`, `DataLifecycleTargetEvent`, `DataLifecycleResponseEvent`, `DataLifecycleCoverageEvent`, `DataRetentionPolicyRevision`, `DataRetentionPolicyWithdrawal`, `DocumentPurgeAuthorization`, `DocumentPurgeAuthorizationWithdrawal`, `DocumentPurgeClaim`, `DocumentPurgeDispositionEvent`, `DocumentRecoveryPreparation`, `DocumentRecoveryEnforcement`, `DocumentRecoveryExecution`, `DocumentRecoveryOutcome`, `DocumentBytePermitCandidateBinding`, `DocumentByteExecutionLease`, `DocumentByteProviderAttempt`, `DocumentByteProviderObservation`, `DocumentCopyDispositionAuthority`, `DocumentCopyHoldEvent`
+- data-requests: `DataLifecycleRequest`, `DataLifecycleStorageLink`, `DataLifecycleStorageLinkWithdrawal`, `DataLifecycleDocumentLink`, `DataLifecycleDocumentLinkWithdrawal`, `DataLifecycleReviewEvent`, `DataLifecycleTargetEvent`, `DataLifecycleResponseEvent`, `DataLifecycleCoverageEvent`, `DataRetentionPolicyRevision`, `DataRetentionPolicyWithdrawal`, `DocumentPurgeAuthorization`, `DocumentPurgeAuthorizationWithdrawal`, `DocumentPurgeClaim`, `DocumentPurgeDispositionEvent`, `DocumentRecoveryPreparation`, `DocumentRecoveryEnforcement`, `DocumentRecoveryExecution`, `DocumentRecoveryOutcome`, `DocumentBytePermitCandidateBinding`, `DocumentByteExecutionLease`, `DocumentByteProviderAttempt`, `DocumentByteProviderObservation`, `DocumentBytePrimaryCompletion`, `DocumentCopyDispositionAuthority`, `DocumentCopyHoldEvent`
 - platform-operators: `PlatformOperator`, `PlatformOperatorRecoveryCode`, `PlatformOperatorSession`, `OperatorActionApproval`
 <!-- MODEL_INVENTORY_END -->
 
@@ -88,13 +88,26 @@ earlier than the marker. The marker must have committed in an earlier
 transaction, and the same one-use capability must be presented to a separate
 SQL function. It is not an all-copy erasure result. It changes no deletion job
 and does not relax the byte fence, so the job stays PENDING and UNKNOWN until a
-separate independent completion permit exists. No production worker calls it.
+separate independent completion exists. No production worker calls it.
+`DocumentBytePrimaryCompletion` is that completion's local half. A sixth
+independent journal entry, `DOCUMENT_BYTE_PRIMARY_COMPLETION_V1`, must first
+reconcile the published UNKNOWN with the recorded observation. It always
+follows the UNKNOWN, so a started attempt is never completed without its
+uncertainty being recorded independently. Then one capability-checked SQL
+function inserts the append-only row and moves the exact claimed job to
+PROCESSED in the same transaction. The byte fence allows that transition and
+the first claim, and nothing else. A row cannot commit without its processed
+job, and an observation from the same transaction cannot back it. Its scope is
+`PRIMARY_ACTIVE_OBJECT_ONLY`: versions, Confluence copies, exports and backups
+are not covered, and the recovery operation stays reserved. No production
+worker calls it.
 `executeVerifiedDocumentBytePrimaryDeletion` composes the lease claim, start
 marker, an immediate pre-provider re-check of the independent decision, one
 bounded call to the eraser selected by the decided provider, and the absence observation.
 Every failure after the marker is UNKNOWN, published where possible and
 never retried. It changes no job and has no production caller.
-Restore snapshot format 7 hashes this observation, format 6 covers the marker
+Restore snapshot format 8 hashes the completion, format 7 the observation without
+it, format 6 covers the marker
 without it, format 5 covers leases without a marker, format 4 covers the
 candidate binding without a lease, and format 3 covers the older schema.
 Mixed formats refuse reconciliation. None of these rows alone is permission
@@ -103,9 +116,12 @@ to reopen after host loss.
 The later document byte-fence migration refuses activation while an older
 purge job is unfinished and refuses direct updates to a purge-claim deletion
 job once enforcement is active. It serializes both paths on the organisation
-row. This is deliberately fail-closed: the storage worker has no verified
-independent byte-execution permit yet, so binding enforcement must remain
-inactive until that permit, copy-writer coverage and host-loss controls pass.
+row. This is deliberately fail-closed. The fence now admits exactly two
+transitions: the first claim backed by a lease consumed in the same
+transaction, and that claim's completion backed by a primary-completion row
+from the same transaction. Neither has a production caller. Binding enforcement
+must remain inactive until all-copy coverage, copy-writer coverage, the
+P05/P08 custody decisions and host-loss controls pass.
 
 
 `ComplaintRecoveryOutcome` binds one original preparation to one committed
