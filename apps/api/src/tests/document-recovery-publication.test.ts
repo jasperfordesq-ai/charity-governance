@@ -33,6 +33,13 @@ import { recordVerifiedDocumentBytePrimaryAbsence,
 import { publishVerifiedDocumentByteProviderUnknown,
   readPublishedDocumentByteProviderUnknown } from '../services/published-document-byte-provider-unknown.js';
 import { readCommittedDocumentByteProviderUnknown } from '../services/document-byte-provider-unknown.js';
+import { finalizeVerifiedDocumentBytePrimaryCompletion, publishVerifiedDocumentBytePrimaryCompletion,
+  readPublishedDocumentBytePrimaryCompletion } from '../services/published-document-byte-primary-completion.js';
+import { prepareDocumentByteProviderUnknownFacts } from '../services/document-byte-provider-unknown.js';
+import { preserveDocumentByteProviderUnknown } from '../services/document-byte-provider-unknown-envelope.js';
+import { prepareDocumentBytePrimaryCompletionFacts,
+  readRecordedDocumentBytePrimaryObservation } from '../services/document-byte-primary-completion.js';
+import { preserveDocumentBytePrimaryCompletion } from '../services/document-byte-primary-completion-envelope.js';
 import { bindVerifiedDocumentBytePermitCandidate, compareDocumentBytePermitAuthority,
   publishVerifiedDocumentBytePermitCandidate,
   readPublishedDocumentBytePermit } from '../services/published-document-byte-permit.js';
@@ -196,9 +203,33 @@ async function readyBytePermitPublisher(storageProvider: 'local' | 'supabase' = 
     boundAttempt: undefined as unknown, observationNotRecorded: false,
     expectedAttempt: undefined as unknown, duringObserve: null as (() => void) | null,
     duringStart: null as (() => void) | null, refuseStartBeforeMarker: false,
-    observationView: null as ((row: Record<string, unknown>) => Record<string, unknown>) | null };
+    observationView: null as ((row: Record<string, unknown>) => Record<string, unknown>) | null,
+    completion: null as Record<string, unknown> | null, completionCalls: 0,
+    completionNotRecorded: false, duringCompletion: null as (() => void) | null,
+    completionView: null as ((row: Record<string, unknown>) => Record<string, unknown>) | null,
+    job: { state: 'PENDING', processedAt: null as Date | null, activeObjectAbsentAt: null as Date | null } };
   const tx = {
     $queryRaw: async (strings: TemplateStringsArray, ...values: unknown[]) => {
+      if (strings.join('').includes('DocumentBytePrimaryCompletion_record')) {
+        state.completionCalls += 1;
+        if (state.expectedAttempt !== undefined && values[1] !== state.expectedAttempt) {
+          throw new Error('Synthetic attempt capability does not match');
+        }
+        if (!state.observation || state.completion || state.job.state !== 'PENDING') {
+          throw new Error('Synthetic completion refused');
+        }
+        if (state.completionNotRecorded) return [{ recorded: false }];
+        state.completion = { id: 'lease', leaseId: 'lease', observationId: 'lease',
+          organisationId: f.context.organisationId, deletionId: row.claim.deletionId,
+          decisionEntryDigest: state.observation.decisionEntryDigest,
+          completionEntryDigest: values[2], completionEnvelopeDigest: values[3],
+          completionBodyDigest: values[4], scope: 'PRIMARY_ACTIVE_OBJECT_ONLY',
+          completedTransactionId: 126n, recordedAt: new Date('2026-10-07T09:29:59.000Z') };
+        state.job = { state: 'PROCESSED', processedAt: new Date('2026-10-07T09:30:00.000Z'),
+          activeObjectAbsentAt: state.observation.providerObservedAt as Date };
+        state.duringCompletion?.();
+        return [{ recorded: true }];
+      }
       if (strings.join('').includes('DocumentByteProviderObservation_recordAbsent')) {
         state.observeCalls += 1;
         state.boundAttempt = values[1];
@@ -300,6 +331,10 @@ async function readyBytePermitPublisher(storageProvider: 'local' | 'supabase' = 
     documentByteProviderAttempt: { findUnique: async () => state.attempt },
     documentByteProviderObservation: { findUnique: async () => state.observation
       && (state.observationView ? state.observationView(state.observation) : state.observation) },
+    documentBytePrimaryCompletion: { findUnique: async () => state.completion
+      && (state.completionView ? state.completionView(state.completion) : state.completion) },
+    documentStorageDeletion: { findUnique: async () => ({
+      organisationId: f.context.organisationId, ...state.job }) },
     $queryRaw: tx.$queryRaw,
     $transaction: async (callback: (value: typeof tx) => Promise<unknown>) => {
       state.reads += 1;
@@ -918,6 +953,257 @@ test('protected primary deletion never calls the provider when authority changes
         f.store, f.context, f.keys, f.store, async () => new Date(), timeoutMs), TypeError);
     }
   }
+});
+
+// Executes the attempt (absence observed while the decision is the head) and
+// publishes its UNKNOWN, which every completion must follow.
+async function observedAndUnknown() {
+  const { f, prisma, state, decision } = await decidedBytePermit();
+  const capability = JSON.parse(decision.body).oneUseAttemptId as string;
+  const publish = () => publishVerifiedDocumentBytePrimaryCompletion(prisma,
+    f.journal, f.store, f.context, f.keys, f.store, 'lease');
+  const finalize = (attempt = capability) => finalizeVerifiedDocumentBytePrimaryCompletion(prisma,
+    f.journal, f.store, f.context, f.keys, f.store, 'lease', attempt);
+  // Nothing to reconcile before an attempt has started.
+  await assert.rejects(publish(), /unavailable or mismatched/);
+  const result = await executeVerifiedDocumentBytePrimaryDeletion(prisma, f.journal,
+    f.store, f.context, f.keys, f.store, async () => new Date('2026-10-07T08:03:02.000Z'));
+  assert.equal(result.outcome, 'PRIMARY_ABSENCE_OBSERVED');
+  // An observation alone cannot complete: the UNKNOWN must be published first.
+  const before = await f.store.readControl();
+  await assert.rejects(publish(), /not published/);
+  await assert.rejects(finalize(), /not published/);
+  assert.equal((await f.store.readControl()).generation, before.generation);
+  const unknown = await publishVerifiedDocumentByteProviderUnknown(prisma,
+    f.journal, f.store, f.context, f.keys, f.store, 'lease');
+  return { f, prisma, state, capability, publish, finalize, unknown, before };
+}
+
+test('a primary completion reconciles the published UNKNOWN with the recorded observation, and nothing else', async () => {
+  const { f, state, publish, finalize, unknown, before } = await observedAndUnknown();
+  const marker = JSON.parse(unknown.body);
+  // The journal refuses a completion that does not follow the exact UNKNOWN.
+  await assert.rejects(f.journal.appendReservedDocumentBytePrimaryCompletion({
+    operationId: f.context.operationId, writerId: marker.writerId, writerEpoch: marker.writerEpoch,
+    preparationDigest: marker.preparationDigest, unknownGeneration: unknown.generation,
+    unknownEntryDigest: '0'.repeat(64), unknownEnvelopeDigest: unknown.envelopeDigest,
+    completionEnvelopeDigest: '1'.repeat(64),
+  }, f.store), /exact published UNKNOWN/);
+  // A local observation that disagrees with the committed marker is refused
+  // before anything is written.
+  for (const change of [
+    { deletionId: 'other-job' }, { decisionEntryDigest: '0'.repeat(64) }, { outcome: 'COMPLETED' },
+    { observedTransactionId: 124n }, { attemptId: 'other-lease' }, { id: 'other-lease' },
+    { providerObservedAt: new Date('2026-10-07T08:03:00.500Z') },
+    { recordedAt: new Date('2026-10-07T08:03:01.500Z') },
+  ]) {
+    state.observationView = row => ({ ...row, ...change });
+    await assert.rejects(publish(), /unavailable or mismatched/, JSON.stringify(Object.keys(change)));
+  }
+  state.observationView = null;
+  assert.equal((await f.store.readControl()).generation, before.generation + 1);
+  // A lost head acknowledgement is recovered from the published entry.
+  f.loseAck(true);
+  await assert.rejects(publish(), /unknown/);
+  const published = await publish();
+  assert.equal(published.replayed, true);
+  assert.equal(published.actionAuthorized, false);
+  const facts = JSON.parse(published.body);
+  assert.deepEqual([facts.scope, facts.outcome, facts.leaseId, facts.deletionId,
+    facts.unknownEntryDigest, facts.decisionEntryDigest, facts.providerObservedAt],
+  ['PRIMARY_ACTIVE_OBJECT_ONLY', 'PRIMARY_ACTIVE_OBJECT_ABSENT', 'lease', 'job',
+    unknown.entryDigest, marker.decisionEntryDigest, '2026-10-07T08:03:02.000Z']);
+  assert.equal((await f.store.readControl()).generation, before.generation + 2);
+  assert.equal((await publish()).entryDigest, published.entryDigest, 'a replay changes nothing');
+  assert.equal((await f.store.readControl()).generation, before.generation + 2);
+  // A published completion that no longer matches the local observation is
+  // refused, on replay and before any local change.
+  state.observationView = row => ({ ...row, providerObservedAt: new Date('2026-10-07T08:03:02.500Z') });
+  await assert.rejects(publish(), /differs from local observation/);
+  await assert.rejects(finalize(), /differs from local observation/);
+  state.observationView = null;
+  assert.equal(state.completionCalls, 0);
+  // Encrypted, immutable and scoped to this operation.
+  const envelope = await f.store.readDocumentBytePrimaryCompletion(f.context.operationId);
+  assert.ok(envelope);
+  assert.doesNotMatch(envelope, /DOCUMENT_PRIMARY_BYTE_COMPLETION|PRIMARY_ACTIVE_OBJECT_ONLY|vault\/synthetic-object/);
+  await assert.rejects(f.store.createDocumentBytePrimaryCompletion('other-operation', envelope), /scope mismatch/);
+  const key = [...f.objects.keys()].find(k => k.startsWith('document-byte-primary-completions/'));
+  assert.ok(key);
+  const saved = f.objects.get(key)!;
+  f.objects.delete(key);
+  await assert.rejects(readPublishedDocumentBytePrimaryCompletion(f.journal,
+    f.store, f.context, f.keys, f.store), /unresolved/);
+  await assert.rejects(finalize(), /unresolved/);
+  f.objects.set(key, saved);
+  // The UNKNOWN is no longer the head, so it cannot be published again and
+  // no later attempt stage can start.
+  await assert.rejects(readPublishedDocumentByteProviderUnknown(f.journal,
+    f.store, f.context, f.keys, f.store), /current exact decision/);
+  assert.equal(state.completionCalls, 0);
+});
+
+test('finalizing a primary completion processes only its job, needs the capability, and keeps the operation reserved', async () => {
+  const { f, state, capability, publish, finalize } = await observedAndUnknown();
+  const published = await publish();
+  assert.equal(published.replayed, false);
+  state.expectedAttempt = capability;
+  await assert.rejects(finalize('not-a-capability'), /Invalid document byte attempt capability/);
+  assert.equal(state.completionCalls, 0, 'a malformed capability never reaches SQL');
+  await assert.rejects(finalize('22222222-2222-4222-8222-222222222222'), /capability does not match/);
+  assert.equal(state.job.state, 'PENDING');
+  state.completionNotRecorded = true;
+  await assert.rejects(finalize(), /did not commit/);
+  state.completionNotRecorded = false;
+  assert.equal(state.job.state, 'PENDING');
+  const done = await finalize();
+  assert.deepEqual([done.scope, done.replayed, done.operationReservationReleased, done.actionAuthorized,
+    done.deletionId, done.completionEntryDigest],
+  ['PRIMARY_ACTIVE_OBJECT_ONLY', false, false, false, 'job', published.entryDigest]);
+  assert.equal(state.job.state, 'PROCESSED');
+  assert.equal(state.job.activeObjectAbsentAt?.toISOString(), '2026-10-07T08:03:02.000Z');
+  assert.equal(state.completion?.completionBodyDigest, createHash('sha256').update(published.body).digest('hex'));
+  const calls = state.completionCalls;
+  const again = await finalize();
+  assert.equal(again.replayed, true);
+  assert.equal(state.completionCalls, calls, 'a completed lease is reported again, never re-applied');
+  // A stored row or job that differs is refused rather than reported.
+  for (const change of [
+    { completionEntryDigest: '0'.repeat(64) }, { completionEnvelopeDigest: '0'.repeat(64) },
+    { completionBodyDigest: '0'.repeat(64) }, { scope: 'ALL_COPIES' }, { deletionId: 'other-job' },
+    { observationId: 'other-lease' }, { decisionEntryDigest: '0'.repeat(64) },
+    { recordedAt: new Date('2026-10-07T09:30:01.000Z') },
+  ]) {
+    state.completionView = row => ({ ...row, ...change });
+    await assert.rejects(finalize(), /unavailable or mismatched/, JSON.stringify(Object.keys(change)));
+  }
+  state.completionView = null;
+  for (const job of [{ state: 'PENDING' }, { activeObjectAbsentAt: new Date('2026-10-07T08:03:03.000Z') },
+    { processedAt: null }]) {
+    const saved = { ...state.job };
+    Object.assign(state.job, job);
+    await assert.rejects(finalize(), /unavailable or mismatched/, JSON.stringify(job));
+    state.job = saved;
+  }
+  // Other copies are not covered: the recovery operation stays reserved.
+  const reservation = await f.store.readControl();
+  assert.equal(reservation.activeOperation?.operationId, f.context.operationId);
+});
+
+test('a primary completion whose head is lost after the local commit is refused, then reported on replay', async () => {
+  const { f, state, publish, finalize } = await observedAndUnknown();
+  await publish();
+  const head = f.objects.get(f.headKey)!;
+  state.duringCompletion = () => { f.objects.delete(f.headKey); };
+  await assert.rejects(finalize());
+  state.duringCompletion = null;
+  assert.equal(state.job.state, 'PROCESSED');
+  f.objects.set(f.headKey, head);
+  const calls = state.completionCalls;
+  const recovered = await finalize();
+  assert.equal(recovered.replayed, true);
+  assert.equal(state.completionCalls, calls);
+});
+
+// Publishes an UNKNOWN and a completion that are validly encrypted and
+// correctly chained in the journal, but whose facts were altered: what a
+// writer holding the keys could forge. Readers must still refuse them.
+async function forgedChain(unknownChange: Record<string, unknown>) {
+  const { f, prisma } = await decidedBytePermit();
+  await executeVerifiedDocumentBytePrimaryDeletion(prisma, f.journal, f.store, f.context,
+    f.keys, f.store, async () => new Date('2026-10-07T08:03:02.000Z'));
+  const request = { installationId: f.context.installationId,
+    organisationId: f.context.organisationId, operationId: f.context.operationId, leaseId: 'lease' };
+  const local = await readCommittedDocumentByteProviderUnknown(prisma, request);
+  const marker = { ...JSON.parse(local.body), ...unknownChange };
+  const unknownBody = prepareDocumentByteProviderUnknownFacts(marker).body;
+  const preservedUnknown = await preserveDocumentByteProviderUnknown(unknownBody, f.context, f.keys, f.store);
+  const decision = await readPublishedDocumentByteExecutionDecision(f.journal, f.store,
+    f.context, f.keys, f.store);
+  const unknown = await f.journal.appendReservedDocumentByteProviderUnknown({
+    operationId: f.context.operationId, writerId: marker.writerId, writerEpoch: marker.writerEpoch,
+    preparationDigest: marker.preparationDigest, decisionGeneration: decision.generation,
+    decisionEntryDigest: decision.entryDigest, decisionEnvelopeDigest: decision.envelopeDigest,
+    unknownEnvelopeDigest: preservedUnknown.digest,
+  }, f.store);
+  const observed = await readRecordedDocumentBytePrimaryObservation(prisma, request);
+  const complete = async (completionChange: Record<string, unknown>) => {
+    const body = prepareDocumentBytePrimaryCompletionFacts({ format: 1,
+      action: 'DOCUMENT_PRIMARY_BYTE_COMPLETION', scope: 'PRIMARY_ACTIVE_OBJECT_ONLY',
+      outcome: 'PRIMARY_ACTIVE_OBJECT_ABSENT', installationId: request.installationId,
+      organisationId: request.organisationId, operationId: request.operationId,
+      writerId: marker.writerId, writerEpoch: marker.writerEpoch, sourceRevision: marker.sourceRevision,
+      preparationDigest: marker.preparationDigest, leaseId: 'lease', deletionId: observed.deletionId,
+      decisionEntryDigest: marker.decisionEntryDigest, unknownEntryDigest: unknown.digest,
+      unknownEnvelopeDigest: preservedUnknown.digest,
+      unknownBodyDigest: createHash('sha256').update(unknownBody).digest('hex'),
+      providerObservedAt: observed.providerObservedAt.toISOString(),
+      observedTransactionId: observed.observedTransactionId,
+      observationRecordedAt: observed.observationRecordedAt.toISOString(), ...completionChange }).body;
+    const preserved = await preserveDocumentBytePrimaryCompletion(body, f.context, f.keys, f.store);
+    await f.journal.appendReservedDocumentBytePrimaryCompletion({
+      operationId: f.context.operationId, writerId: marker.writerId, writerEpoch: marker.writerEpoch,
+      preparationDigest: marker.preparationDigest, unknownGeneration: unknown.generation,
+      unknownEntryDigest: unknown.digest, unknownEnvelopeDigest: preservedUnknown.digest,
+      completionEnvelopeDigest: preserved.digest,
+    }, f.store);
+    return readPublishedDocumentBytePrimaryCompletion(f.journal, f.store, f.context, f.keys, f.store);
+  };
+  return { f, prisma, complete };
+}
+
+test('a validly encrypted completion is refused unless every fact agrees with its UNKNOWN', async () => {
+  const sane = await forgedChain({});
+  assert.equal((await sane.complete({})).actionAuthorized, false, 'the unaltered chain reads');
+  for (const change of [
+    { unknownEntryDigest: '0'.repeat(64) }, { unknownEnvelopeDigest: '0'.repeat(64) },
+    { unknownBodyDigest: '0'.repeat(64) }, { decisionEntryDigest: '0'.repeat(64) },
+    { preparationDigest: '0'.repeat(64) }, { leaseId: 'other-lease' }, { deletionId: 'other-job' },
+    { writerId: 'other-writer' }, { observedTransactionId: '124' },
+    { providerObservedAt: '2026-10-07T08:03:00.000Z' },
+    { observationRecordedAt: '2026-10-07T08:03:01.500Z' },
+  ]) {
+    const { complete } = await forgedChain({});
+    await assert.rejects(complete(change), /does not match its authenticated UNKNOWN|reservation changed/,
+      JSON.stringify(change));
+  }
+  // An UNKNOWN that names another decision is refused even when the
+  // completion repeats its claim.
+  for (const change of [{ decisionEntryDigest: '0'.repeat(64) }, { decisionEnvelopeDigest: '0'.repeat(64) }]) {
+    const { complete } = await forgedChain(change);
+    await assert.rejects(complete(change.decisionEntryDigest ? change : {}),
+      /does not match its authenticated UNKNOWN/, JSON.stringify(change));
+  }
+});
+
+test('the completion publisher refuses a published UNKNOWN that differs from the local marker', async () => {
+  const { f, prisma } = await forgedChain({ startedAt: '2026-10-07T08:03:01.500Z' });
+  const before = await f.store.readControl();
+  await assert.rejects(publishVerifiedDocumentBytePrimaryCompletion(prisma,
+    f.journal, f.store, f.context, f.keys, f.store, 'lease'), /differs from local marker/);
+  assert.equal((await f.store.readControl()).generation, before.generation);
+});
+
+test('a completion that is no longer the head is not reported', async () => {
+  const { f, complete } = await forgedChain({});
+  const published = await complete({});
+  const publisher = {
+    async readHead() {
+      const value = await f.store.readControl();
+      return { installationId: value.installationId, organisationId: value.organisationId,
+        generation: value.generation, digest: value.digest, revision: value.revision };
+    },
+    async compareAndSwap(expectedRevision: string, next: { generation: number; digest: string | null }) {
+      const { revision, ...value } = await f.store.readControl();
+      if (revision !== expectedRevision) return false;
+      return f.store.compareAndSwapControl(revision, { ...value, ...next });
+    },
+  };
+  await f.journal.appendPublished({ operationId: 'later-standalone', kind: 'PRESERVATION_CHANGE',
+    factsDigest: 'e'.repeat(64), expectedGeneration: published.generation,
+    expectedDigest: published.entryDigest }, publisher);
+  await assert.rejects(readPublishedDocumentBytePrimaryCompletion(f.journal,
+    f.store, f.context, f.keys, f.store), /does not follow the current exact UNKNOWN/);
 });
 
 test('committed provider start publishes one encrypted independent UNKNOWN and recovers a lost head acknowledgement', async () => {

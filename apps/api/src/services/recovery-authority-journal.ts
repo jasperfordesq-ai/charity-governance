@@ -23,7 +23,7 @@ const kinds = z.enum(['DISPOSAL_INTENT', 'DISPOSAL_RESULT', 'PRESERVATION_CHANGE
   'COMPLAINT_PREPARATION_V1', 'COMPLAINT_OUTCOME_V1', 'COMPLAINT_HOLD_PREPARATION_V1', 'COMPLAINT_HOLD_OUTCOME_V1',
   'COMPLAINT_CANCELLATION_V1', 'COMPLAINT_HOLD_CANCELLATION_V1', 'DOCUMENT_PREPARATION_V1', 'DOCUMENT_OUTCOME_V1',
   'DOCUMENT_BYTE_PERMIT_V1', 'DOCUMENT_BYTE_EXECUTION_DECISION_V1',
-  'DOCUMENT_BYTE_PROVIDER_UNKNOWN_V1']);
+  'DOCUMENT_BYTE_PROVIDER_UNKNOWN_V1', 'DOCUMENT_BYTE_PRIMARY_COMPLETION_V1']);
 const bindingSchema = z.object({ installationId: identity, organisationId: identity }).strict();
 const checkpointFields = {
   generation: z.number().int().nonnegative().max(10000), digest: digest.nullable(),
@@ -56,7 +56,7 @@ const admissionSlots: Partial<Record<Entry['kind'], number>> = {
   DISPOSAL_INTENT: 2,
   COMPLAINT_PREPARATION_V1: 2,
   COMPLAINT_HOLD_PREPARATION_V1: 2,
-  DOCUMENT_PREPARATION_V1: 5,
+  DOCUMENT_PREPARATION_V1: 6,
 };
 const predecessorKind = (kind: Entry['kind']): Entry['kind'] | undefined => {
   if (kind === 'COMPLAINT_OUTCOME_V1' || kind === 'COMPLAINT_CANCELLATION_V1') return 'COMPLAINT_PREPARATION_V1';
@@ -65,6 +65,10 @@ const predecessorKind = (kind: Entry['kind']): Entry['kind'] | undefined => {
   if (kind === 'DOCUMENT_BYTE_PERMIT_V1') return 'DOCUMENT_OUTCOME_V1';
   if (kind === 'DOCUMENT_BYTE_EXECUTION_DECISION_V1') return 'DOCUMENT_BYTE_PERMIT_V1';
   if (kind === 'DOCUMENT_BYTE_PROVIDER_UNKNOWN_V1') return 'DOCUMENT_BYTE_EXECUTION_DECISION_V1';
+  // A completion always follows the published UNKNOWN: a started attempt is
+  // possible I/O until reconciled, so the chain stays linear and nothing can
+  // complete without first recording that uncertainty independently.
+  if (kind === 'DOCUMENT_BYTE_PRIMARY_COMPLETION_V1') return 'DOCUMENT_BYTE_PROVIDER_UNKNOWN_V1';
   return undefined;
 };
 const isAncestorKind = (ancestor: Entry['kind'], kind: Entry['kind']) => {
@@ -430,6 +434,30 @@ export class RecoveryAuthorityJournal {
     return this.appendPublished({ operationId: request.operationId,
       kind: 'DOCUMENT_BYTE_PROVIDER_UNKNOWN_V1', factsDigest: request.unknownEnvelopeDigest,
       expectedGeneration: decision.generation, expectedDigest: decision.digest }, publisher);
+  }
+
+  /** Sixth-stage reconciled primary-object result. Its encrypted facts must be
+   * authenticated by the caller against the published UNKNOWN and a recorded
+   * provider observation. It covers the primary active object only; it never
+   * releases the operation reservation or speaks for any other copy. */
+  async appendReservedDocumentBytePrimaryCompletion(raw: unknown, control: RecoveryControlStore) {
+    const request = z.object({ operationId: identity, writerId: identity,
+      writerEpoch: z.number().int().positive().max(2147483647), preparationDigest: digest,
+      unknownGeneration: z.number().int().positive().max(9999), unknownEntryDigest: digest,
+      unknownEnvelopeDigest: digest, completionEnvelopeDigest: digest,
+    }).strict().parse(raw);
+    const publisher = await this.complaintPublisher(request, control);
+    const before = await this.readCurrentHead(publisher), rows = await this.history();
+    this.headMatchesHistory(before, rows);
+    const unknown = rows[request.unknownGeneration - 1];
+    if (!unknown || unknown.kind !== 'DOCUMENT_BYTE_PROVIDER_UNKNOWN_V1'
+      || unknown.operationId !== request.operationId || unknown.digest !== request.unknownEntryDigest
+      || unknown.factsDigest !== request.unknownEnvelopeDigest || before.generation < unknown.generation) {
+      throw new Error('Document byte completion requires the exact published UNKNOWN');
+    }
+    return this.appendPublished({ operationId: request.operationId,
+      kind: 'DOCUMENT_BYTE_PRIMARY_COMPLETION_V1', factsDigest: request.completionEnvelopeDigest,
+      expectedGeneration: unknown.generation, expectedDigest: unknown.digest }, publisher);
   }
 
   async appendReservedHoldOutcome(raw: unknown, control: RecoveryControlStore) {

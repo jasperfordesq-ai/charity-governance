@@ -406,27 +406,34 @@ function nearCapacityFixture(generation: number) {
 }
 
 test('near capacity refuses a new document chain before storing its preparation', async () => {
-  const f = nearCapacityFixture(9996);
+  const f = nearCapacityFixture(9995);
   await assert.rejects(() => f.journal.append({ ...intent,
     operationId: 'document-near-capacity', kind: 'DOCUMENT_PREPARATION_V1',
-    expectedGeneration: 9996, expectedDigest: f.lastDigest,
+    expectedGeneration: 9995, expectedDigest: f.lastDigest,
   }), /capacity/);
   assert.equal(f.creates(), 0);
-  assert.equal(f.rows.size, 9996);
+  assert.equal(f.rows.size, 9995);
 });
 
-test('a document chain admitted at the boundary can occupy its five reserved entries', async () => {
-  const f = nearCapacityFixture(9995);
-  let generation = 9995;
+test('a document chain admitted at the boundary can occupy its six reserved entries', async () => {
+  const f = nearCapacityFixture(9994);
+  let generation = 9994;
   let digest = f.lastDigest!;
   for (const kind of ['DOCUMENT_PREPARATION_V1', 'DOCUMENT_OUTCOME_V1', 'DOCUMENT_BYTE_PERMIT_V1',
-    'DOCUMENT_BYTE_EXECUTION_DECISION_V1', 'DOCUMENT_BYTE_PROVIDER_UNKNOWN_V1'] as const) {
+    'DOCUMENT_BYTE_EXECUTION_DECISION_V1', 'DOCUMENT_BYTE_PROVIDER_UNKNOWN_V1',
+    'DOCUMENT_BYTE_PRIMARY_COMPLETION_V1'] as const) {
+    if (kind === 'DOCUMENT_BYTE_PROVIDER_UNKNOWN_V1') {
+      // A completion can never skip the UNKNOWN it reconciles.
+      await assert.rejects(() => f.journal.append({ ...intent, operationId: 'document-at-capacity',
+        kind: 'DOCUMENT_BYTE_PRIMARY_COMPLETION_V1', expectedGeneration: generation, expectedDigest: digest }),
+      /exact predecessor/);
+    }
     const receipt = await f.journal.append({ ...intent, operationId: 'document-at-capacity', kind,
       expectedGeneration: generation, expectedDigest: digest });
     generation = receipt.generation; digest = receipt.digest;
   }
   assert.equal(generation, 10000);
-  assert.equal(f.creates(), 5);
+  assert.equal(f.creates(), 6);
   assert.equal((await f.journal.inspect()).digest, digest);
 });
 
