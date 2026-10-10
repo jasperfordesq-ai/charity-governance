@@ -109,6 +109,38 @@ export async function readPublishedDocumentByteProviderUnknown(journal: Recovery
     revision: unknown.revision, actionAuthorized: false as const };
 }
 
+/** The UNKNOWN entry was written but the head never advanced, so every reader
+ * refuses the history. The verified history already places it directly after
+ * this operation's decision. Resume only if that decision is the one the
+ * local marker names and the pending envelope is exactly the local marker;
+ * the journal then republishes that same entry. */
+async function resumePendingUnknown(journal: RecoveryAuthorityJournal,
+  control: RecoveryControlStore, context: RecoveryEnvelopeContext, keys: RecoveryDataKeys,
+  objects: Objects, localBody: string) {
+  const { pending, head } = await journal.readPendingEntry(context.operationId,
+    'DOCUMENT_BYTE_PROVIDER_UNKNOWN_V1', sourceFor(control));
+  if (!head) throw new Error('Pending document byte UNKNOWN has no decision before it');
+  const facts = JSON.parse(localBody);
+  const decision = await readVerifiedDocumentByteExecutionDecision(head.factsDigest, context, keys, objects);
+  if (facts.decisionEntryDigest !== head.digest || facts.decisionEnvelopeDigest !== head.factsDigest
+    || facts.decisionBodyDigest !== hash(decision.body)) {
+    throw new Error('Committed document byte UNKNOWN differs from current independent decision');
+  }
+  const opened = await readVerifiedDocumentByteProviderUnknown(pending.factsDigest, context, keys, objects);
+  if (opened.body !== localBody) {
+    throw new Error('Pending document byte UNKNOWN differs from local marker');
+  }
+  await journal.appendReservedDocumentByteProviderUnknown({
+    operationId: context.operationId, writerId: facts.writerId,
+    writerEpoch: facts.writerEpoch, preparationDigest: facts.preparationDigest,
+    decisionGeneration: head.generation, decisionEntryDigest: head.digest,
+    decisionEnvelopeDigest: head.factsDigest, unknownEnvelopeDigest: pending.factsDigest,
+  }, control);
+  const published = await readPublishedDocumentByteProviderUnknown(journal,
+    control, context, keys, objects);
+  return { ...published, replayed: true, actionAuthorized: false as const };
+}
+
 /** Convert a committed one-use SQL start marker into a fifth-stage durable
  * independent UNKNOWN. A lost append acknowledgement is recovered only by
  * authenticating the already-published current entry and the same local
@@ -127,6 +159,9 @@ export async function publishVerifiedDocumentByteProviderUnknown(prisma: PrismaC
     if (already.body !== local.body) throw new Error('Published document byte UNKNOWN differs from local marker');
     return { ...already, replayed: true, actionAuthorized: false as const };
   } catch (error) {
+    if (error instanceof Error && error.message === 'Recovery authority history does not match its current head') {
+      return resumePendingUnknown(journal, control, context, keys, objects, local.body);
+    }
     if (!(error instanceof Error) || error.message !== 'Requested recovery entry is not published') throw error;
   }
   const decision = await readPublishedDocumentByteExecutionDecision(journal,
