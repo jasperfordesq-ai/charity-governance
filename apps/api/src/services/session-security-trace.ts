@@ -79,9 +79,14 @@ export function networkPrefix(ip: string | undefined): string | null {
   return null;
 }
 
-export async function pruneSessionSecurityTrace(prisma: Pick<PrismaClient, 'sessionSecurityTrace'>,
-  retentionDays: number, now: Date = new Date()): Promise<number> {
-  const before = new Date(now.getTime() - retentionDays * 24 * 60 * 60 * 1000);
-  const { count } = await prisma.sessionSecurityTrace.deleteMany({ where: { occurredAt: { lt: before } } });
-  return count;
+/** Uses the database clock, the same one the delete guard and the row
+ * default use, so an application host whose clock runs ahead can never select
+ * a row the guard still considers too young and fail the whole delete. */
+export async function pruneSessionSecurityTrace(prisma: Pick<PrismaClient, '$executeRaw'>,
+  retentionDays: number): Promise<number> {
+  if (!Number.isInteger(retentionDays) || retentionDays < 1 || retentionDays > MAX_SESSION_TRACE_RETENTION_DAYS) {
+    throw new RangeError('Session security trace retention must be 1 to 90 days');
+  }
+  return prisma.$executeRaw`DELETE FROM "SessionSecurityTrace"
+    WHERE "occurredAt" < CURRENT_TIMESTAMP - make_interval(days => ${retentionDays}::integer)`;
 }

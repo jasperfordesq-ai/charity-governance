@@ -133,6 +133,12 @@ export function validatePersonalServerEnv(): void {
   if (process.env.SELF_REGISTRATION_ENABLED !== 'false') {
     issues.push('SELF_REGISTRATION_ENABLED must be exactly false in personal-server mode');
   }
+  // A personal server has no scheduler, so nothing would enforce the retention
+  // period: rows would be kept indefinitely. Refuse any value, a typo included.
+  if (process.env.SESSION_SECURITY_TRACE_RETENTION_DAYS?.trim()) {
+    issues.push('SESSION_SECURITY_TRACE_RETENTION_DAYS is not supported in personal-server mode: '
+      + 'it has no scheduler to remove expired rows');
+  }
 
   if (issues.length) {
     throw new AppError(

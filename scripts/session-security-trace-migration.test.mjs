@@ -56,7 +56,8 @@ test('session security trace rows are bounded, never rewritten, and removed only
     sql(`UPDATE "SessionSecurityTrace" SET "statusCode"=500 WHERE "requestId"='req-1';`, /never rewritten/);
     sql(`UPDATE "SessionSecurityTrace" SET "statusCode"=500 WHERE "requestId"='req-old';`, /never rewritten/);
     sql(`DELETE FROM "SessionSecurityTrace" WHERE "requestId"='req-1';`, /removed only by retention/);
-    sql(`DELETE FROM "SessionSecurityTrace" WHERE "occurredAt" < CURRENT_TIMESTAMP - INTERVAL '30 days';`);
+    // The exact statement the scheduler's prune runs, with a 30-day period.
+    sql(`DELETE FROM "SessionSecurityTrace" WHERE "occurredAt" < CURRENT_TIMESTAMP - make_interval(days => 30::integer);`);
     assert.equal(sql(`SELECT string_agg("requestId", ',') FROM "SessionSecurityTrace";`), 'req-1');
   } finally {
     const removed = docker(['rm', '--force', '--volumes', container]);

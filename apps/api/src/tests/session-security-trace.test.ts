@@ -50,18 +50,29 @@ test('retention is off unless a whole number of days from 1 to 90 is set, and pr
   }
 });
 
-test('the prune removes only rows older than the retention period, and a failure is reported', async () => {
-  const calls: unknown[] = [];
-  const prisma = { sessionSecurityTrace: { deleteMany: async (args: unknown) => { calls.push(args); return { count: 3 }; } } };
-  const now = new Date('2026-10-11T12:00:00.000Z');
-  assert.equal(await pruneSessionSecurityTrace(prisma as never, 30, now), 3);
-  assert.deepEqual(calls, [{ where: { occurredAt: { lt: new Date('2026-09-11T12:00:00.000Z') } } }]);
+test('the prune judges age by the database clock, and a failure raises a job alert', async () => {
+  const calls: Array<{ sql: string; values: unknown[] }> = [];
+  const prisma = { $executeRaw: async (strings: TemplateStringsArray, ...values: unknown[]) => {
+    calls.push({ sql: strings.join('?'), values });
+    return 3;
+  } };
+  assert.equal(await pruneSessionSecurityTrace(prisma as never, 30), 3);
+  assert.match(calls[0]!.sql, /DELETE FROM "SessionSecurityTrace"\s+WHERE "occurredAt" < CURRENT_TIMESTAMP - make_interval\(days => \?::integer\)/);
+  assert.deepEqual(calls[0]!.values, [30]);
+  for (const bad of [0, 91, 1.5]) await assert.rejects(pruneSessionSecurityTrace(prisma as never, bad), RangeError);
   const logged: string[] = [];
   const logger = { info: (m: string) => logged.push(m), warn: () => {}, error: (m: string) => logged.push(m) };
-  assert.equal(await runSessionSecurityTracePrune({ prisma: prisma as never, retentionDays: 30, logger, now }), false);
-  const broken = { sessionSecurityTrace: { deleteMany: async () => { throw new Error('down'); } } };
-  assert.equal(await runSessionSecurityTracePrune({ prisma: broken as never, retentionDays: 30, logger, now }), true);
-  assert.match(logged.at(-1)!, /retention failed/);
+  const alerts: Array<{ code: string; job?: string }> = [];
+  const alertSender = async (payload: { code: string }) => { alerts.push(payload); return true; };
+  assert.equal(await runSessionSecurityTracePrune({ prisma: prisma as never, retentionDays: 30, logger,
+    alertSender: alertSender as never }), false);
+  assert.equal(alerts.length, 0);
+  const broken = { $executeRaw: async () => { throw new Error('down'); } };
+  assert.equal(await runSessionSecurityTracePrune({ prisma: broken as never, retentionDays: 30, logger,
+    alertSender: alertSender as never }), true);
+  assert.match(logged.join(' '), /retention failed/);
+  assert.equal(alerts.length, 1);
+  assert.match(JSON.stringify(alerts[0]), /SESSION_SECURITY_TRACE_PRUNE_FAILED/);
 });
 
 async function buildApp(env: string | undefined, rows: Array<Record<string, unknown>>, createFails = false,
