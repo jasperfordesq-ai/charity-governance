@@ -652,6 +652,10 @@ try {
     await tx.$executeRaw`SET LOCAL ROLE cp_fixture`;
     const result = await tx.$queryRaw`SELECT public."DocumentByteProviderAttempt_start"('lease', ${attempt}) AS started`;
     assert.equal(result[0].started, true);
+    // The marker must be durable before any observation: one transaction
+    // cannot both start the attempt and report what the provider did.
+    await assert.rejects(tx.$queryRaw`SELECT public."DocumentByteProviderObservation_recordAbsent"('lease',
+      ${attempt}, clock_timestamp())`, /attempt or target is stale/);
     throw new Error('rollback-provider-start-proof');
   }), /rollback-provider-start-proof/);
   assert.equal((await prisma.$queryRaw`SELECT count(*)::integer AS count
@@ -736,6 +740,59 @@ try {
   assert.equal(unresolved.attempts, 0);
   assert.equal(unresolved.claimedAt?.getTime(), protectedClaimedAt.getTime());
   assert.equal(unresolved.processedAt, null);
+  // A primary-absence observation is the runtime's only write after the
+  // marker. It needs the same one-use capability, a provider time after the
+  // committed start and no later than now, and it must leave the job and its
+  // byte fence exactly as UNKNOWN left them.
+  const observeAs = (capability, at) => prisma.$transaction(async tx => {
+    await tx.$executeRaw`SET LOCAL ROLE cp_fixture`;
+    return tx.$queryRaw`SELECT public."DocumentByteProviderObservation_recordAbsent"('lease',
+      ${capability}, ${at}::timestamptz) AS recorded`;
+  });
+  await assert.rejects(prisma.$transaction(async tx => {
+    await tx.$executeRaw`SET LOCAL ROLE cp_fixture`;
+    await tx.$executeRaw`INSERT INTO "DocumentByteProviderObservation"
+      (id,"leaseId","attemptId","organisationId","deletionId","decisionEntryDigest",
+        outcome,"providerObservedAt","observedTransactionId","recordedAt")
+      VALUES ('lease','lease','lease','charity','job',${'1'.repeat(64)},
+        'PRIMARY_ACTIVE_OBJECT_ABSENT',now(),txid_current(),now())`;
+  }), /permission denied/);
+  const afterStart = new Date(started.startedAt.getTime() + 1).toISOString();
+  await assert.rejects(observeAs(randomUUID(), afterStart), /capability does not match/);
+  await assert.rejects(observeAs('not-a-capability', afterStart), /Invalid document byte attempt capability/);
+  await assert.rejects(observeAs(attempt, null), /Invalid document byte provider observation time/);
+  await assert.rejects(observeAs(attempt, 'infinity'), /Invalid document byte provider observation time/);
+  await assert.rejects(observeAs(attempt,
+    new Date(started.startedAt.getTime() - 1).toISOString()), /attempt or target is stale/);
+  await assert.rejects(observeAs(attempt,
+    new Date(Date.now() + 60_000).toISOString()), /attempt or target is stale/);
+  assert.equal(await prisma.documentByteProviderObservation.count(), 0);
+  const recordedAbsent = await observeAs(attempt, afterStart);
+  assert.equal(recordedAbsent[0].recorded, true);
+  const absence = await prisma.documentByteProviderObservation.findUniqueOrThrow({
+    where: { leaseId: 'lease' },
+  });
+  assert.equal(absence.attemptId, 'lease');
+  assert.equal(absence.deletionId, 'job');
+  assert.equal(absence.organisationId, 'charity');
+  assert.equal(absence.decisionEntryDigest, started.decisionEntryDigest);
+  assert.equal(absence.outcome, 'PRIMARY_ACTIVE_OBJECT_ABSENT');
+  assert.equal(absence.providerObservedAt.toISOString(), afterStart);
+  assert.notEqual(absence.observedTransactionId, started.startedTransactionId);
+  assert.ok(absence.recordedAt.getTime() >= absence.providerObservedAt.getTime());
+  await assert.rejects(observeAs(attempt, afterStart), /23505|unique constraint|duplicate key/i);
+  await assert.rejects(prisma.$executeRaw`UPDATE "DocumentByteProviderObservation"
+    SET outcome='PRIMARY_ACTIVE_OBJECT_ABSENT' WHERE "leaseId"='lease'`, /append-only/);
+  await assert.rejects(prisma.$executeRaw`DELETE FROM "DocumentByteProviderObservation"
+    WHERE "leaseId"='lease'`, /append-only/);
+  const stillUnresolved = await prisma.documentStorageDeletion.findUniqueOrThrow({
+    where: { id: 'job' },
+    select: { state: true, attempts: true, claimedAt: true, processedAt: true },
+  });
+  assert.deepEqual(stillUnresolved, unresolved);
+  await assert.rejects(new DocumentService(prisma).markStorageDeletionProcessed(
+    'job', protectedClaimedAt, absence.providerObservedAt,
+  ), /requires independent permit/);
   await assert.rejects(prisma.$transaction(async tx => {
     await tx.$executeRaw`SET LOCAL ROLE cp_fixture`;
     await tx.$queryRaw`SELECT public."DocumentByteProviderAttempt_start"('lease', ${attempt})`;
@@ -838,7 +895,7 @@ try {
   }), /synthetic page intent proof rollback/u);
   assert.equal(await prisma.documentPublicationPageCreateIntent.count(), 0);
   process.stdout.write(
-    'current-authority-real-postgres-composition=verified; protected-worker-skip=verified; cleanup-alias-fence=verified; upload-intent-fence=verified; publication-upload-intent-service=verified; publication-page-intent-service=verified; copy-evidence-digest=stable; post-claim-local-authority=verified; provider-start-marker=verified; provider-start-race=one-winner; provider-unknown-facts=verified; post-start-ordinary-retry-refused=verified\n',
+    'current-authority-real-postgres-composition=verified; protected-worker-skip=verified; cleanup-alias-fence=verified; upload-intent-fence=verified; publication-upload-intent-service=verified; publication-page-intent-service=verified; copy-evidence-digest=stable; post-claim-local-authority=verified; provider-start-marker=verified; provider-start-race=one-winner; provider-unknown-facts=verified; post-start-ordinary-retry-refused=verified; provider-absence-observation=verified; post-observation-fence=unchanged\n',
   );
 } finally {
   await prisma.$disconnect();

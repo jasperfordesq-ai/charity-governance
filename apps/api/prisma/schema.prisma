@@ -514,6 +514,7 @@ model Organisation {
   documentBytePermitBindings DocumentBytePermitCandidateBinding[]
   documentByteExecutionLeases DocumentByteExecutionLease[]
   documentByteProviderAttempts DocumentByteProviderAttempt[]
+  documentByteProviderObservations DocumentByteProviderObservation[]
   complaintHoldRecoveryPreparations ComplaintHoldRecoveryPreparation[]
   id                                      String                      @id @default(cuid())
   name                                    String
@@ -1477,6 +1478,7 @@ model DocumentByteExecutionLease {
   candidateBinding           DocumentBytePermitCandidateBinding @relation(fields: [candidateBindingId], references: [id], onDelete: Restrict)
   deletion                   DocumentStorageDeletion @relation(fields: [deletionId, organisationId], references: [id, organisationId], onDelete: Restrict)
   providerAttempt            DocumentByteProviderAttempt?
+  providerObservation        DocumentByteProviderObservation?
 
   @@unique([deletionId, organisationId])
   @@index([organisationId, recordedAt, id])
@@ -1494,10 +1496,34 @@ model DocumentByteProviderAttempt {
   startedAt            DateTime
   lease                DocumentByteExecutionLease @relation(fields: [leaseId], references: [id], onDelete: Restrict)
   organisation         Organisation @relation(fields: [organisationId], references: [id], onDelete: Restrict)
+  observation          DocumentByteProviderObservation?
   deletion             DocumentStorageDeletion @relation(fields: [deletionId, organisationId], references: [id, organisationId], onDelete: Restrict)
 
   @@unique([deletionId, organisationId])
   @@index([organisationId, startedAt, leaseId])
+}
+
+// One provider observation per started attempt: the primary active object was
+// observed absent afterwards. Not an all-copy erasure result, and it changes
+// no deletion job; completion still needs a separate independent permit.
+model DocumentByteProviderObservation {
+  id                    String @id
+  leaseId               String @unique
+  attemptId             String @unique
+  organisationId        String
+  deletionId            String @unique
+  decisionEntryDigest   String
+  outcome               String
+  providerObservedAt    DateTime
+  observedTransactionId BigInt
+  recordedAt            DateTime
+  lease                 DocumentByteExecutionLease @relation(fields: [leaseId], references: [id], onDelete: Restrict)
+  attempt               DocumentByteProviderAttempt @relation(fields: [attemptId], references: [id], onDelete: Restrict)
+  organisation          Organisation @relation(fields: [organisationId], references: [id], onDelete: Restrict)
+  deletion              DocumentStorageDeletion @relation(fields: [deletionId, organisationId], references: [id, organisationId], onDelete: Restrict)
+
+  @@unique([deletionId, organisationId])
+  @@index([organisationId, recordedAt, leaseId])
 }
 
 // Reviewer evidence about an explicitly referenced downstream scope, never a
@@ -1778,6 +1804,7 @@ model DocumentStorageDeletion {
   bytePermitBinding       DocumentBytePermitCandidateBinding?
   byteExecutionLease      DocumentByteExecutionLease?
   byteProviderAttempt      DocumentByteProviderAttempt?
+  byteProviderObservation  DocumentByteProviderObservation?
 
   @@unique([id, organisationId])
   @@index([organisationId])

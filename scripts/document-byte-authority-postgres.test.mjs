@@ -101,7 +101,7 @@ test(
       );
       const grants = readFileSync('scripts/bluegreen/runtime-role-grants.psql', 'utf8');
       requireSuccess(docker(['exec', name, 'psql', '-U', 'postgres', '-d', database,
-        '-c', 'GRANT EXECUTE ON FUNCTION public."DocumentByteExecutionLease_claim"(text,text), public."DocumentByteProviderAttempt_start"(text,text) TO PUBLIC']),
+        '-c', 'GRANT EXECUTE ON FUNCTION public."DocumentByteExecutionLease_claim"(text,text), public."DocumentByteProviderAttempt_start"(text,text), public."DocumentByteProviderObservation_recordAbsent"(text,text,timestamp with time zone) TO PUBLIC']),
       'simulate ACL-free backup restore defaults');
       requireSuccess(docker(['exec', '-i', '-e', 'CHARITYPILOT_RUNTIME_ROLE=cp_fixture',
         '-e', 'CHARITYPILOT_RUNTIME_PASSWORD=synthetic-only', name,
@@ -138,14 +138,23 @@ test(
           'public."DocumentByteExecutionLease_claim"(text,text)','EXECUTE'),
           has_function_privilege('cp_fixture',
           'public."DocumentByteProviderAttempt_start"(text,text)','EXECUTE'),
+          has_table_privilege('cp_fixture',
+          'public."DocumentByteProviderObservation"','SELECT'),
+          has_table_privilege('cp_fixture',
+          'public."DocumentByteProviderObservation"','INSERT,UPDATE,DELETE'),
+          has_function_privilege('cp_fixture',
+          'public."DocumentByteProviderObservation_recordAbsent"(text,text,timestamp with time zone)','EXECUTE'),
           EXISTS (SELECT 1 FROM aclexplode((SELECT proacl FROM pg_proc WHERE oid =
             'public."DocumentByteExecutionLease_claim"(text,text)'::regprocedure)) acl
             WHERE acl.grantee=0 AND acl.privilege_type='EXECUTE'),
           EXISTS (SELECT 1 FROM aclexplode((SELECT proacl FROM pg_proc WHERE oid =
             'public."DocumentByteProviderAttempt_start"(text,text)'::regprocedure)) acl
+            WHERE acl.grantee=0 AND acl.privilege_type='EXECUTE'),
+          EXISTS (SELECT 1 FROM aclexplode((SELECT proacl FROM pg_proc WHERE oid =
+            'public."DocumentByteProviderObservation_recordAbsent"(text,text,timestamp with time zone)'::regprocedure)) acl
             WHERE acl.grantee=0 AND acl.privilege_type='EXECUTE');`]),
       'read disposable runtime privileges');
-      assert.equal(privileges, 'f|t|f|t|f|t|t|f|f');
+      assert.equal(privileges, 'f|t|f|t|f|t|t|t|f|t|f|f|f');
       requireSuccess(
         run(process.execPath, ['node_modules/typescript/bin/tsc', '-p', 'apps/api/tsconfig.json'], {
           env,
@@ -158,15 +167,16 @@ test(
       );
       assert.match(
         output,
-        /current-authority-real-postgres-composition=verified; protected-worker-skip=verified; cleanup-alias-fence=verified; upload-intent-fence=verified; publication-upload-intent-service=verified; publication-page-intent-service=verified; copy-evidence-digest=stable; post-claim-local-authority=verified; provider-start-marker=verified; provider-start-race=one-winner; provider-unknown-facts=verified; post-start-ordinary-retry-refused=verified/u,
+        /current-authority-real-postgres-composition=verified; protected-worker-skip=verified; cleanup-alias-fence=verified; upload-intent-fence=verified; publication-upload-intent-service=verified; publication-page-intent-service=verified; copy-evidence-digest=stable; post-claim-local-authority=verified; provider-start-marker=verified; provider-start-race=one-winner; provider-unknown-facts=verified; post-start-ordinary-retry-refused=verified; provider-absence-observation=verified; post-observation-fence=unchanged/u,
       );
       const snapshot = JSON.parse(requireSuccess(docker(['exec', name, 'psql', '-U',
         'postgres', '-d', database, '-tA', '-c', PURGE_RESTORE_SNAPSHOT_SQL]),
-      'capture format-6 disposable restore inventory'));
-      assert.equal(snapshot.format, 6);
+      'capture format-7 disposable restore inventory'));
+      assert.equal(snapshot.format, 7);
       assert.equal(snapshot.tables.DocumentBytePermitCandidateBinding.length, 1);
       assert.equal(snapshot.tables.DocumentByteExecutionLease.length, 1);
       assert.equal(snapshot.tables.DocumentByteProviderAttempt.length, 1);
+      assert.equal(snapshot.tables.DocumentByteProviderObservation.length, 1);
     } finally {
       assert.equal(
         requireSuccess(

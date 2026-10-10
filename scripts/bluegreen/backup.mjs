@@ -74,7 +74,7 @@ import { basename, dirname, join } from 'node:path';
 
 import { DEFAULT_POSTGRES_IMAGE } from '../postgres-backup.mjs';
 import { DOCUMENT_ARCHIVE_IMAGE } from '../personal-server.mjs';
-import { PURGE_RESTORE_SNAPSHOT_SQL, PURGE_RESTORE_PREVIOUS_SNAPSHOT_SQL, PURGE_RESTORE_LEGACY_SNAPSHOT_SQL,
+import { PURGE_RESTORE_SNAPSHOT_SQL, PURGE_RESTORE_ATTEMPT_SNAPSHOT_SQL, PURGE_RESTORE_PREVIOUS_SNAPSHOT_SQL, PURGE_RESTORE_LEGACY_SNAPSHOT_SQL,
   PURGE_RESTORE_OLDEST_SNAPSHOT_SQL,
   PURGE_RESTORE_BINDING_PROBE_SQL, PURGE_RESTORE_LOCAL_OBJECTS_SQL,
   assertPurgeRestoreLedger, assertNoClaimedLocalObjects } from '../purge-restore-reconciliation.mjs';
@@ -786,7 +786,7 @@ export async function runRestoreDrill(ctx) {
       const probe = [...command];
       probe[probe.length - 1] = PURGE_RESTORE_BINDING_PROBE_SQL;
       const output = (await ctx.runCommand(probe, { env }))?.stdout?.trim();
-      if (!['oldest', 'legacy', 'lease', 'attempt'].includes(output)) {
+      if (!['oldest', 'legacy', 'lease', 'attempt', 'observation'].includes(output)) {
         throw new Error('Restore drill requires readable current and restored purge schema');
       }
       return output;
@@ -796,7 +796,8 @@ export async function runRestoreDrill(ctx) {
     if (liveMode !== restoredMode) {
       throw new Error('Restore drill purge schema versions differ; keep application access closed');
     }
-    const historySql = liveMode === 'attempt' ? PURGE_RESTORE_SNAPSHOT_SQL
+    const historySql = liveMode === 'observation' ? PURGE_RESTORE_SNAPSHOT_SQL
+      : liveMode === 'attempt' ? PURGE_RESTORE_ATTEMPT_SNAPSHOT_SQL
       : liveMode === 'lease' ? PURGE_RESTORE_PREVIOUS_SNAPSHOT_SQL
         : liveMode === 'legacy' ? PURGE_RESTORE_LEGACY_SNAPSHOT_SQL
           : PURGE_RESTORE_OLDEST_SNAPSHOT_SQL;

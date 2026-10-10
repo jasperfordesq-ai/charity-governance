@@ -1055,7 +1055,9 @@ export async function verifyAppRuntimeRole(run, deployEnv, fileEnv) {
             (coalesce(executable_definer.oid =
               to_regprocedure('public."DocumentByteExecutionLease_claim"(text,text)'), false)
              OR coalesce(executable_definer.oid =
-              to_regprocedure('public."DocumentByteProviderAttempt_start"(text,text)'), false))
+              to_regprocedure('public."DocumentByteProviderAttempt_start"(text,text)'), false)
+             OR coalesce(executable_definer.oid =
+              to_regprocedure('public."DocumentByteProviderObservation_recordAbsent"(text,text,timestamp with time zone)'), false))
             AND executable_definer.proowner = current_user::regrole
             AND executable_definer.proconfig @> ARRAY['search_path=pg_catalog, public, pg_temp']::text[]
             AND NOT EXISTS (SELECT 1 FROM aclexplode(coalesce(executable_definer.proacl,
@@ -1092,7 +1094,8 @@ export async function verifyAppRuntimeRole(run, deployEnv, fileEnv) {
           ('DocumentRecoveryEnforcement'), ('DocumentRecoveryExecution'),
           ('DocumentRecoveryOutcome'),
           ('DocumentBytePermitCandidateBinding'),
-          ('DocumentByteExecutionLease'), ('DocumentByteProviderAttempt')) AS protected(name)
+          ('DocumentByteExecutionLease'), ('DocumentByteProviderAttempt'),
+          ('DocumentByteProviderObservation')) AS protected(name)
         WHERE to_regclass(format('public.%I', protected.name)) IS NOT NULL
           AND (
             has_table_privilege(r.oid, to_regclass(format('public.%I', protected.name)), 'INSERT')

@@ -23,7 +23,8 @@ BEGIN
       ('DocumentRecoveryOutcome'),
       ('DocumentBytePermitCandidateBinding'),
       ('DocumentByteExecutionLease'),
-      ('DocumentByteProviderAttempt')) AS protected(name)
+      ('DocumentByteProviderAttempt'),
+      ('DocumentByteProviderObservation')) AS protected(name)
     WHERE to_regclass(format('public.%I', protected.name)) IS NULL
   ) THEN
     RAISE EXCEPTION 'Protected recovery or migration table is missing';
@@ -52,7 +53,8 @@ SELECT CASE WHEN :'runtime_role' = current_user OR EXISTS (
         ('DocumentRecoveryOutcome'),
         ('DocumentBytePermitCandidateBinding'),
         ('DocumentByteExecutionLease'),
-        ('DocumentByteProviderAttempt')) AS protected(name)
+        ('DocumentByteProviderAttempt'),
+        ('DocumentByteProviderObservation')) AS protected(name)
       WHERE has_table_privilege(r.oid, to_regclass(format('public.%I', protected.name)),
         'INSERT,UPDATE,DELETE,TRUNCATE,REFERENCES,TRIGGER')
     )
@@ -79,18 +81,21 @@ SELECT format('REVOKE ALL ON ALL TABLES IN SCHEMA public FROM %I', :'runtime_rol
 SELECT format('GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA public TO %I', :'runtime_role') \gexec
 SELECT format('REVOKE ALL ON ALL SEQUENCES IN SCHEMA public FROM %I', :'runtime_role') \gexec
 SELECT format('GRANT USAGE, SELECT ON ALL SEQUENCES IN SCHEMA public TO %I', :'runtime_role') \gexec
-SELECT format('REVOKE ALL ON TABLE public."_prisma_migrations", public."ComplaintRecoveryEnforcement", public."ComplaintHoldRecoveryOutcome", public."ComplaintRecoveryExecution", public."ComplaintRecoveryOutcome", public."ComplaintRecoveryCancellation", public."DocumentRecoveryEnforcement", public."DocumentRecoveryExecution", public."DocumentRecoveryOutcome", public."DocumentBytePermitCandidateBinding", public."DocumentByteExecutionLease", public."DocumentByteProviderAttempt" FROM %I', :'runtime_role') \gexec
-SELECT format('GRANT SELECT ON TABLE public."_prisma_migrations", public."ComplaintRecoveryEnforcement", public."ComplaintHoldRecoveryOutcome", public."ComplaintRecoveryExecution", public."ComplaintRecoveryOutcome", public."ComplaintRecoveryCancellation", public."DocumentRecoveryEnforcement", public."DocumentRecoveryExecution", public."DocumentRecoveryOutcome", public."DocumentBytePermitCandidateBinding", public."DocumentByteExecutionLease", public."DocumentByteProviderAttempt" TO %I', :'runtime_role') \gexec
+SELECT format('REVOKE ALL ON TABLE public."_prisma_migrations", public."ComplaintRecoveryEnforcement", public."ComplaintHoldRecoveryOutcome", public."ComplaintRecoveryExecution", public."ComplaintRecoveryOutcome", public."ComplaintRecoveryCancellation", public."DocumentRecoveryEnforcement", public."DocumentRecoveryExecution", public."DocumentRecoveryOutcome", public."DocumentBytePermitCandidateBinding", public."DocumentByteExecutionLease", public."DocumentByteProviderAttempt", public."DocumentByteProviderObservation" FROM %I', :'runtime_role') \gexec
+SELECT format('GRANT SELECT ON TABLE public."_prisma_migrations", public."ComplaintRecoveryEnforcement", public."ComplaintHoldRecoveryOutcome", public."ComplaintRecoveryExecution", public."ComplaintRecoveryOutcome", public."ComplaintRecoveryCancellation", public."DocumentRecoveryEnforcement", public."DocumentRecoveryExecution", public."DocumentRecoveryOutcome", public."DocumentBytePermitCandidateBinding", public."DocumentByteExecutionLease", public."DocumentByteProviderAttempt", public."DocumentByteProviderObservation" TO %I', :'runtime_role') \gexec
 
 -- Backup/restore deliberately omits ACLs. PostgreSQL then restores its
--- default PUBLIC EXECUTE on these two SECURITY DEFINER functions, so close
+-- default PUBLIC EXECUTE on these three SECURITY DEFINER functions, so close
 -- that default before granting the app role its narrow capability.
 REVOKE ALL ON FUNCTION public."DocumentByteExecutionLease_claim"(text,text) FROM PUBLIC;
 REVOKE ALL ON FUNCTION public."DocumentByteProviderAttempt_start"(text,text) FROM PUBLIC;
+REVOKE ALL ON FUNCTION public."DocumentByteProviderObservation_recordAbsent"(text,text,timestamp with time zone) FROM PUBLIC;
 SELECT format('REVOKE ALL ON FUNCTION public."DocumentByteExecutionLease_claim"(text,text) FROM %I', :'runtime_role') \gexec
 SELECT format('GRANT EXECUTE ON FUNCTION public."DocumentByteExecutionLease_claim"(text,text) TO %I', :'runtime_role') \gexec
 SELECT format('REVOKE ALL ON FUNCTION public."DocumentByteProviderAttempt_start"(text,text) FROM %I', :'runtime_role') \gexec
 SELECT format('GRANT EXECUTE ON FUNCTION public."DocumentByteProviderAttempt_start"(text,text) TO %I', :'runtime_role') \gexec
+SELECT format('REVOKE ALL ON FUNCTION public."DocumentByteProviderObservation_recordAbsent"(text,text,timestamp with time zone) FROM %I', :'runtime_role') \gexec
+SELECT format('GRANT EXECUTE ON FUNCTION public."DocumentByteProviderObservation_recordAbsent"(text,text,timestamp with time zone) TO %I', :'runtime_role') \gexec
 
 -- PostgreSQL grants EXECUTE on new functions to PUBLIC by default. A
 -- SECURITY DEFINER function reachable by the app role could bypass the
@@ -106,7 +111,9 @@ SELECT CASE WHEN EXISTS (
       (coalesce(executable_definer.oid =
         to_regprocedure('public."DocumentByteExecutionLease_claim"(text,text)'), false)
        OR coalesce(executable_definer.oid =
-        to_regprocedure('public."DocumentByteProviderAttempt_start"(text,text)'), false))
+        to_regprocedure('public."DocumentByteProviderAttempt_start"(text,text)'), false)
+       OR coalesce(executable_definer.oid =
+        to_regprocedure('public."DocumentByteProviderObservation_recordAbsent"(text,text,timestamp with time zone)'), false))
       AND executable_definer.proowner = current_user::regrole
       AND executable_definer.proconfig @> ARRAY['search_path=pg_catalog, public, pg_temp']::text[]
       AND NOT EXISTS (SELECT 1 FROM aclexplode(coalesce(executable_definer.proacl,
