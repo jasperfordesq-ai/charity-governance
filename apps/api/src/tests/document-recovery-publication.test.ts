@@ -26,6 +26,7 @@ import { readMatchedClaimedDocumentByteDecision,
   readMatchedStartedDocumentByteDecision } from '../services/matched-claimed-document-byte-decision.js';
 import { claimVerifiedDocumentByteExecutionLease } from '../services/claimed-document-byte-execution-lease.js';
 import { startVerifiedDocumentByteProviderAttempt } from '../services/verified-document-byte-provider-start.js';
+import { executeVerifiedDocumentBytePrimaryDeletion } from '../services/verified-document-byte-primary-execution.js';
 import { recordVerifiedDocumentBytePrimaryAbsence,
   recordReconciledDocumentBytePrimaryAbsence } from '../services/verified-document-byte-provider-observation.js';
 import { publishVerifiedDocumentByteProviderUnknown,
@@ -193,6 +194,7 @@ async function readyBytePermitPublisher() {
     observation: null as Record<string, unknown> | null, observeCalls: 0,
     boundAttempt: undefined as unknown, observationNotRecorded: false,
     expectedAttempt: undefined as unknown, duringObserve: null as (() => void) | null,
+    duringStart: null as (() => void) | null, refuseStartBeforeMarker: false,
     observationView: null as ((row: Record<string, unknown>) => Record<string, unknown>) | null };
   const tx = {
     $queryRaw: async (strings: TemplateStringsArray, ...values: unknown[]) => {
@@ -225,7 +227,7 @@ async function readyBytePermitPublisher() {
       }
       if (strings.join('').includes('DocumentByteProviderAttempt_start')) {
         state.startCalls += 1;
-        if (!state.lease || !state.claimedAt || state.attempt) {
+        if (!state.lease || !state.claimedAt || state.attempt || state.refuseStartBeforeMarker) {
           throw new Error('Synthetic provider start refused');
         }
         state.attempt = { id: 'lease', leaseId: 'lease',
@@ -233,6 +235,7 @@ async function readyBytePermitPublisher() {
           decisionEntryDigest: state.lease.decisionEntryDigest,
           startedTransactionId: 124n,
           startedAt: new Date('2026-10-07T08:03:01.000Z') };
+        state.duringStart?.();
         return [{ started: true }];
       }
       return [{ id: f.context.organisationId }];
@@ -293,6 +296,7 @@ async function readyBytePermitPublisher() {
         organisationId: f.context.organisationId, operationId: f.context.operationId,
         writerEpoch: f.context.writerEpoch, facts: f.prepared.body,
         factsDigest: f.prepared.digest } }, providerAttempt: state.attempt }) },
+    documentByteProviderAttempt: { findUnique: async () => state.attempt },
     documentByteProviderObservation: { findUnique: async () => state.observation
       && (state.observationView ? state.observationView(state.observation) : state.observation) },
     $queryRaw: tx.$queryRaw,
@@ -706,6 +710,159 @@ test('primary absence observation needs a durable start, never authorizes comple
     f.store, f.context, f.keys, f.store);
   assert.equal(reconciled.unknownEntryDigest, head.entryDigest);
   await assert.rejects(reconcile(capability, later), /Synthetic provider observation refused/);
+});
+
+async function decidedBytePermit() {
+  const { f, prisma, state } = await readyBytePermitPublisher();
+  const scope = { installationId: f.context.installationId,
+    organisationId: f.context.organisationId, operationId: f.context.operationId };
+  await publishVerifiedDocumentBytePermitCandidate(prisma,
+    f.journal, f.store, f.context, f.keys, f.store);
+  const candidate = await readPublishedDocumentBytePermit(f.journal, f.store,
+    f.context, f.keys, f.store);
+  await bindVerifiedDocumentBytePermitCandidate(prisma,
+    f.journal, f.store, f.context, f.keys, f.store);
+  const local = await readCurrentDocumentByteAuthority(prisma, scope);
+  const prior = JSON.parse(candidate.body);
+  const control = await f.store.readControl();
+  const decision = prepareDocumentByteExecutionDecisionFacts({ format: 1,
+    action: 'DOCUMENT_PRIMARY_BYTE_EXECUTION_DECISION',
+    ...scope, writerId: prior.writerId, writerEpoch: f.context.writerEpoch,
+    sourceRevision: f.context.sourceRevision, preparationDigest: prior.preparationDigest,
+    candidateBodyDigest: createHash('sha256').update(candidate.body).digest('hex'),
+    candidateEntryDigest: candidate.entryDigest, candidateEnvelopeDigest: candidate.envelopeDigest,
+    candidateGeneration: candidate.generation, candidateAuthorityDigest: prior.currentAuthorityDigest,
+    controlRevision: control.revision, outcomeId: prior.outcomeId, claimId: prior.claimId,
+    deletionId: prior.deletionId, authorizationId: prior.authorizationId,
+    documentId: prior.documentId, actorUserId: prior.actorUserId, provider: prior.provider,
+    storagePath: prior.storagePath, objectSha256: prior.objectSha256, fileSize: prior.fileSize,
+    copyDispositionDigest: local.localCopyObservationDigest,
+    holdStateDigest: local.localHoldObservationDigest,
+    providerInventoryDigest: 'c'.repeat(64), decisionEvidenceRef: 'SYNTHETIC-UNKNOWN-001',
+    oneUseAttemptId: '11111111-1111-4111-8111-111111111111',
+    issuedAt: '2026-10-07T08:00:00.000Z' });
+  const preserved = await preserveDocumentByteExecutionDecision(decision.body,
+    f.context, f.keys, f.store);
+  await f.journal.appendReservedDocumentByteExecutionDecision({
+    operationId: f.context.operationId, writerId: prior.writerId,
+    writerEpoch: f.context.writerEpoch, preparationDigest: prior.preparationDigest,
+    candidateGeneration: candidate.generation, candidateEntryDigest: candidate.entryDigest,
+    candidateEnvelopeDigest: candidate.envelopeDigest, decisionEnvelopeDigest: preserved.digest,
+  }, f.store);
+  return { f, prisma, state, decision };
+}
+
+test('protected primary deletion calls the eraser once for the exact decided target and records absence without authorizing completion', async () => {
+  const { f, prisma, state, decision } = await decidedBytePermit();
+  const facts = JSON.parse(decision.body);
+  const calls: unknown[] = [];
+  const result = await executeVerifiedDocumentBytePrimaryDeletion(prisma, f.journal,
+    f.store, f.context, f.keys, f.store, async (target) => {
+      calls.push(target);
+      return new Date('2026-10-07T08:03:02.000Z');
+    });
+  assert.equal(result.outcome, 'PRIMARY_ABSENCE_OBSERVED');
+  assert.equal(result.actionAuthorized, false);
+  assert.equal(result.providerCalled, true);
+  assert.deepEqual(calls, [{ organisationId: facts.organisationId,
+    storagePath: facts.storagePath, targetRef: null }]);
+  assert.equal(state.startCalls, 1);
+  assert.equal(state.observeCalls, 1);
+  assert.equal(state.observation?.outcome, 'PRIMARY_ACTIVE_OBJECT_ABSENT');
+  assert.equal(state.boundAttempt, facts.oneUseAttemptId);
+});
+
+test('protected primary deletion leaves every post-start failure UNKNOWN, publishes it and never retries the provider', async () => {
+  const cases: Array<{ name: string; erase: (target: unknown, signal?: AbortSignal) => Promise<Date | void>;
+    arrange?: (state: Record<string, unknown>) => void; reason: string; timeoutMs?: number }> = [
+    { name: 'error', reason: 'PROVIDER_ERROR', erase: async () => { throw new Error('provider refused'); } },
+    { name: 'void', reason: 'NO_ABSENCE_OBSERVATION', erase: async () => undefined },
+    { name: 'invalid date', reason: 'NO_ABSENCE_OBSERVATION', erase: async () => new Date(Number.NaN) },
+    { name: 'timeout', reason: 'PROVIDER_TIMEOUT', timeoutMs: 10,
+      erase: (_target, signal) => new Promise((_resolve, reject) => {
+        // A late rejection after the abort must be absorbed, not crash the process.
+        signal?.addEventListener('abort', () => setTimeout(() => reject(new Error('late failure')), 5));
+      }) },
+    { name: 'observation not recorded', reason: 'OBSERVATION_NOT_RECORDED',
+      arrange: (state) => { state.observationNotRecorded = true; },
+      erase: async () => new Date('2026-10-07T08:03:02.000Z') },
+  ];
+  for (const c of cases) {
+    const { f, prisma, state } = await decidedBytePermit();
+    c.arrange?.(state as unknown as Record<string, unknown>);
+    let eraseCalls = 0;
+    const result = await executeVerifiedDocumentBytePrimaryDeletion(prisma, f.journal,
+      f.store, f.context, f.keys, f.store, (target, signal) => { eraseCalls += 1; return c.erase(target, signal); },
+      c.timeoutMs);
+    assert.equal(result.outcome, 'UNKNOWN', c.name);
+    assert.equal(result.outcome === 'UNKNOWN' && result.reason, c.reason, c.name);
+    assert.equal(result.providerCalled, true, c.name);
+    assert.equal(result.outcome === 'UNKNOWN' && result.unknownPublished, true, c.name);
+    assert.equal(result.actionAuthorized, false, c.name);
+    assert.equal(eraseCalls, 1, c.name);
+    const published = await readPublishedDocumentByteProviderUnknown(f.journal,
+      f.store, f.context, f.keys, f.store);
+    assert.equal(published.actionAuthorized, false, c.name);
+    if (c.name !== 'observation not recorded') assert.equal(state.observeCalls, 0, c.name);
+  }
+  await new Promise(resolve => setTimeout(resolve, 30));
+});
+
+test('protected primary deletion never calls the provider when authority changes after the start marker or the claim is refused', async () => {
+  {
+    const { f, prisma, state } = await decidedBytePermit();
+    state.duringStart = () => { state.copyHolds.push({ id: 'hold-after-start', held: true }); };
+    let eraseCalls = 0;
+    const result = await executeVerifiedDocumentBytePrimaryDeletion(prisma, f.journal,
+      f.store, f.context, f.keys, f.store, async () => { eraseCalls += 1; return new Date(); });
+    assert.equal(result.outcome, 'UNKNOWN');
+    assert.equal(result.outcome === 'UNKNOWN' && result.reason, 'PRE_IO_RECHECK_FAILED');
+    assert.equal(result.providerCalled, false);
+    assert.equal(eraseCalls, 0);
+    assert.equal(state.startCalls, 1);
+  }
+  {
+    // The start service's own post-marker read passes; the hold appears at the
+    // executor's separate immediate pre-provider read (two reads later).
+    const { f, prisma, state } = await decidedBytePermit();
+    state.duringStart = () => { state.mutateAtRead = state.reads + 3; };
+    let eraseCalls = 0;
+    const result = await executeVerifiedDocumentBytePrimaryDeletion(prisma, f.journal,
+      f.store, f.context, f.keys, f.store, async () => { eraseCalls += 1; return new Date(); });
+    assert.equal(result.outcome, 'UNKNOWN');
+    assert.equal(result.outcome === 'UNKNOWN' && result.reason, 'PRE_IO_RECHECK_FAILED');
+    assert.equal(result.providerCalled, false);
+    assert.equal(eraseCalls, 0);
+  }
+  {
+    // A start refused before any marker commits is an error, not UNKNOWN.
+    const { f, prisma, state } = await decidedBytePermit();
+    state.refuseStartBeforeMarker = true;
+    let eraseCalls = 0;
+    await assert.rejects(executeVerifiedDocumentBytePrimaryDeletion(prisma, f.journal,
+      f.store, f.context, f.keys, f.store, async () => { eraseCalls += 1; return new Date(); }),
+    /Synthetic provider start refused/);
+    assert.equal(eraseCalls, 0);
+    assert.equal(state.attempt, null);
+  }
+  {
+    const { f, prisma, state } = await decidedBytePermit();
+    state.copyHolds.push({ id: 'hold-before-claim', held: true });
+    let eraseCalls = 0;
+    await assert.rejects(executeVerifiedDocumentBytePrimaryDeletion(prisma, f.journal,
+      f.store, f.context, f.keys, f.store, async () => { eraseCalls += 1; return new Date(); }),
+    /copy or hold facts/);
+    assert.equal(eraseCalls, 0);
+    assert.equal(state.startCalls, 0);
+    assert.equal(state.leaseCreates, 0);
+  }
+  {
+    const { f, prisma } = await decidedBytePermit();
+    for (const timeoutMs of [0, 9, 10_001, 1.5]) {
+      await assert.rejects(executeVerifiedDocumentBytePrimaryDeletion(prisma, f.journal,
+        f.store, f.context, f.keys, f.store, async () => new Date(), timeoutMs), TypeError);
+    }
+  }
 });
 
 test('committed provider start publishes one encrypted independent UNKNOWN and recovers a lost head acknowledgement', async () => {
