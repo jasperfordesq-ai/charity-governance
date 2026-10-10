@@ -38,7 +38,16 @@ try {
   let finished = false;
   const revocation = revokeInstallationSessions(prisma, { realm: 'all', reason, confirm: true })
     .then((result) => { finished = true; return result; });
-  await new Promise((resolve) => setTimeout(resolve, 1500));
+  // Release the refresh only once PostgreSQL shows the job blocked on the
+  // cutoff it is trying to move: the wait is observed, not assumed.
+  let waiting = false;
+  for (let i = 0; i < 100 && !waiting; i += 1) {
+    const rows = await prisma.$queryRaw`SELECT count(*)::integer AS count FROM pg_stat_activity
+      WHERE wait_event_type = 'Lock' AND query ILIKE '%UPDATE%"InstallationSessionCutoff"%'`;
+    waiting = rows[0].count > 0;
+    if (!waiting) await new Promise((resolve) => setTimeout(resolve, 50));
+  }
+  assert.ok(waiting, 'the revocation must be waiting on the refresh in flight');
   assert.equal(finished, false, 'the revocation waits for the refresh in flight');
   release();
   await refresh;
