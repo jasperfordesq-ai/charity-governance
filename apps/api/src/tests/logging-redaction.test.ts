@@ -20,6 +20,10 @@ test('production logger redacts browser credentials, provider secrets, and auth 
   assert.ok(redact?.paths?.includes('refreshToken'));
   assert.ok(redact?.paths?.includes('accessToken'));
   assert.ok(redact?.paths?.includes('env.SUPABASE_SERVICE_ROLE_KEY'));
+  for (const secret of ['env.JWT_SECRET', 'env.JWT_SECRET_PREVIOUS', 'env.OWNER_JWT_SECRET',
+    'env.OWNER_JWT_SECRET_PREVIOUS', 'env.READINESS_API_KEY', 'env.INTEGRATION_ENCRYPTION_KEY']) {
+    assert.ok(redact?.paths?.includes(secret), secret);
+  }
 
   const serialized = JSON.stringify(serializeErrorForLog(
     new Error('Provider failed token=raw-token user@example.org org-1/private-policy.pdf'),

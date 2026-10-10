@@ -117,6 +117,40 @@ journey proof, live deployment evidence and independent DPO review. The live
 enrollment count and exact decision receipt
 are held in the private DPO review pack.
 
+### Signing-secret rotation without locking out authenticators (October 2026)
+
+Authenticator secrets are sealed under a key derived from the realm's signing
+secret: `JWT_SECRET` for charity users, `OWNER_JWT_SECRET` for operators.
+Rotating that secret, for example after a suspected exposure, used to make every
+enrolled authenticator unreadable at once, leaving only recovery codes. Now:
+
+- New envelopes record which secret sealed them, by fingerprint. Older envelopes
+  without one are still read.
+- During a rotation, set the old value as `JWT_SECRET_PREVIOUS` (or
+  `OWNER_JWT_SECRET_PREVIOUS`). Existing authenticators keep working.
+- A charity user's authenticator re-seals itself under the new secret on its next
+  successful code. A failed code never re-seals. An operator's sign-in does not
+  re-seal, so an operator rotation is finished only by the batch job.
+- `npm --prefix apps/api run jobs:reseal-second-factor-secrets user` (or
+  `operator`) re-seals the rest. One run walks every row in pages of `--batch`.
+  It skips any row that changed meanwhile and reports unopenable rows without
+  stopping: a count, plus the first 100 ids. Repeat until `remaining` is 0,
+  then remove the `*_PREVIOUS` value.
+- The personal server forwards `JWT_SECRET_PREVIOUS` from its env file; leave it
+  empty outside a rotation.
+- Production validation requires a configured previous secret to be at least 32
+  characters and different from both current signing secrets. All four values
+  are redacted from logs.
+
+Rotating `JWT_SECRET` does **not** end browser sessions. It invalidates access
+tokens only. A refresh token is an opaque value checked against its stored hash
+in `AuthSession`, so `/refresh` issues a new access token under the new secret.
+When a rotation follows a suspected exposure, revoke sessions as well. A charity
+administrator can revoke all of one member's sessions from the team page. There
+is no single command yet that revokes every session on the installation. The
+lost-all-factors recovery path and the other public-rule items above remain
+open.
+
 ## Password recovery integrity
 
 Personal two-step sign-in has a last-code recovery path: a browser session

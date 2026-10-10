@@ -39,6 +39,8 @@ x-api-environment: &api-environment
   HOST: 0.0.0.0
   DATABASE_URL: postgresql://${POSTGRES_USER:?Set POSTGRES_USER in .env.personal-server}:${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env.personal-server}@db:5432/${POSTGRES_DB:?Set POSTGRES_DB in .env.personal-server}
   JWT_SECRET: ${JWT_SECRET:?Set JWT_SECRET in .env.personal-server}
+  # Set only while rotating JWT_SECRET, so enrolled authenticators still open.
+  JWT_SECRET_PREVIOUS: ${JWT_SECRET_PREVIOUS:-}
   AUTH_RECOVERY_SECRET: ${AUTH_RECOVERY_SECRET:?Set AUTH_RECOVERY_SECRET in .env.personal-server}
   JWT_EXPIRY: ${JWT_EXPIRY:-15m}
   REFRESH_TOKEN_TTL_DAYS: ${REFRESH_TOKEN_TTL_DAYS:-7}

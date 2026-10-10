@@ -150,6 +150,8 @@ test('routine API startup is provider-free and cannot seed', () => {
   assert.match(api, /environment: \*api-environment/);
   assert.doesNotMatch(api, /migrate:/);
   assert.match(compose, /CHARITYPILOT_DEPLOYMENT_MODE: personal-server/);
+  // Without it, a JWT_SECRET rotation locks every enrolled authenticator out.
+  assert.match(compose, /JWT_SECRET_PREVIOUS: \$\{JWT_SECRET_PREVIOUS:-\}/);
   assert.match(compose, /ENABLE_IN_PROCESS_JOBS: "false"/);
   assert.match(compose, /SELF_REGISTRATION_ENABLED: "false"/);
   assert.match(compose, /TRUSTED_PROXY_ADDRESSES: 172\.30\.250\.10/);

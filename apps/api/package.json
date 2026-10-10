@@ -21,6 +21,7 @@
     "jobs:publish-document-mirrors": "node dist/jobs/publish-document-mirrors.js",
     "jobs:auth-email-delivery": "node dist/jobs/process-auth-email-delivery.js",
     "jobs:rotate-auth-recovery-secret": "node dist/jobs/rotate-auth-recovery-secret.js",
+    "jobs:reseal-second-factor-secrets": "node dist/jobs/reseal-second-factor-secrets.js",
     "jobs:rotate-integration-encryption-key": "node dist/jobs/rotate-integration-encryption-key.js",
     "jobs:revoke-all-sessions": "node dist/jobs/revoke-all-sessions.js",
     "jobs:recover-document-storage-deletion": "node dist/jobs/recover-document-storage-deletion.js",
