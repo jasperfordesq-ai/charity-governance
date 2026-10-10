@@ -5746,6 +5746,9 @@ const PRODUCTION_ENV_GUARD_VARIABLES = new Map([
   ['requireAtlassianOAuthClient', []],
   ['requireAccessTokenExpiry', []],
   ['requireRefreshTokenTtlDays', []],
+  // JWT_SECRET_PREVIOUS / OWNER_JWT_SECRET_PREVIOUS exist only during a
+  // signing-secret rotation; the guard checks them only when set.
+  ['requireSigningSecretRotationValues', []],
   ['validateAuthDeliveryNumericEnv', []],
   // Driven by DOCUMENT_STORAGE_DRIVER, which both workflows leave unset, so the
   // Supabase branch runs and its variables arrive as literals above.
