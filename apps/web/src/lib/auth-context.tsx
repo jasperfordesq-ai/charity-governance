@@ -1,7 +1,7 @@
 'use client';
 
 import { createContext, useContext, useEffect, useState, useCallback, type ReactNode } from 'react';
-import { api, logoutSession } from './api';
+import { api, establishSession, logoutSession } from './api';
 import type { UserResponse } from '@charitypilot/shared';
 
 interface AuthContextType {
@@ -36,13 +36,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const login = async (email: string, password: string, secondFactor?: string) => {
     const offered = secondFactor?.trim();
-    const { data } = await api.post('/auth/login', {
+    const { data } = await establishSession(() => api.post('/auth/login', {
       email, password,
       ...(offered ? /^\d{6}$/.test(offered) ? { code: offered } : { recoveryCode: offered } : {}),
     }, {
       skipAuthRefresh: true,
       skipAuthRedirect: true,
-    });
+    }));
     const loggedInUser = { ...data.user, mfaEnrolmentRequired: data.mfaEnrolmentRequired === true };
     setUser(loggedInUser);
     return loggedInUser;

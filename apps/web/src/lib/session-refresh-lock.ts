@@ -8,6 +8,7 @@ const REFRESH_STAMP_KEY = 'charitypilot:session-refresh-stamp';
 const LOGOUT_FENCE_PREFIX = 'logout:';
 const UNCERTAIN_REFRESH_FENCE_PREFIX = 'refresh-uncertain:';
 const IN_FLIGHT_REFRESH_PREFIX = 'probe:';
+const SAFE_REFRESH_REFUSAL_PREFIX = 'refresh-refused:';
 
 type LockManagerLike = {
   request<T>(name: string, callback: () => Promise<T>): Promise<T>;
@@ -56,10 +57,27 @@ export function markSessionEstablished(
   }
 }
 
+/** Serialize cookie-issuing login and invitation acceptance with logout and
+ * refresh. The successful response, cookie update and stamp belong to one
+ * cross-tab critical section. */
+export async function coordinateSessionEstablishment<T>(
+  establish: () => Promise<T>,
+  locks: LockManagerLike | undefined,
+  storage: StorageLike | undefined,
+  newStamp: () => string = () => crypto.randomUUID(),
+): Promise<T> {
+  const perform = async () => {
+    const result = await establish();
+    markSessionEstablished(storage, newStamp);
+    return result;
+  };
+  return locks ? locks.request(REFRESH_LOCK_NAME, perform) : perform();
+}
+
 /** Keep logout's server revocation and cookie clearance in the same
  * cross-tab critical section as refresh. Persist the fence before the
  * request so another tab cannot retry a spent token if this tab closes
- * while the response is in flight. Reassert it after any outcome.
+ * while the response is in flight.
  * Only a successful new login clears this noncredential fence.
  */
 export async function coordinateSessionLogout(
@@ -78,10 +96,15 @@ export async function coordinateSessionLogout(
     try {
       await logout();
     } finally {
-      try {
-        storage?.setItem(REFRESH_STAMP_KEY, fence);
-      } catch {
-        // A persistently unwritable shared stamp blocks renewal.
+      // Under a Web Lock, no new login can complete before this callback
+      // exits. Retry a transiently failed fence write without overwriting a
+      // newer login on browsers where the lock is unavailable.
+      if (locks) {
+        try {
+          storage?.setItem(REFRESH_STAMP_KEY, fence);
+        } catch {
+          // A persistently unwritable stamp blocks renewal before token use.
+        }
       }
     }
   };
@@ -95,6 +118,7 @@ export async function coordinateSessionRefresh(
   storage: StorageLike | undefined,
   newStamp: () => string = () => crypto.randomUUID(),
   isSessionCurrent?: () => Promise<boolean>,
+  isSafePreRotationRefusal?: (error: unknown) => boolean,
 ): Promise<void> {
   if (!locks || !storage) {
     if (isReauthenticationFence(readStamp(storage))) throw new SessionReauthenticationRequiredError();
@@ -111,7 +135,8 @@ export async function coordinateSessionRefresh(
   await locks.request(REFRESH_LOCK_NAME, async () => {
     const after = readStamp(storage);
     if (isReauthenticationFence(after)) throw new SessionReauthenticationRequiredError();
-    if (before !== after && after !== null) return;
+    if (before !== after && after !== null
+      && !after.startsWith(SAFE_REFRESH_REFUSAL_PREFIX)) return;
     // Another browser request can rotate the shared cookies without updating
     // this tab's stamp. A failed storage write can also leave an old non-null
     // stamp in place. For reactive retries, verify the current cookie under
@@ -131,9 +156,12 @@ export async function coordinateSessionRefresh(
       await refresh();
     } catch (error) {
       // A lost response may mean the server rotated the single-use cookie
-      // while the browser retained its old value. No later tab may retry it.
+      // while the browser retained its old value. A received refusal known to
+      // precede rotation is retryable; every other failure stays fenced.
       try {
-        storage.setItem(REFRESH_STAMP_KEY, `${UNCERTAIN_REFRESH_FENCE_PREFIX}${newStamp()}`);
+        storage.setItem(REFRESH_STAMP_KEY,
+          `${isSafePreRotationRefusal?.(error) === true
+            ? SAFE_REFRESH_REFUSAL_PREFIX : UNCERTAIN_REFRESH_FENCE_PREFIX}${newStamp()}`);
       } catch {
         // The initial write succeeded; a later read/write failure also
         // blocks renewal before the token is presented again.

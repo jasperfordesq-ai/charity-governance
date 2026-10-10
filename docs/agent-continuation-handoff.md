@@ -1,5 +1,17 @@
 # CharityPilot Agent Continuation Handoff
 
+> **10 October session review follow-up, source only:** PR #57 merged as
+> `d5a2e045` and its exact merged-master CI/E2E passed, but it has not been
+> deployed to the private VM. A subsequent review identified two browser
+> renewal edge cases: a received rate-limit refusal was permanently fenced,
+> and an overlapping logout could overwrite a newer login stamp. Commit
+> `33b6b0b9` on `codex/session-renewal-race-20261009` addresses both with
+> focused concurrency and retry regressions; 565 Web tests passed locally.
+> The fix still needs hosted checks, merge, guarded deployment and live
+> postflight. The private VM remains at `96c8b1e8` at this checkpoint.
+> Nikita's access, policy, C1/replay and independent acceptance gates remain
+> open; see the ignored private release and review receipts.
+
 > **9 October 10:49 Dublin Member and recovery-identity check:** Renewed
 > live Member UI again showed only the approved certificate in Vault,
 > redacted risk summaries, aggregate compliance and minimal Board cards.

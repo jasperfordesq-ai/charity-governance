@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { coordinateSessionLogout, coordinateSessionRefresh, markSessionEstablished,
+import { coordinateSessionEstablishment, coordinateSessionLogout, coordinateSessionRefresh,
+  markSessionEstablished,
   SessionReauthenticationRequiredError, SessionRefreshLockUnavailableError } from './session-refresh-lock';
 
 function crossTabFixture() {
@@ -109,6 +110,69 @@ test('ambiguous sign-out failure still fences a queued refresh of a possibly rev
   assert.equal(refreshes, 1);
 });
 
+test('a new login waits for logout and replaces its fence only after cookies are issued', async () => {
+  const { locks, storage } = crossTabFixture();
+  let finishLogout!: () => void;
+  let logoutStarted!: () => void;
+  const logoutGate = new Promise<void>((resolve) => { finishLogout = resolve; });
+  const started = new Promise<void>((resolve) => { logoutStarted = resolve; });
+  const signingOut = coordinateSessionLogout(async () => {
+    logoutStarted();
+    await logoutGate;
+  }, locks, storage, () => 'old-session');
+  await started;
+  let loginRequests = 0;
+  const signingIn = coordinateSessionEstablishment(async () => {
+    loginRequests += 1;
+    return 'new-session';
+  }, locks, storage, () => 'new-session');
+  assert.equal(loginRequests, 0);
+  assert.equal(storage.getItem('charitypilot:session-refresh-stamp'), 'logout:old-session');
+  finishLogout();
+  await signingOut;
+  assert.equal(await signingIn, 'new-session');
+  assert.equal(loginRequests, 1);
+  assert.equal(storage.getItem('charitypilot:session-refresh-stamp'), 'login:new-session');
+});
+
+test('a failed login cannot clear the logout fence', async () => {
+  const { locks, storage } = crossTabFixture();
+  storage.setItem('charitypilot:session-refresh-stamp', 'logout:old-session');
+  await assert.rejects(coordinateSessionEstablishment(async () => {
+    throw new Error('bad credentials');
+  }, locks, storage), /bad credentials/);
+  assert.equal(storage.getItem('charitypilot:session-refresh-stamp'), 'logout:old-session');
+});
+
+test('without Web Locks, an old logout cannot overwrite a newer login stamp', async () => {
+  const { storage } = crossTabFixture();
+  let finishLogout!: () => void;
+  const logoutGate = new Promise<void>((resolve) => { finishLogout = resolve; });
+  const signingOut = coordinateSessionLogout(() => logoutGate, undefined, storage,
+    () => 'old-session');
+  await coordinateSessionEstablishment(async () => 'new-session', undefined, storage,
+    () => 'new-session');
+  finishLogout();
+  await signingOut;
+  assert.equal(storage.getItem('charitypilot:session-refresh-stamp'), 'login:new-session');
+});
+
+test('logout retries a transient fence-write failure before releasing its lock', async () => {
+  const { locks, storage } = crossTabFixture();
+  let writes = 0;
+  const flakyStorage = {
+    getItem: storage.getItem,
+    setItem: (key: string, value: string) => {
+      writes += 1;
+      if (writes === 1) throw new Error('transient storage failure');
+      storage.setItem(key, value);
+    },
+  };
+  await coordinateSessionLogout(async () => undefined, locks, flakyStorage,
+    () => 'revoked');
+  assert.equal(storage.getItem('charitypilot:session-refresh-stamp'), 'logout:revoked');
+});
+
 test('an uncertain refresh response requires a new login before any later renewal', async () => {
   const { locks, storage } = crossTabFixture();
   let calls = 0;
@@ -130,6 +194,41 @@ test('an uncertain refresh response requires a new login before any later renewa
   await coordinateSessionRefresh(refresh, locks, storage, () => 'succeeded');
   assert.equal(calls, 2);
   assert.equal(storage.getItem('charitypilot:session-refresh-stamp'), 'succeeded');
+});
+
+test('a received pre-rotation rate limit can be retried without replaying a spent token', async () => {
+  const { locks, storage } = crossTabFixture();
+  let calls = 0;
+  const refresh = async () => {
+    calls += 1;
+    if (calls === 1) throw { response: { status: 429 } };
+  };
+  const safeRefusal = (error: unknown) =>
+    (error as { response?: { status?: number } })?.response?.status === 429;
+  await assert.rejects(coordinateSessionRefresh(refresh, locks, storage, () => 'limited',
+    undefined, safeRefusal));
+  assert.equal(storage.getItem('charitypilot:session-refresh-stamp'), 'refresh-refused:limited');
+  await coordinateSessionRefresh(refresh, locks, storage, () => 'rotated', undefined, safeRefusal);
+  assert.equal(calls, 2);
+  assert.equal(storage.getItem('charitypilot:session-refresh-stamp'), 'rotated');
+});
+
+test('a tab queued behind a safe refusal still attempts its own renewal', async () => {
+  const { locks, storage } = crossTabFixture();
+  let calls = 0;
+  const refresh = async () => {
+    calls += 1;
+    if (calls === 1) throw { response: { status: 429 } };
+  };
+  const safeRefusal = (error: unknown) =>
+    (error as { response?: { status?: number } })?.response?.status === 429;
+  const results = await Promise.allSettled([
+    coordinateSessionRefresh(refresh, locks, storage, () => 'limited', undefined, safeRefusal),
+    coordinateSessionRefresh(refresh, locks, storage, () => 'rotated', undefined, safeRefusal),
+  ]);
+  assert.deepEqual(results.map((result) => result.status), ['rejected', 'fulfilled']);
+  assert.equal(calls, 2);
+  assert.equal(storage.getItem('charitypilot:session-refresh-stamp'), 'rotated');
 });
 
 test('unavailable shared storage fails closed instead of presenting a possibly spent token', async () => {

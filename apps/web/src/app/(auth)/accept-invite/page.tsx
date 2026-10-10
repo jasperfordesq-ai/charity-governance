@@ -3,7 +3,7 @@
 import { FormEvent, Suspense, useState } from 'react';
 import { Button, Card, CardBody, Input, Link } from '@heroui/react';
 import { useRouter } from 'next/navigation';
-import { api } from '@/lib/api';
+import { api, establishSession } from '@/lib/api';
 import { apiErrorMessage } from '@/lib/errors';
 import { passwordIssue } from '@/lib/form-schemas';
 import { useSensitiveQueryToken } from '@/lib/use-sensitive-query-token';
@@ -48,7 +48,7 @@ function AcceptInviteForm() {
     setIsLoading(true);
 
     try {
-      await api.post('/team/accept-invite', { token, name, password });
+      await establishSession(() => api.post('/team/accept-invite', { token, name, password }));
       // The server has set the session cookies; load the new user into context
       // before navigating, otherwise the dashboard guard bounces us to /login.
       await refreshUser();

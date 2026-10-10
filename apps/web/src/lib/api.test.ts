@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import axios from 'axios';
-import { api, logoutSession } from './api';
+import { api, establishSession, logoutSession, refreshSession } from './api';
 
 // Regression guard for the single-flight token refresh: when several requests
 // 401 at once (e.g. a dashboard firing parallel GETs after the access token
@@ -154,6 +154,33 @@ test('does not refresh or retry when skipAuthRefresh is set', async () => {
   assert.equal(attempts, 1, 'the request is tried once and rejected, not retried');
 });
 
+test('a received refresh 429 remains retryable after the rate limit clears', async () => {
+  let calls = 0;
+  axios.defaults.adapter = async (config) => {
+    assert.ok(config.url?.endsWith('/auth/refresh'));
+    calls += 1;
+    if (calls === 1) {
+      const error = new Error('Too many requests');
+      Object.assign(error, {
+        isAxiosError: true,
+        config,
+        response: { status: 429, data: {}, headers: {}, config },
+      });
+      throw error;
+    }
+    return ok(config) as never;
+  };
+  await withNavigatorLocks(testLocks, async () => {
+    await assert.rejects(refreshSession(),
+      (error: unknown) => (error as { response?: { status?: number } }).response?.status === 429);
+    const storage = (globalThis as unknown as { window: { localStorage: Storage } }).window.localStorage;
+    assert.match(storage.getItem('charitypilot:session-refresh-stamp') ?? '', /^refresh-refused:/);
+    await refreshSession();
+    assert.doesNotMatch(storage.getItem('charitypilot:session-refresh-stamp') ?? '', /^refresh-refused:/);
+  });
+  assert.equal(calls, 2);
+});
+
 test('only successful login or invite acceptance clears an ambiguous sign-out fence', async () => {
   const key = 'charitypilot:session-refresh-stamp';
   const values = new Map([[key, 'logout:possibly-revoked']]);
@@ -165,14 +192,15 @@ test('only successful login or invite acceptance clears an ambiguous sign-out fe
   } };
   try {
     api.defaults.adapter = async (config) => fail401(config);
-    await assert.rejects(api.post('/auth/login', {}, { skipAuthRefresh: true, skipAuthRedirect: true }));
+    await assert.rejects(establishSession(() => api.post('/auth/login', {},
+      { skipAuthRefresh: true, skipAuthRedirect: true })));
     assert.equal(values.get(key), 'logout:possibly-revoked');
 
     api.defaults.adapter = async (config) => ok(config) as never;
-    await api.post('/auth/login', {});
+    await establishSession(() => api.post('/auth/login', {}));
     assert.match(values.get(key) ?? '', /^login:/);
     values.set(key, 'logout:another-attempt');
-    await api.post('/team/accept-invite', {});
+    await establishSession(() => api.post('/team/accept-invite', {}));
     assert.match(values.get(key) ?? '', /^login:/);
   } finally {
     if (previousWindow === undefined) delete globals.window;
