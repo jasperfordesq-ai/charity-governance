@@ -3009,6 +3009,17 @@ enum OperatorSessionAccessLevel {
   ADMIN
 }
 
+/// One row, always present. Session families that started at or before these
+/// times cannot create new sessions (an insert trigger on both session tables
+/// refuses them). Moved forward only, by the installation-wide revocation job.
+/// Read and written in raw SQL: the initial values are -infinity.
+model InstallationSessionCutoff {
+  id                     Int      @id
+  userFamiliesBefore     DateTime
+  operatorFamiliesBefore DateTime
+  updatedAt              DateTime
+}
+
 model PlatformOperatorSession {
   id         String           @id @default(cuid())
   operatorId String

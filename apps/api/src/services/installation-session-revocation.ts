@@ -8,19 +8,27 @@ import { AppError } from '../utils/errors.js';
  * and mints new access tokens under the new secret. When a rotation follows a
  * suspected exposure, every live session has to be revoked as well.
  *
- * `user` revokes every live charity session on the installation and records
- * one ALL_SESSIONS_REVOKED event per affected member in that charity's own
- * security log, so each charity can see what happened to its people. Operator
- * sessions (`operator`) have no charity log; their count is reported only.
+ * A confirmed run first moves the installation session cutoff, so no family
+ * that started before it can create another session (an insert trigger on
+ * both session tables enforces this, including for a refresh already in
+ * flight: moving the cutoff waits for it, and its replacement is then visible
+ * here). It then revokes every live session in the realm.
  *
- * Without `confirm` nothing is written; the counts are what a confirmed run
- * would revoke. Sessions already revoked or expired are left as they are.
+ * `user` records one ALL_SESSIONS_REVOKED event per affected member in that
+ * charity's own security log, so each charity can see what happened to its
+ * people. Operator sessions (`operator`) have no charity log; their count is
+ * reported only. Without `confirm` nothing is written; the counts are what a
+ * confirmed run would revoke. Sessions already revoked or expired are left
+ * as they are.
  */
 export type SessionRevocationRealm = 'user' | 'operator' | 'all';
 
 type Client = Pick<PrismaClient, '$transaction'>;
 
 const ACTOR_LABEL = 'Installation operator';
+// Every write is one bounded statement, so this is generous; it is explicit so
+// a slow database cannot roll the whole run back at Prisma's 5-second default.
+const TRANSACTION_TIMEOUT_MS = 120_000;
 
 function cleanEvidence(value: string, maxLength: number): string {
   return value.replace(/[\u0000-\u001f\u007f]/g, ' ').trim().slice(0, maxLength).trim();
@@ -46,6 +54,19 @@ export async function revokeInstallationSessions(prisma: Client, input: {
   const users = input.realm !== 'operator';
   const operators = input.realm !== 'user';
   return prisma.$transaction(async (tx) => {
+    if (input.confirm) {
+      // Taking this row's lock waits for any session insert in flight.
+      if (users) {
+        await tx.$executeRaw`UPDATE "InstallationSessionCutoff"
+          SET "userFamiliesBefore" = timezone('UTC', clock_timestamp()),
+            "updatedAt" = timezone('UTC', clock_timestamp()) WHERE id = 1`;
+      }
+      if (operators) {
+        await tx.$executeRaw`UPDATE "InstallationSessionCutoff"
+          SET "operatorFamiliesBefore" = timezone('UTC', clock_timestamp()),
+            "updatedAt" = timezone('UTC', clock_timestamp()) WHERE id = 1`;
+      }
+    }
     const live = { revokedAt: null, expiresAt: { gt: now } };
     let userSessions = 0;
     let operatorSessions = 0;
@@ -68,19 +89,18 @@ export async function revokeInstallationSessions(prisma: Client, input: {
         orderBy: { id: 'asc' },
       });
       members = people.length;
-      for (const person of people) {
-        charities.add(person.organisationId);
-        if (!input.confirm) continue;
-        await tx.securityAuditEvent.create({ data: {
+      for (const person of people) charities.add(person.organisationId);
+      if (input.confirm && people.length > 0) {
+        await tx.securityAuditEvent.createMany({ data: people.map((person) => ({
           organisationId: person.organisationId,
-          type: 'ALL_SESSIONS_REVOKED',
-          actorKind: 'SYSTEM',
+          type: 'ALL_SESSIONS_REVOKED' as const,
+          actorKind: 'SYSTEM' as const,
           actorLabel: ACTOR_LABEL,
           subjectUserId: person.id,
           subjectLabel: cleanEvidence(person.name, 160) || cleanEvidence(person.email, 160) || 'Team member',
           reason,
           context: { scope: 'INSTALLATION', revokedSessionCount: perUser.get(person.id) ?? 0 },
-        } });
+        })) });
       }
     }
     if (operators) {
@@ -90,5 +110,5 @@ export async function revokeInstallationSessions(prisma: Client, input: {
     }
     return { confirmed: input.confirm, realm: input.realm, userSessions, members,
       charities: charities.size, operatorSessions, revokedAt: input.confirm ? now.toISOString() : null };
-  });
+  }, { timeout: TRANSACTION_TIMEOUT_MS, maxWait: 10_000 });
 }

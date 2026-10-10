@@ -694,6 +694,7 @@ test("reset inventory covers every Prisma model except reference data and migrat
     "GovernanceStandard",
     "AuthRecoveryControl",
     "AuthRecoveryRetiredSecret",
+    "InstallationSessionCutoff",
     "RiskControlVerificationCounter",
   ];
   const expectedResetTables = prismaModels
@@ -716,6 +717,7 @@ test("reset inventory covers every Prisma model except reference data and migrat
       "GovernanceStandard",
       "AuthRecoveryControl",
       "AuthRecoveryRetiredSecret",
+      "InstallationSessionCutoff",
       "RiskControlVerificationCounter",
       "_prisma_migrations",
     ],

@@ -39,7 +39,15 @@ function store() {
     { id: 'o3', revokedAt: EARLIER, expiresAt: LATER },
   ];
   const audit: Array<Record<string, unknown>> = [];
+  const cutoffMoves: string[] = [];
+  const transactionOptions: unknown[] = [];
   const tx = {
+    $executeRaw: async (strings: TemplateStringsArray) => {
+      const sql = strings.join('');
+      assert.match(sql, /UPDATE "InstallationSessionCutoff"/);
+      cutoffMoves.push(sql.includes('"userFamiliesBefore"') ? 'user' : 'operator');
+      return 1;
+    },
     authSession: {
       findMany: async ({ where }: { where: { expiresAt: { gt: Date } } }) =>
         sessions.filter((s) => live(s, where)).map((s) => ({ userId: s.userId })),
@@ -55,7 +63,10 @@ function store() {
         users.filter((u) => where.id.in.includes(u.id)),
     },
     securityAuditEvent: {
-      create: async ({ data }: { data: Record<string, unknown> }) => { audit.push(data); return data; },
+      createMany: async ({ data }: { data: Array<Record<string, unknown>> }) => {
+        audit.push(...data);
+        return { count: data.length };
+      },
     },
     platformOperatorSession: {
       count: async ({ where }: { where: { expiresAt: { gt: Date } } }) =>
@@ -67,8 +78,11 @@ function store() {
       },
     },
   };
-  const client = { $transaction: async <T>(run: (t: typeof tx) => Promise<T>) => run(tx) };
-  return { client: client as never, sessions, operatorSessions, audit };
+  const client = { $transaction: async <T>(run: (t: typeof tx) => Promise<T>, options?: unknown) => {
+    transactionOptions.push(options);
+    return run(tx);
+  } };
+  return { client: client as never, sessions, operatorSessions, audit, cutoffMoves, transactionOptions };
 }
 
 const code = (expected: string) => (error: unknown) => error instanceof AppError && error.code === expected;
@@ -81,6 +95,16 @@ test('without --confirm nothing is written; the counts are what a confirmed run 
     operatorSessions: 1, revokedAt: null });
   assert.equal(JSON.stringify([s.sessions, s.operatorSessions]), before);
   assert.equal(s.audit.length, 0);
+  assert.deepEqual(s.cutoffMoves, [], 'a dry run does not move the cutoff');
+});
+
+test('a confirmed run moves the cutoff for exactly its realms first, within an explicit time budget', async () => {
+  for (const [realm, moves] of [['user', ['user']], ['operator', ['operator']], ['all', ['user', 'operator']]] as const) {
+    const s = store();
+    await revokeInstallationSessions(s.client, { realm, reason: REASON, confirm: true, now: NOW });
+    assert.deepEqual(s.cutoffMoves, moves, realm);
+    assert.deepEqual(s.transactionOptions, [{ timeout: 120_000, maxWait: 10_000 }], realm);
+  }
 });
 
 test('a confirmed run revokes every live charity session and records one event per member in their charity', async () => {
