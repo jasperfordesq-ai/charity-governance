@@ -144,6 +144,34 @@ test('the operator realm revokes only live operator sessions and writes no chari
   assert.equal(s.audit.length, 0);
 });
 
+test('a run aborted by a deadlock is retried whole, and any other failure is not', async () => {
+  for (const deadlock of [{ code: 'P2034' }, { code: 'P2010', meta: { code: '40P01' } },
+    new Error('ERROR: deadlock detected')]) {
+    const s = store();
+    const client = s.client as unknown as { $transaction: (...args: unknown[]) => Promise<unknown> };
+    const original = client.$transaction;
+    let calls = 0;
+    client.$transaction = async (...args: unknown[]) => {
+      calls += 1;
+      if (calls === 1) throw deadlock;
+      return original(...args);
+    };
+    const result = await revokeInstallationSessions(client as never, { realm: 'user', reason: REASON, confirm: true, now: NOW });
+    assert.deepEqual([calls, result.userSessions], [2, 4], JSON.stringify(deadlock));
+  }
+  const s = store();
+  const client = s.client as unknown as { $transaction: (...args: unknown[]) => Promise<unknown> };
+  let calls = 0;
+  client.$transaction = async () => { calls += 1; throw { code: 'P2034' }; };
+  await assert.rejects(revokeInstallationSessions(client as never, { realm: 'user', reason: REASON, confirm: true, now: NOW }));
+  assert.equal(calls, 5, 'bounded retries');
+  calls = 0;
+  client.$transaction = async () => { calls += 1; throw new Error('connection lost'); };
+  await assert.rejects(revokeInstallationSessions(client as never, { realm: 'user', reason: REASON, confirm: true, now: NOW }),
+    /connection lost/);
+  assert.equal(calls, 1, 'other failures are not retried');
+});
+
 test('a revocation needs a plain, meaningful reason, because every affected charity sees it', async () => {
   for (const reason of ['', 'too short', '   short   ','line one\nline two of the reason',
     'x'.repeat(501)]) {

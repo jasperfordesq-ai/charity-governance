@@ -43,7 +43,34 @@ export function validateRevocationReason(raw: string): string {
   return reason;
 }
 
+/** PostgreSQL aborts one side of a lock cycle. A refresh or a password change
+ * holds its session rows and then needs the cutoff; this job holds the cutoff
+ * and then needs those rows. Whichever side is aborted, the other proceeds, so
+ * the whole run is retried rather than reported as a failure. */
+const DEADLOCK_ATTEMPTS = 5;
+
+export function isDeadlock(error: unknown): boolean {
+  const value = error as { code?: unknown; meta?: { code?: unknown }; message?: unknown } | null;
+  return value?.code === 'P2034' || value?.meta?.code === '40P01'
+    || (typeof value?.message === 'string' && value.message.includes('deadlock detected'));
+}
+
 export async function revokeInstallationSessions(prisma: Client, input: {
+  realm: SessionRevocationRealm;
+  reason: string;
+  confirm: boolean;
+  now?: Date;
+}) {
+  for (let attempt = 1; ; attempt += 1) {
+    try {
+      return await revokeOnce(prisma, input);
+    } catch (error) {
+      if (!isDeadlock(error) || attempt >= DEADLOCK_ATTEMPTS) throw error;
+    }
+  }
+}
+
+async function revokeOnce(prisma: Client, input: {
   realm: SessionRevocationRealm;
   reason: string;
   confirm: boolean;

@@ -48,7 +48,7 @@ test('installation-wide revocation waits for a refresh in flight and ends old fa
         'build API for the real PostgreSQL proof');
       const output = requireSuccess(run(process.execPath, ['scripts/installation-session-revocation-postgres-proof.mjs'],
         { env }), 'session revocation proof');
-      assert.match(output, /installation-session-revocation-race=verified; old-family-insert=refused; new-sign-in=allowed; operator-family=refused; cutoff=forward-only/u);
+      assert.match(output, /installation-session-revocation-race=verified; old-family-insert=refused; new-sign-in=allowed; deadlock=resolved; operator-family=refused; cutoff=forward-only/u);
     } finally {
       assert.equal(requireSuccess(docker(['inspect', '--format', '{{.Id}}', name]), 'identify disposable PostgreSQL'), id);
       requireSuccess(docker(['rm', '--force', '--volumes', name]), 'remove disposable PostgreSQL');

@@ -56,6 +56,34 @@ try {
   /predates an installation-wide revocation/);
   await prisma.authSession.create({ data: { userId: user.id, refreshTokenHash: 'f'.repeat(64), expiresAt } });
 
+  // Deadlock: a refresh locks its row and pauses; the job takes the cutoff and
+  // waits on that row; the refresh then needs the cutoff. PostgreSQL aborts
+  // one side. Either way the job completes and no live session survives.
+  const family2 = randomUUID();
+  const login2 = await prisma.authSession.create({ data: { userId: user.id,
+    refreshTokenHash: '7'.repeat(64), familyId: family2, expiresAt } });
+  let releaseRefresh;
+  const resume = new Promise((resolve) => { releaseRefresh = resolve; });
+  let signalLocked;
+  const locked = new Promise((resolve) => { signalLocked = resolve; });
+  const refresh2 = prisma.$transaction(async (tx) => {
+    await tx.$queryRaw`SELECT id FROM "AuthSession" WHERE id = ${login2.id} FOR UPDATE`;
+    signalLocked();
+    await resume;
+    await tx.authSession.update({ where: { id: login2.id },
+      data: { revokedAt: new Date(), revocationReason: 'ROTATED' } });
+    await tx.authSession.create({ data: { userId: user.id, refreshTokenHash: '8'.repeat(64),
+      familyId: family2, familyCreatedAt: login2.familyCreatedAt, expiresAt } });
+  }, { timeout: 30_000 }).then(() => 'committed', () => 'aborted');
+  await locked;
+  const deadlocked = revokeInstallationSessions(prisma, { realm: 'user', reason, confirm: true });
+  await new Promise((resolve) => setTimeout(resolve, 700));
+  releaseRefresh();
+  const [refreshOutcome, deadlockRun] = await Promise.all([refresh2, deadlocked]);
+  assert.equal(deadlockRun.confirmed, true);
+  assert.equal(await prisma.authSession.count({ where: { familyId: family2, revokedAt: null } }), 0,
+    `no live session after the deadlock (refresh ${refreshOutcome})`);
+
   // Operators: the same for an operator family.
   const operator = await prisma.platformOperator.create({ data: { email: 'operator@example.org',
     name: 'Synthetic Operator', passwordHash: 'x' } });
@@ -76,7 +104,7 @@ try {
     (id,"userFamiliesBefore","operatorFamiliesBefore","updatedAt") VALUES (1,now(),now(),now())`,
   /only moves forward/);
   process.stdout.write('installation-session-revocation-race=verified; old-family-insert=refused; '
-    + 'new-sign-in=allowed; operator-family=refused; cutoff=forward-only\n');
+    + 'new-sign-in=allowed; deadlock=resolved; operator-family=refused; cutoff=forward-only\n');
 } finally {
   await prisma.$disconnect();
 }
