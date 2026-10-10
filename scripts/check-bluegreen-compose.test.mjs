@@ -235,7 +235,8 @@ test('local-storage erasure workers share the API documents volume', () => {
 test('the production scheduler is given what the Confluence worker needs', () => {
   const scheduler = serviceBlock(productionCompose, 'production-scheduler');
 
-  for (const key of ['ATLASSIAN_CLIENT_ID', 'ATLASSIAN_CLIENT_SECRET', 'INTEGRATION_ENCRYPTION_KEY']) {
+  for (const key of ['ATLASSIAN_CLIENT_ID', 'ATLASSIAN_CLIENT_SECRET', 'INTEGRATION_ENCRYPTION_KEY',
+    'INTEGRATION_ENCRYPTION_KEY_PREVIOUS']) {
     assert.ok(
       scheduler.includes(key),
       `production-scheduler cannot publish or erase without ${key}; it uses an environment allowlist, not env_file`,
@@ -246,7 +247,8 @@ test('the production scheduler is given what the Confluence worker needs', () =>
 test('the document storage cleanup job can open a sealed credential', () => {
   const cleanup = serviceBlock(productionCompose, 'document-storage-cleanup');
 
-  for (const key of ['ATLASSIAN_CLIENT_ID', 'ATLASSIAN_CLIENT_SECRET', 'INTEGRATION_ENCRYPTION_KEY']) {
+  for (const key of ['ATLASSIAN_CLIENT_ID', 'ATLASSIAN_CLIENT_SECRET', 'INTEGRATION_ENCRYPTION_KEY',
+    'INTEGRATION_ENCRYPTION_KEY_PREVIOUS']) {
     assert.ok(cleanup.includes(key), `the Confluence eraser needs ${key}`);
   }
 });

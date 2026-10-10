@@ -461,6 +461,21 @@ export function requireIntegrationEncryptionKey(
   } catch {
     issues.push('INTEGRATION_ENCRYPTION_KEY must canonically encode exactly 32 bytes as hex or base64url');
   }
+  // The previous key exists only while a rotation is in progress. When it is
+  // set it must be a real, distinct key: a copy of the active key would make
+  // the rotation meaningless, and a malformed one would only surface later as
+  // an unreadable retired generation.
+  const previous = env.INTEGRATION_ENCRYPTION_KEY_PREVIOUS;
+  if (typeof previous === 'string' && previous.length > 0) {
+    if (previous === configured || INTEGRATION_KEY_PEER_SECRETS.some((name) => env[name] === previous)) {
+      issues.push('INTEGRATION_ENCRYPTION_KEY_PREVIOUS must differ from INTEGRATION_ENCRYPTION_KEY and the other root secrets');
+    }
+    try {
+      decodeIntegrationKey(previous);
+    } catch {
+      issues.push('INTEGRATION_ENCRYPTION_KEY_PREVIOUS must canonically encode exactly 32 bytes as hex or base64url');
+    }
+  }
 }
 
 /**
