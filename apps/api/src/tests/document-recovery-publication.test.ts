@@ -1281,6 +1281,79 @@ test('a completion that is no longer the head is not reported', async () => {
     f.store, f.context, f.keys, f.store), /does not follow the current exact UNKNOWN/);
 });
 
+// A started attempt whose UNKNOWN entry is written but whose head never moved.
+async function interruptedUnknown(body?: (local: string) => string) {
+  const { f, prisma, state } = await decidedBytePermit();
+  await claimVerifiedDocumentByteExecutionLease(prisma, f.journal, f.store, f.context, f.keys, f.store);
+  await startVerifiedDocumentByteProviderAttempt(prisma, f.journal, f.store, f.context, f.keys, f.store, 'lease');
+  const store = f.store as unknown as { compareAndSwapControl: (...args: unknown[]) => Promise<boolean> };
+  const original = store.compareAndSwapControl.bind(store);
+  store.compareAndSwapControl = async () => {
+    store.compareAndSwapControl = original;
+    throw new Error('synthetic crash before the head moved');
+  };
+  const before = await f.store.readControl();
+  if (body) {
+    // A writer holding the keys appends a different UNKNOWN instead.
+    const local = await readCommittedDocumentByteProviderUnknown(prisma, { installationId: f.context.installationId,
+      organisationId: f.context.organisationId, operationId: f.context.operationId, leaseId: 'lease' });
+    const forged = body(local.body);
+    const preserved = await preserveDocumentByteProviderUnknown(forged, f.context, f.keys, f.store);
+    const decision = await readPublishedDocumentByteExecutionDecision(f.journal, f.store, f.context, f.keys, f.store);
+    const facts = JSON.parse(forged);
+    await assert.rejects(f.journal.appendReservedDocumentByteProviderUnknown({
+      operationId: f.context.operationId, writerId: facts.writerId, writerEpoch: facts.writerEpoch,
+      preparationDigest: facts.preparationDigest, decisionGeneration: decision.generation,
+      decisionEntryDigest: decision.entryDigest, decisionEnvelopeDigest: decision.envelopeDigest,
+      unknownEnvelopeDigest: preserved.digest }, f.store));
+  } else {
+    await assert.rejects(publishVerifiedDocumentByteProviderUnknown(prisma, f.journal, f.store,
+      f.context, f.keys, f.store, 'lease'));
+  }
+  assert.equal((await f.store.readControl()).generation, before.generation, 'the head did not move');
+  await assert.rejects(readPublishedDocumentByteProviderUnknown(f.journal, f.store, f.context, f.keys, f.store),
+    /does not match its current head/);
+  const publish = () => publishVerifiedDocumentByteProviderUnknown(prisma, f.journal, f.store,
+    f.context, f.keys, f.store, 'lease');
+  return { f, prisma, state, before, publish };
+}
+
+test('an UNKNOWN interrupted before the head moved is verified against the local marker and resumed', async () => {
+  const { f, prisma, before, publish } = await interruptedUnknown();
+  const resumed = await publish();
+  assert.equal(resumed.replayed, true);
+  assert.equal(resumed.actionAuthorized, false);
+  assert.equal((await f.store.readControl()).generation, before.generation + 1);
+  const local = await readCommittedDocumentByteProviderUnknown(prisma, { installationId: f.context.installationId,
+    organisationId: f.context.organisationId, operationId: f.context.operationId, leaseId: 'lease' });
+  assert.equal(resumed.body, local.body);
+  assert.equal((await publish()).entryDigest, resumed.entryDigest, 'a further retry is a plain replay');
+});
+
+test('a pending UNKNOWN that differs from the local marker is never resumed', async () => {
+  const { f, before, publish } = await interruptedUnknown((body) =>
+    prepareDocumentByteProviderUnknownFacts({ ...JSON.parse(body), startedAt: '2026-10-07T08:03:01.500Z' }).body);
+  await assert.rejects(publish(), /Pending document byte UNKNOWN differs from local marker/);
+  assert.equal((await f.store.readControl()).generation, before.generation, 'the head was not advanced');
+});
+
+test('a pending UNKNOWN is not resumed when the local marker names another decision', async () => {
+  const { f, state, before, publish } = await interruptedUnknown();
+  const lease = state.lease as Record<string, string>;
+  const attempt = state.attempt as Record<string, string>;
+  // The right entry with another envelope or body, then another entry.
+  for (const [field, alsoAttempt] of [['decisionEnvelopeDigest', false], ['decisionBodyDigest', false],
+    ['decisionEntryDigest', true]] as const) {
+    const saved = lease[field]!;
+    lease[field] = '0'.repeat(64);
+    if (alsoAttempt) attempt[field] = '0'.repeat(64);
+    await assert.rejects(publish(), /differs from current independent decision/, field);
+    lease[field] = saved;
+    if (alsoAttempt) attempt[field] = saved;
+  }
+  assert.equal((await f.store.readControl()).generation, before.generation, 'the head was not advanced');
+});
+
 test('committed provider start publishes one encrypted independent UNKNOWN and recovers a lost head acknowledgement', async () => {
   const { f, prisma, state } = await readyBytePermitPublisher();
   const scope = { installationId: f.context.installationId,
