@@ -145,11 +145,23 @@ enrolled authenticator unreadable at once, leaving only recovery codes. Now:
 Rotating `JWT_SECRET` does **not** end browser sessions. It invalidates access
 tokens only. A refresh token is an opaque value checked against its stored hash
 in `AuthSession`, so `/refresh` issues a new access token under the new secret.
-When a rotation follows a suspected exposure, revoke sessions as well. A charity
-administrator can revoke all of one member's sessions from the team page. There
-is no single command yet that revokes every session on the installation. The
-lost-all-factors recovery path and the other public-rule items above remain
-open.
+When a rotation follows a suspected exposure, revoke sessions as well, after
+the new secret is live:
+
+```bash
+npm --prefix apps/api run jobs:revoke-all-sessions -- all --reason "<why>"
+```
+
+Without `--confirm` it only counts. With `--confirm` it does three things:
+
+- revokes every live charity session as `INSTALLATION_SESSIONS_REVOKED`;
+- records one `ALL_SESSIONS_REVOKED` event, with the reason, per affected
+  member in that charity's own security log;
+- revokes live operator sessions, reporting counts only.
+
+A charity administrator can still revoke one member's sessions from the team
+page. The lost-all-factors recovery path and the other public-rule items above
+remain open.
 
 ## Password recovery integrity
 
