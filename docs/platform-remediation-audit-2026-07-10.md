@@ -1,5 +1,14 @@
 # CharityPilot Full-Platform Remediation Audit
 
+> **10 October DPO-02/session release gate, OPEN:** Exact merge `d5a2e045`
+> passed CI/E2E but is not on the private VM. Two post-merge browser-session
+> review findings prompted local fix `33b6b0b9`: known pre-rotation HTTP
+> 429 refusals remain retryable, and session creation shares the logout/
+> refresh lock. Local Web tests passed 565/565. Hosted fix checks, guarded
+> cutover, live role/member checks and historical replay disposition are still
+> required. This source fix does not establish root cause for the nine
+> historical replay events or close the wider DPO review.
+
 > **9 October DPO-01 and DPO-05 scoped recheck, OPEN:** A renewed live
 > Member UI showed one approved certificate, redacted risk summaries and
 > minimal trustee cards. A local disposable PostgreSQL regression proved
