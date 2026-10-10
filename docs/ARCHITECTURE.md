@@ -339,8 +339,41 @@ on the second:
   with no window at all, instead of a flag-flip that breaks every un-re-sealed
   row until a background job catches up.
 
-**Documented, not implemented.** There is nothing to rotate yet and the rotation
-job is a later phase. Build one of these *before* that job runs, not after.
+**Implemented (October 2026), the second defence.** `loadIntegrationCredential` resolves the key
+by the envelope's own generation. A configured `INTEGRATION_ENCRYPTION_KEY_PREVIOUS` opens the
+retired generation only when its fingerprint matches the recorded `retiredKeyFingerprint`. An
+envelope this deployment cannot open is named, never misreported as corruption:
+`INTEGRATION_SECRET_GENERATION_STALE` for an older generation, and
+`INTEGRATION_SECRET_GENERATION_AHEAD` when the control record is older than the credentials (for
+example after a partial restore).
+
+The operator command is `npm --prefix apps/api run jobs:rotate-integration-encryption-key`:
+
+1. Set the new key as `INTEGRATION_ENCRYPTION_KEY` and the current key as
+   `INTEGRATION_ENCRYPTION_KEY_PREVIOUS`, then restart. Until step 2 runs, the app keeps sealing and
+   opening under the previous key, so the change opens no window.
+2. `begin --expected-generation <n>`. This proves the previous key matches the recorded fingerprint,
+   then advances the generation and records both fingerprints in one conditional update. It refuses:
+   - a wrong or duplicate key;
+   - a stale expected generation;
+   - an unfinished earlier rotation.
+3. `reseal [--batch <n>] [--after <id>]`, repeated until `remaining` is 0. Each row is opened
+   with its own generation's key, re-sealed under the new one, and written back only if it is
+   unchanged. A row that cannot be opened is reported by code and left untouched. A full batch
+   reports `next`; pass it as `--after` so rows that keep failing do not fill every batch. A flag
+   of another mode, or a repeated flag, refuses before anything runs.
+
+A credential stored while the rotation begins cannot be left behind on the retired key. The
+store re-checks the generation under the control row's lock in its own transaction. If the
+generation has moved, the store seals again under the new key.
+4. `status` reports `STEADY`; then remove `INTEGRATION_ENCRYPTION_KEY_PREVIOUS`. **Keep the retired
+   key wherever backups that predate the rotation are kept.** A restore of such a backup needs it as
+   the previous key.
+
+Recovery: the active and retired keys live outside the database and source. Only their
+fingerprints are stored, so `status` lets an operator confirm an escrowed key matches the
+installation without decrypting anything. Who holds the escrow copy is a custody decision
+(decision-sheet C02/P05), not something the application decides.
 
 #### `INTEGRATION_ENCRYPTION_KEY` is required on the standard production path only — deliberately
 

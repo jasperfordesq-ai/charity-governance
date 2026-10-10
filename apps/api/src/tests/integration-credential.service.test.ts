@@ -75,6 +75,8 @@ function fakePrisma(options: FakeOptions = {}) {
     integrationSecretControl: {
       findUnique: async () =>
         generation === null ? null : { id: 1, generation, activeKeyFingerprint },
+      // The generation fence a store takes when a fingerprint is recorded.
+      updateMany: async () => ({ count: 1 }),
       upsert: async (args: unknown) => {
         if (controlWriteFails) throw new Error('rotation-control write failed');
         controlSink.push(args);
