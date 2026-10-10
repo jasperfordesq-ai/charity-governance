@@ -1,5 +1,39 @@
 # CharityPilot Agent Continuation Handoff
 
+> **10 October late checkpoint (private VM releases and open work):**
+>
+> Releases. Each followed the same sequence: exact merged-master CI/E2E, a guarded blue-green cutover, a read-only postflight, the restricted-role check, an isolated restore drill, and a hash-matched backup copy off the VM.
+>
+> | Release | Contents | Migrations | Protected tables |
+> |---|---|---|---|
+> | `bab0fce0` | PR #59, inert provider primary-absence observation | 176 | 13 |
+> | `11b822d8` | PR #60, inert protected primary-deletion executor | 176 | 13 |
+> | `88eb1d86` | PR #61, `INTEGRATION_ENCRYPTION_KEY` rotation; PR #62, authenticator survival across `JWT_SECRET` / `OWNER_JWT_SECRET` rotation | 176 | 13 |
+> | `8744fcd4` | PR #63, inert reconciled primary-object completion | 177 | 14 |
+>
+> The `8744fcd4` release brought migration `20261011000000`, which moved restore snapshots to format 8. Its restore drill therefore needed a fresh post-migration backup.
+>
+> Rotation drills on disposable PostgreSQL passed for E3 and E4: a full rotation through the job CLIs, plus a restore rehearsal of a pre-rotation backup. No live key was rotated.
+>
+> Merged but not yet deployed:
+> - PR #65 (E9): a minimal session security trace. It is off until `SESSION_SECURITY_TRACE_RETENTION_DAYS` is set, and the period is a data-protection decision (P08/C05).
+>
+> In review:
+> - PR #64 (E14): installation-wide session revocation, with a forward-only session-family cutoff enforced by insert triggers and a deadlock retry.
+> - PR #66 (E15, first stage): resuming an UNKNOWN entry that was written before its head moved.
+>
+> Still open:
+> - all-copy coverage (E6);
+> - the remaining recovery writers (E7);
+> - journal rollover (E8);
+> - the C01 sandbox lifecycle (E10);
+> - the provider permission proof (E13);
+> - E15 for the earlier stages;
+> - Nikita's acceptance;
+> - Board decisions P01–P09 and C01–C05.
+>
+> Exact receipts are in `.charitypilot-private/release-<sha>-deployed-2026-10-10.md`.
+
 > **10 October session review follow-up, source only:** PR #57 merged as
 > `d5a2e045` and its exact merged-master CI/E2E passed, but it has not been
 > deployed to the private VM. A subsequent review identified two browser
