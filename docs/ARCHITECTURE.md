@@ -357,9 +357,15 @@ The operator command is `npm --prefix apps/api run jobs:rotate-integration-encry
    - a wrong or duplicate key;
    - a stale expected generation;
    - an unfinished earlier rotation.
-3. `reseal [--batch <n>]`, repeated until `remaining` is 0. Each row is opened with its own
-   generation's key, re-sealed under the new one, and written back only if it is unchanged. A row
-   that cannot be opened is reported by code and left untouched.
+3. `reseal [--batch <n>] [--after <id>]`, repeated until `remaining` is 0. Each row is opened
+   with its own generation's key, re-sealed under the new one, and written back only if it is
+   unchanged. A row that cannot be opened is reported by code and left untouched. A full batch
+   reports `next`; pass it as `--after` so rows that keep failing do not fill every batch. A flag
+   of another mode, or a repeated flag, refuses before anything runs.
+
+A credential stored while the rotation begins cannot be left behind on the retired key. The
+store re-checks the generation under the control row's lock in its own transaction. If the
+generation has moved, the store seals again under the new key.
 4. `status` reports `STEADY`; then remove `INTEGRATION_ENCRYPTION_KEY_PREVIOUS`. **Keep the retired
    key wherever backups that predate the rotation are kept.** A restore of such a backup needs it as
    the previous key.

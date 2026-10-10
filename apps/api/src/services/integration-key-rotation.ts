@@ -61,34 +61,48 @@ function configuredActiveFingerprint(): string | null {
   return integrationKeyFingerprint(decodeIntegrationKey(configured));
 }
 
-/** Describe where a rotation stands. Decrypts nothing. */
-export async function integrationKeyRotationStatus(
-  prisma: IntegrationKeyRotationClient,
-): Promise<IntegrationKeyRotationStatus> {
+type RotationControlView = Omit<IntegrationKeyRotationStatus, 'credentialsByGeneration' | 'awaitingReseal'>;
+
+/** The control row and configured keys only; no credential is read. */
+async function rotationControlView(prisma: IntegrationKeyRotationClient): Promise<RotationControlView & {
+  stateFor(awaiting: number): IntegrationKeyRotationState;
+}> {
   const control = await prisma.integrationSecretControl.findUnique({
     where: { id: 1 },
     select: { generation: true, activeKeyFingerprint: true, retiredKeyFingerprint: true },
   });
   const generation = control?.generation ?? 1;
   const recordedActive = control?.activeKeyFingerprint ?? null;
-  const recordedRetired = control?.retiredKeyFingerprint ?? null;
   const configuredActive = configuredActiveFingerprint();
   const configuredPrevious = configuredPreviousIntegrationKey()?.fingerprint ?? null;
-  const rows = await prisma.integrationCredential.findMany({ select: { generation: true } });
+  const stateFor = (awaiting: number): IntegrationKeyRotationState => {
+    if (recordedActive === null) return 'NO_KEY_RECORDED';
+    if (configuredActive === recordedActive) return awaiting > 0 ? 'RESEALING' : 'STEADY';
+    if (configuredPrevious === recordedActive) return 'ROTATION_PENDING';
+    return 'KEY_MISMATCH';
+  };
+  return { state: stateFor(0), generation, recordedActiveFingerprint: recordedActive,
+    recordedRetiredFingerprint: control?.retiredKeyFingerprint ?? null,
+    configuredActiveFingerprint: configuredActive, configuredPreviousFingerprint: configuredPrevious, stateFor };
+}
+
+/** Describe where a rotation stands. Decrypts nothing; counts are grouped in the database. */
+export async function integrationKeyRotationStatus(
+  prisma: IntegrationKeyRotationClient,
+): Promise<IntegrationKeyRotationStatus> {
+  const { stateFor, ...view } = await rotationControlView(prisma);
+  const groups = await prisma.integrationCredential.groupBy({
+    by: ['generation'],
+    _count: { _all: true },
+    orderBy: { generation: 'asc' },
+  });
   const byGeneration: Record<string, number> = {};
-  for (const row of rows) byGeneration[String(row.generation)] = (byGeneration[String(row.generation)] ?? 0) + 1;
-  const awaiting = rows.filter(row => row.generation < generation).length;
-
-  let state: IntegrationKeyRotationState;
-  if (recordedActive === null) state = 'NO_KEY_RECORDED';
-  else if (configuredActive === recordedActive) state = awaiting > 0 ? 'RESEALING' : 'STEADY';
-  else if (configuredPrevious === recordedActive) state = 'ROTATION_PENDING';
-  else state = 'KEY_MISMATCH';
-
-  return { state, generation, recordedActiveFingerprint: recordedActive,
-    recordedRetiredFingerprint: recordedRetired, configuredActiveFingerprint: configuredActive,
-    configuredPreviousFingerprint: configuredPrevious, credentialsByGeneration: byGeneration,
-    awaitingReseal: awaiting };
+  let awaiting = 0;
+  for (const group of groups) {
+    byGeneration[String(group.generation)] = group._count._all;
+    if (group.generation < view.generation) awaiting += group._count._all;
+  }
+  return { ...view, state: stateFor(awaiting), credentialsByGeneration: byGeneration, awaitingReseal: awaiting };
 }
 
 /**
@@ -161,23 +175,29 @@ export async function beginIntegrationKeyRotation(
  * key. Each row is opened with its own generation's key and written back only
  * if it is unchanged since it was read; a row that changed is skipped for the
  * next run. A row this deployment cannot open is reported by code, never
- * overwritten.
+ * overwritten. Rows are taken in id order after `after`, and `next` names the
+ * last row read, so a run can move past rows that keep failing instead of
+ * retrying the same batch forever.
  */
 export async function resealIntegrationCredentials(
   prisma: IntegrationKeyRotationClient,
   batchSize = 50,
-): Promise<{ resealed: number; skippedChanged: number; failed: Array<{ id: string; code: string }>; remaining: number }> {
+  after?: string,
+): Promise<{ resealed: number; skippedChanged: number; failed: Array<{ id: string; code: string }>;
+  remaining: number; next: string | null }> {
   if (!Number.isInteger(batchSize) || batchSize < 1 || batchSize > 500) {
     throw new AppError(400, 'INTEGRATION_ROTATION_BATCH_INVALID', 'Batch size must be between 1 and 500');
   }
   const active = await resolveIntegrationKeys(prisma);
-  const status = await integrationKeyRotationStatus(prisma);
-  if (status.state !== 'RESEALING' && status.state !== 'STEADY') {
+  // Only the control row decides whether re-sealing may start; the counts in
+  // the full status are not needed for that.
+  const view = await rotationControlView(prisma);
+  if (view.state !== 'STEADY') {
     throw new AppError(409, 'INTEGRATION_ROTATION_NOT_BEGUN',
-      `Re-sealing needs a begun rotation with the new key active; the state is ${status.state}`);
+      `Re-sealing needs a begun rotation with the new key active; the state is ${view.state}`);
   }
   const rows = await prisma.integrationCredential.findMany({
-    where: { generation: { lt: active.generation } },
+    where: { generation: { lt: active.generation }, ...(after === undefined ? {} : { id: { gt: after } }) },
     select: { id: true, integrationId: true, kind: true, sealed: true, generation: true, updatedAt: true },
     orderBy: { id: 'asc' },
     take: batchSize,
@@ -210,5 +230,7 @@ export async function resealIntegrationCredentials(
   const remaining = await prisma.integrationCredential.count({
     where: { generation: { lt: active.generation } },
   });
-  return { resealed, skippedChanged, failed, remaining };
+  // A full batch may have more rows after it; a short one reached the end.
+  const next = rows.length === batchSize ? rows[rows.length - 1]!.id : null;
+  return { resealed, skippedChanged, failed, remaining, next };
 }

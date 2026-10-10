@@ -1521,6 +1521,9 @@ test('a rotation previous key must be well formed and distinct from the active k
   const base = { INTEGRATION_ENCRYPTION_KEY: 'ab'.repeat(32), JWT_SECRET: 'cd'.repeat(32) };
   for (const [previous, expected] of [
     ['ab'.repeat(32), 'must differ'],
+    // The same key spelled differently is still the same key.
+    ['AB'.repeat(32), 'must differ'],
+    [Buffer.alloc(32, 0xab).toString('base64url'), 'must differ'],
     ['cd'.repeat(32), 'must differ'],
     ['00'.repeat(16), 'INTEGRATION_ENCRYPTION_KEY_PREVIOUS must canonically encode'],
   ] as const) {

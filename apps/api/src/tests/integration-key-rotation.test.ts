@@ -29,6 +29,7 @@ function matches(row: Record<string, unknown>, where: Record<string, unknown> = 
     const value = row[field];
     if (condition && typeof condition === 'object' && !(condition instanceof Date)) {
       if ('lt' in (condition as object) && !((value as number) < (condition as { lt: number }).lt)) return false;
+      if ('gt' in (condition as object) && !(String(value) > (condition as { gt: string }).gt)) return false;
     } else if (condition instanceof Date) {
       if (!(value instanceof Date) || value.getTime() !== condition.getTime()) return false;
     } else if (value !== condition) return false;
@@ -46,6 +47,9 @@ function store() {
   let control: Control | null = null;
   let tick = 0;
   const now = () => new Date(Date.UTC(2026, 9, 10, 12, 0, tick++));
+  // Runs once at the start of the next transaction, to interleave a rotation
+  // between a store choosing its key and committing.
+  const hooks: { beforeTransaction?: () => Promise<void> } = {};
   const client = {
     organisationIntegration: {
       findUnique: async ({ where }: { where: { id: string } }) => integrations.get(where.id) ?? null,
@@ -82,15 +86,26 @@ function store() {
           .sort((a, b) => a.id.localeCompare(b.id)).slice(0, take ?? rows.length).map(r => ({ ...r })),
       count: async ({ where }: { where?: Record<string, unknown> } = {}) =>
         rows.filter(r => matches(r as unknown as Record<string, unknown>, where)).length,
+      groupBy: async () => {
+        const counts = new Map<number, number>();
+        for (const row of rows) counts.set(row.generation, (counts.get(row.generation) ?? 0) + 1);
+        return [...counts].sort((a, b) => a[0] - b[0])
+          .map(([generation, all]) => ({ generation, _count: { _all: all } }));
+      },
       updateMany: async ({ where, data }: { where: Record<string, unknown>; data: Partial<Row> }) => {
         const hits = rows.filter(r => matches(r as unknown as Record<string, unknown>, where));
         for (const row of hits) Object.assign(row, data, { updatedAt: now() });
         return { count: hits.length };
       },
     },
-    $transaction: async <T>(run: (tx: unknown) => Promise<T>) => run(client),
+    $transaction: async <T>(run: (tx: unknown) => Promise<T>) => {
+      const before = hooks.beforeTransaction;
+      hooks.beforeTransaction = undefined;
+      if (before) await before();
+      return run(client);
+    },
   };
-  return { client: client as unknown as IntegrationCredentialWriteClient, rows, control: () => control };
+  return { client: client as unknown as IntegrationCredentialWriteClient, rows, control: () => control, hooks };
 }
 
 async function withKeys<T>(active: Buffer | null, previous: Buffer | null, run: () => Promise<T>): Promise<T> {
@@ -265,9 +280,15 @@ test('the rotation command parses only its three modes and requires an explicit 
     { mode: 'begin', expectedGeneration: 3 });
   assert.deepEqual(parseIntegrationKeyRotationArgs(['reseal']), { mode: 'reseal', batch: 50 });
   assert.deepEqual(parseIntegrationKeyRotationArgs(['reseal', '--batch', '10']), { mode: 'reseal', batch: 10 });
+  assert.deepEqual(parseIntegrationKeyRotationArgs(['reseal', '--after', 'cred-9', '--batch', '5']),
+    { mode: 'reseal', batch: 5, after: 'cred-9' });
   for (const argv of [[], ['begin'], ['begin', '--expected-generation'], ['begin', '--expected-generation', '0'],
     ['begin', '--expected-generation', 'x'], ['reseal', '--batch', '-1'], ['status', '--batch', '2'],
-    ['rotate'], ['begin', '--expected-generation', '2', '--force', '1']]) {
+    ['rotate'], ['begin', '--expected-generation', '2', '--force', '1'],
+    // A flag of another mode, a repeated flag and a stray word all refuse.
+    ['reseal', '--expected-generation', '3'], ['begin', '--batch', '2', '--expected-generation', '2'],
+    ['reseal', '--batch', '10', '--batch', '1'], ['reseal', '--after', 'a b'], ['reseal', '--after'],
+    ['status', 'now'], ['begin', '--expected-generation', '2', 'extra']]) {
     assert.throws(() => parseIntegrationKeyRotationArgs(argv), Error, argv.join(' '));
   }
 });
@@ -289,5 +310,79 @@ test('begin refuses a control record that names no key, even when the row exists
     create: { id: 1, generation: 1, activeKeyFingerprint: null }, update: {} });
   await withKeys(keyB, keyA, async () => {
     await assert.rejects(beginIntegrationKeyRotation(client, 1), code('INTEGRATION_ROTATION_NOTHING_RECORDED'));
+  });
+});
+
+test('a store racing a rotation never commits a credential under the retired key', async () => {
+  const { client, rows, hooks } = store();
+  await withKeys(keyA, null, () => storeIntegrationCredential(client,
+    { integrationId: 'int-1', kind: 'refresh_token', plaintext: 'token-one' }));
+  await withKeys(keyB, keyA, async () => {
+    // The store chooses the old key (rotation pending), then begin and a full
+    // re-seal both finish before its transaction runs.
+    hooks.beforeTransaction = async () => {
+      await beginIntegrationKeyRotation(client, 1);
+      assert.equal((await resealIntegrationCredentials(client)).remaining, 0);
+    };
+    await storeIntegrationCredential(client, { integrationId: 'int-2', kind: 'refresh_token', plaintext: 'token-two' });
+    assert.deepEqual(rows.map(r => r.generation), [2, 2], 'the racing write was redone under the new generation');
+    assert.equal((await integrationKeyRotationStatus(client)).awaitingReseal, 0);
+  });
+  // The retired key can now be removed without losing the racing credential.
+  await withKeys(keyB, null, async () => {
+    assert.equal(await loadIntegrationCredential(client, { integrationId: 'int-2', kind: 'refresh_token' }), 'token-two');
+  });
+});
+
+test('a store whose generation keeps changing gives up without writing', async () => {
+  const { client, rows } = store();
+  await withKeys(keyA, null, () => storeIntegrationCredential(client,
+    { integrationId: 'int-1', kind: 'refresh_token', plaintext: 'token-one' }));
+  const snapshot = JSON.stringify(rows);
+  const control = client.integrationSecretControl as unknown as { updateMany: unknown };
+  const original = control.updateMany;
+  let calls = 0;
+  // Every fence finds the generation moved on.
+  control.updateMany = async () => {
+    calls += 1;
+    return { count: 0 };
+  };
+  try {
+    await withKeys(keyA, null, async () => {
+      await assert.rejects(storeIntegrationCredential(client,
+        { integrationId: 'int-1', kind: 'refresh_token', plaintext: 'token-new' }),
+      code('INTEGRATION_SECRET_GENERATION_CHANGED'));
+    });
+  } finally {
+    control.updateMany = original;
+  }
+  assert.equal(calls, 3, 'three attempts, then a refusal');
+  assert.equal(JSON.stringify(rows), snapshot);
+});
+
+test('reseal moves past rows that keep failing, and status counts by generation', async () => {
+  const { client, rows } = store();
+  await withKeys(keyA, null, async () => {
+    for (const id of ['int-1', 'int-2']) {
+      await storeIntegrationCredential(client, { integrationId: id, kind: 'refresh_token', plaintext: `token-${id}` });
+    }
+    await storeIntegrationCredential(client, { integrationId: 'int-1', kind: 'access_token', plaintext: 'access-one' });
+  });
+  // The first row in id order will never open.
+  (rows[0]!.sealed as { ciphertext: string }).ciphertext = Buffer.from('broken').toString('base64');
+  await withKeys(keyB, keyA, async () => {
+    await beginIntegrationKeyRotation(client, 1);
+    const status = await integrationKeyRotationStatus(client);
+    assert.deepEqual([status.credentialsByGeneration, status.awaitingReseal], [{ 1: 3 }, 3]);
+    const first = await resealIntegrationCredentials(client, 1);
+    assert.deepEqual([first.resealed, first.failed.map(f => f.id), first.next], [0, [rows[0]!.id], rows[0]!.id]);
+    const again = await resealIntegrationCredentials(client, 1);
+    assert.deepEqual(again.failed.map(f => f.id), [rows[0]!.id], 'without a cursor the same row fills the batch');
+    const moved = await resealIntegrationCredentials(client, 1, first.next!);
+    assert.deepEqual([moved.resealed, moved.failed.length, moved.next], [1, 0, rows[1]!.id]);
+    const last = await resealIntegrationCredentials(client, 5, moved.next!);
+    assert.deepEqual([last.resealed, last.remaining, last.next], [1, 1, null]);
+    const after = await integrationKeyRotationStatus(client);
+    assert.deepEqual([after.credentialsByGeneration, after.awaitingReseal, after.state], [{ 1: 1, 2: 2 }, 1, 'RESEALING']);
   });
 });

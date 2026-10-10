@@ -397,38 +397,59 @@ export async function storeIntegrationCredential(
   { integrationId, kind, plaintext, expiresAt }: StoreIntegrationCredentialInput,
 ): Promise<void> {
   const context = await secretContextForIntegration(prisma, integrationId, kind);
-  const { key, fingerprint, generation, fingerprintUnrecorded } = await activeIntegrationKey(prisma);
+  // A key rotation can begin between choosing the key and committing. The
+  // transaction re-checks the generation under a row lock, and a stale seal
+  // is redone under the new key rather than committed under the retired one.
+  for (let attempt = 1; ; attempt += 1) {
+    const { key, fingerprint, generation, fingerprintUnrecorded } = await activeIntegrationKey(prisma);
+    const sealed = sealIntegrationSecret(plaintext, key, generation, context);
+    const sealedJson = sealed as unknown as Prisma.InputJsonObject;
 
-  const sealed = sealIntegrationSecret(plaintext, key, generation, context);
-  const sealedJson = sealed as unknown as Prisma.InputJsonObject;
+    const committed = await prisma.$transaction(async (tx) => {
+      if (!fingerprintUnrecorded) {
+        // A no-op conditional update: it takes the control row's lock, so a
+        // rotation's begin waits for this write (and its re-seal will see the
+        // row) or has already committed (and this matches nothing).
+        const fence = await tx.integrationSecretControl.updateMany({
+          where: { id: 1, generation },
+          data: { generation },
+        });
+        if (fence.count !== 1) return false;
+      }
 
-  await prisma.$transaction(async (tx) => {
-    await tx.integrationCredential.upsert({
-      where: { integrationId_kind: { integrationId, kind } },
-      create: {
-        integrationId,
-        kind,
-        sealed: sealedJson,
-        // Read back off the envelope rather than from the local `generation`, so
-        // the column is definitionally a mirror of what was sealed and not a
-        // second derivation that could drift from it. Rotation scans the column
-        // to find stale rows without opening a single one.
-        generation: sealed.generation,
-        expiresAt: expiresAt ?? null,
-      },
-      update: {
-        sealed: sealedJson,
-        generation: sealed.generation,
-        // Clears a previously stored expiry when the caller supplies none; see
-        // StoreIntegrationCredentialInput.
-        expiresAt: expiresAt ?? null,
-      },
+      await tx.integrationCredential.upsert({
+        where: { integrationId_kind: { integrationId, kind } },
+        create: {
+          integrationId,
+          kind,
+          sealed: sealedJson,
+          // Read back off the envelope rather than from the local `generation`, so
+          // the column is definitionally a mirror of what was sealed and not a
+          // second derivation that could drift from it. Rotation scans the column
+          // to find stale rows without opening a single one.
+          generation: sealed.generation,
+          expiresAt: expiresAt ?? null,
+        },
+        update: {
+          sealed: sealedJson,
+          generation: sealed.generation,
+          // Clears a previously stored expiry when the caller supplies none; see
+          // StoreIntegrationCredentialInput.
+          expiresAt: expiresAt ?? null,
+        },
+      });
+
+      if (fingerprintUnrecorded) {
+        await recordActiveKeyFingerprint(tx, fingerprint, sealed.generation);
+      }
+      return true;
     });
-
-    if (fingerprintUnrecorded) {
-      await recordActiveKeyFingerprint(tx, fingerprint, sealed.generation);
+    if (committed) return;
+    if (attempt >= 3) {
+      throw new AppError(409, 'INTEGRATION_SECRET_GENERATION_CHANGED',
+        'The integration key generation changed while storing a credential. Nothing was stored; try again.');
     }
-  });
+  }
 }
 
 /**
