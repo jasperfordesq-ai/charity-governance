@@ -1242,6 +1242,23 @@ test('the completion publisher refuses a published UNKNOWN that differs from the
   assert.equal((await f.store.readControl()).generation, before.generation);
 });
 
+test('a pending completion of an UNKNOWN that differs from the local marker is never resumed', async () => {
+  // A keys holder publishes an UNKNOWN with a different start time, then a
+  // completion consistent with it, and the head never moves past it.
+  const { f, prisma, complete } = await forgedChain({ startedAt: '2026-10-07T08:03:01.500Z' });
+  const store = f.store as unknown as { compareAndSwapControl: (...args: unknown[]) => Promise<boolean> };
+  const original = store.compareAndSwapControl.bind(store);
+  store.compareAndSwapControl = async () => {
+    store.compareAndSwapControl = original;
+    throw new Error('synthetic crash before the head moved');
+  };
+  await assert.rejects(complete({}));
+  const before = await f.store.readControl();
+  await assert.rejects(publishVerifiedDocumentBytePrimaryCompletion(prisma,
+    f.journal, f.store, f.context, f.keys, f.store, 'lease'), /differs from local marker/);
+  assert.equal((await f.store.readControl()).generation, before.generation, 'the head was not advanced');
+});
+
 test('a completion that is no longer the head is not reported', async () => {
   const { f, complete } = await forgedChain({});
   const published = await complete({});

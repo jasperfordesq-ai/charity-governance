@@ -174,10 +174,10 @@ export async function publishVerifiedDocumentBytePrimaryCompletion(prisma: Prism
 }
 
 /** The completion entry was written but the head never advanced. The
- * verified history already places it directly after this operation's UNKNOWN,
- * which was published only after matching the same immutable local marker.
- * Resume only if the pending envelope is exactly the completion the local
- * observation produces; the journal then republishes that same entry. */
+ * verified history already places it directly after this operation's UNKNOWN.
+ * Resume only if that UNKNOWN equals the local marker and the pending envelope
+ * is exactly the completion the local observation produces; the journal then
+ * republishes that same entry. */
 async function resumePendingCompletion(journal: RecoveryAuthorityJournal,
   control: RecoveryControlStore, context: RecoveryEnvelopeContext, keys: RecoveryDataKeys,
   objects: Objects, local: RecordedObservation) {
@@ -185,6 +185,11 @@ async function resumePendingCompletion(journal: RecoveryAuthorityJournal,
     'DOCUMENT_BYTE_PRIMARY_COMPLETION_V1', sourceFor(control));
   if (!head) throw new Error('Pending document byte completion has no UNKNOWN before it');
   const openedUnknown = await readVerifiedDocumentByteProviderUnknown(head.factsDigest, context, keys, objects);
+  // The local marker is immutable, but a writer holding the keys could have
+  // published a different UNKNOWN; a completion of that is never resumed.
+  if (openedUnknown.body !== local.unknownBody) {
+    throw new Error('Published document byte UNKNOWN differs from local marker');
+  }
   const expected = completionFor(context, local, { body: openedUnknown.body,
     entryDigest: head.digest, envelopeDigest: head.factsDigest });
   const opened = await readVerifiedDocumentBytePrimaryCompletion(pending.factsDigest, context, keys, objects);
