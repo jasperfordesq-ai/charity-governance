@@ -310,6 +310,7 @@ enum AuthSessionRevocationReason {
   OWNERSHIP_CHANGED
   ORGANISATION_INACTIVE
   LEGACY_UNSPECIFIED
+  INSTALLATION_SESSIONS_REVOKED
 }
 
 /// What kind of client a session belongs to. Derived from the route that
@@ -3037,6 +3038,17 @@ enum OperatorSessionAccessLevel {
   READ
   WRITE
   ADMIN
+}
+
+/// One row, always present. Session families that started at or before these
+/// times cannot create new sessions (an insert trigger on both session tables
+/// refuses them). Moved forward only, by the installation-wide revocation job.
+/// Read and written in raw SQL: the initial values are -infinity.
+model InstallationSessionCutoff {
+  id                     Int      @id
+  userFamiliesBefore     DateTime
+  operatorFamiliesBefore DateTime
+  updatedAt              DateTime
 }
 
 /// Minimal session request trace, written only while

@@ -62,8 +62,8 @@ function assertDirectDatabaseSeamAllowed(): DisposableDatabaseConfig {
 /**
  * Tenant/app tables truncated on reset. The seeded governance reference data
  * (GovernancePrinciple, GovernanceStandard), migration-owned singleton
- * AuthRecoveryControl, and its append-only AuthRecoveryRetiredSecret history
- * are deliberately PRESERVED so compliance journeys retain their standards and
+ * AuthRecoveryControl, its append-only AuthRecoveryRetiredSecret history, and
+ * the migration-owned InstallationSessionCutoff row are deliberately PRESERVED so compliance journeys retain their standards and
  * recovery remains bound to the isolated stack's secret and key history.
  * (Confirmed against apps/api/prisma/seed.ts + schema.prisma — see e2e/README.md.)
  */

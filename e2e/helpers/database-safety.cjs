@@ -93,6 +93,9 @@ const PRESERVED_PUBLIC_TABLES = Object.freeze([
   "GovernanceStandard",
   "AuthRecoveryControl",
   "AuthRecoveryRetiredSecret",
+  // Migration-owned singleton: every session insert locks its row, so
+  // truncating it would refuse every sign-in until the migration ran again.
+  "InstallationSessionCutoff",
   "RiskControlVerificationCounter",
   "_prisma_migrations",
 ]);

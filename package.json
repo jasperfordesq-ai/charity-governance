@@ -26,6 +26,7 @@
     "test:document-recovery-preparation": "node --test scripts/document-recovery-preparation-migration.test.mjs",
     "test:document-recovery-byte-fence": "node --test scripts/document-recovery-byte-fence-migration.test.mjs scripts/document-cleanup-organisation-fence-migration.test.mjs",
     "test:document-byte-authority-postgres": "node --test scripts/document-byte-authority-postgres.test.mjs",
+    "test:installation-session-revocation-postgres": "node --test scripts/installation-session-revocation-postgres.test.mjs",
     "test:session-security-trace": "node --test scripts/session-security-trace-migration.test.mjs",
     "test:local-docker:smoke": "node scripts/smoke-local-docker.mjs",
     "personal:ready": "node scripts/personal-local-ready.mjs",

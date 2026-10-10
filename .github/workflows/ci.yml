@@ -208,6 +208,9 @@ jobs:
       - name: Verify document byte authority with disposable PostgreSQL
         run: npm run test:document-byte-authority-postgres
 
+      - name: Verify installation-wide session revocation with disposable PostgreSQL
+        run: npm run test:installation-session-revocation-postgres
+
       - name: Verify session security trace bounds with disposable PostgreSQL
         run: npm run test:session-security-trace
 
