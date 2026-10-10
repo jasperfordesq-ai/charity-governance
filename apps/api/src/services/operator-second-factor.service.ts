@@ -14,6 +14,7 @@ import { Prisma, type PrismaClient } from '@prisma/client';
 import { AppError } from '../utils/errors.js';
 import { generateTotpSecret, totpEnrolmentUri, verifyTotp } from '../utils/totp.js';
 import { openTotpSecret, operatorTotpSecretIsCurrent, sealTotpSecret, type SealedTotpSecret } from './operator-totp-crypto.js';
+import type { SecondFactorResealPage } from './totp-secret-envelope.js';
 
 // The sealing crypto lives in ./operator-totp-crypto.ts, which imports nothing
 // but node:crypto, because the E2E harness has to seal a secret with exactly
@@ -264,20 +265,24 @@ export function recoveryCodeMatches(stored: string, offered: string): boolean {
  * removed without operators enrolling again. A row that changed since it was
  * read is skipped; one that cannot be opened is reported by operator id only.
  */
-export async function resealOperatorSecondFactorSecrets(prisma: Pick<PrismaClient, 'platformOperator'>, batch = 100) {
+export async function resealOperatorSecondFactorSecrets(prisma: Pick<PrismaClient, 'platformOperator'>,
+  batch = 100, after?: string): Promise<SecondFactorResealPage> {
   if (!Number.isInteger(batch) || batch < 1 || batch > 1000) {
     throw new AppError(400, 'OPERATOR_SECOND_FACTOR_RESEAL_BATCH_INVALID', 'Batch size must be between 1 and 1000');
   }
-  const rows = (await prisma.platformOperator.findMany({
-    where: { totpSecret: { not: Prisma.AnyNull } },
+  // One bounded page in id order; see resealUserSecondFactorSecrets.
+  const page = await prisma.platformOperator.findMany({
+    where: { totpSecret: { not: Prisma.AnyNull }, ...(after === undefined ? {} : { id: { gt: after } }) },
     select: { id: true, totpSecret: true, updatedAt: true },
     orderBy: { id: 'asc' },
-  })).filter((row) => row.totpSecret !== null);
+    take: batch,
+  });
+  const rows = page.filter((row) => row.totpSecret !== null);
   const stale = rows.filter((row) => !operatorTotpSecretIsCurrent(row.totpSecret));
   let resealed = 0;
   let skippedChanged = 0;
   const failed: string[] = [];
-  for (const row of stale.slice(0, batch)) {
+  for (const row of stale) {
     let plaintext: string;
     try {
       plaintext = openTotpSecret(row.totpSecret);
@@ -292,6 +297,6 @@ export async function resealOperatorSecondFactorSecrets(prisma: Pick<PrismaClien
     if (written.count === 1) resealed += 1;
     else skippedChanged += 1;
   }
-  return { total: rows.length, staleBefore: stale.length, resealed, skippedChanged, failed,
-    remaining: stale.length - resealed };
+  return { scanned: page.length, stale: stale.length, resealed, skippedChanged, failed,
+    next: page.length === batch ? page[page.length - 1]!.id : null };
 }

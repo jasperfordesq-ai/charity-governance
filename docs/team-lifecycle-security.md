@@ -131,16 +131,22 @@ enrolled authenticator unreadable at once, leaving only recovery codes. Now:
 - A charity user's authenticator re-seals itself under the new secret on its next
   successful code. A failed code never re-seals.
 - `npm --prefix apps/api run jobs:reseal-second-factor-secrets user` (or
-  `operator`) re-seals the rest in bounded batches. It skips any row that changed
-  meanwhile and reports unopenable rows by id. Repeat until `remaining` is 0, then
-  remove the `*_PREVIOUS` value.
+  `operator`) re-seals the rest. One run walks every row in pages of `--batch`.
+  It skips any row that changed meanwhile and reports unopenable rows by id
+  without stopping. Repeat until `remaining` is 0, then remove the `*_PREVIOUS`
+  value.
 - Production validation requires a configured previous secret to be at least 32
   characters and different from both current signing secrets. All four values
   are redacted from logs.
 
-Rotating `JWT_SECRET` still ends every browser session, as it should. Only the
-stored authenticators survive it. The lost-all-factors recovery path and the
-other public-rule items above remain open.
+Rotating `JWT_SECRET` does **not** end browser sessions. It invalidates access
+tokens only. A refresh token is an opaque value checked against its stored hash
+in `AuthSession`, so `/refresh` issues a new access token under the new secret.
+When a rotation follows a suspected exposure, revoke sessions as well. A charity
+administrator can revoke all of one member's sessions from the team page. There
+is no single command yet that revokes every session on the installation. The
+lost-all-factors recovery path and the other public-rule items above remain
+open.
 
 ## Password recovery integrity
 

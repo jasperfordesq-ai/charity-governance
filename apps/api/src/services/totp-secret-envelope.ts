@@ -113,3 +113,13 @@ export function totpEnvelopeIsCurrent(realm: TotpRealm, value: unknown): boolean
   const envelope = value as Partial<TotpEnvelopeV2> | null;
   return !!envelope && envelope.v === 2 && envelope.kid === currentKey(realm).kid;
 }
+
+/** One page of a second-factor re-seal; `next` is null after the last page. */
+export type SecondFactorResealPage = {
+  scanned: number;
+  stale: number;
+  resealed: number;
+  skippedChanged: number;
+  failed: string[];
+  next: string | null;
+};
