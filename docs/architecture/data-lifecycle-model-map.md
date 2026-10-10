@@ -89,6 +89,11 @@ transaction, and the same one-use capability must be presented to a separate
 SQL function. It is not an all-copy erasure result. It changes no deletion job
 and does not relax the byte fence, so the job stays PENDING and UNKNOWN until a
 separate independent completion permit exists. No production worker calls it.
+`executeVerifiedDocumentBytePrimaryDeletion` composes the lease claim, start
+marker, an immediate pre-provider re-check of the independent decision, one
+bounded call to the eraser selected by the decided provider, and the absence observation.
+Every failure after the marker is UNKNOWN, published where possible and
+never retried. It changes no job and has no production caller.
 Restore snapshot format 7 hashes this observation, format 6 covers the marker
 without it, format 5 covers leases without a marker, format 4 covers the
 candidate binding without a lease, and format 3 covers the older schema.
