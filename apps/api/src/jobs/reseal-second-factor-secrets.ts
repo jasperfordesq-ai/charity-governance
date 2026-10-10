@@ -31,10 +31,15 @@ export function parseResealArgs(argv: string[]): { realm: 'user' | 'operator'; b
   return { realm, batch: Number(rest[1]) };
 }
 
+/** The most failed row ids one run reports; beyond this only the count grows,
+ * so memory stays bounded however many rows cannot be opened. */
+export const RESEAL_FAILED_ID_LIMIT = 100;
+
 /** Walk every page once and total the results. `remaining` counts the stale
  * rows this run did not re-seal (failed or changed meanwhile). */
 export async function resealAllPages(page: (after?: string) => Promise<SecondFactorResealPage>) {
-  const total = { scanned: 0, stale: 0, resealed: 0, skippedChanged: 0, failed: [] as string[], pages: 0 };
+  const total = { scanned: 0, stale: 0, resealed: 0, skippedChanged: 0, failedCount: 0,
+    failed: [] as string[], failedIdsTruncated: false, pages: 0 };
   let after: string | undefined;
   do {
     const result = await page(after);
@@ -43,7 +48,11 @@ export async function resealAllPages(page: (after?: string) => Promise<SecondFac
     total.stale += result.stale;
     total.resealed += result.resealed;
     total.skippedChanged += result.skippedChanged;
-    total.failed.push(...result.failed);
+    total.failedCount += result.failed.length;
+    for (const id of result.failed) {
+      if (total.failed.length < RESEAL_FAILED_ID_LIMIT) total.failed.push(id);
+      else total.failedIdsTruncated = true;
+    }
     if (result.next !== null && after !== undefined && result.next <= after) {
       throw new Error('Re-seal paging did not advance; stopping');
     }
@@ -66,7 +75,7 @@ async function main(): Promise<number> {
       ? resealUserSecondFactorSecrets(prisma, command.batch, after)
       : resealOperatorSecondFactorSecrets(prisma, command.batch, after));
     process.stdout.write(`${JSON.stringify(result, null, 2)}\n`);
-    return result.failed.length > 0 ? 1 : 0;
+    return result.failedCount > 0 ? 1 : 0;
   } catch (error) {
     process.stderr.write(`${JSON.stringify(serializeErrorForLog(error))}\n`);
     return 1;

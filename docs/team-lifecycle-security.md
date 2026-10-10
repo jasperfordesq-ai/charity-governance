@@ -132,8 +132,8 @@ enrolled authenticator unreadable at once, leaving only recovery codes. Now:
   successful code. A failed code never re-seals.
 - `npm --prefix apps/api run jobs:reseal-second-factor-secrets user` (or
   `operator`) re-seals the rest. One run walks every row in pages of `--batch`.
-  It skips any row that changed meanwhile and reports unopenable rows by id
-  without stopping. Repeat until `remaining` is 0, then remove the `*_PREVIOUS`
+  It skips any row that changed meanwhile and reports unopenable rows without
+  stopping: a count, plus the first 100 ids. Repeat until `remaining` is 0, then remove the `*_PREVIOUS`
   value.
 - Production validation requires a configured previous secret to be at least 32
   characters and different from both current signing secrets. All four values

@@ -18,7 +18,7 @@ const { sealTotpSecret, openTotpSecret, operatorTotpSecretIsCurrent } =
   await import('../services/operator-totp-crypto.js');
 const { resealOperatorSecondFactorSecrets } = await import('../services/operator-second-factor.service.js');
 const { generateTotpSecret, fromBase32, totp } = await import('../utils/totp.js');
-const { parseResealArgs, resealAllPages } = await import('../jobs/reseal-second-factor-secrets.js');
+const { parseResealArgs, resealAllPages, RESEAL_FAILED_ID_LIMIT } = await import('../jobs/reseal-second-factor-secrets.js');
 
 function withRoots<T>(env: Record<string, string | undefined>, run: () => T): T {
   const names = ['JWT_SECRET', 'JWT_SECRET_PREVIOUS', 'OWNER_JWT_SECRET', 'OWNER_JWT_SECRET_PREVIOUS'];
@@ -193,14 +193,23 @@ test('a run pages through every row, so an unopenable row never blocks the rows 
     const first = await resealUserSecondFactorSecrets(client, 1);
     assert.deepEqual([first.failed, first.next], [['a-broken'], 'a-broken'], 'the bad row fills the first page');
     const total = await resealAllPages((after) => resealUserSecondFactorSecrets(client, 1, after));
-    assert.deepEqual([total.scanned, total.stale, total.resealed, total.failed, total.remaining],
-      [3, 3, 2, ['a-broken'], 1]);
+    assert.deepEqual([total.scanned, total.stale, total.resealed, total.failed, total.failedCount,
+      total.failedIdsTruncated, total.remaining], [3, 3, 2, ['a-broken'], 1, false, 1]);
     assert.ok(reads.every((take) => take === 1), 'every database read is bounded by the batch');
     assert.equal(openUserTotpSecret(rows[2]!.secret), secrets[1]);
     assert.equal(userTotpSecretIsCurrent(rows[1]!.secret), true);
   });
   await assert.rejects(resealAllPages(async () => ({ scanned: 1, stale: 0, resealed: 0, skippedChanged: 0,
     failed: [], next: 'same' })), /did not advance/);
+  // However many rows fail, the run keeps a count and only the first ids.
+  let page = 0;
+  const flood = await resealAllPages(async () => {
+    page += 1;
+    return { scanned: 60, stale: 60, resealed: 0, skippedChanged: 0,
+      failed: Array.from({ length: 60 }, (_, i) => `p${page}-${i}`), next: page < 3 ? `p${page}` : null };
+  });
+  assert.deepEqual([flood.failedCount, flood.failed.length, flood.failedIdsTruncated, flood.remaining],
+    [180, RESEAL_FAILED_ID_LIMIT, true, 180]);
 });
 
 test('operator authenticators rotate with OWNER_JWT_SECRET_PREVIOUS and re-seal in batch', async () => {
