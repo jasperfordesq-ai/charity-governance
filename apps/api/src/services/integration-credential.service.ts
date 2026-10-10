@@ -103,7 +103,35 @@ type ActiveIntegrationKey = {
   generation: number;
   /** True when this installation has never recorded a key fingerprint. */
   fingerprintUnrecorded: boolean;
+  /**
+   * The key for an envelope's own generation, or null when this deployment
+   * does not hold it. Opening always resolves by the envelope's generation,
+   * never by "whichever key is active" (the rotation trap in ARCHITECTURE.md).
+   */
+  keyForGeneration: (generation: number) => Buffer | null;
 };
+
+/**
+ * The optional previous key a rotation keeps configured beside the new one, so
+ * envelopes sealed under the retired generation stay readable until they are
+ * re-sealed. Validated exactly like the active key; a malformed value is a
+ * configuration error, never silently ignored.
+ */
+function configuredPreviousKey(): { key: Buffer; fingerprint: string } | null {
+  const configured = process.env.INTEGRATION_ENCRYPTION_KEY_PREVIOUS;
+  if (typeof configured !== 'string' || configured.length === 0) return null;
+  let key: Buffer;
+  try {
+    key = decodeIntegrationKey(configured);
+  } catch {
+    throw new AppError(
+      500,
+      'INTEGRATION_KEY_INVALID',
+      'INTEGRATION_ENCRYPTION_KEY_PREVIOUS must decode to exactly 32 bytes',
+    );
+  }
+  return { key, fingerprint: integrationKeyFingerprint(key) };
+}
 
 /**
  * Resolve the key the deployment is currently sealing under, and refuse to
@@ -146,9 +174,26 @@ async function activeIntegrationKey(
 
   const control = await prisma.integrationSecretControl.findUnique({
     where: { id: 1 },
-    select: { generation: true, activeKeyFingerprint: true },
+    select: { generation: true, activeKeyFingerprint: true, retiredKeyFingerprint: true },
   });
   const recorded = control?.activeKeyFingerprint ?? null;
+  const generation = control?.generation ?? 1;
+  const previous = configuredPreviousKey();
+
+  // Rotation pending: the operator has configured the new key and kept the old
+  // one as INTEGRATION_ENCRYPTION_KEY_PREVIOUS, but the begin step has not yet
+  // recorded the new fingerprint. Keep sealing and opening under the old key at
+  // the old generation, so changing the environment opens no window in which
+  // every credential looks wrong.
+  if (recorded !== null && recorded !== fingerprint && previous && previous.fingerprint === recorded) {
+    return {
+      key: previous.key,
+      fingerprint: previous.fingerprint,
+      generation,
+      fingerprintUnrecorded: false,
+      keyForGeneration: (g) => (g === generation ? previous.key : null),
+    };
+  }
 
   // A null fingerprint is the normal starting state of an installation that
   // has never recorded one, not an error: it means "nothing to disagree with
@@ -165,12 +210,50 @@ async function activeIntegrationKey(
     );
   }
 
+  // After a rotation has begun, the retired generation opens only with a
+  // configured previous key whose fingerprint matches the one recorded as
+  // retired. Any other previous key is ignored rather than trusted.
+  const retired = control?.retiredKeyFingerprint ?? null;
+  const retiredKey = previous && retired !== null && previous.fingerprint === retired
+    ? previous.key : null;
+
   return {
     key,
     fingerprint,
-    generation: control?.generation ?? 1,
+    generation,
     fingerprintUnrecorded: recorded === null,
+    keyForGeneration: (g) => {
+      if (g === generation) return key;
+      if (g === generation - 1 && retiredKey) return retiredKey;
+      return null;
+    },
   };
+}
+
+/**
+ * Name an envelope whose generation this deployment cannot open, instead of
+ * letting AES-GCM fail as UNREADABLE. An older generation means a rotation has
+ * not finished re-sealing (or its previous key was removed too early); a newer
+ * one means the rotation-control row is older than the credentials, as after a
+ * partial restore. Both leave the stored credential intact.
+ */
+function generationUnavailable(sealedGeneration: number, activeGeneration: number): AppError {
+  if (sealedGeneration < activeGeneration) {
+    return new AppError(
+      500,
+      'INTEGRATION_SECRET_GENERATION_STALE',
+      `This credential is sealed under key generation ${sealedGeneration}, older than the active ` +
+        `generation ${activeGeneration}. It is not corrupt: configure the previous key as ` +
+        'INTEGRATION_ENCRYPTION_KEY_PREVIOUS and finish re-sealing. Do NOT ask organisations to reconnect.',
+    );
+  }
+  return new AppError(
+    500,
+    'INTEGRATION_SECRET_GENERATION_AHEAD',
+    `This credential is sealed under key generation ${sealedGeneration}, newer than the recorded ` +
+      `generation ${activeGeneration}. The rotation-control record is older than the credentials, ` +
+      'for example after a partial restore. Restore a consistent control record; the credential is intact.',
+  );
 }
 
 /**
@@ -314,38 +397,59 @@ export async function storeIntegrationCredential(
   { integrationId, kind, plaintext, expiresAt }: StoreIntegrationCredentialInput,
 ): Promise<void> {
   const context = await secretContextForIntegration(prisma, integrationId, kind);
-  const { key, fingerprint, generation, fingerprintUnrecorded } = await activeIntegrationKey(prisma);
+  // A key rotation can begin between choosing the key and committing. The
+  // transaction re-checks the generation under a row lock, and a stale seal
+  // is redone under the new key rather than committed under the retired one.
+  for (let attempt = 1; ; attempt += 1) {
+    const { key, fingerprint, generation, fingerprintUnrecorded } = await activeIntegrationKey(prisma);
+    const sealed = sealIntegrationSecret(plaintext, key, generation, context);
+    const sealedJson = sealed as unknown as Prisma.InputJsonObject;
 
-  const sealed = sealIntegrationSecret(plaintext, key, generation, context);
-  const sealedJson = sealed as unknown as Prisma.InputJsonObject;
+    const committed = await prisma.$transaction(async (tx) => {
+      if (!fingerprintUnrecorded) {
+        // A no-op conditional update: it takes the control row's lock, so a
+        // rotation's begin waits for this write (and its re-seal will see the
+        // row) or has already committed (and this matches nothing).
+        const fence = await tx.integrationSecretControl.updateMany({
+          where: { id: 1, generation },
+          data: { generation },
+        });
+        if (fence.count !== 1) return false;
+      }
 
-  await prisma.$transaction(async (tx) => {
-    await tx.integrationCredential.upsert({
-      where: { integrationId_kind: { integrationId, kind } },
-      create: {
-        integrationId,
-        kind,
-        sealed: sealedJson,
-        // Read back off the envelope rather than from the local `generation`, so
-        // the column is definitionally a mirror of what was sealed and not a
-        // second derivation that could drift from it. Rotation scans the column
-        // to find stale rows without opening a single one.
-        generation: sealed.generation,
-        expiresAt: expiresAt ?? null,
-      },
-      update: {
-        sealed: sealedJson,
-        generation: sealed.generation,
-        // Clears a previously stored expiry when the caller supplies none; see
-        // StoreIntegrationCredentialInput.
-        expiresAt: expiresAt ?? null,
-      },
+      await tx.integrationCredential.upsert({
+        where: { integrationId_kind: { integrationId, kind } },
+        create: {
+          integrationId,
+          kind,
+          sealed: sealedJson,
+          // Read back off the envelope rather than from the local `generation`, so
+          // the column is definitionally a mirror of what was sealed and not a
+          // second derivation that could drift from it. Rotation scans the column
+          // to find stale rows without opening a single one.
+          generation: sealed.generation,
+          expiresAt: expiresAt ?? null,
+        },
+        update: {
+          sealed: sealedJson,
+          generation: sealed.generation,
+          // Clears a previously stored expiry when the caller supplies none; see
+          // StoreIntegrationCredentialInput.
+          expiresAt: expiresAt ?? null,
+        },
+      });
+
+      if (fingerprintUnrecorded) {
+        await recordActiveKeyFingerprint(tx, fingerprint, sealed.generation);
+      }
+      return true;
     });
-
-    if (fingerprintUnrecorded) {
-      await recordActiveKeyFingerprint(tx, fingerprint, sealed.generation);
+    if (committed) return;
+    if (attempt >= 3) {
+      throw new AppError(409, 'INTEGRATION_SECRET_GENERATION_CHANGED',
+        'The integration key generation changed while storing a credential. Nothing was stored; try again.');
     }
-  });
+  }
 }
 
 /**
@@ -366,8 +470,11 @@ export async function loadIntegrationCredential(
   });
   if (!credential) return null;
 
-  const { key } = await activeIntegrationKey(prisma);
-  return openIntegrationSecret(requireSealedEnvelope(credential.sealed), key, context);
+  const sealed = requireSealedEnvelope(credential.sealed);
+  const active = await activeIntegrationKey(prisma);
+  const key = active.keyForGeneration(sealed.generation);
+  if (!key) throw generationUnavailable(sealed.generation, active.generation);
+  return openIntegrationSecret(sealed, key, context);
 }
 
 /**
@@ -375,6 +482,14 @@ export async function loadIntegrationCredential(
  * generation. Counts on the denormalised column, so nothing is decrypted and
  * no plaintext is materialised to answer the question.
  */
+export {
+  activeIntegrationKey as resolveIntegrationKeys,
+  configuredPreviousKey as configuredPreviousIntegrationKey,
+  generationUnavailable as integrationGenerationUnavailable,
+  requireSealedEnvelope as requireIntegrationSealedEnvelope,
+  secretContextForIntegration as integrationSecretContext,
+};
+
 export async function countCredentialsAwaitingRotation(
   prisma: IntegrationCredentialClient,
   activeGeneration: number,

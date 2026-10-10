@@ -392,8 +392,9 @@ forbidding `refresh`/`token`/`secret`. A task hit it and reverted rather than lo
 
 # 7. Known deferred items
 
-- **The key rotation job is unwritten.** The DPO explicitly wants key management, rotation and
-  recovery for production. Before writing it, read the "rotation trap" in `docs/ARCHITECTURE.md`:
+- **The key rotation job is built (October 2026)**: `jobs:rotate-integration-encryption-key`, see
+  the rotation section of `docs/ARCHITECTURE.md`. Escrow custody of the keys is still a decision
+  (C02/P05). The DPO explicitly wants key management, rotation and recovery for production. Before writing it, read the "rotation trap" in `docs/ARCHITECTURE.md`:
   flipping the active key generation makes every un-re-sealed credential fail as *unreadable*, which
   looks identical to mass corruption and invites an operator response that destroys the recoverable
   data.
