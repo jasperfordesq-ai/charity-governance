@@ -35,6 +35,10 @@ import { publishVerifiedDocumentByteProviderUnknown,
 import { readCommittedDocumentByteProviderUnknown } from '../services/document-byte-provider-unknown.js';
 import { finalizeVerifiedDocumentBytePrimaryCompletion, publishVerifiedDocumentBytePrimaryCompletion,
   readPublishedDocumentBytePrimaryCompletion } from '../services/published-document-byte-primary-completion.js';
+import { publishVerifiedDocumentDisposalOutcome, readPublishedDocumentDisposalOutcome,
+  releaseCompletedDocumentOperation } from '../services/published-document-disposal-outcome.js';
+import { prepareDocumentDisposalOutcomeFacts } from '../services/document-disposal-outcome.js';
+import { preserveDocumentDisposalOutcome } from '../services/document-disposal-outcome-envelope.js';
 import { prepareDocumentByteProviderUnknownFacts } from '../services/document-byte-provider-unknown.js';
 import { preserveDocumentByteProviderUnknown } from '../services/document-byte-provider-unknown-envelope.js';
 import { prepareDocumentBytePrimaryCompletionFacts,
@@ -208,7 +212,9 @@ async function readyBytePermitPublisher(storageProvider: 'local' | 'supabase' = 
     completionNotRecorded: false, duringCompletion: null as (() => void) | null,
     beforeCompletion: null as (() => void) | null,
     completionView: null as ((row: Record<string, unknown>) => Record<string, unknown>) | null,
-    job: { state: 'PENDING', processedAt: null as Date | null, activeObjectAbsentAt: null as Date | null } };
+    job: { state: 'PENDING', processedAt: null as Date | null, activeObjectAbsentAt: null as Date | null },
+    dispositions: [] as Array<Record<string, unknown>>, dbNow: new Date('2026-10-08T00:00:00.000Z'),
+    claimDeletionId: null as string | null, onTransaction: null as (() => void) | null, enforced: true };
   const tx = {
     $queryRaw: async (strings: TemplateStringsArray, ...values: unknown[]) => {
       if (strings.join('').includes('DocumentBytePrimaryCompletion_record')) {
@@ -272,6 +278,7 @@ async function readyBytePermitPublisher(storageProvider: 'local' | 'supabase' = 
         state.duringStart?.();
         return [{ started: true }];
       }
+      if (strings.join('').includes('statement_timestamp')) return [{ now: state.dbNow }];
       return [{ id: f.context.organisationId }];
     },
     documentRecoveryOutcome: { findFirst: async () => row },
@@ -279,13 +286,14 @@ async function readyBytePermitPublisher(storageProvider: 'local' | 'supabase' = 
       facts: f.prepared.body, factsDigest: f.prepared.digest }) },
     organisation: { findFirst: async () => ({ id: f.context.organisationId,
       lifecycleStatus: 'ACTIVE', documentStorageProvider: 'local' }) },
-    documentRecoveryEnforcement: { findFirst: async () => ({ id: 'enforcement',
+    documentRecoveryEnforcement: { findUnique: async () => (state.enforced ? { id: 'enforcement' } : null),
+      findFirst: async () => ({ id: 'enforcement',
       installationId: f.context.installationId, writerId: f.request.writerId,
       writerEpoch: f.context.writerEpoch }) },
     user: { findFirst: async () => ({ id: f.facts.actorUserId,
       role: 'OWNER', lifecycleStatus: 'ACTIVE' }) },
     documentPurgeAuthorization: { findFirst: async () => ({ ...f.facts.authorization,
-      withdrawal: null, claim: { id: row.claim.id, deletionId: row.claim.deletionId } }) },
+      withdrawal: null, claim: { id: row.claim.id, deletionId: state.claimDeletionId ?? row.claim.deletionId } }) },
     // Signed pre-migration facts omitted retentionYears; a current Prisma row
     // includes the nullable field after migration.
     dataRetentionPolicyRevision: { findMany: async () => [{ ...f.facts.policy, retentionYears: null }] },
@@ -294,7 +302,10 @@ async function readyBytePermitPublisher(storageProvider: 'local' | 'supabase' = 
       storagePath: f.facts.authorization.storagePath, provider: f.facts.authorization.provider,
       state: 'PENDING', claimedAt: state.claimedAt, processedAt: null,
       attempts: 0, deadLetteredAt: null, targetRef: null }),
+    findUnique: async () => ({ organisationId: f.context.organisationId, ...state.job }),
     findMany: async () => [{ id: row.claim.deletionId }] },
+    documentBytePrimaryCompletion: { findUnique: async () => state.completion
+      && (state.completionView ? state.completionView(state.completion) : state.completion) },
     documentByteExecutionLease: { findUnique: async () => state.lease,
       create: async ({ data }: { data: Record<string, unknown> }) => {
         state.leaseCreates += 1;
@@ -306,7 +317,7 @@ async function readyBytePermitPublisher(storageProvider: 'local' | 'supabase' = 
     documentByteProviderAttempt: { findUnique: async () => state.attempt },
     documentCopyDispositionAuthority: { findMany: async () => [] },
     documentCopyHoldEvent: { findMany: async () => state.copyHolds },
-    documentPurgeDispositionEvent: { findMany: async () => [] },
+    documentPurgeDispositionEvent: { findMany: async () => state.dispositions },
     documentPublication: { findMany: async () => [] },
     documentUploadIntent: { findMany: async () => [] },
     documentPublicationUploadIntent: { findMany: async () => [] },
@@ -340,6 +351,7 @@ async function readyBytePermitPublisher(storageProvider: 'local' | 'supabase' = 
     $queryRaw: tx.$queryRaw,
     $transaction: async (callback: (value: typeof tx) => Promise<unknown>) => {
       state.reads += 1;
+      state.onTransaction?.();
       if ((state.changeAfterFirstRead && state.reads === 2)
         || state.reads === state.mutateAtRead) {
         state.copyHolds.push({ id: 'new-hold', held: true });
@@ -1124,6 +1136,201 @@ test('a pending completion that no longer matches the local observation is not r
   await assert.rejects(publish(), /Pending document byte completion differs from local observation/);
   state.observationView = null;
   assert.equal((await f.store.readControl()).generation, before.generation, 'the head was not advanced');
+});
+
+// The fixture's plan retains every copy area; one resolved scope per area.
+const retainedEverywhere = () => ['VERSIONS', 'CONFLUENCE', 'EXPORTS', 'AUDIT', 'BACKUPS'].map((area, i) => ({
+  id: `copy-${i}`, area, scopeRef: `${area}-SCOPE`, revision: 1, status: 'RETAINED_APPROVED',
+  copyAuthorityId: null, nextReviewAt: new Date('2026-12-01T00:00:00.000Z') }));
+
+async function completedPrimary() {
+  const setup = await observedAndUnknown();
+  await setup.publish();
+  await setup.finalize();
+  const publishOutcome = () => publishVerifiedDocumentDisposalOutcome(setup.prisma, setup.f.journal,
+    setup.f.store, setup.f.context, setup.f.keys, setup.f.store, setup.f.facts.authorization.id);
+  const release = (writerId = 'host') => releaseCompletedDocumentOperation(setup.prisma, setup.f.journal,
+    setup.f.store, writerId, setup.f.context, setup.f.keys, setup.f.store, setup.f.facts.authorization.id);
+  return { ...setup, publishOutcome, release };
+}
+
+test('the whole-case outcome needs every copy area resolved after the primary completion', async () => {
+  const { f, state, publishOutcome, release } = await completedPrimary();
+  const before = await f.store.readControl();
+  // Primary completion alone: every planned area still needs a resolved scope.
+  await assert.rejects(publishOutcome(), /incomplete: (VERSIONS|CONFLUENCE|EXPORTS|AUDIT|BACKUPS):NO_SCOPE_RECORDED/);
+  state.dispositions.push(...retainedEverywhere());
+  state.dispositions[1] = { ...state.dispositions[1]!, status: 'NEEDS_REVIEW', nextReviewAt: new Date('2026-12-01T00:00:00.000Z') };
+  await assert.rejects(publishOutcome(), /incomplete: CONFLUENCE:NEEDS_REVIEW/);
+  state.dispositions.splice(0, 5, ...retainedEverywhere());
+  // Retention whose follow-up review is already due is not resolved.
+  state.dbNow = new Date('2026-12-02T00:00:00.000Z');
+  await assert.rejects(publishOutcome(), /REVIEW_OVERDUE/);
+  state.dbNow = new Date('2026-10-08T00:00:00.000Z');
+  assert.equal((await f.store.readControl()).generation, before.generation, 'nothing was appended');
+  await assert.rejects(release(), /not published/, 'no release before the outcome');
+  const published = await publishOutcome();
+  assert.deepEqual([published.replayed, published.released, published.actionAuthorized], [false, false, false]);
+  const facts = JSON.parse(published.body);
+  assert.deepEqual([facts.action, facts.deletionId, facts.authorizationId, facts.areas.CONFLUENCE],
+    ['DOCUMENT_DISPOSAL_COMPLETE', 'job', f.facts.authorization.id, { plan: 'RETAIN_APPROVED', scopes: 1 }]);
+  assert.doesNotMatch(published.body, /SCOPE|COPY-001|vault\/synthetic-object/, 'counts and digests only');
+  assert.equal((await f.store.readControl()).generation, before.generation + 1);
+  assert.equal((await publishOutcome()).replayed, true);
+  // Evidence that changes after publication is never reported as the outcome,
+  // and the operation is not released on it.
+  state.dispositions.push({ id: 'copy-late', area: 'EXPORTS', scopeRef: 'LATE-EXPORT', revision: 1,
+    status: 'NEEDS_REVIEW', copyAuthorityId: null, nextReviewAt: new Date('2026-12-01T00:00:00.000Z') });
+  await assert.rejects(publishOutcome(), /differs from current copy evidence/);
+  await assert.rejects(release(), /does not match current control/);
+  state.dispositions.pop();
+  await assert.rejects(release('another-writer'), /writer or operation mismatch/);
+  const released = await release();
+  assert.deepEqual([released.released, released.replayed, released.actionAuthorized], [true, false, false]);
+  assert.equal((await f.store.readControl()).activeOperation, null);
+  assert.equal((await release()).replayed, true, 'a released operation is reported again, never re-released');
+  assert.equal((await publishOutcome()).released, true, 'the outcome stays readable after release');
+});
+
+test('the outcome and its release need recovery enforcement, under which copy evidence is frozen', async () => {
+  const { f, state, publishOutcome, release } = await completedPrimary();
+  state.dispositions.push(...retainedEverywhere());
+  const before = await f.store.readControl();
+  state.enforced = false;
+  await assert.rejects(publishOutcome(), /requires recovery enforcement/);
+  assert.equal(await f.store.readDocumentDisposalOutcome(f.context.operationId), null, 'nothing preserved');
+  state.enforced = true;
+  await publishOutcome();
+  state.enforced = false;
+  await assert.rejects(release(), /does not match current control/);
+  assert.equal((await f.store.readControl()).generation, before.generation + 1);
+  assert.notEqual((await f.store.readControl()).activeOperation, null);
+});
+
+test('an unreleased outcome that no longer holds is neither reported nor released', async () => {
+  const { f, state, publishOutcome, release } = await completedPrimary();
+  state.dispositions.push(...retainedEverywhere());
+  await publishOutcome();
+  // A retained copy's follow-up review falls due before the release.
+  state.dbNow = new Date('2026-12-02T00:00:00.000Z');
+  await assert.rejects(publishOutcome(), /no longer complete/);
+  await assert.rejects(release(), /no longer complete/);
+  assert.notEqual((await f.store.readControl()).activeOperation, null, 'the operation stays reserved');
+  state.dbNow = new Date('2026-10-08T00:00:00.000Z');
+  assert.equal((await release()).replayed, false);
+  // A released outcome is a record of what was true, so it is still reported.
+  state.dbNow = new Date('2026-12-02T00:00:00.000Z');
+  assert.equal((await publishOutcome()).released, true);
+  assert.equal((await release()).replayed, true);
+});
+
+test('the primary counts as completed only with its exact completion and a processed job', async () => {
+  const { f, state, publishOutcome } = await completedPrimary();
+  state.dispositions.push(...retainedEverywhere());
+  for (const [label, change] of [
+    ['job not processed', () => { state.job = { ...state.job, state: 'PENDING' }; }],
+    ['completion of another scope', () => { state.completionView = (row) => ({ ...row, scope: 'ALL_COPIES' }); }],
+    ['completion of another charity', () => { state.completionView = (row) => ({ ...row, organisationId: 'other' }); }],
+  ] as const) {
+    const savedJob = { ...state.job };
+    change();
+    await assert.rejects(publishOutcome(), /incomplete: PRIMARY_NOT_COMPLETED/, label);
+    state.job = savedJob;
+    state.completionView = null;
+  }
+  // Evidence beyond the bounded review size is refused, not truncated.
+  const many = Array.from({ length: 1001 }, (_, i) => ({ id: `bulk-${i}`, area: 'EXPORTS', scopeRef: `BULK-${i}`,
+    revision: 1, status: 'RETAINED_APPROVED', copyAuthorityId: null, nextReviewAt: new Date('2026-12-01T00:00:00.000Z') }));
+  const saved = [...state.dispositions];
+  state.dispositions.splice(0, state.dispositions.length, ...many);
+  await assert.rejects(publishOutcome(), /exceeds the bounded review size/);
+  state.dispositions.splice(0, state.dispositions.length, ...saved);
+  // The authorization must name the deletion the completion is for.
+  state.claimDeletionId = 'another-job';
+  await assert.rejects(publishOutcome(), /names another deletion/);
+  state.claimDeletionId = null;
+  // Evidence that changes between the two reads is never published.
+  let reads = 0;
+  state.onTransaction = () => {
+    reads += 1;
+    if (reads === 2) state.dispositions.push({ id: 'copy-mid', area: 'AUDIT', scopeRef: 'MID-PUBLISH', revision: 1,
+      status: 'NEEDS_REVIEW', copyAuthorityId: null, nextReviewAt: new Date('2026-12-01T00:00:00.000Z') });
+  };
+  const before = await f.store.readControl();
+  await assert.rejects(publishOutcome(), /evidence changed before publication/);
+  state.onTransaction = null;
+  assert.equal((await f.store.readControl()).generation, before.generation);
+});
+
+test('a published outcome must name its completion exactly and stay the head', async () => {
+  const { f, state, publishOutcome } = await completedPrimary();
+  state.dispositions.push(...retainedEverywhere());
+  const read = () => readPublishedDocumentDisposalOutcome(f.journal, f.store, f.context, f.keys, f.store);
+  // A keys holder publishes an outcome naming another completion entry.
+  const forged = await completedPrimary();
+  forged.state.dispositions.push(...retainedEverywhere());
+  const completion = await readPublishedDocumentBytePrimaryCompletion(forged.f.journal, forged.f.store,
+    forged.f.context, forged.f.keys, forged.f.store);
+  const done = JSON.parse(completion.body);
+  const body = prepareDocumentDisposalOutcomeFacts({ format: 1, action: 'DOCUMENT_DISPOSAL_COMPLETE',
+    installationId: forged.f.context.installationId, organisationId: forged.f.context.organisationId,
+    operationId: forged.f.context.operationId, writerId: done.writerId, writerEpoch: done.writerEpoch,
+    sourceRevision: done.sourceRevision, preparationDigest: done.preparationDigest,
+    authorizationId: forged.f.facts.authorization.id, deletionId: done.deletionId,
+    completionEntryDigest: '0'.repeat(64), completionEnvelopeDigest: completion.envelopeDigest,
+    completionBodyDigest: createHash('sha256').update(completion.body).digest('hex'), completenessDigest: 'a'.repeat(64),
+    areas: Object.fromEntries(['VERSIONS', 'CONFLUENCE', 'EXPORTS', 'AUDIT', 'BACKUPS'].map((a) => [a,
+      { plan: 'RETAIN_APPROVED', scopes: 1 }])) }).body;
+  const preserved = await preserveDocumentDisposalOutcome(body, forged.f.context, forged.f.keys, forged.f.store);
+  await forged.f.journal.appendReservedDocumentDisposalOutcome({ operationId: forged.f.context.operationId,
+    writerId: done.writerId, writerEpoch: done.writerEpoch, preparationDigest: done.preparationDigest,
+    completionGeneration: completion.generation, completionEntryDigest: completion.entryDigest,
+    completionEnvelopeDigest: completion.envelopeDigest, outcomeEnvelopeDigest: preserved.digest }, forged.f.store);
+  await assert.rejects(readPublishedDocumentDisposalOutcome(forged.f.journal, forged.f.store, forged.f.context,
+    forged.f.keys, forged.f.store), /does not match its authenticated completion/);
+  // A genuine outcome stops being reported once anything follows it.
+  const published = await publishOutcome();
+  const publisher = {
+    async readHead() {
+      const value = await f.store.readControl();
+      return { installationId: value.installationId, organisationId: value.organisationId,
+        generation: value.generation, digest: value.digest, revision: value.revision };
+    },
+    async compareAndSwap(expectedRevision: string, next: { generation: number; digest: string | null }) {
+      const { revision, ...value } = await f.store.readControl();
+      if (revision !== expectedRevision) return false;
+      return f.store.compareAndSwapControl(revision, { ...value, ...next });
+    },
+  };
+  await f.journal.appendPublished({ operationId: 'later-standalone', kind: 'PRESERVATION_CHANGE',
+    factsDigest: 'e'.repeat(64), expectedGeneration: published.generation, expectedDigest: published.entryDigest },
+  publisher);
+  await assert.rejects(read(), /not the current head/);
+});
+
+test('the whole-case outcome refuses an unfinished primary and anything but the exact completion', async () => {
+  const setup = await observedAndUnknown();
+  setup.state.dispositions.push(...retainedEverywhere());
+  const publishOutcome = () => publishVerifiedDocumentDisposalOutcome(setup.prisma, setup.f.journal,
+    setup.f.store, setup.f.context, setup.f.keys, setup.f.store, setup.f.facts.authorization.id);
+  await setup.publish();
+  // Copies resolved, primary completion published but not yet applied locally.
+  await assert.rejects(publishOutcome(), /incomplete: PRIMARY_NOT_COMPLETED/);
+  await setup.finalize();
+  const completion = await readPublishedDocumentBytePrimaryCompletion(setup.f.journal, setup.f.store,
+    setup.f.context, setup.f.keys, setup.f.store);
+  const marker = JSON.parse(completion.body);
+  await assert.rejects(setup.f.journal.appendReservedDocumentDisposalOutcome({
+    operationId: setup.f.context.operationId, writerId: marker.writerId, writerEpoch: marker.writerEpoch,
+    preparationDigest: marker.preparationDigest, completionGeneration: completion.generation,
+    completionEntryDigest: '0'.repeat(64), completionEnvelopeDigest: completion.envelopeDigest,
+    outcomeEnvelopeDigest: '1'.repeat(64) }, setup.f.store), /exact published completion/);
+  // The store itself refuses to release on the completion: only the outcome releases.
+  const control = await setup.f.store.readControl();
+  await assert.rejects(setup.f.store.releaseControl(control.revision, { operationId: setup.f.context.operationId,
+    preparationDigest: marker.preparationDigest, generation: control.generation, digest: control.digest! }),
+  /release outcome mismatch/);
+  assert.notEqual((await setup.f.store.readControl()).activeOperation, null);
 });
 
 test('a finalize that loses an overlapping race reports the winning completion instead of failing', async () => {

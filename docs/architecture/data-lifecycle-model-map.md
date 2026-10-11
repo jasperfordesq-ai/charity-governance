@@ -101,6 +101,32 @@ job, and an observation from the same transaction cannot back it. Its scope is
 `PRIMARY_ACTIVE_OBJECT_ONLY`: versions, Confluence copies, exports and backups
 are not covered, and the recovery operation stays reserved. No production
 worker calls it.
+The whole case closes only through a seventh independent entry,
+`DOCUMENT_DISPOSAL_OUTCOME_V1`, published after the primary completion.
+`readDocumentDisposalCompleteness` must first show every copy area in the
+authorization's plan resolved. For each area marked DISPOSE or RETAIN_APPROVED:
+- at least one recorded scope;
+- the latest observation for every scope is VERIFIED_ABSENT, NOT_APPLICABLE,
+  or RETAINED_APPROVED with its follow-up review not yet due;
+- any scoped authority is still current and unexpired.
+NEEDS_REVIEW, PENDING_DISPOSAL, FAILED, observations under withdrawn or
+replaced authority, and a scope held before its first observation keep it
+open. The outcome carries counts and an evidence digest, never scope
+references or reasons.
+
+The outcome is published and released only under recovery enforcement. There,
+the database freezes every copy evidence write, and the enforcement row is
+terminal, so one outcome body per operation cannot be outdated before its
+append. The operation reservation can be released only on that outcome, and
+only while the evidence is unchanged and the case is still complete. A review
+or authority that falls due first keeps the operation reserved, which fails
+closed. The store refuses to release on the primary completion.
+
+Whether recorded scopes cover every real copy is the reviewer's attestation.
+Because copy evidence is frozen under enforcement, the outcome is unreachable
+until each copy write has its own independently published entry. Allowing
+writes without one fails open on restore: losing a write that reopens a case
+makes the case look complete again. No production worker calls any of it.
 `executeVerifiedDocumentBytePrimaryDeletion` composes the lease claim, start
 marker, an immediate pre-provider re-check of the independent decision, one
 bounded call to the eraser selected by the decided provider, and the absence observation.
