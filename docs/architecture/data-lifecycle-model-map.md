@@ -101,6 +101,23 @@ job, and an observation from the same transaction cannot back it. Its scope is
 `PRIMARY_ACTIVE_OBJECT_ONLY`: versions, Confluence copies, exports and backups
 are not covered, and the recovery operation stays reserved. No production
 worker calls it.
+The whole case closes only through a seventh independent entry,
+`DOCUMENT_DISPOSAL_OUTCOME_V1`, published after the primary completion.
+`readDocumentDisposalCompleteness` must first show every copy area in the
+authorization's plan resolved. For each area marked DISPOSE or RETAIN_APPROVED:
+- at least one recorded scope;
+- the latest observation for every scope is VERIFIED_ABSENT, NOT_APPLICABLE,
+  or RETAINED_APPROVED with its follow-up review not yet due;
+- any scoped authority is still current and unexpired.
+NEEDS_REVIEW, PENDING_DISPOSAL, FAILED, and observations under withdrawn or
+replaced authority keep it open. The outcome carries counts and an evidence
+digest, never scope references or reasons. The operation reservation can be
+released only on that outcome, and only while the evidence is unchanged; the
+store refuses to release on the primary completion. Whether recorded scopes
+cover every real copy is the reviewer's attestation. While a charity is under
+recovery enforcement, copy evidence cannot yet be written, so the outcome is
+unreachable until a recovery-bound copy-evidence writer exists. No production
+worker calls any of it.
 `executeVerifiedDocumentBytePrimaryDeletion` composes the lease claim, start
 marker, an immediate pre-provider re-check of the independent decision, one
 bounded call to the eraser selected by the decided provider, and the absence observation.

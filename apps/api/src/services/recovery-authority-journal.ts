@@ -23,7 +23,7 @@ const kinds = z.enum(['DISPOSAL_INTENT', 'DISPOSAL_RESULT', 'PRESERVATION_CHANGE
   'COMPLAINT_PREPARATION_V1', 'COMPLAINT_OUTCOME_V1', 'COMPLAINT_HOLD_PREPARATION_V1', 'COMPLAINT_HOLD_OUTCOME_V1',
   'COMPLAINT_CANCELLATION_V1', 'COMPLAINT_HOLD_CANCELLATION_V1', 'DOCUMENT_PREPARATION_V1', 'DOCUMENT_OUTCOME_V1',
   'DOCUMENT_BYTE_PERMIT_V1', 'DOCUMENT_BYTE_EXECUTION_DECISION_V1',
-  'DOCUMENT_BYTE_PROVIDER_UNKNOWN_V1', 'DOCUMENT_BYTE_PRIMARY_COMPLETION_V1']);
+  'DOCUMENT_BYTE_PROVIDER_UNKNOWN_V1', 'DOCUMENT_BYTE_PRIMARY_COMPLETION_V1', 'DOCUMENT_DISPOSAL_OUTCOME_V1']);
 const bindingSchema = z.object({ installationId: identity, organisationId: identity }).strict();
 const checkpointFields = {
   generation: z.number().int().nonnegative().max(10000), digest: digest.nullable(),
@@ -56,7 +56,7 @@ const admissionSlots: Partial<Record<Entry['kind'], number>> = {
   DISPOSAL_INTENT: 2,
   COMPLAINT_PREPARATION_V1: 2,
   COMPLAINT_HOLD_PREPARATION_V1: 2,
-  DOCUMENT_PREPARATION_V1: 6,
+  DOCUMENT_PREPARATION_V1: 7,
 };
 const predecessorKind = (kind: Entry['kind']): Entry['kind'] | undefined => {
   if (kind === 'COMPLAINT_OUTCOME_V1' || kind === 'COMPLAINT_CANCELLATION_V1') return 'COMPLAINT_PREPARATION_V1';
@@ -69,6 +69,9 @@ const predecessorKind = (kind: Entry['kind']): Entry['kind'] | undefined => {
   // possible I/O until reconciled, so the chain stays linear and nothing can
   // complete without first recording that uncertainty independently.
   if (kind === 'DOCUMENT_BYTE_PRIMARY_COMPLETION_V1') return 'DOCUMENT_BYTE_PROVIDER_UNKNOWN_V1';
+  // The whole case closes only after the primary file's completion, once every
+  // copy area is resolved; this is the entry the operation is released on.
+  if (kind === 'DOCUMENT_DISPOSAL_OUTCOME_V1') return 'DOCUMENT_BYTE_PRIMARY_COMPLETION_V1';
   return undefined;
 };
 const isAncestorKind = (ancestor: Entry['kind'], kind: Entry['kind']) => {
@@ -483,6 +486,30 @@ export class RecoveryAuthorityJournal {
     return this.appendPublished({ operationId: request.operationId,
       kind: 'DOCUMENT_BYTE_PRIMARY_COMPLETION_V1', factsDigest: request.completionEnvelopeDigest,
       expectedGeneration: unknown.generation, expectedDigest: unknown.digest }, publisher);
+  }
+
+  /** Seventh-stage whole-case outcome: every copy area resolved after the
+   * primary completion. Its encrypted facts must be authenticated by the
+   * caller against that completion and the local evidence. It is the entry a
+   * document operation is released on; it deletes or retains nothing itself. */
+  async appendReservedDocumentDisposalOutcome(raw: unknown, control: RecoveryControlStore) {
+    const request = z.object({ operationId: identity, writerId: identity,
+      writerEpoch: z.number().int().positive().max(2147483647), preparationDigest: digest,
+      completionGeneration: z.number().int().positive().max(9999), completionEntryDigest: digest,
+      completionEnvelopeDigest: digest, outcomeEnvelopeDigest: digest,
+    }).strict().parse(raw);
+    const publisher = await this.complaintPublisher(request, control);
+    const before = await this.readCurrentHead(publisher), rows = await this.history();
+    this.headMatchesHistory(before, rows);
+    const completion = rows[request.completionGeneration - 1];
+    if (!completion || completion.kind !== 'DOCUMENT_BYTE_PRIMARY_COMPLETION_V1'
+      || completion.operationId !== request.operationId || completion.digest !== request.completionEntryDigest
+      || completion.factsDigest !== request.completionEnvelopeDigest || before.generation < completion.generation) {
+      throw new Error('Document disposal outcome requires the exact published completion');
+    }
+    return this.appendPublished({ operationId: request.operationId,
+      kind: 'DOCUMENT_DISPOSAL_OUTCOME_V1', factsDigest: request.outcomeEnvelopeDigest,
+      expectedGeneration: completion.generation, expectedDigest: completion.digest }, publisher);
   }
 
   async appendReservedHoldOutcome(raw: unknown, control: RecoveryControlStore) {

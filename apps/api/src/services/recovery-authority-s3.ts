@@ -14,6 +14,7 @@ import { inspectDocumentBytePermitEnvelope } from './document-byte-permit-envelo
 import { inspectDocumentByteExecutionDecisionEnvelope } from './document-byte-execution-decision-envelope.js';
 import { inspectDocumentByteProviderUnknownEnvelope } from './document-byte-provider-unknown-envelope.js';
 import { inspectDocumentBytePrimaryCompletionEnvelope } from './document-byte-primary-completion-envelope.js';
+import { inspectDocumentDisposalOutcomeEnvelope } from './document-disposal-outcome-envelope.js';
 import { inspectRecoveryOutcomeEnvelope } from './recovery-outcome-envelope.js';
 import { inspectHoldOutcomeEnvelope } from './hold-outcome-envelope.js';
 import { validateRecoveryControlValue, type RecoveryControlStore, type RecoveryControlValue } from './recovery-operation-reservation.js';
@@ -407,6 +408,34 @@ export class S3AuthorityObjectStore implements AuthorityObjectStore, AuthorityHe
     return this.writeObject(request, envelope, { IfNoneMatch: '*' }, 32768);
   }
 
+  private documentDisposalOutcomeRequest(operationId: string) {
+    const request = this.replayRequest(operationId);
+    return { ...request, Key:
+      `document-disposal-outcomes/${this.config.installationId}/${this.config.organisationId}/${operationId}.json` };
+  }
+
+  private checkDocumentDisposalOutcome(operationId: string, envelope: string) {
+    const context = inspectDocumentDisposalOutcomeEnvelope(envelope);
+    if (context.installationId !== this.config.installationId
+      || context.organisationId !== this.config.organisationId
+      || context.operationId !== operationId || context.keyId !== this.config.replayKeyArn) {
+      throw new Error('Document disposal outcome envelope scope mismatch');
+    }
+  }
+
+  async readDocumentDisposalOutcome(operationId: string) {
+    const object = await this.readObject(this.documentDisposalOutcomeRequest(operationId), undefined, 32768);
+    if (!object) return null;
+    this.checkDocumentDisposalOutcome(operationId, object.body);
+    return object.body;
+  }
+
+  async createDocumentDisposalOutcome(operationId: string, envelope: string) {
+    const request = this.documentDisposalOutcomeRequest(operationId);
+    this.checkDocumentDisposalOutcome(operationId, envelope);
+    return this.writeObject(request, envelope, { IfNoneMatch: '*' }, 32768);
+  }
+
   private holdOutcomeRequest(operationId: string) {
     const request = this.replayRequest(operationId);
     return { ...request, Key: `hold-outcomes/${this.config.installationId}/${this.config.organisationId}/${operationId}.json` };
@@ -549,7 +578,8 @@ export class S3AuthorityObjectStore implements AuthorityObjectStore, AuthorityHe
     if (body === null) throw new Error('Recovery release outcome is missing');
     const entry = validateRecoveryAuthorityEntry(JSON.parse(body));
     if ((entry.kind !== 'COMPLAINT_OUTCOME_V1' && entry.kind !== 'COMPLAINT_HOLD_OUTCOME_V1'
-      && entry.kind !== 'COMPLAINT_CANCELLATION_V1' && entry.kind !== 'COMPLAINT_HOLD_CANCELLATION_V1') || entry.installationId !== this.config.installationId
+      && entry.kind !== 'COMPLAINT_CANCELLATION_V1' && entry.kind !== 'COMPLAINT_HOLD_CANCELLATION_V1'
+      && entry.kind !== 'DOCUMENT_DISPOSAL_OUTCOME_V1') || entry.installationId !== this.config.installationId
       || entry.organisationId !== this.config.organisationId || entry.operationId !== expected.operationId
       || entry.generation !== expected.generation || entry.digest !== expected.digest) throw new Error('Recovery release outcome mismatch');
     return this.writeObject(this.headRequest(), JSON.stringify({ ...current.value, activeOperation: null,
