@@ -16,6 +16,7 @@ import {
   TableRow,
 } from '@heroui/react';
 import { ownerApi, type TenantSummary } from '@/lib/owner-api';
+import { selectOption } from '@/lib/select-option';
 
 const STATUS_COLOR = {
   ACTIVE: 'success',
@@ -105,9 +106,9 @@ export default function OwnerTenantsPage() {
           aria-label="Filter by status"
           className="sm:max-w-[220px]"
           selectedKeys={[status]}
-          onSelectionChange={(keys) => {
-            const next = Array.from(keys)[0];
-            if (typeof next === 'string') setStatus(next as StatusFilter);
+          onChange={(e) => {
+            const next = selectOption(e.target.value, STATUS_OPTIONS.map((option) => option.key));
+            if (next) setStatus(next);
           }}
         >
           {STATUS_OPTIONS.map((option) => (

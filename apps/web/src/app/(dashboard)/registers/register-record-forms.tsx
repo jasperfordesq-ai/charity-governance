@@ -2,6 +2,7 @@
 
 import { Input, Select, SelectItem, Textarea } from '@heroui/react';
 import { FieldGroup } from '@/components/ui/forms';
+import { selectOption } from '@/lib/select-option';
 import { RiskCategory } from '@charitypilot/shared';
 import { ToggleRow } from './register-compliance-cards';
 
@@ -58,8 +59,8 @@ export function RiskForm({ form, updateForm }: FormProps) {
     <FieldGroup title="Risk record" description="Score likelihood and impact from 1 to 5, then record mitigation and owner.">
       <Input label="Risk title" value={String(form.title ?? '')} onValueChange={(value) => updateForm('title', value)} isRequired />
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
-        <Select label="Category" selectedKeys={new Set([String(form.category ?? RiskCategory.GOVERNANCE)])} onSelectionChange={(keys) => {
-          const value = Array.from(keys)[0] as string | undefined;
+        <Select label="Category" selectedKeys={new Set([String(form.category ?? RiskCategory.GOVERNANCE)])} onChange={(e) => {
+          const value = selectOption(e.target.value, Object.keys(riskCategoryLabels));
           if (value) updateForm('category', value);
         }}>
           {Object.entries(riskCategoryLabels).map(([value, label]) => <SelectItem key={value}>{label}</SelectItem>)}

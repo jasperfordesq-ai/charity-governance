@@ -10,6 +10,7 @@ import { DataListItems } from '@/components/ui/data-list';
 import { FieldGroup, FormHint } from '@/components/ui/forms';
 import { EmptyState, PermissionHint } from '@/components/ui/states';
 import { StatusChip, statusPanelClassName } from '@/components/ui/status';
+import { selectOption } from '@/lib/select-option';
 import { ROLE_META, formatDate, inviteStatus } from './team-display';
 import { useInviteLinkReissue } from './use-invite-link-reissue';
 import { CopyLinkButton } from '@/components/copy-link-button';
@@ -78,9 +79,9 @@ export function TeamInvitesPanel({
             label="Role"
             selectedKeys={new Set([role])}
             isDisabled={!canInvite || managementDisabled}
-            onSelectionChange={(keys) => {
-              const next = Array.from(keys)[0] as UserRole.ADMIN | UserRole.MEMBER | undefined;
-              if (next && allowedInviteRoles.includes(next)) setRole(next);
+            onChange={(e) => {
+              const next = selectOption(e.target.value, allowedInviteRoles);
+              if (next) setRole(next);
             }}
           >
             <SelectItem key={UserRole.MEMBER}>Member</SelectItem>

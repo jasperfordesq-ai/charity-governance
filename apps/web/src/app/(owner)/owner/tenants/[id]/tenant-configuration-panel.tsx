@@ -11,6 +11,7 @@ import {
 } from '@heroui/react';
 import { ownerApi, type TenantConfiguration } from '@/lib/owner-api';
 import { apiErrorMessage } from '@/lib/errors';
+import { selectOption } from '@/lib/select-option';
 
 /**
  * The settings a platform operator may change about a charity they do not
@@ -108,9 +109,12 @@ export function TenantConfigurationPanel({ tenantId }: { tenantId: string }) {
             : 'Where this charity’s uploaded files are stored.'
         }
         selectedKeys={[provider]}
-        onSelectionChange={(keys) => {
-          const next = Array.from(keys)[0];
-          if (typeof next === 'string') setProvider(next);
+        onChange={(e) => {
+          const next = selectOption(e.target.value, [
+            DEFAULT_PROVIDER_KEY,
+            ...configuration.availableProviders.filter((option) => option.selectable).map((option) => option.id),
+          ]);
+          if (next) setProvider(next);
         }}
       >
         {[
@@ -144,9 +148,9 @@ export function TenantConfigurationPanel({ tenantId }: { tenantId: string }) {
       <Select
         label="Plan"
         selectedKeys={[plan]}
-        onSelectionChange={(keys) => {
-          const next = Array.from(keys)[0];
-          if (typeof next === 'string') setPlan(next);
+        onChange={(e) => {
+          const next = selectOption(e.target.value, ['ESSENTIALS', 'COMPLETE']);
+          if (next) setPlan(next);
         }}
       >
         <SelectItem key="ESSENTIALS">Essentials</SelectItem>

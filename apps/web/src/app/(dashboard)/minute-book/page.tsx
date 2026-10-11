@@ -6,6 +6,7 @@ import { useAuth } from '@/lib/auth-context';
 import { AppPage, AppSection } from '@/components/ui/app-page';
 import { primaryActionButtonClassName } from '@/components/ui/action-button';
 import { ErrorState, LoadingState, PermissionHint } from '@/components/ui/states';
+import { selectOption } from '@/lib/select-option';
 import { MinuteBookList } from './minute-book-list';
 import { MinuteBookAudit } from './minute-book-audit';
 import { ActModal, VoidModal } from './minute-book-modals';
@@ -13,8 +14,6 @@ import {
   GOVERNING_ACT_KINDS,
   GOVERNING_ACT_STATUSES,
   useMinuteBookWorkflow,
-  type GoverningActKind,
-  type GoverningActStatus,
 } from './use-minute-book-workflow';
 
 export default function MinuteBookPage() {
@@ -130,9 +129,10 @@ export default function MinuteBookPage() {
                   size="sm"
                   selectedKeys={kindFilter ? new Set([kindFilter]) : new Set()}
                   placeholder="All kinds"
-                  onSelectionChange={(keys) =>
-                    setKindFilter((Array.from(keys)[0] as GoverningActKind | undefined) ?? '')
-                  }
+                  onChange={(e) => {
+                    const value = selectOption(e.target.value, ['', ...GOVERNING_ACT_KINDS]);
+                    if (value !== undefined) setKindFilter(value);
+                  }}
                 >
                   {GOVERNING_ACT_KINDS.map((k) => (
                     <SelectItem key={k}>{k.replaceAll('_', ' ').toLowerCase()}</SelectItem>
@@ -144,9 +144,10 @@ export default function MinuteBookPage() {
                   size="sm"
                   selectedKeys={statusFilter ? new Set([statusFilter]) : new Set()}
                   placeholder="All statuses"
-                  onSelectionChange={(keys) =>
-                    setStatusFilter((Array.from(keys)[0] as GoverningActStatus | undefined) ?? '')
-                  }
+                  onChange={(e) => {
+                    const value = selectOption(e.target.value, ['', ...GOVERNING_ACT_STATUSES]);
+                    if (value !== undefined) setStatusFilter(value);
+                  }}
                 >
                   {GOVERNING_ACT_STATUSES.map((s) => (
                     <SelectItem key={s}>{s}</SelectItem>

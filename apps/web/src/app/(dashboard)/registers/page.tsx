@@ -9,6 +9,7 @@ import {
   SelectItem,
 } from '@heroui/react';
 import { useDocumentTitle } from '@/lib/use-title';
+import { selectOption } from '@/lib/select-option';
 import { AppPage, AppSection } from '@/components/ui/app-page';
 import { primaryActionButtonClassName } from '@/components/ui/action-button';
 import { ErrorState, LoadingState, LockedFeatureState, SaveStatusIndicator } from '@/components/ui/states';
@@ -112,8 +113,8 @@ export default function RegistersPage() {
             label="Reporting year"
             className="w-44"
             selectedKeys={new Set([String(year)])}
-            onSelectionChange={(keys) => {
-              const value = Array.from(keys)[0];
+            onChange={(e) => {
+              const value = selectOption(e.target.value, Array.from({ length: 5 }, (_, i) => String(currentYear - i)));
               if (value) setYear(Number(value));
             }}
           >

@@ -3,6 +3,7 @@
 import { Button, Checkbox, Input, Progress, Select, SelectItem, Textarea } from '@heroui/react';
 import { primaryActionButtonClassName } from '@/components/ui/action-button';
 import { FieldGroup, FormHint } from '@/components/ui/forms';
+import { selectOption } from '@/lib/select-option';
 import { EvidenceChip, ReviewFlag, StatusChip, statusPanelClassName } from '@/components/ui/status';
 import {
   AnnualReportFilingStatus,
@@ -89,8 +90,8 @@ export function AnnualReportCard({
         <FieldGroup title="Filing evidence">
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
             <Input type="date" label="Board approval date" value={dateInput(annual.boardApprovalDate)} isReadOnly={!canManage} onValueChange={(value) => setAnnual({ ...annual, boardApprovalDate: value || null })} />
-            <Select label="Filing status" selectedKeys={new Set([annual.filingStatus])} isDisabled={!canManage} onSelectionChange={(keys) => {
-              const value = Array.from(keys)[0] as AnnualReportFilingStatus | undefined;
+            <Select label="Filing status" selectedKeys={new Set([annual.filingStatus])} isDisabled={!canManage} onChange={(e) => {
+              const value = selectOption(e.target.value, Object.keys(filingLabels) as AnnualReportFilingStatus[]);
               if (value) setAnnual({ ...annual, filingStatus: value });
             }}>
               {Object.entries(filingLabels).map(([value, label]) => <SelectItem key={value}>{label}</SelectItem>)}

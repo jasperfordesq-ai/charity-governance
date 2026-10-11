@@ -12,6 +12,7 @@ import { ComplianceAudit } from './compliance-audit';
 import { IRISH_COMPLIANCE_MATRIX } from '@charitypilot/shared';
 import { useAuth } from '@/lib/auth-context';
 import { canManageGovernance } from '@/lib/governance-permissions';
+import { selectOption } from '@/lib/select-option';
 import { scoreColour, useComplianceOverviewWorkflow } from './use-compliance-overview-workflow';
 
 export default function CompliancePage() {
@@ -46,8 +47,8 @@ export default function CompliancePage() {
           <Select
             label="Reporting Year"
             selectedKeys={new Set([String(year)])}
-            onSelectionChange={(keys) => {
-              const val = Array.from(keys)[0];
+            onChange={(e) => {
+              const val = selectOption(e.target.value, yearOptions.map(String));
               if (val) setYear(Number(val));
             }}
             className="w-40"

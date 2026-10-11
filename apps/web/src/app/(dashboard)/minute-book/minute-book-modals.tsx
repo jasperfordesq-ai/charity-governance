@@ -17,9 +17,8 @@ import {
   GOVERNING_ACT_STATUSES,
   type ActForm,
   type GoverningAct,
-  type GoverningActKind,
-  type GoverningActStatus,
 } from './use-minute-book-workflow';
+import { selectOption } from '@/lib/select-option';
 
 type ActModalProps = {
   mode: 'closed' | 'create' | 'edit';
@@ -48,8 +47,8 @@ export function ActModal({ mode, form, updateForm, formError, saving, onClose, o
             <Select
               label="Kind"
               selectedKeys={new Set([form.kind])}
-              onSelectionChange={(keys) => {
-                const value = Array.from(keys)[0] as GoverningActKind | undefined;
+              onChange={(e) => {
+                const value = selectOption(e.target.value, GOVERNING_ACT_KINDS);
                 if (value) updateForm({ kind: value });
               }}
             >
@@ -61,8 +60,8 @@ export function ActModal({ mode, form, updateForm, formError, saving, onClose, o
             <Select
               label="Status"
               selectedKeys={new Set([form.status])}
-              onSelectionChange={(keys) => {
-                const value = Array.from(keys)[0] as GoverningActStatus | undefined;
+              onChange={(e) => {
+                const value = selectOption(e.target.value, GOVERNING_ACT_STATUSES);
                 if (value) updateForm({ status: value });
               }}
             >

@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import { Button, Card, CardBody, Input, Radio, RadioGroup, Select, SelectItem } from '@heroui/react';
 import { ownerApi } from '@/lib/owner-api';
 import { apiErrorMessage } from '@/lib/errors';
+import { selectOption } from '@/lib/select-option';
 import { CopyLinkButton } from '@/components/copy-link-button';
 
 const PLANS = ['ESSENTIALS', 'COMPLETE'] as const;
@@ -129,9 +130,9 @@ export default function OwnerProvisionTenantPage() {
             <Select
               label="Plan"
               selectedKeys={new Set([plan])}
-              onSelectionChange={(keys) => {
-                const value = Array.from(keys)[0];
-                if (value === 'ESSENTIALS' || value === 'COMPLETE') setPlan(value);
+              onChange={(e) => {
+                const value = selectOption(e.target.value, PLANS);
+                if (value) setPlan(value);
               }}
             >
               {PLANS.map((option) => (

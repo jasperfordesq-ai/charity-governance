@@ -10,6 +10,7 @@ import {
 import { DataList, DataListItems } from '@/components/ui/data-list';
 import { EmptyState, ErrorState, LoadingState, PermissionHint } from '@/components/ui/states';
 import { ReviewFlag, StatusChip } from '@/components/ui/status';
+import { selectOption } from '@/lib/select-option';
 import { ROLE_META, formatDate } from './team-display';
 
 export function TeamMembersPanel({
@@ -104,8 +105,8 @@ export function TeamMembersPanel({
                         size="sm"
                         selectedKeys={new Set([member.role])}
                         isDisabled={managementDisabled || Boolean(roleUpdateMemberId)}
-                        onSelectionChange={(keys) => {
-                          const next = Array.from(keys)[0] as UserRole.ADMIN | UserRole.MEMBER | undefined;
+                        onChange={(e) => {
+                          const next = selectOption(e.target.value, [UserRole.ADMIN, UserRole.MEMBER] as const);
                           if (next && next !== member.role) onUpdateRole(member, next);
                         }}
                       >
