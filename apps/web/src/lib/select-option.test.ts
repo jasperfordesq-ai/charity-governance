@@ -26,6 +26,27 @@ test('selectOption refuses the blank option and anything outside the keys', () =
 // onSelectionChange receives only the first character of a key chosen through
 // the hidden native <select>, so a Select wired to it cannot be set by autofill
 // or automation, and a handler with side effects receives a key that does not exist.
+// Only a <Select> element counts: other components (a selectable Table, a
+// Listbox) use onSelectionChange legitimately, and comments are ignored.
+function selectWiredToSelectionChange(source: string) {
+  const code = source.replace(/\/\*[\s\S]*?\*\//g, '').replace(/(^|[^:])\/\/.*$/gm, '$1');
+  for (const match of code.matchAll(/<Select(?![A-Za-z0-9_])/g)) {
+    const rest = code.slice(match.index);
+    const end = rest.indexOf('</Select>');
+    if ((end === -1 ? rest : rest.slice(0, end)).includes('onSelectionChange')) return true;
+  }
+  return false;
+}
+
+test('the Select scan flags only a Select wired to onSelectionChange', () => {
+  assert.equal(selectWiredToSelectionChange('<Select label="x" onSelectionChange={f}><SelectItem key="a">A</SelectItem></Select>'), true);
+  assert.equal(selectWiredToSelectionChange('<Select\n  onChange={g}\n  onSelectionChange={(keys) => f(keys)}\n>{items}</Select>'), true);
+  assert.equal(selectWiredToSelectionChange('<Table selectionMode="single" onSelectionChange={f}>{rows}</Table>'), false);
+  assert.equal(selectWiredToSelectionChange('<Select onChange={g}><SelectItem key="a">A</SelectItem></Select>\n<Table onSelectionChange={f} />'), false);
+  assert.equal(selectWiredToSelectionChange('// never use onSelectionChange on a Select\n<Select onChange={g}>{items}</Select>'), false);
+  assert.equal(selectWiredToSelectionChange('<SelectItem key="a" /> <Listbox onSelectionChange={f} />'), false);
+});
+
 test('no HeroUI Select in the web app is wired to onSelectionChange', () => {
   const src = join(process.cwd(), 'src');
   const offenders: string[] = [];
@@ -33,7 +54,7 @@ test('no HeroUI Select in the web app is wired to onSelectionChange', () => {
     for (const entry of readdirSync(dir)) {
       const path = join(dir, entry);
       if (statSync(path).isDirectory()) walk(path);
-      else if (path.endsWith('.tsx') && readFileSync(path, 'utf8').includes('onSelectionChange')) {
+      else if (path.endsWith('.tsx') && selectWiredToSelectionChange(readFileSync(path, 'utf8'))) {
         offenders.push(relative(src, path));
       }
     }
