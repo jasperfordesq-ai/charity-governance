@@ -9,7 +9,7 @@ const authority={area:'BACKUPS',scopeRef:'BACKUP-001',revision:1,previousId:null
 const hold={area:'BACKUPS',scopeRef:'BACKUP-001',revision:1,observationRevision:1,held:true,
   evidenceRef:'HOLD-001',reason:'Preserve synthetic copy scope',holdConfirmed:true};
 function fixture(kind:'DOCUMENT'|'COMPLAINT') {
-  const state={allowed:true,parent:true,claimed:true,bound:false,completionOrg:null as string|null,writes:[] as any[],actorQueries:[] as any[],rows:[] as any[],reads:[] as any[],error:null as Error|null};
+  const state={allowed:true,parent:true,claimed:true,bound:false,writes:[] as any[],actorQueries:[] as any[],rows:[] as any[],reads:[] as any[],error:null as Error|null};
   const history={findFirst:async({where}:any)=>state.rows.find(row=>row.id===where.id&&row.organisationId===where.organisationId&&row.authorizationId===where.authorizationId)??null,findMany:async(args:any)=>{state.reads.push(args);return state.rows;},
     create:async({data,select}:any)=>{if(state.error)throw state.error;state.writes.push({data,select});return data;}};
   const parent={findFirst:async({where}:any)=>{assert.deepEqual(where,{id:'auth',organisationId:'org'});return state.parent?{id:'auth',claim:state.claimed?{id:'claim'}:null}:null;}};
@@ -17,29 +17,10 @@ function fixture(kind:'DOCUMENT'|'COMPLAINT') {
     documentPurgeAuthorization:parent,complaintPurgeAuthorization:parent,
     documentRecoveryEnforcement:{findUnique:async()=>state.bound?{id:'binding'}:null},
     complaintRecoveryEnforcement:{findUnique:async()=>state.bound?{id:'binding'}:null},
-    documentPurgeClaim:{findFirst:async({where}:any)=>{assert.deepEqual(where,{authorizationId:'auth',organisationId:'org'});
-      return state.claimed?{deletionId:'deletion'}:null;}},
-    documentBytePrimaryCompletion:{findUnique:async({where}:any)=>{assert.deepEqual(where,{deletionId:'deletion'});
-      return state.completionOrg?{organisationId:state.completionOrg}:null;}},
     documentCopyDispositionAuthority:history,complaintCopyDispositionAuthority:history,
     documentCopyHoldEvent:history,complaintCopyHoldEvent:history,documentPurgeDispositionEvent:history,complaintPurgeDispositionEvent:history};
   return {state,service:new CopyReviewService({...tx,$transaction:async(fn:any)=>fn(tx)} as any,kind)};
 }
-test('under recovery binding, a document copy authority is accepted once the primary has completed; holds stay frozen',async()=>{
-  const {state,service}=fixture('DOCUMENT');state.bound=true;
-  state.completionOrg='other-charity';
-  await assert.rejects(service.review('org','actor','auth',authority),{statusCode:409,code:'COPY_RECOVERY_AUTHORITY_REQUIRED'});
-  state.completionOrg='org';
-  await service.review('org','actor','auth',authority);
-  assert.equal(state.writes.length,1);
-  await assert.rejects(service.hold('org','actor','auth',hold),{statusCode:409,code:'COPY_RECOVERY_AUTHORITY_REQUIRED'});
-  assert.equal(state.writes.length,1,'a hold never takes the completed-primary allowance');
-});
-test('a complaint copy authority stays frozen under recovery binding',async()=>{
-  const {state,service}=fixture('COMPLAINT');state.bound=true;state.completionOrg='org';
-  await assert.rejects(service.review('org','actor','auth',authority),{statusCode:409,code:'COPY_RECOVERY_AUTHORITY_REQUIRED'});
-  assert.equal(state.writes.length,0);
-});
 for(const kind of ['DOCUMENT','COMPLAINT'] as const) {
   test(`${kind} recovery binding freezes copy writes but keeps history readable`,async()=>{
     const {state,service}=fixture(kind);state.bound=true;

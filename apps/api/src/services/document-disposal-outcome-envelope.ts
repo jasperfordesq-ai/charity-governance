@@ -1,7 +1,7 @@
 import { createHash } from 'node:crypto';
 import { z } from 'zod';
 import { openIntegrationSecret, sealIntegrationSecret } from './integration-crypto.js';
-import { MAX_DISPOSAL_OUTCOME_BYTES, prepareDocumentDisposalOutcomeFacts } from './document-disposal-outcome.js';
+import { prepareDocumentDisposalOutcomeFacts } from './document-disposal-outcome.js';
 import { validateRecoveryEnvelopeContext, type RecoveryEnvelopeContext,
   type RecoveryDataKeys } from './recovery-preparation-envelope.js';
 
@@ -28,7 +28,7 @@ export function inspectDocumentDisposalOutcomeEnvelope(body: string) {
 }
 
 function requireFacts(body: string, context: RecoveryEnvelopeContext) {
-  if (Buffer.byteLength(body, 'utf8') > MAX_DISPOSAL_OUTCOME_BYTES) throw new Error('oversized');
+  if (Buffer.byteLength(body, 'utf8') > 4096) throw new Error('oversized');
   const prepared = prepareDocumentDisposalOutcomeFacts(JSON.parse(body));
   const facts = JSON.parse(prepared.body);
   if (prepared.body !== body || facts.installationId !== context.installationId

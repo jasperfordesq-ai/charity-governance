@@ -47,16 +47,7 @@ function outcomeFor(context: RecoveryEnvelopeContext, local: Completeness,
     authorizationId: local.authorizationId, deletionId: local.deletionId,
     completionEntryDigest: completion.entryDigest, completionEnvelopeDigest: completion.envelopeDigest,
     completionBodyDigest: hash(completion.body), completenessDigest: local.digest,
-    areas: Object.fromEntries(local.areas.map((a) => [a.area, { plan: a.plan, scopes: a.scopes }])),
-    observations: local.relied.observations.map((row) => ({ id: row.id, area: row.area, scopeRef: row.scopeRef,
-      revision: row.revision, status: row.status, observedAt: row.observedAt?.toISOString(),
-      nextReviewAt: row.nextReviewAt?.toISOString() ?? null, evidenceRef: row.evidenceRef,
-      copyAuthorityId: row.copyAuthorityId })),
-    // Only the authorities the relied-on observations were recorded under.
-    authorities: local.relied.authorities.filter((row) => local.relied.observations
-      .some((o) => o.copyAuthorityId === row.id)).map((row) => ({ id: row.id, area: row.area, scopeRef: row.scopeRef,
-      revision: row.revision, state: row.state, disposition: row.disposition,
-      validUntil: row.validUntil?.toISOString(), evidenceRef: row.evidenceRef })) });
+    areas: Object.fromEntries(local.areas.map((a) => [a.area, { plan: a.plan, scopes: a.scopes }])) });
 }
 
 /** Read the seventh-stage whole-case outcome. It must be the current head,

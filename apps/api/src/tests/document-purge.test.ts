@@ -18,8 +18,7 @@ function fixture() {
     document: { id: 'doc-a', organisationId: 'org-a', updatedAt: date, deletedAt: date,
       deletionHold: false, fileUrl: 'org-a/pinned.txt', storageProvider: 'local', fileSize: bytes.length,
       recoverySha256: createHash('sha256').update(bytes).digest('hex'), recoveryUntil: date } as any,
-    databaseFailure: null as any, listArgs: null as any, dispositionArgs: null as any, dispositionRows: [] as any[],
-    completionOrg: null as string | null };
+    databaseFailure: null as any, listArgs: null as any, dispositionArgs: null as any, dispositionRows: [] as any[] };
   const tx: any = {
     $queryRaw: async () => [],
     documentRecoveryEnforcement: { findUnique: async () => state.bound ? { id: 'binding' } : null },
@@ -37,13 +36,7 @@ function fixture() {
       create: async (args: any) => { if (state.databaseFailure) throw state.databaseFailure; state.dispositionArgs = args; state.writes.push(args.data); return args.data; },
     },
     documentPurgeAuthorizationWithdrawal: { create: async ({ data }: any) => { state.writes.push(data); return data; } },
-    documentBytePrimaryCompletion: { findUnique: async ({ where }: any) => where.deletionId === state.auth?.claim?.deletionId && state.completionOrg
-      ? { organisationId: state.completionOrg } : null },
-    documentPurgeClaim: {
-      findFirst: async ({ where }: any) => state.auth?.id === where.authorizationId
-        && state.auth.organisationId === where.organisationId && state.auth.claim
-        ? { deletionId: state.auth.claim.deletionId } : null,
-      create: async ({ data }: any) => {
+    documentPurgeClaim: { create: async ({ data }: any) => {
       if (state.databaseFailure) throw state.databaseFailure;
       state.claims++; state.auth.claim = { id: 'claim-a', deletionId: data.deletionId, claimedAt: date, transactionId: 12n };
       return { id: 'claim-a', deletionId: data.deletionId, claimedAt: date };
@@ -221,20 +214,6 @@ test('document disposal race returns a safe recovery-authority conflict', async 
     assert.doesNotMatch(error.message, /SECRET/);
     return true;
   });
-});
-
-test('under recovery binding, copy observations are accepted only once the primary has completed', async () => {
-  const { service, state } = fixture();
-  await service.authorize('org-a', 'owner-a', input);
-  await service.claim('org-a', 'owner-a', 'auth-a', { confirmPermanentPurge: true });
-  state.bound = true;
-  state.completionOrg = 'org-b';
-  await assert.rejects(service.recordDisposition('org-a', 'owner-a', 'auth-a', disposition),
-    { statusCode: 409, code: 'COPY_RECOVERY_AUTHORITY_REQUIRED' });
-  assert.equal(state.dispositionArgs, null);
-  state.completionOrg = 'org-a';
-  await service.recordDisposition('org-a', 'owner-a', 'auth-a', disposition);
-  assert.equal((state.dispositionArgs as any)?.data.authorizationId, 'auth-a');
 });
 
 test('document recovery binding freezes copy observation writes while preserving history', async () => {
