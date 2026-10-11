@@ -1991,7 +1991,7 @@ test('the grant is revoked at Atlassian before the credentials are forgotten loc
 
   assert.equal(revokes.length, 1);
   assert.equal(credentialsRemaining, 0);
-  assert.equal(result.revoked, true);
+  assert.equal(result.revokeEndpointAccepted, true);
 
   const [revoke] = revokes;
   assert.ok(revoke);
@@ -2012,7 +2012,7 @@ test('the credentials are forgotten locally even when revocation fails', async (
   const { credentialsRemaining, result, row } = await disconnectWith({ revokeSucceeds: false });
 
   assert.equal(credentialsRemaining, 0);
-  assert.equal(result.revoked, false);
+  assert.equal(result.revokeEndpointAccepted, false);
   // The charity asked to disconnect. Atlassian refusing to be told does not
   // entitle CharityPilot to keep the secrets it was asked to destroy.
   assert.equal(row.status, 'DISCONNECTED');
@@ -2023,7 +2023,7 @@ test('a hanging revoke does not hold the disconnect open', async () => {
   const { credentialsRemaining, result, row } = await disconnectWith({ revokeHangs: true });
 
   assert.equal(credentialsRemaining, 0);
-  assert.equal(result.revoked, false);
+  assert.equal(result.revokeEndpointAccepted, false);
   assert.equal(row.status, 'DISCONNECTED');
 });
 
@@ -2034,7 +2034,7 @@ test('no revoke is attempted when there is no refresh token to withdraw', async 
   // would be refused by Atlassian and reported as a revocation that failed,
   // when in truth there was never a grant of ours left to withdraw.
   assert.equal(revokes.length, 0);
-  assert.equal(result.revoked, false);
+  assert.equal(result.revokeEndpointAccepted, false);
   assert.equal(credentialsRemaining, 0);
 });
 
@@ -2045,7 +2045,7 @@ test('the credentials are forgotten even on a server that cannot open the vault'
   // key. Reading the sealed refresh token in order to revoke it must not have
   // quietly made it so.
   assert.equal(revokes.length, 0, 'an unopenable envelope cannot be presented to Atlassian');
-  assert.equal(result.revoked, false);
+  assert.equal(result.revokeEndpointAccepted, false);
   assert.equal(credentialsRemaining, 0);
   assert.equal(row.status, 'DISCONNECTED');
 });

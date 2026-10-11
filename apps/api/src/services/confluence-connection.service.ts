@@ -1029,9 +1029,11 @@ async function refreshUnderClaim(
  * withdrawn.** Atlassian documents no programmatic revocation for a 3LO app:
  * their OAuth 2.0 (3LO) documentation describes revocation as something the
  * *user* does, and documents no revoke endpoint. The call made below is to a
- * conventional OAuth endpoint that may or may not exist, and `revoked` reports
- * only what that call answered — never that Atlassian has actually forgotten
- * us. `false` may equally mean "the endpoint is not there".
+ * conventional OAuth endpoint that may or may not exist, and
+ * `revokeEndpointAccepted` reports only what that call answered — never that
+ * Atlassian has actually forgotten us. `false` may equally mean "the endpoint is
+ * not there", and `true` has been observed while the grant stayed listed in
+ * Atlassian's Connected apps (C01 sandbox, 11 Oct 2026).
  *
  * Both halves are one transaction. Deleting the credentials while leaving the
  * row `CONNECTED` would advertise a connection with nothing behind it, and
@@ -1047,7 +1049,7 @@ export async function disconnectConfluence(
   prisma: ConfluenceConnectionClient,
   { integrationId }: ConfluenceIntegrationRef,
   deps: ConfluenceConnectionDeps = {},
-): Promise<{ revoked: boolean }> {
+): Promise<{ revokeEndpointAccepted: boolean }> {
   // The conventional OAuth revocation path on Atlassian's identity host.
   // **Atlassian does not document it.** Their 3LO documentation offers no
   // revoke endpoint and describes revocation as user-initiated; a developer
@@ -1146,7 +1148,7 @@ export async function disconnectConfluence(
 
   // The outcome is reported rather than thrown: the disconnect succeeded
   // either way, and the caller needs to be able to tell the difference so it
-  // can say so. `revoked: false` is the ordinary case to plan for, not an
-  // anomaly — see the endpoint comment above. The DELETE route logs it.
-  return { revoked };
+  // can say so. Neither value proves the grant is gone — see the endpoint
+  // comment above. The DELETE route records and logs it.
+  return { revokeEndpointAccepted: revoked };
 }
