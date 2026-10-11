@@ -946,6 +946,7 @@ try {
   const completeness = await readDocumentDisposalCompleteness(prisma,
     { organisationId: 'charity', authorizationId: 'auth' });
   assert.equal(completeness.primaryCompletionRecorded, true);
+  assert.equal(completeness.evidenceFrozen, true, 'the enforcement row is read in the same transaction');
   assert.equal(completeness.complete, false);
   assert.equal(completeness.actionAuthorized, false);
   assert.deepEqual(completeness.areas.map((area) => [area.area, area.plan,

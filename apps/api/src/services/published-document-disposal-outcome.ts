@@ -105,12 +105,18 @@ export async function publishVerifiedDocumentDisposalOutcome(prisma: PrismaClien
   const context = validateRecoveryEnvelopeContext(rawContext);
   const scope = { organisationId: context.organisationId, authorizationId };
   const local = await readDocumentDisposalCompleteness(prisma, scope);
+  // Frozen evidence is what makes one outcome body per operation sound: the
+  // body preserved below cannot be outdated by a copy write before the append.
+  if (!local.evidenceFrozen) throw new Error('Document disposal outcome requires recovery enforcement');
   try {
     const already = await readPublishedDocumentDisposalOutcome(journal, control, context, keys, objects);
     const facts = JSON.parse(already.body);
     if (facts.completenessDigest !== local.digest || facts.authorizationId !== local.authorizationId) {
       throw new Error('Published document disposal outcome differs from current copy evidence');
     }
+    // A review or authority that has fallen due since publication means an
+    // unreleased outcome no longer holds; the operation stays reserved.
+    if (!already.released && !local.complete) throw new Error('Document disposal is no longer complete');
     return { ...already, replayed: true, actionAuthorized: false as const };
   } catch (error) {
     if (!(error instanceof Error) || error.message !== 'Requested recovery entry is not published') throw error;
@@ -148,9 +154,10 @@ export async function publishVerifiedDocumentDisposalOutcome(prisma: PrismaClien
 }
 
 /** Release the operation reservation on its published whole-case outcome,
- * only while that outcome is the head and the copy evidence is still exactly
- * what it was published on. A released operation is reported again, never
- * re-released. This deletes or retains nothing. */
+ * only while that outcome is the head, the copy evidence is still exactly
+ * what it was published on, and the case is still complete. A released
+ * operation is reported again, never re-released. This deletes or retains
+ * nothing. */
 export async function releaseCompletedDocumentOperation(prisma: PrismaClient,
   journal: RecoveryAuthorityJournal, control: RecoveryReleaseStore, writerId: string,
   rawContext: RecoveryEnvelopeContext, keys: RecoveryDataKeys, objects: Objects, authorizationId: string) {
@@ -168,10 +175,13 @@ export async function releaseCompletedDocumentOperation(prisma: PrismaClient,
   const after = validateRecoveryControl(await control.readControl());
   if (published.entryDigest !== before.digest || published.revision !== before.revision
     || JSON.stringify(after) !== JSON.stringify(before) || facts.authorizationId !== authorizationId
-    || local.digest !== facts.completenessDigest
+    || !local.evidenceFrozen || local.digest !== facts.completenessDigest
     || (before.activeOperation && before.activeOperation.preparationDigest !== facts.preparationDigest)) {
     throw new Error('Recovery release evidence does not match current control');
   }
+  // Released only while the outcome still holds. If a review or authority
+  // falls due first, the operation stays reserved: fail closed.
+  if (before.activeOperation !== null && !local.complete) throw new Error('Document disposal is no longer complete');
   if (before.activeOperation === null) return { released: true as const, replayed: true, actionAuthorized: false as const };
   let written: boolean;
   try {

@@ -140,3 +140,30 @@ test('malformed evidence, plans and time are refused', () => {
   assert.throws(() => evaluate({ observations: [obs('VERSIONS', 'VERSION-STORE', 'ERASED')] }));
   assert.throws(() => evaluate({ now: new Date(Number.NaN) }), /time is invalid/);
 });
+
+test('a scope held before its first observation is a known copy and keeps its area open', () => {
+  const hold = (area: string, scopeRef: string, revision = 1, held = true) => ({ area, scopeRef, revision, held });
+  // One set of rows throughout, so a digest difference can only come from the holds.
+  const rows = resolved();
+  const base = evaluate({ observations: rows });
+  assert.equal(evaluate({ observations: rows }).digest, base.digest);
+  // Other scopes resolve CONFLUENCE, but the held copy has no disposition evidence.
+  const held = evaluate({ observations: rows, holds: [hold('CONFLUENCE', 'PAGE-3003')] });
+  assert.equal(held.complete, false);
+  assert.deepEqual(reasons(held), ['CONFLUENCE:PAGE-3003:HOLD_WITHOUT_OBSERVATION']);
+  const confluence = held.areas.find((a) => a.area === 'CONFLUENCE')!;
+  assert.deepEqual([confluence.scopes, confluence.resolved], [2, 1]);
+  assert.notEqual(held.digest, base.digest, 'a held-only scope is bound into the digest');
+  // Releasing the hold does not make the copy disappear: still no evidence.
+  const released = evaluate({ observations: rows,
+    holds: [hold('CONFLUENCE', 'PAGE-3003'), hold('CONFLUENCE', 'PAGE-3003', 2, false)] });
+  assert.deepEqual(reasons(released), ['CONFLUENCE:PAGE-3003:HOLD_WITHOUT_OBSERVATION']);
+  assert.notEqual(released.digest, held.digest);
+  // In an otherwise empty planned area the held scope is the reason, not a missing scope.
+  const only = evaluate({ observations: rows.slice(1), holds: [hold('VERSIONS', 'VERSION-STORE-2')] });
+  assert.deepEqual(reasons(only), ['VERSIONS:VERSION-STORE-2:HOLD_WITHOUT_OBSERVATION']);
+  // Once observed, the hold is the scope's hold, as before.
+  const observed = evaluate({ observations: rows, holds: [hold('VERSIONS', 'VERSION-STORE')] });
+  assert.equal(observed.complete, true);
+  assert.notEqual(observed.digest, base.digest);
+});

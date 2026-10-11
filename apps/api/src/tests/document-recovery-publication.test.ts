@@ -214,7 +214,7 @@ async function readyBytePermitPublisher(storageProvider: 'local' | 'supabase' = 
     completionView: null as ((row: Record<string, unknown>) => Record<string, unknown>) | null,
     job: { state: 'PENDING', processedAt: null as Date | null, activeObjectAbsentAt: null as Date | null },
     dispositions: [] as Array<Record<string, unknown>>, dbNow: new Date('2026-10-08T00:00:00.000Z'),
-    claimDeletionId: null as string | null, onTransaction: null as (() => void) | null };
+    claimDeletionId: null as string | null, onTransaction: null as (() => void) | null, enforced: true };
   const tx = {
     $queryRaw: async (strings: TemplateStringsArray, ...values: unknown[]) => {
       if (strings.join('').includes('DocumentBytePrimaryCompletion_record')) {
@@ -286,7 +286,8 @@ async function readyBytePermitPublisher(storageProvider: 'local' | 'supabase' = 
       facts: f.prepared.body, factsDigest: f.prepared.digest }) },
     organisation: { findFirst: async () => ({ id: f.context.organisationId,
       lifecycleStatus: 'ACTIVE', documentStorageProvider: 'local' }) },
-    documentRecoveryEnforcement: { findFirst: async () => ({ id: 'enforcement',
+    documentRecoveryEnforcement: { findUnique: async () => (state.enforced ? { id: 'enforcement' } : null),
+      findFirst: async () => ({ id: 'enforcement',
       installationId: f.context.installationId, writerId: f.request.writerId,
       writerEpoch: f.context.writerEpoch }) },
     user: { findFirst: async () => ({ id: f.facts.actorUserId,
@@ -1189,6 +1190,38 @@ test('the whole-case outcome needs every copy area resolved after the primary co
   assert.equal((await f.store.readControl()).activeOperation, null);
   assert.equal((await release()).replayed, true, 'a released operation is reported again, never re-released');
   assert.equal((await publishOutcome()).released, true, 'the outcome stays readable after release');
+});
+
+test('the outcome and its release need recovery enforcement, under which copy evidence is frozen', async () => {
+  const { f, state, publishOutcome, release } = await completedPrimary();
+  state.dispositions.push(...retainedEverywhere());
+  const before = await f.store.readControl();
+  state.enforced = false;
+  await assert.rejects(publishOutcome(), /requires recovery enforcement/);
+  assert.equal(await f.store.readDocumentDisposalOutcome(f.context.operationId), null, 'nothing preserved');
+  state.enforced = true;
+  await publishOutcome();
+  state.enforced = false;
+  await assert.rejects(release(), /does not match current control/);
+  assert.equal((await f.store.readControl()).generation, before.generation + 1);
+  assert.notEqual((await f.store.readControl()).activeOperation, null);
+});
+
+test('an unreleased outcome that no longer holds is neither reported nor released', async () => {
+  const { f, state, publishOutcome, release } = await completedPrimary();
+  state.dispositions.push(...retainedEverywhere());
+  await publishOutcome();
+  // A retained copy's follow-up review falls due before the release.
+  state.dbNow = new Date('2026-12-02T00:00:00.000Z');
+  await assert.rejects(publishOutcome(), /no longer complete/);
+  await assert.rejects(release(), /no longer complete/);
+  assert.notEqual((await f.store.readControl()).activeOperation, null, 'the operation stays reserved');
+  state.dbNow = new Date('2026-10-08T00:00:00.000Z');
+  assert.equal((await release()).replayed, false);
+  // A released outcome is a record of what was true, so it is still reported.
+  state.dbNow = new Date('2026-12-02T00:00:00.000Z');
+  assert.equal((await publishOutcome()).released, true);
+  assert.equal((await release()).replayed, true);
 });
 
 test('the primary counts as completed only with its exact completion and a processed job', async () => {

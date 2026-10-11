@@ -109,15 +109,24 @@ authorization's plan resolved. For each area marked DISPOSE or RETAIN_APPROVED:
 - the latest observation for every scope is VERIFIED_ABSENT, NOT_APPLICABLE,
   or RETAINED_APPROVED with its follow-up review not yet due;
 - any scoped authority is still current and unexpired.
-NEEDS_REVIEW, PENDING_DISPOSAL, FAILED, and observations under withdrawn or
-replaced authority keep it open. The outcome carries counts and an evidence
-digest, never scope references or reasons. The operation reservation can be
-released only on that outcome, and only while the evidence is unchanged; the
-store refuses to release on the primary completion. Whether recorded scopes
-cover every real copy is the reviewer's attestation. While a charity is under
-recovery enforcement, copy evidence cannot yet be written, so the outcome is
-unreachable until a recovery-bound copy-evidence writer exists. No production
-worker calls any of it.
+NEEDS_REVIEW, PENDING_DISPOSAL, FAILED, observations under withdrawn or
+replaced authority, and a scope held before its first observation keep it
+open. The outcome carries counts and an evidence digest, never scope
+references or reasons.
+
+The outcome is published and released only under recovery enforcement. There,
+the database freezes every copy evidence write, and the enforcement row is
+terminal, so one outcome body per operation cannot be outdated before its
+append. The operation reservation can be released only on that outcome, and
+only while the evidence is unchanged and the case is still complete. A review
+or authority that falls due first keeps the operation reserved, which fails
+closed. The store refuses to release on the primary completion.
+
+Whether recorded scopes cover every real copy is the reviewer's attestation.
+Because copy evidence is frozen under enforcement, the outcome is unreachable
+until each copy write has its own independently published entry. Allowing
+writes without one fails open on restore: losing a write that reopens a case
+makes the case look complete again. No production worker calls any of it.
 `executeVerifiedDocumentBytePrimaryDeletion` composes the lease claim, start
 marker, an immediate pre-provider re-check of the independent decision, one
 bounded call to the eraser selected by the decided provider, and the absence observation.
