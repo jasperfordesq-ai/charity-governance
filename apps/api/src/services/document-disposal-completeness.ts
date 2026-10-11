@@ -40,9 +40,11 @@ const planSchema = z.object({ PRIMARY: store.extend({ disposition: z.literal('DI
   VERSIONS: store, CONFLUENCE: store, EXPORTS: store, AUDIT: store, BACKUPS: store }).strict();
 const observationSchema = z.object({ id, area, scopeRef, revision: z.number().int().positive(),
   status: z.enum(['NEEDS_REVIEW', 'PENDING_DISPOSAL', 'FAILED', 'VERIFIED_ABSENT', 'RETAINED_APPROVED', 'NOT_APPLICABLE']),
-  copyAuthorityId: id.nullable(), nextReviewAt: z.date().nullable() }).strict();
+  copyAuthorityId: id.nullable(), nextReviewAt: z.date().nullable(),
+  observedAt: z.date().optional(), evidenceRef: scopeRef.optional() }).strict();
 const authoritySchema = z.object({ id, area, scopeRef, revision: z.number().int().positive(),
-  state: z.enum(['AUTHORIZED', 'WITHDRAWN']), validUntil: z.date().nullable() }).strict();
+  state: z.enum(['AUTHORIZED', 'WITHDRAWN']), validUntil: z.date().nullable(),
+  disposition: disposition.nullable().optional(), evidenceRef: scopeRef.optional() }).strict();
 const holdSchema = z.object({ area, scopeRef, revision: z.number().int().positive(), held: z.boolean() }).strict();
 
 export type CompletenessInput = {
@@ -122,8 +124,26 @@ export function evaluateDocumentDisposalCompleteness(input: CompletenessInput) {
       }),
   };
   const digest = createHash('sha256').update(JSON.stringify(evidence), 'utf8').digest('hex');
-  return { complete, primaryCompletionRecorded: input.primaryCompletionRecorded, areas, digest,
+  const byScope = <T extends { area: string; scopeRef: string }>(rows: Iterable<T>) => [...rows]
+    .sort((a, b) => (`${a.area}:${a.scopeRef}` < `${b.area}:${b.scopeRef}` ? -1 : 1));
+  // The exact latest rows the judgement rests on, for a caller that must
+  // publish them in full.
+  const relied = { observations: byScope(observations.values()), authorities: byScope(authorities.values()) };
+  return { complete, primaryCompletionRecorded: input.primaryCompletionRecorded, areas, digest, relied,
     actionAuthorized: false as const };
+}
+
+/** Under recovery enforcement, copy observations and authorities may be
+ * recorded only once the authorization's primary file has its reconciled
+ * completion (the database gate enforces the same). Holds stay frozen. */
+export async function documentPrimaryCompleted(tx: Pick<PrismaClient, 'documentPurgeClaim' | 'documentBytePrimaryCompletion'>,
+  organisationId: string, authorizationId: string): Promise<boolean> {
+  const claim = await tx.documentPurgeClaim.findFirst({ where: { authorizationId, organisationId },
+    select: { deletionId: true } });
+  if (!claim) return false;
+  const completion = await tx.documentBytePrimaryCompletion.findUnique({ where: { deletionId: claim.deletionId },
+    select: { organisationId: true } });
+  return completion?.organisationId === organisationId;
 }
 
 const MAX_EVIDENCE_ROWS = 1000;
@@ -147,9 +167,10 @@ export async function readDocumentDisposalCompleteness(prisma: PrismaClient,
         select: { organisationId: true, state: true } }),
       tx.documentPurgeDispositionEvent.findMany({ where, take: MAX_EVIDENCE_ROWS + 1,
         select: { id: true, area: true, scopeRef: true, revision: true, status: true,
-          copyAuthorityId: true, nextReviewAt: true } }),
+          copyAuthorityId: true, nextReviewAt: true, observedAt: true, evidenceRef: true } }),
       tx.documentCopyDispositionAuthority.findMany({ where, take: MAX_EVIDENCE_ROWS + 1,
-        select: { id: true, area: true, scopeRef: true, revision: true, state: true, validUntil: true } }),
+        select: { id: true, area: true, scopeRef: true, revision: true, state: true, validUntil: true,
+          disposition: true, evidenceRef: true } }),
       tx.documentCopyHoldEvent.findMany({ where, take: MAX_EVIDENCE_ROWS + 1,
         select: { area: true, scopeRef: true, revision: true, held: true } }),
       tx.$queryRaw<Array<{ now: Date }>>`SELECT timezone('UTC', statement_timestamp()) AS now`,

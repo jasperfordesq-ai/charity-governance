@@ -3,6 +3,7 @@ import type { Prisma, PrismaClient } from '@prisma/client';
 import { z } from 'zod';
 import { AppError } from '../utils/errors.js';
 import { retentionWithdrawalInput } from './retention-policy.service.js';
+import { documentPrimaryCompleted } from './document-disposal-completeness.js';
 
 const id = z.string().min(1).max(200).regex(/^[A-Za-z0-9_-]+$/);
 const store = z.object({ disposition: z.enum(['DISPOSE', 'RETAIN_APPROVED', 'NOT_APPLICABLE']),
@@ -141,7 +142,8 @@ export class DocumentPurgeService {
       const auth = await tx.documentPurgeAuthorization.findFirst({ where: { id: authorizationId, organisationId }, select: { id: true, claim: { select: { id: true } } } });
       if (!auth) throw new AppError(404, 'PURGE_AUTHORIZATION_NOT_FOUND', 'Authorization not found');
       if (!auth.claim) throw new AppError(409, 'PURGE_NOT_CLAIMED', 'Record disposal evidence against a claimed authorization.');
-      if (await tx.documentRecoveryEnforcement.findUnique({ where: { organisationId }, select: { id: true } })) {
+      if (await tx.documentRecoveryEnforcement.findUnique({ where: { organisationId }, select: { id: true } })
+        && !(await documentPrimaryCompleted(tx, organisationId, authorizationId))) {
         throw new AppError(409, 'COPY_RECOVERY_AUTHORITY_REQUIRED', 'Copy changes require independent recovery authority for this charity.');
       }
       return tx.documentPurgeDispositionEvent.create({ data: { ...input, organisationId, actorUserId, authorizationId,

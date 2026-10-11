@@ -2,6 +2,7 @@ import type { Prisma, PrismaClient } from '@prisma/client';
 import { z } from 'zod';
 import { retentionWithdrawalInput } from './retention-policy.service.js';
 import { AppError } from '../utils/errors.js';
+import { documentPrimaryCompleted } from './document-disposal-completeness.js';
 
 const id=z.string().min(1).max(160).regex(/^[A-Za-z0-9_-]+$/);
 const revision=z.number().int().positive().max(2147483647);
@@ -59,11 +60,13 @@ export class CopyReviewService {
     if(!parent)throw new AppError(404,'COPY_PARENT_NOT_FOUND','Disposal review not found.');
     if(!parent.claim)throw new AppError(409,'COPY_PRIMARY_NOT_CLAIMED','Review copies against a completed primary disposal claim.');
   }
-  private async assertRecoveryUnbound(tx:Prisma.TransactionClient,organisationId:string) {
+  private async assertRecoveryUnbound(tx:Prisma.TransactionClient,organisationId:string,authorizationId?:string) {
     const binding=this.kind==='DOCUMENT'
       ?await tx.documentRecoveryEnforcement.findUnique({where:{organisationId},select:{id:true}})
       :await tx.complaintRecoveryEnforcement.findUnique({where:{organisationId},select:{id:true}});
-    if(binding)throw new AppError(409,'COPY_RECOVERY_AUTHORITY_REQUIRED',
+    // A document copy authority is accepted once the primary file has its
+    // reconciled completion; holds (no authorizationId here) stay frozen.
+    if(binding&&!(this.kind==='DOCUMENT'&&authorizationId&&await documentPrimaryCompleted(tx,organisationId,authorizationId)))throw new AppError(409,'COPY_RECOVERY_AUTHORITY_REQUIRED',
       'Copy changes require independent recovery authority for this charity.');
   }
   async list(organisationId:string,actorUserId:string,authorizationId:string,history:History,raw:unknown) {
@@ -102,7 +105,7 @@ export class CopyReviewService {
     const input=reviewInput.parse(raw);this.area(input.area);
     return this.transaction(async tx=>{
       await this.parent(tx,organisationId,actorUserId,authorizationId,true);
-      await this.assertRecoveryUnbound(tx,organisationId);
+      await this.assertRecoveryUnbound(tx,organisationId,authorizationId);
       const {authorityConfirmed:_confirmation,...fields}=input;
       const data={...fields,organisationId,actorUserId,authorizationId,
         disposition:input.state==='AUTHORIZED'?input.disposition:null,policyId:input.state==='AUTHORIZED'?input.policyId:null,

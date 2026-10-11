@@ -214,7 +214,8 @@ async function readyBytePermitPublisher(storageProvider: 'local' | 'supabase' = 
     completionView: null as ((row: Record<string, unknown>) => Record<string, unknown>) | null,
     job: { state: 'PENDING', processedAt: null as Date | null, activeObjectAbsentAt: null as Date | null },
     dispositions: [] as Array<Record<string, unknown>>, dbNow: new Date('2026-10-08T00:00:00.000Z'),
-    claimDeletionId: null as string | null, onTransaction: null as (() => void) | null };
+    claimDeletionId: null as string | null, onTransaction: null as (() => void) | null,
+    copyAuthorities: [] as Array<Record<string, unknown>> };
   const tx = {
     $queryRaw: async (strings: TemplateStringsArray, ...values: unknown[]) => {
       if (strings.join('').includes('DocumentBytePrimaryCompletion_record')) {
@@ -314,7 +315,7 @@ async function readyBytePermitPublisher(storageProvider: 'local' | 'supabase' = 
         return { id: 'lease' };
       } },
     documentByteProviderAttempt: { findUnique: async () => state.attempt },
-    documentCopyDispositionAuthority: { findMany: async () => [] },
+    documentCopyDispositionAuthority: { findMany: async () => state.copyAuthorities },
     documentCopyHoldEvent: { findMany: async () => state.copyHolds },
     documentPurgeDispositionEvent: { findMany: async () => state.dispositions },
     documentPublication: { findMany: async () => [] },
@@ -1140,7 +1141,8 @@ test('a pending completion that no longer matches the local observation is not r
 // The fixture's plan retains every copy area; one resolved scope per area.
 const retainedEverywhere = () => ['VERSIONS', 'CONFLUENCE', 'EXPORTS', 'AUDIT', 'BACKUPS'].map((area, i) => ({
   id: `copy-${i}`, area, scopeRef: `${area}-SCOPE`, revision: 1, status: 'RETAINED_APPROVED',
-  copyAuthorityId: null, nextReviewAt: new Date('2026-12-01T00:00:00.000Z') }));
+  copyAuthorityId: null, nextReviewAt: new Date('2026-12-01T00:00:00.000Z'),
+  observedAt: new Date('2026-10-07T10:00:00.000Z'), evidenceRef: `${area}-EVIDENCE` }));
 
 async function completedPrimary() {
   const setup = await observedAndUnknown();
@@ -1173,13 +1175,21 @@ test('the whole-case outcome needs every copy area resolved after the primary co
   const facts = JSON.parse(published.body);
   assert.deepEqual([facts.action, facts.deletionId, facts.authorizationId, facts.areas.CONFLUENCE],
     ['DOCUMENT_DISPOSAL_COMPLETE', 'job', f.facts.authorization.id, { plan: 'RETAIN_APPROVED', scopes: 1 }]);
-  assert.doesNotMatch(published.body, /SCOPE|COPY-001|vault\/synthetic-object/, 'counts and digests only');
+  // The evidence the case closed on, in full, for independent replay; never
+  // the storage path.
+  assert.deepEqual(facts.observations.map((o: { area: string; scopeRef: string; status: string; evidenceRef: string;
+    observedAt: string }) => [o.area, o.scopeRef, o.status, o.evidenceRef, o.observedAt]),
+  ['AUDIT', 'BACKUPS', 'CONFLUENCE', 'EXPORTS', 'VERSIONS'].map((a) => [a, `${a}-SCOPE`, 'RETAINED_APPROVED',
+    `${a}-EVIDENCE`, '2026-10-07T10:00:00.000Z']));
+  assert.deepEqual(facts.authorities, []);
+  assert.doesNotMatch(published.body, /vault\/synthetic-object/);
   assert.equal((await f.store.readControl()).generation, before.generation + 1);
   assert.equal((await publishOutcome()).replayed, true);
   // Evidence that changes after publication is never reported as the outcome,
   // and the operation is not released on it.
   state.dispositions.push({ id: 'copy-late', area: 'EXPORTS', scopeRef: 'LATE-EXPORT', revision: 1,
-    status: 'NEEDS_REVIEW', copyAuthorityId: null, nextReviewAt: new Date('2026-12-01T00:00:00.000Z') });
+    status: 'NEEDS_REVIEW', copyAuthorityId: null, nextReviewAt: new Date('2026-12-01T00:00:00.000Z'),
+    observedAt: new Date('2026-10-07T10:00:00.000Z'), evidenceRef: 'LATE-EVIDENCE' });
   await assert.rejects(publishOutcome(), /differs from current copy evidence/);
   await assert.rejects(release(), /does not match current control/);
   state.dispositions.pop();
@@ -1189,6 +1199,33 @@ test('the whole-case outcome needs every copy area resolved after the primary co
   assert.equal((await f.store.readControl()).activeOperation, null);
   assert.equal((await release()).replayed, true, 'a released operation is reported again, never re-released');
   assert.equal((await publishOutcome()).released, true, 'the outcome stays readable after release');
+});
+
+test('the outcome carries each scoped authority its evidence relied on, and refuses a case too large to carry', async () => {
+  const { f, state, publishOutcome } = await completedPrimary();
+  state.dispositions.push(...retainedEverywhere());
+  state.dispositions[2] = { ...state.dispositions[2]!, copyAuthorityId: 'copy-authority-1' };
+  state.copyAuthorities.push(
+    { id: 'copy-authority-1', area: 'EXPORTS', scopeRef: 'EXPORTS-SCOPE', revision: 1, state: 'AUTHORIZED',
+      validUntil: new Date('2027-01-01T00:00:00.000Z'), disposition: 'RETAIN_APPROVED', evidenceRef: 'EXPORT-AUTHORITY' },
+    // An authority on a scope no observation relied on is not carried.
+    { id: 'copy-authority-2', area: 'AUDIT', scopeRef: 'UNOBSERVED', revision: 1, state: 'WITHDRAWN',
+      validUntil: null, disposition: null, evidenceRef: 'AUDIT-WITHDRAWN' });
+  // Too much evidence for one outcome is refused before anything is preserved.
+  const many = Array.from({ length: 60 }, (_, i) => ({ id: `wide-${i}`, area: 'VERSIONS', scopeRef: `WIDE-VERSION-${i}`,
+    revision: 1, status: 'RETAINED_APPROVED', copyAuthorityId: null, nextReviewAt: new Date('2026-12-01T00:00:00.000Z'),
+    observedAt: new Date('2026-10-07T10:00:00.000Z'), evidenceRef: `WIDE-EVIDENCE-${i}` }));
+  state.dispositions.push(...many);
+  const before = await f.store.readControl();
+  await assert.rejects(publishOutcome(), /exceed limit/);
+  assert.equal(await f.store.readDocumentDisposalOutcome(f.context.operationId), null);
+  state.dispositions.splice(5, many.length);
+  const published = await publishOutcome();
+  const facts = JSON.parse(published.body);
+  assert.deepEqual(facts.authorities, [{ id: 'copy-authority-1', area: 'EXPORTS', scopeRef: 'EXPORTS-SCOPE', revision: 1,
+    state: 'AUTHORIZED', disposition: 'RETAIN_APPROVED', validUntil: '2027-01-01T00:00:00.000Z', evidenceRef: 'EXPORT-AUTHORITY' }]);
+  assert.equal(facts.observations.find((o: { area: string }) => o.area === 'EXPORTS').copyAuthorityId, 'copy-authority-1');
+  assert.equal((await f.store.readControl()).generation, before.generation + 1);
 });
 
 test('the primary counts as completed only with its exact completion and a processed job', async () => {
@@ -1207,7 +1244,8 @@ test('the primary counts as completed only with its exact completion and a proce
   }
   // Evidence beyond the bounded review size is refused, not truncated.
   const many = Array.from({ length: 1001 }, (_, i) => ({ id: `bulk-${i}`, area: 'EXPORTS', scopeRef: `BULK-${i}`,
-    revision: 1, status: 'RETAINED_APPROVED', copyAuthorityId: null, nextReviewAt: new Date('2026-12-01T00:00:00.000Z') }));
+    revision: 1, status: 'RETAINED_APPROVED', copyAuthorityId: null, nextReviewAt: new Date('2026-12-01T00:00:00.000Z'),
+    observedAt: new Date('2026-10-07T10:00:00.000Z'), evidenceRef: 'BULK-EVIDENCE' }));
   const saved = [...state.dispositions];
   state.dispositions.splice(0, state.dispositions.length, ...many);
   await assert.rejects(publishOutcome(), /exceeds the bounded review size/);
@@ -1221,7 +1259,8 @@ test('the primary counts as completed only with its exact completion and a proce
   state.onTransaction = () => {
     reads += 1;
     if (reads === 2) state.dispositions.push({ id: 'copy-mid', area: 'AUDIT', scopeRef: 'MID-PUBLISH', revision: 1,
-      status: 'NEEDS_REVIEW', copyAuthorityId: null, nextReviewAt: new Date('2026-12-01T00:00:00.000Z') });
+      status: 'NEEDS_REVIEW', copyAuthorityId: null, nextReviewAt: new Date('2026-12-01T00:00:00.000Z'),
+    observedAt: new Date('2026-10-07T10:00:00.000Z'), evidenceRef: 'LATE-EVIDENCE' });
   };
   const before = await f.store.readControl();
   await assert.rejects(publishOutcome(), /evidence changed before publication/);
@@ -1247,7 +1286,7 @@ test('a published outcome must name its completion exactly and stay the head', a
     completionEntryDigest: '0'.repeat(64), completionEnvelopeDigest: completion.envelopeDigest,
     completionBodyDigest: createHash('sha256').update(completion.body).digest('hex'), completenessDigest: 'a'.repeat(64),
     areas: Object.fromEntries(['VERSIONS', 'CONFLUENCE', 'EXPORTS', 'AUDIT', 'BACKUPS'].map((a) => [a,
-      { plan: 'RETAIN_APPROVED', scopes: 1 }])) }).body;
+      { plan: 'RETAIN_APPROVED', scopes: 1 }])), observations: [], authorities: [] }).body;
   const preserved = await preserveDocumentDisposalOutcome(body, forged.f.context, forged.f.keys, forged.f.store);
   await forged.f.journal.appendReservedDocumentDisposalOutcome({ operationId: forged.f.context.operationId,
     writerId: done.writerId, writerEpoch: done.writerEpoch, preparationDigest: done.preparationDigest,

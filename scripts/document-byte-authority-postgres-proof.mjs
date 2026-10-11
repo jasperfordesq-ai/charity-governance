@@ -906,6 +906,12 @@ try {
     where: { id: 'job' },
     select: { state: true, attempts: true, claimedAt: true, processedAt: true },
   }), unresolved);
+  await assert.rejects(prisma.$executeRaw`INSERT INTO "DocumentPurgeDispositionEvent"
+    (id,"organisationId","authorizationId",area,"scopeRef",revision,status,"actorUserId","evidenceRef",
+      reason,"observedAt","nextReviewAt")
+    VALUES ('copy-before-completion','charity','auth','VERSIONS','EARLY-SCOPE',1,'RETAINED_APPROVED',
+      'owner','TEST-COPY-001','Synthetic copy review',now(),now() + interval '30 days')`,
+  /requires independent recovery authority/);
   const completed = await completeAs(attempt);
   assert.equal(completed[0].recorded, true);
   const completion = await prisma.documentBytePrimaryCompletion.findUniqueOrThrow({
@@ -939,26 +945,32 @@ try {
     WHERE "leaseId"='lease'`, /append-only/);
   await assert.rejects(prisma.$executeRaw`UPDATE "DocumentStorageDeletion"
     SET "lastError"='synthetic' WHERE id='job'`, /requires independent permit|terminal/);
-  // Whole-case completeness from the real database, through the exact reader:
-  // the primary file is complete, every copy area still lacks evidence, so the
-  // case is not. Under recovery enforcement no copy evidence can be written
-  // yet; that needs its own independently published writer.
-  const completeness = await readDocumentDisposalCompleteness(prisma,
-    { organisationId: 'charity', authorizationId: 'auth' });
-  assert.equal(completeness.primaryCompletionRecorded, true);
-  assert.equal(completeness.complete, false);
-  assert.equal(completeness.actionAuthorized, false);
-  assert.deepEqual(completeness.areas.map((area) => [area.area, area.plan,
-    area.unresolved.map((u) => u.reason).join(',')]), [
-    ['VERSIONS', 'RETAIN_APPROVED', 'NO_SCOPE_RECORDED'], ['CONFLUENCE', 'RETAIN_APPROVED', 'NO_SCOPE_RECORDED'],
-    ['EXPORTS', 'RETAIN_APPROVED', 'NO_SCOPE_RECORDED'], ['AUDIT', 'RETAIN_APPROVED', 'NO_SCOPE_RECORDED'],
-    ['BACKUPS', 'RETAIN_APPROVED', 'NO_SCOPE_RECORDED']]);
-  await assert.rejects(prisma.$executeRaw`INSERT INTO "DocumentPurgeDispositionEvent"
+  // Whole-case completeness from the real database, through the exact reader.
+  // Under recovery enforcement copy observations are accepted only once the
+  // primary has its completion (it has, above); holds stay frozen.
+  const copyObservation = (area) => prisma.$executeRaw`INSERT INTO "DocumentPurgeDispositionEvent"
     (id,"organisationId","authorizationId",area,"scopeRef",revision,status,"actorUserId","evidenceRef",
       reason,"observedAt","nextReviewAt")
-    VALUES ('copy-under-enforcement','charity','auth','VERSIONS','VERSION-STORE',1,'RETAINED_APPROVED',
-      'owner','TEST-COPY-001','Synthetic copy review',now(),now() + interval '30 days')`,
-  /requires independent recovery authority/);
+    VALUES (${'copy-' + area.toLowerCase()},'charity','auth',${area},${area + '-SCOPE'},1,'RETAINED_APPROVED',
+      'owner','TEST-COPY-001','Synthetic copy review',now(),now() + interval '30 days')`;
+  const incomplete = await readDocumentDisposalCompleteness(prisma,
+    { organisationId: 'charity', authorizationId: 'auth' });
+  assert.equal(incomplete.primaryCompletionRecorded, true);
+  assert.equal(incomplete.complete, false);
+  assert.deepEqual(incomplete.areas.map((area) => area.unresolved.map((u) => u.reason).join(',')),
+    ['NO_SCOPE_RECORDED', 'NO_SCOPE_RECORDED', 'NO_SCOPE_RECORDED', 'NO_SCOPE_RECORDED', 'NO_SCOPE_RECORDED']);
+  for (const area of ['VERSIONS', 'CONFLUENCE', 'EXPORTS', 'AUDIT', 'BACKUPS']) await copyObservation(area);
+  await assert.rejects(prisma.$executeRaw`INSERT INTO "DocumentCopyHoldEvent"
+    (id,"organisationId","authorizationId",area,"scopeRef",revision,"observationRevision",held,
+      "actorUserId","evidenceRef",reason)
+    VALUES ('hold-under-enforcement','charity','auth','VERSIONS','VERSIONS-SCOPE',1,1,true,
+      'owner','TEST-HOLD-001','Synthetic hold')`, /requires independent recovery authority/);
+  const completeCase = await readDocumentDisposalCompleteness(prisma,
+    { organisationId: 'charity', authorizationId: 'auth' });
+  assert.equal(completeCase.complete, true);
+  assert.equal(completeCase.actionAuthorized, false);
+  assert.deepEqual(completeCase.relied.observations.map((o) => [o.area, o.status, o.evidenceRef]),
+    ['AUDIT', 'BACKUPS', 'CONFLUENCE', 'EXPORTS', 'VERSIONS'].map((a) => [a, 'RETAINED_APPROVED', 'TEST-COPY-001']));
   // Exercise the exact Prisma query and bound values used by the publisher,
   // against the fully migrated database. A copied SQL fixture alone would not
   // catch a broken production INSERT. Roll the synthetic attempt back.
@@ -1052,7 +1064,7 @@ try {
   }), /synthetic page intent proof rollback/u);
   assert.equal(await prisma.documentPublicationPageCreateIntent.count(), 0);
   process.stdout.write(
-    'current-authority-real-postgres-composition=verified; protected-worker-skip=verified; cleanup-alias-fence=verified; upload-intent-fence=verified; publication-upload-intent-service=verified; publication-page-intent-service=verified; copy-evidence-digest=stable; post-claim-local-authority=verified; provider-start-marker=verified; provider-start-race=one-winner; provider-unknown-facts=verified; post-start-ordinary-retry-refused=verified; provider-absence-observation=verified; post-observation-fence=unchanged; primary-completion=verified; post-completion-job=terminal; disposal-completeness=incomplete-without-copy-evidence; copy-evidence-under-enforcement=refused\n',
+    'current-authority-real-postgres-composition=verified; protected-worker-skip=verified; cleanup-alias-fence=verified; upload-intent-fence=verified; publication-upload-intent-service=verified; publication-page-intent-service=verified; copy-evidence-digest=stable; post-claim-local-authority=verified; provider-start-marker=verified; provider-start-race=one-winner; provider-unknown-facts=verified; post-start-ordinary-retry-refused=verified; provider-absence-observation=verified; post-observation-fence=unchanged; primary-completion=verified; post-completion-job=terminal; copy-evidence-before-completion=refused; copy-evidence-after-completion=accepted; copy-hold-under-enforcement=refused; disposal-completeness=complete-with-copy-evidence\n',
   );
 } finally {
   await prisma.$disconnect();

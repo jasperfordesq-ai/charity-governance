@@ -140,3 +140,21 @@ test('malformed evidence, plans and time are refused', () => {
   assert.throws(() => evaluate({ observations: [obs('VERSIONS', 'VERSION-STORE', 'ERASED')] }));
   assert.throws(() => evaluate({ now: new Date(Number.NaN) }), /time is invalid/);
 });
+
+test('the copy-evidence allowance needs this authorization\'s own claim and a completion in the same charity', async () => {
+  const { documentPrimaryCompleted } = await import('../services/document-disposal-completeness.js');
+  const tx = (claim: { deletionId: string } | null, completion: { organisationId: string } | null) => ({
+    documentPurgeClaim: { findFirst: async ({ where }: { where: unknown }) => {
+      assert.deepEqual(where, { authorizationId: 'auth', organisationId: 'org' });
+      return claim;
+    } },
+    documentBytePrimaryCompletion: { findUnique: async ({ where }: { where: unknown }) => {
+      assert.deepEqual(where, { deletionId: 'deletion' });
+      return completion;
+    } },
+  }) as never;
+  assert.equal(await documentPrimaryCompleted(tx(null, { organisationId: 'org' }), 'org', 'auth'), false, 'no claim');
+  assert.equal(await documentPrimaryCompleted(tx({ deletionId: 'deletion' }, null), 'org', 'auth'), false, 'no completion');
+  assert.equal(await documentPrimaryCompleted(tx({ deletionId: 'deletion' }, { organisationId: 'other' }), 'org', 'auth'), false);
+  assert.equal(await documentPrimaryCompleted(tx({ deletionId: 'deletion' }, { organisationId: 'org' }), 'org', 'auth'), true);
+});
