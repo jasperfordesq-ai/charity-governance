@@ -1869,11 +1869,12 @@ test('a revocation Atlassian will not confirm is logged where an operator can se
   assert.equal(revokes.length, 1);
 
   const warning = lines.find(
-    (line) => line.level === 40 && String(line.msg).includes('could not be confirmed as withdrawn'),
+    (line) => line.level === 40 && String(line.msg).includes('not confirmed as withdrawn'),
   );
   assert.ok(warning, `expected a warning about the unwithdrawn grant, got:\n${raw}`);
   assert.equal(warning.integrationId, 'integration-a');
   assert.equal(warning.provider, 'CONFLUENCE');
+  assert.equal(warning.revokeEndpointAccepted, false);
   // The two things the administrator can actually act on.
   assert.match(String(warning.msg), /90 days/);
   assert.match(String(warning.msg), /connected-apps settings/);
@@ -1884,17 +1885,22 @@ test('a revocation Atlassian will not confirm is logged where an operator can se
   }
 });
 
-test('a revocation Atlassian accepts is not logged as a problem', async () => {
+// An accepted revoke call is not a withdrawn grant. On 11 Oct 2026 the C01
+// sandbox test saw Atlassian accept the call while its Connected apps page
+// still listed the app, until it was removed by hand. Every disconnect leaves
+// the same action for the administrator, so every disconnect says so.
+test('a revoke call Atlassian accepts still warns that the grant is not confirmed withdrawn', async () => {
   const { response, store, revokes, lines } = await disconnectAndCaptureLog(200);
 
   assert.equal(response.statusCode, 204);
   assert.equal(store.credentials.length, 0);
   assert.equal(revokes.length, 1);
-  assert.equal(
-    lines.find((line) => String(line.msg).includes('could not be confirmed as withdrawn')),
-    undefined,
-    'a revocation that succeeded must not warn — an operator who is warned every time stops reading',
+  const warning = lines.find(
+    (line) => line.level === 40 && String(line.msg).includes('not confirmed as withdrawn'),
   );
+  assert.ok(warning, 'an accepted revoke call must not read as a withdrawn grant');
+  assert.equal(warning.revokeEndpointAccepted, true);
+  assert.match(String(warning.msg), /connected-apps settings/);
 });
 
 // ────────────────────────────────────────────────────────────────────────────
@@ -2557,10 +2563,11 @@ test('disconnecting records who did it, and whether Atlassian confirmed the with
   assert.equal(events[0].actorKind, 'USER');
   assert.equal(events[0].actorUserId, 'user-a');
   assert.equal(events[0].actorLabel, 'Ada Trustee', 'a reviewer needs a name, not an opaque id');
-  // The one place the standing-grant question is answerable later: Atlassian
-  // documents no revocation endpoint for an app, so `false` means a grant may
-  // still exist on their side until it lapses or the administrator removes it.
-  assert.equal((events[0].context as Record<string, unknown>).atlassianRevocationConfirmed, false);
+  // What the undocumented revoke call answered, never a claim the grant is
+  // gone: the field is not named as a confirmation of revocation.
+  const context = events[0].context as Record<string, unknown>;
+  assert.equal(context.atlassianRevokeEndpointAccepted, false);
+  assert.equal('atlassianRevocationConfirmed' in context, false);
 });
 
 test('a failure to write the disconnect audit row does not fail the disconnect', async () => {

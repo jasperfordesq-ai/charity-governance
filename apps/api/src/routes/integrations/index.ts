@@ -1384,15 +1384,13 @@ export async function integrationRoutes(
       // leaves the credentials deleted and the row disconnected. `deps` is
       // passed so the attempt is made with the same Atlassian client the
       // connection was made with.
-      const { revoked } = await disconnectConfluence(prisma, { integrationId: integration.id }, deps);
+      const { revokeEndpointAccepted } = await disconnectConfluence(prisma, { integrationId: integration.id }, deps);
 
       // 204 either way: the charity's disconnect succeeded, and it is not
       // their problem that Atlassian offers us no documented way to hand the
-      // authorisation back. But an unconfirmed withdrawal must not be a
-      // discarded return value — this is the only place an operator can learn
-      // that a grant may still be standing. Expected to be the common case:
-      // see the endpoint comment in `disconnectConfluence`. No token, no
-      // secret and no Atlassian error text goes into this line.
+      // authorisation back. The grant may still be standing whatever the
+      // revoke call answered, so the operator line below is written every
+      // time. No token, no secret and no Atlassian error text goes into it.
       // Best-effort, and this is the case the helper exists for: the
       // credentials are already destroyed by the time this runs. Throwing here
       // would tell a charity their disconnect failed while their tokens were
@@ -1406,25 +1404,26 @@ export async function integrationRoutes(
           actor: await integrationAuditActor(app.prisma, request.user),
           subjectLabel: 'Confluence integration',
           reason: 'The Confluence connection was removed and its stored credentials deleted.',
-          // Recorded because it is the one place the standing-grant question is
-          // answerable later. Atlassian documents no revocation endpoint for an
-          // app, so `false` here means a grant may still exist on their side
-          // until it lapses or the administrator removes it themselves.
-          context: { integrationId: integration.id, provider: PROVIDER, atlassianRevocationConfirmed: revoked },
+          // What the undocumented revoke call answered, and nothing more. It is
+          // not evidence the grant is gone: on 11 Oct 2026 the C01 sandbox test
+          // recorded an accepted call while Atlassian's Connected apps page
+          // still listed the app until it was removed by hand. Either value
+          // means a grant may still exist until it lapses or the
+          // administrator removes it themselves.
+          context: { integrationId: integration.id, provider: PROVIDER,
+            atlassianRevokeEndpointAccepted: revokeEndpointAccepted },
           requestId: request.id,
         },
         (error) => request.log.error({ err: error }, 'Failed to record the Confluence disconnect audit event.'),
       );
 
-      if (!revoked) {
-        request.log.warn(
-          { integrationId: integration.id, provider: PROVIDER },
-          'Confluence disconnected and its stored credentials deleted, but the authorisation ' +
-            'could not be confirmed as withdrawn at Atlassian (which documents no revocation ' +
-            'endpoint for an app). The grant expires after 90 days without use, or the ' +
-            'administrator can remove CharityPilot in their Atlassian connected-apps settings.',
-        );
-      }
+      request.log.warn(
+        { integrationId: integration.id, provider: PROVIDER, revokeEndpointAccepted },
+        'Confluence disconnected and its stored credentials deleted, but the authorisation ' +
+          'is not confirmed as withdrawn at Atlassian (which documents no revocation ' +
+          'endpoint for an app). The grant expires after 90 days without use, or the ' +
+          'administrator can remove CharityPilot in their Atlassian connected-apps settings.',
+      );
       return sendNoContent(reply);
     } catch (error) {
       return handleError(reply, error);

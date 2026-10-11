@@ -82,20 +82,21 @@ test.describe('Documents', () => {
         await expect(nativeSelect).toHaveValue('OTHER');
         await nativeSelect.selectOption('STRATEGIC_PLAN', { force: true });
       } else {
-        await dialog.getByRole('button', { name: /Category/ }).click();
+        const trigger = dialog.getByRole('button', { name: /Category/ });
         // Located by CSS, not role: inside this modal the open listbox sits under
         // an aria-hidden ancestor, so getByRole('option') never matches it.
         const option = ownerPage.locator('[role="option"]', { hasText: /^Strategic Plan$/ });
-        await expect(option).toBeAttached();
-        // Chosen with the keyboard inside the open listbox. A pointer click must
-        // first scroll the option into view, and when the listbox overhangs the
-        // modal that scrolls the modal body, which closes the popover (react-aria
-        // closes it when the trigger's scroll container scrolls) and detaches the
-        // option. Typeahead moves focus within the listbox and never scrolls the
-        // modal. The selection still reaches the Select through the listbox.
-        await ownerPage.keyboard.type('Strategic');
-        await expect(option).toHaveAttribute('data-focus', 'true');
-        await ownerPage.keyboard.press('Enter');
+        // Only the interaction is retried, never the outcome. In CI the open
+        // popover sometimes closes on its own moments after opening (react-aria
+        // closes it when the modal body scrolls, and a late layout shift can
+        // scroll it), detaching the option under a pointer click or a
+        // typeahead alike. Reopening and choosing again is what a person does;
+        // the value must still land in the Select and reach the upload below.
+        await expect(async () => {
+          if (!(await option.isVisible())) await trigger.click();
+          await option.click({ timeout: 3_000 });
+          await expect(nativeSelect).toHaveValue('STRATEGIC_PLAN', { timeout: 1_000 });
+        }).toPass({ timeout: 30_000 });
       }
       await expect(nativeSelect).toHaveValue('STRATEGIC_PLAN');
       await expect(dialog.getByRole('button', { name: /Category/ })).toContainText('Strategic Plan');
