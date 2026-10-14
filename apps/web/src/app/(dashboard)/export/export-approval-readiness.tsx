@@ -2,7 +2,7 @@
 
 import { Card } from '@heroui/react';
 import { AppSection } from '@/components/ui/app-page';
-import { countApprovalReadinessBlockers } from '@/lib/approval-readiness';
+import { countApprovalReadinessBlockers, narrativeWarningLines } from '@/lib/approval-readiness';
 import { SourceReferenceList } from '@/components/ui/source-reference';
 import { ReviewFlag, StatusChip, statusPanelClassName } from '@/components/ui/status';
 import type { ComplianceApprovalReadinessResponse } from '@charitypilot/shared';
@@ -73,6 +73,29 @@ export function ApprovalReadinessIssues({ readiness }: { readiness: ApprovalRead
             title="Organisation profile"
             description={item.message}
             label="Profile check"
+          />
+        ))}
+      </div>
+    </AppSection>
+  );
+}
+
+export function NarrativeStalenessWarnings({ readiness }: { readiness: ApprovalReadiness | null }) {
+  const lines = narrativeWarningLines(readiness);
+  if (lines.length === 0) return null;
+
+  return (
+    <AppSection
+      title="Narrative May Be Out Of Date"
+      description="Linked evidence or the calendar has moved on since these standards' text was last edited. This is a warning, not a blocker: trustees can still approve, but should reread these first."
+    >
+      <div className="grid gap-3 md:grid-cols-2">
+        {lines.map((line) => (
+          <ReadinessIssueCard
+            key={line.key}
+            title={`Standard ${line.standardCode}: ${line.title}`}
+            description={line.description}
+            label="Warning"
           />
         ))}
       </div>

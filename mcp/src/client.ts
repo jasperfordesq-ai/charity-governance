@@ -2,10 +2,64 @@ import { randomUUID } from 'node:crypto';
 import type { Session } from './session.js';
 import { redactSecrets } from './redact.js';
 import { CONNECTOR_VERSION } from './version.js';
-import { ConnectionError, type ErrorAction } from './errors.js';
+import { ConnectionError, RequestNotSentError, type ErrorAction } from './errors.js';
 
 const CLIENT_HEADER = 'x-charitypilot-client';
 const REASON_HEADER = 'x-charitypilot-reason';
+/** Names the reason header's encoding when it is not plain ASCII. The API decodes it. */
+const REASON_ENCODING_HEADER = 'x-charitypilot-reason-encoding';
+const REASON_MAX_CODE_POINTS = 500;
+
+/** Printable ASCII: safe as a header value exactly as written. */
+const PLAIN_HEADER_TEXT = /^[\x20-\x7e]*$/;
+const LONE_SURROGATE = /[\uD800-\uDBFF](?![\uDC00-\uDFFF])|(?<![\uD800-\uDBFF])[\uDC00-\uDFFF]/g;
+
+/**
+ * The header(s) carrying a change's reason.
+ *
+ * A header value is bytes, and fetch throws on any character above U+00FF:
+ * an em dash, a fada typed as a combining mark, an emoji. Plain ASCII goes as
+ * it is, as it always has, so an older API reads it unchanged. Anything else
+ * is percent-encoded UTF-8 and marked, and the API decodes it, so the audit
+ * log stores the text the person wrote rather than its encoding.
+ */
+export function reasonHeaders(reason: string): Record<string, string> {
+  // Capped in code points, so a cut never splits an emoji; capped here as
+  // well as at the API so an over-long reason is trimmed, not dropped.
+  const capped = Array.from(reason.replace(LONE_SURROGATE, '�'))
+    .slice(0, REASON_MAX_CODE_POINTS)
+    .join('');
+  if (PLAIN_HEADER_TEXT.test(capped)) return { [REASON_HEADER]: capped };
+  return {
+    [REASON_HEADER]: encodeURIComponent(capped),
+    [REASON_ENCODING_HEADER]: 'percent',
+  };
+}
+
+const NETWORK_ERROR_CODES = new Set([
+  'ECONNREFUSED', 'ECONNRESET', 'ECONNABORTED', 'ENOTFOUND', 'EAI_AGAIN', 'ETIMEDOUT',
+  'EHOSTUNREACH', 'EHOSTDOWN', 'ENETUNREACH', 'ENETDOWN', 'EPIPE',
+  'UND_ERR_CONNECT_TIMEOUT', 'UND_ERR_HEADERS_TIMEOUT', 'UND_ERR_BODY_TIMEOUT',
+  'UND_ERR_SOCKET', 'UND_ERR_CLOSED',
+]);
+
+/**
+ * Whether fetch failed on the way to the server rather than before leaving.
+ *
+ * Node's fetch reports every transport failure as `TypeError: fetch failed`
+ * with the socket error as its cause. A TypeError WITHOUT that shape (an
+ * invalid header value, an unparseable URL) is raised while the request is
+ * still being built on this machine, and is not a network problem at all.
+ */
+export function isNetworkFailure(error: unknown, depth = 0): boolean {
+  if (!(error instanceof Error) || depth > 4) return false;
+  if (error.name === 'AbortError' || error.name === 'TimeoutError') return true;
+  const code = (error as { code?: unknown }).code;
+  if (typeof code === 'string' && NETWORK_ERROR_CODES.has(code)) return true;
+  if (error instanceof TypeError && error.message === 'fetch failed') return true;
+  const cause = (error as { cause?: unknown }).cause;
+  return cause !== error && isNetworkFailure(cause, depth + 1);
+}
 const APPROVAL_HEADER = 'x-charitypilot-approval';
 /** The IETF draft spelling, which is what the API reads. */
 const IDEMPOTENCY_HEADER = 'idempotency-key';
@@ -128,6 +182,9 @@ const QUOTABLE_CODES = new Set([
   'APPROVAL_REFUSED',
   'APPROVAL_RACED',
   'ORGANISATION_INACTIVE',
+  // Fixed text saying what to do next; it names no document and no person.
+  'DOCUMENT_NOT_CURRENT',
+  'DOCUMENT_LIFECYCLE_TRANSITION_INVALID',
 ]);
 const QUOTABLE_PATTERNS = [/_NOT_FOUND$/, /_CONFLICT$/, /^DEADLINE_/, /^GENERATED_DEADLINE_/];
 
@@ -372,9 +429,7 @@ export class ApiClient {
     // FormData sets its own content-type, including the boundary, so one set
     // here would produce a body the server cannot parse.
     if (isJson) headers['content-type'] = 'application/json';
-    // Capped here as well as at the API, so an over-long reason is trimmed
-    // rather than silently dropped by the server's own limit.
-    if (options.reason) headers[REASON_HEADER] = options.reason.slice(0, 500);
+    if (options.reason) Object.assign(headers, reasonHeaders(options.reason));
     if (options.approvalId) headers[APPROVAL_HEADER] = options.approvalId;
     if (options.idempotencyKey) headers[IDEMPOTENCY_HEADER] = options.idempotencyKey;
 
@@ -386,6 +441,15 @@ export class ApiClient {
         ...(body === undefined ? {} : { body }),
       });
     } catch (cause) {
+      // Raised before anything left this machine. Retrying cannot help and
+      // the network is not at fault, so neither is claimed.
+      if (!isNetworkFailure(cause)) {
+        throw new RequestNotSentError(
+          'The connector could not build this request, so nothing was sent to CharityPilot. '
+            + 'This is a fault in the connector or in the arguments it was given, not the network. '
+            + `(${redactSecrets(cause instanceof Error ? cause.message : String(cause))})`,
+        );
+      }
       // A create that met a dropped connection may already have happened, and
       // nothing on this side can tell. With a key it is safe to ask again:
       // the API either carries it out, never having seen the first attempt,

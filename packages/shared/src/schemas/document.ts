@@ -38,6 +38,33 @@ export const uploadDocumentSchema = z.object({
   boardMinuteReference: z.string().trim().max(200).optional(),
 });
 
+/**
+ * An upload, optionally classified in the same request.
+ *
+ * Uploads arrive as DRAFT. An executed, signed instrument is already the
+ * document of record, so it may be uploaded straight into another state with
+ * the reason recorded, exactly as a later lifecycle change would record it.
+ * Which states are reachable is decided by the service's lifecycle transition
+ * rules from DRAFT, not here, so the two can never disagree.
+ *
+ * Kept apart from `uploadDocumentSchema` because `updateDocumentSchema` is
+ * built from that with `.partial()`, which a refinement would break.
+ */
+export const uploadDocumentRequestSchema = uploadDocumentSchema
+  .extend({
+    lifecycleStatus: z.enum(documentLifecycleValues).optional(),
+    lifecycleReason: documentControlReason.optional(),
+  })
+  .superRefine((value, ctx) => {
+    const classified = value.lifecycleStatus !== undefined && value.lifecycleStatus !== 'DRAFT';
+    if (classified && !value.lifecycleReason) {
+      ctx.addIssue({ code: z.ZodIssueCode.custom, message: 'Give a reason for uploading this document as ' + value.lifecycleStatus + '.', path: ['lifecycleReason'] });
+    }
+    if (!classified && value.lifecycleReason) {
+      ctx.addIssue({ code: z.ZodIssueCode.custom, message: 'Lifecycle reason requires a lifecycle status other than DRAFT.', path: ['lifecycleStatus'] });
+    }
+  });
+
 export const linkStandardSchema = z.object({
   standardId: z.string().min(1, 'Standard ID is required'),
 });

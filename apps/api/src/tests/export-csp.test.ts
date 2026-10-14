@@ -50,6 +50,7 @@ function falseProfile() {
 test('export HTML route sets a scoped CSP that allows its inline stylesheet', async () => {
   const app = Fastify({ logger: false });
   app.decorate('prisma', {
+    documentStandardLink: { findMany: async () => [] }, boardMember: { findMany: async () => [] }, documentControlAudit: { findMany: async () => [] },
     authSession: { findFirst: async () => ({ id: 'session-1' }) },
     user: { findUnique: async () => ({ id: 'user-1', organisationId: 'org-1', role: 'ADMIN', emailVerified: true }) },
     subscription: subscription(),
@@ -163,6 +164,7 @@ test('Essentials exports do not include Complete-only governance registers', asy
   let completeOnlyRegisterRead = false;
   const app = Fastify({ logger: false });
   app.decorate('prisma', {
+    documentStandardLink: { findMany: async () => [] }, boardMember: { findMany: async () => [] }, documentControlAudit: { findMany: async () => [] },
     authSession: { findFirst: async () => ({ id: 'session-1' }) },
     user: { findUnique: async () => ({ id: 'user-1', organisationId: 'org-1', role: 'ADMIN', emailVerified: true }) },
     subscription: {

@@ -64,6 +64,7 @@ const readiness = (evidenceHash = 'a'.repeat(64)): ComplianceApprovalReadinessRe
   conditionalReviewItems: [],
   matrixReviewItems: [],
   matrixLastChecked: '2026-07-09',
+  narrativeWarnings: [],
 });
 
 test('derives dirty sign-off state from persisted canonical values', () => {

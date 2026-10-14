@@ -488,6 +488,30 @@ export interface ComplianceApprovalMatrixReviewItem {
   evidenceRequired: string[];
 }
 
+/**
+ * A standard whose written narrative may have been overtaken by events.
+ *
+ * A warning, never a blocker: the board may still approve. Carries
+ * identifiers, codes and dates only, never the narrative text itself.
+ */
+export type ComplianceNarrativeWarning =
+  | {
+      kind: "EVIDENCE_LINKED_AFTER_NARRATIVE";
+      standardId: string;
+      standardCode: string;
+      recordUpdatedAt: string;
+      documentId: string;
+      linkedAt: string;
+    }
+  | {
+      kind: "TARGET_DATE_PASSED";
+      standardId: string;
+      standardCode: string;
+      recordUpdatedAt: string;
+      /** YYYY-MM-DD, as read from a "Target:" date in the action taken. */
+      targetDate: string;
+    };
+
 export interface ComplianceApprovalReadinessResponse {
   ready: boolean;
   evidenceHash: string;
@@ -498,7 +522,19 @@ export interface ComplianceApprovalReadinessResponse {
   conditionalReviewItems: ComplianceApprovalConditionalReviewItem[];
   matrixReviewItems: ComplianceApprovalMatrixReviewItem[];
   matrixLastChecked: string;
+  /**
+   * Computed when asked, and deliberately outside the hashed approval
+   * evidence: a date-dependent value inside the hash would withdraw every
+   * approval at midnight.
+   */
+  narrativeWarnings: ComplianceNarrativeWarning[];
 }
+
+/** The part of readiness that is bound into approval evidence. */
+export type ComplianceApprovalReadinessEvidence = Omit<
+  ComplianceApprovalReadinessResponse,
+  "evidenceHash" | "narrativeWarnings"
+>;
 
 export interface UpsertComplianceRecordRequest {
   reportingYear: number;
@@ -571,7 +607,7 @@ export interface ComplianceEvidenceSnapshotPayload {
   };
   matrixLastChecked: string;
   standards: ComplianceEvidenceStandardSnapshot[];
-  readiness: Omit<ComplianceApprovalReadinessResponse, "evidenceHash">;
+  readiness: ComplianceApprovalReadinessEvidence;
 }
 
 export interface ComplianceApprovalSnapshotPayload {

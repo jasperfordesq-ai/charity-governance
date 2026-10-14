@@ -37,6 +37,38 @@ export function approvalReadinessSummary(readiness: ApprovalReadiness | null | u
   return `${blockerCount} approval-readiness blocker${blockerCount === 1 ? '' : 's'}: ${parts.join(', ')}.`;
 }
 
+export interface NarrativeWarningLine {
+  key: string;
+  standardCode: string;
+  title: string;
+  description: string;
+}
+
+function irishDate(value: string): string {
+  return new Date(value).toLocaleDateString('en-IE', { timeZone: 'UTC', day: 'numeric', month: 'short', year: 'numeric' });
+}
+
+/**
+ * Standards whose narrative linked evidence or the calendar has overtaken.
+ * Warnings only: they never count as blockers and never stop a sign-off.
+ * Tolerates an older API that does not send them.
+ */
+export function narrativeWarningLines(readiness: ApprovalReadiness | null | undefined): NarrativeWarningLine[] {
+  return (readiness?.narrativeWarnings ?? []).map((warning) => warning.kind === 'EVIDENCE_LINKED_AFTER_NARRATIVE'
+    ? {
+        key: `linked-${warning.standardId}-${warning.documentId}`,
+        standardCode: warning.standardCode,
+        title: 'Evidence linked after the narrative was written',
+        description: `A current document was linked on ${irishDate(warning.linkedAt)}, after the actions taken and evidence were last edited on ${irishDate(warning.recordUpdatedAt)}. Reread the text before approving.`,
+      }
+    : {
+        key: `target-${warning.standardId}-${warning.targetDate}`,
+        standardCode: warning.standardCode,
+        title: 'Target date has passed',
+        description: `The actions taken give a target of ${irishDate(warning.targetDate)}, which has passed. Update the text to say what happened.`,
+      });
+}
+
 function summaryPart(count: number, singular: string, plural: string) {
   if (count === 0) return '';
   return `${count} ${count === 1 ? singular : plural}`;

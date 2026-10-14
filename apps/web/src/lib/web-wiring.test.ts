@@ -642,6 +642,10 @@ test('phase 6A workflows surface approval-readiness and evidence-led review guid
   assert.match(exportSurface, /profileIssues/);
   assert.match(exportSurface, /conditionalReviewItems/);
   assert.match(exportPage, /MatrixSourceSummary/);
+  // The board must see that linked evidence or a passed target has overtaken
+  // the narrative before it approves (2026-10-14).
+  assert.match(exportPage, /<NarrativeStalenessWarnings readiness=\{approvalReadiness\} \/>/);
+  assert.match(exportReadiness, /narrativeWarningLines\(readiness\)/);
   assert.match(exportSurface, /matrixReviewItems/);
   assert.match(exportSurface, /matrixLastChecked/);
   assert.match(exportSurface, /not_commenced/);

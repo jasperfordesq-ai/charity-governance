@@ -136,6 +136,7 @@ function buildService(opts: {
       create: async (args: unknown) => { calls.push({ name: 'complianceAuditEvent.create', args }); return {}; },
     },
     user: { findUnique: async () => ({ name: 'User' }) },
+    documentStandardLink: { findMany: async () => [] }, boardMember: { findMany: async () => [] }, documentControlAudit: { findMany: async () => [] },
   };
   prisma.$transaction = async (callback: (tx: unknown) => Promise<unknown>, options: unknown) => {
     calls.push({ name: '$transaction', args: options });

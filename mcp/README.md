@@ -664,6 +664,12 @@ pointing out of it are refused, and dotted directories such as `.git` are never
 traversed — an upload root inside a project directory must not become a way to
 read the credentials in its configuration.
 
+An upload arrives as a restricted DRAFT, and only a CURRENT document can be
+linked to a Governance Code standard. For an executed, signed instrument that
+is already the document of record, pass `lifecycleStatus: "CURRENT"` with a
+`lifecycleReason` to `document_upload`; the API applies the same lifecycle rules
+as a later change would and records the reason in the document's audit trail.
+
 A download writes the file and reports the path. It never returns the contents:
 the personal-data gate can filter a record, but a PDF of board minutes is either
 handed over whole or not at all. Whole-file downloads require both a named
@@ -681,7 +687,9 @@ authorised disclosure or filing.
 
 Every unsafe request a connector session makes leaves a row in
 `ClientActivityEvent`: the route, the identifier, the status code, the access
-level, and the reason you gave. Refused attempts are recorded too, because an
+level, and the reason you gave. A reason may be written in any language or
+script: one that is not plain ASCII (an em dash, a fada, an emoji) travels
+percent-encoded and is stored exactly as written. Refused attempts are recorded too, because an
 agent that tried to delete something and was stopped is the row most worth
 reading. The rows cannot be edited or deleted afterwards, by anyone.
 

@@ -410,6 +410,7 @@ test('current export rejects an apparently current signoff when live evidence ha
   };
 
   app.decorate('prisma', {
+    documentStandardLink: { findMany: async () => [] }, boardMember: { findMany: async () => [] }, documentControlAudit: { findMany: async () => [] },
     authSession: { findFirst: async () => ({ id: 'session-1' }) },
     user: {
       findUnique: async () => ({

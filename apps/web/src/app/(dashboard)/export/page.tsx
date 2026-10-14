@@ -11,6 +11,7 @@ import {
   ApprovalReadinessIssues,
   ConditionalReviewPrompts,
   MatrixSourceSummary,
+  NarrativeStalenessWarnings,
 } from './export-approval-readiness';
 import { ExportBoardApprovalPanel } from './export-board-approval-panel';
 import { ExportControlsPanel } from './export-controls-panel';
@@ -133,6 +134,8 @@ function InternalExportPage() {
         />
 
         <ApprovalReadinessIssues readiness={approvalReadiness} />
+
+        <NarrativeStalenessWarnings readiness={approvalReadiness} />
 
         <ConditionalReviewPrompts items={conditionalReviewItems} />
 

@@ -5,7 +5,7 @@ import Fastify from "fastify";
 process.env.JWT_SECRET =
   process.env.JWT_SECRET ?? "client-activity-log-test-jwt-secret-value";
 
-const { clientActivityLogPlugin, ACTIVITY_REASON_HEADER } = await import(
+const { clientActivityLogPlugin, ACTIVITY_REASON_HEADER, ACTIVITY_REASON_ENCODING_HEADER } = await import(
   "../plugins/client-activity-log.js"
 );
 
@@ -196,6 +196,121 @@ test("the reason the client gave is kept, stripped of control characters and cap
       "a record that can move a terminal cursor is a record that can lie about what it says",
     );
     assert.equal(reason.length, 500, "capped, so the column is a note and not a store");
+  } finally {
+    await app.close();
+  }
+});
+
+// The incident of 2026-10-14: a reason with an em dash could not be sent as a
+// header at all. The connector now percent-encodes such a reason and says so;
+// the audit row must hold the text as written, never its encoding.
+const UNICODE_REASONS = [
+  "Code of Conduct — Trustee Declaration, signed and filed",
+  "Dearbhú ón gcathaoirleach: síníodh an cód iompair",
+  "Both declarations signed 🎉 and uploaded as evidence",
+];
+
+for (const written of UNICODE_REASONS) {
+  test(`a percent-encoded reason is stored as written: ${written}`, async () => {
+    const rows: Row[] = [];
+    const app = await buildApp({ rows });
+    try {
+      await app.inject({
+        method: "POST",
+        url: "/board-members",
+        headers: {
+          [ACTIVITY_REASON_HEADER]: encodeURIComponent(written),
+          [ACTIVITY_REASON_ENCODING_HEADER]: "percent",
+        },
+        payload: {},
+      });
+      await settle();
+      assert.equal(rows[0]!["reason"], written);
+    } finally {
+      await app.close();
+    }
+  });
+}
+
+test("the connector's own encoder and this decoder agree, end to end", async () => {
+  // Through the connector's build, as search-route.test.ts does: the two
+  // packages compile apart, and this is the one place their halves meet.
+  const built = new URL("../../../../mcp/dist/client.js", import.meta.url).href;
+  let reasonHeaders: (reason: string) => Record<string, string>;
+  try {
+    ({ reasonHeaders } = (await import(built)) as { reasonHeaders: typeof reasonHeaders });
+  } catch {
+    assert.fail("The connector is not built, so this could not be checked. Run `npm run build` in mcp/.");
+  }
+  for (const written of [...UNICODE_REASONS, "Plain ASCII reason, 100% unchanged"]) {
+    const rows: Row[] = [];
+    const app = await buildApp({ rows });
+    try {
+      await app.inject({ method: "POST", url: "/board-members", headers: reasonHeaders(written), payload: {} });
+      await settle();
+      assert.equal(rows[0]!["reason"], written);
+    } finally {
+      await app.close();
+    }
+  }
+});
+
+test("an encoded control character is stripped exactly like a literal one", async () => {
+  const rows: Row[] = [];
+  const app = await buildApp({ rows });
+  try {
+    await app.inject({
+      method: "POST",
+      url: "/board-members",
+      headers: {
+        [ACTIVITY_REASON_HEADER]: encodeURIComponent("Signed —\u001b[2K declaration"),
+        [ACTIVITY_REASON_ENCODING_HEADER]: "percent",
+      },
+      payload: {},
+    });
+    await settle();
+    const reason = String(rows[0]!["reason"]);
+    assert.ok(!/[\u0000-\u001f\u007f]/.test(reason), reason);
+    assert.ok(reason.startsWith("Signed —"));
+  } finally {
+    await app.close();
+  }
+});
+
+test("without the encoding marker a percent sign is just text, and malformed encoding is kept", async () => {
+  for (const [headers, expected] of [
+    [{ [ACTIVITY_REASON_HEADER]: "Raised to 100%20 of target" }, "Raised to 100%20 of target"],
+    [{ [ACTIVITY_REASON_HEADER]: "broken %E2%80 text", [ACTIVITY_REASON_ENCODING_HEADER]: "percent" }, "broken %E2%80 text"],
+  ] as const) {
+    const rows: Row[] = [];
+    const app = await buildApp({ rows });
+    try {
+      await app.inject({ method: "POST", url: "/board-members", headers, payload: {} });
+      await settle();
+      assert.equal(rows[0]!["reason"], expected);
+    } finally {
+      await app.close();
+    }
+  }
+});
+
+test("a decoded reason is capped at 500 code points without splitting an emoji", async () => {
+  const rows: Row[] = [];
+  const app = await buildApp({ rows });
+  try {
+    await app.inject({
+      method: "POST",
+      url: "/board-members",
+      headers: {
+        [ACTIVITY_REASON_HEADER]: encodeURIComponent("a".repeat(499) + "🎉🎉"),
+        [ACTIVITY_REASON_ENCODING_HEADER]: "percent",
+      },
+      payload: {},
+    });
+    await settle();
+    const reason = String(rows[0]!["reason"]);
+    assert.equal(Array.from(reason).length, 500);
+    assert.ok(reason.endsWith("🎉"));
   } finally {
     await app.close();
   }

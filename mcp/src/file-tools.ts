@@ -49,6 +49,12 @@ export const TEXT_UPLOAD_TYPES: Record<string, string> = {
  */
 export const TEXT_UPLOAD_MAX_BYTES = 64 * 1024;
 
+/**
+ * The states an upload may arrive in. The API's lifecycle rules from DRAFT
+ * decide this; listing them lets a model see the choice without a refusal.
+ */
+export const UPLOAD_LIFECYCLE_STATUSES = ['DRAFT', 'CURRENT', 'RETIRED', 'HISTORICAL'] as const;
+
 export const FILE_TOOLS: readonly FileToolDefinition[] = [
   {
     name: 'document_upload',
@@ -77,6 +83,20 @@ export const FILE_TOOLS: readonly FileToolDefinition[] = [
         description: { type: 'string', maxLength: 1000 },
         category: { type: 'string', enum: [...DOCUMENT_CATEGORIES] },
         reason: { type: 'string', maxLength: 500, description: 'Why it is being added.' },
+        lifecycleStatus: {
+          type: 'string',
+          enum: [...UPLOAD_LIFECYCLE_STATUSES],
+          description:
+            'Uploads arrive as DRAFT, and only a CURRENT document can be linked to a standard. '
+            + 'For an executed, signed instrument that is already the document of record, pass '
+            + 'CURRENT with a lifecycleReason to upload and classify it in one call.',
+        },
+        lifecycleReason: {
+          type: 'string',
+          minLength: 10,
+          maxLength: 500,
+          description: 'Required with any lifecycleStatus other than DRAFT; recorded in the document audit.',
+        },
       },
       required: ['path', 'name', 'category'],
       additionalProperties: false,
@@ -240,8 +260,21 @@ export async function runFileTool(
     };
     const description = optionalString(args, 'description', 1000);
     if (description) fields['description'] = description;
+    const lifecycleStatus = optionalString(args, 'lifecycleStatus', 16);
+    const lifecycleReason = optionalString(args, 'lifecycleReason', 500);
+    if (lifecycleStatus !== undefined
+      && !(UPLOAD_LIFECYCLE_STATUSES as readonly string[]).includes(lifecycleStatus)) {
+      throw new FileAccessError(`lifecycleStatus must be one of: ${UPLOAD_LIFECYCLE_STATUSES.join(', ')}.`);
+    }
+    // Checked here as well as at the API, so the file is not read and sent
+    // only to be refused for a missing reason.
+    if (lifecycleStatus !== undefined && lifecycleStatus !== 'DRAFT' && !lifecycleReason?.trim()) {
+      throw new FileAccessError(`lifecycleReason is required to upload a document as ${lifecycleStatus}.`);
+    }
+    if (lifecycleStatus) fields['lifecycleStatus'] = lifecycleStatus;
+    if (lifecycleReason) fields['lifecycleReason'] = lifecycleReason;
 
-    const created = await client.upload<{ data?: { id?: string; name?: string } }>(
+    const created = await client.upload<{ data?: { id?: string; name?: string; lifecycleStatus?: string } }>(
       '/api/v1/documents',
       file,
       fields,
@@ -252,6 +285,7 @@ export async function runFileTool(
       uploaded: {
         id: created.data?.id ?? null,
         name: created.data?.name ?? fields['name'],
+        lifecycleStatus: created.data?.lifecycleStatus ?? lifecycleStatus ?? 'DRAFT',
         bytes: file.bytes.length,
         from: file.path,
       },

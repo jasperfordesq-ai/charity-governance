@@ -1440,6 +1440,7 @@ test('draft and historical documents cannot be linked as current standard eviden
     const response = await app.inject({ method: 'POST', url: '/doc-1/standards', headers: { authorization: authHeader }, payload: { standardId: 'standard-1' } });
     assert.equal(response.statusCode, 409);
     assert.equal(response.json().code, 'DOCUMENT_NOT_CURRENT');
+    assert.match(response.json().error, /Set the document to CURRENT with a lifecycle reason .*then link it/);
     assert.equal(linked, false);
   } finally {
     await app.close();
@@ -1462,6 +1463,7 @@ test('a lifecycle change during standard linking is reported as a conflict witho
     const response = await app.inject({ method: 'POST', url: '/doc-1/standards', headers: { authorization: authHeader }, payload: { standardId: 'standard-1' } });
     assert.equal(response.statusCode, 409);
     assert.equal(response.json().code, 'DOCUMENT_NOT_CURRENT');
+    assert.match(response.json().error, /Set the document to CURRENT with a lifecycle reason .*then link it/);
     assert.equal(auditCreated, false);
   } finally {
     await app.close();
@@ -2814,4 +2816,117 @@ test('a member cannot change a document', async () => {
 
   assert.equal(response.statusCode, 403);
   await app.close();
+});
+
+// Found in live use on 2026-10-14: an executed, signed declaration had to be
+// uploaded as a DRAFT and then PATCHed to CURRENT before it could be linked.
+test('an upload may arrive CURRENT with a reason, recorded as the draft\'s first lifecycle change', { concurrency: false }, async () => {
+  const originalUpload = StorageService.prototype.uploadFile;
+  const audits: Record<string, unknown>[] = [];
+  let createdDocument: Record<string, unknown> | undefined;
+  StorageService.prototype.uploadFile = mockUpload('org-1/declaration.pdf');
+  const app = await buildDocumentsApp({
+    subscription: subscription(),
+    document: { create: async (args: unknown) => {
+      createdDocument = (args as { data: Record<string, unknown> }).data;
+      return publicDocument({ lifecycleStatus: 'CURRENT' });
+    } },
+    documentControlAudit: { create: async (args: unknown) => {
+      audits.push((args as { data: Record<string, unknown> }).data);
+      return { id: `audit-${audits.length}` };
+    } },
+  });
+  try {
+    const request = multipartRequest({
+      ...baseFields,
+      category: 'CODE_OF_CONDUCT',
+      lifecycleStatus: 'CURRENT',
+      lifecycleReason: 'Executed and signed by the trustee on 11 October 2026',
+    }, { filename: 'declaration.pdf', mimetype: 'application/pdf', content: Buffer.from('%PDF-1.7\n%%EOF') });
+    const response = await app.inject({ method: 'POST', url: '/', headers: { ...request.headers, authorization: authHeader }, payload: request.payload });
+
+    assert.equal(response.statusCode, 201);
+    assert.equal(createdDocument?.lifecycleStatus, 'CURRENT');
+    assert.equal(createdDocument?.visibility, 'RESTRICTED', 'classifying a document never widens who may see it');
+    assert.equal(createdDocument?.externalPublicationApproved, false, 'nor approves it for publication');
+    assert.deepEqual(audits.map((audit) => [audit.kind, audit.previous, audit.next]), [
+      ['UPLOAD', 'NONE', 'RESTRICTED/DRAFT'],
+      ['LIFECYCLE', 'DRAFT', 'CURRENT'],
+    ]);
+    assert.equal(audits[1]!.reason, 'Executed and signed by the trustee on 11 October 2026');
+    assert.equal(audits[1]!.actorUserId, 'user-1');
+  } finally {
+    StorageService.prototype.uploadFile = originalUpload;
+    await app.close();
+  }
+});
+
+test('an upload with no lifecycle still arrives as DRAFT with one audit row', { concurrency: false }, async () => {
+  const originalUpload = StorageService.prototype.uploadFile;
+  const audits: Record<string, unknown>[] = [];
+  let createdDocument: Record<string, unknown> | undefined;
+  StorageService.prototype.uploadFile = mockUpload('org-1/policy.pdf');
+  const app = await buildDocumentsApp({
+    subscription: subscription(),
+    document: { create: async (args: unknown) => {
+      createdDocument = (args as { data: Record<string, unknown> }).data;
+      return publicDocument({ lifecycleStatus: 'DRAFT' });
+    } },
+    documentControlAudit: { create: async (args: unknown) => {
+      audits.push((args as { data: Record<string, unknown> }).data);
+      return { id: 'audit-1' };
+    } },
+  });
+  try {
+    const request = multipartRequest(baseFields, { filename: 'policy.pdf', mimetype: 'application/pdf', content: Buffer.from('%PDF-1.7\n%%EOF') });
+    const response = await app.inject({ method: 'POST', url: '/', headers: { ...request.headers, authorization: authHeader }, payload: request.payload });
+    assert.equal(response.statusCode, 201);
+    assert.equal(createdDocument?.lifecycleStatus, 'DRAFT');
+    assert.deepEqual(audits.map((audit) => audit.kind), ['UPLOAD']);
+  } finally {
+    StorageService.prototype.uploadFile = originalUpload;
+    await app.close();
+  }
+});
+
+test('an upload lifecycle the transition rules forbid, or one without a reason, is refused before any bytes are stored', { concurrency: false }, async () => {
+  const originalUpload = StorageService.prototype.uploadFile;
+  let stored = 0;
+  let created = 0;
+  StorageService.prototype.uploadFile = async () => { stored += 1; return { storagePath: 'org-1/x.pdf', provider: 'supabase' }; };
+  const app = await buildDocumentsApp({
+    subscription: subscription(),
+    document: { create: async () => { created += 1; return publicDocument(); } },
+  });
+  const cases: Array<[Record<string, string>, number, string]> = [
+    // DRAFT may become CURRENT, RETIRED or HISTORICAL; never SUPERSEDED, which needs a replacement.
+    [{ lifecycleStatus: 'SUPERSEDED', lifecycleReason: 'Replaced by the 2026 version of the code' }, 409, 'DOCUMENT_LIFECYCLE_TRANSITION_INVALID'],
+    [{ lifecycleStatus: 'UNREVIEWED', lifecycleReason: 'Not yet reviewed by the board at all' }, 409, 'DOCUMENT_LIFECYCLE_TRANSITION_INVALID'],
+    [{ lifecycleStatus: 'CURRENT' }, 400, 'VALIDATION_ERROR'],
+    [{ lifecycleReason: 'A reason with nothing to explain' }, 400, 'VALIDATION_ERROR'],
+    [{ lifecycleStatus: 'NOT_A_STATE', lifecycleReason: 'A reason long enough to pass' }, 400, 'VALIDATION_ERROR'],
+  ];
+  try {
+    for (const [extra, status, code] of cases) {
+      const request = multipartRequest({ ...baseFields, ...extra }, { filename: 'x.pdf', mimetype: 'application/pdf', content: Buffer.from('%PDF-1.7\n%%EOF') });
+      const response = await app.inject({ method: 'POST', url: '/', headers: { ...request.headers, authorization: authHeader }, payload: request.payload });
+      assert.equal(response.statusCode, status, JSON.stringify(extra));
+      assert.equal(response.json().code, code, JSON.stringify(extra));
+    }
+    assert.equal(stored, 0, 'nothing reached storage');
+    assert.equal(created, 0, 'no document row was created');
+  } finally {
+    StorageService.prototype.uploadFile = originalUpload;
+    await app.close();
+  }
+});
+
+test('the upload service applies the same lifecycle rule as the route, as a backstop', async () => {
+  const { assertUploadLifecycle } = await import('../services/document.service.js');
+  assert.equal(assertUploadLifecycle(undefined, undefined), 'DRAFT');
+  assert.equal(assertUploadLifecycle('CURRENT', 'Executed and signed instrument'), 'CURRENT');
+  assert.equal(assertUploadLifecycle('RETIRED', 'Archived on arrival for the record'), 'RETIRED');
+  for (const [status, reason] of [['CURRENT', undefined], ['SUPERSEDED', 'x'.repeat(20)], ['UNREVIEWED', 'x'.repeat(20)]] as const) {
+    assert.throws(() => assertUploadLifecycle(status, reason), (err: unknown) => (err as { code?: string }).code === 'DOCUMENT_LIFECYCLE_TRANSITION_INVALID');
+  }
 });

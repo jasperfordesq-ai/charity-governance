@@ -72,6 +72,7 @@ export async function exportRoutes(app: FastifyInstance) {
       const records = await complianceService.getRecords(request.user.organisationId, year);
       const signoff = await complianceService.getSignoff(request.user.organisationId, year);
       const approvalReadiness = await complianceService.getApprovalReadiness(request.user.organisationId, year);
+      const reportEvidence = await complianceService.getReportEvidence(request.user.organisationId);
       const subscription = await app.prisma.subscription.findUnique({
         where: { organisationId: request.user.organisationId },
         select: { plan: true },
@@ -105,6 +106,7 @@ export async function exportRoutes(app: FastifyInstance) {
         approvalReadiness,
         registers,
         year,
+        reportEvidence,
       );
 
       await recordReportPrepared(app, request, year, 'current', 'internal');

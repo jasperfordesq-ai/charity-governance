@@ -39,3 +39,17 @@ export class ConnectionError extends ConnectorError {
     this.name = 'ConnectionError';
   }
 }
+
+/**
+ * The request could not even be built on this machine, so nothing was sent.
+ *
+ * Kept apart from ConnectionError on purpose. Reporting a local fault as
+ * "cannot reach CharityPilot, check Tailscale" sent an operator to debug a
+ * healthy network when the real cause was an em dash in a header.
+ */
+export class RequestNotSentError extends ConnectorError {
+  constructor(message: string) {
+    super('REQUEST_NOT_SENT', message, { retryable: false, action: 'none' });
+    this.name = 'RequestNotSentError';
+  }
+}

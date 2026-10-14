@@ -304,7 +304,10 @@ test('a network failure is a ConnectionError, retryable, with the cause redacted
   const client = new ApiClient({
     session: sessionReturning('access1'),
     baseUrl: 'https://example.test',
-    fetchImpl: async () => { throw new Error('ECONNREFUSED Bearer access1'); },
+    // The shape a socket error really has: a code, not just a message.
+    fetchImpl: async () => {
+      throw Object.assign(new Error('connect ECONNREFUSED Bearer access1'), { code: 'ECONNREFUSED' });
+    },
   });
   await assert.rejects(() => client.get('/api/v1/organisation'), (err: unknown) => {
     assert.ok(err instanceof ConnectionError);

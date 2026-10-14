@@ -157,6 +157,8 @@ function buildHarness() {
       },
     },
   };
+  // Generated-time report reads, outside the hashed evidence; empty here.
+  Object.assign(prisma, { documentStandardLink: { findMany: async () => [] }, boardMember: { findMany: async () => [] }, documentControlAudit: { findMany: async () => [] }, });
   prisma.$transaction = async (
     callback: (tx: unknown) => Promise<unknown>,
     options: unknown,

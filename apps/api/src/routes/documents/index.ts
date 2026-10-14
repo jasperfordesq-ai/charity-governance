@@ -1,6 +1,6 @@
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import { createHash } from 'node:crypto';
-import { DocumentService } from '../../services/document.service.js';
+import { DocumentService, assertUploadLifecycle } from '../../services/document.service.js';
 import { assertDocumentSourceUnbound } from '../../services/document-source-recovery-guard.js';
 import { DocumentRecoveryService } from '../../services/document-recovery.service.js';
 import { RetentionPolicyService } from '../../services/retention-policy.service.js';
@@ -12,7 +12,7 @@ import { requireSessionLevel, requireWebSession } from '../../middleware/session
 import { requireActionApproval } from '../../middleware/action-approval.js';
 import { subscriptionGuard } from '../../middleware/subscription.js';
 import { requireAdmin, requireOwner } from '../../middleware/roles.js';
-import { uploadDocumentSchema, updateDocumentSchema, linkStandardSchema } from '@charitypilot/shared';
+import { uploadDocumentRequestSchema, updateDocumentSchema, linkStandardSchema } from '@charitypilot/shared';
 import { AppError, handleError } from '../../utils/errors.js';
 import {
   mirrorsForDocuments,
@@ -811,7 +811,7 @@ export async function documentRoutes(app: FastifyInstance) {
         return reply.status(400).send({ error: 'No file uploaded', code: 'NO_FILE' });
       }
 
-      const meta = uploadDocumentSchema.parse({
+      const meta = uploadDocumentRequestSchema.parse({
         name: fields.name?.value,
         description: fields.description?.value,
         category: fields.category?.value,
@@ -819,7 +819,13 @@ export async function documentRoutes(app: FastifyInstance) {
         approvedDate: fields.approvedDate?.value,
         nextReviewDate: fields.nextReviewDate?.value,
         boardMinuteReference: fields.boardMinuteReference?.value,
+        lifecycleStatus: fields.lifecycleStatus?.value,
+        lifecycleReason: fields.lifecycleReason?.value,
       });
+
+      // Refused before any provider I/O, so an impossible lifecycle never
+      // leaves a reserved file behind for cleanup.
+      assertUploadLifecycle(meta.lifecycleStatus, meta.lifecycleReason);
 
       if (!hasAllowedExtension(uploadedFile.filename, uploadedFile.mimetype) || !hasValidSignature(uploadedFile.mimetype, uploadedFile.buffer)) {
         return reply.status(400).send({
@@ -873,6 +879,8 @@ export async function documentRoutes(app: FastifyInstance) {
           approvedDate: meta.approvedDate || null,
           nextReviewDate: meta.nextReviewDate || null,
           boardMinuteReference: meta.boardMinuteReference || null,
+          lifecycleStatus: meta.lifecycleStatus,
+          lifecycleReason: meta.lifecycleReason,
       }, uploadIntentId, uploadedProvider);
 
       return sendCreated(reply, doc);

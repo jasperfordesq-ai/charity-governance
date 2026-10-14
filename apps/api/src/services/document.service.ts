@@ -16,6 +16,7 @@ import { publicationErasureTarget } from './document-publication.service.js';
 import { parseConfluenceErasureTarget } from './confluence-erasure-target.js';
 import { lockOrganisationForUpdate } from './organisation-lock.js';
 import { assertDocumentSourceUnbound } from './document-source-recovery-guard.js';
+import { coreStandardLinkInclude, standardLinkInclude } from './document-standard-link-scope.js';
 
 /**
  * An absent field leaves the column alone; an explicit null clears it.
@@ -192,7 +193,7 @@ type DocumentQuotaClient = {
         description?: string;
         category: never;
         visibility: 'RESTRICTED';
-        lifecycleStatus: 'DRAFT';
+        lifecycleStatus: 'DRAFT' | 'CURRENT' | 'RETIRED' | 'HISTORICAL';
         externalPublicationApproved: false;
         fileUrl: string;
         storageProvider: string;
@@ -242,14 +243,6 @@ type DocumentWithStandardLinks = {
   }>;
 };
 
-const standardLinkInclude = {
-  include: { standard: { select: { id: true, code: true } } },
-};
-
-const coreStandardLinkInclude = {
-  where: { standard: { isCore: true } },
-  include: { standard: { select: { id: true, code: true } } },
-};
 
 const publicDocumentInclude = {
   standardLinks: standardLinkInclude,
@@ -263,6 +256,29 @@ const lifecycleNext: Record<string, readonly string[]> = {
   RETIRED: ['HISTORICAL'],
   HISTORICAL: [],
 };
+
+/**
+ * The state an upload arrives in, refused if the lifecycle rules forbid it.
+ *
+ * Every upload starts as a DRAFT. Arriving in another state is that draft's
+ * first lifecycle transition, so it obeys `lifecycleNext.DRAFT` and needs a
+ * reason, exactly as a later PATCH would. Exported so the upload route can
+ * refuse before any bytes reach storage.
+ */
+export function assertUploadLifecycle(status: string | undefined, reason: string | undefined): string {
+  const lifecycleStatus = status ?? 'DRAFT';
+  if (lifecycleStatus !== 'DRAFT' && (!reason || !lifecycleNext.DRAFT!.includes(lifecycleStatus))) {
+    throw new AppError(409, 'DOCUMENT_LIFECYCLE_TRANSITION_INVALID',
+      `An upload may arrive as DRAFT, or as ${lifecycleNext.DRAFT!.join(', ')} with a lifecycle reason.`);
+  }
+  return lifecycleStatus;
+}
+
+/** Says what to do next, since the refusal is a step missed rather than a wrong request. */
+export const DOCUMENT_NOT_CURRENT_LINK_MESSAGE =
+  'Only a CURRENT document may be linked as governance evidence. Set the document to CURRENT '
+  + 'with a lifecycle reason (lifecycleStatus and lifecycleReason), then link it. A signed, '
+  + 'executed document can be uploaded as CURRENT in one step by giving both at upload.';
 
 function scopedPublicDocumentInclude(includeAdditionalStandards: boolean) {
   return {
@@ -1209,11 +1225,16 @@ export class DocumentService {
       approvedDate?: string | null;
       nextReviewDate?: string | null;
       boardMinuteReference?: string | null;
+      lifecycleStatus?: string;
+      lifecycleReason?: string;
     },
     uploadIntentId: string,
     uploadedProvider: string,
   ) {
     const client = this.prisma as unknown as DocumentQuotaClient;
+
+    const lifecycleStatus = assertUploadLifecycle(data.lifecycleStatus, data.lifecycleReason);
+    const classified = lifecycleStatus !== 'DRAFT';
 
     const createDocument = async (tx: DocumentQuotaClient) => {
       await this.assertStorageQuota(tx, organisationId, data.fileSize);
@@ -1226,7 +1247,7 @@ export class DocumentService {
           description: data.description,
           category: data.category as never,
           visibility: 'RESTRICTED',
-          lifecycleStatus: 'DRAFT',
+          lifecycleStatus: lifecycleStatus as 'DRAFT' | 'CURRENT' | 'RETIRED' | 'HISTORICAL',
           externalPublicationApproved: false,
           fileUrl: data.fileUrl,
           storageProvider: uploadedProvider,
@@ -1244,6 +1265,12 @@ export class DocumentService {
         previous: 'NONE', next: 'RESTRICTED/DRAFT',
         reason: 'Document uploaded into restricted draft state.',
       } });
+      if (classified) {
+        await tx.documentControlAudit.create({ data: {
+          organisationId, documentId: created.id, actorUserId: userId, kind: 'LIFECYCLE',
+          previous: 'DRAFT', next: lifecycleStatus, reason: data.lifecycleReason!,
+        } });
+      }
       const attached = await tx.documentUploadIntent.updateMany({
         where: {
           id: uploadIntentId, organisationId, storagePath: data.fileUrl,
@@ -2086,7 +2113,7 @@ export class DocumentService {
       throw new AppError(404, 'DOCUMENT_NOT_FOUND', 'Document not found');
     }
     if (doc.lifecycleStatus !== 'CURRENT') {
-      throw new AppError(409, 'DOCUMENT_NOT_CURRENT', 'Only a current document may be linked as active governance evidence.');
+      throw new AppError(409, 'DOCUMENT_NOT_CURRENT', DOCUMENT_NOT_CURRENT_LINK_MESSAGE);
     }
 
     if (!standard) {
@@ -2125,7 +2152,7 @@ export class DocumentService {
       if (typeof error === 'object' && error !== null && 'code' in error && error.code === 'P2004'
         && typeof databaseError === 'string'
         && databaseError.includes('Document standard link requires current document')) {
-        throw new AppError(409, 'DOCUMENT_NOT_CURRENT', 'Only a current document may be linked as active governance evidence.');
+        throw new AppError(409, 'DOCUMENT_NOT_CURRENT', DOCUMENT_NOT_CURRENT_LINK_MESSAGE);
       }
       throw error;
     }

@@ -111,6 +111,7 @@ async function buildComplianceApp(
     },
     complianceApprovalSnapshot: { findFirst: async () => null },
     complianceAuditEvent: { create: async () => ({}) },
+    documentStandardLink: { findMany: async () => [] }, boardMember: { findMany: async () => [] }, documentControlAudit: { findMany: async () => [] },
   };
   for (const [key, value] of Object.entries(prismaOverrides)) {
     base[key] = value && typeof value === 'object' && !Array.isArray(value)
@@ -421,6 +422,7 @@ function buildService(opts: {
     complianceApprovalSnapshot: { findFirst: async () => null },
     complianceAuditEvent: { create: async (args: unknown) => { calls.push({ name: 'complianceAuditEvent.create', args }); return {}; } },
     user: { findUnique: async () => ({ name: 'User' }) },
+    documentStandardLink: { findMany: async () => [] }, boardMember: { findMany: async () => [] }, documentControlAudit: { findMany: async () => [] },
   };
   prisma.$transaction = async (callback: (tx: unknown) => Promise<unknown>, options: unknown) => {
     calls.push({ name: '$transaction', args: options });
@@ -573,6 +575,7 @@ test('GET /approval-readiness denies Members before evidence reads; Admin gets r
       conditionalReviewItems: [],
       matrixReviewItems: ok.json().data.matrixReviewItems,
       matrixLastChecked: IRISH_COMPLIANCE_MATRIX_LAST_CHECKED,
+      narrativeWarnings: [],
     });
     assert.ok(ok.json().data.matrixReviewItems.length > 0);
 

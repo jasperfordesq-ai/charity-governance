@@ -22,6 +22,18 @@ const MAX_REASON_LENGTH = 500;
 
 export const ACTIVITY_REASON_HEADER = "x-charitypilot-reason";
 
+/**
+ * Says the reason header is percent-encoded UTF-8.
+ *
+ * An HTTP header value is bytes, and fetch refuses any character above
+ * U+00FF, so a reason with an em dash, an emoji, or text beyond Latin-1 cannot
+ * be sent as it is written. The connector encodes such a reason and names the
+ * encoding here; plain ASCII is still sent unencoded with no marker, so an
+ * older connector and an older API both keep working.
+ */
+export const ACTIVITY_REASON_ENCODING_HEADER = "x-charitypilot-reason-encoding";
+export const ACTIVITY_REASON_PERCENT_ENCODING = "percent";
+
 function headerValue(
   value: string | string[] | undefined,
 ): string | undefined {
@@ -36,11 +48,26 @@ function headerValue(
  * that can move the cursor around a terminal is a record that can lie about
  * what it says.
  */
-function reasonFrom(request: FastifyRequest): string | null {
+export function reasonFrom(request: FastifyRequest): string | null {
   const raw = headerValue(request.headers[ACTIVITY_REASON_HEADER]);
   if (!raw) return null;
-  const cleaned = raw.replace(/[\x00-\x1f\x7f]/g, " ").trim();
-  return cleaned.length > 0 ? cleaned.slice(0, MAX_REASON_LENGTH) : null;
+  const encoding = headerValue(request.headers[ACTIVITY_REASON_ENCODING_HEADER]);
+  let text = raw;
+  if (encoding?.trim().toLowerCase() === ACTIVITY_REASON_PERCENT_ENCODING) {
+    try {
+      text = decodeURIComponent(raw);
+    } catch {
+      // Malformed encoding: keep what arrived rather than lose the row's
+      // reason. It is still text, and it is still cleaned below.
+      text = raw;
+    }
+  }
+  // Decoding happens before cleaning, so an encoded control character is
+  // stripped exactly like a literal one.
+  const cleaned = text.replace(/[\x00-\x1f\x7f]/g, " ").trim();
+  // Counted in code points, so a cut never splits an emoji into a lone
+  // surrogate that the database would store as a replacement character.
+  return cleaned.length > 0 ? Array.from(cleaned).slice(0, MAX_REASON_LENGTH).join("") : null;
 }
 
 /**

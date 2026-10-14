@@ -395,3 +395,70 @@ test('a text upload refuses an unsupported format and anything oversized', async
     /64/,
   );
 });
+
+test('an executed instrument can be uploaded as CURRENT in one call, with its reason', async () => {
+  const { root } = sandbox();
+  const tool = FILE_TOOLS.find((t) => t.name === 'document_upload')!;
+  let fields: Record<string, string> = {};
+  const client = {
+    upload: async (_path: string, _file: unknown, given: Record<string, string>) => {
+      fields = given;
+      return { data: { id: 'doc-10', name: given['name'], lifecycleStatus: 'CURRENT' } };
+    },
+  } as unknown as ApiClient;
+
+  const result = (await runFileTool(tool, client, config({ uploadRoot: root }), {
+    path: 'minutes.pdf',
+    name: 'Code of Conduct, Trustee Declaration (signed)',
+    category: 'CODE_OF_CONDUCT',
+    lifecycleStatus: 'CURRENT',
+    lifecycleReason: 'Executed and signed by the trustee on 11 October 2026',
+  })) as { uploaded: Record<string, unknown> };
+
+  assert.equal(fields['lifecycleStatus'], 'CURRENT');
+  assert.equal(fields['lifecycleReason'], 'Executed and signed by the trustee on 11 October 2026');
+  assert.equal(result.uploaded['lifecycleStatus'], 'CURRENT');
+});
+
+test('an upload as CURRENT without a reason is refused before the file is sent', async () => {
+  const { root } = sandbox();
+  const tool = FILE_TOOLS.find((t) => t.name === 'document_upload')!;
+  let sent = false;
+  const client = { upload: async () => { sent = true; return {}; } } as unknown as ApiClient;
+
+  for (const lifecycleReason of [undefined, '   ']) {
+    await assert.rejects(
+      () => runFileTool(tool, client, config({ uploadRoot: root }), {
+        path: 'minutes.pdf', name: 'x', category: 'POLICY', lifecycleStatus: 'CURRENT',
+        ...(lifecycleReason === undefined ? {} : { lifecycleReason }),
+      }),
+      (err: unknown) => err instanceof FileAccessError && /lifecycleReason is required/.test(err.message),
+    );
+  }
+  await assert.rejects(
+    () => runFileTool(tool, client, config({ uploadRoot: root }), {
+      path: 'minutes.pdf', name: 'x', category: 'POLICY', lifecycleStatus: 'SUPERSEDED', lifecycleReason: 'a long enough reason',
+    }),
+    (err: unknown) => err instanceof FileAccessError && /lifecycleStatus must be one of/.test(err.message),
+  );
+  assert.equal(sent, false);
+});
+
+test('an upload with no lifecycle sends no lifecycle fields and reports DRAFT', async () => {
+  const { root } = sandbox();
+  const tool = FILE_TOOLS.find((t) => t.name === 'document_upload')!;
+  let fields: Record<string, string> = {};
+  const client = {
+    upload: async (_path: string, _file: unknown, given: Record<string, string>) => {
+      fields = given;
+      return { data: { id: 'doc-11', name: given['name'] } };
+    },
+  } as unknown as ApiClient;
+
+  const result = (await runFileTool(tool, client, config({ uploadRoot: root }), {
+    path: 'minutes.pdf', name: 'Draft policy', category: 'POLICY',
+  })) as { uploaded: Record<string, unknown> };
+
+  assert.deepEqual(Object.keys(fields).sort(), ['category', 'name']);
+  assert.equal(result.uploaded['lifecycleStatus'], 'DRAFT');
+});

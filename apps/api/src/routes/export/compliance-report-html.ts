@@ -1,10 +1,18 @@
-import type { ComplianceApprovalReadiness } from '../../services/compliance.service.js';
+import type {
+  ComplianceApprovalReadiness,
+  ComplianceReportEvidence,
+  ReportEvidenceDocument,
+} from '../../services/compliance.service.js';
 import type { ComplianceApprovalSnapshotPayloadV1 } from '../../services/compliance-snapshot.js';
 import { IRISH_COMPLIANCE_MATRIX, IRISH_COMPLIANCE_MATRIX_LAST_CHECKED } from '@charitypilot/shared';
 
-type ReportApprovalReadiness = Omit<ComplianceApprovalReadiness, 'evidenceHash'> & {
+type ReportApprovalReadiness = Omit<ComplianceApprovalReadiness, 'evidenceHash' | 'narrativeWarnings'> & {
   evidenceHash?: string;
+  narrativeWarnings?: ComplianceApprovalReadiness['narrativeWarnings'];
 };
+
+/** Standards whose evidence is, in part, each trustee's own signature or induction. */
+const TRUSTEE_DECLARATION_STANDARDS = new Set(['2.3', '5.6', '5.7']);
 
 export type GovernanceRegistersForExport = {
   conflicts: Array<{ trusteeName: string; matter: string; status: string; dateDeclared: Date; actionTaken: string; minuteReference: string | null }>;
@@ -65,10 +73,12 @@ export function buildComplianceReportHtml(
     invalidatedAt?: string | null;
     invalidationReason?: string | null;
   },
-  approvalReadiness: ComplianceApprovalReadiness,
+  approvalReadiness: ReportApprovalReadiness,
   registers: GovernanceRegistersForExport | null,
   year: number,
+  reportEvidence: ComplianceReportEvidence | null = null,
 ): string {
+  const standardCodes = new Map(principles.flatMap((p) => p.standards.map((s) => [s.id, s.code] as const)));
   const standardRows = principles
     .map(
       (p) => `
@@ -81,6 +91,7 @@ export function buildComplianceReportHtml(
             <th>Status</th>
             <th>Actions Taken</th>
             <th>Evidence</th>
+            <th>Linked documents</th>
           </tr>
         </thead>
         <tbody>
@@ -94,6 +105,7 @@ export function buildComplianceReportHtml(
                 <td>${escapeHtml(r?.status?.replace(/_/g, ' ') ?? 'NOT STARTED')}</td>
                 <td>${escapeHtml(r?.actionTaken ?? '')}</td>
                 <td>${escapeHtml(r?.evidence ?? '')}${r?.explanationIfNA ? '<br><em>Explanation: ' + escapeHtml(r.explanationIfNA) + '</em>' : ''}</td>
+                <td>${linkedDocumentsCell(reportEvidence?.documentsByStandard.get(s.id) ?? [], reportEvidence !== null && TRUSTEE_DECLARATION_STANDARDS.has(s.code))}</td>
               </tr>`;
             })
             .join('')}
@@ -101,6 +113,13 @@ export function buildComplianceReportHtml(
       </table>`,
     )
     .join('');
+
+  const narrativeWarningHtml = buildNarrativeWarningHtml(
+    approvalReadiness.narrativeWarnings ?? [],
+    standardCodes,
+    reportEvidence,
+  );
+  const trusteeDeclarationsHtml = reportEvidence ? buildTrusteeDeclarationsHtml(reportEvidence) : '';
 
   const governanceRegisterRows = registers
     ? `
@@ -241,7 +260,14 @@ export function buildComplianceReportHtml(
     <p><strong>Reporting Year:</strong> ${year}</p>
     <p><strong>Date Generated:</strong> ${new Date().toLocaleDateString('en-IE')}</p>
   </div>
+  ${narrativeWarningHtml}
+  ${reportEvidence ? `<p style="font-size: 13px; color: #4b5563;">
+    The Linked documents column and the Trustee declarations appendix show the document register and board
+    register as they stood when this working report was generated. They are outside the hashed board-approved
+    Compliance Record evidence; only status, actions taken and evidence form part of a retained approval.
+  </p>` : ''}
   ${standardRows}
+  ${trusteeDeclarationsHtml}
   ${governanceRegisterRows}
   ${readinessWarningHtml}
   ${conditionalReviewHtml}
@@ -456,6 +482,88 @@ function buildReadinessWarningHtml(approvalReadiness: ReportApprovalReadiness): 
         not legal certification.
       </p>
       ${simpleTable(['Area', 'Readiness blocker', 'Next action'], rows)}
+    </section>`;
+}
+
+/**
+ * A standard's CURRENT linked documents: name, date and category only. Never
+ * a description or file contents, because descriptions can name people and
+ * personal data is gated elsewhere.
+ */
+function linkedDocumentsCell(documents: readonly ReportEvidenceDocument[], referencesDeclarations: boolean): string {
+  const list = documents.length
+    ? `<ul style="margin: 0; padding-left: 16px;">${documents
+        .map((doc) => `<li><strong>${escapeHtml(doc.name)}</strong><br>${escapeHtml(readableCategory(doc.category))}, ${formatDate(doc.date.toISOString())}</li>`)
+        .join('')}</ul>`
+    : '<span style="color: #6b7280;">None linked</span>';
+  const reference = referencesDeclarations
+    ? '<br><em>See Trustee declarations appendix.</em>'
+    : '';
+  return list + reference;
+}
+
+function readableCategory(category: string): string {
+  const words = category.replace(/_/g, ' ').toLowerCase();
+  return words.charAt(0).toUpperCase() + words.slice(1);
+}
+
+/** Names and dates only: the personal-data gate covers everything else on the register. */
+function buildTrusteeDeclarationsHtml(evidence: ComplianceReportEvidence): string {
+  const declared = (done: boolean, date: Date | null) =>
+    done ? (date ? `Yes, ${formatDate(date.toISOString())}` : 'Yes (date not recorded)') : 'No';
+  return `
+    <h2>Trustee declarations (generated-time appendix)</h2>
+    <p style="font-size: 13px; color: #4b5563;">
+      Active trustees on the board register when this report was generated. Referenced by standards 2.3, 5.6 and 5.7.
+    </p>
+    ${simpleTable(
+      ['Trustee name', 'Code of conduct signed', 'Induction completed'],
+      evidence.trusteeDeclarations.map((trustee) => [
+        trustee.name,
+        declared(trustee.conductSigned, trustee.conductSignedDate),
+        declared(trustee.inductionCompleted, trustee.inductionDate),
+      ]),
+    )}`;
+}
+
+function buildNarrativeWarningHtml(
+  warnings: NonNullable<ReportApprovalReadiness['narrativeWarnings']>,
+  standardCodes: ReadonlyMap<string, string>,
+  evidence: ComplianceReportEvidence | null,
+): string {
+  // Only standards this report prints; a warning about anything else would
+  // point the reader at a row that is not there.
+  const shown = warnings.filter((warning) => standardCodes.has(warning.standardId));
+  if (shown.length === 0) return '';
+
+  const documentName = (standardId: string, documentId: string) =>
+    evidence?.documentsByStandard.get(standardId)?.find((doc) => doc.documentId === documentId)?.name;
+
+  const rows = shown.map((warning) => {
+    const edited = formatDate(warning.recordUpdatedAt);
+    if (warning.kind === 'EVIDENCE_LINKED_AFTER_NARRATIVE') {
+      const name = documentName(warning.standardId, warning.documentId);
+      return [
+        warning.standardCode,
+        'Evidence linked after the narrative was written',
+        `${name ? `"${name}"` : 'A current document'} was linked on ${formatDate(warning.linkedAt)}; the actions taken and evidence were last edited on ${edited}.`,
+      ];
+    }
+    return [
+      warning.standardCode,
+      'Target date has passed',
+      `The actions taken give a target of ${formatDate(warning.targetDate)}, which has passed; last edited on ${edited}.`,
+    ];
+  });
+
+  return `
+    <section style="margin: 24px 0; border: 1px solid #f59e0b; background: #fffbeb; padding: 14px 16px;">
+      <h2 style="margin-top: 0; color: #92400e;">Narrative may be out of date</h2>
+      <p style="font-size: 13px; color: #78350f;">
+        Reread these standards before the board approves. Linked evidence or the calendar has moved on since their
+        text was last edited. This is a warning, not an approval blocker.
+      </p>
+      ${simpleTable(['Standard', 'Warning', 'Detail'], rows)}
     </section>`;
 }
 

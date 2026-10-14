@@ -123,6 +123,7 @@ async function buildApp(prismaOverrides: Record<string, unknown>) {
   const app = Fastify({ logger: false });
   app.decorate('prisma', {
     complianceReportPreparationAudit: { create: async () => ({ id: 'audit-1' }) },
+    documentStandardLink: { findMany: async () => [] }, boardMember: { findMany: async () => [] }, documentControlAudit: { findMany: async () => [] },
     ...prismaOverrides,
   } as never);
   await app.register(exportRoutes);

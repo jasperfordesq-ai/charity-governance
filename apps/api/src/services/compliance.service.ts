@@ -8,6 +8,7 @@ import {
   getMatrixEntriesForStandard,
   type ComplianceApprovalConditionalReviewItem,
   type ComplianceApprovalMatrixReviewItem,
+  type ComplianceApprovalReadinessEvidence,
   type ComplianceApprovalReadinessResponse,
   type ComplianceApprovalSnapshotPayload,
   type ComplianceApprovalSnapshotSummary,
@@ -21,6 +22,8 @@ import {
 } from '@charitypilot/shared';
 import { AppError } from '../utils/errors.js';
 import { hashComplianceSnapshot } from './compliance-snapshot.js';
+import { narrativeWarnings } from './compliance-narrative.js';
+import { evidenceStandardLinkWhere } from './document-standard-link-scope.js';
 
 type OrganisationComplianceScope = {
   id: string;
@@ -37,7 +40,30 @@ type ComplianceSignoffWithSnapshot = Prisma.ComplianceSignoffGetPayload<{
 }>;
 type ComplianceApprovalSnapshotRow = Prisma.ComplianceApprovalSnapshotGetPayload<{}>;
 
-type ApprovalReadinessWithoutHash = Omit<ComplianceApprovalReadinessResponse, 'evidenceHash'>;
+type ApprovalReadinessWithoutHash = ComplianceApprovalReadinessEvidence;
+
+/** A CURRENT evidence document as the report may show it: no description, no contents. */
+export type ReportEvidenceDocument = {
+  documentId: string;
+  name: string;
+  category: string;
+  /** The approval date if one is recorded, otherwise the upload date. */
+  date: Date;
+};
+
+/** A trustee's declarations as the report may show them: a name and dates, nothing else. */
+export type ReportTrusteeDeclaration = {
+  name: string;
+  conductSigned: boolean;
+  conductSignedDate: Date | null;
+  inductionCompleted: boolean;
+  inductionDate: Date | null;
+};
+
+export type ComplianceReportEvidence = {
+  documentsByStandard: Map<string, ReportEvidenceDocument[]>;
+  trusteeDeclarations: ReportTrusteeDeclaration[];
+};
 
 type ApprovalEvidenceState = {
   readiness: ApprovalReadinessWithoutHash;
@@ -689,9 +715,127 @@ export class ComplianceService {
     return (await this.buildApprovalEvidenceState(organisationId, reportingYear, client)).evidenceHash;
   }
 
-  async getApprovalReadiness(organisationId: string, reportingYear: number): Promise<ComplianceApprovalReadiness> {
+  async getApprovalReadiness(
+    organisationId: string,
+    reportingYear: number,
+    now: Date = new Date(),
+  ): Promise<ComplianceApprovalReadiness> {
     const state = await this.buildApprovalEvidenceState(organisationId, reportingYear, this.prisma);
-    return { ...state.readiness, evidenceHash: state.evidenceHash };
+    // Computed after, and kept apart from, the hashed evidence above. Linking
+    // a document or the calendar moving on must not withdraw an approval;
+    // they only tell the board the text may need rereading.
+    const links = await this.currentEvidenceLinks(organisationId, this.prisma);
+    const linkedAt = await this.standardLinkTimes(organisationId, links);
+    const warnings = narrativeWarnings({
+      standards: state.evidence.standards.map(({ standard }) => ({ id: standard.id, code: standard.code })),
+      records: new Map(state.evidence.standards
+        .filter((entry) => entry.record !== null)
+        .map(({ standard, record }) => [standard.id, {
+          actionTaken: record!.actionTaken,
+          updatedAt: new Date(record!.updatedAt),
+        }])),
+      links: links.flatMap((link) => {
+        const at = linkedAt.get(`${link.documentId}|${link.standardId}`);
+        // A link with no audit row predates link auditing; its time is unknown,
+        // so it is not claimed to be newer than anything.
+        return at ? [{ standardId: link.standardId, documentId: link.documentId, linkedAt: at }] : [];
+      }),
+      now,
+    });
+    return { ...state.readiness, narrativeWarnings: warnings, evidenceHash: state.evidenceHash };
+  }
+
+  /**
+   * Generated-time evidence for the working report: CURRENT linked documents
+   * per standard and the active trustees' declarations. Neither is part of
+   * the hashed approval evidence, so neither can disturb a retained approval.
+   */
+  async getReportEvidence(organisationId: string): Promise<ComplianceReportEvidence> {
+    const [links, trustees] = await Promise.all([
+      this.currentEvidenceLinks(organisationId, this.prisma),
+      // Selected field by field: dates of birth, addresses, emails and other
+      // directorships are never read, so they cannot leak into a report.
+      this.prisma.boardMember.findMany({
+        where: { organisationId, isActive: true },
+        select: {
+          name: true,
+          conductSigned: true,
+          conductSignedDate: true,
+          inductionCompleted: true,
+          inductionDate: true,
+        },
+        orderBy: [{ name: 'asc' }, { id: 'asc' }],
+      }),
+    ]);
+
+    const documentsByStandard = new Map<string, ReportEvidenceDocument[]>();
+    for (const link of links) {
+      const list = documentsByStandard.get(link.standardId) ?? [];
+      list.push({
+        documentId: link.documentId,
+        name: link.document.name,
+        category: String(link.document.category),
+        date: link.document.approvedDate ?? link.document.createdAt,
+      });
+      documentsByStandard.set(link.standardId, list);
+    }
+    for (const list of documentsByStandard.values()) {
+      list.sort((a, b) => a.date.getTime() - b.date.getTime()
+        || a.name.localeCompare(b.name) || a.documentId.localeCompare(b.documentId));
+    }
+
+    return { documentsByStandard, trusteeDeclarations: trustees };
+  }
+
+  /**
+   * Standard links to documents that are CURRENT and not removed, within the
+   * organisation's plan scope. A link outlives its document's currency (the
+   * database only checks currency when a link is made), so a SUPERSEDED,
+   * RETIRED, HISTORICAL, DRAFT or UNREVIEWED document is filtered out here.
+   */
+  private async currentEvidenceLinks(
+    organisationId: string,
+    client: PrismaClient | ComplianceTransaction,
+  ) {
+    const scope = await this.getOrganisationComplianceScope(organisationId, client);
+    return client.documentStandardLink.findMany({
+      where: {
+        ...evidenceStandardLinkWhere(includesAdditionalStandards(scope)),
+        document: { organisationId, deletedAt: null, lifecycleStatus: 'CURRENT' },
+      },
+      select: {
+        documentId: true,
+        standardId: true,
+        document: { select: { name: true, category: true, approvedDate: true, createdAt: true } },
+      },
+    });
+  }
+
+  /**
+   * When each link was last made. A link row carries no timestamp; the
+   * append-only document control audit records every STANDARD_LINK with the
+   * standard in `next`, and the newest such row is the live link's creation.
+   */
+  private async standardLinkTimes(
+    organisationId: string,
+    links: ReadonlyArray<{ documentId: string; standardId: string }>,
+  ): Promise<Map<string, Date>> {
+    const times = new Map<string, Date>();
+    if (links.length === 0) return times;
+    const audits = await this.prisma.documentControlAudit.findMany({
+      where: {
+        organisationId,
+        kind: 'STANDARD_LINK',
+        documentId: { in: [...new Set(links.map((link) => link.documentId))] },
+      },
+      select: { documentId: true, next: true, occurredAt: true },
+    });
+    for (const audit of audits) {
+      const key = `${audit.documentId}|${audit.next}`;
+      const known = times.get(key);
+      if (!known || audit.occurredAt.getTime() > known.getTime()) times.set(key, audit.occurredAt);
+    }
+    return times;
   }
 
   async getRecord(organisationId: string, standardId: string, year: number) {
