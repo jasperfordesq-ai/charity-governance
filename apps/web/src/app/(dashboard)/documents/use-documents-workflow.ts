@@ -77,7 +77,7 @@ export function useDocumentsWorkflow() {
   const [savingVisibility, setSavingVisibility] = useState(false);
   const controlModal = useDisclosure();
   const [controlDocId, setControlDocId] = useState<string | null>(null);
-  const [controlKind, setControlKind] = useState<'lifecycle' | 'publication' | 'deletion-hold'>('lifecycle');
+  const [controlKind, setControlKind] = useState<'lifecycle' | 'publication' | 'deletion-hold' | 'owner'>('lifecycle');
   const [controlTarget, setControlTarget] = useState('');
   const [controlReason, setControlReason] = useState('');
   const [publicationReviewMirror, setPublicationReviewMirror] = useState<ConfluenceMirror | null>(null);
@@ -452,13 +452,13 @@ export function useDocumentsWorkflow() {
       if (requestNumber === replacementRequest.current) setReplacementLoading(false);
     }
   }, []);
-  const openDocumentControl = (docId: string, kind: 'lifecycle' | 'publication' | 'deletion-hold') => {
+  const openDocumentControl = (docId: string, kind: 'lifecycle' | 'publication' | 'deletion-hold' | 'owner') => {
     if (!canManage) return;
     const document = documents.find((doc) => doc.id === docId);
     if (!document) return;
     setControlDocId(docId);
     setControlKind(kind);
-    setControlTarget(kind === 'lifecycle' ? DOCUMENT_LIFECYCLE_NEXT[document.lifecycleStatus]?.[0] ?? '' : '');
+    setControlTarget(kind === 'owner' ? document.owner ?? '' : kind === 'lifecycle' ? DOCUMENT_LIFECYCLE_NEXT[document.lifecycleStatus]?.[0] ?? '' : '');
     setControlReason('');
     setPublicationReviewMirror(null);
     setPublicationReviewError('');
@@ -489,7 +489,7 @@ export function useDocumentsWorkflow() {
   const chooseControlTarget = (next: string) => {
     setControlTarget(next);
     setReplacementDocumentId('');
-    if (next === 'SUPERSEDED' && controlDocId) void loadReplacementCandidates(controlDocId, 1, replacementSearch);
+    if (controlKind === 'lifecycle' && next === 'SUPERSEDED' && controlDocId) void loadReplacementCandidates(controlDocId, 1, replacementSearch);
   };
   const searchReplacementCandidates = () => {
     if (!controlDocId) return;
@@ -501,7 +501,8 @@ export function useDocumentsWorkflow() {
     void loadReplacementCandidates(controlDocId, replacementPage + 1, replacementSearch);
   };
   const confirmDocumentControl = async () => {
-    if (!canManage || !selectedControlDoc || controlReason.trim().length < 10) return;
+    if (!canManage || !selectedControlDoc || (controlKind !== 'owner' && controlReason.trim().length < 10)) return;
+    if (controlKind === 'owner' && controlTarget.trim().length > 200) return;
     if (controlKind === 'lifecycle' && !DOCUMENT_LIFECYCLE_NEXT[selectedControlDoc.lifecycleStatus]?.includes(controlTarget)) return;
     if (controlKind === 'lifecycle' && controlTarget === 'SUPERSEDED' && !replacementDocumentId) {
       setControlError('Choose the current replacement document.');
@@ -535,7 +536,7 @@ export function useDocumentsWorkflow() {
       } else {
         await api.patch(`/documents/${encodeURIComponent(selectedControlDoc.id)}`, {
           expectedUpdatedAt: selectedControlDoc.updatedAt,
-          ...(controlKind === 'lifecycle'
+          ...(controlKind === 'owner' ? { owner: controlTarget.trim() || null } : controlKind === 'lifecycle'
             ? { lifecycleStatus: controlTarget, lifecycleReason: controlReason.trim(),
                 ...(controlTarget === 'SUPERSEDED' ? { replacementDocumentId } : {}) }
             : { externalPublicationApproved: grantingPublication,

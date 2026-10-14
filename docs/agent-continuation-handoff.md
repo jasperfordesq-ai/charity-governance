@@ -1,5 +1,13 @@
 # CharityPilot Agent Continuation Handoff
 
+> **14 October existing-file owner control, source only:** A controller review
+> exposed that the Vault could classify retained evidence but could not edit
+> its accountable owner through the dashboard. A thin Owner/Admin control now
+> uses the existing audited metadata PATCH with optimistic revision checking,
+> including historical records and clearing an owner. It creates no new API,
+> permission or storage path. Hosted release and live replay remain required;
+> the private roadmap holds item-specific authority and application evidence.
+
 > **14 October report-warning correction, source verification:** Live testing
 > found that a background editing date was mistaken for a deadline, while bare
 > Due and compound approval instructions were missed. The correction narrows

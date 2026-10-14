@@ -1,5 +1,13 @@
 # CharityPilot Full-Platform Remediation Audit
 
+> **14 October DPO ownership reconciliation, OPEN:** The source now exposes
+> the existing accountable-owner metadata edit through the Owner/Admin Vault
+> controls. It preserves revision checks, actor/field audit and the existing
+> Member-review invalidation on metadata changes. A synthetic browser journey
+> covers assigning and clearing ownership after historical classification.
+> Source verification is not deployed ownership reconciliation or DPO acceptance;
+> keep the item-specific private queue and public-production ledger open.
+
 > **14 October DPO reporting evidence, OPEN:** A live working report exposed
 > a date-warning false positive for historical note reorganisation and missed
 > current deadline forms. The focused source correction has synthetic failing-
