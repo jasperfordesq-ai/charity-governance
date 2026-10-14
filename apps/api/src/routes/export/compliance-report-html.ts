@@ -6,6 +6,9 @@ import type {
 import type { ComplianceApprovalSnapshotPayloadV1 } from '../../services/compliance-snapshot.js';
 import { IRISH_COMPLIANCE_MATRIX, IRISH_COMPLIANCE_MATRIX_LAST_CHECKED } from '@charitypilot/shared';
 
+/** The owner's ruling (2026-10-14), printed beside the column it governs. */
+export const LINKED_EVIDENCE_NOTE = 'The board approves the narrative; the document list is supporting evidence.';
+
 type ReportApprovalReadiness = Omit<ComplianceApprovalReadiness, 'evidenceHash' | 'narrativeWarnings'> & {
   evidenceHash?: string;
   narrativeWarnings?: ComplianceApprovalReadiness['narrativeWarnings'];
@@ -91,7 +94,7 @@ export function buildComplianceReportHtml(
             <th>Status</th>
             <th>Actions Taken</th>
             <th>Evidence</th>
-            <th>Linked documents</th>
+            <th>Linked documents<br><span style="font-weight: 400; font-size: 11px; color: #4b5563;">${LINKED_EVIDENCE_NOTE}</span></th>
           </tr>
         </thead>
         <tbody>

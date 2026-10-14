@@ -418,6 +418,12 @@ test('the report header warns that the 2.3 narrative is older than its evidence,
   assert.match(html, /outside the hashed board-approved/);
 });
 
+test('the owner\'s ruling is printed beside the linked-documents column', async () => {
+  const { html } = await renderReport();
+  const header = html.slice(html.indexOf('<th>Linked documents'), html.indexOf('</th>', html.indexOf('<th>Linked documents')));
+  assert.ok(header.includes('The board approves the narrative; the document list is supporting evidence.'), header);
+});
+
 test('a report built without generated-time evidence is unchanged in shape', () => {
   const html = buildComplianceReportHtml(
     { name: 'Example Charity', rcnNumber: null },
