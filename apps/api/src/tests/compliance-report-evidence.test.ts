@@ -251,6 +251,13 @@ test('present-tense action instructions and compound approval requirements carry
   assert.deepEqual(targetDatesIn('The next review is on 3 September 2026.'), ['2026-09-03']);
 });
 
+test('next AGM and qualified future events remain deadlines without treating next step as one', () => {
+  for (const event of ['AGM', 'EGM', 'annual review', 'annual general meeting', 'quarterly board meeting']) {
+    assert.deepEqual(targetDatesIn(`The next ${event} is on 3 September 2026.`), ['2026-09-03'], event);
+  }
+  assert.deepEqual(targetDatesIn('Notes reorganised on 31 August 2026 so the next step in the review is readable.'), []);
+});
+
 test('a date describing something already done is not a stale promise', () => {
   for (const text of [
     'Adopted at the board meeting on 10 March 2026.',

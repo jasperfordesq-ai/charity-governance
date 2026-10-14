@@ -35,7 +35,7 @@ const LEADING_CUE =
 // "to be approved at the board meeting on 3 September 2026", "will be tabled
 // at the 3 September 2026 meeting", "pending the meeting of 03/09/2026".
 const CLAUSE_CUE =
-  /\b(?:will|shall|to be|is to|are to|pending|awaiting|upcoming|forthcoming|next\s+(?:board\s+)?(?:meeting|review|deadline)|proposed|intends?|intended|needs?\s+(?:formal\s+)?(?:approval|receipt|ratification))\b|^\s*action\s*:/i;
+  /\b(?:will|shall|to be|is to|are to|pending|awaiting|upcoming|forthcoming|next\s+(?:(?:annual|general|board|scheduled|monthly|quarterly|ordinary|extraordinary)\s+){0,3}(?:meeting|review|deadline|agm|egm)|proposed|intends?|intended|needs?\s+(?:formal\s+)?(?:approval|receipt|ratification))\b|^\s*action\s*:/i;
 
 // A clause that says the thing already happened is never a stale promise:
 // "the meeting scheduled for 3 September 2026 was held".
