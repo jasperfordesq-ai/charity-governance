@@ -220,6 +220,46 @@ test('target dates are read in the forms trustees write, and anything else is le
   assert.deepEqual(targetDatesIn(null), []);
 });
 
+// Live 4.1, 4.4 and 4.5 still spoke of the 3 September 2026 board meeting in
+// words other than "Target:" and were not flagged (14 Oct 2026).
+test('a date written as still to come is found whatever words introduce it', () => {
+  for (const text of [
+    'Policy to be approved at the board meeting on 3 September 2026.',
+    'Will be tabled at the 3 September 2026 meeting.',
+    'Awaiting the board meeting of 03/09/2026 to adopt the register.',
+    'The board is to consider the revised policy on 3rd Sept. 2026.',
+    'Review scheduled for 2026-09-03, with the policy circulated beforehand.',
+    'Due by 3 September 2026',
+    'Draft circulated. The next board meeting on 3 September 2026 will adopt it.',
+    'Pending approval at the forthcoming meeting (3 September 2026).',
+  ]) {
+    assert.deepEqual(targetDatesIn(text), ['2026-09-03'], text);
+  }
+});
+
+test('a date describing something already done is not a stale promise', () => {
+  for (const text of [
+    'Adopted at the board meeting on 10 March 2026.',
+    'Reviewed on 1 May 2026 and will be reviewed annually.',
+    'The meeting scheduled for 3 September 2026 was held and minuted.',
+    'Signed on 11 October 2026; next review in 2027.',
+    'Approved by the board on 3 March 2026.',
+    'Code adopted 21 March 2026, and the trustees will keep it under review.',
+  ]) {
+    assert.deepEqual(targetDatesIn(text), [], text);
+  }
+});
+
+test('a meeting-date narrative now in the past is a TARGET_DATE_PASSED warning', () => {
+  const warnings = narrativeWarnings({
+    standards: [{ id: 's-41', code: '4.1' }],
+    records: new Map([['s-41', { actionTaken: 'Register to be approved at the board meeting on 3 September 2026.', updatedAt: NARRATIVE_EDITED }]]),
+    links: [],
+    now: NOW,
+  });
+  assert.deepEqual(warnings.map((w) => w.kind === 'TARGET_DATE_PASSED' && `${w.standardCode} ${w.targetDate}`), ['4.1 2026-09-03']);
+});
+
 test('a target is a calendar day in Ireland: due today is not yet past', () => {
   const standards = [{ id: 's', code: '2.3' }];
   const records = new Map([['s', { actionTaken: 'Target: 14 October 2026', updatedAt: NARRATIVE_EDITED }]]);

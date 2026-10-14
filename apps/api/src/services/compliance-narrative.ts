@@ -20,11 +20,31 @@ const MONTHS: Record<string, number> = {
   dec: 12, december: 12,
 };
 
-// "Target:" then one date, in the forms a trustee writes in Ireland:
-// "3 September 2026", "3rd Sept 2026", "2026-09-03" or "03/09/2026"
+// One date, in the forms a trustee writes in Ireland: "3 September 2026",
+// "3rd Sept 2026", "3 of September, 2026", "2026-09-03" or "03/09/2026"
 // (day first). Anything else is left alone rather than guessed at.
-const TARGET_PATTERN =
-  /\btarget\s*:\s*(?:(\d{4})-(\d{2})-(\d{2})|(\d{1,2})\/(\d{1,2})\/(\d{4})|(\d{1,2})(?:st|nd|rd|th)?\s+([a-z]+)\.?,?\s+(\d{4}))/gi;
+const DATE_PATTERN =
+  /(?:(\d{4})-(\d{2})-(\d{2})|(\d{1,2})\/(\d{1,2})\/(\d{4})|(\d{1,2})(?:st|nd|rd|th)?\s+(?:of\s+)?([a-z]+)\.?,?\s+(\d{4}))/gi;
+
+// Words directly before a date that make it a date still to come:
+// "Target: 3 September 2026", "by 3 Sept 2026", "scheduled for 2026-09-03".
+const LEADING_CUE =
+  /(?:\btarget(?:\s+date)?\s*(?::|of|is|for)?|\bby|\bbefore|\bno later than|\bdue\s+(?:on|by)|\bdeadline\s*(?::|of|is)?|\b(?:scheduled|planned|set|expected|arranged|booked)\s+(?:for|on|by))\s*(?:the\s+)?$/i;
+
+// Words anywhere in the same clause that make its dates still to come:
+// "to be approved at the board meeting on 3 September 2026", "will be tabled
+// at the 3 September 2026 meeting", "pending the meeting of 03/09/2026".
+const CLAUSE_CUE =
+  /\b(?:will|shall|to be|is to|are to|pending|awaiting|upcoming|forthcoming|next|proposed|intends?|intended)\b/i;
+
+// A clause that says the thing already happened is never a stale promise:
+// "the meeting scheduled for 3 September 2026 was held".
+const DONE_CUE = /\b(?:held|took place|happened|completed|carried out|took effect)\b/i;
+
+// Clauses: sentences (a full stop only before a capital, so "Sept. 2026"
+// survives), semicolons, line breaks, a comma not followed by a year, and
+// "and"/"but"/"then" joining two statements.
+const CLAUSE_BREAK = /[;!?\n]+|\.(?=\s+[A-Z(])|,(?!\s*\d)|\s+(?:and|but|then)\s+/;
 
 function isoDate(year: number, month: number, day: number): string | null {
   const date = new Date(Date.UTC(year, month - 1, day));
@@ -34,21 +54,32 @@ function isoDate(year: number, month: number, day: number): string | null {
   return date.toISOString().slice(0, 10);
 }
 
-/** Every valid "Target:" date in the text, as YYYY-MM-DD, in order of appearance. */
+function dateFrom(match: RegExpMatchArray): string | null {
+  if (match[1]) return isoDate(Number(match[1]), Number(match[2]), Number(match[3]));
+  if (match[4]) return isoDate(Number(match[6]), Number(match[5]), Number(match[4]));
+  const month = MONTHS[match[8]!.toLowerCase()];
+  return month ? isoDate(Number(match[9]), month, Number(match[7])) : null;
+}
+
+/**
+ * Every date the text speaks of as still to come, as YYYY-MM-DD, in order of
+ * appearance. Not only "Target: <date>": live records spoke of "the board
+ * meeting on 3 September 2026" in other words and were missed (14 Oct 2026).
+ * A date the same clause describes as done is never returned, so a record of
+ * past actions does not turn into a list of warnings.
+ */
 export function targetDatesIn(text: string | null | undefined): string[] {
   if (!text) return [];
   const dates: string[] = [];
-  for (const match of text.matchAll(TARGET_PATTERN)) {
-    let date: string | null = null;
-    if (match[1]) {
-      date = isoDate(Number(match[1]), Number(match[2]), Number(match[3]));
-    } else if (match[4]) {
-      date = isoDate(Number(match[6]), Number(match[5]), Number(match[4]));
-    } else if (match[7]) {
-      const month = MONTHS[match[8]!.toLowerCase()];
-      date = month ? isoDate(Number(match[9]), month, Number(match[7])) : null;
+  for (const clause of text.split(CLAUSE_BREAK)) {
+    if (!clause || DONE_CUE.test(clause)) continue;
+    const future = CLAUSE_CUE.test(clause);
+    for (const match of clause.matchAll(DATE_PATTERN)) {
+      const before = clause.slice(0, match.index);
+      if (!future && !LEADING_CUE.test(before)) continue;
+      const date = dateFrom(match);
+      if (date) dates.push(date);
     }
-    if (date) dates.push(date);
   }
   return dates;
 }
