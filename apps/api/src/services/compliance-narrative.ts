@@ -40,7 +40,7 @@ const CLAUSE_CUE =
 // Action labels occur on both instructions and completed-work summaries.
 // An explicit future cue still recognises "Action: policy to be approved".
 const ACTION_LABEL = /^\s*action\s*:/i;
-const COMPLETED_ACTION_WORD = /\b(?:adopted|approved|ratified|signed|reviewed)\b/i;
+const COMPLETED_ACTION = /^(?:(?:the|a)\s+)?(?:(?:board|committee|chair|trustees?|members?|we|they|i|it|he|she)\s+)?(?:(?:has|have|had|was|were)\s+)?(?:already\s+)?(?:adopted|approved|ratified|signed|reviewed)\b/i;
 
 // A future verb after a date qualifies an event, not an earlier editing date.
 const EVENT_DATE_PREFIX = /\b(?:meeting|review|agm|egm)\s+(?:(?:on|of|at)\s+)?(?:the\s+)?$/i;
@@ -56,7 +56,7 @@ const DONE_CUE = /\b(?:held|took place|happened|completed|carried out|took effec
 // "and"/"but"/"then" joining statements.
 const CLAUSE_BREAK = /[;!?\n]+|\.(?=\s+[A-Z(])|,(?!\s*\d)|\s+(?:and|but|then)\s+/;
 const PAIRED_REQUIREMENT = /\b(?:needs?|awaiting|pending)\s+(?:formal\s+)?(?:approval|receipt|ratification)\s*$/i;
-const PAIRED_CONTINUATION = /^(?:formal\s+)?(?:approval|receipt|ratification)\s+(?:by|on|at)\b/i;
+const PAIRED_CONTINUATION = /^(?:formal\s+)?(?:approval|receipt|ratification)\b(?!\s+(?:pending|awaiting|is|are|was|were|has|have|had|will|shall|completed|approved|adopted|ratified|signed|reviewed|confirmed|recorded|held|took|carried)\b)/i;
 
 function narrativeClauses(text: string): string[] {
   // Protect only paired nouns in one requirement, not a new pending action.
@@ -98,7 +98,7 @@ export function targetDatesIn(text: string | null | undefined): string[] {
   const dates: string[] = [];
   for (const clause of narrativeClauses(text)) {
     if (!clause || DONE_CUE.test(clause)) continue;
-    const actionInstruction = ACTION_LABEL.test(clause) && !COMPLETED_ACTION_WORD.test(clause);
+    const actionInstruction = ACTION_LABEL.test(clause) && !COMPLETED_ACTION.test(clause.replace(ACTION_LABEL, '').trimStart());
     for (const match of clause.matchAll(DATE_PATTERN)) {
       const before = clause.slice(0, match.index);
       const after = clause.slice(match.index! + match[0].length);

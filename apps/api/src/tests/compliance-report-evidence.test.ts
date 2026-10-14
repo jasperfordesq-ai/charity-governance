@@ -269,6 +269,16 @@ test('an Action label does not turn completed adoption into a future deadline', 
   assert.deepEqual(targetDatesIn('Action: The board adopted the policy on 3 March 2026.'), []);
   assert.deepEqual(targetDatesIn('Action: The board approved the policy on 3 March 2026.'), []);
   assert.deepEqual(targetDatesIn('Action: Policy to be approved on 3 September 2026.'), ['2026-09-03']);
+  assert.deepEqual(targetDatesIn('Action: Circulate the approved policy at the board meeting on 3 September 2026.'), ['2026-09-03']);
+  assert.deepEqual(targetDatesIn('Action: Bring the signed declarations to the board meeting on 3 September 2026.'), ['2026-09-03']);
+});
+
+test('a paired requirement shares its deadline through meeting prepositions and parentheses', () => {
+  for (const ending of ['during the board meeting on', 'within the board meeting on', 'at the meeting on']) {
+    assert.deepEqual(targetDatesIn(`The policy needs formal receipt and ratification ${ending} 3 September 2026.`), ['2026-09-03']);
+  }
+  assert.deepEqual(targetDatesIn('The policy needs formal receipt and ratification (3 September 2026).'), ['2026-09-03']);
+  assert.deepEqual(targetDatesIn('The policy needs formal receipt and ratification was approved on 3 March 2026.'), []);
 });
 
 test('a later upcoming event does not turn an earlier editing date into a deadline', () => {
