@@ -19,7 +19,7 @@ export function DocumentControlModal({
   publicationMirror: ConfluenceMirror | null;
   publicationReviewLoading: boolean;
   publicationReviewError: string;
-  kind: 'lifecycle' | 'publication' | 'deletion-hold';
+  kind: 'lifecycle' | 'publication' | 'deletion-hold' | 'owner';
   target: string;
   setTarget: (value: string) => void;
   nextStatuses: string[];
@@ -46,14 +46,20 @@ export function DocumentControlModal({
       <ModalContent>
         {(onClose) => (
           <>
-            <ModalHeader>{kind === 'lifecycle' ? 'Classify document lifecycle' : kind === 'deletion-hold'
+            <ModalHeader>{kind === 'owner' ? 'Change document owner' : kind === 'lifecycle' ? 'Classify document lifecycle' : kind === 'deletion-hold'
               ? placingDeletionHold ? 'Place deletion hold' : 'Release deletion hold'
               : publicationReviewLoading ? 'Review Confluence publication'
                 : approvalNeedsReview ? 'Reapprove Confluence destination'
                 : grantingPublication ? 'Approve Confluence publication' : 'Withdraw publication approval'}</ModalHeader>
             <ModalBody>
               <p className="text-sm font-medium">{document?.name}</p>
-              {kind === 'lifecycle' ? (
+              {kind === 'owner' ? (
+                <div className="space-y-3 text-sm">
+                  <Input label="Accountable owner" description="Role or person responsible for this evidence. Leave blank for Unassigned. This does not change account permissions." value={target} onValueChange={setTarget} maxLength={200} isInvalid={Boolean(error)} errorMessage={error} />
+                  <p>The acting user, changed field and record revisions are retained in the document change history.</p>
+                  {document?.contentAccessClass === 'MEMBER_SUITABLE' ? <p className="text-amber-800 dark:text-amber-300">Changing metadata restricts this file and clears its Member review. A fresh access review is required before Members can read it again.</p> : null}
+                </div>
+              ) : kind === 'lifecycle' ? (
                 <>
                   <p className="text-sm">Current status: {document?.lifecycleStatus}. Historical evidence remains available under its existing access rules. Leaving CURRENT also withdraws future publication approval.</p>
                   <label className="text-sm font-medium" htmlFor="document-lifecycle-target">New lifecycle status</label>
@@ -103,15 +109,15 @@ export function DocumentControlModal({
                   </p> : null}
                 </div>
               )}
-              <Textarea label="Reason for this decision" description="10–500 characters. The decision and acting user are retained in the document control audit." value={reason} onValueChange={setReason} minRows={2} maxLength={500} isInvalid={Boolean(error)} errorMessage={error} />
+              {kind !== 'owner' ? <Textarea label="Reason for this decision" description="10–500 characters. The decision and acting user are retained in the document control audit." value={reason} onValueChange={setReason} minRows={2} maxLength={500} isInvalid={Boolean(error)} errorMessage={error} /> : null}
             </ModalBody>
             <ModalFooter>
               <Button variant="flat" onPress={onClose} isDisabled={saving}>Cancel</Button>
               <Button color={grantingPublication ? 'warning' : 'primary'} onPress={onConfirm} isLoading={saving} isDisabled={!document || (kind === 'lifecycle' && !target) || (kind === 'lifecycle' && target === 'SUPERSEDED' && !replacementDocumentId) ||
                 (kind === 'publication' && (publicationReviewLoading || Boolean(publicationReviewError) || !publicationMirror ||
                   (grantingPublication && (!publicationMirror.publishDestination ||
-                    publicationMirror.recordedPageMatchesDestination === false)))) || reason.trim().length < 10}>
-                {kind === 'lifecycle' ? 'Save status' : kind === 'deletion-hold'
+                    publicationMirror.recordedPageMatchesDestination === false)))) || (kind === 'owner' ? target.trim().length > 200 : reason.trim().length < 10)}>
+                {kind === 'owner' ? 'Save owner' : kind === 'lifecycle' ? 'Save status' : kind === 'deletion-hold'
                   ? placingDeletionHold ? 'Place hold' : 'Release hold'
                   : approvalNeedsReview ? 'Reapprove destination'
                     : grantingPublication ? 'Approve publication' : 'Withdraw approval'}

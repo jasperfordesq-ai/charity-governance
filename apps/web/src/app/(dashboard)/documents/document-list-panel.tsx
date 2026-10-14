@@ -80,7 +80,7 @@ export function DocumentListPanel({
   handleUnlinkStandard: (docId: string, standardId: string) => void | Promise<void>;
   confirmDelete: (docId: string) => void;
   openVisibilityModal: (docId: string) => void;
-  openDocumentControl: (docId: string, kind: 'lifecycle' | 'publication' | 'deletion-hold') => void;
+  openDocumentControl: (docId: string, kind: 'lifecycle' | 'publication' | 'deletion-hold' | 'owner') => void;
   openProviderReview: (docId: string) => void;
   /** Absent for a document whose mirror could not be read; the chip renders nothing. */
   mirrors: Map<string, ConfluenceMirror>;
@@ -253,6 +253,9 @@ export function DocumentListPanel({
                         onPress={() => openVisibilityModal(doc.id)}
                       >
                         Access
+                      </Button> : null}
+                      {canManage ? <Button size="sm" variant="flat" aria-label={`Change owner for ${doc.name}`} onPress={() => openDocumentControl(doc.id, 'owner')}>
+                        Owner
                       </Button> : null}
                       {canManage && doc.lifecycleStatus !== 'HISTORICAL' ? <Button size="sm" variant="flat" aria-label={`Classify ${doc.name}`} onPress={() => openDocumentControl(doc.id, 'lifecycle')}>
                         Lifecycle

@@ -16,6 +16,43 @@ const SAMPLE_FILE = path.resolve(__dirname, '../fixtures/sample-document.txt');
 const SAMPLE_MARKER = 'CharityPilot E2E sample document';
 
 test.describe('Documents', () => {
+  test('an owner can assign and clear the accountable owner of historical evidence', async ({ ownerPage }) => {
+    const docName = `E2E Historical custody ${Date.now()}`;
+    await gotoWithDevServerRetry(ownerPage, '/documents');
+    await ownerPage.getByRole('button', { name: 'Upload Document' }).click();
+    await ownerPage.getByLabel('Document Name').fill(docName);
+    await ownerPage.locator('#document-upload-file').setInputFiles(SAMPLE_FILE);
+    const uploaded = ownerPage.waitForResponse(r => /\/api\/v1\/documents$/.test(r.url()) && r.request().method() === 'POST');
+    await ownerPage.getByRole('button', { name: 'Upload', exact: true }).click();
+    const documentId = (await (await uploaded).json()).data.id;
+    const row = ownerPage.getByRole('article').filter({ hasText: documentId });
+    await row.getByRole('button', { name: `Classify ${docName}`, exact: true }).click();
+    await ownerPage.getByLabel('New lifecycle status', { exact: true }).selectOption('HISTORICAL');
+    await ownerPage.getByLabel('Reason for this decision').fill('Synthetic retained evidence for accountable-owner review.');
+    await ownerPage.getByRole('button', { name: 'Save status', exact: true }).click();
+    await expect(ownerPage.getByRole('dialog')).toHaveCount(0);
+    await expect(row).toContainText('HISTORICAL');
+
+    for (const owner of ['Company Secretary', '']) {
+      await row.getByRole('button', { name: `Change owner for ${docName}`, exact: true }).click();
+      await ownerPage.getByLabel('Accountable owner', { exact: true }).fill(owner);
+      const saved = ownerPage.waitForResponse(r => r.url().endsWith(`/api/v1/documents/${documentId}`) && r.request().method() === 'PATCH');
+      await ownerPage.getByRole('button', { name: 'Save owner', exact: true }).click();
+      const response = await saved;
+      expect(response.status()).toBe(200);
+      expect(response.request().postDataJSON()).toMatchObject({ owner: owner || null, expectedUpdatedAt: expect.any(String) });
+      const data = (await response.json()).data;
+      expect(data).toMatchObject({ owner: owner || null, lifecycleStatus: 'HISTORICAL', visibility: 'RESTRICTED', contentAccessClass: 'UNASSESSED' });
+      await expect(ownerPage.getByRole('dialog')).toHaveCount(0);
+      await expect(row.locator('dl')).toContainText(owner || 'Unassigned');
+    }
+    const history = ownerPage.waitForResponse(r => r.url().endsWith('/api/v1/documents/control-audit'));
+    await ownerPage.getByRole('button', { name: 'Load history', exact: true }).click();
+    const events = (await (await history).json()).data.filter((event: { documentId: string; kind: string }) => event.documentId === documentId && event.kind === 'METADATA');
+    expect(events).toHaveLength(2);
+    expect(events.every((event: { reason: string }) => event.reason === 'Metadata edit applied to fields: owner.')).toBe(true);
+  });
+
   test('upload a document then download it', async ({ ownerPage, browserOriginFence }) => {
     const docName = `E2E Upload ${Date.now()}`;
 
