@@ -45,6 +45,7 @@ const COMPLETED_ACTION = /^(?:(?:the|a)\s+)?(?:(?:board|committee|chair|trustees
 // Document modifiers such as "the approved policy" are not predicates.
 const COMPLETED_PREDICATE = /\b(?:was|were|has|have|had)\s+(?:already\s+)?(?:been\s+)?(?:already\s+)?(?:adopted|approved|ratified|signed|reviewed)\b/gi;
 const RELATIVE_SUBJECT = /\b(?:that|which)\s+(?:[\p{L}\p{N}'’-]+\s+){0,6}$/iu;
+const HISTORY_DATE_LINK = /^\s+(?:(?:on|at|in|by)|by\s+(?:[\p{L}'’-]+\s+){1,6}on|at\s+(?:the\s+)?(?:(?:annual|general|board|scheduled|monthly|quarterly|ordinary|extraordinary)\s+){0,3}(?:meeting|review|agm|egm)\s+on)\s*(?:the\s+)?$/iu;
 
 function hasMainCompletion(text: string): boolean {
   for (const match of text.matchAll(COMPLETED_PREDICATE)) {
@@ -57,7 +58,7 @@ function hasMainCompletion(text: string): boolean {
 function isRelativeHistoryDate(before: string): boolean {
   for (const match of before.matchAll(COMPLETED_PREDICATE)) {
     if (RELATIVE_SUBJECT.test(before.slice(0, match.index)) &&
-        /^\s+(?:on|at|in|by)\s*(?:the\s+)?$/i.test(before.slice(match.index! + match[0].length))) {
+        HISTORY_DATE_LINK.test(before.slice(match.index! + match[0].length))) {
       return true;
     }
   }

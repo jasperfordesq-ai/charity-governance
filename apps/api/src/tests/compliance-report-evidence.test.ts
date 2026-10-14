@@ -293,7 +293,7 @@ test('a later upcoming event does not turn an earlier editing date into a deadli
 });
 
 test('dated approval of a referenced document is distinct from the pending circulation date', () => {
-  for (const relative of ['which was approved', 'which the Board has approved']) {
+  for (const relative of ['which was approved', 'which the Board has approved', 'which was approved by the Board', 'which was approved at the board meeting']) {
     assert.deepEqual(targetDatesIn(`Action: Circulate the policy ${relative} on 3 March 2026 at the board meeting on 3 September 2026.`), ['2026-09-03']);
   }
 });

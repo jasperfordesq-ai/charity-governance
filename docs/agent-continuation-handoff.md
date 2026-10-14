@@ -28,6 +28,8 @@
 > have regression coverage; document adjectives still preserve pending actions.
 > Relative document-approval history is distinguished from completion of the
 > requested work; compound old-approval/current-meeting dates are covered.
+> Historical approval dates can include the approving Board or approval meeting
+> without turning those dates into targets for the later requested action.
 
 > **10 October late checkpoint (private VM releases and open work):**
 >
