@@ -29,13 +29,46 @@ const DATE_PATTERN =
 // Words directly before a date that make it a date still to come:
 // "Target: 3 September 2026", "by 3 Sept 2026", "scheduled for 2026-09-03".
 const LEADING_CUE =
-  /(?:\btarget(?:\s+date)?\s*(?::|of|is|for)?|\bby|\bbefore|\bno later than|\bdue\s+(?:on|by)|\bdeadline\s*(?::|of|is)?|\b(?:scheduled|planned|set|expected|arranged|booked)\s+(?:for|on|by))\s*(?:the\s+)?$/i;
+  /(?:\btarget(?:\s+date)?\s*(?::|of|is|for)?|\bby|\bbefore|\bno later than|\bdue(?:\s+(?:on|by))?\s*:?|\bdeadline\s*(?::|of|is)?|\b(?:scheduled|planned|set|expected|arranged|booked)\s+(?:for|on|by))\s*(?:the\s+)?$/i;
 
-// Words anywhere in the same clause that make its dates still to come:
+// Words before a date in the same clause that make it still to come:
 // "to be approved at the board meeting on 3 September 2026", "will be tabled
 // at the 3 September 2026 meeting", "pending the meeting of 03/09/2026".
 const CLAUSE_CUE =
-  /\b(?:will|shall|to be|is to|are to|pending|awaiting|upcoming|forthcoming|next|proposed|intends?|intended)\b/i;
+  /\b(?:will|shall|to be|is to|are to|pending|awaiting|upcoming|forthcoming|next\s+(?:(?:annual|general|board|scheduled|monthly|quarterly|ordinary|extraordinary)\s+){0,3}(?:meeting|review|deadline|agm|egm)|proposed|intends?|intended|needs?\s+(?:formal\s+)?(?:approval|receipt|ratification))\b/i;
+
+// Action labels occur on both instructions and completed-work summaries.
+// An explicit future cue still recognises "Action: policy to be approved".
+const ACTION_LABEL = /^\s*action\s*:/i;
+const COMPLETED_ACTION = /^(?:(?:the|a)\s+)?(?:(?:board|committee|chair|trustees?|members?|we|they|i|it|he|she)\s+)?(?:(?:has|have|had|was|were)\s+)?(?:already\s+)?(?:adopted|approved|ratified|signed|reviewed)\b/i;
+// A finite past predicate describes completion regardless of its subject.
+// Document modifiers such as "the approved policy" are not predicates.
+const COMPLETED_PREDICATE = /\b(?:was|were|has|have|had)\s+(?:already\s+)?(?:been\s+)?(?:already\s+)?(?:adopted|approved|ratified|signed|reviewed)\b/gi;
+const RELATIVE_SUBJECT = /\b(?:that|which)\s+(?:[\p{L}\p{N}'’-]+\s+){0,6}$/iu;
+const HISTORY_DATE_LINK = /^\s+(?:(?:on|at|in|by)|by\s+(?:[\p{L}'’-]+\s+){1,6}on|at\s+(?:the\s+)?(?:(?:annual|general|board|scheduled|monthly|quarterly|ordinary|extraordinary)\s+){0,3}(?:meeting|review|agm|egm)\s+on)\s*(?:the\s+)?$/iu;
+
+function hasMainCompletion(text: string): boolean {
+  for (const match of text.matchAll(COMPLETED_PREDICATE)) {
+    // Approval of the document being circulated does not complete circulation.
+    if (!RELATIVE_SUBJECT.test(text.slice(0, match.index))) return true;
+  }
+  return false;
+}
+
+function isRelativeHistoryDate(before: string): boolean {
+  for (const match of before.matchAll(COMPLETED_PREDICATE)) {
+    if (RELATIVE_SUBJECT.test(before.slice(0, match.index)) &&
+        HISTORY_DATE_LINK.test(before.slice(match.index! + match[0].length))) {
+      return true;
+    }
+  }
+  return false;
+}
+
+// A future verb after a date qualifies an event, not an earlier editing date.
+const EVENT_DATE_PREFIX = /\b(?:meeting|review|agm|egm)\s+(?:(?:on|of|at)\s+)?(?:the\s+)?$/i;
+const FUTURE_VERB_SUFFIX = /^\s*(?:will|shall|to be|(?:is|are)\s+(?:to|awaiting|pending|upcoming|forthcoming|proposed)|awaiting|pending)\b/i;
+const EVENT_SUFFIX = /^\s*(?:(?:annual|general|board|scheduled|monthly|quarterly|ordinary|extraordinary)\s+){0,3}(?:meeting|review|deadline|agm|egm)\s+/i;
 
 // A clause that says the thing already happened is never a stale promise:
 // "the meeting scheduled for 3 September 2026 was held".
@@ -43,8 +76,25 @@ const DONE_CUE = /\b(?:held|took place|happened|completed|carried out|took effec
 
 // Clauses: sentences (a full stop only before a capital, so "Sept. 2026"
 // survives), semicolons, line breaks, a comma not followed by a year, and
-// "and"/"but"/"then" joining two statements.
+// "and"/"but"/"then" joining statements.
 const CLAUSE_BREAK = /[;!?\n]+|\.(?=\s+[A-Z(])|,(?!\s*\d)|\s+(?:and|but|then)\s+/;
+const PAIRED_REQUIREMENT = /\b(?:needs?|awaiting|pending)\s+(?:formal\s+)?(?:approval|receipt|ratification)\s*$/i;
+const PAIRED_CONTINUATION = /^(?:formal\s+)?(?:approval|receipt|ratification)\b(?!\s+(?:pending|awaiting|is|are|was|were|has|have|had|will|shall|completed|approved|adopted|ratified|signed|reviewed|confirmed|recorded|held|took|carried)\b)/i;
+
+function narrativeClauses(text: string): string[] {
+  // Protect only paired nouns in one requirement, not a new pending action.
+  // Keep the original conjunction so "but"/"then" always split statements.
+  const parts = text.split(/(\s+and\s+)/);
+  for (let index = 1; index < parts.length; index += 2) {
+    const before = parts[index - 1]!.split(CLAUSE_BREAK).at(-1) ?? '';
+    const continuation = parts[index + 1]!.split(CLAUSE_BREAK)[0]!;
+    if (PAIRED_REQUIREMENT.test(before) && PAIRED_CONTINUATION.test(continuation) &&
+        !hasMainCompletion(continuation)) {
+      parts[index] = ' & ';
+    }
+  }
+  return parts.join('').split(CLAUSE_BREAK);
+}
 
 function isoDate(year: number, month: number, day: number): string | null {
   const date = new Date(Date.UTC(year, month - 1, day));
@@ -71,11 +121,21 @@ function dateFrom(match: RegExpMatchArray): string | null {
 export function targetDatesIn(text: string | null | undefined): string[] {
   if (!text) return [];
   const dates: string[] = [];
-  for (const clause of text.split(CLAUSE_BREAK)) {
+  for (const clause of narrativeClauses(text)) {
     if (!clause || DONE_CUE.test(clause)) continue;
-    const future = CLAUSE_CUE.test(clause);
+    const actionBody = clause.replace(ACTION_LABEL, '').trimStart();
+    const actionInstruction = ACTION_LABEL.test(clause) && !COMPLETED_ACTION.test(actionBody) &&
+      !hasMainCompletion(actionBody);
     for (const match of clause.matchAll(DATE_PATTERN)) {
       const before = clause.slice(0, match.index);
+      if (isRelativeHistoryDate(before)) continue;
+      const after = clause.slice(match.index! + match[0].length);
+      const suffixEvent = EVENT_SUFFIX.exec(after);
+      const futureEvent = suffixEvent
+        ? FUTURE_VERB_SUFFIX.test(after.slice(suffixEvent[0].length))
+        : EVENT_DATE_PREFIX.test(before) && FUTURE_VERB_SUFFIX.test(after);
+      const future = CLAUSE_CUE.test(before) || actionInstruction ||
+        futureEvent;
       if (!future && !LEADING_CUE.test(before)) continue;
       const date = dateFrom(match);
       if (date) dates.push(date);

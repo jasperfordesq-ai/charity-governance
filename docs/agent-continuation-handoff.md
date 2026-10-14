@@ -1,5 +1,36 @@
 # CharityPilot Agent Continuation Handoff
 
+> **14 October report-warning correction, source verification:** Live testing
+> found that a background editing date was mistaken for a deadline, while bare
+> Due and compound approval instructions were missed. The correction narrows
+> date cues and preserves paired approval nouns. Two synthetic regression tests
+> failed before the fix; all 26 focused report-evidence tests pass after it.
+> This source correction is not deployment or DPO acceptance evidence. Current
+> private release, role comparison and remaining decision evidence are in the
+> gitignored remediation roadmap and RESUME-HERE checkpoint.
+>
+> Subsequent PR review regressions also preserve qualified AGM/review dates,
+> keep separate completed/pending statements apart, and prevent an Action label
+> from making completed adoption overdue. The original paired approval case
+> remains supported. All evidence remains version-bound; do not deploy an
+> earlier head while later review corrections await their own checks.
+> Date cues are now bound to the relevant date, so a later upcoming AGM does
+> not retrospectively qualify an earlier editing date. Immediate future verbs
+> after a meeting date remain supported. Review corrections require latest-head
+> tests followed by exact merged-SHA release gates.
+> Event-bound suffixes include qualified annual/general meetings and pending
+> confirmation states; those cues do not apply to preceding editing dates.
+> Further regressions distinguish a completed action from an instruction using
+> an approved/signed document and preserve shared requirements through meeting
+> modifiers. These advisory recognisers remain bounded; unknown prose still
+> needs human review.
+> Passive completed summaries and completed predicates within paired phrases
+> have regression coverage; document adjectives still preserve pending actions.
+> Relative document-approval history is distinguished from completion of the
+> requested work; compound old-approval/current-meeting dates are covered.
+> Historical approval dates can include the approving Board or approval meeting
+> without turning those dates into targets for the later requested action.
+
 > **10 October late checkpoint (private VM releases and open work):**
 >
 > Releases. Each followed the same sequence: exact merged-master CI/E2E, a guarded blue-green cutover, a read-only postflight, the restricted-role check, an isolated restore drill, and a hash-matched backup copy off the VM.

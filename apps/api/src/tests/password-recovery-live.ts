@@ -667,22 +667,28 @@ export async function runPasswordRecoveryConcurrencyProof(postgresImage: string)
         },
       });
     }
-    const rateWindowStartedAt = new Date(
-      Math.floor(timingStartedAt.getTime() / (15 * 60 * 1000)) * 15 * 60 * 1000,
-    );
-    await firstClient.authRecoveryRateLimitBucket.create({
-      data: {
+    const [rateClock] = await firstClient.$queryRaw<Array<{ now: Date }>>`
+      SELECT CURRENT_TIMESTAMP AT TIME ZONE 'UTC' AS "now"
+    `;
+    assert.ok(rateClock, 'the timing fixture uses the same database clock as rate limiting');
+    const rateWindowMs = 15 * 60 * 1000;
+    const rateWindowStartMs = Math.floor(rateClock.now.getTime() / rateWindowMs) * rateWindowMs;
+    // The five timing measurements can straddle a window boundary. Exhaust
+    // both synthetic windows so this category remains rate-suppressed; the
+    // earlier concurrent-request proof separately checks the real cap.
+    await firstClient.authRecoveryRateLimitBucket.createMany({
+      data: [0, 1].map((windowOffset) => ({
         scope: 'FORGOT_IDENTIFIER_15M',
         keyVersion: 1,
         subjectDigest: derivePasswordRecoveryRateDigest(
           'forgot-identifier',
           'timing-rate@example.invalid',
         ),
-        windowStartedAt: rateWindowStartedAt,
+        windowStartedAt: new Date(rateWindowStartMs + windowOffset * rateWindowMs),
         count: 3,
-        windowEndsAt: new Date(rateWindowStartedAt.getTime() + 15 * 60 * 1000),
-        expiresAt: new Date(rateWindowStartedAt.getTime() + 24 * 60 * 60 * 1000),
-      },
+        windowEndsAt: new Date(rateWindowStartMs + (windowOffset + 1) * rateWindowMs),
+        expiresAt: new Date(rateWindowStartMs + windowOffset * rateWindowMs + 24 * 60 * 60 * 1000),
+      })),
     });
 
     const equalizedTargetMs = 500;

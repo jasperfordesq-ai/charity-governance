@@ -237,6 +237,75 @@ test('a date written as still to come is found whatever words introduce it', () 
   }
 });
 
+test('background editing dates do not replace deadlines in the current action', () => {
+  assert.deepEqual(targetDatesIn(
+    'Due 30 September 2026.\n--- BACKGROUND (moved out of the notes field on 31 August 2026 so the next step is readable) ---',
+  ), ['2026-09-30']);
+  assert.deepEqual(targetDatesIn('Notes edited on 31 August 2026 to explain the next step.'), []);
+  assert.deepEqual(targetDatesIn('The next step was recorded on 31 August 2026.'), []);
+  assert.deepEqual(targetDatesIn('Notes edited on 31 August 2026 and next review on 30 September 2026.'), ['2026-09-30']);
+});
+
+test('present-tense action instructions and compound approval requirements carry deadlines', () => {
+  assert.deepEqual(targetDatesIn('Action: the Board minutes its decision on 3 September 2026 and brings forward a review in 2027.'), ['2026-09-03']);
+  assert.deepEqual(targetDatesIn('The refreshed policy needs formal receipt and ratification by the Board on 3 September 2026.'), ['2026-09-03']);
+  assert.deepEqual(targetDatesIn('The next review is on 3 September 2026.'), ['2026-09-03']);
+});
+
+test('next AGM and qualified future events remain deadlines without treating next step as one', () => {
+  for (const event of ['AGM', 'EGM', 'annual review', 'annual general meeting', 'quarterly board meeting']) {
+    assert.deepEqual(targetDatesIn(`The next ${event} is on 3 September 2026.`), ['2026-09-03'], event);
+  }
+  assert.deepEqual(targetDatesIn('Notes reorganised on 31 August 2026 so the next step in the review is readable.'), []);
+});
+
+test('separate completed and pending actions retain their own date context', () => {
+  assert.deepEqual(targetDatesIn('Review carried out in March 2026 and ratification pending the board meeting on 3 September 2026.'), ['2026-09-03']);
+  assert.deepEqual(targetDatesIn('Review recorded on 1 March 2026 and ratification pending the board meeting on 3 September 2026.'), ['2026-09-03']);
+  assert.deepEqual(targetDatesIn('The policy needs formal receipt and formal ratification by the Board on 3 September 2026.'), ['2026-09-03']);
+});
+
+test('an Action label does not turn completed adoption into a future deadline', () => {
+  assert.deepEqual(targetDatesIn('Action: The board adopted the policy on 3 March 2026.'), []);
+  assert.deepEqual(targetDatesIn('Action: The board approved the policy on 3 March 2026.'), []);
+  assert.deepEqual(targetDatesIn('Action: The policy was approved on 3 March 2026.'), []);
+  assert.deepEqual(targetDatesIn('Action: The policy has already been approved on 3 March 2026.'), []);
+  assert.deepEqual(targetDatesIn('Action: Policy to be approved on 3 September 2026.'), ['2026-09-03']);
+  assert.deepEqual(targetDatesIn('Action: Circulate the approved policy at the board meeting on 3 September 2026.'), ['2026-09-03']);
+  assert.deepEqual(targetDatesIn('Action: Bring the signed declarations to the board meeting on 3 September 2026.'), ['2026-09-03']);
+  assert.deepEqual(targetDatesIn('Action: Circulate the policy that was approved in March at the board meeting on 3 September 2026.'), ['2026-09-03']);
+});
+
+test('a paired requirement shares its deadline through meeting prepositions and parentheses', () => {
+  for (const ending of ['during the board meeting on', 'within the board meeting on', 'at the meeting on']) {
+    assert.deepEqual(targetDatesIn(`The policy needs formal receipt and ratification ${ending} 3 September 2026.`), ['2026-09-03']);
+  }
+  assert.deepEqual(targetDatesIn('The policy needs formal receipt and ratification (3 September 2026).'), ['2026-09-03']);
+  assert.deepEqual(targetDatesIn('The policy needs formal receipt and ratification was approved on 3 March 2026.'), []);
+  assert.deepEqual(targetDatesIn('The revised policy needs formal receipt and ratification of the original policy was approved on 3 March 2026.'), []);
+  assert.deepEqual(targetDatesIn('The policy needs formal receipt and ratification at the meeting on 3 September 2026 using the draft that was approved earlier.'), ['2026-09-03']);
+});
+
+test('a later upcoming event does not turn an earlier editing date into a deadline', () => {
+  assert.deepEqual(targetDatesIn('Notes edited on 31 August 2026 to explain the next AGM.'), []);
+  assert.deepEqual(targetDatesIn('Notes edited on 31 August 2026 to explain the next AGM on 3 September 2026.'), ['2026-09-03']);
+  assert.deepEqual(targetDatesIn('Draft recorded on 31 August 2026 for the policy to be approved on 3 September 2026.'), ['2026-09-03']);
+});
+
+test('dated approval of a referenced document is distinct from the pending circulation date', () => {
+  for (const relative of ['which was approved', 'which the Board has approved', 'which was approved by the Board', 'which was approved at the board meeting']) {
+    assert.deepEqual(targetDatesIn(`Action: Circulate the policy ${relative} on 3 March 2026 at the board meeting on 3 September 2026.`), ['2026-09-03']);
+  }
+});
+
+test('future wording immediately after an event date still qualifies that event', () => {
+  assert.deepEqual(targetDatesIn('The board meeting on 3 September 2026 will approve the policy.'), ['2026-09-03']);
+  assert.deepEqual(targetDatesIn('The 3 September 2026 meeting will approve the policy.'), ['2026-09-03']);
+  assert.deepEqual(targetDatesIn('The 3 September 2026 annual general meeting will approve the policy.'), ['2026-09-03']);
+  assert.deepEqual(targetDatesIn('The board meeting on 3 September 2026 is awaiting confirmation.'), ['2026-09-03']);
+  assert.deepEqual(targetDatesIn('Notes edited on 31 August 2026 will be kept for the next AGM.'), []);
+});
+
 test('a date describing something already done is not a stale promise', () => {
   for (const text of [
     'Adopted at the board meeting on 10 March 2026.',
