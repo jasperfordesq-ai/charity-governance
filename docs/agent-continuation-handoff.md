@@ -24,6 +24,8 @@
 > an approved/signed document and preserve shared requirements through meeting
 > modifiers. These advisory recognisers remain bounded; unknown prose still
 > needs human review.
+> Passive completed summaries and completed predicates within paired phrases
+> have regression coverage; document adjectives still preserve pending actions.
 
 > **10 October late checkpoint (private VM releases and open work):**
 >

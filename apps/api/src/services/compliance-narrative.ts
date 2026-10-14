@@ -41,6 +41,9 @@ const CLAUSE_CUE =
 // An explicit future cue still recognises "Action: policy to be approved".
 const ACTION_LABEL = /^\s*action\s*:/i;
 const COMPLETED_ACTION = /^(?:(?:the|a)\s+)?(?:(?:board|committee|chair|trustees?|members?|we|they|i|it|he|she)\s+)?(?:(?:has|have|had|was|were)\s+)?(?:already\s+)?(?:adopted|approved|ratified|signed|reviewed)\b/i;
+// A finite past predicate describes completion regardless of its subject.
+// Document modifiers such as "the approved policy" are not predicates.
+const COMPLETED_PREDICATE = /\b(?:was|were|has|have|had)\s+(?:already\s+)?(?:been\s+)?(?:already\s+)?(?:adopted|approved|ratified|signed|reviewed)\b/i;
 
 // A future verb after a date qualifies an event, not an earlier editing date.
 const EVENT_DATE_PREFIX = /\b(?:meeting|review|agm|egm)\s+(?:(?:on|of|at)\s+)?(?:the\s+)?$/i;
@@ -64,7 +67,9 @@ function narrativeClauses(text: string): string[] {
   const parts = text.split(/(\s+and\s+)/);
   for (let index = 1; index < parts.length; index += 2) {
     const before = parts[index - 1]!.split(CLAUSE_BREAK).at(-1) ?? '';
-    if (PAIRED_REQUIREMENT.test(before) && PAIRED_CONTINUATION.test(parts[index + 1]!)) {
+    const continuation = parts[index + 1]!.split(CLAUSE_BREAK)[0]!;
+    if (PAIRED_REQUIREMENT.test(before) && PAIRED_CONTINUATION.test(continuation) &&
+        !COMPLETED_PREDICATE.test(continuation)) {
       parts[index] = ' & ';
     }
   }
@@ -98,7 +103,9 @@ export function targetDatesIn(text: string | null | undefined): string[] {
   const dates: string[] = [];
   for (const clause of narrativeClauses(text)) {
     if (!clause || DONE_CUE.test(clause)) continue;
-    const actionInstruction = ACTION_LABEL.test(clause) && !COMPLETED_ACTION.test(clause.replace(ACTION_LABEL, '').trimStart());
+    const actionBody = clause.replace(ACTION_LABEL, '').trimStart();
+    const actionInstruction = ACTION_LABEL.test(clause) && !COMPLETED_ACTION.test(actionBody) &&
+      !COMPLETED_PREDICATE.test(actionBody);
     for (const match of clause.matchAll(DATE_PATTERN)) {
       const before = clause.slice(0, match.index);
       const after = clause.slice(match.index! + match[0].length);
