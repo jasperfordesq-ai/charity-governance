@@ -35,7 +35,12 @@ const LEADING_CUE =
 // "to be approved at the board meeting on 3 September 2026", "will be tabled
 // at the 3 September 2026 meeting", "pending the meeting of 03/09/2026".
 const CLAUSE_CUE =
-  /\b(?:will|shall|to be|is to|are to|pending|awaiting|upcoming|forthcoming|next\s+(?:(?:annual|general|board|scheduled|monthly|quarterly|ordinary|extraordinary)\s+){0,3}(?:meeting|review|deadline|agm|egm)|proposed|intends?|intended|needs?\s+(?:formal\s+)?(?:approval|receipt|ratification))\b|^\s*action\s*:/i;
+  /\b(?:will|shall|to be|is to|are to|pending|awaiting|upcoming|forthcoming|next\s+(?:(?:annual|general|board|scheduled|monthly|quarterly|ordinary|extraordinary)\s+){0,3}(?:meeting|review|deadline|agm|egm)|proposed|intends?|intended|needs?\s+(?:formal\s+)?(?:approval|receipt|ratification))\b/i;
+
+// Action labels occur on both instructions and completed-work summaries.
+// An explicit future cue still recognises "Action: policy to be approved".
+const ACTION_LABEL = /^\s*action\s*:/i;
+const COMPLETED_ACTION_WORD = /\b(?:adopted|approved|ratified|signed|reviewed)\b/i;
 
 // A clause that says the thing already happened is never a stale promise:
 // "the meeting scheduled for 3 September 2026 was held".
@@ -43,9 +48,23 @@ const DONE_CUE = /\b(?:held|took place|happened|completed|carried out|took effec
 
 // Clauses: sentences (a full stop only before a capital, so "Sept. 2026"
 // survives), semicolons, line breaks, a comma not followed by a year, and
-// "and"/"but"/"then" joining statements. Keep paired approval nouns
-// ("receipt and ratification") together so their cue reaches the date.
-const CLAUSE_BREAK = /[;!?\n]+|\.(?=\s+[A-Z(])|,(?!\s*\d)|\s+(?:but|then)\s+|\s+and\s+(?!(?:formal\s+)?(?:approval|receipt|ratification)\b)/;
+// "and"/"but"/"then" joining statements.
+const CLAUSE_BREAK = /[;!?\n]+|\.(?=\s+[A-Z(])|,(?!\s*\d)|\s+(?:and|but|then)\s+/;
+const PAIRED_REQUIREMENT = /\b(?:needs?|awaiting|pending)\s+(?:formal\s+)?(?:approval|receipt|ratification)\s*$/i;
+const PAIRED_CONTINUATION = /^(?:formal\s+)?(?:approval|receipt|ratification)\s+(?:by|on|at)\b/i;
+
+function narrativeClauses(text: string): string[] {
+  // Protect only paired nouns in one requirement, not a new pending action.
+  // Keep the original conjunction so "but"/"then" always split statements.
+  const parts = text.split(/(\s+and\s+)/);
+  for (let index = 1; index < parts.length; index += 2) {
+    const before = parts[index - 1]!.split(CLAUSE_BREAK).at(-1) ?? '';
+    if (PAIRED_REQUIREMENT.test(before) && PAIRED_CONTINUATION.test(parts[index + 1]!)) {
+      parts[index] = ' & ';
+    }
+  }
+  return parts.join('').split(CLAUSE_BREAK);
+}
 
 function isoDate(year: number, month: number, day: number): string | null {
   const date = new Date(Date.UTC(year, month - 1, day));
@@ -72,9 +91,9 @@ function dateFrom(match: RegExpMatchArray): string | null {
 export function targetDatesIn(text: string | null | undefined): string[] {
   if (!text) return [];
   const dates: string[] = [];
-  for (const clause of text.split(CLAUSE_BREAK)) {
+  for (const clause of narrativeClauses(text)) {
     if (!clause || DONE_CUE.test(clause)) continue;
-    const future = CLAUSE_CUE.test(clause);
+    const future = CLAUSE_CUE.test(clause) || (ACTION_LABEL.test(clause) && !COMPLETED_ACTION_WORD.test(clause));
     for (const match of clause.matchAll(DATE_PATTERN)) {
       const before = clause.slice(0, match.index);
       if (!future && !LEADING_CUE.test(before)) continue;

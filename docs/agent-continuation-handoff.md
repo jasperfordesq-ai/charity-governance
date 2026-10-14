@@ -8,6 +8,12 @@
 > This source correction is not deployment or DPO acceptance evidence. Current
 > private release, role comparison and remaining decision evidence are in the
 > gitignored remediation roadmap and RESUME-HERE checkpoint.
+>
+> Subsequent PR review regressions also preserve qualified AGM/review dates,
+> keep separate completed/pending statements apart, and prevent an Action label
+> from making completed adoption overdue. The original paired approval case
+> remains supported. All evidence remains version-bound; do not deploy an
+> earlier head while later review corrections await their own checks.
 
 > **10 October late checkpoint (private VM releases and open work):**
 >

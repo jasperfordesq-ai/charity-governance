@@ -258,6 +258,18 @@ test('next AGM and qualified future events remain deadlines without treating nex
   assert.deepEqual(targetDatesIn('Notes reorganised on 31 August 2026 so the next step in the review is readable.'), []);
 });
 
+test('separate completed and pending actions retain their own date context', () => {
+  assert.deepEqual(targetDatesIn('Review carried out in March 2026 and ratification pending the board meeting on 3 September 2026.'), ['2026-09-03']);
+  assert.deepEqual(targetDatesIn('Review recorded on 1 March 2026 and ratification pending the board meeting on 3 September 2026.'), ['2026-09-03']);
+  assert.deepEqual(targetDatesIn('The policy needs formal receipt and formal ratification by the Board on 3 September 2026.'), ['2026-09-03']);
+});
+
+test('an Action label does not turn completed adoption into a future deadline', () => {
+  assert.deepEqual(targetDatesIn('Action: The board adopted the policy on 3 March 2026.'), []);
+  assert.deepEqual(targetDatesIn('Action: The board approved the policy on 3 March 2026.'), []);
+  assert.deepEqual(targetDatesIn('Action: Policy to be approved on 3 September 2026.'), ['2026-09-03']);
+});
+
 test('a date describing something already done is not a stale promise', () => {
   for (const text of [
     'Adopted at the board meeting on 10 March 2026.',
