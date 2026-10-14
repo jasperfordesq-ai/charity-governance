@@ -26,6 +26,8 @@
 > needs human review.
 > Passive completed summaries and completed predicates within paired phrases
 > have regression coverage; document adjectives still preserve pending actions.
+> Relative document-approval history is distinguished from completion of the
+> requested work; compound old-approval/current-meeting dates are covered.
 
 > **10 October late checkpoint (private VM releases and open work):**
 >

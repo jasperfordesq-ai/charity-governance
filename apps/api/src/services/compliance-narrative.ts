@@ -43,7 +43,26 @@ const ACTION_LABEL = /^\s*action\s*:/i;
 const COMPLETED_ACTION = /^(?:(?:the|a)\s+)?(?:(?:board|committee|chair|trustees?|members?|we|they|i|it|he|she)\s+)?(?:(?:has|have|had|was|were)\s+)?(?:already\s+)?(?:adopted|approved|ratified|signed|reviewed)\b/i;
 // A finite past predicate describes completion regardless of its subject.
 // Document modifiers such as "the approved policy" are not predicates.
-const COMPLETED_PREDICATE = /\b(?:was|were|has|have|had)\s+(?:already\s+)?(?:been\s+)?(?:already\s+)?(?:adopted|approved|ratified|signed|reviewed)\b/i;
+const COMPLETED_PREDICATE = /\b(?:was|were|has|have|had)\s+(?:already\s+)?(?:been\s+)?(?:already\s+)?(?:adopted|approved|ratified|signed|reviewed)\b/gi;
+const RELATIVE_SUBJECT = /\b(?:that|which)\s+(?:[\p{L}\p{N}'’-]+\s+){0,6}$/iu;
+
+function hasMainCompletion(text: string): boolean {
+  for (const match of text.matchAll(COMPLETED_PREDICATE)) {
+    // Approval of the document being circulated does not complete circulation.
+    if (!RELATIVE_SUBJECT.test(text.slice(0, match.index))) return true;
+  }
+  return false;
+}
+
+function isRelativeHistoryDate(before: string): boolean {
+  for (const match of before.matchAll(COMPLETED_PREDICATE)) {
+    if (RELATIVE_SUBJECT.test(before.slice(0, match.index)) &&
+        /^\s+(?:on|at|in|by)\s*(?:the\s+)?$/i.test(before.slice(match.index! + match[0].length))) {
+      return true;
+    }
+  }
+  return false;
+}
 
 // A future verb after a date qualifies an event, not an earlier editing date.
 const EVENT_DATE_PREFIX = /\b(?:meeting|review|agm|egm)\s+(?:(?:on|of|at)\s+)?(?:the\s+)?$/i;
@@ -69,7 +88,7 @@ function narrativeClauses(text: string): string[] {
     const before = parts[index - 1]!.split(CLAUSE_BREAK).at(-1) ?? '';
     const continuation = parts[index + 1]!.split(CLAUSE_BREAK)[0]!;
     if (PAIRED_REQUIREMENT.test(before) && PAIRED_CONTINUATION.test(continuation) &&
-        !COMPLETED_PREDICATE.test(continuation)) {
+        !hasMainCompletion(continuation)) {
       parts[index] = ' & ';
     }
   }
@@ -105,9 +124,10 @@ export function targetDatesIn(text: string | null | undefined): string[] {
     if (!clause || DONE_CUE.test(clause)) continue;
     const actionBody = clause.replace(ACTION_LABEL, '').trimStart();
     const actionInstruction = ACTION_LABEL.test(clause) && !COMPLETED_ACTION.test(actionBody) &&
-      !COMPLETED_PREDICATE.test(actionBody);
+      !hasMainCompletion(actionBody);
     for (const match of clause.matchAll(DATE_PATTERN)) {
       const before = clause.slice(0, match.index);
+      if (isRelativeHistoryDate(before)) continue;
       const after = clause.slice(match.index! + match[0].length);
       const suffixEvent = EVENT_SUFFIX.exec(after);
       const futureEvent = suffixEvent

@@ -273,6 +273,7 @@ test('an Action label does not turn completed adoption into a future deadline', 
   assert.deepEqual(targetDatesIn('Action: Policy to be approved on 3 September 2026.'), ['2026-09-03']);
   assert.deepEqual(targetDatesIn('Action: Circulate the approved policy at the board meeting on 3 September 2026.'), ['2026-09-03']);
   assert.deepEqual(targetDatesIn('Action: Bring the signed declarations to the board meeting on 3 September 2026.'), ['2026-09-03']);
+  assert.deepEqual(targetDatesIn('Action: Circulate the policy that was approved in March at the board meeting on 3 September 2026.'), ['2026-09-03']);
 });
 
 test('a paired requirement shares its deadline through meeting prepositions and parentheses', () => {
@@ -282,12 +283,19 @@ test('a paired requirement shares its deadline through meeting prepositions and 
   assert.deepEqual(targetDatesIn('The policy needs formal receipt and ratification (3 September 2026).'), ['2026-09-03']);
   assert.deepEqual(targetDatesIn('The policy needs formal receipt and ratification was approved on 3 March 2026.'), []);
   assert.deepEqual(targetDatesIn('The revised policy needs formal receipt and ratification of the original policy was approved on 3 March 2026.'), []);
+  assert.deepEqual(targetDatesIn('The policy needs formal receipt and ratification at the meeting on 3 September 2026 using the draft that was approved earlier.'), ['2026-09-03']);
 });
 
 test('a later upcoming event does not turn an earlier editing date into a deadline', () => {
   assert.deepEqual(targetDatesIn('Notes edited on 31 August 2026 to explain the next AGM.'), []);
   assert.deepEqual(targetDatesIn('Notes edited on 31 August 2026 to explain the next AGM on 3 September 2026.'), ['2026-09-03']);
   assert.deepEqual(targetDatesIn('Draft recorded on 31 August 2026 for the policy to be approved on 3 September 2026.'), ['2026-09-03']);
+});
+
+test('dated approval of a referenced document is distinct from the pending circulation date', () => {
+  for (const relative of ['which was approved', 'which the Board has approved']) {
+    assert.deepEqual(targetDatesIn(`Action: Circulate the policy ${relative} on 3 March 2026 at the board meeting on 3 September 2026.`), ['2026-09-03']);
+  }
 });
 
 test('future wording immediately after an event date still qualifies that event', () => {
