@@ -290,6 +290,8 @@ test('a later upcoming event does not turn an earlier editing date into a deadli
 test('future wording immediately after an event date still qualifies that event', () => {
   assert.deepEqual(targetDatesIn('The board meeting on 3 September 2026 will approve the policy.'), ['2026-09-03']);
   assert.deepEqual(targetDatesIn('The 3 September 2026 meeting will approve the policy.'), ['2026-09-03']);
+  assert.deepEqual(targetDatesIn('The 3 September 2026 annual general meeting will approve the policy.'), ['2026-09-03']);
+  assert.deepEqual(targetDatesIn('The board meeting on 3 September 2026 is awaiting confirmation.'), ['2026-09-03']);
   assert.deepEqual(targetDatesIn('Notes edited on 31 August 2026 will be kept for the next AGM.'), []);
 });
 

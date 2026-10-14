@@ -18,6 +18,8 @@
 > not retrospectively qualify an earlier editing date. Immediate future verbs
 > after a meeting date remain supported. Review corrections require latest-head
 > tests followed by exact merged-SHA release gates.
+> Event-bound suffixes include qualified annual/general meetings and pending
+> confirmation states; those cues do not apply to preceding editing dates.
 > Further regressions distinguish a completed action from an instruction using
 > an approved/signed document and preserve shared requirements through meeting
 > modifiers. These advisory recognisers remain bounded; unknown prose still

@@ -44,8 +44,8 @@ const COMPLETED_ACTION = /^(?:(?:the|a)\s+)?(?:(?:board|committee|chair|trustees
 
 // A future verb after a date qualifies an event, not an earlier editing date.
 const EVENT_DATE_PREFIX = /\b(?:meeting|review|agm|egm)\s+(?:(?:on|of|at)\s+)?(?:the\s+)?$/i;
-const FUTURE_VERB_SUFFIX = /^\s*(?:will|shall|is to|are to|to be)\b/i;
-const FUTURE_EVENT_SUFFIX = /^\s*(?:board\s+)?(?:meeting|review|agm|egm)\s+(?:will|shall|is to|are to|to be)\b/i;
+const FUTURE_VERB_SUFFIX = /^\s*(?:will|shall|to be|(?:is|are)\s+(?:to|awaiting|pending|upcoming|forthcoming|proposed)|awaiting|pending)\b/i;
+const EVENT_SUFFIX = /^\s*(?:(?:annual|general|board|scheduled|monthly|quarterly|ordinary|extraordinary)\s+){0,3}(?:meeting|review|deadline|agm|egm)\s+/i;
 
 // A clause that says the thing already happened is never a stale promise:
 // "the meeting scheduled for 3 September 2026 was held".
@@ -102,8 +102,12 @@ export function targetDatesIn(text: string | null | undefined): string[] {
     for (const match of clause.matchAll(DATE_PATTERN)) {
       const before = clause.slice(0, match.index);
       const after = clause.slice(match.index! + match[0].length);
+      const suffixEvent = EVENT_SUFFIX.exec(after);
+      const futureEvent = suffixEvent
+        ? FUTURE_VERB_SUFFIX.test(after.slice(suffixEvent[0].length))
+        : EVENT_DATE_PREFIX.test(before) && FUTURE_VERB_SUFFIX.test(after);
       const future = CLAUSE_CUE.test(before) || actionInstruction ||
-        (EVENT_DATE_PREFIX.test(before) && FUTURE_VERB_SUFFIX.test(after)) || FUTURE_EVENT_SUFFIX.test(after);
+        futureEvent;
       if (!future && !LEADING_CUE.test(before)) continue;
       const date = dateFrom(match);
       if (date) dates.push(date);
