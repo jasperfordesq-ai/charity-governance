@@ -50,14 +50,17 @@ test('approval readiness summary handles clear or unavailable readiness', () => 
   );
 });
 
-test('narrative staleness warnings are worded for the board and never counted as blockers', () => {
+test('narrative staleness warnings are grouped per standard, like the report, and never counted as blockers', () => {
+  const linked = (documentId: string, linkedAt: string) => ({
+    kind: 'EVIDENCE_LINKED_AFTER_NARRATIVE' as const, standardId: 'std-23', standardCode: '2.3',
+    recordUpdatedAt: '2026-09-01T10:00:00.000Z', documentId, linkedAt,
+  });
   const result = readiness({
     ready: true,
     narrativeWarnings: [
-      {
-        kind: 'EVIDENCE_LINKED_AFTER_NARRATIVE', standardId: 'std-23', standardCode: '2.3',
-        recordUpdatedAt: '2026-09-01T10:00:00.000Z', documentId: 'doc-a', linkedAt: '2026-10-14T10:00:00.000Z',
-      },
+      linked('doc-a', '2026-10-09T10:00:00.000Z'),
+      linked('doc-b', '2026-10-11T10:00:00.000Z'),
+      linked('doc-c', '2026-10-10T10:00:00.000Z'),
       {
         kind: 'TARGET_DATE_PASSED', standardId: 'std-23', standardCode: '2.3',
         recordUpdatedAt: '2026-09-01T10:00:00.000Z', targetDate: '2026-09-03',
@@ -66,12 +69,11 @@ test('narrative staleness warnings are worded for the board and never counted as
   });
 
   const lines = narrativeWarningLines(result);
-  assert.deepEqual(lines.map((line) => [line.standardCode, line.title]), [
-    ['2.3', 'Evidence linked after the narrative was written'],
-    ['2.3', 'Target date has passed'],
+  assert.deepEqual(lines.map((line) => `${line.standardCode} — ${line.message}`), [
+    '2.3 — 3 documents linked since this record was last edited (latest 11 Oct 2026)',
+    `2.3 — Target date ${new Date('2026-09-03').toLocaleDateString('en-IE', { timeZone: 'UTC', day: 'numeric', month: 'short', year: 'numeric' })} has passed`,
   ]);
-  assert.match(lines[0]!.description, /linked on 14 Oct 2026, after the actions taken and evidence were last edited on 1 Sept? 2026/);
-  assert.match(lines[1]!.description, /target of 3 Sept? 2026, which has passed/);
+  assert.match(lines[0]!.description, /Record last edited 1 Sept? 2026/);
   assert.equal(new Set(lines.map((line) => line.key)).size, 2, 'each warning has its own key');
   assert.equal(countApprovalReadinessBlockers(result), 0, 'a warning is not a blocker');
   assert.deepEqual(approvalReadinessBlockerCodes(result), []);

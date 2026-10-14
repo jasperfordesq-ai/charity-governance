@@ -93,7 +93,7 @@ export function NarrativeStalenessWarnings({ readiness }: { readiness: ApprovalR
         {lines.map((line) => (
           <ReadinessIssueCard
             key={line.key}
-            title={`Standard ${line.standardCode}: ${line.title}`}
+            title={`${line.standardCode} — ${line.message}`}
             description={line.description}
             label="Warning"
           />

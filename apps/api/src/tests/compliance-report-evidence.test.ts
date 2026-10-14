@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { IRISH_COMPLIANCE_MATRIX_LAST_CHECKED } from '@charitypilot/shared';
+import { IRISH_COMPLIANCE_MATRIX_LAST_CHECKED, narrativeWarningDate } from '@charitypilot/shared';
 
 process.env.JWT_SECRET = process.env.JWT_SECRET ?? 'compliance-report-evidence-test-secret';
 
@@ -413,8 +413,21 @@ test('the report header warns that the 2.3 narrative is older than its evidence,
   assert.ok(warning > 0);
   assert.ok(warning < html.indexOf('<h2>Principle 2'), 'in the header, ahead of the standards');
   const section = html.slice(warning, html.indexOf('</section>', warning));
-  assert.ok(section.includes(`<td>2.3</td><td>Target date has passed</td><td>The actions taken give a target of ${shown('2026-09-03')}, which has passed`), section);
-  assert.ok(section.includes(`&quot;Code of Conduct, Trustee Declaration (signed) A&quot; was linked on ${shown('2026-10-14')}`), section);
+  // Grouped: one line per standard and kind, never one per document.
+  const expected = [
+    ['2.1', '2 documents linked since this record was last edited (latest 14 Oct 2026)'],
+    ['2.3', '2 documents linked since this record was last edited (latest 14 Oct 2026)'],
+    ['2.3', `Target date ${narrativeWarningDate('2026-09-03')} has passed`],
+    ['5.6', '2 documents linked since this record was last edited (latest 14 Oct 2026)'],
+    ['5.7', '2 documents linked since this record was last edited (latest 14 Oct 2026)'],
+  ];
+  let from = 0;
+  for (const [code, message] of expected) {
+    const at = section.indexOf(`<tr><td>${code}</td><td>${message}</td>`, from);
+    assert.ok(at >= from, `in order: ${code} — ${message}\n${section}`);
+    from = at + 1;
+  }
+  assert.equal(section.split('<tr><td>').length - 1, expected.length, 'no per-document rows');
   assert.match(html, /outside the hashed board-approved/);
 });
 

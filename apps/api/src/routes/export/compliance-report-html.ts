@@ -4,7 +4,12 @@ import type {
   ReportEvidenceDocument,
 } from '../../services/compliance.service.js';
 import type { ComplianceApprovalSnapshotPayloadV1 } from '../../services/compliance-snapshot.js';
-import { IRISH_COMPLIANCE_MATRIX, IRISH_COMPLIANCE_MATRIX_LAST_CHECKED } from '@charitypilot/shared';
+import {
+  IRISH_COMPLIANCE_MATRIX,
+  IRISH_COMPLIANCE_MATRIX_LAST_CHECKED,
+  groupNarrativeWarnings,
+  narrativeWarningDate,
+} from '@charitypilot/shared';
 
 /** The owner's ruling (2026-10-14), printed beside the column it governs. */
 export const LINKED_EVIDENCE_NOTE = 'The board approves the narrative; the document list is supporting evidence.';
@@ -120,7 +125,6 @@ export function buildComplianceReportHtml(
   const narrativeWarningHtml = buildNarrativeWarningHtml(
     approvalReadiness.narrativeWarnings ?? [],
     standardCodes,
-    reportEvidence,
   );
   const trusteeDeclarationsHtml = reportEvidence ? buildTrusteeDeclarationsHtml(reportEvidence) : '';
 
@@ -529,35 +533,24 @@ function buildTrusteeDeclarationsHtml(evidence: ComplianceReportEvidence): strin
     )}`;
 }
 
+/**
+ * One line per standard and kind, grouped by the same shared function the web
+ * sign-off screen uses, so the two can never disagree.
+ */
 function buildNarrativeWarningHtml(
   warnings: NonNullable<ReportApprovalReadiness['narrativeWarnings']>,
   standardCodes: ReadonlyMap<string, string>,
-  evidence: ComplianceReportEvidence | null,
 ): string {
   // Only standards this report prints; a warning about anything else would
   // point the reader at a row that is not there.
-  const shown = warnings.filter((warning) => standardCodes.has(warning.standardId));
-  if (shown.length === 0) return '';
+  const groups = groupNarrativeWarnings(warnings.filter((warning) => standardCodes.has(warning.standardId)));
+  if (groups.length === 0) return '';
 
-  const documentName = (standardId: string, documentId: string) =>
-    evidence?.documentsByStandard.get(standardId)?.find((doc) => doc.documentId === documentId)?.name;
-
-  const rows = shown.map((warning) => {
-    const edited = formatDate(warning.recordUpdatedAt);
-    if (warning.kind === 'EVIDENCE_LINKED_AFTER_NARRATIVE') {
-      const name = documentName(warning.standardId, warning.documentId);
-      return [
-        warning.standardCode,
-        'Evidence linked after the narrative was written',
-        `${name ? `"${name}"` : 'A current document'} was linked on ${formatDate(warning.linkedAt)}; the actions taken and evidence were last edited on ${edited}.`,
-      ];
-    }
-    return [
-      warning.standardCode,
-      'Target date has passed',
-      `The actions taken give a target of ${formatDate(warning.targetDate)}, which has passed; last edited on ${edited}.`,
-    ];
-  });
+  const rows = groups.map((group) => [
+    group.standardCode,
+    group.message,
+    narrativeWarningDate(group.recordUpdatedAt),
+  ]);
 
   return `
     <section style="margin: 24px 0; border: 1px solid #f59e0b; background: #fffbeb; padding: 14px 16px;">
@@ -566,7 +559,7 @@ function buildNarrativeWarningHtml(
         Reread these standards before the board approves. Linked evidence or the calendar has moved on since their
         text was last edited. This is a warning, not an approval blocker.
       </p>
-      ${simpleTable(['Standard', 'Warning', 'Detail'], rows)}
+      ${simpleTable(['Standard', 'Warning', 'Record last edited'], rows)}
     </section>`;
 }
 

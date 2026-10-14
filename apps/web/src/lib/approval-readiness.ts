@@ -1,4 +1,4 @@
-import type { ComplianceApprovalReadinessResponse } from '@charitypilot/shared';
+import { groupNarrativeWarnings, narrativeWarningDate, type ComplianceApprovalReadinessResponse } from '@charitypilot/shared';
 
 export type ApprovalReadiness = ComplianceApprovalReadinessResponse;
 
@@ -40,33 +40,26 @@ export function approvalReadinessSummary(readiness: ApprovalReadiness | null | u
 export interface NarrativeWarningLine {
   key: string;
   standardCode: string;
-  title: string;
+  /** The shared board-facing sentence, identical to the report header's. */
+  message: string;
   description: string;
 }
 
-function irishDate(value: string): string {
-  return new Date(value).toLocaleDateString('en-IE', { timeZone: 'UTC', day: 'numeric', month: 'short', year: 'numeric' });
-}
-
 /**
- * Standards whose narrative linked evidence or the calendar has overtaken.
- * Warnings only: they never count as blockers and never stop a sign-off.
- * Tolerates an older API that does not send them.
+ * Standards whose narrative linked evidence or the calendar has overtaken,
+ * one line per standard and kind, grouped by the same shared function as the
+ * report header. Warnings only: they never count as blockers and never stop
+ * a sign-off. Tolerates an older API that does not send them.
  */
 export function narrativeWarningLines(readiness: ApprovalReadiness | null | undefined): NarrativeWarningLine[] {
-  return (readiness?.narrativeWarnings ?? []).map((warning) => warning.kind === 'EVIDENCE_LINKED_AFTER_NARRATIVE'
-    ? {
-        key: `linked-${warning.standardId}-${warning.documentId}`,
-        standardCode: warning.standardCode,
-        title: 'Evidence linked after the narrative was written',
-        description: `A current document was linked on ${irishDate(warning.linkedAt)}, after the actions taken and evidence were last edited on ${irishDate(warning.recordUpdatedAt)}. Reread the text before approving.`,
-      }
-    : {
-        key: `target-${warning.standardId}-${warning.targetDate}`,
-        standardCode: warning.standardCode,
-        title: 'Target date has passed',
-        description: `The actions taken give a target of ${irishDate(warning.targetDate)}, which has passed. Update the text to say what happened.`,
-      });
+  return groupNarrativeWarnings(readiness?.narrativeWarnings).map((group) => ({
+    key: group.key,
+    standardCode: group.standardCode,
+    message: group.message,
+    description: group.kind === 'EVIDENCE_LINKED_AFTER_NARRATIVE'
+      ? `Record last edited ${narrativeWarningDate(group.recordUpdatedAt)}. Reread the text against the linked evidence before approving.`
+      : `Record last edited ${narrativeWarningDate(group.recordUpdatedAt)}. Update the text to say what happened.`,
+  }));
 }
 
 function summaryPart(count: number, singular: string, plural: string) {
