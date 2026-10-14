@@ -14,6 +14,10 @@
 > from making completed adoption overdue. The original paired approval case
 > remains supported. All evidence remains version-bound; do not deploy an
 > earlier head while later review corrections await their own checks.
+> Date cues are now bound to the relevant date, so a later upcoming AGM does
+> not retrospectively qualify an earlier editing date. Immediate future verbs
+> after a meeting date remain supported. Review corrections require latest-head
+> tests followed by exact merged-SHA release gates.
 
 > **10 October late checkpoint (private VM releases and open work):**
 >

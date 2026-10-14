@@ -31,7 +31,7 @@ const DATE_PATTERN =
 const LEADING_CUE =
   /(?:\btarget(?:\s+date)?\s*(?::|of|is|for)?|\bby|\bbefore|\bno later than|\bdue(?:\s+(?:on|by))?\s*:?|\bdeadline\s*(?::|of|is)?|\b(?:scheduled|planned|set|expected|arranged|booked)\s+(?:for|on|by))\s*(?:the\s+)?$/i;
 
-// Words anywhere in the same clause that make its dates still to come:
+// Words before a date in the same clause that make it still to come:
 // "to be approved at the board meeting on 3 September 2026", "will be tabled
 // at the 3 September 2026 meeting", "pending the meeting of 03/09/2026".
 const CLAUSE_CUE =
@@ -41,6 +41,11 @@ const CLAUSE_CUE =
 // An explicit future cue still recognises "Action: policy to be approved".
 const ACTION_LABEL = /^\s*action\s*:/i;
 const COMPLETED_ACTION_WORD = /\b(?:adopted|approved|ratified|signed|reviewed)\b/i;
+
+// A future verb after a date qualifies an event, not an earlier editing date.
+const EVENT_DATE_PREFIX = /\b(?:meeting|review|agm|egm)\s+(?:(?:on|of|at)\s+)?(?:the\s+)?$/i;
+const FUTURE_VERB_SUFFIX = /^\s*(?:will|shall|is to|are to|to be)\b/i;
+const FUTURE_EVENT_SUFFIX = /^\s*(?:board\s+)?(?:meeting|review|agm|egm)\s+(?:will|shall|is to|are to|to be)\b/i;
 
 // A clause that says the thing already happened is never a stale promise:
 // "the meeting scheduled for 3 September 2026 was held".
@@ -93,9 +98,12 @@ export function targetDatesIn(text: string | null | undefined): string[] {
   const dates: string[] = [];
   for (const clause of narrativeClauses(text)) {
     if (!clause || DONE_CUE.test(clause)) continue;
-    const future = CLAUSE_CUE.test(clause) || (ACTION_LABEL.test(clause) && !COMPLETED_ACTION_WORD.test(clause));
+    const actionInstruction = ACTION_LABEL.test(clause) && !COMPLETED_ACTION_WORD.test(clause);
     for (const match of clause.matchAll(DATE_PATTERN)) {
       const before = clause.slice(0, match.index);
+      const after = clause.slice(match.index! + match[0].length);
+      const future = CLAUSE_CUE.test(before) || actionInstruction ||
+        (EVENT_DATE_PREFIX.test(before) && FUTURE_VERB_SUFFIX.test(after)) || FUTURE_EVENT_SUFFIX.test(after);
       if (!future && !LEADING_CUE.test(before)) continue;
       const date = dateFrom(match);
       if (date) dates.push(date);

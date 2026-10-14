@@ -242,6 +242,7 @@ test('background editing dates do not replace deadlines in the current action', 
     'Due 30 September 2026.\n--- BACKGROUND (moved out of the notes field on 31 August 2026 so the next step is readable) ---',
   ), ['2026-09-30']);
   assert.deepEqual(targetDatesIn('Notes edited on 31 August 2026 to explain the next step.'), []);
+  assert.deepEqual(targetDatesIn('The next step was recorded on 31 August 2026.'), []);
   assert.deepEqual(targetDatesIn('Notes edited on 31 August 2026 and next review on 30 September 2026.'), ['2026-09-30']);
 });
 
@@ -268,6 +269,18 @@ test('an Action label does not turn completed adoption into a future deadline', 
   assert.deepEqual(targetDatesIn('Action: The board adopted the policy on 3 March 2026.'), []);
   assert.deepEqual(targetDatesIn('Action: The board approved the policy on 3 March 2026.'), []);
   assert.deepEqual(targetDatesIn('Action: Policy to be approved on 3 September 2026.'), ['2026-09-03']);
+});
+
+test('a later upcoming event does not turn an earlier editing date into a deadline', () => {
+  assert.deepEqual(targetDatesIn('Notes edited on 31 August 2026 to explain the next AGM.'), []);
+  assert.deepEqual(targetDatesIn('Notes edited on 31 August 2026 to explain the next AGM on 3 September 2026.'), ['2026-09-03']);
+  assert.deepEqual(targetDatesIn('Draft recorded on 31 August 2026 for the policy to be approved on 3 September 2026.'), ['2026-09-03']);
+});
+
+test('future wording immediately after an event date still qualifies that event', () => {
+  assert.deepEqual(targetDatesIn('The board meeting on 3 September 2026 will approve the policy.'), ['2026-09-03']);
+  assert.deepEqual(targetDatesIn('The 3 September 2026 meeting will approve the policy.'), ['2026-09-03']);
+  assert.deepEqual(targetDatesIn('Notes edited on 31 August 2026 will be kept for the next AGM.'), []);
 });
 
 test('a date describing something already done is not a stale promise', () => {
