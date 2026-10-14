@@ -29,13 +29,13 @@ const DATE_PATTERN =
 // Words directly before a date that make it a date still to come:
 // "Target: 3 September 2026", "by 3 Sept 2026", "scheduled for 2026-09-03".
 const LEADING_CUE =
-  /(?:\btarget(?:\s+date)?\s*(?::|of|is|for)?|\bby|\bbefore|\bno later than|\bdue\s+(?:on|by)|\bdeadline\s*(?::|of|is)?|\b(?:scheduled|planned|set|expected|arranged|booked)\s+(?:for|on|by))\s*(?:the\s+)?$/i;
+  /(?:\btarget(?:\s+date)?\s*(?::|of|is|for)?|\bby|\bbefore|\bno later than|\bdue(?:\s+(?:on|by))?\s*:?|\bdeadline\s*(?::|of|is)?|\b(?:scheduled|planned|set|expected|arranged|booked)\s+(?:for|on|by))\s*(?:the\s+)?$/i;
 
 // Words anywhere in the same clause that make its dates still to come:
 // "to be approved at the board meeting on 3 September 2026", "will be tabled
 // at the 3 September 2026 meeting", "pending the meeting of 03/09/2026".
 const CLAUSE_CUE =
-  /\b(?:will|shall|to be|is to|are to|pending|awaiting|upcoming|forthcoming|next|proposed|intends?|intended)\b/i;
+  /\b(?:will|shall|to be|is to|are to|pending|awaiting|upcoming|forthcoming|next\s+(?:board\s+)?(?:meeting|review|deadline)|proposed|intends?|intended|needs?\s+(?:formal\s+)?(?:approval|receipt|ratification))\b|^\s*action\s*:/i;
 
 // A clause that says the thing already happened is never a stale promise:
 // "the meeting scheduled for 3 September 2026 was held".
@@ -43,8 +43,9 @@ const DONE_CUE = /\b(?:held|took place|happened|completed|carried out|took effec
 
 // Clauses: sentences (a full stop only before a capital, so "Sept. 2026"
 // survives), semicolons, line breaks, a comma not followed by a year, and
-// "and"/"but"/"then" joining two statements.
-const CLAUSE_BREAK = /[;!?\n]+|\.(?=\s+[A-Z(])|,(?!\s*\d)|\s+(?:and|but|then)\s+/;
+// "and"/"but"/"then" joining statements. Keep paired approval nouns
+// ("receipt and ratification") together so their cue reaches the date.
+const CLAUSE_BREAK = /[;!?\n]+|\.(?=\s+[A-Z(])|,(?!\s*\d)|\s+(?:but|then)\s+|\s+and\s+(?!(?:formal\s+)?(?:approval|receipt|ratification)\b)/;
 
 function isoDate(year: number, month: number, day: number): string | null {
   const date = new Date(Date.UTC(year, month - 1, day));

@@ -1,5 +1,14 @@
 # CharityPilot Agent Continuation Handoff
 
+> **14 October report-warning correction, source verification:** Live testing
+> found that a background editing date was mistaken for a deadline, while bare
+> Due and compound approval instructions were missed. The correction narrows
+> date cues and preserves paired approval nouns. Two synthetic regression tests
+> failed before the fix; all 26 focused report-evidence tests pass after it.
+> This source correction is not deployment or DPO acceptance evidence. Current
+> private release, role comparison and remaining decision evidence are in the
+> gitignored remediation roadmap and RESUME-HERE checkpoint.
+
 > **10 October late checkpoint (private VM releases and open work):**
 >
 > Releases. Each followed the same sequence: exact merged-master CI/E2E, a guarded blue-green cutover, a read-only postflight, the restricted-role check, an isolated restore drill, and a hash-matched backup copy off the VM.

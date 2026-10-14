@@ -1,5 +1,13 @@
 # CharityPilot Full-Platform Remediation Audit
 
+> **14 October DPO reporting evidence, OPEN:** A live working report exposed
+> a date-warning false positive for historical note reorganisation and missed
+> current deadline forms. The focused source correction has synthetic failing-
+> then-passing regressions (26 report tests passing); release checks and hosted
+> recheck remain required. Agent-observed Member refusal and authorised Owner
+> success for the same restricted document now have private HTTP evidence.
+> Neither result establishes policy decisions or Nikita's independent acceptance.
+
 > **10 October DPO-02/session release gate, OPEN:** Exact merge `d5a2e045`
 > passed CI/E2E but is not on the private VM. Two post-merge browser-session
 > review findings prompted local fix `33b6b0b9`: known pre-rotation HTTP

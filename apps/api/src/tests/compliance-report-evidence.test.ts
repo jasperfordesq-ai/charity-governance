@@ -237,6 +237,20 @@ test('a date written as still to come is found whatever words introduce it', () 
   }
 });
 
+test('background editing dates do not replace deadlines in the current action', () => {
+  assert.deepEqual(targetDatesIn(
+    'Due 30 September 2026.\n--- BACKGROUND (moved out of the notes field on 31 August 2026 so the next step is readable) ---',
+  ), ['2026-09-30']);
+  assert.deepEqual(targetDatesIn('Notes edited on 31 August 2026 to explain the next step.'), []);
+  assert.deepEqual(targetDatesIn('Notes edited on 31 August 2026 and next review on 30 September 2026.'), ['2026-09-30']);
+});
+
+test('present-tense action instructions and compound approval requirements carry deadlines', () => {
+  assert.deepEqual(targetDatesIn('Action: the Board minutes its decision on 3 September 2026 and brings forward a review in 2027.'), ['2026-09-03']);
+  assert.deepEqual(targetDatesIn('The refreshed policy needs formal receipt and ratification by the Board on 3 September 2026.'), ['2026-09-03']);
+  assert.deepEqual(targetDatesIn('The next review is on 3 September 2026.'), ['2026-09-03']);
+});
+
 test('a date describing something already done is not a stale promise', () => {
   for (const text of [
     'Adopted at the board meeting on 10 March 2026.',
