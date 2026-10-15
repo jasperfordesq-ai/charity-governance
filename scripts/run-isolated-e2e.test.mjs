@@ -2907,7 +2907,8 @@ test("standalone compose and bootstrap SQL contain the exact non-personal isolat
     .filter((name) =>
       name.endsWith(".spec.ts") &&
       name !== "personal-local-readiness.spec.ts" &&
-      name !== "dpo-session-replay-concurrency.spec.ts")
+      name !== "dpo-session-replay-concurrency.spec.ts" &&
+      name !== "document-control-refresh-concurrency.spec.ts")
     .map((name) => readFileSync(join(ROOT, "e2e", "tests", name), "utf8"))
     .join("\n");
   // The replay regression deliberately drops real auth responses to simulate
@@ -2930,6 +2931,30 @@ test("standalone compose and bootstrap SQL contain the exact non-personal isolat
   assert.equal((replayFaultCode.match(/route\.fulfill\(\{ response \}\)/g) ?? []).length, 1);
   assert.doesNotMatch(replayFaultCode, /\.(?:unroute|routeWebSocket|unrouteAll)\(/);
   assert.doesNotMatch(replayFaultCode, /route\.fulfill\(\{(?!\s*response\s*\})/);
+  // The document timing regression may delay one real response at the exact
+  // fenced API origin. It cannot synthesize content or follow redirects, and
+  // later requests fall back through the installed browser-origin fence.
+  const documentFaultSpec = readFileSync(
+    join(ROOT, "e2e", "tests", "document-control-refresh-concurrency.spec.ts"),
+    "utf8",
+  );
+  const documentFaultCode = documentFaultSpec.split("\n")
+    .filter((line) => !line.trimStart().startsWith("//"))
+    .join("\n");
+  assert.match(documentFaultCode, /test\.skip\(IS_DEPLOYED_QA,/);
+  assert.match(documentFaultCode,
+    /const mirrorRoute = `\$\{browserOriginFence\.apiOrigin\}\/api\/v1\/documents\/confluence-mirrors\?\*`;/);
+  assert.equal((documentFaultCode.match(/\.route\(mirrorRoute,/g) ?? []).length, 1);
+  assert.equal((documentFaultCode.match(/\.route\(/g) ?? []).length, 1);
+  assert.equal((documentFaultCode.match(/\.unroute\(mirrorRoute\)/g) ?? []).length, 1);
+  assert.match(documentFaultCode, /expect\(route\.request\(\)\.method\(\)\)\.toBe\('GET'\)/);
+  assert.match(documentFaultCode, /route\.fetch\(\{ maxRedirects: 0 \}\)/);
+  assert.equal((documentFaultCode.match(/route\.fetch\(/g) ?? []).length, 1);
+  assert.match(documentFaultCode, /expect\(response\.status\(\)\)\.toBe\(200\)/);
+  assert.match(documentFaultCode, /if \(mirrorHeld\) return route\.fallback\(\)/);
+  assert.doesNotMatch(documentFaultCode, /route\.continue\(|routeWebSocket\(|unrouteAll\(/);
+  assert.equal((documentFaultCode.match(/route\.fulfill\(\{ response \}\)/g) ?? []).length, 1);
+  assert.doesNotMatch(documentFaultCode, /route\.fulfill\(\{(?!\s*response\s*\})/);
   const manualContextSpecs = [
     "auth-session.spec.ts",
     "authz.spec.ts",
