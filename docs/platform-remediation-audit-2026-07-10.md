@@ -1,5 +1,14 @@
 # CharityPilot Full-Platform Remediation Audit
 
+> **15 October retained-copy identity/source observation, OPEN:** Source now
+> derives exact target and recorded primary provider/path from Owner-scoped
+> tenant records, repeats primary hashes and checks binding/grant generations
+> around provider reads. Synthetic tests use real local-storage and provider
+> readback adapters; a completion-time Owner-revocation regression failed before
+> adding the final recheck. These are optimistic observations, not authenticated
+> HTTP, live sandbox, atomic source/provider fencing, policy, independent replay
+> or executable disposal authority. The broader acceptance gate stays open.
+
 > **15 October retained-copy fact collection, OPEN:** Source now collects
 > bounded visible page/attachment/version metadata and streamed attachment
 > hashes using existing guarded readback, with final metadata/history checks,

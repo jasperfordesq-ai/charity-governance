@@ -51,7 +51,8 @@ const candidateSchema = z.object({
 }).strict();
 
 export type RetainedConfluenceCopyReviewCandidate = z.infer<typeof candidateSchema>;
-type Snapshot = z.infer<typeof snapshotSchema>;
+export type RetainedConfluenceCopySnapshot = z.infer<typeof snapshotSchema>;
+type Snapshot = RetainedConfluenceCopySnapshot;
 
 function invalid(): never {
   throw new AppError(400, 'CONFLUENCE_COPY_REVIEW_INVALID',
@@ -82,6 +83,11 @@ function snapshotHash(snapshot: Snapshot): string {
   // separately; every source/target/version/byte identity remains bound.
   const { observedAt: _observedAt, ...inventory } = canonicalSnapshot(snapshot).inventory;
   return createHash('sha256').update(JSON.stringify({ ...snapshot, inventory })).digest('hex');
+}
+
+/** Validate/canonicalise observed facts only; this is not a review or permission. */
+export function parseRetainedConfluenceCopySnapshot(value: unknown): RetainedConfluenceCopySnapshot {
+  return canonicalSnapshot(parse(snapshotSchema, value));
 }
 function checkTimes(review: z.infer<typeof reviewSchema>, now: Date): void {
   const time = now.getTime();

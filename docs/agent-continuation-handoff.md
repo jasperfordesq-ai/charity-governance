@@ -1,5 +1,15 @@
 # CharityPilot Agent Continuation Handoff
 
+> **15 October retained-copy source binding, source only:** An internal
+> Owner-scoped wrapper derives provider targets from tenant records and hashes
+> exact primary bytes through recorded-provider storage before/after collection.
+> It rechecks source/publication/Owner and connection grant identity around
+> observation and token acquisition. A real temporary primary file and the
+> default collector/readback adapters run together against synthetic provider
+> HTTP in tests. No route, synthetic-fixture proof, disposal policy, permission,
+> deployment or live-provider acceptance is added. The private checkpoint holds
+> exact tests, correspondence and remaining independent-history/execution gates.
+
 > **15 October retained-copy provider collector, source only:** A bounded GET
 > collector now composes page-version listing, full visible attachment listing
 > and existing historical byte readback/repeated-current checks. It revisits

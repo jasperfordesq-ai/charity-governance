@@ -82,10 +82,10 @@ than truncate. Provider visibility and concurrency still limit what a bounded
 observation proves: this is not an atomic provider snapshot or discovery of
 hidden copies, comments, exports, backups or all provider-held data.
 
-The collector has no runtime caller or route. Its cloud/site/page arguments
-must next be derived from authenticated tenant publication/connection state
-and checked again after observation. Local primary bytes, synthetic-fixture
-authority and policy remain unverified by this primitive. Its explicit
+The collector has no HTTP route or erasure caller. A new internal wrapper
+derives its cloud/site/page from tenant publication/connection state and
+checks that binding around observation. Local primary bytes, synthetic-fixture
+authority and policy remain unverified by the low-level primitive. Its explicit
 `actionAuthorized`, `allCopiesVerified` and `sourceVerified` flags are false.
 
 Read contracts were checked against Atlassian's official [version API](https://developer.atlassian.com/cloud/confluence/rest/v2/api-group-version/),
@@ -93,11 +93,39 @@ Read contracts were checked against Atlassian's official [version API](https://d
 and [version-specific download API](https://developer.atlassian.com/cloud/confluence/rest/v1/api-group-content---attachments/).
 Actual sandbox responses, grant scope and byte behavior still need acceptance.
 
+### Tenant and source observation wrapper now in source
+
+`observeRetainedConfluenceCopySource` accepts only trusted tenant/actor context
+and a publication ID. It requires an active charity Owner, an unheld retained
+RETIRED source with withdrawn publication approval, an identified RETIRED
+publication without an erasure job, and a matching connected site with known
+read scopes. Site URL, recorded provider/path and source/publication revisions
+are derived from stored rows. Extra input fields cannot override a target or
+source hash. The eventual HTTP caller must supply authenticated actor context;
+the service is not itself an authentication endpoint.
+
+The wrapper hashes the retained primary bytes through `StorageService` using
+the recorded provider and tenant path, before and after provider collection.
+Source size/hash changes and source, publication, Owner or grant changes refuse.
+Token acquisition is bracketed by the same checks. `connectedAt` identifies the
+grant generation; ordinary refresh metadata does not impersonate reconnection.
+A known recorded attachment missing from the visible inventory remains
+unresolved. Completion time comes from the database, followed by a final state
+recheck, and the returned snapshot uses the existing strict review contract.
+
+`sourceBytesObserved: true` is a bounded repeated byte observation, not proof
+that remote bytes equal the current primary or that either record has legal
+authority. These optimistic reads are not an atomic distributed snapshot or
+durable execution fence. `syntheticVerified`, `allCopiesVerified` and
+`actionAuthorized` remain false. No stored review is automatically promoted;
+fixture/policy-backed permission issuance and independent history remain open.
+
 1. **Permission issuance after fact collection:** internal Owner-scoped review
    storage, separate withdrawal and SQL immutability/revision checks now exist
-   with disposable PostgreSQL tests under a restricted DML role. Still collect
-   provider facts and source byte proofs server-side, establish the scoped
-   synthetic fixture and selected disposal policy, then implement explicit
+   with disposable PostgreSQL tests under a restricted DML role. Server-derived
+   target and primary-byte observation now have synthetic adapter tests; actual
+   sandbox validation remains open. Establish the scoped synthetic fixture and
+   selected disposal policy, then implement explicit
    permission issuance under the same transaction locks. Stored review evidence
    alone is not that permission.
 2. **Independent recovery:** retain the authority, withdrawal, possible-copy
