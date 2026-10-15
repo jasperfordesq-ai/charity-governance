@@ -405,6 +405,120 @@ function nearCapacityFixture(generation: number) {
       { ...binding, generation, digest: previousDigest }) };
 }
 
+test('a cold full current-history scan verifies the complete capacity under bounded read latency', async t => {
+  t.mock.timers.enable({ apis: ['setTimeout'] });
+  const f = nearCapacityFixture(10000);
+  const immediate = f.store.read;
+  let active = 0; let peak = 0; let reads = 0;
+  f.store.read = (key, signal) => new Promise((resolve, reject) => {
+    reads++; active++; peak = Math.max(peak, active);
+    const finish = () => { active--; signal?.removeEventListener('abort', cancel); };
+    const cancel = () => { clearTimeout(timer); finish(); reject(new Error('cancelled')); };
+    const timer = setTimeout(() => { finish(); resolve(immediate(key)); }, 50);
+    signal?.addEventListener('abort', cancel, { once: true });
+  });
+  // Start from genesis: the authenticated head, rather than a warm cache or a
+  // supplied terminal checkpoint, identifies the range that must be inspected.
+  const cold = new RecoveryAuthorityJournal(f.store, binding, initializationCheckpoint);
+  let observed: Awaited<ReturnType<typeof cold.inspectCurrent>> | undefined;
+  let failure: unknown; let settled = false;
+  const scan = cold.inspectCurrent({ readHead: async () => ({ ...binding,
+    generation: 10000, digest: f.lastDigest, revision: 'synthetic-head-10000' }) })
+    .then(value => { observed = value; }, error => { failure = error; })
+    .finally(() => { settled = true; });
+  await new Promise<void>(resolve => setImmediate(resolve));
+  for (let elapsed = 0; !settled && elapsed < 30000; elapsed += 50) {
+    t.mock.timers.tick(50);
+    await new Promise<void>(resolve => setImmediate(resolve));
+  }
+  assert.equal(settled, true);
+  await scan;
+  assert.equal(failure, undefined);
+  assert.deepEqual(observed, { generation: 10000, digest: f.lastDigest,
+    revision: 'synthetic-head-10000', actionAuthorized: false });
+  assert.ok(peak > 1 && peak <= 32, `peak reads ${peak}`);
+  assert.equal(reads, 10001, 'each entry and the absence probe are read once');
+  assert.equal(active, 0);
+  assert.equal(f.creates(), 0);
+});
+
+test('parallel full verification checks chain order despite reversed read completions', async () => {
+  const f = nearCapacityFixture(32);
+  const immediate = f.store.read;
+  const pending: (() => void)[] = [];
+  const completed: number[] = [];
+  f.store.read = (key) => {
+    const generation = Number(key.split('/').at(-1)!.slice(0, -5));
+    if (generation > 32) return immediate(key);
+    return new Promise(resolve => {
+      pending.push(() => { completed.push(generation); resolve(immediate(key)); });
+      if (pending.length === 32) for (const finish of pending.reverse()) finish();
+    });
+  };
+  const observed = await f.journal.inspect();
+  assert.equal(completed[0], 32);
+  assert.equal(observed.generation, 32);
+  assert.equal(observed.digest, f.lastDigest);
+  assert.equal(observed.actionAuthorized, false);
+});
+
+test('missing or tampered history in a parallel batch never reaches the next batch', async () => {
+  for (const replacement of [null, '{}']) {
+    const f = nearCapacityFixture(64);
+    const key = [...f.rows.keys()][16]!;
+    if (replacement === null) f.rows.delete(key); else f.rows.set(key, replacement);
+    const immediate = f.store.read;
+    let reads = 0;
+    f.store.read = async (...args) => { reads++; return immediate(...args); };
+    await assert.rejects(() => f.journal.inspect(), /shorter than|Invalid recovery authority/);
+    assert.equal(reads, 32);
+    assert.equal(f.creates(), 0);
+  }
+});
+
+test('parallel scan deadline aborts every outstanding read and cannot authorize a partial prefix', async t => {
+  t.mock.timers.enable({ apis: ['setTimeout'] });
+  const f = nearCapacityFixture(64);
+  let reads = 0; let cancelled = 0;
+  f.store.read = (_key, signal) => new Promise((_resolve, reject) => {
+    reads++;
+    signal!.addEventListener('abort', () => { cancelled++; reject(new Error('cancelled')); }, { once: true });
+  });
+  const result = assert.rejects(() => f.journal.inspect(), /verification deadline/);
+  t.mock.timers.tick(30001);
+  await result;
+  assert.equal(reads, 32);
+  assert.equal(cancelled, 32);
+  assert.equal(f.creates(), 0);
+});
+
+test('a failed parallel read cancels its unfinished siblings instead of accepting partial history', async () => {
+  const f = nearCapacityFixture(64);
+  let cancelled = 0;
+  f.store.read = async (key, signal) => {
+    if (key.endsWith('0000000017.json')) throw new Error('synthetic provider failure');
+    return new Promise((_resolve, reject) => {
+      signal!.addEventListener('abort', () => { cancelled++; reject(new Error('cancelled')); }, { once: true });
+    });
+  };
+  await assert.rejects(() => f.journal.inspect(), /unavailable/);
+  assert.equal(cancelled, 31);
+  assert.equal(f.creates(), 0);
+});
+
+test('parallel current-history verification still refuses a wrong digest or moving head', async () => {
+  for (const changing of [false, true]) {
+    const f = nearCapacityFixture(32);
+    const cold = new RecoveryAuthorityJournal(f.store, binding, initializationCheckpoint);
+    let reads = 0;
+    await assert.rejects(() => cold.inspectCurrent({ readHead: async () => ({ ...binding,
+      generation: 32, digest: changing ? f.lastDigest : 'b'.repeat(64),
+      revision: changing ? `revision-${++reads}` : 'wrong-digest',
+    }) }), changing ? /changed during verification/ : /does not match its current head/);
+    assert.equal(f.creates(), 0);
+  }
+});
+
 test('near capacity refuses a new document chain before storing its preparation', async () => {
   const f = nearCapacityFixture(9994);
   await assert.rejects(() => f.journal.append({ ...intent,

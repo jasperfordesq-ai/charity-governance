@@ -125,7 +125,7 @@ export class RecoveryAuthorityJournal {
   /** Prefix reuse is opt-in and assumes independently enforced immutable entry
    * storage. It does not re-audit historical bytes before the boundary on each
    * append. Recovery inspection always traverses the complete chain. */
-  private async history(reusePrefix = false): Promise<Entry[]> {
+  private async history(reusePrefix = false, knownGeneration = this.checkpoint.generation): Promise<Entry[]> {
     const controller = new AbortController();
     let timer: ReturnType<typeof setTimeout>;
     const expired = new Promise<never>((_resolve, reject) => {
@@ -137,7 +137,8 @@ export class RecoveryAuthorityJournal {
     try {
       const prefix = reusePrefix && this.appendVerification === 'VERIFIED_PREFIX' && this.prefixReusable
         ? this.verifiedPrefix : [];
-      const rows = await this.scanHistory(controller.signal, expired, prefix);
+      const rows = await this.scanHistory(controller.signal, expired, prefix,
+        Math.max(this.checkpoint.generation, knownGeneration));
       if (this.appendVerification === 'VERIFIED_PREFIX') {
         if (rows.length < this.verifiedPrefix.length) {
           throw new Error('Previously verified history is truncated');
@@ -165,7 +166,8 @@ export class RecoveryAuthorityJournal {
     return body;
   }
 
-  private async scanHistory(signal: AbortSignal, expired: Promise<never>, prefix: Entry[]): Promise<Entry[]> {
+  private async scanHistory(signal: AbortSignal, expired: Promise<never>, prefix: Entry[],
+    knownGeneration: number): Promise<Entry[]> {
     const rows = [...prefix]; const operations = new Set(prefix.map(row => row.operationId));
     const boundary = prefix.at(-1);
     if (boundary) {
@@ -178,8 +180,19 @@ export class RecoveryAuthorityJournal {
         }
       } catch { throw new Error('Previously verified recovery authority boundary is missing or changed'); }
     }
+    let batch: (string | null)[] = [];
+    let batchStart = 0;
     for (let generation = prefix.length + 1; generation <= 10001; generation++) {
-      const body = await this.readBody(generation, signal, expired);
+      if (generation >= batchStart + batch.length) {
+        batchStart = generation;
+        // Parallelise only the range already required by a trusted checkpoint
+        // or authenticated head. Validate every body in generation order; probe
+        // the unknown suffix sequentially, without speculative tail requests.
+        const size = Math.min(32, Math.max(1, knownGeneration - generation + 1));
+        batch = await Promise.all(Array.from({ length: size }, (_, offset) =>
+          this.readBody(generation + offset, signal, expired)));
+      }
+      const body = batch[generation - batchStart]!;
       if (body === null) {
         if (rows.length < this.checkpoint.generation) {
           throw new Error('Recovery authority history is shorter than its trusted checkpoint');
@@ -277,7 +290,7 @@ export class RecoveryAuthorityJournal {
 
   private async currentHistory(source: AuthorityHeadSource) {
     const before = await this.readCurrentHead(source);
-    const rows = await this.history();
+    const rows = await this.history(false, before.generation);
     const observed = { generation: rows.length, digest: rows.at(-1)?.digest ?? null };
     if (observed.generation !== before.generation || observed.digest !== before.digest) {
       throw new Error('Recovery authority history does not match its current head');

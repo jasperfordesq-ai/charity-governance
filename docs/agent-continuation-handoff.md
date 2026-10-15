@@ -1,5 +1,16 @@
 # CharityPilot Agent Continuation Handoff
 
+> **15 October recovery full-scan latency correction, source only:** Complete
+> verification now reads up to 32 entries concurrently within the range required
+> by a trusted checkpoint or authenticated current head, then validates every
+> entry in generation order. The unknown suffix remains sequential. The same
+> deadline, chain/checkpoint/head checks, capacity limit and non-authorising
+> receipts remain. A cold 10,000-entry simulated-latency regression failed before
+> this change and passes after it. Provider throughput, restart/replay acceptance,
+> rollover, independent custody and hosted release remain separate open gates;
+> offline inspection from an old checkpoint still discovers its unknown suffix
+> sequentially. Private evidence records the measured limits and remaining work.
+
 > **15 October document-control timing regression:** A synthetic two-record
 > browser journey holds the first save's background mirror response while a
 > second owner review is opened and filled. It verifies that the second form
