@@ -519,6 +519,57 @@ test('parallel current-history verification still refuses a wrong digest or movi
   }
 });
 
+test('cold published appends and pending-entry recovery use their authenticated history range', async t => {
+  t.mock.timers.enable({ apis: ['setTimeout'] });
+  const f = nearCapacityFixture(650);
+  const immediate = f.store.read;
+  let peak = 0; let active = 0;
+  f.store.read = (key, signal) => new Promise((resolve, reject) => {
+    active++; peak = Math.max(peak, active);
+    const finish = () => { active--; signal?.removeEventListener('abort', cancel); };
+    const cancel = () => { clearTimeout(timer); finish(); reject(new Error('cancelled')); };
+    const timer = setTimeout(() => { finish(); resolve(immediate(key)); }, 50);
+    signal?.addEventListener('abort', cancel, { once: true });
+  });
+  let head = { ...binding, generation: 650, digest: f.lastDigest, revision: 'initial-650' };
+  const publisher = {
+    async readHead() { return { ...head }; },
+    async compareAndSwap(revision: string, next: AuthorityCheckpoint) {
+      if (revision !== head.revision) return false;
+      head = { ...next, revision: `generation-${next.generation}` }; return true;
+    },
+  };
+  const cold = new RecoveryAuthorityJournal(f.store, binding, initializationCheckpoint);
+  const request = { ...intent, expectedGeneration: 650, expectedDigest: f.lastDigest };
+  let failure: unknown; let settled = false;
+  const work = (async () => {
+    const published = await cold.appendPublished(request, publisher);
+    assert.equal(published.generation, 651);
+    assert.equal(published.headPublished, true);
+    assert.equal(published.actionAuthorized, false);
+    assert.equal(f.creates(), 1);
+    // A separate crash-state head fixture models stored-before-publication;
+    // the actual publisher above is never rolled back. Start from genesis.
+    const pendingSource = { readHead: async () => ({ ...binding,
+      generation: 650, digest: f.lastDigest, revision: 'pending-fixture-650' }) };
+    const restarted = new RecoveryAuthorityJournal(f.store, binding, initializationCheckpoint);
+    const pending = await restarted.readPendingEntry(intent.operationId, intent.kind, pendingSource);
+    assert.equal(pending.pending.digest, published.digest);
+    assert.equal(pending.pending.generation, 651);
+    assert.equal(pending.actionAuthorized, false);
+  })().catch(error => { failure = error; }).finally(() => { settled = true; });
+  await new Promise<void>(resolve => setImmediate(resolve));
+  for (let elapsed = 0; !settled && elapsed < 120000; elapsed += 50) {
+    t.mock.timers.tick(50);
+    await new Promise<void>(resolve => setImmediate(resolve));
+  }
+  assert.equal(settled, true);
+  await work;
+  assert.equal(failure, undefined);
+  assert.ok(peak > 1 && peak <= 32);
+  assert.equal(active, 0);
+});
+
 test('near capacity refuses a new document chain before storing its preparation', async () => {
   const f = nearCapacityFixture(9994);
   await assert.rejects(() => f.journal.append({ ...intent,

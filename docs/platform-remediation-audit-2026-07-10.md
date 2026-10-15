@@ -8,6 +8,8 @@
 > cancellation and head-change regressions cover this path. Local synthetic
 > improvement is not provider performance, deployment, host-loss recovery,
 > rollover, policy approval or Nikita acceptance evidence.
+> Authenticated-head bounds are also propagated through publication, pending
+> recovery and reserved transitions; cold publication/recovery has a regression.
 
 > **15 October DPO document-control follow-up, OPEN:** Added a controlled
 > two-record browser regression for owner editing during the preceding save's

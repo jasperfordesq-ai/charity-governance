@@ -10,6 +10,9 @@
 > rollover, independent custody and hosted release remain separate open gates;
 > offline inspection from an old checkpoint still discovers its unknown suffix
 > sequentially. Private evidence records the measured limits and remaining work.
+> Publication, pending-entry recovery and reserved document/complaint transitions
+> pass their authenticated head range through repeated scans as well. A separate
+> cold publication/recovery regression failed before that caller correction.
 
 > **15 October document-control timing regression:** A synthetic two-record
 > browser journey holds the first save's background mirror response while a
