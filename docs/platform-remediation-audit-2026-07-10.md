@@ -1,5 +1,13 @@
 # CharityPilot Full-Platform Remediation Audit
 
+> **15 October full local Confluence ledger capture increment, OPEN:** The
+> internal reader captures eight scoped decision/publication tables, including
+> unpublished withdrawals and exact original local metadata, under bounded
+> repeatable-read/Owner checks. Unit and disposable migrated PostgreSQL checks
+> pass. This supplies a complete local input for future preservation; no
+> independently held authenticated archive, host recovery, live deployment or
+> Nikita acceptance follows. Five-row replay cannot replace full-row evidence.
+
 > **15 October restore-inventory coverage gap, source correction:** Format9
 > now compares complete rows in all eight Confluence decision/publication tables;
 > real SQL before/after proof reproduces the false match under format8 and refusal

@@ -488,3 +488,42 @@ drill or independently held latest history: this drill reads a fresh live source
 which may be unavailable after host loss. The newer replay component still needs
 complete independent facts and supported host integration. No backup is rewritten
 and no drill result authorises application reopening.
+
+## Complete local ledger capture before independent preservation
+
+`captureConfluenceCopyLocalLedger` captures all eight Confluence decision,
+withdrawal, capture and publication tables for one active charity Owner. The
+five decision-state payloads cannot recover original capture IDs/timestamps,
+publication plans, key-evidence references or receipts. Those originals must be
+preserved explicitly; fabricating replacement bookkeeping would not satisfy the
+format9 full-row comparison.
+
+The internal reader uses a repeatable-read transaction, charity/actor locks,
+parameterised charity selection and a fixed table allowlist. SQL count/size
+preflight limits each table to 10,000 rows and the aggregate to 120MiB before
+loading; the complete canonical body is bounded to 128MiB. Counts, duplicate IDs
+and tenant scope are checked after transfer. Unpublished withdrawals and all
+ordinary scalar metadata are retained, including the original facts string.
+Database errors are sanitised. No primary document bytes, integration credentials
+or unrelated tables are selected.
+
+`CONFLUENCE_COPY_LOCAL_LEDGER_V1` is a confidential local snapshot format, not an
+accepted journal kind. Installation/source labels are caller declarations, and
+the SHA-256 digest is change detection only. The result explicitly returns
+`independentlyPreserved=false`; it is not authenticated external history, a
+permission validator or a restore artefact. There is no route, scheduled caller,
+provider I/O, persisted archive, grant or application-reopen path.
+
+Focused tests cover exact eight-table retention including unpublished facts,
+Owner/tenant refusal, bounded inventory and sanitised failures. A separate
+disposable PostgreSQL test runs the actual reader against all current migrations,
+checks its real transaction isolation and empty-table SQL handling, excludes a
+primary-document sentinel, and refuses Member/foreign/revoked-Owner access.
+Nonempty eight-table byte/metadata retention is covered by the reader unit test;
+that PostgreSQL case does not yet prove populated archive recovery.
+
+Next: authenticated encrypted independent preservation of these original records,
+binding to complete decision history and safe reconciliation of later facts,
+followed by supported quarantined host recovery. No local digest or five-row
+replay may substitute for these gates. Mixed protocols, old-host isolation,
+provider/key custody, release-bound evidence and acceptance remain open.

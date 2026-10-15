@@ -1,5 +1,15 @@
 # CharityPilot Agent Continuation Handoff
 
+> **15 October complete local Confluence ledger capture, source only:** An
+> internal active-Owner reader captures all eight tables in one repeatable-read
+> transaction with locks, SQL size/count preflight and a bounded canonical body.
+> It preserves unpublished withdrawals and original capture/plan/receipt metadata
+> that the five-record independent payload cannot reconstruct. Tests pass,
+> including actual migrated PostgreSQL isolation/empty-table/role checks. The
+> confidential body is local only; declared source labels and its hash are not
+> independent authentication. No archive/provider write, restore or live change
+> occurs. Complete independent preservation and supported host recovery stay open.
+
 > **15 October Confluence restore inventory correction, source only:** The
 > existing restore drill now compares all eight new decision/capture/publication
 > tables under format9. Actual PostgreSQL reproduced the older format8 gap:
