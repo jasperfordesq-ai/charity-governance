@@ -134,6 +134,7 @@ test('local Confluence ledger capture uses all eight migrated tables and a real 
       preparationDigest: populated.digest, expectedGeneration: 0, expectedDigest: null },control);
     const publishedArchive = await publishVerifiedConfluenceCopyLedger(journal,control,populated.digest,binding,keys,objects);
     assert.equal(publishedArchive.headPublished,true);
+    assert.equal(publishedArchive.candidatePrefixVerified,true);
     const archive = await readPublishedConfluenceCopyLedger(journal,control,binding,keys,objects);
     assert.equal(archive.body,populated.body); assert.equal(archive.currentHistoryVerified,false);
     assert.equal(archive.reopeningAuthorised,false); assert.notEqual(current.activeOperation,null);

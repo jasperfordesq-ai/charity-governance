@@ -140,5 +140,5 @@ test('authenticated but internally inconsistent archive cannot write a journal e
     entryDigest: 'c'.repeat(64), verifiedHeadRevision: 'declared-observation', recordedAt: '2026-10-15T18:00:00.000Z' });
   Object.assign(f.prepared,prepareConfluenceCopyLocalLedger(raw));
   f.replace((await sealConfluenceCopyLedgerArchive(f.prepared.body,f.binding,f.keys)).envelope);
-  await f.reserve(); await assert.rejects(f.publish,/relationships/); assert.equal(f.rows.size,0);
+  await f.reserve(); await assert.rejects(f.publish,/candidate prefix/); assert.equal(f.rows.size,0);
 });

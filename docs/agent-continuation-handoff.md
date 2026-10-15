@@ -1,5 +1,15 @@
 # CharityPilot Agent Continuation Handoff
 
+> **15 October pre-append archive-prefix gate, source only:** Publisher now
+> authenticates the original candidate and full supported predecessor payloads
+> before journal write. Shared inspection accepts at most its exact pending or
+> already head-published next entry, never foreign/extra pending suffixes. Every
+> retry rechecks original bytes, records, writer/slot/control and old payloads;
+> entry/head acknowledgement losses keep the same original operation. Tests
+> reproduce the previous source gap and now refuse missing bookkeeping before
+> append. No slot release or live caller. Durable original dispatch, archive
+> acknowledgement, broader protocols/custody, host recovery and acceptance remain.
+
 > **15 October semantic Confluence ledger/prefix verification, source only:**
 > Strict eight-table relationships/capture lineage and plan/receipt chronology
 > now gate publisher/reader. Current archive reading authenticates every earlier

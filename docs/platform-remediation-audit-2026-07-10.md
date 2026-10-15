@@ -1,5 +1,14 @@
 # CharityPilot Full-Platform Remediation Audit
 
+> **15 October pre-publication candidate/pending increment, OPEN:** Original
+> archive and independent predecessor payload/record consistency now gate
+> publication before entry creation. Exact pending/already-published recovery
+> accepts only the original next archive under its occupied slot; unrelated or
+> extra pending entries refuse. Reproduced old source write-attempt gap now
+> fails before append. Retry/race and PostgreSQL composition checks pass. This
+> closes that unreleased source gap, not durable dispatch/release, other protocol
+> integration, provider custody, supported host recovery or Nikita acceptance.
+
 > **15 October semantic archive/prefix increment, OPEN:** Strict immutable
 > eight-table links/lineage now gate local archive publication and reading.
 > Reading authenticates earlier supported Confluence payloads, exact original

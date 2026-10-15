@@ -44,6 +44,11 @@ export interface AuthorityHeadPublisher extends AuthorityHeadSource {
 const inputSchema = z.object({ operationId: identity, kind: kinds, factsDigest: digest,
   expectedGeneration: z.number().int().nonnegative().max(9999), expectedDigest: digest.nullable(),
 }).strict().refine(v => (v.expectedGeneration === 0) === (v.expectedDigest === null));
+const reservedPreparationSchema = z.object({ operationId: identity, writerId: identity,
+  writerEpoch: z.number().int().positive().max(2147483647), preparationDigest: digest,
+  envelopeDigest: digest, expectedGeneration: z.number().int().nonnegative().max(9999),
+  expectedDigest: digest.nullable(),
+}).strict().refine(v => (v.expectedGeneration === 0) === (v.expectedDigest === null));
 const entrySchema = z.object({ format: z.literal(1), installationId: identity, organisationId: identity,
   generation: z.number().int().positive().max(10000), previousDigest: digest.nullable(),
   operationId: identity, kind: kinds, factsDigest: digest, digest,
@@ -417,14 +422,38 @@ export class RecoveryAuthorityJournal {
     return this.appendReservedPreparation(raw,control,'CONFLUENCE_COPY_LEDGER_ARCHIVE_V1');
   }
 
+  /** Read the published predecessor prefix for this exact reserved archive.
+   * At most its matching next entry may be pending or already head-published.
+   * This does not authenticate payloads, publish anything or release the slot.
+   * Unlike a normal current-history read, no foreign/unbounded pending suffix
+   * is accepted and an exact pending entry is never labelled published.
+   */
+  async readConfluenceCopyLedgerAppendHistory(raw: unknown, control: RecoveryControlStore) {
+    const request = reservedPreparationSchema.parse(raw);
+    const source = await this.complaintPublisher(request,control);
+    const before = await this.readCurrentHead(source), rows = await this.history(false,before.generation);
+    this.headMatchesHistory(before,rows);
+    const previous = this.prior(rows,{ operationId: request.operationId, kind: 'CONFLUENCE_COPY_LEDGER_ARCHIVE_V1',
+      factsDigest: request.envelopeDigest, expectedGeneration: request.expectedGeneration, expectedDigest: request.expectedDigest });
+    const base = request.expectedGeneration;
+    if (rows.length < base || rows.length > base + 1
+      || (rows[base - 1]?.digest ?? null) !== request.expectedDigest
+      || (rows.length === base + 1 && (!previous || rows[base]?.digest !== previous.digest))
+      || (before.generation !== base && before.generation !== base + 1)
+      || (before.generation === base && before.digest !== request.expectedDigest)
+      || (before.generation === base + 1 && (!previous || before.digest !== previous.digest))) {
+      throw new Error('Confluence archive has unrelated or inconsistent pending/publication history');
+    }
+    const after = await this.readCurrentHead(source);
+    if (JSON.stringify(after) !== JSON.stringify(before)) throw new Error('Confluence archive control changed during append inspection');
+    return { entries: rows.slice(0,base).map(row => ({ ...row })), candidateEntry: previous ? { ...previous } : null,
+      candidateHeadPublished: before.generation === base + 1, revision: before.revision, actionAuthorized: false as const };
+  }
+
   private async appendReservedPreparation(raw: unknown, control: RecoveryControlStore,
     kind: 'COMPLAINT_PREPARATION_V1' | 'COMPLAINT_HOLD_PREPARATION_V1' | 'DOCUMENT_PREPARATION_V1'
       | 'CONFLUENCE_COPY_DECISION_STATE_V1' | 'CONFLUENCE_COPY_LEDGER_ARCHIVE_V1') {
-    const request = z.object({ operationId: identity, writerId: identity,
-      writerEpoch: z.number().int().positive().max(2147483647), preparationDigest: digest,
-      envelopeDigest: digest, expectedGeneration: z.number().int().nonnegative().max(9999),
-      expectedDigest: digest.nullable(),
-    }).strict().refine(v => (v.expectedGeneration === 0) === (v.expectedDigest === null)).parse(raw);
+    const request = reservedPreparationSchema.parse(raw);
     const publisher = await this.complaintPublisher(request, control);
     return this.appendPublishedEntry({ operationId: request.operationId, kind,
       factsDigest: request.envelopeDigest, expectedGeneration: request.expectedGeneration,

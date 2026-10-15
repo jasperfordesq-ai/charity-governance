@@ -1,16 +1,14 @@
-import { createHash } from 'node:crypto';
 import type { RecoveryAuthorityJournal } from './recovery-authority-journal.js';
 import { validateRecoveryControl, type RecoveryControlStore } from './recovery-operation-reservation.js';
 import { validateRecoveryEnvelopeContext, type RecoveryDataKeys } from './recovery-preparation-envelope.js';
-import { openConfluenceCopyLedgerArchive, readVerifiedConfluenceCopyLedgerArchive,
+import { readVerifiedConfluenceCopyLedgerArchive,
   type ConfluenceCopyLedgerArchiveBinding, type ConfluenceCopyLedgerObjects } from './confluence-copy-ledger-envelope.js';
 import { validateConfluenceCopyLedgerRows } from './confluence-copy-ledger-validation.js';
-import { verifyConfluenceCopyLedgerPrefix } from './confluence-copy-ledger-prefix.js';
+import { verifyConfluenceCopyLedgerPrefix, verifyConfluenceCopyLedgerCandidate } from './confluence-copy-ledger-prefix.js';
 import type { ConfluenceCopyRecoveryObjects } from './confluence-copy-recovery-envelope.js';
 
 type Objects = Pick<ConfluenceCopyLedgerObjects,'readConfluenceCopyLedger'>
   & Partial<Pick<ConfluenceCopyRecoveryObjects,'readConfluenceCopyState'>>;
-const hash = (value: string) => createHash('sha256').update(value,'utf8').digest('hex');
 const noAuthority = { currentHistoryVerified: false as const, reopeningAuthorised: false as const, actionAuthorized: false as const };
 function archiveBinding(raw: ConfluenceCopyLedgerArchiveBinding) {
   const context = validateRecoveryEnvelopeContext(raw.context), observedControl = validateRecoveryControl(raw.observedControl);
@@ -38,17 +36,13 @@ export async function publishVerifiedConfluenceCopyLedger(journal: RecoveryAutho
     || before.generation < observedControl.generation || before.generation > observedControl.generation + 1) {
     throw new Error('Confluence ledger publication reservation/head does not match');
   }
-  const envelope = await objects.readConfluenceCopyLedger(context.operationId);
-  if (envelope === null) throw new Error('Confluence ledger candidate is missing; preserve original operation evidence');
-  const opened = await openConfluenceCopyLedgerArchive(envelope,binding,keys);
-  validateConfluenceCopyLedgerRows(opened.body,context);
-  if (hash(opened.body) !== preparationDigest) throw new Error('Confluence ledger archive does not match reserved original facts');
+  const candidate = await verifyConfluenceCopyLedgerCandidate(journal,control,preparationDigest,binding,keys,objects);
   const after = validateRecoveryControl(await control.readControl());
   if (JSON.stringify(after) !== JSON.stringify(before)) throw new Error('Confluence ledger control changed during authentication');
   const receipt = await journal.appendReservedConfluenceCopyLedger({ operationId: context.operationId,
     writerId: observedControl.writerId, writerEpoch: context.writerEpoch, preparationDigest,
-    envelopeDigest: hash(envelope), expectedGeneration: observedControl.generation, expectedDigest: observedControl.digest },control);
-  return { ...receipt, ...noAuthority };
+    envelopeDigest: candidate.envelopeDigest, expectedGeneration: observedControl.generation, expectedDigest: observedControl.digest },control);
+  return { ...receipt, candidatePrefixVerified: true as const, ...noAuthority };
 }
 
 /** Authenticates this exact archive only when it is the current journal head,

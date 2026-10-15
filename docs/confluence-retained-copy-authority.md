@@ -665,10 +665,42 @@ earlier objects and changing control. Complete multi-archive history with later
 withdrawals passes. Actual PostgreSQL governance/capture/plan rows still compose
 through encrypted publication and this reader with synthetic external adapters.
 
-Remaining before an operational dispatcher: validate the candidate against the
-independent prefix before appending, durably retain original dispatch state,
-resume exact pending publication boundaries and acknowledge the archive slot.
-The publisher's new checks validate internal rows, not the entire prior payload
-prefix; a contradictory candidate remains unreadable even if lower publication
-primitives append it. No runtime caller is activated. Supported host recovery,
-cross-family/epoch/key integration, real custody and acceptance stay open.
+The pre-append candidate and exact-pending checks below now close the earlier
+publisher-prefix gap. Durable original dispatch and archive acknowledgement
+remain required before an operational caller. No runtime caller is activated.
+Supported host recovery, cross-family/epoch/key integration, real custody and
+acceptance stay open.
+
+## Pre-append candidate verification and exact pending recovery
+
+`verifyConfluenceCopyLedgerCandidate` authenticates the already stored original
+archive and plaintext reservation, then verifies every supported predecessor
+payload and the candidate's complete original records before any journal write.
+It shares the same semantic/payload verifier as current-archive reading. A
+signed internally consistent snapshot that drops earlier publication metadata
+now fails before append, rather than leaving an unusable published archive.
+
+`readConfluenceCopyLedgerAppendHistory` requires the exact writer/epoch/slot and
+original generation/digest. It verifies the complete metadata chain and returns
+only the published predecessor entries. At most the exact matching archive entry
+may be present at the next generation, either pending or already head-published.
+Foreign pending work, changed ciphertext/digests, extra suffix entries, source
+checkpoint conflicts and control changes refuse. A pending entry is never
+labelled as published predecessor evidence.
+
+The candidate and all preceding payloads are reauthenticated for every attempt,
+including lost entry-write or head-write acknowledgements. The original body,
+binding, ciphertext and entry are retained; no missing bytes are reconstructed.
+Candidate plus prefix share the existing512MiB encoded-payload/128MiB latest
+decision-facts bounds and monotonic processing budget. Metadata/control are
+rechecked after verification; the actual append still uses the existing exact
+reservation and provider CAS. No timeout cancellation, force-unlock or slot
+release is introduced.
+
+Tests reproduce the earlier source gap and prove pre-write refusal, original
+pending retry, already-published retry, foreign pending work, replacement bytes
+and a second pending entry. The PostgreSQL composition now asserts the
+candidate-prefix gate before encrypted archive publication. External adapters
+remain synthetic; no runtime dispatcher, real provider or hosted release is
+activated. Durable dispatch, archive acknowledgement, approved key/epoch/other
+protocol rules, supported host recovery and Nikita acceptance remain open.

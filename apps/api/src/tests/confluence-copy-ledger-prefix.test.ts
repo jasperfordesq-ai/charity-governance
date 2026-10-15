@@ -8,7 +8,8 @@ import { recoveryContextFixture as context } from './fixtures/confluence-copy-re
 import { prepareConfluenceCopyLocalLedger } from '../services/confluence-copy-ledger-snapshot.js';
 import { sealConfluenceCopyLedgerArchive } from '../services/confluence-copy-ledger-envelope.js';
 import { readPublishedConfluenceCopyLedger } from '../services/published-confluence-copy-ledger.js';
-import { verifyConfluenceCopyLedgerPrefix } from '../services/confluence-copy-ledger-prefix.js';
+import { verifyConfluenceCopyLedgerPrefix, verifyConfluenceCopyLedgerCandidate } from '../services/confluence-copy-ledger-prefix.js';
+import { publishVerifiedConfluenceCopyLedger } from '../services/published-confluence-copy-ledger.js';
 
 const hash = (body: string) => createHash('sha256').update(body).digest('hex');
 async function setup(earlierArchive = false, changeLatest?: (raw: ReturnType<typeof ledgerFixture>['raw']) => void,
@@ -110,4 +111,70 @@ test('monotonic processing budget refuses partial proof even without wall-clock 
   const original = f.objects.readConfluenceCopyState;
   f.objects.readConfluenceCopyState = async operation => { const body = await original(operation); elapsed = 120001; return body; };
   await assert.rejects(f.prefix,/prefix/);
+});
+
+function candidate(f: Awaited<ReturnType<typeof setup>>, pending = false) {
+  const generation = f.f.state.current.generation;
+  const key = `authority/${context.installationId}/${context.organisationId}/${String(generation).padStart(10,'0')}.json`;
+  const entry = f.f.entries.get(key)!;
+  if (!pending) f.f.entries.delete(key);
+  const preparationDigest = hash(f.ledger.body());
+  f.f.state.current = { ...f.binding.observedControl,
+    activeOperation: { operationId: f.binding.context.operationId, preparationDigest }, revision: 'candidate-reservation' };
+  return { entry, key, verify: () => verifyConfluenceCopyLedgerCandidate(f.f.journal,f.f.control,preparationDigest,f.binding,f.f.keys,f.objects),
+    publish: () => publishVerifiedConfluenceCopyLedger(f.f.journal,f.f.control,preparationDigest,f.binding,f.f.keys,f.objects) };
+}
+
+test('candidate validates all prior payloads before any archive entry exists', async () => {
+  const f = await setup(true), c = candidate(f), before = [...f.f.entries.values()];
+  const result = await c.verify();
+  assert.equal(result.candidatePrefixVerified,true); assert.equal(result.candidateEntryPresent,false);
+  assert.deepEqual([...f.f.entries.values()],before); assert.equal(result.currentHistoryVerified,false);
+});
+
+test('candidate with dropped original bookkeeping refuses before any journal append', async () => {
+  const f = await setup(false,raw => {
+    raw.tables.ConfluenceCopyRecoveryCapture = []; raw.tables.ConfluenceCopyPublicationPlan = []; raw.tables.ConfluenceCopyPublicationReceipt = [];
+  });
+  const c = candidate(f), before = [...f.f.entries.values()];
+  await assert.rejects(c.publish,/candidate|prefix/); assert.deepEqual([...f.f.entries.values()],before);
+});
+
+test('exact pending entry is reverified without treating it as a published archive', async () => {
+  const f = await setup(true), c = candidate(f,true), before = [...f.f.entries.values()];
+  const result = await c.verify(); assert.equal(result.candidateEntryPresent,true);
+  assert.equal(result.candidateHeadPublished,false); assert.deepEqual([...f.f.entries.values()],before);
+});
+
+test('pending different operation or replaced original ciphertext refuses without metadata rewrite', async () => {
+  const f = await setup(), c = candidate(f,true);
+  const original = c.entry;
+  const changed = JSON.parse(original); delete changed.digest; changed.operationId = 'other-operation';
+  f.f.entries.set(c.key,JSON.stringify({ ...changed, digest: hash(JSON.stringify(changed)) }));
+  await assert.rejects(c.verify,/candidate|prefix|identity|pending/);
+  f.f.entries.set(c.key,original);
+  const replacement = await sealConfluenceCopyLedgerArchive(f.ledger.body(),f.binding,f.f.keys);
+  f.archives.set(f.binding.context.operationId,replacement.envelope);
+  await assert.rejects(c.verify,/candidate|prefix|identity|facts/);
+  assert.equal(f.f.entries.get(c.key),original);
+});
+
+test('a second pending entry beyond the exact archive stops candidate reconciliation', async () => {
+  const f = await setup(true), c = candidate(f,true), pending = JSON.parse(c.entry);
+  const unsigned = { ...pending, generation: pending.generation + 1, previousDigest: pending.digest,
+    operationId: 'extra-pending-operation', kind: 'DISPOSAL_RESULT', factsDigest: 'f'.repeat(64) };
+  delete unsigned.digest;
+  const key = `authority/${context.installationId}/${context.organisationId}/${String(unsigned.generation).padStart(10,'0')}.json`;
+  f.f.entries.set(key,JSON.stringify({ ...unsigned, digest: hash(JSON.stringify(unsigned)) }));
+  const before = [...f.f.entries.values()];
+  await assert.rejects(c.verify,/candidate|prefix/); assert.deepEqual([...f.f.entries.values()],before);
+});
+
+test('already head-published original candidate still rechecks predecessor payloads under its occupied slot', async () => {
+  const f = await setup(true), digest = hash(f.ledger.body()), before = [...f.f.entries.values()];
+  // Synthetic occupied-slot setup for a lost head acknowledgement; no release.
+  f.f.state.current.activeOperation = { operationId: f.binding.context.operationId, preparationDigest: digest };
+  const result = await verifyConfluenceCopyLedgerCandidate(f.f.journal,f.f.control,digest,f.binding,f.f.keys,f.objects);
+  assert.equal(result.candidateHeadPublished,true); assert.equal(result.candidateEntryPresent,true);
+  assert.deepEqual([...f.f.entries.values()],before); assert.equal(result.actionAuthorized,false);
 });
