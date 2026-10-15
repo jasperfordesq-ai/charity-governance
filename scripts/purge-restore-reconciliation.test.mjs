@@ -3,16 +3,37 @@ import { test } from 'node:test';
 import { createHash } from 'node:crypto';
 import { assertNoClaimedLocalObjects } from './purge-restore-reconciliation.mjs';
 import { PURGE_RESTORE_TABLES, PURGE_RESTORE_OBSERVATION_TABLES, PURGE_RESTORE_ATTEMPT_TABLES, PURGE_RESTORE_PREVIOUS_TABLES, PURGE_RESTORE_LEGACY_TABLES,
-  PURGE_RESTORE_OLDEST_TABLES,
+  PURGE_RESTORE_OLDEST_TABLES, PURGE_RESTORE_COMPLETION_TABLES,
   reconcilePurgeRestore, assertPurgeRestoreLedger } from './purge-restore-reconciliation.mjs';
 
 function snapshot() {
   return {
-    format: 8, capturedAt: '2026-09-30T10:00:00.000Z',
+    format: 9, capturedAt: '2026-09-30T10:00:00.000Z',
     tables: Object.fromEntries(PURGE_RESTORE_TABLES.map(table => [table, table==='ComplaintPrimaryConflicts'?[]:[{ id: table, sha256: 'a'.repeat(64) }]])),
     claims: [{ organisationId: 'charity-a', documentId: 'removed-document' }], documents: [],
   };
 }
+
+test('current restore inventory includes every Confluence decision and publication record', () => {
+  for (const table of ['ConfluenceRetainedCopyReview','ConfluenceRetainedCopyReviewWithdrawal','ConfluenceSyntheticCopyScope',
+    'ConfluenceRetainedCopyPermission','ConfluenceRetainedCopyPermissionWithdrawal','ConfluenceCopyRecoveryCapture',
+    'ConfluenceCopyPublicationPlan','ConfluenceCopyPublicationReceipt']) assert.ok(PURGE_RESTORE_TABLES.includes(table),table);
+});
+
+test('completion-era format8 stays exact and cannot be mistaken for Confluence coverage', () => {
+  const legacy = snapshot(); legacy.format = 8;
+  legacy.tables = Object.fromEntries(PURGE_RESTORE_COMPLETION_TABLES.map(table => [table,table === 'ComplaintPrimaryConflicts' ? [] : [{ id: table, sha256: 'a'.repeat(64) }]]));
+  const comparedLegacy = assertPurgeRestoreLedger(legacy,structuredClone(legacy));
+  assert.equal(comparedLegacy.databaseLedgerMatches,true); assert.equal(comparedLegacy.schemaFormat,8); assert.equal(comparedLegacy.confluenceRowsCompared,false);
+  assert.equal(assertPurgeRestoreLedger(snapshot(),snapshot()).confluenceRowsCompared,true);
+  assert.throws(() => assertPurgeRestoreLedger(legacy,snapshot()),/schema versions differ/);
+  assert.throws(() => assertPurgeRestoreLedger(snapshot(),legacy),/schema versions differ/);
+  for (const table of ['ConfluenceRetainedCopyReviewWithdrawal','ConfluenceRetainedCopyPermissionWithdrawal',
+    'ConfluenceCopyRecoveryCapture','ConfluenceCopyPublicationPlan','ConfluenceCopyPublicationReceipt']) {
+    const missing = snapshot(); missing.tables[table] = [];
+    assert.throws(() => assertPurgeRestoreLedger(snapshot(),missing),{ code: 'PURGE_RESTORE_RECONCILIATION_REQUIRED' });
+  }
+});
 
 test('restored local files cannot reintroduce claimed keys even with changed bytes', () => {
   const hash = createHash('sha256').update('charity-a/file.pdf').digest('hex');

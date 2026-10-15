@@ -1,5 +1,14 @@
 # CharityPilot Agent Continuation Handoff
 
+> **15 October Confluence restore inventory correction, source only:** The
+> existing restore drill now compares all eight new decision/capture/publication
+> tables under format9. Actual PostgreSQL reproduced the older format8 gap:
+> Confluence-only changes matched the old inventory but fail the new comparison.
+> Schema/response mismatch and partial tables refuse; exact old-schema format8
+> remains supported. Reports expose coverage explicitly. This remains live-source
+> drill evidence, not independent host-loss proof, host replay integration or DPO
+> acceptance. No VM, backup, access or deployment was changed.
+
 > **15 October internal Confluence atomic replay, source only:** An invoker-
 > owned SQL delegate requires suspended charity, fresh isolation, sole-client
 > observation, exact guards/FKs and local snapshot. Exclusive transactional locks

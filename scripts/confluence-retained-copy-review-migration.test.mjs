@@ -5,6 +5,8 @@ import { readFileSync, readdirSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { test } from 'node:test';
 import { validateLocalDockerEndpoint } from './personal-server-docker-boundary.mjs';
+import { PURGE_RESTORE_SNAPSHOT_SQL, PURGE_RESTORE_COMPLETION_SNAPSHOT_SQL, PURGE_RESTORE_BINDING_PROBE_SQL,
+  assertPurgeRestoreLedger } from './purge-restore-reconciliation.mjs';
 
 const migrations = fileURLToPath(new URL('../apps/api/prisma/migrations/', import.meta.url));
 const image = 'postgres@sha256:5660c2cbfea50c7a9127d17dc4e48543eedd3d7a41a595a2dfa572471e37e64c';
@@ -188,6 +190,8 @@ test('retained Confluence review and permission history is scoped, immutable and
       INSERT INTO pg_temp."User" SELECT * FROM public."User" WHERE id='member-a'; UPDATE pg_temp."User" SET role='OWNER';
       ${captureInsert('capture-shadow-owner',firstCapture,'member-a')}`, /active charity Owner/);
     query(captureInsert('capture-1',firstCapture));
+    const beforeConfluenceDecisions = JSON.parse(query(PURGE_RESTORE_SNAPSHOT_SQL));
+    const legacyBeforeConfluenceDecisions = JSON.parse(query(PURGE_RESTORE_COMPLETION_SNAPSHOT_SQL));
     query(captureInsert('capture-duplicate',firstCapture), /initial lineage|predecessor mismatch|unique constraint/);
     query(captureInsert('capture-skip',{ ...firstCapture, operationId: 'capture-operation-3', factsRevision: 3,
       previousFactsDigest: firstCaptureDigest }), /predecessor mismatch/);
@@ -325,6 +329,28 @@ test('retained Confluence review and permission history is scoped, immutable and
     query(`SET ROLE synthetic_copy_runtime; DELETE FROM "ConfluenceRetainedCopyReviewWithdrawal";`, /append-only/);
     query(`SET ROLE synthetic_copy_runtime; UPDATE "ConfluenceRetainedCopyReviewWithdrawal" SET reason='Replace withdrawn evidence';`, /append-only/);
     query(`TRUNCATE "ConfluenceRetainedCopyReviewWithdrawal";`, /append-only/);
+    const afterConfluenceDecisions = JSON.parse(query(PURGE_RESTORE_SNAPSHOT_SQL));
+    const legacyAfterConfluenceDecisions = JSON.parse(query(PURGE_RESTORE_COMPLETION_SNAPSHOT_SQL));
+    // Exact counterexample: the old inventory passes despite later Confluence
+    // withdrawals/captures/publication evidence. Current format must refuse it.
+    assert.equal(assertPurgeRestoreLedger(legacyAfterConfluenceDecisions,legacyBeforeConfluenceDecisions).databaseLedgerMatches,true);
+    assert.throws(() => assertPurgeRestoreLedger(afterConfluenceDecisions,beforeConfluenceDecisions),error => {
+      assert.equal(error.code,'PURGE_RESTORE_RECONCILIATION_REQUIRED');
+      for (const table of ['ConfluenceRetainedCopyReviewWithdrawal','ConfluenceRetainedCopyPermissionWithdrawal','ConfluenceCopyPublicationReceipt']) {
+        assert.ok(error.report.differences.some(row => row.table === table && row.missing > 0),table);
+      }
+      return true;
+    });
+    assert.equal(afterConfluenceDecisions.format,9);
+    assert.equal(query(PURGE_RESTORE_BINDING_PROBE_SQL),'confluence');
+    assert.equal(query(`BEGIN; ALTER TABLE public."ConfluenceCopyPublicationReceipt" RENAME TO "SyntheticPartialConfluenceReceipt";
+      ${PURGE_RESTORE_BINDING_PROBE_SQL} ROLLBACK;`),'partial-confluence');
+    const confluenceNames = ['ConfluenceRetainedCopyReview','ConfluenceRetainedCopyReviewWithdrawal','ConfluenceSyntheticCopyScope',
+      'ConfluenceRetainedCopyPermission','ConfluenceRetainedCopyPermissionWithdrawal','ConfluenceCopyRecoveryCapture',
+      'ConfluenceCopyPublicationPlan','ConfluenceCopyPublicationReceipt'];
+    assert.equal(query(`BEGIN; ${confluenceNames.map((name,index) => `ALTER TABLE public."${name}" RENAME TO "SyntheticLegacyTable${index}";`).join('\n')}
+      ${PURGE_RESTORE_BINDING_PROBE_SQL} ROLLBACK;`),'completion');
+    assert.equal(query(PURGE_RESTORE_BINDING_PROBE_SQL),'confluence');
     query(`INSERT INTO "DocumentRecoveryEnforcement"(id,"organisationId","installationId","writerId","writerEpoch")
       VALUES ('unsafe-binding','org-a','synthetic-installation','synthetic-writer',1);`, /independent Confluence copy review history/);
     query(`INSERT INTO "DocumentRecoveryEnforcement"(id,"organisationId","installationId","writerId","writerEpoch")

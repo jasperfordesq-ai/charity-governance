@@ -1,5 +1,12 @@
 # CharityPilot Full-Platform Remediation Audit
 
+> **15 October restore-inventory coverage gap, source correction:** Format9
+> now compares complete rows in all eight Confluence decision/publication tables;
+> real SQL before/after proof reproduces the false match under format8 and refusal
+> under9. Partial/mixed schemas or downgraded responses stop the drill; exact
+> legacy inventories remain bounded to their schemas. This closes that source
+> omission, not live deployment, independent custody, host replay or acceptance.
+
 > **15 October Confluence maintenance-replay increment, OPEN:** Internal SQL
 > and coordinator components atomically recover missing historical decision rows
 > under maintenance ownership/quarantine/exclusive locks, preserving dates and

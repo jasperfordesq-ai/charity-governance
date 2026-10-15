@@ -464,3 +464,27 @@ quarantine. SQL's client observation alone is not proof of host isolation.
 Existing supported installer/recovery paths remain authoritative; raw SQL is not
 an operator substitute. Mixed protocols, all other writer/key facts, outbox,
 one-use execution, real provider custody and host-loss acceptance remain open.
+
+## Restore-drill inventory coverage
+
+The existing purge/restore comparison now uses format9 to hash complete rows in
+all eight Confluence decision/capture/publication tables. Missing or changed
+withdrawals, captures, plans or receipts refuse comparison. Hashing occurs inside
+PostgreSQL; the inventory exposes IDs/hashes and count-only differences, not
+review content, reasons, key references or provider targets.
+
+The blue-green drill probes both source and disposable restore schemas, selects
+the exact snapshot query and checks response format. Partial Confluence schemas,
+mixed modes or a format8 response for a format9 schema refuse, with no fallback.
+The complete absence of Confluence tables retains exact legacy format8 behavior;
+formats3–7 keep their existing inventory. Results report `schemaFormat` and
+`confluenceRowsCompared` so a legacy match cannot imply new-table coverage.
+
+Real disposable PostgreSQL demonstrates the original gap: the format8 comparison
+passes before/after Confluence-only withdrawals/publication changes, while
+format9 refuses that older inventory. Other real SQL recovery suites retain
+their existing document/complaint invariants. This does not prove a live VM
+drill or independently held latest history: this drill reads a fresh live source,
+which may be unavailable after host loss. The newer replay component still needs
+complete independent facts and supported host integration. No backup is rewritten
+and no drill result authorises application reopening.

@@ -657,6 +657,15 @@ cannot establish safe recovery. Integration with supported recovery procedures,
 durable independent authority and file/copy reconciliation remain outstanding.
 No deployment or live recovery acceptance is claimed by these tests.
 
+The current restore inventory is format9 and also covers all eight Confluence
+decision, withdrawal, capture and publication-plan/receipt tables. Its schema
+probe requires the complete set, refuses partial/mixed inventories and validates
+the returned format; an older format cannot hide missing later withdrawals.
+Explicit legacy inventories remain available only for their matching schemas.
+Reports state the schema format and whether Confluence rows were compared.
+This is still a live-source comparison, not independent host-loss authority or
+an application reopening gate. No backup contents are rewritten.
+
 `GET /documents/purge-authorizations/:id/dispositions` returns up to 50 newest
 review observations with a same-authorization `before` cursor. Only Owner/Admin
 web sessions may read it. Paths, file hashes and raw provider errors are omitted.

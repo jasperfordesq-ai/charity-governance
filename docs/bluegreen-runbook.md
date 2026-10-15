@@ -507,13 +507,17 @@ any failure for diagnostics.
 policy revisions, withdrawals, purge authorizations, claims, disposition
 history and claimed cleanup jobs against fresh read-only snapshots from the
 configured live database. Missing schema or unreadable authority fails closed.
-Snapshot format 3 inventories `DocumentRecoveryPreparation`,
-`DocumentRecoveryEnforcement`, `DocumentRecoveryExecution` and
-`DocumentRecoveryOutcome` as hashed full rows. It requires migrations
-`20261007020000_document_recovery_preparation` and
-`20261007030000_document_recovery_execution` on both the current authority
-database and the isolated restored database. Older backups remain preserved,
-but a backup without these tables cannot pass this comparison. A changed,
+The schema probe selects the exact inventory for formats3–9 on both databases.
+Current format9 adds all eight Confluence review/withdrawal/synthetic-scope/
+permission/capture/publication-plan/receipt tables to the existing hashed-row
+inventory, including `DocumentRecoveryPreparation`, enforcement, execution and
+outcome. Those Confluence tables are introduced through
+`20261015220000_confluence_copy_publication_plan`. Partial Confluence schemas
+are refused; they cannot fall back to an older inventory. Format8 remains the
+explicit completion-era inventory when no Confluence tables exist. Mixed modes
+or a returned format inconsistent with the probe refuse the drill. Reports name
+the compared format and whether Confluence rows were included; a legacy match
+does not imply Confluence coverage. Older backups remain preserved. A changed,
 missing or unexpected row refuses the drill; the snapshot does not itself
 authorize a document claim or application reopen.
 Surviving document rows are compared by database-generated hashes, including
