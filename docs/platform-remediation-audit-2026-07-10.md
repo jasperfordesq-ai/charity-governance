@@ -1,5 +1,14 @@
 # CharityPilot Full-Platform Remediation Audit
 
+> **15 October Confluence recovery metadata preservation, OPEN:** Source
+> canonical/encrypted decision-state primitives retain complete linked review,
+> scope, permission and withdrawals; synthetic later-withdrawal/old-backup
+> comparisons refuse lost evidence and never authorise reopening. Error privacy
+> and backdated-omission regressions failed before corrections. No SQL capture,
+> authenticated current-head publication, complete replay, restore, live provider
+> custody or host-loss acceptance is established. Binding and erasure gates stay
+> closed while the remaining source/copy and execution facts are incomplete.
+
 > **15 October exact-copy controller decision, OPEN:** Source now separates
 > maintenance registration of the exact synthetic review from the Owner's
 > explicit permission/withdrawal decision, with fresh byte/inventory comparison,

@@ -2,6 +2,9 @@ import { createHash } from 'node:crypto';
 import { z } from 'zod';
 import { AppError } from '../utils/app-error.js';
 
+export const SYNTHETIC_COPY_PERMISSION_ATTESTATION =
+  'AUTHORISE PURGE OF THIS SYNTHETIC CONFLUENCE COPY; RETAIN PRIMARY';
+
 const identifier = z.string().min(1).max(200).regex(/^[A-Za-z0-9_-]+$/);
 const evidence = z.string().min(3).max(120).regex(/^[A-Z0-9][A-Z0-9-]+$/);
 const timestamp = z.string().datetime({ precision: 3 });
@@ -83,6 +86,20 @@ function snapshotHash(snapshot: Snapshot): string {
   // separately; every source/target/version/byte identity remains bound.
   const { observedAt: _observedAt, ...inventory } = canonicalSnapshot(snapshot).inventory;
   return createHash('sha256').update(JSON.stringify({ ...snapshot, inventory })).digest('hex');
+}
+
+/** Historical evidence remains valid after expiry; current-action callers must
+ * additionally check their current clock with prepareRetainedConfluenceCopyReview.
+ * This parser produces no permission and does not verify human assertions.
+ */
+export function canonicalRetainedConfluenceCopyReviewEvidence(value: unknown) {
+  const review = parse(reviewSchema, value);
+  review.snapshot = canonicalSnapshot(review.snapshot);
+  if (Date.parse(review.snapshot.inventory.observedAt) > Date.parse(review.reviewedAt)
+    || Date.parse(review.expiresAt) <= Date.parse(review.reviewedAt)
+    || Date.parse(review.snapshot.sourceRevision) > Date.parse(review.snapshot.inventory.observedAt)
+    || Date.parse(review.snapshot.publicationRevision) > Date.parse(review.snapshot.inventory.observedAt)) invalid();
+  return { review, snapshotSha256: snapshotHash(review.snapshot) };
 }
 
 /** Validate/canonicalise observed facts only; this is not a review or permission. */

@@ -1,5 +1,15 @@
 # CharityPilot Agent Continuation Handoff
 
+> **15 October Confluence decision recovery primitives, source only:** Complete
+> linked review/scope/permission/withdrawal facts now have bounded canonical
+> validation, authenticated encrypted preservation, a conditional S3 object
+> boundary and strict consecutive-state comparison. Later withdrawals cannot be
+> dropped or rewritten; missing objects are not recreated from backups. Maximum
+> review inventory is retained without truncation. Durable SQL capture, writer
+> reservation/current-head publication, full replay/restore and live custody
+> remain open; readers explicitly grant no reopening/action authority. Do not
+> replace those protocols with a digest taken from a restored local checkpoint.
+
 > **15 October exact synthetic permission decision, source only:** Internal
 > issuance requires a maintenance-registered exact review/digest, active Owner
 > attestation, scoped disposal evidence, bounded expiry and a fresh source/copy

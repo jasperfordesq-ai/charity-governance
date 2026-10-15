@@ -9,6 +9,7 @@ import { validateRecoveryAuthorityEntry } from './recovery-authority-journal.js'
 import { inspectRecoveryPreparationEnvelope } from './recovery-preparation-envelope.js';
 import { inspectHoldPreparationEnvelope } from './hold-recovery-envelope.js';
 import { inspectDocumentRecoveryEnvelope } from './document-recovery-envelope.js';
+import { inspectConfluenceCopyRecoveryEnvelope, CONFLUENCE_COPY_RECOVERY_MAX_ENVELOPE_BYTES } from './confluence-copy-recovery-envelope.js';
 import { inspectDocumentOutcomeEnvelope } from './document-outcome-envelope.js';
 import { inspectDocumentBytePermitEnvelope } from './document-byte-permit-envelope.js';
 import { inspectDocumentByteExecutionDecisionEnvelope } from './document-byte-execution-decision-envelope.js';
@@ -240,6 +241,27 @@ export class S3AuthorityObjectStore implements AuthorityObjectStore, AuthorityHe
     const request = this.documentPreparationRequest(operationId);
     this.checkDocumentPreparation(operationId, envelope);
     return this.writeObject(request, envelope, { IfNoneMatch: '*' }, 65536);
+  }
+
+  private confluenceCopyStateRequest(operationId: string) {
+    const request = this.replayRequest(operationId);
+    return { ...request, Key: `confluence-copy-state/${this.config.installationId}/${this.config.organisationId}/${operationId}.json` };
+  }
+  private checkConfluenceCopyState(operationId: string, envelope: string) {
+    const context = inspectConfluenceCopyRecoveryEnvelope(envelope);
+    if (context.installationId !== this.config.installationId || context.organisationId !== this.config.organisationId
+      || context.operationId !== operationId || context.keyId !== this.config.replayKeyArn) {
+      throw new Error('Confluence copy recovery envelope scope mismatch');
+    }
+  }
+  async readConfluenceCopyState(operationId: string) {
+    const object = await this.readObject(this.confluenceCopyStateRequest(operationId), undefined, CONFLUENCE_COPY_RECOVERY_MAX_ENVELOPE_BYTES);
+    if (!object) return null;
+    this.checkConfluenceCopyState(operationId, object.body); return object.body;
+  }
+  async createConfluenceCopyState(operationId: string, envelope: string) {
+    const request = this.confluenceCopyStateRequest(operationId); this.checkConfluenceCopyState(operationId, envelope);
+    return this.writeObject(request, envelope, { IfNoneMatch: '*' }, CONFLUENCE_COPY_RECOVERY_MAX_ENVELOPE_BYTES);
   }
 
   private complaintSourceRequest(operationId: string) {

@@ -166,10 +166,12 @@ fixture/policy-backed permission issuance and independent history remain open.
    the actual synthetic fixture, selected disposal decision evidence and reviewed
    registration workflow before activation. Stored review evidence alone is not
    a permission, and the decision record alone cannot execute provider I/O.
-2. **Independent recovery:** retain the authority, withdrawal, possible-copy
-   facts and execution intent in the applicable independent history. Prove
-   replay after stale-backup recovery; a restored approval cannot resurrect a
-   withdrawn or spent execution permission.
+2. **Independent recovery:** canonical linked review/scope/permission/withdrawal
+   facts, authenticated encrypted preservation, an S3 object boundary and strict
+   consecutive-state comparison now exist as source primitives. Durable committed
+   capture, reservation/current-head publication, complete replay and provider
+   custody remain required. Retain possible-copy and execution-intent facts too;
+   a restored approval cannot resurrect withdrawn or spent execution permission.
 3. **One-use provider execution:** request and worker must recheck the same
    approved policy, holds, exact target inventory and source state. Persist the
    decision before provider I/O; handle crashes, lost acknowledgements and
@@ -187,3 +189,46 @@ fixture/policy-backed permission issuance and independent history remain open.
 These increments remain part of the full acceptance work. No production
 retention policy, provider grant, live governance record disposal or independent
 reviewer acceptance follows from the contract tests.
+
+## Recovery facts and encrypted preservation primitives
+
+`confluence-copy-recovery-facts.ts` validates the complete five-record decision
+bundle: immutable review, optional scope, optional permission, and each optional
+withdrawal. It checks cross-record/tenant identity, snapshot hashes, expiry and
+chronology, and retains expired historical decisions. Descriptive documents,
+primary/provider bytes and credentials are excluded; reasons and evidence
+references remain sensitive governance metadata requiring live retention approval.
+
+Consecutive facts bind predecessor digest/revision, installation, charity and
+writer epoch, preserve every previously recorded row/withdrawal, and refuse a
+new row predating an earlier snapshot that declared it absent. Writer-epoch
+transition is not supported by this comparison; it needs its separate reviewed
+control protocol. Parse failures are sanitised and inputs bounded before parsing.
+
+The16MiB fact limit preserves the full review contract: a synthetic maximum
+100,000-version case retains13,309,771canonical bytes without truncation. The
+32MiB encrypted-envelope limit includes encoding overhead. Existing envelope
+key/context/AAD binding and key-buffer wiping are reused, with a distinct
+Confluence kind. Atomic create-if-absent and readback preserve the exact original
+operation identity after lost acknowledgements; different facts cannot overwrite
+it. A missing expected object is never rebuilt from a backup.
+
+S3 methods use a distinct `confluence-copy-state` namespace, expected account,
+existing separate storage/data KMS keys, bounded authenticated reads and conditional
+writes. No live bucket, IAM policy/prefix permission, retention lock, credentials
+or cloud resource was configured or used by this increment.
+
+These components do **not** capture committed SQL rows, maintain an outbox,
+publish a journal kind/reservation/head, select a latest state or apply a restore.
+The expected object digest must ultimately come from independently authenticated
+current history, not a restored local checkpoint. Readers/progression explicitly
+return `currentHistoryVerified: false`, `reopeningAuthorised: false` and no action
+authority. Tests use synthetic object stores/SDK transport; they do not prove
+host-loss safety, source/copy-writer completeness, live IAM or independent custody.
+
+Next capture and retain the original canonical body durably by operation before
+its first external write, then publish under the exact reserved writer/current
+head. A retry must use that original body; recapturing with a new timestamp is a
+different fact and must refuse under the old identity. Reconcile/apply the full
+verified history before any reopening. Keep binding/writer and erasure blocks
+until these protocols and the remaining source/copy facts are complete.

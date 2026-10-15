@@ -2,11 +2,10 @@ import type { Prisma, PrismaClient } from '@prisma/client';
 import { z } from 'zod';
 import { AppError } from '../utils/app-error.js';
 import { retentionWithdrawalInput } from './retention-policy.service.js';
-import { prepareRetainedConfluenceCopyReview, assertRetainedConfluenceCopyReviewCurrent } from './confluence-retained-copy-review.js';
+import { prepareRetainedConfluenceCopyReview, assertRetainedConfluenceCopyReviewCurrent, SYNTHETIC_COPY_PERMISSION_ATTESTATION } from './confluence-retained-copy-review.js';
 import { observeRetainedConfluenceCopySource } from './confluence-retained-copy-source.js';
 
-export const SYNTHETIC_COPY_PERMISSION_ATTESTATION =
-  'AUTHORISE PURGE OF THIS SYNTHETIC CONFLUENCE COPY; RETAIN PRIMARY';
+export { SYNTHETIC_COPY_PERMISSION_ATTESTATION } from './confluence-retained-copy-review.js';
 const evidence = z.string().regex(/^[A-Z0-9][A-Z0-9-]{2,119}$/);
 const connectionIdentity = z.object({ integrationId: z.string().regex(/^[A-Za-z0-9_-]{1,160}$/),
   connectedAt: z.string().datetime({ precision: 3 }), cloudId: z.string().uuid(), siteOrigin: z.string().url() }).strict();
