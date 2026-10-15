@@ -1,5 +1,14 @@
 # CharityPilot Agent Continuation Handoff
 
+> **16 October primary-instrument review, private evidence only:** An exact
+> circulated instrument and its three agreement replies now have complete PDF
+> visual/MIME reconciliation. Source page-count/date wording/review-cadence
+> discrepancies are recorded for accountable review. Fresh c78 read confirms
+> APPROVED act, no direct attachment/child resolutions and no report-approval
+> snapshot; those records remain distinct. A two-clause transcription is proposed
+> evidence only, with no records created. The ignored115-row queue preserves
+> prior fields/decisions; controller/Word-rendering/audience/acceptance remain open.
+
 > **16 October private rendition review, evidence only:** A pending governance
 > rendition now has position-preserved comparison of190table cells and70ordered
 > narrative paragraphs against its circulated PDF, plus all13PDF pages visually

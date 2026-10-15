@@ -1,5 +1,12 @@
 # CharityPilot Full-Platform Remediation Audit
 
+> **16 October primary instrument/act evidence, OPEN:** Complete original PDF
+> review and exact agreement-chain readback narrow one authority/version gap.
+> Source inconsistencies require accountable reconciliation, not silent document
+> correction. Current APPROVED act status is separate from attachment/child rows
+> and approved report snapshots. No document approval, compliance, link, deadline
+> or access change follows; no application source/schema change in this step.
+
 > **16 October rendition content-evidence increment, OPEN:** Private comparison
 > now checks all190table cells and70ordered narrative paragraphs, with PDF visual
 > review and fresh exact stored-byte binding. Word layout/rendering and accountable
