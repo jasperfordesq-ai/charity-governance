@@ -1,5 +1,14 @@
 # CharityPilot Full-Platform Remediation Audit
 
+> **15 October retained-publication disposal, OPEN:** A synthetic review
+> contract now binds retained-source and remote-copy identities and refuses
+> changed, held, active, incomplete, inconsistent or expired evidence. It
+> explicitly produces no provider-I/O authority. Durable scoped approval and
+> withdrawal, SQL guards, independent recovery and one-use worker execution
+> remain required before the retained-source refusal may have an authorised
+> alternative. See `confluence-retained-copy-authority.md`; contract tests do
+> not close provider erasure, policy, deployment or DPO acceptance gates.
+
 > **15 October independent-recovery availability, OPEN:** A valid 650-entry
 > synthetic history exceeded the 30-second full-scan deadline with simulated
 > storage latency. Source correction bounds parallel reads to 32 within a trusted

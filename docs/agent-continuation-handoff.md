@@ -1,5 +1,15 @@
 # CharityPilot Agent Continuation Handoff
 
+> **15 October retained Confluence copy review contract, source only:** An
+> explicitly scoped synthetic continuation now prepares and compares retained
+> source/remote-copy review evidence without authorising provider I/O. Exact
+> source, publication, site, page, attachment/version and byte identities are
+> bound; held/active sources, incomplete/inconsistent inventories, stale targets
+> and expired reviews refuse. The existing request, SQL and worker refusal
+> remain unchanged. See `confluence-retained-copy-authority.md` for the complete
+> remaining durable approval, withdrawal, independent-history and one-use worker
+> increments. This is not a remote-erasure permission, deployment or acceptance.
+
 > **15 October recovery full-scan latency correction, source only:** Complete
 > verification now reads up to 32 entries concurrently within the range required
 > by a trusted checkpoint or authenticated current head, then validates every
