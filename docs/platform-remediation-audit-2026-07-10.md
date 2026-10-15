@@ -1,11 +1,19 @@
 # CharityPilot Full-Platform Remediation Audit
 
+> **15 October Confluence reserved-publication increment, OPEN:** An explicit
+> journal kind and verified publisher/reader now bind the original encrypted
+> state to the exact writer/epoch/plaintext reservation and unchanged current
+> head. A generic-path bypass regression failed before blocking that path.
+> Synthetic acknowledgement-loss and payload/control-change tests pass. Local
+> durable publication/key-context receipts, controlled release, automatic outbox,
+> complete replay, real custody, execution and acceptance remain required.
+
 > **15 October Confluence committed-capture increment, OPEN:** Source now
 > commits original decision bodies by operation under scoped active-Owner and
 > charity locks, preserving retries and subsequent withdrawal lineage. SQL
 > compares complete linked rows and refuses rewrites/deletes/truncation. A
 > suspended-charity retry regression failed before the active-charity check.
-> Source-only evidence does not establish independent publication/current head,
+> Source-only evidence does not establish deployed independent publication/current head,
 > complete replay, one-use execution, deployment or Nikita acceptance.
 
 > **15 October Confluence recovery metadata preservation, OPEN:** Source

@@ -252,10 +252,46 @@ combines capture and encrypted preservation through a lost acknowledgement,
 then preserves a new withdrawal state under a new operation. The provider and
 key service are synthetic; SQL guard tests use disposable isolated PostgreSQL.
 
-Next publish the committed original body under the exact reserved writer/current
-head and reconcile/apply the full verified history before any reopening. Keep
-binding/writer and erasure blocks until those protocols and remaining source/copy
-and one-use execution facts are complete. No live independent-custody or
-host-loss acceptance follows from local capture.
+Reserved publication/readback components are described below; durable publication
+reconciliation and applying the full verified history remain required before
+reopening. Keep binding/writer and erasure blocks until those protocols and
+remaining source/copy and one-use execution facts are complete. No live
+independent-custody or host-loss acceptance follows from local capture.
 The capture binds installation/charity/operation/epoch/source; publication must
 also durably bind the approved encryption-key context and external object receipt.
+
+## Reserved state publication and readback
+
+The explicit journal kind `CONFLUENCE_COPY_DECISION_STATE_V1` binds its
+`factsDigest` to the exact authenticated encrypted envelope bytes, not the
+plaintext capture digest. The format-2 reservation separately binds that
+canonical plaintext digest, operation, writer and epoch. Generic append and
+format-1 publication reject this new kind; the dedicated reserved path rechecks
+the exact slot on every head read and conditional update. Existing entry kinds
+keep their established semantics and are not reinterpreted as Confluence facts.
+
+`publishVerifiedConfluenceCopyState` opens an already preserved candidate,
+checks its canonical plaintext against the reservation and refuses any control
+change during verification. Missing objects are never reconstructed. Entry-write
+and head-write acknowledgement loss resume the same original operation; a newly
+encrypted replacement, even with equivalent plaintext, cannot replace a published
+envelope. The operation remains reserved after publication.
+
+`readPublishedConfluenceCopyState` verifies the current journal chain, its exact
+operation/kind, the encrypted payload digest/authentication/context and an
+unchanged head after decryption. It authenticates one historical capture; it
+does not choose the latest state for a review or verify the other payloads in
+the chain. Its explicit current-history/reopening/action results remain false.
+
+Synthetic tests join actual journal, reservation and envelope components, test
+both lost acknowledgements, changed writers/control, missing history/objects,
+replacement ciphertext and the generic-path refusal. The existing S3 release
+adapter also refuses this metadata kind; no terminal disposal outcome is implied.
+This is not live provider, custody, restart or host-loss acceptance.
+
+Still required: durable approved encryption-key context and publication/object
+receipts tied to the local capture; automatic decision capture/outbox/dispatch;
+controlled metadata-operation reconciliation/release; complete authenticated
+payload progression and SQL replay; remaining source/copy/intent coverage and
+one-use execution. There is no supported live workflow or automatic reservation
+release in this increment. Bindings and erasure gates stay closed.

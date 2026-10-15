@@ -24,6 +24,14 @@ function fixture(options?: { appendVerification: 'FULL' | 'VERIFIED_PREFIX' }) {
 const intent = { operationId: 'operation-a', kind: 'DISPOSAL_INTENT' as const,
   factsDigest: 'a'.repeat(64), expectedGeneration: 0, expectedDigest: null };
 
+test('Confluence state cannot bypass its reservation through generic append or format-1 publication', async () => {
+  const f = publisherFixture();
+  const input = { ...intent, kind: 'CONFLUENCE_COPY_DECISION_STATE_V1' as const };
+  await assert.rejects(f.journal.append(input), /requires the reserved/);
+  await assert.rejects(f.journal.appendPublished(input,f.publisher), /requires the reserved/);
+  assert.equal(f.rows.size,0); assert.equal(f.version(),0);
+});
+
 function publisherFixture(options?: { appendVerification: 'FULL' | 'VERIFIED_PREFIX' }) {
   const f = fixture(options);
   let head = { ...initializationCheckpoint, digest: null as string | null, revision: 'version-0' };

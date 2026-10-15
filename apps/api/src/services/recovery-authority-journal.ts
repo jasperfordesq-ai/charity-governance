@@ -23,7 +23,8 @@ const kinds = z.enum(['DISPOSAL_INTENT', 'DISPOSAL_RESULT', 'PRESERVATION_CHANGE
   'COMPLAINT_PREPARATION_V1', 'COMPLAINT_OUTCOME_V1', 'COMPLAINT_HOLD_PREPARATION_V1', 'COMPLAINT_HOLD_OUTCOME_V1',
   'COMPLAINT_CANCELLATION_V1', 'COMPLAINT_HOLD_CANCELLATION_V1', 'DOCUMENT_PREPARATION_V1', 'DOCUMENT_OUTCOME_V1',
   'DOCUMENT_BYTE_PERMIT_V1', 'DOCUMENT_BYTE_EXECUTION_DECISION_V1',
-  'DOCUMENT_BYTE_PROVIDER_UNKNOWN_V1', 'DOCUMENT_BYTE_PRIMARY_COMPLETION_V1', 'DOCUMENT_DISPOSAL_OUTCOME_V1']);
+  'DOCUMENT_BYTE_PROVIDER_UNKNOWN_V1', 'DOCUMENT_BYTE_PRIMARY_COMPLETION_V1', 'DOCUMENT_DISPOSAL_OUTCOME_V1',
+  'CONFLUENCE_COPY_DECISION_STATE_V1']);
 const bindingSchema = z.object({ installationId: identity, organisationId: identity }).strict();
 const checkpointFields = {
   generation: z.number().int().nonnegative().max(10000), digest: digest.nullable(),
@@ -329,6 +330,13 @@ export class RecoveryAuthorityJournal {
   /** Publishes one exact intent, resuming either interrupted durable boundary.
    * A head receipt still cannot authorize action: later holds need fencing. */
   async appendPublished(raw: Input, publisher: AuthorityHeadPublisher) {
+    if (raw.kind === 'CONFLUENCE_COPY_DECISION_STATE_V1') {
+      throw new Error('Confluence copy state requires the reserved publication path');
+    }
+    return this.appendPublishedEntry(raw, publisher);
+  }
+
+  private async appendPublishedEntry(raw: Input, publisher: AuthorityHeadPublisher) {
     const input = inputSchema.parse(raw);
     const before = await this.readCurrentHead(publisher);
     const rows = await this.history(true, before.generation);
@@ -365,6 +373,9 @@ export class RecoveryAuthorityJournal {
   }
 
   async append(raw: Input) {
+    if (raw.kind === 'CONFLUENCE_COPY_DECISION_STATE_V1') {
+      throw new Error('Confluence copy state requires the reserved publication path');
+    }
     return this.appendIntent(raw, false);
   }
 
@@ -385,15 +396,21 @@ export class RecoveryAuthorityJournal {
     return this.appendReservedPreparation(raw, control, 'DOCUMENT_PREPARATION_V1');
   }
 
+  /** Metadata state only. Keeps the exact reservation occupied; no release or
+   * execution follows from publishing a review/permission/withdrawal capture. */
+  async appendReservedConfluenceCopyState(raw: unknown, control: RecoveryControlStore) {
+    return this.appendReservedPreparation(raw, control, 'CONFLUENCE_COPY_DECISION_STATE_V1');
+  }
+
   private async appendReservedPreparation(raw: unknown, control: RecoveryControlStore,
-    kind: 'COMPLAINT_PREPARATION_V1' | 'COMPLAINT_HOLD_PREPARATION_V1' | 'DOCUMENT_PREPARATION_V1') {
+    kind: 'COMPLAINT_PREPARATION_V1' | 'COMPLAINT_HOLD_PREPARATION_V1' | 'DOCUMENT_PREPARATION_V1' | 'CONFLUENCE_COPY_DECISION_STATE_V1') {
     const request = z.object({ operationId: identity, writerId: identity,
       writerEpoch: z.number().int().positive().max(2147483647), preparationDigest: digest,
       envelopeDigest: digest, expectedGeneration: z.number().int().nonnegative().max(9999),
       expectedDigest: digest.nullable(),
     }).strict().refine(v => (v.expectedGeneration === 0) === (v.expectedDigest === null)).parse(raw);
     const publisher = await this.complaintPublisher(request, control);
-    return this.appendPublished({ operationId: request.operationId, kind,
+    return this.appendPublishedEntry({ operationId: request.operationId, kind,
       factsDigest: request.envelopeDigest, expectedGeneration: request.expectedGeneration,
       expectedDigest: request.expectedDigest }, publisher);
   }

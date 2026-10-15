@@ -1,12 +1,22 @@
 # CharityPilot Agent Continuation Handoff
 
+> **15 October Confluence reserved publication, source only:** An explicit
+> state kind now joins authenticated encrypted payloads to the exact format-2
+> writer/epoch/facts reservation and current journal head. Generic/format-1 append
+> refuses the kind. Lost entry/head acknowledgements preserve the original
+> operation and ciphertext; readback rechecks the head after decryption. This
+> authenticates one historical capture, not complete/latest payload history or
+> reopening authority. Durable publication/key-context receipts, automatic
+> outbox, controlled release, full replay and one-use execution remain open.
+
 > **15 October Confluence durable capture, source only:** Exact canonical
 > decision facts now commit locally by operation before external preservation.
 > Owner/charity checks, shared transaction locking, complete linked-row SQL
 > comparison, immutable history and predecessor/epoch checks prevent a retry
 > from silently recapturing a later state. Original retry and subsequent
 > withdrawal are tested with encrypted preservation. There is no dispatch,
-> reserved journal/current-head publication, full replay or execution authority.
+> complete replay or execution authority. Reserved-publication components are
+> described above; durable publication reconciliation is not yet implemented.
 > The migration is unreleased; independent custody and acceptance remain open.
 
 > **15 October Confluence decision recovery primitives, source only:** Complete
@@ -14,8 +24,7 @@
 > validation, authenticated encrypted preservation, a conditional S3 object
 > boundary and strict consecutive-state comparison. Later withdrawals cannot be
 > dropped or rewritten; missing objects are not recreated from backups. Maximum
-> review inventory is retained without truncation. Writer
-> reservation/current-head publication, full replay/restore and live custody
+> review inventory is retained without truncation. Full replay/restore and live custody
 > remain open; readers explicitly grant no reopening/action authority. Do not
 > replace those protocols with a digest taken from a restored local checkpoint.
 
