@@ -1,5 +1,15 @@
 # CharityPilot Full-Platform Remediation Audit
 
+> **15 October semantic archive/prefix increment, OPEN:** Strict immutable
+> eight-table links/lineage now gate local archive publication and reading.
+> Reading authenticates earlier supported Confluence payloads, exact original
+> capture/plan/receipt references and immutable row preservation across archives.
+> Signed-but-incomplete snapshots, missing older objects and races refuse.
+> Scope remains one key/epoch and Confluence kinds, not global history/custody
+> or restore authority. Pre-append candidate-prefix validation/pending retries,
+> durable dispatch/release, other families/transfers, host recovery and Nikita
+> acceptance remain open. No live source/provider or deployment was changed.
+
 > **15 October exact reserved archive publication increment, OPEN:** A separate
 > journal kind and authenticated publisher bind original complete-ledger bytes
 > to an exact reservation/predecessor. Current-head readback rejects superseded

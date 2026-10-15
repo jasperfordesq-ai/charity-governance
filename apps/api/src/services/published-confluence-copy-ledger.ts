@@ -4,8 +4,12 @@ import { validateRecoveryControl, type RecoveryControlStore } from './recovery-o
 import { validateRecoveryEnvelopeContext, type RecoveryDataKeys } from './recovery-preparation-envelope.js';
 import { openConfluenceCopyLedgerArchive, readVerifiedConfluenceCopyLedgerArchive,
   type ConfluenceCopyLedgerArchiveBinding, type ConfluenceCopyLedgerObjects } from './confluence-copy-ledger-envelope.js';
+import { validateConfluenceCopyLedgerRows } from './confluence-copy-ledger-validation.js';
+import { verifyConfluenceCopyLedgerPrefix } from './confluence-copy-ledger-prefix.js';
+import type { ConfluenceCopyRecoveryObjects } from './confluence-copy-recovery-envelope.js';
 
-type Objects = Pick<ConfluenceCopyLedgerObjects,'readConfluenceCopyLedger'>;
+type Objects = Pick<ConfluenceCopyLedgerObjects,'readConfluenceCopyLedger'>
+  & Partial<Pick<ConfluenceCopyRecoveryObjects,'readConfluenceCopyState'>>;
 const hash = (value: string) => createHash('sha256').update(value,'utf8').digest('hex');
 const noAuthority = { currentHistoryVerified: false as const, reopeningAuthorised: false as const, actionAuthorized: false as const };
 function archiveBinding(raw: ConfluenceCopyLedgerArchiveBinding) {
@@ -37,6 +41,7 @@ export async function publishVerifiedConfluenceCopyLedger(journal: RecoveryAutho
   const envelope = await objects.readConfluenceCopyLedger(context.operationId);
   if (envelope === null) throw new Error('Confluence ledger candidate is missing; preserve original operation evidence');
   const opened = await openConfluenceCopyLedgerArchive(envelope,binding,keys);
+  validateConfluenceCopyLedgerRows(opened.body,context);
   if (hash(opened.body) !== preparationDigest) throw new Error('Confluence ledger archive does not match reserved original facts');
   const after = validateRecoveryControl(await control.readControl());
   if (JSON.stringify(after) !== JSON.stringify(before)) throw new Error('Confluence ledger control changed during authentication');
@@ -46,10 +51,11 @@ export async function publishVerifiedConfluenceCopyLedger(journal: RecoveryAutho
   return { ...receipt, ...noAuthority };
 }
 
-/** Authenticates this exact archive only when it is the current journal head.
- * Any later entry requires a newer archive/reconciliation. Other payloads,
- * semantic SQL relationships, host isolation/custody and restored local state
- * are outside this reader; no global history or reopening authority is emitted.
+/** Authenticates this exact archive only when it is the current journal head,
+ * including supported single-key/epoch Confluence payload history and original
+ * ledger relationships. Any later entry requires a newer archive/reconciliation.
+ * Other protocols, host isolation/custody and restored local state remain
+ * outside this reader; no global history or reopening authority is emitted.
  */
 export async function readPublishedConfluenceCopyLedger(journal: RecoveryAuthorityJournal, control: RecoveryControlStore,
   raw: ConfluenceCopyLedgerArchiveBinding, keys: RecoveryDataKeys, objects: Objects) {
@@ -69,11 +75,13 @@ export async function readPublishedConfluenceCopyLedger(journal: RecoveryAuthori
     throw new Error('Confluence ledger archive does not match the latest exact head/predecessor');
   }
   const opened = await readVerifiedConfluenceCopyLedgerArchive(published.entry.factsDigest,binding,keys,objects);
+  validateConfluenceCopyLedgerRows(opened.body,context);
+  const prefix = await verifyConfluenceCopyLedgerPrefix(journal,control,context,opened.body,keys,objects);
   const finalHistory = await journal.inspectCurrent(source);
   const after = validateRecoveryControl(await control.readControl());
   if (finalHistory.revision !== published.revision || JSON.stringify(after) !== JSON.stringify(before)) {
     throw new Error('Confluence ledger current head/control changed while authenticating archive');
   }
-  return { body: opened.body, archiveAtObservedHead: true as const, entryGeneration: published.entry.generation,
-    entryDigest: published.entry.digest, envelopeDigest: published.entry.factsDigest, revision: published.revision, ...noAuthority };
+  return { body: opened.body, archiveAtObservedHead: true as const, ledgerRowsVerified: true as const, entryGeneration: published.entry.generation,
+    entryDigest: published.entry.digest, envelopeDigest: published.entry.factsDigest, revision: published.revision, ...prefix, ...noAuthority };
 }

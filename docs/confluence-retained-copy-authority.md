@@ -606,11 +606,11 @@ key policy and current provider/custody guarantees.
 
 The result's `archiveAtObservedHead` describes only this archive/metadata match.
 It retains false global current-history, execution and reopening flags. It does
-not semantically reconcile all archive rows against earlier decision payloads,
-approve local source claims, verify epochs/transfers, attest restored state or
-prove all other writers/copies are covered. Decision-only recovery refuses this
-new kind rather than silently filtering it. That mixed-protocol integration is
-a required next gate, not compatibility evidence.
+not approve local source claims, attest restored state or prove all other
+writers/copies are covered. The semantic Confluence-only prefix checks below
+now apply to this reader. Epoch/key transitions and other protocol families
+remain unsupported. Decision-only recovery still refuses the archive kind;
+that older consumer is not silently upgraded into a full archive restorer.
 
 Publication keeps its exact active reservation. Generic CAS clearing,
 disposal-outcome release and decision-state metadata release all refuse the
@@ -623,3 +623,52 @@ refusal and release exclusion. The disposable PostgreSQL case composes actual
 four-table governance/capture/plan/withdrawal rows through the archive and real
 journal code with synthetic keys/in-memory control/object adapters. No actual
 independent provider, old-host isolation, deployment or acceptance is proved.
+
+## Semantic ledger and supported Confluence prefix verification
+
+`validateConfluenceCopyLedgerRows` validates all eight exact record shapes and
+their relationships. It reuses the existing historical decision validator,
+allows expired/withdrawn history, refuses orphan/duplicate links, and validates
+the original capture body/hash/scalars plus consecutive per-review lineage.
+Captured decisions must match the immutable archived records; later unpublished
+withdrawals are retained. Publication plans and receipts require real linked
+captures/plans, correct generation and bounded UTC chronology. Temporary
+validation frames are never returned, saved or treated as original history.
+
+Both publisher and reader now require these internal row checks. The reader
+also runs `verifyConfluenceCopyLedgerPrefix`: the complete current metadata chain
+must contain only supported decision-state/archive kinds, with one matching key
+and writer epoch. Each earlier payload is independently read at its published
+digest and decrypted under its exact context. Published decision progression is
+validated, and each archive must contain the matching original capture, plan and
+receipt for every preceding decision entry. Extra receipts cannot reference an
+unknown, future or other-kind publication.
+
+Each later archive must preserve every immutable row from the preceding archive
+without rewriting any field or moving its capture clock backwards. Missing old
+decision/archive objects are never replaced by the newest complete snapshot.
+Unsupported journal families, key/epoch transitions, absent decision-store
+support and control/head races refuse the whole result; nothing is filtered out.
+Verification bounds aggregate encoded payloads to512MiB, retained latest decision
+facts to128MiB and checks a120-second monotonic processing budget around bounded provider
+calls. This is not a maximum-capacity latency or heap acceptance claim.
+
+The returned `archivePrefixVerified` is scoped to these Confluence records and
+payloads. It does not establish actual historical Owner authority, controller
+approval, provider custody, all other writer/copy facts or restored-state safety.
+Global current-history/action/reopening flags remain false. Retired-key policy,
+writer transfer and other protocol families require their own reviewed rules.
+
+Adversarial tests include a signed archive that omits all publication bookkeeping,
+receipt contradictions, original metadata rewritten across archives, missing
+earlier objects and changing control. Complete multi-archive history with later
+withdrawals passes. Actual PostgreSQL governance/capture/plan rows still compose
+through encrypted publication and this reader with synthetic external adapters.
+
+Remaining before an operational dispatcher: validate the candidate against the
+independent prefix before appending, durably retain original dispatch state,
+resume exact pending publication boundaries and acknowledge the archive slot.
+The publisher's new checks validate internal rows, not the entire prior payload
+prefix; a contradictory candidate remains unreadable even if lower publication
+primitives append it. No runtime caller is activated. Supported host recovery,
+cross-family/epoch/key integration, real custody and acceptance stay open.

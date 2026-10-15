@@ -1,5 +1,16 @@
 # CharityPilot Agent Continuation Handoff
 
+> **15 October semantic Confluence ledger/prefix verification, source only:**
+> Strict eight-table relationships/capture lineage and plan/receipt chronology
+> now gate publisher/reader. Current archive reading authenticates every earlier
+> supported decision/archive payload, binds original publication bookkeeping,
+> and preserves all immutable earlier archive rows. Missing bytes, metadata
+> rewrites, dropped bookkeeping, other families/key/epoch transitions or races
+> refuse. Scope is one key/epoch Confluence history; no global action/reopen
+> authority. Tests and real PostgreSQL-to-synthetic-reader composition pass.
+> Next: pre-append candidate-prefix validation/pending retry, durable dispatch,
+> exact archive acknowledgement, supported host recovery and real acceptance.
+
 > **15 October reserved Confluence ledger publication, source only:** A distinct
 > archive journal kind uses the exact metadata reservation and original observed
 > predecessor; generic append refuses it. Publisher authenticates preserved

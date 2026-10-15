@@ -132,3 +132,13 @@ test('a changed observed predecessor and a later head are refused before publica
   f.state.current.generation = 2; f.state.current.digest = 'e'.repeat(64);
   await assert.rejects(f.publish); assert.equal(f.rows.size,0);
 });
+
+test('authenticated but internally inconsistent archive cannot write a journal entry', async () => {
+  const f = await fixture(), raw = JSON.parse(f.prepared.body);
+  raw.tables.ConfluenceCopyPublicationReceipt.push({ id: 'orphan-receipt', organisationId: context.organisationId,
+    planId: 'missing-plan', actorUserId: 'owner-a', envelopeDigest: 'b'.repeat(64), entryGeneration: 1,
+    entryDigest: 'c'.repeat(64), verifiedHeadRevision: 'declared-observation', recordedAt: '2026-10-15T18:00:00.000Z' });
+  Object.assign(f.prepared,prepareConfluenceCopyLocalLedger(raw));
+  f.replace((await sealConfluenceCopyLedgerArchive(f.prepared.body,f.binding,f.keys)).envelope);
+  await f.reserve(); await assert.rejects(f.publish,/relationships/); assert.equal(f.rows.size,0);
+});
