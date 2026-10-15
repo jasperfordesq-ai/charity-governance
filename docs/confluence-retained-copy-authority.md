@@ -2,9 +2,11 @@
 
 ## Status
 
-Contract increment, 15 October 2026. Synthetic engineering only. No runtime
-route, durable permission, migration, provider call or deletion capability is
-added by this increment. The deployed retained-source refusal remains intact.
+Review contract and durable evidence-storage increments, 15 October 2026.
+Synthetic engineering only. The source adds an internal review/withdrawal
+service and migration; no runtime route, executable permission, provider call
+or deletion capability is added. The migration is not deployed. The deployed
+retained-source refusal remains intact.
 Private item-specific decisions and evidence stay in the ignored roadmap.
 
 ## Two distinct decisions
@@ -36,14 +38,38 @@ Caller-supplied evidence and flags must not be trusted as any of those things.
 The parser bounds inventories to100attachments and1000versions per attachment
 or page. Exceeding a bound refuses the candidate, never truncates the inventory.
 
+## Durable evidence storage
+
+`ConfluenceRetainedCopyReviewService` records parsed review evidence under the
+authenticated charity Owner's identity and the database clock. SQL repeats
+Owner/charity, retained-source/hold, publication, revision, target and time
+checks under locks. The original row is append-only; withdrawal is a separate
+tenant-bound, append-only row. Both reject UPDATE, DELETE and TRUNCATE.
+`authorisesProviderIO` is constrained to false even for direct SQL inserts.
+The service has no route and neither erasure request nor worker imports it.
+
+Provider inventory, byte hashes, synthetic status and evidence references are
+still assertions to review: storage does not establish their truth or sign a
+policy. SQL does not recompute the JavaScript canonical snapshot hash or prove
+all nested version inventories. Future permission issuance must independently
+collect/revalidate those facts and the complete contract; it cannot treat a
+stored row, matching digest or absence of a withdrawal as execution authority.
+
+Existing independent-recovery bindings refuse new review/withdrawal writes
+until independently recorded outcomes are supported. Conversely, review history
+prevents new binding activation until its baseline/history can be replayed.
+Those symmetric refusals preserve the missing-history gate; they do not supply
+independent storage, replay or a host-loss recovery result.
+
 ## Next increments before execution
 
-1. **Durable review and withdrawal:** authenticate the scoped reviewer through
-   existing tenant controls; collect source and provider facts server-side;
-   persist immutable approval identity, policy/evidence references and target
-   snapshot under charity/source/publication locks. Model withdrawal separately.
-   Enforce tenant, immutable-target and revision rules in SQL and test against
-   disposable PostgreSQL with the restricted runtime role.
+1. **Permission issuance after fact collection:** internal Owner-scoped review
+   storage, separate withdrawal and SQL immutability/revision checks now exist
+   with disposable PostgreSQL tests under a restricted DML role. Still collect
+   provider facts and source byte proofs server-side, establish the scoped
+   synthetic fixture and selected disposal policy, then implement explicit
+   permission issuance under the same transaction locks. Stored review evidence
+   alone is not that permission.
 2. **Independent recovery:** retain the authority, withdrawal, possible-copy
    facts and execution intent in the applicable independent history. Prove
    replay after stale-backup recovery; a restored approval cannot resurrect a

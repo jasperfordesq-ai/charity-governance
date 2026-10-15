@@ -1,5 +1,14 @@
 # CharityPilot Full-Platform Remediation Audit
 
+> **15 October retained-copy review persistence, OPEN:** Immutable review and
+> withdrawal evidence now has an internal Owner-scoped service and database
+> fences for current tenant/source/publication/revision, with an explicit false
+> provider-authority constraint. Existing bindings freeze unrecorded review
+> decisions; review history blocks new activation pending independent replay.
+> This source migration is not deployed, and no execution route or erasure
+> permission exists. Fact collection, scoped disposal authority, independent
+> history, one-use worker integration and provider/DPO acceptance remain open.
+
 > **15 October retained-publication disposal, OPEN:** A synthetic review
 > contract now binds retained-source and remote-copy identities and refuses
 > changed, held, active, incomplete, inconsistent or expired evidence. It

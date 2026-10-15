@@ -563,6 +563,7 @@ model Organisation {
   documents                   Document[]
   retentionPolicyRevisions    DataRetentionPolicyRevision[]
   documentPurgeAuthorizations DocumentPurgeAuthorization[]
+  retainedConfluenceCopyReviews ConfluenceRetainedCopyReview[]
   deadlines                   Deadline[]
   conflictRecords             ConflictRecord[]
   riskRecords                 RiskRecord[]
@@ -1787,6 +1788,41 @@ model DocumentStandardLink {
   standard   GovernanceStandard @relation(fields: [standardId], references: [id])
 
   @@unique([documentId, standardId])
+}
+
+// Immutable review evidence only. This table does not grant provider I/O.
+// Scalar source/publication identities survive later source disposal.
+model ConfluenceRetainedCopyReview {
+  id                   String @id @default(cuid())
+  organisationId       String
+  organisation         Organisation @relation(fields: [organisationId], references: [id], onDelete: Restrict, onUpdate: NoAction)
+  documentId           String
+  publicationId        String
+  reviewerId           String
+  snapshotSha256       String
+  review               Json
+  reviewedAt           DateTime
+  expiresAt            DateTime
+  authorisesProviderIO Boolean @default(false)
+  recordedAt           DateTime @default(now())
+  withdrawal           ConfluenceRetainedCopyReviewWithdrawal?
+
+  @@unique([id, organisationId])
+  @@index([organisationId, publicationId, recordedAt], map: "ConfluenceCopyReview_org_publication_recorded_idx")
+}
+
+model ConfluenceRetainedCopyReviewWithdrawal {
+  id             String @id @default(cuid())
+  organisationId String
+  reviewId       String @unique
+  review         ConfluenceRetainedCopyReview @relation(fields: [reviewId, organisationId], references: [id, organisationId], onDelete: Restrict, onUpdate: NoAction, map: "ConfluenceCopyReviewWithdrawal_review_fkey")
+  actorUserId    String
+  evidenceRef    String
+  reason         String
+  occurredAt     DateTime @default(now())
+
+  @@unique([reviewId, organisationId], map: "ConfluenceCopyReviewWithdrawal_review_org_key")
+  @@index([organisationId, occurredAt], map: "ConfluenceCopyReviewWithdrawal_org_occurred_idx")
 }
 
 model DocumentStorageDeletion {

@@ -1,5 +1,15 @@
 # CharityPilot Agent Continuation Handoff
 
+> **15 October retained-copy durable review evidence, source only:** Internal
+> Owner-scoped review recording and separate withdrawal now have immutable
+> tables and SQL source/publication/tenant/revision checks. Direct writes cannot
+> set provider authority; both histories refuse mutation and truncation. New
+> decisions freeze under existing independent-recovery bindings, and existing
+> review history prevents activation without replayable history. No HTTP route,
+> provider call, deletion exception or deployed migration is added. Independent
+> fact collection, real permission issuance, replay and one-use worker checks
+> remain open; see `confluence-retained-copy-authority.md` and private receipts.
+
 > **15 October retained Confluence copy review contract, source only:** An
 > explicitly scoped synthetic continuation now prepares and compares retained
 > source/remote-copy review evidence without authorising provider I/O. Exact
