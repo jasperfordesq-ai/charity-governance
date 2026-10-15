@@ -837,8 +837,42 @@ reconciliation of these separate local transport rows remains unfinished.
 The original publication phase still must be enforced by a future durable
 dispatcher; preparation is not proof that a missing remote object is unpublished.
 
-Next: persist publication/acknowledgement progress and resume unknown
-outcomes across restart using saved capture and ciphertext. No automatic
+### Durable authenticated publication observations
+
+`ConfluenceCopyLedgerProgressStore.observe` records separate immutable PUBLISHED
+and ACKNOWLEDGED observations for an already saved candidate. It accepts only
+object reads and control reads. It creates no provider object, appends no journal
+entry, reserves no operation and releases no slot. Shared saved-candidate
+authentication verifies original ciphertext/hash/binding/plaintext. Full exact
+current archive and supported prefix verification are mandatory on every call,
+including a retry with an existing local progress receipt.
+
+The verified writer/epoch/head/revision and encrypted digest must match the
+original candidate. A foreign active operation refuses both stages. ACKNOWLEDGED
+additionally needs an empty current slot and an exact previously committed
+PUBLISHED observation. It records an empty-slot observation, not proof that this
+caller performed a conditional release or completed remote content deletion.
+Active Owner/charity/original rows are checked again before local commit.
+Unknown local commit retries preserve the original receipt identity; later
+authenticated control revisions do not rewrite its historical observation.
+
+Migration187 guards append-only observations, original candidate/actor/hash/
+generation, publication-before-acknowledgement ordering, isolation/WAL and clocks.
+SQL cannot independently authenticate external history. Local receipts alone
+must never authorise object creation, skip external evidence or claim completion.
+An unavailable/missing current archive therefore refuses even with a receipt.
+Physical power loss and independent custody are not proved by database commits.
+
+Format12 covers these local progress rows as well as saved capture/candidate
+rows. Exact format11 retains the earlier candidate inventory, and formats3–10
+remain available only for their matching schemas. All three transport tables
+remain outside the authoritative eight-table archive, so host-loss reconciliation
+of them still needs reviewed integration. Full dispatcher restart is not yet
+implemented; a separate process can read the saved progress rows, which is a
+narrower persistence check.
+
+Next: resume publication/acknowledgement actions across restart using saved
+capture/ciphertext and freshly authenticated independent phase. No automatic
 dispatcher or cleanup is enabled. Original
 capture retention/purpose and real key/provider custody still require review;
 there is no automatic expiry or disposal of these confidential copies.

@@ -51,7 +51,7 @@ export async function publishVerifiedConfluenceCopyLedger(journal: RecoveryAutho
  * Other protocols, host isolation/custody and restored local state remain
  * outside this reader; no global history or reopening authority is emitted.
  */
-export async function readPublishedConfluenceCopyLedger(journal: RecoveryAuthorityJournal, control: RecoveryControlStore,
+export async function readPublishedConfluenceCopyLedger(journal: RecoveryAuthorityJournal, control: Pick<RecoveryControlStore,'readControl'>,
   raw: ConfluenceCopyLedgerArchiveBinding, keys: RecoveryDataKeys, objects: Objects) {
   const binding = archiveBinding(raw), { context, observedControl } = binding;
   const before = validateRecoveryControl(await control.readControl());

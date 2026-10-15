@@ -1986,7 +1986,27 @@ model ConfluenceCopyLedgerCandidate {
   envelopeDigest String
   recordedAt     DateTime @default(now())
 
+  progress       ConfluenceCopyLedgerProgress[]
+
   @@unique([id, organisationId], map: "ConfluenceLedgerCandidate_id_org_key")
+}
+
+// Historical authenticated metadata observations, never execution authority.
+model ConfluenceCopyLedgerProgress {
+  id               String @id @default(cuid())
+  organisationId   String
+  candidateId      String
+  candidate        ConfluenceCopyLedgerCandidate @relation(fields: [candidateId, organisationId], references: [id, organisationId], onDelete: Restrict, onUpdate: NoAction, map: "ConfluenceLedgerProgress_candidate_fkey")
+  actorUserId      String
+  stage            String
+  entryGeneration  Int
+  entryDigest      String
+  envelopeDigest   String
+  observedRevision String
+  recordedAt       DateTime @default(now())
+
+  @@unique([candidateId, stage], map: "ConfluenceLedgerProgress_candidate_stage_key")
+  @@unique([id, organisationId], map: "ConfluenceLedgerProgress_id_org_key")
 }
 
 model DocumentStorageDeletion {

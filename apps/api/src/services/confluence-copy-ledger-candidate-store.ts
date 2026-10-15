@@ -1,5 +1,5 @@
 import { createHash } from 'node:crypto';
-import type { Prisma, PrismaClient } from '@prisma/client';
+import type { Prisma, PrismaClient, ConfluenceCopyLedgerCandidate, ConfluenceCopyLedgerCapture } from '@prisma/client';
 import { lockOrganisationForUpdate } from './organisation-lock.js';
 import { validateStoredConfluenceLedgerCapture } from './confluence-copy-ledger-capture-store.js';
 import { sealConfluenceCopyLedgerArchive, openConfluenceCopyLedgerArchive,
@@ -57,14 +57,20 @@ export class ConfluenceCopyLedgerCandidateStore {
   }
 
   private async authenticate(value: Awaited<ReturnType<ConfluenceCopyLedgerCandidateStore['load']>>, keys: Pick<RecoveryDataKeys,'unwrap'>) {
-    const original = validateStoredConfluenceLedgerCapture(value.capture), candidate = value.candidate;
-    if (!candidate || candidate.captureId !== value.capture.id || candidate.organisationId !== value.capture.organisationId
-      || candidate.actorUserId !== value.capture.actorUserId || candidate.recordedAt < value.capture.recordedAt
+    if (!value.candidate) throw new Error();
+    return validateStoredConfluenceLedgerCandidate(value.capture,value.candidate,keys);
+  }
+}
+
+export async function validateStoredConfluenceLedgerCandidate(capture: ConfluenceCopyLedgerCapture,
+  candidate: ConfluenceCopyLedgerCandidate, keys: Pick<RecoveryDataKeys,'unwrap'>) {
+    const original = validateStoredConfluenceLedgerCapture(capture);
+    if (candidate.captureId !== capture.id || candidate.organisationId !== capture.organisationId
+      || candidate.actorUserId !== capture.actorUserId || candidate.recordedAt < capture.recordedAt
       || typeof candidate.envelope !== 'string' || Buffer.byteLength(candidate.envelope,'utf8') > CONFLUENCE_COPY_LEDGER_MAX_ENVELOPE_BYTES
       || createHash('sha256').update(candidate.envelope).digest('hex') !== candidate.envelopeDigest) throw new Error();
     if ((await openConfluenceCopyLedgerArchive(candidate.envelope,original.binding,keys)).body !== original.body) throw new Error();
     return { id: candidate.id, original, candidate: { envelope: candidate.envelope, digest: candidate.envelopeDigest },
       durableCandidateRecorded: true as const, independentlyPreserved: false as const,
       actionAuthorized: false as const, currentHistoryVerified: false as const, reopeningAuthorised: false as const };
-  }
 }

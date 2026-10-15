@@ -19,7 +19,9 @@ try {
         generate: async () => { throw new Error('Restart must never generate a new key'); },
         unwrap: async (_wrappedKey,context) => ({ key: Buffer.alloc(32,7), keyId: context.keyId }),
       });
-    process.stdout.write(JSON.stringify({ id: result.id, candidate: result.candidate, replayed: result.replayed }));
+    const progress = await prisma.confluenceCopyLedgerProgress.findMany({ where: { candidateId: result.id, organisationId: 'org-a' },
+      select: { id: true, stage: true }, orderBy: { id: 'asc' } });
+    process.stdout.write(JSON.stringify({ id: result.id, candidate: result.candidate, replayed: result.replayed, progress }));
   } else {
   const result = await new ConfluenceCopyLedgerCaptureStore(prisma).prepare('org-a','owner-a',input);
   process.stdout.write(JSON.stringify({ id: result.id, body: result.body, digest: result.digest, replayed: result.replayed }));

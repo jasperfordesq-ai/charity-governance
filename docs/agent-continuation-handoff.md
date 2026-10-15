@@ -1,5 +1,16 @@
 # CharityPilot Agent Continuation Handoff
 
+> **16 October Dublin / 15 October UTC durable progress, source only:** New
+> immutable publication/acknowledgement observations bind the saved candidate to
+> the authenticated exact current archive. Every retry rechecks ciphertext,
+> plaintext, full supported prefix and writer/head/control. Acknowledgement
+> observation additionally requires empty slot and matching committed publication
+> observation. No provider writes or slot release occur in this observer. SQL
+> enforces original candidate/order/Owner/isolation/WAL and immutable records.
+> Format12 compares progress rows; exact formats3–11 remain. Local187 versus
+> last serving179; restart-safe dispatch and host-loss transport reconciliation
+> remain next. These historical receipts are not current-history/reopen authority.
+
 > **15 October durable encrypted candidate, source only:** Migration186 adds
 > immutable original ciphertext/hash linked to the original capture and actor.
 > Preparation performs key work outside database locks, rechecks active Owner

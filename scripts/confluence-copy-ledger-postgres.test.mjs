@@ -16,6 +16,7 @@ import { reserveRecoveryOperation } from '../apps/api/dist/services/recovery-ope
 import { acknowledgeConfluenceCopyLedgerArchive } from '../apps/api/dist/services/confluence-copy-ledger-acknowledgement.js';
 import { ConfluenceCopyLedgerCaptureStore } from '../apps/api/dist/services/confluence-copy-ledger-capture-store.js';
 import { ConfluenceCopyLedgerCandidateStore } from '../apps/api/dist/services/confluence-copy-ledger-candidate-store.js';
+import { ConfluenceCopyLedgerProgressStore } from '../apps/api/dist/services/confluence-copy-ledger-progress-store.js';
 import { PURGE_RESTORE_SNAPSHOT_SQL, PURGE_RESTORE_BINDING_PROBE_SQL, assertPurgeRestoreLedger } from './purge-restore-reconciliation.mjs';
 import { createHash } from 'node:crypto';
 import { recoveryFactsFixture, recoveryContextFixture } from '../apps/api/dist/tests/fixtures/confluence-copy-recovery-facts.js';
@@ -103,8 +104,8 @@ test('local Confluence ledger capture uses all eight migrated tables and a real 
     finally { await runtime.$disconnect(); }
     assert.equal(originalCapture.durableCaptureRecorded,true);
     const afterDurable = (await prisma.$queryRawUnsafe(PURGE_RESTORE_SNAPSHOT_SQL))[0].snapshot;
-    assert.equal(afterDurable.format,11);
-    assert.equal(Object.values((await prisma.$queryRawUnsafe(PURGE_RESTORE_BINDING_PROBE_SQL))[0])[0],'confluence-candidate');
+    assert.equal(afterDurable.format,12);
+    assert.equal(Object.values((await prisma.$queryRawUnsafe(PURGE_RESTORE_BINDING_PROBE_SQL))[0])[0],'confluence-progress');
     assert.throws(() => assertPurgeRestoreLedger(afterDurable,beforeDurable),{ code: 'PURGE_RESTORE_RECONCILIATION_REQUIRED' });
 
     // Real supported decision/capture services populate four of the eight
@@ -205,7 +206,8 @@ test('local Confluence ledger capture uses all eight migrated tables and a real 
     const candidateRow = await prisma.confluenceCopyLedgerCandidate.findUniqueOrThrow({ where: { id: savedCandidate.id } });
     await assert.rejects(prisma.confluenceCopyLedgerCandidate.update({ where: { id: candidateRow.id }, data: { envelopeDigest: '0'.repeat(64) } }),/append-only/);
     await assert.rejects(prisma.confluenceCopyLedgerCandidate.delete({ where: { id: candidateRow.id } }),/append-only/);
-    await assert.rejects(prisma.$executeRawUnsafe('TRUNCATE public."ConfluenceCopyLedgerCandidate"'),/append-only/);
+    await assert.rejects(prisma.$executeRawUnsafe('TRUNCATE public."ConfluenceCopyLedgerCandidate"'));
+    await assert.rejects(prisma.$executeRawUnsafe('TRUNCATE public."ConfluenceCopyLedgerCandidate",public."ConfluenceCopyLedgerProgress"'),/append-only/);
     const candidateClone = { ...candidateRow, id: 'forged-candidate', captureId: originalCapture.id };
     await assert.rejects(prisma.confluenceCopyLedgerCandidate.create({ data: candidateClone }),/repeatable source binding/);
     await assert.rejects(prisma.$transaction(async tx => {
@@ -278,6 +280,47 @@ test('local Confluence ledger capture uses all eight migrated tables and a real 
     const archive = await readPublishedConfluenceCopyLedger(journal,control,binding,keys,objects);
     assert.equal(archive.body,populated.body); assert.equal(archive.currentHistoryVerified,false);
     assert.equal(archive.reopeningAuthorised,false); assert.notEqual(current.activeOperation,null);
+    const progressRuntime = new PrismaClient({ datasources: { db: { url: runtimeUrl.href } } });
+    const progressDeps = { journal, control: { readControl: control.readControl }, keys, objects };
+    const beforeProgress = (await prisma.$queryRawUnsafe(PURGE_RESTORE_SNAPSHOT_SQL))[0].snapshot;
+    let publishedProgress;
+    try {
+      let loseLocalCommit = true;
+      const unknownCommit = { $transaction: async (...args) => {
+        const result = await progressRuntime.$transaction(...args);
+        if (result.stage === 'PUBLISHED' && loseLocalCommit) { loseLocalCommit = false; throw new Error('Synthetic committed progress response lost'); }
+        return result;
+      } };
+      await assert.rejects(new ConfluenceCopyLedgerProgressStore(unknownCommit).observe('org-a','owner-a',savedCandidate.id,'PUBLISHED',progressDeps),/unresolved/);
+      publishedProgress = await new ConfluenceCopyLedgerProgressStore(progressRuntime).observe('org-a','owner-a',savedCandidate.id,'PUBLISHED',progressDeps);
+      assert.equal(publishedProgress.replayed,true);
+      await assert.rejects(new ConfluenceCopyLedgerProgressStore(progressRuntime).observe('org-a','owner-a',savedCandidate.id,'ACKNOWLEDGED',progressDeps),/unresolved/);
+    } finally { await progressRuntime.$disconnect(); }
+    const publishedRow = await prisma.confluenceCopyLedgerProgress.findUniqueOrThrow({ where: { id: publishedProgress.receiptId } });
+    await assert.rejects(prisma.confluenceCopyLedgerProgress.update({ where: { id: publishedRow.id }, data: { entryDigest: '0'.repeat(64) } }),/append-only/);
+    await assert.rejects(prisma.confluenceCopyLedgerProgress.delete({ where: { id: publishedRow.id } }),/append-only/);
+    await assert.rejects(prisma.$executeRawUnsafe('TRUNCATE public."ConfluenceCopyLedgerProgress"'),/append-only/);
+    const progressClone = { ...publishedRow, id: 'forged-progress', candidateId: candidateRow.id, stage: 'ACKNOWLEDGED' };
+    await assert.rejects(prisma.confluenceCopyLedgerProgress.create({ data: progressClone }),/repeatable source binding/);
+    await assert.rejects(prisma.$transaction(async tx => {
+      await tx.$executeRawUnsafe('SET LOCAL synchronous_commit = off');
+      await tx.confluenceCopyLedgerProgress.create({ data: progressClone });
+    },{ isolationLevel: 'RepeatableRead' }),/durable WAL settings/);
+    await assert.rejects(prisma.$transaction(async tx => {
+      await tx.confluenceCopyLedgerProgress.create({ data: { ...progressClone, entryDigest: '0'.repeat(64) } });
+    },{ isolationLevel: 'RepeatableRead' }),/exact committed publication progress/);
+    const noPublicationCandidate = await prisma.confluenceCopyLedgerCandidate.findUniqueOrThrow({ where: { captureId: concurrentCapture.id } });
+    await assert.rejects(prisma.$transaction(async tx => {
+      await tx.confluenceCopyLedgerProgress.create({ data: { ...progressClone, id: 'ack-without-publication',
+        organisationId: 'org-b', actorUserId: 'owner-b', candidateId: noPublicationCandidate.id,
+        envelopeDigest: noPublicationCandidate.envelopeDigest } });
+    },{ isolationLevel: 'RepeatableRead' }),/exact committed publication progress/);
+    await assert.rejects(prisma.$transaction(async tx => {
+      await tx.confluenceCopyLedgerProgress.create({ data: { ...progressClone, actorUserId: 'member-a' } });
+    },{ isolationLevel: 'RepeatableRead' }),/active charity Owner/);
+    const afterProgress = (await prisma.$queryRawUnsafe(PURGE_RESTORE_SNAPSHOT_SQL))[0].snapshot;
+    assert.throws(() => assertPurgeRestoreLedger(afterProgress,beforeProgress),{ code: 'PURGE_RESTORE_RECONCILIATION_REQUIRED' });
+    assert.equal(assertPurgeRestoreLedger(afterProgress,afterProgress).confluenceLedgerProgressCompared,true);
     const archiveControl = { ...control, releaseConfluenceCopyLedgerControl: async (expectedRevision,expected) => {
       if (current.revision !== expectedRevision) return false;
       assert.equal(expected.operationId,context.operationId); assert.equal(expected.preparationDigest,populated.digest);
@@ -290,6 +333,17 @@ test('local Confluence ledger capture uses all eight migrated tables and a real 
     assert.equal(acknowledged.reopeningAuthorised,false); assert.equal(current.activeOperation,null);
     assert.equal(current.generation,archive.entryGeneration); assert.equal(current.digest,archive.entryDigest);
     assert.equal((await acknowledgeConfluenceCopyLedgerArchive(journal,archiveControl,populated.digest,binding,keys,objects)).replayed,true);
+    const ackRuntime = new PrismaClient({ datasources: { db: { url: runtimeUrl.href } } });
+    let acknowledgedProgress;
+    try {
+      acknowledgedProgress = await new ConfluenceCopyLedgerProgressStore(ackRuntime).observe('org-a','owner-a',savedCandidate.id,'ACKNOWLEDGED',progressDeps);
+    } finally { await ackRuntime.$disconnect(); }
+    const progressRestarted = JSON.parse(run(process.execPath,['scripts/confluence-ledger-capture-restart-proof.mjs'],{ env: {
+      ...process.env, DATABASE_URL: runtimeUrl.href, CHARITYPILOT_SYNTHETIC_LEDGER_CAPTURE_PROOF: '1',
+      CHARITYPILOT_SYNTHETIC_LEDGER_CAPTURE_INPUT: JSON.stringify(durableInput), CHARITYPILOT_SYNTHETIC_LEDGER_CANDIDATE_ID: populated.id,
+    } }));
+    assert.deepEqual(progressRestarted.progress.map(row => row.id).sort(),[publishedProgress.receiptId,acknowledgedProgress.receiptId].sort());
+    assert.deepEqual(progressRestarted.progress.map(row => row.stage).sort(),['ACKNOWLEDGED','PUBLISHED']);
 
     await assert.rejects(captureConfluenceCopyLocalLedger(prisma,'org-a','member-a',input),/capture is unresolved/);
     await assert.rejects(captureConfluenceCopyLocalLedger(prisma,'org-b','owner-a',input),/capture is unresolved/);

@@ -1,5 +1,14 @@
 # CharityPilot Full-Platform Remediation Audit
 
+> **16 October Dublin / 15 October UTC archive progress increment, OPEN:**
+> Immutable original-candidate publication/empty-slot acknowledgement observations
+> now reauthenticate full external archive evidence on every retry. Unknown local
+> commits reuse the same receipt; missing bytes or changed history refuse even
+> with a local receipt. SQL enforces original binding/order and append-only WAL
+> guards; format12 covers these local transport records. This observer cannot
+> upload/publish/clear slots. Runtime dispatch, broader protocol/custody, host-loss
+> reconciliation, deployment and Nikita acceptance remain unresolved.
+
 > **15 October durable original ciphertext increment, OPEN:** Migration186
 > preserves one immutable encrypted candidate/hash per original local capture.
 > SQL guards Owner/charity/actor/capture/envelope binding, isolation/WAL and

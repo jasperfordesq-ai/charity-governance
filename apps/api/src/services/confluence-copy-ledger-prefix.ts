@@ -99,7 +99,7 @@ async function verifyPayloads(entries: Entry[], context: RecoveryEnvelopeContext
   } catch { throw new Error('Confluence archive prefix verification is unresolved; preserve original evidence'); }
 }
 
-function headSource(control: RecoveryControlStore) {
+function headSource(control: Pick<RecoveryControlStore,'readControl'>) {
   return { async readHead() {
     const value = validateRecoveryControl(await control.readControl());
     return { installationId: value.installationId, organisationId: value.organisationId,
@@ -114,7 +114,7 @@ const noAuthority = { currentHistoryVerified: false as const, actionAuthorized: 
 
 /** Full supported single-key/epoch Confluence prefix only, not global history,
  * SQL restore, provider custody or current execution/reopening authority. */
-export async function verifyConfluenceCopyLedgerPrefix(journal: RecoveryAuthorityJournal, control: RecoveryControlStore,
+export async function verifyConfluenceCopyLedgerPrefix(journal: RecoveryAuthorityJournal, control: Pick<RecoveryControlStore,'readControl'>,
   rawContext: RecoveryEnvelopeContext, expectedBody: string, keys: RecoveryDataKeys, objects: Objects) {
   try {
     const startedAt = performance.now(), context = validateRecoveryEnvelopeContext(rawContext);
