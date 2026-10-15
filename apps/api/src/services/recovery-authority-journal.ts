@@ -253,6 +253,15 @@ export class RecoveryAuthorityJournal {
       actionAuthorized: false as const, revision };
   }
 
+  /** Complete journal metadata under a stable live head, never payload proof.
+   * Consumers must authenticate and interpret every relevant envelope and
+   * recheck the same control/head after that potentially slow work. */
+  async readPublishedHistory(source: AuthorityHeadSource) {
+    const { rows, revision } = await this.currentHistory(source);
+    return { entries: rows.map(row => ({ ...row })), revision,
+      actionAuthorized: false as const };
+  }
+
   /** Obtain an immutable entry only after full current-history verification.
    * The caller must interpret factsDigest using the entry's explicit protocol;
    * format 1 does not itself specify an encrypted payload or permit execution. */

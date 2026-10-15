@@ -1,5 +1,15 @@
 # CharityPilot Agent Continuation Handoff
 
+> **15 October Confluence decision-history verifier, source only:** A current
+> complete journal metadata read feeds authenticated verification of every
+> decision-state payload. Exact revision/digest progression, preserved withdrawals,
+> globally immutable IDs and optional restored-prefix equality are checked before
+> selecting each review's latest observed state. Unsupported kinds/epochs, missing
+> payload/history or changed control refuse. Maximum inventory survives without
+> truncation; aggregate limits stop without partial results. This is scoped
+> decision evidence, not mixed-protocol/full recovery, SQL replay, release or
+> reopening authority. Broader coverage and controlled recovery remain open.
+
 > **15 October Confluence durable publication workflow, source only:** Exact
 > capture/key/writer/head plans commit before independent writes, and immutable
 > receipts retain authenticated envelope/entry/head observations. Unknown object,

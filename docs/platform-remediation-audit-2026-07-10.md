@@ -1,5 +1,13 @@
 # CharityPilot Full-Platform Remediation Audit
 
+> **15 October Confluence payload-history increment, OPEN:** Source verifies
+> all payloads in its explicit decision-state protocol against a stable live
+> journal head, immutable IDs and exact monotonic review lineage. Synthetic stale
+> backup checks retain later withdrawals; full maximum inventory is preserved.
+> Unsupported protocols/epochs and missing evidence refuse. This does not cover
+> all recovery payload protocols, publication/key-decision history, SQL replay,
+> source/copy writers, release/execution or Nikita acceptance. No live activation.
+
 > **15 October Confluence publication-plan/receipt increment, OPEN:** Source
 > commits exact key/capture/writer/head context before external writes and stores
 > immutable authenticated publication observations. Synthetic crash/retry and

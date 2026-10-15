@@ -327,3 +327,36 @@ PostgreSQL. No live provider, supported operator route, automatic dispatch,
 reservation release, full replay, host-loss reopening or deletion is enabled.
 The local plan/evidence-reference history is not itself part of the independent
 decision payload; complete replay/custody evidence coverage still needs review.
+
+## Decision-history payload verification
+
+`readPublishedHistory` exposes defensive copies of complete journal metadata
+only after its normal full-chain and stable live-head checks. It does not
+authenticate payloads. `readConfluenceCopyDecisionHistory` opens every payload
+in a decision-state-only history using a separately trusted key allowlist and
+the current supported writer epoch. It refuses unsupported kinds/epoch transitions;
+it never filters or silently treats older generic entries as equivalent facts.
+
+Each review starts at facts revision1 and advances by its exact predecessor
+plaintext digest. Complete immutable review/scope/permission/withdrawal records
+must persist unchanged; globally unique child IDs cannot be reused for another
+review. Optional restored captures must match their exact independent operation
+and bytes; they cannot supply missing remote objects or an invented permission.
+The latest observed state for each review therefore retains later withdrawals.
+Head/control are checked again after every payload has been opened.
+
+The verifier accepts the complete maximum review inventory without truncation.
+It stops without returning partial results beyond512MiB cumulative encrypted
+payloads,128MiB retained latest facts or128MiB restored evidence, and the existing
+per-object/fact/journal bounds. Larger histories need a reviewed streaming or
+segmentation/rollover protocol, not trimming. Provider/key dependencies still
+require their existing bounded authenticated-call contracts; no live throughput
+or recovery-duration acceptance is established.
+
+The result explicitly scopes `confluencePayloadsVerified` to this protocol and
+keeps `currentHistoryVerified`, action and reopening authority false. Encryption
+authenticates stored assertions, not their underlying accuracy or current
+permission. Mixed-protocol payload verification, local publication/key-decision
+coverage, database replay/application, source/copy/intent coverage and controlled
+metadata release remain incomplete. This reader makes no SQL/provider mutations
+and enables no operator restore, automatic outbox or disposal workflow.
