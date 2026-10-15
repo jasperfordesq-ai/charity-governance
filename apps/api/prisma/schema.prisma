@@ -1987,8 +1987,23 @@ model ConfluenceCopyLedgerCandidate {
   recordedAt     DateTime @default(now())
 
   progress       ConfluenceCopyLedgerProgress[]
+  uploadAttempts ConfluenceCopyLedgerUploadAttempt[]
 
   @@unique([id, organisationId], map: "ConfluenceLedgerCandidate_id_org_key")
+}
+
+// One committed marker for attempting immutable archive creation. An unknown
+// commit/upload is reconciled by reading, never by issuing another create.
+model ConfluenceCopyLedgerUploadAttempt {
+  id              String @id @default(cuid())
+  organisationId  String
+  candidateId     String @unique(map: "ConfluenceLedgerUpload_candidate_key")
+  candidate       ConfluenceCopyLedgerCandidate @relation(fields: [candidateId, organisationId], references: [id, organisationId], onDelete: Restrict, onUpdate: NoAction, map: "ConfluenceLedgerUpload_candidate_fkey")
+  actorUserId     String
+  observedControl Json
+  recordedAt      DateTime @default(now())
+
+  @@unique([id, organisationId], map: "ConfluenceLedgerUpload_id_org_key")
 }
 
 // Historical authenticated metadata observations, never execution authority.

@@ -507,8 +507,8 @@ any failure for diagnostics.
 policy revisions, withdrawals, purge authorizations, claims, disposition
 history and claimed cleanup jobs against fresh read-only snapshots from the
 configured live database. Missing schema or unreadable authority fails closed.
-The schema probe selects the exact inventory for formats3–12 on both databases.
-Current format12 includes local progress, encrypted candidates, captures and all eight
+The schema probe selects the exact inventory for formats3–13 on both databases.
+Current format13 includes upload attempts, progress, encrypted candidates, captures and all eight
 Confluence review/withdrawal/synthetic-scope/
 permission/capture/publication-plan/receipt tables to the existing hashed-row
 inventory, including `DocumentRecoveryPreparation`, enforcement, execution and
@@ -516,14 +516,16 @@ outcome. Those Confluence tables are introduced through
 `20261015220000_confluence_copy_publication_plan`; original ledger captures add
 `20261015233000_confluence_copy_ledger_capture`; original encrypted candidates add
 `20261015235000_confluence_copy_ledger_candidate`; progress observations add
-`20261016001000_confluence_copy_ledger_progress`. Format11 retains the previous
+`20261016001000_confluence_copy_ledger_progress`; upload attempts add
+`20261016002500_confluence_copy_ledger_upload_attempt`. Format12 retains the prior
+progress inventory when attempts are absent. Format11 retains the previous
 candidate inventory when progress is absent. Format10 retains capture-only
 transport inventory when candidates are absent. Format9 retains the exact
 eight-table inventory when the local ledger capture table is absent. Partial Confluence schemas
 are refused; they cannot fall back to an older inventory. Format8 remains the
 explicit completion-era inventory when no Confluence tables exist. Mixed modes
 or a returned format inconsistent with the probe refuse the drill. Reports name
-the compared format, Confluence-row, capture, candidate and progress coverage; a legacy match
+the compared format, Confluence-row, capture, candidate, progress and attempt coverage; a legacy match
 does not imply Confluence coverage. Older backups remain preserved. A changed,
 missing or unexpected row refuses the drill; the snapshot does not itself
 authorize a document claim or application reopen.

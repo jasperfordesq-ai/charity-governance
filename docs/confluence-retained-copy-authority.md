@@ -871,8 +871,58 @@ of them still needs reviewed integration. Full dispatcher restart is not yet
 implemented; a separate process can read the saved progress rows, which is a
 narrower persistence check.
 
-Next: resume publication/acknowledgement actions across restart using saved
-capture/ciphertext and freshly authenticated independent phase. No automatic
-dispatcher or cleanup is enabled. Original
+### Restarting the exact metadata operation
+
+`ConfluenceCopyLedgerDispatcher.resume` coordinates one already saved candidate.
+It never creates a fresh snapshot or encryption. Current writer/head determines
+the path: an exact already-published head is reauthenticated and observed without
+upload/reservation; an unchanged predecessor can reserve only the original
+operation. Saved-candidate bytes and every supported predecessor payload are
+authenticated before upload, using local candidate bytes strictly as preparation
+input, never as proof that remote bytes exist.
+
+Migration188 records a unique immutable `ConfluenceCopyLedgerUploadAttempt`
+before calling conditional object creation. Only the successful first claimant
+may invoke creation. Existing attempts, pending metadata entries and published
+heads use expected-digest object reads. A lost attempt-commit response, a crash
+before upload or an unknown upload with no readable object therefore remains
+unresolved: there is no automatic second create, expiry, takeover or force-clear.
+This deliberate limit prevents retrying from absent local publication progress
+and reconstructing missing published evidence. The supported default S3 adapter
+also uses `maxAttempts: 1`; injected adapters must not secretly retry writes.
+
+SQL checks original actor/candidate, exact declared original-head reservation,
+absence of local publication progress, isolation/WAL/clock and append-only
+lifecycle. These are local dispatch-intent controls, not independent proof that
+the declared provider head is authentic. Application prefix/control inspection
+still gates the action. Existing persisted attempts are validated before reuse.
+Owner/original identity is rechecked around action boundaries; no transaction
+lock is treated as a remote provider lease or host-isolation proof.
+
+After exact byte readback, the coordinator uses the existing authenticated
+publisher, commits a reauthenticated PUBLISHED observation, invokes only the
+archive-specific acknowledgement, then commits ACKNOWLEDGED observation.
+Unknown upload/entry/head/release responses preserve original identity and are
+reconciled on retry. No source document or Confluence page is deleted. All global
+current-history, execution and reopening flags remain false.
+
+Tests use four fresh Node processes, a restricted disposable PostgreSQL role and
+synthetic external state carried between processes, losing upload/head/release
+responses in sequence. They converge to one create, original ciphertext and two
+saved observations. This is application-process restart against a surviving
+database and synthetic provider, not loss of the database, real provider custody
+or old-host isolation. An old/restored database must not run this dispatcher until
+its separate capture/candidate/progress/attempt history is reconciled and the old
+host is isolated. That supported recovery/activation integration is absent.
+
+Format13 compares the attempt rows as well; format12 retains the prior progress
+inventory, with exact older formats retained. All four transport tables remain
+outside the authoritative eight-table archive. No route, scheduler, provider
+credential factory or operator activation command is wired to this coordinator.
+
+Next: independent transport-state/host-loss reconciliation and supported reviewed
+provider/activation integration, including resolution of a stranded unknown
+upload without inventing evidence or clearing a reservation. No automatic
+cleanup is enabled. Original
 capture retention/purpose and real key/provider custody still require review;
 there is no automatic expiry or disposal of these confidential copies.

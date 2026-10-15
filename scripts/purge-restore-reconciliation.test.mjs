@@ -3,12 +3,12 @@ import { test } from 'node:test';
 import { createHash } from 'node:crypto';
 import { assertNoClaimedLocalObjects } from './purge-restore-reconciliation.mjs';
 import { PURGE_RESTORE_TABLES, PURGE_RESTORE_OBSERVATION_TABLES, PURGE_RESTORE_ATTEMPT_TABLES, PURGE_RESTORE_PREVIOUS_TABLES, PURGE_RESTORE_LEGACY_TABLES,
-  PURGE_RESTORE_OLDEST_TABLES, PURGE_RESTORE_COMPLETION_TABLES, PURGE_RESTORE_CONFLUENCE_STATE_TABLES, PURGE_RESTORE_LEDGER_CAPTURE_TABLES, PURGE_RESTORE_LEDGER_CANDIDATE_TABLES,
+  PURGE_RESTORE_OLDEST_TABLES, PURGE_RESTORE_COMPLETION_TABLES, PURGE_RESTORE_CONFLUENCE_STATE_TABLES, PURGE_RESTORE_LEDGER_CAPTURE_TABLES, PURGE_RESTORE_LEDGER_CANDIDATE_TABLES, PURGE_RESTORE_LEDGER_PROGRESS_TABLES,
   reconcilePurgeRestore, assertPurgeRestoreLedger } from './purge-restore-reconciliation.mjs';
 
 function snapshot() {
   return {
-    format: 12, capturedAt: '2026-09-30T10:00:00.000Z',
+    format: 13, capturedAt: '2026-09-30T10:00:00.000Z',
     tables: Object.fromEntries(PURGE_RESTORE_TABLES.map(table => [table, table==='ComplaintPrimaryConflicts'?[]:[{ id: table, sha256: 'a'.repeat(64) }]])),
     claims: [{ organisationId: 'charity-a', documentId: 'removed-document' }], documents: [],
   };
@@ -17,7 +17,7 @@ function snapshot() {
 test('current restore inventory includes every Confluence decision and publication record', () => {
   for (const table of ['ConfluenceRetainedCopyReview','ConfluenceRetainedCopyReviewWithdrawal','ConfluenceSyntheticCopyScope',
     'ConfluenceRetainedCopyPermission','ConfluenceRetainedCopyPermissionWithdrawal','ConfluenceCopyRecoveryCapture',
-    'ConfluenceCopyPublicationPlan','ConfluenceCopyPublicationReceipt','ConfluenceCopyLedgerCapture','ConfluenceCopyLedgerCandidate','ConfluenceCopyLedgerProgress']) assert.ok(PURGE_RESTORE_TABLES.includes(table),table);
+    'ConfluenceCopyPublicationPlan','ConfluenceCopyPublicationReceipt','ConfluenceCopyLedgerCapture','ConfluenceCopyLedgerCandidate','ConfluenceCopyLedgerProgress','ConfluenceCopyLedgerUploadAttempt']) assert.ok(PURGE_RESTORE_TABLES.includes(table),table);
 });
 
 test('format9 remains exact while format10 requires the original durable ledger capture', () => {
@@ -48,6 +48,16 @@ test('format11 stays exact while format12 requires publication and acknowledgeme
   assert.equal(assertPurgeRestoreLedger(snapshot(),snapshot()).confluenceLedgerProgressCompared,true);
   assert.throws(() => assertPurgeRestoreLedger(older,snapshot()),/schema versions differ/);
   const missing = snapshot(); missing.tables.ConfluenceCopyLedgerProgress = [];
+  assert.throws(() => assertPurgeRestoreLedger(snapshot(),missing),{ code: 'PURGE_RESTORE_RECONCILIATION_REQUIRED' });
+});
+
+test('format12 stays exact while format13 requires original one-shot upload attempts', () => {
+  const older = snapshot(); older.format = 12;
+  older.tables = Object.fromEntries(PURGE_RESTORE_LEDGER_PROGRESS_TABLES.map(name => [name,snapshot().tables[name]]));
+  assert.equal(assertPurgeRestoreLedger(older,structuredClone(older)).confluenceLedgerUploadAttemptsCompared,false);
+  assert.equal(assertPurgeRestoreLedger(snapshot(),snapshot()).confluenceLedgerUploadAttemptsCompared,true);
+  assert.throws(() => assertPurgeRestoreLedger(older,snapshot()),/schema versions differ/);
+  const missing = snapshot(); missing.tables.ConfluenceCopyLedgerUploadAttempt = [];
   assert.throws(() => assertPurgeRestoreLedger(snapshot(),missing),{ code: 'PURGE_RESTORE_RECONCILIATION_REQUIRED' });
 });
 

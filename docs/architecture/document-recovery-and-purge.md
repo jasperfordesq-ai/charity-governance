@@ -657,7 +657,7 @@ cannot establish safe recovery. Integration with supported recovery procedures,
 durable independent authority and file/copy reconciliation remain outstanding.
 No deployment or live recovery acceptance is claimed by these tests.
 
-The current restore inventory is format12 and covers immutable local progress,
+The current restore inventory is format13 and covers one-shot upload attempts, immutable local progress,
 encrypted candidate and original capture rows plus all eight Confluence
 decision, withdrawal, capture and publication-plan/receipt tables. Its schema
 probe requires the complete set, refuses partial/mixed inventories and validates
@@ -666,7 +666,9 @@ Explicit legacy inventories remain available only for their matching schemas.
 Format9 retains the earlier eight-table inventory; format10 adds local original
 transport captures. Format11 adds immutable original encrypted candidates;
 format12 adds original-candidate publication/acknowledgement observations.
-Reports state separate Confluence/capture/candidate/progress coverage flags.
+Format13 adds immutable upload attempts; exact format12 retains the preceding
+progress inventory. Reports state separate Confluence/capture/candidate/progress/
+upload-attempt coverage flags.
 This is still a live-source comparison, not independent host-loss authority or
 an application reopening gate. No backup contents are rewritten.
 

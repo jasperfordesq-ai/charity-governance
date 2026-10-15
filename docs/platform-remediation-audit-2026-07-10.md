@@ -1,5 +1,15 @@
 # CharityPilot Full-Platform Remediation Audit
 
+> **16 October restart metadata dispatcher increment, OPEN:** Saved original
+> candidate now composes through reservation, exact upload, authenticated
+> publication and separate acknowledgement/progress. Immutable one-shot upload
+> intent prevents an automatic second create after unknown commit/upload; missing
+> bytes require reconciliation. Four fresh processes/restricted PostgreSQL pass
+> lost upload/head/release responses using synthetic external state. Format13
+> covers attempt rows. This is not activated custody, global execution fencing,
+> supported restored-host dispatch or remote-content erasure. Deployment,
+> real providers, host-loss authority, broader history and acceptance remain open.
+
 > **16 October Dublin / 15 October UTC archive progress increment, OPEN:**
 > Immutable original-candidate publication/empty-slot acknowledgement observations
 > now reauthenticate full external archive evidence on every retry. Unknown local

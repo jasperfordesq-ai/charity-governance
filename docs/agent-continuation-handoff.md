@@ -1,5 +1,18 @@
 # CharityPilot Agent Continuation Handoff
 
+> **16 October original-candidate metadata dispatcher, source only:** An inactive
+> coordinator resumes reservation/upload/publication/acknowledgement from saved
+> capture/ciphertext and independently authenticated phase. Migration188 records
+> a unique immutable upload attempt BEFORE creation; only the successful first
+> claimant may invoke create. Unknown attempt commit or missing bytes after an
+> unknown upload refuse another create and require review. Already-published or
+> pending journal entries use read-only object reconciliation. Four fresh Node
+> processes against restricted PostgreSQL recover lost upload/head/ack responses
+> with one create and original bytes. External adapters are synthetic; no job,
+> route, real provider or deletion is enabled. Format13 includes attempt rows.
+> Host-loss transport reconciliation/old-host isolation, custody/activation,
+> broader protocols and Nikita acceptance remain open; local188, last serving179.
+
 > **16 October Dublin / 15 October UTC durable progress, source only:** New
 > immutable publication/acknowledgement observations bind the saved candidate to
 > the authenticated exact current archive. Every retry rechecks ciphertext,
