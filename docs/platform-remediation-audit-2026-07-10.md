@@ -1,5 +1,13 @@
 # CharityPilot Full-Platform Remediation Audit
 
+> **15 October Confluence metadata-release increment, OPEN:** Source checks
+> exact committed local publication evidence and supported independent payload
+> history before acknowledging the matching metadata slot. A separate S3 path
+> preserves history and refuses outcome/metadata substitution; changed/missing
+> evidence and other slots refuse. Synthetic lost-ack retry and next-withdrawal
+> publication pass. SQL replay, mixed protocols, current-decision execution
+> fencing, live custody and DPO acceptance remain unresolved.
+
 > **15 October Confluence payload-history increment, OPEN:** Source verifies
 > all payloads in its explicit decision-state protocol against a stable live
 > journal head, immutable IDs and exact monotonic review lineage. Synthetic stale

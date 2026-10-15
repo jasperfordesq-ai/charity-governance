@@ -43,6 +43,15 @@ export interface RecoveryReleaseStore extends RecoveryControlStore {
   }): Promise<boolean>;
 }
 
+/** A metadata acknowledgement only, separate from disposal-outcome release.
+ * Caller verifies complete decision history and exact committed local receipt.
+ * No provider execution or reopening is authorised by clearing this slot. */
+export interface ConfluenceCopyStateReleaseStore extends RecoveryControlStore {
+  releaseConfluenceCopyStateControl(expectedRevision: string, expected: {
+    operationId: string; preparationDigest: string; generation: number; digest: string; envelopeDigest: string;
+  }): Promise<boolean>;
+}
+
 async function read(store: RecoveryControlStore): Promise<Control> {
   try { return controlSchema.parse(await store.readControl()); }
   catch { throw new Error('Recovery operation control is unavailable or invalid'); }

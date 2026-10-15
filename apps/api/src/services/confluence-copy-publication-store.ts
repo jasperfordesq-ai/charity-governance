@@ -3,10 +3,12 @@ import { z } from 'zod';
 import { lockOrganisationForUpdate } from './organisation-lock.js';
 import { validateConfluenceCopyRecoveryCapture } from './confluence-copy-recovery-capture.js';
 import { validateRecoveryEnvelopeContext, type RecoveryDataKeys } from './recovery-preparation-envelope.js';
-import { reserveRecoveryOperation, validateRecoveryControl, type RecoveryControlStore } from './recovery-operation-reservation.js';
+import { reserveRecoveryOperation, validateRecoveryControl, type RecoveryControlStore,
+  type ConfluenceCopyStateReleaseStore } from './recovery-operation-reservation.js';
 import type { RecoveryAuthorityJournal } from './recovery-authority-journal.js';
 import { preserveConfluenceCopyRecoveryFacts, type ConfluenceCopyRecoveryObjects } from './confluence-copy-recovery-envelope.js';
 import { publishVerifiedConfluenceCopyState, readPublishedConfluenceCopyState } from './published-confluence-copy-state.js';
+import { readConfluenceCopyDecisionHistory } from './confluence-copy-decision-history.js';
 
 const identity = z.string().regex(/^[A-Za-z0-9_-]{1,120}$/);
 const inputSchema = z.object({ captureId: z.string().regex(/^[A-Za-z0-9_-]{1,200}$/), writerId: identity,
@@ -17,7 +19,7 @@ const inputSchema = z.object({ captureId: z.string().regex(/^[A-Za-z0-9_-]{1,200
 type Dependencies = { journal: RecoveryAuthorityJournal; control: RecoveryControlStore;
   keys: RecoveryDataKeys; objects: ConfluenceCopyRecoveryObjects };
 
-/** Inactive metadata publication only. There is no automatic dispatch, release,
+/** Inactive metadata publication only. There is no automatic dispatch/release,
  * provider deletion or current-history/reopening authority in this workflow. */
 export class ConfluenceCopyPublicationStore {
   constructor(private readonly prisma: PrismaClient) {}
@@ -45,19 +47,7 @@ export class ConfluenceCopyPublicationStore {
   }
 
   async resume(organisationId: string, actorUserId: string, planId: string, deps: Dependencies) {
-    const load = async (tx: Prisma.TransactionClient) => {
-      await this.ownerFence(tx,organisationId,actorUserId);
-      const row = await tx.confluenceCopyPublicationPlan.findFirst({ where: { id: planId, organisationId },
-        include: { capture: true, receipt: true } });
-      if (!row) throw new Error('Confluence publication plan not found in charity');
-      const facts = validateConfluenceCopyRecoveryCapture(row.capture);
-      if (row.capture.organisationId !== organisationId || row.captureId !== row.capture.id) {
-        throw new Error('Confluence publication capture binding mismatch');
-      }
-      const context = validateRecoveryEnvelopeContext({ installationId: facts.installationId, organisationId,
-        operationId: facts.operationId, writerEpoch: facts.writerEpoch, sourceRevision: facts.sourceRevision, keyId: row.keyId });
-      return { row, context };
-    };
+    const load = (tx: Prisma.TransactionClient) => this.loadPlan(tx,organisationId,actorUserId,planId);
     const original = await this.prisma.$transaction(load, { isolationLevel: 'ReadCommitted' });
     const { row, context } = original;
     const request = { writerId: row.writerId, preparationDigest: row.capture.factsDigest,
@@ -107,6 +97,62 @@ export class ConfluenceCopyPublicationStore {
       } });
       return this.result(receipt.id,reconciled);
     }, { isolationLevel: 'ReadCommitted' });
+  }
+
+  /** Acknowledge this exact published metadata state only. Later local decisions
+   * still need separate capture/publication before any future execution gate. */
+  async release(organisationId: string, actorUserId: string, planId: string,
+    deps: Omit<Dependencies,'control'> & { control: ConfluenceCopyStateReleaseStore }, allowedKeyIds: readonly string[]) {
+    const load = (tx: Prisma.TransactionClient) => this.loadPlan(tx,organisationId,actorUserId,planId);
+    const original = await this.prisma.$transaction(load, { isolationLevel: 'ReadCommitted' });
+    const { row, context } = original, receipt = row.receipt;
+    if (!receipt) throw new Error('Confluence metadata release requires committed publication receipt');
+    const history = await readConfluenceCopyDecisionHistory(deps.journal,deps.control,deps.keys,deps.objects,allowedKeyIds,
+      [{ body: row.capture.facts, digest: row.capture.factsDigest }]);
+    const latest = history.latestStates.find(state => state.reviewId === row.capture.reviewId);
+    if (!latest || latest.operationId !== context.operationId || latest.body !== row.capture.facts
+      || latest.entryDigest !== receipt.entryDigest || latest.envelopeDigest !== receipt.envelopeDigest
+      || latest.entryGeneration !== receipt.entryGeneration || history.generation !== receipt.entryGeneration
+      || history.digest !== receipt.entryDigest || receipt.planId !== row.id || receipt.organisationId !== organisationId) {
+      throw new Error('Confluence metadata release evidence does not match exact committed head');
+    }
+    const local = await this.prisma.$transaction(load, { isolationLevel: 'ReadCommitted' });
+    if (JSON.stringify(local) !== JSON.stringify(original)) throw new Error('Confluence metadata release local evidence changed');
+    const before = validateRecoveryControl(await deps.control.readControl());
+    if (before.revision !== history.revision || before.installationId !== context.installationId
+      || before.organisationId !== organisationId || before.writerId !== row.writerId || before.writerEpoch !== context.writerEpoch) {
+      throw new Error('Confluence metadata release writer/control changed');
+    }
+    if (before.activeOperation === null) return { released: true as const, ...this.result(receipt.id,true) };
+    if (before.activeOperation.operationId !== context.operationId || before.activeOperation.preparationDigest !== row.capture.factsDigest) {
+      throw new Error('Confluence metadata release slot belongs to another operation');
+    }
+    try {
+      await deps.control.releaseConfluenceCopyStateControl(before.revision,{ operationId: context.operationId,
+        preparationDigest: row.capture.factsDigest, generation: receipt.entryGeneration, digest: receipt.entryDigest,
+        envelopeDigest: receipt.envelopeDigest });
+    } catch { throw new Error('Confluence metadata release outcome is unknown; retry original plan'); }
+    const after = validateRecoveryControl(await deps.control.readControl());
+    const { revision: _beforeRevision, activeOperation: _beforeSlot, ...beforeIdentity } = before;
+    const { revision: _afterRevision, activeOperation: afterSlot, ...afterIdentity } = after;
+    if (afterSlot !== null || after.revision === before.revision || JSON.stringify(beforeIdentity) !== JSON.stringify(afterIdentity)) {
+      throw new Error('Confluence metadata release was not verified; reconcile original plan');
+    }
+    return { released: true as const, ...this.result(receipt.id,false) };
+  }
+
+  private async loadPlan(tx: Prisma.TransactionClient, organisationId: string, actorUserId: string, planId: string) {
+      await this.ownerFence(tx,organisationId,actorUserId);
+      const row = await tx.confluenceCopyPublicationPlan.findFirst({ where: { id: planId, organisationId },
+        include: { capture: true, receipt: true } });
+      if (!row) throw new Error('Confluence publication plan not found in charity');
+      const facts = validateConfluenceCopyRecoveryCapture(row.capture);
+      if (row.capture.organisationId !== organisationId || row.captureId !== row.capture.id) {
+        throw new Error('Confluence publication capture binding mismatch');
+      }
+      const context = validateRecoveryEnvelopeContext({ installationId: facts.installationId, organisationId,
+        operationId: facts.operationId, writerEpoch: facts.writerEpoch, sourceRevision: facts.sourceRevision, keyId: row.keyId });
+      return { row, context };
   }
 
   private async ownerFence(tx: Prisma.TransactionClient, organisationId: string, actorUserId: string) {

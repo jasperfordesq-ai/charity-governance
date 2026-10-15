@@ -357,6 +357,36 @@ The result explicitly scopes `confluencePayloadsVerified` to this protocol and
 keeps `currentHistoryVerified`, action and reopening authority false. Encryption
 authenticates stored assertions, not their underlying accuracy or current
 permission. Mixed-protocol payload verification, local publication/key-decision
-coverage, database replay/application, source/copy/intent coverage and controlled
-metadata release remain incomplete. This reader makes no SQL/provider mutations
+coverage, database replay/application and source/copy/intent coverage remain
+incomplete. This reader makes no SQL/provider mutations
 and enables no operator restore, automatic outbox or disposal workflow.
+
+## Exact metadata-operation acknowledgement
+
+`ConfluenceCopyPublicationStore.release` acknowledges a published metadata state.
+It requires current active Owner/charity, the exact immutable capture/plan/receipt,
+complete supported decision payload history, matching latest review state and
+exact current head. Local evidence and writer/epoch/control are rechecked before
+invoking a separate metadata-release provider method. Mixed kinds/epochs or
+missing/corrupt evidence stop release.
+
+S3 `releaseConfluenceCopyStateControl` accepts only this explicit state kind and
+exact envelope/entry/operation/plaintext/head match, then conditionally clears
+that slot while preserving writer, epoch and history. Existing disposal release
+rejects metadata; the metadata method rejects disposal outcomes. Generic slot
+clearing remains forbidden. Lost acknowledgements retry the same plan; another
+operation's slot is never cleared. Readback requires changed revision, unchanged
+identity/history and an empty slot before reporting success.
+
+This grants no provider I/O or reopening and is not an erasure outcome. Later
+local decisions still need capture/publication; acknowledging an older committed
+state must not deadlock the slot needed for a newer withdrawal. A future execution
+gate must reconcile current SQL decisions and latest independent history before
+action; it is not implemented here. A joined synthetic test acknowledges the first
+publication, reserves a new operation and publishes its later withdrawal, retaining
+it in history with false action authority.
+
+No supported live operator route, automatic dispatch/release, SQL replay, provider
+disposal or real custody/host-loss acceptance is added. Recovery bindings and
+retained-source erasure gates remain closed. Reviewed mixed-protocol handling,
+guarded recovery, all writers and one-use execution remain required.

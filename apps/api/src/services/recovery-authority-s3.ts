@@ -591,6 +591,26 @@ export class S3AuthorityObjectStore implements AuthorityObjectStore, AuthorityHe
     z.string().regex(/^[a-f0-9]{64}$/).parse(expectedRevision);
     const expected = z.object({ operationId: identity, preparationDigest: z.string().regex(/^[a-f0-9]{64}$/),
       generation: z.number().int().min(2).max(10000), digest: z.string().regex(/^[a-f0-9]{64}$/) }).strict().parse(raw);
+    return this.releaseMatchedControl(expectedRevision,expected,[
+      'COMPLAINT_OUTCOME_V1','COMPLAINT_HOLD_OUTCOME_V1','COMPLAINT_CANCELLATION_V1',
+      'COMPLAINT_HOLD_CANCELLATION_V1','DOCUMENT_DISPOSAL_OUTCOME_V1']);
+  }
+
+  /** Separate exact metadata release; this is not a disposal outcome. Caller
+   * authenticates all decision payloads and its immutable local receipt first. */
+  async releaseConfluenceCopyStateControl(expectedRevision: string, raw: {
+    operationId: string; preparationDigest: string; generation: number; digest: string; envelopeDigest: string;
+  }) {
+    z.string().regex(/^[a-f0-9]{64}$/).parse(expectedRevision);
+    const expected = z.object({ operationId: identity, preparationDigest: z.string().regex(/^[a-f0-9]{64}$/),
+      generation: z.number().int().min(1).max(10000), digest: z.string().regex(/^[a-f0-9]{64}$/),
+      envelopeDigest: z.string().regex(/^[a-f0-9]{64}$/) }).strict().parse(raw);
+    return this.releaseMatchedControl(expectedRevision,expected,['CONFLUENCE_COPY_DECISION_STATE_V1'],expected.envelopeDigest);
+  }
+
+  private async releaseMatchedControl(expectedRevision: string,
+    expected: { operationId: string; preparationDigest: string; generation: number; digest: string },
+    kinds: readonly string[], envelopeDigest?: string) {
     const current = await this.currentControl();
     if (current.revision !== expectedRevision) return false;
     if (current.value.generation !== expected.generation || current.value.digest !== expected.digest
@@ -599,9 +619,8 @@ export class S3AuthorityObjectStore implements AuthorityObjectStore, AuthorityHe
     const body = await this.read(`authority/${this.config.installationId}/${this.config.organisationId}/${String(expected.generation).padStart(10, '0')}.json`);
     if (body === null) throw new Error('Recovery release outcome is missing');
     const entry = validateRecoveryAuthorityEntry(JSON.parse(body));
-    if ((entry.kind !== 'COMPLAINT_OUTCOME_V1' && entry.kind !== 'COMPLAINT_HOLD_OUTCOME_V1'
-      && entry.kind !== 'COMPLAINT_CANCELLATION_V1' && entry.kind !== 'COMPLAINT_HOLD_CANCELLATION_V1'
-      && entry.kind !== 'DOCUMENT_DISPOSAL_OUTCOME_V1') || entry.installationId !== this.config.installationId
+    if (!kinds.includes(entry.kind) || (envelopeDigest !== undefined && entry.factsDigest !== envelopeDigest)
+      || entry.installationId !== this.config.installationId
       || entry.organisationId !== this.config.organisationId || entry.operationId !== expected.operationId
       || entry.generation !== expected.generation || entry.digest !== expected.digest) throw new Error('Recovery release outcome mismatch');
     return this.writeObject(this.headRequest(), JSON.stringify({ ...current.value, activeOperation: null,

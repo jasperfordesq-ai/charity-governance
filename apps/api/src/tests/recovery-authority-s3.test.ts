@@ -300,8 +300,9 @@ test('S3 explicit release requires the exact outcome head and refuses generic sl
   for (const scenario of ['valid', 'valid-hold', 'valid-cancellation', 'valid-hold-cancellation',
     'document-outcome', 'document-byte-permit', 'document-byte-decision', 'confluence-state',
     'wrong-kind', 'wrong-operation', 'missing', 'corrupt', 'race']) {
+    const generation = scenario === 'confluence-state' ? 1 : 2;
     const facts = { format: 1, installationId: config.installationId, organisationId: config.organisationId,
-      generation: 2, previousDigest: 'b'.repeat(64), operationId: scenario === 'wrong-operation' ? 'other' : 'operation-a',
+      generation, previousDigest: generation === 1 ? null : 'b'.repeat(64), operationId: scenario === 'wrong-operation' ? 'other' : 'operation-a',
       kind: ({ 'wrong-kind': 'DISPOSAL_RESULT', 'document-outcome': 'DOCUMENT_OUTCOME_V1',
         'document-byte-permit': 'DOCUMENT_BYTE_PERMIT_V1',
         'document-byte-decision': 'DOCUMENT_BYTE_EXECUTION_DECISION_V1',
@@ -309,7 +310,7 @@ test('S3 explicit release requires the exact outcome head and refuses generic sl
         'valid-hold': 'COMPLAINT_HOLD_OUTCOME_V1',
         'valid-cancellation': 'COMPLAINT_CANCELLATION_V1', 'valid-hold-cancellation': 'COMPLAINT_HOLD_CANCELLATION_V1' } as Record<string, string>)[scenario] ?? 'COMPLAINT_OUTCOME_V1', factsDigest: 'c'.repeat(64) };
     const digest = createHash('sha256').update(JSON.stringify(facts)).digest('hex');
-    let body = JSON.stringify({ ...control, generation: 2, digest,
+    let body = JSON.stringify({ ...control, generation, digest,
       activeOperation: { operationId: 'operation-a', preparationDigest: 'a'.repeat(64) },
       publicationId: '11111111-1111-4111-8111-111111111111' });
     let version = 0, writes = 0;
@@ -330,7 +331,18 @@ test('S3 explicit release requires the exact outcome head and refuses generic sl
     const before = await store.readControl();
     const { revision, ...value } = before;
     await assert.rejects(() => store.compareAndSwapControl(revision, { ...value, activeOperation: null }));
-    const expected = { operationId: 'operation-a', preparationDigest: 'a'.repeat(64), generation: 2, digest };
+    const expected = { operationId: 'operation-a', preparationDigest: 'a'.repeat(64), generation, digest };
+    if (scenario === 'confluence-state') {
+      await assert.rejects(() => store.releaseControl(revision,expected));
+      await assert.rejects(() => store.releaseConfluenceCopyStateControl(revision,{ ...expected, envelopeDigest: '0'.repeat(64) }));
+      assert.equal(writes,0);
+      assert.equal(await store.releaseConfluenceCopyStateControl(revision,{ ...expected, envelopeDigest: facts.factsDigest }),true);
+      const released = await store.readControl();
+      assert.equal(released.activeOperation,null); assert.equal(released.generation,generation); assert.equal(released.digest,digest);
+      assert.equal(writes,1);
+      assert.equal(await store.releaseConfluenceCopyStateControl(revision,{ ...expected, envelopeDigest: facts.factsDigest }),false);
+      continue;
+    }
     if (scenario === 'race') {
       assert.equal(await store.releaseControl(revision, expected), false);
       assert.notEqual((await store.readControl()).activeOperation, null); assert.equal(writes, 0); continue;
@@ -338,6 +350,8 @@ test('S3 explicit release requires the exact outcome head and refuses generic sl
     if (!['valid', 'valid-hold', 'valid-cancellation', 'valid-hold-cancellation'].includes(scenario)) {
       await assert.rejects(() => store.releaseControl(revision, expected)); assert.equal(writes, 0); continue;
     }
+    await assert.rejects(() => store.releaseConfluenceCopyStateControl(revision,{ ...expected, envelopeDigest: facts.factsDigest }));
+    assert.equal(writes,0);
     assert.equal(await store.releaseControl(revision, expected), true);
     const after = await store.readControl();
     assert.equal(after.activeOperation, null); assert.equal(after.digest, digest); assert.equal(after.generation, 2);

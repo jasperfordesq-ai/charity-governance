@@ -1,5 +1,14 @@
 # CharityPilot Agent Continuation Handoff
 
+> **15 October Confluence metadata acknowledgement, source only:** Internal
+> release requires exact committed capture/plan/receipt, full supported decision
+> payload history and matching writer/epoch/head. A separate S3 method clears
+> only that metadata slot, preserving history; disposal release and generic CAS
+> cannot substitute. Unknown acknowledgements retry the same plan and another
+> slot is untouched. A joined next-withdrawal publication passes. This is no
+> erasure/current-permission/reopening authority, automatic release, live workflow
+> or SQL replay. Mixed protocols, guarded recovery and one-use execution stay open.
+
 > **15 October Confluence decision-history verifier, source only:** A current
 > complete journal metadata read feeds authenticated verification of every
 > decision-state payload. Exact revision/digest progression, preserved withdrawals,
