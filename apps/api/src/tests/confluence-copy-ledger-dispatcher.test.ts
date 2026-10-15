@@ -1,7 +1,11 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
+import { createHash } from 'node:crypto';
 import { ConfluenceCopyLedgerDispatcher } from '../services/confluence-copy-ledger-dispatcher.js';
 import { publishedLedgerFixture } from './fixtures/published-confluence-copy-ledger.js';
+import { fixture as decisionHistory } from './fixtures/confluence-copy-decision-history.js';
+import { ledgerFixture } from './fixtures/confluence-copy-ledger.js';
+import { sealConfluenceCopyLedgerArchive } from '../services/confluence-copy-ledger-envelope.js';
 
 async function fixture() {
   const f = await publishedLedgerFixture(); f.replace(null);
@@ -59,7 +63,7 @@ async function fixture() {
   const deps = { journal: f.journal, control, objects, keys: { ...f.keys,
     generate: async () => { throw new Error('Dispatch must not generate a new key'); } } };
   const resume = () => new ConfluenceCopyLedgerDispatcher(prisma as never).resume('org-a','owner-a','candidate-a',deps);
-  return { f, state, deps, resume };
+  return { f, state, deps, resume, capture, candidate };
 }
 
 test('dispatcher preserves original ciphertext, publishes and records acknowledgement without content deletion', async () => {
@@ -124,4 +128,47 @@ test('corrupt saved upload binding refuses rather than treating it as an unused 
   await assert.rejects(h.resume);
   h.state.attempt!.actorUserId = 'other';
   await assert.rejects(h.resume); assert.equal(h.state.puts,1); assert.equal(h.state.releases,0);
+});
+
+test('prototype-backed provider preserves decision readers and receiver across full-prefix dispatch', async () => {
+  const h = await fixture(), history = await decisionHistory(), ledger = ledgerFixture();
+  const entries = [...history.entries.values()].map(value => JSON.parse(value));
+  Object.assign(ledger.raw.tables.ConfluenceCopyPublicationReceipt![0]!,{
+    envelopeDigest: entries[0].factsDigest, entryDigest: entries[0].digest });
+  ledger.raw.tables.ConfluenceCopyPublicationPlan!.push({ ...ledger.raw.tables.ConfluenceCopyPublicationPlan![0]!,
+    id: 'plan-2', captureId: 'capture-2', expectedGeneration: 1, expectedDigest: entries[0].digest,
+    recordedAt: '2026-10-15T18:07:01.000Z' });
+  ledger.raw.tables.ConfluenceCopyPublicationReceipt!.push({ ...ledger.raw.tables.ConfluenceCopyPublicationReceipt![0]!,
+    id: 'receipt-2', planId: 'plan-2', entryGeneration: 2, entryDigest: entries[1].digest,
+    envelopeDigest: entries[1].factsDigest, recordedAt: '2026-10-15T18:07:02.000Z' });
+  const binding = { context: { ...h.capture.context, operationId: 'archive-latest' },
+    observedControl: structuredClone(history.state.current) };
+  const body = ledger.body(), encrypted = await sealConfluenceCopyLedgerArchive(body,binding,history.keys);
+  Object.assign(h.capture,{ context: binding.context, operationId: binding.context.operationId,
+    observedControl: binding.observedControl, facts: body, factsDigest: createHash('sha256').update(body).digest('hex') });
+  Object.assign(h.candidate,{ envelope: encrypted.envelope, envelopeDigest: encrypted.digest });
+  h.f.state.current = structuredClone(history.state.current);
+  for (const [key,value] of history.entries) h.f.rows.set(key,value);
+  class Provider {
+    private envelope: string | null = null;
+    private readonly receiver = 'synthetic-receiver';
+    decisionReads = 0;
+    puts = 0;
+    async readConfluenceCopyState(id: string) {
+      assert.equal(this.receiver,'synthetic-receiver'); this.decisionReads++;
+      return history.objects.get(id) ?? null;
+    }
+    async readConfluenceCopyLedger() { return this.envelope; }
+    async createConfluenceCopyLedger(_id: string,bytes: string) {
+      assert.equal(this.receiver,'synthetic-receiver'); this.puts++; this.envelope = bytes; return true;
+    }
+  }
+  const provider = new Provider(); h.deps.objects = provider;
+  h.deps.keys = { ...history.keys, generate: async () => { throw new Error('Dispatch must not generate a key'); } };
+  const result = await h.resume();
+  assert.equal(result.metadataDispatchAcknowledged,true); assert.equal(provider.puts,1);
+  assert.ok(provider.decisionReads >= 2); assert.equal(h.f.state.current.generation,3);
+  history.objects.delete('state-1');
+  await assert.rejects(h.resume);
+  assert.equal(provider.puts,1); assert.equal(h.state.releases,1);
 });

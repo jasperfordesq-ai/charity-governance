@@ -873,6 +873,13 @@ narrower persistence check.
 
 ### Restarting the exact metadata operation
 
+The prepared-candidate preflight forwards provider reader methods explicitly,
+preserving their original receiver. It must not spread a class instance to copy
+capabilities: inherited methods, including the production-style decision reader,
+are not enumerable own properties. A regression with two published decision
+payloads and a prototype-backed provider proves full dispatch, with a negative
+missing-old-payload retry that performs no additional upload or release.
+
 `ConfluenceCopyLedgerDispatcher.resume` coordinates one already saved candidate.
 It never creates a fresh snapshot or encryption. Current writer/head determines
 the path: an exact already-published head is reauthenticated and observed without

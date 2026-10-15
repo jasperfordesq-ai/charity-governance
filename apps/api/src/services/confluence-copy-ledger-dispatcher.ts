@@ -47,8 +47,10 @@ export class ConfluenceCopyLedgerDispatcher {
           ...requestWithoutEnvelope(request) },deps.control);
         // Authenticate saved candidate and every supported predecessor payload
         // BEFORE upload. Local candidate bytes here are not remote-presence proof.
-        const preparedObjects = { ...deps.objects, readConfluenceCopyLedger: async (id: string) =>
-          id === context.operationId ? saved.candidate.envelope : deps.objects.readConfluenceCopyLedger(id) };
+        const readState = deps.objects.readConfluenceCopyState?.bind(deps.objects);
+        const preparedObjects = { ...(readState ? { readConfluenceCopyState: readState } : {}),
+          readConfluenceCopyLedger: async (id: string) =>
+            id === context.operationId ? saved.candidate.envelope : deps.objects.readConfluenceCopyLedger(id) };
         const prefix = await verifyConfluenceCopyLedgerCandidate(deps.journal,deps.control,saved.original.digest,
           saved.original.binding,deps.keys,preparedObjects);
         let mayCreate = false;

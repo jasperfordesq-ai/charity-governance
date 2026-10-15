@@ -1,5 +1,15 @@
 # CharityPilot Agent Continuation Handoff
 
+> **16 October dispatcher provider-method review fix, source only:** Review
+> reproduced loss of inherited decision-reader methods when the preflight spread
+> a provider instance. It now forwards the optional reader explicitly, bound to
+> its original receiver. A class-based provider with two real synthetic published
+> decision payloads completes dispatch; deleting an older payload still refuses
+> without another upload/release. Regression RED/GREEN and inverted-condition
+> mutation check pass; related867 tests/build pass. This bounded critical-path
+> review is not approval of the complete accumulated branch or provider readiness.
+> No schema change, deployment or activation; source188, last serving179.
+
 > **16 October original-candidate metadata dispatcher, source only:** An inactive
 > coordinator resumes reservation/upload/publication/acknowledgement from saved
 > capture/ciphertext and independently authenticated phase. Migration188 records

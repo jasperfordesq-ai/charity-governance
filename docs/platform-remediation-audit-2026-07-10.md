@@ -1,5 +1,14 @@
 # CharityPilot Full-Platform Remediation Audit
 
+> **16 October inherited provider-reader defect, source FIXED / acceptance OPEN:**
+> Preflight copied own instance properties and lost prototype-backed decision
+> methods, causing legitimate mixed-history dispatch to refuse. Explicit bound
+> forwarding preserves the reader and receiver. End-to-end synthetic decision-
+> prefix/class-provider dispatch and missing-old-object refusal now pass, as does
+> an inverted-condition mutation check. This was a fail-closed source defect,
+> not an observed disclosure or live incident. Full branch/release/custody and
+> Nikita acceptance remain unproved; no activation or production change occurred.
+
 > **16 October restart metadata dispatcher increment, OPEN:** Saved original
 > candidate now composes through reservation, exact upload, authenticated
 > publication and separate acknowledgement/progress. Immutable one-shot upload
