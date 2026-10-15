@@ -181,7 +181,8 @@ test(
       const snapshot = JSON.parse(requireSuccess(docker(['exec', name, 'psql', '-U',
         'postgres', '-d', database, '-tA', '-c', PURGE_RESTORE_SNAPSHOT_SQL]),
       'capture format-9 disposable restore inventory'));
-      assert.equal(snapshot.format, 9);
+      assert.equal(snapshot.format, 10);
+      assert.deepEqual(snapshot.tables.ConfluenceCopyLedgerCapture,[]);
       assert.deepEqual(snapshot.tables.ConfluenceRetainedCopyPermissionWithdrawal,[]);
       assert.deepEqual(snapshot.tables.ConfluenceCopyPublicationReceipt,[]);
       assert.equal(snapshot.tables.DocumentBytePermitCandidateBinding.length, 1);

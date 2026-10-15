@@ -74,7 +74,7 @@ import { basename, dirname, join } from 'node:path';
 
 import { DEFAULT_POSTGRES_IMAGE } from '../postgres-backup.mjs';
 import { DOCUMENT_ARCHIVE_IMAGE } from '../personal-server.mjs';
-import { PURGE_RESTORE_SNAPSHOT_SQL, PURGE_RESTORE_COMPLETION_SNAPSHOT_SQL, PURGE_RESTORE_OBSERVATION_SNAPSHOT_SQL, PURGE_RESTORE_ATTEMPT_SNAPSHOT_SQL, PURGE_RESTORE_PREVIOUS_SNAPSHOT_SQL, PURGE_RESTORE_LEGACY_SNAPSHOT_SQL,
+import { PURGE_RESTORE_SNAPSHOT_SQL, PURGE_RESTORE_CONFLUENCE_STATE_SNAPSHOT_SQL, PURGE_RESTORE_COMPLETION_SNAPSHOT_SQL, PURGE_RESTORE_OBSERVATION_SNAPSHOT_SQL, PURGE_RESTORE_ATTEMPT_SNAPSHOT_SQL, PURGE_RESTORE_PREVIOUS_SNAPSHOT_SQL, PURGE_RESTORE_LEGACY_SNAPSHOT_SQL,
   PURGE_RESTORE_OLDEST_SNAPSHOT_SQL,
   PURGE_RESTORE_BINDING_PROBE_SQL, PURGE_RESTORE_LOCAL_OBJECTS_SQL,
   assertPurgeRestoreLedger, assertNoClaimedLocalObjects } from '../purge-restore-reconciliation.mjs';
@@ -786,7 +786,7 @@ export async function runRestoreDrill(ctx) {
       const probe = [...command];
       probe[probe.length - 1] = PURGE_RESTORE_BINDING_PROBE_SQL;
       const output = (await ctx.runCommand(probe, { env }))?.stdout?.trim();
-      if (!['oldest', 'legacy', 'lease', 'attempt', 'observation', 'completion','confluence'].includes(output)) {
+      if (!['oldest', 'legacy', 'lease', 'attempt', 'observation', 'completion','confluence','confluence-ledger'].includes(output)) {
         throw new Error('Restore drill requires readable current and restored purge schema');
       }
       return output;
@@ -796,7 +796,8 @@ export async function runRestoreDrill(ctx) {
     if (liveMode !== restoredMode) {
       throw new Error('Restore drill purge schema versions differ; keep application access closed');
     }
-    const historySql = liveMode === 'confluence' ? PURGE_RESTORE_SNAPSHOT_SQL
+    const historySql = liveMode === 'confluence-ledger' ? PURGE_RESTORE_SNAPSHOT_SQL
+      : liveMode === 'confluence' ? PURGE_RESTORE_CONFLUENCE_STATE_SNAPSHOT_SQL
       : liveMode === 'completion' ? PURGE_RESTORE_COMPLETION_SNAPSHOT_SQL
       : liveMode === 'observation' ? PURGE_RESTORE_OBSERVATION_SNAPSHOT_SQL
       : liveMode === 'attempt' ? PURGE_RESTORE_ATTEMPT_SNAPSHOT_SQL
@@ -811,7 +812,7 @@ export async function runRestoreDrill(ctx) {
     };
     const readHistory = async command => {
       const snapshot = await readJson(command);
-      const expectedFormat = { oldest: 3, legacy: 4, lease: 5, attempt: 6, observation: 7, completion: 8, confluence: 9 }[liveMode];
+      const expectedFormat = { oldest: 3, legacy: 4, lease: 5, attempt: 6, observation: 7, completion: 8, confluence: 9, 'confluence-ledger': 10 }[liveMode];
       if (snapshot?.format !== expectedFormat) throw new Error('Restore drill requires readable current and restored purge history');
       return snapshot;
     };

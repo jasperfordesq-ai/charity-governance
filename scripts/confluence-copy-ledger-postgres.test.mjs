@@ -13,6 +13,9 @@ import { publishVerifiedConfluenceCopyLedger, readPublishedConfluenceCopyLedger 
 import { RecoveryAuthorityJournal } from '../apps/api/dist/services/recovery-authority-journal.js';
 import { reserveRecoveryOperation } from '../apps/api/dist/services/recovery-operation-reservation.js';
 import { acknowledgeConfluenceCopyLedgerArchive } from '../apps/api/dist/services/confluence-copy-ledger-acknowledgement.js';
+import { ConfluenceCopyLedgerCaptureStore } from '../apps/api/dist/services/confluence-copy-ledger-capture-store.js';
+import { PURGE_RESTORE_SNAPSHOT_SQL, assertPurgeRestoreLedger } from './purge-restore-reconciliation.mjs';
+import { createHash } from 'node:crypto';
 import { recoveryFactsFixture, recoveryContextFixture } from '../apps/api/dist/tests/fixtures/confluence-copy-recovery-facts.js';
 
 const image = 'postgres@sha256:5660c2cbfea50c7a9127d17dc4e48543eedd3d7a41a595a2dfa572471e37e64c';
@@ -74,6 +77,32 @@ test('local Confluence ledger capture uses all eight migrated tables and a real 
     assert.deepEqual(Object.keys(body.tables).sort(),[...CONFLUENCE_COPY_LEDGER_TABLES].sort());
     assert.ok(!result.body.includes('PRIVATE-PRIMARY-SENTINEL'));
     assert.equal(result.independentlyPreserved,false); assert.equal(result.reopeningAuthorised,false);
+    await prisma.$executeRawUnsafe("CREATE ROLE synthetic_ledger_runtime LOGIN PASSWORD 'synthetic-ledger-runtime-only' NOSUPERUSER NOCREATEDB NOCREATEROLE NOINHERIT");
+    await prisma.$executeRawUnsafe('GRANT USAGE ON SCHEMA public TO synthetic_ledger_runtime');
+    await prisma.$executeRawUnsafe('GRANT SELECT,INSERT,UPDATE,DELETE ON ALL TABLES IN SCHEMA public TO synthetic_ledger_runtime');
+    const runtimeUrl = new URL(url); runtimeUrl.username = 'synthetic_ledger_runtime'; runtimeUrl.password = 'synthetic-ledger-runtime-only';
+    const runtime = new PrismaClient({ datasources: { db: { url: runtimeUrl.href } }, log: [{ emit: 'event', level: 'error' }] });
+    let syntheticDiagnostic = '';
+    runtime.$on('error',event => { syntheticDiagnostic = event.message.slice(-1200); });
+    const observedControl = { format: 2, installationId: input.installationId, organisationId: 'org-a', writerId: 'writer-a',
+      writerEpoch: 1, generation: 0, digest: null, activeOperation: null, revision: 'synthetic-observed-head' };
+    const durableInput = { installationId: input.installationId, operationId: 'durable-original-empty', writerEpoch: 1,
+      sourceRevision: input.declaredSourceRevision, keyId: recoveryContextFixture.keyId, observedControl };
+    const beforeDurable = (await prisma.$queryRawUnsafe(PURGE_RESTORE_SNAPSHOT_SQL))[0].snapshot;
+    let originalCapture;
+    const fromAsyncSession = { $transaction: (fn,options) => runtime.$transaction(async tx => {
+      await tx.$executeRawUnsafe('SET LOCAL synchronous_commit = off');
+      const result = await fn(tx);
+      const [setting] = await tx.$queryRawUnsafe("SELECT current_setting('synchronous_commit') AS value");
+      assert.equal(setting.value,'on'); return result;
+    },options) };
+    try { originalCapture = await new ConfluenceCopyLedgerCaptureStore(fromAsyncSession).prepare('org-a','owner-a',durableInput); }
+    catch (error) { throw new Error(`${error.message}; disposable synthetic database diagnostic: ${syntheticDiagnostic}`); }
+    finally { await runtime.$disconnect(); }
+    assert.equal(originalCapture.durableCaptureRecorded,true);
+    const afterDurable = (await prisma.$queryRawUnsafe(PURGE_RESTORE_SNAPSHOT_SQL))[0].snapshot;
+    assert.equal(afterDurable.format,10);
+    assert.throws(() => assertPurgeRestoreLedger(afterDurable,beforeDurable),{ code: 'PURGE_RESTORE_RECONCILIATION_REQUIRED' });
 
     // Real supported decision/capture services populate four of the eight
     // tables. No provider contact, synthetic scope or permission is needed.
@@ -99,7 +128,8 @@ test('local Confluence ledger capture uses all eight migrated tables and a real 
       keyEvidenceRef: 'SYNTHETIC-KEY-ASSERTION', expectedGeneration: 0, expectedDigest: null });
     const withdrawal = await reviews.withdraw('org-a','owner-a',recorded.id,{
       evidenceRef: 'SYNTHETIC-WITHDRAWAL', reason: 'Preserve this unpublished synthetic review withdrawal' });
-    const populated = await captureConfluenceCopyLocalLedger(prisma,'org-a','owner-a',input);
+    const populated = await new ConfluenceCopyLedgerCaptureStore(prisma).prepare('org-a','owner-a',{
+      ...durableInput, operationId: 'ledger-archive-original' });
     const capturedTables = JSON.parse(populated.body).tables;
     const originalRows = {
       ConfluenceRetainedCopyReview: await prisma.confluenceRetainedCopyReview.findUniqueOrThrow({ where: { id: recorded.id } }),
@@ -110,9 +140,50 @@ test('local Confluence ledger capture uses all eight migrated tables and a real 
     for (const [name,row] of Object.entries(originalRows)) assert.deepEqual(capturedTables[name],[JSON.parse(JSON.stringify(row))]);
     assert.equal(capturedTables.ConfluenceCopyRecoveryCapture[0].facts,capture.body);
     assert.equal(capturedTables.ConfluenceRetainedCopyReviewWithdrawal[0].id,withdrawal.id);
-    const context = { ...recoveryContextFixture, installationId: input.installationId, operationId: 'ledger-archive-original' };
-    const binding = { context, observedControl: { format: 2, installationId: input.installationId, organisationId: 'org-a',
-      writerId: 'writer-a', writerEpoch: 1, generation: 0, digest: null, activeOperation: null, revision: 'synthetic-observed-head' } };
+    const binding = populated.binding, context = binding.context;
+    const restarted = JSON.parse(run(process.execPath,['scripts/confluence-ledger-capture-restart-proof.mjs'],{ env: {
+      ...process.env, DATABASE_URL: runtimeUrl.href, CHARITYPILOT_SYNTHETIC_LEDGER_CAPTURE_PROOF: '1',
+      CHARITYPILOT_SYNTHETIC_LEDGER_CAPTURE_INPUT: JSON.stringify(durableInput),
+    } }));
+    assert.equal(restarted.id,originalCapture.id); assert.equal(restarted.body,originalCapture.body);
+    assert.equal(restarted.digest,originalCapture.digest); assert.equal(restarted.replayed,true);
+    const durableRow = await prisma.confluenceCopyLedgerCapture.findUniqueOrThrow({ where: { id: populated.id } });
+    const rejectedWrite = async fn => { await assert.rejects(fn); };
+    await rejectedWrite(() => prisma.confluenceCopyLedgerCapture.update({ where: { id: populated.id }, data: { factsDigest: 'f'.repeat(64) } }));
+    await rejectedWrite(() => prisma.confluenceCopyLedgerCapture.delete({ where: { id: populated.id } }));
+    await rejectedWrite(() => prisma.$executeRawUnsafe('TRUNCATE public."ConfluenceCopyLedgerCapture"'));
+    const cloneInput = operationId => ({ ...durableRow, id: operationId, operationId, context: { ...context, operationId } });
+    await assert.rejects(prisma.confluenceCopyLedgerCapture.create({ data: cloneInput('wrong-isolation') }),/repeatable source snapshot/);
+    await assert.rejects(prisma.$transaction(async tx => {
+      await tx.$executeRawUnsafe('SET LOCAL synchronous_commit = off');
+      await tx.confluenceCopyLedgerCapture.create({ data: cloneInput('async-capture') });
+    },{ isolationLevel: 'RepeatableRead' }),/durable WAL settings/);
+    await assert.rejects(prisma.$transaction(async tx => {
+      const data = cloneInput('null-epoch'); data.context.writerEpoch = null;
+      data.observedControl = { ...observedControl, writerEpoch: null };
+      await tx.confluenceCopyLedgerCapture.create({ data });
+    },{ isolationLevel: 'RepeatableRead' }),/binding or original facts are invalid/);
+    const forgedRuntime = new PrismaClient({ datasources: { db: { url: runtimeUrl.href } } });
+    try {
+      await assert.rejects(forgedRuntime.$transaction(async tx => {
+        await tx.$executeRawUnsafe('CREATE TEMP TABLE "User"(id TEXT,"organisationId" TEXT,role TEXT,"lifecycleStatus" TEXT) ON COMMIT DROP');
+        await tx.$executeRawUnsafe("INSERT INTO pg_temp.\"User\" VALUES ('member-a','org-a','OWNER','ACTIVE')");
+        await tx.confluenceCopyLedgerCapture.create({ data: { ...cloneInput('spoofed-owner'), actorUserId: 'member-a' } });
+      },{ isolationLevel: 'RepeatableRead' }),/active charity Owner/);
+    } finally { await forgedRuntime.$disconnect(); }
+    const altered = JSON.parse(durableRow.facts); altered.tables.ConfluenceCopyPublicationPlan = [];
+    const alteredBody = JSON.stringify(altered);
+    await assert.rejects(prisma.$transaction(async tx => {
+      await tx.confluenceCopyLedgerCapture.create({ data: { ...durableRow, id: 'forged-ledger-source', operationId: 'forged-ledger-source',
+        context: { ...context, operationId: 'forged-ledger-source' }, facts: alteredBody,
+        factsDigest: createHash('sha256').update(alteredBody).digest('hex') } });
+    },{ isolationLevel: 'RepeatableRead' }),/complete current source rows/);
+    assert.equal(await prisma.confluenceCopyLedgerCapture.count(),2);
+    await new ConfluenceCopyLedgerCaptureStore(prisma).prepare('org-b','owner-b',{
+      ...durableInput, operationId: 'empty-other-charity', observedControl: { ...observedControl, organisationId: 'org-b' } });
+    await assert.rejects(prisma.$executeRawUnsafe(`INSERT INTO public."DocumentRecoveryEnforcement"
+      (id,"organisationId","installationId","writerId","writerEpoch")
+      VALUES ('unsafe-empty-binding','org-b','synthetic-install','writer-b',1)`),/reviewed original archive dispatch history/);
     const keys = { generate: async () => ({ key: Buffer.alloc(32,7), keyId: context.keyId, wrappedKey: 'dGVzdA==' }),
       unwrap: async () => ({ key: Buffer.alloc(32,7), keyId: context.keyId }) };
     let encrypted = null;

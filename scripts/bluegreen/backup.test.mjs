@@ -5,8 +5,8 @@ import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { test } from 'node:test';
-import { PURGE_RESTORE_TABLES, PURGE_RESTORE_COMPLETION_TABLES, PURGE_RESTORE_OBSERVATION_TABLES, PURGE_RESTORE_ATTEMPT_TABLES, PURGE_RESTORE_PREVIOUS_TABLES, PURGE_RESTORE_OLDEST_TABLES,
-  PURGE_RESTORE_SNAPSHOT_SQL, PURGE_RESTORE_COMPLETION_SNAPSHOT_SQL, PURGE_RESTORE_OBSERVATION_SNAPSHOT_SQL, PURGE_RESTORE_ATTEMPT_SNAPSHOT_SQL, PURGE_RESTORE_PREVIOUS_SNAPSHOT_SQL, PURGE_RESTORE_LEGACY_SNAPSHOT_SQL,
+import { PURGE_RESTORE_TABLES, PURGE_RESTORE_CONFLUENCE_STATE_TABLES, PURGE_RESTORE_COMPLETION_TABLES, PURGE_RESTORE_OBSERVATION_TABLES, PURGE_RESTORE_ATTEMPT_TABLES, PURGE_RESTORE_PREVIOUS_TABLES, PURGE_RESTORE_OLDEST_TABLES,
+  PURGE_RESTORE_SNAPSHOT_SQL, PURGE_RESTORE_CONFLUENCE_STATE_SNAPSHOT_SQL, PURGE_RESTORE_COMPLETION_SNAPSHOT_SQL, PURGE_RESTORE_OBSERVATION_SNAPSHOT_SQL, PURGE_RESTORE_ATTEMPT_SNAPSHOT_SQL, PURGE_RESTORE_PREVIOUS_SNAPSHOT_SQL, PURGE_RESTORE_LEGACY_SNAPSHOT_SQL,
   PURGE_RESTORE_OLDEST_SNAPSHOT_SQL,
   PURGE_RESTORE_BINDING_PROBE_SQL, PURGE_RESTORE_LOCAL_OBJECTS_SQL } from '../purge-restore-reconciliation.mjs';
 
@@ -531,8 +531,8 @@ function makeDrillRecordingRunCommand({
   documentHashStdout,
   failOn = null,
   localKeys = [],
-  schema = () => 'confluence',
-  history = () => ({ format: 9, capturedAt: '2026-09-30T10:00:00.000Z',
+  schema = () => 'confluence-ledger',
+  history = () => ({ format: 10, capturedAt: '2026-09-30T10:00:00.000Z',
     tables: Object.fromEntries(PURGE_RESTORE_TABLES.map(table => [table, []])), claims: [], documents: [] }),
 }) {
   const calls = [];
@@ -560,7 +560,7 @@ function makeDrillRecordingRunCommand({
       return { stdout: rowCensusStdout };
     }
     if (command.includes(PURGE_RESTORE_BINDING_PROBE_SQL)) return { stdout: schema(command, calls) };
-    if (command.includes(PURGE_RESTORE_SNAPSHOT_SQL) || command.includes(PURGE_RESTORE_COMPLETION_SNAPSHOT_SQL) || command.includes(PURGE_RESTORE_OBSERVATION_SNAPSHOT_SQL)
+    if (command.includes(PURGE_RESTORE_SNAPSHOT_SQL) || command.includes(PURGE_RESTORE_CONFLUENCE_STATE_SNAPSHOT_SQL) || command.includes(PURGE_RESTORE_COMPLETION_SNAPSHOT_SQL) || command.includes(PURGE_RESTORE_OBSERVATION_SNAPSHOT_SQL)
       || command.includes(PURGE_RESTORE_ATTEMPT_SNAPSHOT_SQL)
       || command.includes(PURGE_RESTORE_PREVIOUS_SNAPSHOT_SQL)
       || command.includes(PURGE_RESTORE_LEGACY_SNAPSHOT_SQL)
@@ -582,7 +582,7 @@ function makeDrillRecordingRunCommand({
 function assertNeverTouchesLiveDb(calls) {
   for (const { command } of calls) {
     const line = commandLine(command);
-    if (command.includes('compose') && (command.includes(PURGE_RESTORE_SNAPSHOT_SQL) || command.includes(PURGE_RESTORE_COMPLETION_SNAPSHOT_SQL)
+    if (command.includes('compose') && (command.includes(PURGE_RESTORE_SNAPSHOT_SQL) || command.includes(PURGE_RESTORE_CONFLUENCE_STATE_SNAPSHOT_SQL) || command.includes(PURGE_RESTORE_COMPLETION_SNAPSHOT_SQL)
       || command.includes(PURGE_RESTORE_OBSERVATION_SNAPSHOT_SQL)
       || command.includes(PURGE_RESTORE_ATTEMPT_SNAPSHOT_SQL)
       || command.includes(PURGE_RESTORE_PREVIOUS_SNAPSHOT_SQL)
@@ -717,7 +717,7 @@ test('runRestoreDrill refuses stale, unreadable, changed authority or claimed ar
           const live = command.includes('compose');
           if (live) liveReads++;
           if (scenario === 'unreadable' && live) return undefined;
-          const snapshot = { format: 9, capturedAt: '2026-09-30T10:00:00.000Z',
+          const snapshot = { format: 10, capturedAt: '2026-09-30T10:00:00.000Z',
             tables: Object.fromEntries(PURGE_RESTORE_TABLES.map(table => [table, []])), claims: [], documents: [] };
           if ((scenario === 'stale' && live) || (scenario === 'changed' && liveReads === 2)) {
             snapshot.tables.DocumentPurgeDispositionEvent.push({ id: 'later-review', sha256: 'a'.repeat(64) });
@@ -828,6 +828,12 @@ test('runRestoreDrill uses exact legacy inventory before migration and refuses s
     assert.equal(result.purgeReconciliation.databaseLedgerMatches, true);
     assert.ok(legacy.calls.some(({ command }) => command.includes(PURGE_RESTORE_OLDEST_SNAPSHOT_SQL)));
     assertNeverTouchesLiveDb(legacy.calls);
+    const format9 = makeDrillRecordingRunCommand({ documentHashStdout, schema: () => 'confluence',
+      history: () => ({ format: 9, capturedAt: '2026-09-30T10:00:00.000Z',
+        tables: Object.fromEntries(PURGE_RESTORE_CONFLUENCE_STATE_TABLES.map(table => [table,[]])), claims: [], documents: [] }) });
+    assert.equal((await runRestoreDrill({ runCommand: format9.runCommand, stateDir, plan, sleep: async () => {} })).ok,true);
+    assert.ok(format9.calls.some(({ command }) => command.includes(PURGE_RESTORE_CONFLUENCE_STATE_SNAPSHOT_SQL)));
+    assertNeverTouchesLiveDb(format9.calls);
     const mismatch = makeDrillRecordingRunCommand({ documentHashStdout,
       schema: command => command.includes('compose') ? 'lease' : 'oldest' });
     await assert.rejects(() => runRestoreDrill({ runCommand: mismatch.runCommand,
@@ -850,13 +856,16 @@ test('runRestoreDrill preserves exact completion-era format8 and rejects partial
     assert.ok(legacy.calls.some(({ command }) => command.includes(PURGE_RESTORE_COMPLETION_SNAPSHOT_SQL)));
     assert.ok(!legacy.calls.some(({ command }) => command.includes(PURGE_RESTORE_SNAPSHOT_SQL)));
     assertNeverTouchesLiveDb(legacy.calls);
-    for (const scenario of ['partial','downgraded','schema-mix']) {
+    for (const scenario of ['partial','downgraded','ledger-downgraded','schema-mix','ledger-schema-mix']) {
       const fixture = makeDrillRecordingRunCommand({ documentHashStdout,
         schema: scenario === 'partial' ? () => 'partial-confluence'
-          : scenario === 'schema-mix' ? command => command.includes('compose') ? 'confluence' : 'completion' : () => 'confluence',
-        history: oldHistory });
+          : scenario === 'schema-mix' ? command => command.includes('compose') ? 'confluence' : 'completion'
+          : scenario === 'ledger-schema-mix' ? command => command.includes('compose') ? 'confluence-ledger' : 'confluence'
+          : scenario === 'ledger-downgraded' ? () => 'confluence-ledger' : () => 'confluence',
+        history: scenario === 'ledger-downgraded' ? () => ({ format: 9, capturedAt: '2026-09-30T10:00:00.000Z',
+          tables: Object.fromEntries(PURGE_RESTORE_CONFLUENCE_STATE_TABLES.map(table => [table,[]])), claims: [], documents: [] }) : oldHistory });
       await assert.rejects(() => runRestoreDrill({ runCommand: fixture.runCommand, stateDir, plan, sleep: async () => {} }),
-        scenario === 'schema-mix' ? /schema versions differ/ : /requires readable/);
+        scenario.includes('schema-mix') ? /schema versions differ/ : /requires readable/);
       assert.equal(teardownCallsOf(fixture.calls).length,1); assertNeverTouchesLiveDb(fixture.calls);
     }
   } finally { rmSync(stateDir,{ recursive: true, force: true }); }

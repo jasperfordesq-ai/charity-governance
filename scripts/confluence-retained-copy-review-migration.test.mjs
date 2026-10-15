@@ -341,16 +341,18 @@ test('retained Confluence review and permission history is scoped, immutable and
       }
       return true;
     });
-    assert.equal(afterConfluenceDecisions.format,9);
-    assert.equal(query(PURGE_RESTORE_BINDING_PROBE_SQL),'confluence');
+    assert.equal(afterConfluenceDecisions.format,10);
+    assert.equal(query(PURGE_RESTORE_BINDING_PROBE_SQL),'confluence-ledger');
+    assert.equal(query(`BEGIN; ALTER TABLE public."ConfluenceCopyLedgerCapture" RENAME TO "SyntheticLegacyLedgerCapture";
+      ${PURGE_RESTORE_BINDING_PROBE_SQL} ROLLBACK;`),'confluence');
     assert.equal(query(`BEGIN; ALTER TABLE public."ConfluenceCopyPublicationReceipt" RENAME TO "SyntheticPartialConfluenceReceipt";
       ${PURGE_RESTORE_BINDING_PROBE_SQL} ROLLBACK;`),'partial-confluence');
     const confluenceNames = ['ConfluenceRetainedCopyReview','ConfluenceRetainedCopyReviewWithdrawal','ConfluenceSyntheticCopyScope',
       'ConfluenceRetainedCopyPermission','ConfluenceRetainedCopyPermissionWithdrawal','ConfluenceCopyRecoveryCapture',
-      'ConfluenceCopyPublicationPlan','ConfluenceCopyPublicationReceipt'];
+      'ConfluenceCopyPublicationPlan','ConfluenceCopyPublicationReceipt','ConfluenceCopyLedgerCapture'];
     assert.equal(query(`BEGIN; ${confluenceNames.map((name,index) => `ALTER TABLE public."${name}" RENAME TO "SyntheticLegacyTable${index}";`).join('\n')}
       ${PURGE_RESTORE_BINDING_PROBE_SQL} ROLLBACK;`),'completion');
-    assert.equal(query(PURGE_RESTORE_BINDING_PROBE_SQL),'confluence');
+    assert.equal(query(PURGE_RESTORE_BINDING_PROBE_SQL),'confluence-ledger');
     query(`INSERT INTO "DocumentRecoveryEnforcement"(id,"organisationId","installationId","writerId","writerEpoch")
       VALUES ('unsafe-binding','org-a','synthetic-installation','synthetic-writer',1);`, /independent Confluence copy review history/);
     query(`INSERT INTO "DocumentRecoveryEnforcement"(id,"organisationId","installationId","writerId","writerEpoch")

@@ -564,6 +564,7 @@ model Organisation {
   retentionPolicyRevisions    DataRetentionPolicyRevision[]
   documentPurgeAuthorizations DocumentPurgeAuthorization[]
   retainedConfluenceCopyReviews ConfluenceRetainedCopyReview[]
+  confluenceCopyLedgerCaptures ConfluenceCopyLedgerCapture[]
   deadlines                   Deadline[]
   conflictRecords             ConflictRecord[]
   riskRecords                 RiskRecord[]
@@ -1950,6 +1951,25 @@ model ConfluenceCopyPublicationReceipt {
   recordedAt           DateTime @default(now())
 
   @@unique([planId, organisationId], map: "ConfluenceCopyReceipt_plan_org_key")
+}
+
+// Original confidential transport input, saved atomically with its eight-table
+// source snapshot before preservation I/O. Not a disposal or recovery authority.
+model ConfluenceCopyLedgerCapture {
+  id              String @id @default(cuid())
+  organisationId  String
+  organisation    Organisation @relation(fields: [organisationId], references: [id], onDelete: Restrict, onUpdate: NoAction)
+  operationId     String
+  actorUserId     String
+  context         Json
+  observedControl Json
+  facts           String
+  factsDigest     String
+  capturedAt      DateTime
+  recordedAt      DateTime @default(now())
+
+  @@unique([organisationId, operationId], map: "ConfluenceLedgerCapture_org_operation_key")
+  @@unique([id, organisationId], map: "ConfluenceLedgerCapture_id_org_key")
 }
 
 model DocumentStorageDeletion {

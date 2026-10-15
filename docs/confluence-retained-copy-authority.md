@@ -467,18 +467,21 @@ one-use execution, real provider custody and host-loss acceptance remain open.
 
 ## Restore-drill inventory coverage
 
-The existing purge/restore comparison now uses format9 to hash complete rows in
-all eight Confluence decision/capture/publication tables. Missing or changed
-withdrawals, captures, plans or receipts refuse comparison. Hashing occurs inside
+The existing purge/restore comparison now uses format10 to hash complete rows in
+all eight Confluence decision/capture/publication tables plus original local
+ledger captures. Missing or changed withdrawals, captures, plans or receipts
+refuse comparison. Hashing occurs inside
 PostgreSQL; the inventory exposes IDs/hashes and count-only differences, not
 review content, reasons, key references or provider targets.
 
 The blue-green drill probes both source and disposable restore schemas, selects
 the exact snapshot query and checks response format. Partial Confluence schemas,
-mixed modes or a format8 response for a format9 schema refuse, with no fallback.
-The complete absence of Confluence tables retains exact legacy format8 behavior;
-formats3–7 keep their existing inventory. Results report `schemaFormat` and
-`confluenceRowsCompared` so a legacy match cannot imply new-table coverage.
+mixed modes or a downgraded response refuse, with no fallback. Exact format9
+remains for schemas with the eight earlier tables and no local-ledger-capture
+table. The complete absence of Confluence tables retains exact format8 behavior;
+formats3–7 keep their inventories. Results report `schemaFormat`,
+`confluenceRowsCompared` and `confluenceLedgerCapturesCompared` so a legacy match
+cannot imply new-table coverage.
 
 Real disposable PostgreSQL demonstrates the original gap: the format8 comparison
 passes before/after Confluence-only withdrawals/publication changes, while
@@ -738,3 +741,46 @@ and2 archives, exact encrypted digest, ETag races and refusal across all three
 release types. Actual PostgreSQL-generated rows now compose through archive
 publication/readback and acknowledgement using synthetic external adapters.
 This does not establish real provider custody or independent host recovery.
+
+## Atomic original ledger capture before preservation I/O
+
+`ConfluenceCopyLedgerCaptureStore.prepare` records the complete original body,
+digest, actor, context and declared observed control in an immutable database
+row. It captures the eight source tables and inserts the row in one
+repeatable-read transaction under charity/actor locks. No key generation,
+provider lookup, object write or reservation occurs in this operation.
+
+The transaction explicitly requests synchronous commit; its SQL guard also
+requires fsync/full-page writes and synchronous commit, active charity Owner,
+valid binding/hash/clock, bounded source size and exact complete source rows
+within the transaction snapshot. SQL compares all eight normalised row sets,
+not a caller-supplied list of IDs. Update/delete/truncate and unreviewed recovery
+binding activation refuse. Invoker functions use pinned search paths and public
+qualified relations; no security definer, session bypass or runtime privilege
+increase is introduced.
+
+An existing operation returns its original validated body/binding without
+recapturing new rows or timestamps. Changed actor/key/source/epoch/observation
+refuse. An unknown local commit response is retried by lookup of that same
+operation. Original bytes are returned only after active-Owner checks and
+canonical/hash/relationship validation. Observed control/source labels remain
+declarations until independently authenticated in later publication gates.
+
+These local transport records are outside the eight-table authoritative archive
+payload, preventing recursive snapshots of their own bodies. Format10 backup
+comparison includes their full original rows; missing later pending captures
+therefore refuse an old restore. Their host-loss reconciliation is unfinished:
+do not invent missing IDs/timestamps or treat the eight-table payload as proof
+that the separate local transport records survived.
+
+The flag `durableCaptureRecorded` means a committed database original under its
+storage/durability contract. Actual power-loss storage and independent recovery
+remain unproved. Tests show a fresh Node process/new database connection returns
+the original bytes after the source records change; they do not simulate loss
+of PostgreSQL or the host. No latest-local-state coverage or action follows.
+
+Next: preserve original encrypted candidate bytes durably before external
+creation, persist publication/acknowledgement progress and resume unknown
+outcomes across restart. No automatic dispatcher or cleanup is enabled. Original
+capture retention/purpose and real key/provider custody still require review;
+there is no automatic expiry or disposal of these confidential copies.

@@ -657,12 +657,14 @@ cannot establish safe recovery. Integration with supported recovery procedures,
 durable independent authority and file/copy reconciliation remain outstanding.
 No deployment or live recovery acceptance is claimed by these tests.
 
-The current restore inventory is format9 and also covers all eight Confluence
+The current restore inventory is format10 and covers original local ledger
+capture rows plus all eight Confluence
 decision, withdrawal, capture and publication-plan/receipt tables. Its schema
 probe requires the complete set, refuses partial/mixed inventories and validates
 the returned format; an older format cannot hide missing later withdrawals.
 Explicit legacy inventories remain available only for their matching schemas.
-Reports state the schema format and whether Confluence rows were compared.
+Format9 retains the earlier eight-table inventory; format10 adds local original
+transport captures. Reports state the schema format and both coverage flags.
 This is still a live-source comparison, not independent host-loss authority or
 an application reopening gate. No backup contents are rewritten.
 

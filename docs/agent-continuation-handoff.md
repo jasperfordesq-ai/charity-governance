@@ -1,5 +1,16 @@
 # CharityPilot Agent Continuation Handoff
 
+> **15 October atomic durable original ledger capture, source only:** New
+> immutable local capture/migration185 saves original eight-table body/binding
+> in one repeatable-read transaction before preservation I/O. SQL checks actual
+> complete source rows, Owner/tenant/hash/clock/capacity and durable WAL settings;
+> writes/deletes/truncation and unreviewed binding activation refuse. Same-op
+> retries preserve originals; a fresh Node process returns old bytes after source
+> changes. Format10 compares this separate transport table, with exact older
+> formats retained. This is committed database/process-restart proof, not host
+> loss, independent custody or complete dispatch. Next: durable ciphertext and
+> progress/restart integration. Live remains last verified c78/179; source185 only.
+
 > **15 October exact archive acknowledgement, source only:** A distinct typed
 > provider path clears only the current verified archive's exact metadata slot.
 > Full original body/prefix/control checks precede it; readback preserves head,

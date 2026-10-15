@@ -1,5 +1,14 @@
 # CharityPilot Full-Platform Remediation Audit
 
+> **15 October original durable capture increment, OPEN:** Migration185 adds
+> an immutable, Owner-scoped original archive-input row saved atomically with
+> all eight source-table reads. SQL checks source equality, hash/clock, limits,
+> isolation/WAL and binding quiescence. New-process proof retains original bytes
+> after source changes. Format10 includes local transport captures; older exact
+> inventories remain scoped. Source185 is not deployed. Durable ciphertext /
+> dispatch progress, host-loss reconciliation/custody, supported recovery and
+> Nikita acceptance remain unresolved; no data-action/reopen authority follows.
+
 > **15 October archive metadata acknowledgement increment, OPEN:** Full current
 > archive/prefix and original digest/binding now gate a distinct exact metadata
 > clear. Head/writer/epoch are preserved and readback is mandatory. Unknown/null-
