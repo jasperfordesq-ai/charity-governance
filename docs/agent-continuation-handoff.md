@@ -8,6 +8,9 @@
 > application source. This does not reproduce or explain a separately observed
 > rapid-modal no-request attempt; no runtime correction or deployment is claimed.
 > Current private evidence and controller decisions remain in the ignored roadmap.
+> The timing journey has its own disposable-only spec. The isolation contract
+> permits only the exact fenced API-origin mirror GET, disallows redirects and
+> synthetic response bodies, and preserves the fence for subsequent requests.
 
 > **14 October existing-file owner control, source only:** A controller review
 > exposed that the Vault could classify retained evidence but could not edit
