@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { spawnSync } from 'node:child_process';
+import { spawn, spawnSync } from 'node:child_process';
 import { createHash, randomUUID } from 'node:crypto';
 import { readFileSync, readdirSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
@@ -199,6 +199,64 @@ test('retained Confluence review and permission history is scoped, immutable and
     query(`SET ROLE synthetic_copy_runtime; UPDATE "ConfluenceRetainedCopyPermission" SET reason='Replace reviewed permission';`, /append-only/);
     query(`SET ROLE synthetic_copy_runtime; DELETE FROM "ConfluenceSyntheticCopyScope";`, /append-only/);
     query(`TRUNCATE "ConfluenceRetainedCopyPermissionWithdrawal", "ConfluenceRetainedCopyPermission", "ConfluenceSyntheticCopyScope";`, /append-only/);
+    // Internal maintenance replay is distinct from ordinary application writes.
+    // Real historical inserts are exercised inside a rolled-back synthetic
+    // quarantine; external history authentication belongs to its coordinator.
+    const replayBaseline = JSON.parse(query(`SELECT public."ConfluenceCopyRecovery_rows"('org-a');`));
+    const replayTime = new Date(new Date(firstCapture.capturedAt).getTime() + 1).toISOString();
+    const replayRows = [
+      { table: 'reviewWithdrawals', record: { id: 'replay-rw', organisationId: 'org-a', reviewId: 'review-a',
+        actorUserId: 'owner-a', evidenceRef: 'C01-REPLAY', reason: 'Recover the exact synthetic review withdrawal', occurredAt: replayTime } },
+      { table: 'permissionWithdrawals', record: { id: 'replay-pw', organisationId: 'org-a', permissionId: 'permission-a',
+        actorUserId: 'owner-a', evidenceRef: 'C01-REPLAY', reason: 'Recover the exact synthetic permission withdrawal', occurredAt: replayTime } },
+    ];
+    const sqlJson = value => `'${JSON.stringify(value).replaceAll("'","''")}'::jsonb`;
+    const replayCall = (items = replayRows, baseline = replayBaseline) =>
+      `SELECT public."ConfluenceCopyRecovery_replay"('org-a',${sqlJson(baseline)},${sqlJson(items)});`;
+    const quarantine = `BEGIN; UPDATE public."Organisation" SET "lifecycleStatus"='SUSPENDED' WHERE id='org-a';`;
+    const enabledReplayGuards = `SELECT count(*) FROM pg_trigger t JOIN pg_class c ON c.oid=t.tgrelid
+      WHERE c.relnamespace='public'::regnamespace AND c.relname IN ('ConfluenceRetainedCopyReview','ConfluenceSyntheticCopyScope',
+      'ConfluenceRetainedCopyPermission','ConfluenceRetainedCopyReviewWithdrawal','ConfluenceRetainedCopyPermissionWithdrawal')
+      AND t.tgname=c.relname||'_guard' AND t.tgenabled='O';`;
+    assert.equal(query(`SELECT has_function_privilege('synthetic_copy_runtime','public."ConfluenceCopyRecovery_replay"(text,jsonb,jsonb)','EXECUTE');`),'f');
+    query(`SET ROLE synthetic_copy_runtime; ${replayCall()}`, /permission denied for function/);
+    query(`GRANT EXECUTE ON FUNCTION public."ConfluenceCopyRecovery_replay"(TEXT,JSONB,JSONB) TO synthetic_copy_runtime;`);
+    query(`SET ROLE synthetic_copy_runtime; ${replayCall()}`, /maintenance table owner/);
+    query(`REVOKE EXECUTE ON FUNCTION public."ConfluenceCopyRecovery_replay"(TEXT,JSONB,JSONB) FROM synthetic_copy_runtime;`);
+    query(replayCall(), /quarantined charity/);
+    query(`${quarantine.replace('BEGIN;','BEGIN ISOLATION LEVEL REPEATABLE READ;')} ${replayCall()}`, /fresh read-committed/);
+    const competing = spawn('docker',['--host',endpoint.Host,'exec','-i',container,'psql','-h','127.0.0.1','-U','postgres',
+      '-v','ON_ERROR_STOP=1','-Atq','-c','SELECT pg_sleep(3);'], { stdio: 'ignore', signal: AbortSignal.timeout(10_000) });
+    const competingExit = new Promise(resolve => { competing.once('error',() => resolve(-1)); competing.once('exit',code => resolve(code)); });
+    try {
+      let visible = false;
+      for (let attempt=0; attempt<20; attempt++) {
+        if (Number(query(`SELECT count(*) FROM pg_stat_activity WHERE datname=current_database() AND backend_type='client backend';`))>1) { visible=true; break; }
+        await new Promise(resolve => setTimeout(resolve,50));
+      }
+      assert.ok(visible,'synthetic competing maintenance client was not observed');
+      query(`${quarantine} ${replayCall()}`, /exclusive maintenance client access/);
+    } finally { assert.equal(await competingExit,0); }
+    query(`${quarantine} ${replayCall(replayRows,{})}`, /local decisions changed/);
+    query(`${quarantine} ALTER TABLE public."ConfluenceRetainedCopyReview" DISABLE TRIGGER "ConfluenceRetainedCopyReview_guard";
+      ${replayCall()}`, /exact enabled guards/);
+    const historicalProof = query(`${quarantine} ${replayCall()}
+      SELECT (SELECT "occurredAt" FROM public."ConfluenceRetainedCopyReviewWithdrawal" WHERE id='replay-rw')='${replayTime}'::timestamp
+        AND (SELECT "occurredAt" FROM public."ConfluenceRetainedCopyPermissionWithdrawal" WHERE id='replay-pw')='${replayTime}'::timestamp;
+      ${enabledReplayGuards} ROLLBACK;`).split('\n');
+    assert.deepEqual(historicalProof,['2','t','5']);
+    const badSecond = structuredClone(replayRows); badSecond[1].record.permissionId = 'missing-permission';
+    query(`${quarantine} ${replayCall(badSecond)}`, /foreign key constraint/);
+    query(`${quarantine} ${replayCall([{ table: 'reviews', record: replayBaseline.reviews[0] }])}`, /unique constraint/);
+    const extraField = structuredClone(replayRows); extraField[0].record.extra = 'never-ignore';
+    query(`${quarantine} ${replayCall(extraField)}`, /row fields or dates are not exact/);
+    const foreignReplay = structuredClone(replayRows); foreignReplay[0].record.organisationId = 'org-b';
+    query(`${quarantine} ${replayCall(foreignReplay)}`, /row scope mismatch/);
+    assert.equal(query(enabledReplayGuards),'5');
+    assert.equal(query(`SELECT count(*) FROM public."ConfluenceRetainedCopyReviewWithdrawal";`),'0');
+    assert.equal(query(`SELECT count(*) FROM public."ConfluenceRetainedCopyPermissionWithdrawal";`),'0');
+    assert.equal(query(`SELECT "lifecycleStatus" FROM public."Organisation" WHERE id='org-a';`),'ACTIVE');
+    assert.equal(query(`${quarantine} ${replayCall([])} ROLLBACK;`),'0');
     const permissionWithdraw = (id, actor = 'owner-a', org = 'org-a') => `SET ROLE synthetic_copy_runtime;
       INSERT INTO "ConfluenceRetainedCopyPermissionWithdrawal"(id,"organisationId","permissionId","actorUserId","evidenceRef",reason)
       VALUES ('${id}','${org}','permission-a','${actor}','C01-WITHDRAW','Withdraw this exact synthetic permission');`;
@@ -279,6 +337,23 @@ test('retained Confluence review and permission history is scoped, immutable and
     assert.equal(query(`SELECT count(*) FROM "Document" WHERE id='doc-a' AND "deletedAt" IS NULL AND "lifecycleStatus"='RETIRED';`), '1');
     assert.equal(query(`SELECT count(*) FROM "ConfluenceRetainedCopyReview";`), '1');
     assert.equal(query(`SELECT count(*) FROM "ConfluenceRetainedCopyReviewWithdrawal";`), '1');
+    // Commit a complete five-row synthetic replay and prove quarantine and
+    // ordinary guards survive commit. This is not external-history acceptance.
+    const committedBaseline = JSON.parse(query(`SELECT public."ConfluenceCopyRecovery_rows"('org-a');`));
+    const committedRows = [
+      { table: 'reviews', record: { ...committedBaseline.reviews[0], id: 'recovered-review' } },
+      { table: 'scopes', record: { ...committedBaseline.scopes[0], id: 'recovered-scope', reviewId: 'recovered-review' } },
+      { table: 'permissions', record: { ...committedBaseline.permissions[0], id: 'recovered-permission', reviewId: 'recovered-review', scopeId: 'recovered-scope' } },
+      { table: 'reviewWithdrawals', record: { ...committedBaseline.reviewWithdrawals[0], id: 'recovered-rw', reviewId: 'recovered-review' } },
+      { table: 'permissionWithdrawals', record: { ...committedBaseline.permissionWithdrawals[0], id: 'recovered-pw', permissionId: 'recovered-permission' } },
+    ];
+    assert.equal(query(`${quarantine} ${replayCall(committedRows,committedBaseline)} COMMIT;`),'5');
+    const committed = JSON.parse(query(`SELECT public."ConfluenceCopyRecovery_rows"('org-a');`));
+    for (const item of committedRows) assert.deepEqual(committed[item.table].find(row => row.id===item.record.id),item.record);
+    assert.equal(query(enabledReplayGuards),'5');
+    assert.equal(query(`SELECT "lifecycleStatus" FROM public."Organisation" WHERE id='org-a';`),'SUSPENDED');
+    query(`SET ROLE synthetic_copy_runtime; UPDATE public."ConfluenceRetainedCopyPermission" SET reason='Replace recovered decision' WHERE id='recovered-permission';`, /append-only/);
+    assert.equal(query(`SELECT count(*) FROM "DocumentStorageDeletion";`),'0');
   } finally {
     const removed = docker(['rm', '--force', '--volumes', container]);
     assert.equal(removed.status, 0, removed.stderr);

@@ -423,3 +423,44 @@ proof and exact local recheck for atomic historical replay. Current ordinary
 writes correctly refuse that replay. Do not add an app-wide bypass flag, accept
 plan JSON/hash as proof, or document raw database commands as an operator restore.
 Mixed protocols, all writers, one-use execution and live host-loss proof stay open.
+
+## Internal atomic maintenance replay
+
+The forward migration adds invoker-only `ConfluenceCopyRecovery_rows` and
+`ConfluenceCopyRecovery_replay` delegates, with PUBLIC execution revoked and no
+SECURITY DEFINER or runtime route. Replay additionally checks the actual owner
+of all five public tables, a SUSPENDED charity, read-committed isolation, observed
+sole-client maintenance access, exact enabled user/FK guards and the original
+local snapshot. Qualified public relations resist temporary-table impersonation.
+
+Within one transaction it takes exclusive locks on all five tables, temporarily
+pauses only their five named current-time insertion guards, and inserts exact
+typed historical rows. Foreign keys, checks, unique constraints and no-truncate
+guards stay enabled. Extra/missing fields, changed dates, foreign rows, duplicate
+IDs or readback changes fail. All five insertion guards are re-enabled before
+successful return. Errors roll back data and transactional trigger DDL together;
+ordinary application roles receive no bypass flag or write capability.
+
+`replayConfluenceCopyDecisionRows` requires an explicitly supplied maintenance
+client, authenticates fresh independent decision history and regenerates the
+exact proposal. A bounded read-committed transaction calls SQL, checks counts and
+complete post-replay rows, then rechecks the independent head before commit.
+Changed history or late errors roll back; private database errors are sanitised.
+Unknown commit outcomes retry from fresh history/current rows, not a saved plan.
+The result is explicitly scoped to decision rows and grants no action, overall
+current-history or reopening authority. Charity suspension is never removed.
+
+Real disposable PostgreSQL tests commit five exact recovered records, preserve
+dates and suspension, and prove ordinary edits remain refused after commit.
+They test late FK rollback, stale snapshots, role denial even after explicit
+EXECUTE grant, disabled guards, another client and wrong transaction isolation.
+Coordinator tests use mocked Prisma with real journal/envelope verification;
+they are separate from the SQL delegate tests, not a real-provider/Prisma journey.
+
+This remains an internal component, not a supported operator entry point.
+Host integration must attest canonical source/destination, stop application and
+worker access, use a dedicated single-connection maintenance client and maintain
+quarantine. SQL's client observation alone is not proof of host isolation.
+Existing supported installer/recovery paths remain authoritative; raw SQL is not
+an operator substitute. Mixed protocols, all other writer/key facts, outbox,
+one-use execution, real provider custody and host-loss acceptance remain open.

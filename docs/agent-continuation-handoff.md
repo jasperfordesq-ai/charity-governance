@@ -1,5 +1,16 @@
 # CharityPilot Agent Continuation Handoff
 
+> **15 October internal Confluence atomic replay, source only:** An invoker-
+> owned SQL delegate requires suspended charity, fresh isolation, sole-client
+> observation, exact guards/FKs and local snapshot. Exclusive transactional locks
+> permit exact historical inserts while five current-time guards are paused;
+> guards are restored before return and late errors roll everything back. Runtime
+> roles cannot execute or gain a bypass. The internal coordinator authenticates
+> fresh history, verifies final rows/head and sanitises errors; unknown commits
+> retry fresh. Committed synthetic PostgreSQL proof retains suspension and normal
+> edit refusal. No supported host entry point, live restore or reopening authority
+> exists; host isolation, mixed protocols, other facts and acceptance stay open.
+
 > **15 October Confluence reconciliation proposal, source only:** Active-Owner
 > inspection reads five local decision tables under charity locks before/after
 > independent verification. Full-value comparison proposes missing historical

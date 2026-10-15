@@ -1,5 +1,14 @@
 # CharityPilot Full-Platform Remediation Audit
 
+> **15 October Confluence maintenance-replay increment, OPEN:** Internal SQL
+> and coordinator components atomically recover missing historical decision rows
+> under maintenance ownership/quarantine/exclusive locks, preserving dates and
+> withdrawals. Fresh external history, exact local/post-rows and head are checked;
+> runtime roles are denied and late failures roll back data/trigger DDL. Real
+> disposable PostgreSQL commit/rollback tests pass, but this is no supported host
+> recovery or live-provider proof. Host attestation/isolation, broader protocol/
+> writer facts, one-use execution and Nikita acceptance remain unresolved.
+
 > **15 October Confluence reconciliation-planning increment, OPEN:** Source
 > compares five complete local decision tables with verified latest independent
 > state, preserving withdrawals and refusing conflicts/local-only evidence.
