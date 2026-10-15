@@ -1,5 +1,16 @@
 # CharityPilot Full-Platform Remediation Audit
 
+> **15 October independent-recovery availability, OPEN:** A valid 650-entry
+> synthetic history exceeded the 30-second full-scan deadline with simulated
+> storage latency. Source correction bounds parallel reads to 32 within a trusted
+> checkpoint/authenticated-head range while retaining ordered validation and
+> sequential unknown-tail discovery. Full-capacity cold verification, corruption,
+> cancellation and head-change regressions cover this path. Local synthetic
+> improvement is not provider performance, deployment, host-loss recovery,
+> rollover, policy approval or Nikita acceptance evidence.
+> Authenticated-head bounds are also propagated through publication, pending
+> recovery and reserved transitions; cold publication/recovery has a regression.
+
 > **15 October DPO document-control follow-up, OPEN:** Added a controlled
 > two-record browser regression for owner editing during the preceding save's
 > background refresh. The isolated journey passed; record targeting and entered

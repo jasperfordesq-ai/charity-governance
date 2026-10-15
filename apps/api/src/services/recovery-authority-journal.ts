@@ -125,7 +125,7 @@ export class RecoveryAuthorityJournal {
   /** Prefix reuse is opt-in and assumes independently enforced immutable entry
    * storage. It does not re-audit historical bytes before the boundary on each
    * append. Recovery inspection always traverses the complete chain. */
-  private async history(reusePrefix = false): Promise<Entry[]> {
+  private async history(reusePrefix = false, knownGeneration = this.checkpoint.generation): Promise<Entry[]> {
     const controller = new AbortController();
     let timer: ReturnType<typeof setTimeout>;
     const expired = new Promise<never>((_resolve, reject) => {
@@ -137,7 +137,8 @@ export class RecoveryAuthorityJournal {
     try {
       const prefix = reusePrefix && this.appendVerification === 'VERIFIED_PREFIX' && this.prefixReusable
         ? this.verifiedPrefix : [];
-      const rows = await this.scanHistory(controller.signal, expired, prefix);
+      const rows = await this.scanHistory(controller.signal, expired, prefix,
+        Math.max(this.checkpoint.generation, knownGeneration));
       if (this.appendVerification === 'VERIFIED_PREFIX') {
         if (rows.length < this.verifiedPrefix.length) {
           throw new Error('Previously verified history is truncated');
@@ -165,7 +166,8 @@ export class RecoveryAuthorityJournal {
     return body;
   }
 
-  private async scanHistory(signal: AbortSignal, expired: Promise<never>, prefix: Entry[]): Promise<Entry[]> {
+  private async scanHistory(signal: AbortSignal, expired: Promise<never>, prefix: Entry[],
+    knownGeneration: number): Promise<Entry[]> {
     const rows = [...prefix]; const operations = new Set(prefix.map(row => row.operationId));
     const boundary = prefix.at(-1);
     if (boundary) {
@@ -178,8 +180,19 @@ export class RecoveryAuthorityJournal {
         }
       } catch { throw new Error('Previously verified recovery authority boundary is missing or changed'); }
     }
+    let batch: (string | null)[] = [];
+    let batchStart = 0;
     for (let generation = prefix.length + 1; generation <= 10001; generation++) {
-      const body = await this.readBody(generation, signal, expired);
+      if (generation >= batchStart + batch.length) {
+        batchStart = generation;
+        // Parallelise only the range already required by a trusted checkpoint
+        // or authenticated head. Validate every body in generation order; probe
+        // the unknown suffix sequentially, without speculative tail requests.
+        const size = Math.min(32, Math.max(1, knownGeneration - generation + 1));
+        batch = await Promise.all(Array.from({ length: size }, (_, offset) =>
+          this.readBody(generation + offset, signal, expired)));
+      }
+      const body = batch[generation - batchStart]!;
       if (body === null) {
         if (rows.length < this.checkpoint.generation) {
           throw new Error('Recovery authority history is shorter than its trusted checkpoint');
@@ -259,7 +272,7 @@ export class RecoveryAuthorityJournal {
   async readPendingEntry(operationId: string, kind: z.infer<typeof kinds>, source: AuthorityHeadSource) {
     identity.parse(operationId); kinds.parse(kind);
     const before = await this.readCurrentHead(source);
-    const rows = await this.history();
+    const rows = await this.history(false, before.generation);
     this.headMatchesHistory(before, rows);
     const pending = rows[before.generation];
     if (rows.length !== before.generation + 1 || !pending
@@ -277,7 +290,7 @@ export class RecoveryAuthorityJournal {
 
   private async currentHistory(source: AuthorityHeadSource) {
     const before = await this.readCurrentHead(source);
-    const rows = await this.history();
+    const rows = await this.history(false, before.generation);
     const observed = { generation: rows.length, digest: rows.at(-1)?.digest ?? null };
     if (observed.generation !== before.generation || observed.digest !== before.digest) {
       throw new Error('Recovery authority history does not match its current head');
@@ -318,7 +331,7 @@ export class RecoveryAuthorityJournal {
   async appendPublished(raw: Input, publisher: AuthorityHeadPublisher) {
     const input = inputSchema.parse(raw);
     const before = await this.readCurrentHead(publisher);
-    const rows = await this.history(true);
+    const rows = await this.history(true, before.generation);
     this.headMatchesHistory(before, rows);
     const previous = this.prior(rows, input);
     if (previous && previous.generation <= before.generation) {
@@ -330,7 +343,7 @@ export class RecoveryAuthorityJournal {
     if (rows.length > before.generation && (!previous || rows.length !== previous.generation)) {
       throw new Error('Recovery authority has unresolved pending history; reconcile the exact operation.');
     }
-    const receipt = await this.appendIntent(input, true);
+    const receipt = await this.appendIntent(input, true, before.generation);
     const next = { ...this.binding, generation: receipt.generation, digest: receipt.digest };
     let published: boolean;
     try { published = await publisher.compareAndSwap(before.revision, next); }
@@ -338,7 +351,7 @@ export class RecoveryAuthorityJournal {
     let after: z.infer<typeof headSchema>;
     try {
       after = await this.readCurrentHead(publisher);
-      const currentRows = await this.history(true);
+      const currentRows = await this.history(true, after.generation);
       this.headMatchesHistory(after, currentRows);
       if (currentRows[receipt.generation - 1]?.digest !== receipt.digest) {
         throw new Error('Intent changed');
@@ -405,7 +418,7 @@ export class RecoveryAuthorityJournal {
       outcomeEnvelopeDigest: digest, permitEnvelopeDigest: digest,
     }).strict().parse(raw);
     const publisher = await this.complaintPublisher(request, control);
-    const before = await this.readCurrentHead(publisher), rows = await this.history();
+    const before = await this.readCurrentHead(publisher), rows = await this.history(false, before.generation);
     this.headMatchesHistory(before, rows);
     const outcome = rows[request.outcomeGeneration - 1];
     if (!outcome || outcome.kind !== 'DOCUMENT_OUTCOME_V1'
@@ -428,7 +441,7 @@ export class RecoveryAuthorityJournal {
       candidateEnvelopeDigest: digest, decisionEnvelopeDigest: digest,
     }).strict().parse(raw);
     const publisher = await this.complaintPublisher(request, control);
-    const before = await this.readCurrentHead(publisher), rows = await this.history();
+    const before = await this.readCurrentHead(publisher), rows = await this.history(false, before.generation);
     this.headMatchesHistory(before, rows);
     const candidate = rows[request.candidateGeneration - 1];
     if (!candidate || candidate.kind !== 'DOCUMENT_BYTE_PERMIT_V1'
@@ -451,7 +464,7 @@ export class RecoveryAuthorityJournal {
       decisionEnvelopeDigest: digest, unknownEnvelopeDigest: digest,
     }).strict().parse(raw);
     const publisher = await this.complaintPublisher(request, control);
-    const before = await this.readCurrentHead(publisher), rows = await this.history();
+    const before = await this.readCurrentHead(publisher), rows = await this.history(false, before.generation);
     this.headMatchesHistory(before, rows);
     const decision = rows[request.decisionGeneration - 1];
     if (!decision || decision.kind !== 'DOCUMENT_BYTE_EXECUTION_DECISION_V1'
@@ -475,7 +488,7 @@ export class RecoveryAuthorityJournal {
       unknownEnvelopeDigest: digest, completionEnvelopeDigest: digest,
     }).strict().parse(raw);
     const publisher = await this.complaintPublisher(request, control);
-    const before = await this.readCurrentHead(publisher), rows = await this.history();
+    const before = await this.readCurrentHead(publisher), rows = await this.history(false, before.generation);
     this.headMatchesHistory(before, rows);
     const unknown = rows[request.unknownGeneration - 1];
     if (!unknown || unknown.kind !== 'DOCUMENT_BYTE_PROVIDER_UNKNOWN_V1'
@@ -499,7 +512,7 @@ export class RecoveryAuthorityJournal {
       completionEnvelopeDigest: digest, outcomeEnvelopeDigest: digest,
     }).strict().parse(raw);
     const publisher = await this.complaintPublisher(request, control);
-    const before = await this.readCurrentHead(publisher), rows = await this.history();
+    const before = await this.readCurrentHead(publisher), rows = await this.history(false, before.generation);
     this.headMatchesHistory(before, rows);
     const completion = rows[request.completionGeneration - 1];
     if (!completion || completion.kind !== 'DOCUMENT_BYTE_PRIMARY_COMPLETION_V1'
@@ -532,7 +545,7 @@ export class RecoveryAuthorityJournal {
       preparationGeneration: z.number().int().positive().max(9999), outcomeEnvelopeDigest: digest,
     }).strict().parse(raw);
     const publisher = await this.complaintPublisher(request, control);
-    const before = await this.readCurrentHead(publisher), rows = await this.history();
+    const before = await this.readCurrentHead(publisher), rows = await this.history(false, before.generation);
     this.headMatchesHistory(before, rows);
     const preparation = rows[request.preparationGeneration - 1];
     if (!preparation || preparation.kind !== predecessorKind(kind)
@@ -574,8 +587,8 @@ export class RecoveryAuthorityJournal {
     return publisher;
   }
 
-  private async appendIntent(raw: Input, reusePrefix: boolean) {
-    const input = inputSchema.parse(raw); const rows = await this.history(reusePrefix);
+  private async appendIntent(raw: Input, reusePrefix: boolean, knownGeneration = this.checkpoint.generation) {
+    const input = inputSchema.parse(raw); const rows = await this.history(reusePrefix, knownGeneration);
     const previous = this.prior(rows, input);
     if (previous) return this.receipt(previous, true);
     if (input.expectedGeneration !== rows.length || input.expectedDigest !== (rows.at(-1)?.digest ?? null)) {
@@ -596,7 +609,7 @@ export class RecoveryAuthorityJournal {
     try { created = await this.store.create(this.key(entry.generation), JSON.stringify(entry)); }
     catch { throw new Error('Recovery write outcome is unknown; retry the same operation identity.'); }
     let observed: Entry | undefined;
-    try { observed = this.prior(await this.history(reusePrefix), input); }
+    try { observed = this.prior(await this.history(reusePrefix, knownGeneration), input); }
     catch { throw new Error('Recovery write outcome is unknown; retry the same operation identity.'); }
     if (!observed) {
       if (!created) throw new Error('Recovery authority generation changed; review current decisions.');
