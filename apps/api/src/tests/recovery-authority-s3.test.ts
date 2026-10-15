@@ -298,7 +298,7 @@ test('journal and S3 adapter recover a lost publication acknowledgement together
 
 test('S3 explicit release requires the exact outcome head and refuses generic slot clearing', async () => {
   for (const scenario of ['valid', 'valid-hold', 'valid-cancellation', 'valid-hold-cancellation',
-    'document-outcome', 'document-byte-permit', 'document-byte-decision', 'confluence-state',
+    'document-outcome', 'document-byte-permit', 'document-byte-decision', 'confluence-state', 'confluence-ledger',
     'wrong-kind', 'wrong-operation', 'missing', 'corrupt', 'race']) {
     const generation = scenario === 'confluence-state' ? 1 : 2;
     const facts = { format: 1, installationId: config.installationId, organisationId: config.organisationId,
@@ -307,6 +307,7 @@ test('S3 explicit release requires the exact outcome head and refuses generic sl
         'document-byte-permit': 'DOCUMENT_BYTE_PERMIT_V1',
         'document-byte-decision': 'DOCUMENT_BYTE_EXECUTION_DECISION_V1',
         'confluence-state': 'CONFLUENCE_COPY_DECISION_STATE_V1',
+        'confluence-ledger': 'CONFLUENCE_COPY_LEDGER_ARCHIVE_V1',
         'valid-hold': 'COMPLAINT_HOLD_OUTCOME_V1',
         'valid-cancellation': 'COMPLAINT_CANCELLATION_V1', 'valid-hold-cancellation': 'COMPLAINT_HOLD_CANCELLATION_V1' } as Record<string, string>)[scenario] ?? 'COMPLAINT_OUTCOME_V1', factsDigest: 'c'.repeat(64) };
     const digest = createHash('sha256').update(JSON.stringify(facts)).digest('hex');
@@ -332,6 +333,11 @@ test('S3 explicit release requires the exact outcome head and refuses generic sl
     const { revision, ...value } = before;
     await assert.rejects(() => store.compareAndSwapControl(revision, { ...value, activeOperation: null }));
     const expected = { operationId: 'operation-a', preparationDigest: 'a'.repeat(64), generation, digest };
+    if (scenario === 'confluence-ledger') {
+      await assert.rejects(() => store.releaseControl(revision,expected));
+      await assert.rejects(() => store.releaseConfluenceCopyStateControl(revision,{ ...expected, envelopeDigest: facts.factsDigest }));
+      assert.equal(writes,0); assert.notEqual((await store.readControl()).activeOperation,null); continue;
+    }
     if (scenario === 'confluence-state') {
       await assert.rejects(() => store.releaseControl(revision,expected));
       await assert.rejects(() => store.releaseConfluenceCopyStateControl(revision,{ ...expected, envelopeDigest: '0'.repeat(64) }));

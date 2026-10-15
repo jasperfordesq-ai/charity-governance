@@ -1,5 +1,16 @@
 # CharityPilot Agent Continuation Handoff
 
+> **15 October reserved Confluence ledger publication, source only:** A distinct
+> archive journal kind uses the exact metadata reservation and original observed
+> predecessor; generic append refuses it. Publisher authenticates preserved
+> bytes and retries unknown acknowledgements. Reader requires the archive itself
+> at the stable current writer/head and rejects missing/replaced bytes or any
+> later entry. No slot release or global history/reopen authority follows.
+> Related772 tests and actual PostgreSQL-row-to-synthetic-journal composition
+> pass. Durable dispatch, semantic mixed-history/epoch reconciliation, supported
+> quarantined host recovery, real custody and acceptance remain open. Existing
+> decision-only recovery explicitly refuses the archive kind.
+
 > **15 October encrypted complete Confluence ledger primitives, source only:**
 > Strict eight-table structural parsing and distinct AES-GCM archive/AAD bind
 > original metadata to the declared context/control. Conditional S3 storage uses

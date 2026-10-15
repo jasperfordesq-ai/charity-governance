@@ -1,5 +1,14 @@
 # CharityPilot Full-Platform Remediation Audit
 
+> **15 October exact reserved archive publication increment, OPEN:** A separate
+> journal kind and authenticated publisher bind original complete-ledger bytes
+> to an exact reservation/predecessor. Current-head readback rejects superseded
+> archives and races; generic append and existing release paths refuse. Related
+> tests and populated PostgreSQL-to-synthetic-publication composition pass.
+> Publication is metadata evidence only: semantic full-history/epoch checks,
+> durable dispatch/release, host recovery/custody, live release and Nikita
+> acceptance remain unresolved. Decision-only consumers keep refusing this kind.
+
 > **15 October encrypted complete-ledger archive increment, OPEN:** Distinct
 > authenticated encryption and conditional storage preserve original eight-table
 > metadata and declared observed control; tampering, substitution, changed retries

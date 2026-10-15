@@ -24,7 +24,7 @@ const kinds = z.enum(['DISPOSAL_INTENT', 'DISPOSAL_RESULT', 'PRESERVATION_CHANGE
   'COMPLAINT_CANCELLATION_V1', 'COMPLAINT_HOLD_CANCELLATION_V1', 'DOCUMENT_PREPARATION_V1', 'DOCUMENT_OUTCOME_V1',
   'DOCUMENT_BYTE_PERMIT_V1', 'DOCUMENT_BYTE_EXECUTION_DECISION_V1',
   'DOCUMENT_BYTE_PROVIDER_UNKNOWN_V1', 'DOCUMENT_BYTE_PRIMARY_COMPLETION_V1', 'DOCUMENT_DISPOSAL_OUTCOME_V1',
-  'CONFLUENCE_COPY_DECISION_STATE_V1']);
+  'CONFLUENCE_COPY_DECISION_STATE_V1', 'CONFLUENCE_COPY_LEDGER_ARCHIVE_V1']);
 const bindingSchema = z.object({ installationId: identity, organisationId: identity }).strict();
 const checkpointFields = {
   generation: z.number().int().nonnegative().max(10000), digest: digest.nullable(),
@@ -339,7 +339,7 @@ export class RecoveryAuthorityJournal {
   /** Publishes one exact intent, resuming either interrupted durable boundary.
    * A head receipt still cannot authorize action: later holds need fencing. */
   async appendPublished(raw: Input, publisher: AuthorityHeadPublisher) {
-    if (raw.kind === 'CONFLUENCE_COPY_DECISION_STATE_V1') {
+    if (raw.kind === 'CONFLUENCE_COPY_DECISION_STATE_V1' || raw.kind === 'CONFLUENCE_COPY_LEDGER_ARCHIVE_V1') {
       throw new Error('Confluence copy state requires the reserved publication path');
     }
     return this.appendPublishedEntry(raw, publisher);
@@ -382,7 +382,7 @@ export class RecoveryAuthorityJournal {
   }
 
   async append(raw: Input) {
-    if (raw.kind === 'CONFLUENCE_COPY_DECISION_STATE_V1') {
+    if (raw.kind === 'CONFLUENCE_COPY_DECISION_STATE_V1' || raw.kind === 'CONFLUENCE_COPY_LEDGER_ARCHIVE_V1') {
       throw new Error('Confluence copy state requires the reserved publication path');
     }
     return this.appendIntent(raw, false);
@@ -411,8 +411,15 @@ export class RecoveryAuthorityJournal {
     return this.appendReservedPreparation(raw, control, 'CONFLUENCE_COPY_DECISION_STATE_V1');
   }
 
+  /** Full-ledger archive metadata only. Keeps its exact reservation occupied;
+   * this is not an outcome, release, decision-payload audit or restore. */
+  async appendReservedConfluenceCopyLedger(raw: unknown, control: RecoveryControlStore) {
+    return this.appendReservedPreparation(raw,control,'CONFLUENCE_COPY_LEDGER_ARCHIVE_V1');
+  }
+
   private async appendReservedPreparation(raw: unknown, control: RecoveryControlStore,
-    kind: 'COMPLAINT_PREPARATION_V1' | 'COMPLAINT_HOLD_PREPARATION_V1' | 'DOCUMENT_PREPARATION_V1' | 'CONFLUENCE_COPY_DECISION_STATE_V1') {
+    kind: 'COMPLAINT_PREPARATION_V1' | 'COMPLAINT_HOLD_PREPARATION_V1' | 'DOCUMENT_PREPARATION_V1'
+      | 'CONFLUENCE_COPY_DECISION_STATE_V1' | 'CONFLUENCE_COPY_LEDGER_ARCHIVE_V1') {
     const request = z.object({ operationId: identity, writerId: identity,
       writerEpoch: z.number().int().positive().max(2147483647), preparationDigest: digest,
       envelopeDigest: digest, expectedGeneration: z.number().int().nonnegative().max(9999),

@@ -575,8 +575,51 @@ synthetic keys/in-memory objects. The other four tables remain empty in that
 database case; nonempty eight-table coverage is unit proof. This is not real AWS
 custody, publication freshness or populated host-loss replay acceptance.
 
-Next: durable original archive dispatch, reviewed current-head publication and
-verification, authenticated later-fact reconciliation and supported quarantined
-host recovery. Existing journal readers must reject this unsupported protocol
-until its separate history/epoch rules are reviewed. Do not add a generic append
-or empty/missing-object fallback to obtain a passing restore comparison.
+Next: durable original archive dispatch, complete archive/history semantic and
+epoch verification, authenticated later-fact reconciliation and supported
+quarantined host recovery. Decision-only readers must reject archive entries
+until their separate history/epoch rules are implemented. Do not add a generic
+append or empty/missing-object fallback to obtain a passing restore comparison.
+
+## Reserved archive publication and current-head readback
+
+The journal now has a distinct `CONFLUENCE_COPY_LEDGER_ARCHIVE_V1` metadata kind
+and explicit `appendReservedConfluenceCopyLedger` path. Ordinary `append` and
+format1 `appendPublished` refuse it. Its operation cannot be reused for other
+facts, and it has no disposal-outcome predecessor or automatic release rule.
+
+`publishVerifiedConfluenceCopyLedger` authenticates an already preserved archive
+against its exact plaintext reservation digest. Writer/epoch/tenant/operation
+must match current control. The original declared observed head must be
+unoccupied; its generation/digest are the archive entry's exact predecessor.
+Control is rechecked after decryption and throughout the existing reserved
+append/CAS path. Entry or head acknowledgement loss retries the same operation
+and original ciphertext; missing or re-encrypted published payloads refuse.
+
+`readPublishedConfluenceCopyLedger` verifies the complete current journal
+metadata chain, exact archive entry, predecessor, encrypted object digest and
+payload binding. The archive must itself be the current head under the same
+writer/epoch. Any later journal entry makes that older archive unusable through
+this reader. Head/control are checked again after decryption. These are bounded
+observations, not an action fence, and the caller still needs separately trusted
+key policy and current provider/custody guarantees.
+
+The result's `archiveAtObservedHead` describes only this archive/metadata match.
+It retains false global current-history, execution and reopening flags. It does
+not semantically reconcile all archive rows against earlier decision payloads,
+approve local source claims, verify epochs/transfers, attest restored state or
+prove all other writers/copies are covered. Decision-only recovery refuses this
+new kind rather than silently filtering it. That mixed-protocol integration is
+a required next gate, not compatibility evidence.
+
+Publication keeps its exact active reservation. Generic CAS clearing,
+disposal-outcome release and decision-state metadata release all refuse the
+archive kind. No archive release, cancellation, automatic outbox, scheduled
+caller or supported restore command exists yet.
+
+Unit tests cover exact publication/readback, both lost acknowledgements, binding
+and head races, missing/replaced ciphertext, later-head refusal, generic-append
+refusal and release exclusion. The disposable PostgreSQL case composes actual
+four-table governance/capture/plan/withdrawal rows through the archive and real
+journal code with synthetic keys/in-memory control/object adapters. No actual
+independent provider, old-host isolation, deployment or acceptance is proved.

@@ -9,6 +9,9 @@ import { ConfluenceRetainedCopyReviewService } from '../apps/api/dist/services/c
 import { ConfluenceCopyRecoveryCaptureStore } from '../apps/api/dist/services/confluence-copy-recovery-capture.js';
 import { ConfluenceCopyPublicationStore } from '../apps/api/dist/services/confluence-copy-publication-store.js';
 import { preserveConfluenceCopyLedgerArchive, readVerifiedConfluenceCopyLedgerArchive } from '../apps/api/dist/services/confluence-copy-ledger-envelope.js';
+import { publishVerifiedConfluenceCopyLedger, readPublishedConfluenceCopyLedger } from '../apps/api/dist/services/published-confluence-copy-ledger.js';
+import { RecoveryAuthorityJournal } from '../apps/api/dist/services/recovery-authority-journal.js';
+import { reserveRecoveryOperation } from '../apps/api/dist/services/recovery-operation-reservation.js';
 import { recoveryFactsFixture, recoveryContextFixture } from '../apps/api/dist/tests/fixtures/confluence-copy-recovery-facts.js';
 
 const image = 'postgres@sha256:5660c2cbfea50c7a9127d17dc4e48543eedd3d7a41a595a2dfa572471e37e64c';
@@ -117,6 +120,23 @@ test('local Confluence ledger capture uses all eight migrated tables and a real 
     const preserved = await preserveConfluenceCopyLedgerArchive(populated.body,binding,keys,objects);
     assert.equal((await readVerifiedConfluenceCopyLedgerArchive(preserved.digest,binding,keys,objects)).body,populated.body);
     assert.equal(preserved.currentHistoryVerified,false);
+    let current = structuredClone(binding.observedControl), revision = 0;
+    const control = { readControl: async () => structuredClone(current),
+      compareAndSwapControl: async (expected,next) => {
+        if (expected !== current.revision) return false;
+        current = { ...next, revision: `synthetic-archive-revision-${++revision}` }; return true;
+      } };
+    const rows = new Map(), identity = { installationId: context.installationId, organisationId: context.organisationId };
+    const journal = new RecoveryAuthorityJournal({ read: async key => rows.get(key) ?? null,
+      create: async (key,body) => { if (rows.has(key)) return false; rows.set(key,body); return true; } },
+      identity,{ ...identity, generation: 0, digest: null });
+    await reserveRecoveryOperation({ ...identity, operationId: context.operationId, writerId: 'writer-a', writerEpoch: 1,
+      preparationDigest: populated.digest, expectedGeneration: 0, expectedDigest: null },control);
+    const publishedArchive = await publishVerifiedConfluenceCopyLedger(journal,control,populated.digest,binding,keys,objects);
+    assert.equal(publishedArchive.headPublished,true);
+    const archive = await readPublishedConfluenceCopyLedger(journal,control,binding,keys,objects);
+    assert.equal(archive.body,populated.body); assert.equal(archive.currentHistoryVerified,false);
+    assert.equal(archive.reopeningAuthorised,false); assert.notEqual(current.activeOperation,null);
 
     await assert.rejects(captureConfluenceCopyLocalLedger(prisma,'org-a','member-a',input),/capture is unresolved/);
     await assert.rejects(captureConfluenceCopyLocalLedger(prisma,'org-b','owner-a',input),/capture is unresolved/);
