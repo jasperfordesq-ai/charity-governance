@@ -88,6 +88,8 @@ export async function observeRetainedConfluenceCopySource(
     const publicationRevision = timestamp(publication.updatedAt);
     checkCancelled();
     return { source, publication, siteOrigin, target: target.data,
+      connectionIdentity: { integrationId: connection.id, connectedAt: connectionGeneration,
+        cloudId: target.data.cloudId, siteOrigin },
       fingerprint: JSON.stringify({ source: { ...source, updatedAt: sourceRevision },
         publication: { ...publication, updatedAt: publicationRevision },
         connectionId: connection.id, connectionGeneration, siteOrigin, target: target.data,
@@ -135,6 +137,7 @@ export async function observeRetainedConfluenceCopySource(
       cloudId: initial.target.cloudId, siteOrigin: initial.siteOrigin, spaceId: initial.target.spaceId,
       pageId: initial.target.pageId, inventory: { ...observation.inventory, observedAt } }),
     actorUserId: input.actorUserId, sourceBytesObserved: true as const,
+    connection: initial.connectionIdentity,
     syntheticVerified: false as const, allCopiesVerified: false as const, actionAuthorized: false as const,
   };
 }

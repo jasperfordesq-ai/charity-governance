@@ -9,7 +9,7 @@ import { validateLocalDockerEndpoint } from './personal-server-docker-boundary.m
 const migrations = fileURLToPath(new URL('../apps/api/prisma/migrations/', import.meta.url));
 const image = 'postgres@sha256:5660c2cbfea50c7a9127d17dc4e48543eedd3d7a41a595a2dfa572471e37e64c';
 
-test('retained Confluence copy reviews are tenant-scoped immutable non-authorising evidence', { timeout: 240_000 }, async () => {
+test('retained Confluence review and permission history is scoped, immutable and cannot execute erasure', { timeout: 240_000 }, async () => {
   const context = spawnSync('docker', ['context', 'inspect', '--format', '{{json .Endpoints.docker}}'],
     { encoding: 'utf8', timeout: 10_000 });
   assert.equal(context.status, 0, context.stderr);
@@ -30,7 +30,7 @@ test('retained Confluence copy reviews are tenant-scoped immutable non-authorisi
     const result = docker(['exec', '-i', container, 'psql', '-h', '127.0.0.1', '-U', 'postgres',
       '-v', 'ON_ERROR_STOP=1', '-Atq'], statement);
     if (rejectPattern) {
-      assert.notEqual(result.status, 0, 'bound policy mutation was accepted');
+      assert.notEqual(result.status, 0, 'a prohibited Confluence evidence or permission write was accepted');
       assert.match(result.stderr, rejectPattern);
     } else assert.equal(result.status, 0, result.stderr);
     return result.stdout.trim();
@@ -64,6 +64,10 @@ test('retained Confluence copy reviews are tenant-scoped immutable non-authorisi
       VALUES ('doc-a','org-a','Synthetic retained','OTHER','org-a/source.txt',243,'text/plain','RETIRED',CURRENT_TIMESTAMP - INTERVAL '2 minutes');
       INSERT INTO "DocumentPublication"(id,"organisationId","documentId",state,"cloudId","spaceId","pageId","retiredAt","nextAttemptAt","updatedAt")
       VALUES ('pub-a','org-a','doc-a','RETIRED','00000000-0000-4000-8000-000000000001','123','456',CURRENT_TIMESTAMP,NULL,CURRENT_TIMESTAMP - INTERVAL '1 minute'); COMMIT;`);
+    query(`INSERT INTO "OrganisationIntegration"(id,"organisationId",provider,status,config,"connectedAt","connectedById","grantedScopes","updatedAt")
+      VALUES ('confluence-a','org-a','CONFLUENCE','CONNECTED',
+        '{"siteId":"00000000-0000-4000-8000-000000000001","siteUrl":"https://synthetic-example.atlassian.net"}',
+        CURRENT_TIMESTAMP,'owner-a',ARRAY['read:page:confluence','read:attachment:confluence'],CURRENT_TIMESTAMP);`);
     const reviewInsert = (id, transform = '') => `SET ROLE synthetic_copy_runtime;
       WITH data AS (SELECT d.*, p."updatedAt" AS "pubRevision" FROM "Document" d
         JOIN "DocumentPublication" p ON p."documentId"=d.id WHERE d.id='doc-a'),
@@ -98,7 +102,7 @@ test('retained Confluence copy reviews are tenant-scoped immutable non-authorisi
     assert.equal(query(`SELECT "authorisesProviderIO" FROM "ConfluenceRetainedCopyReview" WHERE id='review-a';`), 'f');
     query(`SET ROLE synthetic_copy_runtime; UPDATE "ConfluenceRetainedCopyReview" SET "authorisesProviderIO"=true WHERE id='review-a';`, /append-only/);
     query(`SET ROLE synthetic_copy_runtime; DELETE FROM "ConfluenceRetainedCopyReview" WHERE id='review-a';`, /append-only/);
-    query(`TRUNCATE "ConfluenceRetainedCopyReview", "ConfluenceRetainedCopyReviewWithdrawal";`, /append-only/);
+    query(`TRUNCATE "ConfluenceRetainedCopyReview", "ConfluenceRetainedCopyReviewWithdrawal" CASCADE;`, /append-only/);
     query(reviewInsert('review-b', `|| '{"reviewerId":"owner-b"}'::jsonb`), /exact non-authorising/);
     query(reviewInsert('review-c', `|| '{"scope":"PRODUCTION"}'::jsonb`), /exact non-authorising/);
     query(reviewInsert('review-no-evidence', `|| '{"holdReviewRef":""}'::jsonb`), /controlled evidence/);
@@ -109,12 +113,60 @@ test('retained Confluence copy reviews are tenant-scoped immutable non-authorisi
     query(`UPDATE "Document" SET "deletionHold"=true WHERE id='doc-a';`);
     query(reviewInsert('review-held'), /exact retained/);
     query(`UPDATE "Document" SET "deletionHold"=false WHERE id='doc-a';`);
+    query(`SET ROLE synthetic_copy_runtime;
+      CREATE TEMP TABLE "User" (LIKE public."User" INCLUDING ALL);
+      INSERT INTO pg_temp."User" SELECT * FROM public."User" WHERE id='member-a';
+      UPDATE pg_temp."User" SET role='OWNER';
+      ${reviewInsert('shadow-owner-review').replaceAll('owner-a','member-a')}`, /active charity owner/);
+    const scopeInsert = (id = 'scope-a') => `INSERT INTO public."ConfluenceSyntheticCopyScope"
+      (id,"organisationId","reviewId","snapshotSha256","evidenceRef","disposalPolicyEvidenceRef","approvedById","expiresAt","registeredByDbRole")
+      SELECT '${id}',"organisationId",id,"snapshotSha256",'C01-SCOPE','C01-COPY-DISPOSAL','owner-a',"expiresAt"-INTERVAL '1 minute','spoofed-role'
+      FROM public."ConfluenceRetainedCopyReview" WHERE id='review-a';`;
+    query(`SET ROLE synthetic_copy_runtime; ${scopeInsert('runtime-scope')}`, /maintenance table owner/);
+    query(`SET ROLE synthetic_copy_runtime;
+      CREATE TEMP TABLE "ConfluenceSyntheticCopyScope"(id TEXT);
+      ${scopeInsert('shadow-scope')}`, /maintenance table owner/);
+    query(scopeInsert());
+    assert.equal(query(`SELECT "registeredByDbRole"=current_user FROM "ConfluenceSyntheticCopyScope" WHERE id='scope-a';`), 't');
+    const permissionInsert = (id = 'permission-a', scope = 'scope-a') => `SET ROLE synthetic_copy_runtime;
+      INSERT INTO public."ConfluenceRetainedCopyPermission"
+      (id,"organisationId","reviewId","scopeId","snapshotSha256","actorUserId","integrationId","connectionGeneration","evidenceRef",reason,"expiresAt",attestation,"scopeEvidenceRef","disposalPolicyEvidenceRef")
+      SELECT '${id}',"organisationId","reviewId",'${scope}',"snapshotSha256",'owner-a','confluence-a',(SELECT "connectedAt" FROM public."OrganisationIntegration" WHERE id='confluence-a'),'C01-PERMISSION',
+        'Purge exact synthetic copy and retain primary',"expiresAt"-INTERVAL '1 minute',
+        'AUTHORISE PURGE OF THIS SYNTHETIC CONFLUENCE COPY; RETAIN PRIMARY','C01-SCOPE','C01-COPY-DISPOSAL'
+      FROM public."ConfluenceSyntheticCopyScope" WHERE id='scope-a';`;
+    query(permissionInsert('missing-scope','other-scope'), /registered synthetic scope/);
+    query(permissionInsert('wrong-policy').replace("'C01-SCOPE','C01-COPY-DISPOSAL'","'C01-SCOPE','OTHER-POLICY'"), /registered scope and disposal/);
+    query(permissionInsert('permission-member').replaceAll("'owner-a'","'member-a'"), /active charity Owner/);
+    query(permissionInsert('too-long').replace('"expiresAt"-INTERVAL \'1 minute\'', '"expiresAt"+INTERVAL \'1 minute\''), /registered synthetic scope/);
+    query(`UPDATE "Document" SET "deletionHold"=true WHERE id='doc-a';`);
+    query(`SET ROLE synthetic_copy_runtime;
+      CREATE TEMP TABLE "Document" (LIKE public."Document" INCLUDING ALL);
+      INSERT INTO pg_temp."Document" SELECT * FROM public."Document" WHERE id='doc-a';
+      UPDATE pg_temp."Document" SET "deletionHold"=false;
+      ${permissionInsert('shadow-held-source')}`, /source changed or is not retained and unheld/);
+    query(`UPDATE "Document" SET "deletionHold"=false WHERE id='doc-a';`);
+    query(permissionInsert('wrong-generation').replace(`(SELECT "connectedAt" FROM public."OrganisationIntegration" WHERE id='confluence-a')`, "'2000-01-01'::timestamp"), /exact connected grant generation/);
+    query(permissionInsert());
+    query(permissionInsert('duplicate-permission'), /unique constraint/);
+    query(`SET ROLE synthetic_copy_runtime; UPDATE "ConfluenceRetainedCopyPermission" SET reason='Replace reviewed permission';`, /append-only/);
+    query(`SET ROLE synthetic_copy_runtime; DELETE FROM "ConfluenceSyntheticCopyScope";`, /append-only/);
+    query(`TRUNCATE "ConfluenceRetainedCopyPermissionWithdrawal", "ConfluenceRetainedCopyPermission", "ConfluenceSyntheticCopyScope";`, /append-only/);
+    const permissionWithdraw = (id, actor = 'owner-a', org = 'org-a') => `SET ROLE synthetic_copy_runtime;
+      INSERT INTO "ConfluenceRetainedCopyPermissionWithdrawal"(id,"organisationId","permissionId","actorUserId","evidenceRef",reason)
+      VALUES ('${id}','${org}','permission-a','${actor}','C01-WITHDRAW','Withdraw this exact synthetic permission');`;
+    query(permissionWithdraw('permission-withdraw-member','member-a'), /active charity Owner/);
+    query(permissionWithdraw('permission-withdraw-other','owner-b','org-b'), /not found in charity/);
+    query(permissionWithdraw('permission-withdraw'));
+    query(permissionWithdraw('permission-withdraw-again'), /unique constraint/);
+    query(`SET ROLE synthetic_copy_runtime; DELETE FROM "ConfluenceRetainedCopyPermissionWithdrawal";`, /append-only/);
     const withdrawal = (id, actor = 'owner-a', org = 'org-a') => `SET ROLE synthetic_copy_runtime;
       INSERT INTO "ConfluenceRetainedCopyReviewWithdrawal"(id,"organisationId","reviewId","actorUserId","evidenceRef",reason)
       VALUES ('${id}','${org}','review-a','${actor}','C01-WITHDRAW','Withdraw synthetic copy review');`;
     query(withdrawal('withdraw-member','member-a'), /active charity owner/);
     query(withdrawal('withdraw-other','owner-b','org-b'), /not found in charity/);
     query(withdrawal('withdraw-a'));
+    query(permissionInsert('withdrawn-parent-permission'), /current unwithdrawn synthetic review/);
     query(withdrawal('withdraw-again'), /unique constraint/);
     query(`SET ROLE synthetic_copy_runtime; DELETE FROM "ConfluenceRetainedCopyReviewWithdrawal";`, /append-only/);
     query(`SET ROLE synthetic_copy_runtime; UPDATE "ConfluenceRetainedCopyReviewWithdrawal" SET reason='Replace withdrawn evidence';`, /append-only/);
@@ -128,6 +180,7 @@ test('retained Confluence copy reviews are tenant-scoped immutable non-authorisi
     query(reviewInsert('review-bound').replaceAll('org-a','org-b').replaceAll('owner-a','owner-b'), /independent recovery recording/);
     query(withdrawal('withdraw-bound','owner-b','org-b'), /independent recovery recording/);
     assert.equal(query(`SELECT count(*) FROM "DocumentStorageDeletion";`), '0');
+    assert.equal(query(`SELECT count(*) FROM "Document" WHERE id='doc-a' AND "deletedAt" IS NULL AND "lifecycleStatus"='RETIRED';`), '1');
     assert.equal(query(`SELECT count(*) FROM "ConfluenceRetainedCopyReview";`), '1');
     assert.equal(query(`SELECT count(*) FROM "ConfluenceRetainedCopyReviewWithdrawal";`), '1');
   } finally {

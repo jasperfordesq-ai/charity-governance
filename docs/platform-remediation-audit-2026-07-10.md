@@ -1,5 +1,14 @@
 # CharityPilot Full-Platform Remediation Audit
 
+> **15 October exact-copy controller decision, OPEN:** Source now separates
+> maintenance registration of the exact synthetic review from the Owner's
+> explicit permission/withdrawal decision, with fresh byte/inventory comparison,
+> expiry and grant-generation checks. SQL temporary-table bypass regressions
+> failed before search-path/schema corrections. This is unreleased source;
+> no live registration, permission, deployment, retained-source erasure exception
+> or provider operation occurred. Supported registration, independent history,
+> one-use worker control, provider validation and DPO acceptance remain required.
+
 > **15 October retained-copy identity/source observation, OPEN:** Source now
 > derives exact target and recorded primary provider/path from Owner-scoped
 > tenant records, repeats primary hashes and checks binding/grant generations

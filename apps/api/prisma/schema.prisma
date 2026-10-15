@@ -1806,6 +1806,8 @@ model ConfluenceRetainedCopyReview {
   authorisesProviderIO Boolean @default(false)
   recordedAt           DateTime @default(now())
   withdrawal           ConfluenceRetainedCopyReviewWithdrawal?
+  syntheticScope       ConfluenceSyntheticCopyScope?
+  permission           ConfluenceRetainedCopyPermission?
 
   @@unique([id, organisationId])
   @@index([organisationId, publicationId, recordedAt], map: "ConfluenceCopyReview_org_publication_recorded_idx")
@@ -1823,6 +1825,68 @@ model ConfluenceRetainedCopyReviewWithdrawal {
 
   @@unique([reviewId, organisationId], map: "ConfluenceCopyReviewWithdrawal_review_org_key")
   @@index([organisationId, occurredAt], map: "ConfluenceCopyReviewWithdrawal_org_occurred_idx")
+}
+
+// Maintenance-registered exact test scope; application DML cannot create it.
+// The parent immutable review binds every source/provider identity and hash.
+model ConfluenceSyntheticCopyScope {
+  id                   String @id @default(cuid())
+  organisationId       String
+  reviewId             String @unique
+  review               ConfluenceRetainedCopyReview @relation(fields: [reviewId, organisationId], references: [id, organisationId], onDelete: Restrict, onUpdate: NoAction, map: "ConfluenceSyntheticScope_review_fkey")
+  snapshotSha256       String
+  classification       String @default("SYNTHETIC_ONLY")
+  evidenceRef          String
+  disposalPolicyEvidenceRef String
+  approvedById         String
+  registeredByDbRole   String @default(dbgenerated("CURRENT_USER"))
+  registeredAt         DateTime @default(now())
+  expiresAt            DateTime
+  permission           ConfluenceRetainedCopyPermission?
+
+  @@unique([id, organisationId])
+  @@unique([reviewId, organisationId], map: "ConfluenceSyntheticScope_review_org_key")
+}
+
+// Controller decision only; request/worker still need independently committed
+// history, current-state checks and a durable one-use execution decision.
+model ConfluenceRetainedCopyPermission {
+  id                   String @id @default(cuid())
+  organisationId       String
+  reviewId             String @unique
+  review               ConfluenceRetainedCopyReview @relation(fields: [reviewId, organisationId], references: [id, organisationId], onDelete: Restrict, onUpdate: NoAction, map: "ConfluenceCopyPermission_review_fkey")
+  scopeId              String @unique
+  scope                ConfluenceSyntheticCopyScope @relation(fields: [scopeId, organisationId], references: [id, organisationId], onDelete: Restrict, onUpdate: NoAction, map: "ConfluenceCopyPermission_scope_fkey")
+  snapshotSha256       String
+  actorUserId          String
+  integrationId        String
+  connectionGeneration DateTime
+  evidenceRef          String
+  reason               String
+  attestation          String
+  scopeEvidenceRef     String
+  disposalPolicyEvidenceRef String
+  classification       String @default("OWNER_ATTESTED_SYNTHETIC")
+  issuedAt             DateTime @default(now())
+  expiresAt            DateTime
+  withdrawal           ConfluenceRetainedCopyPermissionWithdrawal?
+
+  @@unique([id, organisationId])
+  @@unique([reviewId, organisationId], map: "ConfluenceCopyPermission_review_org_key")
+  @@unique([scopeId, organisationId], map: "ConfluenceCopyPermission_scope_org_key")
+}
+
+model ConfluenceRetainedCopyPermissionWithdrawal {
+  id             String @id @default(cuid())
+  organisationId String
+  permissionId   String @unique
+  permission     ConfluenceRetainedCopyPermission @relation(fields: [permissionId, organisationId], references: [id, organisationId], onDelete: Restrict, onUpdate: NoAction, map: "ConfluenceCopyPermissionWithdrawal_permission_fkey")
+  actorUserId    String
+  evidenceRef    String
+  reason         String
+  occurredAt     DateTime @default(now())
+
+  @@unique([permissionId, organisationId], map: "ConfluenceCopyPermissionWithdrawal_permission_org_key")
 }
 
 model DocumentStorageDeletion {

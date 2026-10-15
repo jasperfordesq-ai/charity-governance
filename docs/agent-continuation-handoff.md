@@ -1,5 +1,15 @@
 # CharityPilot Agent Continuation Handoff
 
+> **15 October exact synthetic permission decision, source only:** Internal
+> issuance requires a maintenance-registered exact review/digest, active Owner
+> attestation, scoped disposal evidence, bounded expiry and a fresh source/copy
+> observation. Final SQL checks source/publication/Owner and connection grant
+> generation. Withdrawal is separate and history immutable. A forward migration
+> fixes temporary-table impersonation in new/unshipped guards without changing
+> prior checksums. No scope is seeded, no supported live registration/HTTP route
+> exists, and decision records grant no immediate provider I/O. Independent
+> history, one-use execution and sandbox/DPO acceptance remain open.
+
 > **15 October retained-copy source binding, source only:** An internal
 > Owner-scoped wrapper derives provider targets from tenant records and hashes
 > exact primary bytes through recorded-provider storage before/after collection.

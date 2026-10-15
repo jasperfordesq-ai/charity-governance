@@ -63,6 +63,43 @@ independent storage, replay or a host-loss recovery result.
 
 ## Next increments before execution
 
+### Explicit synthetic decision records now in source
+
+`ConfluenceSyntheticCopyScope` registers one exact immutable review, snapshot
+digest, scope/disposal decision evidence, accountable Owner and expiry. Only
+the actual maintenance table owner can insert it; the application DML role
+cannot self-register or use a temporary table to impersonate that owner.
+No scope is seeded. There is no supported live registration command yet;
+do not substitute raw production SQL for the future reviewed operator path.
+
+The internal `ConfluenceRetainedCopyPermissionService` requires the active
+Owner's explicit attestation, expected reviewed digest, matching registered
+scope/disposal evidence and an expiry no later than either parent limit. It
+re-observes the exact source/remote facts outside database locks, then repeats
+review, Owner, scope, expiry and current-source checks in a final transaction.
+Source and remote changes refuse. The decision binds the connected integration
+and grant generation; SQL repeats the exact site/generation check at insertion.
+
+The immutable record says `OWNER_ATTESTED_SYNTHETIC`, not independently verified
+synthetic content or DPO acceptance. Withdrawal appends separate evidence;
+future consumers must also treat review withdrawal as invalidation of the decision. One permission per review
+and scope prevents renewing a spent/withdrawn decision by overwriting history.
+Future execution must check both withdrawals, all expiries, exact source/target
+facts and connection generation again.
+
+The forward permission migration pins search paths for new guards and the
+earlier unshipped review guards, without editing earlier migration checksums.
+Temporary-table impersonation of scope, Owner and source records has SQL
+regressions. All scope/permission/withdrawal tables reject mutation/truncation.
+Existing independent-history bindings still freeze these decisions, and the
+parent review history still prevents activation before independent replay.
+
+No HTTP route, actual registered scope, live permission, erasure exception or
+provider execution was added. Issuance returns `providerIOAuthorised: false`:
+the recorded controller decision still needs independently committed history
+and a durable one-use request/worker decision. Primary retention and the
+existing retained-source erasure refusal remain unchanged.
+
 ### Provider observation collector now in source
 
 `collectRetainedConfluenceCopyInventory` reads an exact current page and its
@@ -124,10 +161,11 @@ fixture/policy-backed permission issuance and independent history remain open.
    storage, separate withdrawal and SQL immutability/revision checks now exist
    with disposable PostgreSQL tests under a restricted DML role. Server-derived
    target and primary-byte observation now have synthetic adapter tests; actual
-   sandbox validation remains open. Establish the scoped synthetic fixture and
-   selected disposal policy, then implement explicit
-   permission issuance under the same transaction locks. Stored review evidence
-   alone is not that permission.
+   sandbox validation remains open. Internal issuance/withdrawal now records an
+   explicit Owner decision under a maintenance-registered exact scope. Establish
+   the actual synthetic fixture, selected disposal decision evidence and reviewed
+   registration workflow before activation. Stored review evidence alone is not
+   a permission, and the decision record alone cannot execute provider I/O.
 2. **Independent recovery:** retain the authority, withdrawal, possible-copy
    facts and execution intent in the applicable independent history. Prove
    replay after stale-backup recovery; a restored approval cannot resurrect a
