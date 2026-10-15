@@ -195,7 +195,7 @@ test('retained Confluence review and permission history is scoped, immutable and
       previousFactsDigest: firstCaptureDigest, writerEpoch: 2 }), /predecessor mismatch/);
     query(`SET ROLE synthetic_copy_runtime; UPDATE "ConfluenceCopyRecoveryCapture" SET "factsDigest"=repeat('0',64);`, /append-only/);
     query(`SET ROLE synthetic_copy_runtime; DELETE FROM "ConfluenceCopyRecoveryCapture";`, /append-only/);
-    query(`TRUNCATE "ConfluenceCopyRecoveryCapture";`, /append-only/);
+    query(`TRUNCATE "ConfluenceCopyRecoveryCapture", "ConfluenceCopyPublicationPlan", "ConfluenceCopyPublicationReceipt";`, /append-only/);
     query(`SET ROLE synthetic_copy_runtime; UPDATE "ConfluenceRetainedCopyPermission" SET reason='Replace reviewed permission';`, /append-only/);
     query(`SET ROLE synthetic_copy_runtime; DELETE FROM "ConfluenceSyntheticCopyScope";`, /append-only/);
     query(`TRUNCATE "ConfluenceRetainedCopyPermissionWithdrawal", "ConfluenceRetainedCopyPermission", "ConfluenceSyntheticCopyScope";`, /append-only/);
@@ -221,6 +221,38 @@ test('retained Confluence review and permission history is scoped, immutable and
     query(captureInsert('capture-stale',{ ...secondCapture, reviewWithdrawal: null, permissionWithdrawal: null }), /complete committed facts/);
     query(captureInsert('capture-2',secondCapture));
     assert.equal(query(`SELECT count(*) FROM "ConfluenceCopyRecoveryCapture";`),'2');
+    const planInsert = (id = 'plan-a', actor = 'owner-a', capture = 'capture-1', org = 'org-a') => `SET ROLE synthetic_copy_runtime;
+      INSERT INTO public."ConfluenceCopyPublicationPlan"
+      (id,"organisationId","captureId","actorUserId","writerId","keyId","keyEvidenceRef","expectedGeneration","expectedDigest")
+      VALUES ('${id}','${org}','${capture}','${actor}','synthetic-writer',
+        'arn:aws:kms:eu-west-1:123456789012:key/11111111-1111-1111-1111-111111111111','C01-KEY-CONTEXT',0,NULL);`;
+    query(planInsert('plan-member','member-a'), /active charity Owner/);
+    query(planInsert('plan-foreign','owner-b','capture-1','org-b'), /original charity capture/);
+    query(planInsert('plan-bad-key').replace('eu-west-1','us-east-1'), /check constraint/);
+    query(planInsert('plan-bad-head').replace("'C01-KEY-CONTEXT',0,NULL", "'C01-KEY-CONTEXT',1,NULL"), /check constraint/);
+    query(`SET ROLE synthetic_copy_runtime;
+      CREATE TEMP TABLE "User" (LIKE public."User" INCLUDING ALL);
+      INSERT INTO pg_temp."User" SELECT * FROM public."User" WHERE id='member-a'; UPDATE pg_temp."User" SET role='OWNER';
+      ${planInsert('plan-shadow','member-a')}`, /active charity Owner/);
+    query(planInsert());
+    query(planInsert('plan-duplicate'), /unique constraint/);
+    query(`SET ROLE synthetic_copy_runtime; UPDATE "ConfluenceCopyPublicationPlan" SET "writerId"='replacement';`, /append-only/);
+    query(`SET ROLE synthetic_copy_runtime; DELETE FROM "ConfluenceCopyPublicationPlan";`, /append-only/);
+    query(`TRUNCATE "ConfluenceCopyPublicationPlan", "ConfluenceCopyPublicationReceipt";`, /append-only/);
+    const receiptInsert = (id = 'receipt-a', actor = 'owner-a', org = 'org-a', generation = 1) => `SET ROLE synthetic_copy_runtime;
+      INSERT INTO public."ConfluenceCopyPublicationReceipt"
+      (id,"organisationId","planId","actorUserId","envelopeDigest","entryGeneration","entryDigest","verifiedHeadRevision")
+      VALUES ('${id}','${org}','plan-a','${actor}',repeat('c',64),${generation},repeat('d',64),'synthetic-revision-1');`;
+    query(receiptInsert('receipt-member','member-a'), /active charity Owner/);
+    query(receiptInsert('receipt-foreign','owner-b','org-b'), /exact plan generation/);
+    query(receiptInsert('receipt-wrong-generation','owner-a','org-a',2), /exact plan generation/);
+    query(receiptInsert('receipt-long-revision').replace("'synthetic-revision-1'","repeat('x',1025)"), /check constraint/);
+    query(receiptInsert('receipt-space-revision').replace("'synthetic-revision-1'","'has space'"), /check constraint/);
+    query(receiptInsert());
+    query(receiptInsert('receipt-duplicate'), /unique constraint/);
+    query(`SET ROLE synthetic_copy_runtime; UPDATE "ConfluenceCopyPublicationReceipt" SET "entryDigest"=repeat('0',64);`, /append-only/);
+    query(`SET ROLE synthetic_copy_runtime; DELETE FROM "ConfluenceCopyPublicationReceipt";`, /append-only/);
+    query(`TRUNCATE "ConfluenceCopyPublicationReceipt";`, /append-only/);
     query(permissionInsert('withdrawn-parent-permission'), /current unwithdrawn synthetic review/);
     query(withdrawal('withdraw-again'), /unique constraint/);
     query(`SET ROLE synthetic_copy_runtime; DELETE FROM "ConfluenceRetainedCopyReviewWithdrawal";`, /append-only/);

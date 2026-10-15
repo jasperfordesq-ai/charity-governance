@@ -1908,9 +1908,48 @@ model ConfluenceCopyRecoveryCapture {
   facts               String
   factsDigest         String
   recordedAt          DateTime @default(now())
+  publicationPlan     ConfluenceCopyPublicationPlan?
 
+  @@unique([id, organisationId], map: "ConfluenceCopyCapture_id_org_key")
   @@unique([organisationId, operationId], map: "ConfluenceCopyCapture_org_operation_key")
   @@unique([organisationId, reviewId, factsRevision], map: "ConfluenceCopyCapture_org_review_revision_key")
+}
+
+// A persisted exact publication request, before any independent-store write.
+// Evidence reference records the Owner's assertion; no live key-policy approval
+// or provider provisioning is inferred from a row.
+model ConfluenceCopyPublicationPlan {
+  id                 String @id @default(cuid())
+  organisationId     String
+  captureId          String @unique
+  capture            ConfluenceCopyRecoveryCapture @relation(fields: [captureId, organisationId], references: [id, organisationId], onDelete: Restrict, onUpdate: NoAction, map: "ConfluenceCopyPlan_capture_fkey")
+  actorUserId        String
+  writerId           String
+  keyId              String
+  keyEvidenceRef     String
+  expectedGeneration Int
+  expectedDigest     String?
+  recordedAt         DateTime @default(now())
+  receipt            ConfluenceCopyPublicationReceipt?
+
+  @@unique([id, organisationId], map: "ConfluenceCopyPlan_id_org_key")
+  @@unique([captureId, organisationId], map: "ConfluenceCopyPlan_capture_org_key")
+}
+
+// Historical publication observation, never current/reopening authority.
+model ConfluenceCopyPublicationReceipt {
+  id                   String @id @default(cuid())
+  organisationId       String
+  planId               String @unique
+  plan                 ConfluenceCopyPublicationPlan @relation(fields: [planId, organisationId], references: [id, organisationId], onDelete: Restrict, onUpdate: NoAction, map: "ConfluenceCopyReceipt_plan_fkey")
+  actorUserId          String
+  envelopeDigest       String
+  entryGeneration      Int
+  entryDigest          String
+  verifiedHeadRevision String
+  recordedAt           DateTime @default(now())
+
+  @@unique([planId, organisationId], map: "ConfluenceCopyReceipt_plan_org_key")
 }
 
 model DocumentStorageDeletion {

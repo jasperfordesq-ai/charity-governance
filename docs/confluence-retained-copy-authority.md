@@ -289,9 +289,41 @@ replacement ciphertext and the generic-path refusal. The existing S3 release
 adapter also refuses this metadata kind; no terminal disposal outcome is implied.
 This is not live provider, custody, restart or host-loss acceptance.
 
-Still required: durable approved encryption-key context and publication/object
-receipts tied to the local capture; automatic decision capture/outbox/dispatch;
+The durable local plan/receipt workflow is described below. Still required:
+approved live key/account/custody policy; automatic decision capture/outbox/dispatch;
 controlled metadata-operation reconciliation/release; complete authenticated
 payload progression and SQL replay; remaining source/copy/intent coverage and
 one-use execution. There is no supported live workflow or automatic reservation
 release in this increment. Bindings and erasure gates stay closed.
+
+## Durable publication plan and receipt
+
+`ConfluenceCopyPublicationStore.prepare` commits the exact capture, writer,
+encryption-key identifier, key evidence reference and expected journal predecessor
+before the first independent-store write. Scoped active Owner/charity and the
+original canonical capture are checked. A retry cannot choose another key,
+writer, evidence reference or head. The key reference records an Owner assertion;
+it does not provision a key or independently approve its account/custody policy.
+
+`resume` loads that immutable plan/capture and performs reservation, encrypted
+preservation, verified publication and authenticated readback outside database
+transactions. When the head has already advanced, it verifies the exact original
+published entry instead of reserving again. Its immutable receipt records the
+winning envelope hash, exact journal generation/digest and observed head revision.
+An existing different slot is untouched during historical reconciliation. Missing
+payload/history or a head behind a committed receipt cannot cause reconstruction.
+
+The forward migration tenant-binds both models, requires current active Owner
+and charity, checks expected generation and key/revision shape, and refuses
+UPDATE/DELETE/TRUNCATE. The service rechecks local capture/plan and Owner before
+committing a receipt. Role/charity checks are observations around remote I/O, not
+a distributed execution fence. A receipt proves one past observation; it does not
+assert that all later facts were captured or that the permission remains current.
+
+Synthetic tests join the store with the real reservation/journal/envelope logic
+through object, entry, head, local-save and local-commit acknowledgement failures.
+The database fixture separately tests scoped immutable rows on disposable
+PostgreSQL. No live provider, supported operator route, automatic dispatch,
+reservation release, full replay, host-loss reopening or deletion is enabled.
+The local plan/evidence-reference history is not itself part of the independent
+decision payload; complete replay/custody evidence coverage still needs review.

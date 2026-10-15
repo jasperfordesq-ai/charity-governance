@@ -1,13 +1,23 @@
 # CharityPilot Agent Continuation Handoff
 
+> **15 October Confluence durable publication workflow, source only:** Exact
+> capture/key/writer/head plans commit before independent writes, and immutable
+> receipts retain authenticated envelope/entry/head observations. Unknown object,
+> journal, head and local-receipt outcomes resume the original plan; an advanced
+> head is reconciled without acquiring another operation's slot. SQL scopes and
+> protects both models. This is not automatic dispatch, a release/execution fence,
+> complete/latest history, live custody or acceptance. Full payload replay and
+> controlled metadata-operation release remain next; bindings stay closed.
+
 > **15 October Confluence reserved publication, source only:** An explicit
 > state kind now joins authenticated encrypted payloads to the exact format-2
 > writer/epoch/facts reservation and current journal head. Generic/format-1 append
 > refuses the kind. Lost entry/head acknowledgements preserve the original
 > operation and ciphertext; readback rechecks the head after decryption. This
 > authenticates one historical capture, not complete/latest payload history or
-> reopening authority. Durable publication/key-context receipts, automatic
-> outbox, controlled release, full replay and one-use execution remain open.
+> reopening authority. Durable receipts are described above; approved live key
+> policy, automatic outbox, controlled release, full replay and one-use execution
+> remain open.
 
 > **15 October Confluence durable capture, source only:** Exact canonical
 > decision facts now commit locally by operation before external preservation.

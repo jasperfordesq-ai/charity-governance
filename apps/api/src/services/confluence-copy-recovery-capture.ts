@@ -30,7 +30,7 @@ export class ConfluenceCopyRecoveryCaptureStore {
       const existing = await tx.confluenceCopyRecoveryCapture.findUnique({
         where: { organisationId_operationId: { organisationId, operationId: input.operationId } } });
       if (existing) {
-        const facts = this.validateStored(existing);
+        const facts = validateConfluenceCopyRecoveryCapture(existing);
         if (existing.actorUserId !== actorUserId || facts.review.id !== input.reviewId
           || facts.installationId !== input.installationId || facts.writerEpoch !== input.writerEpoch
           || facts.sourceRevision !== input.sourceRevision || facts.organisationId !== organisationId
@@ -54,7 +54,7 @@ export class ConfluenceCopyRecoveryCaptureStore {
         where: { organisationId, permissionId: permission.id } }) : null;
       const previous = await tx.confluenceCopyRecoveryCapture.findFirst({ where: {
         organisationId, reviewId: review.id }, orderBy: { factsRevision: 'desc' } });
-      if (previous) this.validateStored(previous);
+      if (previous) validateConfluenceCopyRecoveryCapture(previous);
       const [clock] = await tx.$queryRaw<Array<{ now: Date }>>`
         SELECT timezone('UTC',clock_timestamp())::timestamp(3) AS now`;
       if (!clock) throw new Error('Confluence recovery capture clock unavailable');
@@ -74,30 +74,30 @@ export class ConfluenceCopyRecoveryCaptureStore {
         factsRevision: facts.factsRevision, previousFactsDigest: facts.previousFactsDigest,
         capturedAt: new Date(facts.capturedAt), facts: prepared.body, factsDigest: prepared.digest,
       } });
-      this.validateStored(saved);
+      validateConfluenceCopyRecoveryCapture(saved);
       return this.result(saved, false);
     }, { isolationLevel: 'ReadCommitted' });
-  }
-
-  private validateStored(row: { facts: string; factsDigest: string; organisationId: string;
-    reviewId: string; installationId: string; operationId: string; writerEpoch: number;
-    sourceRevision: string; factsRevision: number; previousFactsDigest: string | null; capturedAt: Date }) {
-    try {
-      if (Buffer.byteLength(row.facts,'utf8') > CONFLUENCE_COPY_RECOVERY_MAX_FACT_BYTES) throw new Error();
-      const prepared = prepareConfluenceCopyRecoveryFacts(JSON.parse(row.facts));
-      const facts = JSON.parse(prepared.body) as ConfluenceCopyRecoveryFacts;
-      if (prepared.body !== row.facts || prepared.digest !== row.factsDigest
-        || facts.organisationId !== row.organisationId || facts.review.id !== row.reviewId
-        || facts.installationId !== row.installationId || facts.operationId !== row.operationId
-        || facts.writerEpoch !== row.writerEpoch || facts.sourceRevision !== row.sourceRevision
-        || facts.factsRevision !== row.factsRevision || facts.previousFactsDigest !== row.previousFactsDigest
-        || facts.capturedAt !== row.capturedAt.toISOString()) throw new Error();
-      return facts;
-    } catch { throw new Error('Invalid stored Confluence recovery capture'); }
   }
 
   private result(row: { id: string; facts: string; factsDigest: string }, replayed: boolean) {
     return { id: row.id, body: row.facts, digest: row.factsDigest, replayed,
       actionAuthorized: false as const, currentHistoryVerified: false as const, reopeningAuthorised: false as const };
   }
+}
+
+export function validateConfluenceCopyRecoveryCapture(row: { facts: string; factsDigest: string; organisationId: string;
+  reviewId: string; installationId: string; operationId: string; writerEpoch: number;
+  sourceRevision: string; factsRevision: number; previousFactsDigest: string | null; capturedAt: Date }) {
+  try {
+    if (Buffer.byteLength(row.facts,'utf8') > CONFLUENCE_COPY_RECOVERY_MAX_FACT_BYTES) throw new Error();
+    const prepared = prepareConfluenceCopyRecoveryFacts(JSON.parse(row.facts));
+    const facts = JSON.parse(prepared.body) as ConfluenceCopyRecoveryFacts;
+    if (prepared.body !== row.facts || prepared.digest !== row.factsDigest
+      || facts.organisationId !== row.organisationId || facts.review.id !== row.reviewId
+      || facts.installationId !== row.installationId || facts.operationId !== row.operationId
+      || facts.writerEpoch !== row.writerEpoch || facts.sourceRevision !== row.sourceRevision
+      || facts.factsRevision !== row.factsRevision || facts.previousFactsDigest !== row.previousFactsDigest
+      || facts.capturedAt !== row.capturedAt.toISOString()) throw new Error();
+    return facts;
+  } catch { throw new Error('Invalid stored Confluence recovery capture'); }
 }

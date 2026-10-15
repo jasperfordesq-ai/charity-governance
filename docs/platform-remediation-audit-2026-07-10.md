@@ -1,11 +1,19 @@
 # CharityPilot Full-Platform Remediation Audit
 
+> **15 October Confluence publication-plan/receipt increment, OPEN:** Source
+> commits exact key/capture/writer/head context before external writes and stores
+> immutable authenticated publication observations. Synthetic crash/retry and
+> occupied-slot reconciliation tests pass; SQL prevents cross-charity links and
+> mutation. Live key/custody approval, complete independent payload coverage,
+> automatic outbox, controlled release, full replay, execution and acceptance
+> remain unresolved. No deployed result or current permission is inferred.
+
 > **15 October Confluence reserved-publication increment, OPEN:** An explicit
 > journal kind and verified publisher/reader now bind the original encrypted
 > state to the exact writer/epoch/plaintext reservation and unchanged current
 > head. A generic-path bypass regression failed before blocking that path.
-> Synthetic acknowledgement-loss and payload/control-change tests pass. Local
-> durable publication/key-context receipts, controlled release, automatic outbox,
+> Synthetic acknowledgement-loss and payload/control-change tests pass. Controlled
+> release, automatic outbox,
 > complete replay, real custody, execution and acceptance remain required.
 
 > **15 October Confluence committed-capture increment, OPEN:** Source now

@@ -57,7 +57,7 @@ export async function readPublishedConfluenceCopyState(journal: RecoveryAuthorit
   const opened = await readVerifiedConfluenceCopyRecoveryFacts(published.entry.factsDigest,context,keys,objects);
   const after = await journal.inspectCurrent(source);
   if (after.revision !== published.revision) throw new Error('Confluence copy authority changed while reading state');
-  return { body: opened.body, entryDigest: published.entry.digest,
+  return { body: opened.body, entryGeneration: published.entry.generation, entryDigest: published.entry.digest,
     envelopeDigest: published.entry.factsDigest, revision: after.revision,
     actionAuthorized: false as const, currentHistoryVerified: false as const, reopeningAuthorised: false as const };
 }
