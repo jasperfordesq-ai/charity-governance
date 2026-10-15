@@ -1,5 +1,14 @@
 # CharityPilot Full-Platform Remediation Audit
 
+> **15 October retained-copy fact collection, OPEN:** Source now collects
+> bounded visible page/attachment/version metadata and streamed attachment
+> hashes using existing guarded readback, with final metadata/history checks,
+> cancellation and an aggregate repeat-inclusive read budget. Two review
+> regressions failed before corrections to raw page-id validation and ambiguous
+> cursor handling. Tests are synthetic; no live-provider observation, primary
+> source proof, authenticated publication binding, disposal permission, atomic
+> all-copy snapshot or independent/DPO acceptance is established.
+
 > **15 October retained-copy review persistence, OPEN:** Immutable review and
 > withdrawal evidence now has an internal Owner-scoped service and database
 > fences for current tenant/source/publication/revision, with an explicit false

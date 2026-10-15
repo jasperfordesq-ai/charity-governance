@@ -1,3 +1,4 @@
+import { readConfluenceInventoryCursor } from './confluence-inventory-pagination.js';
 import { DOCUMENT_UPLOAD_MAX_FILE_SIZE } from './document-upload-limits.js';
 import { AppError } from '../utils/errors.js';
 import type { ConfluenceClient } from './confluence-client.js';
@@ -341,47 +342,6 @@ function readResults(body: unknown): unknown[] | undefined {
   return Array.isArray(results) ? results : undefined;
 }
 
-/**
- * The cursor from `_links.next`, or `undefined` when this is the last page.
- *
- * Confluence sends `next` as a path with a query string. Only the `cursor`
- * parameter is taken from it: re-issuing the URL wholesale would let an
- * upstream response choose the path this client requests next, which is not a
- * decision a response body gets to make.
- */
-function cursorFromNextUrl(next: string): string {
-  try {
-    // The base is a placeholder; only the query is read from the result.
-    const cursor = new URL(next, 'https://confluence.invalid').searchParams.get('cursor');
-    if (cursor !== null && cursor.length > 0) return cursor;
-  } catch {
-    // The caller will reject this as an incomplete inventory.
-  }
-  throw invalidResponse('attachment pagination cursor');
-}
-
-function readNextCursor(body: unknown, linkHeader?: string): string | undefined {
-  const bodyNext = asObject(asObject(body)?._links)?.next;
-  if (bodyNext !== undefined && bodyNext !== null && (typeof bodyNext !== 'string' || bodyNext.length === 0)) {
-    throw invalidResponse('attachment pagination link');
-  }
-  const bodyCursor = typeof bodyNext === 'string' ? cursorFromNextUrl(bodyNext) : undefined;
-
-  const linkMatches = linkHeader === undefined
-    ? []
-    : Array.from(linkHeader.matchAll(/<([^>]+)>\s*;\s*rel\s*=\s*(?:"next"|next)(?=\s*[,;]|\s*$)/gi));
-  if (linkMatches.length > 1 || (linkMatches.length === 0 && /\brel\s*=\s*"?next\b/i.test(linkHeader ?? ''))) {
-    throw invalidResponse('unambiguous attachment pagination header');
-  }
-  const headerCursor = linkMatches[0]?.[1] === undefined
-    ? undefined
-    : cursorFromNextUrl(linkMatches[0][1]);
-  if (bodyCursor !== undefined && headerCursor !== undefined && bodyCursor !== headerCursor) {
-    throw invalidResponse('matching attachment pagination cursors');
-  }
-  return bodyCursor ?? headerCursor;
-}
-
 // ---------------------------------------------------------------------------
 // Listing — v2
 // ---------------------------------------------------------------------------
@@ -438,7 +398,7 @@ async function listAttachmentsAtPath(
       attachments.push(parseAttachment(record, base, invalidResponse));
     }
 
-    cursor = readNextCursor(response.body, response.linkHeader);
+    cursor = readConfluenceInventoryCursor(response.body, response.linkHeader, invalidResponse);
     if (cursor === undefined) return attachments;
     if (seenCursors.has(cursor)) throw invalidResponse('non-repeating attachment cursor');
     seenCursors.add(cursor);
@@ -479,7 +439,7 @@ export async function listTrashedAttachmentIds(
       }
       ids.push(id);
     }
-    cursor = readNextCursor(response.body, response.linkHeader);
+    cursor = readConfluenceInventoryCursor(response.body, response.linkHeader, invalidResponse);
     if (cursor === undefined) return ids;
     if (seenCursors.has(cursor)) throw invalidResponse('non-repeating trashed attachment cursor');
     seenCursors.add(cursor);
@@ -562,7 +522,7 @@ export async function listAttachmentVersions(
       });
     }
 
-    const nextCursor = readNextCursor(response.body, response.linkHeader);
+    const nextCursor = readConfluenceInventoryCursor(response.body, response.linkHeader, invalidResponse);
     if (nextCursor === undefined) {
       if (versions.length === 0) throw invalidResponse('attachment version history');
       return versions;

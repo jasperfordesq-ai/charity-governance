@@ -1,5 +1,16 @@
 # CharityPilot Agent Continuation Handoff
 
+> **15 October retained-copy provider collector, source only:** A bounded GET
+> collector now composes page-version listing, full visible attachment listing
+> and existing historical byte readback/repeated-current checks. It revisits
+> metadata and histories after byte collection, counts repeat reads in the
+> aggregate byte budget and carries cancellation to HTTP/body reads. Shared
+> cursor parsing rejects duplicate cursor parameters; wrong raw page-id types
+> refuse before requests. Synthetic tests cover real streamed hash calculation
+> and change/refusal paths. No route, tenant connection binding, primary-byte
+> proof, sandbox acceptance, executable authority or deployment is added.
+> Current continuation and exact evidence remain in the ignored checkpoint.
+
 > **15 October retained-copy durable review evidence, source only:** Internal
 > Owner-scoped review recording and separate withdrawal now have immutable
 > tables and SQL source/publication/tenant/revision checks. Direct writes cannot

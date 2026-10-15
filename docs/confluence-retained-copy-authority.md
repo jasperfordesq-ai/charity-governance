@@ -63,6 +63,36 @@ independent storage, replay or a host-loss recovery result.
 
 ## Next increments before execution
 
+### Provider observation collector now in source
+
+`collectRetainedConfluenceCopyInventory` reads an exact current page and its
+provider-listed page versions, inventories attachments, and reuses the existing
+historical attachment byte reader and repeated-current observation. It revisits
+page/attachment metadata and each history after byte collection, refusing
+detected changes. All HTTP calls are GETs; byte redirects retain the existing
+host guard and never receive the bearer token. Shared pagination follows only
+an unambiguous cursor on a fixed endpoint, never an upstream next URL.
+
+Bounds:100attachments,1000page versions,32versions per attachment,128MiB across
+attachment reads including repeats, and the existing50MiB per-read ceiling.
+The combined120second cancellation signal reaches HTTP responses and streamed
+bodies. Credential acquisition is checked before/after awaiting the existing
+token provider; this does not cancel a token-store wait. Limits refuse rather
+than truncate. Provider visibility and concurrency still limit what a bounded
+observation proves: this is not an atomic provider snapshot or discovery of
+hidden copies, comments, exports, backups or all provider-held data.
+
+The collector has no runtime caller or route. Its cloud/site/page arguments
+must next be derived from authenticated tenant publication/connection state
+and checked again after observation. Local primary bytes, synthetic-fixture
+authority and policy remain unverified by this primitive. Its explicit
+`actionAuthorized`, `allCopiesVerified` and `sourceVerified` flags are false.
+
+Read contracts were checked against Atlassian's official [version API](https://developer.atlassian.com/cloud/confluence/rest/v2/api-group-version/),
+[attachment metadata API](https://developer.atlassian.com/cloud/confluence/rest/v2/api-group-attachment/)
+and [version-specific download API](https://developer.atlassian.com/cloud/confluence/rest/v1/api-group-content---attachments/).
+Actual sandbox responses, grant scope and byte behavior still need acceptance.
+
 1. **Permission issuance after fact collection:** internal Owner-scoped review
    storage, separate withdrawal and SQL immutability/revision checks now exist
    with disposable PostgreSQL tests under a restricted DML role. Still collect
