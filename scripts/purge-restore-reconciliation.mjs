@@ -29,7 +29,8 @@ const confluenceTables = Object.freeze(['ConfluenceRetainedCopyReview','Confluen
   'ConfluenceSyntheticCopyScope','ConfluenceRetainedCopyPermission','ConfluenceRetainedCopyPermissionWithdrawal',
   'ConfluenceCopyRecoveryCapture','ConfluenceCopyPublicationPlan','ConfluenceCopyPublicationReceipt']);
 const confluenceStateTables = [...completionTables,...confluenceTables];
-const tables = [...confluenceStateTables,'ConfluenceCopyLedgerCapture'];
+const ledgerCaptureTables = [...confluenceStateTables,'ConfluenceCopyLedgerCapture'];
+const tables = [...ledgerCaptureTables,'ConfluenceCopyLedgerCandidate'];
 const observationTables = completionTables.filter(name => name !== 'DocumentBytePrimaryCompletion');
 const attemptTables = observationTables.filter(name => name !== 'DocumentByteProviderObservation');
 const previousTables = attemptTables.filter(name => name !== 'DocumentByteProviderAttempt');
@@ -51,6 +52,7 @@ virtualEntries.push(`SELECT 'ComplaintPrimaryConflicts' AS name, COALESCE(jsonb_
  FROM "ComplaintPurgeClaim" c JOIN "ComplaintRecord" r ON r.id=c."complaintId" AND r."organisationId"=c."organisationId"`);
 const virtualNames = ['ClaimedPrimaryJobs', 'ComplaintRecoveryState', 'DocumentRecoveryState', 'ComplaintPrimaryConflicts'];
 export const PURGE_RESTORE_TABLES = Object.freeze([...tables, ...virtualNames]);
+export const PURGE_RESTORE_LEDGER_CAPTURE_TABLES = Object.freeze([...ledgerCaptureTables,...virtualNames]);
 export const PURGE_RESTORE_CONFLUENCE_STATE_TABLES = Object.freeze([...confluenceStateTables,...virtualNames]);
 export const PURGE_RESTORE_COMPLETION_TABLES = Object.freeze([...completionTables,...virtualNames]);
 export const PURGE_RESTORE_OBSERVATION_TABLES = Object.freeze([...observationTables, ...virtualNames]);
@@ -104,7 +106,8 @@ function snapshotSql(format, names) {
  'documents',COALESCE((SELECT jsonb_agg(jsonb_build_object('organisationId',"organisationId",'documentId',id) ORDER BY "organisationId",id) FROM "Document"),'[]'::jsonb)
 ) AS snapshot;`;
 }
-export const PURGE_RESTORE_SNAPSHOT_SQL = snapshotSql(10, tables);
+export const PURGE_RESTORE_SNAPSHOT_SQL = snapshotSql(11, tables);
+export const PURGE_RESTORE_LEDGER_CAPTURE_SNAPSHOT_SQL = snapshotSql(10,ledgerCaptureTables);
 export const PURGE_RESTORE_CONFLUENCE_STATE_SNAPSHOT_SQL = snapshotSql(9,confluenceStateTables);
 export const PURGE_RESTORE_COMPLETION_SNAPSHOT_SQL = snapshotSql(8, completionTables);
 export const PURGE_RESTORE_OBSERVATION_SNAPSHOT_SQL = snapshotSql(7, observationTables);
@@ -113,6 +116,7 @@ export const PURGE_RESTORE_PREVIOUS_SNAPSHOT_SQL = snapshotSql(5, previousTables
 export const PURGE_RESTORE_LEGACY_SNAPSHOT_SQL = snapshotSql(4, legacyTables);
 export const PURGE_RESTORE_OLDEST_SNAPSHOT_SQL = snapshotSql(3, oldestTables);
 export const PURGE_RESTORE_BINDING_PROBE_SQL = `SELECT CASE
+ WHEN to_regclass('public."ConfluenceCopyLedgerCandidate"') IS NOT NULL THEN CASE WHEN to_regclass('public."ConfluenceCopyLedgerCapture"') IS NOT NULL AND found=${confluenceTables.length} AND to_regclass('public."DocumentBytePrimaryCompletion"') IS NOT NULL THEN 'confluence-candidate' ELSE 'partial-confluence' END
  WHEN to_regclass('public."ConfluenceCopyLedgerCapture"') IS NOT NULL THEN CASE WHEN found=${confluenceTables.length} AND to_regclass('public."DocumentBytePrimaryCompletion"') IS NOT NULL THEN 'confluence-ledger' ELSE 'partial-confluence' END
  WHEN found>0 AND found<${confluenceTables.length} THEN 'partial-confluence'
  WHEN found=${confluenceTables.length} THEN CASE WHEN to_regclass('public."DocumentBytePrimaryCompletion"') IS NULL THEN 'partial-confluence' ELSE 'confluence' END
@@ -144,11 +148,12 @@ function references(rows, label) {
 }
 function validate(snapshot) {
   exact(snapshot, ['format','capturedAt','tables','claims','documents'], 'snapshot');
-  if (![3, 4, 5, 6, 7, 8, 9, 10].includes(snapshot.format) || typeof snapshot.capturedAt !== 'string' ||
+  if (![3, 4, 5, 6, 7, 8, 9, 10, 11].includes(snapshot.format) || typeof snapshot.capturedAt !== 'string' ||
     !/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/.test(snapshot.capturedAt) ||
     !Number.isFinite(Date.parse(snapshot.capturedAt)) ||
     new Date(snapshot.capturedAt).toISOString() !== snapshot.capturedAt) throw new Error('Invalid purge restore format or time');
-  const tableNames = snapshot.format === 10 ? PURGE_RESTORE_TABLES
+  const tableNames = snapshot.format === 11 ? PURGE_RESTORE_TABLES
+    : snapshot.format === 10 ? PURGE_RESTORE_LEDGER_CAPTURE_TABLES
     : snapshot.format === 9 ? PURGE_RESTORE_CONFLUENCE_STATE_TABLES
     : snapshot.format === 8 ? PURGE_RESTORE_COMPLETION_TABLES
     : snapshot.format === 7 ? PURGE_RESTORE_OBSERVATION_TABLES
@@ -205,7 +210,8 @@ export function reconcilePurgeRestore(authority, restored) {
   return {
     schemaFormat: source.format,
     confluenceRowsCompared: source.format >= 9,
-    confluenceLedgerCapturesCompared: source.format === 10,
+    confluenceLedgerCapturesCompared: source.format >= 10,
+    confluenceLedgerCandidatesCompared: source.format === 11,
     databaseLedgerMatches: differences.length === 0 && !resurrectedDocuments && !sourceConflicts && !claimScopeDifferences,
     authorityCapturedAt: authority.capturedAt, restoredCapturedAt: restored.capturedAt,
     differences, resurrectedDocuments, sourceConflicts, claimScopeDifferences,

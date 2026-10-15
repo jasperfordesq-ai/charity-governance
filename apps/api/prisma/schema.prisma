@@ -1968,8 +1968,25 @@ model ConfluenceCopyLedgerCapture {
   capturedAt      DateTime
   recordedAt      DateTime @default(now())
 
+  candidates      ConfluenceCopyLedgerCandidate[]
+
   @@unique([organisationId, operationId], map: "ConfluenceLedgerCapture_org_operation_key")
   @@unique([id, organisationId], map: "ConfluenceLedgerCapture_id_org_key")
+}
+
+// Original encrypted transport candidate. Save before external object creation;
+// never regenerate it after an ambiguous external acknowledgement.
+model ConfluenceCopyLedgerCandidate {
+  id             String @id @default(cuid())
+  organisationId String
+  captureId      String @unique(map: "ConfluenceLedgerCandidate_capture_key")
+  capture        ConfluenceCopyLedgerCapture @relation(fields: [captureId, organisationId], references: [id, organisationId], onDelete: Restrict, onUpdate: NoAction, map: "ConfluenceLedgerCandidate_capture_fkey")
+  actorUserId    String
+  envelope       String
+  envelopeDigest String
+  recordedAt     DateTime @default(now())
+
+  @@unique([id, organisationId], map: "ConfluenceLedgerCandidate_id_org_key")
 }
 
 model DocumentStorageDeletion {

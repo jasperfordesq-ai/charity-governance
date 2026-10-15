@@ -1,5 +1,15 @@
 # CharityPilot Full-Platform Remediation Audit
 
+> **15 October durable original ciphertext increment, OPEN:** Migration186
+> preserves one immutable encrypted candidate/hash per original local capture.
+> SQL guards Owner/charity/actor/capture/envelope binding, isolation/WAL and
+> immutable lifecycle; application readback authenticates AES-GCM and original
+> plaintext. A separate process with key generation forbidden returns exact saved
+> ciphertext. Format11 compares these local transport rows; older formats remain
+> exact and partial/downgraded schema refuses. No dispatcher or provider activation
+> follows. Durable publication/ack state, independent host-loss reconciliation,
+> real custody, release and Nikita acceptance remain unresolved.
+
 > **15 October prepared ciphertext transport increment, OPEN:** A distinct
 > pre-publication path validates the original plaintext/hash/binding and exact
 > encrypted candidate before external object access. It never reseals, rejects

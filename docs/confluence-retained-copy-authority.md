@@ -804,8 +804,41 @@ path. The older seal-on-demand convenience function remains for existing
 synthetic composition and is not a restart-safe durable dispatcher. No runtime
 caller is added. All global authority flags remain false.
 
-Next: preserve original encrypted candidate bytes durably before external
-creation, persist publication/acknowledgement progress and resume unknown
-outcomes across restart. No automatic dispatcher or cleanup is enabled. Original
+### Durable original encrypted candidate
+
+`ConfluenceCopyLedgerCandidateStore.prepare` saves one immutable ciphertext/hash
+for a saved original capture. Initial Owner/charity/capture checks occur in a
+repeatable-read transaction. Key generation/encryption happens outside database
+locks. A second fenced transaction rechecks the original capture and current
+active Owner, and saves the original ciphertext under synchronous commit. Only
+the committed candidate is returned. A concurrent winner is authenticated and
+returned; the losing generated candidate is never uploaded or returned.
+
+Existing and unknown-local-commit retries authenticate the original stored
+envelope and plaintext without new key generation. Corrupt rows refuse; there
+is no automatic reseal or overwrite. A failed or lost commit cannot expose
+uncommitted bytes to a caller. Preparation itself has no object-store methods,
+reservation or journal access, so it cannot create an external candidate before
+the local commit.
+
+SQL enforces append-only insert, no update/delete/truncate, durable WAL settings,
+repeatable isolation, active charity Owner and exact original actor/capture/
+declared envelope binding/hash. Pinned invoker functions and public-qualified
+relations provide no privileged bypass. SQL does not authenticate ciphertext;
+application canonical/AES-GCM/plaintext validation remains required before
+upload. A durable candidate receipt is a local database guarantee under its
+storage contract, not physical power-loss, independent custody or current-history
+authority.
+
+Both local transport tables remain outside the eight-table archive payload to
+avoid self-recursion. Format11 includes candidates and captures in full-source
+backup comparison; format10 retains the earlier capture-only inventory. Host-loss
+reconciliation of these separate local transport rows remains unfinished.
+The original publication phase still must be enforced by a future durable
+dispatcher; preparation is not proof that a missing remote object is unpublished.
+
+Next: persist publication/acknowledgement progress and resume unknown
+outcomes across restart using saved capture and ciphertext. No automatic
+dispatcher or cleanup is enabled. Original
 capture retention/purpose and real key/provider custody still require review;
 there is no automatic expiry or disposal of these confidential copies.

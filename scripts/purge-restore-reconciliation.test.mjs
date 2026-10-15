@@ -3,12 +3,12 @@ import { test } from 'node:test';
 import { createHash } from 'node:crypto';
 import { assertNoClaimedLocalObjects } from './purge-restore-reconciliation.mjs';
 import { PURGE_RESTORE_TABLES, PURGE_RESTORE_OBSERVATION_TABLES, PURGE_RESTORE_ATTEMPT_TABLES, PURGE_RESTORE_PREVIOUS_TABLES, PURGE_RESTORE_LEGACY_TABLES,
-  PURGE_RESTORE_OLDEST_TABLES, PURGE_RESTORE_COMPLETION_TABLES, PURGE_RESTORE_CONFLUENCE_STATE_TABLES,
+  PURGE_RESTORE_OLDEST_TABLES, PURGE_RESTORE_COMPLETION_TABLES, PURGE_RESTORE_CONFLUENCE_STATE_TABLES, PURGE_RESTORE_LEDGER_CAPTURE_TABLES,
   reconcilePurgeRestore, assertPurgeRestoreLedger } from './purge-restore-reconciliation.mjs';
 
 function snapshot() {
   return {
-    format: 10, capturedAt: '2026-09-30T10:00:00.000Z',
+    format: 11, capturedAt: '2026-09-30T10:00:00.000Z',
     tables: Object.fromEntries(PURGE_RESTORE_TABLES.map(table => [table, table==='ComplaintPrimaryConflicts'?[]:[{ id: table, sha256: 'a'.repeat(64) }]])),
     claims: [{ organisationId: 'charity-a', documentId: 'removed-document' }], documents: [],
   };
@@ -17,7 +17,7 @@ function snapshot() {
 test('current restore inventory includes every Confluence decision and publication record', () => {
   for (const table of ['ConfluenceRetainedCopyReview','ConfluenceRetainedCopyReviewWithdrawal','ConfluenceSyntheticCopyScope',
     'ConfluenceRetainedCopyPermission','ConfluenceRetainedCopyPermissionWithdrawal','ConfluenceCopyRecoveryCapture',
-    'ConfluenceCopyPublicationPlan','ConfluenceCopyPublicationReceipt','ConfluenceCopyLedgerCapture']) assert.ok(PURGE_RESTORE_TABLES.includes(table),table);
+    'ConfluenceCopyPublicationPlan','ConfluenceCopyPublicationReceipt','ConfluenceCopyLedgerCapture','ConfluenceCopyLedgerCandidate']) assert.ok(PURGE_RESTORE_TABLES.includes(table),table);
 });
 
 test('format9 remains exact while format10 requires the original durable ledger capture', () => {
@@ -28,6 +28,16 @@ test('format9 remains exact while format10 requires the original durable ledger 
   assert.equal(assertPurgeRestoreLedger(snapshot(),snapshot()).confluenceLedgerCapturesCompared,true);
   assert.throws(() => assertPurgeRestoreLedger(older,snapshot()),/schema versions differ/);
   const missing = snapshot(); missing.tables.ConfluenceCopyLedgerCapture = [];
+  assert.throws(() => assertPurgeRestoreLedger(snapshot(),missing),{ code: 'PURGE_RESTORE_RECONCILIATION_REQUIRED' });
+});
+
+test('format10 stays exact while format11 requires original encrypted candidates', () => {
+  const older = snapshot(); older.format = 10;
+  older.tables = Object.fromEntries(PURGE_RESTORE_LEDGER_CAPTURE_TABLES.map(name => [name,snapshot().tables[name]]));
+  assert.equal(assertPurgeRestoreLedger(older,structuredClone(older)).confluenceLedgerCandidatesCompared,false);
+  assert.equal(assertPurgeRestoreLedger(snapshot(),snapshot()).confluenceLedgerCandidatesCompared,true);
+  assert.throws(() => assertPurgeRestoreLedger(older,snapshot()),/schema versions differ/);
+  const missing = snapshot(); missing.tables.ConfluenceCopyLedgerCandidate = [];
   assert.throws(() => assertPurgeRestoreLedger(snapshot(),missing),{ code: 'PURGE_RESTORE_RECONCILIATION_REQUIRED' });
 });
 

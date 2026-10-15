@@ -1,5 +1,16 @@
 # CharityPilot Agent Continuation Handoff
 
+> **15 October durable encrypted candidate, source only:** Migration186 adds
+> immutable original ciphertext/hash linked to the original capture and actor.
+> Preparation performs key work outside database locks, rechecks active Owner
+> and capture before commit, and returns only the committed winner. Existing /
+> unknown-commit retries decrypt original stored bytes without generating keys;
+> another valid encryption cannot replace them. Restricted PostgreSQL and fresh
+> Node-process proof pass. Format11 includes candidate rows; exact formats3–10
+> remain. No provider object is created during preparation. Publication/ack
+> progress and restart dispatcher are still absent; independent host recovery,
+> custody and acceptance remain open. Last serving proof c78/179; local186 only.
+
 > **15 October exact prepared-ciphertext upload, source only:** A separate
 > pre-publication helper accepts the already saved original capture and encrypted
 > candidate. It checks both hashes, binding, decrypted body and eight-table
