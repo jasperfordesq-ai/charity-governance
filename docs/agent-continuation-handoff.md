@@ -1,5 +1,16 @@
 # CharityPilot Agent Continuation Handoff
 
+> **15 October encrypted complete Confluence ledger primitives, source only:**
+> Strict eight-table structural parsing and distinct AES-GCM archive/AAD bind
+> original metadata to the declared context/control. Conditional S3 storage uses
+> its own namespace and requires exact readback; retries keep original bytes,
+> missing published objects are not reconstructed and returned keys are wiped.
+> Synthetic envelope/transport tests and actual populated PostgreSQL service
+> readback pass. No real provider, durable dispatcher, trusted current-head
+> publication or restore caller is enabled. An observed control is not current
+> history authority; all execution/reopen flags remain false. Next: durable
+> dispatch, reviewed archive publication/freshness and supported host recovery.
+
 > **15 October complete local Confluence ledger capture, source only:** An
 > internal active-Owner reader captures all eight tables in one repeatable-read
 > transaction with locks, SQL size/count preflight and a bounded canonical body.

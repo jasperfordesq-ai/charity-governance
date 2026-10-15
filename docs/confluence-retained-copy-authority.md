@@ -527,3 +527,56 @@ binding to complete decision history and safe reconciliation of later facts,
 followed by supported quarantined host recovery. No local digest or five-row
 replay may substitute for these gates. Mixed protocols, old-host isolation,
 provider/key custody, release-bound evidence and acceptance remain open.
+
+## Encrypted complete-ledger archive primitives
+
+The complete local ledger now has a strict canonical parser: all eight named
+tables must be present, with no extra tables/header fields, duplicate IDs or
+foreign rows. It preserves original metadata, rather than reconstructing it.
+This is structural validation; it does not approve underlying decisions, verify
+their semantic relationships or attest the caller-declared host/source labels.
+
+`confluence-copy-ledger-envelope.ts` uses the existing AES-256-GCM/data-key
+boundary with a distinct `CONFLUENCE_COPY_LEDGER_ARCHIVE_V1` format and AAD domain.
+The AAD authenticates the exact validated context, declared observed control and
+wrapped key. Context/control tenant, installation and epoch must agree; plaintext
+source/tenant labels must match the context. Returned key buffers are wiped on
+success and failure. The 128MiB plaintext limit has a separate 192MiB encoded
+envelope limit. Maximum-size memory/throughput acceptance is not established.
+
+Preservation conditionally creates an immutable object, authenticates readback
+and requires the exact original canonical body. Same-operation retries use the
+stored original ciphertext. Conflicting concurrent winners or changed metadata
+refuse; acknowledgement loss requires the same original body and binding. The
+caller still needs durable original capture/dispatch state before provider I/O;
+recapturing a fresh timestamp is not a valid retry.
+
+The S3 adapter has a distinct
+`confluence-copy-ledger/<installation>/<charity>/<operation>.json` namespace.
+Expected bucket owner, pinned region, separate replay/data-key ARN, version/SSE
+metadata, checksums, conditional creation, byte bounds and deadlines reuse the
+existing adapter boundaries. No bucket, key, credential or policy was provisioned.
+The verified reader needs its expected digest/binding from separately trusted
+publication evidence and never recreates missing published bytes.
+
+The archive format is not an accepted decision or outcome journal kind. Its
+observed control can be authenticated as supplied without proving that it was
+current or independently approved. Results retain false current-history,
+execution and reopening flags; storage readback does not establish custody.
+No route, scheduled dispatcher, reservation release, restore or live caller uses
+these primitives.
+
+Synthetic tests cover full eight-table encryption, binding/AAD substitutions,
+tampering, key cleanup, original-byte retries, conditional-write races and S3
+transport refusals. Actual migrated PostgreSQL services now populate review,
+unpublished withdrawal, capture and publication-plan rows; the local snapshot
+retains their exact original fields and round-trips through the archive using
+synthetic keys/in-memory objects. The other four tables remain empty in that
+database case; nonempty eight-table coverage is unit proof. This is not real AWS
+custody, publication freshness or populated host-loss replay acceptance.
+
+Next: durable original archive dispatch, reviewed current-head publication and
+verification, authenticated later-fact reconciliation and supported quarantined
+host recovery. Existing journal readers must reject this unsupported protocol
+until its separate history/epoch rules are reviewed. Do not add a generic append
+or empty/missing-object fallback to obtain a passing restore comparison.

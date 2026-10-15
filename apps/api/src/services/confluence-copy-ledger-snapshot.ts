@@ -13,14 +13,41 @@ export const CONFLUENCE_COPY_LEDGER_TABLES = Object.freeze([
 ] as const);
 const binding = z.object({ installationId: z.string().regex(/^[A-Za-z0-9_-]{1,120}$/),
   declaredSourceRevision: z.string().regex(/^[a-f0-9]{40}$/) }).strict();
-const MAX_BYTES = 128 * 1024 * 1024;
+export const CONFLUENCE_COPY_LEDGER_MAX_BYTES = 128 * 1024 * 1024;
+const MAX_BYTES = CONFLUENCE_COPY_LEDGER_MAX_BYTES;
 const MAX_ROWS = 10000;
+const row = z.object({ id: z.string().regex(/^[A-Za-z0-9_-]{1,200}$/),
+  organisationId: z.string().regex(/^[A-Za-z0-9_-]{1,120}$/) }).passthrough();
+const ledgerSchema = z.object({ format: z.literal(1), kind: z.literal('CONFLUENCE_COPY_LOCAL_LEDGER_V1'),
+  ...binding.shape, organisationId: z.string().regex(/^[A-Za-z0-9_-]{1,120}$/),
+  actorUserId: z.string().regex(/^[A-Za-z0-9_-]{1,120}$/), capturedAt: z.string().datetime({ precision: 3 }),
+  tables: z.record(z.array(row).max(MAX_ROWS)),
+}).strict();
 
 function canonical(value: unknown): string {
   const order = (v: unknown): unknown => Array.isArray(v) ? v.map(order)
     : v !== null && typeof v === 'object' ? Object.fromEntries(Object.entries(v)
       .sort(([a],[b]) => a < b ? -1 : a === b ? 0 : 1).map(([key,item]) => [key,order(item)])) : v;
   return JSON.stringify(order(value));
+}
+
+/** Structural complete-ledger validation only, not semantic decision approval,
+ * an authenticated provider head, source attestation or restore authority. */
+export function prepareConfluenceCopyLocalLedger(raw: unknown) {
+  try {
+    const wire = JSON.stringify(raw);
+    if (Buffer.byteLength(wire,'utf8') > MAX_BYTES) throw new Error();
+    const ledger = ledgerSchema.parse(JSON.parse(wire));
+    if (Object.keys(ledger.tables).length !== CONFLUENCE_COPY_LEDGER_TABLES.length
+      || CONFLUENCE_COPY_LEDGER_TABLES.some(name => !Object.hasOwn(ledger.tables,name))) throw new Error();
+    for (const group of Object.values(ledger.tables)) {
+      if (new Set(group.map(value => value.id)).size !== group.length
+        || group.some(value => value.organisationId !== ledger.organisationId)) throw new Error();
+    }
+    const body = canonical(ledger);
+    if (Buffer.byteLength(body,'utf8') > MAX_BYTES) throw new Error();
+    return { body, digest: createHash('sha256').update(body,'utf8').digest('hex'), ledger };
+  } catch { throw new Error('Invalid or over-capacity complete Confluence local ledger'); }
 }
 
 /** Internal confidential snapshot only. No provider write, persistence, journal
@@ -76,9 +103,8 @@ export async function captureConfluenceCopyLocalLedger(prisma: PrismaClient, org
       if (Buffer.byteLength(wire,'utf8') > MAX_BYTES) throw new Error();
       // Prisma dates serialize first, then keys are ordered without dropping
       // scalar metadata or changing the original canonical facts string.
-      const body = canonical(JSON.parse(wire));
-      if (Buffer.byteLength(body,'utf8') > MAX_BYTES) throw new Error();
-      return { body, digest: createHash('sha256').update(body,'utf8').digest('hex'),
+      const { body, digest } = prepareConfluenceCopyLocalLedger(JSON.parse(wire));
+      return { body, digest,
         scope: 'CONFLUENCE_LOCAL_LEDGER_ONLY' as const,
         tableCounts: Object.fromEntries(CONFLUENCE_COPY_LEDGER_TABLES.map((name,index) => [name,rows[index]!.length])),
         independentlyPreserved: false as const, currentHistoryVerified: false as const,

@@ -1,5 +1,14 @@
 # CharityPilot Full-Platform Remediation Audit
 
+> **15 October encrypted complete-ledger archive increment, OPEN:** Distinct
+> authenticated encryption and conditional storage preserve original eight-table
+> metadata and declared observed control; tampering, substitution, changed retries
+> and missing-object reconstruction refuse. Actual PostgreSQL review/withdrawal/
+> capture/plan rows survive snapshot and synthetic encrypted readback. This is
+> not independent current-history publication, custody, host recovery or live
+> release evidence. Durable dispatch, reviewed archive protocol, later-fact
+> reconciliation, all writer/custody gates and Nikita acceptance remain open.
+
 > **15 October full local Confluence ledger capture increment, OPEN:** The
 > internal reader captures eight scoped decision/publication tables, including
 > unpublished withdrawals and exact original local metadata, under bounded

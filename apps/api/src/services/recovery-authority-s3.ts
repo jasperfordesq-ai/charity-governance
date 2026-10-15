@@ -10,6 +10,7 @@ import { inspectRecoveryPreparationEnvelope } from './recovery-preparation-envel
 import { inspectHoldPreparationEnvelope } from './hold-recovery-envelope.js';
 import { inspectDocumentRecoveryEnvelope } from './document-recovery-envelope.js';
 import { inspectConfluenceCopyRecoveryEnvelope, CONFLUENCE_COPY_RECOVERY_MAX_ENVELOPE_BYTES } from './confluence-copy-recovery-envelope.js';
+import { inspectConfluenceCopyLedgerEnvelope, CONFLUENCE_COPY_LEDGER_MAX_ENVELOPE_BYTES } from './confluence-copy-ledger-envelope.js';
 import { inspectDocumentOutcomeEnvelope } from './document-outcome-envelope.js';
 import { inspectDocumentBytePermitEnvelope } from './document-byte-permit-envelope.js';
 import { inspectDocumentByteExecutionDecisionEnvelope } from './document-byte-execution-decision-envelope.js';
@@ -262,6 +263,27 @@ export class S3AuthorityObjectStore implements AuthorityObjectStore, AuthorityHe
   async createConfluenceCopyState(operationId: string, envelope: string) {
     const request = this.confluenceCopyStateRequest(operationId); this.checkConfluenceCopyState(operationId, envelope);
     return this.writeObject(request, envelope, { IfNoneMatch: '*' }, CONFLUENCE_COPY_RECOVERY_MAX_ENVELOPE_BYTES);
+  }
+
+  private confluenceCopyLedgerRequest(operationId: string) {
+    const request = this.replayRequest(operationId);
+    return { ...request, Key: `confluence-copy-ledger/${this.config.installationId}/${this.config.organisationId}/${operationId}.json` };
+  }
+  private checkConfluenceCopyLedger(operationId: string, envelope: string) {
+    const { context } = inspectConfluenceCopyLedgerEnvelope(envelope);
+    if (context.installationId !== this.config.installationId || context.organisationId !== this.config.organisationId
+      || context.operationId !== operationId || context.keyId !== this.config.replayKeyArn) {
+      throw new Error('Confluence ledger archive envelope scope mismatch');
+    }
+  }
+  async readConfluenceCopyLedger(operationId: string) {
+    const object = await this.readObject(this.confluenceCopyLedgerRequest(operationId),undefined,CONFLUENCE_COPY_LEDGER_MAX_ENVELOPE_BYTES);
+    if (!object) return null;
+    this.checkConfluenceCopyLedger(operationId,object.body); return object.body;
+  }
+  async createConfluenceCopyLedger(operationId: string, envelope: string) {
+    const request = this.confluenceCopyLedgerRequest(operationId); this.checkConfluenceCopyLedger(operationId,envelope);
+    return this.writeObject(request,envelope,{ IfNoneMatch: '*' },CONFLUENCE_COPY_LEDGER_MAX_ENVELOPE_BYTES);
   }
 
   private complaintSourceRequest(operationId: string) {

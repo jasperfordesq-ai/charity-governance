@@ -5,6 +5,11 @@ import test from 'node:test';
 import { PrismaClient } from '@prisma/client';
 import { validateLocalDockerEndpoint } from './personal-server-docker-boundary.mjs';
 import { captureConfluenceCopyLocalLedger, CONFLUENCE_COPY_LEDGER_TABLES } from '../apps/api/dist/services/confluence-copy-ledger-snapshot.js';
+import { ConfluenceRetainedCopyReviewService } from '../apps/api/dist/services/confluence-retained-copy-review.service.js';
+import { ConfluenceCopyRecoveryCaptureStore } from '../apps/api/dist/services/confluence-copy-recovery-capture.js';
+import { ConfluenceCopyPublicationStore } from '../apps/api/dist/services/confluence-copy-publication-store.js';
+import { preserveConfluenceCopyLedgerArchive, readVerifiedConfluenceCopyLedgerArchive } from '../apps/api/dist/services/confluence-copy-ledger-envelope.js';
+import { recoveryFactsFixture, recoveryContextFixture } from '../apps/api/dist/tests/fixtures/confluence-copy-recovery-facts.js';
 
 const image = 'postgres@sha256:5660c2cbfea50c7a9127d17dc4e48543eedd3d7a41a595a2dfa572471e37e64c';
 function run(command,args,options = {}) {
@@ -65,6 +70,54 @@ test('local Confluence ledger capture uses all eight migrated tables and a real 
     assert.deepEqual(Object.keys(body.tables).sort(),[...CONFLUENCE_COPY_LEDGER_TABLES].sort());
     assert.ok(!result.body.includes('PRIVATE-PRIMARY-SENTINEL'));
     assert.equal(result.independentlyPreserved,false); assert.equal(result.reopeningAuthorised,false);
+
+    // Real supported decision/capture services populate four of the eight
+    // tables. No provider contact, synthetic scope or permission is needed.
+    const now = Date.now(), date = offset => new Date(now + offset);
+    const doc = await prisma.document.create({ data: { id: 'doc-a', organisationId: 'org-a', name: 'Synthetic retained source',
+      category: 'OTHER', fileUrl: 'org-a/reviewed.txt', fileSize: 42, mimeType: 'text/plain',
+      lifecycleStatus: 'RETIRED', updatedAt: date(-120000) } });
+    const pub = await prisma.documentPublication.create({ data: { id: 'pub-a', organisationId: 'org-a', documentId: doc.id,
+      state: 'RETIRED', cloudId: '00000000-0000-4000-8000-000000000001', spaceId: 'space-a', pageId: 'page-a',
+      retiredAt: date(-60000), nextAttemptAt: null, updatedAt: date(-60000) } });
+    const review = recoveryFactsFixture().review.review;
+    review.reviewedAt = date(0).toISOString(); review.expiresAt = date(3600000).toISOString();
+    review.snapshot.sourceRevision = doc.updatedAt.toISOString();
+    review.snapshot.publicationRevision = pub.updatedAt.toISOString();
+    review.snapshot.inventory.observedAt = date(-1000).toISOString();
+    const reviews = new ConfluenceRetainedCopyReviewService(prisma);
+    const recorded = await reviews.record('org-a','owner-a',review);
+    const capture = await new ConfluenceCopyRecoveryCaptureStore(prisma).capture('org-a','owner-a',{
+      installationId: input.installationId, operationId: 'decision-state-original', writerEpoch: 1,
+      sourceRevision: input.declaredSourceRevision, reviewId: recorded.id });
+    const plan = await new ConfluenceCopyPublicationStore(prisma).prepare('org-a','owner-a',{
+      captureId: capture.id, writerId: 'writer-a', keyId: recoveryContextFixture.keyId,
+      keyEvidenceRef: 'SYNTHETIC-KEY-ASSERTION', expectedGeneration: 0, expectedDigest: null });
+    const withdrawal = await reviews.withdraw('org-a','owner-a',recorded.id,{
+      evidenceRef: 'SYNTHETIC-WITHDRAWAL', reason: 'Preserve this unpublished synthetic review withdrawal' });
+    const populated = await captureConfluenceCopyLocalLedger(prisma,'org-a','owner-a',input);
+    const capturedTables = JSON.parse(populated.body).tables;
+    const originalRows = {
+      ConfluenceRetainedCopyReview: await prisma.confluenceRetainedCopyReview.findUniqueOrThrow({ where: { id: recorded.id } }),
+      ConfluenceRetainedCopyReviewWithdrawal: await prisma.confluenceRetainedCopyReviewWithdrawal.findUniqueOrThrow({ where: { id: withdrawal.id } }),
+      ConfluenceCopyRecoveryCapture: await prisma.confluenceCopyRecoveryCapture.findUniqueOrThrow({ where: { id: capture.id } }),
+      ConfluenceCopyPublicationPlan: await prisma.confluenceCopyPublicationPlan.findUniqueOrThrow({ where: { id: plan.id } }),
+    };
+    for (const [name,row] of Object.entries(originalRows)) assert.deepEqual(capturedTables[name],[JSON.parse(JSON.stringify(row))]);
+    assert.equal(capturedTables.ConfluenceCopyRecoveryCapture[0].facts,capture.body);
+    assert.equal(capturedTables.ConfluenceRetainedCopyReviewWithdrawal[0].id,withdrawal.id);
+    const context = { ...recoveryContextFixture, installationId: input.installationId, operationId: 'ledger-archive-original' };
+    const binding = { context, observedControl: { format: 2, installationId: input.installationId, organisationId: 'org-a',
+      writerId: 'writer-a', writerEpoch: 1, generation: 0, digest: null, activeOperation: null, revision: 'synthetic-observed-head' } };
+    const keys = { generate: async () => ({ key: Buffer.alloc(32,7), keyId: context.keyId, wrappedKey: 'dGVzdA==' }),
+      unwrap: async () => ({ key: Buffer.alloc(32,7), keyId: context.keyId }) };
+    let encrypted = null;
+    const objects = { readConfluenceCopyLedger: async () => encrypted,
+      createConfluenceCopyLedger: async (_operation,envelope) => { assert.equal(encrypted,null); encrypted = envelope; return true; } };
+    const preserved = await preserveConfluenceCopyLedgerArchive(populated.body,binding,keys,objects);
+    assert.equal((await readVerifiedConfluenceCopyLedgerArchive(preserved.digest,binding,keys,objects)).body,populated.body);
+    assert.equal(preserved.currentHistoryVerified,false);
+
     await assert.rejects(captureConfluenceCopyLocalLedger(prisma,'org-a','member-a',input),/capture is unresolved/);
     await assert.rejects(captureConfluenceCopyLocalLedger(prisma,'org-b','owner-a',input),/capture is unresolved/);
     await prisma.$transaction(async tx => {
