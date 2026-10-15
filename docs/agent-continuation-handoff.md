@@ -1,5 +1,14 @@
 # CharityPilot Agent Continuation Handoff
 
+> **16 October private rendition review, evidence only:** A pending governance
+> rendition now has position-preserved comparison of190table cells and70ordered
+> narrative paragraphs against its circulated PDF, plus all13PDF pages visually
+> inspected and a fresh guarded c78 stored-byte match. Word rendering is still
+> unavailable; exact formatting/pagination and controller/authority/audience
+> decisions remain unproved. The ignored115-row review queue preserves all prior
+> fields and adds this bounded evidence for one row. No live governance/access
+> change or runtime source change. Details/current queue in private RESUME-HERE.
+
 > **16 October dispatcher provider-method review fix, source only:** Review
 > reproduced loss of inherited decision-reader methods when the preflight spread
 > a provider instance. It now forwards the optional reader explicitly, bound to

@@ -1,5 +1,12 @@
 # CharityPilot Full-Platform Remediation Audit
 
+> **16 October rendition content-evidence increment, OPEN:** Private comparison
+> now checks all190table cells and70ordered narrative paragraphs, with PDF visual
+> review and fresh exact stored-byte binding. Word layout/rendering and accountable
+> rendition/adoption/audience decisions remain open. This narrows a content-review
+> gap; it does not approve the file, alter live document controls or close DPO
+> acceptance. No application source, schema, provider or release change follows.
+
 > **16 October inherited provider-reader defect, source FIXED / acceptance OPEN:**
 > Preflight copied own instance properties and lost prototype-backed decision
 > methods, causing legitimate mixed-history dispatch to refuse. Explicit bound
