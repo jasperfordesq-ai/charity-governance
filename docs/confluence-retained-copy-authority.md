@@ -2,10 +2,10 @@
 
 ## Status
 
-Review contract and durable evidence-storage increments, 15 October 2026.
-Synthetic engineering only. The source adds an internal review/withdrawal
-service and migration; no runtime route, executable permission, provider call
-or deletion capability is added. The migration is not deployed. The deployed
+Review, collection, scoped permission and recovery-capture increments,
+15 October 2026. Synthetic engineering only. Internal decision/capture services
+and migrations add no runtime route, executable provider permission or deletion
+capability. These source increments are not deployed. The deployed
 retained-source refusal remains intact.
 Private item-specific decisions and evidence stay in the ignored roadmap.
 
@@ -168,8 +168,8 @@ fixture/policy-backed permission issuance and independent history remain open.
    a permission, and the decision record alone cannot execute provider I/O.
 2. **Independent recovery:** canonical linked review/scope/permission/withdrawal
    facts, authenticated encrypted preservation, an S3 object boundary and strict
-   consecutive-state comparison now exist as source primitives. Durable committed
-   capture, reservation/current-head publication, complete replay and provider
+   consecutive-state comparison and durable committed capture now exist as source
+   components. Reservation/current-head publication, complete replay and provider
    custody remain required. Retain possible-copy and execution-intent facts too;
    a restored approval cannot resurrect withdrawn or spent execution permission.
 3. **One-use provider execution:** request and worker must recheck the same
@@ -218,17 +218,44 @@ existing separate storage/data KMS keys, bounded authenticated reads and conditi
 writes. No live bucket, IAM policy/prefix permission, retention lock, credentials
 or cloud resource was configured or used by this increment.
 
-These components do **not** capture committed SQL rows, maintain an outbox,
-publish a journal kind/reservation/head, select a latest state or apply a restore.
+The envelope/S3 components do **not** themselves capture SQL rows or publish a
+journal kind/reservation/head, select a latest state or apply a restore.
 The expected object digest must ultimately come from independently authenticated
 current history, not a restored local checkpoint. Readers/progression explicitly
 return `currentHistoryVerified: false`, `reopeningAuthorised: false` and no action
 authority. Tests use synthetic object stores/SDK transport; they do not prove
 host-loss safety, source/copy-writer completeness, live IAM or independent custody.
 
-Next capture and retain the original canonical body durably by operation before
-its first external write, then publish under the exact reserved writer/current
-head. A retry must use that original body; recapturing with a new timestamp is a
-different fact and must refuse under the old identity. Reconcile/apply the full
-verified history before any reopening. Keep binding/writer and erasure blocks
-until these protocols and the remaining source/copy facts are complete.
+## Durable local capture
+
+`ConfluenceCopyRecoveryCaptureStore` reads all five immutable decision records
+under the same charity lock used by decision/scope writers. It requires an
+active charity and scoped active Owner, then commits the exact canonical body,
+digest, context and database capture time before any external preservation.
+Operation identity is unique per charity. A retry validates and returns the
+original body/time, including after later withdrawal or expiry; it cannot
+recapture changed facts under that operation. New facts use a new operation and
+the next review revision/predecessor digest. Epoch changes are refused.
+
+The forward migration independently locks the charity, checks active Owner,
+reconstructs the complete linked rows and verifies payload/digest/chronology and
+lineage. It prevents omission of a committed withdrawal and makes capture rows
+append-only, including TRUNCATE. Its functions pin the search path and qualify
+tables to resist temporary-table impersonation. Canonical text validation is
+also required in the service; SQL compares complete JSON values and byte hash.
+No scope is registered and no decision, job, primary bytes or provider is changed.
+
+This is a local outbox candidate, without dispatch or publication receipts.
+Returning an earlier capture for retry does not make its permission current:
+all results explicitly deny action/current-history/reopening authority. A test
+combines capture and encrypted preservation through a lost acknowledgement,
+then preserves a new withdrawal state under a new operation. The provider and
+key service are synthetic; SQL guard tests use disposable isolated PostgreSQL.
+
+Next publish the committed original body under the exact reserved writer/current
+head and reconcile/apply the full verified history before any reopening. Keep
+binding/writer and erasure blocks until those protocols and remaining source/copy
+and one-use execution facts are complete. No live independent-custody or
+host-loss acceptance follows from local capture.
+The capture binds installation/charity/operation/epoch/source; publication must
+also durably bind the approved encryption-key context and external object receipt.

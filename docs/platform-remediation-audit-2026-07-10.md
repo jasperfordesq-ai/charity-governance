@@ -1,10 +1,18 @@
 # CharityPilot Full-Platform Remediation Audit
 
+> **15 October Confluence committed-capture increment, OPEN:** Source now
+> commits original decision bodies by operation under scoped active-Owner and
+> charity locks, preserving retries and subsequent withdrawal lineage. SQL
+> compares complete linked rows and refuses rewrites/deletes/truncation. A
+> suspended-charity retry regression failed before the active-charity check.
+> Source-only evidence does not establish independent publication/current head,
+> complete replay, one-use execution, deployment or Nikita acceptance.
+
 > **15 October Confluence recovery metadata preservation, OPEN:** Source
 > canonical/encrypted decision-state primitives retain complete linked review,
 > scope, permission and withdrawals; synthetic later-withdrawal/old-backup
 > comparisons refuse lost evidence and never authorise reopening. Error privacy
-> and backdated-omission regressions failed before corrections. No SQL capture,
+> and backdated-omission regressions failed before corrections. No
 > authenticated current-head publication, complete replay, restore, live provider
 > custody or host-loss acceptance is established. Binding and erasure gates stay
 > closed while the remaining source/copy and execution facts are incomplete.

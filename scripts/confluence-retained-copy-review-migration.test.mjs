@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
-import { randomUUID } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
 import { readFileSync, readdirSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { test } from 'node:test';
@@ -149,6 +149,53 @@ test('retained Confluence review and permission history is scoped, immutable and
     query(permissionInsert('wrong-generation').replace(`(SELECT "connectedAt" FROM public."OrganisationIntegration" WHERE id='confluence-a')`, "'2000-01-01'::timestamp"), /exact connected grant generation/);
     query(permissionInsert());
     query(permissionInsert('duplicate-permission'), /unique constraint/);
+    // Use real committed rows from the disposable database. Each capture must
+    // include every linked record visible under the same charity lock.
+    const captureFacts = (operationId, factsRevision, previousFactsDigest) => {
+      const rows = JSON.parse(query(`SELECT jsonb_build_object(
+        'review',public."ConfluenceCopyCapture_timestamp_row"(to_jsonb(r),ARRAY['reviewedAt','expiresAt','recordedAt']),
+        'reviewWithdrawal',(SELECT public."ConfluenceCopyCapture_timestamp_row"(to_jsonb(w),ARRAY['occurredAt']) FROM "ConfluenceRetainedCopyReviewWithdrawal" w WHERE "reviewId"=r.id),
+        'scope',(SELECT public."ConfluenceCopyCapture_timestamp_row"(to_jsonb(s),ARRAY['registeredAt','expiresAt']) FROM "ConfluenceSyntheticCopyScope" s WHERE "reviewId"=r.id),
+        'permission',(SELECT public."ConfluenceCopyCapture_timestamp_row"(to_jsonb(p),ARRAY['connectionGeneration','issuedAt','expiresAt']) FROM "ConfluenceRetainedCopyPermission" p WHERE "reviewId"=r.id),
+        'permissionWithdrawal',(SELECT public."ConfluenceCopyCapture_timestamp_row"(to_jsonb(w),ARRAY['occurredAt']) FROM "ConfluenceRetainedCopyPermissionWithdrawal" w WHERE "permissionId"='permission-a'),
+        'capturedAt',to_char(timezone('UTC',clock_timestamp()),'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"'))
+        FROM "ConfluenceRetainedCopyReview" r WHERE id='review-a';`));
+      return { format: 1, kind: 'CONFLUENCE_COPY_DECISION_STATE_V1', installationId: 'synthetic-installation',
+        organisationId: 'org-a', operationId, writerEpoch: 1, sourceRevision: 'a'.repeat(40), factsRevision,
+        previousFactsDigest, ...rows };
+    };
+    const captureInsert = (id, facts, actor = 'owner-a') => {
+      const body = JSON.stringify(facts);
+      const digest = createHash('sha256').update(body).digest('hex');
+      const quote = value => `'${String(value).replaceAll("'", "''")}'`;
+      return `SET ROLE synthetic_copy_runtime; INSERT INTO public."ConfluenceCopyRecoveryCapture"
+        (id,"organisationId","reviewId","installationId","operationId","writerEpoch","sourceRevision","actorUserId",
+        "factsRevision","previousFactsDigest","capturedAt",facts,"factsDigest") VALUES
+        (${quote(id)},'org-a','review-a',${quote(facts.installationId)},${quote(facts.operationId)},${facts.writerEpoch},${quote(facts.sourceRevision)},${quote(actor)},
+        ${facts.factsRevision},${facts.previousFactsDigest ? quote(facts.previousFactsDigest) : 'NULL'},${quote(facts.capturedAt)},${quote(body)},${quote(digest)});`;
+    };
+    const firstCapture = captureFacts('capture-operation-1',1,null);
+    const firstCaptureDigest = createHash('sha256').update(JSON.stringify(firstCapture)).digest('hex');
+    query(captureInsert('capture-member',firstCapture,'member-a'), /active charity Owner/);
+    query(`BEGIN; UPDATE public."Organisation" SET "lifecycleStatus"='SUSPENDED' WHERE id='org-a';
+      ${captureInsert('capture-suspended',firstCapture)}`, /active charity Owner/);
+    query(captureInsert('capture-other',firstCapture,'owner-b'), /active charity Owner/);
+    query(captureInsert('capture-incomplete',{ ...firstCapture, permission: null }), /complete committed facts/);
+    query(captureInsert('capture-extra',{ ...firstCapture, credential: 'never-store-credentials' }), /complete committed facts/);
+    query(captureInsert('capture-tampered',firstCapture).replace(firstCaptureDigest,'0'.repeat(64)), /complete committed facts/);
+    query(captureInsert('capture-wrong-tenant',firstCapture).replace("'org-a','review-a'","'org-b','review-a'"), /active charity Owner/);
+    query(`SET ROLE synthetic_copy_runtime; CREATE TEMP TABLE "User" (LIKE public."User" INCLUDING ALL);
+      INSERT INTO pg_temp."User" SELECT * FROM public."User" WHERE id='member-a'; UPDATE pg_temp."User" SET role='OWNER';
+      ${captureInsert('capture-shadow-owner',firstCapture,'member-a')}`, /active charity Owner/);
+    query(captureInsert('capture-1',firstCapture));
+    query(captureInsert('capture-duplicate',firstCapture), /initial lineage|predecessor mismatch|unique constraint/);
+    query(captureInsert('capture-skip',{ ...firstCapture, operationId: 'capture-operation-3', factsRevision: 3,
+      previousFactsDigest: firstCaptureDigest }), /predecessor mismatch/);
+    query(captureInsert('capture-epoch',{ ...firstCapture, operationId: 'capture-operation-2', factsRevision: 2,
+      previousFactsDigest: firstCaptureDigest, writerEpoch: 2 }), /predecessor mismatch/);
+    query(`SET ROLE synthetic_copy_runtime; UPDATE "ConfluenceCopyRecoveryCapture" SET "factsDigest"=repeat('0',64);`, /append-only/);
+    query(`SET ROLE synthetic_copy_runtime; DELETE FROM "ConfluenceCopyRecoveryCapture";`, /append-only/);
+    query(`TRUNCATE "ConfluenceCopyRecoveryCapture";`, /append-only/);
     query(`SET ROLE synthetic_copy_runtime; UPDATE "ConfluenceRetainedCopyPermission" SET reason='Replace reviewed permission';`, /append-only/);
     query(`SET ROLE synthetic_copy_runtime; DELETE FROM "ConfluenceSyntheticCopyScope";`, /append-only/);
     query(`TRUNCATE "ConfluenceRetainedCopyPermissionWithdrawal", "ConfluenceRetainedCopyPermission", "ConfluenceSyntheticCopyScope";`, /append-only/);
@@ -166,6 +213,14 @@ test('retained Confluence review and permission history is scoped, immutable and
     query(withdrawal('withdraw-member','member-a'), /active charity owner/);
     query(withdrawal('withdraw-other','owner-b','org-b'), /not found in charity/);
     query(withdrawal('withdraw-a'));
+    // The original committed body stays unchanged after withdrawal. A new
+    // operation/revision must capture BOTH withdrawal records, never resurrect
+    // the earlier unwithdrawn state from a backup or a lost acknowledgement.
+    assert.equal(query(`SELECT "factsDigest" FROM "ConfluenceCopyRecoveryCapture" WHERE id='capture-1';`), firstCaptureDigest);
+    const secondCapture = captureFacts('capture-operation-2',2,firstCaptureDigest);
+    query(captureInsert('capture-stale',{ ...secondCapture, reviewWithdrawal: null, permissionWithdrawal: null }), /complete committed facts/);
+    query(captureInsert('capture-2',secondCapture));
+    assert.equal(query(`SELECT count(*) FROM "ConfluenceCopyRecoveryCapture";`),'2');
     query(permissionInsert('withdrawn-parent-permission'), /current unwithdrawn synthetic review/);
     query(withdrawal('withdraw-again'), /unique constraint/);
     query(`SET ROLE synthetic_copy_runtime; DELETE FROM "ConfluenceRetainedCopyReviewWithdrawal";`, /append-only/);

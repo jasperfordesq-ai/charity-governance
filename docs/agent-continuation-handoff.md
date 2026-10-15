@@ -1,11 +1,20 @@
 # CharityPilot Agent Continuation Handoff
 
+> **15 October Confluence durable capture, source only:** Exact canonical
+> decision facts now commit locally by operation before external preservation.
+> Owner/charity checks, shared transaction locking, complete linked-row SQL
+> comparison, immutable history and predecessor/epoch checks prevent a retry
+> from silently recapturing a later state. Original retry and subsequent
+> withdrawal are tested with encrypted preservation. There is no dispatch,
+> reserved journal/current-head publication, full replay or execution authority.
+> The migration is unreleased; independent custody and acceptance remain open.
+
 > **15 October Confluence decision recovery primitives, source only:** Complete
 > linked review/scope/permission/withdrawal facts now have bounded canonical
 > validation, authenticated encrypted preservation, a conditional S3 object
 > boundary and strict consecutive-state comparison. Later withdrawals cannot be
 > dropped or rewritten; missing objects are not recreated from backups. Maximum
-> review inventory is retained without truncation. Durable SQL capture, writer
+> review inventory is retained without truncation. Writer
 > reservation/current-head publication, full replay/restore and live custody
 > remain open; readers explicitly grant no reopening/action authority. Do not
 > replace those protocols with a digest taken from a restored local checkpoint.

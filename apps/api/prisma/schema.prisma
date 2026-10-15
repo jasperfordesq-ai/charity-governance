@@ -1808,6 +1808,7 @@ model ConfluenceRetainedCopyReview {
   withdrawal           ConfluenceRetainedCopyReviewWithdrawal?
   syntheticScope       ConfluenceSyntheticCopyScope?
   permission           ConfluenceRetainedCopyPermission?
+  recoveryCaptures     ConfluenceCopyRecoveryCapture[]
 
   @@unique([id, organisationId])
   @@index([organisationId, publicationId, recordedAt], map: "ConfluenceCopyReview_org_publication_recorded_idx")
@@ -1887,6 +1888,29 @@ model ConfluenceRetainedCopyPermissionWithdrawal {
   occurredAt     DateTime @default(now())
 
   @@unique([permissionId, organisationId], map: "ConfluenceCopyPermissionWithdrawal_permission_org_key")
+}
+
+// Inactive immutable outbox candidate. The exact body must survive retries;
+// no journal reservation, current-head publication or provider permission.
+model ConfluenceCopyRecoveryCapture {
+  id                  String @id @default(cuid())
+  organisationId      String
+  reviewId            String
+  review              ConfluenceRetainedCopyReview @relation(fields: [reviewId, organisationId], references: [id, organisationId], onDelete: Restrict, onUpdate: NoAction, map: "ConfluenceCopyCapture_review_fkey")
+  installationId      String
+  operationId         String
+  writerEpoch         Int
+  sourceRevision      String
+  actorUserId         String
+  factsRevision       Int
+  previousFactsDigest String?
+  capturedAt          DateTime
+  facts               String
+  factsDigest         String
+  recordedAt          DateTime @default(now())
+
+  @@unique([organisationId, operationId], map: "ConfluenceCopyCapture_org_operation_key")
+  @@unique([organisationId, reviewId, factsRevision], map: "ConfluenceCopyCapture_org_review_revision_key")
 }
 
 model DocumentStorageDeletion {
