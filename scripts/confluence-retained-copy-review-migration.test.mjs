@@ -253,6 +253,15 @@ test('retained Confluence review and permission history is scoped, immutable and
     query(`SET ROLE synthetic_copy_runtime; UPDATE "ConfluenceCopyPublicationReceipt" SET "entryDigest"=repeat('0',64);`, /append-only/);
     query(`SET ROLE synthetic_copy_runtime; DELETE FROM "ConfluenceCopyPublicationReceipt";`, /append-only/);
     query(`TRUNCATE "ConfluenceCopyPublicationReceipt";`, /append-only/);
+    // PostgreSQL wire-size/count primitives used before reconciliation reads
+    // materialise review JSON. One committed row exists in every decision table.
+    for (const table of ['ConfluenceRetainedCopyReview','ConfluenceSyntheticCopyScope','ConfluenceRetainedCopyPermission',
+      'ConfluenceRetainedCopyReviewWithdrawal','ConfluenceRetainedCopyPermissionWithdrawal']) {
+      const budget = query(`SET ROLE synthetic_copy_runtime;
+        SELECT count(*)::text || '|' || coalesce(sum(octet_length(to_jsonb(t)::text)),0)::text
+        FROM public."${table}" t WHERE "organisationId"='org-a';`).split('|');
+      assert.equal(budget[0],'1'); assert.ok(Number(budget[1]) > 0 && Number(budget[1]) < 128 * 1024 * 1024);
+    }
     query(permissionInsert('withdrawn-parent-permission'), /current unwithdrawn synthetic review/);
     query(withdrawal('withdraw-again'), /unique constraint/);
     query(`SET ROLE synthetic_copy_runtime; DELETE FROM "ConfluenceRetainedCopyReviewWithdrawal";`, /append-only/);

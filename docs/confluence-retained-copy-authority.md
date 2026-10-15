@@ -390,3 +390,36 @@ No supported live operator route, automatic dispatch/release, SQL replay, provid
 disposal or real custody/host-loss acceptance is added. Recovery bindings and
 retained-source erasure gates remain closed. Reviewed mixed-protocol handling,
 guarded recovery, all writers and one-use execution remain required.
+
+## Exact local reconciliation proposal
+
+`inspectConfluenceCopyReconciliation` is an active-Owner/charity-scoped read-only
+inspection. It locks and reads all five local decision tables, authenticates
+independent history, then locks/reads the local rows again and rechecks control.
+Changed local decisions or Owner/charity state stop inspection. No historical
+insert guard is relaxed and no decision is mutated.
+
+PostgreSQL checks row counts and JSON wire sizes before materialising review
+JSON:10000rows/table,120MiB server aggregate with representation headroom before
+the128MiB local-wire bound. Capacity excess returns no partial plan. This does
+not establish large-history latency acceptance.
+
+`buildConfluenceCopyReconciliationPlan` compares complete immutable records with
+verified latest states. Missing rows become proposed inserts in dependency order;
+matching records are retained. Unknown local evidence (including an unpublished
+withdrawal), conflicting values, duplicate IDs or foreign rows stop the plan.
+Nothing is proposed for deletion or overwrite. Original dates and evidence stay
+intact. Object-key order is immaterial; extra JSON fields are not discarded.
+
+The candidate digest binds observed head/revision, local-row digest and inserts.
+It detects change; it is not a signature, controller decision or restore authority.
+Action/current-history/reopening results remain false even with no missing rows.
+Captures, publication plans/receipts and source/copy state are outside this five-
+table comparison. The inspection requires an active application Owner; it is not
+the quarantined replacement-host maintenance flow.
+
+Next implement a supported isolated maintenance coordinator with fresh independent
+proof and exact local recheck for atomic historical replay. Current ordinary
+writes correctly refuse that replay. Do not add an app-wide bypass flag, accept
+plan JSON/hash as proof, or document raw database commands as an operator restore.
+Mixed protocols, all writers, one-use execution and live host-loss proof stay open.

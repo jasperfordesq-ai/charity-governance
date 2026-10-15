@@ -1,5 +1,13 @@
 # CharityPilot Full-Platform Remediation Audit
 
+> **15 October Confluence reconciliation-planning increment, OPEN:** Source
+> compares five complete local decision tables with verified latest independent
+> state, preserving withdrawals and refusing conflicts/local-only evidence.
+> Scoped snapshots/control are rechecked; SQL size/count expressions pass on
+> disposable PostgreSQL. This is an insert-only proposal with no restore/write
+> authority. Atomic maintenance replay, broader payload/writer facts, one-use
+> execution, live custody and DPO acceptance remain unresolved.
+
 > **15 October Confluence metadata-release increment, OPEN:** Source checks
 > exact committed local publication evidence and supported independent payload
 > history before acknowledging the matching metadata slot. A separate S3 path

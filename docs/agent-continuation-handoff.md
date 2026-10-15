@@ -1,5 +1,14 @@
 # CharityPilot Agent Continuation Handoff
 
+> **15 October Confluence reconciliation proposal, source only:** Active-Owner
+> inspection reads five local decision tables under charity locks before/after
+> independent verification. Full-value comparison proposes missing historical
+> rows in dependency order and refuses conflicting/local-only evidence, including
+> unpublished withdrawals. Server-side size/count budgets precede JSON loading;
+> local/head races refuse. Candidate hashes are not proof or restore authority.
+> No rows change and no guard is relaxed. Supported maintenance replay, mixed
+> protocols, other facts, execution and acceptance remain open.
+
 > **15 October Confluence metadata acknowledgement, source only:** Internal
 > release requires exact committed capture/plan/receipt, full supported decision
 > payload history and matching writer/epoch/head. A separate S3 method clears
