@@ -4,6 +4,7 @@ import { sealIntegrationSecret, openIntegrationSecret } from './integration-cryp
 import { prepareConfluenceCopyLocalLedger, CONFLUENCE_COPY_LEDGER_MAX_BYTES } from './confluence-copy-ledger-snapshot.js';
 import { validateRecoveryEnvelopeContext, type RecoveryEnvelopeContext, type RecoveryDataKeys } from './recovery-preparation-envelope.js';
 import { validateRecoveryControl } from './recovery-operation-reservation.js';
+import { validateConfluenceCopyLedgerRows } from './confluence-copy-ledger-validation.js';
 
 export const CONFLUENCE_COPY_LEDGER_MAX_ENVELOPE_BYTES = 192 * 1024 * 1024;
 const base64 = (max: number) => z.string().min(1).max(max)
@@ -63,7 +64,7 @@ export async function sealConfluenceCopyLedgerArchive(body: string, raw: Conflue
   } catch { throw new Error('Confluence ledger archive could not be encrypted'); }
   finally { if (Buffer.isBuffer(key)) key.fill(0); }
 }
-export async function openConfluenceCopyLedgerArchive(envelope: string, raw: ConfluenceCopyLedgerArchiveBinding, keys: RecoveryDataKeys) {
+export async function openConfluenceCopyLedgerArchive(envelope: string, raw: ConfluenceCopyLedgerArchiveBinding, keys: Pick<RecoveryDataKeys,'unwrap'>) {
   let key: Buffer | undefined;
   try {
     const binding = bindingSchema.parse(raw), value = inspect(envelope);
@@ -81,6 +82,43 @@ export interface ConfluenceCopyLedgerObjects {
   readConfluenceCopyLedger(operationId: string): Promise<string | null>;
   createConfluenceCopyLedger(operationId: string, envelope: string): Promise<boolean>;
 }
+
+/** Pre-publication upload of an ALREADY durably saved candidate only. The
+ * caller must persist the original capture AND exact envelope/digest before
+ * invoking this helper. This function does not provide that persistence.
+ * Published operations must use the expected-digest reader; a missing published
+ * object must never be recreated through this creation-capable helper.
+ * Unlike the legacy convenience helper below, this path never generates keys
+ * or reseals an archive. A different valid encryption of the same body conflicts.
+ */
+export async function preservePreparedConfluenceCopyLedgerArchive(
+  original: { body: string; digest: string; binding: ConfluenceCopyLedgerArchiveBinding },
+  candidate: { envelope: string; digest: string },
+  keys: Pick<RecoveryDataKeys,'unwrap'>,
+  store: ConfluenceCopyLedgerObjects,
+) {
+  try {
+    const binding = bindingSchema.parse(original.binding);
+    const body = original.body, envelope = candidate.envelope, expectedDigest = candidate.digest;
+    requireLedger(body,binding);
+    validateConfluenceCopyLedgerRows(body,binding.context);
+    if (digest(body) !== original.digest || !/^[a-f0-9]{64}$/.test(expectedDigest)
+      || binding.observedControl.activeOperation !== null || binding.observedControl.generation >= 10000) throw new Error();
+    inspect(envelope);
+    if (digest(envelope) !== expectedDigest) throw new Error();
+    if ((await openConfluenceCopyLedgerArchive(envelope,binding,keys)).body !== body) throw new Error();
+    let saved = await store.readConfluenceCopyLedger(binding.context.operationId), replayed = saved !== null;
+    if (saved === null) {
+      const created = await store.createConfluenceCopyLedger(binding.context.operationId,envelope);
+      if (typeof created !== 'boolean') throw new Error();
+      replayed = !created;
+      saved = await store.readConfluenceCopyLedger(binding.context.operationId);
+    }
+    if (saved !== envelope) throw new Error();
+    return { digest: expectedDigest, replayed, archiveReadbackVerified: true as const, ...noAuthority };
+  } catch { throw new Error('Prepared Confluence ledger preservation unresolved; retain the original candidate'); }
+}
+
 export async function preserveConfluenceCopyLedgerArchive(body: string, raw: ConfluenceCopyLedgerArchiveBinding,
   keys: RecoveryDataKeys, store: ConfluenceCopyLedgerObjects) {
   try {

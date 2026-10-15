@@ -779,6 +779,31 @@ remain unproved. Tests show a fresh Node process/new database connection returns
 the original bytes after the source records change; they do not simulate loss
 of PostgreSQL or the host. No latest-local-state coverage or action follows.
 
+### Exact prepared-ciphertext transport
+
+`preservePreparedConfluenceCopyLedgerArchive` provides the pre-publication
+transport step for a future durable dispatcher. The caller supplies the saved
+original body/digest/binding and saved encrypted envelope/digest. Before object
+lookup it verifies canonical structure, complete eight-table semantics, both
+hashes, binding, original unoccupied observation and decrypted plaintext. It
+needs only key unwrapping; key generation and resealing are unavailable.
+
+Conditional creation sends only the supplied original ciphertext. Existing or
+read-back bytes must match exactly, even when another ciphertext decrypts to
+the same plaintext. Unknown write responses remain unresolved until retry with
+the same candidate authenticates exact stored bytes. Invalid, missing or changed
+readback never yields a successful receipt. Caller-input changes during key
+unwrapping cannot replace the already checked strings or operation identity.
+
+This helper does not save ciphertext, verify durable-save provenance or manage
+publication progress. It must be called only while the operation is unpublished;
+the future dispatcher must enforce that using durable state and independently
+verified history. Once published, use the expected-digest read-only verifier;
+a missing published object must not be reconstructed by this creation-capable
+path. The older seal-on-demand convenience function remains for existing
+synthetic composition and is not a restart-safe durable dispatcher. No runtime
+caller is added. All global authority flags remain false.
+
 Next: preserve original encrypted candidate bytes durably before external
 creation, persist publication/acknowledgement progress and resume unknown
 outcomes across restart. No automatic dispatcher or cleanup is enabled. Original

@@ -1,5 +1,15 @@
 # CharityPilot Full-Platform Remediation Audit
 
+> **15 October prepared ciphertext transport increment, OPEN:** A distinct
+> pre-publication path validates the original plaintext/hash/binding and exact
+> encrypted candidate before external object access. It never reseals, rejects
+> another valid encryption of the same body and requires exact readback after
+> conditional creation. Lost-response and conflict tests pass with synthetic
+> adapters. No ciphertext persistence, publication-progress storage, restart
+> dispatcher or published-object reconstruction is implemented or authorised by
+> this helper. Those gates, host recovery/custody, release and Nikita acceptance
+> remain open. No live provider or data-action authority follows.
+
 > **15 October original durable capture increment, OPEN:** Migration185 adds
 > an immutable, Owner-scoped original archive-input row saved atomically with
 > all eight source-table reads. SQL checks source equality, hash/clock, limits,

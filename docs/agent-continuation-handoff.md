@@ -1,5 +1,16 @@
 # CharityPilot Agent Continuation Handoff
 
+> **15 October exact prepared-ciphertext upload, source only:** A separate
+> pre-publication helper accepts the already saved original capture and encrypted
+> candidate. It checks both hashes, binding, decrypted body and eight-table
+> semantics before object lookup, uploads only the supplied bytes and requires
+> exact readback. Alternative valid encryption of the same body conflicts;
+> lost-response retry never generates a key or reseals. This helper does NOT
+> persist ciphertext or prove a caller saved it; durable candidate/progress and
+> restart dispatch remain next. Published objects must use the read-only verifier,
+> never this creation-capable helper. No runtime caller/provider is activated.
+> Source remains185 migrations; serving evidence last verified c78/179.
+
 > **15 October atomic durable original ledger capture, source only:** New
 > immutable local capture/migration185 saves original eight-table body/binding
 > in one repeatable-read transaction before preservation I/O. SQL checks actual
