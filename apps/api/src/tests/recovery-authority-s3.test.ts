@@ -299,8 +299,9 @@ test('journal and S3 adapter recover a lost publication acknowledgement together
 test('S3 explicit release requires the exact outcome head and refuses generic slot clearing', async () => {
   for (const scenario of ['valid', 'valid-hold', 'valid-cancellation', 'valid-hold-cancellation',
     'document-outcome', 'document-byte-permit', 'document-byte-decision', 'confluence-state', 'confluence-ledger',
+    'confluence-ledger-first', 'confluence-ledger-race',
     'wrong-kind', 'wrong-operation', 'missing', 'corrupt', 'race']) {
-    const generation = scenario === 'confluence-state' ? 1 : 2;
+    const generation = ['confluence-state','confluence-ledger-first'].includes(scenario) ? 1 : 2;
     const facts = { format: 1, installationId: config.installationId, organisationId: config.organisationId,
       generation, previousDigest: generation === 1 ? null : 'b'.repeat(64), operationId: scenario === 'wrong-operation' ? 'other' : 'operation-a',
       kind: ({ 'wrong-kind': 'DISPOSAL_RESULT', 'document-outcome': 'DOCUMENT_OUTCOME_V1',
@@ -308,6 +309,8 @@ test('S3 explicit release requires the exact outcome head and refuses generic sl
         'document-byte-decision': 'DOCUMENT_BYTE_EXECUTION_DECISION_V1',
         'confluence-state': 'CONFLUENCE_COPY_DECISION_STATE_V1',
         'confluence-ledger': 'CONFLUENCE_COPY_LEDGER_ARCHIVE_V1',
+        'confluence-ledger-first': 'CONFLUENCE_COPY_LEDGER_ARCHIVE_V1',
+        'confluence-ledger-race': 'CONFLUENCE_COPY_LEDGER_ARCHIVE_V1',
         'valid-hold': 'COMPLAINT_HOLD_OUTCOME_V1',
         'valid-cancellation': 'COMPLAINT_CANCELLATION_V1', 'valid-hold-cancellation': 'COMPLAINT_HOLD_CANCELLATION_V1' } as Record<string, string>)[scenario] ?? 'COMPLAINT_OUTCOME_V1', factsDigest: 'c'.repeat(64) };
     const digest = createHash('sha256').update(JSON.stringify(facts)).digest('hex');
@@ -320,7 +323,7 @@ test('S3 explicit release requires the exact outcome head and refuses generic sl
         const head = command.input.Key?.endsWith('/head.json');
         if (!head && scenario === 'missing') throw { name: 'NoSuchKey', $metadata: { httpStatusCode: 404 } };
         const payload = head ? body : JSON.stringify({ ...facts, digest: scenario === 'corrupt' ? 'd'.repeat(64) : digest });
-        if (!head && scenario === 'race') { version++; body = JSON.stringify({ ...JSON.parse(body), writerId: 'replacement' }); }
+        if (!head && ['race','confluence-ledger-race'].includes(scenario)) { version++; body = JSON.stringify({ ...JSON.parse(body), writerId: 'replacement' }); }
         return { ...metadata, VersionId: `version-${version}`, ETag: `"etag-${version}"`,
           ContentLength: Buffer.byteLength(payload), Body: Readable.from([Buffer.from(payload)]) };
       }
@@ -333,13 +336,24 @@ test('S3 explicit release requires the exact outcome head and refuses generic sl
     const { revision, ...value } = before;
     await assert.rejects(() => store.compareAndSwapControl(revision, { ...value, activeOperation: null }));
     const expected = { operationId: 'operation-a', preparationDigest: 'a'.repeat(64), generation, digest };
-    if (scenario === 'confluence-ledger') {
+    if (scenario === 'confluence-ledger-race') {
+      assert.equal(await store.releaseConfluenceCopyLedgerControl(revision,{ ...expected, envelopeDigest: facts.factsDigest }),false);
+      assert.notEqual((await store.readControl()).activeOperation,null); assert.equal(writes,0); continue;
+    }
+    if (['confluence-ledger','confluence-ledger-first'].includes(scenario)) {
       await assert.rejects(() => store.releaseControl(revision,expected));
       await assert.rejects(() => store.releaseConfluenceCopyStateControl(revision,{ ...expected, envelopeDigest: facts.factsDigest }));
-      assert.equal(writes,0); assert.notEqual((await store.readControl()).activeOperation,null); continue;
+      await assert.rejects(() => store.releaseConfluenceCopyLedgerControl(revision,{ ...expected, envelopeDigest: '0'.repeat(64) }));
+      assert.equal(writes,0);
+      assert.equal(await store.releaseConfluenceCopyLedgerControl(revision,{ ...expected, envelopeDigest: facts.factsDigest }),true);
+      const acknowledged = await store.readControl();
+      assert.equal(acknowledged.activeOperation,null); assert.equal(acknowledged.generation,generation); assert.equal(acknowledged.digest,digest);
+      assert.equal(acknowledged.writerId,before.writerId); assert.equal(acknowledged.writerEpoch,before.writerEpoch); assert.equal(writes,1);
+      assert.equal(await store.releaseConfluenceCopyLedgerControl(revision,{ ...expected, envelopeDigest: facts.factsDigest }),false); continue;
     }
     if (scenario === 'confluence-state') {
       await assert.rejects(() => store.releaseControl(revision,expected));
+      await assert.rejects(() => store.releaseConfluenceCopyLedgerControl(revision,{ ...expected, envelopeDigest: facts.factsDigest }));
       await assert.rejects(() => store.releaseConfluenceCopyStateControl(revision,{ ...expected, envelopeDigest: '0'.repeat(64) }));
       assert.equal(writes,0);
       assert.equal(await store.releaseConfluenceCopyStateControl(revision,{ ...expected, envelopeDigest: facts.factsDigest }),true);
@@ -357,6 +371,7 @@ test('S3 explicit release requires the exact outcome head and refuses generic sl
       await assert.rejects(() => store.releaseControl(revision, expected)); assert.equal(writes, 0); continue;
     }
     await assert.rejects(() => store.releaseConfluenceCopyStateControl(revision,{ ...expected, envelopeDigest: facts.factsDigest }));
+    await assert.rejects(() => store.releaseConfluenceCopyLedgerControl(revision,{ ...expected, envelopeDigest: facts.factsDigest }));
     assert.equal(writes,0);
     assert.equal(await store.releaseControl(revision, expected), true);
     const after = await store.readControl();

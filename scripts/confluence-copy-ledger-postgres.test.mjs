@@ -12,6 +12,7 @@ import { preserveConfluenceCopyLedgerArchive, readVerifiedConfluenceCopyLedgerAr
 import { publishVerifiedConfluenceCopyLedger, readPublishedConfluenceCopyLedger } from '../apps/api/dist/services/published-confluence-copy-ledger.js';
 import { RecoveryAuthorityJournal } from '../apps/api/dist/services/recovery-authority-journal.js';
 import { reserveRecoveryOperation } from '../apps/api/dist/services/recovery-operation-reservation.js';
+import { acknowledgeConfluenceCopyLedgerArchive } from '../apps/api/dist/services/confluence-copy-ledger-acknowledgement.js';
 import { recoveryFactsFixture, recoveryContextFixture } from '../apps/api/dist/tests/fixtures/confluence-copy-recovery-facts.js';
 
 const image = 'postgres@sha256:5660c2cbfea50c7a9127d17dc4e48543eedd3d7a41a595a2dfa572471e37e64c';
@@ -138,6 +139,18 @@ test('local Confluence ledger capture uses all eight migrated tables and a real 
     const archive = await readPublishedConfluenceCopyLedger(journal,control,binding,keys,objects);
     assert.equal(archive.body,populated.body); assert.equal(archive.currentHistoryVerified,false);
     assert.equal(archive.reopeningAuthorised,false); assert.notEqual(current.activeOperation,null);
+    const archiveControl = { ...control, releaseConfluenceCopyLedgerControl: async (expectedRevision,expected) => {
+      if (current.revision !== expectedRevision) return false;
+      assert.equal(expected.operationId,context.operationId); assert.equal(expected.preparationDigest,populated.digest);
+      assert.equal(expected.generation,archive.entryGeneration); assert.equal(expected.digest,archive.entryDigest);
+      assert.equal(expected.envelopeDigest,archive.envelopeDigest);
+      current = { ...current, activeOperation: null, revision: `synthetic-archive-acknowledgement-${++revision}` }; return true;
+    } };
+    const acknowledged = await acknowledgeConfluenceCopyLedgerArchive(journal,archiveControl,populated.digest,binding,keys,objects);
+    assert.equal(acknowledged.acknowledged,true); assert.equal(acknowledged.currentHistoryVerified,false);
+    assert.equal(acknowledged.reopeningAuthorised,false); assert.equal(current.activeOperation,null);
+    assert.equal(current.generation,archive.entryGeneration); assert.equal(current.digest,archive.entryDigest);
+    assert.equal((await acknowledgeConfluenceCopyLedgerArchive(journal,archiveControl,populated.digest,binding,keys,objects)).replayed,true);
 
     await assert.rejects(captureConfluenceCopyLocalLedger(prisma,'org-a','member-a',input),/capture is unresolved/);
     await assert.rejects(captureConfluenceCopyLocalLedger(prisma,'org-b','owner-a',input),/capture is unresolved/);

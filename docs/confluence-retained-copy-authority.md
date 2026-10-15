@@ -614,8 +614,9 @@ that older consumer is not silently upgraded into a full archive restorer.
 
 Publication keeps its exact active reservation. Generic CAS clearing,
 disposal-outcome release and decision-state metadata release all refuse the
-archive kind. No archive release, cancellation, automatic outbox, scheduled
-caller or supported restore command exists yet.
+archive kind. The separate archive acknowledgement below now clears only its
+verified metadata slot. No cancellation, automatic outbox, scheduled caller or
+supported restore command exists yet.
 
 Unit tests cover exact publication/readback, both lost acknowledgements, binding
 and head races, missing/replaced ciphertext, later-head refusal, generic-append
@@ -666,8 +667,8 @@ withdrawals passes. Actual PostgreSQL governance/capture/plan rows still compose
 through encrypted publication and this reader with synthetic external adapters.
 
 The pre-append candidate and exact-pending checks below now close the earlier
-publisher-prefix gap. Durable original dispatch and archive acknowledgement
-remain required before an operational caller. No runtime caller is activated.
+publisher-prefix gap. Durable original dispatch remains required before an
+operational caller; exact acknowledgement is implemented below. No runtime caller is activated.
 Supported host recovery, cross-family/epoch/key integration, real custody and
 acceptance stay open.
 
@@ -694,13 +695,46 @@ binding, ciphertext and entry are retained; no missing bytes are reconstructed.
 Candidate plus prefix share the existing512MiB encoded-payload/128MiB latest
 decision-facts bounds and monotonic processing budget. Metadata/control are
 rechecked after verification; the actual append still uses the existing exact
-reservation and provider CAS. No timeout cancellation, force-unlock or slot
-release is introduced.
+reservation and provider CAS. This publication path introduces no timeout
+cancellation, force-unlock or slot release; acknowledgement is separate below.
 
 Tests reproduce the earlier source gap and prove pre-write refusal, original
 pending retry, already-published retry, foreign pending work, replacement bytes
 and a second pending entry. The PostgreSQL composition now asserts the
 candidate-prefix gate before encrypted archive publication. External adapters
 remain synthetic; no runtime dispatcher, real provider or hosted release is
-activated. Durable dispatch, archive acknowledgement, approved key/epoch/other
-protocol rules, supported host recovery and Nikita acceptance remain open.
+activated. Durable dispatch, approved key/epoch/other protocol rules, supported
+host recovery and Nikita acceptance remain open.
+
+## Exact verified archive acknowledgement
+
+`acknowledgeConfluenceCopyLedgerArchive` verifies the original prepared snapshot
+digest/binding against the exact current archive and its complete supported
+payload prefix. It rechecks writer, epoch, operation, plaintext reservation,
+entry/ciphertext digest and control revision before using the distinct
+`releaseConfluenceCopyLedgerControl` provider method. That method permits only
+the archive kind; generic outcome and decision-state release paths remain
+separate and cannot acknowledge an archive.
+
+Successful readback must preserve the complete installation/charity/writer/epoch/
+journal-head identity, change the revision and clear only the exact occupied
+slot. Failed CAS without matching readback, unexpected identity changes and
+pending/unpublished archives refuse. Lost-response retry still authenticates
+the full original evidence before recognising an already empty slot. It cannot
+clear a newly acquired operation. A concurrent identical acknowledgement is
+recognised only from the exact final identity/empty-slot readback.
+
+This is acknowledgement of historical metadata, not disposal completion or
+latest-local-state coverage. Later local decisions still need their own archive.
+The original digest/binding must come from durable prepared dispatch; that
+workflow remains unimplemented, and this helper does not prove its durability.
+No provider-I/O dispatcher, timeout clearing, force-unlock or production caller
+is enabled. Global current-history, execution and reopening flags remain false.
+
+Synthetic tests cover acknowledgement/retry/new-reservation progression, lost
+responses, missing objects even on null-slot retry, wrong bindings, pending
+publication and control/readback races. S3 transport tests exercise generation1
+and2 archives, exact encrypted digest, ETag races and refusal across all three
+release types. Actual PostgreSQL-generated rows now compose through archive
+publication/readback and acknowledgement using synthetic external adapters.
+This does not establish real provider custody or independent host recovery.

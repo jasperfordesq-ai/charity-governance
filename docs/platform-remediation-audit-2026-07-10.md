@@ -1,5 +1,14 @@
 # CharityPilot Full-Platform Remediation Audit
 
+> **15 October archive metadata acknowledgement increment, OPEN:** Full current
+> archive/prefix and original digest/binding now gate a distinct exact metadata
+> clear. Head/writer/epoch are preserved and readback is mandatory. Unknown/null-
+> slot retries reverify original evidence; other slots and pending publication
+> refuse. S3 cross-kind/race checks and actual PostgreSQL-to-synthetic-external
+> composition pass. No local-state coverage, disposal or reopen authority follows.
+> Durable original dispatch, provider custody, other protocol/key rules, supported
+> host recovery, live release and Nikita acceptance remain unresolved.
+
 > **15 October pre-publication candidate/pending increment, OPEN:** Original
 > archive and independent predecessor payload/record consistency now gate
 > publication before entry creation. Exact pending/already-published recovery

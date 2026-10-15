@@ -52,6 +52,15 @@ export interface ConfluenceCopyStateReleaseStore extends RecoveryControlStore {
   }): Promise<boolean>;
 }
 
+/** Separate full-ledger metadata acknowledgement. Caller authenticates the
+ * original archive, its complete supported prefix and original snapshot digest.
+ * This cannot clear a decision-state or disposal-outcome operation. */
+export interface ConfluenceCopyLedgerReleaseStore extends RecoveryControlStore {
+  releaseConfluenceCopyLedgerControl(expectedRevision: string, expected: {
+    operationId: string; preparationDigest: string; generation: number; digest: string; envelopeDigest: string;
+  }): Promise<boolean>;
+}
+
 async function read(store: RecoveryControlStore): Promise<Control> {
   try { return controlSchema.parse(await store.readControl()); }
   catch { throw new Error('Recovery operation control is unavailable or invalid'); }

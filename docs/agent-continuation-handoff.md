@@ -1,5 +1,15 @@
 # CharityPilot Agent Continuation Handoff
 
+> **15 October exact archive acknowledgement, source only:** A distinct typed
+> provider path clears only the current verified archive's exact metadata slot.
+> Full original body/prefix/control checks precede it; readback preserves head,
+> writer/epoch and all binding fields. Null-slot/lost-response retry reauthenticates
+> evidence and cannot clear a later operation. Pending publication and bad CAS /
+> readback refuse. This is historical metadata acknowledgement, not current-local
+> coverage, disposal or reopening. Original digest/binding still need durable
+> dispatch, which is absent. No runtime caller or real provider activated; host
+> recovery, broader custody/protocol gates and Nikita acceptance remain open.
+
 > **15 October pre-append archive-prefix gate, source only:** Publisher now
 > authenticates the original candidate and full supported predecessor payloads
 > before journal write. Shared inspection accepts at most its exact pending or
