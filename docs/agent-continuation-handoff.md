@@ -1,5 +1,14 @@
 # CharityPilot Agent Continuation Handoff
 
+> **15 October document-control timing regression:** A synthetic two-record
+> browser journey holds the first save's background mirror response while a
+> second owner review is opened and filled. It verifies that the second form
+> survives the refresh and saves to the correct revision-bound record, leaving
+> the first owner intact. The isolated Chromium journey passed on the existing
+> application source. This does not reproduce or explain a separately observed
+> rapid-modal no-request attempt; no runtime correction or deployment is claimed.
+> Current private evidence and controller decisions remain in the ignored roadmap.
+
 > **14 October existing-file owner control, source only:** A controller review
 > exposed that the Vault could classify retained evidence but could not edit
 > its accountable owner through the dashboard. A thin Owner/Admin control now

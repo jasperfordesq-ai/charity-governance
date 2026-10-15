@@ -1,5 +1,12 @@
 # CharityPilot Full-Platform Remediation Audit
 
+> **15 October DPO document-control follow-up, OPEN:** Added a controlled
+> two-record browser regression for owner editing during the preceding save's
+> background refresh. The isolated journey passed; record targeting and entered
+> state survive that timing window. This is synthetic regression coverage, not
+> a proved root cause or fix for the observed rapid-modal no-request attempt,
+> deployed acceptance, per-file controller authority or independent DPO sign-off.
+
 > **14 October DPO ownership reconciliation, OPEN:** The source now exposes
 > the existing accountable-owner metadata edit through the Owner/Admin Vault
 > controls. It preserves revision checks, actor/field audit and the existing
