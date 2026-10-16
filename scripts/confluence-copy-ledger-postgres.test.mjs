@@ -169,6 +169,28 @@ test('local Confluence ledger capture uses all eight migrated tables and a real 
       data.observedControl = { ...observedControl, writerEpoch: null };
       await tx.confluenceCopyLedgerCapture.create({ data });
     },{ isolationLevel: 'RepeatableRead' }),/binding or original facts are invalid/);
+    for (const kind of ['numeric-digest','fractional-generation','fractional-epoch']) {
+      await assert.rejects(prisma.$transaction(async tx => {
+        const data = cloneInput(kind);
+        data.observedControl = { ...observedControl, generation: 1, digest: '1'.repeat(64) };
+        if (kind === 'numeric-digest') data.observedControl.digest = 1e63;
+        if (kind === 'fractional-generation') data.observedControl.generation = 1.25;
+        if (kind === 'fractional-epoch') {
+          data.context.writerEpoch = 1.25;
+          data.observedControl.writerEpoch = 1.25;
+        }
+        await tx.confluenceCopyLedgerCapture.create({ data });
+      },{ isolationLevel: 'RepeatableRead' }),kind === 'numeric-digest'
+        ? /Confluence ledger capture control types/ : /invalid input syntax for type bigint/);
+    }
+    // A digest containing only decimal characters is still a valid hash string.
+    // Roll back this accepted positive control so later fixture counts stay exact.
+    await assert.rejects(prisma.$transaction(async tx => {
+      const data = cloneInput('string-digest-control');
+      data.observedControl = { ...observedControl, generation: 1, digest: '1'.repeat(64) };
+      await tx.confluenceCopyLedgerCapture.create({ data });
+      throw new Error('ROLLBACK-VALID-STRING-DIGEST');
+    },{ isolationLevel: 'RepeatableRead' }),/ROLLBACK-VALID-STRING-DIGEST/);
     const forgedRuntime = new PrismaClient({ datasources: { db: { url: runtimeUrl.href } } });
     try {
       await assert.rejects(forgedRuntime.$transaction(async tx => {

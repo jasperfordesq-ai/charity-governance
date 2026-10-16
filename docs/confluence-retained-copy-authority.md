@@ -2,6 +2,16 @@
 
 ## Status
 
+16 October source correction: a forward constraint rejects non-string/non-null
+JSON digests in the original ledger capture's declared control. A numeric JSONB
+value could previously match the hexadecimal text check. Actual PostgreSQL
+regression covers that refusal and a valid all-digit hash string. Existing
+fractional-counter refusal is retained. This validates stored metadata only;
+it does not authenticate independent control, activate a provider or authorise
+disposal/reopening. Prior migration checksums remain unchanged. Release and
+existing-record reconciliation remain separate gates; immutable rows are never
+silently rewritten to make a migration pass.
+
 Review, collection, scoped permission and recovery-capture increments,
 15 October 2026. Synthetic engineering only. Internal decision/capture services
 and migrations add no runtime route, executable provider permission or deletion

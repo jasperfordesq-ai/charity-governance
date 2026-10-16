@@ -1,5 +1,13 @@
 # CharityPilot Full-Platform Remediation Audit
 
+> **16 October ledger capture JSON type correction:** A direct PostgreSQL write
+> demonstrated a numeric JSON digest could pass the original text-pattern guard.
+> Forward migration adds an exact string/null constraint; regression retains a
+> valid all-digit string and existing fractional-counter refusals. No historical
+> migration edit, metadata rewrite or execution authority. Read ignored
+> `ledger-control-type-correction-2026-10-16.md` for final verification/status.
+> This source correction is undeployed; provider/recovery/DPO gates remain OPEN.
+
 > **16 October candidate and startup review:** Fresh full candidate API3240
 > ordinary+14actualPostgreSQL fixtures PASS/noSKIP; Web572PASS/noSKIP. Provisioning
 > source has no separate application boot unit. Actual synthetic base/roles/TLS
