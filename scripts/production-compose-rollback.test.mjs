@@ -12,6 +12,8 @@ import { dirname, join } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { after, test } from "node:test";
 import { productionRuntimeEnvFixtures } from './test-fixtures/production-runtime-env.mjs';
+import { buildProductionComposeEnvironment } from './production-runtime-credentials.mjs';
+import { runProductionComposeDeployFromArgs } from './production-compose-deploy.mjs';
 
 const encodeProductionFixture = productionRuntimeEnvFixtures(after);
 function writeFileSync(path, content, options = {}) { writeFixture(path, content, { mode: 0o600, ...options }); }
@@ -35,6 +37,65 @@ const backupOutputDir = join(
   "charitypilot-approved-encrypted-rollback-cutover",
 );
 const backupArgs = ["--backup-output-dir", backupOutputDir];
+
+for (const protocol of ['unavailable', 'supported']) {
+  test(`real rollback delegation with ${protocol} selected-image role protocol preserves the cutover boundary`, async t => {
+    const runRollback = await loadRollbackRunner();
+    const directory = mkdtempSync(join(tmpdir(), 'charitypilot-rollback-role-protocol-'));
+    t.after(() => {
+      assert.equal(dirname(directory), tmpdir());
+      assert.ok(directory.split(/[\\/]/).at(-1).startsWith('charitypilot-rollback-role-protocol-'));
+      rmSync(directory, { recursive: true, force: true });
+    });
+    const envPath = join(directory, 'production.env');
+    const manifestPath = join(directory, 'release-image-digests.previous.env');
+    writeFileSync(envPath, productionEnv());
+    writeFileSync(manifestPath, rollbackManifest());
+    const attestationPath = writeSchemaCompatibilityAttestation(directory, manifestPath);
+    const calls = [], phases = [];
+    let backups = 0, smokes = 0;
+    const result = runRollback([
+      '--production-env-file', envPath, '--rollback-digest-file', manifestPath,
+      '--schema-compatibility-attestation-file', attestationPath, ...backupArgs,
+    ], {
+      processEnv: cleanEnv(), now: () => new Date('2026-07-10T20:05:00.000Z'),
+      runDeploy: (args, dependencies) => runProductionComposeDeployFromArgs(args, {
+        ...dependencies,
+        // Exercise actual file binding and nested lock; lifecycle I/O is mocked.
+        // This flag is not Windows ACL or Linux host certification.
+        buildRuntimeEnvironment: (...input) => ({ ...buildProductionComposeEnvironment(...input), privatePermissionsVerified: true }),
+        runPreflight: () => ({ status: 0, stdout: 'synthetic preflight\n', stderr: '' }),
+        runCommand: (command, env) => {
+          calls.push(command);
+          assert.equal(env.CHARITYPILOT_API_IMAGE, `ghcr.io/jasperfordesq-ai/charity-governance-api@sha256:${rollbackDigest}`);
+        },
+        runRuntimeRoleProbe: (command, env, { input }) => {
+          const { phase } = JSON.parse(input); phases.push(phase);
+          assert.equal(command.at(-1), 'runtime-role-check');
+          assert.equal(env.CHARITYPILOT_API_IMAGE, `ghcr.io/jasperfordesq-ai/charity-governance-api@sha256:${rollbackDigest}`);
+          assert.match(env.CHARITYPILOT_PRODUCTION_RUNTIME_DATABASE_URL, /cp_runtime:runtime-only-password@/);
+          if (protocol === 'unavailable') throw new Error('selected image lacks the role job');
+          return JSON.stringify({ schemaVersion: 1, verified: true, phase });
+        },
+        runBackup: () => { backups++; return { status: 0, stdout: '', stderr: '' }; },
+        runSmoke: () => { smokes++; return { status: 0, stdout: '', stderr: '' }; },
+      }),
+    });
+    assert.doesNotMatch(result.stdout + result.stderr, /user:pass|runtime-only-password|selected image lacks/);
+    if (protocol === 'unavailable') {
+      assert.equal(result.status, 1); assert.match(result.stderr, /runtime database role verification failed/);
+      assert.deepEqual(phases, ['before-migration']); assert.equal(backups, 0); assert.equal(smokes, 0);
+      assert.equal(calls.length, 1); assert.ok(calls[0].includes('pull'));
+      assert.ok(!calls.some(command => ['down', 'run', 'up'].some(action => command.includes(action))));
+      assert.doesNotMatch(result.stderr, /runtime remains stopped|rollback completed/i);
+    } else {
+      assert.equal(result.status, 0, result.stderr); assert.match(result.stdout, /rollback completed/);
+      assert.deepEqual(phases, ['before-migration', 'after-migration']);
+      assert.equal(backups, 1); assert.equal(smokes, 1);
+      assert.ok(calls.some(command => command.includes('down'))); assert.ok(calls.some(command => command.includes('up')));
+    }
+  });
+}
 
 test("P1-09 restore-only probe is exact, terminal, read-only, and selected-image bound", () => {
   assert.deepEqual(P109_RESTORED_MIGRATIONS, P109_RECOVERY_MIGRATIONS);

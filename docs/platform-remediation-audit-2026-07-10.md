@@ -1,5 +1,16 @@
 # CharityPilot Full-Platform Remediation Audit
 
+> **16 October strict-production rollback protocol review:** Added real nested
+> rollback/deployment orchestration tests for unavailable and supported selected
+> API role-probe protocols. Combined78PASS/noSKIP; lifecycle I/O remains mocked.
+> A matching schema marker does not make an old image runtime/TLS compatible.
+> Missing protocol refuses before shutdown; an exact usable rollback image set
+> and old-data rehearsal still require proof. Documented prerequisite in
+> `production-runtime-credentials.md`; ignored receipt
+> `rollback-protocol-review-2026-10-16.md`. No runtime change, private blue-green
+> rollback claim, actual image rollback, deployment or whole-branch approval.
+
+
 > **16 October minimised-report layout fix / local proof:** An allowed long
 > organisation name overflowed the minimised report and clipped in synthetic
 > A4 output. The renderer now wraps unbroken text. Actual browser regression

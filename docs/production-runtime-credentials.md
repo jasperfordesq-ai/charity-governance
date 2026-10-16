@@ -198,6 +198,32 @@ failure. Backup/migration/startup do not proceed. If cleanup fails, shutdown is
 unverified and the operator must confirm all services stopped before recovery;
 no automatic rollback or successful shutdown is asserted.
 
+## Rollback image compatibility is more than a schema marker
+
+The guarded rollback delegates to the same deployment checks with the selected
+rollback digests. Its runtime-role probe runs from the selected API image before
+stopping services and again after migration/status. A schema compatibility
+attestation does not supply a missing probe job or make an older database client
+compatible with the strict runtime credential/TLS contract. Missing or invalid
+phase-bound probe output refuses the cutover; do not bypass the gate or give the
+application maintenance credentials to make an older image start.
+
+Before approving a release, identify an exact usable rollback image set and
+prove it supports this runtime protocol, restricted application permissions,
+the intended database schema and certificate transport. A reviewed compatible
+backport may be necessary; adding the job alone is not proof of the other
+requirements. Rehearse the exact application/migration images and relevant data
+upgrade/restore path. Keep the prior schema-bound backup and its evidence.
+Neither an unchanged compatibility label nor a successful dry run proves a
+working rollback. The separate private blue-green profile retains its own
+release and rollback contract.
+
+The tracked rollback tests exercise the real rollback-to-deployment delegation
+with synthetic files and mocked lifecycle I/O. An unavailable selected-image
+probe permits the image pull but no shutdown, backup, migration or startup;
+a supported phase-bound probe exercises the normal two-phase path. This is
+orchestration evidence, not an actual old-image or restored-data rehearsal.
+
 ## Authenticated API version diagnostics
 
 The API identity snapshot honours CHARITYPILOT_BUILD_REVISION when explicitly
