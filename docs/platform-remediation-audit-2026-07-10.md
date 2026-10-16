@@ -1,5 +1,12 @@
 # CharityPilot Full-Platform Remediation Audit
 
+> **16 October maintenance ACL/catalogue boundary / local PASS:** New installed-
+> catalogue assertions verify five invoker-owned, non-runtime/non-PUBLIC replay
+> functions with pinned lookup order. Deliberate privilege/execution faults fail
+> the gate and roll back; existing actual SQL fixture passes after190migrations.
+> No implementation/role change or production vulnerability claimed. Hosted
+> migration receipts, full review, independent recovery and acceptance stay open.
+
 > **16 October S3 metadata-release boundary / bounded PASS:** Connected synthetic
 > archive/journal/adapter test proves lost release response, authenticated null-slot
 > retry and later-operation preservation. Missing archive cannot be replaced by

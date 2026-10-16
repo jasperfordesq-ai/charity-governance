@@ -1,5 +1,13 @@
 # CharityPilot Agent Continuation Handoff
 
+> **16 October installed maintenance privilege gate:** Actual PostgreSQL catalogue
+> now asserts five replay/snapshot/assertion functions retain maintenance ownership,
+> invoker execution, no application/PUBLIC EXECUTE and pinned lookup path after
+> all190SQL migrations. Temporary PUBLIC grant and SECURITY DEFINER faults are
+> detected and transactionally rolled back; final catalogue and full existing
+> scoped/immutable/replay fixture PASS. Test-only addition, not role/migration
+> change, live Prisma rollout, whole-patch approval or independent recovery proof.
+
 > **16 October connected S3 archive acknowledgement, synthetic evidence:** New
 > test joins actual encrypted archive/journal/reservation/publication/acknowledgement
 > services through S3 adapter with fully intercepted SDK requests. Committed lost

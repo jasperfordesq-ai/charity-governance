@@ -66,6 +66,37 @@ test('retained Confluence review and permission history is scoped, immutable and
       VALUES ('doc-a','org-a','Synthetic retained','OTHER','org-a/source.txt',243,'text/plain','RETIRED',CURRENT_TIMESTAMP - INTERVAL '2 minutes');
       INSERT INTO "DocumentPublication"(id,"organisationId","documentId",state,"cloudId","spaceId","pageId","retiredAt","nextAttemptAt","updatedAt")
       VALUES ('pub-a','org-a','doc-a','RETIRED','00000000-0000-4000-8000-000000000001','123','456',CURRENT_TIMESTAMP,NULL,CURRENT_TIMESTAMP - INTERVAL '1 minute'); COMMIT;`);
+    const maintenanceNames = ['ConfluenceCopyRecovery_rows','ConfluenceCopyRecovery_replay',
+      'ConfluenceCopyLedgerRecovery_assert','ConfluenceCopyLedgerRecovery_rows','ConfluenceCopyLedgerRecovery_replay'];
+    const maintenanceCatalogue = (temporaryChange = '') => JSON.parse(query(`${temporaryChange}
+      SELECT jsonb_agg(jsonb_build_object('name',p.proname,'securityDefiner',p.prosecdef,
+        'ownedByMaintenance',pg_get_userbyid(p.proowner)=current_user,'settings',p.proconfig,
+        'runtimeCanExecute',has_function_privilege('synthetic_copy_runtime',p.oid,'EXECUTE'),
+        'publicCanExecute',EXISTS(SELECT 1 FROM aclexplode(coalesce(p.proacl,acldefault('f',p.proowner))) a
+          WHERE a.grantee=0 AND a.privilege_type='EXECUTE')) ORDER BY p.proname)
+      FROM pg_proc p JOIN pg_namespace n ON n.oid=p.pronamespace
+      WHERE n.nspname='public' AND p.proname IN (${maintenanceNames.map(name => `'${name}'`).join(',')});
+      ${temporaryChange ? 'ROLLBACK;' : ''}`));
+    const assertMaintenanceCatalogue = rows => {
+      assert.deepEqual(rows.map(row => row.name).sort(), [...maintenanceNames].sort());
+      for (const row of rows) {
+        assert.equal(row.securityDefiner,false,`${row.name} must retain invoker execution`);
+        assert.equal(row.ownedByMaintenance,true,`${row.name} must retain maintenance ownership`);
+        assert.equal(row.runtimeCanExecute,false,`${row.name} must not grant runtime execution`);
+        assert.equal(row.publicCanExecute,false,`${row.name} must not grant PUBLIC execution`);
+        assert.deepEqual(row.settings,['search_path=pg_catalog, public, pg_temp'],`${row.name} must pin safe lookup order`);
+      }
+    };
+    assertMaintenanceCatalogue(maintenanceCatalogue());
+    // Transaction-scoped faults prove this catalogue gate detects permission or
+    // execution-mode regressions; neither alteration survives its connection.
+    assert.throws(() => assertMaintenanceCatalogue(maintenanceCatalogue(`BEGIN;
+      GRANT EXECUTE ON FUNCTION public."ConfluenceCopyLedgerRecovery_assert"(TEXT) TO PUBLIC;`)),
+    /must not grant (?:runtime|PUBLIC) execution/);
+    assert.throws(() => assertMaintenanceCatalogue(maintenanceCatalogue(`BEGIN;
+      ALTER FUNCTION public."ConfluenceCopyLedgerRecovery_assert"(TEXT) SECURITY DEFINER;`)),
+    /must retain invoker execution/);
+    assertMaintenanceCatalogue(maintenanceCatalogue());
     query(`INSERT INTO "OrganisationIntegration"(id,"organisationId",provider,status,config,"connectedAt","connectedById","grantedScopes","updatedAt")
       VALUES ('confluence-a','org-a','CONFLUENCE','CONNECTED',
         '{"siteId":"00000000-0000-4000-8000-000000000001","siteUrl":"https://synthetic-example.atlassian.net"}',
