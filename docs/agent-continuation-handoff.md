@@ -1,5 +1,14 @@
 # CharityPilot Agent Continuation Handoff
 
+> **16 October connected S3 archive acknowledgement, synthetic evidence:** New
+> test joins actual encrypted archive/journal/reservation/publication/acknowledgement
+> services through S3 adapter with fully intercepted SDK requests. Committed lost
+> release response retries from fresh adapters without a second write; missing
+> original archive refuses even at empty slot; later operation remains untouched.
+> Deliberate early-return bypass fails; exact source restored. Build/46related
+> checks PASS. Empty-ledger/one-entry fixture only, no real AWS/host-loss proof or
+> runtime change; whole-patch/provider/custody/deployment/DPO gates remain open.
+
 > **16 October accumulated-branch API baseline, release review incomplete:** Clean
 > input6279e686 passes3209ordinaryAPI and14serial real-PostgreSQL fixture checks,
 > no failures/skips. Private exact100path inventory distinguishes seven bounded
