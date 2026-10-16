@@ -1,5 +1,15 @@
 # CharityPilot Full-Platform Remediation Audit
 
+> **16 October correspondence-to-acceptance reconciliation:** The fresh private
+> matrix maps the original six findings/four navigation requests and subsequent
+> architecture, integration and custody instructions to dated serving/local
+> evidence and outstanding accountable decisions. The goal remains relevant and
+> ACTIVE; acceptance is OPEN. DPO advice, controller/Board authority and agent
+> observations remain separate. Mixed-thread work for other systems is excluded.
+> See ignored `nikita-acceptance-matrix-2026-10-16.md` and its bounded mailbox
+> index. This was documentation only: no new test, release or acceptance claim.
+
+
 > **16 October API diagnostic native proof complete / local candidate:** Rebuilt
 > both labelled Linux/amd64 USERnode images from clean5bc54a9f. Native gate now
 >16checksPASS/noSKIP, including packaged API revision matching its image stamp;
