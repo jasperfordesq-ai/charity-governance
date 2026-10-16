@@ -11,6 +11,7 @@ import path from 'node:path';
 const ALLOWED = new Set([
   'lib/deployment-profile.ts', // the axis module itself: this IS the mode-to-default derivation
   'lib/api-config.ts', // resolves the internal Docker-network API base URL, appliance-only
+  'lib/server-api-config.server.ts', // Node-only managed origin binding must exclude appliance and disposable modes
   'lib/api.ts', // forwards the raw mode value as a request header for the API's own appliance checks
   'lib/auth-error-message.ts', // appliance-specific wording for an auth error banner
   'lib/url-security.ts', // appliance loopback-origin trust decisions in CSP/redirect validation

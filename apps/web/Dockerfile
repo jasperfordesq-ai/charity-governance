@@ -14,6 +14,10 @@ COPY apps/web ./apps/web
 COPY scripts/next-build-fs-retry.cjs scripts/next-build-fs-retry.cjs
 COPY scripts/clean-next-export.cjs scripts/clean-next-export.cjs
 ARG NEXT_PUBLIC_API_URL
+# Optional non-secret fingerprint only. The full managed registry is supplied
+# to the running private web service, never as a NEXT_PUBLIC build variable.
+ARG NEXT_PUBLIC_CHARITYPILOT_MANAGED_WEB_BINDING_SHA256
+ENV NEXT_PUBLIC_CHARITYPILOT_MANAGED_WEB_BINDING_SHA256=$NEXT_PUBLIC_CHARITYPILOT_MANAGED_WEB_BINDING_SHA256
 ARG NEXT_PUBLIC_CHARITYPILOT_DEPLOYMENT_MODE=public-production
 # Capability axes (optional — absent args preserve mode-derived defaults at
 # runtime). Must be supplied here, not only at container-run time: these are
@@ -36,9 +40,9 @@ ARG NEXT_PUBLIC_CHARITYPILOT_BILLING
 # process.env.NEXT_PUBLIC_CHARITYPILOT_CANONICAL_API_ORIGIN reference for the
 # client bundle, and (2) ALSO setting it in web-blue/web-green's runtime
 # `environment:` block, because apps/web/src/proxy.ts calls
-# getApiBaseUrl()/getServerApiBaseUrl() with no arguments (default parameter
-# = the live process.env at request time) — a plain object reference like
-# that is never build-time-inlined, so those call sites need the real
+# getApiBaseUrl()/getServerApiBaseUrl() with the live process.env at request
+# time (directly or by default) — a plain object reference like that is
+# never build-time-inlined, so those call sites need the real
 # container environment, not just a baked-in bundle constant.
 ARG NEXT_PUBLIC_CHARITYPILOT_CANONICAL_API_ORIGIN
 ENV NEXT_PUBLIC_API_URL=$NEXT_PUBLIC_API_URL

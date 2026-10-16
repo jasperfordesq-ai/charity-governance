@@ -2,9 +2,9 @@ import { NextResponse, type NextRequest } from "next/server";
 import { createContentSecurityPolicy } from "./lib/content-security-policy";
 import {
   getApiBaseUrl,
-  getServerApiBaseUrl,
   isPersonalServerProduction,
 } from "./lib/api-config";
+import { getServerApiBaseUrl, getManagedWebApiContext } from './lib/server-api-config.server';
 import {
   webBillingMode,
   webEmailDelivery,
@@ -73,7 +73,7 @@ function protectedAuthCookieHeader(request: NextRequest): string {
 
 function createApiAuthUrl(pathname: string): URL | null {
   try {
-    return new URL(pathname, getServerApiBaseUrl());
+    return new URL(pathname, getServerApiBaseUrl(process.env, publicBuildBinding()));
   } catch {
     return null;
   }
@@ -87,7 +87,20 @@ function isPersonalServerRuntime(): boolean {
   });
 }
 
-function personalServerPublicOrigin(): string | null {
+function publicBuildBinding() {
+  // Literal accesses are deliberately compiled by Next. The server guard also
+  // compares the live environment, so runtime changes cannot replace this pin.
+  return {
+    apiOrigin: process.env.NEXT_PUBLIC_API_URL,
+    canonicalApiOrigin: process.env.NEXT_PUBLIC_CHARITYPILOT_CANONICAL_API_ORIGIN,
+    deploymentMode: process.env.NEXT_PUBLIC_CHARITYPILOT_DEPLOYMENT_MODE,
+    bindingSha256: process.env.NEXT_PUBLIC_CHARITYPILOT_MANAGED_WEB_BINDING_SHA256,
+  };
+}
+
+function configuredPublicOrigin(): string | null {
+  const managed = getManagedWebApiContext(process.env, publicBuildBinding());
+  if (managed) return managed.publicOrigin;
   if (!isPersonalServerRuntime()) return null;
 
   try {
@@ -101,7 +114,7 @@ function personalServerPublicOrigin(): string | null {
 }
 
 function externalRequestUrl(request: NextRequest): URL {
-  const configuredOrigin = personalServerPublicOrigin();
+  const configuredOrigin = configuredPublicOrigin();
   if (!configuredOrigin) return request.nextUrl.clone();
 
   const externalUrl = new URL(configuredOrigin);
@@ -193,7 +206,7 @@ function createNonce(): string {
 }
 
 function requestWebOrigin(request: NextRequest): string | undefined {
-  const configuredOrigin = personalServerPublicOrigin();
+  const configuredOrigin = configuredPublicOrigin();
   if (configuredOrigin) return configuredOrigin;
 
   const host = request.headers.get("host")?.trim();
@@ -354,6 +367,14 @@ function authenticationUnavailable(
 }
 
 export async function proxy(request: NextRequest) {
+  try {
+    getManagedWebApiContext(process.env, publicBuildBinding());
+  } catch {
+    return addProtectedNoCacheHeaders(new NextResponse('Application temporarily unavailable.', {
+      status: 503,
+      headers: { 'Content-Type': 'text/plain; charset=utf-8', 'Retry-After': '30' },
+    }));
+  }
   const { pathname } = request.nextUrl;
   const nonce = createNonce();
   const csp = createRequestContentSecurityPolicy(request, nonce);

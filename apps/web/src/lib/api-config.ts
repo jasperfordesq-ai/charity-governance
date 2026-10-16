@@ -15,6 +15,9 @@ export const PERSONAL_SERVER_MODE = 'personal-server';
 export const PERSONAL_SERVER_INTERNAL_API_ORIGIN = 'http://api:3002';
 
 export type ApiEnv = {
+  CHARITYPILOT_MANAGED_PROVIDER?: string;
+  CHARITYPILOT_MANAGED_WEB_BINDING?: string;
+  NEXT_PUBLIC_CHARITYPILOT_MANAGED_WEB_BINDING_SHA256?: string;
   CHARITYPILOT_INTERNAL_API_URL?: string;
   NEXT_PUBLIC_CHARITYPILOT_DEPLOYMENT_MODE?: string;
   NEXT_PUBLIC_API_URL?: string;
@@ -64,6 +67,10 @@ export function getApiBaseUrl(env: ApiEnv = process.env): string {
 }
 
 export function getServerApiBaseUrl(env: ApiEnv = process.env): string {
+  if (env.CHARITYPILOT_MANAGED_PROVIDER !== undefined || env.CHARITYPILOT_MANAGED_WEB_BINDING !== undefined
+    || env.NEXT_PUBLIC_CHARITYPILOT_MANAGED_WEB_BINDING_SHA256) {
+    throw new Error('Managed API routing requires the Node server deployment binding');
+  }
   const configuredInternalUrl = env.CHARITYPILOT_INTERNAL_API_URL?.trim();
 
   if (configuredInternalUrl) {

@@ -1,5 +1,13 @@
 # CharityPilot Full-Platform Remediation Audit
 
+> **16 October managed private web origin:** A separate Node-only guard binds
+> the four-service Render registry to the web image's compiled fingerprint,
+> runtime service/build identity and exact private API origin. Mismatch returns
+> no-store503 before auth fetch; redirects keep the pinned public origin.
+> Unit/proxy tests and a real Next build/browser-asset canary inspection pass.
+> Gateway/trusted-peer integration and actual provider proof remain open.
+> See [managed web/API binding](managed-web-api-binding.md).
+
 > **16 October four-component managed maintenance:** The registry now requires
 > public gateway, private web/API and singleton scheduler, and rejects the old
 > three-service/public-web shape. Fresh gateway readback precedes internal

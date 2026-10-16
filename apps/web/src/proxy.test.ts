@@ -3,9 +3,70 @@ import { createHash } from "node:crypto";
 import { afterEach, test } from "node:test";
 import { NextRequest } from "next/server";
 import { proxy } from "./proxy";
+import { createManagedWebApiBinding } from './lib/server-api-config.server';
 
 const originalFetch = globalThis.fetch;
 const originalEnv = { ...process.env };
+
+function managedWebFixture() {
+  const binding = createManagedWebApiBinding({
+    format: 1, provider: 'render', region: 'frankfurt', installationId: 'synthetic-proxy',
+    ownerId: 'tea-synthetic', environmentId: 'env-synthetic', sourceSha: '1'.repeat(40),
+    publicOrigin: 'https://managed.charitypilot.test', gatewayServiceId: 'srv-' + 'a'.repeat(20),
+    webServiceId: 'srv-' + 'b'.repeat(20), apiServiceId: 'srv-' + 'c'.repeat(20),
+    schedulerServiceId: 'srv-' + 'd'.repeat(20), apiServiceName: 'charitypilot-review-api',
+    apiOrigin: 'http://charitypilot-review-api-ab12:3002',
+  });
+  Object.assign(process.env, {
+    NODE_ENV: 'production', NEXT_PUBLIC_CHARITYPILOT_DEPLOYMENT_MODE: 'public-production',
+    NEXT_PUBLIC_API_URL: binding.record.publicOrigin,
+    NEXT_PUBLIC_CHARITYPILOT_CANONICAL_API_ORIGIN: binding.record.publicOrigin,
+    NEXT_PUBLIC_CHARITYPILOT_MANAGED_WEB_BINDING_SHA256: binding.sha256,
+    CHARITYPILOT_MANAGED_PROVIDER: 'render', CHARITYPILOT_MANAGED_WEB_BINDING: binding.json,
+    CHARITYPILOT_INTERNAL_API_URL: binding.record.apiOrigin,
+    CHARITYPILOT_BUILD_COMMIT: binding.record.sourceSha,
+    RENDER_SERVICE_ID: binding.record.webServiceId, RENDER_SERVICE_TYPE: 'pserv',
+  });
+  delete process.env.NEXT_PUBLIC_CHARITYPILOT_E2E_MODE;
+  return binding;
+}
+
+test('managed proxy authenticates only at the pinned private API and keeps public responses canonical', async () => {
+  const binding = managedWebFixture();
+  const calls: {url: string; cookie: string | null}[] = [];
+  globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
+    calls.push({url: input.toString(), cookie: new Headers(init?.headers).get('cookie')});
+    return new Response(null, {status: 200});
+  }) as typeof fetch;
+  const request = () => new NextRequest('http://private-web:3003/documents', {
+    headers: {host: 'attacker.example', 'x-forwarded-host': 'attacker.example',
+      'x-forwarded-proto': 'http', cookie: 'charitypilot_access=synthetic-managed; unrelated=private'},
+  });
+  const response = await proxy(request());
+  assert.equal(response.status, 200);
+  assert.deepEqual(calls, [{url: binding.record.apiOrigin + '/api/v1/auth/me', cookie: 'charitypilot_access=synthetic-managed'}]);
+  assert.doesNotMatch(response.headers.get('content-security-policy') ?? '', /private-web|review-api|attacker/);
+  globalThis.fetch = (async () => new Response(null, {status: 401})) as typeof fetch;
+  const denied = await proxy(request());
+  assert.equal(denied.headers.get('location'), binding.record.publicOrigin + '/login?next=%2Fdocuments');
+});
+
+test('managed proxy rejects incomplete or altered configuration before any protected or public fetch', async () => {
+  const binding = managedWebFixture();
+  let calls = 0;
+  globalThis.fetch = (async () => { calls++; throw new Error('unexpected fetch'); }) as typeof fetch;
+  for (const raw of ['', binding.json + ' ']) {
+    process.env.CHARITYPILOT_MANAGED_WEB_BINDING = raw;
+    for (const path of ['/documents', '/login']) {
+      const response = await proxy(new NextRequest('http://private-web:3003' + path));
+      assert.equal(response.status, 503);
+      assert.match(response.headers.get('cache-control') ?? '', /no-store/);
+      assert.equal(response.headers.get('location'), null);
+      assert.doesNotMatch(await response.text(), /synthetic|review-api|srv-|PRIVATE/);
+    }
+  }
+  assert.equal(calls, 0);
+});
 
 afterEach(() => {
   globalThis.fetch = originalFetch;

@@ -33,6 +33,7 @@
     "src/lib/integration-status.test.ts",
     "src/lib/api-config.ts",
     "src/lib/api-config.test.ts",
+    "src/lib/server-api-config.test.ts",
     "src/lib/authenticated-report-open.ts",
     "src/lib/authenticated-report-open.test.ts",
     "src/lib/approval-readiness.ts",
