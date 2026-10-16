@@ -172,3 +172,22 @@ temporary certificates.
 The first local receipt binds images built from763ed75a. It is not a remote CI
 run, signature/registry evidence, a Linux-host permission attestation, full HTTP
 acceptance, old-data upgrade, provider compatibility, or a deployed release.
+
+## Default roots in PostgreSQL backup clients
+
+For verify-full connections with no explicit host CA file, the proof/backup
+helper now derives sslrootcert=/etc/ssl/certs/ca-certificates.crt inside its
+pinned PostgreSQL-tools image. An explicit system value uses the same mapping.
+The reviewed host URL remains unchanged. This keeps certificate-chain and
+hostname checks enabled and avoids relying on a user's missing root.crt or a
+version-specific special value. Explicit reviewed CA files keep their separate
+readonly mount and integrity checks. Other/local connection modes are unchanged.
+
+PostgreSQL describes the default user certificate file and the explicit file
+parameter in its [PostgreSQL16 TLS documentation](https://www.postgresql.org/docs/16/libpq-ssl.html).
+The tracked native-image gate reproduces the missing-user-root failure, then
+checks trusted/untrusted default image roots, explicit system mapping and
+hostname refusal. Its trust-store override contains only a synthetic public
+certificate, mounted read-only in disposable clients; no host trust store is
+changed. Actual provider trust compatibility and full backup/restore remain
+separate acceptance checks.

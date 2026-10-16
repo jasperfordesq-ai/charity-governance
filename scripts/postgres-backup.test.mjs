@@ -1366,3 +1366,15 @@ test('database CA transport preserves normal inherited environment when none was
   const transport=prepareDatabaseCaDockerTransport(['run',DEFAULT_POSTGRES_IMAGE,'pg_restore']);
   assert.equal(transport.env,undefined);transport.assertUnchanged();transport.close();
 });
+
+test('verified libpq transport explicitly selects pinned-image system roots when the canonical URL omits a CA',()=>{
+  const args=['run','--rm','-e','CHARITYPILOT_PROOF_DATABASE_URL',DEFAULT_POSTGRES_IMAGE,'psql'];
+  const original='postgresql://synthetic:synthetic@db.example.invalid/postgres?sslmode=verify-full&target_session_attrs=read-write';
+  const environment={CHARITYPILOT_PROOF_DATABASE_URL:original};
+  const transport=prepareDatabaseCaDockerTransport(args,environment);
+  try {
+    assert.equal(new URL(transport.env.CHARITYPILOT_PROOF_DATABASE_URL).searchParams.get('sslrootcert'),'/etc/ssl/certs/ca-certificates.crt');
+    assert.equal(environment.CHARITYPILOT_PROOF_DATABASE_URL,original);
+    assert.equal(transport.args.includes('--mount'),false);
+  } finally {transport.close();}
+});

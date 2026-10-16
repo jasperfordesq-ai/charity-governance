@@ -1,5 +1,16 @@
 # CharityPilot Full-Platform Remediation Audit
 
+> **16 October backup default-root defect fixed / local regression:** Accumulated
+> transport review reproduced a PostgreSQL16 tools default requiring missing
+> user root.crt despite available image roots. Helper now derives its pinned
+> image CA-bundle path for default/system verify-full policy, preserving original
+> URL and strict checks. Explicit file mounts and other connection modes unchanged.
+> Actual native gate15checksPASS (190migrations and prior refusals retained); raw
+> missing-root failure, corrected trusted/untrusted roots and hostname refusal
+> demonstrated. Final1231productionPASS/8SKIP. No provider/full dump/restore or
+> deployed proof. Whole-branch review and acceptance remain OPEN.
+
+
 > **16 October native Linux image proof / local only:** Built API runner and
 > migration-runner from clean763ed75a on the verified local Docker daemon. Both
 > Linux/amd64, USER node. Tracked image gate10checksPASS: strictTLS pre/post role,

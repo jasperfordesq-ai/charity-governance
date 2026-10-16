@@ -1,3 +1,4 @@
+import { prepareDatabaseCaDockerTransport } from './postgres-backup.mjs';
 import { readdirSync } from 'node:fs';
 import { toStrictPrismaTlsUrl } from '../packages/shared/runtime/prisma-database-url.mjs';
 import { fileURLToPath } from 'node:url';
@@ -98,6 +99,38 @@ try {
     assert.notEqual(r.status,0);
   });
   check('Linux API native Prisma verifies complete post-migration role catalogue',()=>validRole('after-migration'));
+  function libpqAttempt({raw=false,trusted=false,explicitSystem=false,hostname='localhost'}={}) {
+    const url=new URL(runtimeUrl);url.hostname=hostname;url.searchParams.delete('sslrootcert');
+    if(explicitSystem) url.searchParams.set('sslrootcert','system');
+    const args=['run','--rm','--pull=never','--user','65534:65534','--network','container:'+id,
+      '--read-only','--tmpfs','/tmp','--cap-drop','ALL','--security-opt','no-new-privileges:true',
+      ...(trusted?['--mount','type=bind,source='+join(certDir,'cert.pem')+',target=/etc/ssl/certs/ca-certificates.crt,readonly']:[]),
+      '-e','CHARITYPILOT_PROOF_DATABASE_URL',image,'sh','-eu','-c',
+      'psql -X --dbname \"$CHARITYPILOT_PROOF_DATABASE_URL\" -Atqc \"SELECT current_user, ssl FROM pg_stat_ssl WHERE pid=pg_backend_pid()\"'];
+    const environment={...dockerEnv,CHARITYPILOT_PROOF_DATABASE_URL:url.href};
+    const transport=raw?{args,env:environment,assertUnchanged(){},close(){}}:prepareDatabaseCaDockerTransport(args,environment);
+    try {
+      const r=spawnSync('docker',['--host',endpoint.Host,...transport.args],{
+        env:transport.env,encoding:'utf8',timeout:15000,maxBuffer:16384});
+      transport.assertUnchanged();return r;
+    } finally {transport.close();}
+  }
+  check('raw PostgreSQL16 verified URL without CA fails at missing user root file',()=>{
+    const r=libpqAttempt({raw:true,trusted:true});assert.notEqual(r.status,0);assert.match(r.stderr,/root\.crt.*does not exist/s);
+  });
+  check('default libpq transport refuses an untrusted synthetic certificate',()=>{
+    const r=libpqAttempt();assert.notEqual(r.status,0);assert.match(r.stderr,/certificate.*(verify|verification).*fail/i);
+  });
+  check('default libpq transport verifies against its readonly image CA bundle',()=>{
+    const r=libpqAttempt({trusted:true});assert.equal(r.status,0,r.stderr);assert.equal(r.stdout.trim(),'cp_runtime|t');
+  });
+  check('explicit system policy uses the pinned PostgreSQL16 image CA bundle',()=>{
+    const r=libpqAttempt({trusted:true,explicitSystem:true});assert.equal(r.status,0,r.stderr);assert.equal(r.stdout.trim(),'cp_runtime|t');
+  });
+  check('default libpq image trust still refuses hostname mismatch',()=>{
+    const r=libpqAttempt({trusted:true,hostname:'127.0.0.1'});assert.notEqual(r.status,0);
+  });
+
   for(const [label,url] of [['wrong hostname',runtimeUrl.replace('@localhost:', '@127.0.0.1:')],
     ['wrong password',runtimeUrl.replace('synthetic-runtime-only@','wrong-synthetic-password@')]]) {
     check('Linux API refuses '+label,()=>{const r=roleJob('after-migration',url);assert.notEqual(r.status,0);

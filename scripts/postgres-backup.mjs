@@ -2141,7 +2141,14 @@ export function prepareDatabaseCaDockerTransport(args, environment) {
     const key=keys[0];
     const url=key?new URL(sourceEnvironment[key]):null;
     const ca=url?.searchParams.get('sslrootcert');
-    if(!ca||ca==='system') return {args,env:environment,assertUnchanged(){},close(){}};
+    if(!ca||ca==='system') {
+      // The pinned PostgreSQL16 client defaults to a per-user root.crt, not
+      // the OS CA bundle. Resolve the declared system-trust policy explicitly
+      // inside this immutable tools image; preserve the reviewed host URL.
+      const useSystemBundle=key&&url.searchParams.get('sslmode')==='verify-full';
+      if(useSystemBundle) url.searchParams.set('sslrootcert','/etc/ssl/certs/ca-certificates.crt');
+      return {args,env:useSystemBundle?{...sourceEnvironment,[key]:url.href}:environment,assertUnchanged(){},close(){}};
+    }
     if(!['postgres:','postgresql:'].includes(url.protocol)||!isAbsolute(ca)||/[,\x00-\x1f\x7f]/u.test(ca)||ca.includes(String.fromCharCode(34))) throw new Error();
     handle=openProtectedRegularFile(ca,'database CA');
     const status=fstatSync(handle.fd,{bigint:true});
