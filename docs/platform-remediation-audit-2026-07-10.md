@@ -1,5 +1,11 @@
 # CharityPilot Full-Platform Remediation Audit
 
+> **16 October hosted role gap / first source slice only:** Added standalone
+> same-target/distinct-credential validator and24passing cases. Input equality/TLS
+> checks are not actual restricted role or protected environment transport proof.
+> Existing deployment path remains unmodified; owner/runtime/job/rollback separation
+> and DB checks still OPEN. No live credential change, grant or provider operation.
+
 > **16 October hosted production credential separation / source gap OPEN:** Synthetic
 > Compose expansion shows current migration and runtime services share DB input.
 > This is a planned-hosting compatibility gap, not evidence of live owner exposure.

@@ -1,5 +1,14 @@
 # CharityPilot Agent Continuation Handoff
 
+> **16 October production credential input slice, integration OPEN:** New pure
+> helper checks distinct decoded roles/passwords on the same verified-TLS target;
+> rejects routing overrides, TLS weakening and local-address aliases.24checks pass,
+> including two review-discovered gaps corrected before shipping. No passwords
+> returned; no file/DB/provider effects. Not yet connected to production deploy:
+> protected env transport, actual restricted-role proof, jobs/rollback/maintenance
+> separation and post-migration checks remain required. Do not mark hosted role
+> gap fixed or alter private profile from this preparatory component.
+
 > **16 October managed-backend decision brief / production role gap OPEN:** Existing
 > strict production contract already expects external PostgreSQL; private blue-green
 > host=db guard remains separate. Fully synthetic all-profile Compose expansion
