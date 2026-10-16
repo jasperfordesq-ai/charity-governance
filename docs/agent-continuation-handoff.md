@@ -1,5 +1,18 @@
 # CharityPilot Agent Continuation Handoff
 
+> **16 October complete Confluence archive reconciliation proposal, source only:**
+> New inactive Owner inspection compares all eight original ledger tables with
+> a freshly authenticated archive/current supported prefix. Bounded locked local
+> reads before/after, semantic row validation and final head/writer checks refuse
+> changes. Missing original records are proposed in dependency/revision order;
+> local-only/conflicting evidence is preserved by refusal. No SQL replay, transport
+> recovery, deletion or reopening authority follows. Synthetic encrypted-reader
+> composition and21focused tests pass; API build and3200ordinary checks pass.
+> Immutable-row bypass mutation is detected. Real database composition for this
+> coordinator, eight-table maintenance replay, four transport tables, old-host
+> isolation, provider custody, release and acceptance remain open. No migration;
+> local188 versus last serving179. Private RESUME-HERE has current receipts.
+
 > **16 October primary-instrument review, private evidence only:** An exact
 > circulated instrument and its three agreement replies now have complete PDF
 > visual/MIME reconciliation. Source page-count/date wording/review-cadence

@@ -1,5 +1,17 @@
 # CharityPilot Full-Platform Remediation Audit
 
+> **16 October eight-table Confluence reconciliation, source increment / OPEN:**
+> An inactive read-only Owner coordinator now compares complete archived decision,
+> capture and publication rows against bounded local snapshots around fresh
+> encrypted archive/prefix verification. It proposes only missing exact records,
+> orders capture revisions, and refuses immutable conflicts/local-only evidence.
+> Synthetic composition,21focused checks, build and3200ordinary API checks pass;
+> an immutable-comparison mutation fails eight tests. No maintenance writes,
+> runtime caller, schema or provider change. Eight-table SQL restore, four-table
+> transport reconciliation, actual database coordinator proof, host isolation,
+> custody, deployment and DPO acceptance remain unresolved. No recovery or
+> current-action/reopening authority is established by a matching proposal.
+
 > **16 October primary instrument/act evidence, OPEN:** Complete original PDF
 > review and exact agreement-chain readback narrow one authority/version gap.
 > Source inconsistencies require accountable reconciliation, not silent document
