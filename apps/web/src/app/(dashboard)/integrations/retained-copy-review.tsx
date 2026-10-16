@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from 'react';
 import { Button, Checkbox, Input } from '@heroui/react';
 import { api } from '@/lib/api';
 import { apiErrorMessage } from '@/lib/errors';
+import { ReviewWithdrawal } from './review-withdrawal';
 import { buildSyntheticCopyReview, SYNTHETIC_REVIEW_FIELDS, type CopyReviewActor } from '@/lib/retained-copy-review';
 
 type Receipt = { id: string; reviewerId: string; snapshotSha256: string; evidenceRef: string | null;
@@ -114,6 +115,7 @@ export function RetainedCopyReview({ publicationId, actor }: { publicationId: st
       <strong>{receipt.evidenceRef ?? 'Unidentified review reference'}</strong> · {receipt.id}
       <p>Reviewer {receipt.reviewerId === actor.id ? 'you' : receipt.reviewerId} · reviewed {new Date(receipt.reviewedAt).toLocaleString('en-IE')} · expires {new Date(receipt.expiresAt).toLocaleString('en-IE')}{receipt.withdrawnAt ? ' · withdrawn' : ''}</p>
       <p>Snapshot digest: {receipt.snapshotSha256}</p>
+      <ReviewWithdrawal review={receipt} busy={busy} run={run} refresh={() => loadReceipts()} />
     </li>)}</ul>
     {next ? <Button size="sm" variant="flat" isDisabled={busy} onPress={() => void run(() => loadReceipts(next))}>Load more review receipts</Button> : null}
   </section>;

@@ -4,8 +4,9 @@ import { gotoWithDevServerRetry } from '../helpers/navigation';
 import { IS_DEPLOYED_QA } from '../env';
 import AxeBuilder from '@axe-core/playwright';
 
-for (const loseResponse of [false, true]) {
-  test(`Owner records retained-copy review and reconciles receipts${loseResponse ? ' after a lost response' : ''}`, async ({ newFencedContext, browserOriginFence }) => {
+for (const outcome of ['recorded', 'lost-save', 'lost-withdrawal']) {
+  const loseResponse = outcome === 'lost-save', loseWithdrawal = outcome === 'lost-withdrawal';
+  test(`Owner records retained-copy review and reconciles receipts${outcome === 'recorded' ? '' : ` after ${outcome}`}`, async ({ newFencedContext, browserOriginFence }) => {
     test.skip(IS_DEPLOYED_QA, 'Synthetic fixture and response interception require the isolated disposable stack.');
     test.setTimeout(150_000);
     const stamp = Date.now();
@@ -60,7 +61,7 @@ for (const loseResponse of [false, true]) {
       else await route.fulfill({ response });
     });
     await gotoWithDevServerRetry(page, '/integrations');
-    const theme = loseResponse ? 'dark' : 'light';
+    const theme = loseResponse || loseWithdrawal ? 'dark' : 'light';
     await page.evaluate(theme => {
       localStorage.setItem('theme', theme);
       document.documentElement.classList.toggle('dark', theme === 'dark');
@@ -114,5 +115,45 @@ for (const loseResponse of [false, true]) {
     expect(stored.reviews[0].authorisesProviderIO).toBe(false);
     expect(stored.reviews[0].review).toMatchObject({ scope: 'SYNTHETIC_ONLY', primaryDisposition: 'RETAIN', copyDisposition: 'PURGE' });
     expect(stored.deletions).toBe(0);
+    if (!loseResponse) {
+      const reviewId = await withDb(async client => (await client.query<{ id: string }>(
+        `SELECT id FROM "ConfluenceRetainedCopyReview" WHERE "organisationId"=$1 AND "publicationId"=$2`,
+        [owner.organisationId, publicationId])).rows[0].id);
+      let withdrawals = 0;
+      await page.route(`${root}/${reviewId}/withdraw`, async route => {
+        expect(route.request().method()).toBe('POST');
+        withdrawals++;
+        const response = await route.fetch({ maxRedirects: 0 });
+        expect(response.status(), await response.text()).toBe(201);
+        if (loseWithdrawal) await route.abort('failed');
+        else await route.fulfill({ response });
+      });
+      await expect(panel.getByRole('button', { name: 'Review withdrawal', exact: true })).toBeVisible();
+      await panel.getByRole('button', { name: 'Review withdrawal', exact: true }).click();
+      const withdrawal = panel.getByRole('group', { name: 'Withdraw this review' });
+      await reliableFill(withdrawal.getByLabel('Withdrawal evidence reference', { exact: true }), `WITHDRAW-${stamp}`);
+      await reliableFill(withdrawal.getByLabel('Withdrawal reason', { exact: true }), 'Synthetic review withdrawn after the recorded browser test.');
+      const withdraw = withdrawal.getByRole('button', { name: 'Withdraw review', exact: true });
+      await expect(withdraw).toBeDisabled();
+      await withdrawal.getByRole('checkbox', { name: /I confirm withdrawal of this exact review/ }).check();
+      const withdrawalScan = await new AxeBuilder({ page }).include('[aria-label="Withdraw this review"]')
+        .withTags(['wcag2a', 'wcag2aa', 'wcag21aa']).analyze();
+      expect(withdrawalScan.violations.filter(issue => issue.impact === 'serious' || issue.impact === 'critical')).toEqual([]);
+      await withdrawal.screenshot({ path: test.info().outputPath('review-withdrawal.png') });
+      await withdraw.click();
+      if (loseWithdrawal) {
+        await expect(withdrawal.getByText(/Withdrawal outcome needs reconciliation/)).toBeVisible();
+        await expect(withdraw).toBeDisabled();
+        await panel.getByRole('button', { name: 'Refresh review receipts', exact: true }).click();
+      }
+      await expect(panel.locator('li').filter({ hasText: `UI-REVIEW-${stamp}` })).toContainText('withdrawn');
+      expect(withdrawals).toBe(1);
+      const persisted = await withDb(async client => (await client.query(
+        `SELECT "actorUserId","evidenceRef",reason FROM "ConfluenceRetainedCopyReviewWithdrawal" WHERE "reviewId"=$1 AND "organisationId"=$2`,
+        [reviewId, owner.organisationId])).rows);
+      expect(persisted).toEqual([{ actorUserId: owner.userId, evidenceRef: `WITHDRAW-${stamp}`,
+        reason: 'Synthetic review withdrawn after the recorded browser test.' }]);
+    }
+
   });
 }

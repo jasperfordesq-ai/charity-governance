@@ -1,5 +1,11 @@
 # CharityPilot Agent Continuation Handoff
 
+> **16 October review withdrawal interface:** Owner receipt rows now offer a
+> confirmed withdrawal with evidence reference/reason and preserved original
+> review. Unknown save outcomes freeze another submission while receipt lookup
+> remains possible. Permission issuance/withdrawal and execution controls remain
+> outstanding; no provider operation is activated.
+
 > **16 October Owner retained-copy review interface:** The retired-publications
 > queue distinguishes retained primary records and offers the Owner synthetic
 > observation/review/receipt form. Lost save responses freeze another save while

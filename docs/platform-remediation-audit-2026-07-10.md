@@ -1,5 +1,10 @@
 # CharityPilot Full-Platform Remediation Audit
 
+> **16 October review withdrawal controls:** The Owner can append a review
+> withdrawal through the supported API without losing the original evidence.
+> Exact-target confirmation and uncertain-response reconciliation are explicit.
+> This does not complete permission/execution or independent recovery.
+
 > **16 October retained-copy Owner workflow increment:** Review preparation and
 > receipt reconciliation now have a dashboard path, local-primary guidance and
 > explicit synthetic attestation. Three isolated browser journeys pass; the panel

@@ -125,9 +125,34 @@ not a cross-session uniqueness guarantee: the API retains distinct reviews and
 a fresh page does not automatically resubmit anything. Stored review digests
 identify recorded evidence; no receipt automatically selects disposal authority.
 
-This increment does not expose review/permission withdrawal, permission issuance,
-claim execution or a provider action in the dashboard. Those controls and the
+The dashboard supports review withdrawal as described below. It does not yet
+expose permission withdrawal/issuance, claim execution or a provider action. Those controls and the
 independent claim/request/outcome history remain required stages. The synthetic
 browser proof intercepts only the observation response, then uses the real
 recording and receipt API; its lost-response case drops a response after a real
 backend commit. It does not prove source bytes or real Atlassian inventory.
+
+
+## Withdraw a recorded review
+
+Open **Review withdrawal** beside an unwithdrawn receipt. The panel identifies
+that exact review and requires a separate withdrawal evidence reference, a
+10–500 character reason and explicit confirmation. The authenticated API supplies
+the actor/organisation and appends the existing immutable withdrawal record.
+The original review remains available. Withdrawal prevents future permission use
+of the review; it does not remove data or reverse a completed provider action.
+
+While saving, the review panel serialises requests. A lost/refused response leaves
+the withdrawal outcome unresolved and blocks another submission in that panel.
+The original attempted reference/reason remain readable. Refresh the review
+receipts to reconcile the result: a withdrawal timestamp confirms the recorded
+state, while an absent timestamp does not establish that a pending write failed.
+Closing/reopening the main review panel preserves its mounted state; this remains
+a UI guard, not an independent recovery history or cross-session transaction.
+
+The isolated Chromium proof checks the real withdrawal API/database result,
+a dropped response after actual withdrawal commit and receipt reconciliation,
+alongside review recording/save-loss and the original primary-absent erasure
+request. Four journeys pass. The tested light/dark withdrawal panels have no
+serious/critical Axe WCAG A/AA findings. The synthetic observation remains mocked;
+these checks do not establish real provider inventory, disposal or host loss.

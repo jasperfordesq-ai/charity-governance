@@ -2990,15 +2990,16 @@ test("standalone compose and bootstrap SQL contain the exact non-personal isolat
     join(ROOT, "e2e", "tests", "document-control-refresh-concurrency.spec.ts"),
     "utf8",
   );
-  // Synthetic observations and post-commit response loss are confined to two
+  // Synthetic observations and post-commit response loss are confined to three
   // exact routes on the already fenced API origin, only in disposable tests.
   const copyReviewSpec = readFileSync(join(ROOT, "e2e", "tests", "retained-copy-review.spec.ts"), "utf8");
   assert.match(copyReviewSpec, /test\.skip\(IS_DEPLOYED_QA,/);
   assert.match(copyReviewSpec, /const root = `\$\{browserOriginFence\.apiOrigin\}\/api\/v1\/integrations\/confluence\/retained-copy-reviews`;/);
-  assert.equal((copyReviewSpec.match(/\.route\(/g) ?? []).length, 2);
+  assert.equal((copyReviewSpec.match(/\.route\(/g) ?? []).length, 3);
   assert.match(copyReviewSpec, /\.route\(`\$\{root\}\/observe\/\$\{publicationId\}`,/);
   assert.match(copyReviewSpec, /\.route\(`\$\{root\}\/`,/);
-  assert.equal((copyReviewSpec.match(/expect\(route\.request\(\)\.method\(\)\)\.toBe\('POST'\)/g) ?? []).length, 2);
+  assert.equal((copyReviewSpec.match(/expect\(route\.request\(\)\.method\(\)\)\.toBe\('POST'\)/g) ?? []).length, 3);
+  assert.match(copyReviewSpec, /\.route\(`\$\{root\}\/\$\{reviewId\}\/withdraw`,/);
   assert.match(copyReviewSpec, /route\.fetch\(\{ maxRedirects: 0 \}\)/);
   assert.match(copyReviewSpec, /route\.abort\('failed'\)/);
   assert.doesNotMatch(copyReviewSpec, /\.(?:unroute|routeWebSocket|unrouteAll)\(/);
