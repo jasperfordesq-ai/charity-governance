@@ -1,5 +1,15 @@
 # CharityPilot Agent Continuation Handoff
 
+> **16 October retention category coverage, decision preparation only:** Private
+> worksheet now preserves all four original cells for each of24schedule categories
+> and records individual scope/anchor/implementation questions plus blank controller
+> decisions. Exact source hash, row coverage, round-trip and unchanged bytes verified.
+> Current operational service has four classes and day-based creation; extensible
+> database class/anchor strings do not prove complete category workflows. Calendar
+> assessment exists but activation remains fenced. No policy/live state changed.
+> Controller/Board V2 reconciliation, category decisions, deployed proof and Nikita
+> acceptance remain open; private approval pack points to current115-document queue.
+
 > **16 October minimised-report privacy boundary, test evidence only:** A new
 > synthetic route-level counterfactual changes private narratives, approval/
 > recorder details, source text and activity profile while holding allowed fields

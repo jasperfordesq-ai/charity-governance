@@ -1,5 +1,13 @@
 # CharityPilot Full-Platform Remediation Audit
 
+> **16 October retention coverage / OPEN:** Completed private source-bound24-row
+> controller decision sheet; all original cells retained and input/output validated.
+> Operational routes support four classes, not all adopted schedule categories;
+> database vocabulary alone does not implement evidence/authorization/disposal.
+> Calendar arithmetic is separate from approved activation. No invented term,
+> class mapping, policy or disposal authority; row decisions remain pending.
+> Historical approval-pack inventory pointer corrected to current115-row queue.
+
 > **16 October report minimisation counterfactual proof / acceptance OPEN:**
 > Authenticated synthetic approved-export route now proves private narrative/
 > approval/source/profile changes cannot influence minimised HTML, with internal
