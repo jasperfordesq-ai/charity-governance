@@ -1,5 +1,15 @@
 # CharityPilot Agent Continuation Handoff
 
+> **16 October protected navigation investigation:** Hosted E2E on the footer
+> update hit a fail-closed authentication 503 during a governance-audit journey.
+> The retained browser trace showed repeated background protected-page
+> prefetches. Sidebar links now disable automatic prefetching; authentication
+> validation and rate limits are unchanged. The network regression reproduced
+> before the fix; all four selected disposable browser tests, including the
+> original DPO journey, now pass, alongside 197 focused web/proxy checks. The ignored
+> `prefetch-auth-throttle-investigation-2026-10-16.md` carries exact results and
+> limits. This is not deployed or DPO acceptance evidence.
+
 > **16 October private VM startup compatibility:** A guarded release refused
 > candidate startup because the new strict TLS client also selected the existing
 > documented internal non-TLS VM profile. Added exact private-profile matching;

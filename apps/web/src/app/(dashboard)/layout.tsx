@@ -357,6 +357,9 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
               <Link
                 key={item.href}
                 href={item.href}
+                // Each protected-page prefetch validates the session. A full
+                // sidebar must not exhaust that budget before a user clicks.
+                prefetch={false}
                 tabIndex={navInteractive ? undefined : -1}
                 onClick={() => setSidebarOpen(false)}
                 className={`

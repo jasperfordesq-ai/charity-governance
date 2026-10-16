@@ -4,6 +4,28 @@ import { gotoWithDevServerRetry } from '../helpers/navigation';
 
 test.describe.configure({ timeout: 180_000 });
 
+test('sidebar navigation does not prefetch protected pages while reviewing a record', async ({ ownerPage }) => {
+  const prefetchedPaths: string[] = [];
+  ownerPage.on('request', (request) => {
+    if (request.headers()['next-router-prefetch'] === '1') {
+      prefetchedPaths.push(new URL(request.url()).pathname);
+    }
+  });
+  await ownerPage.setViewportSize({ width: 1280, height: 900 });
+  await gotoWithDevServerRetry(ownerPage, '/data-lifecycle');
+  await expect(ownerPage.locator('#dashboard-primary-navigation')).toBeVisible();
+  // Production Link prefetches run in the background after hydration. Observe
+  // the settled network, including a hover, before asserting their absence.
+  await ownerPage.locator('#dashboard-primary-navigation')
+    .getByRole('link', { name: 'Governance Audit', exact: true }).hover();
+  await ownerPage.waitForLoadState('networkidle');
+  // These destinations occur only in the sidebar on this page. Its separate
+  // Governance Audit content link is outside this navigation regression.
+  const sidebarOnlyPaths = new Set(['/team', '/registers', '/minute-book']);
+  expect(prefetchedPaths.filter((path) => sidebarOnlyPaths.has(path)),
+    'unvisited sidebar destinations must not consume the session-validation budget').toEqual([]);
+});
+
 test('mobile dashboard sidebar restores focus and removes closed links from tab order', async ({ ownerPage }) => {
   await ownerPage.setViewportSize({ width: 390, height: 844 });
   await gotoWithDevServerRetry(ownerPage, '/dashboard', { waitUntil: 'commit', timeout: 150_000 });
