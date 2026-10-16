@@ -1,11 +1,17 @@
 import assert from 'node:assert/strict';
-import { createHash, randomBytes } from 'node:crypto';
+import { createHash, createHmac, randomBytes } from 'node:crypto';
 import { Readable } from 'node:stream';
 import { test } from 'node:test';
 import { KMSClient } from '@aws-sdk/client-kms';
 import { S3Client } from '@aws-sdk/client-s3';
 import { KmsDocumentBackupKeys } from '../services/document-byte-backup-kms.js';
 import { S3DocumentByteBackups } from '../services/document-byte-backup-s3.js';
+import { canonicalMetadataBindingSha256 } from '../../../../packages/shared/runtime/document-recovery-inventory.mjs';
+import {
+  openDocumentBackupIndex,
+  sealDocumentBackupIndex,
+  type DocumentBackupIndexMac,
+} from '../services/document-backup-index.js';
 import {
   sealDocumentByteBackup,
   openDocumentByteBackup,
@@ -32,7 +38,13 @@ const context = {
   documentId: 'document',
   sourceSha: 'a'.repeat(40),
   databaseSha256: 'b'.repeat(64),
-  sourceBindingSha256: 'c'.repeat(64),
+  sourceBindingSha256: canonicalMetadataBindingSha256({
+    id: 'document',
+    organisationId: 'charity',
+    fileUrl: 'synthetic/private-document',
+    fileSize: bytes.length,
+    mimeType: 'application/octet-stream',
+  }),
   bytesSha256: createHash('sha256').update(bytes).digest('hex'),
   byteLength: bytes.length,
   keyArn,
@@ -201,15 +213,91 @@ test('signed KMS and S3 transports recover the immutable encrypted bytes with fr
     ).observe(context, sealed.sha256);
     assert.equal(observed.versionId, 'synthetic-v1');
     assert.equal(writes, 1);
+    const indexScope = {
+      installationId: context.installationId,
+      setId: context.setId,
+      sourceSha: context.sourceSha,
+      databaseSha256: context.databaseSha256,
+      sourceCaptureReportSha256: 'c'.repeat(64),
+      databaseIdentitySha256: 'd'.repeat(64),
+      objectStoreIdentitySha256: 'e'.repeat(64),
+      dataKeyArn: keyArn,
+      macKeyArn:
+        'arn:aws:kms:eu-west-1:123456789012:key/44444444-4444-4444-8444-444444444444',
+      metadataCapturedAt: '2026-10-17T00:00:00.000Z',
+      metadataCaptureTransactionId: '42',
+      objectCapturedAt: '2026-10-17T00:00:00.000Z',
+    };
+    const macSecret = randomBytes(32);
+    const indexMac = (): DocumentBackupIndexMac => ({
+      async generate(arn, message) {
+        return {
+          keyArn: arn,
+          mac: createHmac('sha256', macSecret).update(message).digest(),
+        };
+      },
+      async verify(arn, message, tag) {
+        return {
+          keyArn: arn,
+          valid: createHmac('sha256', macSecret)
+            .update(message)
+            .digest()
+            .equals(tag),
+        };
+      },
+    });
+    const index = await sealDocumentBackupIndex(
+      {
+        scope: indexScope,
+        metadataRows: [
+          {
+            id: context.documentId,
+            organisationId: context.organisationId,
+            fileUrl: 'synthetic/private-document',
+            fileSize: bytes.length,
+            mimeType: 'application/octet-stream',
+          },
+        ],
+        objectRows: [
+          {
+            fileUrl: 'synthetic/private-document',
+            bytes: bytes.length,
+            sha256: context.bytesSha256,
+          },
+        ],
+        receipts: [
+          {
+            context,
+            sha256: observed.sha256,
+            objectKey: observed.objectKey,
+            versionId: observed.versionId,
+          },
+        ],
+      },
+      indexMac(),
+    );
+    const openedIndex = await openDocumentBackupIndex(
+      indexScope,
+      index.body,
+      index.sha256,
+      indexMac(),
+    );
+    const entry = openedIndex.entries[0];
+    const exact = await new S3DocumentByteBackups(
+      config,
+      credentials,
+      nextS3,
+    ).observe(entry.context, entry.archive.sha256, entry.archive.versionId);
     const recovered = await openDocumentByteBackup(
-      context,
-      observed.body,
-      sealed.sha256,
+      entry.context,
+      exact.body,
+      entry.archive.sha256,
       new KmsDocumentBackupKeys(keyArn, credentials, nextKms),
     );
     assert.deepEqual(recovered, bytes);
     assert.equal(kmsRequests, 2);
     assert.ok(reads >= 1);
+    macSecret.fill(0);
     for (const object of objects.values()) {
       assert.ok(!object.includes(bytes.toString()));
       assert.ok(!object.includes(bytes.toString('base64')));

@@ -2,6 +2,20 @@
 
 import { createHash } from 'node:crypto';
 import {
+  canonicalDocumentIdentitySha256,
+  canonicalMetadataBindingSha256,
+  canonicalObjectKeySha256,
+  canonicalMetadataInventorySha256,
+  canonicalObjectInventorySha256,
+} from '../packages/shared/runtime/document-recovery-inventory.mjs';
+export {
+  canonicalDocumentIdentitySha256,
+  canonicalMetadataBindingSha256,
+  canonicalObjectKeySha256,
+  canonicalMetadataInventorySha256,
+  canonicalObjectInventorySha256,
+};
+import {
   closeSync,
   constants,
   fstatSync,
@@ -375,31 +389,6 @@ function canonicalString(value, label) {
   return value;
 }
 
-export function canonicalDocumentIdentitySha256(id) {
-  return canonicalDigest(DOCUMENT_RECOVERY_HASH_CONTRACT.documentIdentityDomain, [[
-    canonicalString(id, 'Document.id'),
-  ]]);
-}
-
-export function canonicalMetadataBindingSha256({ id, organisationId, fileUrl, fileSize, mimeType }) {
-  if (!Number.isSafeInteger(fileSize) || fileSize < 0 || fileSize > MAX_DOCUMENT_BYTES) {
-    throw new TypeError('Document.fileSize must be a safe integer within the document byte limit');
-  }
-  return canonicalDigest(DOCUMENT_RECOVERY_HASH_CONTRACT.metadataBindingDomain, [[
-    canonicalString(id, 'Document.id'),
-    canonicalString(organisationId, 'Document.organisationId'),
-    canonicalString(fileUrl, 'Document.fileUrl'),
-    fileSize,
-    canonicalString(mimeType, 'Document.mimeType'),
-  ]]);
-}
-
-export function canonicalObjectKeySha256(fileUrl) {
-  return canonicalDigest(DOCUMENT_RECOVERY_HASH_CONTRACT.objectKeyDomain, [[
-    canonicalString(fileUrl, 'Document.fileUrl'),
-  ]]);
-}
-
 export function canonicalDatabaseIdentitySha256({ provider, projectRef, databaseName, schemaName }) {
   return canonicalDigest(DOCUMENT_RECOVERY_HASH_CONTRACT.databaseIdentityDomain, [[
     canonicalString(provider, 'database provider'),
@@ -433,32 +422,6 @@ function canonicalTransactionId(value, label) {
     throw new TypeError(`${label} must be a canonical bounded decimal transaction identifier`);
   }
   return value;
-}
-
-export function canonicalMetadataInventorySha256(entries, capturedAt, captureTransactionId) {
-  const rows = entries
-    .map((entry) => [
-      entry.documentIdentitySha256,
-      entry.metadataBindingSha256,
-      entry.objectKeySha256,
-      entry.fileSize,
-    ])
-    .sort((left, right) => left[0] < right[0] ? -1 : left[0] > right[0] ? 1 : 0);
-  return canonicalDigest(DOCUMENT_RECOVERY_HASH_CONTRACT.metadataInventoryDomain, [[
-    canonicalTimestamp(capturedAt, 'metadata inventory capturedAt'),
-    canonicalTransactionId(captureTransactionId, 'metadata inventory captureTransactionId'),
-    rows,
-  ]]);
-}
-
-export function canonicalObjectInventorySha256(entries, capturedAt) {
-  const rows = entries
-    .map((entry) => [entry.objectKeySha256, entry.bytes, entry.sha256])
-    .sort((left, right) => left[0] < right[0] ? -1 : left[0] > right[0] ? 1 : 0);
-  return canonicalDigest(DOCUMENT_RECOVERY_HASH_CONTRACT.objectInventoryDomain, [[
-    canonicalTimestamp(capturedAt, 'object inventory capturedAt'),
-    rows,
-  ]]);
 }
 
 export function canonicalStorageDeletionIdentitySha256(id) {

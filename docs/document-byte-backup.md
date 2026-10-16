@@ -70,6 +70,14 @@ original commit acknowledgement or a completed current backup-set manifest.
 Normal SDK retries and region redirects are disabled. There is no delete,
 overwrite, bucket provisioning, head publication or automatic recovery action.
 
+## Authenticated inventory connection
+
+The [document archive index](document-backup-index.md) now reconciles complete
+supplied metadata/object inventories with exact archive version receipts and
+authenticates the index using a separate KMS HMAC key. Its per-document source
+binding is the existing canonical metadata-binding hash. It still does not
+capture a database, publish a complete set or authorise restored-file admission.
+
 ## Verification and remaining integration
 
 Tests use real cryptography and SDK request signing with synthetic credentials

@@ -1,5 +1,13 @@
 # CharityPilot Agent Continuation Handoff
 
+> **17 October authenticated archive index:** The new index reconciles complete
+> supplied document/object inventories and exact archived versions, binds the
+> database/source/set, and uses separate-key KMS HMAC authentication. Shared
+> inventory hash domains remain unchanged. Synthetic exact-version byte recovery
+> through the index passes; consistent source capture, full-set publication,
+> database restoration, current authority and actual provider/host-loss proof
+> remain open. See [archive index](document-backup-index.md).
+
 > **17 October independent byte candidates:** New document-byte backup services
 > seal exact files, use distinct-purpose KMS wrapping and conditionally store
 > versioned/checksummed S3 candidates. Synthetic SDK/crypto fault and fresh-client
