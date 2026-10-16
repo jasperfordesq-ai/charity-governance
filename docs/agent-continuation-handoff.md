@@ -1,5 +1,11 @@
 # CharityPilot Agent Continuation Handoff
 
+> **16 October review receipt lookup:** The Owner/full-web API now pages scoped
+> review receipts by publication, supporting reconciliation of a lost save
+> response. Exact cursors, minimal projection, no-store and throttling preserve
+> the boundary. It performs no fresh provider/source check and grants no action.
+> See `docs/confluence-retained-copy-review.md`; the Owner interface remains next.
+
 > **16 October disposable inventory correction:** The hosted schema-coverage
 > gate correctly rejected the new claim model missing from the disposable reset
 > inventory. Its exact table name is now included; immutable triggers and target

@@ -204,6 +204,10 @@ export const EXCLUDED_ROUTES: readonly ExcludedRoute[] = [
     reason: 'Owner/full-data web-only decision receipt includes scoped review and withdrawal evidence; connector sessions cannot read this dashboard record.',
   },
   {
+    path: '/api/v1/integrations/confluence/retained-copy-reviews/publications/:publicationId/reviews',
+    reason: 'Owner/full-data web-only review receipts reconcile a lost dashboard response; connector sessions are refused.',
+  },
+  {
     path: '/api/v1/documents/:id/download',
     reason:
       'Returns the raw bytes of a stored document. No field filter is meaningful against a '

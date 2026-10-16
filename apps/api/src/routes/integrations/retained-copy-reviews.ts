@@ -77,6 +77,35 @@ export async function retainedCopyReviewRoutes(app: FastifyInstance, options: Re
     } catch (error) { return failure(reply, error); }
   });
 
+  // Reconcile a lost recording response before making another review. IDs are
+  // opaque cursors within this tenant/publication, never a provider target.
+  app.get('/publications/:publicationId/reviews', { config: { rateLimit: { max: 10, timeWindow: '1 minute' } } }, async (request, reply) => {
+    try {
+      const { publicationId } = z.object({ publicationId: identifier }).strict().parse(request.params);
+      const { before } = z.object({ before: identifier.optional() }).strict().parse(request.query);
+      const scope = { organisationId: request.user.organisationId, publicationId };
+      if (before && !await app.prisma.confluenceRetainedCopyReview.findFirst({ where: { ...scope, id: before }, select: { id: true } })) {
+        throw new AppError(400, 'CONFLUENCE_COPY_REVIEW_CURSOR_INVALID', 'Refresh this publication’s review receipts.');
+      }
+      const rows = await app.prisma.confluenceRetainedCopyReview.findMany({
+        where: { ...scope, ...(before ? { id: { lt: before } } : {}) },
+        orderBy: { id: 'desc' }, take: 26,
+        select: { id: true, reviewerId: true, snapshotSha256: true, reviewedAt: true, expiresAt: true, recordedAt: true,
+          review: true, withdrawal: { select: { occurredAt: true } } },
+      });
+      const page = rows.slice(0, 25);
+      return sendSuccess(reply, { reviews: page.map(row => {
+        const evidenceRef = row.review !== null && typeof row.review === 'object' && !Array.isArray(row.review)
+          && typeof row.review.evidenceRef === 'string' && /^[A-Z0-9][A-Z0-9-]{2,119}$/.test(row.review.evidenceRef)
+          ? row.review.evidenceRef : null;
+        return { id: row.id, reviewerId: row.reviewerId, snapshotSha256: row.snapshotSha256,
+          reviewedAt: row.reviewedAt, expiresAt: row.expiresAt, recordedAt: row.recordedAt,
+          evidenceRef, withdrawnAt: row.withdrawal?.occurredAt ?? null };
+      }), nextCursor: rows.length > 25 ? page[page.length - 1]!.id : null,
+      currentSourceChecked: false, providerIOAuthorised: false, absenceProvesFailure: false });
+    } catch (error) { return failure(reply, error); }
+  });
+
   app.post('/:reviewId/permission', { bodyLimit: 8192, config: { rateLimit: { max: 4, timeWindow: '1 minute' } } }, async (request, reply) => {
     try {
       empty.parse(request.query);

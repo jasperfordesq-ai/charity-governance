@@ -1,5 +1,11 @@
 # CharityPilot Full-Platform Remediation Audit
 
+> **16 October review reconciliation increment:** A bounded publication-scoped
+> receipt lookup supports the Owner workflow without resubmitting an uncertain
+> save. Authentication, cross-scope cursor refusal, projection and throttling have
+> route tests; the connector has an explicit dashboard-only read exclusion.
+> This does not complete the interface, provider execution or independent recovery.
+
 > **16 October hosted orchestration correction:** Both hosted runs failed before
 > browser execution because the exact reset inventory omitted the claim model.
 > Add that model to the inventory; preserve all reset/immutability safeguards.

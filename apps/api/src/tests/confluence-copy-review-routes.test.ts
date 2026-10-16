@@ -16,6 +16,20 @@ async function fixture(role: 'OWNER' | 'ADMIN' | 'MEMBER' = 'OWNER', clientKind 
   app.decorate('prisma', {
     authSession: { findFirst: async () => revoked ? null : { id: 'session-a', familyId: 'family-a', clientKind, accessLevel: 'ADMIN', dataScope } },
     user: { findUnique: async () => ({ id: 'owner-a', organisationId: 'org-a', role, emailVerified: true }) },
+    confluenceRetainedCopyReview: {
+      findFirst: async ({ where }: { where: { organisationId: string; publicationId: string; id: string } }) => {
+        calls.push(['review-cursor', where]);
+        return where.organisationId === 'org-a' && where.publicationId === 'pub-a' && where.id === 'review-01' ? { id: where.id } : null;
+      },
+      findMany: async (query: { where: { organisationId: string; publicationId: string; id?: { lt: string } }; take: number }) => {
+        calls.push(['review-list', query]);
+        if (query.where.organisationId !== 'org-a' || query.where.publicationId !== 'pub-a' || query.where.id) return [];
+        return Array.from({ length: 26 }, (_, i) => ({ id: `review-${String(25 - i).padStart(2, '0')}`,
+          reviewerId: 'owner-a', snapshotSha256: 'a'.repeat(64), reviewedAt: new Date(), expiresAt: new Date(), recordedAt: new Date(),
+          withdrawal: null, review: { evidenceRef: 'SYNTHETIC-REVIEW', privateSentinel: 'NEVER-RETURN-RAW-REVIEW' },
+          integrationId: 'NEVER-RETURN-CONNECTION' }));
+      },
+    },
     confluenceRetainedCopyPermission: { findFirst: async ({ where }: { where: { organisationId: string; reviewId: string } }) => {
       calls.push(['lookup', where]);
       return where.organisationId === 'org-a' && where.reviewId === 'review-a' ? { id: 'permission-a', reviewId: 'review-a',
@@ -82,7 +96,60 @@ for (const [label, role, clientKind, revoked] of [
     }
     assert.equal(h.calls.length, 0);
     assert.equal((await h.app.inject({ method: 'GET', url: '/reviews/review-a/permission', headers: h.headers })).statusCode, revoked ? 401 : 403);
+    assert.equal((await h.app.inject({ method: 'GET', url: '/reviews/publications/pub-a/reviews', headers: h.headers })).statusCode, revoked ? 401 : 403);
     assert.equal(h.calls.length, 0);
+  } finally { await h.app.close(); }
+});
+
+test('review receipt pages are bounded, scoped and safe after a lost recording response', async () => {
+  const h = await fixture();
+  try {
+    const r = await h.app.inject({ method: 'GET', url: '/reviews/publications/pub-a/reviews', headers: h.headers });
+    assert.equal(r.statusCode, 200);
+    assert.equal(r.headers['cache-control'], 'no-store');
+    const data = r.json().data;
+    assert.equal(data.reviews.length, 25);
+    assert.equal(data.nextCursor, 'review-01');
+    assert.equal(data.currentSourceChecked, false);
+    assert.equal(data.providerIOAuthorised, false);
+    assert.equal(data.absenceProvesFailure, false);
+    assert.equal(data.reviews[0].evidenceRef, 'SYNTHETIC-REVIEW');
+    assert.equal(JSON.stringify(data).includes('NEVER-RETURN'), false);
+    assert.deepEqual((h.calls[0]![1] as { where: unknown }).where, { organisationId: 'org-a', publicationId: 'pub-a' });
+    assert.equal((h.calls[0]![1] as { take: number }).take, 26);
+    const next = await h.app.inject({ method: 'GET', url: `/reviews/publications/pub-a/reviews?before=${data.nextCursor}`, headers: h.headers });
+    assert.equal(next.statusCode, 200);
+    assert.deepEqual(next.json().data.reviews, []);
+    assert.equal(next.json().data.nextCursor, null);
+    assert.deepEqual(h.calls[1], ['review-cursor', { id: 'review-01', organisationId: 'org-a', publicationId: 'pub-a' }]);
+  } finally { await h.app.close(); }
+});
+
+test('receipt query forgery and cross-publication cursors cannot change the authenticated scope', async () => {
+  const h = await fixture();
+  try {
+    assert.equal((await h.app.inject({ method: 'GET', url: '/reviews/publications/pub-a/reviews' })).statusCode, 401);
+    assert.equal(h.calls.length, 0);
+    assert.equal((await h.app.inject({ method: 'GET', url: '/reviews/publications/pub-a/reviews?organisationId=org-b', headers: h.headers })).statusCode, 400);
+    assert.equal(h.calls.length, 0);
+    assert.equal((await h.app.inject({ method: 'GET', url: '/reviews/publications/pub-a/reviews?before=foreign-review', headers: h.headers })).statusCode, 400);
+    assert.deepEqual(h.calls, [['review-cursor', { id: 'foreign-review', organisationId: 'org-a', publicationId: 'pub-a' }]]);
+    const foreign = await h.app.inject({ method: 'GET', url: '/reviews/publications/foreign-publication/reviews', headers: h.headers });
+    assert.equal(foreign.statusCode, 200);
+    assert.deepEqual(foreign.json().data.reviews, []);
+  } finally { await h.app.close(); }
+});
+
+test('receipt enumeration is throttled without further database reads or cached errors', async () => {
+  const h = await fixture();
+  try {
+    for (let i = 0; i < 10; i++) {
+      assert.equal((await h.app.inject({ method: 'GET', url: '/reviews/publications/pub-a/reviews', headers: h.headers })).statusCode, 200);
+    }
+    const limited = await h.app.inject({ method: 'GET', url: '/reviews/publications/pub-a/reviews', headers: h.headers });
+    assert.equal(limited.statusCode, 429);
+    assert.equal(limited.headers['cache-control'], 'no-store');
+    assert.equal(h.calls.length, 10);
   } finally { await h.app.close(); }
 });
 

@@ -19,6 +19,7 @@ Base path: `/api/v1/integrations/confluence/retained-copy-reviews`.
 | `POST /observe/:publicationId` with `{}` | Observe the exact retained local source and its stored Confluence target using the organisation's existing connection. No caller-supplied site, page, storage path or hash is accepted. |
 | `POST /` | Record the complete explicit synthetic review accepted by `prepareRetainedConfluenceCopyReview`. The service and database recheck actor, tenant and current source/publication. |
 | `POST /:reviewId/withdraw` | Withdraw a review with a strict evidence reference and reason; immutable original evidence is retained. |
+| `GET /publications/:publicationId/reviews` | Page through review receipts for one publication, including after a lost recording response. |
 | `POST /:reviewId/permission` | Record one exact Owner permission decision against the registered synthetic scope, after the existing service re-observes the source and copy. |
 | `GET /:reviewId/permission` | Read the tenant-scoped decision receipt and any permission/review withdrawal, including after a lost issuance response. This does not refresh source evidence. |
 | `POST /permissions/:permissionId/withdraw` | Withdraw the recorded permission with an evidence reference and reason, retaining the original decision. |
@@ -75,3 +76,26 @@ Product decision authority and the required recovery boundary are described in
 [Product governance decisions](product-governance-decisions.md). Real provider
 consent/purge actions require their specific operational authority; synthetic
 route tests neither grant it nor certify a live provider.
+
+
+## Reconcile a lost review response
+
+Use the publication-scoped receipt list before recording another review when a
+save response is lost. It returns at most 25 receipts plus an optional `nextCursor`.
+Pass that exact opaque ID as `before` for another page; a cursor must belong to
+the same authenticated organisation and publication. Unknown query fields and
+foreign cursors are refused. Ordering is by opaque ID descending, not a claim
+that IDs establish the time of human review. Compare the original evidence
+reference, reviewer, reviewed/recorded times and snapshot digest; ambiguous
+receipts require review rather than choosing a permission automatically.
+
+The projection contains those receipt fields, expiry and withdrawal time. It
+omits the complete stored review/inventory and connection identity. Empty results
+do not disclose another charity's receipts. The route has a ten-request/minute
+limit and returns `no-store`, including refusals. Receipt lookup performs no
+provider observation or mutation and carries `currentSourceChecked=false` and
+`providerIOAuthorised=false`; an unexpired receipt is not execution authority.
+
+An empty page does not prove that an in-flight save cannot still commit. The
+response carries `absenceProvesFailure=false`; retain the uncertainty instead
+of automatically repeating a save because a receipt was not yet found.
