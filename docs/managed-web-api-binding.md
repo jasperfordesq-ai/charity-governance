@@ -1,5 +1,10 @@
 # Managed private web/API origin binding
 
+> **Prototype status:** This page describes the existing V1/HTTP web scaffold.
+> The managed API and gateway now require the shared HTTPS/mTLS
+> [format2 mesh record](managed-service-mesh.md). The web server/client migration
+> is still open; these V1 instructions do not permit managed activation.
+
 This is an opt-in Node-server configuration boundary for the four-component
 Render design. It is not an activated provider deployment or network-peer
 authentication. Existing private VM, personal-server and isolated-E2E origin

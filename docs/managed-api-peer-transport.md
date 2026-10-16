@@ -13,22 +13,26 @@ callers cannot accidentally omit it by forgetting a separate registration.
 The factory returns a server for subsequent ordinary application plugin/route
 registration. It does not itself grant user or tenant permissions.
 
-`createManagedApiPeerBinding` prepares a canonical17-field non-secret registry:
+`createManagedApiPeerBinding` delegates to the canonical21-field format2
+[shared service mesh record](managed-service-mesh.md):
 
 ```text
-format=1, provider=render, region=frankfurt
+format=2, provider=render, region=frankfurt
 installationId, ownerId, environmentId, sourceSha, publicOrigin
 gatewayServiceId, webServiceId, apiServiceId, schedulerServiceId
-apiHostname
-issuerCertSha256, apiCertSha256
+apiServiceName, apiOrigin, webServiceName, webOrigin
+issuerCertSha256, apiCertSha256, webCertSha256
 gatewayClientCertSha256, webClientCertSha256
 ```
 
-All four service IDs and all four certificate digests must be distinct. The API
+All four service IDs and all five certificate digests must be distinct. The API
 hostname is a bounded stable `charitypilot-…-api-…` Render private hostname;
 discovery endpoints and arbitrary public/IP destinations are refused. Registry
 JSON must be canonical and at most8192bytes. Its SHA-256 uses the separate
-`CHARITYPILOT_MANAGED_API_MTLS_V1` domain.
+`CHARITYPILOT_MANAGED_SERVICE_MESH_V2` domain. The API hostname is derived from
+the exact HTTPS API origin. Image-pin metadata remains format1 independently
+of the service record's format2. Old enabled V1 records/images require a fresh
+reviewed record and image build; there is no automatic reinterpretation.
 
 The constructor takes this JSON, a trusted image build pin/source SHA, runtime
 production/Render/private-service identity and port3002, and protected issuer,
@@ -115,14 +119,19 @@ TLS, secrets, origins and provider configuration. A lifecycle allowlist entry
 explicitly permits this module to exclude appliance and disposable profiles;
 behavioural feature code still uses capability axes.
 
-Local tests cover configuration-only opt-in, metadata, forged/stale contexts
+The protected reader is shared with the gateway. Local tests cover configuration-only opt-in, metadata, forged/stale contexts
 and remaining production gates. A pinned, isolated Linux container separately
 tests the actual descriptor/ownership/mode/link/size checks from the Windows
 host. These are component checks, not a full managed application boot.
 
+The real gateway container now reaches this fixed-pin/protected-material loader
+and TLS factory in a Linux fixture. Its API routes are synthetic; it does not
+run the full production environment/provider boot. Gateway/API record parity
+comes from the shared format2 parser and fingerprint.
+
 **Not deployed or activation-ready:** real protected material provisioning and
-custody, complete image-pin/loader/application boot proof, gateway HTTPS/client
-certificates, web TLS/API-client transport, record parity, rotation/revocation
+custody, complete production image/application boot proof, web TLS/API-client
+transport, web record parity, rotation/revocation
 and the joined browser-to-application flow remain required. Provider secret
 mounts must be inspected: a shared-readable or symlinked mount does not satisfy
 this contract. Prepare a protected delivery step rather than weakening the

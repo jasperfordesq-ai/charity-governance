@@ -1,5 +1,12 @@
 # CharityPilot Agent Continuation Handoff
 
+> **16 October gateway/API mTLS composition:** API and gateway now share the
+> format2 mesh record and protected Linux reader. The real gateway image reaches
+> the compiled API's fixed-pin/material loader and TLS peer hook; foreign-CA and
+> wrong-host upstreams fail actual verification with redacted logs. Web remains
+> a synthetic TLS fixture in this proof; real Next integration and full provider
+> boot/custody/host-loss proof remain open. See [shared mesh](managed-service-mesh.md).
+
 > **16 October managed API startup integration:** The normal entry point now
 > loads the TLS factory only from an enabled fixed image pin and protected Linux
 > key files. A private exact-environment server context replaces proxy-IP checks

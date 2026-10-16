@@ -134,8 +134,14 @@ function makeFixture() {
   const ca = readFileSync(join(directory, 'ca.pem'), 'utf8');
   const fingerprint = (pem: string) =>
     createHash('sha256').update(new X509Certificate(pem).raw).digest('hex');
+  const webServer = certificate(
+    'charitypilot-review-web-cd34',
+    'ca',
+    9,
+    'serverAuth',
+  );
   const record = {
-    format: 1,
+    format: 2,
     provider: 'render',
     region: 'frankfurt',
     installationId: 'synthetic',
@@ -147,7 +153,11 @@ function makeFixture() {
     webServiceId: 'srv-' + 'b'.repeat(20),
     apiServiceId: 'srv-' + 'c'.repeat(20),
     schedulerServiceId: 'srv-' + 'd'.repeat(20),
-    apiHostname: 'charitypilot-review-api-ab12',
+    apiServiceName: 'charitypilot-review-api',
+    apiOrigin: 'https://charitypilot-review-api-ab12:3002',
+    webServiceName: 'charitypilot-review-web',
+    webOrigin: 'https://charitypilot-review-web-cd34:3003',
+    webCertSha256: fingerprint(webServer.cert),
     issuerCertSha256: fingerprint(ca),
     apiCertSha256: fingerprint(api.cert),
     gatewayClientCertSha256: fingerprint(gateway.cert),
@@ -224,7 +234,7 @@ async function start(input = fixture.input) {
         url + path,
         {
           ca: fixture.ca,
-          servername: fixture.record.apiHostname,
+          servername: new URL(fixture.record.apiOrigin).hostname,
           cert: peer?.cert,
           key: peer?.key,
           agent: false,

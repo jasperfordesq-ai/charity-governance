@@ -1,13 +1,15 @@
 import { readFile, mkdtemp, writeFile, unlink, rmdir } from 'node:fs/promises';
-import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { spawn } from 'node:child_process';
-import { gatewayConfiguration } from './config.mjs';
+import { gatewayConfiguration, gatewayRuntimeBinding } from './config.mjs';
+import { readGatewayTlsMaterial } from './tls.mjs';
 
 let directory, file;
+const materialFiles = [];
 let stage = 'build-pin';
 async function cleanup() {
   if (file) await unlink(file).catch(() => {});
+  for (const item of materialFiles) await unlink(item).catch(() => {});
   if (directory) await rmdir(directory).catch(() => {});
 }
 try {
@@ -15,9 +17,20 @@ try {
     await readFile(new URL('./build.json', import.meta.url), 'utf8'),
   );
   stage = 'binding';
-  const config = gatewayConfiguration(process.env, build);
+  const binding = gatewayRuntimeBinding(process.env, build);
+  stage = 'protected-material';
+  const material = readGatewayTlsMaterial(
+    process.env.CHARITYPILOT_MANAGED_GATEWAY_TLS_DIRECTORY,
+    binding.record,
+  );
   stage = 'temporary-directory';
-  directory = await mkdtemp(join(tmpdir(), 'charitypilot-gateway-'));
+  directory = await mkdtemp(join('/tmp', 'charitypilot-gateway-'));
+  for (const [name, bytes] of Object.entries(material)) {
+    const path = join(directory, name);
+    materialFiles.push(path);
+    await writeFile(path, bytes, { encoding: 'utf8', flag: 'wx', mode: 0o400 });
+  }
+  const config = gatewayConfiguration(process.env, build, directory);
   stage = 'temporary-file';
   file = join(directory, 'Caddyfile');
   await writeFile(file, config, { encoding: 'utf8', flag: 'wx', mode: 0o600 });

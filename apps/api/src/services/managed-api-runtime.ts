@@ -4,11 +4,13 @@ import {
   fstatSync,
   lstatSync,
   openSync,
-  readSync,
   realpathSync,
 } from 'node:fs';
-import { dirname, isAbsolute, join, resolve } from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { dirname } from 'node:path';
+import {
+  readProtectedTlsMaterial,
+  readBoundedRegularDescriptor,
+} from '../../../../packages/shared/runtime/protected-tls-material.mjs';
 import {
   createManagedApiPeerBinding,
   createManagedApiPeerServer,
@@ -18,9 +20,6 @@ import type { FastifyServerOptions } from 'fastify';
 type Environment = Record<string, string | undefined>;
 type ImagePin = { format: 1; sourceSha: string; bindingSha256: string };
 const pinPath = '/opt/charitypilot/managed-api-build.json';
-const applicationRoot = resolve(
-  fileURLToPath(new URL('../../../../', import.meta.url)),
-);
 const selectors = [
   'CHARITYPILOT_MANAGED_API_PEER_BINDING',
   'CHARITYPILOT_MANAGED_API_TLS_DIRECTORY',
@@ -73,89 +72,20 @@ export function parseManagedApiImagePin(raw: string): ImagePin {
   }
 }
 
-function boundedRead(fd: number, limit: number) {
-  const before = fstatSync(fd),
-    bytes = Buffer.alloc(limit + 1);
-  if (
-    !before.isFile() ||
-    before.nlink !== 1 ||
-    before.size < 1 ||
-    before.size > limit
-  )
-    throw refused();
-  let length = 0;
-  while (length < bytes.length) {
-    const size = readSync(fd, bytes, length, bytes.length - length, length);
-    if (!size) break;
-    length += size;
-  }
-  const after = fstatSync(fd);
-  if (
-    length > limit ||
-    length !== before.size ||
-    after.size !== before.size ||
-    after.mtimeMs !== before.mtimeMs ||
-    after.ctimeMs !== before.ctimeMs
-  )
-    throw refused();
-  return bytes.subarray(0, length).toString('utf8');
-}
-
 export function readManagedApiTlsMaterial(directory: string) {
-  let directoryFd: number | undefined;
   try {
-    if (
-      process.platform !== 'linux' ||
-      directory === applicationRoot ||
-      directory.startsWith(applicationRoot + '/') ||
-      !isAbsolute(directory) ||
-      resolve(directory) !== directory ||
-      realpathSync(directory) !== directory
-    )
-      throw refused();
-    const uid = process.getuid!(),
-      before = lstatSync(directory);
-    if (
-      !before.isDirectory() ||
-      before.isSymbolicLink() ||
-      before.uid !== uid ||
-      (before.mode & 0o777) !== 0o700
-    )
-      throw refused();
-    directoryFd = openSync(
-      directory,
-      constants.O_RDONLY | constants.O_DIRECTORY | constants.O_NOFOLLOW,
-    );
-    const opened = fstatSync(directoryFd);
-    if (
-      opened.ino !== before.ino ||
-      opened.dev !== before.dev ||
-      opened.uid !== uid ||
-      (opened.mode & 0o777) !== 0o700
-    )
-      throw refused();
-    const read = (name: string) => {
-      const fd = openSync(
-        join('/proc/self/fd', String(directoryFd), name),
-        constants.O_RDONLY | constants.O_NOFOLLOW | constants.O_NONBLOCK,
-      );
-      try {
-        const info = fstatSync(fd);
-        if (info.uid !== uid || (info.mode & 0o777) !== 0o400) throw refused();
-        return boundedRead(fd, 16384);
-      } finally {
-        closeSync(fd);
-      }
-    };
+    const files = readProtectedTlsMaterial(directory, [
+      'issuer.pem',
+      'server.pem',
+      'server.key',
+    ] as const);
     return {
-      issuerCertPem: read('issuer.pem'),
-      serverCertPem: read('server.pem'),
-      serverKeyPem: read('server.key'),
+      issuerCertPem: files['issuer.pem'],
+      serverCertPem: files['server.pem'],
+      serverKeyPem: files['server.key'],
     };
   } catch {
     throw refused();
-  } finally {
-    if (directoryFd !== undefined) closeSync(directoryFd);
   }
 }
 
@@ -176,7 +106,7 @@ function imagePin() {
   try {
     const file = fstatSync(fd);
     if (file.uid !== 0 || (file.mode & 0o777) !== 0o444) throw refused();
-    return parseManagedApiImagePin(boundedRead(fd, 512));
+    return parseManagedApiImagePin(readBoundedRegularDescriptor(fd, 512));
   } finally {
     closeSync(fd);
   }

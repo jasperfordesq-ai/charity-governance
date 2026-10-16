@@ -29,6 +29,7 @@
 !caddy/managed/config.mjs
 !caddy/managed/start.mjs
 !caddy/managed/build-pin.mjs
+!caddy/managed/tls.mjs
 
 !e2e/
 !e2e/docker/

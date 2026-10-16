@@ -8,20 +8,21 @@ the deployed private VM.
 ## Build and runtime binding
 
 `caddy/managed/config.mjs` exports `createGatewayBinding`. Prepare a reviewed
-record containing the same fourteen identity/origin fields documented in
-[managed web/API binding](managed-web-api-binding.md), plus `webServiceName` and
-`webOrigin`. The web name follows `charitypilot-…-web`, with an exact single-label
-Render internal HTTP origin on3003; the API is on3002. Both use bounded stable
-hostname suffixes, not discovery endpoints. All four service IDs must differ.
-Unknown fields, unsafe origins and noncanonical JSON are refused.
+record using the canonical21-field
+[format2 service mesh](managed-service-mesh.md), shared with the API. Both
+upstreams require HTTPS at exact stable private hostnames, API3002 and web3003.
+HTTP, unknown fields, unsafe origins, duplicate identities and noncanonical JSON
+are refused. The old format1 HTTP prototype is no longer accepted.
 
-The helper returns canonical JSON and a SHA-256 under the separate
-`CHARITYPILOT_MANAGED_GATEWAY_V1` domain. Build `caddy/managed/Dockerfile` with
+The helper returns canonical JSON and the shared
+`CHARITYPILOT_MANAGED_SERVICE_MESH_V2` SHA-256. Build `caddy/managed/Dockerfile` with
 `CHARITYPILOT_BUILD_COMMIT` and `CHARITYPILOT_MANAGED_GATEWAY_BINDING_SHA256`.
 The image contains an immutable build-pin file. Supply runtime:
 
 - `CHARITYPILOT_MANAGED_PROVIDER=render`.
 - `CHARITYPILOT_MANAGED_GATEWAY_BINDING`: exact canonical JSON, maximum8192bytes.
+- `CHARITYPILOT_MANAGED_GATEWAY_TLS_DIRECTORY`: protected Linux material folder
+  containing `issuer.pem`, `client.pem` and `client.key`.
 - `CHARITYPILOT_BUILD_COMMIT`: the bound source SHA.
 - Render read-only gateway `RENDER_SERVICE_ID` and `RENDER_SERVICE_TYPE=web`.
 - `NODE_ENV=production`, `PORT=10000` (image defaults).
@@ -30,6 +31,13 @@ The trusted deployment controller must reconcile gateway/web records and actual
 provider inventory and images; the helpers alone do not establish that trust.
 A different service, source, record or compiled fingerprint refuses startup
 before a listener is created. No unbound/default upstream is available.
+
+The shared Linux reader enforces current-UID0700 directories outside the
+application root and current-UID0400 regular, non-linked bounded files. Before
+starting Caddy, Node verifies the pinned current self-signed issuer and pinned
+current non-CA client leaf, its issuer/signature, client-auth usage and private
+key match. Validated bytes are copied into private0400 snapshots in the process's
+own temporary directory, so Caddy does not reopen changing delivery files.
 
 The image pins Node and Caddy bases, installs no package at build time and copies
 only explicit code. Caddy's binary bytes are recreated without inherited file
@@ -40,8 +48,15 @@ Run as the `node` user with a read-only root, no new privileges, all capabilitie
 dropped and writable temporary storage. The Docker proof explicitly uses a
 32MiB `/tmp` tmpfs with mode1777. Each process creates its own private temporary
 directory and0600 Caddy configuration, forwards shutdown signals and removes
-its own configuration on exit. Admin API, config persistence and automatic TLS
+its own configuration and credential snapshots on exit. The image entry is now
+`node caddy/managed/start.mjs`. Admin API, config persistence and automatic TLS
 are disabled; this HTTP listener is intended behind Render's managed HTTPS edge.
+
+Each private upstream uses explicit CA trust, client certificate/key and exact
+TLS server name, with a bounded handshake. API client identity is independently
+checked by the actual API peer hook. Stock Caddy uses CA/name verification for
+the server; it does not compare the server leaf DER pin itself. See the shared
+mesh proof limits and remaining issuer-custody/revocation requirements.
 
 ## Routes and metadata
 
@@ -77,14 +92,21 @@ it, rejects ambient overrides, creates synthetic isolated upstreams, and exposes
 only the gateway on a dynamically selected loopback port. It proves API/web/root
 API routing, bodies/cookies, canonical headers, stripped forged metadata,
 unknown-host refusal, narrow health wording, actual error-log redaction, graceful
-shutdown and malformed-binding startup refusal. It removes only its own uniquely
+shutdown and malformed-binding startup refusal. The API side uses its actual
+fixed-pin/protected-file loader and Fastify TLS factory with synthetic routes;
+the web side remains a TLS fixture. Both positive hops negotiate TLS1.3. Foreign
+CA and wrong-host servers are proved listening before the negative requests;
+each request must produce a fresh certificate-verification error, not merely a
+connection failure, and cannot reach the rogue HTTP handler. Callback canaries
+remain absent from those actual error logs. It removes only its own uniquely
 named fixture containers, networks and image.
 
 This is local container evidence, not an actual Render deployment or full
 browser/Next/Fastify journey. Render private networking includes other regional
 workspace services and mutable instance addresses. A private hostname is not
-peer authentication. The API trusted-peer/client-address policy, environment
-isolation/provider observations, controller provenance, record parity and joined
+peer authentication. API peer pins and gateway/API parity now have component
+proof; end-user address policy, real Next integration, environment
+isolation/provider observations, controller provenance and full joined
 flow remain activation gates. Do not populate broad trusted proxy ranges or
 claim socket-peer rate limits are end-user rate limits. The shape-only private
 blueprint remains non-deployable until those gates and real image/resource,

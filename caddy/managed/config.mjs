@@ -1,124 +1,9 @@
-import { createHash } from 'node:crypto';
+import { createManagedServiceMeshBinding } from '../../packages/shared/runtime/managed-service-mesh.mjs';
 
-const fields = [
-  'format',
-  'provider',
-  'region',
-  'installationId',
-  'ownerId',
-  'environmentId',
-  'sourceSha',
-  'publicOrigin',
-  'gatewayServiceId',
-  'webServiceId',
-  'apiServiceId',
-  'schedulerServiceId',
-  'apiServiceName',
-  'apiOrigin',
-  'webServiceName',
-  'webOrigin',
-];
+export const createGatewayBinding = createManagedServiceMeshBinding;
 const refuse = () => new Error('Managed gateway configuration refused');
 
-function internalAddress(origin, name, kind, port) {
-  if (
-    typeof name !== 'string' ||
-    !new RegExp(`^charitypilot(?:-[a-z0-9]+)*-${kind}$`).test(name) ||
-    typeof origin !== 'string' ||
-    origin.length > 256
-  )
-    throw refuse();
-  const url = new URL(origin),
-    prefix = name + '-';
-  if (
-    url.protocol !== 'http:' ||
-    url.origin !== origin ||
-    url.username ||
-    url.password ||
-    url.port !== String(port) ||
-    url.hostname.length > 63 ||
-    !url.hostname.startsWith(prefix) ||
-    !/^[a-z0-9]{4,20}$/.test(url.hostname.slice(prefix.length)) ||
-    url.hostname.endsWith('-discovery')
-  )
-    throw refuse();
-  return url.host;
-}
-
-export function createGatewayBinding(raw) {
-  try {
-    if (
-      !raw ||
-      typeof raw !== 'object' ||
-      Array.isArray(raw) ||
-      Object.keys(raw).sort().join('|') !== [...fields].sort().join('|')
-    )
-      throw refuse();
-    const record = Object.fromEntries(fields.map((key) => [key, raw[key]]));
-    if (
-      record.format !== 1 ||
-      record.provider !== 'render' ||
-      record.region !== 'frankfurt' ||
-      !/^[A-Za-z0-9_-]{1,120}$/.test(record.installationId) ||
-      !/^[a-z][a-z0-9-]{1,99}$/.test(record.ownerId) ||
-      !/^[a-z][a-z0-9-]{1,99}$/.test(record.environmentId) ||
-      !/^[a-f0-9]{40}$/.test(record.sourceSha)
-    )
-      throw refuse();
-    for (const key of [
-      'installationId',
-      'ownerId',
-      'environmentId',
-      'sourceSha',
-    ]) {
-      if (typeof record[key] !== 'string') throw refuse();
-    }
-    const ids = [
-      'gatewayServiceId',
-      'webServiceId',
-      'apiServiceId',
-      'schedulerServiceId',
-    ].map((key) => record[key]);
-    if (
-      ids.some(
-        (id) => typeof id !== 'string' || !/^srv-[a-z0-9]{20}$/.test(id),
-      ) ||
-      new Set(ids).size !== 4
-    )
-      throw refuse();
-    if (
-      typeof record.publicOrigin !== 'string' ||
-      record.publicOrigin.length > 512
-    )
-      throw refuse();
-    const front = new URL(record.publicOrigin);
-    if (
-      front.protocol !== 'https:' ||
-      front.origin !== record.publicOrigin ||
-      front.username ||
-      front.password ||
-      front.port ||
-      !front.hostname.includes('.') ||
-      /^[\d.]+$/.test(front.hostname) ||
-      !/^[a-z0-9.-]+$/.test(front.hostname)
-    )
-      throw refuse();
-    internalAddress(record.apiOrigin, record.apiServiceName, 'api', 3002);
-    internalAddress(record.webOrigin, record.webServiceName, 'web', 3003);
-    const json = JSON.stringify(record);
-    return {
-      record,
-      json,
-      sha256: createHash('sha256')
-        .update('CHARITYPILOT_MANAGED_GATEWAY_V1\n' + json)
-        .digest('hex'),
-    };
-  } catch {
-    throw refuse();
-  }
-}
-
-export function gatewayConfiguration(env, build) {
+export function gatewayRuntimeBinding(env, build) {
   try {
     if (
       env.NODE_ENV !== 'production' ||
@@ -141,20 +26,33 @@ export function gatewayConfiguration(env, build) {
       env.RENDER_SERVICE_ID !== r.gatewayServiceId
     )
       throw refuse();
+    return binding;
+  } catch {
+    throw refuse();
+  }
+}
+
+export function gatewayConfiguration(env, build, tlsDirectory) {
+  try {
+    const r = gatewayRuntimeBinding(env, build).record;
+    if (
+      typeof tlsDirectory !== 'string' ||
+      !/^\/tmp\/charitypilot-gateway-[A-Za-z0-9_-]{1,80}$/.test(tlsDirectory)
+    )
+      throw refuse();
     const host = new URL(r.publicOrigin).host;
     // Discard every unverified client/proxy claim. The remote socket peer is
     // deliberately not labelled as the end-user address behind Render's edge.
-    const upstream = (
-      origin,
-      name,
-      kind,
-      port,
-    ) => `reverse_proxy ${internalAddress(origin, name, kind, port)} {
+    const upstream = (origin) => `reverse_proxy ${origin} {
       header_up Host ${host}
       header_up X-Forwarded-For {http.request.remote.host}
       header_up X-Forwarded-Host ${host}
       header_up X-Forwarded-Proto https
       transport http {
+        tls_trust_pool file ${tlsDirectory}/issuer.pem
+        tls_client_auth ${tlsDirectory}/client.pem ${tlsDirectory}/client.key
+        tls_server_name ${new URL(origin).hostname}
+        tls_timeout 5s
         dial_timeout 5s
         response_header_timeout 30s
       }
@@ -200,10 +98,10 @@ export function gatewayConfiguration(env, build) {
     }
     @api path /api/v1 /api/v1/*
     handle @api {
-      ${upstream(r.apiOrigin, r.apiServiceName, 'api', 3002)}
+      ${upstream(r.apiOrigin)}
     }
     handle {
-      ${upstream(r.webOrigin, r.webServiceName, 'web', 3003)}
+      ${upstream(r.webOrigin)}
     }
   }
   handle {
