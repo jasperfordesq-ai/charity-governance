@@ -1,3 +1,4 @@
+import { stageManagedTlsDelivery } from '../../packages/shared/runtime/managed-tls-delivery.mjs';
 import { readFile, mkdtemp, writeFile, unlink, rmdir } from 'node:fs/promises';
 import { join } from 'node:path';
 import { spawn } from 'node:child_process';
@@ -18,6 +19,8 @@ try {
   );
   stage = 'binding';
   const binding = gatewayRuntimeBinding(process.env, build);
+  stage = 'provider-secret-delivery';
+  stageManagedTlsDelivery('gateway', process.env, build);
   stage = 'protected-material';
   const material = readGatewayTlsMaterial(
     process.env.CHARITYPILOT_MANAGED_GATEWAY_TLS_DIRECTORY,

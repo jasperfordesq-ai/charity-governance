@@ -1,3 +1,4 @@
+import { stageManagedTlsDelivery } from '../../packages/shared/runtime/managed-tls-delivery.mjs';
 import { loadManagedWebTls, closeManagedWebClients } from './managed-tls.mjs';
 import { createServer } from 'node:http';
 import { dirname } from 'node:path';
@@ -19,6 +20,7 @@ if (!Number.isFinite(port) || port <= 0) {
   );
 }
 
+stageManagedTlsDelivery('web');
 const managedServerFactory = loadManagedWebTls();
 
 const app = next({ dev: false, dir, hostname, port });

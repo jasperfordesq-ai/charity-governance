@@ -47,6 +47,9 @@
 **/.env.*
 **/managed-api-build.json
 **/managed-web-build.json
+**/charitypilot-gateway-tls.json
+**/charitypilot-api-tls.json
+**/charitypilot-web-tls.json
 **/*.pem
 **/*.key
 node_modules

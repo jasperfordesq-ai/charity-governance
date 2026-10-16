@@ -1,5 +1,12 @@
 # CharityPilot Full-Platform Remediation Audit
 
+> **16 October managed TLS delivery:** Normal gateway, web and API startup now
+> optionally validate a service-specific provider bundle and stage node-owned
+> protected TLS files before listeners. This replaces direct fixture placement
+> in the synthetic transport proof, not actual provider issuance/custody.
+> See [TLS delivery](managed-tls-delivery.md); full production/provider,
+> independent recovery and host-loss/reopening gates remain open.
+
 > **16 October compiled Next mTLS integration:** Private Next now consumes the
 > shared V2 mesh, fixed root-owned image pin and protected separate server/client
 > keys. The real gateway and compiled Next image reached the actual API TLS

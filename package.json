@@ -24,6 +24,7 @@
     "test:local-docker": "node --test scripts/check-local-docker.test.mjs",
     "test:managed-gateway": "npm run build -w @charitypilot/api && node --test scripts/managed-service-mesh.test.mjs scripts/managed-gateway.test.mjs scripts/managed-gateway-mtls-runtime.test.mjs",
     "test:managed-web-tls": "node --test scripts/managed-web-tls.test.mjs",
+    "test:managed-tls-delivery": "node --test scripts/managed-tls-delivery.test.mjs",
     "test:managed-api-build-pin": "node --test scripts/managed-api-build-pin.test.mjs",
     "test:retention-policy": "node --test --test-concurrency=1 scripts/retention-calendar-sql.test.mjs scripts/retention-policy-migration.test.mjs scripts/recovery-bound-policy-migration.test.mjs scripts/confluence-retained-copy-review-migration.test.mjs",
     "test:confluence-copy-ledger-postgres": "npm run build -w @charitypilot/api && node --test scripts/confluence-copy-ledger-postgres.test.mjs",

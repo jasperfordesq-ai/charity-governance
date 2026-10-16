@@ -1,16 +1,13 @@
-import { createHash, createPrivateKey, X509Certificate } from 'node:crypto';
+import {
+  parseManagedCertificate,
+  parseManagedPrivateKey,
+} from '../../packages/shared/runtime/managed-tls-identity.mjs';
+import { createHash } from 'node:crypto';
 import { readProtectedTlsMaterial } from '../../packages/shared/runtime/protected-tls-material.mjs';
 const refused = () => new Error('Managed gateway TLS material refused');
 const digest = (bytes) => createHash('sha256').update(bytes).digest('hex');
-function certificate(pem) {
-  if (
-    typeof pem !== 'string' ||
-    Buffer.byteLength(pem) > 16384 ||
-    (pem.match(/-----BEGIN CERTIFICATE-----/g) ?? []).length !== 1
-  )
-    throw refused();
-  return new X509Certificate(pem);
-}
+const certificate = parseManagedCertificate;
+
 function current(cert) {
   const now = Date.now();
   return Date.parse(cert.validFrom) <= now && now < Date.parse(cert.validTo);
@@ -33,7 +30,7 @@ export function verifyGatewayTlsMaterial(record, files) {
       !client.keyUsage?.includes('1.3.6.1.5.5.7.3.2') ||
       typeof files['client.key'] !== 'string' ||
       Buffer.byteLength(files['client.key']) > 16384 ||
-      !client.checkPrivateKey(createPrivateKey(files['client.key']))
+      !client.checkPrivateKey(parseManagedPrivateKey(files['client.key']))
     )
       throw refused();
     return files;

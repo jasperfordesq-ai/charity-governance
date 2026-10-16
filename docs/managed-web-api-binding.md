@@ -74,3 +74,13 @@ issuance/delivery/custody/rotation/revocation, verified end-user address handlin
 independent recovery and source-host-loss/reopening evidence remain required.
 The shape-only hosting blueprint remains non-deployable. No real certificate,
 access grant, tenant policy, provider purge or deployment is implied.
+
+
+## Optional provider secret-file staging
+
+The normal entry point supports the service-scoped
+[TLS delivery contract](managed-tls-delivery.md). It validates the pinned bundle
+before creating protected runtime directories. Direct protected-directory input
+remains available when this delivery selector is absent. Actual provider mount
+permissions, key custody, issuance and complete rotation/recovery evidence remain
+required; synthetic staging is not evidence that those gates have passed.

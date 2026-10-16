@@ -154,3 +154,13 @@ its compiled Next image is part of the synthetic gateway integration test.
 See [web transport](managed-web-api-binding.md). API/web enabled image pins cannot
 be disabled by deleting runtime managed flags. Further provider/full business
 boot evidence remains open as described above.
+
+
+## Optional provider secret-file staging
+
+The normal entry point supports the service-scoped
+[TLS delivery contract](managed-tls-delivery.md). It validates the pinned bundle
+before creating protected runtime directories. Direct protected-directory input
+remains available when this delivery selector is absent. Actual provider mount
+permissions, key custody, issuance and complete rotation/recovery evidence remain
+required; synthetic staging is not evidence that those gates have passed.

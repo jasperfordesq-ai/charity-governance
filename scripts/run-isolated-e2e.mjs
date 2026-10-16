@@ -84,6 +84,8 @@ export const BUILD_CONTEXT_MANIFEST = Object.freeze([
   { path: "packages/shared/runtime/protected-tls-material.d.mts", type: "file" },
   { path: "packages/shared/runtime/managed-tls-identity.mjs", type: "file" },
   { path: "packages/shared/runtime/managed-tls-identity.d.mts", type: "file" },
+  { path: "packages/shared/runtime/managed-tls-delivery.mjs", type: "file" },
+  { path: "packages/shared/runtime/managed-tls-delivery.d.mts", type: "file" },
   { path: "packages/shared/runtime/managed-web-build-pin.mjs", type: "file" },
   { path: "packages/shared/runtime/managed-service-image-pin.mjs", type: "file" },
   { path: "packages/shared/runtime/managed-service-image-pin.d.mts", type: "file" },

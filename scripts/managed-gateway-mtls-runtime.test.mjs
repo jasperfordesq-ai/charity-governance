@@ -12,6 +12,7 @@ import {
 import {
   gatewayTlsFixture,
   provisionMaterial,
+  provisionDelivery,
   provisionPin,
   gatewayWait,
   backendSource,
@@ -107,6 +108,7 @@ test(
       "--security-opt=no-new-privileges",
       "--tmpfs",
       "/tmp:rw,noexec,nosuid,size=32m,mode=1777",
+      "--tmpfs", "/etc/secrets:rw,noexec,nosuid,size=1m,mode=0755",
       "--tmpfs",
       "/run/charitypilot:rw,noexec,nosuid,size=32m,mode=1777",
     ];
@@ -124,6 +126,12 @@ test(
         ],
         JSON.stringify({ directories }),
       );
+    const deliver=(name,service)=>{
+      const bundle={format:1,service,meshSha256:b.sha256,issuerCertPem:f.issuer};
+      if(service!=='gateway')Object.assign(bundle,{serverCertPem:f[service].cert,serverKeyPem:f[service].key});
+      if(service!=='api'){const leaf=service==='gateway'?f.gateway:f.webClient;Object.assign(bundle,{clientCertPem:leaf.cert,clientKeyPem:leaf.key});}
+      docker(['exec','--user','0:1000','--interactive',name,'node','-e',provisionDelivery],JSON.stringify({service,bundle}));
+    };
     const material = (leaf) => ({
       "issuer.pem": f.issuer,
       "server.pem": leaf.cert,
@@ -176,7 +184,7 @@ test(
           PORT: "3002",
           CHARITYPILOT_MANAGED_PROVIDER: "render",
           CHARITYPILOT_MANAGED_API_PEER_BINDING: b.json,
-          CHARITYPILOT_MANAGED_API_TLS_DIRECTORY: "/run/charitypilot/api",
+          CHARITYPILOT_MANAGED_TLS_DELIVERY: "render-secret-file-v1",
           CHARITYPILOT_BUILD_COMMIT: r.sourceSha,
           RENDER_SERVICE_TYPE: "pserv",
           RENDER_SERVICE_ID: r.apiServiceId,
@@ -210,8 +218,8 @@ test(
           bindingSha256: b.sha256,
         }),
       );
+      deliver(backend,"api");
       provision(backend, {
-        "/run/charitypilot/api": material(f.api),
         "/run/charitypilot/web": material(f.web),
       });
       for (let i = 0; i < 80; i++) {
@@ -228,12 +236,25 @@ test(
         "-e",
         "import assert from 'node:assert/strict';import {loadManagedApiRuntime} from '/app/apps/api/dist/services/managed-api-runtime.js';assert.throws(()=>loadManagedApiRuntime({NODE_ENV:'production'}));",
       ]);
+      const deliveryProbe = "import assert from 'node:assert/strict';import fs from 'node:fs';import {stageManagedTlsDelivery} from '/app/packages/shared/runtime/managed-tls-delivery.mjs';";
+      const refuseProbe = deliveryProbe+"const before=fs.readdirSync('/tmp').filter(x=>x.startsWith('charitypilot-managed-tls-'));assert.throws(()=>stageManagedTlsDelivery('api'),{message:'Managed TLS delivery refused'});assert.deepEqual(fs.readdirSync('/tmp').filter(x=>x.startsWith('charitypilot-managed-tls-')),before);";
+      const rootProbe = code=>docker(['exec','--user','0:1000',backend,'node','-e',code]);
+      const nodeProbe = code=>docker(['exec',backend,'node','--input-type=module','-e',code]);
+      const sourceFile='/etc/secrets/charitypilot-api-tls.json';
+      rootProbe("require('node:fs').chmodSync('"+sourceFile+"',0o444)");
+      nodeProbe(refuseProbe);
+      rootProbe("require('node:fs').chmodSync('"+sourceFile+"',0o440)");
+      rootProbe("const f=require('node:fs');f.renameSync('"+sourceFile+"','"+sourceFile+".original');f.symlinkSync('"+sourceFile+".original','"+sourceFile+"')");
+      nodeProbe(refuseProbe);
+      rootProbe("const f=require('node:fs');f.unlinkSync('"+sourceFile+"');f.renameSync('"+sourceFile+".original','"+sourceFile+"');f.linkSync('"+sourceFile+"','"+sourceFile+".link')");
+      nodeProbe(refuseProbe);
+      rootProbe("require('node:fs').unlinkSync('"+sourceFile+".link')");
+      nodeProbe(deliveryProbe+"const staged=stageManagedTlsDelivery('api');assert.deepEqual(Object.keys(staged.directories),['CHARITYPILOT_MANAGED_API_TLS_DIRECTORY']);const directory=staged.directories.CHARITYPILOT_MANAGED_API_TLS_DIRECTORY;assert.equal(fs.statSync(directory).mode&0o777,0o700);for(const name of fs.readdirSync(directory)){const s=fs.statSync(directory+'/'+name);assert.equal(s.mode&0o777,0o400);assert.equal(s.uid,process.getuid());}staged.cleanup();assert.equal(fs.existsSync(directory),false);assert.ok(fs.existsSync('"+sourceFile+"'));");
       const gateway = id + "-gateway",
         runtime = {
           CHARITYPILOT_MANAGED_PROVIDER: "render",
           CHARITYPILOT_MANAGED_GATEWAY_BINDING: b.json,
-          CHARITYPILOT_MANAGED_GATEWAY_TLS_DIRECTORY:
-            "/run/charitypilot/gateway",
+          CHARITYPILOT_MANAGED_TLS_DELIVERY: "render-secret-file-v1",
           CHARITYPILOT_BUILD_COMMIT: r.sourceSha,
           RENDER_SERVICE_ID: r.gatewayServiceId,
           RENDER_SERVICE_TYPE: "web",
@@ -258,13 +279,8 @@ test(
       ]);
       containers.push(gateway);
       docker(["network", "connect", internal, gateway]);
-      provision(gateway, {
-        "/run/charitypilot/gateway": {
-          "issuer.pem": f.issuer,
-          "client.pem": f.gateway.cert,
-          "client.key": f.gateway.key,
-        },
-      });
+      deliver(gateway,"gateway");
+      provision(gateway, {});
       const inspected = JSON.parse(docker(["inspect", gateway]))[0],
         ports = inspected.NetworkSettings.Ports["10000/tcp"];
       assert.equal(ports.length, 1);
@@ -395,9 +411,7 @@ test(
           CHARITYPILOT_MANAGED_PROVIDER: "render",
           CHARITYPILOT_MANAGED_WEB_BINDING: b.json,
           CHARITYPILOT_BUILD_COMMIT: r.sourceSha,
-          CHARITYPILOT_MANAGED_WEB_TLS_DIRECTORY: "/run/charitypilot/server",
-          CHARITYPILOT_MANAGED_WEB_API_TLS_DIRECTORY:
-            "/run/charitypilot/client",
+          CHARITYPILOT_MANAGED_TLS_DELIVERY: "render-secret-file-v1",
           RENDER_SERVICE_TYPE: "pserv",
           RENDER_SERVICE_ID: r.webServiceId,
           NEXT_PUBLIC_CHARITYPILOT_DEPLOYMENT_MODE: "public-production",
@@ -414,14 +428,8 @@ test(
         "import fs from 'node:fs/promises';while(true){try{await fs.access('/run/charitypilot/ready');break;}catch{await new Promise(r=>setTimeout(r,50));}}await import('/app/apps/web/server.mjs');",
       ]);
       containers.push(realWeb);
-      provision(realWeb, {
-        "/run/charitypilot/server": material(f.web),
-        "/run/charitypilot/client": {
-          "issuer.pem": f.issuer,
-          "client.pem": f.webClient.cert,
-          "client.key": f.webClient.key,
-        },
-      });
+      deliver(realWeb,"web");
+      provision(realWeb, {});
       for (let i = 0; i < 150; i++) {
         const logs = docker(["logs", realWeb]);
         if (logs.includes("web running on https:")) break;
@@ -477,7 +485,7 @@ test(
         "node",
         "--input-type=module",
         "-e",
-        "import assert from 'node:assert/strict';import {managedWebAuthMe} from './managed-tls.mjs';const e=process.env;const p={format:1,sourceSha:e.CHARITYPILOT_BUILD_COMMIT,bindingSha256:e.NEXT_PUBLIC_CHARITYPILOT_MANAGED_WEB_BINDING_SHA256};const r=await managedWebAuthMe(e,p,'charitypilot_access=synthetic');assert.equal(r?.status,200);assert.equal(await managedWebAuthMe(e,p,'charitypilot_access=oversized'),null);console.log('WEB_AUTH_ME_TLS_PASS');",
+        "import assert from 'node:assert/strict';import {managedWebAuthMe} from './managed-tls.mjs';import {stageManagedTlsDelivery} from '/app/packages/shared/runtime/managed-tls-delivery.mjs';stageManagedTlsDelivery('web');const e=process.env;const p={format:1,sourceSha:e.CHARITYPILOT_BUILD_COMMIT,bindingSha256:e.NEXT_PUBLIC_CHARITYPILOT_MANAGED_WEB_BINDING_SHA256};const r=await managedWebAuthMe(e,p,'charitypilot_access=synthetic');assert.equal(r?.status,200);assert.equal(await managedWebAuthMe(e,p,'charitypilot_access=oversized'),null);console.log('WEB_AUTH_ME_TLS_PASS');",
       ]);
       assert.match(probe, /WEB_AUTH_ME_TLS_PASS/);
       assert.match(docker(["logs", backend]), /WEB_AUTH_ME_TLS_OBSERVED/);
@@ -487,7 +495,7 @@ test(
         "node",
         "--input-type=module",
         "-e",
-        "import fs from 'node:fs';import assert from 'node:assert/strict';let n=0;function visit(p){for(const x of fs.readdirSync(p,{withFileTypes:true})){const f=p+'/'+x.name;if(x.isDirectory())visit(f);else{n++;const s=fs.readFileSync(f,'utf8');for(const v of [process.env.CHARITYPILOT_MANAGED_WEB_BINDING,'BEGIN PRIVATE KEY','BEGIN CERTIFICATE','/run/charitypilot/client',process.env.CHARITYPILOT_INTERNAL_API_URL])assert.ok(!s.includes(v),'Private canary in browser asset');}}}visit('.next/static');console.log('BROWSER_ASSETS_CHECKED='+n);",
+        "import fs from 'node:fs';import assert from 'node:assert/strict';let n=0;function visit(p){for(const x of fs.readdirSync(p,{withFileTypes:true})){const f=p+'/'+x.name;if(x.isDirectory())visit(f);else{n++;const s=fs.readFileSync(f,'utf8');for(const v of [process.env.CHARITYPILOT_MANAGED_WEB_BINDING,'BEGIN PRIVATE KEY','BEGIN CERTIFICATE','/tmp/charitypilot-managed-tls-',process.env.CHARITYPILOT_INTERNAL_API_URL])assert.ok(!s.includes(v),'Private canary in browser asset');}}}visit('.next/static');console.log('BROWSER_ASSETS_CHECKED='+n);",
       ]);
       assert.match(browserScan, /BROWSER_ASSETS_CHECKED=[1-9]/);
       docker(["stop", "--time", "5", backend]);

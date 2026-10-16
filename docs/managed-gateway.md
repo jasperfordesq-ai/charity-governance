@@ -117,3 +117,13 @@ References checked16October2026:
 [Render private services](https://render.com/docs/private-services),
 [Caddy proxy headers](https://caddyserver.com/docs/caddyfile/directives/reverse_proxy),
 [Caddy proxy trust](https://caddyserver.com/docs/caddyfile/options#trusted-proxies).
+
+
+## Optional provider secret-file staging
+
+The normal entry point supports the service-scoped
+[TLS delivery contract](managed-tls-delivery.md). It validates the pinned bundle
+before creating protected runtime directories. Direct protected-directory input
+remains available when this delivery selector is absent. Actual provider mount
+permissions, key custody, issuance and complete rotation/recovery evidence remain
+required; synthetic staging is not evidence that those gates have passed.

@@ -38,7 +38,7 @@ export function readBoundedRegularDescriptor(fd, limit) {
     after.ctimeMs !== before.ctimeMs
   )
     throw refused();
-  return bytes.subarray(0, length).toString('utf8');
+  return new TextDecoder('utf-8', { fatal: true, ignoreBOM: true }).decode(bytes.subarray(0, length));
 }
 export function readProtectedTlsMaterial(directory, filenames) {
   let directoryFd;

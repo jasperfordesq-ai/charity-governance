@@ -1,8 +1,12 @@
+import {
+  parseManagedCertificate,
+  parseManagedPrivateKey,
+} from '../../../../packages/shared/runtime/managed-tls-identity.mjs';
 import Fastify, {
   type FastifyRequest,
   type FastifyServerOptions,
 } from 'fastify';
-import { createHash, createPrivateKey, X509Certificate } from 'node:crypto';
+import { createHash, X509Certificate } from 'node:crypto';
 import { createSecureContext, TLSSocket } from 'node:tls';
 
 import { createManagedServiceMeshBinding } from '../../../../packages/shared/runtime/managed-service-mesh.mjs';
@@ -31,16 +35,8 @@ export type ManagedApiPeerInput = {
   serverCertPem: string;
   serverKeyPem: string;
 };
-function certificate(pem: string) {
-  if (
-    typeof pem !== 'string' ||
-    Buffer.byteLength(pem) > 16384 ||
-    (pem.match(/-----BEGIN CERTIFICATE-----/g) ?? []).length !== 1 ||
-    (pem.match(/-----END CERTIFICATE-----/g) ?? []).length !== 1
-  )
-    throw refusal();
-  return new X509Certificate(pem);
-}
+const certificate = parseManagedCertificate;
+
 function current(cert: X509Certificate) {
   const now = Date.now(),
     start = Date.parse(cert.validFrom),
@@ -99,7 +95,7 @@ export function createManagedApiPeerServer(
       digest(leaf.raw) !== r.apiCertSha256 ||
       !leaf.checkIssued(issuer) ||
       !leaf.verify(issuer.publicKey) ||
-      !leaf.checkPrivateKey(createPrivateKey(input.serverKeyPem)) ||
+      !leaf.checkPrivateKey(parseManagedPrivateKey(input.serverKeyPem)) ||
       leaf.checkHost(new URL(r.apiOrigin).hostname, {
         subject: 'never',
         wildcards: false,

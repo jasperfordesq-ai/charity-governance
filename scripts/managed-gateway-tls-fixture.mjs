@@ -166,6 +166,7 @@ import fs from 'node:fs/promises';import https from 'node:https';import {createH
 while(true){try{await fs.access('/run/charitypilot/ready');break;}catch{await new Promise(r=>setTimeout(r,50));}}
 const {loadManagedApiRuntime}=await import('/app/apps/api/dist/services/managed-api-runtime.js');
 const {managedApiPeerRole}=await import('/app/apps/api/dist/services/managed-api-peer-transport.js');
+const {stageManagedTlsDelivery}=await import('/app/packages/shared/runtime/managed-tls-delivery.mjs');stageManagedTlsDelivery('api');
 const app=loadManagedApiRuntime();const ingress=new WeakMap();app.server.prependListener('request',req=>ingress.set(req,{...req.headers}));
 app.get('/api/v1/auth/me',async(req,reply)=>{if(managedApiPeerRole(req)==='web'){console.log('WEB_AUTH_ME_TLS_OBSERVED');if(req.headers.cookie==='charitypilot_access=expired')return reply.code(401).send({synthetic:true});if(req.headers.cookie==='charitypilot_access=throttled')return reply.header('Retry-After','7').code(429).send({synthetic:true});if(req.headers.cookie==='charitypilot_access=oversized')return 'x'.repeat(65537);return {synthetic:true};}return {port:3002,url:req.url,headers:req.headers,ingressHeaders:ingress.get(req.raw),body:'',role:managedApiPeerRole(req),protocol:req.raw.socket.getProtocol()};});
 app.all('/*',async req=>({port:3002,url:req.url,headers:req.headers,ingressHeaders:ingress.get(req.raw),body:req.body??'',role:managedApiPeerRole(req),protocol:req.raw.socket.getProtocol()}));
@@ -177,3 +178,6 @@ web.listen(3003,'0.0.0.0',()=>console.log('BACKEND_TLS_READY'));process.once('SI
 export const rogueSource = String.raw`
 import fs from 'node:fs/promises';import https from 'node:https';while(true){try{await fs.access('/run/charitypilot/ready');break;}catch{await new Promise(r=>setTimeout(r,50));}}
 https.createServer({key:await fs.readFile('/run/charitypilot/rogue/server.key'),cert:await fs.readFile('/run/charitypilot/rogue/server.pem')},(q,s)=>{console.log('UNTRUSTED_HANDLER_REACHED');s.end('rogue');}).listen(3002,'0.0.0.0',()=>console.log('ROGUE_TLS_READY'));`;
+
+export const provisionDelivery = String.raw`
+const fs=require('node:fs');let raw='';process.stdin.setEncoding('utf8');process.stdin.on('data',part=>raw+=part);process.stdin.on('end',()=>{const {service,bundle}=JSON.parse(raw);if(!['gateway','api','web'].includes(service))process.exit(1);const path='/etc/secrets/charitypilot-'+service+'-tls.json';fs.writeFileSync(path,JSON.stringify(bundle)+'\n',{flag:'wx',mode:0o440});});`;
