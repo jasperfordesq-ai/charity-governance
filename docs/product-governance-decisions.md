@@ -18,6 +18,18 @@ customer. Organisation Owners can adopt their own settings through the audited
 controls; the product must provide usable recommendations rather than require
 each customer to design the feature from scratch.
 
+## Managed internal service authentication
+
+Use mutual TLS and distinct, exactly pinned gateway/web client certificates for
+managed internal API connections. The private web credential is limited to its
+read-only auth-me check. Do not trust the entire regional provider network or
+arbitrary forwarded client-address claims. Actual service-key custody, immutable
+deployment binding, revocation and end-user address verification remain required.
+Existing HTTP-only managed prototypes are not eligible for activation under
+this decision. This is a product engineering choice under delegated authority;
+it neither provisions provider resources nor adopts a tenant governance policy.
+See [managed API peer transport](managed-api-peer-transport.md).
+
 ## Record access and lifecycle
 
 - New and unassessed documents are restricted. Member disclosure requires an

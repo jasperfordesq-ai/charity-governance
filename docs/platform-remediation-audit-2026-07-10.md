@@ -1,5 +1,13 @@
 # CharityPilot Full-Platform Remediation Audit
 
+> **16 October managed API mutual TLS foundation:** An actual Fastify factory
+> binds issuer/server/client certificate digests to the managed registry and
+> separates gateway and exact auth-me-only web access. Real TLS socket tests
+> cover legitimate peers, missing/foreign/unlisted peers, older/plain/resumed
+> connections, expiry and SAN/usage mismatches. The normal entry point, protected
+> image/key loading and gateway/web HTTPS integration remain open; not activated.
+> See [managed API peer transport](managed-api-peer-transport.md).
+
 > **16 October managed gateway image:** A separately bound unprivileged image
 > now implements canonical public-host routing to private web/API, strips
 > unverified proxy claims and removes request objects from Caddy error logs.
