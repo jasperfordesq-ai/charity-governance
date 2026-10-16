@@ -8,6 +8,7 @@ import path from 'node:path';
 // Adding a file here means you are writing appliance-lifecycle code — say
 // why in the commit message.
 const ALLOWED = new Set([
+  'services/managed-api-runtime.ts', // managed TLS lifecycle and exact startup-environment binding must exclude appliance/E2E modes
   'utils/personal-server.ts',
   'utils/personal-server-env.ts',
   'utils/deployment-profile.ts',

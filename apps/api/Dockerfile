@@ -51,6 +51,7 @@ RUN npm ci --omit=dev --omit=peer --workspace @charitypilot/api --workspace @cha
 FROM node:22-alpine@sha256:968df39aedcea65eeb078fb336ed7191baf48f972b4479711397108be0966920 AS runner
 WORKDIR /app
 ARG CHARITYPILOT_BUILD_COMMIT
+ARG CHARITYPILOT_MANAGED_API_PEER_BINDING_SHA256
 ENV NODE_ENV=production
 ENV PORT=3002
 ENV CHARITYPILOT_BUILD_COMMIT=$CHARITYPILOT_BUILD_COMMIT
@@ -62,6 +63,7 @@ COPY --chown=node:node --from=build /app/packages/shared/dist ./packages/shared/
 COPY --chown=node:node --from=build /app/packages/shared/runtime ./packages/shared/runtime
 COPY --chown=node:node --from=build /app/apps/api/package.json ./apps/api/package.json
 COPY --chown=node:node --from=build /app/apps/api/dist ./apps/api/dist
+RUN node packages/shared/runtime/managed-api-build-pin.mjs /opt/charitypilot/managed-api-build.json
 WORKDIR /app/apps/api
 EXPOSE 3002
 USER node

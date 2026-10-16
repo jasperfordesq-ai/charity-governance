@@ -5764,7 +5764,7 @@ const PRODUCTION_ENV_GUARD_VARIABLES = new Map([
 
 function validateProductionEnvBody() {
   const source = readRepoFile('apps/api/src/utils/env.ts');
-  const start = source.indexOf('export function validateProductionEnv(): void {');
+  const start = source.search(/export function validateProductionEnv\([^)]*\): void \{/);
   assert.notEqual(start, -1, 'validateProductionEnv must still exist in apps/api/src/utils/env.ts');
   const end = source.indexOf('\n}', start);
   assert.notEqual(end, -1, 'validateProductionEnv must have a closing brace at column 0');

@@ -1,4 +1,4 @@
-import Fastify from 'fastify';
+import Fastify, { type FastifyInstance } from 'fastify';
 import cookie from '@fastify/cookie';
 import rateLimit from '@fastify/rate-limit';
 import multipart from '@fastify/multipart';
@@ -43,6 +43,7 @@ import { parsePort } from './utils/port.js';
 import { normaliseOrigin } from './utils/request-origin.js';
 import { globalApiRateLimitMax } from './utils/global-rate-limit.js';
 import { sessionOrAddressRateLimitKey } from './utils/rate-limit-key.js';
+import { loadManagedApiRuntime } from './services/managed-api-runtime.js';
 
 const environment = process.env.NODE_ENV ?? 'development';
 const defaultFrontendOrigins = ['http://localhost:3003', 'http://localhost:3000'];
@@ -58,9 +59,10 @@ const trustedProxyAddresses = (process.env.TRUSTED_PROXY_ADDRESSES ?? '')
   .map((address) => address.trim())
   .filter(Boolean);
 
-validateRuntimeEnv();
+const managedApp = loadManagedApiRuntime(process.env, apiLoggerOptionsForEnvironment(environment));
+validateRuntimeEnv(managedApp);
 
-const app = Fastify({
+const app: FastifyInstance = managedApp ?? Fastify({
   logger: apiLoggerOptionsForEnvironment(environment),
   trustProxy: trustedProxyAddresses.length > 0 ? trustedProxyAddresses : false,
 });

@@ -44,6 +44,9 @@
 .env.*
 **/.env
 **/.env.*
+**/managed-api-build.json
+**/*.pem
+**/*.key
 node_modules
 **/node_modules
 .turbo

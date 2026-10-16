@@ -5,6 +5,12 @@ import { mkdtempSync, readFileSync, writeFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { basename, join, resolve, sep } from 'node:path';
 import { createHash, X509Certificate } from 'node:crypto';
+import {
+  createConfiguredManagedApiServer,
+  managedApiRuntimePolicy,
+} from '../services/managed-api-runtime.js';
+import { validateProductionEnv } from '../utils/env.js';
+import { AppError } from '../utils/app-error.js';
 import { request, Agent } from 'node:https';
 import { request as plainRequest } from 'node:http';
 import {
@@ -417,5 +423,76 @@ test('a matching fingerprint cannot replace SAN or certificate-purpose verificat
     assert.equal(s.reached(), 0);
   } finally {
     await s.app.close();
+  }
+});
+
+test('only a minted managed server for the exact environment replaces the proxy-IP requirement', async () => {
+  const f = fixture,
+    original = { ...process.env };
+  const env = {
+    NODE_ENV: 'production',
+    PORT: '3002',
+    CHARITYPILOT_MANAGED_PROVIDER: 'render',
+    CHARITYPILOT_MANAGED_API_PEER_BINDING: f.binding.json,
+    CHARITYPILOT_MANAGED_API_TLS_DIRECTORY: '/protected/synthetic',
+    CHARITYPILOT_BUILD_COMMIT: f.record.sourceSha,
+    RENDER_SERVICE_TYPE: 'pserv',
+    RENDER_SERVICE_ID: f.record.apiServiceId,
+    FRONTEND_URL: f.record.publicOrigin,
+    NEXT_PUBLIC_API_URL: f.record.publicOrigin,
+    CHARITYPILOT_CANONICAL_WEB_ORIGIN: f.record.publicOrigin,
+    CHARITYPILOT_CANONICAL_API_ORIGIN: f.record.publicOrigin,
+  };
+  const pin = { format: 1 as const, ...f.input.build };
+  const material = {
+    issuerCertPem: f.ca,
+    serverCertPem: f.api.cert,
+    serverKeyPem: f.api.key,
+  };
+  const app = createConfiguredManagedApiServer(env, pin, material);
+  try {
+    for (const key of Object.keys(process.env)) delete process.env[key];
+    Object.assign(process.env, env);
+    assert.ok(managedApiRuntimePolicy(app));
+    assert.equal(managedApiRuntimePolicy({}), undefined);
+    assert.throws(
+      () => validateProductionEnv(app),
+      (error) =>
+        error instanceof AppError &&
+        JSON.stringify(error.details).includes('JWT_SECRET') &&
+        !JSON.stringify(error.details).includes('TRUSTED_PROXY_ADDRESSES'),
+    );
+    assert.throws(
+      () => validateProductionEnv({}),
+      (error) =>
+        error instanceof AppError &&
+        JSON.stringify(error.details).includes('TRUSTED_PROXY_ADDRESSES'),
+    );
+    process.env.RENDER_SERVICE_ID = f.record.webServiceId;
+    assert.equal(managedApiRuntimePolicy(app), undefined);
+    assert.throws(
+      () => validateProductionEnv(app),
+      (error) =>
+        error instanceof AppError &&
+        JSON.stringify(error.details).includes('validated TLS server'),
+    );
+    assert.throws(() =>
+      createConfiguredManagedApiServer(
+        { ...env, TRUSTED_PROXY_ADDRESSES: '10.0.0.0/8' },
+        pin,
+        material,
+      ),
+    );
+    assert.throws(() =>
+      createConfiguredManagedApiServer(
+        { ...env, FRONTEND_URL: 'https://other.example' },
+        pin,
+        material,
+      ),
+    );
+  } finally {
+    for (const key of Object.keys(process.env)) delete process.env[key];
+    Object.assign(process.env, original);
+    await app.close();
   }
 });

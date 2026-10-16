@@ -150,7 +150,7 @@ export function validatePersonalServerEnv(): void {
   }
 }
 
-export function validateRuntimeEnv(): void {
+export function validateRuntimeEnv(managedServer?: unknown): void {
   // assertDeploymentProfile() runs first, in BOTH branches: it fails at
   // boot, naming the invalid variable, instead of letting an invalid or
   // incoherent axis combination boot fine and blow up on first use (today
@@ -167,5 +167,5 @@ export function validateRuntimeEnv(): void {
     return;
   }
 
-  validateProductionEnv();
+  validateProductionEnv(managedServer);
 }

@@ -76,13 +76,58 @@ expires after startup, build/service/key mismatches, and independently pinned
 leaves with wrong SAN or certificate usage. Temporary key files are synthetic,
 stay outside the repository and are removed only from the verified fixture root.
 
-**Not activated:** the normal API entry point still uses its existing transport.
-Immutable API image-pin loading, protected key provisioning/custody, strict
-production environment integration, gateway HTTPS/client certificates, web TLS
-and API-client transport, record parity, rotation/revocation and the joined
-browser-to-application flow remain required. The previous HTTP-only gateway/web
-bindings are not sufficient for the chosen managed activation contract. Do not
-turn them into an activated deployment by adding broad trusted proxy ranges.
+## Runtime entry and image binding
+
+The normal API entry point now conditionally calls `loadManagedApiRuntime`
+before validating the full environment and registering application plugins.
+With no managed selector it retains the existing transport and proxy checks.
+Any provider/API-binding/TLS-directory selector, including an empty value,
+opts into the managed loader; failure never falls back to HTTP.
+
+The API image build accepts optional
+`CHARITYPILOT_MANAGED_API_PEER_BINDING_SHA256`. With a full source SHA and binding
+hash it generates root-owned0444 metadata at the fixed
+`/opt/charitypilot/managed-api-build.json` path before switching to `node`.
+Builds without this argument generate an explicit disabled pin. An environment
+hash cannot enable such an image. The source build context excludes this file.
+The loader requires non-root Linux, a root-owned non-shared-writable parent,
+a non-linked root-owned0444 regular file, bounded stable descriptor reads and
+canonical metadata. CI also checks actual image ownership and write refusal.
+
+Supply runtime `CHARITYPILOT_MANAGED_API_PEER_BINDING` and
+`CHARITYPILOT_MANAGED_API_TLS_DIRECTORY` alongside the existing Render/source
+identity values. All four public frontend/browser/canonical web/API origin
+variables must equal the bound public origin. `TRUSTED_PROXY_ADDRESSES` must be
+unset or empty. In the TLS directory, `issuer.pem`, `server.pem` and `server.key`
+must be current-user-owned0400 regular files in a current-user-owned0700
+directory outside the application/source root. PEM/key files are also excluded
+from source build contexts. The Linux loader rejects symlinked roots/children, hardlinks, shared
+or writable files and oversized material. It opens children through a held
+directory descriptor with no-follow/nonblocking flags and bounded stable reads.
+Native Windows loading is unsupported for this Render mode; the existing
+Windows personal-server path is separate and unaffected.
+
+Only the configured TLS factory can mint the private server context used by
+environment validation. That context must still match the exact environment;
+an arbitrary object, stale context or selector alone cannot exempt proxy-IP
+validation. Every other production check remains active, including database
+TLS, secrets, origins and provider configuration. A lifecycle allowlist entry
+explicitly permits this module to exclude appliance and disposable profiles;
+behavioural feature code still uses capability axes.
+
+Local tests cover configuration-only opt-in, metadata, forged/stale contexts
+and remaining production gates. A pinned, isolated Linux container separately
+tests the actual descriptor/ownership/mode/link/size checks from the Windows
+host. These are component checks, not a full managed application boot.
+
+**Not deployed or activation-ready:** real protected material provisioning and
+custody, complete image-pin/loader/application boot proof, gateway HTTPS/client
+certificates, web TLS/API-client transport, record parity, rotation/revocation
+and the joined browser-to-application flow remain required. Provider secret
+mounts must be inspected: a shared-readable or symlinked mount does not satisfy
+this contract. Prepare a protected delivery step rather than weakening the
+reader. Previous HTTP-only gateway/web bindings are not sufficient for the
+chosen managed activation contract. Do not add broad trusted proxy ranges.
 
 Certificate possession is not proof of which provider process holds the key.
 Provider identity/IAM/environment isolation and actual key custody still need

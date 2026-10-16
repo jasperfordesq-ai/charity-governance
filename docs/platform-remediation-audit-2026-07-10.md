@@ -1,11 +1,20 @@
 # CharityPilot Full-Platform Remediation Audit
 
+> **16 October managed API startup integration:** The normal entry point now
+> loads the TLS factory only from an enabled fixed image pin and protected Linux
+> key files. A private exact-environment server context replaces proxy-IP checks
+> only for that validated managed transport; other production gates remain.
+> Existing profiles retain their startup path. Actual Linux file protection is
+> tested; full image/application boot, key delivery and gateway/web TLS remain
+> open. See [managed API transport](managed-api-peer-transport.md).
+
 > **16 October managed API mutual TLS foundation:** An actual Fastify factory
 > binds issuer/server/client certificate digests to the managed registry and
 > separates gateway and exact auth-me-only web access. Real TLS socket tests
 > cover legitimate peers, missing/foreign/unlisted peers, older/plain/resumed
-> connections, expiry and SAN/usage mismatches. The normal entry point, protected
-> image/key loading and gateway/web HTTPS integration remain open; not activated.
+> connections, expiry and SAN/usage mismatches. Startup integration supersedes
+> the initial entry-point gap above; gateway/web HTTPS and actual key delivery
+> remain open. No hosted activation is claimed.
 > See [managed API peer transport](managed-api-peer-transport.md).
 
 > **16 October managed gateway image:** A separately bound unprivileged image

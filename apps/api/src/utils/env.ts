@@ -7,6 +7,7 @@ import { billingMode, emailDeliveryMode, isMultiTenant } from './deployment-prof
 import { envDefaultProviderId } from '../services/document-storage-resolution.js';
 import { decodeIntegrationKey } from '../services/integration-crypto.js';
 import { MAX_SESSION_TRACE_RETENTION_DAYS, sessionTraceRetentionDays } from '../services/session-security-trace.js';
+import { managedApiRuntimePolicy } from '../services/managed-api-runtime.js';
 
 export { isConfiguredSecret } from './secrets.js';
 export { isProductionEnv } from './deployment-profile.js';
@@ -679,7 +680,11 @@ function isValidProxyAddress(entry: string): boolean {
   return prefixLength >= 0 && prefixLength <= maxPrefixLength;
 }
 
-function requireTrustedProxyAddresses(issues: string[]) {
+function requireTrustedProxyAddresses(issues: string[], managedServer?: unknown) {
+  if (managedApiRuntimePolicy(managedServer)) return;
+  if (process.env.CHARITYPILOT_MANAGED_API_PEER_BINDING !== undefined || process.env.CHARITYPILOT_MANAGED_API_TLS_DIRECTORY !== undefined) {
+    issues.push('Managed API transport requires a validated TLS server for this exact environment');
+  }
   const value = process.env.TRUSTED_PROXY_ADDRESSES;
   if (!isConfiguredSecret(value)) {
     issues.push('TRUSTED_PROXY_ADDRESSES must list the reverse proxy address or CIDR for production rate limits');
@@ -924,7 +929,7 @@ export function validateAuthDeliveryEnv(): void {
   );
 }
 
-export function validateProductionEnv(): void {
+export function validateProductionEnv(managedServer?: unknown): void {
   if (process.env.NODE_ENV !== 'production') return;
 
   const issues: string[] = [];
@@ -954,7 +959,7 @@ export function validateProductionEnv(): void {
     issues.push(error instanceof Error ? error.message : 'PORT must be an integer from 1 to 65535');
   }
 
-  requireTrustedProxyAddresses(issues);
+  requireTrustedProxyAddresses(issues, managedServer);
   requireMinLength('READINESS_API_KEY', 32, issues);
   requireDatabaseUrl('DATABASE_URL', issues);
   requireMinLength('JWT_SECRET', 32, issues);
