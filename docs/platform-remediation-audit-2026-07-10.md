@@ -1,5 +1,17 @@
 # CharityPilot Full-Platform Remediation Audit
 
+> **16 October complete Confluence maintenance replay increment / OPEN:** New
+> migration189 provides bounded invoker-owned eight-table snapshot/replay with
+> suspension/sole-client/WAL/role/guard/FK gates and transactional exact readback.
+> Separate inactive archive-authenticated coordinator rechecks local/history
+> state before commit; uncertain commits retry fresh. Fully populated database
+> replay/rollback/refusal proof and seven coordinator checks pass separately;
+> API build/3207ordinary checks and existing dispatcher database proof pass.
+> This is not joint real-database authenticated maintenance composition, four
+> transport-table reconciliation, source-VM isolation or supported recovery.
+> No deployment, erasure, permission grant or reopening; custody/release/DPO
+> acceptance and the public-production ledger remain unresolved.
+
 > **16 October database reconciliation coordinator proof / OPEN:** Restricted
 > actual PostgreSQL composition now verifies the inactive eight-table inspector,
 > real repeatable-read role boundary, denied actors before archive access, exact

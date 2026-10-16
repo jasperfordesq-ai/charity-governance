@@ -400,6 +400,62 @@ test('retained Confluence review and permission history is scoped, immutable and
     assert.equal(query(`SELECT "lifecycleStatus" FROM public."Organisation" WHERE id='org-a';`),'SUSPENDED');
     query(`SET ROLE synthetic_copy_runtime; UPDATE public."ConfluenceRetainedCopyPermission" SET reason='Replace recovered decision' WHERE id='recovered-permission';`, /append-only/);
     assert.equal(query(`SELECT count(*) FROM "DocumentStorageDeletion";`),'0');
+    const ledgerMeta = [
+      ['ConfluenceRetainedCopyReview','ConfluenceRetainedCopyReview_guard','ConfluenceRetainedCopyReview_no_truncate'],
+      ['ConfluenceSyntheticCopyScope','ConfluenceSyntheticCopyScope_guard','ConfluenceSyntheticCopyScope_no_truncate'],
+      ['ConfluenceRetainedCopyPermission','ConfluenceRetainedCopyPermission_guard','ConfluenceRetainedCopyPermission_no_truncate'],
+      ['ConfluenceRetainedCopyReviewWithdrawal','ConfluenceRetainedCopyReviewWithdrawal_guard','ConfluenceRetainedCopyReviewWithdrawal_no_truncate'],
+      ['ConfluenceRetainedCopyPermissionWithdrawal','ConfluenceRetainedCopyPermissionWithdrawal_guard','ConfluenceRetainedCopyPermissionWithdrawal_no_truncate'],
+      ['ConfluenceCopyRecoveryCapture','ConfluenceCopyRecoveryCapture_guard','ConfluenceCopyRecoveryCapture_truncate_guard'],
+      ['ConfluenceCopyPublicationPlan','ConfluenceCopyPlan_guard','ConfluenceCopyPlan_truncate_guard'],
+      ['ConfluenceCopyPublicationReceipt','ConfluenceCopyReceipt_guard','ConfluenceCopyReceipt_truncate_guard'],
+    ];
+    const completeRows = () => JSON.parse(query(`SELECT public."ConfluenceCopyLedgerRecovery_rows"('org-a');`));
+    const complete = completeRows();
+    assert.deepEqual(Object.keys(complete).sort(),ledgerMeta.map(([name]) => name).sort());
+    assert.ok(Object.values(complete).every(rows => rows.length > 0),'all eight source groups must be populated');
+    const completePlan = ledgerMeta.flatMap(([table]) => [...complete[table]].sort((a,b) =>
+      table === 'ConfluenceCopyRecoveryCapture' ? a.factsRevision-b.factsRevision : a.id.localeCompare(b.id))
+      .map(record => ({ table,record })));
+    const emptyLedger = Object.fromEntries(ledgerMeta.map(([name]) => [name,[]]));
+    const literal = value => "'"+value.replaceAll("'","''")+"'";
+    const fullReplay = (inserts=completePlan,expected=emptyLedger) => `SELECT public."ConfluenceCopyLedgerRecovery_replay"('org-a',${literal(JSON.stringify(expected))}::jsonb,${literal(JSON.stringify(inserts))}::jsonb);`;
+    const fixtureOlder = `BEGIN;
+      ${ledgerMeta.map(([name,guard]) => `ALTER TABLE public."${name}" DISABLE TRIGGER "${guard}";`).join('\n')}
+      ${[...ledgerMeta].reverse().map(([name]) => `DELETE FROM public."${name}" WHERE "organisationId"='org-a';`).join('\n')}
+      ${ledgerMeta.map(([name,guard]) => `ALTER TABLE public."${name}" ENABLE TRIGGER "${guard}";`).join('\n')}`;
+    // The following removal is disposable old-backup fixture construction only;
+    // all guards are enabled before either maintenance delegate is called.
+    query(`SET ROLE synthetic_copy_runtime; SELECT public."ConfluenceCopyLedgerRecovery_rows"('org-a');`,/permission denied for function/);
+    query(`SET ROLE synthetic_copy_runtime; ${fullReplay()}`,/permission denied for function/);
+    query(`GRANT EXECUTE ON FUNCTION public."ConfluenceCopyLedgerRecovery_replay"(TEXT,JSONB,JSONB),public."ConfluenceCopyLedgerRecovery_assert"(TEXT) TO synthetic_copy_runtime;`);
+    query(`SET ROLE synthetic_copy_runtime; ${fullReplay()}`,/maintenance table owner/);
+    query(`SET ROLE synthetic_copy_runtime; CREATE TEMP TABLE "ConfluenceCopyPublicationPlan"(id TEXT); ${fullReplay()}`,/maintenance table owner/);
+    query(`REVOKE EXECUTE ON FUNCTION public."ConfluenceCopyLedgerRecovery_replay"(TEXT,JSONB,JSONB),public."ConfluenceCopyLedgerRecovery_assert"(TEXT) FROM synthetic_copy_runtime;`);
+    query(`BEGIN ISOLATION LEVEL REPEATABLE READ; ${fullReplay([],complete)}`,/fresh read-committed/);
+    query(`BEGIN; SET LOCAL synchronous_commit=off; ${fullReplay([],complete)}`,/durable WAL/);
+    query(`BEGIN; ALTER TABLE public."ConfluenceCopyPublicationPlan" DISABLE TRIGGER "ConfluenceCopyPlan_guard"; ${fullReplay([],complete)}`,/exact enabled guards/);
+    query(fullReplay([],emptyLedger),/local records changed/);
+    query(`BEGIN; UPDATE public."Organisation" SET "lifecycleStatus"='ACTIVE' WHERE id='org-a'; ${fullReplay([],complete)}`,/quarantined charity/);
+    const foreignComplete = structuredClone(completePlan); foreignComplete[0].record.organisationId='org-b';
+    query(`${fixtureOlder} ${fullReplay(foreignComplete)} COMMIT;`,/row scope mismatch/);
+    const unsupported = structuredClone(completePlan); unsupported[0].table='ConfluenceCopyLedgerUploadAttempt';
+    query(`${fixtureOlder} ${fullReplay(unsupported)} COMMIT;`,/Unsupported complete Confluence replay table/);
+    const lateBad = structuredClone(completePlan); lateBad.at(-1).record.planId='missing-plan';
+    query(`${fixtureOlder} ${fullReplay(lateBad)} COMMIT;`,/foreign key constraint/);
+    assert.deepEqual(completeRows(),complete,'late FK failure must roll back fixture and every inserted historical row');
+    const extra = structuredClone(completePlan); extra[0].record.unexpected='must-not-drop';
+    query(`${fixtureOlder} ${fullReplay(extra)} COMMIT;`,/row fields or dates are not exact/);
+    assert.deepEqual(completeRows(),complete);
+    assert.equal(query(`${fixtureOlder} ${fullReplay()} COMMIT;`),String(completePlan.length));
+    assert.deepEqual(completeRows(),complete,'all eight original groups must survive committed replay byte-for-field');
+    assert.equal(query(fullReplay([],complete)),'0');
+    assert.equal(query(`SELECT "lifecycleStatus" FROM public."Organisation" WHERE id='org-a';`),'SUSPENDED');
+    for (const [name,guard,trunc] of ledgerMeta) {
+      assert.equal(query(`SELECT count(*) FROM pg_trigger WHERE tgrelid='public."${name}"'::regclass AND tgname IN ('${guard}','${trunc}') AND tgenabled='O';`),'2');
+    }
+    query(`SET ROLE synthetic_copy_runtime; DELETE FROM public."ConfluenceCopyRecoveryCapture";`,/append-only/);
+    assert.equal(query(`SELECT count(*) FROM "DocumentStorageDeletion";`),'0');
   } finally {
     const removed = docker(['rm', '--force', '--volumes', container]);
     assert.equal(removed.status, 0, removed.stderr);

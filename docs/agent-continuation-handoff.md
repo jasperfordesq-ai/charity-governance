@@ -1,7 +1,21 @@
 # CharityPilot Agent Continuation Handoff
 
+> **16 October complete-ledger maintenance delegate, source only:** Migration189
+> adds invoker-owned eight-table snapshot/replay functions with no runtime grants.
+> Exact table ownership, suspension, sole-client observation, read-committed/WAL,
+> bounded inventory, enabled guards/FKs and exact snapshot gate historical inserts.
+> Guards are restored before success; late errors roll back rows/DDL together.
+> A separate inactive coordinator authenticates the current archive/prefix,
+> applies the insert-only proposal and rechecks full local rows/control before
+> commit. Unknown commits retry fresh. Seven coordinator checks, build and3207
+> ordinary API checks pass; fully populated eight-group PostgreSQL restore and
+> existing dispatcher/database proof pass separately. Joint authenticated
+> archive-to-real-PostgreSQL maintenance composition remains next. No host entry
+> point, provider action, four-table transport recovery or reopening authority.
+> Source189 versus last serving179; release/custody/host-loss/acceptance open.
+
 > **16 October real PostgreSQL reconciliation composition, test evidence only:**
-> The new eight-table Owner inspector now runs against all188migrated tables as
+> The new eight-table Owner inspector now runs against the schema after188migrations as
 > a non-superuser runtime role, with actual repeatable-read transactions. Four
 > populated ledger groups match the authenticated synthetic archive; the other
 > four groups are present/empty. Member/tenant refusal occurs before archive I/O;
