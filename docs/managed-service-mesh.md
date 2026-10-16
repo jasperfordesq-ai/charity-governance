@@ -52,8 +52,12 @@ The native gateway test builds the real gateway image, stages synthetic protecte
 material in isolated containers and reaches the actual compiled API runtime
 loader/TLS factory through Caddy. It first uses an echo TLS web fixture, then
 substitutes the actual compiled Next image and exercises its protected-route
-private API client. The API has synthetic routes. This verifies the joined
-transport and protected loaders, not a full production business/provider boot.
+private API client. A final phase builds the actual enabled API runner and boots
+its normal command, full routes and production validators against the fully
+migrated TLS database. It tests real synthetic tenants, byte access/isolation and
+required Owner MFA with matched self-contained provider axes. See
+[normal runtime proof](managed-application-runtime-proof.md). External provider
+observation remains separate.
 
 Caddy validates the explicit CA and exact upstream hostname and presents its
 validated, pinned gateway client certificate. The API pins its own server leaf
@@ -66,7 +70,7 @@ attestation of the provider process or running image.
 The API server requires TLS1.3; the positive Caddy/API and synthetic web tests
 negotiate TLS1.3. This is not a claim that stock Caddy exposes a separate TLS1.3
 client-minimum setting. Gateway health remains process-only. End-user address
-verification, full production API/business-provider boot, actual provider/key
+verification, real provider-backed storage/mail/billing observations, actual provider/key
 custody and independent host-loss/reopening evidence remain open.
 
 References: [Caddy proxy TLS options](https://caddyserver.com/docs/caddyfile/directives/reverse_proxy),

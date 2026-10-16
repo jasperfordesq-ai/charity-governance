@@ -3,7 +3,7 @@ FROM node:22-alpine@sha256:968df39aedcea65eeb078fb336ed7191baf48f972b44797113971
 WORKDIR /app
 COPY --from=caddy /usr/bin/caddy /usr/bin/caddy.original
 COPY caddy/managed/config.mjs caddy/managed/start.mjs caddy/managed/build-pin.mjs caddy/managed/tls.mjs ./caddy/managed/
-COPY packages/shared/runtime/managed-service-mesh.mjs packages/shared/runtime/protected-tls-material.mjs packages/shared/runtime/managed-service-image-pin.mjs packages/shared/runtime/managed-tls-identity.mjs packages/shared/runtime/managed-tls-delivery.mjs ./packages/shared/runtime/
+COPY packages/shared/runtime/managed-application-headers.mjs packages/shared/runtime/managed-service-mesh.mjs packages/shared/runtime/protected-tls-material.mjs packages/shared/runtime/managed-service-image-pin.mjs packages/shared/runtime/managed-tls-identity.mjs packages/shared/runtime/managed-tls-delivery.mjs ./packages/shared/runtime/
 ARG CHARITYPILOT_BUILD_COMMIT
 ARG CHARITYPILOT_MANAGED_GATEWAY_BINDING_SHA256
 LABEL org.opencontainers.image.revision=$CHARITYPILOT_BUILD_COMMIT

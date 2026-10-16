@@ -1,3 +1,4 @@
+import {proveManagedApplication} from './managed-application-fixture.mjs';
 import assert from "node:assert/strict";
 import test from "node:test";
 import { spawnSync } from "node:child_process";
@@ -99,7 +100,9 @@ test(
       internal = id + "-internal",
       edge = id + "-edge",
       containers = [],
-      networks = [];
+      networks = [],
+      volumes = [],
+      extraImages = [];
     const environment = (values) =>
       Object.entries(values).flatMap(([k, v]) => ["--env", k + "=" + v]);
     const hardened = [
@@ -314,6 +317,11 @@ test(
         "cf-connecting-ip": "203.0.113.44",
         "true-client-ip": "203.0.113.44",
         "x-charitypilot-peer-role": "forged",
+        "x-charitypilot-readiness-key":"synthetic-readiness",
+        "x-charitypilot-approval":"synthetic-approval",
+        "x-charitypilot-client":"synthetic-client",
+        "x-charitypilot-reason":"synthetic-reason",
+        "x-charitypilot-reason-encoding":"base64url",
         cookie: "synthetic=preserved",
       };
       for (const [path, port] of [
@@ -347,6 +355,9 @@ test(
         ])
           assert.equal(data.ingressHeaders[k], undefined, k);
         assert.equal(data.headers.cookie, headers.cookie);
+        for(const name of ['x-charitypilot-readiness-key','x-charitypilot-approval','x-charitypilot-client','x-charitypilot-reason','x-charitypilot-reason-encoding']){
+          assert.equal(data.ingressHeaders[name],headers[name],name+' gateway preservation');assert.equal(data.headers[name],headers[name],name+' API preservation');
+        }
         if (port === 3002)
           assert.equal(data.headers["x-forwarded-for"], undefined);
       }
@@ -381,6 +392,10 @@ test(
         "NEXT_PUBLIC_API_URL=" + r.publicOrigin,
         "--build-arg",
         "NEXT_PUBLIC_CHARITYPILOT_CANONICAL_API_ORIGIN=" + r.publicOrigin,
+        "--build-arg","NEXT_PUBLIC_CHARITYPILOT_TENANCY=multi",
+        "--build-arg","NEXT_PUBLIC_CHARITYPILOT_REGISTRATION=closed",
+        "--build-arg","NEXT_PUBLIC_CHARITYPILOT_EMAIL_DELIVERY=manual-link",
+        "--build-arg","NEXT_PUBLIC_CHARITYPILOT_BILLING=none",
         "--tag",
         webImage,
         ".",
@@ -415,6 +430,8 @@ test(
           RENDER_SERVICE_TYPE: "pserv",
           RENDER_SERVICE_ID: r.webServiceId,
           NEXT_PUBLIC_CHARITYPILOT_DEPLOYMENT_MODE: "public-production",
+          NEXT_PUBLIC_CHARITYPILOT_TENANCY:"multi",NEXT_PUBLIC_CHARITYPILOT_REGISTRATION:"closed",
+          NEXT_PUBLIC_CHARITYPILOT_EMAIL_DELIVERY:"manual-link",NEXT_PUBLIC_CHARITYPILOT_BILLING:"none",
           NEXT_PUBLIC_API_URL: r.publicOrigin,
           NEXT_PUBLIC_CHARITYPILOT_CANONICAL_API_ORIGIN: r.publicOrigin,
           NEXT_PUBLIC_CHARITYPILOT_MANAGED_WEB_BINDING_SHA256: b.sha256,
@@ -500,6 +517,7 @@ test(
       assert.match(browserScan, /BROWSER_ASSETS_CHECKED=[1-9]/);
       docker(["stop", "--time", "5", backend]);
       docker(["network", "disconnect", internal, backend]);
+      await proveManagedApplication({docker,root,id,internal,containers,volumes,extraImages,f,request,base,host:headers.host});
       for (const [label, leaf] of [
         ["foreign-root", f.foreign],
         ["wrong-host", f.web],
@@ -538,7 +556,7 @@ test(
           secret = "SYNTHETIC_CALLBACK_CANARY",
           response = await request(
             base + "/api/v1/synthetic?code=" + secret + "&state=" + secret,
-            { headers: { ...headers, authorization: "Bearer " + secret } },
+            { headers: { ...headers, authorization: "Bearer " + secret, "x-charitypilot-readiness-key":secret, "x-charitypilot-approval":secret } },
           );
         assert.equal(response.status, 502, label);
         assert.doesNotMatch(
@@ -588,6 +606,8 @@ test(
         docker(["image", "rm", image]);
       if (docker(["image", "ls", "--quiet", webImage]))
         docker(["image", "rm", webImage]);
+      for(const name of volumes.reverse())docker(["volume","rm",name]);
+      for(const name of extraImages.reverse())if(docker(["image","ls","--quiet",name]))docker(["image","rm",name]);
       f.cleanup();
     }
   },

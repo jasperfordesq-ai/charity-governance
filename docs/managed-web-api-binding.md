@@ -84,3 +84,15 @@ before creating protected runtime directories. Direct protected-directory input
 remains available when this delivery selector is absent. Actual provider mount
 permissions, key custody, issuance and complete rotation/recovery evidence remain
 required; synthetic staging is not evidence that those gates have passed.
+
+
+## Normal application phase superseding earlier transport-only limits
+
+The native test now also builds the actual enabled API runner and boots its
+normal command with the complete migrated TLS database and production validators.
+It exercises real synthetic tenant sessions, Member byte access/isolation,
+compiled Next authentication and required privileged MFA. This self-contained
+provider configuration supplements the earlier synthetic-route phases above.
+See [normal runtime proof](managed-application-runtime-proof.md), including the
+application-header policy. External providers, public browser/edge, real key/IAM
+custody, independent recovery and host-loss/reopening remain open.

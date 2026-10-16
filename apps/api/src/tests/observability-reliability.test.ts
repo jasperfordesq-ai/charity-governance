@@ -3,7 +3,7 @@ import { mkdtemp } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import test from 'node:test';
-import { API_LOG_REDACT_PATHS } from '../utils/logger.js';
+import { API_LOG_REDACT_PATHS, apiLoggerOptionsForEnvironment } from '../utils/logger.js';
 import {
   emptyIntegrationEstate,
   recordingReconcileRunner,
@@ -428,4 +428,39 @@ test('the key that unseals every charity credential is redacted like its peers',
   for (const secret of ['env.JWT_SECRET', 'env.AUTH_RECOVERY_SECRET', 'env.ATLASSIAN_CLIENT_SECRET']) {
     assert.ok(redactPaths.includes(secret), `${secret} must stay redacted`);
   }
+});
+
+test('production logs redact application approval capabilities and private activity reasons', async () => {
+  const lines: string[] = [];
+  const options = apiLoggerOptionsForEnvironment('production');
+  if (!options || typeof options !== 'object')
+    throw new Error('Production logger options missing');
+  const app = Fastify({
+    logger: {
+      ...options,
+      stream: {
+        write: (line: string) => {
+          lines.push(line);
+        },
+      },
+    },
+  });
+  const headers = {
+    'x-charitypilot-approval': 'SYNTHETIC_APPROVAL_LOG_CANARY',
+    'x-charitypilot-reason': 'SYNTHETIC_REASON_LOG_CANARY',
+  };
+  try {
+    app.log.info(
+      { headers, request: { headers } },
+      'synthetic application header log',
+    );
+  } finally {
+    await app.close();
+  }
+  const output = lines.join('');
+  assert.match(output, /synthetic application header log/);
+  assert.doesNotMatch(
+    output,
+    /SYNTHETIC_APPROVAL_LOG_CANARY|SYNTHETIC_REASON_LOG_CANARY/,
+  );
 });

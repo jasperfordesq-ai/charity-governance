@@ -161,7 +161,7 @@ let localAuthDeliveryTimer: NodeJS.Timeout | undefined;
 try {
   await bindAuthRecoveryControlForRuntime(app.prisma);
   await app.listen({ port, host });
-  app.log.info(`CharityPilot API running on http://${host}:${port}`);
+  app.log.info({ host, port, transport: managedApp ? 'https' : 'http' }, 'CharityPilot API listening');
 
   // Cron jobs
   const deadlineRemindersService = new DeadlineRemindersService(app.prisma);

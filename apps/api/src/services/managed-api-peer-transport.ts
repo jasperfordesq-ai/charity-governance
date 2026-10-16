@@ -1,3 +1,4 @@
+import { isManagedProxyClaim } from '../../../../packages/shared/runtime/managed-application-headers.mjs';
 import {
   parseManagedCertificate,
   parseManagedPrivateKey,
@@ -152,15 +153,7 @@ export function createManagedApiPeerServer(
       }
       roles.set(request, role);
       for (const key of Object.keys(request.headers)) {
-        if (
-          key === 'forwarded' ||
-          key.startsWith('x-forwarded-') ||
-          key === 'x-real-ip' ||
-          key === 'cf-connecting-ip' ||
-          key === 'true-client-ip' ||
-          key.startsWith('x-charitypilot-')
-        )
-          delete request.headers[key];
+        if (isManagedProxyClaim(key)) delete request.headers[key];
       }
     });
     return app;

@@ -245,6 +245,12 @@ async function start(input = fixture.input) {
             'x-forwarded-host': 'evil.example',
             forwarded: 'for=evil',
             'x-charitypilot-peer-role': 'gateway',
+            'x-charitypilot-readiness-key': 'synthetic-readiness',
+            'x-charitypilot-approval': 'synthetic-approval',
+            'x-charitypilot-reason': 'synthetic-reason',
+            'x-charitypilot-reason-encoding': 'base64url',
+            'x-charitypilot-client': 'synthetic-client',
+            'x-charitypilot-unknown': 'forged',
             cookie: 'charitypilot_access=synthetic',
             authorization: 'Bearer synthetic',
             origin: fixture.record.publicOrigin,
@@ -297,6 +303,15 @@ test('actual Fastify mutual TLS pins the gateway leaf and discards forwarded cla
       assert.equal(headers[key], undefined);
     assert.equal(headers.cookie, 'charitypilot_access=synthetic');
     assert.equal(headers.authorization, 'Bearer synthetic');
+    for (const [name, value] of Object.entries({
+      'x-charitypilot-readiness-key': 'synthetic-readiness',
+      'x-charitypilot-approval': 'synthetic-approval',
+      'x-charitypilot-reason': 'synthetic-reason',
+      'x-charitypilot-reason-encoding': 'base64url',
+      'x-charitypilot-client': 'synthetic-client',
+    }))
+      assert.equal(headers[name], value);
+    assert.equal(headers['x-charitypilot-unknown'], undefined);
     assert.equal(headers.origin, fixture.record.publicOrigin);
   } finally {
     await s.app.close();

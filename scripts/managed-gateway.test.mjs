@@ -2,7 +2,10 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import { verifyGatewayTlsMaterial } from '../caddy/managed/tls.mjs';
 import { gatewayTlsFixture } from './managed-gateway-tls-fixture.mjs';
-import { readFileSync } from 'node:fs';
+import { readFileSync,readdirSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
+import {join} from 'node:path';
+import {managedApplicationHeaders,isManagedProxyClaim} from '../packages/shared/runtime/managed-application-headers.mjs';
 import {
   createGatewayBinding,
   gatewayConfiguration,
@@ -196,3 +199,16 @@ test('gateway startup verifies the pinned issuer, client leaf and private key be
     f.cleanup();
   }
 });
+
+ test('managed transport preserves the request-header contract defined by the application',()=>{
+  const declared=new Set();
+  const visit=directory=>{for(const item of readdirSync(directory,{withFileTypes:true})){
+   if(item.name==='tests')continue;const path=join(directory,item.name);
+   if(item.isDirectory()){visit(path);continue;}if(!item.name.endsWith('.ts'))continue;
+   for(const match of readFileSync(path,'utf8').matchAll(/const\s+\w*HEADER\s*=\s*["'](x-charitypilot-[a-z-]+)["']/g))declared.add(match[1]);
+  }};
+  visit(fileURLToPath(new URL('../apps/api/src',import.meta.url)));
+  assert.ok(declared.size>=5);
+  for(const name of declared){assert.ok(managedApplicationHeaders.includes(name),'Missing application request header: '+name);assert.equal(isManagedProxyClaim(name),false);}
+  for(const name of ['x-charitypilot-peer-role','x-charitypilot-user-id','x-charitypilot-unknown','x-forwarded-for'])assert.equal(isManagedProxyClaim(name),true);
+ });

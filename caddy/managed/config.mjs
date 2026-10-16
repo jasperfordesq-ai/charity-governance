@@ -1,3 +1,4 @@
+import { managedApplicationHeaders } from '../../packages/shared/runtime/managed-application-headers.mjs';
 import { createManagedServiceMeshBinding } from '../../packages/shared/runtime/managed-service-mesh.mjs';
 
 export const createGatewayBinding = createManagedServiceMeshBinding;
@@ -57,6 +58,19 @@ export function gatewayConfiguration(env, build, tlsDirectory) {
         response_header_timeout 30s
       }
     }`;
+    // route preserves snapshot -> deletion -> conditional restoration ordering.
+    // Match stable variables, not headers already removed by the preceding step.
+    const capture = managedApplicationHeaders
+      .map(
+        (name, index) => `vars cp_app_${index} {http.request.header.${name}}`,
+      )
+      .join('\n');
+    const restore = managedApplicationHeaders
+      .map(
+        (name, index) =>
+          `@cp_app_${index} vars_regexp {vars.cp_app_${index}} .+\nrequest_header @cp_app_${index} ${name} {vars.cp_app_${index}}`,
+      )
+      .join('\n');
     return `{
   admin off
   auto_https off
@@ -87,12 +101,15 @@ export function gatewayConfiguration(env, build, tlsDirectory) {
   }
   @canonical host ${host}
   handle @canonical {
+   route {
+    ${capture}
     request_header -Forwarded
     request_header -X-Forwarded-*
     request_header -X-Real-IP
     request_header -CF-Connecting-IP
     request_header -True-Client-IP
     request_header -X-CharityPilot-*
+    ${restore}
     request_body {
       max_size 64MB
     }
@@ -103,6 +120,7 @@ export function gatewayConfiguration(env, build, tlsDirectory) {
     handle {
       ${upstream(r.webOrigin)}
     }
+   }
   }
   handle {
     respond "Not found" 404

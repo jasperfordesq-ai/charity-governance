@@ -1,3 +1,4 @@
+import {isManagedProxyClaim} from '../../packages/shared/runtime/managed-application-headers.mjs';
 import { createServer, request as httpsRequest, Agent } from "node:https";
 import { TLSSocket, checkServerIdentity } from "node:tls";
 import { readManagedServiceImagePin } from "../../packages/shared/runtime/managed-service-image-pin.mjs";
@@ -102,12 +103,7 @@ export function createManagedWebHttpsServer(env, pin, material, handler) {
       }
       for (const key of Object.keys(req.headers))
         if (
-          key === "forwarded" ||
-          key.startsWith("x-forwarded-") ||
-          key === "x-real-ip" ||
-          key === "cf-connecting-ip" ||
-          key === "true-client-ip" ||
-          key.startsWith("x-charitypilot-")
+          isManagedProxyClaim(key)
         )
           delete req.headers[key];
       handler(req, res);

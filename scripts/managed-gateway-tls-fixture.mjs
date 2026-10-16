@@ -147,7 +147,7 @@ export function gatewayTlsFixture() {
       gatewayClientCertSha256: fingerprint(gateway.cert),
       webClientCertSha256: fingerprint(webClient.cert),
     });
-    return { binding, issuer, api, web, gateway, webClient, foreign, cleanup };
+    return { binding, issuer, api, web, gateway, webClient, foreign, database:leaf('database','charitypilot-managed-database','serverAuth','issuer',6), cleanup };
   } catch (error) {
     cleanup();
     throw error;

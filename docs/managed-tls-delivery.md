@@ -98,3 +98,15 @@ documents runtime `/etc/secrets` access, group1000, and secret files being copie
 into Docker build contexts. Those facts motivate the explicit input inspection,
 separate protected staging and build exclusions above; they do not establish
 that an uninspected live mount satisfies this contract.
+
+
+## Normal application phase superseding earlier transport-only limits
+
+The native test now also builds the actual enabled API runner and boots its
+normal command with the complete migrated TLS database and production validators.
+It exercises real synthetic tenant sessions, Member byte access/isolation,
+compiled Next authentication and required privileged MFA. This self-contained
+provider configuration supplements the earlier synthetic-route phases above.
+See [normal runtime proof](managed-application-runtime-proof.md), including the
+application-header policy. External providers, public browser/edge, real key/IAM
+custody, independent recovery and host-loss/reopening remain open.

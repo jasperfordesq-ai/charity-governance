@@ -1,5 +1,13 @@
 # CharityPilot Agent Continuation Handoff
 
+> **16 October normal managed application phase:** The actual enabled API runner
+> boots its default command against the fully migrated TLS database, restricted
+> runtime role and production validators. Real synthetic tenant sessions, Member
+> bytes/isolation and required MFA are tested through Caddy and compiled Next.
+> Defined application headers survive filtering; approval/reason logs are redacted.
+> See [normal runtime proof](managed-application-runtime-proof.md). External
+> providers, custody, independent recovery and host-loss/reopening remain open.
+
 > **16 October managed TLS delivery:** Normal gateway, web and API startup now
 > optionally validate a service-specific provider bundle and stage node-owned
 > protected TLS files before listeners. This replaces direct fixture placement
