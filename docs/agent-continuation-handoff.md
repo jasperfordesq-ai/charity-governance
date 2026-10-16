@@ -1,5 +1,11 @@
 # CharityPilot Agent Continuation Handoff
 
+> **16 October hosted route-accounting correction:** The connector coverage gate
+> correctly required decisions for the three new retained-copy review POST
+> routes. Each is now explicitly excluded because the API requires an Owner
+> full-data web session and rejects connectors. No wildcard exclusion or guard
+> relaxation; private receipts record the hosted RED and local connector suite.
+
 > **16 October synthetic-scope registration increment:** The dedicated
 > maintenance command previews and digest-confirms one exact, expiring synthetic
 > review scope. See `docs/confluence-synthetic-scope-registration.md`. The joined

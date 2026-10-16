@@ -1,5 +1,10 @@
 # CharityPilot Full-Platform Remediation Audit
 
+> **16 October connector coverage gate:** Accounted for all three exact new
+> review-preparation routes as intentional Owner/web-only exclusions. The coverage
+> test remains strict and the API connector refusals remain in place. See private
+> hosted/local receipts; this does not grant connector access or establish a release.
+
 > **16 October synthetic maintenance scope path:** A preview/confirmation command
 > provides guarded immutable registration with a dedicated maintenance credential.
 > Its joined PostgreSQL/permission proof found and corrected a query-result

@@ -180,6 +180,18 @@ export const EXCLUDED_MUTATIONS: readonly ExcludedMutation[] = [
     route: 'PUT /api/v1/integrations/confluence/declared-environment',
     reason: 'Changes the operator-declared external integration environment; a connector cannot establish that environment safely.',
   },
+  {
+    route: 'POST /api/v1/integrations/confluence/retained-copy-reviews/observe/:publicationId',
+    reason: 'Exact retained-copy inventory is restricted to an Owner full-data web session; connector sessions cannot collect this dashboard review evidence.',
+  },
+  {
+    route: 'POST /api/v1/integrations/confluence/retained-copy-reviews',
+    reason: 'Records the Owner\'s explicit synthetic and retention review assertions in the dashboard; the connector must not attest to that review.',
+  },
+  {
+    route: 'POST /api/v1/integrations/confluence/retained-copy-reviews/:reviewId/withdraw',
+    reason: 'Withdraws a retained-copy review through the Owner dashboard and is deliberately refused to all connector sessions.',
+  },
   /* --- the platform operator realm ------------------------------------- */
   {
     route: 'POST /api/v1/owner/auth/login',
