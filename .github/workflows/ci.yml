@@ -246,7 +246,18 @@ jobs:
         run: npm run build -w @charitypilot/web
 
       - name: Build API Docker image
-        run: docker build -f apps/api/Dockerfile --build-arg DATABASE_URL=postgresql://charitypilot:charitypilot_ci@localhost:5432/charitypilot_ci -t charitypilot-api-ci .
+        run: docker build -f apps/api/Dockerfile --build-arg DATABASE_URL=postgresql://charitypilot:charitypilot_ci@localhost:5432/charitypilot_ci --build-arg CHARITYPILOT_BUILD_COMMIT="${GITHUB_SHA}" --label "org.opencontainers.image.revision=${GITHUB_SHA}" -t charitypilot-api-ci .
+
+      - name: Build migration image for Linux TLS verification
+        run: docker build -f apps/api/Dockerfile --target migration-runner --label "org.opencontainers.image.revision=${GITHUB_SHA}" -t charitypilot-api-migrations-ci .
+
+      - name: Verify Linux image database TLS and role boundaries
+        run: |
+          set -euo pipefail
+          export CHARITYPILOT_TEST_API_IMAGE="$(docker image inspect charitypilot-api-ci --format '{{.Id}}')"
+          export CHARITYPILOT_TEST_MIGRATION_IMAGE="$(docker image inspect charitypilot-api-migrations-ci --format '{{.Id}}')"
+          export CHARITYPILOT_TEST_SOURCE_COMMIT="${GITHUB_SHA}"
+          npm run test:production-linux-database-images
 
       - name: Validate API Docker production configuration
         run: |

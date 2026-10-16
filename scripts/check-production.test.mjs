@@ -5412,7 +5412,7 @@ test('CI builds API and web production Docker images', () => {
 
   assert.match(
     workflow,
-    /docker build -f apps\/api\/Dockerfile --build-arg DATABASE_URL=postgresql:\/\/charitypilot:charitypilot_ci@localhost:5432\/charitypilot_ci -t charitypilot-api-ci \./,
+    /docker build -f apps\/api\/Dockerfile --build-arg DATABASE_URL=postgresql:\/\/charitypilot:charitypilot_ci@localhost:5432\/charitypilot_ci[\s\S]*-t charitypilot-api-ci \./,
   );
   assert.match(
     workflow,
@@ -6001,7 +6001,7 @@ test('release workflow publishes runtime and migration Docker images to GHCR', (
   );
   assert.match(
     workflow,
-    /docker build -f apps\/api\/Dockerfile --build-arg DATABASE_URL=postgresql:\/\/charitypilot:charitypilot_ci@localhost:5432\/charitypilot_ci -t charitypilot-api-ci \./,
+    /docker build -f apps\/api\/Dockerfile --build-arg DATABASE_URL=postgresql:\/\/charitypilot:charitypilot_ci@localhost:5432\/charitypilot_ci[\s\S]*-t charitypilot-api-ci \./,
   );
   assert.match(workflow, /-e ERROR_ALERT_WEBHOOK_URL=https:\/\/alerts\.charitypilot\.ie\/hooks\/charitypilot/);
   assertWorkflowChecksForbiddenApiRuntimePackages(workflow);
@@ -6488,3 +6488,22 @@ test('stale Vercel API project auto-deploys are disabled while Docker is the rel
   assert.equal(apiVercelConfig.$schema, 'https://openapi.vercel.sh/vercel.json');
   assert.equal(apiVercelConfig.git?.deploymentEnabled, false);
 });
+
+for(const workflowName of ['ci.yml','release-images.yml']) {
+  test(workflowName+' gates Linux native TLS on both revision-labelled immutable image IDs',()=>{
+    const workflow=readRepoFile('.github/workflows/'+workflowName);
+    assert.ok(workflow.includes('--build-arg CHARITYPILOT_BUILD_COMMIT="${GITHUB_SHA}" --label "org.opencontainers.image.revision=${GITHUB_SHA}"'));
+    assert.ok(workflow.includes('--target migration-runner --label "org.opencontainers.image.revision=${GITHUB_SHA}"'));
+    const gateStart=workflow.indexOf('name: Verify Linux image database TLS and role boundaries');
+    const next=workflow.indexOf('      - name:',gateStart);
+    const gate=workflow.slice(gateStart,next);
+    assert.ok(gate.includes('set -euo pipefail'));
+    assert.ok(gate.includes('docker image inspect charitypilot-api-ci'));
+    assert.ok(gate.includes('docker image inspect charitypilot-api-migrations-ci'));
+    assert.ok(gate.includes('CHARITYPILOT_TEST_SOURCE_COMMIT="${GITHUB_SHA}"'));
+    assert.ok(gate.includes('npm run test:production-linux-database-images'));
+    assert.doesNotMatch(gate,/continue-on-error:\s*true/);
+    assert.ok(workflow.indexOf('name: Build API Docker image')<gateStart);
+    assert.ok(gateStart<workflow.indexOf('name: Validate API Docker production configuration'));
+  });
+}

@@ -147,3 +147,28 @@ TLS login succeeds, and a wrong hostname refuses. Effective Compose rendering
 covers all eight mounts and the migration-only strict URL. This does not prove
 an exact published Linux application image, a managed provider, full dump/restore
 with that provider or a hosted deployment.
+
+## Linux image gate
+
+The CI and release workflows now test locally built API and migration images
+before the production configuration checks and publication. Both are labelled
+with the checked-out commit; the test receives immutable local image IDs. It
+uses a disposable TLS PostgreSQL container with no published port and a public
+CA file mounted read-only. The application and migration images run as node
+with read-only root filesystems, temporary /tmp, no added capabilities and no
+new privileges. It applies all source migrations with the actual Linux CLI,
+checks the restricted role before/after, tests TLS/permission refusals and
+performs synthetic tenant/Owner operations through the packaged factory.
+
+For a local repeat after building both labelled Docker targets, supply
+CHARITYPILOT_TEST_API_IMAGE, CHARITYPILOT_TEST_MIGRATION_IMAGE (sha256 image IDs)
+and CHARITYPILOT_TEST_SOURCE_COMMIT (40-character commit), then run
+npm run test:production-linux-database-images. Missing inputs fail; no skipped
+claim or image-tag fallback is provided. The PostgreSQL fixture may pull only
+its fixed digest when absent. Docker endpoint validation/pinning applies to
+every lifecycle child. The test cleans its exact database container and
+temporary certificates.
+
+The first local receipt binds images built from763ed75a. It is not a remote CI
+run, signature/registry evidence, a Linux-host permission attestation, full HTTP
+acceptance, old-data upgrade, provider compatibility, or a deployed release.

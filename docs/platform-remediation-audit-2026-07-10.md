@@ -1,5 +1,17 @@
 # CharityPilot Full-Platform Remediation Audit
 
+> **16 October native Linux image proof / local only:** Built API runner and
+> migration-runner from clean763ed75a on the verified local Docker daemon. Both
+> Linux/amd64, USER node. Tracked image gate10checksPASS: strictTLS pre/post role,
+> actual190migrations, migration/API hostname refusals, API wrongpassword/CA and
+> elevated protected-grant refusal, restored positive and tenant/Owner operations.
+> CI and release workflow now invoke this gate on revision-labelled immutable
+> image IDs before publication/config checks. Final production1230PASS/8SKIP;
+> workflow YAML parsed. No remoteCI, registry/signature, provider, deployed-version
+> or host-loss proof. Whole accumulated branch, hosting/custody, grant provision
+> and Nikita/controller/Board gates remain OPEN. No source runtime/schema change.
+
+
 > **16 October explicit CA delivery connected / local proof:** Guarded Compose
 > automatically mounts the reviewed public certificate file read-only on all eight
 > database consumers. Derived runtime/maintenance URLs use a fixed container path;

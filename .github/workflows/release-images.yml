@@ -159,7 +159,7 @@ jobs:
         uses: sigstore/cosign-installer@d7543c93d881b35a8faa02e8e3605f69b7a1ce62 # v3.10.0
 
       - name: Build migration runner image
-        run: docker build -f apps/api/Dockerfile --target migration-runner -t charitypilot-api-migrations-ci .
+        run: docker build -f apps/api/Dockerfile --target migration-runner --label "org.opencontainers.image.revision=${GITHUB_SHA}" -t charitypilot-api-migrations-ci .
 
       - name: Verify migration runner Docker runtime dependencies
         run: |
@@ -277,7 +277,15 @@ jobs:
           '
 
       - name: Build API Docker image
-        run: docker build -f apps/api/Dockerfile --build-arg DATABASE_URL=postgresql://charitypilot:charitypilot_ci@localhost:5432/charitypilot_ci -t charitypilot-api-ci .
+        run: docker build -f apps/api/Dockerfile --build-arg DATABASE_URL=postgresql://charitypilot:charitypilot_ci@localhost:5432/charitypilot_ci --build-arg CHARITYPILOT_BUILD_COMMIT="${GITHUB_SHA}" --label "org.opencontainers.image.revision=${GITHUB_SHA}" -t charitypilot-api-ci .
+
+      - name: Verify Linux image database TLS and role boundaries
+        run: |
+          set -euo pipefail
+          export CHARITYPILOT_TEST_API_IMAGE="$(docker image inspect charitypilot-api-ci --format '{{.Id}}')"
+          export CHARITYPILOT_TEST_MIGRATION_IMAGE="$(docker image inspect charitypilot-api-migrations-ci --format '{{.Id}}')"
+          export CHARITYPILOT_TEST_SOURCE_COMMIT="${GITHUB_SHA}"
+          npm run test:production-linux-database-images
 
       - name: Validate API Docker production configuration
         run: |
