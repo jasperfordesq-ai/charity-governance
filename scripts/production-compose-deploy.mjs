@@ -625,14 +625,17 @@ export function runProductionComposeDeployFromArgs(
       );
     }
 
-    let runtimeQuiesced = false;
+    let quiesceAttempted = false;
     let backupResult = result(1);
     let smokeResult;
     try {
       guardedCommand(pullCommand);
       verifyRuntimeRole('before-migration');
-      guardedCommand(quiesceCommand);
-      runtimeQuiesced = true;
+      assertRuntimeEnvironmentUnchanged(transport.binding);
+      // A failed stop may already have stopped some services. Record the
+      // attempt after the binding guard, before entering Docker.
+      quiesceAttempted = true;
+      runCommand(quiesceCommand,commandEnv);
 
       if (hasPreMigrationDatabaseProbe) {
         guardedCommand(preMigrationDatabaseProbeCommand, prismaCommandEnv);
@@ -649,7 +652,7 @@ export function runProductionComposeDeployFromArgs(
         return result(
           1,
           `${preflightResult.stdout}${backupResult.stdout}`,
-          `Production compose deploy failed: pre-migration backup/restore verification failed. The production runtime remains stopped; do not restart an older image after any schema change.\n${redactProductionDeployTranscript(backupResult.stderr)}${cleanupError}`,
+          `Production compose deploy failed: pre-migration backup/restore verification failed. ${cleanupError ? "Runtime shutdown is unverified; confirm all services are stopped before recovery." : "The production runtime remains stopped; do not restart an older image after any schema change."}\n${redactProductionDeployTranscript(backupResult.stderr)}${cleanupError}`,
         );
       }
 
@@ -667,11 +670,13 @@ export function runProductionComposeDeployFromArgs(
       const message = redactProductionDeployTranscript(
         error instanceof Error ? error.message : String(error),
       );
-      const cleanupError = runtimeQuiesced
+      const cleanupError = quiesceAttempted
         ? failClosedCleanup(runCommand, quiesceCommand, commandEnv)
         : "";
-      const posture = runtimeQuiesced
-        ? " The production runtime remains stopped; recover by rolling forward, or restore the pre-migration database backup before deliberately selecting older images."
+      const posture = quiesceAttempted
+        ? cleanupError
+          ? " Runtime shutdown is unverified; confirm all services are stopped before any recovery action."
+          : " The production runtime remains stopped; recover by rolling forward, or restore the pre-migration database backup before deliberately selecting older images."
         : " No migration was attempted.";
       return result(
         1,
@@ -689,7 +694,7 @@ export function runProductionComposeDeployFromArgs(
       return result(
         1,
         `${preflightResult.stdout}${backupResult.stdout}${smokeResult.stdout}`,
-        `Production compose deploy failed: post-deploy smoke failed. The promoted runtime was stopped and will not fall back to an older image automatically.\n${redactProductionDeployTranscript(smokeResult.stderr)}${cleanupError}`,
+        `Production compose deploy failed: post-deploy smoke failed. ${cleanupError ? "Runtime shutdown is unverified; confirm all services are stopped before recovery." : "The promoted runtime was stopped and will not fall back to an older image automatically."}\n${redactProductionDeployTranscript(smokeResult.stderr)}${cleanupError}`,
       );
     }
 

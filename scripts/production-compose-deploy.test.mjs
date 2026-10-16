@@ -31,10 +31,11 @@ async function boundDeploymentFixture(t, mutation) {
   writeFileSync(envPath, completeDeployEnv(useCa?{DATABASE_URL:
     'postgresql://user:pass@db.charitypilot.ie:5432/charitypilot?sslmode=verify-full&target_session_attrs=read-write&sslrootcert='+encodeURIComponent(caPath)}:{}));
   const transport = buildProductionComposeEnvironment(envPath);
-  const change = () => writeFileSync(transport.binding.appPath,
-    readFileSync(transport.binding.appPath, 'utf8') + '# changed during deployment\n');
+  const change = () => useCa ? writeFileSync(caPath,'replaced synthetic CA')
+    : writeFileSync(transport.binding.appPath,readFileSync(transport.binding.appPath,'utf8')+'# changed during deployment\n');
   const calls = [];
   const rolePhases=[];
+  let backupCalls=0;
   const module = await loadDeployModule();
   const result = module.runProductionComposeDeployFromArgs(['--production-env-file', envPath, ...backupArgs], {
     processEnv: { ...cleanEnv(), DATABASE_URL: 'ambient-unreviewed', COMPOSE_FILE: 'ambient-unreviewed.yml' },
@@ -48,6 +49,10 @@ async function boundDeploymentFixture(t, mutation) {
     },
     runCommand: (command, env) => {
       calls.push(command);
+      if(command.includes('down') && (mutation==='shutdown-twice'
+        || (mutation==='shutdown-once' && calls.filter(value=>value.includes('down')).length===1))) {
+        throw new Error('synthetic partial shutdown');
+      }
       assert.equal(env.COMPOSE_FILE, undefined);
       assert.match(env.DATABASE_URL, /user:pass@/);
       const isPrismaCli=command.includes('run')&&command.includes('migrate');
@@ -69,6 +74,7 @@ async function boundDeploymentFixture(t, mutation) {
       return JSON.stringify({schemaVersion:1,verified:true,phase:target.phase});
     },
     runBackup: (_args,env) => {
+      backupCalls++;
       assert.equal(new URL(env.DATABASE_URL).searchParams.get('sslmode'),'verify-full');
       if (phase === 'backup') change();
       return { status: 0, stdout: 'synthetic backup\n', stderr: '' };
@@ -78,7 +84,7 @@ async function boundDeploymentFixture(t, mutation) {
       return { status: 0, stdout: 'synthetic smoke\n', stderr: '' };
     },
   });
-  return { result, calls, rolePhases };
+  return { result, calls, rolePhases, backupCalls };
 }
 
 for(const phase of ['preflight','backup','migration']) {
@@ -1237,3 +1243,17 @@ test("nested production deploy rejects a lock whose persisted ownership changed"
     rmSync(tempDir, { recursive: true, force: true });
   }
 });
+
+for(const mutation of ['shutdown-once','shutdown-twice']) {
+  test(mutation+' triggers cleanup after an attempted partial shutdown without starting backup or migrations',async t=>{
+    const {result,calls,backupCalls}=await boundDeploymentFixture(t,mutation);
+    assert.equal(result.status,1);
+    assert.equal(calls.filter(command=>command.includes('down')).length,2);
+    assert.equal(backupCalls,0);
+    assert.ok(!calls.some(command=>command.includes('run')||command.includes('up')));
+    if(mutation==='shutdown-twice') {
+      assert.match(result.stderr,/shutdown is unverified/);
+      assert.doesNotMatch(result.stderr,/runtime remains stopped/);
+    }
+  });
+}

@@ -1,5 +1,17 @@
 # CharityPilot Agent Continuation Handoff
 
+> **16 October partial-stop handling and CA proof correction:** Deployment now
+> attempts cleanup when its first stop fails partway through, without backup,
+> migration or startup. Failed cleanup reports shutdown UNVERIFIED rather than
+> asserting stopped. Two regressionsRED then41deployPASS; full1233PASS/8SKIP.
+> Corrected CA cutover fixture: earlier named CA cases changed app-env bytes;
+> they did NOT prove CA replacement. Current cases replace CA itself and all3
+> fail when CA binding is disabled in a temporary mutation (restored exactly).
+> Earlier CA-specific cutover claims superseded; loader/native-TLS proof remains
+> separately valid. Mock orchestration is not live Docker shutdown or deployment
+> evidence. Whole branch/provider/recovery/Nikita acceptance remain OPEN.
+
+
 > **16 October backup default-root defect fixed / local regression:** Accumulated
 > transport review reproduced a PostgreSQL16 tools default requiring missing
 > user root.crt despite available image roots. Helper now derives its pinned

@@ -191,3 +191,9 @@ hostname refusal. Its trust-store override contains only a synthetic public
 certificate, mounted read-only in disposable clients; no host trust store is
 changed. Actual provider trust compatibility and full backup/restore remain
 separate acceptance checks.
+
+A failed initial stop can have partially stopped services. Deployment therefore
+records its stop attempt after the configuration guard and retries cleanup on
+failure. Backup/migration/startup do not proceed. If cleanup fails, shutdown is
+unverified and the operator must confirm all services stopped before recovery;
+no automatic rollback or successful shutdown is asserted.
