@@ -1,5 +1,17 @@
 # CharityPilot Agent Continuation Handoff
 
+> **16 October deploy binding connected / complete role split still OPEN:** Deploy
+> derives protected transport before preflight, pins canonical paths, verifies the
+> same file binding after preflight and before every cutover/probe/backup/startup
+> child, and rechecks around smoke. Changed inputs refuse startup or trigger the
+> existing fail-closed shutdown after startup. No credential map is printed.
+> Seven new bound-file cases plus focused dependencies:169PASS/twoWindowsSKIP.
+> Orchestration uses mocked commands/protection evidence, not real ACL, database,
+> signature, backup or deployed proof. P1-09/P1-07A recovery's earlier commands
+> still need the same transport; apply active Compose only with all callers and
+> real role/target gates. Candidate Compose remains private; API/jobs still have
+> the original production-config gap. No push/deploy; acceptance remains OPEN.
+
 > **16 October strict production preflight connected / remaining lifecycle OPEN:**
 > Preflight now requires the separate reviewed runtime file, validates its complete
 > production settings, refuses unverified file protection on execution, and checks

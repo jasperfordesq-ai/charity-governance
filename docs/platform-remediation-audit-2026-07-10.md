@@ -1,5 +1,12 @@
 # CharityPilot Full-Platform Remediation Audit
 
+> **16 October deployment continuity / partial remediation:** Reviewed credential
+> files are now pinned across preflight and cutover; changes during backup,
+> migration, startup or smoke refuse completion and retain fail-closed handling.
+> Focused169PASS/twoWindowsSKIP, with synthetic command/permission dependencies.
+> Recovery-command transport, effective service split and actual target/grants
+> remain OPEN. No live execution, provider/signature/backup or acceptance proof.
+
 > **16 October production runtime preflight integration / partial remediation:**
 > Separate runtime configuration is now mandatory in preflight, including complete
 > production validation, protected-file execution refusal and rechecks across

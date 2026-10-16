@@ -1,13 +1,101 @@
 import assert from "node:assert/strict";
-import { existsSync, mkdtempSync, rmSync, writeFileSync as writeFixture } from "node:fs";
+import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync as writeFixture } from "node:fs";
 import { tmpdir } from "node:os";
-import { dirname, join } from "node:path";
+import { basename, dirname, join } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { after, test } from "node:test";
 import { productionRuntimeEnvFixtures } from './test-fixtures/production-runtime-env.mjs';
+import { buildProductionComposeEnvironment } from './production-runtime-credentials.mjs';
 
 const encodeProductionFixture = productionRuntimeEnvFixtures(after);
 function writeFileSync(path, content, options = {}) { writeFixture(path, content, { mode: 0o600, ...options }); }
+
+async function boundDeploymentFixture(t, mutation) {
+  const directory = mkdtempSync(join(tmpdir(), 'charitypilot-bound-deploy-'));
+  t.after(() => {
+    assert.equal(dirname(directory), tmpdir());
+    assert.ok(basename(directory).startsWith('charitypilot-bound-deploy-'));
+    rmSync(directory, { recursive: true, force: true });
+  });
+  const envPath = join(directory, 'production.env');
+  writeFileSync(envPath, completeDeployEnv());
+  const transport = buildProductionComposeEnvironment(envPath);
+  const change = () => writeFileSync(transport.binding.appPath,
+    readFileSync(transport.binding.appPath, 'utf8') + '# changed during deployment\n');
+  const calls = [];
+  const module = await loadDeployModule();
+  const result = module.runProductionComposeDeployFromArgs(['--production-env-file', envPath, ...backupArgs], {
+    processEnv: { ...cleanEnv(), DATABASE_URL: 'ambient-unreviewed', COMPOSE_FILE: 'ambient-unreviewed.yml' },
+    cutoverLockPath: join(directory, 'cutover.lock'),
+    // Protected branch orchestration only; not Windows ACL certification.
+    buildRuntimeEnvironment: (...args) => ({ ...buildProductionComposeEnvironment(...args), privatePermissionsVerified: mutation !== 'unprotected' }),
+    runPreflight: () => {
+      if (mutation === 'preflight') change();
+      return { status: 0, stdout: 'synthetic preflight\n', stderr: '' };
+    },
+    runCommand: (command, env) => {
+      calls.push(command);
+      assert.equal(env.COMPOSE_FILE, undefined);
+      assert.match(env.DATABASE_URL, /user:pass@/);
+      assert.match(env.CHARITYPILOT_PRODUCTION_RUNTIME_DATABASE_URL, /cp_runtime:runtime-only-password@/);
+      assert.equal(env.CHARITYPILOT_PRODUCTION_ENV_FILE, transport.binding.maintenancePath);
+      if (mutation === 'migration' && command.at(-1) === 'migrate') change();
+      if (mutation === 'startup' && command.includes('up')) change();
+    },
+    runBackup: () => {
+      if (mutation === 'backup') change();
+      return { status: 0, stdout: 'synthetic backup\n', stderr: '' };
+    },
+    runSmoke: () => {
+      if (mutation === 'smoke') change();
+      return { status: 0, stdout: 'synthetic smoke\n', stderr: '' };
+    },
+  });
+  return { result, calls };
+}
+
+test('bound deployment refuses changed preflight files before pulling or stopping runtime', async t => {
+  const { result, calls } = await boundDeploymentFixture(t, 'preflight');
+  assert.equal(result.status, 1);
+  assert.match(result.stderr, /configuration changed/);
+  assert.equal(calls.length, 0);
+});
+
+for (const phase of ['backup', 'migration']) {
+  test(`bound deployment refuses a file change during ${phase} before runtime startup`, async t => {
+    const { result, calls } = await boundDeploymentFixture(t, phase);
+    assert.equal(result.status, 1);
+    assert.match(result.stderr, /configuration changed/);
+    assert.ok(calls.some(command => command.includes('down')));
+    assert.ok(!calls.some(command => command.includes('up')));
+    if (phase === 'backup') assert.ok(!calls.some(command => command.includes('run')));
+  });
+}
+
+test('bound deployment uses distinct reviewed CLI inputs for all cutover phases', async t => {
+  const { result, calls } = await boundDeploymentFixture(t, 'none');
+  assert.equal(result.status, 0, result.stderr);
+  assert.ok(calls.some(command => command.includes('up')));
+  assert.doesNotMatch(result.stdout + result.stderr, /user:pass|runtime-only-password/);
+});
+
+test('bound deployment refuses unsupported protection before any lifecycle command', async t => {
+  const { result, calls } = await boundDeploymentFixture(t, 'unprotected');
+  assert.equal(result.status, 1);
+  assert.match(result.stderr, /private file permissions/);
+  assert.equal(calls.length, 0);
+});
+
+for (const phase of ['startup', 'smoke']) {
+  test(`bound deployment stops the promoted runtime after configuration changes during ${phase}`, async t => {
+    const { result, calls } = await boundDeploymentFixture(t, phase);
+    assert.equal(result.status, 1);
+    assert.match(result.stderr, /configuration changed/);
+    assert.ok(calls.some(command => command.includes('up')));
+    assert.ok(calls.at(-1).includes('down'));
+    assert.doesNotMatch(result.stdout, /Production compose deploy completed/);
+  });
+}
 
 const scriptsDir = dirname(fileURLToPath(import.meta.url));
 const deployScriptPath = join(scriptsDir, "production-compose-deploy.mjs");
@@ -43,6 +131,18 @@ async function loadDeployRunner() {
         tmpdir(),
         `charitypilot-deploy-test-${process.pid}.lock`,
       ),
+      // Existing orchestration cases mock preflight and do not have real files.
+      // Separate cases below use actual bound files and unchanged-input checks.
+      ...(dependencies.runPreflight ? {
+        buildRuntimeEnvironment: (path, env) => ({
+          environment: { ...env, CHARITYPILOT_PRODUCTION_ENV_FILE: path,
+            CHARITYPILOT_PRODUCTION_APP_ENV_FILE: 'synthetic-runtime.env',
+            CHARITYPILOT_PRODUCTION_RUNTIME_DATABASE_URL: 'synthetic-runtime-only' },
+          binding: { maintenancePath: path, appPath: 'synthetic-runtime.env' },
+          privatePermissionsVerified: true,
+        }),
+        assertRuntimeEnvironmentUnchanged: () => {},
+      } : {}),
       ...dependencies,
     });
 }

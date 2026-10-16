@@ -12,6 +12,7 @@ import {
   assertProductionCutoverLock,
   releaseProductionCutoverLock,
 } from "./production-cutover-lock.mjs";
+import { assertProductionRuntimeEnvironmentUnchanged, buildProductionComposeEnvironment } from './production-runtime-credentials.mjs';
 
 const scriptsDir = dirname(fileURLToPath(import.meta.url));
 const repoRoot = resolve(scriptsDir, "..");
@@ -147,7 +148,9 @@ function defaultRunCommand(command, env) {
     cwd: repoRoot,
     encoding: "utf8",
     env,
-    stdio: "inherit",
+    // Expanded configuration and migration diagnostics can contain secrets.
+    // Surface only the fixed command/status failure below.
+    stdio: "pipe",
   });
 
   if (commandResult.status !== 0) {
@@ -368,6 +371,8 @@ export function runProductionComposeDeployFromArgs(
     runCommand = defaultRunCommand,
     runBackup = defaultRunBackup,
     runSmoke = defaultRunSmoke,
+    buildRuntimeEnvironment = buildProductionComposeEnvironment,
+    assertRuntimeEnvironmentUnchanged = assertProductionRuntimeEnvironmentUnchanged,
     now = () => new Date(),
     randomId = randomUUID,
     cutoverLock = null,
@@ -430,6 +435,17 @@ export function runProductionComposeDeployFromArgs(
   }
 
   const executeCutover = () => {
+    let transport;
+    try {
+      transport = buildRuntimeEnvironment(resolve(repoRoot, options.productionEnvFile), processEnv);
+      if (!options.dryRun && !transport.privatePermissionsVerified) {
+        throw new Error('Production execution requires verified private file permissions for both configurations.');
+      }
+      options.productionEnvFile = transport.binding.maintenancePath;
+    } catch (error) {
+      return result(1, '', `Production compose deploy failed before preflight: ${redactProductionDeployTranscript(error instanceof Error ? error.message : String(error))}\n`);
+    }
+    const commandEnv = transport.environment;
     const preflightArgs = [
       "--production-env-file",
       options.productionEnvFile,
@@ -444,7 +460,7 @@ export function runProductionComposeDeployFromArgs(
         : attestedDatabaseCompatibility === "p006-restored"
           ? "p006-deadline-calendar-v1"
           : "p107a-password-recovery-v1";
-    const preflightResult = runPreflight(preflightArgs, processEnv, {
+    const preflightResult = runPreflight(preflightArgs, commandEnv, {
       expectedDatabaseCompatibility,
     });
     if (preflightResult.status !== 0) {
@@ -455,12 +471,18 @@ export function runProductionComposeDeployFromArgs(
       );
     }
 
+    try {
+      assertRuntimeEnvironmentUnchanged(transport.binding);
+    } catch (error) {
+      return result(1, '', `Production compose deploy failed after preflight: ${redactProductionDeployTranscript(error instanceof Error ? error.message : String(error))}\n`);
+    }
     const commandEnvOverrides = {
       CHARITYPILOT_PRODUCTION_ENV_FILE: options.productionEnvFile,
+      CHARITYPILOT_PRODUCTION_APP_ENV_FILE: transport.binding.appPath,
     };
-    const commandEnv = {
-      ...processEnv,
-      ...commandEnvOverrides,
+    const guardedCommand = command => {
+      assertRuntimeEnvironmentUnchanged(transport.binding);
+      runCommand(command, commandEnv);
     };
     const pullCommand = composePullCommand(options);
     const quiesceCommand = composeQuiesceCommand(options);
@@ -552,15 +574,17 @@ export function runProductionComposeDeployFromArgs(
 
     let runtimeQuiesced = false;
     let backupResult = result(1);
+    let smokeResult;
     try {
-      runCommand(pullCommand, commandEnv);
-      runCommand(quiesceCommand, commandEnv);
+      guardedCommand(pullCommand);
+      guardedCommand(quiesceCommand);
       runtimeQuiesced = true;
 
       if (hasPreMigrationDatabaseProbe) {
-        runCommand(preMigrationDatabaseProbeCommand, commandEnv);
+        guardedCommand(preMigrationDatabaseProbeCommand);
       }
 
+      assertRuntimeEnvironmentUnchanged(transport.binding);
       backupResult = runBackup(backupArgs, commandEnv);
       if (backupResult.status !== 0) {
         const cleanupError = failClosedCleanup(
@@ -575,12 +599,15 @@ export function runProductionComposeDeployFromArgs(
         );
       }
 
-      runCommand(migrateCommand, commandEnv);
-      runCommand(migrationStatusCommand, commandEnv);
+      guardedCommand(migrateCommand);
+      guardedCommand(migrationStatusCommand);
       if (!skipReminderReconciliationGate) {
-        runCommand(reminderReconciliationGateCommand, commandEnv);
+        guardedCommand(reminderReconciliationGateCommand);
       }
-      runCommand(command, commandEnv);
+      guardedCommand(command);
+      assertRuntimeEnvironmentUnchanged(transport.binding);
+      smokeResult = runSmoke(smokeArgs, commandEnv);
+      assertRuntimeEnvironmentUnchanged(transport.binding);
     } catch (error) {
       const message = redactProductionDeployTranscript(
         error instanceof Error ? error.message : String(error),
@@ -598,7 +625,6 @@ export function runProductionComposeDeployFromArgs(
       );
     }
 
-    const smokeResult = runSmoke(smokeArgs, commandEnv);
     if (smokeResult.status !== 0) {
       const cleanupError = failClosedCleanup(
         runCommand,
