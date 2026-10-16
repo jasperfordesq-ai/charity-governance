@@ -1,5 +1,12 @@
 # CharityPilot Agent Continuation Handoff
 
+> **16 October historical KMS routing:** An explicit bounded key ring permits
+> generation only with its configured current key and unwraps original history
+> only through configured exact-key/context delegates. Existing single-key
+> boundaries remain. Synthetic integrated S3/KMS proof is distinct from real
+> provider IAM/custody, deployment or host loss. V2 durable dispatch/release and
+> replay remain required before activation.
+
 > **16 October V2 mixed-history authentication:** Separate V2 publication and
 > current-head readers require an explicit trusted epoch/key policy, authenticate
 > original decision bookkeeping and preserve earlier archive rows. Downgrades,

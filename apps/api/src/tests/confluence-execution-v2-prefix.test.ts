@@ -1,3 +1,5 @@
+import { KMSClient, DecryptCommand } from '@aws-sdk/client-kms';
+import { KmsRecoveryDataKeyRing } from '../services/recovery-data-keys-kms.js';
 import { Readable } from 'node:stream';
 import { S3Client, GetObjectCommand } from '@aws-sdk/client-s3';
 import { S3AuthorityObjectStore } from '../services/recovery-authority-s3.js';
@@ -205,7 +207,7 @@ test('V2 permits independently approved key rotation within one epoch and refuse
  await assert.rejects(duplicate.read);
 });
 
-test('mixed-key prefix reads through the actual S3 adapter without weakening legacy current-key readers', async t => {
+test('mixed-key prefix reads through actual S3 and KMS adapters without weakening legacy current-key readers', async t => {
  const h = await setup(true), rows = new Map(h.f.entries), calls: string[] = [];
  for (const [operation,body] of h.f.objects) rows.set(`confluence-copy-state/${context.installationId}/${context.organisationId}/${operation}.json`,body);
  for (const [operation,body] of h.legacy) rows.set(`confluence-copy-ledger/${context.installationId}/${context.organisationId}/${operation}.json`,body);
@@ -224,11 +226,25 @@ test('mixed-key prefix reads through the actual S3 adapter without weakening leg
  const objects = new S3AuthorityObjectStore(config,credentials,client);
  const journal = new RecoveryAuthorityJournal(objects,{ installationId: context.installationId,organisationId: context.organisationId },
   { installationId: context.installationId,organisationId: context.organisationId,generation: 0,digest: null });
- assert.equal((await readPublishedConfluenceExecutionV2(journal,h.f.control,h.binding,h.f.keys,objects,h.policy)).archiveAtObservedHead,true);
+ const kms = new KMSClient({ region: 'eu-west-1',credentials }), buffers: Uint8Array[] = [], keyCalls: string[] = [];
+ t.mock.method(kms,'send',async (command: unknown) => {
+  assert.ok(command instanceof DecryptCommand); const keyId = command.input.KeyId!; keyCalls.push(keyId);
+  assert.ok([context.keyId,laterKey].includes(keyId));
+  assert.equal(command.input.EncryptionContext?.installationId,context.installationId);
+  assert.equal(command.input.EncryptionContext?.organisationId,context.organisationId);
+  const Plaintext = new Uint8Array(32).fill(7); buffers.push(Plaintext);
+  return { KeyId: keyId,Plaintext,EncryptionAlgorithm: 'SYMMETRIC_DEFAULT' };
+ });
+ try {
+  const keys = new KmsRecoveryDataKeyRing(laterKey,[context.keyId],credentials,kms);
+  assert.equal((await readPublishedConfluenceExecutionV2(journal,h.f.control,h.binding,keys,objects,h.policy)).archiveAtObservedHead,true);
+  assert.ok(keyCalls.includes(context.keyId)); assert.ok(keyCalls.includes(laterKey));
+  assert.ok(buffers.every(bytes => bytes.every(byte => byte === 0)));
  assert.ok(calls.some(key => key.endsWith('/1/archive-v2.json'))); assert.ok(calls.some(key => key.endsWith('/2/archive-v2.json')));
  await assert.rejects(objects.readConfluenceCopyState('state-1'));
  await assert.rejects(objects.readConfluenceCopyLedger('archive-legacy'));
  assert.ok((await objects.readConfluenceCopyStateHistory('state-1')));
+ } finally { kms.destroy(); client.destroy(); }
 });
 
 test('V2 candidate uses one policy snapshot rather than accepting keys added during asynchronous reads', async () => {

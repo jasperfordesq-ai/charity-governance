@@ -172,11 +172,10 @@ current-key readers and full-context V2 reader remain strict. The integrated
 synthetic SDK test traverses the real S3 adapter across old/new keys and epochs,
 then confirms that the legacy current-key readers still refuse old-key payloads.
 No live AWS call or actual independently administered policy is implied.
-The existing KMS adapter is deliberately pinned to one configured key. Before
-activation, provide an explicit bounded historical-key router with current-key-only
-generation and original-context unwrap; do not fall back to ambient keys or weaken
-that single-key adapter. The integrated transport fixture uses synthetic key
-responses and does not prove real multi-key KMS custody.
+The existing KMS adapter remains pinned to one configured key. The explicit
+historical-key router below retains that boundary while composing configured
+delegates. The integrated transport fixture uses synthetic provider responses
+and does not prove real multi-key KMS custody.
 
 V2 has its own reserved append/history method and explicit journal kind. Generic
 append and format1 publication cannot bypass the reservation. Candidate verification
@@ -210,3 +209,58 @@ zero skips, plus a fresh joined native PostgreSQL recovery proof. Source securit
 scans and manual staged review passed. The full repository result predates only
 that final prefix-local policy-snapshot change; the final API/native results cover
 it. These are local/synthetic results, not hosted CI, deployment or provider proof.
+
+
+## Explicit historical KMS routing
+
+`KmsRecoveryDataKeyRing` snapshots one exact current Ireland key ARN and up to31
+unique historical key ARNs. It rejects duplicate, malformed and out-of-region
+configuration and requires explicit credentials. `generate` accepts only the
+current key; `unwrap` routes only to the originally named configured key and
+passes the original installation, organisation, operation, writer epoch and
+source revision unchanged. No recovered record, provider response, alias or
+ambient credential selection can add a key or trigger fallback to another key.
+The original single-key adapter remains unchanged.
+
+Each delegate retains its pinned endpoint, exact provider key/context checks,
+bounded deadline, no automatic retry, sanitised errors and clearing of SDK
+plaintext buffers, including late/rejected responses. Caller-owned key buffers
+still require clearing after use; the existing archive codec does that. The ring
+neither caches plaintext keys nor activates provider accounts or permissions.
+
+The integrated mixed-history fixture now traverses the actual S3 adapter and KMS
+router/delegates using isolated synthetic SDK responses. Five dedicated ring
+tests cover current-only generation, original-context unwrap, copied bounded
+configuration, unknown/old generation refusal, invalid provider key response,
+no fallback, timeout cancellation and late-buffer clearing. They do not verify
+live AWS IAM, key availability, independent custody or host-loss recovery.
+
+Provider policy must independently enforce the intended separation: generation
+for the current key and decrypt-only access to retained historical keys. This is
+an operating requirement, not a claim that IAM has been configured. Do not delete
+historical wrapping keys while retained recovery evidence still needs them.
+
+Official AWS references checked16October2026:
+
+- [GenerateDataKey](https://docs.aws.amazon.com/kms/latest/APIReference/API_GenerateDataKey.html)
+  documents the separate generation permission, exact matching encryption context
+  for subsequent decryption and prompt removal of plaintext data keys.
+- [Decrypt](https://docs.aws.amazon.com/kms/latest/APIReference/API_Decrypt.html)
+  documents decrypt permission and original key/context binding.
+- [Deleting KMS keys](https://docs.aws.amazon.com/kms/latest/developerguide/deleting-keys.html)
+  explains the recovery consequence of deleting keys needed by ciphertext.
+
+The software decision is to apply that separation explicitly. Source allowlists
+are not substitutes for provider IAM, protected policy custody or tested recovery.
+Durable V2 upload/progress/acknowledgement/release, maintenance replay and the
+managed whole-backend/provider/host-loss demonstration remain open.
+
+
+Router verification: API TypeScript build passed; all22 focused ring, single-key
+KMS and mixed-prefix tests passed; all3348 ordinary API tests passed with zero
+skips. Secrets/static-analysis scanned1580 files and control-byte checks1564
+source files, all passed. Manual staged review and whitespace checks passed.
+No SQL/model/restore inventory or runtime entry point changed, so the preceding
+separately dated full/native gates were not rerun for this provider-router-only
+increment. Exact hosted checks, live permissions/custody and deployment remain
+separate evidence requirements.

@@ -78,3 +78,33 @@ export class KmsRecoveryDataKeys implements RecoveryDataKeys {
     finally { clear(response); }
   }
 }
+
+
+/** Explicit, bounded historical-key routing. A configured old key can unwrap
+ * original ciphertext but cannot generate a new archive. Neither provider
+ * response hints nor a recovered payload can add keys to this snapshot. Each
+ * delegate retains exact context/key checks, deadline, no retry, sanitised
+ * errors and SDK-buffer clearing. Provider policy/custody remains separate. */
+export class KmsRecoveryDataKeyRing implements RecoveryDataKeys {
+  private readonly currentKeyArn: string;
+  private readonly keys: ReadonlyMap<string,KmsRecoveryDataKeys>;
+  constructor(currentKeyArn: string, historicalKeyArns: readonly string[],
+    credentials: NonNullable<KMSClientConfig['credentials']>, client?: KMSClient) {
+    this.currentKeyArn = arn.parse(currentKeyArn);
+    const historical = z.array(arn).max(31).parse(historicalKeyArns);
+    const configured = [this.currentKeyArn,...historical];
+    if (new Set(configured).size !== configured.length) throw new Error('Duplicate recovery key configuration');
+    if (!credentials) throw new Error('Explicit recovery KMS credentials are required');
+    this.keys = new Map(configured.map(keyId => [keyId,new KmsRecoveryDataKeys(keyId,credentials,client)]));
+  }
+  async generate(raw: RecoveryEnvelopeContext) {
+    const context = validateRecoveryEnvelopeContext(raw);
+    if (context.keyId !== this.currentKeyArn) throw new Error('Only the current recovery key can generate data keys');
+    return this.keys.get(this.currentKeyArn)!.generate(context);
+  }
+  async unwrap(wrappedKey: string, raw: RecoveryEnvelopeContext) {
+    const context = validateRecoveryEnvelopeContext(raw), selected = this.keys.get(context.keyId);
+    if (!selected) throw new Error('Recovery key is not explicitly configured');
+    return selected.unwrap(wrappedKey,context);
+  }
+}
