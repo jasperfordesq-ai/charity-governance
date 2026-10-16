@@ -2,6 +2,12 @@
 
 ## Status
 
+The main CI workflow now runs `npm run test:confluence-copy-ledger-postgres`,
+which builds the API and executes the existing joined disposable PostgreSQL
+restart/maintenance proof. This is separate from the API migration fixtures and
+retention-policy SQL checks. The proof uses synthetic external state; passing it
+does not establish real-provider custody, transport recovery or safe reopening.
+
 16 October source correction: a forward constraint rejects non-string/non-null
 JSON digests in the original ledger capture's declared control. A numeric JSONB
 value could previously match the hexadecimal text check. Actual PostgreSQL

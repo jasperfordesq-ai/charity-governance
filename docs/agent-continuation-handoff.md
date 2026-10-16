@@ -1,5 +1,13 @@
 # CharityPilot Agent Continuation Handoff
 
+> **16 October Confluence ledger CI coverage correction:** The existing joined
+> restart/maintenance PostgreSQL proof was not invoked by the main CI workflow.
+> Added an explicit build-and-test command and gate. Local execution passes,
+> including eight populated groups, late-failure rollback and unknown-commit
+> retry; external state is synthetic and transport recovery remains unproved.
+> Read ignored `ledger-restart-ci-gate-review-2026-10-16.md`. No hosted run,
+> release, provider activation, disposal or DPO acceptance inferred.
+
 > **16 October managed-local browser lifecycle correction:** The current schema's
 > append-only truncate guards correctly refuse the old global reset. Managed local
 > tests now prove an exactly bound pristine dataset and use parent-verified disposal

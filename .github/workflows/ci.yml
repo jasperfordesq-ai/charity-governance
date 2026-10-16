@@ -201,6 +201,9 @@ jobs:
       - name: Verify retention policy migrations and recovery bindings
         run: npm run test:retention-policy
 
+      - name: Verify Confluence ledger restart and maintenance recovery with disposable PostgreSQL
+        run: npm run test:confluence-copy-ledger-postgres
+
       - name: Verify complaint retention migrations
         run: |
           npm run test:complaint-resolution
