@@ -1,5 +1,11 @@
 # CharityPilot Full-Platform Remediation Audit
 
+> **16 October retained-copy transport increment:** The new internal single-call
+> primitive preserves ambiguous outcomes and never treats a 404 as purge proof.
+> Focused real-client synthetic transport tests cover retry/error paths. This
+> does not close durable consumption, provider readback, full execution recovery
+> or host-loss proof; no route or worker consumes it yet.
+
 > **16 October permission API increment:** Supported Owner/full-web issuance and
 > withdrawal reuse registered-scope/current-source/expiry guards. Receipt lookup
 > reconciles a lost response without claiming fresh validity or provider authority.

@@ -1,5 +1,12 @@
 # CharityPilot Agent Continuation Handoff
 
+> **16 October retained-copy destructive transport:** A separate internal
+> primitive makes one trash/purge request with retries disabled. A 204 is only
+> acknowledgement; missing targets and uncertain responses remain unresolved.
+> It has no route/worker caller and does not consume permission. The execution
+> coordinator still needs durable one-use and independently recoverable history.
+> The authority document now reflects the existing Owner API and scope command.
+
 > **16 October supported Owner permission decisions:** The review API adds
 > issuance, tenant-scoped receipt lookup and withdrawal through the existing
 > guarded permission service. Receipts explicitly grant no provider execution

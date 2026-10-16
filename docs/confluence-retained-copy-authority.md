@@ -18,12 +18,22 @@ disposal/reopening. Prior migration checksums remain unchanged. Release and
 existing-record reconciliation remain separate gates; immutable rows are never
 silently rewritten to make a migration pass.
 
-Review, collection, scoped permission and recovery-capture increments,
-15 October 2026. Synthetic engineering only. Internal decision/capture services
-and migrations add no runtime route, executable provider permission or deletion
-capability. These source increments are not deployed. The deployed
-retained-source refusal remains intact.
-Private item-specific decisions and evidence stay in the ignored roadmap.
+Current source includes Owner/full-web review and permission decision routes
+and the dedicated maintenance scope-registration command. See
+[the supported review API](confluence-retained-copy-review.md) and
+[scope registration](confluence-synthetic-scope-registration.md). Neither
+consumes one-use authority or executes a retained-source purge. Private release
+receipts distinguish source, hosted checks and actual serving versions.
+Item-specific decisions and evidence stay in the ignored roadmap.
+
+The internal `confluence-copy-mutation-once.ts` transport primitive sends one
+trash or purge request through the existing client with retries disabled. It is
+not wired to a route or worker. A 204 acknowledges a request; it does not prove
+absence or erasure. Missing targets, timeouts, rate limits and other uncertain
+responses remain unresolved. No outcome allows automatic retry. A future
+coordinator must commit exact one-use authority and retain recoverable execution
+history before invoking it; the eight-table decision archive alone cannot restore
+consumption history that it does not contain.
 
 ## Two distinct decisions
 
@@ -62,12 +72,13 @@ Owner/charity, retained-source/hold, publication, revision, target and time
 checks under locks. The original row is append-only; withdrawal is a separate
 tenant-bound, append-only row. Both reject UPDATE, DELETE and TRUNCATE.
 `authorisesProviderIO` is constrained to false even for direct SQL inserts.
-The service has no route and neither erasure request nor worker imports it.
+The Owner review routes call this service; neither the erasure request nor worker
+consumes the evidence as execution authority.
 
 Provider inventory, byte hashes, synthetic status and evidence references are
 still assertions to review: storage does not establish their truth or sign a
 policy. SQL does not recompute the JavaScript canonical snapshot hash or prove
-all nested version inventories. Future permission issuance must independently
+all nested version inventories. Permission issuance must independently
 collect/revalidate those facts and the complete contract; it cannot treat a
 stored row, matching digest or absence of a withdrawal as execution authority.
 
@@ -85,8 +96,9 @@ independent storage, replay or a host-loss recovery result.
 digest, scope/disposal decision evidence, accountable Owner and expiry. Only
 the actual maintenance table owner can insert it; the application DML role
 cannot self-register or use a temporary table to impersonate that owner.
-No scope is seeded. There is no supported live registration command yet;
-do not substitute raw production SQL for the future reviewed operator path.
+No scope is seeded. Use the dedicated preview/confirmation
+[maintenance registration command](confluence-synthetic-scope-registration.md);
+do not substitute ad hoc production SQL.
 
 The internal `ConfluenceRetainedCopyPermissionService` requires the active
 Owner's explicit attestation, expected reviewed digest, matching registered
@@ -110,8 +122,9 @@ regressions. All scope/permission/withdrawal tables reject mutation/truncation.
 Existing independent-history bindings still freeze these decisions, and the
 parent review history still prevents activation before independent replay.
 
-No HTTP route, actual registered scope, live permission, erasure exception or
-provider execution was added. Issuance returns `providerIOAuthorised: false`:
+Owner HTTP decision routes and a maintenance registration command now exist;
+they do not seed a scope or permission, add an erasure exception or execute a
+provider action. Issuance returns `providerIOAuthorised: false`:
 the recorded controller decision still needs independently committed history
 and a durable one-use request/worker decision. Primary retention and the
 existing retained-source erasure refusal remain unchanged.
