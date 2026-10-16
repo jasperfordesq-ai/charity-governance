@@ -194,6 +194,9 @@ jobs:
               comparison.mismatchCount !== 0
             ) process.exit(1);
           '
+          CHARITYPILOT_DATABASE_BACKUP_PROOF_REPORT="${backup_dir}/ci-postgres-restore-proof.json" \
+          CHARITYPILOT_SOURCE_IDENTITY_SHA256="${source_identity_sha}" \
+            node --import tsx --test scripts/database-byte-backup-postgres.test.mjs
 
       - name: Lint
         run: npm run lint

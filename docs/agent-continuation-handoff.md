@@ -1,5 +1,14 @@
 # CharityPilot Agent Continuation Handoff
 
+> **17 October encrypted database archive:** The new bounded chunk codec and
+> purpose-specific KMS adapter preserve exact source/capture/dump scope and open
+> only to quarantine. A real synthetic PostgreSQL dump was encrypted, its local
+> source removed and its bytes restored/query-checked in another isolated DB.
+> CI now composes the archive with its existing full source-bound proof; inspect
+> the exact run before claiming that branch passed. Independent publication,
+> common object capture/current authority and host-loss/reopening remain open.
+> See [database archive](database-byte-backup.md).
+
 > **17 October authenticated archive index:** The new index reconciles complete
 > supplied document/object inventories and exact archived versions, binds the
 > database/source/set, and uses separate-key KMS HMAC authentication. Shared

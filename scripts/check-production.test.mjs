@@ -5051,6 +5051,9 @@ test('CI verifies PostgreSQL backup and restore against the migrated database', 
   assert.match(step, /value\.dump\?\.capacityPreflight\?\.verified !== true/);
   assert.match(step, /comparison\.rowFingerprintsMatched !== true/);
   assert.match(step, /comparison\.mismatchCount !== 0/);
+  assert.match(step, /CHARITYPILOT_DATABASE_BACKUP_PROOF_REPORT="\$\{backup_dir\}\/ci-postgres-restore-proof\.json"/);
+  assert.match(step, /CHARITYPILOT_SOURCE_IDENTITY_SHA256="\$\{source_identity_sha\}"/);
+  assert.match(step, /node --import tsx --test scripts\/database-byte-backup-postgres\.test\.mjs/);
   assert.doesNotMatch(step, /postgres-backup\.mjs backup|postgres-backup\.mjs verify-restore|--expect-operational-sentinel/);
   assert.ok(
     step.indexOf('seed-restore-sentinel') < step.indexOf('postgres-backup.mjs source-identity') &&
