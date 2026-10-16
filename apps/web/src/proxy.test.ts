@@ -10,15 +10,16 @@ const originalEnv = { ...process.env };
 
 function managedWebFixture() {
   const binding = createManagedWebApiBinding({
-    format: 1, provider: 'render', region: 'frankfurt', installationId: 'synthetic-proxy',
+    format: 2, provider: 'render', region: 'frankfurt', installationId: 'synthetic-proxy',
     ownerId: 'tea-synthetic', environmentId: 'env-synthetic', sourceSha: '1'.repeat(40),
     publicOrigin: 'https://managed.charitypilot.test', gatewayServiceId: 'srv-' + 'a'.repeat(20),
     webServiceId: 'srv-' + 'b'.repeat(20), apiServiceId: 'srv-' + 'c'.repeat(20),
     schedulerServiceId: 'srv-' + 'd'.repeat(20), apiServiceName: 'charitypilot-review-api',
-    apiOrigin: 'http://charitypilot-review-api-ab12:3002',
+    apiOrigin: 'https://charitypilot-review-api-ab12:3002',
+    webServiceName:'charitypilot-review-web',webOrigin:'https://charitypilot-review-web-cd34:3003',issuerCertSha256:'2'.repeat(64),apiCertSha256:'3'.repeat(64),webCertSha256:'4'.repeat(64),gatewayClientCertSha256:'5'.repeat(64),webClientCertSha256:'6'.repeat(64),
   });
   Object.assign(process.env, {
-    NODE_ENV: 'production', NEXT_PUBLIC_CHARITYPILOT_DEPLOYMENT_MODE: 'public-production',
+    NODE_ENV: 'production', PORT:'3003', NEXT_PUBLIC_CHARITYPILOT_DEPLOYMENT_MODE: 'public-production',
     NEXT_PUBLIC_API_URL: binding.record.publicOrigin,
     NEXT_PUBLIC_CHARITYPILOT_CANONICAL_API_ORIGIN: binding.record.publicOrigin,
     NEXT_PUBLIC_CHARITYPILOT_MANAGED_WEB_BINDING_SHA256: binding.sha256,
@@ -31,24 +32,13 @@ function managedWebFixture() {
   return binding;
 }
 
-test('managed proxy authenticates only at the pinned private API and keeps public responses canonical', async () => {
-  const binding = managedWebFixture();
-  const calls: {url: string; cookie: string | null}[] = [];
-  globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
-    calls.push({url: input.toString(), cookie: new Headers(init?.headers).get('cookie')});
-    return new Response(null, {status: 200});
-  }) as typeof fetch;
-  const request = () => new NextRequest('http://private-web:3003/documents', {
-    headers: {host: 'attacker.example', 'x-forwarded-host': 'attacker.example',
-      'x-forwarded-proto': 'http', cookie: 'charitypilot_access=synthetic-managed; unrelated=private'},
-  });
-  const response = await proxy(request());
-  assert.equal(response.status, 200);
-  assert.deepEqual(calls, [{url: binding.record.apiOrigin + '/api/v1/auth/me', cookie: 'charitypilot_access=synthetic-managed'}]);
-  assert.doesNotMatch(response.headers.get('content-security-policy') ?? '', /private-web|review-api|attacker/);
-  globalThis.fetch = (async () => new Response(null, {status: 401})) as typeof fetch;
-  const denied = await proxy(request());
-  assert.equal(denied.headers.get('location'), binding.record.publicOrigin + '/login?next=%2Fdocuments');
+test('managed proxy keeps redirects canonical and refuses missing TLS material without public fallback',async()=>{
+ const binding=managedWebFixture();let calls=0;globalThis.fetch=(async()=>{calls++;throw new Error('unexpected fallback');}) as typeof fetch;
+ const headers={host:'attacker.example','x-forwarded-host':'attacker.example'};
+ const publicResponse=await proxy(new NextRequest('http://private-web:3003/login',{headers}));assert.equal(publicResponse.status,200);
+ assert.doesNotMatch(publicResponse.headers.get('content-security-policy')??'',/private-web|review-api|attacker/);
+ const redirect=await proxy(new NextRequest('http://private-web:3003/documents',{headers}));assert.equal(redirect.headers.get('location'),binding.record.publicOrigin+'/login?next=%2Fdocuments');
+ const denied=await proxy(new NextRequest('http://private-web:3003/documents',{headers:{...headers,cookie:'charitypilot_access=synthetic'}}));assert.equal(denied.status,503);assert.equal(calls,0);
 });
 
 test('managed proxy rejects incomplete or altered configuration before any protected or public fetch', async () => {

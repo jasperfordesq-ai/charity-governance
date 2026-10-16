@@ -1,5 +1,14 @@
 # CharityPilot Full-Platform Remediation Audit
 
+> **16 October compiled Next mTLS integration:** Private Next now consumes the
+> shared V2 mesh, fixed root-owned image pin and protected separate server/client
+> keys. The real gateway and compiled Next image reached the actual API TLS
+> loader with synthetic routes. Enabled API/web images refuse removed runtime
+> flags instead of downgrading to HTTP. See [web transport](managed-web-api-binding.md).
+> Full production business/provider boot, actual key custody, independent recovery
+> and host-loss/reopening proof remain open; this supersedes the older web-open
+> transport snapshots below, without claiming managed deployment.
+
 > **16 October gateway/API mTLS composition:** API and gateway now share the
 > format2 mesh record and protected Linux reader. The real gateway image reaches
 > the compiled API's fixed-pin/material loader and TLS peer hook; foreign-CA and

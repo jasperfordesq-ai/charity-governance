@@ -78,6 +78,7 @@ RUN npm ci --omit=dev --omit=peer --workspace @charitypilot/web --workspace @cha
 FROM node:22-alpine@sha256:968df39aedcea65eeb078fb336ed7191baf48f972b4479711397108be0966920 AS runner
 WORKDIR /app
 ARG CHARITYPILOT_BUILD_COMMIT
+ARG NEXT_PUBLIC_CHARITYPILOT_MANAGED_WEB_BINDING_SHA256
 ENV NODE_ENV=production
 ENV PORT=3003
 ENV CHARITYPILOT_BUILD_COMMIT=$CHARITYPILOT_BUILD_COMMIT
@@ -85,10 +86,13 @@ COPY --chown=node:node --from=build /app/package.json /app/package-lock.json ./
 COPY --chown=node:node --from=runtime-deps /app/node_modules ./node_modules
 COPY --chown=node:node --from=build /app/packages/shared/package.json ./packages/shared/package.json
 COPY --chown=node:node --from=build /app/packages/shared/dist ./packages/shared/dist
+COPY --chown=node:node --from=build /app/packages/shared/runtime ./packages/shared/runtime
 COPY --chown=node:node --from=build /app/apps/web/package.json ./apps/web/package.json
 COPY --chown=node:node --from=build /app/apps/web/server.mjs ./apps/web/server.mjs
+COPY --chown=node:node --from=build /app/apps/web/managed-tls.mjs ./apps/web/managed-tls.mjs
 COPY --chown=node:node --from=build /app/apps/web/next.config.ts ./apps/web/next.config.ts
 COPY --chown=node:node --from=build /app/apps/web/.next ./apps/web/.next
+RUN node packages/shared/runtime/managed-web-build-pin.mjs /opt/charitypilot/managed-web-build.json
 WORKDIR /app/apps/web
 EXPOSE 3003
 USER node

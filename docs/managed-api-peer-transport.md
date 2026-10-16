@@ -130,8 +130,8 @@ run the full production environment/provider boot. Gateway/API record parity
 comes from the shared format2 parser and fingerprint.
 
 **Not deployed or activation-ready:** real protected material provisioning and
-custody, complete production image/application boot proof, web TLS/API-client
-transport, web record parity, rotation/revocation
+custody, complete production image/application boot proof, actual provider/key
+custody, rotation/revocation
 and the joined browser-to-application flow remain required. Provider secret
 mounts must be inspected: a shared-readable or symlinked mount does not satisfy
 this contract. Prepare a protected delivery step rather than weakening the
@@ -147,3 +147,10 @@ real certificate, key transfer or live API setting is changed by these tests.
 References: [Node22 TLS](https://nodejs.org/docs/latest-v22.x/api/tls.html),
 [Node22 X509](https://nodejs.org/docs/latest-v22.x/api/crypto.html#class-x509certificate),
 [Render private networking](https://render.com/docs/private-network).
+
+
+The private web now shares mesh V2 and implements protected server/client TLS;
+its compiled Next image is part of the synthetic gateway integration test.
+See [web transport](managed-web-api-binding.md). API/web enabled image pins cannot
+be disabled by deleting runtime managed flags. Further provider/full business
+boot evidence remains open as described above.

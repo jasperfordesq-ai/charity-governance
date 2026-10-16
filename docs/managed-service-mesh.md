@@ -1,12 +1,12 @@
 # Managed service mesh binding
 
-Format2 consolidates the managed gateway and API configuration into one
+Format2 consolidates the managed gateway, web and API configuration into one
 canonical record and fingerprint. It replaces their incompatible prototype
 records. No deployed managed environment is migrated automatically. Existing
 unconfigured private/public profiles continue using their established paths.
 
 `packages/shared/runtime/managed-service-mesh.mjs` is the single parser/preparer.
-The gateway and API preparation exports delegate to it. Its21 exact fields are:
+The gateway, web and API preparation exports delegate to it. Its21 exact fields are:
 
 ```text
 format=2, provider=render, region=frankfurt
@@ -28,13 +28,13 @@ Image digests are bound separately after the build, avoiding a circular hash.
 
 The API currently consumes the record through its fixed image-pin/protected-file
 loader. The gateway consumes the same record through its build pin and protected
-client certificate loader. The private Next server/client integration remains
-open; the older web V1/HTTP scaffold is not an activation substitute.
+client certificate loader. The private Next listener and read-only API client
+consume the same record and protected material; see [web transport](managed-web-api-binding.md).
 
 ## Shared protected material reader
 
 `protected-tls-material.mjs` provides the same Linux descriptor checks to API
-and gateway: canonical absolute directory outside the application root, current
+web and gateway: canonical absolute directory outside the application root, current
 UID0700 directory, current UID0400 single-link regular files, bounded stable
 reads, and no-follow/nonblocking file opens through a held directory descriptor.
 Each service requests only its fixed filenames. Actual Linux tests cover these
@@ -50,9 +50,10 @@ local unfiltered workspace resolution.
 
 The native gateway test builds the real gateway image, stages synthetic protected
 material in isolated containers and reaches the actual compiled API runtime
-loader/TLS factory through Caddy. The API has synthetic routes. A separate web
-TLS fixture stands in for Next. This verifies the gateway/API transport and
-positive protected loader path, not a full production application boot.
+loader/TLS factory through Caddy. It first uses an echo TLS web fixture, then
+substitutes the actual compiled Next image and exercises its protected-route
+private API client. The API has synthetic routes. This verifies the joined
+transport and protected loaders, not a full production business/provider boot.
 
 Caddy validates the explicit CA and exact upstream hostname and presents its
 validated, pinned gateway client certificate. The API pins its own server leaf
@@ -65,7 +66,7 @@ attestation of the provider process or running image.
 The API server requires TLS1.3; the positive Caddy/API and synthetic web tests
 negotiate TLS1.3. This is not a claim that stock Caddy exposes a separate TLS1.3
 client-minimum setting. Gateway health remains process-only. End-user address
-verification, full Next/API/business-provider boot, actual image/provider/key
+verification, full production API/business-provider boot, actual provider/key
 custody and independent host-loss/reopening evidence remain open.
 
 References: [Caddy proxy TLS options](https://caddyserver.com/docs/caddyfile/directives/reverse_proxy),

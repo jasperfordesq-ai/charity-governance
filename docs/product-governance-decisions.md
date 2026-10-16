@@ -143,3 +143,20 @@ Show source retention separately from external-copy disposal. After an uncertain
 review save, preserve the attempted reference/reviewer/time and permit receipt
 inspection without automatically submitting another review. A receipt or a
 matching digest cannot by itself activate erasure.
+
+## Further platform research and transport implementation
+
+The 16 October source check of [Render private networking](https://render.com/docs/private-network)
+confirms that private connectivity is shared among services in the same workspace
+and region. That reachability is not sufficient application identity. Retain the
+chosen mutual TLS boundary and distinct gateway/web credentials; do not use
+private DNS or network location as authorisation.
+
+[Microsoft Purview retention](https://learn.microsoft.com/en-us/purview/retention)
+separates retention, deletion and policy precedence. This supports CharityPilot's
+existing decision to keep recovery convenience, preservation obligations and
+permanent disposal authority separate. It does not adopt a schedule for a tenant.
+
+The software-owner delegation is sufficient for these engineering choices.
+Further Nikita participation remains optional; evidence gaps must be closed by
+appropriate tests and observations rather than an assumed reviewer approval.

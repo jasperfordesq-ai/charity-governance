@@ -1,3 +1,4 @@
+import { loadManagedWebTls, closeManagedWebClients } from './managed-tls.mjs';
 import { createServer } from 'node:http';
 import { dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -5,13 +6,20 @@ import next from 'next';
 
 const dir = dirname(fileURLToPath(import.meta.url));
 const portFlagIndex = process.argv.indexOf('--port');
-const cliPort = portFlagIndex >= 0 ? process.argv[portFlagIndex + 1] : undefined;
-const port = Number(process.env.PORT ?? process.env.WEB_PORT ?? cliPort ?? 3003);
+const cliPort =
+  portFlagIndex >= 0 ? process.argv[portFlagIndex + 1] : undefined;
+const port = Number(
+  process.env.PORT ?? process.env.WEB_PORT ?? cliPort ?? 3003,
+);
 const hostname = process.env.HOST ?? '0.0.0.0';
 
 if (!Number.isFinite(port) || port <= 0) {
-  throw new Error(`Invalid port: ${process.env.PORT ?? process.env.WEB_PORT ?? cliPort}`);
+  throw new Error(
+    `Invalid port: ${process.env.PORT ?? process.env.WEB_PORT ?? cliPort}`,
+  );
 }
+
+const managedServerFactory = loadManagedWebTls();
 
 const app = next({ dev: false, dir, hostname, port });
 const handle = app.getRequestHandler();
@@ -20,8 +28,14 @@ await app.prepare();
 
 function redactLogText(value) {
   return String(value)
-    .replace(/[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}/g, '[redacted-email]')
-    .replace(/\b(token|access_token|refresh_token|signature|secret)=([^&\s]+)/gi, '$1=[redacted]')
+    .replace(
+      /[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}/g,
+      '[redacted-email]',
+    )
+    .replace(
+      /\b(token|access_token|refresh_token|signature|secret)=([^&\s]+)/gi,
+      '$1=[redacted]',
+    )
     .replace(/\b[a-z0-9_-]+\/[^\s'"<>]+/gi, '[redacted-path]');
 }
 
@@ -39,11 +53,14 @@ function serializeErrorForWebLog(error) {
   };
 }
 
-const server = createServer(async (request, response) => {
+const requestHandler = async (request, response) => {
   try {
     await handle(request, response);
   } catch (error) {
-    console.error('Next request handler failed:', serializeErrorForWebLog(error));
+    console.error(
+      'Next request handler failed:',
+      serializeErrorForWebLog(error),
+    );
     if (!response.headersSent) {
       response.statusCode = 500;
       response.end('Internal Server Error');
@@ -51,10 +68,15 @@ const server = createServer(async (request, response) => {
     }
     response.destroy(error);
   }
-});
+};
+const server = managedServerFactory
+  ? managedServerFactory(requestHandler)
+  : createServer(requestHandler);
 
 server.listen(port, hostname, () => {
-  console.log(`CharityPilot web running on http://${hostname}:${port}`);
+  console.log(
+    `CharityPilot web running on ${managedServerFactory ? 'https' : 'http'}://${hostname}:${port}`,
+  );
 });
 
 let isShuttingDown = false;
@@ -64,9 +86,13 @@ function shutdown(signal) {
   isShuttingDown = true;
 
   console.log(`Received ${signal}, shutting down CharityPilot web`);
+  closeManagedWebClients();
   server.close((error) => {
     if (error) {
-      console.error('Graceful shutdown failed:', serializeErrorForWebLog(error));
+      console.error(
+        'Graceful shutdown failed:',
+        serializeErrorForWebLog(error),
+      );
       process.exit(1);
     }
     process.exit(0);

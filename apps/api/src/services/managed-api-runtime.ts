@@ -1,16 +1,8 @@
 import {
-  constants,
-  closeSync,
-  fstatSync,
-  lstatSync,
-  openSync,
-  realpathSync,
-} from 'node:fs';
-import { dirname } from 'node:path';
-import {
-  readProtectedTlsMaterial,
-  readBoundedRegularDescriptor,
-} from '../../../../packages/shared/runtime/protected-tls-material.mjs';
+  readManagedServiceImagePin,
+  parseManagedServiceImagePin,
+} from '../../../../packages/shared/runtime/managed-service-image-pin.mjs';
+import { readProtectedTlsMaterial } from '../../../../packages/shared/runtime/protected-tls-material.mjs';
 import {
   createManagedApiPeerBinding,
   createManagedApiPeerServer,
@@ -19,7 +11,6 @@ import type { FastifyServerOptions } from 'fastify';
 
 type Environment = Record<string, string | undefined>;
 type ImagePin = { format: 1; sourceSha: string; bindingSha256: string };
-const pinPath = '/opt/charitypilot/managed-api-build.json';
 const selectors = [
   'CHARITYPILOT_MANAGED_API_PEER_BINDING',
   'CHARITYPILOT_MANAGED_API_TLS_DIRECTORY',
@@ -50,23 +41,7 @@ const refused = () => new Error('Managed API runtime refused');
 
 export function parseManagedApiImagePin(raw: string): ImagePin {
   try {
-    if (Buffer.byteLength(raw) > 512) throw refused();
-    const value = JSON.parse(raw);
-    const pin = {
-      format: 1 as const,
-      sourceSha: value.sourceSha,
-      bindingSha256: value.bindingSha256,
-    };
-    if (
-      value.format !== 1 ||
-      typeof pin.sourceSha !== 'string' ||
-      !/^[a-f0-9]{40}$/.test(pin.sourceSha) ||
-      typeof pin.bindingSha256 !== 'string' ||
-      !/^[a-f0-9]{64}$/.test(pin.bindingSha256) ||
-      JSON.stringify(pin) + '\n' !== raw
-    )
-      throw refused();
-    return pin;
+    return parseManagedServiceImagePin(raw, true)!;
   } catch {
     throw refused();
   }
@@ -86,29 +61,6 @@ export function readManagedApiTlsMaterial(directory: string) {
     };
   } catch {
     throw refused();
-  }
-}
-
-function imagePin() {
-  if (
-    process.platform !== 'linux' ||
-    process.getuid!() === 0 ||
-    realpathSync(pinPath) !== pinPath
-  )
-    throw refused();
-  const parent = lstatSync(dirname(pinPath));
-  if (!parent.isDirectory() || parent.uid !== 0 || (parent.mode & 0o022) !== 0)
-    throw refused();
-  const fd = openSync(
-    pinPath,
-    constants.O_RDONLY | constants.O_NOFOLLOW | constants.O_NONBLOCK,
-  );
-  try {
-    const file = fstatSync(fd);
-    if (file.uid !== 0 || (file.mode & 0o777) !== 0o444) throw refused();
-    return parseManagedApiImagePin(readBoundedRegularDescriptor(fd, 512));
-  } finally {
-    closeSync(fd);
   }
 }
 
@@ -185,9 +137,12 @@ export function loadManagedApiRuntime(
   env: Environment = process.env,
   logger: FastifyServerOptions['logger'] = false,
 ) {
-  if (!hasManagedApiRuntimeSettings(env)) return null;
   try {
-    const pin = imagePin();
+    const pin = readManagedServiceImagePin(
+      'api',
+      hasManagedApiRuntimeSettings(env),
+    );
+    if (!pin) return null;
     const material = readManagedApiTlsMaterial(
       env.CHARITYPILOT_MANAGED_API_TLS_DIRECTORY ?? '',
     );

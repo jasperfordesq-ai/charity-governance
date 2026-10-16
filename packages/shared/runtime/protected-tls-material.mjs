@@ -7,10 +7,10 @@ import {
   readSync,
   realpathSync,
 } from 'node:fs';
-import { isAbsolute, join, resolve } from 'node:path';
+import { dirname, isAbsolute, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 const applicationRoot = resolve(
-  fileURLToPath(new URL('../../../', import.meta.url)),
+  dirname(fileURLToPath(import.meta.url)), '../../..',
 );
 const refused = () => new Error('Protected TLS material refused');
 export function readBoundedRegularDescriptor(fd, limit) {
@@ -46,6 +46,7 @@ export function readProtectedTlsMaterial(directory, filenames) {
     if (
       process.platform !== 'linux' ||
       typeof directory !== 'string' ||
+      directory === '/app' || directory.startsWith('/app/') ||
       directory === applicationRoot ||
       directory.startsWith(applicationRoot + '/') ||
       !isAbsolute(directory) ||

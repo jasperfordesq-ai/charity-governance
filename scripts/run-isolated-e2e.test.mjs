@@ -368,23 +368,59 @@ test('isolated build context includes the shared package runtime exports', () =>
   }
 });
 
-test('isolated build context includes directly imported shared runtime helpers',()=>{
-  const visit=directory=>{
-    for(const entry of readdirSync(directory,{withFileTypes:true})){
-      const file=join(directory,entry.name);
-      if(entry.isDirectory()){visit(file);continue;}
-      if(!entry.name.endsWith('.ts'))continue;
-      const source=readFileSync(file,'utf8');
-      for(const match of source.matchAll(/from\s+["']([^"']*packages\/shared\/runtime\/[^"']+\.mjs)["']/g)){
-        const path=relative(ROOT,resolve(dirname(file),match[1])).split('\\').join('/');
-        assert.ok(BUILD_CONTEXT_MANIFEST.some(item=>item.type==='file'&&item.path===path),'Missing eager API runtime dependency: '+path);
-        const types=path.replace(/\.mjs$/,'.d.mts');
-        if(existsSync(join(ROOT,types)))assert.ok(BUILD_CONTEXT_MANIFEST.some(item=>item.type==='file'&&item.path===types),'Missing runtime declaration: '+types);
+test("isolated build context includes directly imported shared runtime helpers", () => {
+  const visit = (directory) => {
+    for (const entry of readdirSync(directory, { withFileTypes: true })) {
+      const file = join(directory, entry.name);
+      if (entry.isDirectory()) {
+        visit(file);
+        continue;
+      }
+      if (!entry.name.endsWith(".ts")) continue;
+      const source = readFileSync(file, "utf8");
+      for (const match of source.matchAll(
+        /from\s+["']([^"']*packages\/shared\/runtime\/[^"']+\.mjs)["']/g,
+      )) {
+        const path = relative(ROOT, resolve(dirname(file), match[1]))
+          .split("\\")
+          .join("/");
+        assert.ok(
+          BUILD_CONTEXT_MANIFEST.some(
+            (item) => item.type === "file" && item.path === path,
+          ),
+          "Missing eager API runtime dependency: " + path,
+        );
+        const types = path.replace(/\.mjs$/, ".d.mts");
+        if (existsSync(join(ROOT, types)))
+          assert.ok(
+            BUILD_CONTEXT_MANIFEST.some(
+              (item) => item.type === "file" && item.path === types,
+            ),
+            "Missing runtime declaration: " + types,
+          );
       }
     }
   };
-  visit(join(ROOT,'apps/api/src'));
+  visit(join(ROOT, "apps/api/src"));
+  visit(join(ROOT, "apps/web/src"));
+  for (const item of BUILD_CONTEXT_MANIFEST) {
+    if (item.type !== "file" || !item.path.endsWith(".mjs")) continue;
+    const file = join(ROOT, item.path),
+      source = readFileSync(file, "utf8");
+    for (const match of source.matchAll(/from\s+["'](\.[^"']+\.mjs)["']/g)) {
+      const dependency = relative(ROOT, resolve(dirname(file), match[1]))
+        .split("\\")
+        .join("/");
+      assert.ok(
+        BUILD_CONTEXT_MANIFEST.some(
+          (x) => x.type === "file" && x.path === dependency,
+        ),
+        "Missing transitive runtime module: " + dependency,
+      );
+    }
+  }
 });
+
 
 test('fresh database lifecycle cannot be supplied as ambient local or deployed authority', async () => {
   for(const deployed of [false,true]) {

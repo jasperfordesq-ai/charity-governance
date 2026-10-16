@@ -94,7 +94,7 @@ API routing, bodies/cookies, canonical headers, stripped forged metadata,
 unknown-host refusal, narrow health wording, actual error-log redaction, graceful
 shutdown and malformed-binding startup refusal. The API side uses its actual
 fixed-pin/protected-file loader and Fastify TLS factory with synthetic routes;
-the web side remains a TLS fixture. Both positive hops negotiate TLS1.3. Foreign
+the web side first uses a TLS fixture, then the actual compiled Next image. Both positive hops negotiate TLS1.3. Foreign
 CA and wrong-host servers are proved listening before the negative requests;
 each request must produce a fresh certificate-verification error, not merely a
 connection failure, and cannot reach the rogue HTTP handler. Callback canaries
@@ -102,10 +102,10 @@ remain absent from those actual error logs. It removes only its own uniquely
 named fixture containers, networks and image.
 
 This is local container evidence, not an actual Render deployment or full
-browser/Next/Fastify journey. Render private networking includes other regional
+browser/public-TLS/full-business journey. Render private networking includes other regional
 workspace services and mutable instance addresses. A private hostname is not
 peer authentication. API peer pins and gateway/API parity now have component
-proof; end-user address policy, real Next integration, environment
+proof; compiled Next transport now also passes. End-user address policy, environment
 isolation/provider observations, controller provenance and full joined
 flow remain activation gates. Do not populate broad trusted proxy ranges or
 claim socket-peer rate limits are end-user rate limits. The shape-only private

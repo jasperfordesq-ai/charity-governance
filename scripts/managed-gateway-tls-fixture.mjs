@@ -147,7 +147,7 @@ export function gatewayTlsFixture() {
       gatewayClientCertSha256: fingerprint(gateway.cert),
       webClientCertSha256: fingerprint(webClient.cert),
     });
-    return { binding, issuer, api, web, gateway, foreign, cleanup };
+    return { binding, issuer, api, web, gateway, webClient, foreign, cleanup };
   } catch (error) {
     cleanup();
     throw error;
@@ -167,6 +167,7 @@ while(true){try{await fs.access('/run/charitypilot/ready');break;}catch{await ne
 const {loadManagedApiRuntime}=await import('/app/apps/api/dist/services/managed-api-runtime.js');
 const {managedApiPeerRole}=await import('/app/apps/api/dist/services/managed-api-peer-transport.js');
 const app=loadManagedApiRuntime();const ingress=new WeakMap();app.server.prependListener('request',req=>ingress.set(req,{...req.headers}));
+app.get('/api/v1/auth/me',async(req,reply)=>{if(managedApiPeerRole(req)==='web'){console.log('WEB_AUTH_ME_TLS_OBSERVED');if(req.headers.cookie==='charitypilot_access=expired')return reply.code(401).send({synthetic:true});if(req.headers.cookie==='charitypilot_access=throttled')return reply.header('Retry-After','7').code(429).send({synthetic:true});if(req.headers.cookie==='charitypilot_access=oversized')return 'x'.repeat(65537);return {synthetic:true};}return {port:3002,url:req.url,headers:req.headers,ingressHeaders:ingress.get(req.raw),body:'',role:managedApiPeerRole(req),protocol:req.raw.socket.getProtocol()};});
 app.all('/*',async req=>({port:3002,url:req.url,headers:req.headers,ingressHeaders:ingress.get(req.raw),body:req.body??'',role:managedApiPeerRole(req),protocol:req.raw.socket.getProtocol()}));
 await app.listen({host:'0.0.0.0',port:3002});
 const r=JSON.parse(process.env.CHARITYPILOT_MANAGED_API_PEER_BINDING),folder='/run/charitypilot/web';

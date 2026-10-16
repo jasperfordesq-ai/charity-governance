@@ -87,6 +87,9 @@ jobs:
       - name: Security scan
         run: npm run security:scan
 
+      - name: Verify managed web TLS and immutable image pins
+        run: npm run test:managed-web-tls
+
       - name: Verify managed API build pin contract
         run: npm run test:managed-api-build-pin
 

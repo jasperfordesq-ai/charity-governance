@@ -4229,7 +4229,11 @@ test('web Docker runtime ships only compiled app artifacts', () => {
 test('web server awaits request handling and closes cleanly on termination signals', () => {
   const server = readRepoFile('apps/web/server.mjs');
 
-  assert.match(server, /const\s+server\s*=\s*createServer\(async\s*\(/);
+  assert.match(server, /const requestHandler = async \(request, response\)/);
+  assert.match(server, /managedServerFactory\(requestHandler\)/);
+  assert.match(server, /createServer\(requestHandler\)/);
+  assert.ok(server.indexOf('loadManagedWebTls()') < server.indexOf('await app.prepare()'));
+  assert.match(server, /closeManagedWebClients\(\)/);
   assert.match(server, /await\s+handle\(request,\s*response\)/);
   assert.match(server, /server\.close\(/);
   assert.match(server, /process\.once\('SIGTERM'/);
@@ -4244,10 +4248,10 @@ test('web server serializes caught production errors before logging them', () =>
   assert.match(server, /\[redacted-email\]/);
   assert.match(server, /\$1=\[redacted\]/);
   assert.match(server, /\[redacted-path\]/);
-  assert.match(server, /console\.error\('Next request handler failed:',\s*serializeErrorForWebLog\(error\)\)/);
-  assert.match(server, /console\.error\('Graceful shutdown failed:',\s*serializeErrorForWebLog\(error\)\)/);
-  assert.doesNotMatch(server, /console\.error\('Next request handler failed:',\s*error\)/);
-  assert.doesNotMatch(server, /console\.error\('Graceful shutdown failed:',\s*error\)/);
+  assert.match(server, /console\.error\(\s*'Next request handler failed:',\s*serializeErrorForWebLog\(error\),?\s*\)/);
+  assert.match(server, /console\.error\(\s*'Graceful shutdown failed:',\s*serializeErrorForWebLog\(error\),?\s*\)/);
+  assert.doesNotMatch(server, /console\.error\(\s*'Next request handler failed:',\s*error\)/);
+  assert.doesNotMatch(server, /console\.error\(\s*'Graceful shutdown failed:',\s*error\)/);
 });
 
 test('web config disables generated agent-rule files during local dev startup', () => {
@@ -4774,8 +4778,8 @@ test('web proxy validates protected sessions with API auth authority before rend
   );
   // The Node-only managed boundary preserves legacy profile checks and also
   // compares the actual runtime environment with literal compiled public pins.
-  assert.match(proxy, /import\s*\{\s*getServerApiBaseUrl,\s*getManagedWebApiContext\s*\}\s*from ["']\.\/lib\/server-api-config\.server["']/);
-  assert.match(proxy, /new URL\(pathname,\s*getServerApiBaseUrl\(process\.env,\s*publicBuildBinding\(\)\)\)/);
+  assert.match(proxy, /import\s*\{\s*getServerApiBaseUrl,\s*getManagedWebApiContext,?\s*\}\s*from ["']\.\/lib\/server-api-config\.server["']/);
+  assert.match(proxy, /new URL\(\s*pathname,\s*getServerApiBaseUrl\(process\.env,\s*publicBuildBinding\(\),?\s*\),?\s*\)/);
   assert.doesNotMatch(proxy, /process\.env\.NEXT_PUBLIC_API_URL\?\.trim\(\)\s*\|\|/);
   assert.match(proxy, /type ProtectedAuthSession\s*=/);
   assert.match(proxy, /state:\s*["']authenticated["']/);

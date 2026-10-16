@@ -46,6 +46,7 @@
 **/.env
 **/.env.*
 **/managed-api-build.json
+**/managed-web-build.json
 **/*.pem
 **/*.key
 node_modules

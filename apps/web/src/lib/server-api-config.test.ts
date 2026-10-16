@@ -8,7 +8,7 @@ import {
 
 function fixture() {
   const record = {
-    format: 1,
+    format: 2,
     provider: 'render',
     region: 'frankfurt',
     installationId: 'synthetic-installation',
@@ -21,11 +21,12 @@ function fixture() {
     apiServiceId: 'srv-' + 'c'.repeat(20),
     schedulerServiceId: 'srv-' + 'd'.repeat(20),
     apiServiceName: 'charitypilot-review-api',
-    apiOrigin: 'http://charitypilot-review-api-ab12:3002',
+    apiOrigin: 'https://charitypilot-review-api-ab12:3002',
+    webServiceName:'charitypilot-review-web',webOrigin:'https://charitypilot-review-web-cd34:3003',issuerCertSha256:'2'.repeat(64),apiCertSha256:'3'.repeat(64),webCertSha256:'4'.repeat(64),gatewayClientCertSha256:'5'.repeat(64),webClientCertSha256:'6'.repeat(64),
   };
   const binding = createManagedWebApiBinding(record);
   const env = {
-    NODE_ENV: 'production',
+    NODE_ENV: 'production', PORT:'3003',
     NEXT_PUBLIC_CHARITYPILOT_DEPLOYMENT_MODE: 'public-production',
     NEXT_PUBLIC_API_URL: record.publicOrigin,
     NEXT_PUBLIC_CHARITYPILOT_CANONICAL_API_ORIGIN: record.publicOrigin,
@@ -92,7 +93,7 @@ test('partial, noncanonical, tampered and oversized managed records never fall b
     f.binding.json.replace('ab12', 'ef34'),
     '{}',
     'x'.repeat(8193),
-    f.binding.json.replace('"format":1', '"format":1,"format":1'),
+    f.binding.json.replace('"format":2', '"format":2,"format":2'),
   ]) {
     assert.throws(
       () =>
@@ -125,7 +126,7 @@ test('managed record creation refuses network destinations and incomplete/ambigu
     'http://169.254.169.254:3002',
     'http://api-blue:3002',
     'http://charitypilot-review-api-ab12.attacker.example:3002',
-    'https://charitypilot-review-api-ab12:3002',
+    'http://charitypilot-review-api-ab12:3002',
     'http://user:password@charitypilot-review-api-ab12:3002',
     'http://charitypilot-review-api-ab12:3002/path',
     'http://charitypilot-review-api-ab12:3002/',
@@ -136,7 +137,7 @@ test('managed record creation refuses network destinations and incomplete/ambigu
     assert.throws(() => createManagedWebApiBinding({ ...f.record, apiOrigin }));
   }
   for (const change of [
-    { format: 2 },
+    { format: 1 },
     { provider: 'other' },
     { region: 'oregon' },
     { webServiceId: f.record.apiServiceId },

@@ -1,10 +1,11 @@
+import { managedWebAuthMe } from "../managed-tls.mjs";
 import { NextResponse, type NextRequest } from "next/server";
 import { createContentSecurityPolicy } from "./lib/content-security-policy";
+import { getApiBaseUrl, isPersonalServerProduction } from "./lib/api-config";
 import {
-  getApiBaseUrl,
-  isPersonalServerProduction,
-} from "./lib/api-config";
-import { getServerApiBaseUrl, getManagedWebApiContext } from './lib/server-api-config.server';
+  getServerApiBaseUrl,
+  getManagedWebApiContext,
+} from "./lib/server-api-config.server";
 import {
   webBillingMode,
   webEmailDelivery,
@@ -23,7 +24,10 @@ const AUTH_COOKIE_NAMES = [
 const REFRESH_COOKIE_NAME = "charitypilot_refresh";
 const PROTECTED_RESPONSE_CACHE_CONTROL = "no-store, no-cache, must-revalidate";
 const AUTH_VALIDATION_TIMEOUT_MS = 5_000;
-const inFlightProtectedAuthValidations = new Map<string, Promise<Response | null>>();
+const inFlightProtectedAuthValidations = new Map<
+  string,
+  Promise<Response | null>
+>();
 const DEFAULT_AUTH_RETRY_AFTER = "5";
 const MAX_AUTH_RETRY_AFTER_SECONDS = 300;
 const SENSITIVE_AUTH_PATHS = new Set([
@@ -73,7 +77,10 @@ function protectedAuthCookieHeader(request: NextRequest): string {
 
 function createApiAuthUrl(pathname: string): URL | null {
   try {
-    return new URL(pathname, getServerApiBaseUrl(process.env, publicBuildBinding()));
+    return new URL(
+      pathname,
+      getServerApiBaseUrl(process.env, publicBuildBinding()),
+    );
   } catch {
     return null;
   }
@@ -92,9 +99,11 @@ function publicBuildBinding() {
   // compares the live environment, so runtime changes cannot replace this pin.
   return {
     apiOrigin: process.env.NEXT_PUBLIC_API_URL,
-    canonicalApiOrigin: process.env.NEXT_PUBLIC_CHARITYPILOT_CANONICAL_API_ORIGIN,
+    canonicalApiOrigin:
+      process.env.NEXT_PUBLIC_CHARITYPILOT_CANONICAL_API_ORIGIN,
     deploymentMode: process.env.NEXT_PUBLIC_CHARITYPILOT_DEPLOYMENT_MODE,
-    bindingSha256: process.env.NEXT_PUBLIC_CHARITYPILOT_MANAGED_WEB_BINDING_SHA256,
+    bindingSha256:
+      process.env.NEXT_PUBLIC_CHARITYPILOT_MANAGED_WEB_BINDING_SHA256,
   };
 }
 
@@ -148,12 +157,28 @@ async function validateProtectedAuthSession(
 
   let validation = inFlightProtectedAuthValidations.get(validationKey);
   if (!validation) {
-    validation = fetch(authUrl, {
+    const options = {
       headers: { Cookie: cookieHeader },
-      cache: "no-store",
-      redirect: "manual",
+      cache: "no-store" as const,
+      redirect: "manual" as const,
       signal: AbortSignal.timeout(AUTH_VALIDATION_TIMEOUT_MS),
-    }).catch(() => null);
+    };
+    const built = publicBuildBinding();
+    const managed = getManagedWebApiContext(process.env, built);
+    validation = (
+      managed
+        ? managedWebAuthMe(
+            process.env,
+            {
+              format: 1,
+              sourceSha: managed.sourceSha,
+              bindingSha256: built.bindingSha256!,
+            },
+            cookieHeader,
+            options.signal,
+          )
+        : fetch(authUrl, options)
+    ).catch(() => null);
     inFlightProtectedAuthValidations.set(validationKey, validation);
     const pending = validation;
     void pending.then(() => {
@@ -166,8 +191,8 @@ async function validateProtectedAuthSession(
   const response = await validation;
   if (!response) return unavailableAuthSession();
   if (response.status === 200) {
-    return response.headers.get('x-charitypilot-mfa-enrolment-required') === '1'
-      ? { state: 'mfa-setup' }
+    return response.headers.get("x-charitypilot-mfa-enrolment-required") === "1"
+      ? { state: "mfa-setup" }
       : { state: "authenticated" };
   }
   if (response.status !== 401) return unavailableAuthSession(response);
@@ -285,10 +310,7 @@ function redirectSensitiveQueryToken(
   );
 }
 
-function redirectToLogin(
-  request: NextRequest,
-  csp: string,
-): NextResponse {
+function redirectToLogin(request: NextRequest, csp: string): NextResponse {
   const { pathname, search } = request.nextUrl;
   const loginUrl = externalRequestUrl(request);
   loginUrl.pathname = "/login";
@@ -306,7 +328,10 @@ function redirectToLogin(
   return addContentSecurityPolicy(addProtectedNoCacheHeaders(response), csp);
 }
 
-function redirectToSessionRenew(request: NextRequest, csp: string): NextResponse {
+function redirectToSessionRenew(
+  request: NextRequest,
+  csp: string,
+): NextResponse {
   const { pathname, search } = request.nextUrl;
   const renewalUrl = externalRequestUrl(request);
   renewalUrl.pathname = "/session-renew";
@@ -320,11 +345,12 @@ function redirectToSessionRenew(request: NextRequest, csp: string): NextResponse
 
 function redirectToMfaSetup(request: NextRequest, csp: string): NextResponse {
   const setupUrl = externalRequestUrl(request);
-  setupUrl.pathname = '/security-data';
-  setupUrl.search = '';
-  setupUrl.hash = '';
+  setupUrl.pathname = "/security-data";
+  setupUrl.search = "";
+  setupUrl.hash = "";
   return addContentSecurityPolicy(
-    addSensitiveAuthHeaders(NextResponse.redirect(setupUrl)), csp,
+    addSensitiveAuthHeaders(NextResponse.redirect(setupUrl)),
+    csp,
   );
 }
 
@@ -370,10 +396,15 @@ export async function proxy(request: NextRequest) {
   try {
     getManagedWebApiContext(process.env, publicBuildBinding());
   } catch {
-    return addProtectedNoCacheHeaders(new NextResponse('Application temporarily unavailable.', {
-      status: 503,
-      headers: { 'Content-Type': 'text/plain; charset=utf-8', 'Retry-After': '30' },
-    }));
+    return addProtectedNoCacheHeaders(
+      new NextResponse("Application temporarily unavailable.", {
+        status: 503,
+        headers: {
+          "Content-Type": "text/plain; charset=utf-8",
+          "Retry-After": "30",
+        },
+      }),
+    );
   }
   const { pathname } = request.nextUrl;
   const nonce = createNonce();
@@ -459,8 +490,11 @@ export async function proxy(request: NextRequest) {
       : redirectToLogin(request, csp);
   }
 
-  if (authSession.state === 'mfa-setup' && pathname !== '/security-data' &&
-      !renewsItsOwnSession(pathname)) {
+  if (
+    authSession.state === "mfa-setup" &&
+    pathname !== "/security-data" &&
+    !renewsItsOwnSession(pathname)
+  ) {
     return redirectToMfaSetup(request, csp);
   }
 
