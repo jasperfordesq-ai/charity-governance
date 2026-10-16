@@ -13,6 +13,18 @@ test('a draft enters Deleted Items and restores with identical bytes and retaine
   const policies = ownerPage.getByRole('region', { name: 'Draft retention policies' });
   await expect(policies.getByLabel('Recovery days after removal')).toHaveValue('');
   await expect(policies.getByRole('button', { name: 'Review approval' })).toBeDisabled();
+  // Prove the preset is read-only even when this tenant already has history.
+  await reliableFill(policies.getByLabel('Recovery days after removal'), '45');
+  const existingProposal = ownerPage.waitForResponse(response => response.url().endsWith('/documents/policy-revisions') && response.request().method() === 'POST');
+  await policies.getByRole('button', { name: 'Save proposal' }).click();
+  expect((await existingProposal).status()).toBe(201);
+  await reliableFill(policies.getByLabel('Recovery days after removal'), '');
+  const policyCount = async () => {
+    const rows = await withDb(client => client.query('SELECT count(*) AS count FROM "DataRetentionPolicyRevision" WHERE "organisationId"=$1 AND "recordClass"=\'VAULT_DRAFT\'', [owner.organisationId]));
+    return Number(rows.rows[0].count);
+  };
+  const beforePreset = await policyCount();
+  expect(beforePreset).toBeGreaterThan(0);
   const policyWrites: string[] = [];
   ownerPage.on('request', request => {
     if (request.url().endsWith('/documents/policy-revisions') && request.method() === 'POST') policyWrites.push(request.url());
@@ -22,8 +34,7 @@ test('a draft enters Deleted Items and restores with identical bytes and retaine
   await expect(policies.getByLabel('Retention rule', { exact: true })).toHaveValue('REVIEW_REQUIRED');
   await expect(policies.getByRole('status')).toContainText('not saved or approved');
   expect(policyWrites).toHaveLength(0);
-  const unsaved = await withDb(client => client.query('SELECT count(*) AS count FROM "DataRetentionPolicyRevision"'));
-  expect(unsaved.rows[0].count).toBe('0');
+  expect(await policyCount()).toBe(beforePreset);
   const copyPolicies = ownerPage.getByRole('region', { name: 'Document copy retention policies' });
   await expect(copyPolicies.getByRole('button', { name: 'Use recommended draft settings' })).toHaveCount(0);
   await expect(copyPolicies.getByLabel('Recorded recovery period (days)')).toHaveValue('');
