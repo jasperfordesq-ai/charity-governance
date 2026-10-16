@@ -8,6 +8,15 @@ https://github.com/jasperfordesq-ai/charity-governance
 
 Agents working in this directory should treat that GitHub repository as the source-control home for this project.
 
+## Working branch preference
+
+Work in the existing checkout on the primary branch, `master` in this repository.
+The user prefers ordinary commits on that branch instead of new branches,
+worktrees or pull requests. Use those only when an actual repository rule or
+technical requirement needs them, and explain why. Preserve existing unrelated
+branches and worktrees. This preference does not authorise force pushes,
+deployment, external messages, provider changes or governance decisions.
+
 ## Active Continuation Goal
 
 Before starting production-completion work, read:
