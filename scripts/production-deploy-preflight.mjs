@@ -1,4 +1,5 @@
 import { spawnSync } from 'node:child_process';
+import { spawnLocalDockerCommand } from './local-docker-command.mjs';
 import { existsSync, readFileSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
@@ -202,14 +203,16 @@ export function redactProductionDeployTranscript(value) {
 }
 
 function runCommand(command, env) {
-  const result = spawnSync(command[0], command.slice(1), {
+  const options = {
     cwd: repoRoot,
     encoding: 'utf8',
     env,
     // Child diagnostics can contain expanded secrets. Only the bounded,
     // input-independent failure below is exposed to the deploy transcript.
     stdio: 'pipe',
-  });
+  };
+  const result = command[0] === 'docker' ? spawnLocalDockerCommand(command,env,options)
+    : spawnSync(command[0],command.slice(1),options);
 
   if (result.status !== 0) {
     throw new Error(`${commandLine(command)} failed with exit code ${result.status ?? 'unknown'}`);

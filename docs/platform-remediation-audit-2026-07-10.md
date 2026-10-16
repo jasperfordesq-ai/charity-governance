@@ -1,5 +1,17 @@
 # CharityPilot Full-Platform Remediation Audit
 
+> **16 October direct production Docker boundary / partial coverage:** Default
+> preflight/deploy/shared migration-recovery Docker children now revalidate the
+> local endpoint/engine and pin every daemon probe/action. Fourteen helper cases,
+> focused153PASS and real read-only local-engine probe pass. Full production
+>1251PASS/8SKIP after correcting the earlier renderer test's E2E isolation breach:
+> moved to separate rendering suite/CI step; no fixture/routing contract weakened.
+> Renderer/type/import checks pass. Standalone backup/nested child targeting,
+> explicit project identity and complete release/rollback remain OPEN. No live
+> lifecycle, deployment or all-path certification. See ignored
+> `production-docker-boundary-review-2026-10-16.md` for exact proof/correction.
+
+
 > **16 October strict-production rollback protocol review:** Added real nested
 > rollback/deployment orchestration tests for unavailable and supported selected
 > API role-probe protocols. Combined78PASS/noSKIP; lifecycle I/O remains mocked.

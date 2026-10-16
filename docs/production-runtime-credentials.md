@@ -198,6 +198,24 @@ failure. Backup/migration/startup do not proceed. If cleanup fails, shutdown is
 unverified and the operator must confirm all services stopped before recovery;
 no automatic rollback or successful shutdown is asserted.
 
+## Local Docker targeting in direct production commands
+
+Default direct Docker commands in production preflight, deployment and shared
+migration recovery now verify the selected context endpoint and Linux Engine
+identity/API before every child. Only the local Windows Docker Desktop pipe or
+Linux `/var/run/docker.sock` is accepted. Each subsequent daemon probe and action
+uses explicit `--host` plus a scrubbed, pinned environment. Ambient Docker/build
+controls refuse; Compose controls are removed. Discovery failures expose a fixed
+error without daemon diagnostics. Non-Docker commands retain their existing
+execution paths, and dry runs perform no new Docker discovery.
+
+This boundary does not yet cover every independent tool or nested subprocess:
+the standalone PostgreSQL backup helper still needs its own targeting review,
+and explicit production Compose project identity remains unresolved. Do not
+interpret direct-command coverage as certification of the complete release,
+backup/restore or project-isolation path. Private-profile boundary code remains
+unchanged.
+
 ## Rollback image compatibility is more than a schema marker
 
 The guarded rollback delegates to the same deployment checks with the selected

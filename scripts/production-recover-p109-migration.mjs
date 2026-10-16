@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 
 import { spawnSync } from "node:child_process";
+import { spawnLocalDockerCommand } from './local-docker-command.mjs';
 import { createHash } from "node:crypto";
 import {
   existsSync,
@@ -780,12 +781,14 @@ function composeResolveCommand(options, config) {
 }
 
 function defaultRunCommand(command, env, { input } = {}) {
-  const commandResult = spawnSync(command[0], command.slice(1), {
+  const options = {
     cwd: repoRoot,
     encoding: "utf8",
     env,
     input,
-  });
+  };
+  const commandResult = command[0] === 'docker' ? spawnLocalDockerCommand(command,env,options)
+    : spawnSync(command[0],command.slice(1),options);
   return {
     status: commandResult.status ?? 1,
     stdout: commandResult.stdout ?? "",

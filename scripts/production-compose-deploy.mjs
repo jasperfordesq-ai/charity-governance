@@ -1,4 +1,5 @@
 import { spawnSync } from "node:child_process";
+import { spawnLocalDockerCommand } from './local-docker-command.mjs';
 import { randomUUID } from "node:crypto";
 import { chmodSync, existsSync, mkdirSync } from "node:fs";
 import { dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
@@ -144,7 +145,7 @@ function result(status, stdout = "", stderr = "") {
 }
 
 function defaultRunCommand(command, env, {input,timeout,maxBuffer}={}) {
-  const commandResult = spawnSync(command[0], command.slice(1), {
+  const options = {
     cwd: repoRoot,
     encoding: "utf8",
     env,
@@ -154,7 +155,9 @@ function defaultRunCommand(command, env, {input,timeout,maxBuffer}={}) {
     // Expanded configuration and migration diagnostics can contain secrets.
     // Surface only the fixed command/status failure below.
     stdio: "pipe",
-  });
+  };
+  const commandResult = command[0] === 'docker' ? spawnLocalDockerCommand(command,env,options)
+    : spawnSync(command[0],command.slice(1),options);
 
   if (commandResult.status !== 0) {
     throw new Error(
