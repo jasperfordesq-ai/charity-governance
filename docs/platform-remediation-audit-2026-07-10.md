@@ -1,5 +1,11 @@
 # CharityPilot Full-Platform Remediation Audit
 
+> **16 October V2 archive capture/codec:** The new format retains eleven
+> original groups and separates its encryption domain from V1. Five focused
+> tests and populated native capture exercise the foundation. V2 has no live
+> independent adapter, publication/current-head or maintenance replay path yet;
+> full execution/provider/transport/whole-backend/host-loss evidence stays open.
+
 > **16 October hosted retention-gate correction:** The journal migration
 > exposed one more TRUNCATE fixture with an incomplete foreign-key child list.
 > Include request/outcome tables so the unchanged assertion reaches the

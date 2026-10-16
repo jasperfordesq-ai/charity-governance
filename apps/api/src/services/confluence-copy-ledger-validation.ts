@@ -37,6 +37,16 @@ function uniqueBy(rows: Row[], key: string) {
  * Original rows are returned unchanged; validation frames are never history.
  */
 export function validateConfluenceCopyLedgerRows(body: string, rawContext: RecoveryEnvelopeContext) {
+  return validateLedgerRows(body,rawContext,false);
+}
+
+/** V2 validation frame only: historical capture epochs stay original. This is
+ * never the legacy V1 current-epoch reader or independently verified history. */
+export function validateConfluenceExecutionLedgerLegacyRows(body: string, rawContext: RecoveryEnvelopeContext) {
+  return { ...validateLedgerRows(body,rawContext,true), historicalEpochsAllowed: true as const };
+}
+
+function validateLedgerRows(body: string, rawContext: RecoveryEnvelopeContext, historicalEpochs: boolean) {
   try {
     if (typeof body !== 'string' || Buffer.byteLength(body,'utf8') > CONFLUENCE_COPY_LEDGER_MAX_BYTES) throw new Error();
     const context = validateRecoveryEnvelopeContext(rawContext);
@@ -73,7 +83,7 @@ export function validateConfluenceCopyLedgerRows(body: string, rawContext: Recov
     const lineages = new Map<string,typeof captures>();
     for (const row of captures) {
       if (captureOperations.has(row.operationId) || row.installationId !== context.installationId
-        || row.writerEpoch !== context.writerEpoch || row.recordedAt < row.capturedAt || row.recordedAt > ledger.capturedAt) throw new Error();
+        || (historicalEpochs ? row.writerEpoch > context.writerEpoch : row.writerEpoch !== context.writerEpoch) || row.recordedAt < row.capturedAt || row.recordedAt > ledger.capturedAt) throw new Error();
       captureOperations.add(row.operationId);
       const facts = validateConfluenceCopyRecoveryCapture({ ...row, capturedAt: new Date(row.capturedAt) });
       const latest = byReview.get(row.reviewId);

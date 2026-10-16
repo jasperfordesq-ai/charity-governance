@@ -1,5 +1,8 @@
 import assert from 'node:assert/strict';
 import { Prisma, PrismaClient } from '@prisma/client';
+import { captureConfluenceExecutionLedgerV2 } from '../apps/api/dist/services/confluence-execution-ledger-v2.js';
+import { sealConfluenceExecutionArchiveV2,openConfluenceExecutionArchiveV2 } from '../apps/api/dist/services/confluence-execution-archive-v2.js';
+import { recoveryContextFixture } from '../apps/api/dist/tests/fixtures/confluence-copy-recovery-facts.js';
 import { ConfluenceCopyExecutionJournalService } from '../apps/api/dist/services/confluence-copy-execution-journal.js';
 import { ConfluenceRetainedCopyPermissionService } from '../apps/api/dist/services/confluence-retained-copy-permission.service.js';
 import { PURGE_RESTORE_SNAPSHOT_SQL, PURGE_RESTORE_BINDING_PROBE_SQL, assertPurgeRestoreLedger } from './purge-restore-reconciliation.mjs';
@@ -122,7 +125,32 @@ export async function runConfluenceExecutionJournalPostgresProof(prisma,url,clai
       throw new Error('SYNTHETIC-PARTIAL-SCHEMA-ROLLBACK');
     }),/SYNTHETIC-PARTIAL-SCHEMA-ROLLBACK/);
     assert.equal(await prisma.confluenceCopyExecutionOutcome.count({where:{organisationId:'org-a'}}),2);
-    return {racingRequests:2,raceCommittedRequests:1,lostRequestReceipt:true,lostOutcomeReceipt:true,outcomeAfterRevocation:true,
+    const sourceBinding=await prisma.confluenceCopyRecoveryCapture.findFirstOrThrow({where:{organisationId:'org-a'}});
+    const context={...recoveryContextFixture,installationId:sourceBinding.installationId,sourceRevision:sourceBinding.sourceRevision,
+      writerEpoch:sourceBinding.writerEpoch,operationId:'native-execution-v2'};
+    let captureIsolation;
+    const inspected={$transaction:(fn,options)=>runtime.$transaction(async tx=>{
+      const [isolation]=await tx.$queryRaw`SHOW transaction_isolation`;
+      captureIsolation=isolation.transaction_isolation;return fn(tx);
+    },options)};
+    const execution=await captureConfluenceExecutionLedgerV2(inspected,'org-a','owner-a',context);
+    assert.equal(captureIsolation,'repeatable read');assert.equal(execution.executionHistoryIncluded,true);
+    assert.equal(execution.currentHistoryVerified,false);assert.equal(execution.reopeningAuthorised,false);
+    for(const [name,delegate]of [['ConfluenceCopyExecutionClaim',runtime.confluenceCopyExecutionClaim],
+      ['ConfluenceCopyExecutionRequest',runtime.confluenceCopyExecutionRequest],['ConfluenceCopyExecutionOutcome',runtime.confluenceCopyExecutionOutcome]]) {
+      const rows=await delegate.findMany({where:{organisationId:'org-a'},orderBy:{id:'asc'}});
+      assert.deepEqual(execution.ledger.tables[name],JSON.parse(JSON.stringify(rows)));
+    }
+    await assert.rejects(captureConfluenceExecutionLedgerV2(runtime,'org-a','member-a',context));
+    await assert.rejects(captureConfluenceExecutionLedgerV2(runtime,'org-b','owner-a',context));
+    const binding={context,observedControl:{format:2,installationId:context.installationId,organisationId:'org-a',
+      writerId:'synthetic-writer',writerEpoch:context.writerEpoch,generation:0,digest:null,activeOperation:null,revision:'synthetic-only'}};
+    const keys={generate:async supplied=>({key:Buffer.alloc(32,7),keyId:supplied.keyId,wrappedKey:'dGVzdA=='}),
+      unwrap:async(_wrapped,supplied)=>({key:Buffer.alloc(32,7),keyId:supplied.keyId})};
+    const encrypted=await sealConfluenceExecutionArchiveV2(execution.body,binding,keys);
+    const opened=await openConfluenceExecutionArchiveV2(encrypted.envelope,binding,keys);
+    assert.equal(opened.body,execution.body);assert.equal(opened.independentlyPreserved,false);
+    return {executionV2Groups:Object.keys(execution.ledger.tables).length,executionV2OriginalBytes:true,racingRequests:2,raceCommittedRequests:1,lostRequestReceipt:true,lostOutcomeReceipt:true,outcomeAfterRevocation:true,
       immutable:true,olderRestoreRefused:true,providerRequests:0};
   } finally {
     await restoreOwner();await runtime.$disconnect();

@@ -1,5 +1,13 @@
 # CharityPilot Agent Continuation Handoff
 
+> **16 October V2 execution-history archive foundation:** Read-only bounded
+> capture and a separate authenticated-encryption codec preserve eleven source
+> groups, including original claims, requests and reports. Historical epochs
+> remain original; legacy V1 validation stays strict. Native database capture
+> and exact-byte crypto checks are separate from independent custody/current
+> head or SQL replay. V2 persistence/publication/replay remain required; see
+> `docs/confluence-execution-ledger-v2.md`.
+
 > **16 October retained-review gate fixture correction:** Hosted607 failed
 > because its existing permission/scope TRUNCATE probe omitted the new request
 > and outcome children. The probe now names the complete child set, preserving
