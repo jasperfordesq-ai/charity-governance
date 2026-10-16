@@ -1,5 +1,12 @@
 # CharityPilot Full-Platform Remediation Audit
 
+> **16 October hosted credential file boundary / partial implementation:** New
+> loader rejects aliases, ambiguous/interpolated inputs, owner-variable leakage
+> and unreviewed runtime changes; pins exact bytes/identity. Linux51checksPASS
+> including permissions/symlinks; Windows ACL certification remains unproved.
+> No production caller or privilege claim from files alone. Complete transport,
+> actual DB role, job/rollback and provider/deployed acceptance gates remain OPEN.
+
 > **16 October hosted role gap / first source slice only:** Added standalone
 > same-target/distinct-credential validator and24passing cases. Input equality/TLS
 > checks are not actual restricted role or protected environment transport proof.

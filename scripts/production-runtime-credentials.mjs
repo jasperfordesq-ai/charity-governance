@@ -1,4 +1,7 @@
 import { isIP } from 'node:net';
+import { createHash } from 'node:crypto';
+import { closeSync, constants, fstatSync, lstatSync, openSync, readSync, realpathSync, statSync } from 'node:fs';
+import { isAbsolute } from 'node:path';
 
 const refusal = 'Production database credentials must use distinct roles for the same verified-TLS database.';
 const allowedOptions = new Set(['sslmode', 'sslrootcert', 'target_session_attrs', 'connect_timeout', 'application_name']);
@@ -56,4 +59,93 @@ export function validateProductionRuntimeDatabasePair(maintenanceUrl, runtimeUrl
     // URL parsing errors can contain passwords. No original input/cause escapes.
     throw new Error(refusal);
   }
+}
+
+const fileRefusal = 'Production requires a separate protected runtime configuration.';
+const MAX_ENV_BYTES = 256 * 1024;
+const hash = bytes => createHash('sha256').update(bytes).digest('hex');
+function fileWitness(path) {
+  if (typeof path !== 'string' || !isAbsolute(path) || lstatSync(path).isSymbolicLink()) throw new Error();
+  const canonical = realpathSync(path);
+  const descriptor = openSync(path, constants.O_RDONLY | (constants.O_NOFOLLOW ?? 0));
+  try {
+    const before = fstatSync(descriptor, { bigint: true });
+    if (!before.isFile() || before.size < 1n || before.size > BigInt(MAX_ENV_BYTES)) throw new Error();
+    const permissionsVerified = process.platform !== 'win32';
+    if (permissionsVerified && ((before.mode & 0o077n) !== 0n
+      || (before.uid !== BigInt(process.geteuid()) && process.geteuid() !== 0))) throw new Error();
+    const buffer = Buffer.alloc(MAX_ENV_BYTES + 1);
+    let length = 0;
+    while (length <= MAX_ENV_BYTES) {
+      const amount = readSync(descriptor, buffer, length, buffer.length - length, null);
+      if (amount === 0) break;
+      length += amount;
+    }
+    const after = fstatSync(descriptor, { bigint: true }), selected = statSync(path, { bigint: true });
+    if (length > MAX_ENV_BYTES || BigInt(length) !== before.size || canonical !== realpathSync(path)
+      || after.dev !== before.dev || after.ino !== before.ino || after.size !== before.size
+      || after.mtimeNs !== before.mtimeNs || after.ctimeNs !== before.ctimeNs
+      || selected.dev !== before.dev || selected.ino !== before.ino) throw new Error();
+    const bytes = buffer.subarray(0, length);
+    return { path: canonical, device: String(before.dev), inode: String(before.ino),
+      sha256: hash(bytes), values: envValues(new TextDecoder('utf-8', { fatal: true }).decode(bytes)), permissionsVerified };
+  } finally { closeSync(descriptor); }
+}
+
+function envValues(text) {
+  if (/[\x00-\x08\x0b\x0c\x0e-\x1f\x7f-\x9f]/u.test(text.replaceAll('\r\n', '\n'))) throw new Error();
+  const values = Object.create(null);
+  for (const line of text.split(/\r?\n/u)) {
+    const trimmed = line.trim();
+    if (!trimmed || trimmed.startsWith('#')) continue;
+    const match = /^([A-Z_][A-Z0-9_]*)\s*=\s*(.*)$/u.exec(trimmed);
+    if (!match || Object.hasOwn(values, match[1])) throw new Error();
+    let value = match[2].trim();
+    // A deliberately literal dotenv subset prevents Compose interpolation or
+    // escape interpretation from changing the reviewed value at startup.
+    if (value.includes('$')) throw new Error();
+    if (value.startsWith('"') || value.startsWith("'")) {
+      const quote = value[0];
+      if (value.length < 2 || !value.endsWith(quote)) throw new Error();
+      value = value.slice(1, -1);
+      if (value.includes(quote) || (quote === '"' && value.includes('\\'))) throw new Error();
+    } else if (/['"#]/u.test(value)) throw new Error();
+    values[match[1]] = value;
+  }
+  return values;
+}
+
+/** Confidential loader for future deployment integration. appEnvironment has
+ * runtime secrets: pass only to trusted deployment code, never print/serialize.
+ * Windows file identity is checked but ACLs are NOT certified here; callers
+ * must not treat privatePermissionsVerified=false as protected transport proof.
+ */
+export function readProductionRuntimeEnvironment(maintenanceEnvFile) {
+  try {
+    const maintenance = fileWitness(maintenanceEnvFile);
+    const app = fileWitness(maintenance.values.CHARITYPILOT_PRODUCTION_APP_ENV_FILE);
+    if (app.path === maintenance.path || (app.device === maintenance.device && app.inode === maintenance.inode)) throw new Error();
+    const identity = validateProductionRuntimeDatabasePair(maintenance.values.DATABASE_URL, app.values.DATABASE_URL);
+    const maintenancePassword = connection(maintenance.values.DATABASE_URL).password;
+    for (const [key, value] of Object.entries(app.values)) {
+      if (/^(?:POSTGRES_|MIGRATION_|PG[A-Z0-9_]*$|BLUEGREEN_|CHARITYPILOT_PRODUCTION_|DOCKER_|COMPOSE_)/u.test(key)
+        || ['NODE_OPTIONS','NODE_PATH','LD_PRELOAD','LD_LIBRARY_PATH','BASH_ENV','ENV'].includes(key)) throw new Error();
+      if (key === 'DATABASE_URL') continue;
+      if (!Object.hasOwn(maintenance.values, key) || value !== maintenance.values[key]
+        || value.includes(maintenance.values.DATABASE_URL) || value === maintenancePassword) throw new Error();
+    }
+    return Object.freeze({ appEnvFile: app.path, appEnvironment: Object.freeze(app.values), identity: Object.freeze(identity),
+      privatePermissionsVerified: maintenance.permissionsVerified && app.permissionsVerified,
+      binding: Object.freeze({ maintenancePath: maintenance.path, appPath: app.path,
+        maintenanceSha256: maintenance.sha256, appSha256: app.sha256,
+        maintenanceDevice: maintenance.device, maintenanceInode: maintenance.inode,
+        appDevice: app.device, appInode: app.inode }) });
+  } catch { throw new Error(fileRefusal); }
+}
+
+export function assertProductionRuntimeEnvironmentUnchanged(binding) {
+  try {
+    const current = readProductionRuntimeEnvironment(binding.maintenancePath).binding;
+    if (JSON.stringify(current) !== JSON.stringify(binding)) throw new Error();
+  } catch { throw new Error('Production runtime configuration changed; repeat protected configuration review.'); }
 }

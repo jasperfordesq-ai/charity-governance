@@ -1,5 +1,14 @@
 # CharityPilot Agent Continuation Handoff
 
+> **16 October runtime file boundary, caller integration OPEN:** Added bounded
+> confidential file loader: explicit separate runtime selector, no symlink/hard-
+> link owner alias, literal unambiguous config, unchanged reviewed values and no
+> migration/executor variables. Exact hashes/file identity can be rechecked.
+> Windows49PASS/twoexpectedSKIP; isolated nonroot Linux51PASS/noSKIP. POSIX
+> private permissions proved; Windows ACL flag remains false. Runtime-secret map
+> is internal, never log it. Production Compose/deploy/rollback/jobs and actual
+> role/login/catalogue gates are not connected yet; no live config change.
+
 > **16 October production credential input slice, integration OPEN:** New pure
 > helper checks distinct decoded roles/passwords on the same verified-TLS target;
 > rejects routing overrides, TLS weakening and local-address aliases.24checks pass,
