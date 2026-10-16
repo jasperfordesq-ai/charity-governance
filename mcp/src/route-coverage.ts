@@ -11,10 +11,10 @@ export interface ExcludedRoute {
   path: string;
   reason: string;
   /**
-   * True when the route is not registered in its group's `index.ts` — either it
-   * lives in a sibling file, or it is registered only under some deployment
-   * profiles. The coverage test cannot discover these, so it does not treat
-   * them as stale when they go unmatched.
+   * True for routes outside the parser's supported wiring, such as nested
+   * registrations or deployment-only profiles. Direct server registrations
+   * are discovered regardless of source filename. Unsupported cases do not become
+   * stale when they go unmatched.
    */
   notInGroupIndex?: boolean;
 }
@@ -200,6 +200,10 @@ export const EXCLUDED_ROUTES: readonly ExcludedRoute[] = [
     reason: 'Admin-only inventory of charity-managed cited pages and linked Vault records for human evidence and audience review, distinct from CharityPilot-published copies.',
   },
   {
+    path: '/api/v1/integrations/confluence/retained-copy-reviews/:reviewId/permission',
+    reason: 'Owner/full-data web-only decision receipt includes scoped review and withdrawal evidence; connector sessions cannot read this dashboard record.',
+  },
+  {
     path: '/api/v1/documents/:id/download',
     reason:
       'Returns the raw bytes of a stored document. No field filter is meaningful against a '
@@ -240,6 +244,10 @@ export const EXCLUDED_ROUTES: readonly ExcludedRoute[] = [
       + 'about to approve before asking for their password. Driven by that command, never by '
       + 'a tool, and denied after the account loses its Owner/Admin role.',
     notInGroupIndex: true,
+  },
+  {
+    path: '/api/v1/auth/connector/session',
+    reason: 'Consumed internally by fetchSessionPosture to enforce connector access/data scope and populate session_info; it is not a separate governance-data tool.',
   },
   {
     path: '/api/v1/auth/me',

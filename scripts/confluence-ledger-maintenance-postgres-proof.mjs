@@ -91,10 +91,9 @@ export async function runConfluenceLedgerMaintenancePostgresProof(prisma,url) {
   });
   assert.equal(permissionResult.providerIOAuthorised,false);
   const permission=permissionResult.permission;
-  await prisma.confluenceRetainedCopyPermissionWithdrawal.create({ data: {
-    organisationId: 'org-a', permissionId: permission.id, actorUserId: 'owner-a',
+  await permissionService.withdraw('org-a','owner-a',permission.id,{
     evidenceRef: 'SYNTHETIC-JOINED-WITHDRAWAL', reason: 'Preserve original synthetic permission withdrawal on restore',
-  } });
+  });
   await reviewStore.withdraw('org-a','owner-a',recorded.id,{
     evidenceRef: 'SYNTHETIC-JOINED-REVIEW-WITHDRAWAL', reason: 'Preserve original synthetic review withdrawal on restore' });
   const identity = { installationId: 'synthetic-install', organisationId: 'org-a' };

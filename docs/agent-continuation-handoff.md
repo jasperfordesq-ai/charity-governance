@@ -1,5 +1,13 @@
 # CharityPilot Agent Continuation Handoff
 
+> **16 October supported Owner permission decisions:** The review API adds
+> issuance, tenant-scoped receipt lookup and withdrawal through the existing
+> guarded permission service. Receipts explicitly grant no provider execution
+> and do not certify fresh source state. Original review issuance cannot be
+> renewed by withdrawal. The connector GET parser now follows directly registered
+> sibling modules; exact dashboard exclusions remain enforced. See
+> `docs/confluence-retained-copy-review.md` and private test/release receipts.
+
 > **16 October hosted route-accounting correction:** The connector coverage gate
 > correctly required decisions for the three new retained-copy review POST
 > routes. Each is now explicitly excluded because the API requires an Owner

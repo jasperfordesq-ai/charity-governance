@@ -4,8 +4,9 @@ import { authGuard } from '../../middleware/auth.js';
 import { requireOwner } from '../../middleware/roles.js';
 import { requireWebSession } from '../../middleware/session-level.js';
 import { ConfluenceRetainedCopyReviewService } from '../../services/confluence-retained-copy-review.service.js';
+import { ConfluenceRetainedCopyPermissionService } from '../../services/confluence-retained-copy-permission.service.js';
 import { observeRetainedConfluenceCopySource } from '../../services/confluence-retained-copy-source.js';
-import { handleError } from '../../utils/errors.js';
+import { AppError, handleError } from '../../utils/errors.js';
 import { sendSuccess } from '../../utils/response.js';
 
 const identifier = z.string().regex(/^[A-Za-z0-9][A-Za-z0-9_-]{0,159}$/);
@@ -16,6 +17,7 @@ export type RetainedCopyReviewRoutesOptions = {
   deps?: {
     observe?: typeof observeRetainedConfluenceCopySource;
     reviews?: Pick<ConfluenceRetainedCopyReviewService, 'record' | 'withdraw'>;
+    permissions?: Pick<ConfluenceRetainedCopyPermissionService, 'issue' | 'withdraw'>;
   };
 };
 
@@ -24,13 +26,14 @@ function failure(reply: FastifyReply, error: unknown) {
   return handleError(reply, error);
 }
 
-/** Review evidence only. Does not register maintenance scopes, issue a
- * permission, enqueue erasure or consume one-use authority. The authenticated
+/** Review and permission decisions only. Does not register maintenance scopes,
+ * enqueue erasure or consume one-use authority. The authenticated
  * tenant/actor is never accepted from query parameters or the observation body.
  */
 export async function retainedCopyReviewRoutes(app: FastifyInstance, options: RetainedCopyReviewRoutesOptions = {}) {
   const reviews = options.deps?.reviews ?? new ConfluenceRetainedCopyReviewService(app.prisma);
   const observe = options.deps?.observe ?? observeRetainedConfluenceCopySource;
+  const permissions = options.deps?.permissions ?? new ConfluenceRetainedCopyPermissionService(app.prisma);
   app.addHook('onSend', async (_request, reply, payload) => {
     reply.header('Cache-Control', 'no-store');
     return payload;
@@ -71,6 +74,43 @@ export async function retainedCopyReviewRoutes(app: FastifyInstance, options: Re
       const { reviewId } = z.object({ reviewId: identifier }).strict().parse(request.params);
       const withdrawal = await reviews.withdraw(request.user.organisationId, request.user.userId, reviewId, request.body);
       return sendSuccess(reply, { id: withdrawal.id, authorisesProviderIO: false }, 201);
+    } catch (error) { return failure(reply, error); }
+  });
+
+  app.post('/:reviewId/permission', { bodyLimit: 8192, config: { rateLimit: { max: 4, timeWindow: '1 minute' } } }, async (request, reply) => {
+    try {
+      empty.parse(request.query);
+      const { reviewId } = z.object({ reviewId: identifier }).strict().parse(request.params);
+      const { permission } = await permissions.issue(request.user.organisationId, request.user.userId, reviewId, request.body);
+      return sendSuccess(reply, { permission: { id: permission.id, reviewId: permission.reviewId,
+        scopeId: permission.scopeId, snapshotSha256: permission.snapshotSha256,
+        issuedAt: permission.issuedAt, expiresAt: permission.expiresAt }, providerIOAuthorised: false }, 201);
+    } catch (error) { return failure(reply, error); }
+  });
+
+  // Receipt lookup lets a caller reconcile a lost issuance response without
+  // retrying the decision. It does not refresh inventory or certify current use.
+  app.get('/:reviewId/permission', async (request, reply) => {
+    try {
+      empty.parse(request.query);
+      const { reviewId } = z.object({ reviewId: identifier }).strict().parse(request.params);
+      const permission = await app.prisma.confluenceRetainedCopyPermission.findFirst({
+        where: { organisationId: request.user.organisationId, reviewId },
+        select: { id: true, reviewId: true, scopeId: true, snapshotSha256: true, issuedAt: true, expiresAt: true,
+          withdrawal: { select: { id: true, occurredAt: true, evidenceRef: true, reason: true } },
+          review: { select: { withdrawal: { select: { id: true, occurredAt: true } } } } },
+      });
+      if (!permission) throw new AppError(404, 'CONFLUENCE_COPY_PERMISSION_NOT_FOUND', 'Recorded permission not found.');
+      return sendSuccess(reply, { permission, currentSourceChecked: false, providerIOAuthorised: false });
+    } catch (error) { return failure(reply, error); }
+  });
+
+  app.post('/permissions/:permissionId/withdraw', { bodyLimit: 8192 }, async (request, reply) => {
+    try {
+      empty.parse(request.query);
+      const { permissionId } = z.object({ permissionId: identifier }).strict().parse(request.params);
+      const result = await permissions.withdraw(request.user.organisationId, request.user.userId, permissionId, request.body);
+      return sendSuccess(reply, { id: result.id, permissionId, providerIOAuthorised: false }, 201);
     } catch (error) { return failure(reply, error); }
   });
 }

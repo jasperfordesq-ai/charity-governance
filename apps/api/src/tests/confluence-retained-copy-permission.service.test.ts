@@ -18,7 +18,7 @@ function fixture() {
         complete: true, currentPageVersion: 1, pageVersions: [1], attachments: [] } },
   };
   const prepared = prepareRetainedConfluenceCopyReview(review, NOW);
-  const state = { owner: true, active: true, bound: false, reviewWithdrawn: false, permissionWithdrawn: false,
+  const state = { owner: true, active: true, bound: false, reviewWithdrawn: false, permissionWithdrawn: false, permissionIssued: false,
     scopePresent: true, scopePolicy: 'C01-COPY-DISPOSAL', scopeExpires: new Date('2026-10-15T18:50:00.000Z'), clock: NOW };
   const calls = { observations: 0, writes: [] as Array<{ kind: string; data: Record<string, unknown> }> };
   const tx = {
@@ -36,9 +36,9 @@ function fixture() {
       expiresAt: state.scopeExpires,
     } : null },
     confluenceRetainedCopyPermission: {
-      create: async ({ data }: { data: Record<string, unknown> }) => { calls.writes.push({ kind: 'permission', data }); return { id: 'permission-a', ...data }; },
-      findFirst: async ({ where }: { where: { id: string; organisationId: string } }) =>
-        where.id === 'permission-a' && where.organisationId === 'org-a' ? {
+      create: async ({ data }: { data: Record<string, unknown> }) => { state.permissionIssued = true; calls.writes.push({ kind: 'permission', data }); return { id: 'permission-a', ...data }; },
+      findFirst: async ({ where }: { where: { id?: string; reviewId?: string; organisationId: string } }) =>
+        (where.id === 'permission-a' || (where.reviewId === 'review-a' && state.permissionIssued)) && where.organisationId === 'org-a' ? {
           id: 'permission-a', withdrawal: state.permissionWithdrawn ? { id: 'withdrawn' } : null } : null,
     },
     confluenceRetainedCopyPermissionWithdrawal: { create: async ({ data }: { data: Record<string, unknown> }) => {
@@ -79,6 +79,9 @@ for (const [label, mutate] of Object.entries({
   wrongPolicyDecision: (h: ReturnType<typeof fixture>) => { h.input.disposalPolicyEvidenceRef = 'OTHER-POLICY'; },
   beyondScopeExpiry: (h: ReturnType<typeof fixture>) => { h.input.expiresAt = '2026-10-15T18:55:00.000Z'; },
   missingAttestation: (h: ReturnType<typeof fixture>) => { h.input.attestation = ''; },
+  forgedTenant: (h: ReturnType<typeof fixture>) => { Object.assign(h.input, { organisationId: 'org-b' }); },
+  forgedActor: (h: ReturnType<typeof fixture>) => { Object.assign(h.input, { actorUserId: 'other' }); },
+  forgedReview: (h: ReturnType<typeof fixture>) => { Object.assign(h.input, { reviewId: 'other' }); },
 })) test(`issuance refuses ${label} before provider observation`, async () => {
   const h = fixture(); mutate(h);
   await assert.rejects(h.service.issue('org-a', 'owner-a', 'review-a', h.input));
@@ -115,4 +118,15 @@ test('permission withdrawal is a separate retained decision and repeated withdra
   h.state.permissionWithdrawn = true;
   await assert.rejects(h.service.withdraw('org-a','owner-a','permission-a',reason));
   assert.equal(h.calls.writes.length, 1);
+});
+
+test('the original review cannot issue another permission after issuance or withdrawal', async () => {
+  const h = fixture();
+  await h.service.issue('org-a', 'owner-a', 'review-a', h.input);
+  await assert.rejects(h.service.issue('org-a', 'owner-a', 'review-a', h.input), { code: 'CONFLUENCE_COPY_PERMISSION_ALREADY_ISSUED' });
+  await h.service.withdraw('org-a', 'owner-a', 'permission-a', { evidenceRef: 'C01-WITHDRAW', reason: 'Withdraw the original synthetic decision.' });
+  h.state.permissionWithdrawn = true;
+  await assert.rejects(h.service.issue('org-a', 'owner-a', 'review-a', h.input), { code: 'CONFLUENCE_COPY_PERMISSION_ALREADY_ISSUED' });
+  assert.equal(h.calls.observations, 1);
+  assert.deepEqual(h.calls.writes.map(row => row.kind), ['permission', 'withdrawal']);
 });

@@ -192,6 +192,14 @@ export const EXCLUDED_MUTATIONS: readonly ExcludedMutation[] = [
     route: 'POST /api/v1/integrations/confluence/retained-copy-reviews/:reviewId/withdraw',
     reason: 'Withdraws a retained-copy review through the Owner dashboard and is deliberately refused to all connector sessions.',
   },
+  {
+    route: 'POST /api/v1/integrations/confluence/retained-copy-reviews/:reviewId/permission',
+    reason: 'Records the Owner\'s exact synthetic scope/expiry/disposal attestation after fresh review; connector sessions cannot issue this dashboard decision.',
+  },
+  {
+    route: 'POST /api/v1/integrations/confluence/retained-copy-reviews/permissions/:permissionId/withdraw',
+    reason: 'Withdrawal of this synthetic permission decision requires the Owner full-data web session and is not a connector action.',
+  },
   /* --- the platform operator realm ------------------------------------- */
   {
     route: 'POST /api/v1/owner/auth/login',

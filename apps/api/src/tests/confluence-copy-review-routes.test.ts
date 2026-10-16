@@ -16,6 +16,12 @@ async function fixture(role: 'OWNER' | 'ADMIN' | 'MEMBER' = 'OWNER', clientKind 
   app.decorate('prisma', {
     authSession: { findFirst: async () => revoked ? null : { id: 'session-a', familyId: 'family-a', clientKind, accessLevel: 'ADMIN', dataScope } },
     user: { findUnique: async () => ({ id: 'owner-a', organisationId: 'org-a', role, emailVerified: true }) },
+    confluenceRetainedCopyPermission: { findFirst: async ({ where }: { where: { organisationId: string; reviewId: string } }) => {
+      calls.push(['lookup', where]);
+      return where.organisationId === 'org-a' && where.reviewId === 'review-a' ? { id: 'permission-a', reviewId: 'review-a',
+        scopeId: 'scope-a', snapshotSha256: 'a'.repeat(64), issuedAt: new Date(), expiresAt: new Date(),
+        withdrawal: null, review: { withdrawal: null } } : null;
+    } },
   } as never);
   const deps: NonNullable<RetainedCopyReviewRoutesOptions['deps']> = {
     observe: async (_db, input) => { calls.push(['observe', input]); return {
@@ -27,13 +33,19 @@ async function fixture(role: 'OWNER' | 'ADMIN' | 'MEMBER' = 'OWNER', clientKind 
         reviewedAt: new Date(), expiresAt: new Date(), authorisesProviderIO: false } as never; },
       withdraw: async (...args) => { calls.push(['withdraw', ...args]); return { id: 'withdrawal-a' } as never; },
     },
+    permissions: {
+      issue: async (...args) => { calls.push(['issue', ...args]); return { permission: { id: 'permission-a', reviewId: 'review-a',
+        scopeId: 'scope-a', snapshotSha256: 'a'.repeat(64), issuedAt: new Date(), expiresAt: new Date(),
+        integrationId: 'must-not-be-echoed' }, providerIOAuthorised: false } as never; },
+      withdraw: async (...args) => { calls.push(['permission-withdraw', ...args]); return { id: 'permission-withdrawal-a' } as never; },
+    },
   };
   await app.register(retainedCopyReviewRoutes, { prefix: '/reviews', deps });
   const headers = { authorization: `Bearer ${signAccessToken({ userId: 'owner-a', organisationId: 'org-a', role, sessionId: 'session-a' })}` };
   return { app, headers, calls };
 }
 
-const paths = ['/observe/pub-a', '/', '/review-a/withdraw'];
+const paths = ['/observe/pub-a', '/', '/review-a/withdraw', '/review-a/permission', '/permissions/permission-a/withdraw'];
 test('inventory observations are throttled and oversize reviews cannot reach persistence', async () => {
   const h = await fixture();
   try {
@@ -53,6 +65,8 @@ test('Owner with withheld data scope cannot observe or record review evidence', 
   try {
     for (const path of paths) assert.equal((await h.app.inject({ method: 'POST', url: `/reviews${path}`, headers: h.headers, payload: {} })).statusCode, 403);
     assert.equal(h.calls.length, 0);
+    assert.equal((await h.app.inject({ method: 'GET', url: '/reviews/review-a/permission', headers: h.headers })).statusCode, 403);
+    assert.equal(h.calls.length, 0);
   } finally { await h.app.close(); }
 });
 for (const [label, role, clientKind, revoked] of [
@@ -66,6 +80,8 @@ for (const [label, role, clientKind, revoked] of [
       assert.equal(r.statusCode, revoked ? 401 : 403);
       assert.equal(r.headers['cache-control'], 'no-store');
     }
+    assert.equal(h.calls.length, 0);
+    assert.equal((await h.app.inject({ method: 'GET', url: '/reviews/review-a/permission', headers: h.headers })).statusCode, revoked ? 401 : 403);
     assert.equal(h.calls.length, 0);
   } finally { await h.app.close(); }
 });
@@ -114,6 +130,58 @@ test('unauthenticated and ambiguous-query requests cannot reach review dependenc
       assert.equal((await h.app.inject({ method: 'POST', url: `/reviews${path}?organisationId=org-b`, headers: h.headers, payload: {} })).statusCode, 400);
     }
     assert.equal(h.calls.length, 0);
+  } finally { await h.app.close(); }
+});
+
+test('permission decisions use authenticated scope, project safe fields and never expose provider authority', async () => {
+  const h = await fixture();
+  try {
+    const input = { scopeId: 'scope-a', evidenceRef: 'SYNTHETIC-PERMISSION' };
+    const r = await h.app.inject({ method: 'POST', url: '/reviews/review-a/permission', headers: h.headers, payload: input });
+    assert.equal(r.statusCode, 201);
+    assert.deepEqual(h.calls[0], ['issue', 'org-a', 'owner-a', 'review-a', input]);
+    assert.equal(r.json().data.permission.id, 'permission-a');
+    assert.equal(r.json().data.permission.integrationId, undefined);
+    assert.equal(r.json().data.providerIOAuthorised, false);
+    const reason = { evidenceRef: 'SYNTHETIC-WITHDRAW', reason: 'Withdraw only this recorded synthetic permission.' };
+    const w = await h.app.inject({ method: 'POST', url: '/reviews/permissions/permission-a/withdraw', headers: h.headers, payload: reason });
+    assert.equal(w.statusCode, 201);
+    assert.deepEqual(h.calls[1], ['permission-withdraw', 'org-a', 'owner-a', 'permission-a', reason]);
+    assert.equal(w.json().data.providerIOAuthorised, false);
+    assert.equal(w.headers['cache-control'], 'no-store');
+    assert.equal((await h.app.inject({ method: 'POST', url: '/reviews/permissions/permission-a/execute', headers: h.headers, payload: {} })).statusCode, 404);
+  } finally { await h.app.close(); }
+});
+
+test('permission receipt lookup is tenant-scoped and is not a fresh-source or execution assertion', async () => {
+  const h = await fixture();
+  try {
+    const r = await h.app.inject({ method: 'GET', url: '/reviews/review-a/permission', headers: h.headers });
+    assert.equal(r.statusCode, 200);
+    assert.deepEqual(h.calls, [['lookup', { organisationId: 'org-a', reviewId: 'review-a' }]]);
+    assert.equal(r.json().data.permission.id, 'permission-a');
+    assert.equal(r.json().data.currentSourceChecked, false);
+    assert.equal(r.json().data.providerIOAuthorised, false);
+    assert.equal(r.headers['cache-control'], 'no-store');
+    const foreign = await h.app.inject({ method: 'GET', url: '/reviews/foreign-review/permission', headers: h.headers });
+    assert.equal(foreign.statusCode, 404);
+    const query = await h.app.inject({ method: 'GET', url: '/reviews/review-a/permission?organisationId=org-b', headers: h.headers });
+    assert.equal(query.statusCode, 400);
+    assert.equal(h.calls.length, 2);
+  } finally { await h.app.close(); }
+});
+
+test('permission issuance is rate limited and oversized permission bodies are refused before service calls', async () => {
+  const h = await fixture();
+  try {
+    const oversized = await h.app.inject({ method: 'POST', url: '/reviews/review-a/permission', headers: h.headers, payload: { reason: 'x'.repeat(8192) } });
+    assert.equal(oversized.statusCode, 413); assert.equal(h.calls.length, 0);
+    // The same route/IP limiter also accounts for the oversized attempt.
+    for (let i = 0; i < 3; i++) assert.equal((await h.app.inject({ method: 'POST', url: '/reviews/review-a/permission', headers: h.headers, payload: {} })).statusCode, 201);
+    const throttled = await h.app.inject({ method: 'POST', url: '/reviews/review-a/permission', headers: h.headers, payload: {} });
+    assert.equal(throttled.statusCode, 429);
+    assert.equal(throttled.headers['cache-control'], 'no-store');
+    assert.equal(h.calls.length, 3);
   } finally { await h.app.close(); }
 });
 

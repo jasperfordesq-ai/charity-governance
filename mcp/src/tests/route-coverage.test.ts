@@ -10,16 +10,16 @@ import { EXCLUDED_ROUTES } from '../route-coverage.js';
 const here = dirname(fileURLToPath(import.meta.url));
 const API_SRC = resolve(here, '../../../apps/api/src');
 
-/** Follows the API's wiring: prefix -> the directory that serves it. */
-function routeDirectoriesByPrefix(): Map<string, string> {
+/** Follows the API's wiring: prefix -> the exact registered source file. */
+function routeFilesByPrefix(): Map<string, string> {
   const server = readFileSync(resolve(API_SRC, 'server.ts'), 'utf8');
 
   const importedFrom = new Map<string, string>();
   for (const match of server.matchAll(
-    /import\s*\{([^}]*)\}\s*from\s*'\.\/routes\/([a-z-]+)\/index\.js'/g,
+    /import\s*\{([^}]*)\}\s*from\s*'\.\/routes\/([A-Za-z-]+(?:\/[A-Za-z-]+)*)\.js'/g,
   )) {
     for (const name of match[1]!.split(',').map((n) => n.trim()).filter(Boolean)) {
-      importedFrom.set(name, match[2]!);
+      importedFrom.set(name, `${match[2]!}.ts`);
     }
   }
 
@@ -27,19 +27,19 @@ function routeDirectoriesByPrefix(): Map<string, string> {
   for (const match of server.matchAll(
     /register\(\s*(\w+)\s*,\s*\{\s*prefix:\s*(?:'([^']+)'|(\w+))/g,
   )) {
-    const directory = importedFrom.get(match[1]!);
-    if (!directory) continue;
+    const file = importedFrom.get(match[1]!);
+    if (!file) continue;
 
     let prefix = match[2];
     if (!prefix) {
       const constName = match[3]!;
-      const constDirectory = importedFrom.get(constName) ?? directory;
-      const source = readFileSync(resolve(API_SRC, 'routes', constDirectory, 'index.ts'), 'utf8');
+      const constFile = importedFrom.get(constName) ?? file;
+      const source = readFileSync(resolve(API_SRC, 'routes', constFile), 'utf8');
       const value = new RegExp(`export const ${constName}\\s*=\\s*'([^']+)'`).exec(source);
       if (!value) continue;
       prefix = value[1]!;
     }
-    if (prefix.startsWith('/api/v1')) byPrefix.set(prefix, directory);
+    if (prefix.startsWith('/api/v1')) byPrefix.set(prefix, file);
   }
   return byPrefix;
 }
@@ -70,8 +70,8 @@ function discoverGetRoutes(): string[] {
     }
     return result;
   }
-  for (const [prefix, directory] of routeDirectoriesByPrefix()) {
-    for (const source of sources(resolve(API_SRC, 'routes', directory, 'index.ts'))) {
+  for (const [prefix, file] of routeFilesByPrefix()) {
+    for (const source of sources(resolve(API_SRC, 'routes', file))) {
       for (const match of source.matchAll(GET_REGISTRATION)) {
         const subPath = match[1]!;
         found.push(subPath === '/' ? prefix : `${prefix}${subPath}`);
@@ -95,6 +95,8 @@ test('the route parser really finds routes', () => {
     '/api/v1/documents/:id/download',
     '/api/v1/governance-registers/conflicts',
     '/api/v1/team',
+    '/api/v1/integrations/confluence/retained-copy-reviews/:reviewId/permission',
+    '/api/v1/auth/connector/session',
   ]) {
     assert.ok(routes.includes(expected), `expected to discover ${expected}`);
   }

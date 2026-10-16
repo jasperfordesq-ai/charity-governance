@@ -1,7 +1,8 @@
 # Review a retained source's synthetic Confluence copy
 
-This API is the review-preparation stage of the optional Confluence integration.
-It does not issue a purge permission or execute a provider deletion.
+This API supports review preparation and Owner permission decisions for the
+optional Confluence integration. It does not execute a provider deletion or
+consume the recorded permission as one-use authority.
 
 ## Access and target binding
 
@@ -18,6 +19,9 @@ Base path: `/api/v1/integrations/confluence/retained-copy-reviews`.
 | `POST /observe/:publicationId` with `{}` | Observe the exact retained local source and its stored Confluence target using the organisation's existing connection. No caller-supplied site, page, storage path or hash is accepted. |
 | `POST /` | Record the complete explicit synthetic review accepted by `prepareRetainedConfluenceCopyReview`. The service and database recheck actor, tenant and current source/publication. |
 | `POST /:reviewId/withdraw` | Withdraw a review with a strict evidence reference and reason; immutable original evidence is retained. |
+| `POST /:reviewId/permission` | Record one exact Owner permission decision against the registered synthetic scope, after the existing service re-observes the source and copy. |
+| `GET /:reviewId/permission` | Read the tenant-scoped decision receipt and any permission/review withdrawal, including after a lost issuance response. This does not refresh source evidence. |
+| `POST /permissions/:permissionId/withdraw` | Withdraw the recorded permission with an evidence reference and reason, retaining the original decision. |
 
 The observation route has a four-request/minute route limit and passes a
 60-second cancellation signal to the existing bounded observer. Observations
@@ -37,7 +41,19 @@ recording a review does not independently prove a human synthetic assertion.
 Observation responses deliberately omit internal connection identity. They retain
 `syntheticVerified=false`, `allCopiesVerified=false`, and
 `actionAuthorized=false`. Recording/withdrawal responses retain
-`authorisesProviderIO=false`.
+`authorisesProviderIO=false` for reviews. Permission responses retain
+`providerIOAuthorised=false`; the receipt lookup also returns
+`currentSourceChecked=false`. Integration connection identifiers are not exposed
+by issuance responses. Permission issuance is limited to four requests/minute
+and an 8 KiB body, as distinct from the 128 KiB review body.
+
+Issuance requires the exact scope/digest/evidence/expiry and explicit synthetic
+purge/retain-primary attestation accepted by the existing permission service.
+The authenticated organisation and actor are not body fields. The original
+review can issue only one permission; withdrawal does not renew it. Use receipt
+lookup to reconcile an unknown response, not a new issuance attempt. A stored
+receipt, even if unexpired, is not a current-source check or permission to invoke
+an arbitrary provider deletion.
 
 No execution endpoint is exposed by this module. A current observation or stored
 review must not be presented as proof of all provider-held copies, permission to
@@ -47,8 +63,9 @@ refuses while a primary remains retained.
 ## Remaining execution stages
 
 The [maintenance scope-registration command](confluence-synthetic-scope-registration.md)
-provides preview-bound registration of the exact synthetic review. Separate Owner permission, durable one-use
-consumption and uncertain-outcome quarantine, provider action/readback and
+provides preview-bound registration of the exact synthetic review. Owner
+permission recording and withdrawal now use the guarded HTTP paths above.
+Durable one-use consumption and uncertain-outcome quarantine, provider action/readback and
 independent recovery are separate stages. They must be implemented and verified
 before claiming the retained-source synthetic purge journey is complete. Existing
 internal permission and ledger modules are not an operational shortcut around

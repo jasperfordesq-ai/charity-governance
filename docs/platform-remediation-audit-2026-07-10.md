@@ -1,5 +1,12 @@
 # CharityPilot Full-Platform Remediation Audit
 
+> **16 October permission API increment:** Supported Owner/full-web issuance and
+> withdrawal reuse registered-scope/current-source/expiry guards. Receipt lookup
+> reconciles a lost response without claiming fresh validity or provider authority.
+> The joined PostgreSQL proof now invokes the actual withdrawal service too.
+> One-use consumption, provider purge/readback and independent recovery remain
+> unclosed; private receipts distinguish local checks from hosted/deployed state.
+
 > **16 October connector coverage gate:** Accounted for all three exact new
 > review-preparation routes as intentional Owner/web-only exclusions. The coverage
 > test remains strict and the API connector refusals remain in place. See private
