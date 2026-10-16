@@ -1,5 +1,16 @@
 # CharityPilot Agent Continuation Handoff
 
+> **16 October retention source/version reconciliation, private evidence only:**
+> Fresh c78 byte check matches the previously reviewed schedule. Its original
+> circulated DOCX has different bytes but matching124position-preserved cells,
+> five ordered body paragraphs and extracted header/footer text. Word rendering
+> remains unverified. Full eight-message historical adoption thread was reread;
+> current carried resolution link resolves, while application policy revisions
+> remain zero. Stale private decision-pack approval/calendar statements are
+> corrected: inert year evaluation exists, new-policy creation is still day-based.
+> V2schedule reconciliation, category/anchor/recovery/copy decisions and lifecycle/
+> audience remain open. No live policy, approval or access change follows.
+
 > **16 October recovery architecture review and diagnostic repair:** Current
 > blue-green source explicitly requires the local db service; a separate
 > database/standby requires a reviewed new mode, not a hostname-check bypass.

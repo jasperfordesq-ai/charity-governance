@@ -1,5 +1,14 @@
 # CharityPilot Full-Platform Remediation Audit
 
+> **16 October retention provenance refresh / OPEN:** Exact current schedule
+> bytes and original circulation now have bounded table/body correspondence,
+> refreshed full historical approval-thread evidence and a verified carried
+> resolution link. Hash/Word-rendering and laterV2scope boundaries remain explicit.
+> Current tenant has zero application policy revisions. Historical governance
+> adoption is not application activation; inert calendar-year evaluation is
+> distinct from the still day-only creation API. Private decision pack corrected;
+> controller mappings, recovery/copies and DPO acceptance remain unresolved.
+
 > **16 October rejected-host diagnostic credential handling, source FIXED:**
 > Synthetic tests reproduce connection-password/query/fragment disclosure in a
 > deployment preflight error. The error now states the local-db requirement
