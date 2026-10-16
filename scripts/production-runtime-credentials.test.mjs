@@ -1,3 +1,5 @@
+import { X509Certificate } from 'node:crypto';
+import { rootCertificates } from 'node:tls';
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { chmodSync, linkSync, mkdtempSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
@@ -212,4 +214,51 @@ test('Compose transport derives runtime inputs and overrides inherited credentia
   assertProductionRuntimeEnvironmentUnchanged(result.binding);
   f.saveOwner('COMPOSE_FILE=unreviewed.yml\n');
   assert.throws(() => buildProductionComposeEnvironment(f.maintenance));
+});
+
+function caFiles(t) {
+  const f=files(t);
+  const now=Date.now();
+  const certificates=rootCertificates.filter(pem=>{
+    const cert=new X509Certificate(pem);
+    return cert.ca && Date.parse(cert.validFrom)<now && Date.parse(cert.validTo)>now;
+  });
+  assert.ok(certificates.length>=2);
+  const ca=join(f.directory,'database-ca.pem');
+  writeFileSync(ca,certificates[0],{mode:0o600});
+  const suffix='&sslrootcert='+encodeURIComponent(ca);
+  writeFileSync(f.maintenance,
+    f.common+'DATABASE_URL='+owner+suffix+'\nCHARITYPILOT_PRODUCTION_APP_ENV_FILE=\''+f.app+'\'\n');
+  writeFileSync(f.app,f.common+'DATABASE_URL='+runtime+suffix+'\n');
+  return {...f,ca,certificates};
+}
+
+test('explicit database CA is pinned in the reviewed runtime binding',t=>{
+  const f=caFiles(t);
+  const result=readProductionRuntimeEnvironment(f.maintenance);
+  assert.equal(result.binding.databaseCa.path,f.ca);
+  assert.match(result.binding.databaseCa.sha256,/^[a-f0-9]{64}$/);
+  assertProductionRuntimeEnvironmentUnchanged(result.binding);
+  writeFileSync(f.ca,f.certificates[1]);
+  assert.throws(()=>assertProductionRuntimeEnvironmentUnchanged(result.binding),/changed/);
+});
+
+test('explicit database CA refuses missing, malformed, mixed or key material with fixed diagnostics',t=>{
+  const f=caFiles(t);
+  for(const bad of ['', 'not a certificate', f.certificates[0]+'\nPRIVATE_MARKER',
+    f.certificates[0]+'\n-----BEGIN PRIVATE KEY-----\nPRIVATE_MARKER\n-----END PRIVATE KEY-----']) {
+    writeFileSync(f.ca,bad);
+    assert.throws(()=>readProductionRuntimeEnvironment(f.maintenance),error=>{
+      assert.equal(error.message,'Production requires a separate protected runtime configuration.');
+      assert.equal(error.cause,undefined);return true;
+    });
+  }
+  rmSync(f.ca);
+  assert.throws(()=>readProductionRuntimeEnvironment(f.maintenance),/separate protected/);
+});
+
+test('POSIX database CA integrity requires owner-only protection',t=>{
+  if(process.platform==='win32') {t.skip('Windows ACL certification remains unsupported');return;}
+  const f=caFiles(t);chmodSync(f.ca,0o644);
+  assert.throws(()=>readProductionRuntimeEnvironment(f.maintenance),/separate protected/);
 });

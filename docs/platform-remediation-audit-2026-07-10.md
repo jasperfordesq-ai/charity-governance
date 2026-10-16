@@ -1,5 +1,15 @@
 # CharityPilot Full-Platform Remediation Audit
 
+> **16 October explicit database CA binding / partial source remediation:**
+> Protected credential review now also pins an explicitly selected CA file's
+> identity/hash. Only bounded current CA-certificate PEM bundles are accepted;
+> malformed/mixed/key material refuses with fixed diagnostics. Cutover mutations
+> during preflight/backup/migration refuse before startup. Focused92PASS/3Windows
+> SKIP; full production checks1224PASS/8SKIP. No container mount, provider custody,
+> release or actual hosted custom-CA proof. CA transport to all consumers remains
+> OPEN; no private profile or deployment change. Broader acceptance remains OPEN.
+
+
 > **16 October full-source grant compatibility / local proof:** Actual Prisma CLI
 > migrated a fresh disposable database through all190 source migrations. Existing
 > blue-green grant script reconciled the synthetic runtime role; fresh strict-TLS

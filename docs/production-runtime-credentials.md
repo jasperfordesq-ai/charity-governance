@@ -20,8 +20,13 @@ The environment generator is a scaffold, not a runtime-file or grant
 provisioner. Prepare and review both files before deployment preflight. Current
 execution requires verified owner-only POSIX file permissions; Windows content
 dry-run is not ACL certification and unverified execution is refused. Custom
-CA files need separately reviewed protection and container availability. This
-slice does not configure those mounts or certify provider custody.
+Explicit CA files are now included in the protected file review: bounded UTF-8
+PEM, at most32 current CA certificates, no private keys or trailing material,
+owner-only POSIX protection, and identity/content binding throughout cutover.
+Changes or expiry refuse the reviewed configuration. This validates the selected
+trust-anchor input, not its organisational approval or provider identity.
+Container availability and mounts remain separate unresolved work; this does
+not configure those mounts or certify provider custody.
 
 Guarded transport checks exact file identity/bytes throughout cutover. A change
 requires a new review. Prisma consumers get an explicit strict TLS transport;

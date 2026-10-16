@@ -1,3 +1,5 @@
+import { X509Certificate } from 'node:crypto';
+import { rootCertificates } from 'node:tls';
 import assert from "node:assert/strict";
 import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync as writeFixture } from "node:fs";
 import { tmpdir } from "node:os";
@@ -18,7 +20,16 @@ async function boundDeploymentFixture(t, mutation) {
     rmSync(directory, { recursive: true, force: true });
   });
   const envPath = join(directory, 'production.env');
-  writeFileSync(envPath, completeDeployEnv());
+  const caPath=join(directory,'database-ca.pem');
+  const useCa=mutation?.startsWith('ca-');
+  const phase=useCa?mutation.slice(3):mutation;
+  if(useCa) {
+    const pem=rootCertificates.find(value=>{const cert=new X509Certificate(value);
+      return cert.ca && Date.parse(cert.validFrom)<Date.now() && Date.parse(cert.validTo)>Date.now();});
+    assert.ok(pem);writeFileSync(caPath,pem);
+  }
+  writeFileSync(envPath, completeDeployEnv(useCa?{DATABASE_URL:
+    'postgresql://user:pass@db.charitypilot.ie:5432/charitypilot?sslmode=verify-full&target_session_attrs=read-write&sslrootcert='+encodeURIComponent(caPath)}:{}));
   const transport = buildProductionComposeEnvironment(envPath);
   const change = () => writeFileSync(transport.binding.appPath,
     readFileSync(transport.binding.appPath, 'utf8') + '# changed during deployment\n');
@@ -32,7 +43,7 @@ async function boundDeploymentFixture(t, mutation) {
     buildRuntimeEnvironment: (...args) => ({ ...buildProductionComposeEnvironment(...args), privatePermissionsVerified: mutation !== 'unprotected' }),
     expectedRuntimeBinding: mutation === 'handoff' ? { ...transport.binding, appSha256: '0'.repeat(64) } : null,
     runPreflight: () => {
-      if (mutation === 'preflight') change();
+      if (phase === 'preflight') change();
       return { status: 0, stdout: 'synthetic preflight\n', stderr: '' };
     },
     runCommand: (command, env) => {
@@ -44,8 +55,8 @@ async function boundDeploymentFixture(t, mutation) {
       if(isPrismaCli) assert.equal(new URL(env.DATABASE_URL).searchParams.get('sslaccept'),'strict');
       assert.match(env.CHARITYPILOT_PRODUCTION_RUNTIME_DATABASE_URL, /cp_runtime:runtime-only-password@/);
       assert.equal(env.CHARITYPILOT_PRODUCTION_ENV_FILE, transport.binding.maintenancePath);
-      if (mutation === 'migration' && command.at(-1) === 'migrate') change();
-      if (mutation === 'startup' && command.includes('up')) change();
+      if (phase === 'migration' && command.at(-1) === 'migrate') change();
+      if (phase === 'startup' && command.includes('up')) change();
     },
     runRuntimeRoleProbe: (command,env,{input}) => {
       const target=JSON.parse(input);rolePhases.push(target.phase);
@@ -59,15 +70,24 @@ async function boundDeploymentFixture(t, mutation) {
     },
     runBackup: (_args,env) => {
       assert.equal(new URL(env.DATABASE_URL).searchParams.get('sslmode'),'verify-full');
-      if (mutation === 'backup') change();
+      if (phase === 'backup') change();
       return { status: 0, stdout: 'synthetic backup\n', stderr: '' };
     },
     runSmoke: () => {
-      if (mutation === 'smoke') change();
+      if (phase === 'smoke') change();
       return { status: 0, stdout: 'synthetic smoke\n', stderr: '' };
     },
   });
   return { result, calls, rolePhases };
+}
+
+for(const phase of ['preflight','backup','migration']) {
+  test(`bound deployment refuses replaced CA during ${phase} before startup`,async t=>{
+    const {result,calls}=await boundDeploymentFixture(t,'ca-'+phase);
+    assert.equal(result.status,1);assert.match(result.stderr,/configuration changed/);
+    assert.ok(!calls.some(command=>command.includes('up')));
+    if(phase==='preflight') assert.equal(calls.length,0);
+  });
 }
 
 test('bound deployment refuses changed preflight files before pulling or stopping runtime', async t => {

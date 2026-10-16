@@ -1,5 +1,5 @@
 import { isIP } from 'node:net';
-import { createHash } from 'node:crypto';
+import { createHash, X509Certificate } from 'node:crypto';
 import { closeSync, constants, fstatSync, lstatSync, openSync, readSync, realpathSync, statSync } from 'node:fs';
 import { isAbsolute } from 'node:path';
 import { toStrictPrismaTlsUrl } from '../packages/shared/runtime/prisma-database-url.mjs';
@@ -72,7 +72,7 @@ export function validateProductionRuntimeDatabasePair(maintenanceUrl, runtimeUrl
 const fileRefusal = 'Production requires a separate protected runtime configuration.';
 const MAX_ENV_BYTES = 256 * 1024;
 const hash = bytes => createHash('sha256').update(bytes).digest('hex');
-function fileWitness(path) {
+function fileWitness(path, parseText = envValues) {
   if (typeof path !== 'string' || !isAbsolute(path) || lstatSync(path).isSymbolicLink()) throw new Error();
   const canonical = realpathSync(path);
   const descriptor = openSync(path, constants.O_RDONLY | (constants.O_NOFOLLOW ?? 0));
@@ -96,8 +96,23 @@ function fileWitness(path) {
       || selected.dev !== before.dev || selected.ino !== before.ino) throw new Error();
     const bytes = buffer.subarray(0, length);
     return { path: canonical, device: String(before.dev), inode: String(before.ino),
-      sha256: hash(bytes), values: envValues(new TextDecoder('utf-8', { fatal: true }).decode(bytes)), permissionsVerified };
+      sha256: hash(bytes), values: parseText(new TextDecoder('utf-8', { fatal: true }).decode(bytes)), permissionsVerified };
   } finally { closeSync(descriptor); }
+}
+
+// An explicit trust anchor is security configuration, even though its public
+// certificate bytes are not a secret. Never accept keys or trailing material.
+function certificateValues(text) {
+  const pattern=/-----BEGIN CERTIFICATE-----\r?\n[A-Za-z0-9+/=\r\n]+-----END CERTIFICATE-----/gu;
+  const blocks=[...text.matchAll(pattern)].map(match=>match[0]);
+  if(!blocks.length || blocks.length>32 || text.replace(pattern,'').trim()!=='') throw new Error();
+  const now=Date.now();
+  for(const pem of blocks) {
+    const certificate=new X509Certificate(pem);
+    if(!certificate.ca || !(Date.parse(certificate.validFrom)<=now)
+      || !(Date.parse(certificate.validTo)>now)) throw new Error();
+  }
+  return null;
 }
 
 function envValues(text) {
@@ -134,7 +149,11 @@ export function readProductionRuntimeEnvironment(maintenanceEnvFile) {
     const app = fileWitness(maintenance.values.CHARITYPILOT_PRODUCTION_APP_ENV_FILE);
     if (app.path === maintenance.path || (app.device === maintenance.device && app.inode === maintenance.inode)) throw new Error();
     const identity = validateProductionRuntimeDatabasePair(maintenance.values.DATABASE_URL, app.values.DATABASE_URL);
-    const maintenancePassword = connection(maintenance.values.DATABASE_URL).password;
+    const maintenanceConnection = connection(maintenance.values.DATABASE_URL);
+    const maintenancePassword = maintenanceConnection.password;
+    const ca = maintenanceConnection.ca === 'system' ? null
+      : fileWitness(maintenanceConnection.ca, certificateValues);
+    const databaseCa = ca ? Object.freeze({path:ca.path,device:ca.device,inode:ca.inode,sha256:ca.sha256}) : null;
     for (const [key, value] of Object.entries(app.values)) {
       if (/^(?:POSTGRES_|MIGRATION_|PG[A-Z0-9_]*$|BLUEGREEN_|CHARITYPILOT_PRODUCTION_|DOCKER_|COMPOSE_)/u.test(key)
         || ['NODE_OPTIONS','NODE_PATH','LD_PRELOAD','LD_LIBRARY_PATH','BASH_ENV','ENV'].includes(key)) throw new Error();
@@ -143,11 +162,11 @@ export function readProductionRuntimeEnvironment(maintenanceEnvFile) {
         || value.includes(maintenance.values.DATABASE_URL) || value === maintenancePassword) throw new Error();
     }
     return Object.freeze({ appEnvFile: app.path, appEnvironment: Object.freeze(app.values), identity: Object.freeze(identity),
-      privatePermissionsVerified: maintenance.permissionsVerified && app.permissionsVerified,
+      privatePermissionsVerified: maintenance.permissionsVerified && app.permissionsVerified && (!ca || ca.permissionsVerified),
       binding: Object.freeze({ maintenancePath: maintenance.path, appPath: app.path,
         maintenanceSha256: maintenance.sha256, appSha256: app.sha256,
         maintenanceDevice: maintenance.device, maintenanceInode: maintenance.inode,
-        appDevice: app.device, appInode: app.inode }) });
+        appDevice: app.device, appInode: app.inode, ...(databaseCa ? {databaseCa} : {}) }) });
   } catch { throw new Error(fileRefusal); }
 }
 
