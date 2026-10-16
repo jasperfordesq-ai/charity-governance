@@ -129,6 +129,10 @@ function fixture(overrides = {}) {
 
 function dependencies(overrides = {}) {
   return {
+    // Existing cases mock file transport alongside their external operations.
+    buildRuntimeEnvironment: (path, env) => ({ environment: { ...env, CHARITYPILOT_PRODUCTION_ENV_FILE: path },
+      binding: { maintenancePath: path, maintenanceSha256: sha256(readFileSync(path)) }, privatePermissionsVerified: true }),
+    assertRuntimeEnvironmentUnchanged: () => {},
     now: () => NOW,
     runPreflight: () => ({
       status: 0,

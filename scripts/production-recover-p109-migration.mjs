@@ -22,6 +22,7 @@ import {
 } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { runProductionComposeDeployFromArgs } from "./production-compose-deploy.mjs";
+import { assertProductionRuntimeEnvironmentUnchanged, buildProductionComposeEnvironment } from './production-runtime-credentials.mjs';
 import {
   redactProductionDeployTranscript,
   runProductionDeployPreflightFromArgs,
@@ -873,6 +874,8 @@ export function runProductionFailedMigrationRecoveryFromArgs(
     runPreflight = runProductionDeployPreflightFromArgs,
     runCommand = defaultRunCommand,
     runDeploy = runProductionComposeDeployFromArgs,
+    buildRuntimeEnvironment = buildProductionComposeEnvironment,
+    assertRuntimeEnvironmentUnchanged = assertProductionRuntimeEnvironmentUnchanged,
     cutoverLockPath = undefined,
     acquireCutoverLock = acquireProductionCutoverLock,
     releaseCutoverLock = releaseProductionCutoverLock,
@@ -912,6 +915,7 @@ export function runProductionFailedMigrationRecoveryFromArgs(
     let productionEnvBytes;
     let productionEnvHash;
     let migrationImage;
+    let transport;
     try {
       productionEnvBytes = readBoundedRegularFile(
         originalProductionEnvPath,
@@ -951,6 +955,14 @@ export function runProductionFailedMigrationRecoveryFromArgs(
           productionEnvFile: verifiedProductionEnvPath,
         };
       }
+      transport = buildRuntimeEnvironment(options.productionEnvFile, processEnv);
+      if (transport.binding.maintenanceSha256 !== productionEnvHash) {
+        throw new Error('production env bytes changed after attestation validation');
+      }
+      if (!options.dryRun && !transport.privatePermissionsVerified) {
+        throw new Error('Production execution requires verified private file permissions for both configurations.');
+      }
+      options.productionEnvFile = transport.binding.maintenancePath;
     } catch (error) {
       return result(
         1,
@@ -965,7 +977,8 @@ export function runProductionFailedMigrationRecoveryFromArgs(
       ...(options.dryRun ? ["--dry-run"] : []),
       ...(options.tlsProxy ? [] : ["--no-tls-proxy"]),
     ];
-    const preflightResult = runPreflight(preflightArgs, processEnv);
+    const commandEnv = transport.environment;
+    const preflightResult = runPreflight(preflightArgs, commandEnv);
     if (preflightResult.status !== 0) {
       return result(
         1,
@@ -974,9 +987,24 @@ export function runProductionFailedMigrationRecoveryFromArgs(
       );
     }
 
-    const commandEnv = {
-      ...processEnv,
-      CHARITYPILOT_PRODUCTION_ENV_FILE: options.productionEnvFile,
+    try {
+      assertRuntimeEnvironmentUnchanged(transport.binding);
+    } catch (error) {
+      return result(1, '', `${config.taskLabel} production recovery failed after preflight: ${sanitizeTranscript(error instanceof Error ? error.message : String(error), options)}\n`);
+    }
+    const guardedRunCommand = (...commandArgs) => {
+      assertRuntimeEnvironmentUnchanged(transport.binding);
+      return runCommand(...commandArgs);
+    };
+    const delegate = () => {
+      assertRuntimeEnvironmentUnchanged(transport.binding);
+      const delegated = runDeploy(deployArgs, {
+        processEnv: commandEnv,
+        expectedRuntimeBinding: transport.binding,
+        cutoverLock,
+      });
+      assertRuntimeEnvironmentUnchanged(transport.binding);
+      return delegated;
     };
     const pullCommand = composePullMigrationCommand(options);
     const checksumCommand = composeImageChecksumCommand(options, config);
@@ -995,10 +1023,11 @@ export function runProductionFailedMigrationRecoveryFromArgs(
     ];
 
     if (options.dryRun) {
-      const deployResult = runDeploy(deployArgs, {
-        processEnv,
-        cutoverLock,
-      });
+      let deployResult;
+      try { deployResult = delegate(); }
+      catch (error) {
+        return result(1, '', `${config.taskLabel} production recovery dry-run failed: ${sanitizeTranscript(error instanceof Error ? error.message : String(error), options)}\n`);
+      }
       if (deployResult.status !== 0) {
         return result(
           deployResult.status,
@@ -1037,13 +1066,13 @@ export function runProductionFailedMigrationRecoveryFromArgs(
     let migrationResolved = false;
     try {
       checkedCommand(
-        runCommand,
+        guardedRunCommand,
         pullCommand,
         commandEnv,
         "pinned migration image pull",
       );
       const checksumResult = checkedCommand(
-        runCommand,
+        guardedRunCommand,
         checksumCommand,
         commandEnv,
         "selected migration image checksum capture",
@@ -1054,15 +1083,16 @@ export function runProductionFailedMigrationRecoveryFromArgs(
       const recoveryPreflightSql = config.buildRecoveryPreflightSql(
         selectedImageChecksums,
       );
+      assertRuntimeEnvironmentUnchanged(transport.binding);
       quiesceAttempted = true;
       checkedCommand(
-        runCommand,
+        guardedRunCommand,
         quiesceCommand,
         commandEnv,
         "production runtime quiesce",
       );
       checkedCommand(
-        runCommand,
+        guardedRunCommand,
         sqlPreflightCommand,
         commandEnv,
         `read-only ${config.taskLabel} recovery preflight`,
@@ -1083,17 +1113,14 @@ export function runProductionFailedMigrationRecoveryFromArgs(
       }
 
       checkedCommand(
-        runCommand,
+        guardedRunCommand,
         resolveCommand,
         commandEnv,
         `exact ${config.migrationName} rolled-back resolution`,
       );
       migrationResolved = true;
 
-      const deployResult = runDeploy(deployArgs, {
-        processEnv,
-        cutoverLock,
-      });
+      const deployResult = delegate();
       if (deployResult.status !== 0) {
         const cleanupError = failClosedCleanup(
           runCommand,

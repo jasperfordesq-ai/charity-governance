@@ -1,5 +1,17 @@
 # CharityPilot Agent Continuation Handoff
 
+> **16 October recovery binding connected / service split and role proof OPEN:**
+> Shared P1-09/P1-07A recovery now derives reviewed transport from the exact
+> attested maintenance snapshot, checks its hash, rechecks runtime files through
+> verification/quiesce/SQL/resolve, and supplies the binding to delegated deploy.
+> Deploy refuses a different handoff binding; changes around delegation cannot
+> report recovery success. Provisioner output now points to guarded deployment,
+> not raw Compose startup. Six focused suites:177PASS/twoWindowsSKIP. Synthetic
+> commands/protection mocks do not prove live recovery, ACLs, signatures or grants.
+> Active Compose still unchanged: NEXT real target/login/catalogue privilege gates,
+> maintenance/root-rotation/backup classification, effective API/worker split and
+> operator config contract. Private host/API/schema untouched; no push/deploy.
+
 > **16 October deploy binding connected / complete role split still OPEN:** Deploy
 > derives protected transport before preflight, pins canonical paths, verifies the
 > same file binding after preflight and before every cutover/probe/backup/startup

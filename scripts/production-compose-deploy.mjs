@@ -373,6 +373,7 @@ export function runProductionComposeDeployFromArgs(
     runSmoke = defaultRunSmoke,
     buildRuntimeEnvironment = buildProductionComposeEnvironment,
     assertRuntimeEnvironmentUnchanged = assertProductionRuntimeEnvironmentUnchanged,
+    expectedRuntimeBinding = null,
     now = () => new Date(),
     randomId = randomUUID,
     cutoverLock = null,
@@ -438,6 +439,9 @@ export function runProductionComposeDeployFromArgs(
     let transport;
     try {
       transport = buildRuntimeEnvironment(resolve(repoRoot, options.productionEnvFile), processEnv);
+      if (expectedRuntimeBinding !== null && JSON.stringify(transport.binding) !== JSON.stringify(expectedRuntimeBinding)) {
+        throw new Error('Production runtime configuration changed at recovery handoff; repeat protected configuration review.');
+      }
       if (!options.dryRun && !transport.privatePermissionsVerified) {
         throw new Error('Production execution requires verified private file permissions for both configurations.');
       }

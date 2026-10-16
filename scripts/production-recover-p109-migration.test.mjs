@@ -10,6 +10,7 @@ import {
 import { tmpdir } from "node:os";
 import { basename, join } from "node:path";
 import { test } from "node:test";
+import { assertProductionRuntimeEnvironmentUnchanged, buildProductionComposeEnvironment } from './production-runtime-credentials.mjs';
 import {
   P109_RECOVERY_ACKNOWLEDGEMENT,
   P109_RECOVERY_CHECKSUM_OUTPUT_PREFIX,
@@ -139,6 +140,11 @@ function dependencies(overrides = {}) {
       stdout: "delegated deploy ok\n",
       stderr: "",
     }),
+    // Existing tests isolate attestation/history orchestration, without complete
+    // production runtime files. Bound transport is exercised separately below.
+    buildRuntimeEnvironment: (path, env) => ({ environment: { ...env, CHARITYPILOT_PRODUCTION_ENV_FILE: path },
+      binding: { maintenancePath: path, maintenanceSha256: sha256(readFileSync(path)) }, privatePermissionsVerified: true }),
+    assertRuntimeEnvironmentUnchanged: () => {},
     ...overrides,
   };
 }
@@ -146,6 +152,84 @@ function dependencies(overrides = {}) {
 function cleanFixture(value) {
   rmSync(value.tempDir, { recursive: true, force: true });
 }
+
+function boundRecovery(mutation) {
+  const value = fixture();
+  const appPath = join(value.tempDir, 'runtime.env');
+  const owner = productionEnv().replace('sslmode=verify-full', 'sslmode=verify-full&target_session_attrs=read-write');
+  writeFileSync(appPath, 'NODE_ENV=production\nDATABASE_URL=postgresql://cp_runtime:runtime-only-password@db.charitypilot.ie:5432/charitypilot?sslmode=verify-full&target_session_attrs=read-write\n', { mode: 0o600 });
+  const ownerBytes = Buffer.from(`${owner}CHARITYPILOT_PRODUCTION_APP_ENV_FILE='${appPath}'\n`);
+  writeFileSync(value.envPath, ownerBytes, { mode: 0o600 });
+  writeFileSync(value.attestationPath, recoveryAttestation(value.envPath, ownerBytes));
+  const commands = [];
+  let delegated = false;
+  const change = () => writeFileSync(appPath, readFileSync(appPath, 'utf8') + '# changed\n', { mode: 0o600 });
+  let recoveryResult;
+  try {
+    recoveryResult = runProductionP109RecoveryFromArgs(value.args, dependencies({
+      processEnv: { DATABASE_URL: 'ambient-unreviewed', COMPOSE_FILE: 'ambient-unreviewed.yml' },
+      cutoverLockPath: value.lockPath,
+      // Test actual binding semantics; external verification/protection is mocked.
+      buildRuntimeEnvironment: (...args) => ({ ...buildProductionComposeEnvironment(...args), privatePermissionsVerified: mutation !== 'unprotected' }),
+      assertRuntimeEnvironmentUnchanged: assertProductionRuntimeEnvironmentUnchanged,
+      runPreflight: (_args, env) => {
+        assert.equal(env.COMPOSE_FILE, undefined);
+        assert.match(env.DATABASE_URL, /operator:secret@/);
+        if (mutation === 'preflight') change();
+        return { status: 0, stdout: '', stderr: '' };
+      },
+      runCommand: (command, env) => {
+        commands.push(command);
+        assert.equal(env.COMPOSE_FILE, undefined);
+        assert.match(env.CHARITYPILOT_PRODUCTION_RUNTIME_DATABASE_URL, /cp_runtime:runtime-only-password@/);
+        assert.equal(env.CHARITYPILOT_PRODUCTION_ENV_FILE, command[command.indexOf('--env-file') + 1]);
+        if (mutation === 'checksum' && command.includes(P109_RECOVERY_IMAGE_CHECKSUM_SCRIPT)) change();
+        if (mutation === 'sql' && command.includes('execute')) change();
+        if (mutation === 'resolve' && command.includes('resolve')) change();
+        return successfulRunCommand(command);
+      },
+      runDeploy: (_args, nested) => {
+        delegated = true;
+        assert.equal(nested.expectedRuntimeBinding.appPath, appPath);
+        assert.equal(nested.expectedRuntimeBinding.maintenanceSha256, sha256(ownerBytes));
+        assert.match(nested.processEnv.CHARITYPILOT_PRODUCTION_RUNTIME_DATABASE_URL, /cp_runtime:runtime-only-password@/);
+        if (mutation === 'delegate') change();
+        return { status: 0, stdout: 'synthetic delegated deployment\n', stderr: '' };
+      },
+    }));
+    return { recoveryResult, commands, delegated };
+  } finally {
+    assert.ok(basename(value.tempDir).startsWith('charitypilot-p109-production-recovery-test-'));
+    cleanFixture(value);
+  }
+}
+
+for (const phase of ['preflight', 'checksum', 'sql', 'resolve', 'delegate']) {
+  test(`bound recovery refuses runtime file changes during ${phase}`, () => {
+    const { recoveryResult, commands, delegated } = boundRecovery(phase);
+    assert.equal(recoveryResult.status, 1);
+    assert.match(recoveryResult.stderr, /configuration changed/);
+    if (['preflight', 'checksum'].includes(phase)) assert.ok(!commands.some(command => command.includes('down')));
+    if (['preflight', 'checksum', 'sql'].includes(phase)) assert.ok(!commands.some(command => command.includes('resolve')));
+    if (phase !== 'delegate') assert.equal(delegated, false);
+    assert.doesNotMatch(recoveryResult.stdout, /immediately recovered through the complete production deploy path/);
+  });
+}
+
+test('bound recovery passes the exact attested snapshot binding through delegated deployment', () => {
+  const { recoveryResult, delegated } = boundRecovery('none');
+  assert.equal(recoveryResult.status, 0, recoveryResult.stderr);
+  assert.equal(delegated, true);
+  assert.doesNotMatch(recoveryResult.stdout + recoveryResult.stderr, /operator:secret|runtime-only-password/);
+});
+
+test('bound recovery refuses unsupported protection before any maintenance command', () => {
+  const { recoveryResult, commands, delegated } = boundRecovery('unprotected');
+  assert.equal(recoveryResult.status, 1);
+  assert.match(recoveryResult.stderr, /private file permissions/);
+  assert.equal(commands.length, 0);
+  assert.equal(delegated, false);
+});
 
 test("P1-09 recovery SQL is read-only and checks exact history, catalog, legacy objects, and all six data blockers", () => {
   assert.match(

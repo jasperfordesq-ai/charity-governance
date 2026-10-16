@@ -1,5 +1,12 @@
 # CharityPilot Full-Platform Remediation Audit
 
+> **16 October recovery maintenance transport / partial remediation:** Exact
+> attested maintenance bytes and reviewed runtime binding now span early recovery
+> commands and delegated deployment. Changed handoff bindings refuse before
+> lifecycle commands.177focusedPASS/twoWindowsSKIP; external/protection actions
+> mocked. No live recovery, effective service credential separation or actual
+> role-grant closure. Active production Compose and hosting acceptance stay OPEN.
+
 > **16 October deployment continuity / partial remediation:** Reviewed credential
 > files are now pinned across preflight and cutover; changes during backup,
 > migration, startup or smoke refuse completion and retain fail-closed handling.

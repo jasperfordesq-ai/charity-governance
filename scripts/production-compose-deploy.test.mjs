@@ -29,6 +29,7 @@ async function boundDeploymentFixture(t, mutation) {
     cutoverLockPath: join(directory, 'cutover.lock'),
     // Protected branch orchestration only; not Windows ACL certification.
     buildRuntimeEnvironment: (...args) => ({ ...buildProductionComposeEnvironment(...args), privatePermissionsVerified: mutation !== 'unprotected' }),
+    expectedRuntimeBinding: mutation === 'handoff' ? { ...transport.binding, appSha256: '0'.repeat(64) } : null,
     runPreflight: () => {
       if (mutation === 'preflight') change();
       return { status: 0, stdout: 'synthetic preflight\n', stderr: '' };
@@ -83,6 +84,13 @@ test('bound deployment refuses unsupported protection before any lifecycle comma
   const { result, calls } = await boundDeploymentFixture(t, 'unprotected');
   assert.equal(result.status, 1);
   assert.match(result.stderr, /private file permissions/);
+  assert.equal(calls.length, 0);
+});
+
+test('deployment refuses a different binding supplied by the recovery caller', async t => {
+  const { result, calls } = await boundDeploymentFixture(t, 'handoff');
+  assert.equal(result.status, 1);
+  assert.match(result.stderr, /configuration changed at recovery handoff/);
   assert.equal(calls.length, 0);
 });
 

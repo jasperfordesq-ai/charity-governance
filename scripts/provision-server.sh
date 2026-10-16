@@ -57,10 +57,12 @@ ufw --force enable
 ufw status verbose || true
 
 echo ""
-echo "==> Done. This server can now run the CharityPilot stack."
+echo "==> Host software preparation complete. Production launch gates still apply."
 echo "    Next (see docs/LAUNCH-GUIDE.md Step 4):"
 echo "      1. Point DNS A records for your web + api domains at this server's IP."
-echo "      2. Copy the repo and your filled .env.production here."
-echo "      3. docker compose --env-file .env.production \\"
-echo "           -f compose.production.yml -f compose.production-tls.yml up -d"
+echo "      2. Prepare protected maintenance and separate runtime configuration files."
+echo "         The maintenance file must name the absolute reviewed runtime file."
+echo "      3. Complete the production launch checks, then use the guarded deploy:"
+echo "         npm run deploy:production -- --production-env-file .env.production \\"
+echo "           --backup-output-dir /absolute/approved/encrypted-backup-base"
 echo "    Caddy will obtain HTTPS certificates automatically."
