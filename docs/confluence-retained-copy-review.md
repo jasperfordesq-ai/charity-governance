@@ -125,8 +125,8 @@ not a cross-session uniqueness guarantee: the API retains distinct reviews and
 a fresh page does not automatically resubmit anything. Stored review digests
 identify recorded evidence; no receipt automatically selects disposal authority.
 
-The dashboard supports review withdrawal as described below. It does not yet
-expose permission withdrawal/issuance, claim execution or a provider action. Those controls and the
+The dashboard supports review withdrawal and permission decisions as described
+below. It does not expose claim execution or a provider action. Those controls and the
 independent claim/request/outcome history remain required stages. The synthetic
 browser proof intercepts only the observation response, then uses the real
 recording and receipt API; its lost-response case drops a response after a real
@@ -156,3 +156,36 @@ alongside review recording/save-loss and the original primary-absent erasure
 request. Four journeys pass. The tested light/dark withdrawal panels have no
 serious/critical Axe WCAG A/AA findings. The synthetic observation remains mocked;
 these checks do not establish real provider inventory, disposal or host loss.
+
+
+## Owner permission decisions
+
+Beside the exact review receipt, open **Review synthetic permission**. The panel
+first reads the permission receipt. An expected not-found result shows an explicit
+preparation form; authentication/network/unknown failures do not enable issuance.
+No permission is recorded by opening the panel or refreshing a receipt.
+
+Use the supported maintenance registration receipt for its scope ID, scope
+evidence reference, disposal-policy evidence and expiry. Add a distinct Owner
+decision reference, reason and explicit synthetic purge/retain-primary attestation.
+Expiry is a canonical UTC timestamp, within one hour and no later than the review;
+the API also enforces the registered scope expiry. The form binds the stored review
+digest. It does not accept a caller-selected provider target, organisation or actor.
+The existing API re-observes source bytes and inventory and repeats current state,
+connection, scope and authority checks before recording permission.
+
+A recorded permission is historical evidence, not proof of current source or
+execution authority. The panel displays permission/scope IDs, issue/expiry and
+review/permission withdrawal. **Review permission withdrawal** requires a separate
+evidence reference, reason and exact confirmation, and preserves the original.
+
+An uncertain issuance/withdrawal response blocks resubmission in its mounted
+panel. Receipt refresh remains possible. A missing receipt never clears that
+uncertainty or automatically sends another decision. Database uniqueness remains
+authoritative across sessions; this UI state is not independent recovery.
+
+The form/helper, real refused-issuance browser path and existing guarded service
+and native PostgreSQL permission proofs are separate evidence scopes. A missing
+scope refusal does not prove a successful integrated browser-to-provider issuance.
+That positive workflow, independent execution history and actual provider/host-loss
+proof remain required before the complete disposal journey can be claimed.

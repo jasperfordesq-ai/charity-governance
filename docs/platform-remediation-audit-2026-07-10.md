@@ -1,5 +1,11 @@
 # CharityPilot Full-Platform Remediation Audit
 
+> **16 October permission decision controls:** Owner UI binds the review digest
+> to registered scope/disposal evidence and explicit attestation, with receipt
+> reconciliation and separate withdrawal. The missing-scope refusal and native
+> service proof do not establish a successful integrated provider journey.
+> Independent execution recovery and provider/host-loss proof remain open.
+
 > **16 October review withdrawal controls:** The Owner can append a review
 > withdrawal through the supported API without losing the original evidence.
 > Exact-target confirmation and uncertain-response reconciliation are explicit.

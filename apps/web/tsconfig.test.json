@@ -14,6 +14,7 @@
   },
   "include": [
     "src/lib/retained-copy-review.test.ts",
+    "src/lib/copy-permission.test.ts",
     "src/lib/copy-authority-review.test.ts",
     "src/lib/copy-hold-review.test.ts",
     "src/lib/api.ts",

@@ -116,6 +116,36 @@ for (const outcome of ['recorded', 'lost-save', 'lost-withdrawal']) {
     expect(stored.reviews[0].review).toMatchObject({ scope: 'SYNTHETIC_ONLY', primaryDisposition: 'RETAIN', copyDisposition: 'PURGE' });
     expect(stored.deletions).toBe(0);
     if (!loseResponse) {
+      await panel.getByRole('button', { name: 'Review synthetic permission', exact: true }).click();
+      const permissionPanel = panel.getByRole('region', { name: 'Synthetic copy permission' });
+      await expect(permissionPanel.getByText(/No permission receipt is listed/)).toBeVisible();
+      for (const [label, value] of [
+        ['Registered synthetic scope ID', `missing-scope-${stamp}`],
+        ['Registered scope evidence reference', `SCOPE-${stamp}`],
+        ['Disposal policy evidence reference', `POLICY-${stamp}`],
+        ['Permission decision reference', `PERMISSION-${stamp}`],
+        ['Permission expiry (UTC)', new Date(Date.now() + 5 * 60000).toISOString()],
+        ['Permission reason', 'Synthetic permission must refuse because no maintenance scope is registered.'],
+      ]) await reliableFill(permissionPanel.getByLabel(label, { exact: true }), value);
+      const issue = permissionPanel.getByRole('button', { name: 'Record synthetic permission', exact: true });
+      await expect(issue).toBeDisabled();
+      await permissionPanel.getByRole('checkbox', { name: /I authorise purge of this exact synthetic/ }).check();
+      const permissionScan = await new AxeBuilder({ page }).include('[aria-label="Synthetic copy permission"]')
+        .withTags(['wcag2a', 'wcag2aa', 'wcag21aa']).analyze();
+      expect(permissionScan.violations.filter(item => item.impact === 'serious' || item.impact === 'critical')).toEqual([]);
+      await permissionPanel.screenshot({ path: test.info().outputPath('synthetic-permission.png') });
+      const refusedPermission = page.waitForResponse(response => response.url().endsWith('/permission') && response.request().method() === 'POST');
+      await issue.click();
+      const refused = await refusedPermission;
+      expect(refused.status(), await refused.text()).toBe(409);
+      expect((await refused.json()).code).toBe('CONFLUENCE_COPY_PERMISSION_REVIEW_REQUIRED');
+      await expect(permissionPanel.getByText(/Permission outcome needs reconciliation/)).toBeVisible();
+      await permissionPanel.getByRole('button', { name: 'Refresh permission receipt', exact: true }).click();
+      await expect(permissionPanel.getByText(/No permission receipt is listed/)).toBeVisible();
+      await expect(issue).toBeDisabled();
+      const permissions = await withDb(async client => (await client.query(
+        `SELECT count(*)::integer AS count FROM "ConfluenceRetainedCopyPermission" WHERE "organisationId"=$1`, [owner.organisationId])).rows[0].count);
+      expect(permissions).toBe(0);
       const reviewId = await withDb(async client => (await client.query<{ id: string }>(
         `SELECT id FROM "ConfluenceRetainedCopyReview" WHERE "organisationId"=$1 AND "publicationId"=$2`,
         [owner.organisationId, publicationId])).rows[0].id);

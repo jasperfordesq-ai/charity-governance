@@ -1,5 +1,11 @@
 # CharityPilot Agent Continuation Handoff
 
+> **16 October Owner permission interface:** Review receipt rows now offer
+> scoped synthetic permission preparation, receipt lookup and separate withdrawal.
+> Opening/refreshing records no decision. Unknown writes cannot automatically
+> resubmit. Source/provider checks remain in the guarded API; independent history,
+> one-use execution and positive provider/host-loss proof remain outstanding.
+
 > **16 October review withdrawal interface:** Owner receipt rows now offer a
 > confirmed withdrawal with evidence reference/reason and preserved original
 > review. Unknown save outcomes freeze another submission while receipt lookup
