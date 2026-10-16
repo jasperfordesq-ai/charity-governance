@@ -1,3 +1,4 @@
+import { spawnSync } from 'node:child_process';
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 
@@ -118,4 +119,40 @@ test('an unreadable version produces no answer rather than a wrong one', () => {
   ] as const) {
     assert.equal(isNewerRelease(left, right), false, `${left} vs ${right}`);
   }
+});
+
+const identityUrl=new URL('../utils/build-identity.js',import.meta.url).href;
+function isolatedBuildIdentity(values: Record<string,string>, route=false) {
+  const env={...process.env};
+  delete env.CHARITYPILOT_BUILD_REVISION;delete env.CHARITYPILOT_BUILD_COMMIT;
+  Object.assign(env,values);
+  const code=route?
+    `import Fastify from 'fastify';
+     import {healthRoutes} from ${JSON.stringify(new URL('../routes/health/index.js',import.meta.url).href)};
+     import {signAccessToken} from ${JSON.stringify(new URL('../utils/jwt.js',import.meta.url).href)};
+     const app=Fastify({logger:false});app.decorate('prisma',{});
+     await app.register(healthRoutes,{prefix:'/api/v1/health'});
+     try {const token=signAccessToken({userId:'synthetic-user',organisationId:'synthetic-org',role:'ADMIN',sessionId:'synthetic-session'});
+       const signed=await app.inject({method:'GET',url:'/api/v1/health',headers:{authorization:'Bearer '+token}});
+       const anonymous=await app.inject({method:'GET',url:'/api/v1/health'});
+       process.stdout.write(JSON.stringify({revision:signed.json().build.revision,anonymousBuild:anonymous.json().build??null}));
+     }finally{await app.close();}`
+    :`import {buildIdentity} from ${JSON.stringify(identityUrl)};process.stdout.write(JSON.stringify(buildIdentity()));`;
+  const result=spawnSync(process.execPath,['--input-type=module','-e',code],{env,encoding:'utf8',timeout:10000});
+  assert.equal(result.status,0,result.stderr);return JSON.parse(result.stdout);
+}
+
+for(const [label,values,expected] of [
+  ['explicit revision wins',{CHARITYPILOT_BUILD_REVISION:' explicit-release ',CHARITYPILOT_BUILD_COMMIT:'a'.repeat(40)},'explicit-release'],
+  ['image commit fills missing revision',{CHARITYPILOT_BUILD_COMMIT:'a'.repeat(40)},'a'.repeat(40)],
+  ['image commit fills blank revision',{CHARITYPILOT_BUILD_REVISION:'  ',CHARITYPILOT_BUILD_COMMIT:' aaaaaaa '},'aaaaaaa'],
+  ['missing stamps stay unknown',{},null],
+  ['blank stamps stay unknown',{CHARITYPILOT_BUILD_REVISION:' ',CHARITYPILOT_BUILD_COMMIT:' '},null],
+] as const) {
+  test('build identity '+label,()=>{assert.equal(isolatedBuildIdentity(values).revision,expected);});
+}
+
+test('image-only build stamp reaches signed health without anonymous disclosure',()=>{
+  const result=isolatedBuildIdentity({CHARITYPILOT_BUILD_COMMIT:'a'.repeat(40),JWT_SECRET:'synthetic-build-identity-secret'},true);
+  assert.equal(result.revision,'a'.repeat(40));assert.equal(result.anonymousBuild,null);
 });

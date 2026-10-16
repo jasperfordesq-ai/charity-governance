@@ -197,3 +197,18 @@ records its stop attempt after the configuration guard and retries cleanup on
 failure. Backup/migration/startup do not proceed. If cleanup fails, shutdown is
 unverified and the operator must confirm all services stopped before recovery;
 no automatic rollback or successful shutdown is asserted.
+
+## Authenticated API version diagnostics
+
+The API identity snapshot honours CHARITYPILOT_BUILD_REVISION when explicitly
+set, otherwise uses the image CHARITYPILOT_BUILD_COMMIT stamp. Blank values
+are ignored; both missing remains unknown. This is read once at process start
+and does not invent a revision from the package version or working tree. The
+existing signed-in health boundary is unchanged and anonymous health output
+still omits build identity.
+
+The native image gate also checks this packaged metadata against the expected
+image source commit. Build the API target with CHARITYPILOT_BUILD_COMMIT as
+well as its revision label; a label alone does not populate the API stamp.
+These API diagnostics do not prove an installed MCP client upgrade, historical
+replay cause, image signature or DPO acceptance.

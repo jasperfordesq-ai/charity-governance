@@ -85,6 +85,11 @@ try {
     'dist/jobs/verify-runtime-database-role.js'],url,JSON.stringify({...target,phase}));}
   function validRole(phase) {const r=roleJob(phase);assert.equal(r.status,0,r.stderr);
     assert.deepEqual(JSON.parse(r.stdout),{schemaVersion:1,verified:true,phase});}
+  check('Linux API identity exposes its actual image build stamp to authenticated metadata consumers',()=>{
+    const code="import {buildIdentity} from './dist/utils/build-identity.js';process.stdout.write(JSON.stringify(buildIdentity()));";
+    const r=child([...common,'--entrypoint','node',runtimeImage,'--input-type=module','-e',code]);
+    assert.equal(r.status,0,r.stderr);assert.equal(JSON.parse(r.stdout).revision,expectedSource);
+  });
   check('Linux API native Prisma verifies pre-migration restricted TLS login',()=>validRole('before-migration'));
   check('Linux migration image applies complete source migration chain',()=>{
     const r=child([...common,migrationImage],toStrictPrismaTlsUrl(ownerUrl));assert.equal(r.status,0,r.stderr||r.stdout);

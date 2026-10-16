@@ -1,5 +1,16 @@
 # CharityPilot Agent Continuation Handoff
 
+> **16 October API build-stamp fallback / source verified, image retest pending:**
+> Authenticated identity now prefers explicit BUILD_REVISION and falls back to
+> image BUILD_COMMIT, with whitespace/missing handling and original cached
+> snapshot semantics. Anonymous health still omits identity. Six new isolated
+> env/route cases:3RED before fix, then full3240API+14actualPGfixturesPASS/noSKIP.
+> Native gate now requires packaged identity to match the selected source SHA;
+> old763image fails that new check as expected. Rebuild/retest new labelled
+> images next. No auth-policy change, deployed fix, client-upgrade or replay
+> disposition claimed. Whole branch and acceptance remain OPEN.
+
+
 > **16 October recovery shutdown reporting / source fix:** Shared P1-09/P1-07A
 > recovery no longer asserts stopped if cleanup fails after delegated deploy
 > failure or an exception following accepted migration resolution. It preserves

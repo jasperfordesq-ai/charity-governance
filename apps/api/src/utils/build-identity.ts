@@ -41,7 +41,9 @@ function packageVersion(): string | null {
  */
 const IDENTITY: BuildIdentity = {
   version: packageVersion(),
-  revision: process.env.CHARITYPILOT_BUILD_REVISION?.trim() || null,
+  // Honour an explicit deployment revision, then the immutable image stamp.
+  revision: process.env.CHARITYPILOT_BUILD_REVISION?.trim()
+    || process.env.CHARITYPILOT_BUILD_COMMIT?.trim() || null,
 };
 
 export function buildIdentity(): BuildIdentity {
