@@ -22,7 +22,7 @@ import {
 } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { runProductionComposeDeployFromArgs } from "./production-compose-deploy.mjs";
-import { assertProductionRuntimeEnvironmentUnchanged, buildProductionComposeEnvironment } from './production-runtime-credentials.mjs';
+import { assertProductionRuntimeEnvironmentUnchanged, buildProductionComposeEnvironment, productionPrismaMaintenanceEnvironment } from './production-runtime-credentials.mjs';
 import {
   redactProductionDeployTranscript,
   runProductionDeployPreflightFromArgs,
@@ -916,6 +916,7 @@ export function runProductionFailedMigrationRecoveryFromArgs(
     let productionEnvHash;
     let migrationImage;
     let transport;
+    let prismaCommandEnv;
     try {
       productionEnvBytes = readBoundedRegularFile(
         originalProductionEnvPath,
@@ -956,6 +957,7 @@ export function runProductionFailedMigrationRecoveryFromArgs(
         };
       }
       transport = buildRuntimeEnvironment(options.productionEnvFile, processEnv);
+      prismaCommandEnv = productionPrismaMaintenanceEnvironment(transport.environment);
       if (transport.binding.maintenanceSha256 !== productionEnvHash) {
         throw new Error('production env bytes changed after attestation validation');
       }
@@ -1094,7 +1096,7 @@ export function runProductionFailedMigrationRecoveryFromArgs(
       checkedCommand(
         guardedRunCommand,
         sqlPreflightCommand,
-        commandEnv,
+        prismaCommandEnv,
         `read-only ${config.taskLabel} recovery preflight`,
         recoveryPreflightSql,
       );
@@ -1115,7 +1117,7 @@ export function runProductionFailedMigrationRecoveryFromArgs(
       checkedCommand(
         guardedRunCommand,
         resolveCommand,
-        commandEnv,
+        prismaCommandEnv,
         `exact ${config.migrationName} rolled-back resolution`,
       );
       migrationResolved = true;

@@ -1,5 +1,19 @@
 # CharityPilot Agent Continuation Handoff
 
+> **16 October administrative clients and Prisma CLI connected / role split OPEN:**
+> Nine public/shared administrative entry points now use the verified client;
+> original authority/dry-run/lock/transaction logic remains. Three direct private-
+> server-only constructors retain their explicit personal-server gates. Deploy's
+> migration/status/restored-history probe and recovery's SQL/resolve commands get
+> strict Prisma-only maintenance environment; backups/restores and stop/start keep
+> canonical libpq input. No Compose edit required for this scoped transport.
+> Actual CLI db-execute AND synthetic migrate-deploy pass positive/negative TLS
+> checks. API3229+14PG fixturesPASS; combined37casesPASS (18SQL/23Prisma+CLI internals);
+> cutover178PASS/twoWindowsSKIP. Linux image/remoteCI/live proof still absent.
+> NEXT runtime-only full-role probe job/service pre/postmigration, intended grant
+> reconciliation/classification, effective API/worker Compose separation and CA/
+> config/operator contract. Source190migrations unchanged; no deploy/acceptance.
+
 > **16 October API/routine-job TLS integration connected / remaining transport OPEN:**
 > Packaged typed pure adapter and explicit runtime-image COPY. API plugin plus six
 > routine jobs now use a factory that translates verified-TLS/public URLs, connects

@@ -1,5 +1,6 @@
 import { pathToFileURL } from 'node:url';
 import { PrismaClient } from '@prisma/client';
+import { createApplicationPrismaClient } from '../utils/application-prisma-client.js';
 import { serializeErrorForLog } from '../utils/logger.js';
 import { revokeInstallationSessions,
   type SessionRevocationRealm } from '../services/installation-session-revocation.js';
@@ -49,8 +50,9 @@ async function main(): Promise<number> {
     process.stderr.write(`${(error as Error).message}\n`);
     return 2;
   }
-  const prisma = new PrismaClient();
+  let prisma: PrismaClient | undefined;
   try {
+    prisma = await createApplicationPrismaClient();
     const result = await revokeInstallationSessions(prisma, command);
     process.stdout.write(`${JSON.stringify(result, null, 2)}\n`);
     if (!result.confirmed) process.stdout.write('Nothing was revoked. Repeat with --confirm to revoke.\n');
@@ -59,7 +61,7 @@ async function main(): Promise<number> {
     process.stderr.write(`${JSON.stringify(serializeErrorForLog(error))}\n`);
     return 1;
   } finally {
-    await prisma.$disconnect();
+    await prisma?.$disconnect();
   }
 }
 

@@ -4,9 +4,22 @@ import { chmodSync, linkSync, mkdtempSync, rmSync, symlinkSync, writeFileSync } 
 import { tmpdir } from 'node:os';
 import { basename, dirname, join, resolve } from 'node:path';
 import { assertProductionRuntimeEnvironmentUnchanged, buildProductionComposeEnvironment, readProductionRuntimeEnvironment,
-  validateProductionRuntimeDatabasePair } from './production-runtime-credentials.mjs';
+  validateProductionRuntimeDatabasePair, productionPrismaMaintenanceEnvironment } from './production-runtime-credentials.mjs';
 
 const owner = 'postgresql://migration_owner:synthetic-owner-password@db.charitypilot.ie:5432/charitypilot?sslmode=verify-full&target_session_attrs=read-write';
+
+test('Prisma maintenance transport is strict without changing canonical backup input',()=>{
+  const original={ DATABASE_URL:owner, KEEP:'reviewed' };
+  const prisma=productionPrismaMaintenanceEnvironment(original);
+  assert.notEqual(prisma,original);
+  assert.equal(original.DATABASE_URL,owner);
+  assert.equal(prisma.KEEP,'reviewed');
+  const actual=new URL(prisma.DATABASE_URL);
+  assert.equal(actual.searchParams.get('sslmode'),'require');
+  assert.equal(actual.searchParams.get('sslaccept'),'strict');
+  assert.equal(actual.username,'migration_owner');
+  assert.equal(actual.password,'synthetic-owner-password');
+});
 const runtime = 'postgresql://cp_runtime:synthetic-runtime-password@db.charitypilot.ie/charitypilot?target_session_attrs=read-write&sslmode=verify-full';
 
 test('production role pair identifies the same direct database without returning credentials', () => {

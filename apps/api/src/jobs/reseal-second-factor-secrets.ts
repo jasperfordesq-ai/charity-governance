@@ -1,5 +1,6 @@
 import { pathToFileURL } from 'node:url';
 import { PrismaClient } from '@prisma/client';
+import { createApplicationPrismaClient } from '../utils/application-prisma-client.js';
 import { serializeErrorForLog } from '../utils/logger.js';
 import { resealUserSecondFactorSecrets } from '../services/user-second-factor.service.js';
 import type { SecondFactorResealPage } from '../services/totp-secret-envelope.js';
@@ -71,18 +72,19 @@ async function main(): Promise<number> {
     process.stderr.write(`${(error as Error).message}\n`);
     return 2;
   }
-  const prisma = new PrismaClient();
+  let prisma: PrismaClient | undefined;
   try {
+    const verifiedPrisma = prisma = await createApplicationPrismaClient();
     const result = await resealAllPages((after) => command.realm === 'user'
-      ? resealUserSecondFactorSecrets(prisma, command.batch, after)
-      : resealOperatorSecondFactorSecrets(prisma, command.batch, after));
+      ? resealUserSecondFactorSecrets(verifiedPrisma, command.batch, after)
+      : resealOperatorSecondFactorSecrets(verifiedPrisma, command.batch, after));
     process.stdout.write(`${JSON.stringify(result, null, 2)}\n`);
     return result.failedCount > 0 ? 1 : 0;
   } catch (error) {
     process.stderr.write(`${JSON.stringify(serializeErrorForLog(error))}\n`);
     return 1;
   } finally {
-    await prisma.$disconnect();
+    await prisma?.$disconnect();
   }
 }
 

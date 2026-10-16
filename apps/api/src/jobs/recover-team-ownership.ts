@@ -1,4 +1,5 @@
 import { Prisma, PrismaClient, type UserLifecycleStatus, type UserRole } from '@prisma/client';
+import { createApplicationPrismaClient } from '../utils/application-prisma-client.js';
 import { pathToFileURL } from 'node:url';
 import { assertBillingAuthorityAllowsOwnershipChange } from '../services/billing-authority-interlock.js';
 
@@ -523,7 +524,7 @@ export async function executeOwnershipRecovery(
 
 async function main() {
   const command = parseOwnershipRecoveryArgs(process.argv.slice(2));
-  const prisma = new PrismaClient();
+  const prisma = await createApplicationPrismaClient();
   try {
     process.stderr.write(
       '[team-ownership-recovery] Restricted operator workflow. Keep organisation, user, operator, and case evidence out of shared logs.\n',

@@ -48,7 +48,7 @@ function productionEnv() {
     "NODE_ENV=production",
     `CHARITYPILOT_MIGRATION_IMAGE=${MIGRATION_IMAGE}`,
     "CHARITYPILOT_DATABASE_COMPATIBILITY=p107a-password-recovery-v1",
-    "DATABASE_URL=postgresql://operator:secret@db.charitypilot.ie:5432/charitypilot?sslmode=verify-full",
+    "DATABASE_URL=postgresql://operator:secret@db.charitypilot.ie:5432/charitypilot?sslmode=verify-full&target_session_attrs=read-write",
     "",
   ].join("\n");
 }
@@ -142,7 +142,7 @@ function dependencies(overrides = {}) {
     }),
     // Existing tests isolate attestation/history orchestration, without complete
     // production runtime files. Bound transport is exercised separately below.
-    buildRuntimeEnvironment: (path, env) => ({ environment: { ...env, CHARITYPILOT_PRODUCTION_ENV_FILE: path },
+    buildRuntimeEnvironment: (path, env) => ({ environment: { ...env, DATABASE_URL: 'postgresql://operator:secret@db.charitypilot.ie:5432/charitypilot?sslmode=verify-full&target_session_attrs=read-write', CHARITYPILOT_PRODUCTION_ENV_FILE: path },
       binding: { maintenancePath: path, maintenanceSha256: sha256(readFileSync(path)) }, privatePermissionsVerified: true }),
     assertRuntimeEnvironmentUnchanged: () => {},
     ...overrides,
@@ -156,7 +156,7 @@ function cleanFixture(value) {
 function boundRecovery(mutation) {
   const value = fixture();
   const appPath = join(value.tempDir, 'runtime.env');
-  const owner = productionEnv().replace('sslmode=verify-full', 'sslmode=verify-full&target_session_attrs=read-write');
+  const owner = productionEnv();
   writeFileSync(appPath, 'NODE_ENV=production\nDATABASE_URL=postgresql://cp_runtime:runtime-only-password@db.charitypilot.ie:5432/charitypilot?sslmode=verify-full&target_session_attrs=read-write\n', { mode: 0o600 });
   const ownerBytes = Buffer.from(`${owner}CHARITYPILOT_PRODUCTION_APP_ENV_FILE='${appPath}'\n`);
   writeFileSync(value.envPath, ownerBytes, { mode: 0o600 });
@@ -182,6 +182,9 @@ function boundRecovery(mutation) {
         commands.push(command);
         assert.equal(env.COMPOSE_FILE, undefined);
         assert.match(env.CHARITYPILOT_PRODUCTION_RUNTIME_DATABASE_URL, /cp_runtime:runtime-only-password@/);
+        const isPrismaCli=command.includes('execute')||command.includes('resolve');
+        assert.equal(new URL(env.DATABASE_URL).searchParams.get('sslmode'),isPrismaCli?'require':'verify-full');
+        if(isPrismaCli) assert.equal(new URL(env.DATABASE_URL).searchParams.get('sslaccept'),'strict');
         assert.equal(env.CHARITYPILOT_PRODUCTION_ENV_FILE, command[command.indexOf('--env-file') + 1]);
         if (mutation === 'checksum' && command.includes(P109_RECOVERY_IMAGE_CHECKSUM_SCRIPT)) change();
         if (mutation === 'sql' && command.includes('execute')) change();

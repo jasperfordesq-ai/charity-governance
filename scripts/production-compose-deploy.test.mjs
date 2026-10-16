@@ -38,12 +38,16 @@ async function boundDeploymentFixture(t, mutation) {
       calls.push(command);
       assert.equal(env.COMPOSE_FILE, undefined);
       assert.match(env.DATABASE_URL, /user:pass@/);
+      const isPrismaCli=command.includes('run')&&command.includes('migrate');
+      assert.equal(new URL(env.DATABASE_URL).searchParams.get('sslmode'),isPrismaCli?'require':'verify-full');
+      if(isPrismaCli) assert.equal(new URL(env.DATABASE_URL).searchParams.get('sslaccept'),'strict');
       assert.match(env.CHARITYPILOT_PRODUCTION_RUNTIME_DATABASE_URL, /cp_runtime:runtime-only-password@/);
       assert.equal(env.CHARITYPILOT_PRODUCTION_ENV_FILE, transport.binding.maintenancePath);
       if (mutation === 'migration' && command.at(-1) === 'migrate') change();
       if (mutation === 'startup' && command.includes('up')) change();
     },
-    runBackup: () => {
+    runBackup: (_args,env) => {
+      assert.equal(new URL(env.DATABASE_URL).searchParams.get('sslmode'),'verify-full');
       if (mutation === 'backup') change();
       return { status: 0, stdout: 'synthetic backup\n', stderr: '' };
     },
@@ -143,7 +147,7 @@ async function loadDeployRunner() {
       // Separate cases below use actual bound files and unchanged-input checks.
       ...(dependencies.runPreflight ? {
         buildRuntimeEnvironment: (path, env) => ({
-          environment: { ...env, CHARITYPILOT_PRODUCTION_ENV_FILE: path,
+          environment: { ...env, DATABASE_URL: 'postgresql://user:pass@db.charitypilot.ie/charitypilot?sslmode=verify-full&target_session_attrs=read-write', CHARITYPILOT_PRODUCTION_ENV_FILE: path,
             CHARITYPILOT_PRODUCTION_APP_ENV_FILE: 'synthetic-runtime.env',
             CHARITYPILOT_PRODUCTION_RUNTIME_DATABASE_URL: 'synthetic-runtime-only' },
           binding: { maintenancePath: path, appPath: 'synthetic-runtime.env' },

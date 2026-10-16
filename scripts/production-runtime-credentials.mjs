@@ -2,6 +2,14 @@ import { isIP } from 'node:net';
 import { createHash } from 'node:crypto';
 import { closeSync, constants, fstatSync, lstatSync, openSync, readSync, realpathSync, statSync } from 'node:fs';
 import { isAbsolute } from 'node:path';
+import { toStrictPrismaTlsUrl } from '../packages/shared/runtime/prisma-database-url.mjs';
+
+/** SECRET environment for explicit Prisma CLI consumers only. Keep the original
+ * bound environment for libpq backups/restores and non-Prisma operations.
+ */
+export function productionPrismaMaintenanceEnvironment(environment) {
+  return { ...environment, DATABASE_URL:toStrictPrismaTlsUrl(environment.DATABASE_URL) };
+}
 
 const refusal = 'Production database credentials must use distinct roles for the same verified-TLS database.';
 const allowedOptions = new Set(['sslmode', 'sslrootcert', 'target_session_attrs', 'connect_timeout', 'application_name']);

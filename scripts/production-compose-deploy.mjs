@@ -12,7 +12,7 @@ import {
   assertProductionCutoverLock,
   releaseProductionCutoverLock,
 } from "./production-cutover-lock.mjs";
-import { assertProductionRuntimeEnvironmentUnchanged, buildProductionComposeEnvironment } from './production-runtime-credentials.mjs';
+import { assertProductionRuntimeEnvironmentUnchanged, buildProductionComposeEnvironment, productionPrismaMaintenanceEnvironment } from './production-runtime-credentials.mjs';
 
 const scriptsDir = dirname(fileURLToPath(import.meta.url));
 const repoRoot = resolve(scriptsDir, "..");
@@ -437,8 +437,10 @@ export function runProductionComposeDeployFromArgs(
 
   const executeCutover = () => {
     let transport;
+    let prismaCommandEnv;
     try {
       transport = buildRuntimeEnvironment(resolve(repoRoot, options.productionEnvFile), processEnv);
+      prismaCommandEnv = productionPrismaMaintenanceEnvironment(transport.environment);
       if (expectedRuntimeBinding !== null && JSON.stringify(transport.binding) !== JSON.stringify(expectedRuntimeBinding)) {
         throw new Error('Production runtime configuration changed at recovery handoff; repeat protected configuration review.');
       }
@@ -484,9 +486,9 @@ export function runProductionComposeDeployFromArgs(
       CHARITYPILOT_PRODUCTION_ENV_FILE: options.productionEnvFile,
       CHARITYPILOT_PRODUCTION_APP_ENV_FILE: transport.binding.appPath,
     };
-    const guardedCommand = command => {
+    const guardedCommand = (command, env = commandEnv) => {
       assertRuntimeEnvironmentUnchanged(transport.binding);
-      runCommand(command, commandEnv);
+      runCommand(command, env);
     };
     const pullCommand = composePullCommand(options);
     const quiesceCommand = composeQuiesceCommand(options);
@@ -585,7 +587,7 @@ export function runProductionComposeDeployFromArgs(
       runtimeQuiesced = true;
 
       if (hasPreMigrationDatabaseProbe) {
-        guardedCommand(preMigrationDatabaseProbeCommand);
+        guardedCommand(preMigrationDatabaseProbeCommand, prismaCommandEnv);
       }
 
       assertRuntimeEnvironmentUnchanged(transport.binding);
@@ -603,8 +605,8 @@ export function runProductionComposeDeployFromArgs(
         );
       }
 
-      guardedCommand(migrateCommand);
-      guardedCommand(migrationStatusCommand);
+      guardedCommand(migrateCommand, prismaCommandEnv);
+      guardedCommand(migrationStatusCommand, prismaCommandEnv);
       if (!skipReminderReconciliationGate) {
         guardedCommand(reminderReconciliationGateCommand);
       }

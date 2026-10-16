@@ -49,7 +49,7 @@ function productionEnv() {
     "NODE_ENV=production",
     `CHARITYPILOT_MIGRATION_IMAGE=${MIGRATION_IMAGE}`,
     "CHARITYPILOT_DATABASE_COMPATIBILITY=p107a-password-recovery-v1",
-    "DATABASE_URL=postgresql://operator:secret@db.charitypilot.ie:5432/charitypilot?sslmode=verify-full",
+    "DATABASE_URL=postgresql://operator:secret@db.charitypilot.ie:5432/charitypilot?sslmode=verify-full&target_session_attrs=read-write",
     "",
   ].join("\n");
 }
@@ -130,7 +130,7 @@ function fixture(overrides = {}) {
 function dependencies(overrides = {}) {
   return {
     // Existing cases mock file transport alongside their external operations.
-    buildRuntimeEnvironment: (path, env) => ({ environment: { ...env, CHARITYPILOT_PRODUCTION_ENV_FILE: path },
+    buildRuntimeEnvironment: (path, env) => ({ environment: { ...env, DATABASE_URL: 'postgresql://operator:secret@db.charitypilot.ie:5432/charitypilot?sslmode=verify-full&target_session_attrs=read-write', CHARITYPILOT_PRODUCTION_ENV_FILE: path },
       binding: { maintenancePath: path, maintenanceSha256: sha256(readFileSync(path)) }, privatePermissionsVerified: true }),
     assertRuntimeEnvironmentUnchanged: () => {},
     now: () => NOW,

@@ -1,4 +1,5 @@
 import { PrismaClient } from '@prisma/client';
+import { createApplicationPrismaClient } from '../utils/application-prisma-client.js';
 import { createHash } from 'node:crypto';
 import { pathToFileURL } from 'node:url';
 import { isAbsolute, normalize, sep } from 'node:path';
@@ -513,7 +514,7 @@ export async function runPlatformDocumentStorageRecovery(
 
 async function main(): Promise<void> {
   const command = parsePlatformDocumentStorageRecoveryArgs(process.argv.slice(2));
-  const prisma = new PrismaClient();
+  const prisma = await createApplicationPrismaClient();
   try {
     const result = await runPlatformDocumentStorageRecovery(command, prisma);
     console.log(JSON.stringify(result));

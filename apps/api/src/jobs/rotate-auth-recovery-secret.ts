@@ -1,6 +1,7 @@
 import { createHash, timingSafeEqual } from 'node:crypto';
 import { pathToFileURL } from 'node:url';
 import { Prisma, PrismaClient } from '@prisma/client';
+import { createApplicationPrismaClient } from '../utils/application-prisma-client.js';
 import { serializeErrorForLog } from '../utils/logger.js';
 import {
   lockAuthRecoveryControl,
@@ -1088,7 +1089,7 @@ export async function runAuthRecoverySecretRotation(
 
 async function main() {
   const command = parseAuthRecoverySecretRotationArgs(process.argv.slice(2));
-  const prisma = new PrismaClient();
+  const prisma = await createApplicationPrismaClient();
   try {
     process.stderr.write(
       '[auth-recovery-secret-rotation] Restricted quiesced workflow. Do not place secrets, database URLs, or recovery tokens in arguments or logs.\n',

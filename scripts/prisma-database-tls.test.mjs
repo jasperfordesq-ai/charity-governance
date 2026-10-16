@@ -1,10 +1,11 @@
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
-import { mkdtempSync, readFileSync, rmSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { basename, dirname, join, resolve } from 'node:path';
 import { test } from 'node:test';
+import { fileURLToPath } from 'node:url';
 import { validateLocalDockerEndpoint } from './personal-server-docker-boundary.mjs';
 import { toStrictPrismaTlsUrl } from '../packages/shared/runtime/prisma-database-url.mjs';
 import { PrismaClient } from '@prisma/client';
@@ -19,7 +20,7 @@ function run(command,args,options={}) {
   assert.equal(result.status,0, result.stderr || result.error?.message || 'synthetic fixture command failed');
   return result.stdout.trim();
 }
-test('strict Prisma TLS transport rejects wrong CA, hostname, password and plaintext', { timeout:60000 }, async () => {
+test('strict Prisma application and CLI TLS reject wrong CA, hostname, password and plaintext', { timeout:120000 }, async () => {
 const endpoint = JSON.parse(run('docker',['context','inspect','--format','{{json .Endpoints.docker}}']));
 validateLocalDockerEndpoint({endpoint:endpoint.Host,skipTlsVerify:endpoint.SkipTLSVerify},process.env);
 const docker = (args,input) => run('docker',['--host',endpoint.Host,...args],{ input });
@@ -58,10 +59,10 @@ try {
     const logs = spawnSync('docker',['--host',endpoint.Host,'logs',id],{encoding:'utf8',timeout:10000});
     throw new Error(`disposable TLS PostgreSQL did not start: ${(logs.stdout+logs.stderr).slice(-3000)}`);
   }
-  const query = (statement,role='postgres',sslmode='verify-full') => docker(['exec','-i',
+  const query = (statement,role='postgres',sslmode='verify-full',database='postgres') => docker(['exec','-i',
     '--env',`PGPASSWORD=${role==='postgres'?'synthetic-maintenance-only':'synthetic-runtime-only'}`,
     '--env',`PGSSLMODE=${sslmode}`,'--env','PGSSLROOTCERT=/tmp/cert.pem',id,'psql',
-    '-X','-h','localhost','-U',role,'-d','postgres','-v','ON_ERROR_STOP=1','-Atq'],statement);
+    '-X','-h','localhost','-U',role,'-d',database,'-v','ON_ERROR_STOP=1','-Atq'],statement);
   query(`CREATE ROLE cp_runtime LOGIN PASSWORD 'synthetic-runtime-only' NOINHERIT;
     GRANT CONNECT ON DATABASE postgres TO cp_runtime; GRANT USAGE ON SCHEMA public TO cp_runtime;
     ${tables.map(name=>`CREATE TABLE public."${name}" (id text PRIMARY KEY); GRANT SELECT ON public."${name}" TO cp_runtime;`).join('\n')}
@@ -98,17 +99,57 @@ try {
       return {connected:false};
     } finally {await client?.$disconnect();}
   }
+  function cliAttempt(options={}) {
+    const canonical=new URL(`postgresql://cp_runtime:synthetic-runtime-only@${options.hostname??'localhost'}:${port}/postgres`);
+    canonical.searchParams.set('sslmode','verify-full');canonical.searchParams.set('target_session_attrs','read-write');
+    canonical.searchParams.set('connect_timeout','3');canonical.searchParams.set('sslrootcert',options.ca??join(certDir,'cert.pem'));
+    if(options.password) canonical.password=options.password;
+    const result=spawnSync(process.execPath,[fileURLToPath(new URL('../node_modules/prisma/build/index.js',import.meta.url)),
+      'db','execute','--schema',fileURLToPath(new URL('../apps/api/prisma/schema.prisma',import.meta.url)),'--stdin'],{
+      encoding:'utf8',timeout:15000,maxBuffer:1024*1024,
+      env:{...process.env,DATABASE_URL:toStrictPrismaTlsUrl(canonical.href),CHECKPOINT_DISABLE:'1',PRISMA_HIDE_UPDATE_MESSAGE:'1'},
+      // Terminal assertion: no later ROLLBACK can mask a DO failure in the CLI.
+      input:`BEGIN TRANSACTION READ ONLY; DO $probe$ BEGIN
+        IF current_user <> 'cp_runtime' OR NOT EXISTS(SELECT 1 FROM pg_stat_ssl WHERE pid=pg_backend_pid() AND ssl)
+        THEN RAISE EXCEPTION 'synthetic TLS identity refused'; END IF; END $probe$;`,
+    });
+    return result.status===0;
+  }
+  const migrationRoot=join(certDir,'cli-migration');
+  const migrationDir=join(migrationRoot,'migrations','20261016000000_synthetic_tls');
+  mkdirSync(migrationDir,{recursive:true});
+  const migrationSchema=join(migrationRoot,'schema.prisma');
+  writeFileSync(migrationSchema,'datasource db {\n provider = "postgresql"\n url = env("DATABASE_URL")\n}\nmodel SyntheticTlsMigration {\n id String @id\n @@map("synthetic_tls_migration")\n}\n');
+  writeFileSync(join(migrationRoot,'migrations','migration_lock.toml'),'provider = "postgresql"\n');
+  writeFileSync(join(migrationDir,'migration.sql'),'CREATE TABLE "synthetic_tls_migration" ("id" TEXT PRIMARY KEY);\n');
+  query('CREATE DATABASE synthetic_cli_tls;');
+  function cliMigrateAttempt(hostname='localhost') {
+    const canonical=new URL(`postgresql://postgres:synthetic-maintenance-only@${hostname}:${port}/synthetic_cli_tls`);
+    canonical.searchParams.set('sslmode','verify-full');canonical.searchParams.set('target_session_attrs','read-write');
+    canonical.searchParams.set('sslrootcert',join(certDir,'cert.pem'));canonical.searchParams.set('connect_timeout','3');
+    const result=spawnSync(process.execPath,[fileURLToPath(new URL('../node_modules/prisma/build/index.js',import.meta.url)),
+      'migrate','deploy','--schema',migrationSchema],{encoding:'utf8',timeout:15000,maxBuffer:1024*1024,
+      env:{...process.env,DATABASE_URL:toStrictPrismaTlsUrl(canonical.href),CHECKPOINT_DISABLE:'1',PRISMA_HIDE_UPDATE_MESSAGE:'1'}});
+    return result.status===0;
+  }
   const positive={connected:true,verified:true,tls:true};
   check('fresh Prisma login, TLS and actual transaction wrapper',await prismaAttempt(),positive);
   check('actual application factory verifies strict TLS and target',await prismaAttempt({applicationFactory:true}),positive);
   check('Prisma wrong hostname refuses',await prismaAttempt({hostname:'127.0.0.1'}),{connected:false});
   check('application factory refuses wrong hostname',await prismaAttempt({applicationFactory:true,hostname:'127.0.0.1'}),{connected:false});
+  check('actual Prisma CLI strict TLS positive',cliAttempt(),true);
+  check('actual Prisma CLI wrong hostname refuses',cliAttempt({hostname:'127.0.0.1'}),false);
+  check('actual migrate deploy accepts strict TLS',cliMigrateAttempt(),true);
+  assert.equal(query("SELECT to_regclass('public.synthetic_tls_migration') IS NOT NULL",'postgres','verify-full','synthetic_cli_tls'),'t');
+  check('actual migrate deploy wrong hostname refuses',cliMigrateAttempt('127.0.0.1'),false);
   check('Prisma untrusted certificate refuses',await prismaAttempt({ca:false}),{connected:false});
   check('Prisma wrong password refuses',await prismaAttempt({password:'wrong-synthetic-password'}),{connected:false});
   run(openssl,['req','-x509','-newkey','rsa:2048','-nodes','-keyout',join(certDir,'wrong-key.pem'),'-out',join(certDir,'wrong-cert.pem'),
     '-days','1','-subj','/CN=wrong-root','-addext','basicConstraints=critical,CA:TRUE']);
   check('Prisma explicitly wrong CA refuses',await prismaAttempt({ca:join(certDir,'wrong-cert.pem')}),{connected:false});
   check('application factory refuses wrong CA',await prismaAttempt({applicationFactory:true,ca:join(certDir,'wrong-cert.pem')}),{connected:false});
+  check('actual Prisma CLI wrong CA refuses',cliAttempt({ca:join(certDir,'wrong-cert.pem')}),false);
+  check('actual Prisma CLI wrong password refuses',cliAttempt({password:'wrong-synthetic-password'}),false);
   check('catalogue wrapper refuses a plaintext client',await prismaAttempt({plaintext:true}),{connected:true,verified:false,tls:false});
   query('ALTER ROLE cp_runtime SET default_transaction_read_only=on;');
   check('catalogue wrapper refuses a read-only target',await prismaAttempt(),{connected:true,verified:false,tls:true});
@@ -124,6 +165,8 @@ try {
   assert.ok(disabled,'synthetic server TLS must actually be off for fallback refusal proof');
   check('Prisma requires TLS when server no longer offers it',await prismaAttempt(),{connected:false});
   check('application factory refuses a TLS-disabled server',await prismaAttempt({applicationFactory:true}),{connected:false});
+  check('actual Prisma CLI requires TLS',cliAttempt(),false);
+  check('actual migrate deploy requires TLS',cliMigrateAttempt(),false);
   process.stdout.write(`${checks} real TLS/Prisma checks passed\n`);
 } finally {
   try { if (id) docker(['rm','--force',id]); }

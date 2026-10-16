@@ -1,5 +1,13 @@
 # CharityPilot Full-Platform Remediation Audit
 
+> **16 October administrative/CLI TLS transport / partial remediation:** Verified
+> client now reaches nine remaining public/shared job mains; only three explicit
+> personal-server constructors remain direct. Prisma migration/recovery commands
+> use strict maintenance URL copies; libpq backup input unchanged. Actual CLI
+> db-execute/migrate-deploy TLS faults refuse.3229API+14PG,37TLS,178cutover tests
+> pass (twoWindowsSKIP in cutover). No live authority/grant, complete role split,
+> Linux-image/provider, recovery or Nikita acceptance closure.
+
 > **16 October API/ordinary worker TLS callers / partial remediation:** Seven
 > runtime entry points now consume the shared strict-TLS transport and observed
 > writable-connection checks. Private/local lazy fallback remains; errors are

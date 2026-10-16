@@ -1,3 +1,4 @@
+import { createApplicationPrismaClient } from '../utils/application-prisma-client.js';
 import {
   Prisma,
   PrismaClient,
@@ -533,7 +534,7 @@ export async function executeBillingAuthorityReconciliation(
 
 async function main() {
   const command = parseBillingAuthorityReconciliationArgs(process.argv.slice(2));
-  const prisma = new PrismaClient();
+  const prisma = await createApplicationPrismaClient();
   try {
     process.stderr.write(
       '[billing-authority-reconciliation] Restricted offline workflow. Keep provider, actor, organisation, and incident evidence out of shared logs.\n',

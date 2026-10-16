@@ -1,3 +1,4 @@
+import { createApplicationPrismaClient } from '../utils/application-prisma-client.js';
 import {
   PrismaClient,
   type DeadlineReminderReconciliationOutcome,
@@ -223,7 +224,7 @@ export async function executeReminderReconciliation(
 
 async function main() {
   const command = parseReminderReconciliationArgs(process.argv.slice(2));
-  const prisma = new PrismaClient();
+  const prisma = await createApplicationPrismaClient();
   try {
     const result = await executeReminderReconciliation(prisma, command);
     if (command.mode === 'list') {

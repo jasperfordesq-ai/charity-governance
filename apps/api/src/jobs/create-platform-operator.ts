@@ -147,8 +147,8 @@ async function main(): Promise<void> {
     );
   }
 
-  const { PrismaClient } = await import('@prisma/client');
-  const prisma = new PrismaClient();
+  const { createApplicationPrismaClient } = await import('../utils/application-prisma-client.js');
+  const prisma = await createApplicationPrismaClient();
   try {
     const { operatorId, resetToken } = await createPlatformOperator(
       prisma,

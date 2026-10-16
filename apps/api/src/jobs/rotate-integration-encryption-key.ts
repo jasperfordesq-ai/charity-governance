@@ -1,5 +1,6 @@
 import { pathToFileURL } from 'node:url';
 import { PrismaClient } from '@prisma/client';
+import { createApplicationPrismaClient } from '../utils/application-prisma-client.js';
 import { serializeErrorForLog } from '../utils/logger.js';
 import {
   beginIntegrationKeyRotation,
@@ -79,8 +80,9 @@ async function main(): Promise<number> {
     process.stderr.write(`${(error as Error).message}\n`);
     return 2;
   }
-  const prisma = new PrismaClient();
+  let prisma: PrismaClient | undefined;
   try {
+    prisma = await createApplicationPrismaClient();
     const result = await runIntegrationKeyRotation(prisma, command);
     process.stdout.write(`${JSON.stringify(result, null, 2)}\n`);
     if (command.mode === 'reseal' && 'failed' in result && result.failed.length > 0) return 1;
@@ -89,7 +91,7 @@ async function main(): Promise<number> {
     process.stderr.write(`${JSON.stringify(serializeErrorForLog(error))}\n`);
     return 1;
   } finally {
-    await prisma.$disconnect();
+    await prisma?.$disconnect();
   }
 }
 
