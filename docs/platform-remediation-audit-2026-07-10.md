@@ -1,5 +1,13 @@
 # CharityPilot Full-Platform Remediation Audit
 
+> **16 October hosted-driver TLS finding / partial remediation:** Pinned Prisma
+> reproduced accepting a hostname mismatch under the canonical libpq-style URL.
+> Strict driver-specific TLS adapter and actual-driver negative/positive tests
+> added;29combined node casesPASS/noSKIP. Existing callers have not been switched.
+> No live incident, private-VM TLS defect or complete hosted fix inferred. Exact
+> API/job/CLI transport, writable-target and effective service separation remain
+> OPEN before release/provider/deployed acceptance.
+
 > **16 October runtime-role catalogue component:** New read-only probe has11unit
 > checks and18real disposable TLS PostgreSQL checks; tracked regression and CI
 > command added. Fixed new-component SQL NULL acceptance before committing. Not

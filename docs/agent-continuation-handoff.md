@@ -1,5 +1,18 @@
 # CharityPilot Agent Continuation Handoff
 
+> **16 October pinned Prisma TLS compatibility proved / caller wiring OPEN:** Real
+> Prisma6.19.3 test reproduced hostname-mismatch acceptance with the raw libpq
+> verify-full URL. New confidential TLS adapter derives require+sslaccept=strict
+> and maps an explicit root CA to the proven Prisma certificate input; canonical
+> libpq URL remains unchanged. Real driver test refuses wrong CA/hostname/password
+> and a TLS-disabled server; actual catalogue transaction refuses plaintext and
+> default-read-only connections. Combined29node casesPASS/noSKIP, including18SQL
+> and10Prisma/TLS internal checks; CI source gate extended, remote CI not run.
+> Adapter is not consumed by API/jobs/migration commands yet. NEXT wire every
+> applicable Prisma caller and migration transport, preserve canonical backup
+> input, enforce observed writable target, then finish effective Compose split.
+> Do not claim an unused adapter fixes hosted connections or the private VM.
+
 > **16 October runtime catalogue probe / not connected to deployment:** Added
 > read-only repeatable-read probe for actual runtime/session/database identity,
 > TLS presence, role attributes/membership/ownership,14protected tables, privileged

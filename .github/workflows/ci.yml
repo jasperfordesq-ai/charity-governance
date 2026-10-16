@@ -231,7 +231,7 @@ jobs:
         run: npm run build -w @charitypilot/api
 
       - name: Verify runtime database role against synthetic TLS PostgreSQL
-        run: node --test apps/api/dist/tests/production-runtime-database-role.test.js scripts/production-runtime-role-postgres.test.mjs
+        run: node --test apps/api/dist/tests/production-runtime-database-role.test.js scripts/production-runtime-role-postgres.test.mjs scripts/prisma-database-url.test.mjs scripts/prisma-database-tls.test.mjs
 
       # Runs here, not beside the other MCP steps: references.test.ts reads the
       # reference kinds out of the API's own build output, so that the two lists
