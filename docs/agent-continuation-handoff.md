@@ -1,5 +1,13 @@
 # CharityPilot Agent Continuation Handoff
 
+> **16 October document handoff reconciliation:** Restored17missing dated content-
+> review references in the private115-row controlling queue. All17retained byte
+> hashes verified and every original column/decision preserved by CSV round-trip.
+> Seven already applied controller decisions remain applied; historical PENDING
+> addenda are not new authority. New links supersede stale content-review follow-
+> ups, not review findings or live policy. No fresh hosted byte/signature proof,
+> classification/access change or deployment. Private resume names current queue.
+
 > **16 October replay proof boundary and audit description:** Desktop connector
 > source inclusion in server release does not prove installed client upgrades.
 > Current local tarball matches35package files and passes three synthetic archived-

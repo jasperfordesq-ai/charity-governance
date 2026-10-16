@@ -1,5 +1,12 @@
 # CharityPilot Full-Platform Remediation Audit
 
+> **16 October document evidence-link repair / acceptance OPEN:** Latest private
+> queue omitted17completed14October content-review receipts. Restored additive
+> references/hash/proof-limit/next-action fields; preserved all115rows and original
+> decisions, including seven applied classifications. Rehashed17retained files;
+> historical hosted proof stays dated. This repairs continuation evidence and
+> avoids repeat title-only review; it is not new controller approval or live proof.
+
 > **16 October replay description / source correction, acceptance OPEN:** Audit
 > reason previously implied successful prior use even for LOGOUT-revoked tokens.
 > Future text now reports the proved revocation; event/detection/quarantine stay
