@@ -60,9 +60,8 @@ history. Neither validator nor source guards were weakened. Fixture keys and
 objects are synthetic, not real KMS/S3 custody or source-attested authority.
 
 The V1 publisher and maintenance replay remain V1-only. Persisted capture and
-candidate guards now distinguish formats as described below. The actual independent
-object adapter, mixed-version prefix/current-head authentication and suspended
-maintenance replay remain required stages2–4. Do not feed V2 to the V1 pipeline, treat the codec as an operator recovery
+candidate guards now distinguish formats as described below. The S3 transport adapter is implemented below. Mixed-version prefix/current-head
+authentication and suspended maintenance replay remain required stages2–4. Do not feed V2 to the V1 pipeline, treat the codec as an operator recovery
 entry point, or claim provider/transport/whole-backend/host-loss completion.
 
 
@@ -101,3 +100,38 @@ row, refuses omitted source records and cross-version metadata in direct SQL,
 retains immutable originals, and refuses a candidate after an atomic Owner transfer
 during key generation. Fixture keys are synthetic and external writes remain zero.
 This is local persistence/reconciliation evidence, not provider custody or host loss.
+
+
+## V2 object transport (not activated)
+
+`S3AuthorityObjectStore.readExecutionLedgerV2/createExecutionLedgerV2` use the
+separate `confluence-execution-ledger-v2/{installation}/{organisation}/{epoch}/{operation}.json`
+namespace. Existing V1 keys and decoders are unchanged. Validated full context
+must match the V2 header, including source, operation, epoch and configured replay
+key; structural header inspection does not authenticate ciphertext or history.
+The coordinator must still open the envelope against its original binding.
+
+This adapter reuses the fixed Ireland endpoint, explicit credentials, expected
+bucket owner, storage KMS binding, checksum, version metadata, bounded strict-UTF8
+stream and deadlines. Writes are conditional create-if-absent; conflict returns
+false, unknown write outcome throws without retry, and missing reads never create.
+Storage encryption and envelope wrapping keys remain separate.
+
+Five synthetic SDK transport tests cover exact paths/headers, scope and version
+substitution, epoch isolation, missing objects, inconsistent metadata, conditional
+conflict and uncertain writes. They do not call AWS or prove actual independent
+custody. No runtime entry point activates V2 upload. Durable one-use attempts,
+fresh authenticated mixed-version prefix/publication, maintenance replay and
+provider/host-loss proof remain required; do not wire the pre-publication helper
+directly to a route or worker.
+
+
+Local verification for this adapter: API TypeScript build; seven focused
+codec/transport tests; all 3,330 ordinary API tests with zero failures/skips;
+secret/static-analysis scans of 1,577 files and control-byte scan of 1,561 source
+files. The separate native migration fixtures were not rerun for this
+transport-only increment (no SQL/model/restore-inventory change); the preceding
+persistence increment's full/native results remain separately dated evidence.
+Manual review checked normalized full-context comparison, legacy separation,
+conditional-write failure handling, no network retry and no activation path.
+Hosted verification and provider evidence remain separate.

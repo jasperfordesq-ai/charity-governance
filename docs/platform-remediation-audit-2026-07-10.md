@@ -1,5 +1,11 @@
 # CharityPilot Full-Platform Remediation Audit
 
+> **16 October V2 object adapter:** The S3 adapter now separates V2 by
+> installation, tenant, epoch and operation and requires exact header context.
+> Existing conditional writes, account/KMS/version/stream/deadline controls
+> remain. Synthetic transport proof is not live custody or activation. Durable
+> fenced upload, authenticated mixed-version publication and replay remain open.
+
 > **16 October CI execution budget:** The V2 foundation CI reached its
 > 20-minute job timeout during the web image build, after preceding gates
 > passed. The bounded allowance is now 30 minutes; all checks stay enabled.

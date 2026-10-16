@@ -1,3 +1,5 @@
+import { inspectConfluenceExecutionArchiveV2, CONFLUENCE_EXECUTION_ARCHIVE_V2_MAX_ENVELOPE_BYTES } from './confluence-execution-archive-v2.js';
+import { validateRecoveryEnvelopeContext, type RecoveryEnvelopeContext } from './recovery-preparation-envelope.js';
 import { inspectCancellationEnvelope } from './cancellation-envelope.js';
 import { inspectComplaintSourceEnvelope } from './complaint-source-envelope.js';
 import { createHash, randomUUID } from 'node:crypto';
@@ -284,6 +286,33 @@ export class S3AuthorityObjectStore implements AuthorityObjectStore, AuthorityHe
   async createConfluenceCopyLedger(operationId: string, envelope: string) {
     const request = this.confluenceCopyLedgerRequest(operationId); this.checkConfluenceCopyLedger(operationId,envelope);
     return this.writeObject(request,envelope,{ IfNoneMatch: '*' },CONFLUENCE_COPY_LEDGER_MAX_ENVELOPE_BYTES);
+  }
+
+  private executionLedgerV2Request(raw: RecoveryEnvelopeContext) {
+    const context = validateRecoveryEnvelopeContext(raw);
+    if (context.installationId !== this.config.installationId || context.organisationId !== this.config.organisationId
+      || context.keyId !== this.config.replayKeyArn) throw new Error('Execution archive V2 storage scope mismatch');
+    const request = this.replayRequest(context.operationId);
+    return { context, request: { ...request,
+      Key: `confluence-execution-ledger-v2/${context.installationId}/${context.organisationId}/${context.writerEpoch}/${context.operationId}.json` } };
+  }
+  private checkExecutionLedgerV2(context: RecoveryEnvelopeContext, envelope: string) {
+    if (JSON.stringify(inspectConfluenceExecutionArchiveV2(envelope).context) !== JSON.stringify(context)) {
+      throw new Error('Execution archive V2 envelope scope mismatch');
+    }
+  }
+  /** Transport only. Current-head authentication, one-use upload fencing and
+   * authenticated decryption belong to the coordinator; this is not activation. */
+  async readExecutionLedgerV2(raw: RecoveryEnvelopeContext) {
+    const { context, request } = this.executionLedgerV2Request(raw);
+    const object = await this.readObject(request, undefined, CONFLUENCE_EXECUTION_ARCHIVE_V2_MAX_ENVELOPE_BYTES);
+    if (!object) return null;
+    this.checkExecutionLedgerV2(context, object.body); return object.body;
+  }
+  async createExecutionLedgerV2(raw: RecoveryEnvelopeContext, envelope: string) {
+    const { context, request } = this.executionLedgerV2Request(raw);
+    this.checkExecutionLedgerV2(context, envelope);
+    return this.writeObject(request, envelope, { IfNoneMatch: '*' }, CONFLUENCE_EXECUTION_ARCHIVE_V2_MAX_ENVELOPE_BYTES);
   }
 
   private complaintSourceRequest(operationId: string) {

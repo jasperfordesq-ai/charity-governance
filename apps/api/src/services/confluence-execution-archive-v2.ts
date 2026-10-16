@@ -27,6 +27,11 @@ function inspect(envelope:string) {
  if(JSON.stringify(value)!==envelope||value.sealed.generation!==value.binding.context.writerEpoch)throw new Error();
  return value;
 }
+/** Structural header inspection only. Does not decrypt or authenticate history. */
+export function inspectConfluenceExecutionArchiveV2(envelope:string) {
+ try { return inspect(envelope).binding; }
+ catch { throw new Error('Invalid Confluence execution archive V2'); }
+}
 function requireBody(body:string,binding:z.infer<typeof bindingSchema>) {
  if(typeof body!=='string'||Buffer.byteLength(body,'utf8')>CONFLUENCE_COPY_LEDGER_MAX_BYTES
   ||prepareConfluenceExecutionLedgerV2(JSON.parse(body),binding.context).body!==body)throw new Error();
