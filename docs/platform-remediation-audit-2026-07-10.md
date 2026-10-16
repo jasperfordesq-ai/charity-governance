@@ -1,5 +1,12 @@
 # CharityPilot Full-Platform Remediation Audit
 
+> **16 October private VM startup compatibility:** A guarded release refused
+> candidate startup because the new strict TLS client also selected the existing
+> documented internal non-TLS VM profile. Added exact private-profile matching;
+> explicit public-production and other targets retain strict TLS. No traffic
+> switched on failure. Private `private-vm-database-transport-2026-10-16.md`
+> records regression tests, applied migration state and subsequent release proof.
+
 > **16 October reliability linkage correction:** Two replay guarantees still
 > named the former test title. Linked them to the existing ROTATED-family
 > quarantine test; assertions and runtime behavior are unchanged. The private

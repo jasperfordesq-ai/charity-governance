@@ -4,6 +4,17 @@ import type { PrismaClient, Prisma } from '@prisma/client';
 import { createApplicationPrismaClient } from '../utils/application-prisma-client.js';
 
 const canonical='postgresql://cp_runtime:synthetic-private-password@db.charitypilot.ie/charitypilot?sslmode=verify-full&target_session_attrs=read-write';
+const privateVm: NodeJS.ProcessEnv={
+  NODE_ENV:'production',
+  DATABASE_URL:canonical.replace('db.charitypilot.ie','db:5432'),
+  CHARITYPILOT_TENANCY:'multi', CHARITYPILOT_REGISTRATION:'closed',
+  CHARITYPILOT_EMAIL_DELIVERY:'manual-link', CHARITYPILOT_BILLING:'none',
+  CHARITYPILOT_ERROR_ALERTS:'none', DOCUMENT_STORAGE_DRIVER:'local',
+  FRONTEND_URL:'https://charitypilot.tail0000.ts.net',
+  NEXT_PUBLIC_API_URL:'https://charitypilot.tail0000.ts.net',
+  CHARITYPILOT_CANONICAL_WEB_ORIGIN:'https://charitypilot.tail0000.ts.net',
+  CHARITYPILOT_CANONICAL_API_ORIGIN:'https://charitypilot.tail0000.ts.net',
+};
 function fixture(rows: unknown=[{ safe:true }]) {
   const calls: unknown[]=[];
   const client={
@@ -43,6 +54,45 @@ test('private local connection retains normal constructor and lazy connection be
   await createApplicationPrismaClient({DATABASE_URL:'postgresql://runtime:synthetic@db/charitypilot',CHARITYPILOT_DEPLOYMENT_MODE:'personal-server'},{createClient:f.createClient});
   assert.deepEqual(f.calls,[{url:undefined}]);
 });
+
+test('existing private VM profile retains its documented internal database transport',async()=>{
+  const f=fixture();
+  await createApplicationPrismaClient(privateVm,{createClient:f.createClient});
+  assert.deepEqual(f.calls,[{url:undefined}]);
+});
+
+for(const override of [
+  {CHARITYPILOT_DEPLOYMENT_MODE:'production'},
+  {CHARITYPILOT_REGISTRATION:'open'}, {CHARITYPILOT_EMAIL_DELIVERY:'provider'},
+  {CHARITYPILOT_TENANCY:'single'}, {CHARITYPILOT_BILLING:'stripe'},
+  {CHARITYPILOT_ERROR_ALERTS:'webhook'}, {DOCUMENT_STORAGE_DRIVER:'supabase'},
+  {CHARITYPILOT_CANONICAL_API_ORIGIN:'https://api.charitypilot.ie'},
+  {FRONTEND_URL:'https://other.tail0000.ts.net'},
+  {NEXT_PUBLIC_API_URL:'https://other.tail0000.ts.net'},
+  {CHARITYPILOT_CANONICAL_WEB_ORIGIN:'https://app.charitypilot.ie'},
+  {DATABASE_URL:canonical},
+  {DATABASE_URL:privateVm.DATABASE_URL+'&sslrootcert=system'},
+  {DATABASE_URL:privateVm.DATABASE_URL?.replace('db:5432','db:6432')},
+  {DATABASE_URL:privateVm.DATABASE_URL?.replace('db:5432','db.example:5432')},
+]) {
+  test(`private VM compatibility cannot apply outside its exact profile: ${Object.keys(override)[0]}`,async()=>{
+    const f=fixture();
+    await createApplicationPrismaClient({...privateVm,...override},{createClient:f.createClient});
+    assert.equal(f.calls[1],'connect');
+  });
+}
+
+for(const origin of ['http://charitypilot.tail0000.ts.net','https://api.charitypilot.ie',
+  'https://charitypilot.tail0000.ts.net:8443','https://charitypilot.tail0000.ts.net/path',
+  'https://charitypilot.tail0000.ts.net.attacker.example']) {
+  test(`non-private origin cannot select internal transport: ${origin}`,async()=>{
+    const f=fixture();
+    await createApplicationPrismaClient({...privateVm,FRONTEND_URL:origin,NEXT_PUBLIC_API_URL:origin,
+      CHARITYPILOT_CANONICAL_WEB_ORIGIN:origin,CHARITYPILOT_CANONICAL_API_ORIGIN:origin},
+    {createClient:f.createClient});
+    assert.equal(f.calls[1],'connect');
+  });
+}
 
 test('declared public production cannot fall back to an unverified URL',async()=>{
   const f=fixture();
