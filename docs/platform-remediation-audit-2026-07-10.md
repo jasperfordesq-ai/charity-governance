@@ -1,5 +1,15 @@
 # CharityPilot Full-Platform Remediation Audit
 
+> **16 October database reconciliation coordinator proof / OPEN:** Restricted
+> actual PostgreSQL composition now verifies the inactive eight-table inspector,
+> real repeatable-read role boundary, denied actors before archive access, exact
+> historical match and preservation/refusal of later local evidence. Four ledger
+> groups are populated; four are present/empty. Snapshot observation time is
+> excluded from state equality; all recorded fields remain compared. Existing
+> restart/dispatch proof passes in the same disposable test. No runtime change,
+> migration, live provider operation or deployment; maintenance restore,
+> transport recovery, independent custody/host loss and DPO acceptance stay open.
+
 > **16 October eight-table Confluence reconciliation, source increment / OPEN:**
 > An inactive read-only Owner coordinator now compares complete archived decision,
 > capture and publication rows against bounded local snapshots around fresh

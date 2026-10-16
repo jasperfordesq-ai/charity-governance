@@ -1,5 +1,17 @@
 # CharityPilot Agent Continuation Handoff
 
+> **16 October real PostgreSQL reconciliation composition, test evidence only:**
+> The new eight-table Owner inspector now runs against all188migrated tables as
+> a non-superuser runtime role, with actual repeatable-read transactions. Four
+> populated ledger groups match the authenticated synthetic archive; the other
+> four groups are present/empty. Member/tenant refusal occurs before archive I/O;
+> newer real local evidence is retained and reconciliation refuses. Full ledger
+> snapshot comparison excludes only its generated observation timestamp. The
+> existing capture/candidate/progress/dispatcher proof also passes. No runtime
+> source/schema/provider change or deployment. Eight-table SQL restore, four
+> transport tables, host isolation/custody, broader populated coverage and
+> acceptance remain open. Current private receipt is in RESUME-HERE.
+
 > **16 October complete Confluence archive reconciliation proposal, source only:**
 > New inactive Owner inspection compares all eight original ledger tables with
 > a freshly authenticated archive/current supported prefix. Bounded locked local

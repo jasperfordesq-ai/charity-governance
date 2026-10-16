@@ -17,6 +17,7 @@ import { acknowledgeConfluenceCopyLedgerArchive } from '../apps/api/dist/service
 import { ConfluenceCopyLedgerCaptureStore } from '../apps/api/dist/services/confluence-copy-ledger-capture-store.js';
 import { ConfluenceCopyLedgerCandidateStore } from '../apps/api/dist/services/confluence-copy-ledger-candidate-store.js';
 import { ConfluenceCopyLedgerProgressStore } from '../apps/api/dist/services/confluence-copy-ledger-progress-store.js';
+import { inspectConfluenceCopyLedgerReconciliation } from '../apps/api/dist/services/confluence-copy-ledger-reconciliation.js';
 import { PURGE_RESTORE_SNAPSHOT_SQL, PURGE_RESTORE_BINDING_PROBE_SQL, assertPurgeRestoreLedger } from './purge-restore-reconciliation.mjs';
 import { createHash } from 'node:crypto';
 import { recoveryFactsFixture, recoveryContextFixture } from '../apps/api/dist/tests/fixtures/confluence-copy-recovery-facts.js';
@@ -280,6 +281,46 @@ test('local Confluence ledger capture uses all eight migrated tables and a real 
     const archive = await readPublishedConfluenceCopyLedger(journal,control,binding,keys,objects);
     assert.equal(archive.body,populated.body); assert.equal(archive.currentHistoryVerified,false);
     assert.equal(archive.reopeningAuthorised,false); assert.notEqual(current.activeOperation,null);
+    // Actual restricted-role coordinator composition, not substituted local
+    // rows: both bounded snapshots run against the migrated PostgreSQL fixture.
+    const reconciliationRuntime = new PrismaClient({ datasources: { db: { url: runtimeUrl.href } } });
+    const reconciliationBefore = (await prisma.$queryRawUnsafe(PURGE_RESTORE_SNAPSHOT_SQL))[0].snapshot;
+    const ledgerState = ({ capturedAt: _observationTime, ...snapshot }) => snapshot;
+    const originalControl = structuredClone(current), originalJournal = [...rows.values()];
+    let inspections = 0, archiveReads = 0;
+    const inspectedRuntime = { $transaction: (fn,options) => reconciliationRuntime.$transaction(async tx => {
+      const [observed] = await tx.$queryRawUnsafe("SELECT current_user AS role,current_setting('transaction_isolation') AS isolation");
+      assert.equal(observed.role,'synthetic_ledger_runtime'); assert.equal(observed.isolation,'repeatable read');
+      inspections++; return fn(tx);
+    },options) };
+    const reconciliationObjects = { readConfluenceCopyLedger: async operationId => {
+      archiveReads++; return objects.readConfluenceCopyLedger(operationId);
+    } };
+    const reconciliationDeps = { journal, control: { readControl: control.readControl }, keys, objects: reconciliationObjects };
+    try {
+      const reconciled = await inspectConfluenceCopyLedgerReconciliation(inspectedRuntime,'org-a','owner-a',binding,reconciliationDeps);
+      assert.equal(inspections,2); assert.equal(reconciled.matchingRecords,4);
+      assert.equal(reconciled.inserts.length,0); assert.equal(reconciled.requiresReplay,false);
+      assert.equal(reconciled.actionAuthorized,false); assert.equal(reconciled.currentHistoryVerified,false);
+      assert.equal(reconciled.reopeningAuthorised,false); assert.equal(reconciled.transportStateReconciled,false);
+      assert.ok(archiveReads > 0);
+      const readsBeforeDenied = archiveReads;
+      await assert.rejects(inspectConfluenceCopyLedgerReconciliation(inspectedRuntime,'org-a','member-a',binding,reconciliationDeps),/Complete Confluence ledger reconciliation is unresolved/);
+      await assert.rejects(inspectConfluenceCopyLedgerReconciliation(inspectedRuntime,'org-b','owner-a',binding,reconciliationDeps),/Complete Confluence ledger reconciliation is unresolved/);
+      assert.equal(archiveReads,readsBeforeDenied,'denied actor must not read independent archive');
+      const reconciliationAfter = (await prisma.$queryRawUnsafe(PURGE_RESTORE_SNAPSHOT_SQL))[0].snapshot;
+      assert.deepEqual(ledgerState(reconciliationAfter),ledgerState(reconciliationBefore),'read-only inspection must preserve all observed ledgers');
+      assert.deepEqual(current,originalControl); assert.deepEqual([...rows.values()],originalJournal);
+
+      // A new real local decision is not in the already authenticated archive.
+      // Inspection must preserve it and refuse, never drop it to match backup.
+      const laterReview = await reviews.record('org-a','owner-a',{ ...review, evidenceRef: 'SYNTHETIC-LATER-LOCAL-REVIEW' });
+      const withLater = (await prisma.$queryRawUnsafe(PURGE_RESTORE_SNAPSHOT_SQL))[0].snapshot;
+      await assert.rejects(inspectConfluenceCopyLedgerReconciliation(inspectedRuntime,'org-a','owner-a',binding,reconciliationDeps),/Complete Confluence ledger reconciliation is unresolved/);
+      assert.ok(await prisma.confluenceRetainedCopyReview.findUnique({ where: { id: laterReview.id } }));
+      assert.deepEqual(ledgerState((await prisma.$queryRawUnsafe(PURGE_RESTORE_SNAPSHOT_SQL))[0].snapshot),ledgerState(withLater));
+      assert.deepEqual(current,originalControl); assert.deepEqual([...rows.values()],originalJournal);
+    } finally { await reconciliationRuntime.$disconnect(); }
     const progressRuntime = new PrismaClient({ datasources: { db: { url: runtimeUrl.href } } });
     const progressDeps = { journal, control: { readControl: control.readControl }, keys, objects };
     const beforeProgress = (await prisma.$queryRawUnsafe(PURGE_RESTORE_SNAPSHOT_SQL))[0].snapshot;
