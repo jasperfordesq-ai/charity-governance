@@ -87,6 +87,9 @@ jobs:
       - name: Security scan
         run: npm run security:scan
 
+      - name: Verify managed gateway with disposable private upstreams
+        run: npm run test:managed-gateway
+
       - name: Generate Prisma client
         run: npm run db:generate -w @charitypilot/api
 

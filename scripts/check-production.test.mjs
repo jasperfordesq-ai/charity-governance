@@ -4770,9 +4770,12 @@ test('web proxy validates protected sessions with API auth authority before rend
   assert.match(proxy, /export async function proxy\(request: NextRequest\)/);
   assert.match(
     proxy,
-    /import\s*\{\s*getApiBaseUrl,\s*getServerApiBaseUrl,\s*isPersonalServerProduction,?\s*\}\s*from ["']\.\/lib\/api-config["']/,
+    /import\s*\{\s*getApiBaseUrl,\s*isPersonalServerProduction,?\s*\}\s*from ["']\.\/lib\/api-config["']/,
   );
-  assert.match(proxy, /new URL\(pathname,\s*getServerApiBaseUrl\(\)\)/);
+  // The Node-only managed boundary preserves legacy profile checks and also
+  // compares the actual runtime environment with literal compiled public pins.
+  assert.match(proxy, /import\s*\{\s*getServerApiBaseUrl,\s*getManagedWebApiContext\s*\}\s*from ["']\.\/lib\/server-api-config\.server["']/);
+  assert.match(proxy, /new URL\(pathname,\s*getServerApiBaseUrl\(process\.env,\s*publicBuildBinding\(\)\)\)/);
   assert.doesNotMatch(proxy, /process\.env\.NEXT_PUBLIC_API_URL\?\.trim\(\)\s*\|\|/);
   assert.match(proxy, /type ProtectedAuthSession\s*=/);
   assert.match(proxy, /state:\s*["']authenticated["']/);

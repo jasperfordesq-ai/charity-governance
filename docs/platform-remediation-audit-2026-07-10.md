@@ -1,5 +1,12 @@
 # CharityPilot Full-Platform Remediation Audit
 
+> **16 October managed gateway image:** A separately bound unprivileged image
+> now implements canonical public-host routing to private web/API, strips
+> unverified proxy claims and removes request objects from Caddy error logs.
+> Actual read-only/capability-dropped container tests cover routes, headers,
+> startup refusal and callback redaction. API peer/client-address trust and
+> joined hosted flow remain open. See [managed gateway](managed-gateway.md).
+
 > **16 October managed private web origin:** A separate Node-only guard binds
 > the four-service Render registry to the web image's compiled fingerprint,
 > runtime service/build identity and exact private API origin. Mismatch returns
