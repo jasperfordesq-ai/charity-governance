@@ -21,6 +21,7 @@ import { inspectConfluenceCopyLedgerReconciliation } from '../apps/api/dist/serv
 import { PURGE_RESTORE_SNAPSHOT_SQL, PURGE_RESTORE_BINDING_PROBE_SQL, assertPurgeRestoreLedger } from './purge-restore-reconciliation.mjs';
 import { createHash } from 'node:crypto';
 import { recoveryFactsFixture, recoveryContextFixture } from '../apps/api/dist/tests/fixtures/confluence-copy-recovery-facts.js';
+import { runConfluenceLedgerMaintenancePostgresProof } from './confluence-ledger-maintenance-postgres-proof.mjs';
 
 const image = 'postgres@sha256:5660c2cbfea50c7a9127d17dc4e48543eedd3d7a41a595a2dfa572471e37e64c';
 function run(command,args,options = {}) {
@@ -435,6 +436,8 @@ test('local Confluence ledger capture uses all eight migrated tables and a real 
       await tx.user.update({ where: { id: 'member-a' }, data: { role: 'OWNER' } });
     });
     await assert.rejects(captureConfluenceCopyLocalLedger(prisma,'org-a','owner-a',input),/capture is unresolved/);
+    const maintenanceProof = await runConfluenceLedgerMaintenancePostgresProof(prisma,url);
+    console.log('Synthetic joined archive/PostgreSQL maintenance proof:',JSON.stringify(maintenanceProof));
   } finally {
     if (prisma) await prisma.$disconnect();
     assert.equal(docker(['inspect','--format','{{.Id}}',name]),id);

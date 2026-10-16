@@ -1,5 +1,18 @@
 # CharityPilot Agent Continuation Handoff
 
+> **16 October joined authenticated maintenance proof, tests only:** The real
+> PostgreSQL harness now populates all eight ledger groups through guarded
+> synthetic review/decision/capture/publication setup and authenticates the
+> encrypted archive with its real synthetic predecessor journal. The actual
+> maintenance coordinator restores13original records into an older disposable
+> state. Late SQL/head failures roll back; lost acknowledgement AFTER a real
+> commit retries with zero inserts. Missing independent bytes still refuse when
+> local rows already match. Four transport groups remain unchanged, explicitly
+> unreconciled. Source189/build/runtime logic unchanged; whole database/dispatcher
+> test passes. This is same-host synthetic proof, not host-loss isolation,
+> independent custody, a supported recovery entry point or Nikita acceptance.
+> Next: separate four-table transport recovery and quarantined-host integration.
+
 > **16 October complete-ledger maintenance delegate, source only:** Migration189
 > adds invoker-owned eight-table snapshot/replay functions with no runtime grants.
 > Exact table ownership, suspension, sole-client observation, read-committed/WAL,

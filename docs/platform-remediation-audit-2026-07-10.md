@@ -1,5 +1,15 @@
 # CharityPilot Full-Platform Remediation Audit
 
+> **16 October joined archive-to-database maintenance proof / OPEN:** Full
+> synthetic eight-group publication/archive authentication now drives the actual
+> maintenance coordinator and migrated PostgreSQL restore.13historical records
+> survive committed replay, SQL/head races roll back, lost commit acknowledgement
+> retries without duplicates and missing archive bytes refuse despite local
+> matching rows. Four transport groups are preserved without reconciliation
+> authority. No runtime/schema/deployment change. Same-host tests do not prove
+> source-VM loss/isolation, separate custody, supported recovery/reopening or DPO
+> acceptance; those gates remain unresolved.
+
 > **16 October complete Confluence maintenance replay increment / OPEN:** New
 > migration189 provides bounded invoker-owned eight-table snapshot/replay with
 > suspension/sole-client/WAL/role/guard/FK gates and transactional exact readback.
