@@ -194,6 +194,7 @@ const DISPOSABLE_DATABASE_RESET_TABLES = Object.freeze([
   "ConfluenceSyntheticCopyScope",
   "ConfluenceRetainedCopyPermission",
   "ConfluenceRetainedCopyPermissionWithdrawal",
+  "ConfluenceCopyExecutionClaim",
   "ConfluenceCopyRecoveryCapture",
   "ConfluenceCopyPublicationPlan",
   "ConfluenceCopyPublicationReceipt",

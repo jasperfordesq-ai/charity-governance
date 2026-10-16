@@ -1,5 +1,10 @@
 # CharityPilot Full-Platform Remediation Audit
 
+> **16 October hosted orchestration correction:** Both hosted runs failed before
+> browser execution because the exact reset inventory omitted the claim model.
+> Add that model to the inventory; preserve all reset/immutability safeguards.
+> Local isolated-runner contract is green. New exact hosted checks remain required.
+
 > **16 October claim interruption evidence:** Actual PostgreSQL commit followed
 > by a lost response is reconciled by original operation receipt, with no second
 > consumption. The joined native proof covers this alongside the competing-claim

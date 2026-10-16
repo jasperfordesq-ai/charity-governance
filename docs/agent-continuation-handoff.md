@@ -1,5 +1,10 @@
 # CharityPilot Agent Continuation Handoff
 
+> **16 October disposable inventory correction:** The hosted schema-coverage
+> gate correctly rejected the new claim model missing from the disposable reset
+> inventory. Its exact table name is now included; immutable triggers and target
+> guards are unchanged. The complete isolated-runner contract passes locally.
+
 > **16 October post-commit claim acknowledgement proof:** A synthetic fixture
 > now loses the response after an actual claim commit. A new client recovers
 > its original ID through receipt lookup; a subsequent attempt inserts no
