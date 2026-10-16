@@ -89,6 +89,10 @@ test('production configuration has no owner fallback when derived runtime input 
 });
 
 test('effective CA overlay mounts only the reviewed public certificate on every database consumer',t=>{
+  // Older Compose serializers omit false here (compose-go#836). Require the
+  // explicit source opt-out as well as a rendered value that cannot enable it.
+  assert.match(readFileSync(join(repo,'compose.production.database-ca.yml'),'utf8'),
+    /\bbind:\s*\r?\n\s+create_host_path: false\s*\r?\n/);
   const f=fixture(t,true), rendered=f.render();assert.equal(rendered.status,0,rendered.stderr);
   const services=JSON.parse(rendered.stdout).services;
   for(const name of ['api','production-scheduler','deadline-reminders','document-storage-cleanup',
@@ -96,7 +100,8 @@ test('effective CA overlay mounts only the reviewed public certificate on every 
     const ca=services[name].volumes.find(v=>v.target==='/run/charitypilot/database-ca.pem');
     assert.equal(ca.type,'bind');assert.equal(ca.read_only,true);
     assert.equal(ca.source.replaceAll('\\','/'),f.caFile.replaceAll('\\','/'));
-    assert.equal(ca.bind.create_host_path,false);
+    assert.ok([undefined,false].includes(ca.bind?.create_host_path),
+      `${name}: CA bind must not enable host-path creation`);
     assert.equal(new URL(services[name].environment.DATABASE_URL).searchParams.get('sslrootcert'),ca.target);
   }
   assert.equal(services.web.volumes,undefined);

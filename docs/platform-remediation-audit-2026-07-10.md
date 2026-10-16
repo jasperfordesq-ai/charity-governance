@@ -1,5 +1,11 @@
 # CharityPilot Full-Platform Remediation Audit
 
+> **16 October hosted Compose assertion correction:** Older Compose versions omit
+> a false bind option from rendered JSON. The CA test now requires the explicit
+> source opt-out and accepts that serialization; true remains rejected. Runtime
+> configuration is unchanged. Private `hosted-compose-serialization-2026-10-16.md`
+> records the hosted failure, local proof and unsafe-mutation rejection.
+
 > **16 October hosted static-scan correction:** The first accumulated master
 > CI stopped on raw-SQL methods in the runtime connection/role probes and a
 > synthetic maintenance helper. Converted fixed statements to tagged queries
