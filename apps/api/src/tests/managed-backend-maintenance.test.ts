@@ -37,7 +37,8 @@ function fixture(){
  const provider={configurationDigest:()=>hash('provider-registry'),suspend:async()=>{calls.push('suspend');},
   observeSuspended:async()=>{calls.push('services-observe');return{observationDigest:hash('services')};}};
  const database={configurationDigest:()=>hash('db-registry'),close:async()=>{calls.push('database-close');},
-  observeClosed:async()=>{calls.push('database-observe');return{observationDigest:hash('database')};}};
+  invalidatePasswords:async()=>{calls.push('password-invalidate');},
+  observePasswordsInvalidated:async()=>{calls.push('database-observe');return{observationDigest:hash('database'),passwordCredentialsInvalidated:true};}};
  const coordinator=new ManagedBackendMaintenance(operation,provider as never,database as never,store);
  value.planDigest=coordinator.planDigest();
  return{store,provider,database,coordinator,calls,metadata,get value(){return value;},set value(next){value=next;},
@@ -48,15 +49,17 @@ function fixture(){
 test('managed shutdown records an independent attempt before provider/database mutation and never repeats it',async()=>{
  const f=fixture();const result=await f.coordinator.close();
  assert.equal(result.phase,'OBSERVED_CLOSED');assert.equal(f.puts,2);
+ assert.equal(result.databasePasswordCredentialsInvalidated,true);
  assert.ok(f.calls.indexOf('put')<f.calls.indexOf('suspend'));
  assert.ok(f.calls.indexOf('suspend')<f.calls.indexOf('database-close'));
- assert.ok(f.calls.indexOf('database-close')<f.calls.indexOf('services-observe'));
+ assert.ok(f.calls.indexOf('database-close')<f.calls.indexOf('password-invalidate'));
+ assert.ok(f.calls.indexOf('password-invalidate')<f.calls.indexOf('services-observe'));
  assert.ok(f.calls.indexOf('database-observe')<f.calls.lastIndexOf('put'));
  for(const flag of ['wholeBackendQuiesced','credentialRotationVerified','currentTenantAuthorityVerified','sourceHostFenced','reopeningAuthorised','actionAuthorized'])assert.equal(result[flag as keyof typeof result],false);
- const mutations=f.calls.filter(s=>['put','suspend','database-close'].includes(s)).length;
+ const mutations=f.calls.filter(s=>['put','suspend','database-close','password-invalidate'].includes(s)).length;
  const inspection=await f.coordinator.inspect();assert.equal(inspection.phase,'OBSERVED_CLOSED');
  await assert.rejects(f.coordinator.close());
- assert.equal(f.calls.filter(s=>['put','suspend','database-close'].includes(s)).length,mutations);
+ assert.equal(f.calls.filter(s=>['put','suspend','database-close','password-invalidate'].includes(s)).length,mutations);
 });
 
 test('lost independent acquisition acknowledgement never dispatches, even after a new coordinator reads the committed attempt',async()=>{
@@ -71,13 +74,14 @@ test('lost independent acquisition acknowledgement never dispatches, even after 
 });
 
 test('provider/database/recording failures retain attempt and forbid repeat or automatic compensation',async()=>{
- for(const stage of ['suspend','database-close','services-observe','database-observe','record'] as const){
+ for(const stage of ['suspend','database-close','password-invalidate','services-observe','database-observe','record'] as const){
   const f=fixture();
   const fail=async()=>{throw new Error('PRIVATE uncertain external mutation');};
   if(stage==='suspend')f.provider.suspend=fail;
   if(stage==='database-close')f.database.close=fail;
+  if(stage==='password-invalidate')f.database.invalidatePasswords=fail;
   if(stage==='services-observe')f.provider.observeSuspended=fail;
-  if(stage==='database-observe')f.database.observeClosed=fail;
+  if(stage==='database-observe')f.database.observePasswordsInvalidated=fail;
   if(stage==='record')f.setFault(command=>{
    if(command instanceof PutObjectCommand&&JSON.parse(String(command.input.Body)).phase==='OBSERVED_CLOSED'){
     f.commit(command);throw new Error('lost final commit');
@@ -85,9 +89,10 @@ test('provider/database/recording failures retain attempt and forbid repeat or a
   });
   await assert.rejects(f.coordinator.close(),error=>error instanceof Error&&!error.message.includes('PRIVATE')&&error.cause===undefined);
   assert.equal(f.value.phase,stage==='record'?'OBSERVED_CLOSED':'ATTEMPTED');
-  f.setFault(undefined);const mutations=f.calls.filter(s=>['put','suspend','database-close'].includes(s)).length;
-  await assert.rejects(f.coordinator.close());assert.equal(f.calls.filter(s=>['put','suspend','database-close'].includes(s)).length,mutations);
+  f.setFault(undefined);const mutations=f.calls.filter(s=>['put','suspend','database-close','password-invalidate'].includes(s)).length;
+  await assert.rejects(f.coordinator.close());assert.equal(f.calls.filter(s=>['put','suspend','database-close','password-invalidate'].includes(s)).length,mutations);
   if(stage==='suspend')assert.equal(f.calls.includes('database-close'),false);
+  if(stage==='database-close')assert.equal(f.calls.includes('password-invalidate'),false);
  }
 });
 
@@ -135,7 +140,7 @@ test('maintenance readback rejects a competing publication and inspection reject
  });
  await assert.rejects(f.coordinator.close());assert.equal(changed,true);assert.equal(f.calls.includes('suspend'),false);
  f.setFault(undefined);
- f.database.observeClosed=async()=>{f.value={...f.value,publicationId:randomUUID()};return{observationDigest:hash('db')};};
+ f.database.observePasswordsInvalidated=async()=>{f.value={...f.value,publicationId:randomUUID()};return{observationDigest:hash('db'),passwordCredentialsInvalidated:true};};
  await assert.rejects(f.coordinator.inspect());
 });
 
@@ -174,4 +179,11 @@ test('default maintenance SDK pins Ireland endpoint, single attempt and no regio
  });
  try{await assert.rejects(new S3ManagedMaintenanceControl(config,credentials).observe());}
  finally{interception.mock.restore();}
+});
+
+test('legacy closure-only plan cannot authorise the password-invalidation workflow',async()=>{
+ const f=fixture();
+ f.value={...f.value,planDigest:hash(JSON.stringify({format:1,...operation,
+  provider:f.provider.configurationDigest(),database:f.database.configurationDigest()}))};
+ await assert.rejects(f.coordinator.close());assert.equal(f.puts,0);assert.equal(f.calls.includes('suspend'),false);
 });

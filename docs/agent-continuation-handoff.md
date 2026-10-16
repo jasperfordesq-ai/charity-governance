@@ -1,5 +1,12 @@
 # CharityPilot Agent Continuation Handoff
 
+> **16 October closed-role password invalidation:** The guarded protocol2
+> shutdown now clears configured database passwords only after NOLOGIN/session
+> closure, using boolean catalogue proof without reading passwords/verifiers.
+> TLS PostgreSQL proves rollback, lost actual commit and old-password rejection
+> with the LOGIN barrier removed in a disposable fixture. Replacement-secret
+> custody/delivery and full rotation remain open; no live role or secret changed.
+
 > **16 October guarded managed shutdown integration:** A separate installation
 > control records a one-attempt shutdown before Render/job suspension and actual
 > database closure. Fresh readbacks and exact conditional result recording retain

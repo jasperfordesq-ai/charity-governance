@@ -18,10 +18,11 @@ export class ManagedBackendMaintenance {
   private readonly database:ManagedDatabaseWriterFence,private readonly control:S3ManagedMaintenanceControl){
   this.config=configuration.parse(raw);
  }
- planDigest(){return createHash('sha256').update(JSON.stringify({format:1,...this.config,
+ planDigest(){return createHash('sha256').update(JSON.stringify({format:2,...this.config,
+  databaseCredentialPolicy:'PASSWORD_NULL_WHILE_CLOSED',
   provider:this.provider.configurationDigest(),database:this.database.configurationDigest()})).digest('hex');}
  private async readback(){
-  const services=await this.provider.observeSuspended(),database=await this.database.observeClosed();
+  const services=await this.provider.observeSuspended(),database=await this.database.observePasswordsInvalidated();
   return{servicesDigest:services.observationDigest,databaseDigest:database.observationDigest,observedAt:new Date().toISOString()};
  }
  async close(){
@@ -30,10 +31,11 @@ export class ManagedBackendMaintenance {
    if(attempt.value.installationId!==this.config.installationId||attempt.value.phase!=='ATTEMPTED'||!attempt.value.attemptId)throw new Error();
    await this.provider.suspend();
    await this.database.close();
+   await this.database.invalidatePasswords();
    const observations=await this.readback();
    const recorded=await this.control.recordObservedClosed(attempt.value.attemptId,attempt.revision,observations);
    return{phase:recorded.value.phase,attemptId:recorded.value.attemptId,observations,
-    wholeBackendQuiesced:false as const,credentialRotationVerified:false as const,
+    databasePasswordCredentialsInvalidated:true as const,wholeBackendQuiesced:false as const,credentialRotationVerified:false as const,
     currentTenantAuthorityVerified:false as const,sourceHostFenced:false as const,reopeningAuthorised:false as const,actionAuthorized:false as const};
   }catch{throw new Error(failure);}
  }
@@ -47,7 +49,7 @@ export class ManagedBackendMaintenance {
    // Fresh observations never rewrite the original attempt or fabricate a
    // missing command/database completion receipt after an uncertain outcome.
    return{phase:after.value.phase,attemptId:after.value.attemptId,observations,
-    recordedObservations:after.value.observations,wholeBackendQuiesced:false as const,
+    recordedObservations:after.value.observations,databasePasswordCredentialsInvalidated:true as const,wholeBackendQuiesced:false as const,
     credentialRotationVerified:false as const,currentTenantAuthorityVerified:false as const,
     sourceHostFenced:false as const,reopeningAuthorised:false as const,actionAuthorized:false as const};
   }catch{throw new Error(failure);}

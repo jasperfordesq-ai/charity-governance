@@ -17,6 +17,7 @@ const role=z.object({name,oid,canLogin:z.boolean(),superuser:z.boolean(),createR
 const identity=z.object({database:name,databaseOid:oid,currentRole:name,sessionRole:name,recovery:z.boolean(),durable:z.boolean(),encrypted:z.boolean(),
  observedAt:z.string().min(1).max(80)}).strict();
 const session=z.object({pid:z.number().int().positive(),roleOid:oid,databaseOid:oid.nullable(),backendStart:z.string().min(1).max(80)}).strict();
+const passwordState=z.object({name,oid,invalidated:z.boolean()}).strict();
 /** Internal privileged maintenance primitive, never an application route. Caller
  * supplies a separately trusted database/principal registry and verified TLS
  * connection. Closing roles is cluster-wide. Custodians remain trusted writers.
@@ -81,6 +82,39 @@ export class ManagedDatabaseWriterFence {
    loginRolesClosed:state.targets.length,remainingSessions:0,observationDigest:createHash('sha256').update(JSON.stringify(facts)).digest('hex'),
    observedAt:state.actual.observedAt,sourceHostFenced:false as const,providerJobsFenced:false as const,
    wholeBackendQuiesced:false as const,reopeningAuthorised:false as const,actionAuthorized:false as const};
+ }
+ private async passwords(tx:Prisma.TransactionClient,state:Awaited<ReturnType<ManagedDatabaseWriterFence['read']>>){
+  this.proof(state); // Never clear a password while any target can log in or has a session.
+  // Only booleans leave the catalogue: never fetch passwords or their verifiers.
+  const rows=z.array(passwordState).parse(await tx.$queryRaw`SELECT rolname::text AS name,oid::text AS oid,
+   rolpassword IS NULL AS invalidated FROM pg_authid WHERE oid::text IN (${Prisma.join(this.config.writers.map(p=>p.oid))}) ORDER BY rolname`);
+  if(rows.length!==state.targets.length||rows.some(p=>!state.targets.some(r=>r.name===p.name&&r.oid===p.oid)))throw new Error();
+  return rows;
+ }
+ private passwordProof(state:Awaited<ReturnType<ManagedDatabaseWriterFence['read']>>,passwords:z.infer<typeof passwordState>[]){
+  const closed=this.proof(state);if(passwords.some(p=>!p.invalidated))throw new Error();
+  return{...closed,scope:'CONFIGURED_DATABASE_PASSWORDS_INVALIDATED_WHILE_CLOSED' as const,
+   passwordCredentialsInvalidated:true as const,
+   observationDigest:createHash('sha256').update(JSON.stringify({closureDigest:closed.observationDigest,passwords})).digest('hex'),
+   replacementCredentialsVerified:false as const,credentialRotationVerified:false as const};
+ }
+ async observePasswordsInvalidated(){
+  try{return await this.transaction(async tx=>{const state=await this.read(tx);return this.passwordProof(state,await this.passwords(tx,state));});}
+  catch{throw new Error('Managed database password invalidation is unverified; preserve closed roles and inspect the original operation');}
+ }
+ async invalidatePasswords(){
+  try{
+   await this.transaction(async tx=>{
+    const before=await this.read(tx),passwords=await this.passwords(tx,before);
+    for(const target of passwords){
+     if(!target.invalidated)await tx.$executeRaw(Prisma.sql`ALTER ROLE ${Prisma.raw('"'+target.name+'"')} PASSWORD NULL`);
+    }
+    const after=await this.read(tx);this.passwordProof(after,await this.passwords(tx,after));
+   });
+   // A lost commit acknowledgement stops above. Do not restore an old password,
+   // enable LOGIN, invent replacement credentials or repeat from the coordinator.
+   return await this.observePasswordsInvalidated();
+  }catch{throw new Error('Managed database password invalidation is unresolved; preserve closed roles without restoring credentials');}
  }
  async observeClosed() {
   try{return await this.transaction(async tx=>this.proof(await this.read(tx)));}

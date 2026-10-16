@@ -49,3 +49,36 @@ The [guarded shutdown prototype](managed-backend-maintenance.md) now composes
 these component observations under a separate installation-wide one-attempt
 control. Its native database proof uses synthetic provider transports and does
 not close the remaining activation, custody, credential or host-loss gates.
+
+## Database password invalidation while closed
+
+`invalidatePasswords()` now requires the existing verified closure, NOLOGIN and
+zero target sessions. It reads only `rolpassword IS NULL` booleans from
+`pg_authid`, matching every exact role name/OID; it never retrieves a password
+or verifier. Missing catalogue permission is a refusal, not an assumption that
+the credentials were revoked. A single durable transaction clears non-null
+passwords with `ALTER ROLE ... PASSWORD NULL`, then rereads identity, closure
+and boolean states. Fresh post-commit readback is separate. Partial/late errors
+roll back; lost commit acknowledgements remain unresolved. No old password is
+restored and no LOGIN/replacement-secret method is exposed.
+
+`observePasswordsInvalidated()` verifies both closure and null passwords and
+returns a scoped digest. This invalidates PostgreSQL password authentication;
+it does not rotate provider API tokens, certificates or other authentication
+mechanisms. [PostgreSQL password authentication](https://www.postgresql.org/docs/16/auth-password.html)
+documents the null-password refusal, and [ALTER ROLE](https://www.postgresql.org/docs/16/sql-alterrole.html)
+defines the explicit PASSWORD NULL operation.
+
+The real TLS PostgreSQL fixture proves catalogue-access refusal, no mutation
+while LOGIN is enabled, atomic rollback, actual commit with lost acknowledgement,
+idempotent observation, and a fixture-only LOGIN counterfactual: old password
+fails while a replacement synthetic password succeeds through the same path.
+The fixture restores NOLOGIN/PASSWORD NULL afterward. These test-only changes
+are not a supported reopening or credential-delivery workflow.
+
+The guarded shutdown plan is now protocol2 with an explicit
+PASSWORD_NULL_WHILE_CLOSED policy. It invalidates passwords after session drain
+and before final readback/recording; the independent control record stays
+format1. A legacy closure-only plan cannot authorise this new step. Full
+credentialRotationVerified staysfalse until fresh credentials are protected,
+delivered, independently verified and used only by the authorised new release.

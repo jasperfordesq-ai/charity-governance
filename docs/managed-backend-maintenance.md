@@ -37,7 +37,7 @@ and custody gates remain required. Do not treat SSE-KMS alone as separate custod
 ## Coordinator sequence
 
 `ManagedBackendMaintenance` computes the plan from a copied installation,
-source SHA and maintenance epoch plus hashes of the actual provider and database
+source SHA and maintenance epoch, protocol2/password-invalidation policy and hashes of the actual provider and database
 configuration registries. This binds the reviewed target identities and exact
 pinned image paths; it does not independently prove that images were built from
 the supplied source SHA. Exact-release build/attestation evidence remains needed.
@@ -48,7 +48,11 @@ the supplied source SHA. Exact-release build/attestation evidence remains needed
 2. Suspend the exact Render services and separately cancel surviving one-off
    jobs, requiring the adapter's full fresh readback.
 3. Commit NOLOGIN and drain the exact configured database sessions through
-   `ManagedDatabaseWriterFence`. Unknown commit never causes automatic LOGIN.
+   `ManagedDatabaseWriterFence`, then atomically clear their database passwords
+   while they remain closed. Unknown commit never causes automatic LOGIN or
+   password restoration. Catalogue proof is mandatory, with no raw password or
+   verifier reads. A legacy protocol1 plan refuses this new workflow; the
+   independent control record itself remains format1.
 4. Observe provider services/jobs and database closure again.
 5. Conditionally record OBSERVED_CLOSED against the original attempt's exact
    revision. A changed head or unknown final write result stays unresolved.
@@ -67,12 +71,14 @@ destroys a stalled provider body at the read deadline. The existing disposable T
 PostgreSQL gate now also runs `managed-backend-maintenance-postgres-proof.mjs`.
 It composes the real database fence with synthetic Render HTTP and S3 SDK
 transports, covering successful ordering, lost acquisition acknowledgement, lost
-actual NOLOGIN commit acknowledgement and lost final control acknowledgement.
+actual NOLOGIN commit acknowledgement, lost PASSWORD NULL commit
+acknowledgement and lost final control acknowledgement.
 Fresh clients refuse repeats. Real old sessions remain usable after NOLOGIN
 until explicitly drained; inspection refuses that unresolved state. Explicit
 fixture-only cleanup is separate from the coordinator and is not a recovery API.
 
-The receipt and fresh inspection keep wholeBackendQuiesced,
+The receipt and fresh inspection now verify databasePasswordCredentialsInvalidated
+when their fresh checks succeed. They still keep wholeBackendQuiesced,
 credentialRotationVerified, currentTenantAuthorityVerified, sourceHostFenced,
 reopeningAuthorised and actionAuthorized false. A point-in-time component pair
 is not a global durable fence or permission to reopen. The control does not

@@ -8,6 +8,55 @@ import {RenderMaintenanceControl} from '../apps/api/dist/services/render-mainten
 import {S3ManagedMaintenanceControl} from '../apps/api/dist/services/managed-maintenance-control.js';
 import {ManagedBackendMaintenance} from '../apps/api/dist/services/managed-backend-maintenance.js';
 
+export async function proveManagedPasswordInvalidation({admin,configuration,url}){
+ const service=new ManagedDatabaseWriterFence(admin,configuration);
+ const passwordStates=()=>admin.$queryRaw`SELECT rolpassword IS NULL AS invalidated FROM pg_authid
+  WHERE rolname IN ('managed_writer_a','managed_writer_b') ORDER BY rolname`;
+ assert.ok((await passwordStates()).every(r=>!r.invalidated));
+ await assert.rejects(service.observePasswordsInvalidated());
+ await admin.$executeRaw`ALTER ROLE managed_writer_a LOGIN`;
+ try{await assert.rejects(service.invalidatePasswords());assert.ok((await passwordStates()).every(r=>!r.invalidated));}
+ finally{await admin.$executeRaw`ALTER ROLE managed_writer_a NOLOGIN`;}
+
+ await admin.$executeRaw`CREATE ROLE managed_catalog_maintenance LOGIN PASSWORD 'synthetic-maintenance-view-only' NOSUPERUSER NOCREATEDB NOCREATEROLE NOREPLICATION NOBYPASSRLS NOINHERIT`;
+ const maintenanceUrl=new URL(url);maintenanceUrl.username='managed_catalog_maintenance';maintenanceUrl.password='synthetic-maintenance-view-only';
+ const limited=new PrismaClient({datasources:{db:{url:maintenanceUrl.href}}});
+ try{
+  const [identity]=await admin.$queryRaw`SELECT rolname::text AS name,oid::text AS oid FROM pg_roles WHERE rolname='managed_catalog_maintenance'`;
+  const [privilege]=await limited.$queryRaw`SELECT has_table_privilege(current_user,'pg_authid','SELECT') AS allowed`;
+  assert.equal(privilege.allowed,false);
+  await assert.rejects(new ManagedDatabaseWriterFence(limited,{...configuration,maintenance:identity,custodians:[...configuration.custodians,identity]}).invalidatePasswords());
+  assert.ok((await passwordStates()).every(r=>!r.invalidated));
+ }finally{await limited.$disconnect();await admin.$executeRaw`DROP ROLE managed_catalog_maintenance`;}
+
+ const rollback={$transaction:(fn,options)=>admin.$transaction(async tx=>{await fn(tx);throw new Error('synthetic late invalidation rollback');},options)};
+ await assert.rejects(new ManagedDatabaseWriterFence(rollback,configuration).invalidatePasswords());
+ assert.ok((await passwordStates()).every(r=>!r.invalidated));
+ const unknown={$transaction:async(fn,options)=>{await admin.$transaction(fn,options);throw new Error('synthetic committed PASSWORD NULL acknowledgement lost');}};
+ await assert.rejects(new ManagedDatabaseWriterFence(unknown,configuration).invalidatePasswords());
+ assert.ok((await passwordStates()).every(r=>r.invalidated));
+ assert.equal((await service.observePasswordsInvalidated()).passwordCredentialsInvalidated,true);
+ assert.equal((await service.invalidatePasswords()).passwordCredentialsInvalidated,true);
+
+ const oldUrl=new URL(url);oldUrl.username='managed_writer_a';oldUrl.password='synthetic-writer-only';
+ let old,replacement;
+ try{
+  // Counterfactual is fixture-only: remove the NOLOGIN barrier to prove the old
+  // password itself fails, then prove the same TLS path accepts a new password.
+  await admin.$executeRaw`ALTER ROLE managed_writer_a LOGIN`;
+  old=new PrismaClient({datasources:{db:{url:oldUrl.href}}});await assert.rejects(old.$queryRaw`SELECT 1`);
+  await admin.$executeRaw`ALTER ROLE managed_writer_a PASSWORD 'synthetic-replacement-only'`;
+  const replacementUrl=new URL(oldUrl);replacementUrl.password='synthetic-replacement-only';
+  replacement=new PrismaClient({datasources:{db:{url:replacementUrl.href}}});
+  assert.equal((await replacement.$queryRaw`SELECT 1 AS ok`)[0].ok,1);
+  await assert.rejects(old.$queryRaw`SELECT 1`);
+ }finally{
+  await old?.$disconnect();await replacement?.$disconnect();await admin.$executeRaw`ALTER ROLE managed_writer_a NOLOGIN PASSWORD NULL`;
+ }
+ assert.equal((await service.observePasswordsInvalidated()).passwordCredentialsInvalidated,true);
+ console.log('PASS actual password invalidation, atomic rollback/lost commit, catalogue refusal and LOGIN counterfactual with replacement positive control');
+}
+
 // Actual TLS PostgreSQL fencing composed with synthetic provider HTTP and SDK
 // transport. This is not live Render/S3 custody or physical host-loss evidence.
 export async function proveManagedBackendMaintenance({admin,configuration,url}){
@@ -15,14 +64,14 @@ export async function proveManagedBackendMaintenance({admin,configuration,url}){
  const image='ghcr.io/synthetic/api@sha256:'+ '1'.repeat(64),credentials={accessKeyId:'synthetic',secretAccessKey:'synthetic'};
  const storage={installationId:'synthetic-managed',bucket:'synthetic-managed-control',accountId:'123456789012',
   kmsKeyArn:'arn:aws:kms:eu-west-1:123456789012:key/11111111-1111-1111-1111-111111111111'};
- for(const scenario of ['success','acquire-ack-lost','database-ack-lost','record-ack-lost']){
+ for(const scenario of ['success','acquire-ack-lost','database-ack-lost','password-ack-lost','record-ack-lost']){
   // Only this disposable fixture reopens synthetic roles between independent
   // cases. Neither production primitive nor coordinator exposes reopening.
-  await admin.$executeRaw`ALTER ROLE managed_writer_a LOGIN`;
-  await admin.$executeRaw`ALTER ROLE managed_writer_b LOGIN`;
+  await admin.$executeRaw`ALTER ROLE managed_writer_a LOGIN PASSWORD 'synthetic-writer-only'`;
+  await admin.$executeRaw`ALTER ROLE managed_writer_b LOGIN PASSWORD 'synthetic-writer-only'`;
   const writerUrl=new URL(url);writerUrl.username='managed_writer_a';writerUrl.password='synthetic-writer-only';
   const writer=new PrismaClient({datasources:{db:{url:writerUrl.href}}});
-  const events=[];let commands=0,job='running',version=1,value,databaseClosed=false,lostDatabase=scenario==='database-ack-lost';
+  const events=[];let commands=0,job='running',version=1,value,databaseClosed=false,transactions=0;
   const services=ids.map((id,i)=>({id,ownerId:'tea-synthetic',environmentId:'env-synthetic',
    type:['web_service','private_service','background_worker'][i],imagePath:image,autoDeploy:'no',autoDeployTrigger:'off',
    suspended:'not_suspended',serviceDetails:{region:'frankfurt',runtime:'image',numInstances:1}}));
@@ -59,11 +108,15 @@ export async function proveManagedBackendMaintenance({admin,configuration,url}){
    return metadata();
   };
   const store=new S3ManagedMaintenanceControl(storage,credentials,sdk);
-  const driver=scenario==='database-ack-lost'?{$transaction:async(fn,options)=>{
-   const result=await admin.$transaction(fn,options);if(lostDatabase){lostDatabase=false;throw new Error('synthetic real NOLOGIN commit acknowledgement lost');}return result;
+  const driver=['database-ack-lost','password-ack-lost'].includes(scenario)?{$transaction:async(fn,options)=>{
+   const result=await admin.$transaction(fn,options);transactions++;
+   if((scenario==='database-ack-lost'&&transactions===1)||(scenario==='password-ack-lost'&&transactions===4))throw new Error('synthetic real role transaction commit acknowledgement lost');
+   return result;
   }}:admin;
   const database=new ManagedDatabaseWriterFence(driver,configuration),originalClose=database.close.bind(database);
   database.close=async()=>{events.push('database-close');const result=await originalClose();databaseClosed=true;return result;};
+  const originalInvalidate=database.invalidatePasswords.bind(database);
+  database.invalidatePasswords=async()=>{events.push('password-invalidate');return originalInvalidate();};
   const operation={installationId:storage.installationId,sourceSha:'1'.repeat(40),maintenanceEpoch:1};
   const coordinator=new ManagedBackendMaintenance(operation,provider,database,store);
   value={format:1,installationId:storage.installationId,maintenanceEpoch:1,planDigest:coordinator.planDigest(),
@@ -73,6 +126,7 @@ export async function proveManagedBackendMaintenance({admin,configuration,url}){
    if(scenario==='success'){
     const result=await coordinator.close();assert.equal(result.phase,'OBSERVED_CLOSED');assert.equal(result.wholeBackendQuiesced,false);
     assert.equal(events[0],'control-ATTEMPTED');assert.ok(events.indexOf('cancel')<events.indexOf('database-close'));
+    assert.ok(events.indexOf('database-close')<events.indexOf('password-invalidate'));
     assert.ok(events.includes('post-database-provider-read'));assert.equal(events.at(-1),'control-OBSERVED_CLOSED');
    }else{
     await assert.rejects(coordinator.close());
@@ -80,20 +134,25 @@ export async function proveManagedBackendMaintenance({admin,configuration,url}){
      assert.equal(commands,0);assert.equal(value.phase,'ATTEMPTED');await writer.$queryRaw`SELECT 1`;
      // Explicit fixture-only cleanup; the coordinator never silently drains an
      // operation for which acquisition may have reached storage without consent.
-     await new ManagedDatabaseWriterFence(admin,configuration).close();
+     const cleanup=new ManagedDatabaseWriterFence(admin,configuration);await cleanup.close();await cleanup.invalidatePasswords();
      for(const service of services)service.suspended='suspended';job='canceled';databaseClosed=true;
     }
     if(scenario==='database-ack-lost'){
      assert.equal(commands,4);assert.equal(value.phase,'ATTEMPTED');
      await writer.$executeRaw`INSERT INTO public.synthetic_managed_writer VALUES ('managed-old-session-after-lost-commit')`;
      await assert.rejects(coordinator.inspect());
-     await new ManagedDatabaseWriterFence(admin,configuration).close();databaseClosed=true;
+     const cleanup=new ManagedDatabaseWriterFence(admin,configuration);await cleanup.close();await cleanup.invalidatePasswords();databaseClosed=true;
+    }
+    if(scenario==='password-ack-lost'){
+     assert.equal(commands,4);assert.equal(value.phase,'ATTEMPTED');
+     const [state]=await admin.$queryRaw`SELECT count(*)::integer AS n FROM pg_authid WHERE rolname IN ('managed_writer_a','managed_writer_b') AND rolpassword IS NULL AND NOT rolcanlogin`;
+     assert.equal(state.n,2);
     }
    }
    const before=commands,fresh=new ManagedBackendMaintenance(operation,provider,new ManagedDatabaseWriterFence(admin,configuration),store);
    await assert.rejects(fresh.close());assert.equal(commands,before);
    const inspected=await fresh.inspect();assert.equal(inspected.phase,value.phase);
-   assert.equal(inspected.recordedObservations===null,scenario==='acquire-ack-lost'||scenario==='database-ack-lost');
+   assert.equal(inspected.recordedObservations===null,['acquire-ack-lost','database-ack-lost','password-ack-lost'].includes(scenario));
    assert.equal(inspected.reopeningAuthorised,false);assert.equal(inspected.actionAuthorized,false);
    const freshWriter=new PrismaClient({datasources:{db:{url:writerUrl.href}}});
    try{await assert.rejects(freshWriter.$queryRaw`SELECT 1`);}finally{await freshWriter.$disconnect();}
