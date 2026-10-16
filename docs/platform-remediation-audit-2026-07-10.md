@@ -1,5 +1,14 @@
 # CharityPilot Full-Platform Remediation Audit
 
+> **16 October transport-history coverage gap, verified OPEN:** A committed
+> local publication observation can differ while authenticated archive/control/
+> journal and eight source groups stay identical. Actual PostgreSQL reproduces
+> that boundary. Missing immutable transport rows cannot be manufactured from
+> this evidence. Independent checkpoint coverage/own publication state, original
+> ambiguous attempts, host isolation and guarded transport recovery remain to
+> design/verify. Local format13 coverage and eight-table restore do not close
+> these gates. No runtime/schema/deployment or operating-policy change follows.
+
 > **16 October joined archive-to-database maintenance proof / OPEN:** Full
 > synthetic eight-group publication/archive authentication now drives the actual
 > maintenance coordinator and migrated PostgreSQL restore.13historical records

@@ -325,6 +325,7 @@ test('local Confluence ledger capture uses all eight migrated tables and a real 
     const progressRuntime = new PrismaClient({ datasources: { db: { url: runtimeUrl.href } } });
     const progressDeps = { journal, control: { readControl: control.readControl }, keys, objects };
     const beforeProgress = (await prisma.$queryRawUnsafe(PURGE_RESTORE_SNAPSHOT_SQL))[0].snapshot;
+    const independentBeforeLocalProgress = { control: structuredClone(current), journal: [...rows], envelope: encrypted };
     let publishedProgress;
     try {
       let loseLocalCommit = true;
@@ -338,6 +339,12 @@ test('local Confluence ledger capture uses all eight migrated tables and a real 
       assert.equal(publishedProgress.replayed,true);
       await assert.rejects(new ConfluenceCopyLedgerProgressStore(progressRuntime).observe('org-a','owner-a',savedCandidate.id,'ACKNOWLEDGED',progressDeps),/unresolved/);
     } finally { await progressRuntime.$disconnect(); }
+    const afterLocalProgress = (await prisma.$queryRawUnsafe(PURGE_RESTORE_SNAPSHOT_SQL))[0].snapshot;
+    for (const name of CONFLUENCE_COPY_LEDGER_TABLES) assert.deepEqual(afterLocalProgress.tables[name],beforeProgress.tables[name]);
+    assert.notDeepEqual(afterLocalProgress.tables.ConfluenceCopyLedgerProgress,beforeProgress.tables.ConfluenceCopyLedgerProgress);
+    assert.deepEqual({ control: current, journal: [...rows], envelope: encrypted },independentBeforeLocalProgress,
+      'independent archive/control/journal cannot reveal whether a local progress receipt committed');
+    console.log('Synthetic transport coverage boundary: unchanged independent archive/control/journal and eight source tables; local publication receipt changed');
     const publishedRow = await prisma.confluenceCopyLedgerProgress.findUniqueOrThrow({ where: { id: publishedProgress.receiptId } });
     await assert.rejects(prisma.confluenceCopyLedgerProgress.update({ where: { id: publishedRow.id }, data: { entryDigest: '0'.repeat(64) } }),/append-only/);
     await assert.rejects(prisma.confluenceCopyLedgerProgress.delete({ where: { id: publishedRow.id } }),/append-only/);

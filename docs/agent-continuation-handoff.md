@@ -1,5 +1,16 @@
 # CharityPilot Agent Continuation Handoff
 
+> **16 October transport evidence-gap proof, tests only:** Actual PostgreSQL
+> publication-observation commit changes a local transport receipt while the
+> independent archive/control/journal and eight source-table fingerprints remain
+> identical. Exact original local receipt existence/ID/time therefore cannot be
+> inferred from those independent values. Current archives do not preserve all
+> four transport groups; format13 local inventory is not independent freshness.
+> Whole database/joined-recovery test passes. Next requires a written independent
+> transport checkpoint/recovery contract, including its own publication state,
+> uncertain attempts and old-host fencing, before another restore executor.
+> No runtime/schema/provider change; original no-action/no-reopen gates remain.
+
 > **16 October joined authenticated maintenance proof, tests only:** The real
 > PostgreSQL harness now populates all eight ledger groups through guarded
 > synthetic review/decision/capture/publication setup and authenticates the
