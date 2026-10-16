@@ -2,6 +2,7 @@
 
 import { spawnSync } from "node:child_process";
 import { spawnLocalDockerCommand } from './local-docker-command.mjs';
+import { productionComposeProjectArgs } from './production-compose-project.mjs';
 import { createHash } from "node:crypto";
 import {
   existsSync,
@@ -694,6 +695,7 @@ function composePrefix(options) {
   return [
     "docker",
     "compose",
+    ...productionComposeProjectArgs(),
     "--env-file",
     options.productionEnvFile,
     "-f",

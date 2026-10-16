@@ -218,10 +218,22 @@ network-isolated PostgreSQL check exercised a real streaming dump and exact
 synthetic-row restore, including guarded cleanup. This is not full governance
 recovery or provider acceptance.
 
-Other independent tools still need scope-specific review, and explicit
-production Compose project identity remains unresolved. Do not interpret this
-coverage as certification of every release path or project isolation.
-Private-profile boundary code remains unchanged.
+Other independent tools still need scope-specific review. The guarded production
+preflight/deploy/shared-recovery, restored-history probe and rollback emergency
+command now pass an explicit project name. They preserve the valid existing
+checkout-directory basename: no new fixed stack name, ambient override or silent
+name normalisation. Docker documents this directory-derived default and CLI
+precedence in its [project-name rules](https://docs.docker.com/compose/how-tos/project-name/).
+An actual synthetic Compose config comparison proves the implicit and explicit
+models identical in the current checkout, including resource names.
+
+A renamed checkout or a stack historically started with a custom project name
+requires operator reconciliation before using these tools. Keep the original
+checkout basename for ordinary updates; this does not migrate/adopt a differently
+named stack or discover its ownership. Invalid project basenames refuse.
+Do not interpret this coverage as certification of every independent lifecycle
+tool or an actual live-stack adoption/recovery rehearsal. Private-profile
+boundary code remains unchanged.
 
 ## Rollback image compatibility is more than a schema marker
 

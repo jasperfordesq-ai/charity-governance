@@ -1,5 +1,15 @@
 # CharityPilot Full-Platform Remediation Audit
 
+> **16 October explicit production project selection:** Guarded preflight,
+> deploy/shared recovery, restored-history probe and rollback emergency command
+> now use one explicit project selector preserving the valid existing checkout
+> basename. No new fixed name/normalisation or stack adoption. Actual synthetic
+> Compose models match before/after; full1255PASS/8SKIP. Checkout rename/custom
+> historical project requires operator review. Other independent lifecycle paths,
+> exact release/rollback and acceptance remain OPEN; no live stack change.
+> See ignored `production-project-identity-review-2026-10-16.md` and runbooks.
+
+
 > **16 October source-bound backup Docker guard:** Moved the shared production
 > guard into the PostgreSQL helper's source-hashed file (Node built-ins only);
 > direct commands re-export it. Helper synchronous/readiness/cleanup and streaming

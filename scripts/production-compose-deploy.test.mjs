@@ -8,6 +8,7 @@ import { fileURLToPath, pathToFileURL } from "node:url";
 import { after, test } from "node:test";
 import { productionRuntimeEnvFixtures } from './test-fixtures/production-runtime-env.mjs';
 import { buildProductionComposeEnvironment } from './production-runtime-credentials.mjs';
+import { productionComposeProjectArgs } from './production-compose-project.mjs';
 
 const encodeProductionFixture = productionRuntimeEnvFixtures(after);
 function writeFileSync(path, content, options = {}) { writeFixture(path, content, { mode: 0o600, ...options }); }
@@ -293,6 +294,7 @@ test("production deploy dry-run validates preflight before rendering compose up"
 
     assert.equal(result.status, 0, result.stderr);
     assert.match(result.stdout, /Production compose deploy dry-run/);
+    assert.match(result.stdout, /docker compose --project-name [a-z0-9][a-z0-9_-]* --env-file/);
     const preflightIndex = result.stdout.indexOf(
       "node scripts/production-deploy-preflight.mjs",
     );
@@ -338,7 +340,7 @@ test("production deploy dry-run validates preflight before rendering compose up"
     );
     assert.match(
       result.stdout,
-      /Start only the promoted runtime:\ndocker compose --env-file/,
+      /Start only the promoted runtime:\ndocker compose --project-name [a-z0-9][a-z0-9_-]* --env-file/,
     );
     assert.match(
       result.stdout,
@@ -346,7 +348,7 @@ test("production deploy dry-run validates preflight before rendering compose up"
     );
     assert.doesNotMatch(
       result.stdout,
-      /CHARITYPILOT_PRODUCTION_ENV_FILE=.*docker compose --env-file/,
+      /CHARITYPILOT_PRODUCTION_ENV_FILE=.*docker compose --project-name [a-z0-9][a-z0-9_-]* --env-file/,
     );
     assert.doesNotMatch(result.stdout, /[A-Z]:\\\\/);
     assert.match(
@@ -489,6 +491,7 @@ test("production deploy quiesces and backs up the old runtime before migration a
   assert.deepEqual(calls[7].command, [
     "docker",
     "compose",
+    ...productionComposeProjectArgs(),
     "--env-file",
     envPath,
     "-f",
@@ -986,6 +989,7 @@ test("production deploy can opt out of the TLS overlay when a managed load balan
   assert.deepEqual(calls[7].command, [
     "docker",
     "compose",
+    ...productionComposeProjectArgs(),
     "--env-file",
     envPath,
     "-f",

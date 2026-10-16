@@ -14,6 +14,7 @@ import { after, test } from "node:test";
 import { productionRuntimeEnvFixtures } from './test-fixtures/production-runtime-env.mjs';
 import { buildProductionComposeEnvironment } from './production-runtime-credentials.mjs';
 import { runProductionComposeDeployFromArgs } from './production-compose-deploy.mjs';
+import { productionComposeProjectArgs } from './production-compose-project.mjs';
 
 const encodeProductionFixture = productionRuntimeEnvFixtures(after);
 function writeFileSync(path, content, options = {}) { writeFixture(path, content, { mode: 0o600, ...options }); }
@@ -1071,9 +1072,10 @@ test("production rollback accepts P1-09 only with exact pre-P1-07A restore evide
     assert.equal(deployCalls[0].dependencies.attestedDatabaseCompatibility, "p109-restored");
     const probeCommand = deployCalls[0].dependencies.preMigrationDatabaseProbeCommand;
     assert.ok(Array.isArray(probeCommand));
-    assert.deepEqual(probeCommand.slice(0, 4), [
+    assert.deepEqual(probeCommand.slice(0, 6), [
       "docker",
       "compose",
+      ...productionComposeProjectArgs(),
       "--env-file",
       deployCalls[0].args[1],
     ]);

@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 
 import { createHash } from "node:crypto";
+import { productionComposeProjectArgs } from './production-compose-project.mjs';
 import {
   closeSync,
   existsSync,
@@ -640,6 +641,7 @@ function durableRecoveryCommand(options) {
   return commandLine([
     "docker",
     "compose",
+    ...productionComposeProjectArgs(),
     "--env-file",
     options.productionEnvFile,
     "-f",

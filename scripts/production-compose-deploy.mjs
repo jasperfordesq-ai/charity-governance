@@ -1,5 +1,6 @@
 import { spawnSync } from "node:child_process";
 import { spawnLocalDockerCommand } from './local-docker-command.mjs';
+import { productionComposeProjectArgs } from './production-compose-project.mjs';
 import { randomUUID } from "node:crypto";
 import { chmodSync, existsSync, mkdirSync } from "node:fs";
 import { dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
@@ -277,6 +278,7 @@ function composePrefix(options) {
   return [
     "docker",
     "compose",
+    ...productionComposeProjectArgs(),
     "--env-file",
     productionEnvFile,
     "-f",

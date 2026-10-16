@@ -1,5 +1,6 @@
 import { spawnSync } from 'node:child_process';
 import { spawnLocalDockerCommand } from './local-docker-command.mjs';
+import { productionComposeProjectArgs } from './production-compose-project.mjs';
 import { existsSync, readFileSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
@@ -230,7 +231,7 @@ function commandsFor({ productionEnvFile, images, tlsProxy, databaseCa }) {
 
   const commands = [
     ['node', 'scripts/check-production.mjs', `--production-env-file=${productionEnvFile}`],
-    ['docker', 'compose', '--env-file', productionEnvFile, ...composeFiles, 'config', '--quiet'],
+    ['docker', 'compose', ...productionComposeProjectArgs(), '--env-file', productionEnvFile, ...composeFiles, 'config', '--quiet'],
   ];
 
   for (const image of images) {

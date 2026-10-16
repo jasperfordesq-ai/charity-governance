@@ -1,3 +1,5 @@
+import { productionComposeProjectArgs } from './production-compose-project.mjs';
+
 const P107A_MIGRATION = "20260712013000_add_password_recovery_integrity";
 
 export const P109_RESTORED_MIGRATIONS = Object.freeze([
@@ -405,6 +407,7 @@ export function p109RestoredHistoryProbeComposeCommand({
   return [
     "docker",
     "compose",
+    ...productionComposeProjectArgs(),
     "--env-file",
     productionEnvFile,
     "-f",

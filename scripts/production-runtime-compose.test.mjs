@@ -9,6 +9,7 @@ import { basename, dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { test } from 'node:test';
 import { buildProductionComposeEnvironment } from './production-runtime-credentials.mjs';
+import { productionComposeProjectArgs } from './production-compose-project.mjs';
 
 const repo = fileURLToPath(new URL('..', import.meta.url));
 const source = join(repo, 'compose.production.yml');
@@ -44,12 +45,20 @@ function fixture(t,withCa=false) {
   const transport = buildProductionComposeEnvironment(ownerFile, { ...process.env,
     DATABASE_URL: 'unreviewed-ambient', CHARITYPILOT_PRODUCTION_APP_ENV_FILE: ownerFile,
     CHARITYPILOT_PRODUCTION_RUNTIME_DATABASE_URL: maintenanceUrl });
-  const render = (overrides = {}) => spawnSync('docker', ['compose','--env-file',transport.binding.maintenancePath,
+  const render = (overrides = {}, explicit = false) => spawnSync('docker', ['compose',...(explicit?productionComposeProjectArgs():[]),'--env-file',transport.binding.maintenancePath,
     '-f',source,'-f',overlay,...(withCa?['-f',join(repo,'compose.production.database-ca.yml')]:[]),'--profile','*','config','--format','json'], {
     cwd: repo, env: { ...transport.environment, ...overrides }, encoding: 'utf8', timeout: 30000,
   });
   return { transport, render, caFile };
 }
+
+test('explicit project flag preserves the existing implicit project and resource identities',t=>{
+  const f=fixture(t);const legacy=f.render(),explicit=f.render({},true);
+  assert.equal(legacy.status,0,legacy.stderr);assert.equal(explicit.status,0,explicit.stderr);
+  const before=JSON.parse(legacy.stdout),after=JSON.parse(explicit.stdout);
+  assert.equal(before.name,productionComposeProjectArgs()[1]);
+  assert.deepEqual(after,before);
+});
 
 test('rendered production runtime services never receive the migration credential', t => {
   const f = fixture(t), result = f.render();

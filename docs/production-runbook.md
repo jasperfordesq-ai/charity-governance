@@ -1,5 +1,14 @@
 # CharityPilot Production Runbook
 
+Guarded production commands explicitly select the valid checkout-directory
+project name, preserving the prior directory-derived default. Keep that basename
+stable across updates and reconcile any historically customised project before
+execution. Preflight, deploy, recovery and rendered emergency-down commands use
+the same selector; no automatic stack rename/adoption is performed. See
+[runtime credentials and project targeting](production-runtime-credentials.md)
+for current credential overlays, local-engine guards and proof limits. These
+source checks do not certify a managed deployment or live rollback.
+
 This runbook is the short operator guide for release promotion. The full launch evidence ledger is `docs/production-launch-checklist.md`.
 
 ## Production Evidence Artifacts
