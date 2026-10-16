@@ -44,3 +44,8 @@ credential rotation, provider lifecycle and independent-history authority,
 document-byte recovery, actual custody and source-host-unavailable/reopening
 proof. This primitive provides none of those by itself. No database migration,
 restore-inventory change, vendor operation or live role modification is included.
+
+The [guarded shutdown prototype](managed-backend-maintenance.md) now composes
+these component observations under a separate installation-wide one-attempt
+control. Its native database proof uses synthetic provider transports and does
+not close the remaining activation, custody, credential or host-loss gates.

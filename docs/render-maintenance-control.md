@@ -71,3 +71,8 @@ The synthetic HTTP contract suite verifies exact requests, ordered observation,
 job survival/cancellation, paging, stale/changed configuration, uncertain IO and
 abort/error handling. It uses injected responses, not live Render infrastructure.
 These tests do not establish actual vendor suspension timing or custody.
+
+The [guarded shutdown prototype](managed-backend-maintenance.md) now composes
+these component observations under a separate installation-wide one-attempt
+control. Its native database proof uses synthetic provider transports and does
+not close the remaining activation, custody, credential or host-loss gates.

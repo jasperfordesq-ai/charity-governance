@@ -25,6 +25,7 @@ const session=z.object({pid:z.number().int().positive(),roleOid:oid,databaseOid:
 export class ManagedDatabaseWriterFence {
  private readonly config:Configuration;
  constructor(private readonly prisma:PrismaClient,raw:unknown){this.config=configuration.parse(raw);}
+ configurationDigest(){return createHash('sha256').update(JSON.stringify(this.config)).digest('hex');}
  private async transaction<T>(fn:(tx:Prisma.TransactionClient)=>Promise<T>) {
   return this.prisma.$transaction(async tx=>{
    await tx.$executeRaw`SET LOCAL synchronous_commit=on`;

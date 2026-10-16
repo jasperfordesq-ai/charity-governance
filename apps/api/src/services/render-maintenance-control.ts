@@ -35,6 +35,7 @@ export class RenderMaintenanceControl {
   this.config=configuration.parse(raw);
   if(!/^[\x21-\x7e]{1,512}$/.test(token))throw new Error('Invalid Render maintenance credential');
  }
+ configurationDigest(){return createHash('sha256').update(JSON.stringify(this.config)).digest('hex');}
  private budget():Budget{return{requests:0,deadline:performance.now()+60000};}
  private async request(path:string,query:Record<string,string>,method:'GET'|'POST',expected:number,budget:Budget){
   if(++budget.requests>96||performance.now()>=budget.deadline)throw new Error();

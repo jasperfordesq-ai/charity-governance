@@ -1,5 +1,13 @@
 # CharityPilot Agent Continuation Handoff
 
+> **16 October guarded managed shutdown integration:** A separate installation
+> control records a one-attempt shutdown before Render/job suspension and actual
+> database closure. Fresh readbacks and exact conditional result recording retain
+> uncertain outcomes without automatic replay or reopening. TLS PostgreSQL plus
+> synthetic HTTP/SDK tests cover lost acquisition, NOLOGIN commit and final-record
+> acknowledgements. Real custody/credential rotation/whole recovery remain open.
+> See [guarded managed shutdown](managed-backend-maintenance.md).
+
 > **16 October Render maintenance prototype:** The internal adapter verifies
 > an exact three-service pinned-image environment, refuses active deployments,
 > suspends services and separately cancels surviving one-off jobs. Fresh bounded
