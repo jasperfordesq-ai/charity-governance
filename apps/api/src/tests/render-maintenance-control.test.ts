@@ -1,0 +1,203 @@
+import assert from 'node:assert/strict';
+import test from 'node:test';
+import {RenderMaintenanceControl} from '../services/render-maintenance-control.js';
+
+const ids=['srv-'+ 'a'.repeat(20),'srv-'+ 'b'.repeat(20),'srv-'+ 'c'.repeat(20)];
+const jobId='job-'+ 'd'.repeat(20);
+const digest='sha256:'+ '1'.repeat(64);
+const configuration={ownerId:'tea-synthetic',environmentId:'env-synthetic',
+ services:[{component:'web',id:ids[0],imagePath:'ghcr.io/synthetic/web@'+digest},
+ {component:'api',id:ids[1],imagePath:'ghcr.io/synthetic/api@'+digest},
+ {component:'scheduler',id:ids[2],imagePath:'ghcr.io/synthetic/api@'+digest}]};
+function fixture(){
+ const services=configuration.services.map((s,i)=>({...s,ownerId:configuration.ownerId,environmentId:configuration.environmentId,
+  type:['web_service','private_service','background_worker'][i],autoDeploy:'no',autoDeployTrigger:'off',
+  suspended:'not_suspended',serviceDetails:{region:'frankfurt',runtime:'image',numInstances:1}}));
+ const calls:Array<{path:string;method:string}>=[];
+ const jobs=new Map(ids.map(id=>[id,[] as Array<{id:string;serviceId:string;status:string}>]));
+ jobs.get(ids[2]!)!.push({id:jobId,serviceId:ids[2]!,status:'running'});
+ let fault:((url:URL,method:string)=>Response|undefined)|undefined;
+ const transport:typeof fetch=async(input,options)=>{
+  const url=new URL(String(input)),method=options?.method??'GET';calls.push({path:url.pathname+url.search,method});
+  assert.equal(url.origin,'https://api.render.com');assert.equal(options?.redirect,'error');
+  assert.equal(new Headers(options?.headers).get('Authorization'),'Bearer synthetic-token');
+  assert.ok(options?.signal);const response=fault?.(url,method);if(response)return response;
+  const parts=url.pathname.split('/'),id=parts[3];
+  if(url.pathname==='/v1/services')return Response.json(services.map(service=>({service,cursor:service.id})));
+  const service=services.find(s=>s.id===id);assert.ok(service);
+  if(parts[4]==='suspend'){
+   assert.equal(method,'POST');service.suspended='suspended';return new Response(null,{status:202});
+  }
+  if(parts[4]==='deploys')return Response.json([]);
+  if(parts[4]==='jobs'&&parts[6]==='cancel'){
+   assert.equal(method,'POST');const job=jobs.get(id!)!.find(j=>j.id===parts[5]);assert.ok(job);
+   job.status='canceled';return Response.json(job);
+  }
+  if(parts[4]==='jobs')return Response.json(jobs.get(id!)!.filter(j=>['pending','running'].includes(j.status)).map(job=>({job,cursor:job.id})));
+  throw new Error('unexpected request');
+ };
+ return{services,calls,jobs,transport,setFault:(value:typeof fault)=>{fault=value;}};
+}
+
+test('Render suspension checks every service and independently cancels surviving one-off jobs',async()=>{
+ const f=fixture(),config=structuredClone(configuration);
+ const control=new RenderMaintenanceControl(config,'synthetic-token',f.transport);config.services[0]!.id='changed';
+ await assert.rejects(control.observeSuspended());assert.equal(f.calls.some(c=>c.method==='POST'),false);
+ const result=await control.suspend();assert.equal(result.scope,'RENDER_CONFIGURED_ENVIRONMENT_OBSERVATION');
+ assert.equal(result.suspendedServices,3);assert.equal(result.activeJobs,0);
+ for(const flag of ['wholeBackendQuiesced','databaseWritersFenced','sourceHostFenced','reopeningAuthorised','actionAuthorized'])assert.equal(result[flag as keyof typeof result],false);
+ assert.equal(f.calls.filter(c=>c.path.endsWith('/suspend')).length,3);
+ assert.equal(f.calls.filter(c=>c.path.endsWith('/cancel')).length,1);
+ assert.ok(f.calls.find(c=>c.path.startsWith('/v1/services?'))?.path.includes('includePreviews=true'));
+ const mutations=f.calls.filter(c=>c.method==='POST').length;
+ await control.observeSuspended();await control.suspend();assert.equal(f.calls.filter(c=>c.method==='POST').length,mutations);
+});
+
+test('Render preflight rejects extra previews, wrong ownership, mutable images, auto-deploy and active deploys before mutation',async()=>{
+ for(const change of ['extra','owner','environment','type','region','image','auto','deploy','singleton'] as const){
+  const f=fixture();
+  if(change==='extra')f.services.push({...f.services[0]!,id:'srv-'+ 'z'.repeat(20)});
+  if(change==='owner')f.services[0]!.ownerId='tea-other';
+  if(change==='environment')f.services[0]!.environmentId='env-other';
+  if(change==='type')f.services[0]!.type='cron_job';
+  if(change==='region')f.services[0]!.serviceDetails.region='oregon';
+  if(change==='image')f.services[0]!.imagePath='ghcr.io/synthetic/web:latest';
+  if(change==='auto')f.services[0]!.autoDeployTrigger='commit';
+  if(change==='singleton')f.services[2]!.serviceDetails.numInstances=2;
+  if(change==='deploy')f.setFault(url=>url.pathname.endsWith('/deploys')?Response.json([{deploy:{id:'dep-active',status:'queued'},cursor:'next'}]):undefined);
+  await assert.rejects(new RenderMaintenanceControl(configuration,'synthetic-token',f.transport).suspend(),/unresolved/);
+  assert.equal(f.calls.some(c=>c.method==='POST'),false,change);
+ }
+});
+
+test('Render lost suspension acknowledgement stops without retry or resuming any service',async()=>{
+ const f=fixture();f.setFault((url,method)=>{
+  if(method==='POST'&&url.pathname.endsWith('/suspend')){f.services[0]!.suspended='suspended';throw new Error('PRIVATE-token-body');}
+  return undefined;
+ });
+ const control=new RenderMaintenanceControl(configuration,'synthetic-token',f.transport);
+ await assert.rejects(control.suspend(),error=>error instanceof Error&&!error.message.includes('PRIVATE')&&error.cause===undefined);
+ assert.equal(f.calls.filter(c=>c.method==='POST').length,1);
+ assert.equal(f.services[0]!.suspended,'suspended');assert.equal(f.services[1]!.suspended,'not_suspended');
+});
+
+test('Render accepts no acknowledgement as terminal job proof, and unknown cancellation is never retried',async()=>{
+ for(const mode of ['running','lost','new-job','foreign-job'] as const){
+  const f=fixture();
+  f.setFault((url,method)=>{
+   if(mode==='foreign-job'&&url.pathname.endsWith('/jobs'))return Response.json([{job:{id:jobId,serviceId:'srv-'+ 'x'.repeat(20),status:'running'},cursor:'c'}]);
+   if(method==='POST'&&url.pathname.endsWith('/cancel')){
+    if(mode==='lost')throw new Error('lost cancel');
+    if(mode==='new-job'){f.jobs.get(ids[2]!)!.push({id:'job-'+ 'e'.repeat(20),serviceId:ids[2]!,status:'pending'});f.jobs.get(ids[2]!)![0]!.status='canceled';}
+    return Response.json({id:jobId,serviceId:ids[2],status:'canceled'});
+   }
+  });
+  await assert.rejects(new RenderMaintenanceControl(configuration,'synthetic-token',f.transport).suspend());
+  assert.ok(f.calls.filter(c=>c.path.endsWith('/cancel')).length<=1,mode);
+ }
+});
+
+test('Render bounded pagination refuses repeated cursors, duplicates and truncated/malformed inventories',async()=>{
+ for(const mode of ['cursor','duplicate','malformed','large','http','redirect'] as const){
+  const f=fixture();f.setFault(url=>{
+   if(url.pathname!=='/v1/services')return;
+   if(mode==='malformed')return Response.json({services:f.services});
+   if(mode==='large')return new Response(' '.repeat(1024*1024+1));
+   if(mode==='http')return new Response('PRIVATE provider credentials',{status:429});
+   if(mode==='redirect')return new Response(null,{status:302,headers:{Location:'https://other.invalid'}});
+   if(mode==='duplicate')return Response.json([{service:f.services[0],cursor:'one'},{service:f.services[0],cursor:'two'}]);
+   return Response.json(Array.from({length:100},()=>({service:f.services[0],cursor:'repeated'})));
+  });
+  await assert.rejects(new RenderMaintenanceControl(configuration,'synthetic-token',f.transport).suspend());
+  assert.equal(f.calls.some(c=>c.method==='POST'),false);
+ }
+});
+
+test('Render configuration rejects unsafe paths and incomplete component sets before any request',()=>{
+ const f=fixture();
+ for(const config of [{...configuration,services:configuration.services.slice(0,2)},
+  {...configuration,services:[configuration.services[0],configuration.services[0],configuration.services[2]]},
+  {...configuration,ownerId:'tea-x?other=1'},
+  {...configuration,services:configuration.services.map(s=>({...s,imagePath:'image:latest'}))}]){
+  assert.throws(()=>new RenderMaintenanceControl(config,'synthetic-token',f.transport));
+ }
+ assert.throws(()=>new RenderMaintenanceControl(configuration,'bad\r\ntoken',f.transport));assert.equal(f.calls.length,0);
+});
+
+test('Render 202 is not suspension proof and commands are not retried on provider refusal',async()=>{
+ for(const status of [202,400,401,403,404,429,500,503]){
+  const f=fixture();f.setFault((url,method)=>method==='POST'&&url.pathname.endsWith('/suspend')?new Response(null,{status}):undefined);
+  await assert.rejects(new RenderMaintenanceControl(configuration,'synthetic-token',f.transport).suspend());
+  assert.equal(f.calls.filter(c=>c.path.endsWith('/suspend')).length,status===202?3:1);
+  assert.equal(f.calls.some(c=>c.path.endsWith('/cancel')),false);
+ }
+});
+
+test('Render paginated deploy inventory follows the cursor and catches a later active deploy',async()=>{
+ for(const cycle of [false,true]){
+  const f=fixture();let pages=0;
+  f.setFault(url=>{
+   if(url.pathname!==`/v1/services/${ids[0]}/deploys`)return;
+   pages++;
+   if(pages===1||cycle)return Response.json(Array.from({length:100},(_,i)=>({deploy:{id:`dep-p${pages}-${i}`,status:'deactivated'},cursor:'same-cursor'})));
+   assert.equal(url.searchParams.get('cursor'),'same-cursor');
+   return Response.json([{deploy:{id:'dep-hidden-active',status:'pre_deploy_in_progress'},cursor:'last'}]);
+  });
+  await assert.rejects(new RenderMaintenanceControl(configuration,'synthetic-token',f.transport).suspend());
+  assert.equal(pages,2);assert.equal(f.calls.some(c=>c.method==='POST'),false);
+ }
+});
+
+test('Render final readback refuses a service or image changed while cancellation was in flight',async()=>{
+ for(const change of ['resume','image','extra'] as const){
+  const f=fixture();f.setFault((url,method)=>{
+   if(method==='POST'&&url.pathname.endsWith('/cancel')){
+    f.jobs.get(ids[2]!)![0]!.status='canceled';
+    if(change==='resume')f.services[0]!.suspended='not_suspended';
+    if(change==='image')f.services[0]!.imagePath='ghcr.io/synthetic/web@sha256:'+ '2'.repeat(64);
+    if(change==='extra')f.services.push({...f.services[0]!,id:'srv-'+ 'z'.repeat(20)});
+    return Response.json({id:jobId,serviceId:ids[2],status:'canceled'});
+   }
+   return undefined;
+  });
+  await assert.rejects(new RenderMaintenanceControl(configuration,'synthetic-token',f.transport).suspend());
+  assert.equal(f.calls.filter(c=>c.path.endsWith('/cancel')).length,1);
+ }
+});
+
+test('Render request deadline aborts transport and preserves a sanitised unresolved outcome',{timeout:8000},async()=>{
+ const transport:typeof fetch=async(_url,options)=>new Promise((_resolve,reject)=>{
+  options!.signal!.addEventListener('abort',()=>reject(new Error('PRIVATE credential timeout')),{once:true});
+ });
+ const keepAlive=setTimeout(()=>{},7000);
+ try{await assert.rejects(new RenderMaintenanceControl(configuration,'synthetic-token',transport).observeSuspended(),error=>
+  error instanceof Error&&error.message.includes('unresolved')&&!error.message.includes('PRIVATE')&&error.cause===undefined);
+ }finally{clearTimeout(keepAlive);}
+});
+
+test('Render complete paginated terminal history permits suspension without canceling historical work',async()=>{
+ const f=fixture();let continuationPages=0;
+ f.setFault(url=>{
+  if(url.pathname!==`/v1/services/${ids[0]}/deploys`)return;
+  if(url.searchParams.has('cursor')){
+   assert.equal(url.searchParams.get('cursor'),'cursor-99');continuationPages++;return Response.json([]);
+  }
+  return Response.json(Array.from({length:100},(_,i)=>({deploy:{id:`dep-terminal-${i}`,status:'deactivated'},cursor:`cursor-${i}`})));
+ });
+ const result=await new RenderMaintenanceControl(configuration,'synthetic-token',f.transport).suspend();
+ assert.equal(result.activeJobs,0);assert.equal(continuationPages,3);
+ assert.equal(f.calls.filter(c=>c.path.endsWith('/cancel')).length,1);
+});
+
+test('Render unknown job state and scheduler autoscaling refuse before any mutation',async()=>{
+ for(const mode of ['unknown','autoscaling'] as const){
+  const f=fixture();
+  if(mode==='autoscaling')Object.assign(f.services[2]!.serviceDetails,{autoscaling:{enabled:false}});
+  else f.jobs.get(ids[2]!)![0]!.status='future-unknown';
+  // Return the unknown state even if the service incorrectly ignores filters.
+  if(mode==='unknown')f.setFault(url=>url.pathname===`/v1/services/${ids[2]}/jobs`?
+   Response.json(f.jobs.get(ids[2]!)!.map(job=>({job,cursor:job.id}))):undefined);
+  await assert.rejects(new RenderMaintenanceControl(configuration,'synthetic-token',f.transport).suspend());
+  assert.equal(f.calls.some(c=>c.method==='POST'),false);
+ }
+});

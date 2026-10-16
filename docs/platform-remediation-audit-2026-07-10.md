@@ -1,5 +1,12 @@
 # CharityPilot Full-Platform Remediation Audit
 
+> **16 October Render maintenance prototype:** The internal adapter verifies
+> an exact three-service pinned-image environment, refuses active deployments,
+> suspends services and separately cancels surviving one-off jobs. Fresh bounded
+> readback is required; uncertain outcomes are unresolved without automatic retry.
+> Synthetic HTTP contracts are not vendor shutdown, custody or whole-backend
+> evidence. See [Render maintenance control](render-maintenance-control.md).
+
 > **16 October configured database writer closure:** An inactive maintenance
 > primitive commits NOLOGIN before exact-session draining and requires a fresh
 > zero-session readback. Real TLS PostgreSQL tests cover stale sessions, alias,
