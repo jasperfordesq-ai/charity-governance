@@ -36,7 +36,8 @@ function origin(config: unknown, cloudId: string): string {
  * supplies a publication ID, never provider addresses, storage paths or hashes.
  * No transaction/row lock is held across HTTP or storage reads; repeated state
  * and byte checks detect changes, but are not an atomic provider snapshot or
- * a durable execution fence. This function has no HTTP route or erasure caller.
+ * a durable execution fence. The Owner dashboard review route can observe it;
+ * there is no erasure caller and the observation grants no execution authority.
  */
 export async function observeRetainedConfluenceCopySource(
   prisma: PrismaClient, raw: unknown,

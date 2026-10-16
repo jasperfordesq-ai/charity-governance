@@ -1,5 +1,12 @@
 # CharityPilot Full-Platform Remediation Audit
 
+> **16 October supported Confluence review preparation:** The exact retained-copy
+> observer and review store gain Owner/full-web-session HTTP entry points. Read
+> `docs/confluence-retained-copy-review.md`. This closes the missing review API
+> surface only; it does not close scope registration, permission consumption,
+> provider purge/readback or independent host-loss recovery. No new DPO acceptance
+> or live provider action is asserted.
+
 > **16 October product decision authority:** Follow
 > `docs/product-governance-decisions.md` for delegated multi-organisation product
 > decisions and engineering acceptance. Further personal external review is

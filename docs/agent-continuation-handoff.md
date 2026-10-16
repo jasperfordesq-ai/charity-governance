@@ -1,5 +1,12 @@
 # CharityPilot Agent Continuation Handoff
 
+> **16 October retained-copy review HTTP increment:** An Owner/full-web-session
+> API now exposes exact retained-source observation and guarded review
+> recording/withdrawal. See `docs/confluence-retained-copy-review.md`. It grants
+> no provider execution authority. Scope registration, one-use execution,
+> uncertain-outcome reconciliation and provider/independent recovery proof remain
+> separate implementation stages. Private receipts record exact test/release state.
+
 > **16 October product-owner delegation:** The software owner has delegated
 > product and engineering decisions and removed further personal reviewer
 > participation as a prerequisite. Read `docs/product-governance-decisions.md`.
