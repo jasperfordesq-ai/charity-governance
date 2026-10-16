@@ -59,6 +59,7 @@ COPY --chown=node:node --from=runtime-deps /app/node_modules ./node_modules
 COPY --chown=node:node --from=build /app/node_modules/.prisma ./node_modules/.prisma
 COPY --chown=node:node --from=build /app/packages/shared/package.json ./packages/shared/package.json
 COPY --chown=node:node --from=build /app/packages/shared/dist ./packages/shared/dist
+COPY --chown=node:node --from=build /app/packages/shared/runtime ./packages/shared/runtime
 COPY --chown=node:node --from=build /app/apps/api/package.json ./apps/api/package.json
 COPY --chown=node:node --from=build /app/apps/api/dist ./apps/api/dist
 WORKDIR /app/apps/api

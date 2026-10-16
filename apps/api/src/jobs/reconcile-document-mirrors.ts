@@ -1,4 +1,5 @@
-import { PrismaClient } from '@prisma/client';
+import { createApplicationPrismaClient } from '../utils/application-prisma-client.js';
+import type { PrismaClient } from '@prisma/client';
 import { DocumentPublicationService } from '../services/document-publication.service.js';
 import { createConfluenceReconciler } from '../services/confluence-reconcile.service.js';
 import { validateDocumentStorageCleanupEnv } from '../utils/env.js';
@@ -31,7 +32,7 @@ import { logSchedulerError, runDocumentReconcile } from './production-scheduler.
 process.env.NODE_ENV ??= 'production';
 validateDocumentStorageCleanupEnv();
 
-const prisma = new PrismaClient();
+let prisma: PrismaClient | undefined;
 const logger = console;
 
 function positiveIntegerEnv(value: string | undefined, fallback: number): number {
@@ -40,6 +41,7 @@ function positiveIntegerEnv(value: string | undefined, fallback: number): number
 }
 
 try {
+  prisma = await createApplicationPrismaClient();
   const publicationService = new DocumentPublicationService(prisma);
   const reconcile = createConfluenceReconciler({ prisma });
 
@@ -64,5 +66,5 @@ try {
   logSchedulerError(logger, 'Document reconcile job failed outside its runner:', error);
   process.exitCode = 1;
 } finally {
-  await prisma.$disconnect();
+  await prisma?.$disconnect();
 }

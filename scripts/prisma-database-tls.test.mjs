@@ -9,6 +9,7 @@ import { validateLocalDockerEndpoint } from './personal-server-docker-boundary.m
 import { toStrictPrismaTlsUrl } from '../packages/shared/runtime/prisma-database-url.mjs';
 import { PrismaClient } from '@prisma/client';
 import { verifyProductionRuntimeDatabaseRole } from '../apps/api/dist/services/production-runtime-database-role.js';
+import { createApplicationPrismaClient } from '../apps/api/dist/utils/application-prisma-client.js';
 import { PRODUCTION_RUNTIME_DATABASE_ROLE_SQL as sql, PRODUCTION_RUNTIME_PROTECTED_TABLES as tables,
   PRODUCTION_RUNTIME_MAINTENANCE_FUNCTIONS as functions } from '../apps/api/dist/services/production-runtime-database-role.js';
 
@@ -83,8 +84,11 @@ try {
     if(options.password) canonical.password=options.password;
     const url = options.plaintext ? new URL(canonical) : new URL(toStrictPrismaTlsUrl(canonical.href));
     if(options.plaintext) url.searchParams.set('sslmode','disable');
-    const client = new PrismaClient({datasources:{db:{url:url.href}},log:[],errorFormat:'minimal'});
+    let client;
     try {
+      client=options.applicationFactory
+        ? await createApplicationPrismaClient({DATABASE_URL:canonical.href,CHARITYPILOT_DEPLOYMENT_MODE:'production'})
+        : new PrismaClient({datasources:{db:{url:url.href}},log:[],errorFormat:'minimal'});
       const rows=await client.$queryRawUnsafe('SELECT current_user, ssl FROM pg_stat_ssl WHERE pid=pg_backend_pid()');
       try {
         await verifyProductionRuntimeDatabaseRole(client,{runtimeRole:'cp_runtime',maintenanceRole:'postgres',database:'postgres',phase:'after-migration'});
@@ -92,19 +96,23 @@ try {
       } catch {return {connected:true,verified:false,tls:rows[0].ssl};}
     } catch {
       return {connected:false};
-    } finally {await client.$disconnect();}
+    } finally {await client?.$disconnect();}
   }
   const positive={connected:true,verified:true,tls:true};
   check('fresh Prisma login, TLS and actual transaction wrapper',await prismaAttempt(),positive);
+  check('actual application factory verifies strict TLS and target',await prismaAttempt({applicationFactory:true}),positive);
   check('Prisma wrong hostname refuses',await prismaAttempt({hostname:'127.0.0.1'}),{connected:false});
+  check('application factory refuses wrong hostname',await prismaAttempt({applicationFactory:true,hostname:'127.0.0.1'}),{connected:false});
   check('Prisma untrusted certificate refuses',await prismaAttempt({ca:false}),{connected:false});
   check('Prisma wrong password refuses',await prismaAttempt({password:'wrong-synthetic-password'}),{connected:false});
   run(openssl,['req','-x509','-newkey','rsa:2048','-nodes','-keyout',join(certDir,'wrong-key.pem'),'-out',join(certDir,'wrong-cert.pem'),
     '-days','1','-subj','/CN=wrong-root','-addext','basicConstraints=critical,CA:TRUE']);
   check('Prisma explicitly wrong CA refuses',await prismaAttempt({ca:join(certDir,'wrong-cert.pem')}),{connected:false});
+  check('application factory refuses wrong CA',await prismaAttempt({applicationFactory:true,ca:join(certDir,'wrong-cert.pem')}),{connected:false});
   check('catalogue wrapper refuses a plaintext client',await prismaAttempt({plaintext:true}),{connected:true,verified:false,tls:false});
   query('ALTER ROLE cp_runtime SET default_transaction_read_only=on;');
   check('catalogue wrapper refuses a read-only target',await prismaAttempt(),{connected:true,verified:false,tls:true});
+  check('application factory refuses the actual read-only connection',await prismaAttempt({applicationFactory:true}),{connected:false});
   query('ALTER ROLE cp_runtime RESET default_transaction_read_only;');
   check('Prisma positive control after faults',await prismaAttempt(),positive);
   query('ALTER SYSTEM SET ssl=off; SELECT pg_reload_conf();');
@@ -115,6 +123,7 @@ try {
   }
   assert.ok(disabled,'synthetic server TLS must actually be off for fallback refusal proof');
   check('Prisma requires TLS when server no longer offers it',await prismaAttempt(),{connected:false});
+  check('application factory refuses a TLS-disabled server',await prismaAttempt({applicationFactory:true}),{connected:false});
   process.stdout.write(`${checks} real TLS/Prisma checks passed\n`);
 } finally {
   try { if (id) docker(['rm','--force',id]); }

@@ -6,6 +6,10 @@
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
   "exports": {
+    "./prisma-database-url": {
+      "types": "./runtime/prisma-database-url.d.mts",
+      "import": "./runtime/prisma-database-url.mjs"
+    },
     ".": {
       "types": "./dist/index.d.ts",
       "import": "./dist/index.js"

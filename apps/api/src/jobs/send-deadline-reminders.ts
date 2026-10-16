@@ -1,4 +1,5 @@
-import { PrismaClient } from '@prisma/client';
+import { createApplicationPrismaClient } from '../utils/application-prisma-client.js';
+import type { PrismaClient } from '@prisma/client';
 import { DeadlineRemindersService } from '../services/deadline-reminders.service.js';
 import { validateDeadlineRemindersEnv } from '../utils/env.js';
 import { logSchedulerError, sendJobFailureAlert } from './production-scheduler.js';
@@ -6,10 +7,11 @@ import { logSchedulerError, sendJobFailureAlert } from './production-scheduler.j
 process.env.NODE_ENV ??= 'production';
 validateDeadlineRemindersEnv();
 
-const prisma = new PrismaClient();
+let prisma: PrismaClient | undefined;
 const logger = console;
 
 try {
+  prisma = await createApplicationPrismaClient();
   const service = new DeadlineRemindersService(prisma);
   await service.sendDueReminders();
   logger.info('Deadline reminders job completed successfully.');
@@ -23,5 +25,5 @@ try {
   });
   process.exitCode = 1;
 } finally {
-  await prisma.$disconnect();
+  await prisma?.$disconnect();
 }

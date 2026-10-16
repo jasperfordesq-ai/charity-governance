@@ -1,4 +1,4 @@
-import { PrismaClient } from '@prisma/client';
+import { createApplicationPrismaClient } from '../utils/application-prisma-client.js';
 import { pathToFileURL } from 'node:url';
 import { DeadlineRemindersService } from '../services/deadline-reminders.service.js';
 import { DocumentService, type DocumentStorageCleanupResult } from '../services/document.service.js';
@@ -1044,7 +1044,7 @@ async function main(): Promise<void> {
   validateAuthDeliveryEnv();
 
   const config = productionSchedulerConfigFromEnv();
-  const prisma = new PrismaClient();
+  const prisma = await createApplicationPrismaClient();
   await requireAuthRecoveryControlForRuntime(prisma);
   const deadlineService = new DeadlineRemindersService(prisma);
   const documentService = new DocumentService(prisma);

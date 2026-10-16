@@ -1,4 +1,5 @@
-import { PrismaClient } from '@prisma/client';
+import { createApplicationPrismaClient } from '../utils/application-prisma-client.js';
+import type { PrismaClient } from '@prisma/client';
 import { DocumentService } from '../services/document.service.js';
 import { StorageService } from '../services/storage.service.js';
 import { createPrismaOrganisationStorageResolver } from '../services/document-storage-resolution.js';
@@ -10,7 +11,7 @@ import { logSchedulerError, sendJobFailureAlert } from './production-scheduler.j
 process.env.NODE_ENV ??= 'production';
 validateDocumentStorageCleanupEnv();
 
-const prisma = new PrismaClient();
+let prisma: PrismaClient | undefined;
 const logger = console;
 
 function cleanupLimit(): number {
@@ -19,6 +20,7 @@ function cleanupLimit(): number {
 }
 
 try {
+  prisma = await createApplicationPrismaClient();
   const documentService = new DocumentService(prisma);
   const storageService = new StorageService(createPrismaOrganisationStorageResolver(prisma));
   const dispatch = createErasureDispatcher({
@@ -83,5 +85,5 @@ try {
   });
   process.exitCode = 1;
 } finally {
-  await prisma.$disconnect();
+  await prisma?.$disconnect();
 }

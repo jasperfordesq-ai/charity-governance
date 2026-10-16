@@ -1,4 +1,4 @@
-import { PrismaClient } from '@prisma/client';
+import { createApplicationPrismaClient } from '../utils/application-prisma-client.js';
 import { pathToFileURL } from 'node:url';
 import { AuthEmailDeliveryService } from '../services/auth-email-delivery.service.js';
 import { requireAuthRecoveryControlForRuntime } from '../services/auth-recovery-control.js';
@@ -10,7 +10,7 @@ export async function processAuthEmailDeliveryOnce(): Promise<void> {
   process.env.NODE_ENV ??= 'production';
   validateAuthDeliveryEnv();
   const config = productionSchedulerConfigFromEnv();
-  const prisma = new PrismaClient();
+  const prisma = await createApplicationPrismaClient();
   try {
     await requireAuthRecoveryControlForRuntime(prisma);
     const result = await new AuthEmailDeliveryService(prisma).processDueDeliveries({

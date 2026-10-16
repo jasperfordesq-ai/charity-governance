@@ -1,5 +1,18 @@
 # CharityPilot Agent Continuation Handoff
 
+> **16 October API/routine-job TLS integration connected / remaining transport OPEN:**
+> Packaged typed pure adapter and explicit runtime-image COPY. API plugin plus six
+> routine jobs now use a factory that translates verified-TLS/public URLs, connects
+> and verifies actual user/session/database, encryption and writable target before
+> returning. Private/local clients preserve normal lazy constructor behaviour.
+> Failed checks disconnect with no raw driver diagnostics; standalone jobs retain
+> their existing catch/alert paths. Final API3229ordinary+14actualPG fixturesPASS;
+> combined TLS/factory37casesPASS (18SQL/15Prisma internal checks);209production/
+> profile contractsPASS. No remote CI, rebuilt Linux image or deployed proof.
+> Remaining12direct job constructors require classification, plus Prisma CLI and
+> libpq backup separation, full role pre/postmigration and effective Compose split.
+> Original inventory was19sites, not18; private count corrected. No deploy/closure.
+
 > **16 October pinned Prisma TLS compatibility proved / caller wiring OPEN:** Real
 > Prisma6.19.3 test reproduced hostname-mismatch acceptance with the raw libpq
 > verify-full URL. New confidential TLS adapter derives require+sslaccept=strict

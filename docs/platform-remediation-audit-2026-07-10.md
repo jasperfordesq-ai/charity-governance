@@ -1,5 +1,13 @@
 # CharityPilot Full-Platform Remediation Audit
 
+> **16 October API/ordinary worker TLS callers / partial remediation:** Seven
+> runtime entry points now consume the shared strict-TLS transport and observed
+> writable-connection checks. Private/local lazy fallback remains; errors are
+> sanitised and failed clients disconnected. Final3229API+14PG fixtures,37TLS/
+> factory and209profile casesPASS. No Linux-image/live-provider proof.12remaining
+> job constructors, migration CLI, full database role gates and effective Compose
+> separation remain OPEN; hosted least privilege and acceptance not complete.
+
 > **16 October hosted-driver TLS finding / partial remediation:** Pinned Prisma
 > reproduced accepting a hostname mismatch under the canonical libpq-style URL.
 > Strict driver-specific TLS adapter and actual-driver negative/positive tests
