@@ -312,7 +312,7 @@ export function buildMinimisedComplianceReportHtml(
 <html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
 <meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'; base-uri 'none'; form-action 'none'">
 <title>Minimised Compliance Record draft</title>
-<style>body{font-family:system-ui,sans-serif;max-width:48rem;margin:2rem auto;padding:0 1rem;color:#111827;line-height:1.5}table{border-collapse:collapse;width:100%}th,td{border:1px solid #d1d5db;padding:.5rem;text-align:left}.notice{background:#fef3c7;padding:1rem}</style>
+<style>body{font-family:system-ui,sans-serif;max-width:48rem;margin:2rem auto;padding:0 1rem;color:#111827;line-height:1.5;overflow-wrap:anywhere}table{border-collapse:collapse;width:100%}th,td{border:1px solid #d1d5db;padding:.5rem;text-align:left}.notice{background:#fef3c7;padding:1rem}</style>
 </head><body>
 <h1>Minimised Compliance Record draft</h1>
 <p class="notice">For audience and field review only. Board approval of the internal snapshot does not authorise disclosure of this draft or constitute a regulator filing.</p>

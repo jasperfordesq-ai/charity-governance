@@ -1,5 +1,16 @@
 # CharityPilot Agent Continuation Handoff
 
+> **16 October minimised-report layout fix / local proof:** An allowed long
+> organisation name overflowed the minimised report and clipped in synthetic
+> A4 output. The renderer now wraps unbroken text. Actual browser regression
+> failed before the fix and passes at three widths in screen/print modes;
+> related report suites48PASS and E2E typecheckPASS. Two synthetic PDFs were
+> text-checked and visually inspected. No new fields or permissions. Local
+> direct-render proof is not authenticated serving-PDF or real Board approval
+> evidence; deployed-QA explicitly skips this source-import test. Read ignored
+> `minimised-report-layout-review-2026-10-16.md`. No deployment or acceptance.
+
+
 > **16 October correspondence-to-acceptance reconciliation:** The fresh private
 > matrix maps the original six findings/four navigation requests and subsequent
 > architecture, integration and custody instructions to dated serving/local
