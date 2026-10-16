@@ -1135,7 +1135,7 @@ export function runProductionFailedMigrationRecoveryFromArgs(
         return result(
           deployResult.status,
           sanitizeTranscript(deployResult.stdout ?? "", options),
-          `${config.taskLabel} production recovery failed after exact rolled-back resolution: the delegated production deploy did not complete, and the runtime remains stopped.\n${sanitizeTranscript(deployResult.stderr ?? "", options)}${cleanupError}`,
+          `${config.taskLabel} production recovery failed after exact rolled-back resolution: the delegated production deploy did not complete. ${cleanupError ? "Runtime shutdown is unverified; confirm all services are stopped before recovery." : "The runtime remains stopped."}\n${sanitizeTranscript(deployResult.stderr ?? "", options)}${cleanupError}`,
         );
       }
       return result(
@@ -1147,8 +1147,10 @@ export function runProductionFailedMigrationRecoveryFromArgs(
         ? failClosedCleanup(runCommand, quiesceCommand, commandEnv)
         : "";
       const resolutionPosture = migrationResolved
-        ? " The exact migration history row was already marked rolled back; the runtime remains stopped and requires a fresh controlled deploy after the failure is resolved."
-        : " No migration-history resolution was accepted.";
+        ? cleanupError
+          ? " The exact migration history row was already marked rolled back; runtime shutdown is unverified and must be confirmed before a fresh controlled deploy."
+          : " The exact migration history row was already marked rolled back; the runtime remains stopped and requires a fresh controlled deploy after the failure is resolved."
+        : ` No migration-history resolution was accepted.${cleanupError ? " Runtime shutdown is unverified; confirm all services are stopped before recovery." : ""}`;
       return result(
         1,
         sanitizeTranscript(preflightResult.stdout ?? "", options),

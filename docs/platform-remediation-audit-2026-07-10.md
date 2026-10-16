@@ -1,5 +1,15 @@
 # CharityPilot Full-Platform Remediation Audit
 
+> **16 October recovery shutdown reporting / source fix:** Shared P1-09/P1-07A
+> recovery no longer asserts stopped if cleanup fails after delegated deploy
+> failure or an exception following accepted migration resolution. It preserves
+> the accepted-resolution fact and explicitly marks shutdown UNVERIFIED. TwoRED
+> regressions then69focusedPASS; full1235PASS/8SKIP. Metadata-only serving/count
+> checks refreshed read-only on the private VM; details in ignored evidence.
+> This is not a live recovery, Member check or deployment. Whole branch, approved
+> hosting/custody, recovery and controller/Nikita acceptance remain OPEN.
+
+
 > **16 October partial-stop handling and CA proof correction:** Deployment now
 > attempts cleanup when its first stop fails partway through, without backup,
 > migration or startup. Failed cleanup reports shutdown UNVERIFIED rather than

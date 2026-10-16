@@ -893,3 +893,26 @@ test("unsafe or incomplete CLI options fail before lock acquisition", () => {
     cleanFixture(value);
   }
 });
+
+for(const mode of ['return-failure','throw-failure']) {
+  test('recovery '+mode+' reports unverified shutdown when cleanup fails after accepted resolution',()=>{
+    const value=fixture();let stops=0;let deploys=0;
+    try {
+      const result=runProductionP109RecoveryFromArgs(value.args,dependencies({
+        cutoverLockPath:value.lockPath,
+        runCommand:command=>{
+          if(command.includes('down')&&++stops>1) throw new Error('synthetic cleanup failure');
+          return successfulRunCommand(command);
+        },
+        runDeploy:()=>{deploys++;
+          if(mode==='throw-failure') throw new Error('synthetic delegated failure');
+          return {status:1,stdout:'',stderr:'synthetic delegated failure'};
+        },
+      }));
+      assert.equal(result.status,1);assert.equal(stops,2);assert.equal(deploys,1);
+      assert.match(result.stderr,/shutdown is unverified/);
+      assert.doesNotMatch(result.stderr,/runtime remains stopped/);
+      assert.match(result.stderr,/cleanup also failed/);
+    } finally {cleanFixture(value);}
+  });
+}
