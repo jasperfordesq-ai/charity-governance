@@ -40,6 +40,15 @@ import {
 const scriptsDir = dirname(fileURLToPath(import.meta.url));
 const repoRoot = resolve(scriptsDir, '..');
 
+test('source-bound backup helper never spawns an unpinned Docker lifecycle child', () => {
+  const source = readFileSync(join(scriptsDir, 'postgres-backup.mjs'), 'utf8');
+  assert.doesNotMatch(source, /spawnSync\(\s*['"]docker['"]/);
+  // Implementation authority covers this file, not additional local imports.
+  const imports = [...source.matchAll(/^import\s+[\s\S]*?\sfrom\s+['"]([^'"]+)['"]/gm)];
+  assert.ok(imports.length > 5);
+  for (const match of imports) assert.match(match[1], /^node:/);
+});
+
 test('restore proof never chmods the dump after opening its protected descriptor', () => {
   const source = readFileSync(join(scriptsDir, 'postgres-backup.mjs'), 'utf8').replace(/\r\n/g, '\n');
   const proofStart = source.indexOf('async function proveRestore(options) {');

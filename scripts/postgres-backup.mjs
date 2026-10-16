@@ -31,6 +31,44 @@ import { fileURLToPath, pathToFileURL } from 'node:url';
 // imports this constant instead of retyping the digest — a retyped copy
 // drifts the moment either one changes.
 export const DEFAULT_POSTGRES_IMAGE = 'postgres@sha256:5660c2cbfea50c7a9127d17dc4e48543eedd3d7a41a595a2dfa572471e37e64c';
+
+/** Keep backup authority inside this source-hashed helper, without unbound
+ * local imports. Returned secret-bearing transport must never be logged. */
+export function prepareLocalDockerCommand(command, environment, { spawn: probeSpawn = spawnSync, platform = process.platform } = {}) {
+  try {
+    if (!Array.isArray(command) || command[0] !== 'docker' || command.length < 2
+      || command.some(value => typeof value !== 'string') || command[1].startsWith('-')
+      || Object.entries(environment).some(([key,value]) =>
+        /^(?:DOCKER_|BUILDX_|BUILDKIT_)/i.test(key) && String(value ?? '').trim())) throw new Error();
+    const safe = Object.fromEntries(Object.entries(environment).filter(([key]) => !/^(?:COMPOSE_|DOCKER_|BUILDX_|BUILDKIT_)/i.test(key)));
+    const probe = (args, env) => {
+      const result = probeSpawn('docker',args,{encoding:'utf8',stdio:'pipe',timeout:30000,maxBuffer:131072,env});
+      if (result.status !== 0 || result.error || typeof result.stdout !== 'string') throw new Error();
+      return result.stdout.trim();
+    };
+    const context = JSON.parse(probe(['context','inspect','--format','{{json .Endpoints.docker}}'],safe));
+    const endpoint = context.Host;
+    const allowed = platform === 'linux' ? ['unix:///var/run/docker.sock'] : platform === 'win32'
+      ? ['npipe:////./pipe/dockerdesktoplinuxengine','npipe:////./pipe/docker_engine'] : [];
+    if (typeof endpoint !== 'string' || !allowed.includes(endpoint.toLowerCase()) || context.SkipTLSVerify !== false) throw new Error();
+    const pinned = {...safe,DOCKER_HOST:endpoint};
+    const info = JSON.parse(probe(['--host',endpoint,'info','--format','{{json .}}'],pinned));
+    const api = /^(\d+)\.(\d+)$/.exec(probe(['--host',endpoint,'version','--format','{{.Server.APIVersion}}'],pinned));
+    if (String(info.OSType).toLowerCase() !== 'linux' || !api || !(Number(api[1]) > 1 || (Number(api[1]) === 1 && Number(api[2]) >= 48))
+      || (platform === 'win32' ? !/docker desktop/i.test(String(info.OperatingSystem)) : !String(info.OperatingSystem ?? '').trim())) throw new Error();
+    return {command:['docker','--host',endpoint,...command.slice(1)],environment:pinned};
+  } catch { throw new Error('Docker lifecycle requires a verified local Linux engine; remote or ambiguous targets are refused.'); }
+}
+
+export function spawnLocalDockerCommand(command, environment, options = {}, dependencies = {}) {
+  const prepared = prepareLocalDockerCommand(command,environment,dependencies);
+  return (dependencies.spawn ?? spawnSync)(prepared.command[0],prepared.command.slice(1),{...options,env:prepared.environment});
+}
+
+function runLocalDockerSync(args, options = {}) {
+  return spawnLocalDockerCommand(['docker',...args],options.env ?? process.env,options);
+}
+
 const APPROVED_POSTGRES_IMAGE_DIGEST_SHA256 = '5660c2cbfea50c7a9127d17dc4e48543eedd3d7a41a595a2dfa572471e37e64c';
 const HELPER_IMPLEMENTATION_FORMAT = 'charitypilot-postgres-proof-helper/v1';
 const HELPER_IMPLEMENTATION_REPOSITORY_URL = 'https://github.com/jasperfordesq-ai/charity-governance';
@@ -45,7 +83,6 @@ const RESTORE_PROOF_PROVENANCE_LIMITATION =
   'This proof verifies a read-only source snapshot against one isolated restore. PostgreSQL ownership and ACL privileges are intentionally excluded by --no-owner and --no-privileges, sequence runtime state is excluded, and provider retention, immutable external custody, document-object recovery, and operator approval remain separate evidence.';
 const PROOF_COMMAND_TIMEOUT_MS = 45 * 60 * 1000;
 const DEFAULT_COMMAND_TIMEOUT_MS = 5 * 60 * 1000;
-const DOCKER_AVAILABILITY_TIMEOUT_MS = 30 * 1000;
 const PROOF_CONTAINER_STALE_AFTER_MS = PROOF_COMMAND_TIMEOUT_MS + 15 * 60 * 1000;
 const PROOF_STDIO_LIMIT_BYTES = 512 * 1024;
 const DEFAULT_TEMP_FILE_LIMIT_MB = 1024;
@@ -2008,20 +2045,6 @@ dump_bytes=$(wc -c < "$CHARITYPILOT_DUMP_PATH" | tr -d ' ')
 if [ "$dump_bytes" -gt "$CHARITYPILOT_MAX_DUMP_BYTES" ]; then echo 'PostgreSQL dump exceeds maxDumpBytes.' >&2; exit 75; fi
 ` + DATABASE_FINGERPRINT_ACTION_SCRIPT;
 
-function ensureDockerAvailable() {
-  const result = spawnSync('docker', ['version', '--format', '{{.Server.Version}}'], {
-    encoding: 'utf8',
-    stdio: ['ignore', 'pipe', 'pipe'],
-    timeout: DOCKER_AVAILABILITY_TIMEOUT_MS,
-    killSignal: 'SIGKILL',
-    maxBuffer: PROOF_STDIO_LIMIT_BYTES,
-  });
-
-  if (result.status !== 0) {
-    throw new Error(result.stderr || result.stdout || 'Docker is not available');
-  }
-}
-
 function runCommand(
   command,
   args,
@@ -2038,8 +2061,8 @@ function runCommand(
     return '';
   }
 
-  ensureDockerAvailable();
-  const result = spawnSync(command, args, {
+  if (command !== 'docker') throw new Error('PostgreSQL lifecycle requires the guarded Docker executor');
+  const result = runLocalDockerSync(args, {
     env,
     encoding: 'utf8',
     stdio: ['ignore', 'pipe', 'pipe'],
@@ -2116,7 +2139,7 @@ function removeProofContainerStrict(containerName, dryRun) {
     console.log(formatCommand('docker', ['rm', '-f', '-v', containerName]));
     return;
   }
-  const result = spawnSync('docker', ['rm', '-f', '-v', containerName], {
+  const result = runLocalDockerSync(['rm', '-f', '-v', containerName], {
     encoding: 'utf8',
     stdio: ['ignore', 'pipe', 'pipe'],
     timeout: 60_000,
@@ -2479,7 +2502,7 @@ function waitForProofRestoreDatabase(containerName, dryRun, databaseName = RESTO
   }
   const deadline = Date.now() + 60_000;
   while (Date.now() < deadline) {
-    const result = spawnSync('docker', args, {
+    const result = runLocalDockerSync(args, {
       encoding: 'utf8',
       stdio: ['ignore', 'pipe', 'pipe'],
       timeout: 10_000,
@@ -3053,12 +3076,13 @@ async function runStreamingCommand(command, args, outputPath, { dryRun = false }
     return;
   }
 
-  ensureDockerAvailable();
+  if (command !== 'docker') throw new Error('PostgreSQL streaming requires the guarded Docker executor');
+  const prepared = prepareLocalDockerCommand([command,...args],process.env);
 
   try {
     await new Promise((resolvePromise, reject) => {
       const output = createWriteStream(tempPath, { flags: 'wx', mode: 0o600 });
-      const child = spawn(command, args, { stdio: ['ignore', 'pipe', 'inherit'] });
+      const child = spawn(prepared.command[0],prepared.command.slice(1), { env:prepared.environment,stdio: ['ignore', 'pipe', 'inherit'] });
       let childClosed = false;
       let outputClosed = false;
       let exitCode = null;
@@ -3798,7 +3822,7 @@ function waitForRestoreDatabase(containerName, dryRun) {
 
   const deadline = Date.now() + 60_000;
   while (Date.now() < deadline) {
-    const result = spawnSync('docker', readinessArgs, {
+    const result = runLocalDockerSync(readinessArgs, {
       encoding: 'utf8',
       stdio: ['ignore', 'pipe', 'pipe'],
       timeout: 10_000,

@@ -1,5 +1,16 @@
 # CharityPilot Agent Continuation Handoff
 
+> **16 October source-bound backup Docker guard:** Moved the shared production
+> guard into the PostgreSQL helper's source-hashed file (Node built-ins only);
+> direct commands re-export it. Helper synchronous/readiness/cleanup and streaming
+> children now verify/pin local Docker. Invariant RED then focused61PASS/1SKIP;
+> full1252PASS/8SKIP. Actual isolated PostgreSQL backup CLI streamed a dump and
+> exact synthetic row restored; exact temporary container cleaned. This is not
+> full governance/provider/independent recovery proof. Project identity, other
+> independent paths and release/acceptance stay OPEN. See ignored
+> `backup-docker-boundary-review-2026-10-16.md` for precise receipts and limits.
+
+
 > **16 October direct production Docker boundary / partial coverage:** Default
 > preflight/deploy/shared migration-recovery Docker children now revalidate the
 > local endpoint/engine and pin every daemon probe/action. Fourteen helper cases,

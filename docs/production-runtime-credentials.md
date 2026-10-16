@@ -209,12 +209,19 @@ controls refuse; Compose controls are removed. Discovery failures expose a fixed
 error without daemon diagnostics. Non-Docker commands retain their existing
 execution paths, and dry runs perform no new Docker discovery.
 
-This boundary does not yet cover every independent tool or nested subprocess:
-the standalone PostgreSQL backup helper still needs its own targeting review,
-and explicit production Compose project identity remains unresolved. Do not
-interpret direct-command coverage as certification of the complete release,
-backup/restore or project-isolation path. Private-profile boundary code remains
-unchanged.
+The shared implementation lives inside the source-hashed PostgreSQL helper,
+with only Node built-in imports. The direct-command module re-exports it; backup
+authority does not depend on an additional unbound implementation. The helper's
+synchronous actions, readiness loops, cleanup and streaming dumps all prepare a
+verified, pinned target. Dry-run plans remain non-executing. A disposable,
+network-isolated PostgreSQL check exercised a real streaming dump and exact
+synthetic-row restore, including guarded cleanup. This is not full governance
+recovery or provider acceptance.
+
+Other independent tools still need scope-specific review, and explicit
+production Compose project identity remains unresolved. Do not interpret this
+coverage as certification of every release path or project isolation.
+Private-profile boundary code remains unchanged.
 
 ## Rollback image compatibility is more than a schema marker
 
