@@ -4,11 +4,11 @@ import {z} from 'zod';
 const identifier=z.string().regex(/^[a-z][a-z0-9-]{1,99}$/);
 const serviceId=z.string().regex(/^srv-[a-z0-9]{20}$/);
 const imagePath=z.string().max(512).regex(/^[a-z0-9][a-z0-9.-]*(?::[0-9]+)?\/[A-Za-z0-9._/-]+@sha256:[a-f0-9]{64}$/);
-const component=z.enum(['web','api','scheduler']);
+const component=z.enum(['gateway','web','api','scheduler']);
 const configuration=z.object({ownerId:identifier,environmentId:identifier,
- services:z.array(z.object({component,id:serviceId,imagePath}).strict()).length(3)}).strict().superRefine((value,ctx)=>{
- if(new Set(value.services.map(s=>s.id)).size!==3||new Set(value.services.map(s=>s.component)).size!==3)
-  ctx.addIssue({code:'custom',message:'Exact distinct web, API and scheduler services required'});
+ services:z.array(z.object({component,id:serviceId,imagePath}).strict()).length(4)}).strict().superRefine((value,ctx)=>{
+ if(new Set(value.services.map(s=>s.id)).size!==4||new Set(value.services.map(s=>s.component)).size!==4)
+  ctx.addIssue({code:'custom',message:'Exact distinct gateway, private web, API and scheduler services required'});
 });
 const service=z.object({id:serviceId,ownerId:identifier,environmentId:identifier,
  type:z.enum(['web_service','private_service','background_worker']),imagePath,
@@ -21,7 +21,8 @@ const job=z.object({id:z.string().regex(/^job-[a-z0-9]{20}$/),serviceId,
 const deploy=z.object({id:identifier,status:z.enum(['created','queued','build_in_progress','update_in_progress',
  'live','deactivated','build_failed','update_failed','canceled','pre_deploy_in_progress','pre_deploy_failed'])});
 const activeDeploys=['created','queued','build_in_progress','update_in_progress','pre_deploy_in_progress'];
-const types={web:'web_service',api:'private_service',scheduler:'background_worker'} as const;
+const types={gateway:'web_service',web:'private_service',api:'private_service',scheduler:'background_worker'} as const;
+const shutdownOrder=['gateway','scheduler','web','api'] as const;
 const unresolved='Render maintenance is unresolved; inspect current services and jobs without automatically retrying mutations or reopening';
 type Budget={requests:number;deadline:number};
 
@@ -35,7 +36,12 @@ export class RenderMaintenanceControl {
   this.config=configuration.parse(raw);
   if(!/^[\x21-\x7e]{1,512}$/.test(token))throw new Error('Invalid Render maintenance credential');
  }
- configurationDigest(){return createHash('sha256').update(JSON.stringify(this.config)).digest('hex');}
+ configurationDigest(){return createHash('sha256').update(JSON.stringify({topology:'GATEWAY_PRIVATE_WEB_API_SCHEDULER_V1',...this.config})).digest('hex');}
+ private checkService(actual:z.infer<typeof service>,expected:z.infer<typeof configuration>['services'][number]){
+  if(actual.id!==expected.id||actual.ownerId!==this.config.ownerId||actual.environmentId!==this.config.environmentId
+   ||actual.type!==types[expected.component]||actual.imagePath!==expected.imagePath)throw new Error();
+  if(expected.component==='scheduler'&&(actual.serviceDetails.numInstances!==1||actual.serviceDetails.autoscaling!==undefined))throw new Error();
+ }
  private budget():Budget{return{requests:0,deadline:performance.now()+60000};}
  private async request(path:string,query:Record<string,string>,method:'GET'|'POST',expected:number,budget:Budget){
   if(++budget.requests>96||performance.now()>=budget.deadline)throw new Error();
@@ -71,12 +77,10 @@ export class RenderMaintenanceControl {
  private async snapshot(budget:Budget){
   const c=this.config;
   const services=await this.list('/services',{ownerId:c.ownerId,environmentId:c.environmentId,includePreviews:'true'},'service',service,budget);
-  if(services.length!==3)throw new Error();
+  if(services.length!==4)throw new Error();
   for(const expected of c.services){
    const actual=services.find(s=>s.id===expected.id);
-   if(!actual||actual.ownerId!==c.ownerId||actual.environmentId!==c.environmentId||actual.type!==types[expected.component]
-    ||actual.imagePath!==expected.imagePath)throw new Error();
-   if(expected.component==='scheduler'&&(actual.serviceDetails.numInstances!==1||actual.serviceDetails.autoscaling!==undefined))throw new Error();
+   if(!actual)throw new Error();this.checkService(actual,expected);
   }
   const jobs:z.infer<typeof job>[]=[];
   for(const current of services){
@@ -92,7 +96,7 @@ export class RenderMaintenanceControl {
  private proof(state:Awaited<ReturnType<RenderMaintenanceControl['snapshot']>>){
   if(state.services.some(s=>s.suspended!=='suspended')||state.jobs.length)throw new Error();
   const observedAt=new Date().toISOString();
-  return{scope:'RENDER_CONFIGURED_ENVIRONMENT_OBSERVATION' as const,observedAt,suspendedServices:3,activeJobs:0,
+  return{scope:'RENDER_CONFIGURED_ENVIRONMENT_OBSERVATION' as const,observedAt,suspendedServices:4,activeJobs:0,
    observationDigest:createHash('sha256').update(JSON.stringify({config:this.config,state,observedAt})).digest('hex'),
    wholeBackendQuiesced:false as const,databaseWritersFenced:false as const,sourceHostFenced:false as const,
    reopeningAuthorised:false as const,actionAuthorized:false as const};
@@ -106,7 +110,16 @@ export class RenderMaintenanceControl {
    const before=await this.snapshot(budget);
    // No automatic retries, cancellation of deploys, resume, deploy, deletion or
    // secret mutation. Unknown command outcomes need fresh read-only inspection.
-   for(const current of before.services){
+   const gateway=this.config.services.find(s=>s.component==='gateway')!;
+   const previousGateway=before.services.find(s=>s.id===gateway.id)!;
+   if(previousGateway.suspended!=='suspended')await this.request(`/services/${gateway.id}/suspend`,{},'POST',202,budget);
+   const observedGateway=service.parse(await this.request(`/services/${gateway.id}`,{},'GET',200,budget));
+   this.checkService(observedGateway,gateway);if(observedGateway.suspended!=='suspended')throw new Error();
+   // Block the observed front door before internal shutdown. Provider list order
+   // never determines execution order, and a202 alone cannot advance this step.
+   for(const name of shutdownOrder.slice(1)){
+    const expected=this.config.services.find(s=>s.component===name)!;
+    const current=before.services.find(s=>s.id===expected.id)!;
     if(current.suspended!=='suspended')await this.request(`/services/${current.id}/suspend`,{},'POST',202,budget);
    }
    const suspended=await this.snapshot(budget);

@@ -1,5 +1,17 @@
 # CharityPilot Agent Continuation Handoff
 
+> **16 October four-component managed maintenance:** The registry now requires
+> public gateway, private web/API and singleton scheduler, and rejects the old
+> three-service/public-web shape. Fresh gateway readback precedes internal
+> shutdown; all four job inventories and final state must reconcile. Synthetic
+> HTTP plus actual PostgreSQL tests prove ordering and old-plan refusal. Gateway
+> image/origin/trust integration and actual provider/custody proof remain open.
+
+> **Private release checkpoint:** 3b323064 is live on the existing private VM
+> with195 migrations/restore15 and verified private catalogue/restore/off-VM copy.
+> Its legacy same-host DB transport is not public-production TLS evidence; the
+> separately held recovery/physical-host-loss gates remain open.
+
 > **16 October closed-role password invalidation:** The guarded protocol2
 > shutdown now clears configured database passwords only after NOLOGIN/session
 > closure, using boolean catalogue proof without reading passwords/verifiers.

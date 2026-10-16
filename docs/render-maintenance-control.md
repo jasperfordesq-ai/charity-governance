@@ -20,8 +20,9 @@ Checked 16 October 2026 against Render's official API specification and docs:
 ## Implementation
 
 `RenderMaintenanceControl` requires a trusted exact workspace/environment and
-three distinct pinned-image service IDs: web_service for compiled web,
-private_service for API and background_worker for the singleton scheduler.
+four distinct pinned-image service IDs: web_service for the Caddy gateway,
+private_service for compiled web and API, and background_worker for the singleton
+scheduler. The old three-service shape and a publicly exposed web are refused.
 The service response must match its identity, type, Frankfurt region, image
 runtime and exact image digest. Independent auto-deploy must be off. Scheduler
 must report one configured instance and no autoscaling configuration.
@@ -33,9 +34,11 @@ or queued deployment. Do not cancel deploys automatically: a queued deploy may
 start as another is canceled. Historical terminal records do not imply no active
 work; filtered lists are still paginated and validated.
 
-The mutation method suspends each observed unsuspended service once, rereads all
-services, separately inventories surviving jobs and requests each cancellation
-once. A complete fresh readback must still match all service identities/images,
+The mutation method first suspends the gateway once and requires a fresh exact
+gateway GET to confirm its identity/image/type and suspended state. A202 alone
+cannot advance shutdown. It then suspends scheduler, private web and API in that
+order, regardless of provider inventory order, rereads all four services,
+separately inventories surviving jobs and requests each cancellation once. A complete fresh readback must still match all service identities/images,
 report every service suspended and report no active jobs/deployments. A202 or
 job response body alone cannot satisfy that readback. New jobs, changed config,
 continued activity and unknown command outcomes keep the operation unresolved.
@@ -76,3 +79,22 @@ The [guarded shutdown prototype](managed-backend-maintenance.md) now composes
 these component observations under a separate installation-wide one-attempt
 control. Its native database proof uses synthetic provider transports and does
 not close the remaining activation, custody, credential or host-loss gates.
+
+## Four-component contract binding
+
+The configuration digest includes a dedicated
+GATEWAY_PRIVATE_WEB_API_SCHEDULER_V1 domain and all four exact component bindings.
+The guarded maintenance plan therefore differs from the old three-service plan;
+no stored READY record is automatically upgraded or reused. Current snapshot,
+job ownership, active-deploy, bounded paging, copied configuration and error
+controls apply to the gateway as well as internal services. A resumed or changed
+gateway at final readback refuses the result. Tests populate one-off jobs for
+every component and reverse the provider inventory to verify explicit ordering.
+The actual PostgreSQL integration now also proves an old three-service control
+cannot dispatch a provider command or close a database role.
+
+This closes the maintenance inventory/sequence gap, not the managed hosting fit
+assessment. A gateway image, exact managed internal API origin, peer/forwarded
+header trust, matching build-time configuration and provider/IAM/custody tests
+remain required before using the proposed four-service deployment. This adapter
+is still inactive and does not create a provider resource or reopen services.

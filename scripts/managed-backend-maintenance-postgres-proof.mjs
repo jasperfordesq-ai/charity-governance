@@ -60,11 +60,11 @@ export async function proveManagedPasswordInvalidation({admin,configuration,url}
 // Actual TLS PostgreSQL fencing composed with synthetic provider HTTP and SDK
 // transport. This is not live Render/S3 custody or physical host-loss evidence.
 export async function proveManagedBackendMaintenance({admin,configuration,url}){
- const ids=['srv-'+ 'a'.repeat(20),'srv-'+ 'b'.repeat(20),'srv-'+ 'c'.repeat(20)];
+ const ids=['srv-'+ 'a'.repeat(20),'srv-'+ 'b'.repeat(20),'srv-'+ 'c'.repeat(20),'srv-'+ 'd'.repeat(20)];
  const image='ghcr.io/synthetic/api@sha256:'+ '1'.repeat(64),credentials={accessKeyId:'synthetic',secretAccessKey:'synthetic'};
  const storage={installationId:'synthetic-managed',bucket:'synthetic-managed-control',accountId:'123456789012',
   kmsKeyArn:'arn:aws:kms:eu-west-1:123456789012:key/11111111-1111-1111-1111-111111111111'};
- for(const scenario of ['success','acquire-ack-lost','database-ack-lost','password-ack-lost','record-ack-lost']){
+ for(const scenario of ['legacy-three-service-plan','success','acquire-ack-lost','database-ack-lost','password-ack-lost','record-ack-lost']){
   // Only this disposable fixture reopens synthetic roles between independent
   // cases. Neither production primitive nor coordinator exposes reopening.
   await admin.$executeRaw`ALTER ROLE managed_writer_a LOGIN PASSWORD 'synthetic-writer-only'`;
@@ -73,25 +73,26 @@ export async function proveManagedBackendMaintenance({admin,configuration,url}){
   const writer=new PrismaClient({datasources:{db:{url:writerUrl.href}}});
   const events=[];let commands=0,job='running',version=1,value,databaseClosed=false,transactions=0;
   const services=ids.map((id,i)=>({id,ownerId:'tea-synthetic',environmentId:'env-synthetic',
-   type:['web_service','private_service','background_worker'][i],imagePath:image,autoDeploy:'no',autoDeployTrigger:'off',
+   type:['web_service','private_service','private_service','background_worker'][i],imagePath:image,autoDeploy:'no',autoDeployTrigger:'off',
    suspended:'not_suspended',serviceDetails:{region:'frankfurt',runtime:'image',numInstances:1}}));
   const provider=new RenderMaintenanceControl({ownerId:'tea-synthetic',environmentId:'env-synthetic',services:ids.map((id,i)=>
-   ({component:['web','api','scheduler'][i],id,imagePath:image}))},'synthetic-token',async(input,options)=>{
+   ({component:['gateway','web','api','scheduler'][i],id,imagePath:image}))},'synthetic-token',async(input,options)=>{
    const endpoint=new URL(String(input)),parts=endpoint.pathname.split('/'),id=parts[3];
    assert.equal(endpoint.origin,'https://api.render.com');assert.equal(options.redirect,'error');
    if(endpoint.pathname==='/v1/services'){
-    if(databaseClosed){const [row]=await admin.$queryRaw`SELECT count(*)::integer AS n FROM pg_roles WHERE rolname IN ('managed_writer_a','managed_writer_b') AND rolcanlogin`;
-     assert.equal(row.n,0);events.push('post-database-provider-read');}
+    if(databaseClosed){const [row]=await admin.$queryRaw`SELECT count(*)::integer AS n FROM pg_authid WHERE rolname IN ('managed_writer_a','managed_writer_b') AND NOT rolcanlogin AND rolpassword IS NULL`;
+     assert.equal(row.n,2);events.push('post-database-provider-read');}
     return Response.json(services.map(service=>({service,cursor:service.id})));
    }
+   if(parts.length===4)return Response.json(services.find(s=>s.id===id));
    if(parts[4]==='suspend'){
-    assert.equal(options.method,'POST');commands++;events.push('suspend');
+    assert.equal(options.method,'POST');commands++;events.push('suspend-'+id);
     const [row]=await admin.$queryRaw`SELECT count(*)::integer AS n FROM pg_roles WHERE rolname IN ('managed_writer_a','managed_writer_b') AND rolcanlogin`;
     assert.equal(row.n,2);services.find(s=>s.id===id).suspended='suspended';return new Response(null,{status:202});
    }
    if(parts[4]==='deploys')return Response.json([]);
    if(parts[6]==='cancel'){assert.equal(options.method,'POST');commands++;events.push('cancel');job='canceled';return Response.json({status:'canceled'});}
-   if(parts[4]==='jobs')return Response.json(id===ids[2]&&job==='running'?
+   if(parts[4]==='jobs')return Response.json(id===ids[3]&&job==='running'?
     [{job:{id:'job-'+ 'd'.repeat(20),serviceId:id,status:job},cursor:'last-job'}]:[]);
    throw new Error('unexpected synthetic endpoint');
   });
@@ -123,9 +124,19 @@ export async function proveManagedBackendMaintenance({admin,configuration,url}){
    phase:'READY',attemptId:null,observations:null,publicationId:randomUUID()};
   try{
    await writer.$queryRaw`SELECT 1`;
+   if(scenario==='legacy-three-service-plan'){
+    const hash=text=>createHash('sha256').update(text).digest('hex');
+    const legacy={ownerId:'tea-synthetic',environmentId:'env-synthetic',services:ids.slice(0,3).map((id,i)=>({component:['web','api','scheduler'][i],id,imagePath:image}))};
+    value.planDigest=hash(JSON.stringify({format:2,...operation,databaseCredentialPolicy:'PASSWORD_NULL_WHILE_CLOSED',
+     provider:hash(JSON.stringify(legacy)),database:database.configurationDigest()}));
+    await assert.rejects(coordinator.close());assert.equal(commands,0);assert.equal(value.phase,'READY');
+    await writer.$queryRaw`SELECT 1`;await assert.rejects(coordinator.inspect());
+    console.log('PASS legacy three-service control refuses before provider/role mutation');continue;
+   }
    if(scenario==='success'){
     const result=await coordinator.close();assert.equal(result.phase,'OBSERVED_CLOSED');assert.equal(result.wholeBackendQuiesced,false);
     assert.equal(events[0],'control-ATTEMPTED');assert.ok(events.indexOf('cancel')<events.indexOf('database-close'));
+    assert.deepEqual(events.filter(event=>event.startsWith('suspend-')),[ids[0],ids[3],ids[1],ids[2]].map(id=>'suspend-'+id));
     assert.ok(events.indexOf('database-close')<events.indexOf('password-invalidate'));
     assert.ok(events.includes('post-database-provider-read'));assert.equal(events.at(-1),'control-OBSERVED_CLOSED');
    }else{
@@ -138,13 +149,13 @@ export async function proveManagedBackendMaintenance({admin,configuration,url}){
      for(const service of services)service.suspended='suspended';job='canceled';databaseClosed=true;
     }
     if(scenario==='database-ack-lost'){
-     assert.equal(commands,4);assert.equal(value.phase,'ATTEMPTED');
+     assert.equal(commands,5);assert.equal(value.phase,'ATTEMPTED');
      await writer.$executeRaw`INSERT INTO public.synthetic_managed_writer VALUES ('managed-old-session-after-lost-commit')`;
      await assert.rejects(coordinator.inspect());
      const cleanup=new ManagedDatabaseWriterFence(admin,configuration);await cleanup.close();await cleanup.invalidatePasswords();databaseClosed=true;
     }
     if(scenario==='password-ack-lost'){
-     assert.equal(commands,4);assert.equal(value.phase,'ATTEMPTED');
+     assert.equal(commands,5);assert.equal(value.phase,'ATTEMPTED');
      const [state]=await admin.$queryRaw`SELECT count(*)::integer AS n FROM pg_authid WHERE rolname IN ('managed_writer_a','managed_writer_b') AND rolpassword IS NULL AND NOT rolcanlogin`;
      assert.equal(state.n,2);
     }

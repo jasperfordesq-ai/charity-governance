@@ -45,8 +45,11 @@ the supplied source SHA. Exact-release build/attestation evidence remains needed
 1. Read the expected READY record; conditionally write a unique ATTEMPTED record
    and verify it. Only that fresh acknowledged caller proceeds. A lost write
    response stays unresolved even if a later read sees its committed attempt.
-2. Suspend the exact Render services and separately cancel surviving one-off
-   jobs, requiring the adapter's full fresh readback.
+2. Suspend and freshly confirm the exact gateway, then scheduler/private web/API
+   in a defined order, separately cancel surviving one-off jobs from all four
+   components and require the adapter's full fresh readback. Provider list order
+   cannot choose the sequence. The configuration digest has a four-component
+   domain; legacy three-service control plans refuse before dispatch.
 3. Commit NOLOGIN and drain the exact configured database sessions through
    `ManagedDatabaseWriterFence`, then atomically clear their database passwords
    while they remain closed. Unknown commit never causes automatic LOGIN or
@@ -70,7 +73,8 @@ concurrent callers, verifies the default SDK endpoint/retry configuration and
 destroys a stalled provider body at the read deadline. The existing disposable TLS
 PostgreSQL gate now also runs `managed-backend-maintenance-postgres-proof.mjs`.
 It composes the real database fence with synthetic Render HTTP and S3 SDK
-transports, covering successful ordering, lost acquisition acknowledgement, lost
+transports, covering old-three-service plan refusal, four-component ordering, lost
+acquisition acknowledgement, lost
 actual NOLOGIN commit acknowledgement, lost PASSWORD NULL commit
 acknowledgement and lost final control acknowledgement.
 Fresh clients refuse repeats. Real old sessions remain usable after NOLOGIN
