@@ -95,3 +95,11 @@ whole business-data/document-byte backup/restore and authority reconciliation.
 Prove real provider/IAM/key custody and source-host-off recovery/reopening. No
 provider account/resource/access grant or real cloud mutation occurred in these
 tests. No database migration or restore-inventory change is included.
+
+
+## Document byte candidate increment
+
+The [document byte archive](document-byte-backup.md) supplies encrypted object
+candidates outside the intent journal. It does not complete a database/object
+recovery set or authorise reopening. Full capture, manifest, current-authority,
+provider/custody and host-loss integration gates above remain open.

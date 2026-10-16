@@ -1,5 +1,12 @@
 # CharityPilot Full-Platform Remediation Audit
 
+> **17 October independent byte candidates:** New document-byte backup services
+> seal exact files, use distinct-purpose KMS wrapping and conditionally store
+> versioned/checksummed S3 candidates. Synthetic SDK/crypto fault and fresh-client
+> recovery tests pass. These are not complete backup sets, current authority,
+> restore/reopening permission or real provider/host-loss proof. See
+> [document byte archive](document-byte-backup.md).
+
 > **16 October normal managed application phase:** The actual enabled API runner
 > boots its default command against the fully migrated TLS database, restricted
 > runtime role and production validators. Real synthetic tenant sessions, Member
