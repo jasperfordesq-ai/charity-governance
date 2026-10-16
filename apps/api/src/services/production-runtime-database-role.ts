@@ -1,3 +1,5 @@
+import { Prisma } from '@prisma/client';
+
 export const PRODUCTION_RUNTIME_PROTECTED_TABLES = [
   '_prisma_migrations', 'ComplaintRecoveryEnforcement', 'ComplaintHoldRecoveryOutcome',
   'ComplaintRecoveryExecution', 'ComplaintRecoveryOutcome', 'ComplaintRecoveryCancellation',
@@ -71,8 +73,8 @@ SELECT EXISTS (
 ) AS safe`;
 
 interface RuntimeRoleTransaction {
-  $executeRawUnsafe(sql: string): Promise<unknown>;
-  $queryRawUnsafe<T>(sql: string, ...parameters: unknown[]): Promise<T>;
+  $executeRaw(sql: TemplateStringsArray): Promise<unknown>;
+  $queryRaw<T>(query: Prisma.Sql): Promise<T>;
 }
 export interface RuntimeRoleProbeClient {
   $transaction<T>(fn: (tx: RuntimeRoleTransaction) => Promise<T>,
@@ -107,10 +109,13 @@ export async function verifyProductionRuntimeDatabaseRole(client: RuntimeRolePro
   try {
     target=parseProductionRuntimeRoleTarget(target);
     return await client.$transaction(async tx => {
-      await tx.$executeRawUnsafe('SET TRANSACTION READ ONLY');
-      await tx.$executeRawUnsafe('SET LOCAL search_path = pg_catalog, public, pg_temp');
-      const rows = await tx.$queryRawUnsafe<Array<{ safe: boolean }>>(PRODUCTION_RUNTIME_DATABASE_ROLE_SQL,
+      await tx.$executeRaw`SET TRANSACTION READ ONLY`;
+      await tx.$executeRaw`SET LOCAL search_path = pg_catalog, public, pg_temp`;
+      // The repository-owned query has exactly four ordered CTE parameters.
+      // Preserve its libpq form while binding all values through Prisma.Sql.
+      const query = Prisma.sql(PRODUCTION_RUNTIME_DATABASE_ROLE_SQL.split(/\$[1-4](?=::)/u),
         target.runtimeRole,target.maintenanceRole,target.database,target.phase==='after-migration');
+      const rows = await tx.$queryRaw<Array<{ safe: boolean }>>(query);
       if (!Array.isArray(rows) || rows.length!==1 || rows[0]?.safe!==true) throw new Error();
       return { verified: true as const, phase: target.phase };
     }, { isolationLevel: 'RepeatableRead', timeout: 15000, maxWait: 5000 });

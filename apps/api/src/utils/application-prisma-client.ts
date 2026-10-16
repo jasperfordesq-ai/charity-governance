@@ -1,8 +1,8 @@
-import { PrismaClient } from '@prisma/client';
+import { Prisma, PrismaClient } from '@prisma/client';
 import { toStrictPrismaTlsUrl } from '@charitypilot/shared/prisma-database-url';
 
-const connectionProofSql=`SELECT current_user=$1::text AND session_user=$1::text
-  AND current_database()=$2::text AND NOT pg_is_in_recovery()
+const connectionProofSql = (role: string, database: string) => Prisma.sql`SELECT current_user=${role}::text AND session_user=${role}::text
+  AND current_database()=${database}::text AND NOT pg_is_in_recovery()
   AND current_setting('default_transaction_read_only')='off'
   AND EXISTS (SELECT 1 FROM pg_stat_ssl WHERE pid=pg_backend_pid() AND ssl) AS safe`;
 
@@ -30,10 +30,10 @@ export async function createApplicationPrismaClient(
     client=createClient(transport);
     await client.$connect();
     await client.$transaction(async tx=>{
-      await tx.$executeRawUnsafe('SET TRANSACTION READ ONLY');
-      await tx.$executeRawUnsafe('SET LOCAL search_path = pg_catalog, public, pg_temp');
-      const rows=await tx.$queryRawUnsafe<Array<{safe:boolean}>>(connectionProofSql,
-        decodeURIComponent(target.username),decodeURIComponent(target.pathname.slice(1)));
+      await tx.$executeRaw`SET TRANSACTION READ ONLY`;
+      await tx.$executeRaw`SET LOCAL search_path = pg_catalog, public, pg_temp`;
+      const rows=await tx.$queryRaw<Array<{safe:boolean}>>(connectionProofSql(
+        decodeURIComponent(target.username),decodeURIComponent(target.pathname.slice(1))));
       if(!Array.isArray(rows)||rows.length!==1||rows[0]?.safe!==true) throw new Error();
     },{isolationLevel:'RepeatableRead',timeout:15000,maxWait:5000});
     return client;

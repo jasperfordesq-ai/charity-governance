@@ -1,5 +1,13 @@
 # CharityPilot Agent Continuation Handoff
 
+> **16 October hosted static-scan correction:** The first accumulated master
+> CI stopped on raw-SQL methods in the runtime connection/role probes and a
+> synthetic maintenance helper. Converted fixed statements to tagged queries
+> and preserved bound catalogue parameters; scanner policy remains unchanged.
+> Private `hosted-ci-tagged-sql-correction-2026-10-16.md` records RED/GREEN,
+> actual TLS/database proof and exact run status. Hosted verification, release
+> and acceptance remain distinct; no production incident or deployment claimed.
+
 > **16 October Confluence ledger CI coverage correction:** The existing joined
 > restart/maintenance PostgreSQL proof was not invoked by the main CI workflow.
 > Added an explicit build-and-test command and gate. Local execution passes,

@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import type { PrismaClient } from '@prisma/client';
+import type { PrismaClient, Prisma } from '@prisma/client';
 import { createApplicationPrismaClient } from '../utils/application-prisma-client.js';
 
 const canonical='postgresql://cp_runtime:synthetic-private-password@db.charitypilot.ie/charitypilot?sslmode=verify-full&target_session_attrs=read-write';
@@ -11,8 +11,8 @@ function fixture(rows: unknown=[{ safe:true }]) {
     async $disconnect() {calls.push('disconnect');},
     async $transaction(fn: (tx: unknown)=>Promise<unknown>) {
       return fn({
-        async $executeRawUnsafe(sql: string) {calls.push(sql);},
-        async $queryRawUnsafe(sql: string,...values: unknown[]) {calls.push({sql,values});return rows;},
+        async $executeRaw(sql: TemplateStringsArray) {calls.push(sql[0]);},
+        async $queryRaw(query: Prisma.Sql) {calls.push({sql:query.text,values:query.values});return rows;},
       });
     },
   } as unknown as PrismaClient;
@@ -27,7 +27,7 @@ test('application client uses strict translated TLS and checks the observed conn
   assert.equal(url.searchParams.get('sslmode'),'require');
   assert.equal(f.calls[1],'connect');
   assert.equal(f.calls[2],'SET TRANSACTION READ ONLY');
-  assert.deepEqual((f.calls[4] as {values:unknown[]}).values,['cp_runtime','charitypilot']);
+  assert.deepEqual((f.calls[4] as {values:unknown[]}).values,['cp_runtime','cp_runtime','charitypilot']);
 });
 
 for(const rows of [[],[{safe:false}],[{safe:'true'}],[{safe:true},{safe:true}]]) {

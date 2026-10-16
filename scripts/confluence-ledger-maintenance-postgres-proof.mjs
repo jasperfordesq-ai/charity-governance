@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { PrismaClient } from '@prisma/client';
+import { Prisma, PrismaClient } from '@prisma/client';
 import { ConfluenceRetainedCopyReviewService } from '../apps/api/dist/services/confluence-retained-copy-review.service.js';
 import { ConfluenceCopyRecoveryCaptureStore } from '../apps/api/dist/services/confluence-copy-recovery-capture.js';
 import { ConfluenceCopyPublicationStore } from '../apps/api/dist/services/confluence-copy-publication-store.js';
@@ -17,7 +17,7 @@ export async function runConfluenceLedgerMaintenancePostgresProof(prisma,url) {
   const target = new URL(url);
   assert.equal(target.hostname,'127.0.0.1'); assert.equal(target.username,'postgres');
   assert.match(target.pathname,/^\/copy_ledger_[a-f0-9]{32}$/);
-  const [database] = await prisma.$queryRawUnsafe('SELECT current_database() AS name,current_user AS role');
+  const [database] = await prisma.$queryRaw`SELECT current_database() AS name,current_user AS role`;
   assert.equal(database.name,target.pathname.slice(1)); assert.equal(database.role,'postgres');
   await prisma.$transaction(async tx => {
     await tx.user.update({ where: { id: 'member-a' }, data: { role: 'MEMBER' } });
@@ -97,6 +97,7 @@ export async function runConfluenceLedgerMaintenancePostgresProof(prisma,url) {
   await publishVerifiedConfluenceCopyLedger(journal,control,saved.digest,saved.binding,keys,store);
   const originals = JSON.parse(saved.body).tables;
   assert.ok(Object.values(originals).every(rows => rows.length>0),'joined proof requires all eight populated groups');
+  // Prisma.raw receives only these fixed repository-owned identifiers.
   const meta = [
     ['ConfluenceRetainedCopyReview','ConfluenceRetainedCopyReview_guard'],['ConfluenceSyntheticCopyScope','ConfluenceSyntheticCopyScope_guard'],
     ['ConfluenceRetainedCopyPermission','ConfluenceRetainedCopyPermission_guard'],['ConfluenceRetainedCopyReviewWithdrawal','ConfluenceRetainedCopyReviewWithdrawal_guard'],
@@ -122,9 +123,9 @@ export async function runConfluenceLedgerMaintenancePostgresProof(prisma,url) {
     const beforeTransport = await transportRows();
     // Disposable older-backup fixture only. No guard bypass reaches the replay.
     await maintenance.$transaction(async tx => {
-      for (const [name,guard] of meta) await tx.$executeRawUnsafe(`ALTER TABLE public."${name}" DISABLE TRIGGER "${guard}"`);
-      for (const [name] of [...meta].reverse()) await tx.$executeRawUnsafe(`DELETE FROM public."${name}" WHERE "organisationId"=$1`,'org-a');
-      for (const [name,guard] of meta) await tx.$executeRawUnsafe(`ALTER TABLE public."${name}" ENABLE TRIGGER "${guard}"`);
+      for (const [name,guard] of meta) await tx.$executeRaw(Prisma.raw(`ALTER TABLE public."${name}" DISABLE TRIGGER "${guard}"`));
+      for (const [name] of [...meta].reverse()) await tx.$executeRaw(Prisma.sql`DELETE FROM public.${Prisma.raw(`"${name}"`)} WHERE "organisationId"=${'org-a'}`);
+      for (const [name,guard] of meta) await tx.$executeRaw(Prisma.raw(`ALTER TABLE public."${name}" ENABLE TRIGGER "${guard}"`));
     });
     const empty = await readRows(); assert.ok(Object.values(empty).every(rows => rows.length===0));
     const beforeControl = structuredClone(current), beforeEntries = [...entries], beforeObjects = [...objects], beforeWrites = externalWrites;
@@ -134,7 +135,7 @@ export async function runConfluenceLedgerMaintenancePostgresProof(prisma,url) {
           $executeRaw: tx.$executeRaw.bind(tx), $queryRaw: async (sql,...values) => {
             const result = await tx.$queryRaw(sql,...values);
             if (sql.join('?').includes('ConfluenceCopyLedgerRecovery_replay')) {
-              if (failure==='SQL') await tx.$executeRawUnsafe('SELECT 1/0');
+              if (failure==='SQL') await tx.$executeRaw`SELECT 1/0`;
               else current = { ...current, revision: 'synthetic-head-race' };
             }
             return result;
