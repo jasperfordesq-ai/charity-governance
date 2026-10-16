@@ -5,12 +5,16 @@ import {
   mkdtempSync,
   readFileSync,
   rmSync,
-  writeFileSync,
+  writeFileSync as writeFixture,
 } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
-import { test } from "node:test";
+import { after, test } from "node:test";
+import { productionRuntimeEnvFixtures } from './test-fixtures/production-runtime-env.mjs';
+
+const encodeProductionFixture = productionRuntimeEnvFixtures(after);
+function writeFileSync(path, content, options = {}) { writeFixture(path, content, { mode: 0o600, ...options }); }
 import {
   P109_RESTORED_HISTORY_PROBE_IMAGE_SCRIPT,
   P109_RESTORED_HISTORY_PROBE_SQL_TEMPLATE,
@@ -159,9 +163,7 @@ function productionEnv(overrides = {}) {
     ...overrides,
   };
 
-  return `${Object.entries(values)
-    .map(([key, value]) => `${key}=${value}`)
-    .join("\n")}\n`;
+  return encodeProductionFixture(values);
 }
 
 function rollbackManifest(overrides = {}) {
@@ -347,12 +349,11 @@ test("production rollback dry-run tolerates legacy Supabase metadata and delegat
       deployCalls[0].mergedEnv,
       /JWT_SECRET=J9mQ4vRx7tL2pZs6NfB8hDy3WcK1uEa5/,
     );
-    assert.match(deployCalls[0].mergedEnv, new RegExp(currentDigest));
-    assert.ok(
-      deployCalls[0].mergedEnv.lastIndexOf(rollbackDigest) >
-        deployCalls[0].mergedEnv.lastIndexOf(currentDigest),
-      "trusted rollback overrides must be appended after the byte-preserved production env",
-    );
+    assert.doesNotMatch(deployCalls[0].mergedEnv, new RegExp(currentDigest));
+    for (const key of ['CHARITYPILOT_API_IMAGE', 'CHARITYPILOT_WEB_IMAGE', 'CHARITYPILOT_MIGRATION_IMAGE',
+      'CHARITYPILOT_WEB_BUILD_NEXT_PUBLIC_API_URL', 'CHARITYPILOT_DATABASE_COMPATIBILITY']) {
+      assert.equal(deployCalls[0].mergedEnv.split('\n').filter(line => line.startsWith(`${key}=`)).length, 1, key);
+    }
     assert.match(result.stdout, /Production compose rollback dry-run/);
     assert.match(
       result.stdout,
@@ -382,7 +383,7 @@ test("production rollback preserves quoted and special-character production env 
       /JWT_SECRET=.*\n/,
       `${specialLine}\n# preserve this operator comment byte-for-byte\n`,
     )
-    .trimEnd();
+    .trimEnd().replaceAll('\n', '\r\n');
   writeFileSync(envPath, originalContent);
   writeFileSync(manifestPath, rollbackManifest());
   const schemaAttestationPath = writeSchemaCompatibilityAttestation(
@@ -414,7 +415,12 @@ test("production rollback preserves quoted and special-character production env 
     );
 
     assert.equal(result.status, 0, result.stderr);
-    assert.ok(mergedContent.startsWith(`${originalContent}\n`));
+    // Only release selections are replaced; every other original line retains
+    // its bytes, including CRLF, quoted values and operator comments.
+    for (const line of originalContent.split(/(?<=\n)/u)) {
+      if (/^CHARITYPILOT_(?:API_IMAGE|WEB_IMAGE|MIGRATION_IMAGE|WEB_BUILD_NEXT_PUBLIC_API_URL|DATABASE_COMPATIBILITY)=/u.test(line)) continue;
+      assert.ok(mergedContent.includes(line), 'non-release configuration bytes must be preserved');
+    }
     assert.match(
       mergedContent,
       /JWT_SECRET='literal \$dollar # hash \\ slash and spaces'/,

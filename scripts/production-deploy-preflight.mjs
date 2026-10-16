@@ -3,6 +3,7 @@ import { existsSync, readFileSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { runProductionPreflight } from './check-production.mjs';
+import { assertProductionRuntimeEnvironmentUnchanged, buildProductionComposeEnvironment } from './production-runtime-credentials.mjs';
 import {
   CANONICAL_PRODUCTION_API_ORIGIN,
   CANONICAL_PRODUCTION_WEB_ORIGIN,
@@ -187,7 +188,7 @@ export function redactProductionDeployTranscript(value) {
   return String(value)
     .replace(/postgres(?:ql)?:\/\/[^\s'")]+/gi, '[redacted-database-url]')
     .replace(
-      /\b((?:DATABASE_URL|OWNER_JWT_SECRET|JWT_SECRET|AUTH_RECOVERY_SECRET|READINESS_API_KEY|STRIPE_SECRET_KEY|STRIPE_WEBHOOK_SECRET|STRIPE_BILLING_PORTAL_CONFIGURATION_ID|RESEND_API_KEY|SUPABASE_SERVICE_ROLE_KEY|ERROR_ALERT_WEBHOOK_URL|NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY)=)[^\s'")]+/gi,
+      /\b((?:CHARITYPILOT_PRODUCTION_RUNTIME_DATABASE_URL|DATABASE_URL|OWNER_JWT_SECRET|JWT_SECRET|AUTH_RECOVERY_SECRET|READINESS_API_KEY|STRIPE_SECRET_KEY|STRIPE_WEBHOOK_SECRET|STRIPE_BILLING_PORTAL_CONFIGURATION_ID|RESEND_API_KEY|SUPABASE_SERVICE_ROLE_KEY|ERROR_ALERT_WEBHOOK_URL|NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY)=)[^\s'")]+/gi,
       '$1[redacted]',
     )
     .replace(/\b(?:sk|pk)_(?:live|test)_[A-Za-z0-9_=-]+/g, '[redacted-stripe-key]')
@@ -205,7 +206,9 @@ function runCommand(command, env) {
     cwd: repoRoot,
     encoding: 'utf8',
     env,
-    stdio: 'inherit',
+    // Child diagnostics can contain expanded secrets. Only the bounded,
+    // input-independent failure below is exposed to the deploy transcript.
+    stdio: 'pipe',
   });
 
   if (result.status !== 0) {
@@ -247,7 +250,9 @@ function result(status, stdout = '', stderr = '') {
 export function runProductionDeployPreflightFromArgs(
   args = process.argv.slice(2),
   processEnv = process.env,
-  { expectedDatabaseCompatibility = REQUIRED_DATABASE_COMPATIBILITY } = {},
+  { expectedDatabaseCompatibility = REQUIRED_DATABASE_COMPATIBILITY,
+    buildRuntimeEnvironment = buildProductionComposeEnvironment,
+    executeCommand = runCommand } = {},
 ) {
   let options;
   try {
@@ -325,33 +330,53 @@ export function runProductionDeployPreflightFromArgs(
     );
   }
 
-  const images = requiredImages.map(({ envName }) => deploymentEnv[envName]);
-  const commands = commandsFor({ productionEnvFile: options.productionEnvFile, images, tlsProxy: options.tlsProxy });
+  let transport;
+  try {
+    transport = buildRuntimeEnvironment(envPath, processEnv);
+    if (JSON.stringify(parseEnvFile(transport.binding.maintenancePath)) !== JSON.stringify(fileEnv)) {
+      throw new Error('Production runtime configuration changed; repeat protected configuration review.');
+    }
+    const runtimeResult = runProductionPreflight({
+      envFile: transport.binding.appPath,
+      processEnv: transport.environment,
+    });
+    if (runtimeResult.status !== 0) {
+      return result(1, '', `Production deploy preflight failed: runtime environment validation failed.\n${redactProductionDeployTranscript(runtimeResult.stderr)}`);
+    }
+    assertProductionRuntimeEnvironmentUnchanged(transport.binding);
+    if (!options.dryRun && !transport.privatePermissionsVerified) {
+      throw new Error('Production execution requires verified private file permissions for both configurations.');
+    }
+  } catch (error) {
+    return result(1, '', `Production deploy preflight failed: ${redactProductionDeployTranscript(error instanceof Error ? error.message : String(error))}\n`);
+  }
+  const images = requiredImages.map(({ envName }) => transport.environment[envName]);
+  const commands = commandsFor({ productionEnvFile: transport.binding.maintenancePath, images, tlsProxy: options.tlsProxy });
 
   if (options.dryRun) {
     return result(0, [
       'Production deploy preflight dry-run:',
+      'Separate runtime configuration content validated; actual database-role privileges remain unverified.',
+      ...(transport.privatePermissionsVerified ? [] : ['Private file permissions are unverified; execution is refused on this platform.']),
       ...commands.map(commandLine),
       '',
     ].join('\n'));
   }
 
-  const commandEnv = {
-    ...processEnv,
-    ...fileEnv,
-    CHARITYPILOT_PRODUCTION_ENV_FILE: options.productionEnvFile,
-  };
+  const commandEnv = transport.environment;
 
   try {
     for (const command of commands) {
-      runCommand(command, commandEnv);
+      assertProductionRuntimeEnvironmentUnchanged(transport.binding);
+      executeCommand(command, commandEnv);
     }
+    assertProductionRuntimeEnvironmentUnchanged(transport.binding);
   } catch (error) {
     const message = redactProductionDeployTranscript(error instanceof Error ? error.message : String(error));
     return result(1, '', `Production deploy preflight failed: ${message}\n`);
   }
 
-  return result(0, 'Production deploy preflight passed: env, compose config, and image signatures verified.\n');
+  return result(0, 'Production deploy preflight passed: separate protected runtime configuration, compose config, and image signatures verified. Actual database-role privileges require separate verification.\n');
 }
 
 function main() {

@@ -1,5 +1,13 @@
 # CharityPilot Full-Platform Remediation Audit
 
+> **16 October production runtime preflight integration / partial remediation:**
+> Separate runtime configuration is now mandatory in preflight, including complete
+> production validation, protected-file execution refusal and rechecks across
+> verification children. Rollback no longer emits duplicate release keys. Focused
+>128PASS/twoWindowsSKIP; production/recovery dependents215PASS. No actual DB grant,
+> signature/provider/deployed proof from mocks. Deployment/recovery child transport,
+> full effective Compose split and preflight-to-cutover continuity remain OPEN.
+
 > **16 October trusted deployment environment preparation:** Added canonical
 > reviewed-file Compose transport and ambient override rejection. Proposed split
 > configuration is archived privately with static synthetic render proof; active

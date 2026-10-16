@@ -1,8 +1,9 @@
 import assert from 'node:assert/strict';
-import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { mkdtempSync, readFileSync, rmSync, writeFileSync as writeFixture } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
-import { test } from 'node:test';
+import { basename, dirname, join, resolve } from 'node:path';
+import { after, test } from 'node:test';
+import { buildProductionComposeEnvironment } from './production-runtime-credentials.mjs';
 import {
   redactProductionDeployTranscript,
   runProductionDeployPreflightFromArgs,
@@ -10,6 +11,14 @@ import {
 
 const digest = 'a'.repeat(64);
 const productionSupabaseUrl = 'https://xjvdkmqbtczrnlqpswfa.supabase.co';
+const runtimeFixtures = mkdtempSync(join(tmpdir(), 'charitypilot-preflight-runtime-'));
+let runtimeFixtureNumber = 0;
+after(() => {
+  assert.equal(dirname(resolve(runtimeFixtures)), resolve(tmpdir()));
+  assert.ok(basename(runtimeFixtures).startsWith('charitypilot-preflight-runtime-'));
+  rmSync(runtimeFixtures, { recursive: true, force: true });
+});
+function writeFileSync(path, contents) { writeFixture(path, contents, { mode: 0o600 }); }
 
 function completeDeployEnv(overrides = {}) {
   const values = {
@@ -54,7 +63,12 @@ function completeDeployEnv(overrides = {}) {
     ...overrides,
   };
 
-  return `${Object.entries(values).map(([key, value]) => `${key}=${value}`).join('\n')}\n`;
+  const runtimeFile = join(runtimeFixtures, `runtime-${++runtimeFixtureNumber}.env`);
+  const runtimeValues = { ...values, DATABASE_URL: String(values.DATABASE_URL).replace('user:pass@', 'cp_runtime:runtime-only-password@') };
+  delete runtimeValues.CHARITYPILOT_PRODUCTION_APP_ENV_FILE;
+  writeFileSync(runtimeFile, `${Object.entries(runtimeValues).map(([key, value]) => `${key}=${value}`).join('\n')}\n`);
+  values.CHARITYPILOT_PRODUCTION_APP_ENV_FILE ??= runtimeFile;
+  return `${Object.entries(values).map(([key, value]) => `${key}='${value}'`).join('\n')}\n`;
 }
 
 function runPreflight(args, env = {}, internalOptions = undefined) {
@@ -72,6 +86,7 @@ function runPreflight(args, env = {}, internalOptions = undefined) {
 test('deploy transcript redaction removes production secret fragments', () => {
   const transcript = [
     'DATABASE_URL=postgresql://user:secret@db.charitypilot.ie:5432/charitypilot?sslmode=require',
+    'CHARITYPILOT_PRODUCTION_RUNTIME_DATABASE_URL=runtime-secret-without-url-prefix',
     'STRIPE_SECRET_KEY=sk_live_superSecret',
     'STRIPE_WEBHOOK_SECRET=whsec_superSecret',
     'RESEND_API_KEY=re_superSecret',
@@ -85,6 +100,7 @@ test('deploy transcript redaction removes production secret fragments', () => {
   const redacted = redactProductionDeployTranscript(transcript);
 
   assert.match(redacted, /DATABASE_URL=\[redacted\]/);
+  assert.match(redacted, /CHARITYPILOT_PRODUCTION_RUNTIME_DATABASE_URL=\[redacted\]/);
   assert.match(redacted, /STRIPE_SECRET_KEY=\[redacted\]/);
   assert.match(redacted, /STRIPE_WEBHOOK_SECRET=\[redacted\]/);
   assert.match(redacted, /RESEND_API_KEY=\[redacted\]/);
@@ -407,4 +423,92 @@ test('deploy preflight redacts env file failure transcripts', () => {
   assert.match(result.stderr, /Production deploy preflight failed:/);
   assert.match(result.stderr, /token=\[redacted\]/);
   assert.doesNotMatch(result.stderr, /secret-token/);
+});
+
+test('preflight requires separate runtime configuration even in planning mode', t => {
+  const envPath = join(runtimeFixtures, 'missing-runtime-selector.env');
+  writeFileSync(envPath, completeDeployEnv({ CHARITYPILOT_PRODUCTION_APP_ENV_FILE: '' }));
+  const calls = [];
+  const result = runPreflight(['--production-env-file', envPath, '--dry-run'], {}, {
+    executeCommand: (...args) => calls.push(args),
+  });
+  assert.equal(result.status, 1);
+  assert.match(result.stderr, /separate protected runtime configuration/);
+  assert.equal(calls.length, 0);
+});
+
+test('runtime production checks cannot borrow a missing API secret from the maintenance file', () => {
+  const envPath = join(runtimeFixtures, 'incomplete-runtime.env');
+  writeFileSync(envPath, completeDeployEnv());
+  const transport = buildProductionComposeEnvironment(envPath);
+  writeFileSync(transport.binding.appPath, readFileSync(transport.binding.appPath, 'utf8').replace(/^OWNER_JWT_SECRET=.*\n/m, ''));
+  const result = runPreflight(['--production-env-file', envPath, '--dry-run']);
+  assert.equal(result.status, 1);
+  assert.match(result.stderr, /runtime environment validation failed/);
+  assert.match(result.stderr, /OWNER_JWT_SECRET/);
+});
+
+test('preflight execution passes reviewed inputs and detects a changed runtime file before the next command', () => {
+  const envPath = join(runtimeFixtures, 'guarded-execution.env');
+  writeFileSync(envPath, completeDeployEnv());
+  const calls = [];
+  const result = runPreflight(['--production-env-file', envPath], {
+    DATABASE_URL: 'unreviewed-ambient', COMPOSE_FILE: 'unreviewed-compose.yml',
+  }, {
+    // Command orchestration test only. This flag does NOT prove Windows ACLs.
+    buildRuntimeEnvironment: (...args) => ({ ...buildProductionComposeEnvironment(...args), privatePermissionsVerified: true }),
+    executeCommand: (command, env) => {
+      calls.push(command);
+      assert.equal(env.COMPOSE_FILE, undefined);
+      assert.match(env.DATABASE_URL, /user:pass@/);
+      assert.match(env.CHARITYPILOT_PRODUCTION_RUNTIME_DATABASE_URL, /cp_runtime:runtime-only-password@/);
+      assert.equal(env.CHARITYPILOT_PRODUCTION_ENV_FILE, resolve(envPath));
+      writeFileSync(env.CHARITYPILOT_PRODUCTION_APP_ENV_FILE, '# changed after first command\n');
+    },
+  });
+  assert.equal(result.status, 1);
+  assert.match(result.stderr, /configuration changed/);
+  assert.equal(calls.length, 1);
+  assert.doesNotMatch(result.stdout + result.stderr, /user:pass|runtime-only-password/);
+});
+
+test('unsupported file protection refuses execution before any command', () => {
+  const envPath = join(runtimeFixtures, 'unverified-protection.env');
+  writeFileSync(envPath, completeDeployEnv());
+  const calls = [];
+  const result = runPreflight(['--production-env-file', envPath], {}, {
+    buildRuntimeEnvironment: (...args) => ({ ...buildProductionComposeEnvironment(...args), privatePermissionsVerified: false }),
+    executeCommand: (...args) => calls.push(args),
+  });
+  assert.equal(result.status, 1);
+  assert.match(result.stderr, /private file permissions/);
+  assert.equal(calls.length, 0);
+});
+
+test('a change during the final signature command cannot produce preflight success', () => {
+  const envPath = join(runtimeFixtures, 'changed-at-final-signature.env');
+  writeFileSync(envPath, completeDeployEnv());
+  let calls = 0;
+  const result = runPreflight(['--production-env-file', envPath], {}, {
+    // Isolate orchestration from platform ACL verification and external tools.
+    buildRuntimeEnvironment: (...args) => ({ ...buildProductionComposeEnvironment(...args), privatePermissionsVerified: true }),
+    executeCommand: (_command, env) => {
+      if (++calls === 5) writeFileSync(env.CHARITYPILOT_PRODUCTION_APP_ENV_FILE,
+        readFileSync(env.CHARITYPILOT_PRODUCTION_APP_ENV_FILE, 'utf8') + '# late change\n');
+    },
+  });
+  assert.equal(calls, 5);
+  assert.equal(result.status, 1);
+  assert.match(result.stderr, /configuration changed/);
+});
+
+test('actual unverified Windows permissions cannot execute production preflight', t => {
+  if (process.platform !== 'win32') { t.skip('Windows-specific unsupported ACL gate'); return; }
+  const envPath = join(runtimeFixtures, 'actual-windows-protection.env');
+  writeFileSync(envPath, completeDeployEnv());
+  let calls = 0;
+  const result = runPreflight(['--production-env-file', envPath], {}, { executeCommand: () => { calls++; } });
+  assert.equal(result.status, 1);
+  assert.match(result.stderr, /private file permissions/);
+  assert.equal(calls, 0);
 });

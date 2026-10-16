@@ -1,5 +1,19 @@
 # CharityPilot Agent Continuation Handoff
 
+> **16 October strict production preflight connected / remaining lifecycle OPEN:**
+> Preflight now requires the separate reviewed runtime file, validates its complete
+> production settings, refuses unverified file protection on execution, and checks
+> unchanged bytes/identity before every verification child and after the last.
+> Runtime URL redaction includes the derived key; child output cannot bypass it.
+> Rollback replaces selected release metadata without duplicate dotenv keys while
+> preserving unrelated bytes/comments/CRLF.130focused cases:128PASS/twoexpected
+> WindowsSKIP;215additional production/recovery dependency checksPASS. Credential
+> tests are registered in the production check gate. Windows orchestration mocks
+> are not ACL/signature/provider evidence. Active Compose and deploy/recovery child
+> transport remain unmodified: NEXT connect all callers, close preflight-to-cutover
+> binding continuity, inspect actual role grants and apply Compose atomically.
+> Existing restricted runtime credential gap and acceptance remain OPEN; no deploy.
+
 > **16 October Compose transport preparation / integration OPEN:** Trusted helper
 > derives canonical maintenance/runtime selectors and runtime database input from
 > bound reviewed files, replacing ambient credential aliases and excluding

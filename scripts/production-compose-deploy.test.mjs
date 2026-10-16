@@ -1,9 +1,13 @@
 import assert from "node:assert/strict";
-import { existsSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdtempSync, rmSync, writeFileSync as writeFixture } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
-import { test } from "node:test";
+import { after, test } from "node:test";
+import { productionRuntimeEnvFixtures } from './test-fixtures/production-runtime-env.mjs';
+
+const encodeProductionFixture = productionRuntimeEnvFixtures(after);
+function writeFileSync(path, content, options = {}) { writeFixture(path, content, { mode: 0o600, ...options }); }
 
 const scriptsDir = dirname(fileURLToPath(import.meta.url));
 const deployScriptPath = join(scriptsDir, "production-compose-deploy.mjs");
@@ -103,9 +107,7 @@ function completeDeployEnv(overrides = {}) {
     ...overrides,
   };
 
-  return `${Object.entries(values)
-    .map(([key, value]) => `${key}=${value}`)
-    .join("\n")}\n`;
+  return encodeProductionFixture(values);
 }
 
 test("production deploy dry-run validates preflight before rendering compose up", async () => {

@@ -613,10 +613,14 @@ function mergedEnvContent(productionEnvContent, rollbackEnv, compatibility) {
   }
   overrideLines.push(`${DATABASE_COMPATIBILITY_ENV}=${compatibility}`);
 
-  const preserved = productionEnvContent.endsWith("\n")
-    ? productionEnvContent
-    : `${productionEnvContent}\n`;
-  return `${preserved}${overrideLines.join("\n")}\n`;
+  const overrideKeys = new Set(overrideLines.map(line => line.slice(0, line.indexOf('='))));
+  // Replace selected release metadata instead of appending duplicate keys. The
+  // protected configuration reader deliberately refuses ambiguous dotenv files.
+  const preserved = productionEnvContent.replace(
+    /^[\t ]*([A-Z][A-Z0-9_]*)[\t ]*=[^\r\n]*(?:\r?\n|$)/gmu,
+    (line, key) => overrideKeys.has(key) ? '' : line,
+  );
+  return `${preserved}${preserved.endsWith('\n') ? '' : '\n'}${overrideLines.join("\n")}\n`;
 }
 
 function result(status, stdout = "", stderr = "") {
