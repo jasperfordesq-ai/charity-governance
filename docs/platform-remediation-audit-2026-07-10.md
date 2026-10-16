@@ -1,5 +1,12 @@
 # CharityPilot Full-Platform Remediation Audit
 
+> **16 October document content gap / reviewed, authority OPEN:** Fully read two
+> older comparison notes; exact hashes match fresh guarded c78 storage. Titles
+> do not turn commentary into executed instruments or structural supersession.
+> Stored authority/two carried resolutions corroborated; primary signature,
+> conditions, adoption and ratification not independently verified. Added private
+> row-specific evidence without changing lifecycle, audience or controller state.
+
 > **16 October document evidence-link repair / acceptance OPEN:** Latest private
 > queue omitted17completed14October content-review receipts. Restored additive
 > references/hash/proof-limit/next-action fields; preserved all115rows and original

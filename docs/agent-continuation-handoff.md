@@ -1,5 +1,14 @@
 # CharityPilot Agent Continuation Handoff
 
+> **16 October two commentary records reviewed:** Exact retained text and fresh
+> guarded serving-c78 byte proof establish two older contract-comparison files
+> are authored notes, not signed instruments. Corrected note claims replacement
+> but changes conclusions; legal equivalence/authority is not inferred. Referenced
+> approved governing act and two carried items verified as stored records, not
+> independent original adoption/contract compliance. Both files remain restricted
+> drafts with custody/lifecycle decisions pending. Private115-row queue adds review
+> evidence and preserves all original decisions plus17restored review links.
+
 > **16 October document handoff reconciliation:** Restored17missing dated content-
 > review references in the private115-row controlling queue. All17retained byte
 > hashes verified and every original column/decision preserved by CSV round-trip.
