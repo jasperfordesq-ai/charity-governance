@@ -1,5 +1,15 @@
 # CharityPilot Agent Continuation Handoff
 
+> **16 October replay proof boundary and audit description:** Desktop connector
+> source inclusion in server release does not prove installed client upgrades.
+> Current local tarball matches35package files and passes three synthetic archived-
+> Session ambiguity/retry/successor cases; connector suite427PASS/twoSKIP. No
+> client installation or credentials touched. Future replay reason now describes
+> presentation after revocation, covering rotation and logout without asserting a
+> previous successful use. Build/52relatedAPI checks pass; detection/quarantine unchanged,
+> historical events untouched. Release and qualified risk-owner/DPO disposition
+> remain open; see private receipt and corrected proposal.
+
 > **16 October retention category coverage, decision preparation only:** Private
 > worksheet now preserves all four original cells for each of24schedule categories
 > and records individual scope/anchor/implementation questions plus blank controller

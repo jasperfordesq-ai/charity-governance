@@ -415,10 +415,11 @@ export async function rotateSessionTokens(
         },
       });
 
-      // A refresh token is single-use, so a second presentation means either a
-      // replay or a copy in somebody else's hands. Quarantining the family is
-      // the right response, but doing it silently meant the one event most
-      // worth hearing about was the one event nobody heard. The row goes in
+      // Presentation after revocation includes rotation and explicit logout;
+      // it does not establish why the retired credential was presented again.
+      // Quarantining the family is the right response, but doing it silently
+      // meant the one event most worth hearing about was the one nobody heard.
+      // The row goes in
       // the same transaction as the quarantine, so there is no state where the
       // family is dead and the reason is unrecorded.
       await tx.securityAuditEvent.create({
@@ -432,7 +433,7 @@ export async function rotateSessionTokens(
           subjectUserId: session.id,
           subjectLabel: 'Session family quarantined after a replayed refresh token',
           subjectSessionId: session.familyId,
-          reason: 'A refresh token was presented after it had already been used.',
+          reason: 'A refresh token was presented after its session had already been revoked.',
           context: {
             clientKind: session.clientKind,
             accessLevel: session.accessLevel,

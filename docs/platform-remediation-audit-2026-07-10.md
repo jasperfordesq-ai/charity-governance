@@ -1,5 +1,13 @@
 # CharityPilot Full-Platform Remediation Audit
 
+> **16 October replay description / source correction, acceptance OPEN:** Audit
+> reason previously implied successful prior use even for LOGOUT-revoked tokens.
+> Future text now reports the proved revocation; event/detection/quarantine stay
+> unchanged. Build/52relatedAPI checks pass, including ROTATED/LOGOUT. Private disposition corrected:
+> server source inclusion is not installed desktop connector upgrade evidence.
+> Local archive behaviour and427connector checks do not close client distribution,
+> historical provenance, risk-owner or Nikita review gates.
+
 > **16 October retention coverage / OPEN:** Completed private source-bound24-row
 > controller decision sheet; all original cells retained and input/output validated.
 > Operational routes support four classes, not all adopted schedule categories;
