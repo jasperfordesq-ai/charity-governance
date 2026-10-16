@@ -1,5 +1,14 @@
 # CharityPilot Full-Platform Remediation Audit
 
+> **16 October report minimisation counterfactual proof / acceptance OPEN:**
+> Authenticated synthetic approved-export route now proves private narrative/
+> approval/source/profile changes cannot influence minimised HTML, with internal
+> positive controls and an allowed-name control. A private activity leak mutation
+> fails the new test; original source restored. Build/48related checks pass.
+> No report implementation or live governance record changed. This is bounded
+> synthetic evidence, not approval of external fields/recipients, a real Board
+> snapshot, rendered regulator filing or independent acceptance.
+
 > **16 October privileged maintenance trigger-enforcement assertion, source FIXED:**
 > Replica-mode sessions could pass enabled-trigger catalogue checks. New forward
 > migration190 refuses non-origin sessions in both replay families; prior checks

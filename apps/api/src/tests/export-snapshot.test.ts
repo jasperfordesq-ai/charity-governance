@@ -278,6 +278,46 @@ test('minimised status totals include standards without a recorded status', () =
   assert.equal(html.includes('standard-2'), false);
 });
 
+test('private narrative changes cannot influence minimised HTML while internal export still reflects them', async () => {
+  let payload = snapshotPayload();
+  const store = () => storedSnapshot({ payload, evidenceHash: hashComplianceSnapshot(payload.evidence),
+    snapshotHash: hashComplianceSnapshot(payload), createdByName: payload.approval.recordedByName });
+  const app = await buildApprovedExportApp(async () => store());
+  const get = (audience: 'internal' | 'minimised') => app.inject({ method: 'GET',
+    url: `/compliance-report?year=2026&version=approved&audience=${audience}`, headers: { authorization: authHeader } });
+  try {
+    const originalMinimised = await get('minimised'), originalInternal = await get('internal');
+    assert.equal(originalMinimised.statusCode,200); assert.equal(originalInternal.statusCode,200);
+    payload = structuredClone(payload);
+    const entry = payload.evidence.standards[0]!;
+    entry.record.actionTaken = 'SYNTHETIC_PRIVATE_TRUSTEE_PARTICULARS';
+    entry.record.evidence = 'SYNTHETIC_PRIVATE_COMPLAINT_DETAILS';
+    entry.record.notes = 'SYNTHETIC_PRIVATE_CONFLICT_DETAILS';
+    entry.principle.title = 'SYNTHETIC_PRIVATE_PRINCIPLE_TITLE';
+    entry.standard.title = 'SYNTHETIC_PRIVATE_STANDARD_TITLE';
+    payload.approval.minuteReference = 'SYNTHETIC_PRIVATE_MINUTE_REFERENCE';
+    payload.approval.approvedByName = 'SYNTHETIC_PRIVATE_APPROVER_NAME';
+    payload.approval.approvedByRole = 'SYNTHETIC_PRIVATE_APPROVER_ROLE';
+    payload.approval.approvalNotes = 'SYNTHETIC_PRIVATE_APPROVAL_NOTES';
+    payload.approval.recordedByName = 'SYNTHETIC_PRIVATE_RECORDER_NAME';
+    payload.evidence.scope.conditionalObligationProfile.hasVolunteers = false;
+    const source = payload.evidence.readiness.matrixReviewItems[0]!.sourceRefs[0]!;
+    source.name = 'SYNTHETIC_PRIVATE_SOURCE_NAME'; source.owner = 'SYNTHETIC_PRIVATE_SOURCE_OWNER';
+    source.note = 'SYNTHETIC_PRIVATE_SOURCE_NOTE'; source.url = 'https://example.invalid/SYNTHETIC_PRIVATE_SOURCE_PATH';
+    const changedMinimised = await get('minimised'), changedInternal = await get('internal');
+    assert.equal(changedMinimised.statusCode,200); assert.equal(changedInternal.statusCode,200);
+    assert.equal(changedMinimised.body,originalMinimised.body,'only omitted fields changed, so disclosure bytes must be identical');
+    assert.doesNotMatch(changedMinimised.body,/SYNTHETIC_PRIVATE_/);
+    assert.notEqual(changedInternal.body,originalInternal.body);
+    for (const marker of ['SYNTHETIC_PRIVATE_TRUSTEE_PARTICULARS','SYNTHETIC_PRIVATE_COMPLAINT_DETAILS',
+      'SYNTHETIC_PRIVATE_MINUTE_REFERENCE','SYNTHETIC_PRIVATE_APPROVER_NAME']) assert.ok(changedInternal.body.includes(marker),marker);
+    payload.evidence.organisation.name = 'SYNTHETIC_PUBLIC_ORGANISATION_NAME';
+    const changedPublic = await get('minimised'); assert.equal(changedPublic.statusCode,200);
+    assert.notEqual(changedPublic.body,changedMinimised.body); assert.match(changedPublic.body,/SYNTHETIC_PUBLIC_ORGANISATION_NAME/);
+    assert.doesNotMatch(changedPublic.body,/SYNTHETIC_PRIVATE_/);
+  } finally { await app.close(); }
+});
+
 test('approved snapshot is withheld after session revocation during snapshot verification', async () => {
   let sessionReads = 0;
   let auditWrites = 0;

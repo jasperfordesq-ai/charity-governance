@@ -1,5 +1,15 @@
 # CharityPilot Agent Continuation Handoff
 
+> **16 October minimised-report privacy boundary, test evidence only:** A new
+> synthetic route-level counterfactual changes private narratives, approval/
+> recorder details, source text and activity profile while holding allowed fields
+> constant. Minimised HTML stays byte-identical; full internal output reflects
+> private canaries. Changing an allowed organisation name changes the draft.
+> An injected unlabelled activity-flag leak is detected and exact renderer bytes
+> restored. Build and48related checks pass. Report route/renderer/integrity source
+> is unchanged from c78; no real approval/export or live test occurred. External
+> purpose/recipient/field decisions and genuine Board/DPO acceptance remain open.
+
 > **16 October maintenance session-mode refusal, source fix:** Review reproduced
 > a privileged replay session accepting replica mode despite enabled trigger
 > catalogue flags. Forward migration190 requires origin mode in the older five-
