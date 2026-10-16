@@ -58,7 +58,7 @@ export class ConfluenceRetainedCopyPermissionService {
       if (existing) throw new AppError(409, 'CONFLUENCE_COPY_PERMISSION_ALREADY_ISSUED', 'This review already has a permission. A withdrawal does not renew it.');
       // SQL locks the current local source/publication too. No network/storage
       // read occurs while this short preflight/final transaction is held.
-      await tx.$queryRaw`SELECT public."ConfluenceCopyPermission_current_review"(${reviewId}, ${organisationId})`;
+      await tx.$queryRaw`SELECT public."ConfluenceCopyPermission_current_review"(${reviewId}, ${organisationId})::text AS checked`;
       return { candidate, now: clock.now };
     };
     const before = await this.prisma.$transaction(readDecision);

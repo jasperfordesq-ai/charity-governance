@@ -1,5 +1,13 @@
 # CharityPilot Full-Platform Remediation Audit
 
+> **16 October synthetic maintenance scope path:** A preview/confirmation command
+> provides guarded immutable registration with a dedicated maintenance credential.
+> Its joined PostgreSQL/permission proof found and corrected a query-result
+> compatibility defect hidden by mocks. Scope registration still grants no provider
+> IO. See `docs/confluence-synthetic-scope-registration.md`; the complete one-use
+> erasure and independent recovery outcomes remain open, with no deployment or
+> external-review claim in this source note.
+
 > **16 October supported Confluence review preparation:** The exact retained-copy
 > observer and review store gain Owner/full-web-session HTTP entry points. Read
 > `docs/confluence-retained-copy-review.md`. This closes the missing review API

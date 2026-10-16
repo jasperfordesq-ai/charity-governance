@@ -46,7 +46,8 @@ refuses while a primary remains retained.
 
 ## Remaining execution stages
 
-Maintenance scope registration, separate Owner permission, durable one-use
+The [maintenance scope-registration command](confluence-synthetic-scope-registration.md)
+provides preview-bound registration of the exact synthetic review. Separate Owner permission, durable one-use
 consumption and uncertain-outcome quarantine, provider action/readback and
 independent recovery are separate stages. They must be implemented and verified
 before claiming the retained-source synthetic purge journey is complete. Existing

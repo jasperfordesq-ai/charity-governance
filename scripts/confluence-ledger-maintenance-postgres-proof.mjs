@@ -1,6 +1,8 @@
 import assert from 'node:assert/strict';
 import { Prisma, PrismaClient } from '@prisma/client';
 import { ConfluenceRetainedCopyReviewService } from '../apps/api/dist/services/confluence-retained-copy-review.service.js';
+import { registerSyntheticConfluenceScope } from '../apps/api/dist/services/confluence-synthetic-scope.js';
+import { ConfluenceRetainedCopyPermissionService } from '../apps/api/dist/services/confluence-retained-copy-permission.service.js';
 import { ConfluenceCopyRecoveryCaptureStore } from '../apps/api/dist/services/confluence-copy-recovery-capture.js';
 import { ConfluenceCopyPublicationStore } from '../apps/api/dist/services/confluence-copy-publication-store.js';
 import { ConfluenceCopyLedgerCaptureStore } from '../apps/api/dist/services/confluence-copy-ledger-capture-store.js';
@@ -37,19 +39,36 @@ export async function runConfluenceLedgerMaintenancePostgresProof(prisma,url) {
     grantedScopes: ['read:page:confluence','read:attachment:confluence'],
   } });
   // Synthetic maintenance scope/decision fixture; no live consent or OAuth token.
-  const scope = await prisma.confluenceSyntheticCopyScope.create({ data: {
-    organisationId: 'org-a', reviewId: recorded.id, snapshotSha256: recorded.snapshotSha256,
+  const scopeInput = {
+    organisationId: 'org-a', reviewId: recorded.id, expectedSnapshotSha256: recorded.snapshotSha256,
     evidenceRef: 'SYNTHETIC-JOINED-SCOPE', disposalPolicyEvidenceRef: 'SYNTHETIC-JOINED-DISPOSAL',
-    approvedById: 'owner-a', expiresAt: new Date(now+3500000),
-  } });
-  const permission = await prisma.confluenceRetainedCopyPermission.create({ data: {
-    organisationId: 'org-a', reviewId: recorded.id, scopeId: scope.id, snapshotSha256: recorded.snapshotSha256,
-    actorUserId: 'owner-a', integrationId: integration.id, connectionGeneration: integration.connectedAt,
+    approvedById: 'owner-a', expiresAt: new Date(now+3500000).toISOString(),
+  };
+  const preview = await registerSyntheticConfluenceScope(prisma,scopeInput);
+  assert.equal(preview.state,'PREVIEW'); assert.equal(preview.providerIOAuthorised,false);
+  assert.equal(await prisma.confluenceSyntheticCopyScope.count({where:{reviewId:recorded.id}}),0);
+  await assert.rejects(registerSyntheticConfluenceScope(prisma,scopeInput,'f'.repeat(64)));
+  const registered = await registerSyntheticConfluenceScope(prisma,scopeInput,preview.confirmationSha256);
+  assert.equal(registered.state,'REGISTERED');
+  const repeated = await registerSyntheticConfluenceScope(prisma,scopeInput,preview.confirmationSha256);
+  assert.equal(repeated.state,'ALREADY_REGISTERED'); assert.equal(repeated.scopeId,registered.scopeId);
+  assert.equal(await prisma.confluenceSyntheticCopyScope.count({where:{reviewId:recorded.id}}),1);
+  const scope = await prisma.confluenceSyntheticCopyScope.findUniqueOrThrow({where:{id:registered.scopeId}});
+  const permissionService = new ConfluenceRetainedCopyPermissionService(prisma,{observeSource:async()=>({
+    snapshot:{...review.snapshot,inventory:{...review.snapshot.inventory,observedAt:new Date().toISOString()}},
+    actorUserId:'owner-a',sourceBytesObserved:true,syntheticVerified:false,allCopiesVerified:false,actionAuthorized:false,
+    connection:{integrationId:integration.id,connectedAt:integration.connectedAt.toISOString(),
+      cloudId:review.snapshot.cloudId,siteOrigin:review.snapshot.siteOrigin},
+  })});
+  const permissionResult = await permissionService.issue('org-a','owner-a',recorded.id,{
+    scopeId: scope.id, expectedSnapshotSha256: recorded.snapshotSha256,
     evidenceRef: 'SYNTHETIC-JOINED-PERMISSION', reason: 'Synthetic permission retained for isolated restoration proof',
     attestation: 'AUTHORISE PURGE OF THIS SYNTHETIC CONFLUENCE COPY; RETAIN PRIMARY',
     scopeEvidenceRef: scope.evidenceRef, disposalPolicyEvidenceRef: scope.disposalPolicyEvidenceRef,
-    expiresAt: new Date(now+3400000),
-  } });
+    expiresAt: new Date(now+3400000).toISOString(),
+  });
+  assert.equal(permissionResult.providerIOAuthorised,false);
+  const permission=permissionResult.permission;
   await prisma.confluenceRetainedCopyPermissionWithdrawal.create({ data: {
     organisationId: 'org-a', permissionId: permission.id, actorUserId: 'owner-a',
     evidenceRef: 'SYNTHETIC-JOINED-WITHDRAWAL', reason: 'Preserve original synthetic permission withdrawal on restore',

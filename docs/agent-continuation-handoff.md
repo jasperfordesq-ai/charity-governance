@@ -1,5 +1,14 @@
 # CharityPilot Agent Continuation Handoff
 
+> **16 October synthetic-scope registration increment:** The dedicated
+> maintenance command previews and digest-confirms one exact, expiring synthetic
+> review scope. See `docs/confluence-synthetic-scope-registration.md`. The joined
+> PostgreSQL proof now calls the registration and permission services rather than
+> inserting their fixture rows directly; it exposed a Prisma `void` result
+> deserialization error, corrected by projecting the guard result as text. No SQL
+> guard or provider authority is weakened. Permission execution, quarantine and
+> independent recovery remain separate; private receipts carry release state.
+
 > **16 October retained-copy review HTTP increment:** An Owner/full-web-session
 > API now exposes exact retained-source observation and guarded review
 > recording/withdrawal. See `docs/confluence-retained-copy-review.md`. It grants
