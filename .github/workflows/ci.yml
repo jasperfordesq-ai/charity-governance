@@ -191,6 +191,13 @@ jobs:
       - name: Test
         run: npm run test
 
+      - name: Install renderer-check Chromium
+        run: npx playwright install --with-deps chromium
+        working-directory: e2e
+
+      - name: Verify synthetic report renderer layout
+        run: npm run test:rendering --prefix e2e
+
       - name: Verify retention policy migrations and recovery bindings
         run: npm run test:retention-policy
 

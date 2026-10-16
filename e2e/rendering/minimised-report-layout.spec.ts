@@ -1,18 +1,24 @@
 import { test, expect } from '@playwright/test';
-import { buildMinimisedComplianceReportHtml } from '../../apps/api/src/routes/export/compliance-report-html';
+import { resolve } from 'node:path';
+import { pathToFileURL } from 'node:url';
 
 test('minimised report retains an allowed long organisation name inside screen and print bounds', async ({ page }) => {
   test.skip(process.env.E2E_DEPLOYED_QA === 'true', 'Local renderer proof cannot attest a deployed report.');
+  // The separate CI step runs after the API build. A dynamic compiled import
+  // keeps API/Prisma dependencies out of the isolated E2E type-check graph.
+  const rendererUrl = pathToFileURL(resolve(__dirname, '../../apps/api/dist/routes/export/compliance-report-html.js')).href;
+  const { buildMinimisedComplianceReportHtml } = await import(rendererUrl) as {
+    buildMinimisedComplianceReportHtml: (snapshot: unknown) => string;
+  };
   // This deliberately isolated renderer fixture is not a real Board approval.
   const name = `SYNTHETIC-${'W'.repeat(290)}`;
   const html = buildMinimisedComplianceReportHtml({
     evidence: { organisation: { name, rcnNumber: 'SYNTHETIC-NOT-REAL' }, reportingYear: 2026,
       standards: [{ record: { status: 'COMPLIANT' } }, { record: null }] },
     approval: { sequence: 1, approvedAt: '2026-10-16T05:00:00.000Z' },
-  } as Parameters<typeof buildMinimisedComplianceReportHtml>[0]);
+  });
   const requests: string[] = [];
   page.on('request', request => requests.push(request.url()));
-  await page.route('**/*', route => route.abort());
   await page.setContent(html);
   for (const media of ['screen', 'print'] as const) {
     await page.emulateMedia({ media });

@@ -5,6 +5,7 @@
   "description": "End-to-end Playwright tests for CharityPilot, driven through a runner-owned isolated disposable stack. Intentionally NOT a root workspace, so Playwright never enters the API/web production installs or images.",
   "scripts": {
     "test": "playwright test",
+    "test:rendering": "playwright test --config playwright.rendering.config.ts",
     "typecheck": "tsc --noEmit -p tsconfig.json",
     "test:deployed:responsive:cross-browser": "playwright test tests/responsive-smoke.spec.ts --project=deployed-chromium-desktop --project=deployed-chromium-mobile --project=deployed-firefox-desktop --project=deployed-webkit-desktop",
     "test:deployed:accessibility:cross-browser": "playwright test tests/accessibility.spec.ts --project=deployed-chromium-desktop --project=deployed-chromium-mobile --project=deployed-firefox-desktop --project=deployed-webkit-desktop",
