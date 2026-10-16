@@ -1,3 +1,4 @@
+import {runConfluenceExecutionV2DispatchPostgresProof} from './confluence-execution-v2-dispatch-postgres-proof.mjs';
 import assert from 'node:assert/strict';
 import {createHash} from 'node:crypto';
 import {PrismaClient} from '@prisma/client';
@@ -98,7 +99,8 @@ export async function runConfluenceExecutionV2StorePostgresProof(prisma,runtime,
   } finally {
    await prisma.$transaction(async tx=>{await tx.user.update({where:{id:'member-a'},data:{role:member.role}});await tx.user.update({where:{id:'owner-a'},data:{role:owner.role}});});
   }
-  return{lostCaptureCommitReconciled:true,lostCandidateCommitReconciled:true,originalCiphertext:true,raceCommittedCandidates:1,retryKeyGenerations:0,
+  const v2Dispatch=await runConfluenceExecutionV2DispatchPostgresProof(prisma,runtime,url,context);
+  return{v2Dispatch,lostCaptureCommitReconciled:true,lostCandidateCommitReconciled:true,originalCiphertext:true,raceCommittedCandidates:1,retryKeyGenerations:0,
    sourceOmissionRefused:true,crossVersionRefused:true,revocationDuringKeyRefused:true,externalWrites:0};
  }finally{await replacement.$disconnect();}
 }

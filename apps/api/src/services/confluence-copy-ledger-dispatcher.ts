@@ -76,7 +76,19 @@ export class ConfluenceCopyLedgerDispatcher {
         const history = await deps.journal.readConfluenceCopyLedgerAppendHistory(request,deps.control);
         await sameLocal();
         if (mayCreate && !history.candidateEntry && !history.candidateHeadPublished) {
-          await preservePreparedConfluenceCopyLedgerArchive(saved.original,saved.candidate,deps.keys,deps.objects);
+          const guardedObjects = {
+            readConfluenceCopyLedger: deps.objects.readConfluenceCopyLedger.bind(deps.objects),
+            createConfluenceCopyLedger: async (operationId: string,envelope: string) => {
+              const latestPrefix = await verifyConfluenceCopyLedgerCandidate(deps.journal,deps.control,saved.original.digest,
+                saved.original.binding,deps.keys,preparedObjects);
+              if (latestPrefix.candidateEntryPresent || latestPrefix.candidateHeadPublished) throw new Error();
+              await sameLocal();
+              const latestHistory = await deps.journal.readConfluenceCopyLedgerAppendHistory(request,deps.control);
+              if (latestHistory.candidateEntry || latestHistory.candidateHeadPublished) throw new Error();
+              return deps.objects.createConfluenceCopyLedger(operationId,envelope);
+            },
+          };
+          await preservePreparedConfluenceCopyLedgerArchive(saved.original,saved.candidate,deps.keys,guardedObjects);
         } else {
           const opened = await readVerifiedConfluenceCopyLedgerArchive(saved.candidate.digest,saved.original.binding,deps.keys,deps.objects);
           if (opened.body !== saved.original.body) throw new Error();

@@ -187,8 +187,9 @@ release the operation, run provider deletion, restore SQL, establish physical ho
 loss readiness or authorise reopening. All corresponding authority flags stay false.
 
 Durable one-use upload, original progress/acknowledgement and version-specific slot
-release remain required before activation, followed by V2 maintenance replay and
-the complete provider/whole-backend/custody demonstration. There is no new route,
+release are implemented in the metadata coordinator described below. V2
+maintenance replay, runtime integration and the complete provider/whole-backend/
+custody demonstration remain required before activation. There is no new route,
 worker, operator recovery command or live provider action in this increment.
 
 
@@ -252,8 +253,9 @@ Official AWS references checked16October2026:
 
 The software decision is to apply that separation explicitly. Source allowlists
 are not substitutes for provider IAM, protected policy custody or tested recovery.
-Durable V2 upload/progress/acknowledgement/release, maintenance replay and the
-managed whole-backend/provider/host-loss demonstration remain open.
+The V2 metadata dispatcher below implements durable upload/progress/
+acknowledgement/release. Maintenance replay, runtime integration and the managed
+whole-backend/provider/host-loss demonstration remain open.
 
 
 Router verification: API TypeScript build passed; all22 focused ring, single-key
@@ -264,3 +266,77 @@ No SQL/model/restore inventory or runtime entry point changed, so the preceding
 separately dated full/native gates were not rerun for this provider-router-only
 increment. Exact hosted checks, live permissions/custody and deployment remain
 separate evidence requirements.
+
+
+## Durable V2 metadata dispatcher, progress and acknowledgement
+
+`ConfluenceExecutionV2Dispatcher` joins the immutable original/candidate stores,
+trusted writer/key policy, prefix verification, reservation, upload-attempt guard,
+publication and progress observations. It never recaptures source or generates
+new keys. Only the caller receiving a fresh committed attempt insert may call
+create. Lost attempt acknowledgement or a missing object after uncertain upload
+requires read-only reconciliation; no automatic second create or timeout unlock.
+The local candidate reader used before upload is explicitly separate from the
+provider reader and does not count as independent object-presence evidence.
+Historical readers retain their provider object's receiver/prototype.
+
+Current local Owner and original candidate checks repeat around asynchronous
+proofs and before control changes and archive creation; no database lock spans IO.
+Journal publication can leave pending metadata on interruption. This coordinator
+does not provide an atomic database/provider transaction or all-writer fencing.
+Before creating, the dispatcher reauthenticates the prefix and refuses if its
+entry is already pending or published. A regression test first reproduced an
+unwanted create after publication changed during a missing-object read. Both V1
+and V2 creation paths now refuse that case. This bounds the observed race; it is
+not proof of all-writer isolation or of a cross-provider transaction.
+
+`ConfluenceExecutionV2ProgressStore` records PUBLISHED and ACKNOWLEDGED separately
+in the existing immutable progress table. Each retry reauthenticates the original
+candidate and current full prefix; an old local receipt cannot substitute for a
+missing archive. ACKNOWLEDGED requires its committed matching PUBLISHED receipt
+and an independently observed empty slot. All local persistence retains the
+active Owner, tenant, original candidate, WAL/isolation and append-only guards.
+The existing SQL guards are format-neutral; no migration, table or restore-format
+change was needed. Schema remains194 and recovery inventory format15.
+
+`acknowledgeConfluenceExecutionV2Archive` verifies the exact original body digest,
+full supported prefix and unchanged current control. A separate
+`releaseConfluenceExecutionV2Control` adapter clears only its exact V2 archive
+head, operation, preparation and envelope digest with conditional replacement.
+V1 archive, decision-state and disposal releases cannot clear it. A lost release
+acknowledgement is reconciled by reauthenticating the same archive and unchanged
+identity with an empty slot; a newly acquired slot is never cleared. Release
+means acknowledgement of metadata, not provider deletion or safe reopening.
+
+The disposable PostgreSQL extension executes actual capture/candidate, attempt
+and progress commits under the restricted runtime role. New clients reconcile
+lost upload, entry, head and release responses plus actual attempt/progress commit
+acknowledgement loss. Races leave one attempt/create; unknown absent uploads stay
+quarantined. Owner transfer during a provider read completes with a500ms SQL lock
+timeout and prevents creation, proving that the observer did not hold Owner locks
+across that IO. Completed progress remains immutable; removing the fake object
+still refuses despite local receipts. These new tenants begin with empty eleven-
+group source histories; the joined earlier proof separately captures populated
+execution groups and compares their original bytes. Neither proof is live AWS,
+Confluence deletion, independent custody or physical source-host loss.
+
+Synthetic S3 integration verifies conditional V2 release, cross-version refusal,
+unknown release readback, reauthentication after an empty slot and refusal to
+clear a later operation. Unit cases also cover corrupt receipts/candidates,
+revocation, competing dispatchers, unsupported pending suffixes and lost state.
+All action/current-history/custody/reopening/transport authority flags remain
+false. There is no route, worker, user-facing execution button or operator recovery
+activation in this increment. Suspended V2 maintenance replay and the complete
+provider/whole-backend/custody/host-loss evidence remain required.
+
+
+Dispatcher verification: the local full repository gate passed shared62/web576/
+API3383/native PostgreSQL14, production1264 (7 reported skips), personal-server164
+and local-Docker45. A final populated-execution journey was then added; the
+rebuilt ordinary API suite passed3384 with zero skips, preserving original claim,
+request and outcome bytes through the complete metadata flow. The final joined
+native proof passed with both PUBLISHED and ACKNOWLEDGED commit-response loss,
+one-use attempt races, revocation during IO and immutable progress/attempt rows.
+Secrets/static-analysis scanned1589 files and control-byte checks1573 files, all
+passed. Manual staged review passed. These local/synthetic results do not replace
+exact hosted checks, runtime deployment or real provider/custody/host-loss proof.

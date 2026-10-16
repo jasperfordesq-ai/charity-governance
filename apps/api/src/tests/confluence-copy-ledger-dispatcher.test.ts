@@ -172,3 +172,14 @@ test('prototype-backed provider preserves decision readers and receiver across f
   await assert.rejects(h.resume);
   assert.equal(provider.puts,1); assert.equal(h.state.releases,1);
 });
+
+test('legacy upload refuses if its entry became published during the pre-upload read', async () => {
+ const h = await fixture();
+ h.deps.objects.readConfluenceCopyLedger = async () => {
+  await h.f.journal.appendReservedConfluenceCopyLedger({ operationId:h.f.binding.context.operationId,
+   writerId:h.f.binding.observedControl.writerId,writerEpoch:h.f.binding.context.writerEpoch,
+   preparationDigest:h.f.prepared.digest,envelopeDigest:h.f.original.digest,expectedGeneration:0,expectedDigest:null },h.deps.control);
+  return null;
+ };
+ await assert.rejects(h.resume); assert.equal(h.state.puts,0); assert.equal(h.state.releases,0); assert.ok(h.state.attempt);
+});

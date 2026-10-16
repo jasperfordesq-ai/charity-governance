@@ -1,5 +1,12 @@
 # CharityPilot Full-Platform Remediation Audit
 
+> **16 October durable V2 metadata dispatch:** Separate V2 upload/progress/
+> acknowledgement/release paths now reuse the immutable original candidate and
+> SQL guards. Lost commit/IO acknowledgements reconcile without another create;
+> pending/published-entry races refuse object recreation in V1 and V2. Synthetic
+> PostgreSQL and S3 tests are distinct from provider custody, runtime activation
+> and host loss. V2 replay and full managed recovery remain open.
+
 > **16 October historical KMS routing:** An explicit bounded key ring permits
 > generation only with its configured current key and unwraps original history
 > only through configured exact-key/context delegates. Existing single-key

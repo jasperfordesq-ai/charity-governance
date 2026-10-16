@@ -707,6 +707,17 @@ export class S3AuthorityObjectStore implements AuthorityObjectStore, AuthorityHe
     return this.releaseMatchedControl(expectedRevision,expected,['CONFLUENCE_COPY_LEDGER_ARCHIVE_V1'],expected.envelopeDigest);
   }
 
+  /** Exact V2 metadata acknowledgement only. It cannot release V1 or disposal. */
+  async releaseConfluenceExecutionV2Control(expectedRevision: string, raw: {
+    operationId: string; preparationDigest: string; generation: number; digest: string; envelopeDigest: string;
+  }) {
+    z.string().regex(/^[a-f0-9]{64}$/).parse(expectedRevision);
+    const expected = z.object({ operationId: identity, preparationDigest: z.string().regex(/^[a-f0-9]{64}$/),
+      generation: z.number().int().min(1).max(10000), digest: z.string().regex(/^[a-f0-9]{64}$/),
+      envelopeDigest: z.string().regex(/^[a-f0-9]{64}$/) }).strict().parse(raw);
+    return this.releaseMatchedControl(expectedRevision,expected,['CONFLUENCE_EXECUTION_LEDGER_ARCHIVE_V2'],expected.envelopeDigest);
+  }
+
   private async releaseMatchedControl(expectedRevision: string,
     expected: { operationId: string; preparationDigest: string; generation: number; digest: string },
     kinds: readonly string[], envelopeDigest?: string) {

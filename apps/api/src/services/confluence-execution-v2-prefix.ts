@@ -12,9 +12,10 @@ import { assertConfluenceCopyHistoricalProgression, type ConfluenceCopyRecoveryF
 import { validateConfluenceCopyLedgerRows } from './confluence-copy-ledger-validation.js';
 import { prepareConfluenceExecutionLedgerV2 } from './confluence-execution-ledger-v2.js';
 
-type Objects = ConfluenceExecutionArchiveV2HistoryObjects
+export type ConfluenceExecutionV2PrefixObjects = ConfluenceExecutionArchiveV2HistoryObjects
  & { readConfluenceCopyLedgerHistory(operationId:string):Promise<string|null>;
      readConfluenceCopyStateHistory(operationId:string):Promise<string|null> };
+type Objects = ConfluenceExecutionV2PrefixObjects;
 type Entry = ReturnType<typeof validateRecoveryAuthorityEntry>;
 type Tables = ReturnType<typeof prepareConfluenceExecutionLedgerV2>['ledger']['tables'];
 const policySchema = z.array(z.object({ writerEpoch: z.number().int().positive().max(2147483647),

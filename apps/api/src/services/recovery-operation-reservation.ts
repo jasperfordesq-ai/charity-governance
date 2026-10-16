@@ -61,6 +61,13 @@ export interface ConfluenceCopyLedgerReleaseStore extends RecoveryControlStore {
   }): Promise<boolean>;
 }
 
+/** V2 metadata release is distinct from V1 archives, decision state and disposal. */
+export interface ConfluenceExecutionV2ReleaseStore extends RecoveryControlStore {
+  releaseConfluenceExecutionV2Control(expectedRevision: string, expected: {
+    operationId: string; preparationDigest: string; generation: number; digest: string; envelopeDigest: string;
+  }): Promise<boolean>;
+}
+
 async function read(store: RecoveryControlStore): Promise<Control> {
   try { return controlSchema.parse(await store.readControl()); }
   catch { throw new Error('Recovery operation control is unavailable or invalid'); }
