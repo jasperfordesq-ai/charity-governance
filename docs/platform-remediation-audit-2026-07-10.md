@@ -1,5 +1,12 @@
 # CharityPilot Full-Platform Remediation Audit
 
+> **16 October live fixture evidence / recovery acceptance OPEN:** Read3synthetic
+> test payloads and matched fresh c78 bytes/lineage. No draft policy revisions;
+> historical and retired linked fixtures are outside the supported removal class.
+> Separate recovery draft still requires actual policy scope and agreed test plan;
+> no relabelling/lineage bypass or remote-copy authority substitution. Same-host
+> restore would not prove independent host-loss recovery. No live write performed.
+
 > **16 October document content gap / reviewed, authority OPEN:** Fully read two
 > older comparison notes; exact hashes match fresh guarded c78 storage. Titles
 > do not turn commentary into executed instruments or structural supersession.

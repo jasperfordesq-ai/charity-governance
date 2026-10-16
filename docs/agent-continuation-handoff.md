@@ -1,5 +1,13 @@
 # CharityPilot Agent Continuation Handoff
 
+> **16 October acceptance-fixture disposition preparation:** Three exact synthetic
+> payloads read and fresh guarded c78 hashes verified. Three identities/two hashes;
+> matching bytes do not transfer authority. Historical/retired lineage fixtures
+> cannot use DRAFT removal; only separate draft is a candidate after policy/test
+> agreement. No approved draft policy exists; class-wide policy is not a fixture-ID
+> permission. Current115-row private queue adds source/current guard boundaries,
+> preserves prior decisions. No deletion, reclassification or test-plan approval.
+
 > **16 October two commentary records reviewed:** Exact retained text and fresh
 > guarded serving-c78 byte proof establish two older contract-comparison files
 > are authored notes, not signed instruments. Corrected note claims replacement
