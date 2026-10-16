@@ -275,6 +275,16 @@ WHERE table_namespace.nspname = $1
   AND (trigger_entry.tgtype::int & 32) = 32
 `.trim();
 
+// Empty-row proof must not be satisfied by RLS or ONLY hiding inherited rows.
+// These are metadata reads, under the same schema locks as the row probe.
+const PRISTINE_RELATION_SHAPE_SQL = `
+SELECT COUNT(*)::int AS unsafe_relation_count
+FROM pg_catalog.pg_class t JOIN pg_catalog.pg_namespace n ON n.oid=t.relnamespace
+WHERE n.nspname=$1 AND t.relname=ANY($2::text[])
+AND (t.relkind<>'r' OR t.relrowsecurity OR t.relforcerowsecurity
+  OR EXISTS (SELECT 1 FROM pg_catalog.pg_inherits i WHERE i.inhrelid=t.oid OR i.inhparent=t.oid))
+`.trim();
+
 const TRUNCATE_PUBLICATION_SQL = `
 SELECT COUNT(*)::int AS unsafe_publication_count
 FROM pg_catalog.pg_publication_tables AS publication_table
@@ -736,6 +746,10 @@ function loadDisposableDatabaseConfig(env = process.env) {
 
   const isRemote =
     executionMode === DATABASE_SAFETY_CONTRACT.remoteExecutionMode;
+  if (env.E2E_LOCAL_DATABASE_LIFECYCLE !== undefined &&
+      (isRemote || env.E2E_LOCAL_DATABASE_LIFECYCLE !== 'runner-owned-fresh')) {
+    fail('Fresh runner-owned database lifecycle is restricted to managed local disposable tests.');
+  }
   let apiUrl;
   let webUrl;
   let cookieDomain;
@@ -1186,6 +1200,41 @@ function buildSchemaQualifiedTruncateSql(tables) {
   return `TRUNCATE TABLE ${qualifiedOnlyResetTables(tables).join(", ")} CONTINUE IDENTITY RESTRICT;`;
 }
 
+function buildPristineDatabaseProbeSql(tables) {
+  return `SELECT NOT EXISTS (${qualifiedOnlyResetTables(tables).map(table =>
+    `(SELECT 1 FROM ${table} LIMIT 1)`).join(' UNION ALL ')}) AS is_pristine;`;
+}
+
+/** Non-destructive initial proof for a newly provisioned managed local stack.
+ * Never clears data or disables a trigger. A dirty/hidden/changed dataset
+ * refuses; only the owning runner may later dispose of its exact resources.
+ */
+async function assertPristineLocalDisposableDatabase(client, config, tables) {
+  assertDirectResetModeIsLocal(config);
+  let started = false;
+  try {
+    await client.query('BEGIN');
+    started = true;
+    await client.query(ADVISORY_LOCK_SQL, [DATABASE_SAFETY_CONTRACT.advisoryLockKey]);
+    await queryAndAssertDatabaseIdentity(client, config);
+    await queryAndAssertPublicTableInventory(client, tables);
+    await client.query(buildSchemaQualifiedLockSql(tables));
+    const shape = await client.query(PRISTINE_RELATION_SHAPE_SQL, [DATABASE_SAFETY_CONTRACT.databaseSchema, tables]);
+    assertSingleZeroCount(shape, 'unsafe_relation_count', 'Pristine database proof refuses hidden or inherited application rows.');
+    const result = await client.query(buildPristineDatabaseProbeSql(tables));
+    if (!result || !Array.isArray(result.rows) || result.rows.length !== 1 || result.rows[0]?.is_pristine !== true) {
+      fail('Managed local E2E requires a pristine application dataset; existing records are never reset.');
+    }
+    await queryAndAssertDatabaseIdentity(client, config);
+    await client.query('COMMIT');
+  } catch (error) {
+    if (started) {
+      try { await client.query('ROLLBACK'); } catch { /* Preserve safe failure. */ }
+    }
+    throw safeDatabaseOperationError('Pristine local database proof', error);
+  }
+}
+
 function expectedPublicTableInventory(tables) {
   validateResetTables(tables);
   return [...tables, ...PRESERVED_PUBLIC_TABLES].sort();
@@ -1524,6 +1573,7 @@ module.exports = {
   DISPOSABLE_DATABASE_RESET_TABLES,
   PRESERVED_PUBLIC_TABLES,
   PUBLIC_TABLE_INVENTORY_SQL,
+  PRISTINE_RELATION_SHAPE_SQL,
   REMOTE_SUITE_ADVISORY_LOCK_KEY,
   REMOTE_SUITE_LEASE_OWNERSHIP_SQL,
   REMOTE_SUITE_LEASE_PRESENCE_SQL,
@@ -1539,6 +1589,8 @@ module.exports = {
   acquireRemoteSuiteAdvisoryLeaseBounded,
   buildSchemaQualifiedLockSql,
   buildSchemaQualifiedTruncateSql,
+  buildPristineDatabaseProbeSql,
+  assertPristineLocalDisposableDatabase,
   isPrivateOrLoopbackAddress,
   invokeWithRemoteSuiteLeaseAuthority,
   loadDisposableDatabaseConfig,

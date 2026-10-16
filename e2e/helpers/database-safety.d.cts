@@ -175,6 +175,11 @@ export declare function resetDisposableDatabase(
   config: DisposableDatabaseConfig,
   tables: readonly string[],
 ): Promise<void>;
+export declare const PRISTINE_RELATION_SHAPE_SQL: string;
+export declare function buildPristineDatabaseProbeSql(tables: readonly string[]): string;
+export declare function assertPristineLocalDisposableDatabase(
+  client: DatabaseClientLike, config: DisposableDatabaseConfig, tables: readonly string[],
+): Promise<void>;
 export declare function safeDatabaseOperationError(
   operation: string,
   error: unknown,

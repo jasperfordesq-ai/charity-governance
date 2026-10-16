@@ -36,11 +36,58 @@ const {
   queryAndAssertRemoteSuiteAdvisoryLeaseOwnership,
   queryAndAssertRemoteSuiteAdvisoryLeasePresence,
   resetDisposableDatabase,
+  assertPristineLocalDisposableDatabase,
+  buildPristineDatabaseProbeSql,
+  PRISTINE_RELATION_SHAPE_SQL,
   releaseRemoteSuiteAdvisoryLease,
   safeDatabaseOperationError,
 } = require("./database-safety.cjs");
 
 const INSTANCE_ID = "123e4567-e89b-42d3-a456-426614174000";
+
+test('pristine local proof preserves immutable guards and writes no application data', async () => {
+  const tables = ['Organisation','ConfluenceRetainedCopyReview'];
+  const probe = buildPristineDatabaseProbeSql(tables);
+  const calls = [];
+  const client = { query: async (sql) => {
+    calls.push(sql);
+    if (sql === PUBLIC_TABLE_INVENTORY_SQL) return {rows:publicTableRows(tables)};
+    if (sql === DATABASE_IDENTITY_SQL) return {rows:[identityRow()]};
+    if (sql === PRISTINE_RELATION_SHAPE_SQL) return {rows:[{unsafe_relation_count:0}]};
+    if (sql === probe) return {rows:[{is_pristine:true}]};
+    if (sql === UNSAFE_TRUNCATE_TRIGGER_SQL) throw new Error('No truncation is attempted');
+    return {rows:[]};
+  }};
+  await assertPristineLocalDisposableDatabase(client,localConfig(),tables);
+  assert.deepEqual(calls, ['BEGIN',ADVISORY_LOCK_SQL,DATABASE_IDENTITY_SQL,
+    PUBLIC_TABLE_INVENTORY_SQL,buildSchemaQualifiedLockSql(tables),PRISTINE_RELATION_SHAPE_SQL,probe,DATABASE_IDENTITY_SQL,'COMMIT']);
+  assert(calls.every(sql=>!/^\s*(?:TRUNCATE|INSERT|UPDATE|DELETE|ALTER|DROP|CREATE)\b/i.test(sql)));
+});
+
+test('pristine local proof refuses existing data, malformed evidence and changed identity', async () => {
+  for (const scenario of ['dirty','malformed','identity','hidden-rows']) {
+    const tables=['Organisation'],calls=[];let identities=0;
+    const client={query:async sql=>{
+      calls.push(sql);
+      if(sql===PUBLIC_TABLE_INVENTORY_SQL)return {rows:publicTableRows(tables)};
+      if(sql===DATABASE_IDENTITY_SQL){identities++;return {rows:[identityRow(scenario==='identity'&&identities===2?{marker_instance_id:'different'}:{})]};}
+      if(sql===PRISTINE_RELATION_SHAPE_SQL)return {rows:[{unsafe_relation_count:scenario==='hidden-rows'?1:0}]};
+      if(sql===buildPristineDatabaseProbeSql(tables))return scenario==='malformed'?{rows:[]}:{rows:[{is_pristine:scenario!=='dirty'}]};
+      return {rows:[]};
+    }};
+    await assert.rejects(assertPristineLocalDisposableDatabase(client,localConfig(),tables));
+    assert.equal(calls.at(-1),'ROLLBACK');assert(!calls.includes('COMMIT'));
+  }
+});
+
+test('pristine local proof never accepts a remote target or creates a reset bypass', async () => {
+  let queried=false;
+  await assert.rejects(assertPristineLocalDisposableDatabase({query:async()=>{queried=true;}},remoteConfig(),['Organisation']));
+  assert.equal(queried,false);
+  assert.throws(()=>loadDisposableDatabaseConfig(remoteEnv({E2E_LOCAL_DATABASE_LIFECYCLE:'runner-owned-fresh'})));
+  assert.throws(()=>loadDisposableDatabaseConfig(localEnv({E2E_LOCAL_DATABASE_LIFECYCLE:'skip-reset'})));
+  assert.equal(loadDisposableDatabaseConfig(localEnv({E2E_LOCAL_DATABASE_LIFECYCLE:'runner-owned-fresh'})).isRemote,false);
+});
 const REMOTE_ADDRESS = "203.0.113.42";
 
 function postgresUrl({

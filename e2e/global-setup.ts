@@ -7,6 +7,7 @@ import {
   resetDb,
   type RemoteDisposableSuiteLease,
   verifyDisposableDatabaseIdentity,
+  verifyPristineLocalDatabase,
 } from './helpers/db';
 
 const LOCAL_STARTUP_HINT =
@@ -221,6 +222,8 @@ export default async function globalSetup(
   }
 
   let remoteLease: RemoteDisposableSuiteLease | null = null;
+  const runnerOwnedFresh = !disposableConfig?.isRemote &&
+    process.env.E2E_LOCAL_DATABASE_LIFECYCLE === 'runner-owned-fresh';
   let remoteDestructiveAuthorized = false;
   try {
     if (disposableConfig?.isRemote) {
@@ -232,12 +235,13 @@ export default async function globalSetup(
       await remoteLease.reset();
     } else {
       // Local fixed ports prevent concurrent managed stacks. Prove both direct
-      // and API bindings before reset; resetDb re-proves identity under lock.
+      // and API bindings; the selected database proof repeats identity under lock.
       await verifyDisposableDatabaseIdentity();
       await verifyApiDatabaseBinding();
-      await resetDb();
+      if (runnerOwnedFresh) await verifyPristineLocalDatabase();
+      else await resetDb();
     }
-    // Re-prove the API binding after reset and before browser mutation.
+    // Re-prove the API binding after database proof and before browser mutation.
     await verifyApiDatabaseBinding();
   } catch (err) {
     if (remoteLease) {
@@ -263,15 +267,21 @@ export default async function globalSetup(
   await warmRoutes();
 
   // eslint-disable-next-line no-console
-  console.log('[e2e] Stack reachable, database reset, public-route readiness sweep complete - starting tests.');
+  console.log(`[e2e] Stack reachable, database ${runnerOwnedFresh ? 'verified pristine' : 'reset'}, public-route readiness sweep complete - starting tests.`);
 
   // Playwright invokes the function returned by global setup after all tests,
-  // including failed suites. Reset again so no known-password synthetic users,
-  // sessions, documents, or tenant rows remain in a remote disposable target.
+  // including failed suites. Remote mode resets its leased target; managed local
+  // mode leaves final exact-resource disposal to the owning parent runner.
   return async () => {
     try {
       if (remoteLease) {
         await finalResetVerifyAndRelease(remoteLease);
+      } else if (runnerOwnedFresh) {
+        // The parent waits for child-tree absence, destroys its exact per-run
+        // stack/volumes and verifies no residue before returning success.
+        // Do not truncate append-only evidence or claim this child disposed it.
+        await verifyDisposableDatabaseIdentity();
+        await verifyApiDatabaseBinding();
       } else {
         await resetDb();
         await verifyApiDatabaseBinding();

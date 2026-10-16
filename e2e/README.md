@@ -56,6 +56,20 @@ The retired boolean reset flag never grants reset authority. Local destructive
 tests require the managed runner's generated UUID, exact loopback identity,
 protected marker, restricted role and API binding proof. Direct Playwright from
 this directory is not a supported destructive entry point.
+The managed local runner selects `runner-owned-fresh` database lifecycle itself;
+an ambient lifecycle override is refused. Before browser mutations, setup locks
+the complete application-table inventory, rejects hidden/inherited rows and
+proves every application table empty under the same database identity. Seeded
+reference and migration-owned control tables are preserved. This proof writes
+no application data and never disables an append-only/no-truncate guard.
+
+After local tests, the parent waits for exact child-tree absence, removes its
+per-run stack/volumes/images/network and verifies no residue before success.
+The child does not claim to have disposed those resources. Dirty databases fail
+instead of being cleared. Exceptional remote-disposable mode still requires its
+leased reset and final cleanup; it cannot select this local lifecycle, and
+protected-table truncate refusal is retained. Deployed QA remains non-destructive.
+
 The runner also generates a distinct integration encryption key for its
 disposable API. An ambient local override is refused; no real Atlassian
 credential or site is used by the fake-provider tests.
@@ -94,13 +108,13 @@ The expected cache should include `icudtl.dat` under the Playwright
 
 - **Single worker, serial.** The suite shares one database and owner fixture, so
   `playwright.config.ts` sets `workers: 1` and `fullyParallel: false`.
-- **Reset only after layered proof.** `global-setup.ts` proves the direct
+- **Pristine local data only after layered proof.** `global-setup.ts` proves the direct
   connection identity and restricted role, proves that the API is bound to the
-  same per-run marker, then resets only after an exact live table inventory and
-  per-table access-exclusive locks. The transaction rejects `ON TRUNCATE`
-  triggers and truncate-publishing logical publications, re-proves identity as
-  its final query, and uses `ONLY ... CONTINUE IDENTITY RESTRICT` without
-  `CASCADE`; the API binding is checked again before browser work.
+  same per-run marker, then proves all application tables empty after an exact
+  live inventory and per-table access-exclusive locks. Hidden/inherited rows
+  refuse; final identity and API binding are checked again. The separate reset
+  primitive still rejects `ON TRUNCATE` triggers and truncate-publishing logical
+  publications and retains `ONLY ... CONTINUE IDENTITY RESTRICT`, without CASCADE.
 - **No personal persistence.** The standalone stack uses dedicated loopback
   ports (`3354`, `3302`, `3303`) and a runner-generated positive allow-list
   build context. The source Compose bytes are read once, validated, and written
@@ -149,7 +163,7 @@ would click in an email is unrecoverable. The harness therefore:
 - **Team invite** - sends a real invite via the UI, then overwrites that invite's
   hashed token with a known one (`setInviteToken`) and drives
   `/accept-invite#token=<known>`.
-- **Reset / lookups** - `resetDb`, `getUserAndOrg`, `getPrincipleIdByNumber`, and
+- **Pristine proof / lookups** - `verifyPristineLocalDatabase`, `getUserAndOrg`, `getPrincipleIdByNumber`, and
   read-back helpers for assertions.
 
 There is no committed DSN or password. The runner generates URL-safe bootstrap,
@@ -239,7 +253,7 @@ fit; provision an isolated disposable target instead.
 
 ## Deployed browser QA mode
 
-The default suite is local and intentionally uses database seams for reset, token
+The default suite is local and intentionally uses database seams for pristine proof, token
 injection, and assertions. For deployed HTTPS browser QA, set
 `E2E_DEPLOYED_QA=true` and run only the browser-rendering/accessibility suites
 against an approved non-sensitive test workspace.
@@ -370,7 +384,9 @@ QA modes are rejected. The proof checks exact local byte absence, competing
 workers, retained bytes after timeout, retry and an untouched control file.
 Synthetic removal dates exercise recovery expiry. Retry uses the real database
 deadline (about five minutes), including early refusal; no policy or host clock
-is changed. Browser setup resets the
-synthetic database afterward; runner cleanup destroys its tmpfs storage.
+is changed. The proof runs in its own fresh stack, then exact runner cleanup
+destroys its tmpfs storage before a second fresh stack runs browser assertions.
+Both phases share the original overall deadline; a failed proof or teardown
+prevents browser startup. Neither phase resets protected history by truncation.
 The browser purge journey still tests a pending handoff independently of this
 worker proof. Neither proves external-provider versions or backup erasure.

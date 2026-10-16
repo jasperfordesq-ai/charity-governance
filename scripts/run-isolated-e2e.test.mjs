@@ -302,6 +302,7 @@ test("local run identity pins the disposable contract and creates no reusable cr
 
   assert.equal(identity.projectName, "charitypilot-e2e-9d9899dc9bea45caa916");
   assert.equal(identity.playwrightEnv.E2E_EXECUTION_MODE, "local-disposable");
+  assert.equal(identity.playwrightEnv.E2E_LOCAL_DATABASE_LIFECYCLE, 'runner-owned-fresh');
   assert.equal(
     identity.playwrightEnv.E2E_DESTRUCTIVE_RESET_CONFIRMATION,
     "DELETE_ONLY_CHARITYPILOT_DISPOSABLE_E2E",
@@ -356,6 +357,30 @@ test("local run identity pins the disposable contract and creates no reusable cr
   );
 });
 
+test('isolated build context includes the shared package runtime exports', () => {
+  const shared=JSON.parse(readFileSync(join(ROOT,'packages/shared/package.json'),'utf8'));
+  for(const entry of Object.values(shared.exports)) {
+    for(const target of [entry.import,entry.types]) {
+      if(!target?.startsWith('./runtime/')) continue;
+      assert(BUILD_CONTEXT_MANIFEST.some(file=>file.type==='file'&&
+        file.path==='packages/shared/'+target.slice(2)), 'Missing shared runtime export: '+target);
+    }
+  }
+});
+
+test('fresh database lifecycle cannot be supplied as ambient local or deployed authority', async () => {
+  for(const deployed of [false,true]) {
+    let ran=false;
+    await assert.rejects(runIsolatedE2e(deployed?[]:['--validate-only'],{
+      env:{E2E_LOCAL_DATABASE_LIFECYCLE:'runner-owned-fresh',...(deployed?{
+        E2E_DEPLOYED_QA:'true',E2E_WEB_URL:'https://app.charitypilot.ie',E2E_API_URL:'https://api.charitypilot.ie',
+      }:{})},
+      runCommand:async()=>{ran=true;return {code:0,stdout:'',stderr:''};},
+    }), deployed?/non-destructive.*refuses/:/does not accept ambient reset authority/);
+    assert.equal(ran,false);
+  }
+});
+
 test("runner arguments reserve runner options and pass Playwright arguments through exactly", () => {
   assert.deepEqual(parseRunnerArgs(['--runner-purge-worker-proof', '--', 'tests/document-purge.spec.ts']), {
     validateOnly: false, purgeWorkerProof: true, playwrightArgs: ['tests/document-purge.spec.ts'],
@@ -385,6 +410,32 @@ test('purge worker proof refuses every non-local execution mode before running c
     await assert.rejects(runIsolatedE2e(['--runner-purge-worker-proof'], { env,
       runCommand: async () => { ran = true; } }), /locally attested disposable stack/);
     assert.equal(ran, false);
+  }
+});
+
+test('worker proof is disposed before a fresh browser stack and failure never starts browsers', async () => {
+  for(const failProof of [false,true]) {
+    const events=[];const roots=[];
+    const invoke=()=>runIsolatedE2e(['--runner-purge-worker-proof','--','tests/document-purge.spec.ts'],{
+      ...TEST_RUNTIME_ATTESTATION_STUBS,env:{},identity:FIXED_IDENTITY,
+      captureRunningContainerAttestation:async()=>({containerIds:{api:'a'.repeat(64)}}),
+      buildContextCreator:async()=>{},portChecker:async()=>{},onTempRoot:root=>roots.push(root),
+      waitOptions:{fetchFn:async()=>new Response('',{status:200})},
+      runCommand:async(command,args)=>{
+        if(args.includes('config'))return {code:0,stdout:JSON.stringify(renderedCompose()),stderr:''};
+        if(args.includes('context'))return {code:0,stdout:'"unix:///var/run/docker.sock"',stderr:''};
+        if(args.includes('buildx'))return {code:0,stdout:'Name: default\nDriver: docker\n',stderr:''};
+        if(args.includes('scripts/verify-document-purge-worker.mjs')){events.push('proof');if(failProof)throw new Error('synthetic proof failure');}
+        if(args.includes('down'))events.push('down');
+        if(command!=='docker')events.push('browser');
+        return {code:0,stdout:'',stderr:''};
+      },
+    });
+    if(failProof)await assert.rejects(invoke,/synthetic proof failure/);
+    else assert.equal(await invoke(),0);
+    assert.deepEqual(events,failProof?['proof','down']:['proof','down','browser','down']);
+    assert.equal(roots.length,failProof?1:2);
+    assert(roots.every(root=>!existsSync(root)));
   }
 });
 

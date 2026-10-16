@@ -15,10 +15,10 @@ import { loadDisposableDatabaseConfig } from './helpers/database-safety.cjs';
  * driver, Stripe/Resend are unconfigured (test mode / no-op), and one-time
  * tokens are read or injected via the database rather than a real mailbox.
  *
- * Determinism: the suite runs single-worker, resets before browser work and
- * performs final cleanup after the suite, preserving only the seeded governance
- * reference data. Tests use unique records; there are no endpoint or database
- * fallbacks.
+ * Determinism: the suite runs single-worker. The managed local runner supplies
+ * a new pristine database and destroys its exact stack after child-tree absence;
+ * exceptional remote mode retains its leased reset/cleanup contract. Tests use
+ * unique records; there are no endpoint or database fallbacks.
  */
 const isDeployedQa = process.env.E2E_DEPLOYED_QA === 'true';
 const disposableConfig = isDeployedQa

@@ -74,6 +74,8 @@ export const BUILD_CONTEXT_MANIFEST = Object.freeze([
   },
   { path: "packages/shared/package.json", type: "file" },
   { path: "packages/shared/tsconfig.json", type: "file" },
+  { path: "packages/shared/runtime/prisma-database-url.mjs", type: "file" },
+  { path: "packages/shared/runtime/prisma-database-url.d.mts", type: "file" },
   {
     path: "packages/shared/src",
     type: "directory",
@@ -129,6 +131,7 @@ const REMOTE_JANITOR_TIMEOUTS = Object.freeze({
   disconnect: 15_000,
 });
 const FORBIDDEN_AMBIENT_LOCAL_KEYS = Object.freeze([
+  "E2E_LOCAL_DATABASE_LIFECYCLE",
   "E2E_ALLOW_LOCAL_DB_RESET",
   "E2E_DATABASE_URL",
   "E2E_DATABASE_INSTANCE_ID",
@@ -291,6 +294,7 @@ export function createLocalRunIdentity(overrides = {}) {
     },
     playwrightEnv: {
       E2E_EXECUTION_MODE: LOCAL_CONTRACT.executionMode,
+      E2E_LOCAL_DATABASE_LIFECYCLE: 'runner-owned-fresh',
       E2E_DESTRUCTIVE_RESET_CONFIRMATION:
         LOCAL_CONTRACT.destructiveConfirmation,
       E2E_DATABASE_INSTANCE_ID: instanceId,
@@ -2031,6 +2035,7 @@ function assertNoAmbientLocalAuthority(env) {
 
 function deployedQaEnvironment(env) {
   const forbidden = [
+    "E2E_LOCAL_DATABASE_LIFECYCLE",
     "E2E_EXECUTION_MODE",
     "E2E_DATABASE_URL",
     "E2E_DATABASE_INSTANCE_ID",
@@ -2398,6 +2403,29 @@ export async function runIsolatedE2e(
   argv = process.argv.slice(2),
   options = {},
 ) {
+  const env = options.env ?? process.env;
+  const parsed = parseRunnerArgs(argv);
+  if (!parsed.purgeWorkerProof || parsed.validateOnly || env.E2E_DEPLOYED_QA === 'true'
+    || env.E2E_EXECUTION_MODE === 'remote-disposable') {
+    return runIsolatedE2eOnce(argv, options);
+  }
+  // The worker proof creates irreversible synthetic history and requires an
+  // empty job queue. Dispose its entire exact stack before the browser phase;
+  // neither phase may truncate/omit that history to manufacture a clean start.
+  const started = performance.now();
+  const budget = resolveOverallRunnerTimeoutMs(env, options.overallTimeoutMs);
+  const phaseOptions = () => {
+    const remaining = Math.floor(budget - (performance.now() - started));
+    if (remaining < 1) throw new Error('Isolated E2E overall deadline expired between proof and browser phases.');
+    return { ...options, overallTimeoutMs: remaining };
+  };
+  const proofCode = await runIsolatedE2eOnce(argv, phaseOptions(), true);
+  if (proofCode !== 0) return proofCode;
+  process.stdout.write('Worker proof stack disposal verified; starting a fresh browser stack.\n');
+  return runIsolatedE2eOnce(['--', ...parsed.playwrightArgs], phaseOptions());
+}
+
+async function runIsolatedE2eOnce(argv, options, workerProofOnly = false) {
   const env = options.env ?? process.env;
   const parsed = parseRunnerArgs(argv);
   if (parsed.purgeWorkerProof && (env.E2E_DEPLOYED_QA === 'true' || env.E2E_EXECUTION_MODE === 'remote-disposable')) {
@@ -2936,6 +2964,7 @@ export async function runIsolatedE2e(
         'node', '--import', 'tsx', 'scripts/verify-document-purge-worker.mjs', identity.instanceId],
         { env: composeChildEnv, timeoutMs: 480_000 });
       shutdownController.signal.throwIfAborted();
+      if (workerProofOnly) return 0;
     }
     await Promise.all([
       waitForEndpoint(

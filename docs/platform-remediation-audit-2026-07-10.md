@@ -1,5 +1,15 @@
 # CharityPilot Full-Platform Remediation Audit
 
+> **16 October managed-local browser lifecycle correction:** The current schema's
+> append-only truncate guards correctly refuse the old global reset. Managed local
+> tests now prove an exactly bound pristine dataset and use parent-verified disposal
+> of each generated stack. Remote reset refusals and deployed-QA boundaries remain.
+> Fixed two omitted shared-runtime files in the isolated build context. Optional
+> synthetic worker proof and browsers use separately disposed stacks under one
+> deadline. Local scoped browser/contract receipts and final status are in ignored
+> `e2e-pristine-lifecycle-correction-2026-10-16.md`. No product guard weakened,
+> live permission issued, remote copy purged or DPO acceptance inferred.
+
 > **16 October ledger capture JSON type correction:** A direct PostgreSQL write
 > demonstrated a numeric JSON digest could pass the original text-pattern guard.
 > Forward migration adds an exact string/null constraint; regression retains a

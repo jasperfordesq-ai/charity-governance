@@ -17,6 +17,7 @@ import {
   loadDisposableDatabaseConfig,
   queryAndAssertDatabaseIdentity,
   resetDisposableDatabase,
+  assertPristineLocalDisposableDatabase,
   releaseRemoteSuiteAdvisoryLease,
   safeDatabaseOperationError,
 } from "./database-safety.cjs";
@@ -266,11 +267,17 @@ function signLocalAccessToken(
   return `${encodedHeader}.${encodedBody}.${signature}`;
 }
 
-/**
- * Truncate all tenant/app tables, preserving seeded governance reference data.
- * The guarded reset uses per-table ONLY, CONTINUE IDENTITY, and RESTRICT after
- * exact table, trigger, publication, role, and marker preflights.
- */
+/** Initial non-destructive proof for the managed runner's fresh local stack. */
+export async function verifyPristineLocalDatabase(): Promise<void> {
+  const config = assertDirectDatabaseSeamAllowed();
+  assertDirectResetModeIsLocal(config);
+  if (process.env.E2E_LOCAL_DATABASE_LIFECYCLE !== 'runner-owned-fresh') {
+    throw new Error('Pristine database verification requires the managed runner-owned lifecycle.');
+  }
+  await withDb(client => assertPristineLocalDisposableDatabase(client, config, DISPOSABLE_DATABASE_RESET_TABLES));
+}
+
+/** Guarded legacy local reset; immutable-table refusal remains enforced. */
 export async function resetDb(): Promise<void> {
   const config = assertDirectDatabaseSeamAllowed();
   assertDirectResetModeIsLocal(config);
