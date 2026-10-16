@@ -1,5 +1,15 @@
 # CharityPilot Agent Continuation Handoff
 
+> **16 October API diagnostic native proof complete / local candidate:** Rebuilt
+> both labelled Linux/amd64 USERnode images from clean5bc54a9f. Native gate now
+>16checksPASS/noSKIP, including packaged API revision matching its image stamp;
+>190migrations and TLS/role/default-root/data checks retained. Full3240API+14PG
+> and1235productionPASS/8SKIP. Earlier old-image regression failed as expected.
+> Exact image IDs/dates in ignored build-identity evidence. Live c78 unchanged;
+> installed-client/replay attribution, remoteCI/release, whole-branch review,
+> controller/provider/recovery and Nikita acceptance remain OPEN.
+
+
 > **16 October API build-stamp fallback / source verified, image retest pending:**
 > Authenticated identity now prefers explicit BUILD_REVISION and falls back to
 > image BUILD_COMMIT, with whitespace/missing handling and original cached
