@@ -1,3 +1,4 @@
+import {runConfluenceExecutionV2MaintenancePostgresProof} from './confluence-execution-v2-maintenance-postgres-proof.mjs';
 import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
 import { spawnSync } from 'node:child_process';
@@ -469,6 +470,7 @@ test('local Confluence ledger capture uses all eight migrated tables and a real 
     const maintenanceProof = await runConfluenceLedgerMaintenancePostgresProof(prisma,url);
     console.log('Synthetic joined archive/PostgreSQL maintenance proof:',JSON.stringify(maintenanceProof));
     console.log('Synthetic execution claim proof:',JSON.stringify(await runConfluenceExecutionClaimPostgresProof(prisma,url)));
+    console.log('Synthetic eleven-group maintenance proof:',JSON.stringify(await runConfluenceExecutionV2MaintenancePostgresProof(prisma,url)));
   } finally {
     if (prisma) await prisma.$disconnect();
     assert.equal(docker(['inspect','--format','{{.Id}}',name]),id);

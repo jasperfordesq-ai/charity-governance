@@ -62,7 +62,8 @@ objects are synthetic, not real KMS/S3 custody or source-attested authority.
 The V1 publisher and maintenance replay remain V1-only. Persisted capture and
 candidate guards distinguish formats as described below. Separate V2 object
 transport and mixed-version publication/current-head verification are implemented
-below. Durable upload coordination and suspended maintenance replay remain open.
+below. The durable dispatcher and suspended maintenance replay core are described below;
+runtime integration and independent custody/host-loss proof remain open.
 Do not feed V2 to the V1 pipeline, treat the codec as an operator recovery entry
 point, or claim provider/transport/whole-backend/host-loss completion.
 
@@ -188,8 +189,8 @@ loss readiness or authorise reopening. All corresponding authority flags stay fa
 
 Durable one-use upload, original progress/acknowledgement and version-specific slot
 release are implemented in the metadata coordinator described below. V2
-maintenance replay, runtime integration and the complete provider/whole-backend/
-custody demonstration remain required before activation. There is no new route,
+maintenance replay core is described below. Runtime integration and the complete
+provider/whole-backend/custody demonstration remain required before activation. There is no new route,
 worker, operator recovery command or live provider action in this increment.
 
 
@@ -254,8 +255,8 @@ Official AWS references checked16October2026:
 The software decision is to apply that separation explicitly. Source allowlists
 are not substitutes for provider IAM, protected policy custody or tested recovery.
 The V2 metadata dispatcher below implements durable upload/progress/
-acknowledgement/release. Maintenance replay, runtime integration and the managed
-whole-backend/provider/host-loss demonstration remain open.
+acknowledgement/release. The maintenance replay core is described below. Runtime integration and the
+managed whole-backend/provider/host-loss demonstration remain open.
 
 
 Router verification: API TypeScript build passed; all22 focused ring, single-key
@@ -297,7 +298,8 @@ missing archive. ACKNOWLEDGED requires its committed matching PUBLISHED receipt
 and an independently observed empty slot. All local persistence retains the
 active Owner, tenant, original candidate, WAL/isolation and append-only guards.
 The existing SQL guards are format-neutral; no migration, table or restore-format
-change was needed. Schema remains194 and recovery inventory format15.
+change was needed. That increment retained schema194 and recovery inventory format15. The later
+forward migration195 below adds replay functions without changing that inventory.
 
 `acknowledgeConfluenceExecutionV2Archive` verifies the exact original body digest,
 full supported prefix and unchanged current control. A separate
@@ -326,8 +328,8 @@ clear a later operation. Unit cases also cover corrupt receipts/candidates,
 revocation, competing dispatchers, unsupported pending suffixes and lost state.
 All action/current-history/custody/reopening/transport authority flags remain
 false. There is no route, worker, user-facing execution button or operator recovery
-activation in this increment. Suspended V2 maintenance replay and the complete
-provider/whole-backend/custody/host-loss evidence remain required.
+activation in this increment. The suspended V2 maintenance core is described below; runtime integration and
+complete provider/whole-backend/custody/host-loss evidence remain required.
 
 
 Dispatcher verification: the local full repository gate passed shared62/web576/
@@ -340,3 +342,79 @@ one-use attempt races, revocation during IO and immutable progress/attempt rows.
 Secrets/static-analysis scanned1589 files and control-byte checks1573 files, all
 passed. Manual staged review passed. These local/synthetic results do not replace
 exact hosted checks, runtime deployment or real provider/custody/host-loss proof.
+
+
+## V2 maintenance replay core (inactive)
+
+Forward migration `20261016190000_confluence_execution_v2_maintenance_replay`
+adds separate `ConfluenceExecutionV2Recovery_assert/rows/replay` functions.
+Existing V1 functions, stored bytes and migration checksums remain unchanged.
+No model/table or restore-inventory change: source now has195 migrations and
+restore format15 remains authoritative. Future release guards must expect195.
+
+SQL requires the invoker to own all eleven tables, a suspended organisation,
+origin replication role, Read Committed, durable WAL settings, exclusive source
+table locks and the sole database client. Client checks run before and after
+non-waiting row/table locks so an old lock-holding client is refused promptly. User guards must have their exact
+names, enabled state, expected function and BEFORE/event/row shape. Internal FK
+triggers must remain enabled and constraints validated. Reads preflight each
+group's row count and aggregate size before materialising bodies. Functions have
+fixed identifiers/search paths and PUBLIC execution is revoked; no runtime grant
+or SECURITY DEFINER path is added.
+
+`buildConfluenceExecutionV2ReconciliationPlan` compares a bounded older local
+subset with the authenticated original eleven-group archive. Every retained row
+must match exactly; local-only/later evidence is neither dropped nor overwritten.
+The proposal inserts only missing originals in dependency/revision order. A local
+subset may be missing parents; that does not justify inventing facts or ignoring
+extra fields/groups. Proposal flags are not authentication and provide no action,
+transport, custody or reopening authority.
+
+`replayConfluenceExecutionV2Rows` snapshots its binding/policy, reads original
+local rows and authenticates the complete current V2 prefix. Any occupied operation
+slot refuses replay. In one maintenance transaction, SQL compares the exact fresh
+local snapshot, pauses only eleven named row guards and inserts exact typed
+original rows. FK, unique, CHECK and no-truncate protections remain. Typed field,
+timestamp and readback equality is required, then guards are reenabled and checked.
+The coordinator verifies complete reconciliation and reauthenticates the archive
+and unchanged control before commit. The bounded five-minute transaction limit
+accommodates the prefix reader's own120-second processing bound; it is not a
+throughput or recovery-time guarantee for maximum-size datasets. Late SQL, head or archive loss rolls back
+all groups. An unknown commit response retries fresh independent evidence and
+inserts zero when original rows already committed; it never manufactures receipts
+or recreates a missing archive.
+
+The joined disposable PostgreSQL proof creates a separate synthetic tenant via
+supported review/scope/permission, claim/request/outcome and publication services.
+All eleven source groups are populated. Outcomes are originally reported under
+the restricted runtime role, then restored under the maintenance owner with the
+original role/timestamps/identity preserved. The real durable V2 dispatcher also
+populates all four transport groups before the older-source fixture. Replay
+preserves those four groups byte-for-byte without claiming their reconciliation.
+
+Native cases restore eleven original records, roll back after SQL/head/archive
+failure, lose an actual PostgreSQL commit response and reconcile through a new
+client with zero inserts. Missing archives still refuse after local recovery.
+Active/runtime callers, non-origin replication, wrong isolation/WAL, a second
+client, disabled guards, wrong trigger event/function and unvalidated constraints
+refuse. Contradictory outcomes and later unarchived requests are preserved rather
+than replaced or deleted. Original document bytes and deletion state are untouched.
+
+These are local synthetic maintenance proofs. They do not establish physical
+old-writer fencing, independent provider/key custody, whole-application or missing
+transport restoration, managed-backend availability or safe reopening. No operator
+installer/recovery command, route, worker, provider deletion or live policy change
+is activated by this core. Those integration and provider/host-loss gates remain
+part of the full goal.
+
+
+Final replay-core verification: complete repository gate PASS shared62/web576/
+API3406/native PostgreSQL14, production1264 (7 reported skips), personal-server164
+and local-Docker45. Retention-policy gate PASS4/4; byte-authority native gate PASS.
+The populated eleven-group proof passes with exact original readback, three late
+rollbacks, fresh-client unknown-commit retry and zero duplicate inserts. Its final
+lock-holding-client test refuses within1.5 seconds, and a runtime role remains
+refused even with temporary synthetic execute grants. Migration lint has zero
+blocked/warned/override/exemption results. Secrets/SAST1595 files and control-byte
+checks1579 files passed. All proof targets are disposable/synthetic; no live host,
+provider deletion, IAM provisioning, custody or whole-backend recovery is certified.

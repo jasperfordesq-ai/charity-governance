@@ -1,5 +1,12 @@
 # CharityPilot Full-Platform Remediation Audit
 
+> **16 October V2 maintenance replay core:** Separate invoker-owned SQL and
+> coordinator restore all eleven original source groups with current-prefix
+> authentication, full rollback and conflict/later-history refusal. Forward
+> migration195 preserves V1 and restore format15. Native proofs use populated
+> synthetic history; transport restoration, real custody, old-writer fencing,
+> managed-backend and host-loss/reopening evidence remain open. No activation.
+
 > **16 October durable V2 metadata dispatch:** Separate V2 upload/progress/
 > acknowledgement/release paths now reuse the immutable original candidate and
 > SQL guards. Lost commit/IO acknowledgements reconcile without another create;
