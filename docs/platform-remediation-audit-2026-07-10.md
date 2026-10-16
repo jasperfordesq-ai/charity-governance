@@ -1,5 +1,10 @@
 # CharityPilot Full-Platform Remediation Audit
 
+> **16 October CI execution budget:** The V2 foundation CI reached its
+> 20-minute job timeout during the web image build, after preceding gates
+> passed. The bounded allowance is now 30 minutes; all checks stay enabled.
+> The cancelled run remains cancelled, and a new exact-commit run is required.
+
 > **16 October V2 persistence:** Original capture and ciphertext candidate now
 > have guarded durable stores with current-Owner rechecks and exact committed
 > byte reuse. Forward migration194 reuses existing transport tables, preserving

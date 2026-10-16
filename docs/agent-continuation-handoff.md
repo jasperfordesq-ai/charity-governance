@@ -1,5 +1,10 @@
 # CharityPilot Agent Continuation Handoff
 
+> **16 October CI execution budget:** The V2 foundation CI reached its
+> 20-minute job timeout during the web image build, after preceding gates
+> passed. The bounded allowance is now 30 minutes; all checks stay enabled.
+> The cancelled run remains cancelled, and a new exact-commit run is required.
+
 > **16 October durable V2 originals/candidates:** The 194th forward migration
 > preserves V1 behaviour and allows only exact eleven-group V2 captures and
 > version-bound candidates in the existing immutable tables. Capture commit

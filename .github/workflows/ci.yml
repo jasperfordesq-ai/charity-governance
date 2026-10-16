@@ -17,7 +17,8 @@ env:
 jobs:
   verify:
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    # Full migration, recovery and Docker gates exceeded 20m on 16 Oct 2026.
+    timeout-minutes: 30
     env:
       DATABASE_URL: postgresql://charitypilot:charitypilot_ci@localhost:5432/charitypilot_ci
 
