@@ -89,3 +89,34 @@ exact containers/directories; they do not contact a production database.
 
 Passing local tests is not remote CI, a rebuilt Linux image, approved hosting,
 host-boundary certification, live acceptance or Nikita's review.
+
+## Grant compatibility evidence and duties
+
+The tracked Prisma/TLS fixture now migrates a fresh disposable PostgreSQL
+database through every source migration with the actual Prisma CLI. It applies
+the existing blue-green grant script only inside that fixture, then uses a
+fresh restricted Prisma login for ordinary tenant/Owner creation, tenant update
+and user lookup. The tenant and first Owner are created in one transaction,
+preserving the database's exactly-one-active-Owner constraint.
+
+The same fixture checks the full role catalogue, explicit permission-denied
+responses for no-op deletion from each of the fourteen protected tables, and
+refusal of a maintenance replay entry point. A newly created ordinary table is
+unavailable until reconciliation; reconciliation enables its synthetic data
+operation while retaining the catalogue restrictions.
+
+| Duty | Intended credential boundary |
+| --- | --- |
+| Ordinary API and scheduled application data operations | Restricted runtime login |
+| Four named document-byte capabilities | Narrow reviewed function calls; no direct protected-table DML |
+| Migration history and protected recovery state | Runtime read access; maintenance-only mutations |
+| Confluence snapshot/replay/assert maintenance functions | Maintenance login; no runtime or PUBLIC execution |
+| Inactive recovery executors that write protected state | Separate reviewed activation/executor design required |
+
+This is local compatibility evidence for the existing grant map, not authority
+to apply it to a provider or a new hosted provisioning path. The fixture uses
+a synthetic PostgreSQL superuser for migrations/reconciliation; managed-provider
+role-administration permissions and custody remain unproved. It does not test
+every API route, all four document-byte capabilities end to end, old-data
+upgrade, Linux application image, rollback or independent recovery. Do not widen
+runtime grants to activate currently inactive recovery executors.

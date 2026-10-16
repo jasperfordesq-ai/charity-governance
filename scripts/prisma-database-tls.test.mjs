@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
-import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { basename, dirname, join, resolve } from 'node:path';
 import { test } from 'node:test';
@@ -20,7 +20,7 @@ function run(command,args,options={}) {
   assert.equal(result.status,0, result.stderr || result.error?.message || 'synthetic fixture command failed');
   return result.stdout.trim();
 }
-test('strict Prisma application and CLI TLS reject wrong CA, hostname, password and plaintext', { timeout:120000 }, async () => {
+test('strict Prisma application and CLI TLS reject wrong CA, hostname, password and plaintext', { timeout:180000 }, async () => {
 const endpoint = JSON.parse(run('docker',['context','inspect','--format','{{json .Endpoints.docker}}']));
 validateLocalDockerEndpoint({endpoint:endpoint.Host,skipTlsVerify:endpoint.SkipTLSVerify},process.env);
 const docker = (args,input) => run('docker',['--host',endpoint.Host,...args],{ input });
@@ -148,6 +148,62 @@ try {
       env:{...process.env,DATABASE_URL:toStrictPrismaTlsUrl(canonical.href),CHECKPOINT_DISABLE:'1',PRISMA_HIDE_UPDATE_MESSAGE:'1'}});
     return result.status===0;
   }
+  // Full current source schema: this complements, rather than replaces, the
+  // fault-isolation fixture above. No production credentials or provider IO.
+  query('CREATE DATABASE synthetic_full_source;');
+  const fullMaintenance=new URL(`postgresql://postgres:synthetic-maintenance-only@localhost:${port}/synthetic_full_source`);
+  fullMaintenance.searchParams.set('sslmode','verify-full');
+  fullMaintenance.searchParams.set('target_session_attrs','read-write');
+  fullMaintenance.searchParams.set('sslrootcert',join(certDir,'cert.pem'));
+  fullMaintenance.searchParams.set('connect_timeout','3');
+  const fullMigration=spawnSync(process.execPath,[fileURLToPath(new URL('../node_modules/prisma/build/index.js',import.meta.url)),
+    'migrate','deploy','--schema',fileURLToPath(new URL('../apps/api/prisma/schema.prisma',import.meta.url))],{
+    encoding:'utf8',timeout:60000,maxBuffer:4*1024*1024,
+    env:{...process.env,DATABASE_URL:toStrictPrismaTlsUrl(fullMaintenance.href),CHECKPOINT_DISABLE:'1',PRISMA_HIDE_UPDATE_MESSAGE:'1'}});
+  assert.equal(fullMigration.status,0,fullMigration.stderr||fullMigration.stdout);
+  const sourceMigrations=readdirSync(fileURLToPath(new URL('../apps/api/prisma/migrations/',import.meta.url)),{withFileTypes:true})
+    .filter(entry=>entry.isDirectory()).length;
+  check('full source migration ledger has no failed or unfinished migrations',
+    query('SELECT count(*) FROM public.\"_prisma_migrations\" WHERE finished_at IS NOT NULL AND rolled_back_at IS NULL',
+      'postgres','verify-full','synthetic_full_source'),String(sourceMigrations));
+  const reconcileFull=()=>docker(['exec','-i','--env','CHARITYPILOT_RUNTIME_ROLE=cp_runtime',
+    '--env','CHARITYPILOT_RUNTIME_PASSWORD=synthetic-runtime-only',id,'psql','-X','-q','-U','postgres',
+    '-d','synthetic_full_source','-v','ON_ERROR_STOP=1'],
+    readFileSync(fileURLToPath(new URL('bluegreen/runtime-role-grants.psql',import.meta.url)),'utf8'));
+  reconcileFull();
+  const fullRuntime=new URL(fullMaintenance.href);fullRuntime.username='cp_runtime';fullRuntime.password='synthetic-runtime-only';
+  const fullClient=await createApplicationPrismaClient({DATABASE_URL:fullRuntime.href,CHARITYPILOT_DEPLOYMENT_MODE:'production'});
+  try {
+    const target={runtimeRole:'cp_runtime',maintenanceRole:'postgres',database:'synthetic_full_source',phase:'after-migration'};
+    check('full source schema reconciled runtime passes actual catalogue checker',
+      await verifyProductionRuntimeDatabaseRole(fullClient,target),{verified:true,phase:'after-migration'});
+    for(const table of tables) {
+      await assert.rejects(fullClient.$executeRawUnsafe(`DELETE FROM public."${table}" WHERE false`),
+        error=>error.meta?.code==='42501');
+      checks++;
+    }
+    await assert.rejects(fullClient.$queryRawUnsafe(`SELECT public."ConfluenceCopyRecovery_rows"('synthetic')`),
+      error=>error.meta?.code==='42501');
+    checks++;
+    process.stdout.write('PASS full schema denies direct DML on all protected tables and maintenance replay entry point\n');
+    const {org,user}=await fullClient.$transaction(async tx=>{
+      const org=await tx.organisation.create({data:{name:'Synthetic grant compatibility'}});
+      const user=await tx.user.create({data:{email:'runtime-grants@example.invalid',name:'Synthetic Owner',
+        passwordHash:'synthetic-not-a-usable-login',role:'OWNER',organisationId:org.id}});
+      return {org,user};
+    });
+    await fullClient.organisation.update({where:{id:org.id},data:{name:'Synthetic updated'}});
+    check('restricted Prisma application login can create and read ordinary tenant/user records',
+      (await fullClient.user.findUniqueOrThrow({where:{id:user.id}})).organisationId,org.id);
+    query('CREATE TABLE public.synthetic_later_business (id text PRIMARY KEY);','postgres','verify-full','synthetic_full_source');
+    await assert.rejects(fullClient.$queryRawUnsafe('SELECT * FROM public.synthetic_later_business'));
+    reconcileFull();
+    await fullClient.$executeRawUnsafe(`INSERT INTO public.synthetic_later_business VALUES ('synthetic')`);
+    check('grant reconciliation restores access to a newly migrated ordinary table',
+      await fullClient.$queryRawUnsafe('SELECT id FROM public.synthetic_later_business'),[{id:'synthetic'}]);
+    check('reconciled later table preserves full runtime catalogue restrictions',
+      await verifyProductionRuntimeDatabaseRole(fullClient,target),{verified:true,phase:'after-migration'});
+  } finally {await fullClient.$disconnect();}
   const positive={connected:true,verified:true,tls:true};
   check('fresh Prisma login, TLS and actual transaction wrapper',await prismaAttempt(),positive);
   check('actual application factory verifies strict TLS and target',await prismaAttempt({applicationFactory:true}),positive);

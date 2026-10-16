@@ -1,4 +1,20 @@
-#> **16 October runtime-role cutover gate / local source proof:** Guarded production
+# CharityPilot Full-Platform Remediation Audit
+
+> **16 October full-source grant compatibility / local proof:** Actual Prisma CLI
+> migrated a fresh disposable database through all190 source migrations. Existing
+> blue-green grant script reconciled the synthetic runtime role; fresh strict-TLS
+> Prisma client passed catalogue verification, ordinary tenant/Owner transaction,
+> tenant update and user read. All14protected-table no-op DELETEs and a Confluence
+> maintenance entry point refused with42501. New ordinary-table access refused
+> before reconciliation and succeeded afterward; catalogue restrictions retained.
+> Final fixture48internal checksPASS/noSKIP; no runtime/schema/grant-script change.
+> This is not hosted grant provisioning, all-route approval, old-data upgrade or
+> Linux-image/recovery/DPO evidence. Privileged fixture role was synthetic postgres.
+> NEXT provider-specific grant duties/reconciliation and CA mounts/custody, whole
+> branch review and release gates. GoalACTIVE; acceptanceOPEN.
+
+
+> **16 October runtime-role cutover gate / local source proof:** Guarded production
 > deploy now verifies a restricted fresh connection before downtime and after
 > migration/status. Mandatory roles overlay replaces the API env file, gives four
 > workers runtime credentials, and isolates the probe from maintenance/API secrets.
@@ -11,7 +27,7 @@
 > Confluence independent-history self-coverage, C1/replay/controller/Nikita gates
 > remain OPEN. See docs/production-runtime-credentials.md. Earlier notes historical.
 
- CharityPilot Full-Platform Remediation Audit
+
 
 > **16 October administrative/CLI TLS transport / partial remediation:** Verified
 > client now reaches nine remaining public/shared job mains; only three explicit
