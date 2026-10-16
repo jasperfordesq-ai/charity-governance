@@ -1,5 +1,12 @@
 # CharityPilot Full-Platform Remediation Audit
 
+> **16 October request/outcome journal:** Local immutable intent and
+> APPLICATION_REPORT evidence now accompany consumption claims, with durable
+> receipt reconciliation and format15 restore inventory. Native PostgreSQL
+> exercises races, lost commit acknowledgements and outcome recording after
+> revocation. These are not dispatch/erasure or independent host-loss proof;
+> the V1 archive omission gate and full remaining recovery scope stay open.
+
 > **16 October permission decision controls:** Owner UI binds the review digest
 > to registered scope/disposal evidence and explicit attestation, with receipt
 > reconciliation and separate withdrawal. The missing-scope refusal and native

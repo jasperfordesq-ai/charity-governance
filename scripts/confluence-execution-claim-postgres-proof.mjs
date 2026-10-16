@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import { runConfluenceExecutionJournalPostgresProof } from './confluence-execution-journal-postgres-proof.mjs';
 import { Prisma, PrismaClient } from '@prisma/client';
 import { ConfluenceRetainedCopyReviewService } from '../apps/api/dist/services/confluence-retained-copy-review.service.js';
 import { registerSyntheticConfluenceScope } from '../apps/api/dist/services/confluence-synthetic-scope.js';
@@ -65,7 +66,7 @@ export async function runConfluenceExecutionClaimPostgresProof(prisma,url) {
   }),/durable WAL/);
   await assert.rejects(prisma.confluenceCopyExecutionClaim.update({where:{id:row.id},data:{phase:'QUARANTINED'}}),/append-only/);
   await assert.rejects(prisma.confluenceCopyExecutionClaim.delete({where:{id:row.id}}),/append-only/);
-  await assert.rejects(prisma.$executeRaw`TRUNCATE public."ConfluenceCopyExecutionClaim"`,/append-only/);
+  await assert.rejects(prisma.$executeRaw`TRUNCATE public."ConfluenceCopyExecutionClaim",public."ConfluenceCopyExecutionRequest",public."ConfluenceCopyExecutionOutcome"`,/append-only/);
   // Distinct explicit synthetic permission: lose the response AFTER its real
   // commit. Reconcile through a new client, never infer that the write failed.
   const lostReview=await new ConfluenceRetainedCopyReviewService(prisma).record('org-a','owner-a',review);
@@ -91,10 +92,11 @@ export async function runConfluenceExecutionClaimPostgresProof(prisma,url) {
     await assert.rejects(replacementService.claim('org-a','owner-a',lostInput));
     assert.equal(await replacementClient.confluenceCopyExecutionClaim.count({where:{permissionId:lostInput.permissionId}}),1);
   } finally {await replacementClient.$disconnect();}
+  const journal=await runConfluenceExecutionJournalPostgresProof(prisma,url,row.id);
   const after=(await prisma.$queryRaw(Prisma.raw(PURGE_RESTORE_SNAPSHOT_SQL)))[0].snapshot;
-  assert.equal(after.format,14);
+  assert.equal(after.format,15);
   assert.throws(()=>assertPurgeRestoreLedger(after,before),{code:'PURGE_RESTORE_RECONCILIATION_REQUIRED'});
   assert.equal(assertPurgeRestoreLedger(after,after).confluenceExecutionClaimsCompared,true);
-  return {racingClaims:2,raceCommittedClaims:1,lostCommitReceipt:true,lostCommitRetryInserts:0,
+  return {journal,racingClaims:2,raceCommittedClaims:1,lostCommitReceipt:true,lostCommitRetryInserts:0,
     restartedReceipt:true,olderRestoreRefused:true,providerRequests:0};
 }

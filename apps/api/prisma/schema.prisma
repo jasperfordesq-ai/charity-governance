@@ -1907,10 +1907,49 @@ model ConfluenceCopyExecutionClaim {
   phase                String @default("QUARANTINED")
   providerIOAuthorised Boolean @default(false)
   claimedAt            DateTime @default(now())
+  requests             ConfluenceCopyExecutionRequest[]
 
   @@unique([id, organisationId])
   @@unique([organisationId, operationId])
   @@unique([permissionId, organisationId])
+}
+
+// Quarantined intent and application-reported outcomes, never dispatch authority.
+model ConfluenceCopyExecutionRequest {
+  id                   String @id @default(cuid())
+  organisationId       String
+  claimId              String
+  claim                ConfluenceCopyExecutionClaim @relation(fields: [claimId, organisationId], references: [id, organisationId], onDelete: Restrict, onUpdate: NoAction)
+  requestKey           String
+  actorUserId          String
+  action               String
+  evidenceRef          String
+  reason               String
+  phase                String @default("QUARANTINED")
+  providerIOAuthorised Boolean @default(false)
+  preparedAt           DateTime @default(now())
+  outcome              ConfluenceCopyExecutionOutcome?
+
+  @@unique([id, organisationId])
+  @@unique([organisationId, requestKey])
+  @@unique([claimId, action])
+}
+
+model ConfluenceCopyExecutionOutcome {
+  id                     String @id @default(cuid())
+  organisationId         String
+  requestId              String @unique
+  request                ConfluenceCopyExecutionRequest @relation(fields: [requestId, organisationId], references: [id, organisationId], onDelete: Restrict, onUpdate: NoAction)
+  requestOutcome         String
+  reportingBasis         String @default("APPLICATION_REPORT")
+  automaticRetryAllowed  Boolean @default(false)
+  providerAbsenceVerified Boolean @default(false)
+  allCopiesVerified      Boolean @default(false)
+  providerIOAuthorised   Boolean @default(false)
+  reportedAt             DateTime @default(now())
+  recordedByDatabaseRole String @default(dbgenerated("CURRENT_USER"))
+
+  @@unique([requestId, organisationId])
 }
 
 // Inactive immutable outbox candidate. The exact body must survive retries;

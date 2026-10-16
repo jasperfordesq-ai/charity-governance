@@ -107,8 +107,8 @@ test('local Confluence ledger capture uses all eight migrated tables and a real 
     finally { await runtime.$disconnect(); }
     assert.equal(originalCapture.durableCaptureRecorded,true);
     const afterDurable = (await prisma.$queryRawUnsafe(PURGE_RESTORE_SNAPSHOT_SQL))[0].snapshot;
-    assert.equal(afterDurable.format,14);
-    assert.equal(Object.values((await prisma.$queryRawUnsafe(PURGE_RESTORE_BINDING_PROBE_SQL))[0])[0],'confluence-claim');
+    assert.equal(afterDurable.format,15);
+    assert.equal(Object.values((await prisma.$queryRawUnsafe(PURGE_RESTORE_BINDING_PROBE_SQL))[0])[0],'confluence-journal');
     assert.throws(() => assertPurgeRestoreLedger(afterDurable,beforeDurable),{ code: 'PURGE_RESTORE_RECONCILIATION_REQUIRED' });
 
     // Real supported decision/capture services populate four of the eight

@@ -1,5 +1,13 @@
 # CharityPilot Agent Continuation Handoff
 
+> **16 October execution journal:** The 193rd migration adds immutable
+> quarantined request intents and application-reported outcomes. Lost commit
+> responses reconcile through current-Owner receipts, and revocation does not
+> discard an already-prepared report. Restore format15 compares both groups;
+> exact format14 and earlier remain available. No dispatcher/provider caller
+> is activated. Independent archive/replay/current-head and one-use dispatch
+> remain required; see `docs/confluence-copy-execution-journal.md`.
+
 > **16 October Owner permission interface:** Review receipt rows now offer
 > scoped synthetic permission preparation, receipt lookup and separate withdrawal.
 > Opening/refreshing records no decision. Unknown writes cannot automatically

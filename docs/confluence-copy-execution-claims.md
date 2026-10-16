@@ -34,7 +34,9 @@ state before proceeding. Claim expiry must never erase consumption history.
 
 ## Recovery compatibility
 
-Current purge/restore comparison is format14 and includes hashed claim records.
+Current purge/restore comparison is format15 and includes hashed claims,
+quarantined requests and application-reported outcomes. Exact format14 retains
+the earlier claim-only comparison; see [the journal](confluence-copy-execution-journal.md).
 It rejects a restored state missing a later claim. Exact format13 inventory and
 SQL remain available for older databases, alongside earlier explicit formats;
 format mismatch cannot be treated as a successful current comparison. The
