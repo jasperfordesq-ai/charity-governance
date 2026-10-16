@@ -229,6 +229,7 @@ test('retained Confluence review and permission history is scoped, immutable and
     query(`REVOKE EXECUTE ON FUNCTION public."ConfluenceCopyRecovery_replay"(TEXT,JSONB,JSONB) FROM synthetic_copy_runtime;`);
     query(replayCall(), /quarantined charity/);
     query(`${quarantine.replace('BEGIN;','BEGIN ISOLATION LEVEL REPEATABLE READ;')} ${replayCall()}`, /fresh read-committed/);
+    query(`${quarantine} SET LOCAL session_replication_role=replica; ${replayCall([],replayBaseline)}`, /origin replication role/);
     const competing = spawn('docker',['--host',endpoint.Host,'exec','-i',container,'psql','-h','127.0.0.1','-U','postgres',
       '-v','ON_ERROR_STOP=1','-Atq','-c','SELECT pg_sleep(3);'], { stdio: 'ignore', signal: AbortSignal.timeout(10_000) });
     const competingExit = new Promise(resolve => { competing.once('error',() => resolve(-1)); competing.once('exit',code => resolve(code)); });
@@ -434,6 +435,7 @@ test('retained Confluence review and permission history is scoped, immutable and
     query(`REVOKE EXECUTE ON FUNCTION public."ConfluenceCopyLedgerRecovery_replay"(TEXT,JSONB,JSONB),public."ConfluenceCopyLedgerRecovery_assert"(TEXT) FROM synthetic_copy_runtime;`);
     query(`BEGIN ISOLATION LEVEL REPEATABLE READ; ${fullReplay([],complete)}`,/fresh read-committed/);
     query(`BEGIN; SET LOCAL synchronous_commit=off; ${fullReplay([],complete)}`,/durable WAL/);
+    query(`BEGIN; SET LOCAL session_replication_role=replica; ${fullReplay([],complete)}`,/origin replication role/);
     query(`BEGIN; ALTER TABLE public."ConfluenceCopyPublicationPlan" DISABLE TRIGGER "ConfluenceCopyPlan_guard"; ${fullReplay([],complete)}`,/exact enabled guards/);
     query(fullReplay([],emptyLedger),/local records changed/);
     query(`BEGIN; UPDATE public."Organisation" SET "lifecycleStatus"='ACTIVE' WHERE id='org-a'; ${fullReplay([],complete)}`,/quarantined charity/);

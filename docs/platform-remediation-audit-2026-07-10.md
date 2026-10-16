@@ -1,5 +1,14 @@
 # CharityPilot Full-Platform Remediation Audit
 
+> **16 October privileged maintenance trigger-enforcement assertion, source FIXED:**
+> Replica-mode sessions could pass enabled-trigger catalogue checks. New forward
+> migration190 refuses non-origin sessions in both replay families; prior checks
+> and migration hashes remain unchanged. Actual PostgreSQL refusal/restore and
+> joined authenticated maintenance tests pass. This is an unshipped privileged
+> maintenance guard correction, not proof of an ordinary-user exploit or live
+> incident. No role/profile/VM change or deployment. Whole-branch review, release,
+> independent recovery/custody and Nikita acceptance remain unresolved.
+
 > **16 October retention provenance refresh / OPEN:** Exact current schedule
 > bytes and original circulation now have bounded table/body correspondence,
 > refreshed full historical approval-thread evidence and a verified carried

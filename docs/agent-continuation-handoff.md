@@ -1,5 +1,16 @@
 # CharityPilot Agent Continuation Handoff
 
+> **16 October maintenance session-mode refusal, source fix:** Review reproduced
+> a privileged replay session accepting replica mode despite enabled trigger
+> catalogue flags. Forward migration190 requires origin mode in the older five-
+> table replay and complete eight-table maintenance gate. Earlier checksums and
+> all other function-body checks are preserved. Actual PostgreSQL RED/green and
+> the joined archive/13-record restore/dispatcher proof pass; no mode is silently
+> reset, role grant or live operation added. Source190 versus last serving179.
+> Bounded review only, not approval of the entire accumulated branch. Known work
+> mailbox refresh leaves acceptance open; latest substantive11October reply and
+> later Gmail reaction are distinguished in private receipts.
+
 > **16 October retention source/version reconciliation, private evidence only:**
 > Fresh c78 byte check matches the previously reviewed schedule. Its original
 > circulated DOCX has different bytes but matching124position-preserved cells,
