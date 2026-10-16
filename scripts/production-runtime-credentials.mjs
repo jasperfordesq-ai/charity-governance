@@ -149,3 +149,28 @@ export function assertProductionRuntimeEnvironmentUnchanged(binding) {
     if (JSON.stringify(current) !== JSON.stringify(binding)) throw new Error();
   } catch { throw new Error('Production runtime configuration changed; repeat protected configuration review.'); }
 }
+
+/** Trusted Compose CLI transport, NOT container environment or a public result.
+ * environment intentionally includes maintenance secrets for migration. Never
+ * log it. Only the explicitly selected Compose service fields reach containers.
+ */
+export function buildProductionComposeEnvironment(maintenanceEnvFile, inherited = {}) {
+  try {
+    const runtime = readProductionRuntimeEnvironment(maintenanceEnvFile);
+    const maintenance = fileWitness(runtime.binding.maintenancePath);
+    if (maintenance.sha256 !== runtime.binding.maintenanceSha256
+      || Object.keys(maintenance.values).some(key => /^(?:COMPOSE_|DOCKER_|BUILDX_)/u.test(key)
+        || ['PATH','PATHEXT','NODE_OPTIONS','NODE_PATH','LD_PRELOAD','LD_LIBRARY_PATH','BASH_ENV','ENV'].includes(key))) throw new Error();
+    const replaced = new Set([...Object.keys(maintenance.values), 'CHARITYPILOT_PRODUCTION_ENV_FILE',
+      'CHARITYPILOT_PRODUCTION_APP_ENV_FILE', 'CHARITYPILOT_PRODUCTION_RUNTIME_DATABASE_URL'].map(key => key.toUpperCase()));
+    const safeInherited = Object.fromEntries(Object.entries(inherited).filter(([key]) =>
+      !replaced.has(key.toUpperCase()) && !/^(?:COMPOSE_|DOCKER_|BUILDX_)/iu.test(key)
+      && !['NODE_OPTIONS','NODE_PATH','LD_PRELOAD','LD_LIBRARY_PATH','BASH_ENV','ENV'].includes(key.toUpperCase())));
+    assertProductionRuntimeEnvironmentUnchanged(runtime.binding);
+    return { environment: { ...safeInherited, ...maintenance.values,
+      CHARITYPILOT_PRODUCTION_ENV_FILE: runtime.binding.maintenancePath,
+      CHARITYPILOT_PRODUCTION_APP_ENV_FILE: runtime.appEnvFile,
+      CHARITYPILOT_PRODUCTION_RUNTIME_DATABASE_URL: runtime.appEnvironment.DATABASE_URL },
+    binding: runtime.binding, identity: runtime.identity, privatePermissionsVerified: runtime.privatePermissionsVerified };
+  } catch { throw new Error(fileRefusal); }
+}

@@ -1,5 +1,12 @@
 # CharityPilot Full-Platform Remediation Audit
 
+> **16 October trusted deployment environment preparation:** Added canonical
+> reviewed-file Compose transport and ambient override rejection. Proposed split
+> configuration is archived privately with static synthetic render proof; active
+> production Compose and deployment callers remain unchanged.52focusedPASS/two
+> expected WindowsSKIP. No actual role/login, protected Windows ACL, deployment,
+> provider or independent-recovery closure. Complete integration remains OPEN.
+
 > **16 October hosted credential file boundary / partial implementation:** New
 > loader rejects aliases, ambiguous/interpolated inputs, owner-variable leakage
 > and unreviewed runtime changes; pins exact bytes/identity. Linux51checksPASS

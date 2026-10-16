@@ -3,7 +3,7 @@ import { test } from 'node:test';
 import { chmodSync, linkSync, mkdtempSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { basename, dirname, join, resolve } from 'node:path';
-import { assertProductionRuntimeEnvironmentUnchanged, readProductionRuntimeEnvironment,
+import { assertProductionRuntimeEnvironmentUnchanged, buildProductionComposeEnvironment, readProductionRuntimeEnvironment,
   validateProductionRuntimeDatabasePair } from './production-runtime-credentials.mjs';
 
 const owner = 'postgresql://migration_owner:synthetic-owner-password@db.charitypilot.ie:5432/charitypilot?sslmode=verify-full&target_session_attrs=read-write';
@@ -175,4 +175,28 @@ test('POSIX runtime files require owner-only permissions', t => {
   if (process.platform === 'win32') { t.skip('Windows ACL certification remains a separate integration gate'); return; }
   const f = files(t); chmodSync(f.app, 0o644);
   assert.throws(() => readProductionRuntimeEnvironment(f.maintenance), /separate protected runtime configuration/);
+});
+
+test('Compose transport derives runtime inputs and overrides inherited credential/selector aliases', t => {
+  const f = files(t);
+  const result = buildProductionComposeEnvironment(f.maintenance, {
+    PATH: 'synthetic-path', DATABASE_URL: 'unreviewed', database_url: 'case-alias',
+    CHARITYPILOT_PRODUCTION_APP_ENV_FILE: f.maintenance,
+    CHARITYPILOT_PRODUCTION_ENV_FILE: 'unreviewed-owner.env',
+    charitypilot_production_env_file: 'case-alias-owner.env',
+    CHARITYPILOT_PRODUCTION_RUNTIME_DATABASE_URL: owner,
+    COMPOSE_FILE: 'unreviewed.yml', compose_project_name: 'unreviewed', DOCKER_HOST: 'tcp://unreviewed:2375',
+    NODE_OPTIONS: '--require=unreviewed',
+  });
+  assert.equal(result.environment.DATABASE_URL, owner);
+  assert.equal(result.environment.CHARITYPILOT_PRODUCTION_RUNTIME_DATABASE_URL, runtime);
+  assert.equal(result.environment.CHARITYPILOT_PRODUCTION_APP_ENV_FILE, f.app);
+  assert.equal(result.environment.CHARITYPILOT_PRODUCTION_ENV_FILE, result.binding.maintenancePath);
+  assert.equal(result.environment.PATH, 'synthetic-path');
+  for (const key of ['database_url','charitypilot_production_env_file','COMPOSE_FILE','compose_project_name','DOCKER_HOST','NODE_OPTIONS']) {
+    assert.equal(result.environment[key], undefined);
+  }
+  assertProductionRuntimeEnvironmentUnchanged(result.binding);
+  f.saveOwner('COMPOSE_FILE=unreviewed.yml\n');
+  assert.throws(() => buildProductionComposeEnvironment(f.maintenance));
 });

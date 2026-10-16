@@ -1,5 +1,16 @@
 # CharityPilot Agent Continuation Handoff
 
+> **16 October Compose transport preparation / integration OPEN:** Trusted helper
+> derives canonical maintenance/runtime selectors and runtime database input from
+> bound reviewed files, replacing ambient credential aliases and excluding
+> Compose/Docker/executor overrides. Its returned environment contains secrets;
+> never log it or expose it as a container environment. Production Compose stays
+> unchanged until preflight/deploy/rollback and actual role gates are integrated.
+> An archived synthetic candidate renders the proposed API/worker split without
+> maintenance fallback; this is proposal evidence, not shipping configuration.
+> Focused Windows run:52PASS/twoexpectedSKIP across54cases. No new Linux/DB/host
+> proof. Private dated receipt records the exact next steps.
+
 > **16 October runtime file boundary, caller integration OPEN:** Added bounded
 > confidential file loader: explicit separate runtime selector, no symlink/hard-
 > link owner alias, literal unambiguous config, unchanged reviewed values and no
