@@ -14,9 +14,11 @@
 #      production validators and launch evidence model are deliberately changed first.
 #   4. Set TRUSTED_PROXY_ADDRESSES so the API trusts this proxy's forwarded IPs.
 #
-# Run:
-#   docker compose --env-file .env.production \
-#     -f compose.production.yml -f compose.production-tls.yml up -d
+# After preparing separate protected runtime/maintenance configuration and
+# satisfying release gates, use the guarded deploy (TLS overlay is default):
+#   npm run deploy:production -- --production-env-file .env.production \
+#     --backup-output-dir /absolute/approved/encrypted-backup-base
+# Raw Compose startup skips the credential, role and recovery checks.
 # =============================================================================
 
 services:

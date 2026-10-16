@@ -1,5 +1,16 @@
 # CharityPilot Agent Continuation Handoff
 
+> **16 October candidate and startup review:** Fresh full candidate API3240
+> ordinary+14actualPostgreSQL fixtures PASS/noSKIP; Web572PASS/noSKIP. Provisioning
+> source has no separate application boot unit. Actual synthetic base/roles/TLS
+> Compose model selects API/web/scheduler/Caddy ordinarily; six maintenance/jobs
+> remain profile-only/restart=no, with runtime credential separation. Corrected
+> TLS-overlay comment recommending raw startup to the guarded deploy. No runtime
+> model change, actual reboot/provider/live-release proof or whole-branch approval.
+> Read ignored `candidate-and-startup-review-2026-10-16.md`; exact-image, hosted,
+> independent recovery and controller/Nikita gates remain OPEN.
+
+
 > **16 October explicit production project selection:** Guarded preflight,
 > deploy/shared recovery, restored-history probe and rollback emergency command
 > now use one explicit project selector preserving the valid existing checkout
