@@ -42,7 +42,7 @@
     "guarantee": "Replaying an already-revoked refresh token is rejected with 401 INVALID_REFRESH_TOKEN and, under the ordered organisation-user-family locks, quarantines every still-active session in that affected token family only. Unrelated device families remain untouched, and no user re-lookup or replacement session occurs.",
     "status": "covered",
     "testFile": "apps/api/src/tests/auth-isolation.test.ts",
-    "testTitle": "refresh token replay revokes active sessions for the affected user",
+    "testTitle": "refresh token replay quarantines the affected family after ROTATED",
     "linkResolved": true,
     "gapDescription": "",
     "surface": "api"
@@ -3594,7 +3594,7 @@
     "guarantee": "A replayed already-revoked refresh token is rejected with 401 INVALID_REFRESH_TOKEN and, under the ordered organisation-user-family locks, revokes every still-active session in the affected token family only, without touching unrelated device families, re-looking-up the user, or creating a replacement session.",
     "status": "covered",
     "testFile": "apps/api/src/tests/auth-isolation.test.ts",
-    "testTitle": "refresh token replay revokes active sessions for the affected user",
+    "testTitle": "refresh token replay quarantines the affected family after ROTATED",
     "linkResolved": true,
     "gapDescription": "",
     "surface": "api"

@@ -1,5 +1,10 @@
 # CharityPilot Agent Continuation Handoff
 
+> **16 October reliability linkage correction:** Two replay guarantees still
+> named the former test title. Linked them to the existing ROTATED-family
+> quarantine test; assertions and runtime behavior are unchanged. The private
+> `hosted-reliability-linkage-2026-10-16.md` records hosted failure and verification.
+
 > **16 October hosted Compose assertion correction:** Older Compose versions omit
 > a false bind option from rendered JSON. The CA test now requires the explicit
 > source opt-out and accepts that serialization; true remains rejected. Runtime
