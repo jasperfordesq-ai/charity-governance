@@ -87,12 +87,18 @@ export function prepareConfluenceExecutionLedgerV2(raw:unknown,rawContext:Recove
   } catch {throw new Error('Invalid or over-capacity Confluence execution ledger V2');}
 }
 
-/** Confidential read-only capture; source/installation declarations need host
- * attestation. No durable capture, external object, publication or replay. */
+/** Confidential read-only capture; declarations need host attestation. */
 export async function captureConfluenceExecutionLedgerV2(prisma:PrismaClient,organisationId:string,actorUserId:string,rawContext:RecoveryEnvelopeContext) {
   try {
-    const context=validateRecoveryEnvelopeContext(rawContext);if(context.organisationId!==organisationId)throw new Error();
-    return await prisma.$transaction(async tx=>{
+    return await prisma.$transaction(tx=>captureConfluenceExecutionLedgerV2InTransaction(tx,organisationId,actorUserId,rawContext),
+      {isolationLevel:'RepeatableRead',maxWait:5000,timeout:30000});
+  } catch {throw new Error('Confluence execution ledger V2 capture is unresolved; preserve existing evidence');}
+}
+
+/** Internal delegate. Caller owns Repeatable Read and any durable capture write.
+ * This is a consistent MVCC snapshot, not independently current authority. */
+export async function captureConfluenceExecutionLedgerV2InTransaction(tx:Prisma.TransactionClient,organisationId:string,actorUserId:string,rawContext:RecoveryEnvelopeContext) {
+  const context=validateRecoveryEnvelopeContext(rawContext);if(context.organisationId!==organisationId)throw new Error();
       const old=await captureConfluenceCopyLocalLedgerInTransaction(tx,organisationId,actorUserId,
         {installationId:context.installationId,declaredSourceRevision:context.sourceRevision});
       const legacy=JSON.parse(old.body) as {tables:Record<string,unknown>;[key:string]:unknown};
@@ -108,6 +114,5 @@ export async function captureConfluenceExecutionLedgerV2(prisma:PrismaClient,org
       const tables={...legacy.tables,...Object.fromEntries(extraNames.map((name,index)=>[name,groups[index]]))};
       return prepareConfluenceExecutionLedgerV2({...legacy,format:2,kind:'CONFLUENCE_EXECUTION_LEDGER_V2',writerEpoch:context.writerEpoch,
         captureOperationId:context.operationId,tables},context);
-    },{isolationLevel:'RepeatableRead',maxWait:5000,timeout:30000});
-  } catch {throw new Error('Confluence execution ledger V2 capture is unresolved; preserve existing evidence');}
+
 }

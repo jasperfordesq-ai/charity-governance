@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import { runConfluenceExecutionV2StorePostgresProof } from './confluence-execution-v2-store-postgres-proof.mjs';
 import { Prisma, PrismaClient } from '@prisma/client';
 import { captureConfluenceExecutionLedgerV2 } from '../apps/api/dist/services/confluence-execution-ledger-v2.js';
 import { sealConfluenceExecutionArchiveV2,openConfluenceExecutionArchiveV2 } from '../apps/api/dist/services/confluence-execution-archive-v2.js';
@@ -150,7 +151,8 @@ export async function runConfluenceExecutionJournalPostgresProof(prisma,url,clai
     const encrypted=await sealConfluenceExecutionArchiveV2(execution.body,binding,keys);
     const opened=await openConfluenceExecutionArchiveV2(encrypted.envelope,binding,keys);
     assert.equal(opened.body,execution.body);assert.equal(opened.independentlyPreserved,false);
-    return {executionV2Groups:Object.keys(execution.ledger.tables).length,executionV2OriginalBytes:true,racingRequests:2,raceCommittedRequests:1,lostRequestReceipt:true,lostOutcomeReceipt:true,outcomeAfterRevocation:true,
+    const v2Persistence=await runConfluenceExecutionV2StorePostgresProof(prisma,runtime,url,context,binding.observedControl);
+    return {v2Persistence,executionV2Groups:Object.keys(execution.ledger.tables).length,executionV2OriginalBytes:true,racingRequests:2,raceCommittedRequests:1,lostRequestReceipt:true,lostOutcomeReceipt:true,outcomeAfterRevocation:true,
       immutable:true,olderRestoreRefused:true,providerRequests:0};
   } finally {
     await restoreOwner();await runtime.$disconnect();

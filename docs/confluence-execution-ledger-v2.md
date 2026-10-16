@@ -32,9 +32,10 @@ record groups, full business-data/document bytes, current control, custody and
 old-writer fencing still need their separately specified recovery proof. No
 provider activation, global history or reopening authority follows from step1.
 
-The initial codec/capture work does not change the V1 persisted capture guard or
-wire V2 into the existing V1 publisher/replay functions. Those remain closed to
-execution history until the later steps have their own evidence.
+The initial codec/capture increment did not change persisted guards. The later
+persistence increment below adds explicit V2 validation while retaining V1
+behaviour. V1 publisher/replay functions remain closed to execution history
+until version-aware publication/replay has its own evidence.
 
 
 ## Current source capability and proof limits
@@ -58,8 +59,45 @@ it now derives the declared installation/source/epoch from its existing syntheti
 history. Neither validator nor source guards were weakened. Fixture keys and
 objects are synthetic, not real KMS/S3 custody or source-attested authority.
 
-The persisted V1 capture guard, V1 publisher and V1 maintenance replay are unchanged.
-V2 durable capture/candidate storage, actual independent object adapter, mixed-version
-prefix/current-head authentication and suspended maintenance replay remain stages
-2–4 above. Do not feed V2 to the V1 pipeline, treat the codec as an operator recovery
+The V1 publisher and maintenance replay remain V1-only. Persisted capture and
+candidate guards now distinguish formats as described below. The actual independent
+object adapter, mixed-version prefix/current-head authentication and suspended
+maintenance replay remain required stages2–4. Do not feed V2 to the V1 pipeline, treat the codec as an operator recovery
 entry point, or claim provider/transport/whole-backend/host-loss completion.
+
+
+## Durable originals and encrypted candidates
+
+`ConfluenceExecutionV2CaptureStore.prepare` accepts only the declared context and
+original predecessor-control observation. Actor/tenant come from the internal
+trusted caller. It repeats current active-Owner/tenant checks and persists the
+complete original eleven-group body, digest and binding in the same Repeatable
+Read transaction. A retry with an existing operation identity returns its original
+committed bytes; changed actor/binding/context is refused, never recaptured.
+
+`ConfluenceExecutionV2CandidateStore.prepare` reads that original, obtains a data
+key and encrypts outside database locks, then repeats Owner/source-binding checks
+in a second transaction. Only its committed winning ciphertext can be returned.
+An existing candidate is authenticated and reused; it is never silently resealed.
+Revocation while obtaining a key prevents a new candidate from being persisted.
+These operations do not upload, reserve or publish an archive.
+
+The forward `20261016170000_confluence_execution_v2_persistence` migration reuses
+the existing immutable capture/candidate tables. Version1 keeps its eight-group
+contract and refusal when claims would be omitted. Version2 must match all eleven
+actual source groups and its exact original envelope context/version. Actor, WAL,
+isolation, bounds, timestamp, hash, recovery-binding and append-only checks remain.
+Earlier migration checksums and stored records are unchanged. Schema194 does not
+change the restore inventory: format15 already hashes both transport tables in full.
+
+A capture is a consistent MVCC view. Its clock stamp does not establish that no
+concurrent writer committed later. Independent current-head authentication and
+supported all-writer fencing are still required before any dispatch or reopening.
+Original bytes cannot be substituted for that freshness proof.
+
+The joined native database proof loses actual capture/candidate commit responses
+and resumes through new clients, races candidate preparations with one committed
+row, refuses omitted source records and cross-version metadata in direct SQL,
+retains immutable originals, and refuses a candidate after an atomic Owner transfer
+during key generation. Fixture keys are synthetic and external writes remain zero.
+This is local persistence/reconciliation evidence, not provider custody or host loss.

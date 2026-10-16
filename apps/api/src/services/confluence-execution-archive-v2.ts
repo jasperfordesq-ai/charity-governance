@@ -5,7 +5,8 @@ import { prepareConfluenceExecutionLedgerV2 } from './confluence-execution-ledge
 import { CONFLUENCE_COPY_LEDGER_MAX_BYTES } from './confluence-copy-ledger-snapshot.js';
 import { validateRecoveryEnvelopeContext,type RecoveryEnvelopeContext,type RecoveryDataKeys } from './recovery-preparation-envelope.js';
 import { validateRecoveryControl } from './recovery-operation-reservation.js';
-const MAX_ENVELOPE=192*1024*1024;
+export const CONFLUENCE_EXECUTION_ARCHIVE_V2_MAX_ENVELOPE_BYTES=192*1024*1024;
+const MAX_ENVELOPE=CONFLUENCE_EXECUTION_ARCHIVE_V2_MAX_ENVELOPE_BYTES;
 const base64=(max:number)=>z.string().min(1).max(max).refine(value=>Buffer.from(value,'base64').toString('base64')===value);
 const bindingSchema=z.object({context:z.unknown().transform(validateRecoveryEnvelopeContext),
  observedControl:z.unknown().transform(validateRecoveryControl)}).strict().refine(value=>

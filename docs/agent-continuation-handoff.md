@@ -1,5 +1,13 @@
 # CharityPilot Agent Continuation Handoff
 
+> **16 October durable V2 originals/candidates:** The 194th forward migration
+> preserves V1 behaviour and allows only exact eleven-group V2 captures and
+> version-bound candidates in the existing immutable tables. Capture commit
+> loss resumes original bytes; candidate retries authenticate original winning
+> ciphertext without resealing. Native races, commit-loss and role-change tests
+> exercise persistence. Restore format15 is unchanged. Independent object/head
+> publication, V2 replay and provider execution remain required.
+
 > **16 October V2 execution-history archive foundation:** Read-only bounded
 > capture and a separate authenticated-encryption codec preserve eleven source
 > groups, including original claims, requests and reports. Historical epochs

@@ -1,5 +1,11 @@
 # CharityPilot Full-Platform Remediation Audit
 
+> **16 October V2 persistence:** Original capture and ciphertext candidate now
+> have guarded durable stores with current-Owner rechecks and exact committed
+> byte reuse. Forward migration194 reuses existing transport tables, preserving
+> restore format15 and V1 refusal of omitted execution history. This does not
+> establish independent preservation, current freshness or reopening authority.
+
 > **16 October V2 archive capture/codec:** The new format retains eleven
 > original groups and separates its encryption domain from V1. Five focused
 > tests and populated native capture exercise the foundation. V2 has no live
