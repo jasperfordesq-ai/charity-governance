@@ -1,5 +1,12 @@
 # CharityPilot Agent Continuation Handoff
 
+> **16 October retained-review gate fixture correction:** Hosted607 failed
+> because its existing permission/scope TRUNCATE probe omitted the new request
+> and outcome children. The probe now names the complete child set, preserving
+> its append-only assertion and all application guards. Format15 and explicit
+> journal-partial/legacy-schema fixtures also cover the new structures. This is a test-fixture
+> correction; it does not relax immutability or change production behaviour.
+
 > **16 October execution journal:** The 193rd migration adds immutable
 > quarantined request intents and application-reported outcomes. Lost commit
 > responses reconcile through current-Owner receipts, and revocation does not

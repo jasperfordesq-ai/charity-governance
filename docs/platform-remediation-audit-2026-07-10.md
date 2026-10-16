@@ -1,5 +1,11 @@
 # CharityPilot Full-Platform Remediation Audit
 
+> **16 October hosted retention-gate correction:** The journal migration
+> exposed one more TRUNCATE fixture with an incomplete foreign-key child list.
+> Include request/outcome tables so the unchanged assertion reaches the
+> append-only protection. Update current format15 and actual legacy/partial
+> table fixtures too. Preserve the failed607 run as failed evidence.
+
 > **16 October request/outcome journal:** Local immutable intent and
 > APPLICATION_REPORT evidence now accompany consumption claims, with durable
 > receipt reconciliation and format15 restore inventory. Native PostgreSQL
