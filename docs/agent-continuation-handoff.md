@@ -1,5 +1,15 @@
 # CharityPilot Agent Continuation Handoff
 
+> **16 October managed-backend decision brief / production role gap OPEN:** Existing
+> strict production contract already expects external PostgreSQL; private blue-green
+> host=db guard remains separate. Fully synthetic all-profile Compose expansion
+> reproduces shared database input in migration/API/scheduler/jobs, so the private
+> restricted-runtime credential seam cannot be assumed to transfer to hosted
+> production. No live credential incident or config change claimed. Private brief
+> defines whole-backend/custody/recovery/cost decisions and role-split acceptance
+> before provider selection/cutover. Preserve strict profile gates; no new mode or
+> provider activation inferred. Hosting/independent recovery/Nikita gates stay open.
+
 > **16 October primary-requirement provenance review:** Reread eight selected
 > CharityPilot architecture/privacy/acceptance messages; full goal remains active.
 > Separate explicit managed-backend/off-host recovery outcomes from proposed

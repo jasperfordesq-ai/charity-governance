@@ -1,5 +1,14 @@
 # CharityPilot Full-Platform Remediation Audit
 
+> **16 October hosted production credential separation / source gap OPEN:** Synthetic
+> Compose expansion shows current migration and runtime services share DB input.
+> This is a planned-hosting compatibility gap, not evidence of live owner exposure.
+> Existing production already supports external DB configuration; current private
+> role proof and host=db contract do not establish hosted least privilege. Private
+> whole-backend requirements/recovery decision brief prepared; role transport and
+> exact provider/cutover acceptance required before operational reliance. No source
+> implementation, runtime/secret, profile relaxation or deployment in this review.
+
 > **16 October requirement provenance / acceptance OPEN:** Eight primary emails
 > reread; requested controls/managed hosting stay in scope. Exact transport loss
 > tolerance and managed-DB topology are engineering choices needing review, not
