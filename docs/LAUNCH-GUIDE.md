@@ -164,7 +164,8 @@ You need four external services. Create the **production/live** versions
 ### Step 4 - Choose where the app runs (hosting)
 - **What:** A Linux host (or platform) that can run Docker Compose, OR a
   container platform. The repo ships production `Dockerfile`s and
-  `compose.production.yml`, plus a GitHub Actions workflow that builds signed
+  `compose.production.yml` with mandatory `compose.production.roles.yml` (see
+  [runtime credential requirements](production-runtime-credentials.md)), plus a GitHub Actions workflow that builds signed
   images.
 - **Why:** Somewhere for the API, web app, and the scheduled-jobs service to live.
 - **You need:** A server/host + DNS pointing `app.charitypilot.ie` (web app) and

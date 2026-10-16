@@ -85,17 +85,27 @@ export interface ProductionRuntimeRoleTarget {
   phase: 'before-migration' | 'after-migration';
 }
 
+export function parseProductionRuntimeRoleTarget(raw: unknown): ProductionRuntimeRoleTarget {
+  try {
+    if(!raw||typeof raw!=='object'||Array.isArray(raw)
+      ||Object.keys(raw).sort().join(',')!=='database,maintenanceRole,phase,runtimeRole') throw new Error();
+    const target=raw as ProductionRuntimeRoleTarget;
+    if(!['before-migration','after-migration'].includes(target.phase)
+      ||typeof target.runtimeRole!=='string'||!/^[a-z_][a-z0-9_]{0,62}$/u.test(target.runtimeRole)
+      ||[target.maintenanceRole,target.database].some(value=>typeof value!=='string'||!value
+        ||Buffer.byteLength(value,'utf8')>63||/[\x00-\x1f\x7f]/u.test(value))
+      ||target.runtimeRole===target.maintenanceRole) throw new Error();
+    return {runtimeRole:target.runtimeRole,maintenanceRole:target.maintenanceRole,database:target.database,phase:target.phase};
+  } catch {throw new Error('Production runtime database verification failed.');}
+}
+
 /** Read-only catalogue check on a fresh client connected with the runtime URL.
  * Does not provision/reconcile grants, attest provider custody, or prove that
  * a caller actually supplied a fresh client/the reviewed TLS connection URL.
  */
 export async function verifyProductionRuntimeDatabaseRole(client: RuntimeRoleProbeClient, target: ProductionRuntimeRoleTarget) {
   try {
-    if (!target || !['before-migration','after-migration'].includes(target.phase)
-      || !/^[a-z_][a-z0-9_]{0,62}$/u.test(target.runtimeRole)
-      || [target.maintenanceRole, target.database].some(value => typeof value !== 'string' || !value
-        || Buffer.byteLength(value,'utf8')>63 || /[\x00-\x1f\x7f]/u.test(value))
-      || target.runtimeRole===target.maintenanceRole) throw new Error();
+    target=parseProductionRuntimeRoleTarget(target);
     return await client.$transaction(async tx => {
       await tx.$executeRawUnsafe('SET TRANSACTION READ ONLY');
       await tx.$executeRawUnsafe('SET LOCAL search_path = pg_catalog, public, pg_temp');

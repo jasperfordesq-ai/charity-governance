@@ -220,6 +220,7 @@ function commandsFor({ productionEnvFile, images, tlsProxy }) {
   const composeFiles = [
     '-f',
     'compose.production.yml',
+    '-f', 'compose.production.roles.yml',
     ...(tlsProxy ? ['-f', 'compose.production-tls.yml'] : []),
   ];
 

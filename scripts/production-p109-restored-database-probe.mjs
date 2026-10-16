@@ -409,6 +409,7 @@ export function p109RestoredHistoryProbeComposeCommand({
     productionEnvFile,
     "-f",
     "compose.production.yml",
+    "-f", "compose.production.roles.yml",
     ...(tlsProxy ? ["-f", "compose.production-tls.yml"] : []),
     "--profile",
     "maintenance",

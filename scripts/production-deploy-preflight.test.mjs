@@ -355,7 +355,7 @@ test('deploy preflight dry-run emits production validation and signature verific
     assert.match(result.stdout, /node scripts\/check-production\.mjs "?--production-env-file=.*production\.env"?/);
     assert.match(
       result.stdout,
-      /docker compose --env-file "?.*production\.env"? -f compose\.production\.yml -f compose\.production-tls\.yml config --quiet/,
+      /docker compose --env-file "?.*production\.env"? -f compose\.production\.yml -f compose\.production\.roles\.yml -f compose\.production-tls\.yml config --quiet/,
     );
     assert.match(result.stdout, /cosign verify/);
     assert.match(result.stdout, /--certificate-identity-regexp "\^https:\/\/github\.com\/jasperfordesq-ai\/charity-governance\//);
@@ -385,7 +385,7 @@ test('deploy preflight can opt out of the TLS overlay when a managed load balanc
     const result = runPreflight(['--production-env-file', envPath, '--dry-run', '--no-tls-proxy']);
 
     assert.equal(result.status, 0, result.stderr);
-    assert.match(result.stdout, /docker compose --env-file "?.*production\.env"? -f compose\.production\.yml config --quiet/);
+    assert.match(result.stdout, /docker compose --env-file "?.*production\.env"? -f compose\.production\.yml -f compose\.production\.roles\.yml config --quiet/);
     assert.doesNotMatch(result.stdout, /compose\.production-tls\.yml/);
   } finally {
     rmSync(tempDir, { recursive: true, force: true });

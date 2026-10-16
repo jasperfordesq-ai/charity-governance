@@ -8,6 +8,9 @@
 # takes the old runtime fully down, creates and restore-verifies a retained
 # database backup, runs migration alone, prepares/reconciles reminder cutover
 # state with the runtime still quiesced, and only then starts the new runtime.
+# The guarded tools always add compose.production.roles.yml for credential
+# separation. This base is not a standalone startup configuration. It remains
+# usable for the documented emergency down operation without derived secrets.
 # =============================================================================
 
 services:

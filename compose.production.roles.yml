@@ -1,0 +1,32 @@
+# Mandatory overlay for guarded production lifecycle commands. Compose >=2.24.4
+# is required: env_file must REPLACE the maintenance file, never append to it.
+services:
+  api:
+    env_file: !override
+      - ${CHARITYPILOT_PRODUCTION_APP_ENV_FILE:?Set the separately reviewed runtime env file}
+  production-scheduler:
+    environment:
+      DATABASE_URL: ${CHARITYPILOT_PRODUCTION_RUNTIME_DATABASE_URL:?Use guarded runtime credential transport}
+  deadline-reminders:
+    environment:
+      DATABASE_URL: ${CHARITYPILOT_PRODUCTION_RUNTIME_DATABASE_URL:?Use guarded runtime credential transport}
+  document-storage-cleanup:
+    environment:
+      DATABASE_URL: ${CHARITYPILOT_PRODUCTION_RUNTIME_DATABASE_URL:?Use guarded runtime credential transport}
+  document-publication:
+    environment:
+      DATABASE_URL: ${CHARITYPILOT_PRODUCTION_RUNTIME_DATABASE_URL:?Use guarded runtime credential transport}
+  runtime-role-check:
+    image: ${CHARITYPILOT_API_IMAGE:?Set CHARITYPILOT_API_IMAGE}
+    profiles: [maintenance]
+    environment:
+      NODE_ENV: production
+      CHARITYPILOT_DEPLOYMENT_MODE: production
+      DATABASE_URL: ${CHARITYPILOT_PRODUCTION_RUNTIME_DATABASE_URL:?Use guarded runtime credential transport}
+    command: [node, dist/jobs/verify-runtime-database-role.js]
+    restart: "no"
+    read_only: true
+    tmpfs: [/tmp]
+    security_opt: ["no-new-privileges:true"]
+    cap_drop: [ALL]
+    networks: [charitypilot-production]

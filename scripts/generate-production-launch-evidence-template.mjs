@@ -73,6 +73,8 @@ const evidenceHintsByCheck = new Map([
   ['releaseGate.deploy-production', [
     'npm run deploy:production -- --production-env-file=.env.production --backup-output-dir=/secure/charitypilot/cutovers',
     'compose.production.yml',
+    'compose.production.roles.yml',
+    'runtime-role-check before-migration and after-migration succeeded',
     'compose.production-tls.yml or --no-tls-proxy with managed TLS certificate evidence',
     'release-image-digests.env',
     'digest-pinned images',

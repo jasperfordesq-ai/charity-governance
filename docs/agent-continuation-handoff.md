@@ -1,4 +1,17 @@
-# CharityPilot Agent Continuation Handoff
+#> **16 October runtime-role cutover gate / local source proof:** Guarded production
+> deploy now verifies a restricted fresh connection before downtime and after
+> migration/status. Mandatory roles overlay replaces the API env file, gives four
+> workers runtime credentials, and isolates the probe from maintenance/API secrets.
+> Preflight, recovery and rollback delegation use the overlay; emergency base-only
+> down remains available. Compose >=2.24.4 required. No grants are provisioned.
+> API3234 +14actualPG fixturesPASS; role/TLS/effective-Compose53PASS; full production
+> checks1219PASS/7SKIP. Source190 migrations; no push/remoteCI/Linux-image/deploy.
+> NEXT reviewed grant provisioning/reconciliation and positive application access,
+> CA protection/mounts, full accumulated-patch review and approved hosting/recovery.
+> Confluence independent-history self-coverage, C1/replay/controller/Nikita gates
+> remain OPEN. See docs/production-runtime-credentials.md. Earlier notes historical.
+
+ CharityPilot Agent Continuation Handoff
 
 > **16 October administrative clients and Prisma CLI connected / role split OPEN:**
 > Nine public/shared administrative entry points now use the verified client;

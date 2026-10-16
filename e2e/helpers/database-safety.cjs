@@ -187,6 +187,20 @@ const DISPOSABLE_DATABASE_RESET_TABLES = Object.freeze([
   // and trip INTEGRATION_KEY_MISMATCH, so it truncates.
   "OrganisationIntegration",
   "ConfluenceReference",
+  // Exact schema inventory only: protected ON TRUNCATE triggers still refuse
+  // reset. Never disable those guards to make a disposable suite run.
+  "ConfluenceRetainedCopyReview",
+  "ConfluenceRetainedCopyReviewWithdrawal",
+  "ConfluenceSyntheticCopyScope",
+  "ConfluenceRetainedCopyPermission",
+  "ConfluenceRetainedCopyPermissionWithdrawal",
+  "ConfluenceCopyRecoveryCapture",
+  "ConfluenceCopyPublicationPlan",
+  "ConfluenceCopyPublicationReceipt",
+  "ConfluenceCopyLedgerCapture",
+  "ConfluenceCopyLedgerCandidate",
+  "ConfluenceCopyLedgerUploadAttempt",
+  "ConfluenceCopyLedgerProgress",
   "IntegrationCredential",
   "IntegrationSecretControl",
   "SessionSecurityTrace",

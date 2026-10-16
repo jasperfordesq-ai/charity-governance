@@ -697,6 +697,7 @@ function composePrefix(options) {
     options.productionEnvFile,
     "-f",
     "compose.production.yml",
+    "-f", "compose.production.roles.yml",
     ...(options.tlsProxy ? ["-f", "compose.production-tls.yml"] : []),
   ];
 }

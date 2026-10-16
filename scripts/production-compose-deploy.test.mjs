@@ -23,6 +23,7 @@ async function boundDeploymentFixture(t, mutation) {
   const change = () => writeFileSync(transport.binding.appPath,
     readFileSync(transport.binding.appPath, 'utf8') + '# changed during deployment\n');
   const calls = [];
+  const rolePhases=[];
   const module = await loadDeployModule();
   const result = module.runProductionComposeDeployFromArgs(['--production-env-file', envPath, ...backupArgs], {
     processEnv: { ...cleanEnv(), DATABASE_URL: 'ambient-unreviewed', COMPOSE_FILE: 'ambient-unreviewed.yml' },
@@ -46,6 +47,16 @@ async function boundDeploymentFixture(t, mutation) {
       if (mutation === 'migration' && command.at(-1) === 'migrate') change();
       if (mutation === 'startup' && command.includes('up')) change();
     },
+    runRuntimeRoleProbe: (command,env,{input}) => {
+      const target=JSON.parse(input);rolePhases.push(target.phase);
+      assert.equal(command.at(-1),'runtime-role-check');
+      assert.equal(target.runtimeRole,'cp_runtime');assert.equal(target.maintenanceRole,'user');
+      assert.match(env.CHARITYPILOT_PRODUCTION_RUNTIME_DATABASE_URL,/cp_runtime:runtime-only-password@/);
+      assert.ok(!calls.some(value=>value.includes('up')));
+      if(mutation===`role-${target.phase}`) throw new Error('synthetic role refusal');
+      if(mutation==='role-receipt') return '';
+      return JSON.stringify({schemaVersion:1,verified:true,phase:target.phase});
+    },
     runBackup: (_args,env) => {
       assert.equal(new URL(env.DATABASE_URL).searchParams.get('sslmode'),'verify-full');
       if (mutation === 'backup') change();
@@ -56,7 +67,7 @@ async function boundDeploymentFixture(t, mutation) {
       return { status: 0, stdout: 'synthetic smoke\n', stderr: '' };
     },
   });
-  return { result, calls };
+  return { result, calls, rolePhases };
 }
 
 test('bound deployment refuses changed preflight files before pulling or stopping runtime', async t => {
@@ -78,10 +89,25 @@ for (const phase of ['backup', 'migration']) {
 }
 
 test('bound deployment uses distinct reviewed CLI inputs for all cutover phases', async t => {
-  const { result, calls } = await boundDeploymentFixture(t, 'none');
+  const { result, calls, rolePhases } = await boundDeploymentFixture(t, 'none');
   assert.equal(result.status, 0, result.stderr);
   assert.ok(calls.some(command => command.includes('up')));
   assert.doesNotMatch(result.stdout + result.stderr, /user:pass|runtime-only-password/);
+  assert.deepEqual(rolePhases,['before-migration','after-migration']);
+});
+
+for(const phase of ['before-migration','after-migration']) {
+  test(`role refusal ${phase} prevents runtime startup`,async t=>{
+    const {result,calls}=await boundDeploymentFixture(t,`role-${phase}`);
+    assert.equal(result.status,1);
+    assert.ok(!calls.some(command=>command.includes('up')));
+    assert.equal(calls.some(command=>command.includes('down')),phase==='after-migration');
+  });
+}
+test('an empty role receipt cannot allow deployment',async t=>{
+  const {result,calls}=await boundDeploymentFixture(t,'role-receipt');
+  assert.equal(result.status,1);
+  assert.ok(!calls.some(command=>command.includes('down')));
 });
 
 test('bound deployment refuses unsupported protection before any lifecycle command', async t => {
@@ -151,9 +177,11 @@ async function loadDeployRunner() {
             CHARITYPILOT_PRODUCTION_APP_ENV_FILE: 'synthetic-runtime.env',
             CHARITYPILOT_PRODUCTION_RUNTIME_DATABASE_URL: 'synthetic-runtime-only' },
           binding: { maintenancePath: path, appPath: 'synthetic-runtime.env' },
+          identity: {runtimeRole:'cp_runtime',maintenanceRole:'user',database:'charitypilot'},
           privatePermissionsVerified: true,
         }),
         assertRuntimeEnvironmentUnchanged: () => {},
+        runRuntimeRoleProbe: (_command,_env,{input})=>JSON.stringify({schemaVersion:1,verified:true,phase:JSON.parse(input).phase}),
       } : {}),
       ...dependencies,
     });
@@ -439,6 +467,7 @@ test("production deploy quiesces and backs up the old runtime before migration a
     envPath,
     "-f",
     "compose.production.yml",
+    "-f", "compose.production.roles.yml",
     "-f",
     "compose.production-tls.yml",
     "up",
@@ -935,6 +964,7 @@ test("production deploy can opt out of the TLS overlay when a managed load balan
     envPath,
     "-f",
     "compose.production.yml",
+    "-f", "compose.production.roles.yml",
     "up",
     "--wait",
     "--wait-timeout",

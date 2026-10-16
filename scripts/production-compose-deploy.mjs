@@ -143,11 +143,14 @@ function result(status, stdout = "", stderr = "") {
   return { status, stdout, stderr };
 }
 
-function defaultRunCommand(command, env) {
+function defaultRunCommand(command, env, {input,timeout,maxBuffer}={}) {
   const commandResult = spawnSync(command[0], command.slice(1), {
     cwd: repoRoot,
     encoding: "utf8",
     env,
+    ...(input===undefined?{}:{input}),
+    ...(timeout===undefined?{}:{timeout}),
+    ...(maxBuffer===undefined?{}:{maxBuffer}),
     // Expanded configuration and migration diagnostics can contain secrets.
     // Surface only the fixed command/status failure below.
     stdio: "pipe",
@@ -158,6 +161,18 @@ function defaultRunCommand(command, env) {
       `${commandLine(command)} failed with exit code ${commandResult.status ?? "unknown"}`,
     );
   }
+  return commandResult.stdout ?? '';
+}
+
+export function parseProductionRuntimeRoleReceipt(value,phase) {
+  try {
+    if(!['before-migration','after-migration'].includes(phase)||typeof value!=='string'||value.length>2048) throw new Error();
+    const receipt=JSON.parse(value);
+    if(!receipt||Object.keys(receipt).sort().join(',')!=='phase,schemaVersion,verified'
+      ||receipt.schemaVersion!==1||receipt.verified!==true||receipt.phase!==phase
+      ||JSON.stringify(receipt)!==value.trim()) throw new Error();
+    return receipt;
+  } catch {throw new Error('Production runtime database role verification failed.');}
 }
 
 function defaultRunSmoke(args, env) {
@@ -262,6 +277,7 @@ function composePrefix({ productionEnvFile, tlsProxy }) {
     productionEnvFile,
     "-f",
     "compose.production.yml",
+    "-f", "compose.production.roles.yml",
     ...(tlsProxy ? ["-f", "compose.production-tls.yml"] : []),
   ];
 }
@@ -302,6 +318,10 @@ function composeMigrateCommand(options) {
     "--no-deps",
     "migrate",
   ];
+}
+
+function composeRuntimeRoleProbeCommand(options) {
+  return [...composePrefix(options),'--profile','maintenance','run','--rm','-T','--no-deps','runtime-role-check'];
 }
 
 function composeMigrationStatusCommand(options) {
@@ -371,6 +391,7 @@ export function runProductionComposeDeployFromArgs(
     runCommand = defaultRunCommand,
     runBackup = defaultRunBackup,
     runSmoke = defaultRunSmoke,
+    runRuntimeRoleProbe = (command,env,options)=>defaultRunCommand(command,env,{...options,timeout:120000,maxBuffer:16384}),
     buildRuntimeEnvironment = buildProductionComposeEnvironment,
     assertRuntimeEnvironmentUnchanged = assertProductionRuntimeEnvironmentUnchanged,
     expectedRuntimeBinding = null,
@@ -493,6 +514,17 @@ export function runProductionComposeDeployFromArgs(
     const pullCommand = composePullCommand(options);
     const quiesceCommand = composeQuiesceCommand(options);
     const migrateCommand = composeMigrateCommand(options);
+    const roleProbeCommand = composeRuntimeRoleProbeCommand(options);
+    const verifyRuntimeRole = phase => {
+      assertRuntimeEnvironmentUnchanged(transport.binding);
+      const input=JSON.stringify({runtimeRole:transport.identity.runtimeRole,maintenanceRole:transport.identity.maintenanceRole,
+        database:transport.identity.database,phase});
+      let output;
+      try {output=runRuntimeRoleProbe(roleProbeCommand,commandEnv,{input});}
+      catch {throw new Error('Production runtime database role verification failed.');}
+      assertRuntimeEnvironmentUnchanged(transport.binding);
+      parseProductionRuntimeRoleReceipt(output,phase);
+    };
     const migrationStatusCommand = composeMigrationStatusCommand(options);
     const reminderReconciliationGateCommand = composeReminderReconciliationGateCommand(options);
     const skipReminderReconciliationGate =
@@ -541,6 +573,9 @@ export function runProductionComposeDeployFromArgs(
           ),
           "Pull promoted images before downtime:",
           commandLine(pullCommand),
+          'Verify the restricted runtime connection and grants before downtime:',
+          commandLine(roleProbeCommand),
+          'stdin: reviewed role/database metadata, phase before-migration (not printed)',
           "Enter fail-closed maintenance mode (stops and removes API, web, scheduler, jobs, and proxy):",
           commandLine(quiesceCommand),
           ...(hasPreMigrationDatabaseProbe
@@ -561,6 +596,9 @@ export function runProductionComposeDeployFromArgs(
           commandLine(migrateCommand),
           "Probe live migration history compatibility before any runtime starts:",
           commandLine(migrationStatusCommand),
+          'Verify restricted runtime grants again after migration, before any runtime job starts:',
+          commandLine(roleProbeCommand),
+          'stdin: reviewed role/database metadata, phase after-migration (not printed)',
           skipReminderReconciliationGate
             ? "P0-06 reminder reconciliation gate skipped only because the rollback caller supplied a verified pre-P0-06 database-restore attestation."
             : "Require every ambiguous deadline reminder outcome to be reconciled before runtime starts:",
@@ -583,6 +621,7 @@ export function runProductionComposeDeployFromArgs(
     let smokeResult;
     try {
       guardedCommand(pullCommand);
+      verifyRuntimeRole('before-migration');
       guardedCommand(quiesceCommand);
       runtimeQuiesced = true;
 
@@ -607,6 +646,7 @@ export function runProductionComposeDeployFromArgs(
 
       guardedCommand(migrateCommand, prismaCommandEnv);
       guardedCommand(migrationStatusCommand, prismaCommandEnv);
+      verifyRuntimeRole('after-migration');
       if (!skipReminderReconciliationGate) {
         guardedCommand(reminderReconciliationGateCommand);
       }

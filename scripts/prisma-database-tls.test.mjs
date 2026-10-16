@@ -115,6 +115,22 @@ try {
     });
     return result.status===0;
   }
+  function roleJobAttempt(phase='after-migration',rawInput) {
+    const canonical=new URL(`postgresql://cp_runtime:synthetic-runtime-only@localhost:${port}/postgres`);
+    canonical.searchParams.set('sslmode','verify-full');canonical.searchParams.set('target_session_attrs','read-write');
+    canonical.searchParams.set('sslrootcert',join(certDir,'cert.pem'));canonical.searchParams.set('connect_timeout','3');
+    const result=spawnSync(process.execPath,[fileURLToPath(new URL('../apps/api/dist/jobs/verify-runtime-database-role.js',import.meta.url))],{
+      encoding:'utf8',timeout:15000,maxBuffer:16384,
+      env:{...process.env,NODE_ENV:'production',CHARITYPILOT_DEPLOYMENT_MODE:'production',DATABASE_URL:canonical.href},
+      input:rawInput??JSON.stringify({runtimeRole:'cp_runtime',maintenanceRole:'postgres',database:'postgres',phase}),
+    });
+    if(result.status!==0) {
+      assert.equal(result.stdout,'');assert.equal(result.stderr.trim(),'Runtime database role probe failed.');
+      return false;
+    }
+    assert.deepEqual(JSON.parse(result.stdout),{schemaVersion:1,verified:true,phase});
+    return true;
+  }
   const migrationRoot=join(certDir,'cli-migration');
   const migrationDir=join(migrationRoot,'migrations','20261016000000_synthetic_tls');
   mkdirSync(migrationDir,{recursive:true});
@@ -135,6 +151,13 @@ try {
   const positive={connected:true,verified:true,tls:true};
   check('fresh Prisma login, TLS and actual transaction wrapper',await prismaAttempt(),positive);
   check('actual application factory verifies strict TLS and target',await prismaAttempt({applicationFactory:true}),positive);
+  check('actual role job before migration emits verified receipt',roleJobAttempt('before-migration'),true);
+  check('actual role job after migration emits verified receipt',roleJobAttempt(),true);
+  check('actual role job refuses oversized stdin before connecting',roleJobAttempt('after-migration',' '.repeat(4097)),false);
+  query('GRANT UPDATE ON public."DocumentRecoveryEnforcement" TO cp_runtime;');
+  check('actual role job refuses protected-table write authority',roleJobAttempt(),false);
+  query('REVOKE UPDATE ON public."DocumentRecoveryEnforcement" FROM cp_runtime;');
+  check('actual role job positive control after grant rollback',roleJobAttempt(),true);
   check('Prisma wrong hostname refuses',await prismaAttempt({hostname:'127.0.0.1'}),{connected:false});
   check('application factory refuses wrong hostname',await prismaAttempt({applicationFactory:true,hostname:'127.0.0.1'}),{connected:false});
   check('actual Prisma CLI strict TLS positive',cliAttempt(),true);

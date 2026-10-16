@@ -41,6 +41,7 @@ const FIXED_VALUES = {
 // for the human-facing summary - they are left as placeholders in the file.
 export const OPERATOR_SUPPLIED_KEYS = [
   ['DATABASE_URL', 'Managed production PostgreSQL URL with sslmode=verify-full and target_session_attrs=read-write (Step 3)'],
+  ['CHARITYPILOT_PRODUCTION_APP_ENV_FILE', 'Absolute separately protected runtime env-file path; restricted database role on the same target, matching reviewed application values (docs/production-runtime-credentials.md)'],
   ['DOCUMENT_STORAGE_RECOVERY_DATABASE_HOST_ALLOWLIST', 'Exact managed PostgreSQL hostname authorized for audited document-deletion recovery (Step 3)'],
   ['FRONTEND_URL', 'Public HTTPS web app origin, e.g. https://app.charitypilot.ie (Step 1/4)'],
   ['NEXT_PUBLIC_API_URL', 'Public HTTPS API origin, e.g. https://api.charitypilot.ie (Step 4)'],
