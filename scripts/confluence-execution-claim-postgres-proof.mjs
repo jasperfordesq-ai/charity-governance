@@ -33,10 +33,11 @@ export async function runConfluenceExecutionClaimPostgresProof(prisma,url) {
     actorUserId:'owner-a',snapshot:review.snapshot,sourceBytesObserved:true,actionAuthorized:false,syntheticVerified:false,allCopiesVerified:false,
     connection:{integrationId:connection.id,connectedAt:connection.connectedAt.toISOString(),cloudId:review.snapshot.cloudId,siteOrigin:review.snapshot.siteOrigin},
   })});
-  const {permission}=await permissions.issue('org-a','owner-a',recorded.id,{scopeId:scope.id,expectedSnapshotSha256:recorded.snapshotSha256,
+  const permissionInput={scopeId:scope.id,expectedSnapshotSha256:recorded.snapshotSha256,
     evidenceRef:'SYNTHETIC-CLAIM-PERMISSION',reason:'Synthetic one-use claim proof only, no provider request',
     attestation:'AUTHORISE PURGE OF THIS SYNTHETIC CONFLUENCE COPY; RETAIN PRIMARY',scopeEvidenceRef:scope.evidenceRef,
-    disposalPolicyEvidenceRef:scope.disposalPolicyEvidenceRef,expiresAt:new Date(now+3400000).toISOString()});
+    disposalPolicyEvidenceRef:scope.disposalPolicyEvidenceRef,expiresAt:new Date(now+3400000).toISOString()};
+  const {permission}=await permissions.issue('org-a','owner-a',recorded.id,permissionInput);
   const service=new ConfluenceCopyExecutionClaimService(prisma);
   const input={permissionId:permission.id,operationId:'claim-race-a',expectedSnapshotSha256:recorded.snapshotSha256,
     evidenceRef:'SYNTHETIC-CLAIM-EXECUTION',reason:'Synthetic local consumption remains quarantined for independent history'};
@@ -65,9 +66,35 @@ export async function runConfluenceExecutionClaimPostgresProof(prisma,url) {
   await assert.rejects(prisma.confluenceCopyExecutionClaim.update({where:{id:row.id},data:{phase:'QUARANTINED'}}),/append-only/);
   await assert.rejects(prisma.confluenceCopyExecutionClaim.delete({where:{id:row.id}}),/append-only/);
   await assert.rejects(prisma.$executeRaw`TRUNCATE public."ConfluenceCopyExecutionClaim"`,/append-only/);
+  // Distinct explicit synthetic permission: lose the response AFTER its real
+  // commit. Reconcile through a new client, never infer that the write failed.
+  const lostReview=await new ConfluenceRetainedCopyReviewService(prisma).record('org-a','owner-a',review);
+  const lostScopeInput={...scopeInput,reviewId:lostReview.id};
+  const lostPreview=await registerSyntheticConfluenceScope(prisma,lostScopeInput);
+  const lostScope=await registerSyntheticConfluenceScope(prisma,lostScopeInput,lostPreview.confirmationSha256);
+  const lostPermission=await permissions.issue('org-a','owner-a',lostReview.id,{...permissionInput,scopeId:lostScope.scopeId});
+  const lostInput={...input,permissionId:lostPermission.permission.id,operationId:'claim-response-lost'};
+  let committedId;
+  const lostResponseClient={confluenceCopyExecutionClaim:{create:async args=>{
+    const committed=await prisma.confluenceCopyExecutionClaim.create(args);committedId=committed.id;
+    throw new Error('SYNTHETIC-PRIVATE-DETAIL: acknowledgement lost after commit');
+  }}};
+  await assert.rejects(new ConfluenceCopyExecutionClaimService(lostResponseClient).claim('org-a','owner-a',lostInput),error=>{
+    assert.equal(error.code,'CONFLUENCE_COPY_EXECUTION_CLAIM_UNRESOLVED');
+    assert.equal(error.message.includes('SYNTHETIC-PRIVATE-DETAIL'),false);return true;
+  });
+  assert.ok(committedId);
+  const replacementClient=new PrismaClient({datasources:{db:{url}}});
+  try {
+    const replacementService=new ConfluenceCopyExecutionClaimService(replacementClient);
+    assert.equal((await replacementService.receipt('org-a','owner-a',lostInput.operationId)).claim.id,committedId);
+    await assert.rejects(replacementService.claim('org-a','owner-a',lostInput));
+    assert.equal(await replacementClient.confluenceCopyExecutionClaim.count({where:{permissionId:lostInput.permissionId}}),1);
+  } finally {await replacementClient.$disconnect();}
   const after=(await prisma.$queryRaw(Prisma.raw(PURGE_RESTORE_SNAPSHOT_SQL)))[0].snapshot;
   assert.equal(after.format,14);
   assert.throws(()=>assertPurgeRestoreLedger(after,before),{code:'PURGE_RESTORE_RECONCILIATION_REQUIRED'});
   assert.equal(assertPurgeRestoreLedger(after,after).confluenceExecutionClaimsCompared,true);
-  return {racingClaims:2,committedClaims:1,restartedReceipt:true,olderRestoreRefused:true,providerRequests:0};
+  return {racingClaims:2,raceCommittedClaims:1,lostCommitReceipt:true,lostCommitRetryInserts:0,
+    restartedReceipt:true,olderRestoreRefused:true,providerRequests:0};
 }

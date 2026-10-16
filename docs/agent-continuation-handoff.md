@@ -1,5 +1,11 @@
 # CharityPilot Agent Continuation Handoff
 
+> **16 October post-commit claim acknowledgement proof:** A synthetic fixture
+> now loses the response after an actual claim commit. A new client recovers
+> its original ID through receipt lookup; a subsequent attempt inserts no
+> duplicate. Raw injected errors remain private. This closes that database
+> interruption case only; provider outcomes and independent recovery remain open.
+
 > **16 October durable local retained-copy claims:** One immutable quarantined
 > claim can consume each permission; racing consumers cannot both commit. A
 > tenant-scoped Owner receipt reconciles the original operation. Restore format14

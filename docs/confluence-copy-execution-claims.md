@@ -56,3 +56,10 @@ WAL, and rejects an older snapshot missing the claim. It also checks refusal of
 a new archive capture that omits claim history. Provider inventory in the parent
 permission fixture is synthetic. No real consent, deletion, independent custody,
 physical-crash recovery or complete user journey is established by this proof.
+
+
+A separate synthetic permission exercises an acknowledgement lost after a real
+PostgreSQL commit. The service reports an unresolved operation without exposing
+the injected private error; a new client finds the exact committed claim by its
+original operation ID. A subsequent claim attempt inserts no second row. This
+proves database-response reconciliation, not reconciliation of a provider request.

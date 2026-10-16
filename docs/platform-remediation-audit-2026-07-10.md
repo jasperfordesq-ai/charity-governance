@@ -1,5 +1,10 @@
 # CharityPilot Full-Platform Remediation Audit
 
+> **16 October claim interruption evidence:** Actual PostgreSQL commit followed
+> by a lost response is reconciled by original operation receipt, with no second
+> consumption. The joined native proof covers this alongside the competing-claim
+> case. No provider action, full process/host-loss or independent custody claim.
+
 > **16 October retained-copy claim increment:** Local one-use consumption and
 > receipt reconciliation now have SQL guards, immutable quarantine and actual
 > PostgreSQL concurrency/reconnection proof. Format14 compares claim history;
