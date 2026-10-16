@@ -1,5 +1,15 @@
 # CharityPilot Agent Continuation Handoff
 
+> **16 October product-owner delegation:** The software owner has delegated
+> product and engineering decisions and removed further personal reviewer
+> participation as a prerequisite. Read `docs/product-governance-decisions.md`.
+> Older entries awaiting reviewer/product choices do not block that authorised
+> implementation. Preserve historical external-review status without claiming
+> approval; keep actual tenant governance, provider and release proof distinct.
+> A configurable Vault-draft recommendation is being delivered through the
+> existing proposal/Owner approval controls. Private receipts record test and
+> deployment status; this note does not claim it is deployed.
+
 > **16 October protected navigation investigation:** Hosted E2E on the footer
 > update hit a fail-closed authentication 503 during a governance-audit journey.
 > The retained browser trace showed repeated background protected-page

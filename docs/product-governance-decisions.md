@@ -1,0 +1,119 @@
+# Product governance decisions
+
+Decision date: 16 October 2026.
+
+## Authority and acceptance
+
+CharityPilot is a product for multiple organisations. The software owner has
+delegated product and engineering decisions to the implementation agent.
+An external reviewer's participation is optional; a further reviewer response
+is not a release prerequisite. Record external observations accurately without
+claiming a reviewer approved a release they have not reviewed.
+
+Product acceptance requires demonstrated behaviour against the requirements,
+reviewed code, exact-version checks and appropriate deployment/provider proof.
+Keep synthetic approvals clearly distinct from real governance acts. Product
+design decisions do not create Board resolutions or adopt policies for every
+customer. Organisation Owners can adopt their own settings through the audited
+controls; the product must provide usable recommendations rather than require
+each customer to design the feature from scratch.
+
+## Record access and lifecycle
+
+- New and unassessed documents are restricted. Member disclosure requires an
+  explicit assessment and an exact reviewed file; changing bytes invalidates
+  the basis for that disclosure.
+- Keep the existing structural lifecycle and accountable ownership controls.
+  Group category decisions where authority and evidence permit. A record review
+  backlog is not a requirement for a new Board resolution for each file.
+- Preserve removal, retention, disclosure and legal/currentness decisions as
+  separate facts. A historical classification does not establish legal accuracy
+  or permission to erase the record.
+
+## Draft removal and recovery recommendation
+
+Recommend individual removal review and 30 days of recovery after authorised
+removal for eligible unheld drafts without linked evidence. This is a recovery
+recommendation, not a statutory retention period. The Owner can change it.
+
+The recommendation is an explicit form preset, not an automatically active
+policy. Selecting it makes no API write. Saving a proposal and approving a
+policy remain separate actions. The recommendation is limited to Vault drafts;
+it must not silently populate complaint, external-copy or backup policies.
+
+The recovery deadline does not initiate permanent purge. Preserve the existing
+separate disposal authority, hold checks, exact-file safeguards and copy evidence.
+An expired recovery period must not be presented as proof that every copy has
+been erased. Recovery remains restricted and preserves audit history.
+
+References checked on the decision date:
+
+- [Google Drive](https://support.google.com/drive/answer/14933051?hl=en):
+  30 days in Trash.
+- [Notion](https://www.notion.com/help/custom-data-retention-settings):
+  30-day default with configurable enterprise retention settings.
+- [SharePoint](https://support.microsoft.com/en-us/sharepoint/admin/restore-deleted-items-from-the-site-collection-recycle-bin):
+  93 days from original deletion, shared across recycle-bin stages.
+
+These are comparative product behaviours, not legal authority or evidence that
+CharityPilot provides those services' recovery guarantees. The differing periods
+support a configurable choice. CharityPilot retains separate purge safeguards
+because it holds governance evidence and preservation decisions.
+
+The [ICO's storage-limitation guidance](https://ico.org.uk/for-organisations/uk-gdpr-guidance-and-resources/data-protection-principles/a-guide-to-the-data-protection-principles/storage-limitation/)
+also explains that there is no universal retention period for all personal data.
+This supports keeping purpose-specific record retention separate from a product's
+recovery convenience setting; it is not jurisdiction-specific approval of a
+customer's schedule.
+
+## Reporting
+
+Keep the full internal report limited to authorised privileged users. A minimised
+report is a separate, explicitly labelled output based on an immutable approved
+snapshot; synthetic snapshot tests establish product behaviour without recording
+an invented real Board approval. A customer with no approved snapshot should
+receive a clear explanation and a synthetic sample, not a false approved report.
+
+Continue field-level minimisation tests and rendered-output checks. Recipient
+approval for a particular disclosure remains separate from availability of the
+feature. An external reviewer need not approve each product test fixture.
+
+## Historical security events
+
+Where retained evidence cannot attribute historical replay events, preserve that
+uncertainty. Record engineering investigation results, observed repairs and their
+proof limits. Do not invent a benign cause, erase events, or mark a tenant risk
+verified solely because new source tests pass. Further diagnostics must have a
+bounded purpose and retention setting.
+
+## Recovery and provider work
+
+The product must recover to a safe state with current preservation/disposal
+authority, or quarantine uncertain operations. Exact restoration of every internal
+transport identifier is not a universal availability requirement. Missing original
+commit evidence must remain unknown; a quarantined/manual reconciliation path is
+acceptable when it cannot authorise stale writes, repeated erasure or unsafe
+reopening. Do not manufacture lost immutable rows.
+
+Managed whole-backend hosting and independently held usable recovery information
+remain required outcomes. A same-host disposable restore is engineering evidence,
+not physical-host-loss resilience. Provider selection, costed operating plan,
+accountable key custody and host-off/replacement proof are separate work items;
+external reviewer availability does not prevent preparing or implementing the
+chosen product contract. Supplier spend, legal acceptance and new access grants
+still require the corresponding authority.
+
+## Execution order
+
+1. Deliver and verify the recommended draft-policy path and synthetic recovery.
+2. Verify reporting with synthetic snapshots and explicit field/output assertions.
+3. Implement supported synthetic Confluence permission/execution and uncertainty
+   handling using the reviewed quarantine contract, followed by authorised real
+   sandbox observations.
+4. Complete the costed whole-backend deployment and independent recovery path,
+   then perform the required provider and host-loss demonstrations.
+
+Existing production/security invariants remain applicable. Keep implementation,
+CI, actual deployment, provider observation and external review as distinct
+evidence states. Do not require an unavailable reviewer to close engineering
+work, and do not claim unperformed independent acceptance.

@@ -1,5 +1,14 @@
 # CharityPilot Full-Platform Remediation Audit
 
+> **16 October product decision authority:** Follow
+> `docs/product-governance-decisions.md` for delegated multi-organisation product
+> decisions and engineering acceptance. Further personal external review is
+> optional, not a prerequisite. Do not convert synthetic tests into real Board
+> approvals or provider guarantees. The existing issue ledger remains open where
+> actual implementation or execution proof is missing. Draft-recovery settings
+> gain an explicit recommendation without automatically activating tenant policy
+> or authorising purge; private receipts record verification and release status.
+
 > **16 October protected navigation investigation:** Hosted E2E on the footer
 > update hit a fail-closed authentication 503 during a governance-audit journey.
 > The retained browser trace showed repeated background protected-page

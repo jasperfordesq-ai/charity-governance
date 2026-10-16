@@ -90,9 +90,17 @@ export function RetentionPolicies({ recordClass }: { recordClass: 'VAULT_DRAFT' 
 
   return <section className={statusPanelClassName('neutral', 'p-5')} aria-label={title}>
     <h2 className="font-semibold">{title}</h2>
-    <p className="text-sm">{copy ? 'These rules apply only to retained copies after primary disposal. Each scope still requires separate Owner authority and evidence of its creation time for a timed rule. Recorded recovery days do not provide recovery of external copies.' : complaint ? 'These rules apply only to complaints. Timed rules require reviewed resolution evidence that still matches the closed complaint. Complaints with board evidence require separate review. Owners review eligible primary records in Complaint permanent disposal; saving a retention policy does not delete a complaint.' : 'These rules apply only to unheld Vault drafts without linked evidence.'} Recovery days are separate from retention obligations. Record the charity’s approved rules; no period is supplied automatically. Other record classes and permanent erasure need separate review.</p>
+    <p className="text-sm">{copy ? 'These rules apply only to retained copies after primary disposal. Each scope still requires separate Owner authority and evidence of its creation time for a timed rule. Recorded recovery days do not provide recovery of external copies.' : complaint ? 'These rules apply only to complaints. Timed rules require reviewed resolution evidence that still matches the closed complaint. Complaints with board evidence require separate review. Owners review eligible primary records in Complaint permanent disposal; saving a retention policy does not delete a complaint.' : 'These rules apply only to unheld Vault drafts without linked evidence.'} Recovery days are separate from retention obligations. Record your organisation’s approved rules. Other record classes and permanent erasure need separate review.</p>
+    {recordClass === 'VAULT_DRAFT' ? <div className="mt-3 text-sm">
+      <p>Recommended starting point: review each draft removal individually and allow 30 days for recovery afterwards. You can change these settings. The recovery deadline does not automatically purge the file.</p>
+      <Button className="mt-2" size="sm" variant="flat" isDisabled={busy} onPress={() => {
+        setMode('REVIEW_REQUIRED'); setRetention(''); setRecovery('30'); setReview(null);
+        setEvidence(''); setConfirmed(false); setError('');
+        setNotice('Recommended draft settings added to the form, not saved or approved. Review them before recording your organisation’s policy.');
+      }}>Use recommended draft settings</Button>
+    </div> : null}
     <div className="mt-4 grid gap-3 sm:grid-cols-2">
-      <label className="text-sm">Retention rule<select className="mt-1 block w-full rounded border p-2" value={mode} disabled={busy}
+      <label className="text-sm">Retention rule<select aria-label="Retention rule" className="mt-1 block w-full rounded border p-2" value={mode} disabled={busy}
         onChange={event => setMode(event.target.value as Terms['retentionMode'])}>
         <option value="REVIEW_REQUIRED">Individual removal review required</option>
         <option value="AFTER_ANCHOR">Minimum days from {anchor}</option>

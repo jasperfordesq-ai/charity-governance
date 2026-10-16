@@ -11,7 +11,22 @@ test('a draft enters Deleted Items and restores with identical bytes and retaine
   const sample = path.resolve(__dirname, '../fixtures/sample-document.txt');
   await gotoWithDevServerRetry(ownerPage, '/documents');
   const policies = ownerPage.getByRole('region', { name: 'Draft retention policies' });
-  await reliableFill(policies.getByLabel('Recovery days after removal'), '30');
+  await expect(policies.getByLabel('Recovery days after removal')).toHaveValue('');
+  await expect(policies.getByRole('button', { name: 'Review approval' })).toBeDisabled();
+  const policyWrites: string[] = [];
+  ownerPage.on('request', request => {
+    if (request.url().endsWith('/documents/policy-revisions') && request.method() === 'POST') policyWrites.push(request.url());
+  });
+  await policies.getByRole('button', { name: 'Use recommended draft settings' }).click();
+  await expect(policies.getByLabel('Recovery days after removal')).toHaveValue('30');
+  await expect(policies.getByLabel('Retention rule', { exact: true })).toHaveValue('REVIEW_REQUIRED');
+  await expect(policies.getByRole('status')).toContainText('not saved or approved');
+  expect(policyWrites).toHaveLength(0);
+  const unsaved = await withDb(client => client.query('SELECT count(*) AS count FROM "DataRetentionPolicyRevision"'));
+  expect(unsaved.rows[0].count).toBe('0');
+  const copyPolicies = ownerPage.getByRole('region', { name: 'Document copy retention policies' });
+  await expect(copyPolicies.getByRole('button', { name: 'Use recommended draft settings' })).toHaveCount(0);
+  await expect(copyPolicies.getByLabel('Recorded recovery period (days)')).toHaveValue('');
   const proposal = ownerPage.waitForResponse(response => response.url().endsWith('/documents/policy-revisions') && response.request().method() === 'POST');
   await policies.getByRole('button', { name: 'Save proposal' }).click();
   expect((await proposal).status()).toBe(201);
