@@ -117,3 +117,17 @@ Existing production/security invariants remain applicable. Keep implementation,
 CI, actual deployment, provider observation and external review as distinct
 evidence states. Do not require an unavailable reviewer to close engineering
 work, and do not claim unperformed independent acceptance.
+
+
+## Synthetic retained-copy review form
+
+Recommend 30 minutes of explicit synthetic-review validity, editable from 1 to 60
+minutes in the Owner form, within the separate maintenance scope's one-hour
+ceiling. This is a short engineering review window; it is not a retention period
+or a grant of provider authority. The API still requires explicit review times;
+no tenant policy or scope is automatically created by displaying the preset.
+
+Show source retention separately from external-copy disposal. After an uncertain
+review save, preserve the attempted reference/reviewer/time and permit receipt
+inspection without automatically submitting another review. A receipt or a
+matching digest cannot by itself activate erasure.

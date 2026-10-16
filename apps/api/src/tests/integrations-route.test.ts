@@ -123,7 +123,7 @@ function makeStore(rows: IntegrationRow[], publications: PublicationRow[] = [], 
   const documentDetails = new Map<string, { id: string; organisationId: string; name: string;
     lifecycleStatus: string; externalPublicationApproved: boolean;
     externalPublicationSiteId: string | null; externalPublicationSpaceId: string | null;
-    visibility?: string }>();
+    visibility?: string; deletedAt?: Date | null; deletionHold?: boolean }>();
   // One member, so `integrationAuditActor` has a name to resolve. Tests that
   // care about the degraded path empty this array.
   const users: Array<{ id: string; organisationId: string; name: string; email: string }> = [
@@ -2104,9 +2104,11 @@ test('the publications listing returns exactly the allow-listed shape', async ()
     'erasureRequested',
     'id',
     'pageTitle',
+    'primaryRetained',
     'recordedPageId',
     'recordedSiteId',
     'recordedSpaceId',
+    'retainedReviewEligible',
     'retiredAt',
   ]);
   assert.deepEqual(data.publications[0], {
@@ -2118,7 +2120,30 @@ test('the publications listing returns exactly the allow-listed shape', async ()
     recordedPageId: 'page-1',
     retiredAt: '2026-09-19T09:00:00.000Z',
     erasureRequested: false,
+    primaryRetained: false,
+    retainedReviewEligible: false,
   });
+});
+
+test('retired-copy listing distinguishes retained primary review from ordinary erasure without exposing source particulars', async () => {
+  const { app, store } = await buildApp({ publications: [retiredPublicationRow()] });
+  const source = { id: 'document-1', organisationId: 'org-a', name: 'PRIVATE-SOURCE-NAME', lifecycleStatus: 'RETIRED',
+    externalPublicationApproved: false, externalPublicationSiteId: null, externalPublicationSpaceId: null,
+    deletedAt: null as Date | null, deletionHold: false };
+  store.documentDetails.set(source.id, source);
+  for (const [change, retained, eligible] of [
+    [{}, true, true], [{ deletionHold: true }, true, false],
+    [{ lifecycleStatus: 'CURRENT' }, true, false], [{ deletedAt: new Date() }, true, false],
+    [{ organisationId: 'org-b' }, false, false],
+  ] as const) {
+    store.documentDetails.set(source.id, { ...source, ...change });
+    const response = await app.inject({ method: 'GET', url: '/confluence/publications', headers: { authorization: bearer(ORG_A_ADMIN) } });
+    assert.equal(response.statusCode, 200);
+    const row = response.json().data.publications[0];
+    assert.equal(row.primaryRetained, retained);
+    assert.equal(row.retainedReviewEligible, eligible);
+    assert.equal(response.body.includes('PRIVATE-SOURCE-NAME'), false);
+  }
 });
 
 test('retired publication review pages past the former cap with tenant-bound cursors', async () => {

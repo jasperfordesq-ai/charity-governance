@@ -1107,8 +1107,8 @@ export async function integrationRoutes(
   });
 
   /**
-   * The pages this charity could still ask to erase — publications whose document
-   * has been deleted in CharityPilot while the Confluence page was left standing.
+   * Retired publication records, including sources still retained in the Vault.
+   * Tenant-scoped source flags guide review; they do not grant disposal authority.
    *
    * Note what this route does NOT accept: an `integrationId`. The publication is
    * found by its own id scoped to the authenticated organisation, the same rule
@@ -1118,6 +1118,11 @@ export async function integrationRoutes(
     try {
       const query = z.object({ before: publicationIdSchema.optional() }).strict().parse(request.query);
       const page = await listRetiredConfluencePublications(app.prisma, request.user.organisationId, query.before);
+      const sources = page.publications.length ? await app.prisma.document.findMany({
+        where: { organisationId: request.user.organisationId, id: { in: page.publications.map(row => row.documentId) } },
+        select: { id: true, deletedAt: true, lifecycleStatus: true, deletionHold: true, externalPublicationApproved: true },
+      }) : [];
+      const sourcesById = new Map(sources.map(source => [source.id, source]));
       return sendSuccess(reply, {
         publications: page.publications.map((row) => ({
           id: row.id,
@@ -1128,6 +1133,12 @@ export async function integrationRoutes(
           recordedPageId: row.pageId,
           retiredAt: row.retiredAt ? new Date(row.retiredAt).toISOString() : null,
           erasureRequested: row.erasureRequestedAt !== null,
+          primaryRetained: sourcesById.has(row.documentId),
+          retainedReviewEligible: row.erasureRequestedAt === null
+            && sourcesById.get(row.documentId)?.deletedAt === null
+            && sourcesById.get(row.documentId)?.lifecycleStatus === 'RETIRED'
+            && sourcesById.get(row.documentId)?.deletionHold === false
+            && sourcesById.get(row.documentId)?.externalPublicationApproved === false,
         })),
         nextCursor: page.nextCursor,
       });

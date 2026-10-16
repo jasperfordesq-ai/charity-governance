@@ -1,10 +1,19 @@
 # CharityPilot Agent Continuation Handoff
 
+> **16 October Owner retained-copy review interface:** The retired-publications
+> queue distinguishes retained primary records and offers the Owner synthetic
+> observation/review/receipt form. Lost save responses freeze another save while
+> retaining reconciliation context. The browser proves real review persistence,
+> post-commit response loss, receipt lookup and the original primary-absent path;
+> observation is intercepted and is not provider/byte proof. Further withdrawal,
+> permission/execution UI and independent history remain required.
+
 > **16 October review receipt lookup:** The Owner/full-web API now pages scoped
 > review receipts by publication, supporting reconciliation of a lost save
 > response. Exact cursors, minimal projection, no-store and throttling preserve
 > the boundary. It performs no fresh provider/source check and grants no action.
-> See `docs/confluence-retained-copy-review.md`; the Owner interface remains next.
+> See `docs/confluence-retained-copy-review.md`; the preparation interface is now
+> implemented above, with withdrawal and permission controls still outstanding.
 
 > **16 October disposable inventory correction:** The hosted schema-coverage
 > gate correctly rejected the new claim model missing from the disposable reset

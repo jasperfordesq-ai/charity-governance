@@ -2959,12 +2959,13 @@ test("standalone compose and bootstrap SQL contain the exact non-personal isolat
       name.endsWith(".spec.ts") &&
       name !== "personal-local-readiness.spec.ts" &&
       name !== "dpo-session-replay-concurrency.spec.ts" &&
-      name !== "document-control-refresh-concurrency.spec.ts")
+      name !== "document-control-refresh-concurrency.spec.ts" &&
+      name !== "retained-copy-review.spec.ts")
     .map((name) => readFileSync(join(ROOT, "e2e", "tests", name), "utf8"))
     .join("\n");
   // The replay regression deliberately drops real auth responses to simulate
   // network loss. Its only interception points are the three exact auth
-  // requests below; all other isolated specs remain free of routing mocks.
+  // requests below. Other deliberate interceptors are pinned separately.
   const replayFaultSpec = readFileSync(
     join(ROOT, "e2e", "tests", "dpo-session-replay-concurrency.spec.ts"),
     "utf8",
@@ -2989,6 +2990,18 @@ test("standalone compose and bootstrap SQL contain the exact non-personal isolat
     join(ROOT, "e2e", "tests", "document-control-refresh-concurrency.spec.ts"),
     "utf8",
   );
+  // Synthetic observations and post-commit response loss are confined to two
+  // exact routes on the already fenced API origin, only in disposable tests.
+  const copyReviewSpec = readFileSync(join(ROOT, "e2e", "tests", "retained-copy-review.spec.ts"), "utf8");
+  assert.match(copyReviewSpec, /test\.skip\(IS_DEPLOYED_QA,/);
+  assert.match(copyReviewSpec, /const root = `\$\{browserOriginFence\.apiOrigin\}\/api\/v1\/integrations\/confluence\/retained-copy-reviews`;/);
+  assert.equal((copyReviewSpec.match(/\.route\(/g) ?? []).length, 2);
+  assert.match(copyReviewSpec, /\.route\(`\$\{root\}\/observe\/\$\{publicationId\}`,/);
+  assert.match(copyReviewSpec, /\.route\(`\$\{root\}\/`,/);
+  assert.equal((copyReviewSpec.match(/expect\(route\.request\(\)\.method\(\)\)\.toBe\('POST'\)/g) ?? []).length, 2);
+  assert.match(copyReviewSpec, /route\.fetch\(\{ maxRedirects: 0 \}\)/);
+  assert.match(copyReviewSpec, /route\.abort\('failed'\)/);
+  assert.doesNotMatch(copyReviewSpec, /\.(?:unroute|routeWebSocket|unrouteAll)\(/);
   const documentFaultCode = documentFaultSpec.split("\n")
     .filter((line) => !line.trimStart().startsWith("//"))
     .join("\n");

@@ -99,3 +99,35 @@ provider observation or mutation and carries `currentSourceChecked=false` and
 An empty page does not prove that an in-flight save cannot still commit. The
 response carries `absenceProvesFailure=false`; retain the uncertainty instead
 of automatically repeating a save because a receipt was not yet found.
+
+
+## Owner review preparation in the dashboard
+
+In Integrations, open **Retired Confluence copies**. A retained or recoverable
+Vault record is labelled as such and is not offered the ordinary primary-absent
+erasure action. The API reads that source metadata within the authenticated
+organisation; these display flags do not authorise disposal.
+
+For an unheld, retained RETIRED source with withdrawn publication approval, an
+Owner can open **Review retained synthetic copy**. Read existing receipts, then
+observe the current source/copy, review the source digest, target and inventory
+summary, supply the five evidence references, and explicitly confirm synthetic
+content with the primary retained. The form suggests 30 minutes of review validity,
+editable from 1 to 60 minutes. This is an engineering freshness window, not a data
+retention period, an automatic approval or permission to erase.
+
+The panel serialises requests and distinguishes saving, recorded and unresolved
+outcomes. A failed save response freezes another review save in that panel;
+receipts remain readable, and the attempted reference, reviewer and time are
+shown for reconciliation. A missing receipt never unlocks another submission.
+Closing/reopening the panel preserves that state. The lock is local UI state,
+not a cross-session uniqueness guarantee: the API retains distinct reviews and
+a fresh page does not automatically resubmit anything. Stored review digests
+identify recorded evidence; no receipt automatically selects disposal authority.
+
+This increment does not expose review/permission withdrawal, permission issuance,
+claim execution or a provider action in the dashboard. Those controls and the
+independent claim/request/outcome history remain required stages. The synthetic
+browser proof intercepts only the observation response, then uses the real
+recording and receipt API; its lost-response case drops a response after a real
+backend commit. It does not prove source bytes or real Atlassian inventory.

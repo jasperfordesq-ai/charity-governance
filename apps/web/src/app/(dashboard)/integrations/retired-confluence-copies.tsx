@@ -7,6 +7,8 @@ import { api } from '@/lib/api';
 import { apiErrorMessage } from '@/lib/errors';
 import { AppSection } from '@/components/ui/app-page';
 import { ErrorState } from '@/components/ui/states';
+import { useAuth } from '@/lib/auth-context';
+import { RetainedCopyReview } from './retained-copy-review';
 
 type RetiredCopy = {
   id: string;
@@ -17,11 +19,14 @@ type RetiredCopy = {
   recordedPageId: string | null;
   retiredAt: string | null;
   erasureRequested: boolean;
+  primaryRetained: boolean;
+  retainedReviewEligible: boolean;
 };
 type Page = { publications: RetiredCopy[]; nextCursor: string | null };
 const CONFIRMATION = 'ERASE CONFLUENCE COPY';
 
 export function RetiredConfluenceCopies() {
+  const { user } = useAuth();
   const [copies, setCopies] = useState<RetiredCopy[]>([]);
   const [nextCursor, setNextCursor] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
@@ -64,7 +69,7 @@ export function RetiredConfluenceCopies() {
   };
 
   const requestErasure = async (copy: RetiredCopy) => {
-    if (submitting || selectedId !== copy.id || copy.erasureRequested
+    if (submitting || selectedId !== copy.id || copy.erasureRequested || copy.primaryRetained
       || !copy.recordedSiteId || !copy.recordedPageId) return;
     setSubmitting(true);
     setError('');
@@ -85,7 +90,7 @@ export function RetiredConfluenceCopies() {
     }
   };
 
-  return <AppSection title="Retired Confluence copies" description="Review recorded external pages left after a CharityPilot document was removed. This list is paged and includes only this charity’s retained publication records. A recorded reference does not prove that a page still exists or identify every external copy.">
+  return <AppSection title="Retired Confluence copies" description="Review this charity’s retired publication records, including copies whose local Vault record is retained. A recorded reference does not prove that a page still exists or identify every external copy.">
     <div className="flex flex-wrap gap-2">
       <Button size="sm" variant="flat" onPress={() => void load()} isLoading={loading}>Refresh copies</Button>
       <Link className="self-center text-sm text-teal-primary underline" href="/governance-audit">Review deletion history</Link>
@@ -105,12 +110,15 @@ export function RetiredConfluenceCopies() {
             ? `Retired ${new Date(copy.retiredAt).toLocaleString('en-IE')}` : 'Retirement time not recorded'}</p>
           {copy.erasureRequested ? <p className="mt-1 text-sm">Erasure request recorded; check the deletion job outcome.</p> : null}
         </div>
-        {!copy.erasureRequested && copy.recordedSiteId && copy.recordedPageId ? <Button size="sm" variant="flat" color="danger"
+        {!copy.primaryRetained && !copy.erasureRequested && copy.recordedSiteId && copy.recordedPageId ? <Button size="sm" variant="flat" color="danger"
           onPress={() => open(copy.id)}>Review erasure request</Button> : null}
         {!copy.erasureRequested && (!copy.recordedSiteId || !copy.recordedPageId)
           ? <p className="text-sm text-amber-800 dark:text-amber-300">The recorded site or page ID is missing. Review the original publication record; this screen cannot request erasure of an unidentified target.</p> : null}
       </div>
-      {selectedId === copy.id && !copy.erasureRequested && copy.recordedSiteId && copy.recordedPageId ? <div className="mt-4 space-y-3">
+      {copy.primaryRetained ? <p className="mt-2 text-sm">The Vault record is retained or recoverable. Its retention does not authorise disposing of this external copy.</p> : null}
+      {user?.role === 'OWNER' && copy.retainedReviewEligible && !copy.erasureRequested && copy.recordedSiteId && copy.recordedPageId
+        ? <RetainedCopyReview key={`${user.id}:${user.organisationId}`} publicationId={copy.id} actor={user} /> : null}
+      {selectedId === copy.id && !copy.primaryRetained && !copy.erasureRequested && copy.recordedSiteId && copy.recordedPageId ? <div className="mt-4 space-y-3">
         <p className="text-sm text-gray-700 dark:text-gray-200">This separately requests removal of the Confluence page and attachments. Confirm the page, retention decision, legal hold and external audience before proceeding. Provider versions and backups need separate proof.</p>
         <Textarea label={`Reason for erasing ${copy.pageTitle || copy.documentId}`} value={reason}
           onValueChange={setReason} minRows={2} isRequired description="Record the case or approved decision; avoid unnecessary personal details." />

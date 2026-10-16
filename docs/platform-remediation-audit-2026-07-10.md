@@ -1,5 +1,12 @@
 # CharityPilot Full-Platform Remediation Audit
 
+> **16 October retained-copy Owner workflow increment:** Review preparation and
+> receipt reconciliation now have a dashboard path, local-primary guidance and
+> explicit synthetic attestation. Three isolated browser journeys pass; the panel
+> has no serious/critical WCAG A/AA findings in the tested light/dark states.
+> Permission/withdrawal/execution controls, actual provider proof and independent
+> claim/outcome recovery remain open; this is not the complete disposal journey.
+
 > **16 October review reconciliation increment:** A bounded publication-scoped
 > receipt lookup supports the Owner workflow without resubmitting an uncertain
 > save. Authentication, cross-scope cursor refusal, projection and throttling have
