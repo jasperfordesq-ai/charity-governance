@@ -1,5 +1,13 @@
 # CharityPilot Full-Platform Remediation Audit
 
+> **16 October whole-API baseline / release gate OPEN:** At clean6279e686,
+> build+3209ordinary tests and14actual PostgreSQL migration fixtures PASS with no
+> skips. The fixtures do not prove all190migrations, real host-loss recovery or
+> production acceptance. Existing migration Git blobs unchanged; local newline
+> differences separately accounted. Private100path review inventory leaves whole-
+> patch review unapproved and independent transport/custody/CI/deployment/DPO
+> gates explicit. No live state changed.
+
 > **16 October live fixture evidence / recovery acceptance OPEN:** Read3synthetic
 > test payloads and matched fresh c78 bytes/lineage. No draft policy revisions;
 > historical and retired linked fixtures are outside the supported removal class.

@@ -1,5 +1,14 @@
 # CharityPilot Agent Continuation Handoff
 
+> **16 October accumulated-branch API baseline, release review incomplete:** Clean
+> input6279e686 passes3209ordinaryAPI and14serial real-PostgreSQL fixture checks,
+> no failures/skips. Private exact100path inventory distinguishes seven bounded
+> manual reads from remaining review; it is not whole-patch approval. All180prior
+> migration-directory Git blobs unchanged; Windows checkout line endings are
+> separately recorded, not confused with release-host checksum proof. Eleven
+> forward migrations/independent transport/hosting decisions and exact deployed
+> acceptance remain open. No source edit, push, deployment or provider action.
+
 > **16 October acceptance-fixture disposition preparation:** Three exact synthetic
 > payloads read and fresh guarded c78 hashes verified. Three identities/two hashes;
 > matching bytes do not transfer authority. Historical/retired lineage fixtures
