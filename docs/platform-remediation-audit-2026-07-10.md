@@ -1,5 +1,13 @@
 # CharityPilot Full-Platform Remediation Audit
 
+> **16 October requirement provenance / acceptance OPEN:** Eight primary emails
+> reread; requested controls/managed hosting stay in scope. Exact transport loss
+> tolerance and managed-DB topology are engineering choices needing review, not
+> newly attributed DPO mandates. Private test-file wording attribution corrected;
+> existing safeguards retained. Bounded11migration/prefix source review found no
+> new fix in this increment; whole patch, provider/recovery/policy/deployed/DPO
+> acceptance remain unproved. No new runtime change or tests claimed.
+
 > **16 October maintenance ACL/catalogue boundary / local PASS:** New installed-
 > catalogue assertions verify five invoker-owned, non-runtime/non-PUBLIC replay
 > functions with pinned lookup order. Deliberate privilege/execution faults fail

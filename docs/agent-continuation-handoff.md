@@ -1,5 +1,15 @@
 # CharityPilot Agent Continuation Handoff
 
+> **16 October primary-requirement provenance review:** Reread eight selected
+> CharityPilot architecture/privacy/acceptance messages; full goal remains active.
+> Separate explicit managed-backend/off-host recovery outcomes from proposed
+> managed-database/zero-loss transport criteria. Do not turn design assumptions
+> into new DPO instructions or relax existing safeguards. Corrected one private
+> test-file attribution without changing authority. All11forward SQL sources now
+> inspected in bounded review; supported prefix remains Confluence-only/single-
+> key/epoch, not global recovery. Next reviewable whole-hosting/recovery decision
+> brief, before new production wiring. No source/test/live/provider/mail change.
+
 > **16 October installed maintenance privilege gate:** Actual PostgreSQL catalogue
 > now asserts five replay/snapshot/assertion functions retain maintenance ownership,
 > invoker execution, no application/PUBLIC EXECUTE and pinned lookup path after
