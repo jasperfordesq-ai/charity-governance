@@ -3213,6 +3213,17 @@ test('public attribution follows the Project NEXUS AGPL licensing model', () => 
     assert.match(src, /LegalAttribution/, `${file} must show copyright/source attribution`);
   }
 
+  // The dashboard shows the attribution in a page footer under the content,
+  // not stacked at the bottom of the navigation sidebar: the sidebar block
+  // ends with the nav, and the attribution is rendered inside a <footer>.
+  const dashboardLayout = app('(dashboard)/layout.tsx');
+  assert.doesNotMatch(dashboardLayout, /data-testid="sidebar-footer"/, 'the sidebar must not carry a footer block');
+  const asideEnd = dashboardLayout.indexOf('</aside>');
+  const footerStart = dashboardLayout.indexOf('data-testid="dashboard-footer"');
+  const attributionUse = dashboardLayout.indexOf('<LegalAttribution');
+  assert.ok(asideEnd > 0 && footerStart > asideEnd, 'the dashboard footer must come after the sidebar');
+  assert.ok(attributionUse > footerStart, 'the dashboard attribution must be rendered inside the page footer');
+
   const aboutPagePath = join(WEB, 'src', 'app', '(marketing)', 'about', 'page.tsx');
   assert.ok(existsSync(aboutPagePath), 'public about page should exist');
   const aboutPage = readFileSync(aboutPagePath, 'utf8');

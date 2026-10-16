@@ -28,11 +28,10 @@ test('mobile dashboard sidebar restores focus and removes closed links from tab 
   await expect(documentsLink).toHaveAttribute('tabindex', '-1');
 });
 
-test('desktop sidebar keeps every navigation item clear of the sidebar footer', async ({ ownerPage }) => {
+test('desktop sidebar is navigation only and the attribution sits in the page footer', async ({ ownerPage }) => {
   // 1280x700 is an ordinary laptop window — and what a 1600x875 screen at the
-  // 125% Windows scaling reports. The navigation list plus the footer is taller
-  // than that, which is the case the footer used to be painted straight over:
-  // it is positioned, so it reserves no space of its own and nothing scrolls.
+  // 125% Windows scaling reports. The navigation list is taller than that, so
+  // the sidebar has to scroll its own list rather than clip the tail of it.
   await ownerPage.setViewportSize({ width: 1280, height: 700 });
   await gotoWithDevServerRetry(ownerPage, '/integrations', { waitUntil: 'commit', timeout: 150_000 });
 
@@ -40,37 +39,33 @@ test('desktop sidebar keeps every navigation item clear of the sidebar footer', 
   const navLinks = sidebar.locator('nav a[href]');
   await expect(navLinks.first()).toBeVisible();
 
-  // Ask the browser what is actually painted at each on-screen navigation item:
-  // a rectangle comparison would not do, because an item scrolled out of the
-  // navigation's own scroll box still reports a rectangle down where the footer
-  // is, it is merely clipped. Only items the reader can see are judged here.
-  const coveredItems = () =>
-    sidebar.evaluate((aside) => {
-      const nav = aside.querySelector<HTMLElement>('nav');
-      if (!nav) throw new Error('sidebar navigation not found');
-      const navBox = nav.getBoundingClientRect();
-      return Array.from(nav.querySelectorAll<HTMLElement>('a[href]'))
-        .filter((link) => {
-          const box = link.getBoundingClientRect();
-          return box.top >= navBox.top - 1 && box.bottom <= navBox.bottom + 1;
-        })
-        .filter((link) => {
-          const box = link.getBoundingClientRect();
-          const onTop = document.elementFromPoint(box.left + box.width / 2, box.top + box.height / 2);
-          return !(onTop && (onTop === link || link.contains(onTop)));
-        })
-        .map((link) => link.textContent?.trim() ?? '');
-    });
+  // The attribution, version label and shortcuts hint used to be stacked at the
+  // bottom of the sidebar. They belong to the page footer now, so the sidebar
+  // holds nothing but the brand and the navigation.
+  await expect(sidebar.getByTestId('sidebar-footer')).toHaveCount(0);
+  await expect(sidebar.getByText('Powered by CharityPilot')).toHaveCount(0);
+  await expect(sidebar.getByText('for shortcuts')).toHaveCount(0);
 
-  expect(await coveredItems(), 'no visible navigation item may be painted over').toEqual([]);
+  const footer = ownerPage.getByTestId('dashboard-footer');
+  await expect(footer).toContainText('Powered by CharityPilot');
+  await expect(footer).toContainText('AGPL-3.0-or-later');
+  await expect(footer.getByRole('link', { name: 'GitHub repository' })).toHaveAttribute(
+    'href',
+    'https://github.com/jasperfordesq-ai/charity-governance',
+  );
+  await expect(footer.getByRole('link', { name: 'Privacy' })).toHaveAttribute('href', '/privacy');
+  await expect(footer.getByRole('link', { name: 'Terms' })).toHaveAttribute('href', '/terms');
+  await expect(footer.getByText('for shortcuts')).toBeVisible();
 
-  // The tail of the list has to be reachable, not merely un-overlapped: the
-  // navigation scrolls inside the sidebar once it no longer fits.
+  // The tail of the list has to be reachable: the navigation scrolls inside the
+  // sidebar once it no longer fits, and nothing is painted over it.
   const lastLink = navLinks.last();
   await lastLink.scrollIntoViewIfNeeded();
   await expect(lastLink).toBeInViewport({ ratio: 0.99 });
-  expect(await coveredItems(), 'scrolling the navigation may not slide items under the footer').toEqual([]);
-
-  // The footer itself stays on screen rather than being pushed off the bottom.
-  await expect(sidebar.getByTestId('sidebar-footer')).toBeInViewport({ ratio: 0.99 });
+  const covered = await lastLink.evaluate((link) => {
+    const box = link.getBoundingClientRect();
+    const onTop = document.elementFromPoint(box.left + box.width / 2, box.top + box.height / 2);
+    return !(onTop && (onTop === link || link.contains(onTop)));
+  });
+  expect(covered, 'the last navigation item may not be painted over').toBe(false);
 });

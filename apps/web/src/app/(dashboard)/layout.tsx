@@ -350,7 +350,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
         {/* Navigation links. The list is longer than a short laptop window can
             hold, so it takes the leftover column height and scrolls inside it
             (min-h-0 is what lets a flex child shrink far enough to scroll). */}
-        <nav className="flex min-h-0 flex-1 flex-col gap-0.5 overflow-y-auto p-3 mt-2">
+        <nav className="flex min-h-0 flex-1 flex-col gap-0.5 overflow-y-auto p-3 pb-6 mt-2">
           {visibleNavItems.map((item) => {
             const active = isActive(item.href);
             return (
@@ -383,22 +383,10 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
             );
           })}
         </nav>
-
-        {/* Sidebar footer. In flow at the end of the column, not positioned over
-            it: absolutely positioned, it reserved no height of its own and so
-            was painted straight over the last navigation items on any window
-            too short for both. */}
-        <div
-          data-testid="sidebar-footer"
-          className="flex-shrink-0 p-4 border-t border-gray-200 dark:border-gray-800"
-        >
-          <div className="text-xs text-gray-400 dark:text-gray-400 text-center space-y-1">
-            {/* Appliance branding — lifecycle, not a capability axis. Keep on MODE. */}
-            <p>{personalServer ? 'CharityPilot private server' : 'CharityPilot v1.0'}</p>
-            <LegalAttribution className="leading-5" />
-            <p className="hidden lg:block">Press <kbd className="px-1 py-0.5 bg-gray-100 dark:bg-gray-800 border border-gray-300 dark:border-gray-700 rounded text-[10px] font-mono">?</kbd> for shortcuts</p>
-          </div>
-        </div>
+        {/* The sidebar is navigation only. Version, attribution and the
+            shortcuts hint live in the page footer below the content, so the
+            column stays uncluttered and the navigation list keeps the full
+            height to scroll in. */}
       </aside>
 
       {/* Main content area */}
@@ -477,6 +465,37 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
           {signOutError ? <p role="alert" className="mb-4 text-sm text-red-700 dark:text-red-300">{signOutError}</p> : null}
           {children}
         </main>
+
+        {/* Page footer. Carries what used to crowd the bottom of the sidebar:
+            the appliance label, the AGPL attribution the wiring test requires
+            on every layout, the policy links, and the shortcuts hint. */}
+        <footer
+          data-testid="dashboard-footer"
+          className="border-t border-gray-200 px-4 py-4 text-xs leading-5 text-gray-500 dark:border-gray-800 dark:text-gray-400 sm:px-6 lg:px-8"
+        >
+          <div className="flex flex-col gap-2 lg:flex-row lg:items-start lg:justify-between lg:gap-8">
+            <LegalAttribution className="lg:max-w-3xl" />
+            <div className="flex flex-wrap items-center gap-x-3 gap-y-1 lg:flex-shrink-0 lg:justify-end">
+              {/* Appliance branding — lifecycle, not a capability axis. Keep on MODE. */}
+              <span className="font-medium text-gray-700 dark:text-gray-300">
+                {personalServer ? 'CharityPilot private server' : 'CharityPilot v1.0'}
+              </span>
+              <span aria-hidden="true" className="text-gray-300 dark:text-gray-700">|</span>
+              <Link href="/privacy" className="transition-colors hover:text-teal-primary dark:hover:text-teal-bright">
+                Privacy
+              </Link>
+              <Link href="/terms" className="transition-colors hover:text-teal-primary dark:hover:text-teal-bright">
+                Terms
+              </Link>
+              <span className="hidden items-center gap-1 lg:inline-flex">
+                <span aria-hidden="true" className="mr-2 text-gray-300 dark:text-gray-700">|</span>
+                Press
+                <kbd className="rounded border border-gray-300 bg-gray-100 px-1 py-0.5 font-mono text-[10px] text-gray-700 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-300">?</kbd>
+                for shortcuts
+              </span>
+            </div>
+          </div>
+        </footer>
         <KeyboardShortcuts />
         <SessionTimeout />
       </div>
