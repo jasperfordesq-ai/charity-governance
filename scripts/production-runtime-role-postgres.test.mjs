@@ -75,6 +75,9 @@ try {
   query('REVOKE UPDATE ON public."DocumentRecoveryEnforcement" FROM cp_runtime;');
   query('GRANT EXECUTE ON FUNCTION public."ConfluenceCopyLedgerRecovery_assert"() TO PUBLIC;');check('maintenance PUBLIC EXECUTE refuses',probe(),'f');
   query('REVOKE EXECUTE ON FUNCTION public."ConfluenceCopyLedgerRecovery_assert"() FROM PUBLIC;');
+  query('GRANT EXECUTE ON FUNCTION public."ConfluenceExecutionV2Recovery_rows"() TO PUBLIC;');check('V2 maintenance PUBLIC EXECUTE refuses',probe(),'f');
+  query('REVOKE EXECUTE ON FUNCTION public."ConfluenceExecutionV2Recovery_rows"() FROM PUBLIC;');
+
   query(`CREATE FUNCTION public.synthetic_unsafe_definer() RETURNS integer LANGUAGE sql SECURITY DEFINER AS 'SELECT 1';`);
   check('unknown callable SECURITY DEFINER refuses',probe(),'f');
   query(`ALTER FUNCTION public.synthetic_unsafe_definer() SET search_path=pg_catalog,public,pg_temp;

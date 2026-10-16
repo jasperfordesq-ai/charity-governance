@@ -10,6 +10,7 @@ export const PRODUCTION_RUNTIME_PROTECTED_TABLES = [
 export const PRODUCTION_RUNTIME_MAINTENANCE_FUNCTIONS = [
   'ConfluenceCopyRecovery_rows', 'ConfluenceCopyRecovery_replay', 'ConfluenceCopyLedgerRecovery_assert',
   'ConfluenceCopyLedgerRecovery_rows', 'ConfluenceCopyLedgerRecovery_replay',
+  'ConfluenceExecutionV2Recovery_assert','ConfluenceExecutionV2Recovery_rows','ConfluenceExecutionV2Recovery_replay',
 ] as const;
 
 // Metadata uses driver parameters. No URL/password or caller-supplied SQL enters
@@ -62,8 +63,8 @@ SELECT EXISTS (
             WHERE grantee=0 AND privilege_type='EXECUTE')
         ), false)
     )
-    AND (NOT e.after_migration OR ((SELECT count(*) FROM maintenance)=5
-      AND (SELECT count(DISTINCT proname) FROM maintenance)=5))
+    AND (NOT e.after_migration OR ((SELECT count(*) FROM maintenance)=${PRODUCTION_RUNTIME_MAINTENANCE_FUNCTIONS.length}
+      AND (SELECT count(DISTINCT proname) FROM maintenance)=${PRODUCTION_RUNTIME_MAINTENANCE_FUNCTIONS.length}))
     AND NOT EXISTS (SELECT 1 FROM maintenance p WHERE
       p.prosecdef OR p.proowner<>owner_role.oid
       OR p.proconfig IS DISTINCT FROM ARRAY['search_path=pg_catalog, public, pg_temp']::text[]

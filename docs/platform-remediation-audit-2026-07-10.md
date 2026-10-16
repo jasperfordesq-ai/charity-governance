@@ -1,5 +1,13 @@
 # CharityPilot Full-Platform Remediation Audit
 
+> **16 October configured database writer closure:** An inactive maintenance
+> primitive commits NOLOGIN before exact-session draining and requires a fresh
+> zero-session readback. Real TLS PostgreSQL tests cover stale sessions, alias,
+> prepared/cross-database refusal and lost commit acknowledgement. The runtime
+> probe now includes all three V2 maintenance functions. This is configured-role
+> evidence only; whole-backend/provider/host fencing and recovery remain open.
+> See [managed database writer closure](managed-database-writer-closure.md).
+
 > **16 October V2 maintenance replay core:** Separate invoker-owned SQL and
 > coordinator restore all eleven original source groups with current-prefix
 > authentication, full rollback and conflict/later-history refusal. Forward
