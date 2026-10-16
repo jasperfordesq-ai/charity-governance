@@ -1,5 +1,12 @@
 # CharityPilot Full-Platform Remediation Audit
 
+> **16 October runtime-role catalogue component:** New read-only probe has11unit
+> checks and18real disposable TLS PostgreSQL checks; tracked regression and CI
+> command added. Fixed new-component SQL NULL acceptance before committing. Not
+> called by deployment; actual Prisma/TLS transport and provider/cutover proof
+> remain unverified.14table/fivefunction catalogue contract is not complete schema,
+> effective container least-privilege or independent-recovery acceptance evidence.
+
 > **16 October recovery maintenance transport / partial remediation:** Exact
 > attested maintenance bytes and reviewed runtime binding now span early recovery
 > commands and delegated deployment. Changed handoff bindings refuse before

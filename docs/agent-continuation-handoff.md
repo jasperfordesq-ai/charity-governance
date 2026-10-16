@@ -1,5 +1,18 @@
 # CharityPilot Agent Continuation Handoff
 
+> **16 October runtime catalogue probe / not connected to deployment:** Added
+> read-only repeatable-read probe for actual runtime/session/database identity,
+> TLS presence, role attributes/membership/ownership,14protected tables, privileged
+> helper exceptions and five maintenance functions. Compiled API/unit11PASS;
+> tracked disposable TLS PostgreSQL regression18checksPASS; combined CI command
+>12node casesPASS/noSKIP. Compound real SQL test exposed/corrected NULL handling
+> in the new unreleased probe; pinned helper without search_path also refuses.
+> CI step added after API build, not run remotely. No deployment caller yet.
+> NEXT test pinned Prisma6.19.3 TLS/certificate/hostname behaviour before choosing
+> the driver transport: documented Prisma URL arguments differ from libpq. Psql
+> proof does not certify Prisma, provider identity or all190migration definitions.
+> Active Compose/service role split, actual grants/release/Nikita gates stay OPEN.
+
 > **16 October recovery binding connected / service split and role proof OPEN:**
 > Shared P1-09/P1-07A recovery now derives reviewed transport from the exact
 > attested maintenance snapshot, checks its hash, rechecks runtime files through
