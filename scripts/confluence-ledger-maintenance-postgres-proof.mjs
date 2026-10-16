@@ -1,4 +1,9 @@
 import assert from 'node:assert/strict';
+import { spawnSync } from 'node:child_process';
+import { mkdtempSync, writeFileSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { dirname, join, resolve } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { Prisma, PrismaClient } from '@prisma/client';
 import { ConfluenceRetainedCopyReviewService } from '../apps/api/dist/services/confluence-retained-copy-review.service.js';
 import { registerSyntheticConfluenceScope } from '../apps/api/dist/services/confluence-synthetic-scope.js';
@@ -44,11 +49,28 @@ export async function runConfluenceLedgerMaintenancePostgresProof(prisma,url) {
     evidenceRef: 'SYNTHETIC-JOINED-SCOPE', disposalPolicyEvidenceRef: 'SYNTHETIC-JOINED-DISPOSAL',
     approvedById: 'owner-a', expiresAt: new Date(now+3500000).toISOString(),
   };
-  const preview = await registerSyntheticConfluenceScope(prisma,scopeInput);
+  const commandDir=mkdtempSync(join(tmpdir(),'charitypilot-scope-cli-'));
+  const inputFile=join(commandDir,'scope.json');
+  writeFileSync(inputFile,JSON.stringify(scopeInput),{encoding:'utf8',mode:0o600});
+  const runScopeCommand=(confirmation)=>{
+    const env={...process.env,NODE_ENV:'test',CHARITYPILOT_DEPLOYMENT_MODE:'',DATABASE_MAINTENANCE_URL:url,
+      DATABASE_URL:'postgresql://not-the-maintenance-role@127.0.0.1:1/not-a-target'};
+    const result=spawnSync(process.execPath,[fileURLToPath(new URL('../apps/api/dist/jobs/register-confluence-synthetic-scope.js',import.meta.url)),
+      '--input',inputFile,...(confirmation?['--confirm',confirmation]:[])],{env,encoding:'utf8',timeout:30000,maxBuffer:65536});
+    assert.equal(result.status,0,result.stderr);return JSON.parse(result.stdout);
+  };
+  let preview,registered;
+  try {
+    preview=runScopeCommand();
+    assert.equal(preview.state,'PREVIEW');
+    assert.equal(await prisma.confluenceSyntheticCopyScope.count({where:{reviewId:recorded.id}}),0);
+    await assert.rejects(registerSyntheticConfluenceScope(prisma,scopeInput,'f'.repeat(64)));
+    registered=runScopeCommand(preview.confirmationSha256);
+  } finally {
+    assert.equal(dirname(resolve(commandDir)),resolve(tmpdir()));
+    rmSync(commandDir,{recursive:true});
+  }
   assert.equal(preview.state,'PREVIEW'); assert.equal(preview.providerIOAuthorised,false);
-  assert.equal(await prisma.confluenceSyntheticCopyScope.count({where:{reviewId:recorded.id}}),0);
-  await assert.rejects(registerSyntheticConfluenceScope(prisma,scopeInput,'f'.repeat(64)));
-  const registered = await registerSyntheticConfluenceScope(prisma,scopeInput,preview.confirmationSha256);
   assert.equal(registered.state,'REGISTERED');
   const repeated = await registerSyntheticConfluenceScope(prisma,scopeInput,preview.confirmationSha256);
   assert.equal(repeated.state,'ALREADY_REGISTERED'); assert.equal(repeated.scopeId,registered.scopeId);

@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { mkdtemp, writeFile, rm } from 'node:fs/promises';
-import { join } from 'node:path';
+import { dirname, join, resolve } from 'node:path';
 import { tmpdir } from 'node:os';
 import test from 'node:test';
 import { spawnSync } from 'node:child_process';
@@ -27,7 +27,7 @@ test('scope input reader accepts bounded JSON and refuses empty, oversized, malf
       await writeFile(file, content); await assert.rejects(readSyntheticScopeInput(file));
     }
     await assert.rejects(readSyntheticScopeInput(dir));
-  } finally { await rm(dir, { recursive: true }); }
+  } finally { assert.equal(dirname(resolve(dir)), resolve(tmpdir())); await rm(dir, { recursive: true }); }
 });
 
 test('the command refuses a missing maintenance credential without falling back to or printing the runtime URL', async () => {
@@ -42,5 +42,5 @@ test('the command refuses a missing maintenance credential without falling back 
     assert.equal(result.status, 1); assert.equal(result.stdout, '');
     assert.match(result.stderr, /No provider action was attempted/);
     assert.doesNotMatch(result.stderr, /private-runtime-marker|postgresql:\/\//);
-  } finally { await rm(dir, { recursive: true }); }
+  } finally { assert.equal(dirname(resolve(dir)), resolve(tmpdir())); await rm(dir, { recursive: true }); }
 });
