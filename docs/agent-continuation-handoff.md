@@ -1,5 +1,12 @@
 # CharityPilot Agent Continuation Handoff
 
+> **16 October V2 mixed-history authentication:** Separate V2 publication and
+> current-head readers require an explicit trusted epoch/key policy, authenticate
+> original decision bookkeeping and preserve earlier archive rows. Downgrades,
+> missing payloads and ambiguous pending history refuse. Legacy V1 remains strict.
+> Durable upload/ack/release, maintenance replay and actual independent custody,
+> managed backend and host-loss proof are still open; no runtime activation.
+
 > **16 October V2 object adapter:** The S3 adapter now separates V2 by
 > installation, tenant, epoch and operation and requires exact header context.
 > Existing conditional writes, account/KMS/version/stream/deadline controls

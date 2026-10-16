@@ -73,6 +73,14 @@ export interface ConfluenceExecutionArchiveV2Objects {
  readExecutionLedgerV2(context:RecoveryEnvelopeContext):Promise<string|null>;
  createExecutionLedgerV2(context:RecoveryEnvelopeContext,envelope:string):Promise<boolean>;
 }
+export type ConfluenceExecutionArchiveV2Locator = Pick<RecoveryEnvelopeContext,
+ 'installationId' | 'organisationId' | 'writerEpoch' | 'operationId'>;
+/** Locate historical ciphertext without guessing its original source/key.
+ * The caller must match the journal digest, trusted epoch/key policy and open
+ * the complete original header before accepting any evidence. */
+export interface ConfluenceExecutionArchiveV2HistoryObjects extends Pick<ConfluenceExecutionArchiveV2Objects,'readExecutionLedgerV2'> {
+ readExecutionLedgerV2At(locator:ConfluenceExecutionArchiveV2Locator):Promise<string|null>;
+}
 /** Pre-publication only; a future caller must durably save exact original and
  * candidate before IO and authenticate publication state. Flags are not proof.
  * This helper never generates/reseals a retry. Published reads use the separate

@@ -72,6 +72,15 @@ export function prepareConfluenceCopyRecoveryFacts(raw: unknown) {
  * the caller must independently authenticate the full chain and live head.
  */
 export function assertConfluenceCopyRecoveryProgression(previous: string, next: string) {
+  return assertProgression(previous,next,false);
+}
+
+/** V2 historical validation only. The caller must separately authenticate the
+ * allowed writer/key lineage; this function supplies no transition authority. */
+export function assertConfluenceCopyHistoricalProgression(previous: string, next: string) {
+  return assertProgression(previous,next,true);
+}
+function assertProgression(previous: string, next: string, historicalEpochs: boolean) {
   try {
     if (typeof previous !== 'string' || typeof next !== 'string'
       || Buffer.byteLength(previous, 'utf8') > CONFLUENCE_COPY_RECOVERY_MAX_FACT_BYTES
@@ -82,7 +91,7 @@ export function assertConfluenceCopyRecoveryProgression(previous: string, next: 
     const old = JSON.parse(previous) as ConfluenceCopyRecoveryFacts;
     const current = JSON.parse(next) as ConfluenceCopyRecoveryFacts;
     if (old.installationId !== current.installationId || old.organisationId !== current.organisationId
-      || old.writerEpoch !== current.writerEpoch || old.operationId === current.operationId
+      || (historicalEpochs ? old.writerEpoch > current.writerEpoch : old.writerEpoch !== current.writerEpoch) || old.operationId === current.operationId
       || old.factsRevision + 1 !== current.factsRevision || current.previousFactsDigest !== a.digest
       || current.capturedAt < old.capturedAt || JSON.stringify(old.review) !== JSON.stringify(current.review)) {
       throw new Error('Confluence recovery state lineage changed');

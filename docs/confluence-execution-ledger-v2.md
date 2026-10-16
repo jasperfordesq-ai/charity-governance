@@ -60,9 +60,11 @@ history. Neither validator nor source guards were weakened. Fixture keys and
 objects are synthetic, not real KMS/S3 custody or source-attested authority.
 
 The V1 publisher and maintenance replay remain V1-only. Persisted capture and
-candidate guards now distinguish formats as described below. The S3 transport adapter is implemented below. Mixed-version prefix/current-head
-authentication and suspended maintenance replay remain required stages2–4. Do not feed V2 to the V1 pipeline, treat the codec as an operator recovery
-entry point, or claim provider/transport/whole-backend/host-loss completion.
+candidate guards distinguish formats as described below. Separate V2 object
+transport and mixed-version publication/current-head verification are implemented
+below. Durable upload coordination and suspended maintenance replay remain open.
+Do not feed V2 to the V1 pipeline, treat the codec as an operator recovery entry
+point, or claim provider/transport/whole-backend/host-loss completion.
 
 
 ## Durable originals and encrypted candidates
@@ -135,3 +137,76 @@ persistence increment's full/native results remain separately dated evidence.
 Manual review checked normalized full-context comparison, legacy separation,
 conditional-write failure handling, no network retry and no activation path.
 Hosted verification and provider evidence remain separate.
+
+
+## Mixed-version V2 publication and observed-head verification
+
+`confluence-execution-v2-prefix.ts` supplies a separate current-head reader,
+candidate verifier and verified publisher. It traverses the complete supported
+journal prefix rather than filtering unrelated kinds. Unsupported protocols,
+missing objects, changed heads, foreign pending suffixes, contradictory receipts
+and processing/byte limits refuse verification. Published decision captures,
+original plaintext, plan/key/writer/predecessor and receipt digests must agree.
+Successive archives preserve every earlier immutable row; once a V2 archive
+appears, a later V1 archive is refused, including when execution groups would be
+empty in a proposed downgrade. Claimed/requested/reported history is retained
+without converting it into provider execution, absence or erasure evidence.
+
+The caller supplies an explicitly trusted, ordered writer-epoch/key policy from
+independent operator custody. Each call snapshots that policy before asynchronous
+reads, so later mutation cannot add an accepted candidate key mid-verification.
+It must cover each original context, disallow epoch
+regression and end at the observed current writer. Historical source/key/epoch
+fields remain original. This is not a mechanism for adopting a policy from a
+backup or authorising a writer takeover. Production custody/provisioning of the
+policy is still an integration requirement. The legacy V1 progression checker
+remains single-epoch; a named V2 historical checker permits only nondecreasing
+original epochs and retains canonical bytes, exact hash lineage and immutable
+record checks. It supplies no authority to change writers.
+
+The S3 historical readers retain original key/source headers. They check scope,
+operation, version and, for V2, the epoch locator; the prefix reader subsequently
+checks trusted key policy, journal digest and authenticated original AAD. They do
+not guess a source revision or silently substitute the current key. Existing V1
+current-key readers and full-context V2 reader remain strict. The integrated
+synthetic SDK test traverses the real S3 adapter across old/new keys and epochs,
+then confirms that the legacy current-key readers still refuse old-key payloads.
+No live AWS call or actual independently administered policy is implied.
+The existing KMS adapter is deliberately pinned to one configured key. Before
+activation, provide an explicit bounded historical-key router with current-key-only
+generation and original-context unwrap; do not fall back to ambient keys or weaken
+that single-key adapter. The integrated transport fixture uses synthetic key
+responses and does not prove real multi-key KMS custody.
+
+V2 has its own reserved append/history method and explicit journal kind. Generic
+append and format1 publication cannot bypass the reservation. Candidate verification
+distinguishes absent, exactly pending and already head-published entries; only the
+published predecessor prefix counts as prior evidence. Lost publication acknowledgements
+resume the exact original candidate and metadata without another head write.
+The slot stays occupied. These functions neither upload a missing candidate nor
+release the operation, run provider deletion, restore SQL, establish physical host
+loss readiness or authorise reopening. All corresponding authority flags stay false.
+
+Durable one-use upload, original progress/acknowledgement and version-specific slot
+release remain required before activation, followed by V2 maintenance replay and
+the complete provider/whole-backend/custody demonstration. There is no new route,
+worker, operator recovery command or live provider action in this increment.
+
+
+Verification for this publication increment includes mixed epoch/key history,
+same-epoch key rotation, policy mutation during reads, exact original row
+conservation, missing historical data, version downgrade, changed heads,
+unsupported/pending suffixes, different ciphertext, generic publication bypass,
+no-release semantics and exact lost-head-acknowledgement reconciliation. The
+integrated SDK case exercises historical object lookup through the actual S3
+adapter; keys and heads are synthetic. Local test completion and exact hosted
+release results are recorded separately in the ignored continuation checkpoint.
+
+
+The local full repository gate passed shared62/web576/API3342/native PostgreSQL14,
+production1264 (7 reported skips), personal-server164 and local-Docker45. A final
+policy-snapshot hardening then passed a rebuilt ordinary API suite of3343 with
+zero skips, plus a fresh joined native PostgreSQL recovery proof. Source security
+scans and manual staged review passed. The full repository result predates only
+that final prefix-local policy-snapshot change; the final API/native results cover
+it. These are local/synthetic results, not hosted CI, deployment or provider proof.

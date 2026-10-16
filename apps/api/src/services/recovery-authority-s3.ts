@@ -1,4 +1,4 @@
-import { inspectConfluenceExecutionArchiveV2, CONFLUENCE_EXECUTION_ARCHIVE_V2_MAX_ENVELOPE_BYTES } from './confluence-execution-archive-v2.js';
+import { inspectConfluenceExecutionArchiveV2, CONFLUENCE_EXECUTION_ARCHIVE_V2_MAX_ENVELOPE_BYTES, type ConfluenceExecutionArchiveV2Locator } from './confluence-execution-archive-v2.js';
 import { validateRecoveryEnvelopeContext, type RecoveryEnvelopeContext } from './recovery-preparation-envelope.js';
 import { inspectCancellationEnvelope } from './cancellation-envelope.js';
 import { inspectComplaintSourceEnvelope } from './complaint-source-envelope.js';
@@ -288,6 +288,22 @@ export class S3AuthorityObjectStore implements AuthorityObjectStore, AuthorityHe
     return this.writeObject(request,envelope,{ IfNoneMatch: '*' },CONFLUENCE_COPY_LEDGER_MAX_ENVELOPE_BYTES);
   }
 
+  /** Historical transport keeps original wrapping-key/source headers. The
+   * V2 prefix verifier enforces its separate trusted policy and decrypts them;
+   * existing V1 current-key readers deliberately remain strict. */
+  private async readConfluenceHistoryObject(operationId: string, ledger: boolean) {
+    const request = ledger ? this.confluenceCopyLedgerRequest(operationId) : this.confluenceCopyStateRequest(operationId);
+    const object = await this.readObject(request,undefined,
+      ledger ? CONFLUENCE_COPY_LEDGER_MAX_ENVELOPE_BYTES : CONFLUENCE_COPY_RECOVERY_MAX_ENVELOPE_BYTES);
+    if (!object) return null;
+    const context = ledger ? inspectConfluenceCopyLedgerEnvelope(object.body).context : inspectConfluenceCopyRecoveryEnvelope(object.body);
+    if (context.installationId !== this.config.installationId || context.organisationId !== this.config.organisationId
+      || context.operationId !== operationId) throw new Error('Historical Confluence payload scope mismatch');
+    return object.body;
+  }
+  async readConfluenceCopyStateHistory(operationId: string) { return this.readConfluenceHistoryObject(operationId,false); }
+  async readConfluenceCopyLedgerHistory(operationId: string) { return this.readConfluenceHistoryObject(operationId,true); }
+
   private executionLedgerV2Request(raw: RecoveryEnvelopeContext) {
     const context = validateRecoveryEnvelopeContext(raw);
     if (context.installationId !== this.config.installationId || context.organisationId !== this.config.organisationId
@@ -308,6 +324,26 @@ export class S3AuthorityObjectStore implements AuthorityObjectStore, AuthorityHe
     const object = await this.readObject(request, undefined, CONFLUENCE_EXECUTION_ARCHIVE_V2_MAX_ENVELOPE_BYTES);
     if (!object) return null;
     this.checkExecutionLedgerV2(context, object.body); return object.body;
+  }
+  /** Historical locator only: key/source are not guessed or replaced.
+   * The prefix reader authenticates original header, journal digest and its
+   * separately trusted epoch/key policy before accepting returned bytes. */
+  async readExecutionLedgerV2At(raw: ConfluenceExecutionArchiveV2Locator) {
+    const locator = z.object({ installationId: identity, organisationId: identity,
+      writerEpoch: z.number().int().positive().max(2147483647),
+      operationId: z.string().regex(/^[A-Za-z0-9_-]{1,160}$/) }).strict().parse(raw);
+    if (locator.installationId !== this.config.installationId || locator.organisationId !== this.config.organisationId) {
+      throw new Error('Historical execution archive scope mismatch');
+    }
+    const request = this.replayRequest(locator.operationId);
+    const object = await this.readObject({ ...request,
+      Key: `confluence-execution-ledger-v2/${locator.installationId}/${locator.organisationId}/${locator.writerEpoch}/${locator.operationId}.json` },
+      undefined, CONFLUENCE_EXECUTION_ARCHIVE_V2_MAX_ENVELOPE_BYTES);
+    if (!object) return null;
+    const context = inspectConfluenceExecutionArchiveV2(object.body).context;
+    if (context.installationId !== locator.installationId || context.organisationId !== locator.organisationId
+      || context.writerEpoch !== locator.writerEpoch || context.operationId !== locator.operationId) throw new Error('Historical execution archive header mismatch');
+    return object.body;
   }
   async createExecutionLedgerV2(raw: RecoveryEnvelopeContext, envelope: string) {
     const { context, request } = this.executionLedgerV2Request(raw);

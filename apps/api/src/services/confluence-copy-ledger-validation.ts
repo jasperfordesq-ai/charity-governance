@@ -1,7 +1,7 @@
 import { isDeepStrictEqual } from 'node:util';
 import { z } from 'zod';
 import { prepareConfluenceCopyLocalLedger, CONFLUENCE_COPY_LEDGER_MAX_BYTES } from './confluence-copy-ledger-snapshot.js';
-import { prepareConfluenceCopyRecoveryFacts, assertConfluenceCopyRecoveryProgression,
+import { prepareConfluenceCopyRecoveryFacts, assertConfluenceCopyRecoveryProgression, assertConfluenceCopyHistoricalProgression,
   type ConfluenceCopyRecoveryFacts } from './confluence-copy-recovery-facts.js';
 import { validateConfluenceCopyRecoveryCapture } from './confluence-copy-recovery-capture.js';
 import { validateRecoveryEnvelopeContext, type RecoveryEnvelopeContext } from './recovery-preparation-envelope.js';
@@ -101,7 +101,10 @@ function validateLedgerRows(body: string, rawContext: RecoveryEnvelopeContext, h
     for (const group of lineages.values()) {
       group.sort((a,b) => a.factsRevision - b.factsRevision);
       if (group[0]!.factsRevision !== 1) throw new Error();
-      for (let index = 1; index < group.length; index++) assertConfluenceCopyRecoveryProgression(group[index - 1]!.facts,group[index]!.facts);
+      for (let index = 1; index < group.length; index++) {
+        const progression = historicalEpochs ? assertConfluenceCopyHistoricalProgression : assertConfluenceCopyRecoveryProgression;
+        progression(group[index - 1]!.facts,group[index]!.facts);
+      }
     }
 
     const plans = t.ConfluenceCopyPublicationPlan!.map(row => planSchema.parse(row));

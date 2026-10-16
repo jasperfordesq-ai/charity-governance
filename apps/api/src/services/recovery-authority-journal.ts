@@ -24,7 +24,7 @@ const kinds = z.enum(['DISPOSAL_INTENT', 'DISPOSAL_RESULT', 'PRESERVATION_CHANGE
   'COMPLAINT_CANCELLATION_V1', 'COMPLAINT_HOLD_CANCELLATION_V1', 'DOCUMENT_PREPARATION_V1', 'DOCUMENT_OUTCOME_V1',
   'DOCUMENT_BYTE_PERMIT_V1', 'DOCUMENT_BYTE_EXECUTION_DECISION_V1',
   'DOCUMENT_BYTE_PROVIDER_UNKNOWN_V1', 'DOCUMENT_BYTE_PRIMARY_COMPLETION_V1', 'DOCUMENT_DISPOSAL_OUTCOME_V1',
-  'CONFLUENCE_COPY_DECISION_STATE_V1', 'CONFLUENCE_COPY_LEDGER_ARCHIVE_V1']);
+  'CONFLUENCE_COPY_DECISION_STATE_V1', 'CONFLUENCE_COPY_LEDGER_ARCHIVE_V1', 'CONFLUENCE_EXECUTION_LEDGER_ARCHIVE_V2']);
 const bindingSchema = z.object({ installationId: identity, organisationId: identity }).strict();
 const checkpointFields = {
   generation: z.number().int().nonnegative().max(10000), digest: digest.nullable(),
@@ -344,7 +344,8 @@ export class RecoveryAuthorityJournal {
   /** Publishes one exact intent, resuming either interrupted durable boundary.
    * A head receipt still cannot authorize action: later holds need fencing. */
   async appendPublished(raw: Input, publisher: AuthorityHeadPublisher) {
-    if (raw.kind === 'CONFLUENCE_COPY_DECISION_STATE_V1' || raw.kind === 'CONFLUENCE_COPY_LEDGER_ARCHIVE_V1') {
+    if (raw.kind === 'CONFLUENCE_COPY_DECISION_STATE_V1' || raw.kind === 'CONFLUENCE_COPY_LEDGER_ARCHIVE_V1'
+      || raw.kind === 'CONFLUENCE_EXECUTION_LEDGER_ARCHIVE_V2') {
       throw new Error('Confluence copy state requires the reserved publication path');
     }
     return this.appendPublishedEntry(raw, publisher);
@@ -387,7 +388,8 @@ export class RecoveryAuthorityJournal {
   }
 
   async append(raw: Input) {
-    if (raw.kind === 'CONFLUENCE_COPY_DECISION_STATE_V1' || raw.kind === 'CONFLUENCE_COPY_LEDGER_ARCHIVE_V1') {
+    if (raw.kind === 'CONFLUENCE_COPY_DECISION_STATE_V1' || raw.kind === 'CONFLUENCE_COPY_LEDGER_ARCHIVE_V1'
+      || raw.kind === 'CONFLUENCE_EXECUTION_LEDGER_ARCHIVE_V2') {
       throw new Error('Confluence copy state requires the reserved publication path');
     }
     return this.appendIntent(raw, false);
@@ -422,6 +424,10 @@ export class RecoveryAuthorityJournal {
     return this.appendReservedPreparation(raw,control,'CONFLUENCE_COPY_LEDGER_ARCHIVE_V1');
   }
 
+  async appendReservedConfluenceExecutionV2(raw: unknown, control: RecoveryControlStore) {
+    return this.appendReservedPreparation(raw,control,'CONFLUENCE_EXECUTION_LEDGER_ARCHIVE_V2');
+  }
+
   /** Read the published predecessor prefix for this exact reserved archive.
    * At most its matching next entry may be pending or already head-published.
    * This does not authenticate payloads, publish anything or release the slot.
@@ -429,11 +435,18 @@ export class RecoveryAuthorityJournal {
    * is accepted and an exact pending entry is never labelled published.
    */
   async readConfluenceCopyLedgerAppendHistory(raw: unknown, control: RecoveryControlStore) {
+    return this.readConfluenceArchiveAppendHistory(raw,control,'CONFLUENCE_COPY_LEDGER_ARCHIVE_V1');
+  }
+  async readConfluenceExecutionV2AppendHistory(raw: unknown, control: RecoveryControlStore) {
+    return this.readConfluenceArchiveAppendHistory(raw,control,'CONFLUENCE_EXECUTION_LEDGER_ARCHIVE_V2');
+  }
+  private async readConfluenceArchiveAppendHistory(raw: unknown, control: RecoveryControlStore,
+    kind: 'CONFLUENCE_COPY_LEDGER_ARCHIVE_V1' | 'CONFLUENCE_EXECUTION_LEDGER_ARCHIVE_V2') {
     const request = reservedPreparationSchema.parse(raw);
     const source = await this.complaintPublisher(request,control);
     const before = await this.readCurrentHead(source), rows = await this.history(false,before.generation);
     this.headMatchesHistory(before,rows);
-    const previous = this.prior(rows,{ operationId: request.operationId, kind: 'CONFLUENCE_COPY_LEDGER_ARCHIVE_V1',
+    const previous = this.prior(rows,{ operationId: request.operationId, kind,
       factsDigest: request.envelopeDigest, expectedGeneration: request.expectedGeneration, expectedDigest: request.expectedDigest });
     const base = request.expectedGeneration;
     if (rows.length < base || rows.length > base + 1
@@ -452,7 +465,7 @@ export class RecoveryAuthorityJournal {
 
   private async appendReservedPreparation(raw: unknown, control: RecoveryControlStore,
     kind: 'COMPLAINT_PREPARATION_V1' | 'COMPLAINT_HOLD_PREPARATION_V1' | 'DOCUMENT_PREPARATION_V1'
-      | 'CONFLUENCE_COPY_DECISION_STATE_V1' | 'CONFLUENCE_COPY_LEDGER_ARCHIVE_V1') {
+      | 'CONFLUENCE_COPY_DECISION_STATE_V1' | 'CONFLUENCE_COPY_LEDGER_ARCHIVE_V1' | 'CONFLUENCE_EXECUTION_LEDGER_ARCHIVE_V2') {
     const request = reservedPreparationSchema.parse(raw);
     const publisher = await this.complaintPublisher(request, control);
     return this.appendPublishedEntry({ operationId: request.operationId, kind,

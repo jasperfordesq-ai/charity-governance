@@ -100,3 +100,20 @@ test('V2 reads validate scope before IO and select a different object for a late
  assert.equal(await store.readExecutionLedgerV2({ ...context, writerEpoch: 2 }), null);
  assert.equal(calls, 1);
 });
+
+test('historical locator returns only matching scoped headers without guessing source or key authority', async () => {
+ const body = await envelope(); let calls = 0;
+ const header = JSON.parse(body); header.binding.context.sourceRevision = 'b'.repeat(40);
+ const historical = JSON.stringify(header);
+ const store = fixture(async command => { calls++; assert.ok(command instanceof GetObjectCommand);
+  assert.equal(command.input.Key,expectedKey); return response(historical); });
+ const locator = { installationId: context.installationId,organisationId: context.organisationId,
+  writerEpoch: context.writerEpoch,operationId: context.operationId };
+ assert.equal(await store.readExecutionLedgerV2At(locator),historical);
+ await assert.rejects(store.readExecutionLedgerV2(context));
+ const before = calls;
+ await assert.rejects(store.readExecutionLedgerV2At({ ...locator,organisationId: 'other' })); assert.equal(calls,before);
+ await assert.rejects(store.readExecutionLedgerV2At({ ...locator,operationId: 'other' }));
+ // Locating a structurally valid header is deliberately not a claim that its
+ // ciphertext authenticates; the prefix reader separately opens original AAD.
+});
