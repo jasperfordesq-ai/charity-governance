@@ -1,5 +1,14 @@
 # CharityPilot Full-Platform Remediation Audit
 
+> **16 October rejected-host diagnostic credential handling, source FIXED:**
+> Synthetic tests reproduce connection-password/query/fragment disclosure in a
+> deployment preflight error. The error now states the local-db requirement
+> without echoing submitted connection data.99deployment/role/private-profile
+> checks pass,2Linux-only skips. This is no evidence of actual live disclosure
+> or an exhaustive logging review; fix is not deployed. Recovery architecture
+> options are private review material, with no provider/topology/spend decision.
+> Independent recovery, hosting, release and DPO acceptance remain open.
+
 > **16 October transport-history coverage gap, verified OPEN:** A committed
 > local publication observation can differ while authenticated archive/control/
 > journal and eight source groups stay identical. Actual PostgreSQL reproduces

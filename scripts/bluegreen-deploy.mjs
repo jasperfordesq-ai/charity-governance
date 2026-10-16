@@ -339,8 +339,7 @@ export function preflightIssues({ fileEnv, resolvedEnvFilePath }) {
   const databaseHost = hostnameOf(fileEnv.DATABASE_URL ?? '');
   if (databaseHost !== 'db') {
     issues.push(
-      'DATABASE_URL must point at the compose db service (hostname "db") — got ' +
-        JSON.stringify(fileEnv.DATABASE_URL ?? ''),
+      'DATABASE_URL must point at the compose db service (hostname "db"); review the configured host without copying credentials into logs',
     );
   }
 

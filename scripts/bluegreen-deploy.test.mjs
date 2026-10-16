@@ -24,6 +24,22 @@ async function loadDeployRunner() {
   return (args, dependencies = {}) => module.runBluegreenDeployFromArgs(args, dependencies);
 }
 
+test('database-host preflight refuses unsafe targets without returning connection secrets', async () => {
+  const { preflightIssues } = await loadDeployModule();
+  const path = join(tmpdir(),'charitypilot-redacted-preflight.env');
+  for (const databaseUrl of [
+    'postgresql://charitypilot:SYNTHETIC_PASSWORD_SENTINEL@remote.example.invalid:5432/charitypilot?token=SYNTHETIC_QUERY_SENTINEL#SYNTHETIC_FRAGMENT_SENTINEL',
+    'postgresql://charitypilot:SYNTHETIC%40ENCODED%3ASECRET@remote.example.invalid:5432/charitypilot',
+    'not a valid URL SYNTHETIC_MALFORMED_SECRET',
+  ]) {
+    const issues = preflightIssues({ fileEnv: { DATABASE_URL: databaseUrl, POSTGRES_USER: 'charitypilot', POSTGRES_DB: 'charitypilot',
+      BLUEGREEN_ENV_FILE: path, FRONTEND_URL: 'https://app.example.invalid', BLUEGREEN_ORIGIN: 'https://app.example.invalid', READINESS_API_KEY: READINESS_KEY },
+    resolvedEnvFilePath: path });
+    assert.ok(issues.some(issue => issue.includes('DATABASE_URL must point at the compose db service')));
+    assert.doesNotMatch(JSON.stringify(issues),/SYNTHETIC_|remote\.example\.invalid|postgresql:\/\//);
+  }
+});
+
 test('web build profile follows the API app env, ignoring ambient profile overrides', async () => {
   const dir = makeFixtureDir('charitypilot-web-profile-');
   try {

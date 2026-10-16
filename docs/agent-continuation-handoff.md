@@ -1,5 +1,17 @@
 # CharityPilot Agent Continuation Handoff
 
+> **16 October recovery architecture review and diagnostic repair:** Current
+> blue-green source explicitly requires the local db service; a separate
+> database/standby requires a reviewed new mode, not a hostname-check bypass.
+> A private comparison now separates application-VM loss from database rollback,
+> key/custody and old-writer fencing. Investigation direction is pending; no
+> provider/mode selected. Source review reproduced full connection-URL disclosure
+> in the rejected-host diagnostic. It now omits submitted connection data while
+> retaining the same local-host refusal. RED/green secret regression and the
+> deployment/role/private-profile suites pass99checks, with2Linux-only skips.
+> No host/env/DB/network or deployment change; this is a bounded diagnostic fix,
+> not an exhaustive logging audit. Current private receipts are in RESUME-HERE.
+
 > **16 October transport evidence-gap proof, tests only:** Actual PostgreSQL
 > publication-observation commit changes a local transport receipt while the
 > independent archive/control/journal and eight source-table fingerprints remain
