@@ -40,6 +40,12 @@ reads, and no-follow/nonblocking file opens through a held directory descriptor.
 Each service requests only its fixed filenames. Actual Linux tests cover these
 checks; they do not establish how a provider will deliver real key material.
 
+The isolated E2E context explicitly includes both helpers and their declarations:
+API startup imports them even when managed mode is off. A dependency-derived
+contract test checks direct shared-runtime imports in API source against the
+positive context manifest. This keeps the context narrow without relying on
+local unfiltered workspace resolution.
+
 ## Proof boundaries
 
 The native gateway test builds the real gateway image, stages synthetic protected

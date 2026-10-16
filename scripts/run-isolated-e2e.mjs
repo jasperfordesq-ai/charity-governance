@@ -76,6 +76,10 @@ export const BUILD_CONTEXT_MANIFEST = Object.freeze([
   { path: "packages/shared/tsconfig.json", type: "file" },
   { path: "packages/shared/runtime/prisma-database-url.mjs", type: "file" },
   { path: "packages/shared/runtime/prisma-database-url.d.mts", type: "file" },
+  { path: "packages/shared/runtime/managed-service-mesh.mjs", type: "file" },
+  { path: "packages/shared/runtime/managed-service-mesh.d.mts", type: "file" },
+  { path: "packages/shared/runtime/protected-tls-material.mjs", type: "file" },
+  { path: "packages/shared/runtime/protected-tls-material.d.mts", type: "file" },
   {
     path: "packages/shared/src",
     type: "directory",
