@@ -2,13 +2,13 @@ import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { createHash } from 'node:crypto';
 import { assertNoClaimedLocalObjects } from './purge-restore-reconciliation.mjs';
-import { PURGE_RESTORE_TABLES, PURGE_RESTORE_OBSERVATION_TABLES, PURGE_RESTORE_ATTEMPT_TABLES, PURGE_RESTORE_PREVIOUS_TABLES, PURGE_RESTORE_LEGACY_TABLES,
+import { PURGE_RESTORE_TABLES, PURGE_RESTORE_LEDGER_UPLOAD_TABLES, PURGE_RESTORE_OBSERVATION_TABLES, PURGE_RESTORE_ATTEMPT_TABLES, PURGE_RESTORE_PREVIOUS_TABLES, PURGE_RESTORE_LEGACY_TABLES,
   PURGE_RESTORE_OLDEST_TABLES, PURGE_RESTORE_COMPLETION_TABLES, PURGE_RESTORE_CONFLUENCE_STATE_TABLES, PURGE_RESTORE_LEDGER_CAPTURE_TABLES, PURGE_RESTORE_LEDGER_CANDIDATE_TABLES, PURGE_RESTORE_LEDGER_PROGRESS_TABLES,
   reconcilePurgeRestore, assertPurgeRestoreLedger } from './purge-restore-reconciliation.mjs';
 
 function snapshot() {
   return {
-    format: 13, capturedAt: '2026-09-30T10:00:00.000Z',
+    format: 14, capturedAt: '2026-09-30T10:00:00.000Z',
     tables: Object.fromEntries(PURGE_RESTORE_TABLES.map(table => [table, table==='ComplaintPrimaryConflicts'?[]:[{ id: table, sha256: 'a'.repeat(64) }]])),
     claims: [{ organisationId: 'charity-a', documentId: 'removed-document' }], documents: [],
   };
@@ -216,4 +216,16 @@ test('malformed or incomplete evidence fails closed', () => {
     assert.throws(() => reconcilePurgeRestore(snapshot(), malformed));
     assert.throws(() => reconcilePurgeRestore(malformed, snapshot()));
   }
+});
+
+
+test('format13 remains exact while format14 includes immutable permission consumption', () => {
+  const current=snapshot(), older=structuredClone(current);
+  older.format=13;
+  older.tables=Object.fromEntries(PURGE_RESTORE_LEDGER_UPLOAD_TABLES.map(name=>[name,current.tables[name]]));
+  assert.equal(assertPurgeRestoreLedger(older,older).confluenceExecutionClaimsCompared,false);
+  assert.equal(assertPurgeRestoreLedger(current,current).confluenceExecutionClaimsCompared,true);
+  assert.throws(()=>assertPurgeRestoreLedger(current,older),/schema versions differ/);
+  const stale=structuredClone(current); stale.tables.ConfluenceCopyExecutionClaim=[];
+  assert.throws(()=>assertPurgeRestoreLedger(current,stale),{code:'PURGE_RESTORE_RECONCILIATION_REQUIRED'});
 });

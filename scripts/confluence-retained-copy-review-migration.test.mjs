@@ -233,7 +233,7 @@ test('retained Confluence review and permission history is scoped, immutable and
     query(`TRUNCATE "ConfluenceCopyRecoveryCapture", "ConfluenceCopyPublicationPlan", "ConfluenceCopyPublicationReceipt";`, /append-only/);
     query(`SET ROLE synthetic_copy_runtime; UPDATE "ConfluenceRetainedCopyPermission" SET reason='Replace reviewed permission';`, /append-only/);
     query(`SET ROLE synthetic_copy_runtime; DELETE FROM "ConfluenceSyntheticCopyScope";`, /append-only/);
-    query(`TRUNCATE "ConfluenceRetainedCopyPermissionWithdrawal", "ConfluenceRetainedCopyPermission", "ConfluenceSyntheticCopyScope";`, /append-only/);
+    query(`TRUNCATE "ConfluenceRetainedCopyPermissionWithdrawal", "ConfluenceRetainedCopyPermission", "ConfluenceSyntheticCopyScope", "ConfluenceCopyExecutionClaim";`, /append-only/);
     // Internal maintenance replay is distinct from ordinary application writes.
     // Real historical inserts are exercised inside a rolled-back synthetic
     // quarantine; external history authentication belongs to its coordinator.
@@ -373,20 +373,26 @@ test('retained Confluence review and permission history is scoped, immutable and
       }
       return true;
     });
-    assert.equal(afterConfluenceDecisions.format,13);
-    assert.equal(query(PURGE_RESTORE_BINDING_PROBE_SQL),'confluence-upload');
+    assert.equal(afterConfluenceDecisions.format,14);
+    assert.equal(query(PURGE_RESTORE_BINDING_PROBE_SQL),'confluence-claim');
+    assert.equal(query(`BEGIN; ALTER TABLE public."ConfluenceCopyExecutionClaim" RENAME TO "SyntheticLegacyExecutionClaim";
+      ${PURGE_RESTORE_BINDING_PROBE_SQL} ROLLBACK;`),'confluence-upload');
+
     assert.equal(query(`BEGIN; ALTER TABLE public."ConfluenceCopyLedgerUploadAttempt" RENAME TO "SyntheticLegacyLedgerUpload";
+      ALTER TABLE public."ConfluenceCopyExecutionClaim" RENAME TO "SyntheticLegacyExecutionClaim";
       ${PURGE_RESTORE_BINDING_PROBE_SQL} ROLLBACK;`),'confluence-progress');
     assert.equal(query(`BEGIN; ALTER TABLE public."ConfluenceCopyLedgerProgress" RENAME TO "SyntheticLegacyLedgerProgress";
       ${PURGE_RESTORE_BINDING_PROBE_SQL} ROLLBACK;`),'partial-confluence');
     assert.equal(query(`BEGIN; ALTER TABLE public."ConfluenceCopyLedgerProgress" RENAME TO "SyntheticLegacyLedgerProgress";
       ALTER TABLE public."ConfluenceCopyLedgerUploadAttempt" RENAME TO "SyntheticLegacyLedgerUpload";
+      ALTER TABLE public."ConfluenceCopyExecutionClaim" RENAME TO "SyntheticLegacyExecutionClaim";
       ${PURGE_RESTORE_BINDING_PROBE_SQL} ROLLBACK;`),'confluence-candidate');
     assert.equal(query(`BEGIN; ALTER TABLE public."ConfluenceCopyLedgerCandidate" RENAME TO "SyntheticLegacyLedgerCandidate";
       ${PURGE_RESTORE_BINDING_PROBE_SQL} ROLLBACK;`),'partial-confluence');
     assert.equal(query(`BEGIN; ALTER TABLE public."ConfluenceCopyLedgerCandidate" RENAME TO "SyntheticLegacyLedgerCandidate";
       ALTER TABLE public."ConfluenceCopyLedgerProgress" RENAME TO "SyntheticLegacyLedgerProgress";
       ALTER TABLE public."ConfluenceCopyLedgerUploadAttempt" RENAME TO "SyntheticLegacyLedgerUpload";
+      ALTER TABLE public."ConfluenceCopyExecutionClaim" RENAME TO "SyntheticLegacyExecutionClaim";
       ${PURGE_RESTORE_BINDING_PROBE_SQL} ROLLBACK;`),'confluence-ledger');
     assert.equal(query(`BEGIN; ALTER TABLE public."ConfluenceCopyLedgerCapture" RENAME TO "SyntheticLegacyLedgerCapture";
       ${PURGE_RESTORE_BINDING_PROBE_SQL} ROLLBACK;`),'partial-confluence');
@@ -394,15 +400,16 @@ test('retained Confluence review and permission history is scoped, immutable and
       ALTER TABLE public."ConfluenceCopyLedgerCandidate" RENAME TO "SyntheticLegacyLedgerCandidate";
       ALTER TABLE public."ConfluenceCopyLedgerProgress" RENAME TO "SyntheticLegacyLedgerProgress";
       ALTER TABLE public."ConfluenceCopyLedgerUploadAttempt" RENAME TO "SyntheticLegacyLedgerUpload";
+      ALTER TABLE public."ConfluenceCopyExecutionClaim" RENAME TO "SyntheticLegacyExecutionClaim";
       ${PURGE_RESTORE_BINDING_PROBE_SQL} ROLLBACK;`),'confluence');
     assert.equal(query(`BEGIN; ALTER TABLE public."ConfluenceCopyPublicationReceipt" RENAME TO "SyntheticPartialConfluenceReceipt";
       ${PURGE_RESTORE_BINDING_PROBE_SQL} ROLLBACK;`),'partial-confluence');
     const confluenceNames = ['ConfluenceRetainedCopyReview','ConfluenceRetainedCopyReviewWithdrawal','ConfluenceSyntheticCopyScope',
       'ConfluenceRetainedCopyPermission','ConfluenceRetainedCopyPermissionWithdrawal','ConfluenceCopyRecoveryCapture',
-      'ConfluenceCopyPublicationPlan','ConfluenceCopyPublicationReceipt','ConfluenceCopyLedgerCapture','ConfluenceCopyLedgerCandidate','ConfluenceCopyLedgerProgress','ConfluenceCopyLedgerUploadAttempt'];
+      'ConfluenceCopyPublicationPlan','ConfluenceCopyPublicationReceipt','ConfluenceCopyLedgerCapture','ConfluenceCopyLedgerCandidate','ConfluenceCopyLedgerProgress','ConfluenceCopyLedgerUploadAttempt','ConfluenceCopyExecutionClaim'];
     assert.equal(query(`BEGIN; ${confluenceNames.map((name,index) => `ALTER TABLE public."${name}" RENAME TO "SyntheticLegacyTable${index}";`).join('\n')}
       ${PURGE_RESTORE_BINDING_PROBE_SQL} ROLLBACK;`),'completion');
-    assert.equal(query(PURGE_RESTORE_BINDING_PROBE_SQL),'confluence-upload');
+    assert.equal(query(PURGE_RESTORE_BINDING_PROBE_SQL),'confluence-claim');
     query(`INSERT INTO "DocumentRecoveryEnforcement"(id,"organisationId","installationId","writerId","writerEpoch")
       VALUES ('unsafe-binding','org-a','synthetic-installation','synthetic-writer',1);`, /independent Confluence copy review history/);
     query(`INSERT INTO "DocumentRecoveryEnforcement"(id,"organisationId","installationId","writerId","writerEpoch")

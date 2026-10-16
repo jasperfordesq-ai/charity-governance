@@ -962,3 +962,12 @@ upload without inventing evidence or clearing a reservation. No automatic
 cleanup is enabled. Original
 capture retention/purpose and real key/provider custody still require review;
 there is no automatic expiry or disposal of these confidential copies.
+
+
+## Quarantined local consumption
+
+The [execution claim service](confluence-copy-execution-claims.md) now records
+one immutable local claim per permission, with SQL concurrency and current-local
+state checks. It grants no provider authority. Format14 restore comparison
+includes claim rows, while new V1 archive capture refuses to omit them. Independent
+claim/outcome recovery and a supported execution user journey are still required.

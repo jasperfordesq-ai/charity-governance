@@ -32,7 +32,8 @@ const confluenceStateTables = [...completionTables,...confluenceTables];
 const ledgerCaptureTables = [...confluenceStateTables,'ConfluenceCopyLedgerCapture'];
 const ledgerCandidateTables = [...ledgerCaptureTables,'ConfluenceCopyLedgerCandidate'];
 const ledgerProgressTables = [...ledgerCandidateTables,'ConfluenceCopyLedgerProgress'];
-const tables = [...ledgerProgressTables,'ConfluenceCopyLedgerUploadAttempt'];
+const ledgerUploadTables = [...ledgerProgressTables,'ConfluenceCopyLedgerUploadAttempt'];
+const tables = [...ledgerUploadTables,'ConfluenceCopyExecutionClaim'];
 const observationTables = completionTables.filter(name => name !== 'DocumentBytePrimaryCompletion');
 const attemptTables = observationTables.filter(name => name !== 'DocumentByteProviderObservation');
 const previousTables = attemptTables.filter(name => name !== 'DocumentByteProviderAttempt');
@@ -53,6 +54,7 @@ virtualEntries.push(`SELECT 'DocumentRecoveryState' AS name, COALESCE(jsonb_agg(
 virtualEntries.push(`SELECT 'ComplaintPrimaryConflicts' AS name, COALESCE(jsonb_agg(jsonb_build_object('id',c.id,'sha256',${digest('to_jsonb(c)')}) ORDER BY c.id),'[]'::jsonb) AS rows
  FROM "ComplaintPurgeClaim" c JOIN "ComplaintRecord" r ON r.id=c."complaintId" AND r."organisationId"=c."organisationId"`);
 const virtualNames = ['ClaimedPrimaryJobs', 'ComplaintRecoveryState', 'DocumentRecoveryState', 'ComplaintPrimaryConflicts'];
+export const PURGE_RESTORE_LEDGER_UPLOAD_TABLES = Object.freeze([...ledgerUploadTables,...virtualNames]);
 export const PURGE_RESTORE_TABLES = Object.freeze([...tables, ...virtualNames]);
 export const PURGE_RESTORE_LEDGER_PROGRESS_TABLES = Object.freeze([...ledgerProgressTables,...virtualNames]);
 export const PURGE_RESTORE_LEDGER_CANDIDATE_TABLES = Object.freeze([...ledgerCandidateTables,...virtualNames]);
@@ -110,7 +112,8 @@ function snapshotSql(format, names) {
  'documents',COALESCE((SELECT jsonb_agg(jsonb_build_object('organisationId',"organisationId",'documentId',id) ORDER BY "organisationId",id) FROM "Document"),'[]'::jsonb)
 ) AS snapshot;`;
 }
-export const PURGE_RESTORE_SNAPSHOT_SQL = snapshotSql(13, tables);
+export const PURGE_RESTORE_SNAPSHOT_SQL = snapshotSql(14, tables);
+export const PURGE_RESTORE_LEDGER_UPLOAD_SNAPSHOT_SQL = snapshotSql(13,ledgerUploadTables);
 export const PURGE_RESTORE_LEDGER_PROGRESS_SNAPSHOT_SQL = snapshotSql(12,ledgerProgressTables);
 export const PURGE_RESTORE_LEDGER_CANDIDATE_SNAPSHOT_SQL = snapshotSql(11,ledgerCandidateTables);
 export const PURGE_RESTORE_LEDGER_CAPTURE_SNAPSHOT_SQL = snapshotSql(10,ledgerCaptureTables);
@@ -122,6 +125,7 @@ export const PURGE_RESTORE_PREVIOUS_SNAPSHOT_SQL = snapshotSql(5, previousTables
 export const PURGE_RESTORE_LEGACY_SNAPSHOT_SQL = snapshotSql(4, legacyTables);
 export const PURGE_RESTORE_OLDEST_SNAPSHOT_SQL = snapshotSql(3, oldestTables);
 export const PURGE_RESTORE_BINDING_PROBE_SQL = `SELECT CASE
+ WHEN to_regclass('public."ConfluenceCopyExecutionClaim"') IS NOT NULL THEN CASE WHEN to_regclass('public."ConfluenceCopyLedgerUploadAttempt"') IS NOT NULL AND to_regclass('public."ConfluenceCopyLedgerProgress"') IS NOT NULL AND to_regclass('public."ConfluenceCopyLedgerCandidate"') IS NOT NULL AND to_regclass('public."ConfluenceCopyLedgerCapture"') IS NOT NULL AND found=${confluenceTables.length} AND to_regclass('public."DocumentBytePrimaryCompletion"') IS NOT NULL THEN 'confluence-claim' ELSE 'partial-confluence' END
  WHEN to_regclass('public."ConfluenceCopyLedgerUploadAttempt"') IS NOT NULL THEN CASE WHEN to_regclass('public."ConfluenceCopyLedgerProgress"') IS NOT NULL AND to_regclass('public."ConfluenceCopyLedgerCandidate"') IS NOT NULL AND to_regclass('public."ConfluenceCopyLedgerCapture"') IS NOT NULL AND found=${confluenceTables.length} AND to_regclass('public."DocumentBytePrimaryCompletion"') IS NOT NULL THEN 'confluence-upload' ELSE 'partial-confluence' END
  WHEN to_regclass('public."ConfluenceCopyLedgerProgress"') IS NOT NULL THEN CASE WHEN to_regclass('public."ConfluenceCopyLedgerCandidate"') IS NOT NULL AND to_regclass('public."ConfluenceCopyLedgerCapture"') IS NOT NULL AND found=${confluenceTables.length} AND to_regclass('public."DocumentBytePrimaryCompletion"') IS NOT NULL THEN 'confluence-progress' ELSE 'partial-confluence' END
  WHEN to_regclass('public."ConfluenceCopyLedgerCandidate"') IS NOT NULL THEN CASE WHEN to_regclass('public."ConfluenceCopyLedgerCapture"') IS NOT NULL AND found=${confluenceTables.length} AND to_regclass('public."DocumentBytePrimaryCompletion"') IS NOT NULL THEN 'confluence-candidate' ELSE 'partial-confluence' END
@@ -156,11 +160,12 @@ function references(rows, label) {
 }
 function validate(snapshot) {
   exact(snapshot, ['format','capturedAt','tables','claims','documents'], 'snapshot');
-  if (![3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13].includes(snapshot.format) || typeof snapshot.capturedAt !== 'string' ||
+  if (![3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14].includes(snapshot.format) || typeof snapshot.capturedAt !== 'string' ||
     !/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/.test(snapshot.capturedAt) ||
     !Number.isFinite(Date.parse(snapshot.capturedAt)) ||
     new Date(snapshot.capturedAt).toISOString() !== snapshot.capturedAt) throw new Error('Invalid purge restore format or time');
-  const tableNames = snapshot.format === 13 ? PURGE_RESTORE_TABLES
+  const tableNames = snapshot.format === 14 ? PURGE_RESTORE_TABLES
+    : snapshot.format === 13 ? PURGE_RESTORE_LEDGER_UPLOAD_TABLES
     : snapshot.format === 12 ? PURGE_RESTORE_LEDGER_PROGRESS_TABLES
     : snapshot.format === 11 ? PURGE_RESTORE_LEDGER_CANDIDATE_TABLES
     : snapshot.format === 10 ? PURGE_RESTORE_LEDGER_CAPTURE_TABLES
@@ -223,7 +228,8 @@ export function reconcilePurgeRestore(authority, restored) {
     confluenceLedgerCapturesCompared: source.format >= 10,
     confluenceLedgerCandidatesCompared: source.format >= 11,
     confluenceLedgerProgressCompared: source.format >= 12,
-    confluenceLedgerUploadAttemptsCompared: source.format === 13,
+    confluenceLedgerUploadAttemptsCompared: source.format >= 13,
+    confluenceExecutionClaimsCompared: source.format >= 14,
     databaseLedgerMatches: differences.length === 0 && !resurrectedDocuments && !sourceConflicts && !claimScopeDifferences,
     authorityCapturedAt: authority.capturedAt, restoredCapturedAt: restored.capturedAt,
     differences, resurrectedDocuments, sourceConflicts, claimScopeDifferences,

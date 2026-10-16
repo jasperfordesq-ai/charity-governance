@@ -3,6 +3,7 @@ import { randomUUID } from 'node:crypto';
 import { spawnSync } from 'node:child_process';
 import test from 'node:test';
 import { PrismaClient } from '@prisma/client';
+import { runConfluenceExecutionClaimPostgresProof } from './confluence-execution-claim-postgres-proof.mjs';
 import { validateLocalDockerEndpoint } from './personal-server-docker-boundary.mjs';
 import { captureConfluenceCopyLocalLedger, CONFLUENCE_COPY_LEDGER_TABLES } from '../apps/api/dist/services/confluence-copy-ledger-snapshot.js';
 import { ConfluenceRetainedCopyReviewService } from '../apps/api/dist/services/confluence-retained-copy-review.service.js';
@@ -106,8 +107,8 @@ test('local Confluence ledger capture uses all eight migrated tables and a real 
     finally { await runtime.$disconnect(); }
     assert.equal(originalCapture.durableCaptureRecorded,true);
     const afterDurable = (await prisma.$queryRawUnsafe(PURGE_RESTORE_SNAPSHOT_SQL))[0].snapshot;
-    assert.equal(afterDurable.format,13);
-    assert.equal(Object.values((await prisma.$queryRawUnsafe(PURGE_RESTORE_BINDING_PROBE_SQL))[0])[0],'confluence-upload');
+    assert.equal(afterDurable.format,14);
+    assert.equal(Object.values((await prisma.$queryRawUnsafe(PURGE_RESTORE_BINDING_PROBE_SQL))[0])[0],'confluence-claim');
     assert.throws(() => assertPurgeRestoreLedger(afterDurable,beforeDurable),{ code: 'PURGE_RESTORE_RECONCILIATION_REQUIRED' });
 
     // Real supported decision/capture services populate four of the eight
@@ -467,6 +468,7 @@ test('local Confluence ledger capture uses all eight migrated tables and a real 
     await assert.rejects(captureConfluenceCopyLocalLedger(prisma,'org-a','owner-a',input),/capture is unresolved/);
     const maintenanceProof = await runConfluenceLedgerMaintenancePostgresProof(prisma,url);
     console.log('Synthetic joined archive/PostgreSQL maintenance proof:',JSON.stringify(maintenanceProof));
+    console.log('Synthetic execution claim proof:',JSON.stringify(await runConfluenceExecutionClaimPostgresProof(prisma,url)));
   } finally {
     if (prisma) await prisma.$disconnect();
     assert.equal(docker(['inspect','--format','{{.Id}}',name]),id);

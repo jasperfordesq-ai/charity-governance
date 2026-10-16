@@ -1872,6 +1872,7 @@ model ConfluenceRetainedCopyPermission {
   issuedAt             DateTime @default(now())
   expiresAt            DateTime
   withdrawal           ConfluenceRetainedCopyPermissionWithdrawal?
+  executionClaim       ConfluenceCopyExecutionClaim?
 
   @@unique([id, organisationId])
   @@unique([reviewId, organisationId], map: "ConfluenceCopyPermission_review_org_key")
@@ -1889,6 +1890,27 @@ model ConfluenceRetainedCopyPermissionWithdrawal {
   occurredAt     DateTime @default(now())
 
   @@unique([permissionId, organisationId], map: "ConfluenceCopyPermissionWithdrawal_permission_org_key")
+}
+
+// One local consumption per permission. This is quarantined preparation only;
+// independent history and current provider proof are required before execution.
+model ConfluenceCopyExecutionClaim {
+  id                   String @id @default(cuid())
+  organisationId       String
+  permissionId         String @unique
+  permission           ConfluenceRetainedCopyPermission @relation(fields: [permissionId, organisationId], references: [id, organisationId], onDelete: Restrict, onUpdate: NoAction)
+  operationId          String
+  actorUserId          String
+  snapshotSha256       String
+  evidenceRef          String
+  reason               String
+  phase                String @default("QUARANTINED")
+  providerIOAuthorised Boolean @default(false)
+  claimedAt            DateTime @default(now())
+
+  @@unique([id, organisationId])
+  @@unique([organisationId, operationId])
+  @@unique([permissionId, organisationId])
 }
 
 // Inactive immutable outbox candidate. The exact body must survive retries;

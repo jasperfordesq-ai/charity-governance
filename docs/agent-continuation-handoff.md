@@ -1,5 +1,12 @@
 # CharityPilot Agent Continuation Handoff
 
+> **16 October durable local retained-copy claims:** One immutable quarantined
+> claim can consume each permission; racing consumers cannot both commit. A
+> tenant-scoped Owner receipt reconciles the original operation. Restore format14
+> includes claims and retains exact older formats. New V1 archive capture refuses
+> when claims would be omitted. See `docs/confluence-copy-execution-claims.md`.
+> This does not activate provider execution or establish independent recovery.
+
 > **16 October retained-copy destructive transport:** A separate internal
 > primitive makes one trash/purge request with retries disabled. A 204 is only
 > acknowledgement; missing targets and uncertain responses remain unresolved.

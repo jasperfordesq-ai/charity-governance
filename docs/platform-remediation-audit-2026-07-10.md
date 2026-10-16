@@ -1,5 +1,12 @@
 # CharityPilot Full-Platform Remediation Audit
 
+> **16 October retained-copy claim increment:** Local one-use consumption and
+> receipt reconciliation now have SQL guards, immutable quarantine and actual
+> PostgreSQL concurrency/reconnection proof. Format14 compares claim history;
+> exact format13 remains supported. Independent claim/outcome publication,
+> provider execution/readback and host-loss proof remain unclosed. See
+> `docs/confluence-copy-execution-claims.md` and private verification receipts.
+
 > **16 October retained-copy transport increment:** The new internal single-call
 > primitive preserves ambiguous outcomes and never treats a 404 as purge proof.
 > Focused real-client synthetic transport tests cover retry/error paths. This
