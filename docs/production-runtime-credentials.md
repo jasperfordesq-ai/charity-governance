@@ -22,15 +22,30 @@ execution requires verified owner-only POSIX file permissions; Windows content
 dry-run is not ACL certification and unverified execution is refused. Custom
 Explicit CA files are now included in the protected file review: bounded UTF-8
 PEM, at most32 current CA certificates, no private keys or trailing material,
-owner-only POSIX protection, and identity/content binding throughout cutover.
+POSIX protection against group/other writes, public certificate readability,
+and identity/content binding throughout cutover. Use a certificate-only file
+owned by the deployment operator, normally mode0644 or0444. Environment files
+and keys remain owner-only. Mode0600 is unsuitable for this public CA mount
+because application/migration containers run as their own user.
 Changes or expiry refuse the reviewed configuration. This validates the selected
 trust-anchor input, not its organisational approval or provider identity.
-Container availability and mounts remain separate unresolved work; this does
-not configure those mounts or certify provider custody.
+Guarded lifecycle commands automatically add compose.production.database-ca.yml
+for an explicit CA, mounting only that reviewed file read-only at
+/run/charitypilot/database-ca.pem on all eight database-consuming services.
+Host URLs remain unchanged; derived container URLs use the mounted path.
+The Prisma CLI environment converts its derived maintenance URL separately.
+No CA overlay is selected for default/system trust. Windows permission
+certification, actual Linux image/provider compatibility and custody remain
+separate gates.
 
 Guarded transport checks exact file identity/bytes throughout cutover. A change
 requires a new review. Prisma consumers get an explicit strict TLS transport;
-libpq backup/restore keeps the canonical URL. Credential maps and expanded
+libpq backup/proof tools retain canonical TLS semantics. Their source-hashed
+helper independently validates and mounts an explicit CA at the same fixed
+container path, rewrites only its confidential child URL, and checks file
+continuity after execution. Disposable restore targets use their existing local
+connection. CA paths containing commas or quotes are refused by this Docker
+transport; prepare a reviewed certificate-only path without those characters. Credential maps and expanded
 Compose output contain secrets and must not enter public evidence.
 
 ## Mandatory Compose overlay
@@ -125,3 +140,10 @@ role-administration permissions and custody remain unproved. It does not test
 every API route, all four document-byte capabilities end to end, old-data
 upgrade, Linux application image, rollback or independent recovery. Do not widen
 runtime grants to activate currently inactive recovery executors.
+
+The CA transport fixture also uses an unprivileged PostgreSQL-tools container
+with the real reviewed public certificate mount: file write fails, verified
+TLS login succeeds, and a wrong hostname refuses. Effective Compose rendering
+covers all eight mounts and the migration-only strict URL. This does not prove
+an exact published Linux application image, a managed provider, full dump/restore
+with that provider or a hosted deployment.

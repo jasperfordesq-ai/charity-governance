@@ -225,7 +225,7 @@ function caFiles(t) {
   });
   assert.ok(certificates.length>=2);
   const ca=join(f.directory,'database-ca.pem');
-  writeFileSync(ca,certificates[0],{mode:0o600});
+  writeFileSync(ca,certificates[0],{mode:0o644});
   const suffix='&sslrootcert='+encodeURIComponent(ca);
   writeFileSync(f.maintenance,
     f.common+'DATABASE_URL='+owner+suffix+'\nCHARITYPILOT_PRODUCTION_APP_ENV_FILE=\''+f.app+'\'\n');
@@ -257,8 +257,28 @@ test('explicit database CA refuses missing, malformed, mixed or key material wit
   assert.throws(()=>readProductionRuntimeEnvironment(f.maintenance),/separate protected/);
 });
 
-test('POSIX database CA integrity requires owner-only protection',t=>{
+test('POSIX public database CA requires container readability and refuses writable trust anchors',t=>{
   if(process.platform==='win32') {t.skip('Windows ACL certification remains unsupported');return;}
-  const f=caFiles(t);chmodSync(f.ca,0o644);
+  const f=caFiles(t);
+  assertProductionRuntimeEnvironmentUnchanged(readProductionRuntimeEnvironment(f.maintenance).binding);
+  chmodSync(f.ca,0o600);assert.throws(()=>readProductionRuntimeEnvironment(f.maintenance));
+  chmodSync(f.ca,0o666);
   assert.throws(()=>readProductionRuntimeEnvironment(f.maintenance),/separate protected/);
+});
+
+test('Compose derives a fixed container CA path without changing reviewed host URLs',t=>{
+  const f=caFiles(t), transport=buildProductionComposeEnvironment(f.maintenance,{
+    CHARITYPILOT_PRODUCTION_DATABASE_CA_FILE:'unreviewed',
+    charitypilot_production_maintenance_database_url:'unreviewed'});
+  assert.equal(transport.environment.CHARITYPILOT_PRODUCTION_DATABASE_CA_FILE,f.ca);
+  assert.equal(new URL(transport.environment.CHARITYPILOT_PRODUCTION_RUNTIME_DATABASE_URL).searchParams.get('sslrootcert'),
+    '/run/charitypilot/database-ca.pem');
+  assert.equal(new URL(transport.environment.CHARITYPILOT_PRODUCTION_MAINTENANCE_DATABASE_URL).searchParams.get('sslrootcert'),
+    '/run/charitypilot/database-ca.pem');
+  assert.equal(new URL(transport.environment.DATABASE_URL).searchParams.get('sslrootcert'),f.ca);
+  assert.equal(transport.environment.charitypilot_production_maintenance_database_url,undefined);
+  const cli=productionPrismaMaintenanceEnvironment(transport.environment);
+  const url=new URL(cli.CHARITYPILOT_PRODUCTION_MAINTENANCE_DATABASE_URL);
+  assert.equal(url.searchParams.get('sslcert'),'/run/charitypilot/database-ca.pem');
+  assert.equal(url.searchParams.get('sslaccept'),'strict');
 });

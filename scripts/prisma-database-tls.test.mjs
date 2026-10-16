@@ -1,3 +1,4 @@
+import { prepareDatabaseCaDockerTransport } from './postgres-backup.mjs';
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
@@ -204,6 +205,24 @@ try {
     check('reconciled later table preserves full runtime catalogue restrictions',
       await verifyProductionRuntimeDatabaseRole(fullClient,target),{verified:true,phase:'after-migration'});
   } finally {await fullClient.$disconnect();}
+  for(const hostname of ['localhost','127.0.0.1']) {
+    const libpqUrl=new URL(`postgresql://cp_runtime:synthetic-runtime-only@${hostname}:5432/postgres`);
+    libpqUrl.searchParams.set('sslmode','verify-full');libpqUrl.searchParams.set('sslrootcert',join(certDir,'cert.pem'));
+    const transport=prepareDatabaseCaDockerTransport(['run','--rm','--user','65534:65534','--network','container:'+id,
+      '-e','CHARITYPILOT_PROOF_DATABASE_URL',image,'sh','-eu','-c',
+      'if (printf unexpected >> /run/charitypilot/database-ca.pem) 2>/dev/null; then exit 91; fi; '+
+      'psql -X --dbname \"$CHARITYPILOT_PROOF_DATABASE_URL\" -Atqc \"SELECT current_user\"'],
+      {...process.env,CHARITYPILOT_PROOF_DATABASE_URL:libpqUrl.href});
+    try {
+      const result=spawnSync('docker',['--host',endpoint.Host,...transport.args],{
+        env:transport.env,encoding:'utf8',timeout:15000,maxBuffer:16384});
+      transport.assertUnchanged();
+      if(hostname==='localhost') {assert.equal(result.status,0,result.stderr);
+        check('real libpq container reads readonly CA mount and verifies hostname',result.stdout.trim(),'cp_runtime');}
+      else {assert.notEqual(result.status,0);checks++;
+        process.stdout.write('PASS real libpq readonly CA transport refuses wrong hostname\n');}
+    } finally {transport.close();}
+  }
   const positive={connected:true,verified:true,tls:true};
   check('fresh Prisma login, TLS and actual transaction wrapper',await prismaAttempt(),positive);
   check('actual application factory verifies strict TLS and target',await prismaAttempt({applicationFactory:true}),positive);

@@ -1,3 +1,6 @@
+import { rootCertificates } from 'node:tls';
+import { X509Certificate } from 'node:crypto';
+import { prepareDatabaseCaDockerTransport, DEFAULT_POSTGRES_IMAGE } from './postgres-backup.mjs';
 import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
 import {
@@ -1333,4 +1336,33 @@ test('package scripts expose database backup and restore verification commands',
   assert.equal(packageJson.scripts['db:backup'], 'node scripts/postgres-backup.mjs backup');
   assert.equal(packageJson.scripts['db:restore:verify'], 'node scripts/postgres-backup.mjs verify-restore');
   assert.match(packageJson.scripts['test:production-check'], /scripts\/postgres-backup\.test\.mjs/);
+});
+
+test('database CA Docker transport binds one readonly file, preserves input and detects replacement',t=>{
+  const directory=mkdtempSync(join(tmpdir(),'charitypilot-ca-proof-'));
+  t.after(()=>rmSync(directory,{recursive:true,force:true}));
+  const file=join(directory,'root.pem');
+  const pem=rootCertificates.find(p=>{const c=new X509Certificate(p);
+    return c.ca&&Date.parse(c.validFrom)<Date.now()&&Date.parse(c.validTo)>Date.now();});
+  assert.ok(pem);writeFileSync(file,pem,{mode:0o644});
+  const url=new URL('postgresql://synthetic:synthetic@localhost/postgres?sslmode=verify-full');
+  url.searchParams.set('sslrootcert',file);
+  const args=['run','--rm','-e','CHARITYPILOT_PROOF_DATABASE_URL',DEFAULT_POSTGRES_IMAGE,'psql'];
+  const env={CHARITYPILOT_PROOF_DATABASE_URL:url.href};
+  const transport=prepareDatabaseCaDockerTransport(args,env);
+  try {
+    assert.equal(args.includes('--mount'),false);assert.equal(env.CHARITYPILOT_PROOF_DATABASE_URL,url.href);
+    assert.equal(transport.args[transport.args.indexOf('--mount')+1],
+      'type=bind,source='+file+',target=/run/charitypilot/database-ca.pem,readonly');
+    assert.equal(new URL(transport.env.CHARITYPILOT_PROOF_DATABASE_URL).searchParams.get('sslrootcert'),
+      '/run/charitypilot/database-ca.pem');
+    transport.assertUnchanged();writeFileSync(file,'replaced CA');
+    assert.throws(()=>transport.assertUnchanged(),/^Error: Database CA transport changed\.$/);
+  } finally {transport.close();}
+  assert.throws(()=>prepareDatabaseCaDockerTransport(args,env),/^Error: Database CA transport refused\.$/);
+});
+
+test('database CA transport preserves normal inherited environment when none was supplied',()=>{
+  const transport=prepareDatabaseCaDockerTransport(['run',DEFAULT_POSTGRES_IMAGE,'pg_restore']);
+  assert.equal(transport.env,undefined);transport.assertUnchanged();transport.close();
 });

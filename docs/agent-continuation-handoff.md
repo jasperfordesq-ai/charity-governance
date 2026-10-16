@@ -1,5 +1,18 @@
 # CharityPilot Agent Continuation Handoff
 
+> **16 October explicit CA delivery connected / local proof:** Guarded Compose
+> automatically mounts the reviewed public certificate file read-only on all eight
+> database consumers. Derived runtime/maintenance URLs use a fixed container path;
+> Prisma migration URLs are converted separately and host/libpq inputs retain
+> canonical semantics. Source-hashed backup/proof helper mounts/verifies/rechecks
+> the same input. Public CA requires POSIX read access across container UIDs and
+> no group/other writes (normally0644/0444); environment/key rules remain private.
+> Dedicated54casesPASS (50TLS/Prisma +18SQL internal); actual nonroot libpq client
+> reads CA, cannot write it, refuses wrong hostname. Full1236cases1228PASS/8SKIP.
+> No provider, rebuilt Linux app image, remoteCI, deploy or full provider restore
+> proof. Grant/provisioning/custody/architecture/release/Nikita gates remain OPEN.
+
+
 > **16 October explicit database CA binding / partial source remediation:**
 > Protected credential review now also pins an explicitly selected CA file's
 > identity/hash. Only bounded current CA-certificate PEM bundles are accepted;

@@ -2,8 +2,16 @@
 # is required: env_file must REPLACE the maintenance file, never append to it.
 services:
   api:
+    environment:
+      DATABASE_URL: ${CHARITYPILOT_PRODUCTION_RUNTIME_DATABASE_URL:?Use guarded runtime credential transport}
     env_file: !override
       - ${CHARITYPILOT_PRODUCTION_APP_ENV_FILE:?Set the separately reviewed runtime env file}
+  migrate:
+    environment:
+      DATABASE_URL: ${CHARITYPILOT_PRODUCTION_MAINTENANCE_DATABASE_URL:?Use guarded maintenance credential transport}
+  auth-recovery-secret-rotation:
+    environment:
+      DATABASE_URL: ${CHARITYPILOT_PRODUCTION_MAINTENANCE_DATABASE_URL:?Use guarded maintenance credential transport}
   production-scheduler:
     environment:
       DATABASE_URL: ${CHARITYPILOT_PRODUCTION_RUNTIME_DATABASE_URL:?Use guarded runtime credential transport}

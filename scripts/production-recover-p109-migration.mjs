@@ -698,6 +698,7 @@ function composePrefix(options) {
     "-f",
     "compose.production.yml",
     "-f", "compose.production.roles.yml",
+    ...(options.databaseCa ? ["-f", "compose.production.database-ca.yml"] : []),
     ...(options.tlsProxy ? ["-f", "compose.production-tls.yml"] : []),
   ];
 }
@@ -966,6 +967,7 @@ export function runProductionFailedMigrationRecoveryFromArgs(
         throw new Error('Production execution requires verified private file permissions for both configurations.');
       }
       options.productionEnvFile = transport.binding.maintenancePath;
+      options.databaseCa = Boolean(transport.binding.databaseCa);
     } catch (error) {
       return result(
         1,

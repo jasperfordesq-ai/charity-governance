@@ -8,7 +8,16 @@ import { toStrictPrismaTlsUrl } from '../packages/shared/runtime/prisma-database
  * bound environment for libpq backups/restores and non-Prisma operations.
  */
 export function productionPrismaMaintenanceEnvironment(environment) {
-  return { ...environment, DATABASE_URL:toStrictPrismaTlsUrl(environment.DATABASE_URL) };
+  return { ...environment, DATABASE_URL:toStrictPrismaTlsUrl(environment.DATABASE_URL),
+    ...(environment.CHARITYPILOT_PRODUCTION_MAINTENANCE_DATABASE_URL ? {
+      CHARITYPILOT_PRODUCTION_MAINTENANCE_DATABASE_URL:toStrictPrismaTlsUrl(environment.CHARITYPILOT_PRODUCTION_MAINTENANCE_DATABASE_URL)} : {}) };
+}
+
+export const PRODUCTION_DATABASE_CA_CONTAINER_PATH = '/run/charitypilot/database-ca.pem';
+function containerDatabaseUrl(raw, ca) {
+  if(!ca) return raw;
+  const url=new URL(raw);url.searchParams.set('sslrootcert',PRODUCTION_DATABASE_CA_CONTAINER_PATH);
+  return url.href;
 }
 
 const refusal = 'Production database credentials must use distinct roles for the same verified-TLS database.';
@@ -80,7 +89,8 @@ function fileWitness(path, parseText = envValues) {
     const before = fstatSync(descriptor, { bigint: true });
     if (!before.isFile() || before.size < 1n || before.size > BigInt(MAX_ENV_BYTES)) throw new Error();
     const permissionsVerified = process.platform !== 'win32';
-    if (permissionsVerified && ((before.mode & 0o077n) !== 0n
+    if (permissionsVerified && ((before.mode & (parseText === certificateValues ? 0o022n : 0o077n)) !== 0n
+      || (parseText === certificateValues && (before.mode & 0o044n) !== 0o044n)
       || (before.uid !== BigInt(process.geteuid()) && process.geteuid() !== 0))) throw new Error();
     const buffer = Buffer.alloc(MAX_ENV_BYTES + 1);
     let length = 0;
@@ -153,6 +163,7 @@ export function readProductionRuntimeEnvironment(maintenanceEnvFile) {
     const maintenancePassword = maintenanceConnection.password;
     const ca = maintenanceConnection.ca === 'system' ? null
       : fileWitness(maintenanceConnection.ca, certificateValues);
+    if(ca && (ca.path.includes(',') || ca.path.includes(String.fromCharCode(34)))) throw new Error();
     const databaseCa = ca ? Object.freeze({path:ca.path,device:ca.device,inode:ca.inode,sha256:ca.sha256}) : null;
     for (const [key, value] of Object.entries(app.values)) {
       if (/^(?:POSTGRES_|MIGRATION_|PG[A-Z0-9_]*$|BLUEGREEN_|CHARITYPILOT_PRODUCTION_|DOCKER_|COMPOSE_)/u.test(key)
@@ -189,7 +200,8 @@ export function buildProductionComposeEnvironment(maintenanceEnvFile, inherited 
       || Object.keys(maintenance.values).some(key => /^(?:COMPOSE_|DOCKER_|BUILDX_)/u.test(key)
         || ['PATH','PATHEXT','NODE_OPTIONS','NODE_PATH','LD_PRELOAD','LD_LIBRARY_PATH','BASH_ENV','ENV'].includes(key))) throw new Error();
     const replaced = new Set([...Object.keys(maintenance.values), 'CHARITYPILOT_PRODUCTION_ENV_FILE',
-      'CHARITYPILOT_PRODUCTION_APP_ENV_FILE', 'CHARITYPILOT_PRODUCTION_RUNTIME_DATABASE_URL'].map(key => key.toUpperCase()));
+      'CHARITYPILOT_PRODUCTION_APP_ENV_FILE', 'CHARITYPILOT_PRODUCTION_RUNTIME_DATABASE_URL',
+      'CHARITYPILOT_PRODUCTION_MAINTENANCE_DATABASE_URL', 'CHARITYPILOT_PRODUCTION_DATABASE_CA_FILE'].map(key => key.toUpperCase()));
     const safeInherited = Object.fromEntries(Object.entries(inherited).filter(([key]) =>
       !replaced.has(key.toUpperCase()) && !/^(?:COMPOSE_|DOCKER_|BUILDX_)/iu.test(key)
       && !['NODE_OPTIONS','NODE_PATH','LD_PRELOAD','LD_LIBRARY_PATH','BASH_ENV','ENV'].includes(key.toUpperCase())));
@@ -197,7 +209,9 @@ export function buildProductionComposeEnvironment(maintenanceEnvFile, inherited 
     return { environment: { ...safeInherited, ...maintenance.values,
       CHARITYPILOT_PRODUCTION_ENV_FILE: runtime.binding.maintenancePath,
       CHARITYPILOT_PRODUCTION_APP_ENV_FILE: runtime.appEnvFile,
-      CHARITYPILOT_PRODUCTION_RUNTIME_DATABASE_URL: runtime.appEnvironment.DATABASE_URL },
+      CHARITYPILOT_PRODUCTION_RUNTIME_DATABASE_URL: containerDatabaseUrl(runtime.appEnvironment.DATABASE_URL,runtime.binding.databaseCa),
+      CHARITYPILOT_PRODUCTION_MAINTENANCE_DATABASE_URL: containerDatabaseUrl(maintenance.values.DATABASE_URL,runtime.binding.databaseCa),
+      CHARITYPILOT_PRODUCTION_DATABASE_CA_FILE: runtime.binding.databaseCa?.path ?? '' },
     binding: runtime.binding, identity: runtime.identity, privatePermissionsVerified: runtime.privatePermissionsVerified };
   } catch { throw new Error(fileRefusal); }
 }

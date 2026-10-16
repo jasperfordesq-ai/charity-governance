@@ -269,7 +269,8 @@ export function protectBackupDump(
   chmod(dumpPath, 0o600);
 }
 
-function composePrefix({ productionEnvFile, tlsProxy }) {
+function composePrefix(options) {
+  const {productionEnvFile,tlsProxy}=options;
   return [
     "docker",
     "compose",
@@ -278,6 +279,7 @@ function composePrefix({ productionEnvFile, tlsProxy }) {
     "-f",
     "compose.production.yml",
     "-f", "compose.production.roles.yml",
+    ...(options.databaseCa ? ["-f", "compose.production.database-ca.yml"] : []),
     ...(tlsProxy ? ["-f", "compose.production-tls.yml"] : []),
   ];
 }
@@ -469,6 +471,13 @@ export function runProductionComposeDeployFromArgs(
         throw new Error('Production execution requires verified private file permissions for both configurations.');
       }
       options.productionEnvFile = transport.binding.maintenancePath;
+      options.databaseCa = Boolean(transport.binding.databaseCa);
+      if(options.databaseCa && hasPreMigrationDatabaseProbe) {
+        const index=preMigrationDatabaseProbeCommand.indexOf('compose.production.roles.yml');
+        if(index<0) throw new Error('Restored database probe must use the guarded production role overlay.');
+        preMigrationDatabaseProbeCommand=[...preMigrationDatabaseProbeCommand.slice(0,index+1),
+          '-f','compose.production.database-ca.yml',...preMigrationDatabaseProbeCommand.slice(index+1)];
+      }
     } catch (error) {
       return result(1, '', `Production compose deploy failed before preflight: ${redactProductionDeployTranscript(error instanceof Error ? error.message : String(error))}\n`);
     }

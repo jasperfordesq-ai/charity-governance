@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 import { spawn, spawnSync } from 'node:child_process';
-import { createHash, randomBytes } from 'node:crypto';
+import { createHash, randomBytes, X509Certificate } from 'node:crypto';
 import {
   closeSync,
   chmodSync,
@@ -2129,7 +2129,46 @@ function removeProofContainerStrict(containerName, dryRun) {
   throw new Error(`Strict proof-container cleanup failed for ${containerName}: ${failure.trim() || `exit ${result.status}`}`);
 }
 
+// Kept inside the source-hashed proof helper: adding an unbound local import
+// here would weaken its exact-release implementation receipt.
+export function prepareDatabaseCaDockerTransport(args, environment) {
+  const sourceEnvironment=environment??process.env;
+  let handle;
+  try {
+    const keys=['CHARITYPILOT_PROOF_DATABASE_URL','CHARITYPILOT_RESTORE_SENTINEL_DATABASE_URL','CHARITYPILOT_BACKUP_DATABASE_URL']
+      .filter(key=>args.includes(key)&&sourceEnvironment[key]);
+    if(keys.length>1) throw new Error();
+    const key=keys[0];
+    const url=key?new URL(sourceEnvironment[key]):null;
+    const ca=url?.searchParams.get('sslrootcert');
+    if(!ca||ca==='system') return {args,env:environment,assertUnchanged(){},close(){}};
+    if(!['postgres:','postgresql:'].includes(url.protocol)||!isAbsolute(ca)||/[,\x00-\x1f\x7f]/u.test(ca)||ca.includes(String.fromCharCode(34))) throw new Error();
+    handle=openProtectedRegularFile(ca,'database CA');
+    const status=fstatSync(handle.fd,{bigint:true});
+    if(process.platform!=='win32'&&((status.mode&0o022n)!==0n || (status.mode&0o044n)!==0o044n
+      || (status.uid!==BigInt(process.geteuid())&&process.geteuid()!==0))) throw new Error();
+    const text=readProtectedFile(handle,256*1024,'database CA validation');
+    const pattern=/-----BEGIN CERTIFICATE-----\r?\n[A-Za-z0-9+/=\r\n]+-----END CERTIFICATE-----/gu;
+    const blocks=[...text.matchAll(pattern)].map(match=>match[0]);
+    if(!blocks.length||blocks.length>32||text.replace(pattern,'').trim()!=='') throw new Error();
+    for(const pem of blocks) {const cert=new X509Certificate(pem);
+      if(!cert.ca||!(Date.parse(cert.validFrom)<=Date.now())||!(Date.parse(cert.validTo)>Date.now())) throw new Error();}
+    const index=args.indexOf(postgresToolsImage());
+    if(index<0) throw new Error();
+    const target='/run/charitypilot/database-ca.pem';
+    url.searchParams.set('sslrootcert',target);
+    return {args:[...args.slice(0,index),'--mount',
+      'type=bind,source='+ca+',target='+target+',readonly',...args.slice(index)],
+      env:{...sourceEnvironment,[key]:url.href},
+      assertUnchanged(){try {assertProtectedFileUnchanged(handle,'during database CA transport');}
+        catch {throw new Error('Database CA transport changed.');}},
+      close(){closeProtectedFile(handle);handle=null;}};
+  } catch {closeProtectedFile(handle);throw new Error('Database CA transport refused.');}
+}
+
 function runNamedProofContainer(containerName, args, { env, dryRun = false } = {}) {
+  const caTransport=prepareDatabaseCaDockerTransport(args,env);
+  args=caTransport.args;env=caTransport.env;
   let primaryError;
   let stdout = '';
   try {
@@ -2140,9 +2179,10 @@ function runNamedProofContainer(containerName, args, { env, dryRun = false } = {
       maxBuffer: PROOF_STDIO_LIMIT_BYTES,
       rejectStderr: true,
     });
+    caTransport.assertUnchanged();
   } catch (error) {
     primaryError = error;
-  }
+  } finally {caTransport.close();}
 
   try {
     removeProofContainerStrict(containerName, dryRun);

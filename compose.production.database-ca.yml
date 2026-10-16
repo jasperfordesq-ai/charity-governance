@@ -1,0 +1,34 @@
+# Selected automatically only for a reviewed explicit database CA.
+# Mount one public trust bundle read-only; never mount its parent directory.
+x-database-ca: &database-ca
+  type: bind
+  source: ${CHARITYPILOT_PRODUCTION_DATABASE_CA_FILE:?Use the reviewed database CA file}
+  target: /run/charitypilot/database-ca.pem
+  read_only: true
+  bind:
+    create_host_path: false
+services:
+  api:
+    volumes:
+      - *database-ca
+  migrate:
+    volumes:
+      - *database-ca
+  auth-recovery-secret-rotation:
+    volumes:
+      - *database-ca
+  production-scheduler:
+    volumes:
+      - *database-ca
+  deadline-reminders:
+    volumes:
+      - *database-ca
+  document-storage-cleanup:
+    volumes:
+      - *database-ca
+  document-publication:
+    volumes:
+      - *database-ca
+  runtime-role-check:
+    volumes:
+      - *database-ca

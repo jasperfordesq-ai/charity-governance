@@ -26,7 +26,7 @@ async function boundDeploymentFixture(t, mutation) {
   if(useCa) {
     const pem=rootCertificates.find(value=>{const cert=new X509Certificate(value);
       return cert.ca && Date.parse(cert.validFrom)<Date.now() && Date.parse(cert.validTo)>Date.now();});
-    assert.ok(pem);writeFileSync(caPath,pem);
+    assert.ok(pem);writeFileSync(caPath,pem,{mode:0o644});
   }
   writeFileSync(envPath, completeDeployEnv(useCa?{DATABASE_URL:
     'postgresql://user:pass@db.charitypilot.ie:5432/charitypilot?sslmode=verify-full&target_session_attrs=read-write&sslrootcert='+encodeURIComponent(caPath)}:{}));

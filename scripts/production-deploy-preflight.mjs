@@ -216,11 +216,12 @@ function runCommand(command, env) {
   }
 }
 
-function commandsFor({ productionEnvFile, images, tlsProxy }) {
+function commandsFor({ productionEnvFile, images, tlsProxy, databaseCa }) {
   const composeFiles = [
     '-f',
     'compose.production.yml',
     '-f', 'compose.production.roles.yml',
+    ...(databaseCa ? ['-f', 'compose.production.database-ca.yml'] : []),
     ...(tlsProxy ? ['-f', 'compose.production-tls.yml'] : []),
   ];
 
@@ -352,7 +353,7 @@ export function runProductionDeployPreflightFromArgs(
     return result(1, '', `Production deploy preflight failed: ${redactProductionDeployTranscript(error instanceof Error ? error.message : String(error))}\n`);
   }
   const images = requiredImages.map(({ envName }) => transport.environment[envName]);
-  const commands = commandsFor({ productionEnvFile: transport.binding.maintenancePath, images, tlsProxy: options.tlsProxy });
+  const commands = commandsFor({ productionEnvFile: transport.binding.maintenancePath, images, tlsProxy: options.tlsProxy, databaseCa:Boolean(transport.binding.databaseCa) });
 
   if (options.dryRun) {
     return result(0, [
