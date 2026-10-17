@@ -1,3 +1,11 @@
+## 17 October: live guardian handles calling-parent loss
+
+Read [proof guardian](managed-proof-guardian.md). Original-ACK-gated source work
+now runs through a fixed independent IPC guardian, which cancels its owned worker
+when the caller dies. Actual Windows parent-kill/cancel tests preserve a separate
+running job. Guardian death, pending daemon requests, restart ownership and real
+provider/source-host-loss/current-authority gates remain open. Full goal active.
+
 ## 17 October: native Docker cancellation and batch preflight
 
 Read [Docker cancellation acceptance](managed-proof-docker-acceptance.md). Actual

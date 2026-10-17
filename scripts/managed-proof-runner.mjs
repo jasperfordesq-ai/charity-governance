@@ -78,6 +78,21 @@ export async function superviseManagedProofProcess({input,env,signal,timeoutMs=9
   if(!stopped)child.stdin.end(input);
  });
 }
+/** The calling process never kills a recovered PID. A live IPC guardian owns
+ * the worker handle and performs cancellation/cleanup after parent loss. */
+export async function superviseManagedProofGuardian(options,{guardianPath=fileURLToPath(new URL('./managed-proof-guardian.mjs',import.meta.url)),onStderr}={}){
+ const terminate=child=>new Promise((resolve,reject)=>{
+  if(child.exitCode!==null||child.signalCode!==null){resolve();return;}
+  let settled=false;const done=error=>{if(settled)return;settled=true;clearTimeout(timer);child.removeListener('close',closed);error?reject(unresolved()):resolve();};
+  const closed=()=>done();const timer=setTimeout(()=>{if(child.connected)child.disconnect();done(unresolved());},12000);
+  child.once('close',closed);
+  if(child.connected)child.send({kind:'CANCEL_MANAGED_PROOF_V1'},error=>{if(error&&!child.connected){/* disconnect also cancels in guardian */}});
+ });
+ return superviseManagedProofProcess(options,{onStderr,terminate,start(command,_args,settings){
+  const env=Object.fromEntries(Object.entries(settings.env??process.env).filter(([key])=>key.toUpperCase()!=='CHARITYPILOT_INTERNAL_GUARDIAN_TIMEOUT_MS'));
+  return spawn(command,[guardianPath],{...settings,env:{...env,CHARITYPILOT_INTERNAL_GUARDIAN_TIMEOUT_MS:String(options.timeoutMs??90000)},detached:true,windowsHide:true,stdio:['pipe','pipe','pipe','ipc']});
+ }});
+}
 /** Dedicated original helper runner, not an arbitrary command execution API. */
 export async function runManagedImportedProof({args,snapshot,databaseUrl,workspace,scope={kind:'STANDALONE_INTERNAL_PROOF'},jobCustody,diagnostics,signal,timeoutMs=90000}){
  if(scope?.kind==='COMMON_CANDIDATE'&&(!jobCustody||typeof jobCustody.reserve!=='function'||typeof jobCustody.observe!=='function'))throw unresolved();
@@ -96,7 +111,7 @@ export async function runManagedImportedProof({args,snapshot,databaseUrl,workspa
  if(jobCustody)await jobCustody.reserve(job.requestArtifact);
  let result;
  const input=Buffer.from(JSON.stringify({args,snapshot,jobId}));
- try{await superviseManagedProofProcess({input,env,signal,timeoutMs},{onStderr:diagnostics});success=true;}
+ try{await superviseManagedProofGuardian({input,env,signal,timeoutMs},{onStderr:diagnostics});success=true;}
  catch{throw unresolved();}
  finally{
   input.fill(0);

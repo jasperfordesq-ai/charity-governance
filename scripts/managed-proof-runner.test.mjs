@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {spawn} from 'node:child_process';
+import {spawn,spawnSync} from 'node:child_process';
+import {fileURLToPath} from 'node:url';
 import {randomUUID} from 'node:crypto';
 import {superviseManagedProofProcess,reconcileManagedProofContainers} from './managed-proof-runner.mjs';
 const ack=JSON.stringify({format:1,kind:'MANAGED_IMPORTED_PROOF_WORKER_V1',ok:true});
@@ -98,4 +99,9 @@ test('diagnostic observer failure stops the worker and cannot turn failure into 
  const f=fixture(`process.stderr.write('fixture');setInterval(()=>{},1000);`);
  await assert.rejects(superviseManagedProofProcess(base(),{...f,onStderr(){throw new Error('private-observer-error');}}),e=>!e.message.includes('private-observer-error'));
  assert.ok(f.child.exitCode!==null||f.child.signalCode!==null);
+});
+
+test('fixed guardian refuses standalone execution without the original inherited IPC channel',()=>{
+ const r=spawnSync(process.execPath,[fileURLToPath(new URL('./managed-proof-guardian.mjs',import.meta.url))],{env:process.env,windowsHide:true,input:'{}',encoding:'utf8',timeout:5000,maxBuffer:4096});
+ assert.equal(r.status,1);assert.equal(r.stdout,'');assert.equal(r.stderr,'');
 });
