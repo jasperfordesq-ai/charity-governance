@@ -1,3 +1,12 @@
+## 17 October: independent request-owner acceptance probe
+
+Read [independent daemon request owner](managed-independent-request-owner.md).
+A fixed synthetic test exercises a separately managed request service during
+caller loss and owner loss. It accepts no tenant data or arbitrary commands.
+The production helper still dispatches in its source worker; original owner
+custody/dispatch integration and actual provider/host-loss proof remain open.
+Exact executable results are private, with no inferred production completion.
+
 ## 17 October: cold bounded daemon catalogue discovery
 
 Read [daemon intent custody](managed-daemon-intent-custody.md). Cold source-job
