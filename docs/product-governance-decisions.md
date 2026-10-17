@@ -189,3 +189,19 @@ are engineering choices under this delegation. Complete the remaining actual
 write/capability fencing, common capture, restoration and provider/host-loss proof
 in the agreed sequence. Do not require a fresh human decision to implement or
 test those product contracts with synthetic data.
+
+## Signing-key and capability maintenance
+
+Use a separately reviewed asymmetric current signing key and exact previous-key
+revocation for managed maintenance; do not implicitly create, promote or rotate
+an active issuer. Keep the original provider acknowledgements separate from
+fresh metadata observations. The [signing-key primitive](supabase-signing-key-control.md)
+implements that narrow contract with no real-provider activation.
+
+Do not infer Storage capability closure from Auth key metadata, ordinary API-key
+refusal or nominal token expiry. Identify the actual Storage token issuer and
+provider release and test issued capabilities directly before closing that gate.
+In-flight commits, privileged capture credentials and external management actors
+remain separate fencing requirements. This is an engineering decision under
+delegated software ownership; no new reviewer or tenant-policy decision is needed
+to implement and exercise the synthetic workflow.

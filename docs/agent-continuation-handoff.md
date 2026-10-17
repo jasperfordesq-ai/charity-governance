@@ -1,5 +1,12 @@
 # CharityPilot Agent Continuation Handoff
 
+> **17 October reviewed signing-key primitive:** Explicit old signing-key UUIDs
+> can now be revoked against a pinned project/material registry, retaining the
+> reviewed asymmetric current key. Partial/unknown outcomes stop; inspection is
+> GET-only. This is NOT yet in protocol5 and does NOT prove Storage capability
+> revocation: actual issuer/token/provider-release evidence remains required.
+> See [signing-key control](supabase-signing-key-control.md).
+
 > **17 October protocol5 integration:** The default internal coordinator now
 > requires exact-version write-baseline publication/readback and acknowledged
 > WRITE_BASELINED head-pin CAS before any shutdown. It retains the report pin
