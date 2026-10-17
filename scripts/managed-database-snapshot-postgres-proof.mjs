@@ -6,6 +6,7 @@ import {fileURLToPath} from 'node:url';
 import {managedCommonCustodyBackend,startManagedCommonCustody} from './managed-common-custody-postgres-proof.mjs';
 import {mkdtempSync,readFileSync,statSync,rmSync,existsSync,readdirSync} from 'node:fs';
 import {daemonCustodyScope} from '../apps/api/dist/services/managed-daemon-intent-custody.js';
+import {GetObjectCommand} from '@aws-sdk/client-s3';
 import {tmpdir} from 'node:os';
 import {basename,dirname,join,resolve} from 'node:path';
 import {canonicalDocumentIdentitySha256,canonicalMetadataBindingSha256,canonicalObjectKeySha256,canonicalDocumentMetadataRowsSha256} from '../packages/shared/runtime/document-recovery-inventory.mjs';
@@ -208,7 +209,20 @@ export async function proveManagedDatabaseSnapshot({admin,url,id,database,certif
      if(mode==='daemon-response-ack'){assert.equal(intents.length,1);assert.equal(existsSync(join(output,'common.json')),false);}
      else for(const name of ['common.dump','common.json'])assert.ok(existsSync(join(output,name)));
      const kind=mode==='daemon-response-ack'?'MANAGED_DAEMON_CUSTODY_RESPONSE_V1':'MANAGED_DAEMON_CUSTODY_END_V1';
-     assert.ok([...cloud.b.objects.values()].some(v=>{try{return JSON.parse(v.body.toString()).kind===kind;}catch{return false;}}));
+     // The separate keeper exposes metadata only. Read original bytes through
+     // its SDK transport instead of assuming an in-process backing Map.
+     const ordinal=mode==='daemon-response-ack'?1:0;
+     const key=`managed-maintenance/${cloud.config.installationId}/${original.binding.attemptId}/capture-job/${daemonCustodyScope(original.binding.candidateId,ordinal)}/observation.json`;
+     const metadata=cloud.b.objects.get(key);assert.ok(metadata);
+     const stored=await cloud.clients.s3.send(new GetObjectCommand({Bucket:cloud.config.bucket,ExpectedBucketOwner:cloud.config.accountId,
+      Key:key,VersionId:metadata.version,ChecksumMode:'ENABLED'}));
+     const bytes=Buffer.from(await stored.Body.transformToByteArray());
+     assert.equal(stored.VersionId,metadata.version);assert.equal(stored.ServerSideEncryption,'aws:kms');assert.equal(stored.SSEKMSKeyId,cloud.config.storageKeyArn);
+     assert.equal(stored.ChecksumSHA256,Buffer.from(hash(bytes),'hex').toString('base64'));
+     const retained=JSON.parse(bytes.toString('utf8'));assert.equal(retained.kind,kind);
+     const local=readFileSync(join(output,mode==='daemon-response-ack'?'proof-daemon.001.response.json':'proof-daemon.end.json'),'utf8');
+     assert.equal(retained.localRecord.body,local);assert.equal(retained.localRecord.sha256,hash(local));assert.equal(retained.localRecord.byteLength,Buffer.byteLength(local));
+     assert.equal(retained.savedEvidenceAuthorizesDispatch,false);assert.equal(retained.pendingRequestResolved,false);
     }
     if(['daemon-header-ack','daemon-intent-ack'].includes(mode)){
      const names=readdirSync(output);assert.equal(names.filter(n=>/^proof-daemon\.[0-9]{3}\.response\.json$/.test(n)).length,0);
