@@ -26,3 +26,7 @@ fixtures/recovery-canary-v1.txt text eol=lf
 scripts/managed-proof-systemd-containment.mjs text eol=lf
 scripts/managed-proof-channel*.mjs text eol=lf
 scripts/managed-proof-guardian.mjs text eol=lf
+scripts/managed-proof-systemd-runner*.mjs text eol=lf
+scripts/managed-proof-runner.mjs text eol=lf
+scripts/managed-proof-job.mjs text eol=lf
+scripts/managed-proof-worker.mjs text eol=lf

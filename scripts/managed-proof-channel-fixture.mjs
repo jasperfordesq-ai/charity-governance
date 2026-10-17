@@ -7,7 +7,7 @@ import {createHash} from 'node:crypto';
 import {createManagedCaptureWorkspace} from './managed-capture-workspace.mjs';
 import {recordManagedProofJob,inspectManagedProofJob} from './managed-proof-job.mjs';
 // Synthetic transport/guardian cohort only; no Docker/provider/application calls.
-if(process.argv[2]==='--service'&&process.argv.length===4){
+if(['--service','--systemd-socket'].includes(process.argv[2])&&process.argv.length===4){
  const parent=await connectManagedGuardianParent(process.argv[3]);
  const receive=parent.receive;parent.receive=async()=>{const request=await receive();return{...request,env:{...request.env,CHARITYPILOT_SYNTHETIC_CHANNEL_SOCKET:process.argv[3]}};};
  await runManagedProofGuardian({parent,workerPath:fileURLToPath(new URL('./managed-proof-channel-worker-fixture.mjs',import.meta.url)),

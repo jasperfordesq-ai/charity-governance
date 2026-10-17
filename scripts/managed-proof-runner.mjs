@@ -3,6 +3,7 @@ import {spawn,spawnSync} from 'node:child_process';
 import {randomUUID,createHash} from 'node:crypto';
 import {fileURLToPath} from 'node:url';
 import {prepareLocalDockerCommand,captureHelperImplementationBinding} from './postgres-backup.mjs';
+import {superviseContainedManagedProof} from './managed-proof-systemd-runner.mjs';
 const root=fileURLToPath(new URL('..',import.meta.url));
 const worker=fileURLToPath(new URL('./managed-proof-worker.mjs',import.meta.url));
 const jobPattern=/^[a-f0-9]{8}-[a-f0-9]{4}-4[a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}$/;
@@ -94,8 +95,10 @@ export async function superviseManagedProofGuardian(options,{guardianPath=fileUR
  }});
 }
 /** Dedicated original helper runner, not an arbitrary command execution API. */
-export async function runManagedImportedProof({args,snapshot,databaseUrl,workspace,scope={kind:'STANDALONE_INTERNAL_PROOF'},jobCustody,diagnostics,signal,timeoutMs=90000}){
+export async function runManagedImportedProof({args,snapshot,databaseUrl,workspace,scope={kind:'STANDALONE_INTERNAL_PROOF'},jobCustody,diagnostics,signal,timeoutMs=90000,executionMode='KERNEL_CONTAINED'}){
+ if(!['KERNEL_CONTAINED','INTERNAL_IPC_PROOF'].includes(executionMode)||(executionMode==='KERNEL_CONTAINED'&&(process.platform!=='linux'||process.getuid()===0)))throw unresolved();
  if(scope?.kind==='COMMON_CANDIDATE'&&(!jobCustody||typeof jobCustody.reserve!=='function'||typeof jobCustody.observe!=='function'))throw unresolved();
+ if(executionMode==='KERNEL_CONTAINED'&&scope?.kind==='COMMON_CANDIDATE'&&typeof jobCustody?.bindService!=='function')throw unresolved();
  const jobId=randomUUID();let success=false,cleanup;
  const env=Object.fromEntries(Object.entries(process.env).filter(([k])=>!(/^(NODE_OPTIONS|NODE_PATH|DATABASE_URL)$/i).test(k)));
  env.DATABASE_URL=databaseUrl;
@@ -109,12 +112,21 @@ export async function runManagedImportedProof({args,snapshot,databaseUrl,workspa
   argumentsDigest:hash(JSON.stringify(args)),createdAt:new Date().toISOString(),state:'REQUESTED_ONLY',
   executionAuthorized:false,publicationAuthorized:false,actionAuthorized:false},signal);
  if(jobCustody)await jobCustody.reserve(job.requestArtifact);
- let result;
+ let result,boundService,cohortTerminated=executionMode==='INTERNAL_IPC_PROOF';
  const input=Buffer.from(JSON.stringify({args,snapshot,jobId}));
- try{await superviseManagedProofGuardian({input,env,signal,timeoutMs},{onStderr:diagnostics});success=true;}
- catch{throw unresolved();}
+ try{
+  if(executionMode==='KERNEL_CONTAINED'){
+   await superviseContainedManagedProof({jobId,sourceSha:helper.commitSha,input,env,signal,timeoutMs,authorizeInvocation:async identity=>{
+    boundService=await job.bindService(identity,input);if(jobCustody)await jobCustody.bindService(boundService.artifact);signal?.throwIfAborted();return true;
+   }});cohortTerminated=true;
+  }else await superviseManagedProofGuardian({input,env,signal,timeoutMs},{onStderr:diagnostics});success=true;
+ }
+ catch(error){if(executionMode==='KERNEL_CONTAINED')cohortTerminated=error?.cohortTerminated===true;throw unresolved();}
  finally{
   input.fill(0);
+  if(!cohortTerminated){
+   try{const failed=await job.observe('UNRESOLVED',false);if(jobCustody)await jobCustody.observe(failed.artifact);}catch{}throw unresolved();
+  }
   try{cleanup=reconcileManagedProofContainers(jobId,env);}catch{
    try{const failed=await job.observe('UNRESOLVED',false);if(jobCustody)await jobCustody.observe(failed.artifact);}catch{}throw unresolved();
   }
@@ -122,5 +134,6 @@ export async function runManagedImportedProof({args,snapshot,databaseUrl,workspa
   // Residue after an apparently successful worker is an unresolved outcome too.
   if(success&&cleanup.removedCount!==0)throw unresolved();
  }
- return{jobId,requestPin:job.requestPin,observationPin:result.pin,directoryFlushSupported:job.directoryFlushSupported,workerExited:true,observedJobContainersAbsent:true,actionAuthorized:false};
+ return{jobId,requestPin:job.requestPin,observationPin:result.pin,servicePin:boundService?.pin??null,kernelContained:executionMode==='KERNEL_CONTAINED',
+  directoryFlushSupported:job.directoryFlushSupported,workerExited:true,observedJobContainersAbsent:true,actionAuthorized:false};
 }

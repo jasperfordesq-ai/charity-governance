@@ -65,7 +65,7 @@ export async function createManagedGuardianChannel({jobId,sourceSha,input,env,au
  const cancel=()=>finish(false),timer=setTimeout(cancel,timeoutMs);signal?.addEventListener('abort',cancel,{once:true});
  try{await new Promise((yes,no)=>{server.once('error',no);server.listen(path,()=>{chmodSync(path,0o600);yes();});});if(signal?.aborted)cancel();}
  catch{finish(false);ownedDirectory(root);rmSync(root,{recursive:true,force:true});throw refuse();}
- return{path,unit,result,close:async()=>{finish(false);await new Promise(r=>server.close(()=>r()));ownedDirectory(root);rmSync(root,{recursive:true,force:true});}};
+ return{path,unit,result,close:async({preserve=false}={})=>{finish(false);await new Promise(r=>server.close(()=>r()));ownedDirectory(root);if(!preserve)rmSync(root,{recursive:true,force:true});}};
 }
 /** Fixed service-side connection. No commands, source paths or worker selectors. */
 export async function connectManagedGuardianParent(path){

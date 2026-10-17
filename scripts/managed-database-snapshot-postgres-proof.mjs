@@ -37,7 +37,8 @@ export async function proveManagedDatabaseSnapshot({admin,url,id,database,certif
   const source=new URL(captureUrl(database));source.searchParams.set('sslrootcert',certificate);
   const args=['prove-restore','--source-container-id='+id,'--recovery-set-id=synthetic-imported-'+randomUUID(),
    '--expected-source-database-identity-sha256='+identity,'--output-dir='+output,'--output-file=common.dump','--report-file=common.json'];
-  const supervised=await runManagedImportedProof({args,snapshot,databaseUrl:source.href,workspace,scope,jobCustody,signal,diagnostics:b=>{sourceFailure=(sourceFailure+b.toString('utf8')).slice(0,4096);}});
+  const supervised=await runManagedImportedProof({args,snapshot,databaseUrl:source.href,workspace,scope,jobCustody,signal,executionMode:'INTERNAL_IPC_PROOF',diagnostics:b=>{sourceFailure=(sourceFailure+b.toString('utf8')).slice(0,4096);}});
+  assert.equal(supervised.kernelContained,false);assert.equal(supervised.servicePin,null);
   assert.equal(supervised.workerExited,true);assert.equal(supervised.observedJobContainersAbsent,true);
   assert.ok(statSync(join(output,'common.json')).size<16*1024*1024);
   const report=JSON.parse(readFileSync(join(output,'common.json'),'utf8'));

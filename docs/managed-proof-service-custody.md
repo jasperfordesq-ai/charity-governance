@@ -1,3 +1,14 @@
+## 17 October: fixed kernel-contained launcher is the runner default
+
+Read [contained runner](managed-proof-contained-runner.md). The original helper
+runner now requires non-root Linux systemd containment by default, exact executor
+source bytes, original service custody acknowledgement, actual successful service
+exit and an empty original cgroup. The cross-platform SQL fixture explicitly uses
+INTERNAL_IPC_PROOF and reports kernelContained=false. Live Linux synthetic tests
+cover success, denied acknowledgement, cancellation, guardian loss, unknown launch
+acknowledgement and refusal to adopt an existing unit. Genuine contained SQL and
+independent provider/source-host-off recovery remain open; the full goal is active.
+
 # Original-job service identity and custody
 
 17 October 2026. Internal managed source integration. No provider resources or permissions, tenant policy, actual risk status or deployment changed.
