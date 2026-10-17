@@ -1,3 +1,13 @@
+## 17 October: native Storage grant/capture-window evidence
+
+Read [Storage grant and capture-window proof](storage-grant-capture-window-proof.md).
+Native TLS PostgreSQL counterexamples now cover in-flight commits after table
+REVOKE, column/function/SET ROLE authority, observed lock/drain ordering and a
+read-compatible SHARE window. Positive reads and precise 42501 refusals passed.
+This is synthetic SQL evidence, not a hosted Storage fence or completed common
+capture. Actual provider contract, object-byte/background writers and full
+privileged actor coverage remain open. Full delegated goal remains active.
+
 # Product governance decisions
 
 Decision date: 16 October 2026.

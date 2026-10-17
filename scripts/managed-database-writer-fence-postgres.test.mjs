@@ -1,3 +1,4 @@
+import {proveStorageGrantBoundary} from './storage-grant-boundary-postgres-proof.mjs';
 import {mkdtempSync,readFileSync,rmSync} from 'node:fs';
 import {tmpdir} from 'node:os';
 import {basename,dirname,join,resolve} from 'node:path';
@@ -118,6 +119,7 @@ test('managed database fence closes real stale credentials and sessions while re
   assert.equal(count.total,4); // No source rows were deleted; prepared insert rolled back only by this fixture.
   await proveManagedPasswordInvalidation({admin,configuration,url});
   await proveManagedBackendMaintenance({admin,configuration,url});
+  await proveStorageGrantBoundary({admin,url});
  }finally{
   await writerA?.$disconnect();await writerB?.$disconnect();await admin?.$disconnect();
   try {if(id)docker(['rm','--force',id]);}
