@@ -1,3 +1,13 @@
+## 17 October: mandatory durable candidate journal
+
+Read [candidate request/report custody](managed-candidate-capture-journal.md).
+Current capture requires bindingV2, an acknowledged original conditional request
+before the metadata window, and a full exact-version report before returning.
+Restart inspection never grants execution/publication permission or fills a
+missing result. Native source composition covers lost request/file/report ACKs
+with synthetic provider transports. Common DB+files, actual provider/IAM and
+independent recovery/admission remain open; the full goal remains active.
+
 ## 17 October: parent-coordinated quarantine candidate capture
 
 The [quarantined capture composition](managed-quarantined-storage-capture.md)

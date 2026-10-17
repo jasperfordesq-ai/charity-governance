@@ -1,3 +1,13 @@
+## 17 October: mandatory durable candidate journal
+
+Read [candidate request/report custody](managed-candidate-capture-journal.md).
+Current capture requires bindingV2, an acknowledged original conditional request
+before the metadata window, and a full exact-version report before returning.
+Restart inspection never grants execution/publication permission or fills a
+missing result. Native source composition covers lost request/file/report ACKs
+with synthetic provider transports. Common DB+files, actual provider/IAM and
+independent recovery/admission remain open; the full goal remains active.
+
 # Managed quarantine-only Storage capture composition
 
 17 October 2026. Internal source integration; not activated in a hosted provider
@@ -43,10 +53,11 @@ by a visitor before failure remain quarantined. This method neither deletes them
 nor retries, backfills an acknowledgement, publishes an authenticated set root,
 advances a latest pointer, restores live state or authorises reopening.
 
-The caller must retain original candidate identity and custody receipts. There is
-no durable candidate-attempt reservation/resume journal in this method yet; do not
-interpret its candidate ID as a persisted execution guard. Reconciliation and
-root/index publication must use separate guarded custody/admission contracts.
+The mandatory journal now retains the original request and full report through
+conditional exact-version custody; see the current notice above. Earlier V1
+candidate IDs had no persisted journal and must not be upgraded into execution
+receipts. Keep original identity/pins available through independent discovery;
+reconciliation and root/index publication still require guarded admission.
 A caller must not change IDs to disguise an unresolved publication or treat a
 partial encrypted object as a recovered set.
 
@@ -80,8 +91,8 @@ JavaScript strings or caller-owned copies.
 Establish the actual provider-supported DB/Storage/project/release mapping and
 complete relation/actor coverage. Stop or independently account for non-SQL bytes,
 in-flight uploads/multipart, cleanup, current issuers and privileged control-plane
-actors. Join database capture and file custody under the common boundary, persist
-original candidate execution/report evidence and root/index bindings, and finish
+actors. Join database capture and file custody under the common boundary, verify
+real journal custody and add independently discoverable candidate/root/index bindings, and finish
 quarantine admission under independently current preservation/disposal authority.
 Complete whole-application restore/replacement identities/secrets/sessions,
 repeated epochs, source-host-off and guarded reopening proof. Further personal
