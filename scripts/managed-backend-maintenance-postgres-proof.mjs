@@ -241,7 +241,7 @@ export async function proveManagedBackendMaintenance({admin,configuration,url,id
    if(['success','working-s3-success'].includes(scenario)){
     const result=await coordinator.close();assert.equal(result.phase,'OBSERVED_CLOSED');assert.equal(result.configuredS3CoverageObserved,true);assert.ok(value.s3BaselinePin&&value.s3ObservationPin&&value.observations.s3ProofDigest);assert.ok(events.indexOf('control-S3_BASELINED')>=0&&events.indexOf('control-S3_BASELINED')<events.indexOf('suspend-'+ids[0]));assert.equal(result.wholeBackendQuiesced,false);
     assert.equal(result.storageAccessPathsObservedClosed,true);assert.equal(storageCommands,scenario==='working-s3-success'?3:2);assert.ok(value.observations.storageDigest);
-    assert.equal(events[0],'control-ATTEMPTED');assert.ok(events.indexOf('control-BASELINED')<events.indexOf('suspend-'+ids[0]));
+    assert.equal(events[0],independentControl?'control-READY':'control-ATTEMPTED');if(independentControl)assert.equal(events[1],'control-ATTEMPTED');assert.ok(events.indexOf('control-BASELINED')<events.indexOf('suspend-'+ids[0]));
     assert.ok(value.readBaseline&&value.readObservation);assert.equal(result.credentialReadRefusalsObserved,true);assert.ok(events.indexOf('cancel')<events.indexOf('database-close'));
     assert.ok(value.resumableBaselinePin&&value.resumableObservationPin);assert.equal(result.resumableCredentialCohortRefusalsObserved,true);assert.equal(result.testedSignedResumablePatchRefusalObserved,true);assert.ok(value.signedResumableBaselinePin&&value.signedResumableObservationPin);
     assert.ok(events.indexOf('control-SIGNED_RESUMABLE_BASELINED')<events.indexOf('suspend-'+ids[0]));assert.ok(Buffer.byteLength(JSON.stringify(value))<=8192);
