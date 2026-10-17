@@ -1,5 +1,12 @@
 # CharityPilot Agent Continuation Handoff
 
+> **17 October encrypted signed-token custody:** A purpose-bound AES-GCM/KMS
+> vault now conditionally stores the original token and acknowledges only after
+> exact-version decrypted readback. Signed baseline format2 requires that pin;
+> fresh component instances compose successfully, while unknown ACKs stay unknown.
+> Actual IAM/custody, signed parent dispatch, issuer/release association and full
+> recovery gates remain open; see [credential vault](signed-upload-credential-vault.md).
+
 > **17 October signed-upload evidence component:** Issued synthetic upload tokens
 > now have pinned public-signature/scope/path/lifetime validation and an active
 > refusal test bracketed by working retained-issuer signed uploads. Credentials

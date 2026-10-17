@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import { createHash, generateKeyPairSync } from 'node:crypto';
 import jwt from 'jsonwebtoken';
 import test from 'node:test';
+import { vaultFixture } from './fixtures/signed-upload-vault.js';
 import { SupabaseSignedUploadProof } from '../services/supabase-signed-upload-proof.js';
 import { publicSigningKeyFingerprint } from '../services/supabase-signing-key-control.js';
 import {
@@ -9,6 +10,15 @@ import {
   syntheticWriteUpdate,
 } from '../services/supabase-credential-write-proof.js';
 const hash = (v: string) => createHash('sha256').update(v).digest('hex');
+const modelPin = (reference: string, tokenSha256: string) => ({
+  kind: 'SIGNED_UPLOAD_CREDENTIAL_PIN_V1' as const,
+  reference,
+  custodyDigest: '9'.repeat(64),
+  versionId: 'synthetic-retained-1',
+  sha256: '8'.repeat(64),
+  byteLength: 1024,
+  tokenSha256,
+});
 const pair = () => generateKeyPairSync('ec', { namedCurve: 'prime256v1' }),
   old = pair(),
   fresh = pair();
@@ -146,7 +156,11 @@ function fixture() {
       reference: '44444444-4444-4444-8444-444444444444',
       token: value.token,
     };
-    return { reference: saved.reference, tokenSha256: value.sha256 };
+    return {
+      reference: saved.reference,
+      tokenSha256: value.sha256,
+      pin: modelPin(saved.reference, value.sha256),
+    };
   };
   return {
     objects,
@@ -277,12 +291,10 @@ test('changed maintenance or credential references refuse before any provider ac
     await assert.rejects(f.service().verifyRefusal(body, hash(body), f.saved));
   }
   await assert.rejects(
-    f
-      .service()
-      .verifyRefusal(baseline.body, baseline.sha256, {
-        ...f.saved,
-        reference: ids[1],
-      }),
+    f.service().verifyRefusal(baseline.body, baseline.sha256, {
+      ...f.saved,
+      reference: ids[1],
+    }),
   );
   assert.equal(f.calls.length, before);
 });
@@ -309,7 +321,11 @@ test('a late secret-custody ACK after timeout cannot resume a signed mutation', 
   t.mock.timers.enable({ apis: ['setTimeout'] });
   const f = fixture(),
     service = f.service();
-  let reply!: (value: { reference: string; tokenSha256: string }) => void,
+  let reply!: (value: {
+      reference: string;
+      tokenSha256: string;
+      pin: ReturnType<typeof modelPin>;
+    }) => void,
     entered!: () => void,
     tokenSha256 = '';
   const started = new Promise<void>((resolve) => {
@@ -328,10 +344,62 @@ test('a late secret-custody ACK after timeout cannot resume a signed mutation', 
   const before = f.calls.length;
   t.mock.timers.tick(180001);
   await pending;
-  reply({ reference: '44444444-4444-4444-8444-444444444444', tokenSha256 });
+  const reference = '44444444-4444-4444-8444-444444444444';
+  reply({ reference, tokenSha256, pin: modelPin(reference, tokenSha256) });
   await Promise.resolve();
   await Promise.resolve();
   await Promise.resolve();
   assert.equal(f.calls.length, before);
   assert.equal([...f.objects.values()][0], syntheticWriteProbe);
+});
+test('signed probe composes with encrypted custody and fresh instances use the same original token', async () => {
+  const f = fixture(),
+    probe = f.service(),
+    custody = vaultFixture({ probeDigest: probe.configurationDigest() }),
+    vault = custody.vault();
+  const baseline = await probe.baseline((input, signal) =>
+      vault.retain(input, signal),
+    ),
+    saved = JSON.parse(baseline.body);
+  assert.equal(saved.format, 2);
+  assert.equal(saved.credentialPin.kind, 'SIGNED_UPLOAD_CREDENTIAL_PIN_V1');
+  f.rotated = true;
+  const report = await custody
+    .vault()
+    .withCredential(
+      saved.credentialPin,
+      saved.credentialReference,
+      (secret, signal) =>
+        f
+          .service()
+          .verifyRefusal(baseline.body, baseline.sha256, secret, signal),
+    );
+  assert.equal(report.testedSignedUploadRefusalObserved, true);
+  assert.equal(report.tokenSha256, saved.tokenProof.tokenSha256);
+  assert.equal(report.credentialPinSha256, saved.credentialPin.sha256);
+  assert.ok(custody.plaintextResponses.every((b) => b.every((v) => v === 0)));
+  assert.equal(
+    [...custody.objects.values()][0].body.includes('"token":'),
+    false,
+  );
+  const legacy = {
+    ...saved,
+    format: 1,
+    kind: 'SUPABASE_SIGNED_UPLOAD_BASELINE_V1',
+  };
+  delete legacy.credentialPin;
+  const body = JSON.stringify(legacy),
+    before = f.calls.length;
+  await custody
+    .vault()
+    .withCredential(
+      saved.credentialPin,
+      saved.credentialReference,
+      async (secret) => {
+        await assert.rejects(
+          f.service().verifyRefusal(body, hash(body), secret),
+        );
+      },
+    );
+  assert.equal(f.calls.length, before);
 });

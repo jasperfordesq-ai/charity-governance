@@ -49,16 +49,20 @@ claim to close them. No header or payload claim alone counts as signature proof.
    gateway key; verify bytes, reset to initial through the control key and verify
    again. Check bucket health.
 
-The baseline contains only a credential reference, token hash/verified issuer
+The format2 baseline contains a credential reference and encrypted version pin,
+token hash/verified issuer
 identity/times, configuration/maintenance binding and payload hashes. It never
 returns the raw token, signed URL or error message. A later instance receives
 the original credential separately by matching reference; it does not mint a
 replacement for the original capability.
 
-The callback is an explicit custody contract, not an implemented encrypted vault
-or proof of independent persistence. Real activation still needs encrypted,
-restricted token custody plus independently acknowledged baseline publication
-and parent-head binding before revocation. Do not place the token in plaintext
+The [encrypted credential vault](signed-upload-credential-vault.md) now implements
+that callback with conditional ciphertext publication and exact-version decrypted
+readback. Format2 requires its pin to match the reference/token hash; earlier
+reference-only format1 cannot enter active refusal verification. Real activation
+still needs actual independent IAM/key/retention custody plus independently
+acknowledged baseline publication and parent-head binding before revocation.
+Do not place the token in plaintext
 heads, reports, logs, emails or backup manifests. Outbound tracing must redact
 the provider-required token query before activation.
 
@@ -110,7 +114,7 @@ Local EC signatures and synthetic HTTP tests cover working original capability,
 fresh retained-issuer signed controls, wrong-signature/claim/algorithm/issuer/path,
 outage/expiry/side-effect refusal, token omission from evidence, scope/reference
 substitution, unknown/late custody ACK, provider clock uncertainty and read-only
-inspection. They are not actual Supabase acceptance, original-custody, resumed
+inspection. They are not actual Supabase acceptance, provider-custody, resumed
 TUS/S3 or source-host-loss proof.
 
 Next bind the actual provider management key/material and release, retain tokens

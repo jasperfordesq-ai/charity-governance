@@ -2,6 +2,10 @@ import { createHash } from 'node:crypto';
 import { z } from 'zod';
 import { credentialReadMaintenanceBindingSchema } from './credential-read-evidence.js';
 import {
+  signedUploadCredentialPinSchema,
+  type SignedUploadCredentialPin,
+} from './signed-upload-credential-contract.js';
+import {
   StorageSignedUploadIssuer,
   storageSignedUploadIssuerSchema,
 } from './storage-signed-upload-issuer.js';
@@ -68,24 +72,34 @@ const tokenProof = z
   .strict();
 const baselineSchema = z
   .object({
-    format: z.literal(1),
-    kind: z.literal('SUPABASE_SIGNED_UPLOAD_BASELINE_V1'),
+    format: z.literal(2),
+    kind: z.literal('SUPABASE_SIGNED_UPLOAD_BASELINE_V2'),
     configurationDigest: sha,
     maintenance: credentialReadMaintenanceBindingSchema,
     credentialReference: uuid,
+    credentialPin: signedUploadCredentialPinSchema,
     tokenProof,
     capturedAt: time,
     initialPayloadSha256: sha,
     updatePayloadSha256: sha,
   })
-  .strict();
+  .strict()
+  .refine(
+    (v) =>
+      v.credentialPin.reference === v.credentialReference &&
+      v.credentialPin.tokenSha256 === v.tokenProof.tokenSha256,
+  );
 const credential = z
   .object({ reference: uuid, token: z.string().min(1).max(8192) })
   .strict();
 export type RetainSignedUploadCredential = (
   value: { token: string; sha256: string },
   signal: AbortSignal,
-) => Promise<{ reference: string; tokenSha256: string }>;
+) => Promise<{
+  reference: string;
+  tokenSha256: string;
+  pin: SignedUploadCredentialPin;
+}>;
 type Budget = { signal: AbortSignal; requests: number };
 
 /** Active probes in fixed synthetic paths only. Secrets go to an explicit
@@ -125,7 +139,7 @@ export class SupabaseSignedUploadProof {
     return hash(
       JSON.stringify({
         format: 1,
-        policy: 'ONE_SCOPED_SIGNED_UPLOAD_V1',
+        policy: 'ONE_SCOPED_SIGNED_UPLOAD_WITH_CUSTODY_PIN_V2',
         installationId: this.config.installationId,
         projectRef: this.config.projectRef,
         bucket: this.config.bucket,
@@ -442,7 +456,11 @@ export class SupabaseSignedUploadProof {
       await this.write('old', true, budget);
       const issued = await this.issue('old', this.previous, budget);
       const retained = z
-        .object({ reference: uuid, tokenSha256: sha })
+        .object({
+          reference: uuid,
+          tokenSha256: sha,
+          pin: signedUploadCredentialPinSchema,
+        })
         .strict()
         .parse(
           await retain(
@@ -451,7 +469,12 @@ export class SupabaseSignedUploadProof {
           ),
         );
       budget.signal.throwIfAborted();
-      if (retained.tokenSha256 !== issued.proof.tokenSha256) throw failure();
+      if (
+        retained.tokenSha256 !== issued.proof.tokenSha256 ||
+        retained.pin.tokenSha256 !== issued.proof.tokenSha256 ||
+        retained.pin.reference !== retained.reference
+      )
+        throw failure();
       const r = await this.signedPut(
         'old',
         issued.token,
@@ -468,11 +491,12 @@ export class SupabaseSignedUploadProof {
       await this.bucket(budget);
       const body = JSON.stringify(
         baselineSchema.parse({
-          format: 1,
-          kind: 'SUPABASE_SIGNED_UPLOAD_BASELINE_V1',
+          format: 2,
+          kind: 'SUPABASE_SIGNED_UPLOAD_BASELINE_V2',
           configurationDigest: this.configurationDigest(),
           maintenance: this.config.maintenance,
           credentialReference: retained.reference,
+          credentialPin: retained.pin,
           tokenProof: issued.proof,
           capturedAt: new Date().toISOString(),
           initialPayloadSha256: hash(syntheticWriteProbe),
@@ -558,6 +582,7 @@ export class SupabaseSignedUploadProof {
         kind: 'SUPABASE_SIGNED_UPLOAD_REFUSAL_V1' as const,
         configurationDigest: this.configurationDigest(),
         baselineSha256,
+        credentialPinSha256: baseline.credentialPin.sha256,
         tokenSha256: proof.tokenSha256,
         issuerFingerprint: proof.issuerFingerprint,
         observedAt: new Date().toISOString(),
