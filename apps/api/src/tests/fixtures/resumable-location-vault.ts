@@ -35,8 +35,10 @@ export const syntheticAwsCredentials = {
   accessKeyId: 'synthetic',
   secretAccessKey: 'synthetic',
 };
-export function locationVaultFixture(
+export function maintenanceSecretVaultFixture(
   overrides: Partial<typeof locationVaultConfig> = {},
+  objectName = 'resumable-location.json',
+  purpose = 'charitypilot-resumable-location-v1',
 ) {
   const config = { ...locationVaultConfig, ...overrides },
     objects = new Map<string, { body: string; version: string }>(),
@@ -82,7 +84,8 @@ export function locationVaultFixture(
           config.installationId +
           '/' +
           config.maintenance.attemptId +
-          '/resumable-location.json',
+          '/' +
+          objectName,
       );
       if (command instanceof PutObjectCommand) {
         assert.equal(command.input.IfNoneMatch, '*');
@@ -115,10 +118,7 @@ export function locationVaultFixture(
       const result = fault?.(command);
       if (result !== undefined) return result;
       assert.equal(command.input.KeyId, config.dataKeyArn);
-      assert.equal(
-        command.input.EncryptionContext?.purpose,
-        'charitypilot-resumable-location-v1',
-      );
+      assert.equal(command.input.EncryptionContext?.purpose, purpose);
       assert.equal(
         command.input.EncryptionContext?.installationId,
         config.installationId,
@@ -169,12 +169,20 @@ export function locationVaultFixture(
     setFault: (next: typeof fault) => {
       fault = next;
     },
+  };
+}
+export function locationVaultFixture(
+  overrides: Partial<typeof locationVaultConfig> = {},
+) {
+  const f = maintenanceSecretVaultFixture(overrides);
+  return {
+    ...f,
     vault: () =>
       new S3ResumableLocationVault(
-        config,
+        f.config,
         syntheticAwsCredentials,
         syntheticAwsCredentials,
-        { storage, kms },
+        { storage: f.storage, kms: f.kms },
       ),
   };
 }

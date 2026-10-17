@@ -1,5 +1,12 @@
 # CharityPilot Full-Platform Remediation Audit
 
+> **17 October combined signed-TUS custody:** Exact original token+Location
+> now encrypt together under a separate purpose/object/pin. Retention requires
+> exact-version decrypted readback before the initial chunk; fresh use preserves
+> the original pair. Shared bounded crypto transport preserves ordinary formats.
+> Public artifact/parent integration and actual supplier/full recovery proof
+> remain open. See [combined custody](signed-resumable-credential-custody.md).
+
 > **17 October signed-TUS component:** Original signed token+Location custody
 > is now required before the initial chunk; actual signed PATCH refusal is
 > bracketed by current-issuer uploads. Closed evidence checks and synthetic tests

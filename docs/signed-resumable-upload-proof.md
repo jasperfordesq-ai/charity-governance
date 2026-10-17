@@ -52,10 +52,11 @@ Before sending the original6MiB chunk, a required callback must acknowledge
 version, encrypted-body SHA/length and both plaintext hashes. Ordinary signed
 token and ordinary resumable-location pins cannot substitute for it.
 
-The callback is a contract, not a custody implementation. The next required
-slice must implement purpose-separated authenticated encryption, exact-version
-decrypted readback, independent baseline/report retention and parent barriers.
-The probe cannot establish independent custody from an arbitrary callback.
+The callback now has a [combined encrypted implementation](signed-resumable-credential-custody.md)
+with purpose separation and exact-version decrypted readback. Independent public
+baseline/report retention and parent barriers remain required. The probe cannot
+establish actual independent provider custody from an arbitrary callback or a
+synthetic transport test.
 
 After acknowledged custody, the baseline sends6MiB of a6MiB+1 upload, checks
 the exact original offset/length/live explicit expiry and absence of a completed
@@ -112,7 +113,7 @@ forged report digest/association/chronology. Ordinary protocol7 regression and
 the real local PostgreSQL exercise test compatibility of the transport
 extraction; they do not demonstrate signed-TUS parent integration.
 
-Next implement combined encrypted custody and original evidence publication,
+Combined encrypted custody now composes locally. Next implement original evidence publication,
 then require signed-TUS in the default coordinator. Keep S3/other sessions,
 in-flight/control-plane/capture credentials, actual supplier issuer/release,
 common DB/files capture, independent current preservation/disposal authority,

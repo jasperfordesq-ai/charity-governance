@@ -89,3 +89,11 @@ The envelope follows the previously reviewed
 [KMS encryption-context contract](https://docs.aws.amazon.com/kms/latest/developerguide/encrypt_context.html)
 and [conditional S3 creation contract](https://docs.aws.amazon.com/AmazonS3/latest/userguide/conditional-writes.html).
 Neither contract establishes the actual independent provider configuration.
+
+## Shared encrypted transport
+
+As of17 October, this wrapper delegates bounded encryption/KMS/S3 work to
+EncryptedMaintenanceSecretStore. Its original purpose, object path, context,
+envelope/pin and configuration digest remain unchanged. The new
+[combined signed-TUS wrapper](signed-resumable-credential-custody.md) uses a
+separate purpose/path/pin and cannot substitute for ordinary location custody.
