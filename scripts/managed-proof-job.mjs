@@ -1,5 +1,6 @@
 import {createHash} from 'node:crypto';
 import {finished} from 'node:stream/promises';
+import {requireOriginalControlGroup} from './managed-proof-systemd-containment.mjs';
 const failure=()=>new Error('Managed proof job record unresolved; inspect without execution or publication');
 const sha=v=>createHash('sha256').update(v).digest('hex');
 const hex=v=>typeof v==='string'&&/^[a-f0-9]{64}$/.test(v);
@@ -31,11 +32,13 @@ function service(raw,original,requestPin){
  if(!keys(raw,'format,kind,jobId,requestPin,identity,executionAuthorized,publicationAuthorized,actionAuthorized')||raw.format!==1||raw.kind!=='MANAGED_IMPORTED_PROOF_SERVICE_V1'
   ||raw.jobId!==original.jobId||JSON.stringify(pin(raw.requestPin))!==JSON.stringify(pin(requestPin))||raw.executionAuthorized!==false||raw.publicationAuthorized!==false||raw.actionAuthorized!==false)throw failure();
  const v=raw.identity;
- if(!keys(v,'format,kind,jobId,unit,invocationId,uid,mainPid,mainStartMonotonic,sourceSha,inputDigest,executionAuthorized,actionAuthorized')||v.format!==1||v.kind!=='MANAGED_GUARDIAN_LIVE_BINDING_V1'
+ const version2=v?.format===2&&v?.kind==='MANAGED_GUARDIAN_LIVE_BINDING_V2';
+ if(!keys(v,'format,kind,jobId,unit,invocationId,uid,mainPid,mainStartMonotonic,sourceSha,inputDigest,executionAuthorized,actionAuthorized'+(version2?',bootId,controlGroup':''))||(!version2&&(v.format!==1||v.kind!=='MANAGED_GUARDIAN_LIVE_BINDING_V1'))
   ||v.jobId!==original.jobId||v.unit!=='charitypilot-containment-'+original.jobId+'.service'||!(/^[a-f0-9]{32}$/).test(v.invocationId)
   ||!Number.isSafeInteger(v.uid)||v.uid<1||v.uid>2147483647||!Number.isSafeInteger(v.mainPid)||v.mainPid<1||v.mainPid>2147483647
   ||typeof v.mainStartMonotonic!=='string'||!(/^[1-9][0-9]{0,19}$/).test(v.mainStartMonotonic)||v.sourceSha!==original.sourceSha||!hex(v.inputDigest)
   ||v.executionAuthorized!==false||v.actionAuthorized!==false)throw failure();
+ if(version2){if(typeof v.bootId!=='string'||!/^[a-f0-9]{8}(-[a-f0-9]{4}){3}-[a-f0-9]{12}$/.test(v.bootId))throw failure();requireOriginalControlGroup(v.controlGroup,v.unit,v.uid);}
  return{...raw,requestPin:pin(raw.requestPin)};
 }
 async function read(workspace,filename,expected,signal){

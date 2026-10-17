@@ -15,10 +15,16 @@ const requestEnvelope=z.object({format:z.literal(1),kind:z.literal('MANAGED_SOUR
  localRequest:localJobArtifactSchema,executionState:z.literal('REQUESTED_ONLY'),savedObservationAuthorizesExecution:no}).strict();
 const resultEnvelope=z.object({format:z.literal(1),kind:z.literal('MANAGED_SOURCE_JOB_OBSERVATION_V1'),bindingDigest:sha,jobRequestPin:candidatePinSchema,
  localObservation:localJobArtifactSchema,savedObservationAuthorizesExecution:no,actionAuthorized:no}).strict();
-const identity=z.object({format:z.literal(1),kind:z.literal('MANAGED_GUARDIAN_LIVE_BINDING_V1'),jobId:localRequest.shape.jobId,
+const identityFields={jobId:localRequest.shape.jobId,
  unit:z.string().max(100),invocationId:z.string().regex(/^[a-f0-9]{32}$/),uid:z.number().int().min(1).max(2147483647),mainPid:z.number().int().min(1).max(2147483647),
- mainStartMonotonic:z.string().regex(/^[1-9][0-9]{0,19}$/),sourceSha:release,inputDigest:sha,executionAuthorized:no,actionAuthorized:no}).strict()
- .refine(v=>v.unit===`charitypilot-containment-${v.jobId}.service`);
+ mainStartMonotonic:z.string().regex(/^[1-9][0-9]{0,19}$/),sourceSha:release,inputDigest:sha,executionAuthorized:no,actionAuthorized:no};
+const identity=z.union([
+ z.object({format:z.literal(1),kind:z.literal('MANAGED_GUARDIAN_LIVE_BINDING_V1'),...identityFields}).strict(),
+ z.object({format:z.literal(2),kind:z.literal('MANAGED_GUARDIAN_LIVE_BINDING_V2'),...identityFields,
+  bootId:z.string().regex(/^[a-f0-9]{8}(-[a-f0-9]{4}){3}-[a-f0-9]{12}$/),controlGroup:z.string().max(1024)}).strict()
+  .refine(v=>v.controlGroup.startsWith(`/user.slice/user-${v.uid}.slice/user@${v.uid}.service/`)
+   &&v.controlGroup.endsWith('/'+v.unit)&&v.controlGroup.slice(1).split('/').every(p=>p!=='.'&&p!=='..'&&/^[A-Za-z0-9_.@:-]+$/.test(p))),
+]).refine(v=>v.unit===`charitypilot-containment-${v.jobId}.service`);
 const localService=z.object({format:z.literal(1),kind:z.literal('MANAGED_IMPORTED_PROOF_SERVICE_V1'),jobId:localRequest.shape.jobId,requestPin:localJobPinSchema,
  identity,executionAuthorized:no,publicationAuthorized:no,actionAuthorized:no}).strict().refine(v=>v.jobId===v.identity.jobId);
 const serviceEnvelope=z.object({format:z.literal(1),kind:z.literal('MANAGED_SOURCE_JOB_SERVICE_V1'),bindingDigest:sha,jobRequestPin:candidatePinSchema,

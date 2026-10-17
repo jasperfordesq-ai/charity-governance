@@ -70,6 +70,20 @@ function service(f:ReturnType<typeof fixture>,change={},identityChange={}){
    mainStartMonotonic:'123456',sourceSha:f.binding.sourceSha,inputDigest:'d'.repeat(64),executionAuthorized:false,actionAuthorized:false,...identityChange},
   executionAuthorized:false,publicationAuthorized:false,actionAuthorized:false,...change});
 }
+test('version two service custody preserves original boot/group without granting execution',async()=>{
+ const f=fixture();try{
+  const next={format:2,kind:'MANAGED_GUARDIAN_LIVE_BINDING_V2',bootId:'12345678-1234-1234-1234-123456789012',
+   controlGroup:`/user.slice/user-1000.slice/user@1000.service/app.slice/charitypilot-containment-${f.request.jobId}.service`};
+  await f.session.reserve(f.input,f.original);await f.session.bindService(service(f,{},next),f.original);
+  const r=await f.create().discover(f.original);assert.equal(r.serviceIdentity?.format,2);
+  assert.equal(r.serviceIdentity?.kind,'MANAGED_GUARDIAN_LIVE_BINDING_V2');assert.equal(r.executionAuthorized,false);
+ }finally{f.close();}
+ for(const controlGroup of ['/other','/user.slice/user-1000.slice/user@1000.service/../bad','/user.slice/user-2000.slice/user@2000.service/unrelated.service']){
+  const g=fixture();try{await g.session.reserve(g.input,g.original);await assert.rejects(g.session.bindService(service(g,{},
+   {format:2,kind:'MANAGED_GUARDIAN_LIVE_BINDING_V2',bootId:'12345678-1234-1234-1234-123456789012',controlGroup}),g.original));}finally{g.close();}
+ }
+});
+
 test('original descriptor ACK gates one exact service binding and fresh discovery is read-only',async()=>{
  const f=fixture();try{
   await assert.rejects(f.session.bindService(service(f),f.original));assert.equal(f.b.writes,0);

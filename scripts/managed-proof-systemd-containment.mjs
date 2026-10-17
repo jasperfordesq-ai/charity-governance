@@ -7,13 +7,33 @@ import {randomUUID,createHash} from 'node:crypto';
 const self=fileURLToPath(import.meta.url),failure=()=>new Error('Systemd containment is unresolved; no worker or recovery authority is inferred');
 const props=['Id','LoadState','ActiveState','SubState','MainPID','ControlGroup','KillMode','Type','Transient','InvocationID','ExecMainStartTimestampMonotonic','Result','ExecMainCode','ExecMainStatus','NoNewPrivileges'];
 export function containmentUnit(jobId){if(typeof jobId!=='string'||!(/^[a-f0-9]{8}-[a-f0-9]{4}-4[a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}$/).test(jobId))throw failure();return'charitypilot-containment-'+jobId+'.service';}
+export function requireOriginalControlGroup(path,unit,uid){
+ requireUnit(unit);if(!Number.isSafeInteger(uid)||uid<1||typeof path!=='string'||path.length>1024
+  ||!path.startsWith('/user.slice/user-'+uid+'.slice/user@'+uid+'.service/')||!path.endsWith('/'+unit)
+  ||path.slice(1).split('/').some(p=>!p||p==='.'||p==='..'||!/^[A-Za-z0-9_.@:-]+$/.test(p)))throw failure();return path;
+}
+export function currentContainmentBootId(){
+ if(process.platform!=='linux'||process.getuid()===0)throw failure();
+ const id=readFileSync('/proc/sys/kernel/random/boot_id','utf8').trim();if(!/^[a-f0-9]{8}(-[a-f0-9]{4}){3}-[a-f0-9]{12}$/.test(id))throw failure();return id;
+}
+export function parseCgroupPopulation(body){
+ if(typeof body!=='string'||body.length>4096)throw failure();const values=Object.create(null);
+ for(const row of body.trim().split('\n')){const m=/^([a-z_]+) ([0-9]+)$/.exec(row);if(!m||Object.hasOwn(values,m[1]))throw failure();values[m[1]]=m[2];}
+ if(!['0','1'].includes(values.populated))throw failure();return values.populated==='0'?'EMPTY':'POPULATED';
+}
+/** Recursive kernel observation, including nested cgroups. Never a cleanup lease. */
+export function observeOriginalControlGroup(path,unit,uid,{realpath=realpathSync,read=readFileSync}={}){
+ requireOriginalControlGroup(path,unit,uid);const root='/sys/fs/cgroup'+path;
+ try{if(realpath(root)!==root)throw failure();return parseCgroupPopulation(read(join(root,'cgroup.events'),'utf8'));}
+ catch(error){if(error.code==='ENOENT')return'ABSENT';throw failure();}
+}
 function requireUnit(name){if(typeof name!=='string'||!/^charitypilot-containment-[a-f0-9-]{36}\.service$/.test(name)||containmentUnit(name.slice('charitypilot-containment-'.length,-8))!==name)throw failure();return name;}
 export function parseScopeProperties(text,unit,uid){
  requireUnit(unit);if(typeof text!=='string'||text.length>16384||!Number.isSafeInteger(uid)||uid<1)throw failure();
  const out={};for(const row of text.trim().split(/\r?\n/)){const i=row.indexOf('=');if(i<1)throw failure();const key=row.slice(0,i);if(!props.includes(key)||key in out)throw failure();out[key]=row.slice(i+1);}
  if(Object.keys(out).length!==props.length||out.Id!==unit||out.LoadState!=='loaded'||out.Type!=='exec'||out.Transient!=='yes'||out.KillMode!=='control-group'||out.NoNewPrivileges!=='yes'
   ||!(/^[a-f0-9]{32}$/).test(out.InvocationID)||!(/^[0-9]+$/).test(out.MainPID)||!Number.isSafeInteger(Number(out.MainPID))||!(/^[0-9]+$/).test(out.ExecMainStartTimestampMonotonic))throw failure();
- if(out.ControlGroup&&(out.ControlGroup.includes('/../')||!out.ControlGroup.startsWith('/user.slice/user-'+uid+'.slice/user@'+uid+'.service/')||!out.ControlGroup.endsWith('/'+unit)))throw failure();
+ if(out.ControlGroup)requireOriginalControlGroup(out.ControlGroup,unit,uid);
  return out;
 }
 function execute(command,args){const r=spawnSync(command,args,{encoding:'utf8',stdio:'pipe',timeout:15000,maxBuffer:65536,env:process.env});if(r.status!==0||r.error)throw failure();return r.stdout.trim();}

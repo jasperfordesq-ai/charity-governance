@@ -3,7 +3,7 @@ import {readFileSync,realpathSync,existsSync,writeFileSync} from 'node:fs';
 import {dirname,join} from 'node:path';
 import {fileURLToPath} from 'node:url';
 import {createManagedGuardianChannel} from './managed-proof-channel.mjs';
-import {containmentUnit,inspectContainmentUnit} from './managed-proof-systemd-containment.mjs';
+import {containmentUnit,inspectContainmentUnit,observeOriginalControlGroup} from './managed-proof-systemd-containment.mjs';
 const sourceRoot=fileURLToPath(new URL('..',import.meta.url)),guardian=fileURLToPath(new URL('./managed-proof-guardian.mjs',import.meta.url));
 const modules=['managed-proof-systemd-runner.mjs','managed-proof-runner.mjs','managed-proof-guardian.mjs','managed-proof-worker.mjs','managed-proof-channel.mjs','managed-proof-systemd-containment.mjs','managed-proof-job.mjs','postgres-backup.mjs'];
 const no=()=>new Error('Contained source proof unresolved; preserve job and original scope without replay');
@@ -19,9 +19,8 @@ export function verifyContainedExecutorSource(sourceSha){
  }
 }
 function groupEmpty(path){
- if(!path)return false;const root='/sys/fs/cgroup'+path;
- try{if(!existsSync(root))return true;if(realpathSync(root)!==root)throw no();return readFileSync(join(root,'cgroup.procs'),'utf8').trim()==='';}
- catch(e){if(e.code==='ENOENT')return true;throw no();}
+ if(!path)return false;
+ return observeOriginalControlGroup(path,path.slice(path.lastIndexOf('/')+1),process.getuid())!=='POPULATED';
 }
 function managerState(unit){
  const r=spawnSync('systemctl',['--user','show',unit,'--property=LoadState','--value'],{encoding:'utf8',timeout:15000,maxBuffer:4096});
@@ -38,7 +37,7 @@ export async function superviseContainedManagedProof({jobId,sourceSha,input,env,
  let channel,attempted=false,identity,originalGroup,cohortTerminated=false,normal=false,cleanupCertain=false,result;
  try{
   channel=await createManagedGuardianChannel({jobId,sourceSha,input,env:workerEnv,timeoutMs,signal,onStderr:diagnostics,authorizeInvocation:async value=>{
-   const current=inspectContainmentUnit(unit);if(current.InvocationID!==value.invocationId||Number(current.MainPID)!==value.mainPid||!current.ControlGroup)throw no();
+   const current=inspectContainmentUnit(unit);if(current.InvocationID!==value.invocationId||Number(current.MainPID)!==value.mainPid||current.ControlGroup!==value.controlGroup)throw no();
    identity=value;originalGroup=current.ControlGroup;
    // Verify actual kernel resource caps before releasing any work.
    const root='/sys/fs/cgroup'+originalGroup;

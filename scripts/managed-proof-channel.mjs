@@ -3,7 +3,7 @@ import {mkdtempSync,chmodSync,lstatSync,realpathSync,rmSync,readFileSync} from '
 import {tmpdir} from 'node:os';
 import {join,dirname,basename,resolve} from 'node:path';
 import {createHash} from 'node:crypto';
-import {containmentUnit,inspectContainmentUnit} from './managed-proof-systemd-containment.mjs';
+import {containmentUnit,inspectContainmentUnit,currentContainmentBootId} from './managed-proof-systemd-containment.mjs';
 const refuse=()=>new Error('Managed guardian channel unresolved; no execution or recovery authority inferred');
 const ACK={format:1,kind:'MANAGED_IMPORTED_PROOF_WORKER_V1',ok:true};
 function ownedDirectory(root){
@@ -45,12 +45,13 @@ export async function createManagedGuardianChannel({jobId,sourceSha,input,env,au
      if(current.ActiveState!=='active'||current.SubState!=='running'||current.InvocationID!==value.invocationId||Number(current.MainPID)!==value.mainPid||!current.ControlGroup)throw refuse();
      const members=readFileSync('/sys/fs/cgroup'+current.ControlGroup+'/cgroup.procs','utf8').trim().split(/\s+/);
      if(!members.includes(String(value.mainPid)))throw refuse();
-     identity={format:1,kind:'MANAGED_GUARDIAN_LIVE_BINDING_V1',jobId,unit,invocationId:value.invocationId,uid:value.uid,mainPid:value.mainPid,mainStartMonotonic:current.ExecMainStartTimestampMonotonic,sourceSha,
+     identity={format:2,kind:'MANAGED_GUARDIAN_LIVE_BINDING_V2',jobId,unit,invocationId:value.invocationId,uid:value.uid,mainPid:value.mainPid,mainStartMonotonic:current.ExecMainStartTimestampMonotonic,sourceSha,
+      bootId:currentContainmentBootId(),controlGroup:current.ControlGroup,
       inputDigest,executionAuthorized:false,actionAuthorized:false};
      const acknowledged=await authorizeInvocation(Object.freeze({...identity}));
      if(acknowledged!==true||finished||signal?.aborted||socket.destroyed)throw refuse();
      // Re-read after the asynchronous original custody ACK, before sending work.
-     const after=inspectContainmentUnit(unit);if(after.InvocationID!==identity.invocationId||Number(after.MainPID)!==identity.mainPid||after.ExecMainStartTimestampMonotonic!==identity.mainStartMonotonic||after.ActiveState!=='active')throw refuse();
+     const after=inspectContainmentUnit(unit);if(after.InvocationID!==identity.invocationId||Number(after.MainPID)!==identity.mainPid||after.ExecMainStartTimestampMonotonic!==identity.mainStartMonotonic||after.ActiveState!=='active'||after.ControlGroup!==identity.controlGroup||currentContainmentBootId()!==identity.bootId)throw refuse();
      const frame=Buffer.concat([payload,Buffer.from('\n')]);socket.write(frame,()=>frame.fill(0));payload.fill(0);
     }catch{fail();}})();return;
    }

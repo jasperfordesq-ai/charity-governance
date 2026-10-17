@@ -1,3 +1,14 @@
+## 17 October: original boot and recursive cohort inspection
+
+Read [original cohort inspection](managed-proof-orphan-inspection.md). New
+version-two service identities durably bind the original kernel boot and cgroup
+before source work. Legacy records stay readable without invented bindings.
+A protected original-pin operator command inspects same-boot invocation/group
+state without cleanup, PID signals or replay. The runner now uses recursive
+cgroup.events population for emptiness. Exact execution results belong to the
+private checkpoint; pending daemon requests, storage and authorised resolution
+remain separate gates.
+
 ## 17 October: read-only proof residue and other-job preservation
 
 Read [residue inspection](managed-proof-residue-inspection.md). Restore proof

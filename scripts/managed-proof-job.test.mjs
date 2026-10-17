@@ -111,3 +111,16 @@ test('a service binding cannot be added after the original outcome has been atte
   assert.equal(existsSync(join(f.workspace.root,'proof-job.service.json')),false);
  }finally{input.fill(0);await f.close();}
 });
+
+test('version two service pins retain original boot and cgroup while rejecting malformed scope paths',async()=>{
+ for(const invalid of [null,'/other','/user.slice/user-1000.slice/user@1000.service/../bad']){
+  const f=await setup(),{input,identity}=serviceInput(f);try{
+   const next={...identity,format:2,kind:'MANAGED_GUARDIAN_LIVE_BINDING_V2',bootId:'12345678-1234-1234-1234-123456789012',
+    controlGroup:'/user.slice/user-1000.slice/user@1000.service/app.slice/'+identity.unit};
+   if(invalid!==null)next.controlGroup=invalid;
+   const job=await recordManagedProofJob(f.workspace,f.request);
+   if(invalid!==null)await assert.rejects(job.bindService(next,input));
+   else{const saved=await job.bindService(next,input),read=await inspectManagedProofJob(f.workspace,{requestPin:job.requestPin,expectedScope:scope,servicePin:saved.pin});assert.deepEqual(read.serviceIdentity,next);}
+  }finally{input.fill(0);await f.close();}
+ }
+});
