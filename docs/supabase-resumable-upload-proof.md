@@ -73,8 +73,8 @@ before activation; the component cannot control a caller's tracing transport.
 
 Each instance consumes a phase before dispatch. Unknown custody/POST/PATCH results
 do not produce a baseline/report or allow that instance to retry. A fresh instance
-could create another session for an incomplete object until the independent
-parent attempt guard is integrated; this component does not supply that guard.
+could create another session for an incomplete object without the independent
+parent attempt guard; this component does not supply that guard.
 Caller cancellation,15-second bounded
 requests,180-second outer deadlines,32-request budgets and bounded response bodies
 apply. Late location acknowledgements and provider bodies cannot resume the
@@ -101,3 +101,8 @@ coordinator/native fixture now compose through protocol7. Add signed-resumable a
 prove actual provider in-flight/control-plane exclusion before common capture.
 Keep the full independent-recovery/current-authority/full-restore/host-loss goal
 open; a local PATCH model is not its completion.
+
+The separate [signed-TUS component](signed-resumable-upload-proof.md) now tests
+an original x-signature capability with issuer validation and required combined
+custody. Its encrypted store/publication/parent integration still remain open;
+ordinary protocol7 success does not include that component yet.

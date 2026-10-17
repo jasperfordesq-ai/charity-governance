@@ -1,5 +1,12 @@
 # CharityPilot Full-Platform Remediation Audit
 
+> **17 October signed-TUS component:** Original signed token+Location custody
+> is now required before the initial chunk; actual signed PATCH refusal is
+> bracketed by current-issuer uploads. Closed evidence checks and synthetic tests
+> cover substitutions, partial outcomes and continued acceptance. Combined
+> encrypted custody, publication/parent integration and actual provider/full
+> recovery proof remain open. See [signed TUS proof](signed-resumable-upload-proof.md).
+
 > **17 October protocol7 TUS integration:** The default coordinator now requires
 > complete configured-credential TUS baseline-manifest publication, parent pin CAS
 > and actual original child readback before shutdown. Original report manifest/

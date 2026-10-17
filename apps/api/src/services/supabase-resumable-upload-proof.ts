@@ -1,3 +1,4 @@
+import {BoundedStorageProbeTransport, type StorageProbeBudget as Budget} from './bounded-storage-probe-transport.js';
 import {resumableUploadBaselineSchema as baselineSchema} from './resumable-upload-evidence-contract.js';
 import {resumableLocationPinSchema,assertResumableLocation} from './resumable-location-contract.js';
 import { createHash } from 'node:crypto';
@@ -36,7 +37,6 @@ const failure = () =>
   new Error(
     'Resumable-upload proof is unresolved; preserve the original attempt and incomplete synthetic upload without retrying mutations',
   );
-type Budget = { signal: AbortSignal; requests: number };
 type Slot = 'old' | 'control-before' | 'control-after';
 export type RetainResumableLocation = (
   value: { location: string; sha256: string },
@@ -52,14 +52,16 @@ export type RetainResumableLocation = (
 export class SupabaseResumableUploadProof {
   private readonly config: z.infer<typeof configSchema>;
   private readonly secrets: { control: string; retired: string };
+  private readonly http: BoundedStorageProbeTransport;
   private baselineAttempted = false;
   private verificationAttempted = false;
   constructor(
     raw: unknown,
     rawSecrets: unknown,
-    private readonly transport: typeof fetch = fetch,
+    transport: typeof fetch = fetch,
   ) {
     this.config = configSchema.parse(raw);
+    this.http = new BoundedStorageProbeTransport(this.origin(), transport);
     const supplied = z
       .object({
         control: z.object({ id: uuid, secret: z.string() }).strict(),
@@ -113,127 +115,12 @@ export class SupabaseResumableUploadProof {
   private location(raw:unknown,slot:Slot){
     return assertResumableLocation(raw,{installationId:this.config.installationId,projectRef:this.config.projectRef,attemptId:this.config.maintenance.attemptId,uploadIdFormat:this.config.uploadIdFormat},slot);
   }
-  private async work<T>(run: (b: Budget) => Promise<T>, caller?: AbortSignal) {
-    const controller = new AbortController(),
-      signal = caller
-        ? AbortSignal.any([caller, controller.signal])
-        : controller.signal,
-      timer = setTimeout(() => controller.abort(), 180000);
-    let stop!: () => void;
-    const cancelled = new Promise<never>((_r, reject) => {
-      stop = () => reject(failure());
-      signal.addEventListener('abort', stop, { once: true });
-    });
-    try {
-      signal.throwIfAborted();
-      const result = await Promise.race([
-        run({ signal, requests: 0 }),
-        cancelled,
-      ]);
-      signal.throwIfAborted();
-      return result;
-    } catch {
-      throw failure();
-    } finally {
-      clearTimeout(timer);
-      signal.removeEventListener('abort', stop);
-      controller.abort();
-    }
+  private work<T>(run: (b: Budget) => Promise<T>, caller?: AbortSignal) {
+    return this.http.work(run, caller).catch(() => { throw failure(); });
   }
-  private async request(
-    method: 'GET' | 'HEAD' | 'POST' | 'PATCH',
-    url: string,
-    credential: 'control' | 'retired',
-    budget: Budget,
-    headers: Record<string, string> = {},
-    body?: Buffer,
-  ) {
-    if (++budget.requests > 32 || new URL(url).origin !== this.origin())
-      throw failure();
-    const controller = new AbortController(),
-      signal = AbortSignal.any([budget.signal, controller.signal]),
-      timer = setTimeout(() => controller.abort(), 15000);
-    let reader: ReadableStreamDefaultReader<Uint8Array> | undefined,
-      stop!: () => void;
-    const cancelled = new Promise<never>((_r, reject) => {
-      stop = () => {
-        void reader?.cancel().catch(() => {});
-        reject(failure());
-      };
-      signal.addEventListener('abort', stop, { once: true });
-    });
-    const run = async () => {
-      const response = await this.transport(url, {
-        method,
-        redirect: 'error',
-        signal,
-        headers: {
-          apikey: this.secrets[credential],
-          'Accept-Encoding': 'identity',
-          'Cache-Control': 'no-cache, no-store',
-          ...headers,
-        },
-        ...(body ? { body: new Uint8Array(body) } : {}),
-      });
-      if (signal.aborted) {
-        void response.body?.cancel().catch(() => {});
-        throw failure();
-      }
-      const date = Date.parse(response.headers.get('date') ?? '');
-      if (!Number.isFinite(date) || Math.abs(Date.now() - date) > 60000) {
-        void response.body?.cancel().catch(() => {});
-        throw failure();
-      }
-      const bytes: Buffer[] = [];
-      let count = 0;
-      try {
-        const length = response.headers.get('content-length'),
-          encoding = response.headers.get('content-encoding');
-        if (
-          (encoding && encoding !== 'identity') ||
-          (length !== null &&
-            (!/^(0|[1-9][0-9]*)$/.test(length) || Number(length) > 32768))
-        )
-          throw failure();
-        if (response.body) {
-          reader = response.body.getReader();
-          for (;;) {
-            signal.throwIfAborted();
-            const part = await reader.read();
-            if (part.done) break;
-            if (
-              !(part.value instanceof Uint8Array) ||
-              count + part.value.byteLength > 32768
-            )
-              throw failure();
-            bytes.push(Buffer.from(part.value));
-            count += part.value.byteLength;
-          }
-        }
-        if (
-          signal.aborted ||
-          (method !== 'HEAD' && length !== null && count !== Number(length))
-        )
-          throw failure();
-        return {
-          status: response.status,
-          headers: response.headers,
-          bytes: Buffer.concat(bytes),
-          date,
-        };
-      } finally {
-        void reader?.cancel().catch(() => {});
-        for (const b of bytes) b.fill(0);
-      }
-    };
-    try {
-      signal.throwIfAborted();
-      return await Promise.race([run(), cancelled]);
-    } finally {
-      clearTimeout(timer);
-      signal.removeEventListener('abort', stop);
-      controller.abort();
-    }
+  private request(method: 'GET' | 'HEAD' | 'POST' | 'PATCH', url: string,
+    credential: 'control' | 'retired', b: Budget, headers: Record<string,string> = {}, body?: Buffer) {
+    return this.http.request(method, url, b, {apikey:this.secrets[credential], ...headers}, body);
   }
   private protocol(r: { headers: Headers }) {
     if (r.headers.get('tus-resumable') !== '1.0.0') throw failure();
