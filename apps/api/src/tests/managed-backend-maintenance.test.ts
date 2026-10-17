@@ -39,9 +39,11 @@ function fixture(){
  const database={configurationDigest:()=>hash('db-registry'),close:async()=>{calls.push('database-close');},
   invalidatePasswords:async()=>{calls.push('password-invalidate');},
   observePasswordsInvalidated:async()=>{calls.push('database-observe');return{observationDigest:hash('database'),passwordCredentialsInvalidated:true};}};
- const coordinator=new ManagedBackendMaintenance(operation,provider as never,database as never,store);
+ const storage={configurationDigest:()=>hash('storage-registry'),close:async()=>{calls.push('storage-close');},
+  observeClosed:async()=>{calls.push('storage-observe');return{observationDigest:hash('storage'),configuredAccessPathsObservedClosed:true};}};
+ const coordinator=new ManagedBackendMaintenance(operation,provider as never,database as never,store,storage as never);
  value.planDigest=coordinator.planDigest();
- return{store,provider,database,coordinator,calls,metadata,get value(){return value;},set value(next){value=next;},
+ return{store,provider,database,storage,coordinator,calls,metadata,get value(){return value;},set value(next){value=next;},
   get puts(){return puts;},get reads(){return reads;},setFault:(next:typeof fault)=>{fault=next;},
   commit:(command:PutObjectCommand)=>{value=JSON.parse(String(command.input.Body));version++;return metadata();}};
 }
@@ -50,16 +52,19 @@ test('managed shutdown records an independent attempt before provider/database m
  const f=fixture();const result=await f.coordinator.close();
  assert.equal(result.phase,'OBSERVED_CLOSED');assert.equal(f.puts,2);
  assert.equal(result.databasePasswordCredentialsInvalidated,true);
+ assert.equal(result.storageAccessPathsObservedClosed,true);assert.ok(f.value.observations);
  assert.ok(f.calls.indexOf('put')<f.calls.indexOf('suspend'));
  assert.ok(f.calls.indexOf('suspend')<f.calls.indexOf('database-close'));
  assert.ok(f.calls.indexOf('database-close')<f.calls.indexOf('password-invalidate'));
+ assert.ok(f.calls.indexOf('password-invalidate')<f.calls.indexOf('storage-close'));
+ assert.ok(f.calls.indexOf('storage-close')<f.calls.indexOf('services-observe'));
  assert.ok(f.calls.indexOf('password-invalidate')<f.calls.indexOf('services-observe'));
  assert.ok(f.calls.indexOf('database-observe')<f.calls.lastIndexOf('put'));
  for(const flag of ['wholeBackendQuiesced','credentialRotationVerified','currentTenantAuthorityVerified','sourceHostFenced','reopeningAuthorised','actionAuthorized'])assert.equal(result[flag as keyof typeof result],false);
- const mutations=f.calls.filter(s=>['put','suspend','database-close','password-invalidate'].includes(s)).length;
+ const mutations=f.calls.filter(s=>['put','suspend','database-close','password-invalidate','storage-close'].includes(s)).length;
  const inspection=await f.coordinator.inspect();assert.equal(inspection.phase,'OBSERVED_CLOSED');
  await assert.rejects(f.coordinator.close());
- assert.equal(f.calls.filter(s=>['put','suspend','database-close','password-invalidate'].includes(s)).length,mutations);
+ assert.equal(f.calls.filter(s=>['put','suspend','database-close','password-invalidate','storage-close'].includes(s)).length,mutations);
 });
 
 test('lost independent acquisition acknowledgement never dispatches, even after a new coordinator reads the committed attempt',async()=>{
@@ -68,18 +73,20 @@ test('lost independent acquisition acknowledgement never dispatches, even after 
  });
  await assert.rejects(f.coordinator.close());assert.equal(f.value.phase,'ATTEMPTED');
  f.setFault(undefined);
- const fresh=new ManagedBackendMaintenance(operation,f.provider as never,f.database as never,f.store);
+ const fresh=new ManagedBackendMaintenance(operation,f.provider as never,f.database as never,f.store,f.storage as never);
  await assert.rejects(fresh.close());assert.equal(f.calls.includes('suspend'),false);assert.equal(f.calls.includes('database-close'),false);
  const observed=await fresh.inspect();assert.equal(observed.phase,'ATTEMPTED');assert.equal(observed.recordedObservations,null);
 });
 
 test('provider/database/recording failures retain attempt and forbid repeat or automatic compensation',async()=>{
- for(const stage of ['suspend','database-close','password-invalidate','services-observe','database-observe','record'] as const){
+ for(const stage of ['suspend','database-close','password-invalidate','storage-close','services-observe','database-observe','storage-observe','record'] as const){
   const f=fixture();
   const fail=async()=>{throw new Error('PRIVATE uncertain external mutation');};
   if(stage==='suspend')f.provider.suspend=fail;
   if(stage==='database-close')f.database.close=fail;
   if(stage==='password-invalidate')f.database.invalidatePasswords=fail;
+  if(stage==='storage-close')f.storage.close=fail;
+  if(stage==='storage-observe')f.storage.observeClosed=fail;
   if(stage==='services-observe')f.provider.observeSuspended=fail;
   if(stage==='database-observe')f.database.observePasswordsInvalidated=fail;
   if(stage==='record')f.setFault(command=>{
@@ -89,25 +96,26 @@ test('provider/database/recording failures retain attempt and forbid repeat or a
   });
   await assert.rejects(f.coordinator.close(),error=>error instanceof Error&&!error.message.includes('PRIVATE')&&error.cause===undefined);
   assert.equal(f.value.phase,stage==='record'?'OBSERVED_CLOSED':'ATTEMPTED');
-  f.setFault(undefined);const mutations=f.calls.filter(s=>['put','suspend','database-close','password-invalidate'].includes(s)).length;
-  await assert.rejects(f.coordinator.close());assert.equal(f.calls.filter(s=>['put','suspend','database-close','password-invalidate'].includes(s)).length,mutations);
+  f.setFault(undefined);const mutations=f.calls.filter(s=>['put','suspend','database-close','password-invalidate','storage-close'].includes(s)).length;
+  await assert.rejects(f.coordinator.close());assert.equal(f.calls.filter(s=>['put','suspend','database-close','password-invalidate','storage-close'].includes(s)).length,mutations);
   if(stage==='suspend')assert.equal(f.calls.includes('database-close'),false);
   if(stage==='database-close')assert.equal(f.calls.includes('password-invalidate'),false);
  }
 });
 
-test('maintenance plan binds copied installation/source/epoch and both component registries',async()=>{
- for(const stage of ['installation','source','epoch','provider','database'] as const){
+test('maintenance plan binds copied installation/source/epoch and all component registries',async()=>{
+ for(const stage of ['installation','source','epoch','provider','database','storage'] as const){
   const f=fixture(),changed={...operation};
   if(stage==='installation')changed.installationId='different-installation';
   if(stage==='source')changed.sourceSha='2'.repeat(40);
   if(stage==='epoch')changed.maintenanceEpoch=2;
   if(stage==='provider')f.provider.configurationDigest=()=>hash('different-provider');
   if(stage==='database')f.database.configurationDigest=()=>hash('different-database');
-  await assert.rejects(new ManagedBackendMaintenance(changed,f.provider as never,f.database as never,f.store).close());
+  if(stage==='storage')f.storage.configurationDigest=()=>hash('different-storage');
+  await assert.rejects(new ManagedBackendMaintenance(changed,f.provider as never,f.database as never,f.store,f.storage as never).close());
   assert.equal(f.puts,0);assert.equal(f.calls.includes('suspend'),false);
  }
- const f=fixture(),input={...operation},coordinator=new ManagedBackendMaintenance(input,f.provider as never,f.database as never,f.store);
+ const f=fixture(),input={...operation},coordinator=new ManagedBackendMaintenance(input,f.provider as never,f.database as never,f.store,f.storage as never);
  const before=coordinator.planDigest();input.sourceSha='2'.repeat(40);assert.equal(coordinator.planDigest(),before);
 });
 
@@ -154,7 +162,7 @@ test('maintenance SDK has no ambient endpoint/credential fallback and sanitises 
 });
 
 test('two concurrent maintenance callers cannot both dispatch from one READY record',async()=>{
- const f=fixture(),other=new ManagedBackendMaintenance(operation,f.provider as never,f.database as never,f.store);
+ const f=fixture(),other=new ManagedBackendMaintenance(operation,f.provider as never,f.database as never,f.store,f.storage as never);
  const outcomes=await Promise.allSettled([f.coordinator.close(),other.close()]);
  assert.equal(outcomes.filter(r=>r.status==='fulfilled').length,1);
  assert.equal(f.calls.filter(c=>c==='suspend').length,1);assert.equal(f.calls.filter(c=>c==='database-close').length,1);
@@ -186,4 +194,17 @@ test('legacy closure-only plan cannot authorise the password-invalidation workfl
  f.value={...f.value,planDigest:hash(JSON.stringify({format:1,...operation,
   provider:f.provider.configurationDigest(),database:f.database.configurationDigest()}))};
  await assert.rejects(f.coordinator.close());assert.equal(f.puts,0);assert.equal(f.calls.includes('suspend'),false);
+});
+test('legacy four-service protocol2 cannot dispatch the new named storage-key workflow',async()=>{
+ const f=fixture();
+ f.value={...f.value,planDigest:hash(JSON.stringify({format:2,...operation,
+  databaseCredentialPolicy:'PASSWORD_NULL_WHILE_CLOSED',provider:f.provider.configurationDigest(),database:f.database.configurationDigest()}))};
+ await assert.rejects(f.coordinator.close());assert.equal(f.puts,0);assert.equal(f.calls.includes('suspend'),false);
+ assert.equal(f.calls.includes('storage-close'),false);
+});
+test('protocol3 inspection cannot promote an incomplete recorded storage observation',async()=>{
+ const f=fixture();await f.coordinator.close();
+ const original=f.value.observations as Record<string,unknown>,changed={...original};delete changed.storageDigest;
+ f.value={...f.value,observations:changed};const before=f.calls.filter(x=>x==='storage-observe').length;
+ await assert.rejects(f.coordinator.inspect());assert.equal(f.calls.filter(x=>x==='storage-observe').length,before);
 });

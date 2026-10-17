@@ -7,6 +7,7 @@ import {ManagedDatabaseWriterFence} from '../apps/api/dist/services/managed-data
 import {RenderMaintenanceControl} from '../apps/api/dist/services/render-maintenance-control.js';
 import {S3ManagedMaintenanceControl} from '../apps/api/dist/services/managed-maintenance-control.js';
 import {ManagedBackendMaintenance} from '../apps/api/dist/services/managed-backend-maintenance.js';
+import {SupabaseStorageWriterControl} from '../apps/api/dist/services/supabase-storage-writer-control.js';
 
 export async function proveManagedPasswordInvalidation({admin,configuration,url}){
  const service=new ManagedDatabaseWriterFence(admin,configuration);
@@ -64,7 +65,7 @@ export async function proveManagedBackendMaintenance({admin,configuration,url}){
  const image='ghcr.io/synthetic/api@sha256:'+ '1'.repeat(64),credentials={accessKeyId:'synthetic',secretAccessKey:'synthetic'};
  const storage={installationId:'synthetic-managed',bucket:'synthetic-managed-control',accountId:'123456789012',
   kmsKeyArn:'arn:aws:kms:eu-west-1:123456789012:key/11111111-1111-1111-1111-111111111111'};
- for(const scenario of ['legacy-three-service-plan','success','acquire-ack-lost','database-ack-lost','password-ack-lost','record-ack-lost']){
+ for(const scenario of ['legacy-three-service-plan','success','acquire-ack-lost','database-ack-lost','password-ack-lost','storage-ack-lost','record-ack-lost']){
   // Only this disposable fixture reopens synthetic roles between independent
   // cases. Neither production primitive nor coordinator exposes reopening.
   await admin.$executeRaw`ALTER ROLE managed_writer_a LOGIN PASSWORD 'synthetic-writer-only'`;
@@ -119,7 +120,33 @@ export async function proveManagedBackendMaintenance({admin,configuration,url}){
   const originalInvalidate=database.invalidatePasswords.bind(database);
   database.invalidatePasswords=async()=>{events.push('password-invalidate');return originalInvalidate();};
   const operation={installationId:storage.installationId,sourceSha:'1'.repeat(40),maintenanceEpoch:1};
-  const coordinator=new ManagedBackendMaintenance(operation,provider,database,store);
+  const storageConfig={installationId:storage.installationId,projectRef:'abcdefghijklmnopqrst',bucket:'documents',
+   organisationId:'org-synthetic',region:'eu-central-1',captureKeyId:'11111111-1111-4111-8111-111111111111',
+   writerKeys:[{id:'22222222-2222-4222-8222-222222222222',type:'secret'}]};
+  let legacyEnabled=true,s3Enabled=true,writerKeyPresent=true,storageCommands=0;
+  const storageTransport=async(input,options)=>{
+   const endpoint=new URL(String(input)),path=endpoint.pathname;
+   assert.equal(endpoint.origin,'https://api.supabase.com');assert.equal(options.redirect,'error');
+   if(options.method!=='GET'){
+    storageCommands++;const [closed]=await admin.$queryRaw`SELECT count(*)::integer AS n FROM pg_authid
+      WHERE rolname IN ('managed_writer_a','managed_writer_b') AND NOT rolcanlogin AND rolpassword IS NULL`;
+    assert.equal(closed.n,2);events.push('storage-'+options.method);
+   }
+   if(path.endsWith('/config/storage')){
+    if(options.method==='PATCH'){s3Enabled=false;return Response.json({});}
+    return Response.json({features:{s3Protocol:{enabled:s3Enabled}}});
+   }
+   if(path.endsWith('/api-keys/legacy')){if(options.method==='PUT')legacyEnabled=false;return Response.json({enabled:legacyEnabled});}
+   if(path.endsWith('/api-keys'))return Response.json([{id:storageConfig.captureKeyId,type:'secret'},...(writerKeyPresent?storageConfig.writerKeys:[])]);
+   if(options.method==='DELETE'){
+    assert.ok(path.endsWith(storageConfig.writerKeys[0].id));writerKeyPresent=false;
+    if(scenario==='storage-ack-lost')throw new Error('synthetic committed Supabase key deletion ACK lost');
+    return Response.json(storageConfig.writerKeys[0]);
+   }
+   return Response.json({ref:storageConfig.projectRef,organization_id:storageConfig.organisationId,region:storageConfig.region,status:'ACTIVE_HEALTHY'});
+  };
+  const newStorageControl=()=>new SupabaseStorageWriterControl(storageConfig,'synthetic-supabase-management',storageTransport);
+  const coordinator=new ManagedBackendMaintenance(operation,provider,database,store,newStorageControl());
   value={format:1,installationId:storage.installationId,maintenanceEpoch:1,planDigest:coordinator.planDigest(),
    phase:'READY',attemptId:null,observations:null,publicationId:randomUUID()};
   try{
@@ -135,9 +162,11 @@ export async function proveManagedBackendMaintenance({admin,configuration,url}){
    }
    if(scenario==='success'){
     const result=await coordinator.close();assert.equal(result.phase,'OBSERVED_CLOSED');assert.equal(result.wholeBackendQuiesced,false);
+    assert.equal(result.storageAccessPathsObservedClosed,true);assert.equal(storageCommands,3);assert.ok(value.observations.storageDigest);
     assert.equal(events[0],'control-ATTEMPTED');assert.ok(events.indexOf('cancel')<events.indexOf('database-close'));
     assert.deepEqual(events.filter(event=>event.startsWith('suspend-')),[ids[0],ids[3],ids[1],ids[2]].map(id=>'suspend-'+id));
     assert.ok(events.indexOf('database-close')<events.indexOf('password-invalidate'));
+    assert.ok(events.indexOf('password-invalidate')<events.indexOf('storage-PATCH'));
     assert.ok(events.includes('post-database-provider-read'));assert.equal(events.at(-1),'control-OBSERVED_CLOSED');
    }else{
     await assert.rejects(coordinator.close());
@@ -160,10 +189,14 @@ export async function proveManagedBackendMaintenance({admin,configuration,url}){
      assert.equal(state.n,2);
     }
    }
-   const before=commands,fresh=new ManagedBackendMaintenance(operation,provider,new ManagedDatabaseWriterFence(admin,configuration),store);
-   await assert.rejects(fresh.close());assert.equal(commands,before);
+   // Explicit synthetic fixture resolution after the earlier uncertain DB/
+   // acquisition cases; never part of production inspect or an automatic retry.
+   if(['acquire-ack-lost','database-ack-lost','password-ack-lost'].includes(scenario))await newStorageControl().close();
+   if(scenario==='storage-ack-lost'){assert.equal(storageCommands,3);assert.equal(value.phase,'ATTEMPTED');}
+   const before=commands,storageBefore=storageCommands,fresh=new ManagedBackendMaintenance(operation,provider,new ManagedDatabaseWriterFence(admin,configuration),store,newStorageControl());
+   await assert.rejects(fresh.close());assert.equal(commands,before);assert.equal(storageCommands,storageBefore);
    const inspected=await fresh.inspect();assert.equal(inspected.phase,value.phase);
-   assert.equal(inspected.recordedObservations===null,['acquire-ack-lost','database-ack-lost','password-ack-lost'].includes(scenario));
+   assert.equal(inspected.recordedObservations===null,['acquire-ack-lost','database-ack-lost','password-ack-lost','storage-ack-lost'].includes(scenario));
    assert.equal(inspected.reopeningAuthorised,false);assert.equal(inspected.actionAuthorized,false);
    const freshWriter=new PrismaClient({datasources:{db:{url:writerUrl.href}}});
    try{await assert.rejects(freshWriter.$queryRaw`SELECT 1`);}finally{await freshWriter.$disconnect();}

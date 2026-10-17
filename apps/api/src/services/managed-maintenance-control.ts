@@ -8,7 +8,7 @@ const configuration=z.object({installationId:identity,bucket:z.string().regex(/^
  accountId:z.string().regex(/^\d{12}$/),
  kmsKeyArn:z.string().regex(/^arn:aws:kms:eu-west-1:\d{12}:key\/[a-f0-9-]{36}$/)}).strict()
  .refine(c=>c.kmsKeyArn.split(':')[4]===c.accountId);
-const observations=z.object({servicesDigest:digest,databaseDigest:digest,observedAt:z.string().datetime()}).strict();
+const observations=z.object({servicesDigest:digest,databaseDigest:digest,storageDigest:digest.optional(),observedAt:z.string().datetime()}).strict();
 const control=z.object({format:z.literal(1),installationId:identity,maintenanceEpoch:z.number().int().positive().max(2147483647),
  planDigest:digest,phase:z.enum(['READY','ATTEMPTED','OBSERVED_CLOSED']),attemptId:z.string().uuid().nullable(),
  observations:observations.nullable(),publicationId:z.string().uuid()}).strict().superRefine((v,ctx)=>{

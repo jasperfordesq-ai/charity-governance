@@ -1,5 +1,14 @@
 # CharityPilot Full-Platform Remediation Audit
 
+> **17 October named storage-path closure:** Managed maintenance protocol3 now
+> binds the reviewed Supabase project/region/key registry, disables S3/legacy
+> paths, revokes only exact writer keys and records storage observation after DB
+> closure. Lost key-delete responses remain one-attempt/read-only reconciliation.
+> Local TLS PostgreSQL composition passes with synthetic provider responses.
+> Actual data-plane rejection, signed/in-flight capabilities, global custody/
+> writer exclusion and host-loss/reopening remain open; see
+> [storage control](supabase-storage-writer-control.md) and inspect exact CI.
+
 > **17 October Supabase candidate reader:** The new bounded internal reader
 > traverses the credential-visible private bucket, checks bytes twice and clears
 > plaintext after its consumer. Archive-set tests now compose this HTTP source

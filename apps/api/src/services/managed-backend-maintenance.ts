@@ -3,6 +3,7 @@ import {z} from 'zod';
 import type {RenderMaintenanceControl} from './render-maintenance-control.js';
 import type {ManagedDatabaseWriterFence} from './managed-database-writer-fence.js';
 import type {S3ManagedMaintenanceControl} from './managed-maintenance-control.js';
+import type {SupabaseStorageWriterControl} from './supabase-storage-writer-control.js';
 
 const configuration=z.object({installationId:z.string().regex(/^[A-Za-z0-9_-]{1,120}$/),
  sourceSha:z.string().regex(/^[a-f0-9]{40}$/),maintenanceEpoch:z.number().int().positive().max(2147483647)}).strict();
@@ -15,15 +16,18 @@ const failure='Managed backend maintenance is unresolved; preserve closed writer
 export class ManagedBackendMaintenance {
  private readonly config:z.infer<typeof configuration>;
  constructor(raw:unknown,private readonly provider:RenderMaintenanceControl,
-  private readonly database:ManagedDatabaseWriterFence,private readonly control:S3ManagedMaintenanceControl){
+  private readonly database:ManagedDatabaseWriterFence,private readonly control:S3ManagedMaintenanceControl,
+  private readonly storage:SupabaseStorageWriterControl){
   this.config=configuration.parse(raw);
  }
- planDigest(){return createHash('sha256').update(JSON.stringify({format:2,...this.config,
+ planDigest(){return createHash('sha256').update(JSON.stringify({format:3,...this.config,
   databaseCredentialPolicy:'PASSWORD_NULL_WHILE_CLOSED',
-  provider:this.provider.configurationDigest(),database:this.database.configurationDigest()})).digest('hex');}
+  storageCredentialPolicy:'REVOKE_REVIEWED_KEYS_KEEP_CAPTURE_V1',
+  provider:this.provider.configurationDigest(),database:this.database.configurationDigest(),storage:this.storage.configurationDigest(this.config.installationId)})).digest('hex');}
  private async readback(){
-  const services=await this.provider.observeSuspended(),database=await this.database.observePasswordsInvalidated();
-  return{servicesDigest:services.observationDigest,databaseDigest:database.observationDigest,observedAt:new Date().toISOString()};
+  const services=await this.provider.observeSuspended(),database=await this.database.observePasswordsInvalidated(),storage=await this.storage.observeClosed();
+  if(storage.configuredAccessPathsObservedClosed!==true)throw new Error(failure);
+  return{servicesDigest:services.observationDigest,databaseDigest:database.observationDigest,storageDigest:storage.observationDigest,observedAt:new Date().toISOString()};
  }
  async close(){
   try{
@@ -32,10 +36,11 @@ export class ManagedBackendMaintenance {
    await this.provider.suspend();
    await this.database.close();
    await this.database.invalidatePasswords();
+   await this.storage.close();
    const observations=await this.readback();
    const recorded=await this.control.recordObservedClosed(attempt.value.attemptId,attempt.revision,observations);
    return{phase:recorded.value.phase,attemptId:recorded.value.attemptId,observations,
-    databasePasswordCredentialsInvalidated:true as const,wholeBackendQuiesced:false as const,credentialRotationVerified:false as const,
+    storageAccessPathsObservedClosed:true as const,databasePasswordCredentialsInvalidated:true as const,wholeBackendQuiesced:false as const,credentialRotationVerified:false as const,
     currentTenantAuthorityVerified:false as const,sourceHostFenced:false as const,reopeningAuthorised:false as const,actionAuthorized:false as const};
   }catch{throw new Error(failure);}
  }
@@ -44,12 +49,13 @@ export class ManagedBackendMaintenance {
    const before=await this.control.observe();
    if(before.value.installationId!==this.config.installationId||before.value.planDigest!==this.planDigest()
     ||before.value.maintenanceEpoch!==this.config.maintenanceEpoch||before.value.phase==='READY')throw new Error();
+   if(before.value.phase==='OBSERVED_CLOSED'&&!before.value.observations?.storageDigest)throw new Error();
    const observations=await this.readback(),after=await this.control.observe();
    if(after.revision!==before.revision)throw new Error();
    // Fresh observations never rewrite the original attempt or fabricate a
    // missing command/database completion receipt after an uncertain outcome.
    return{phase:after.value.phase,attemptId:after.value.attemptId,observations,
-    recordedObservations:after.value.observations,databasePasswordCredentialsInvalidated:true as const,wholeBackendQuiesced:false as const,
+    recordedObservations:after.value.observations,storageAccessPathsObservedClosed:true as const,databasePasswordCredentialsInvalidated:true as const,wholeBackendQuiesced:false as const,
     credentialRotationVerified:false as const,currentTenantAuthorityVerified:false as const,
     sourceHostFenced:false as const,reopeningAuthorised:false as const,actionAuthorized:false as const};
   }catch{throw new Error(failure);}
