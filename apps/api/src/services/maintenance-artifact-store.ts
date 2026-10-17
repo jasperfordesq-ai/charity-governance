@@ -33,7 +33,9 @@ export type MaintenanceArtifactPin = {
   byteLength: number;
 };
 export type MaintenanceArtifactPolicy<P extends MaintenanceArtifactPin> = {
-  namespace: 'write' | 'signed' | 'resumable' | 'resumable-cohort' | 'signed-resumable';
+  namespace: 'write' | 'signed' | 'resumable' | 'resumable-cohort' | 'signed-resumable' | 's3-capability';
+  /** S3 capability cohorts only; source-defined policy, never a raw object path. */
+  scopeDigest?: string;
   pinSchema: z.ZodType<P>;
   limits: Record<MaintenanceArtifactKind, number>;
   baseline: (raw: unknown) => MaintenanceArtifact;
@@ -62,7 +64,10 @@ export class S3MaintenanceArtifactStore<P extends MaintenanceArtifactPin> {
     this.policy = { ...policy, limits: { ...policy.limits } };
     this.config = configuration.parse(raw);
     if (!credentials) throw this.policy.failure();
-    z.enum(['write', 'signed', 'resumable', 'resumable-cohort', 'signed-resumable']).parse(policy.namespace);
+    z.enum(['write', 'signed', 'resumable', 'resumable-cohort', 'signed-resumable', 's3-capability']).parse(policy.namespace);
+    if (policy.namespace === 's3-capability')
+      z.string().regex(/^[a-f0-9]{64}$/).parse(policy.scopeDigest);
+    else if (policy.scopeDigest !== undefined) throw this.policy.failure();
     const maximum=policy.namespace==='resumable-cohort'?131072:16384;
     z.object({
       BASELINE: z.number().int().min(1).max(maximum),
@@ -86,10 +91,13 @@ export class S3MaintenanceArtifactStore<P extends MaintenanceArtifactPin> {
       });
   }
   private request(kind: MaintenanceArtifactKind) {
+    const prefix = this.policy.namespace === 's3-capability'
+      ? 's3-capability/' + this.policy.scopeDigest + '/'
+      : this.policy.namespace + '-';
     return {
       Bucket: this.config.bucket,
       ExpectedBucketOwner: this.config.accountId,
-      Key: `managed-maintenance/${this.config.installationId}/${this.config.maintenance.attemptId}/${this.policy.namespace}-${kind === 'BASELINE' ? 'baseline' : 'observation'}.json`,
+      Key: `managed-maintenance/${this.config.installationId}/${this.config.maintenance.attemptId}/${prefix}${kind === 'BASELINE' ? 'baseline' : 'observation'}.json`,
     };
   }
   private metadata(

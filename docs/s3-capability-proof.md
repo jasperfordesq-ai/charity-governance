@@ -142,3 +142,5 @@ The separate [current feature-boundary component](s3-current-feature-boundary-pr
 ## Original encrypted capability custody
 
 The [combined original URL/UploadId vault](s3-capability-custody.md) is now locally implemented and composed with the real SDK probe through synthetic transports. The probe shares exact target/lifetime validation with custody. Original public artifacts, complete cohort factory and parent integration remain open; earlier next-work references to encrypted custody are superseded by this addendum.
+
+[Original public artifact publication and pair inspection](s3-capability-public-evidence.md) are now locally implemented. These supersede earlier next-work references to public evidence; full configured factory/parent integration and actual supplier proof remain outstanding.

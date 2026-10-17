@@ -142,3 +142,20 @@ export function assertS3CapabilityPair(raw: unknown, report: unknown) {
     throw new Error('S3 evidence does not match its original baseline');
   return r;
 }
+export function parseS3CapabilityObservation(raw: unknown) {
+  const a = z
+    .object({ body: z.string().min(1).max(8192), sha256: sha })
+    .strict()
+    .parse(raw);
+  if (Buffer.byteLength(a.body) > 8192 || s3ProbeHash(a.body) !== a.sha256)
+    throw new Error('Unresolved original S3 observation');
+  const value = s3CapabilityObservationSchema.parse(JSON.parse(a.body));
+  if (JSON.stringify(value) !== a.body)
+    throw new Error('Unresolved original S3 observation');
+  return { artifact: a, value };
+}
+export function s3CapabilityObservationArtifact(raw: unknown) {
+  const body = JSON.stringify(s3CapabilityObservationSchema.parse(raw));
+  return parseS3CapabilityObservation({ body, sha256: s3ProbeHash(body) })
+    .artifact;
+}

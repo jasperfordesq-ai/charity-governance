@@ -78,3 +78,7 @@ guarded reopening requirements in the full goal.
   current-object preconditions and delete-marker/concurrency limits.
 - [AWS KMS encryption context](https://docs.aws.amazon.com/kms/latest/developerguide/encrypt_context.html):
   authenticated context is visible in logs and must contain no sensitive plaintext.
+
+## Original public evidence addendum
+
+[Public original baseline/refusal custody](s3-capability-public-evidence.md) now composes locally with this vault and actual SDK probe through synthetic transports. Complete configured factory, coordinator and actual provider/host-loss proof remain open.

@@ -1,5 +1,12 @@
 # CharityPilot Full-Platform Remediation Audit
 
+> **17 October original S3 public evidence:** Original baseline/refusal artifacts
+> now publish conditionally with exact-version readback and scope-specific paths.
+> Fresh saved-pair inspection uses GET only and does not reconstruct missing
+> acknowledgements. Complete factory/parent and actual provider proof remain open.
+> See [S3 public evidence](s3-capability-public-evidence.md).
+
+
 > **17 October original S3 capability custody:** The working-capability probe
 > now composes locally with encrypted original URL/UploadId custody and exact
 > version readback before original use. Shared target/lifetime validation and
