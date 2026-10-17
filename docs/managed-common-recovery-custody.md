@@ -1,3 +1,12 @@
+## 17 October: real-window/new-parent/common archive native cohort
+
+The [combined native integration](managed-common-native-integration.md) now calls
+the actual common parent with its original closed control, real TLS window/full
+source proof, SDK crypto/custody and durable root journal. Success plus lost root,
+report and request ACK cases use fresh live-head discovery without supplied IDs/
+pin; originals/holder are unavailable to the fresh reader. Actual cloud custody,
+full source-VM loss/current authority and production supervision remain open.
+
 ## 17 October: managed common-candidate ACK gates and root bootstrap
 
 Read [common candidate journal](managed-common-candidate-journal.md). BindingV3
@@ -82,9 +91,9 @@ plaintext test buffers/owned keys are cleared and disposable artifacts cleaned.
 
 ## Remaining full goal
 
-Join this path to the original managed coordinator's closed control and durable
-request/report acknowledgement gates, and make the common-root pin independently
-discoverable from trusted bootstrap. Complete supported production supervision,
+The [combined native path](managed-common-native-integration.md) now joins the
+original managed closed control and durable request/report acknowledgement gates
+and learns the common-root pin from trusted live-head bootstrap. Complete supported production supervision,
 cancellation/crash/orphan lifecycle, real provider identity/release/DB/Storage
 mapping and all non-SQL/in-flight/multipart/cleanup/issuer/control-plane writers.
 Verify actual immutable storage/IAM/deletion/lifecycle/rollback exclusion and

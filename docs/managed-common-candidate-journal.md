@@ -1,3 +1,12 @@
+## 17 October: real-window/new-parent/common archive native cohort
+
+The [combined native integration](managed-common-native-integration.md) now calls
+the actual common parent with its original closed control, real TLS window/full
+source proof, SDK crypto/custody and durable root journal. Success plus lost root,
+report and request ACK cases use fresh live-head discovery without supplied IDs/
+pin; originals/holder are unavailable to the fresh reader. Actual cloud custody,
+full source-VM loss/current authority and production supervision remain open.
+
 # Managed common-candidate journal and root discovery
 
 17 October 2026. Internal source and synthetic tests; no deployment/provider
@@ -73,14 +82,13 @@ Focused tests use the actual original coordinator/journal/capture classes with
 explicit synthetic window/archive dependencies. They cover ACK ordering, replay
 refusal, unknown final/root/report ACK, current bootstrap learning the pin,
 archive/interval/binding/time/state substitution and object inventory mismatch.
-The existing native regression still exercises original protocol9/file-candidate
-custody and genuine full database/file/rootV2 crypto custody. It does not yet run
-the new common parent with a real window and actual archive callbacks in one
-cohort; that combined native gate remains required. Do not substitute its focused
-test doubles for that proof.
+The [combined native integration](managed-common-native-integration.md) now runs
+the actual new parent with real TLS window, full helper and actual SDK crypto/
+archive callbacks in its original closed-control cohort. It checks success,
+unknown root/report/request ACK, learned original root reference and fresh
+verification with local originals removed. Maintenance source SHA and original
+installation/storage/credential scope match instead of weakening matchers.
 
-Next align that native cohort's real helper release and installation/storage scope
-with its original closed plan, rather than weaken source/capture/root matchers.
 Complete supported production source runner/supervision/cancellation/crash/orphan
 lifecycle, independently current preservation/disposal authority, actual provider
 identity/privileges/writer exclusions, immutable root/key/epoch custody, full app

@@ -1,3 +1,5 @@
+import {proveManagedDatabaseSnapshot} from './managed-database-snapshot-postgres-proof.mjs';
+import {captureHelperImplementationBinding} from './postgres-backup.mjs';
 import {proveManagedCandidateCapture} from './managed-candidate-capture-postgres-proof.mjs';
 import {managedS3WorkingFixture} from '../apps/api/dist/tests/fixtures/managed-s3-working.js';
 import {managedS3CurrentFixture} from '../apps/api/dist/tests/fixtures/managed-s3-current.js';
@@ -68,7 +70,7 @@ export async function proveManagedPasswordInvalidation({admin,configuration,url}
 
 // Actual TLS PostgreSQL fencing composed with synthetic provider HTTP and SDK
 // transport. This is not live Render/S3 custody or physical host-loss evidence.
-export async function proveManagedBackendMaintenance({admin,configuration,url}){
+export async function proveManagedBackendMaintenance({admin,configuration,url,id,database:databaseName,certificate}){
  const ids=['srv-'+ 'a'.repeat(20),'srv-'+ 'b'.repeat(20),'srv-'+ 'c'.repeat(20),'srv-'+ 'd'.repeat(20)];
  const image='ghcr.io/synthetic/api@sha256:'+ '1'.repeat(64),credentials={accessKeyId:'synthetic',secretAccessKey:'synthetic'};
  const storage={installationId:'synthetic-managed',bucket:'synthetic-managed-control',accountId:'123456789012',
@@ -139,7 +141,7 @@ export async function proveManagedBackendMaintenance({admin,configuration,url}){
   database.close=async()=>{events.push('database-close');const result=await originalClose();databaseClosed=true;return result;};
   const originalInvalidate=database.invalidatePasswords.bind(database);
   database.invalidatePasswords=async()=>{events.push('password-invalidate');return originalInvalidate();};
-  const operation={installationId:storage.installationId,sourceSha:'1'.repeat(40),maintenanceEpoch:1};
+  const operation={installationId:storage.installationId,sourceSha:captureHelperImplementationBinding().commitSha,maintenanceEpoch:1};
   const storageConfig={installationId:storage.installationId,projectRef:'abcdefghijklmnopqrst',bucket:'documents',
    organisationId:'org-synthetic',region:'eu-central-1',captureKeyId:'11111111-1111-4111-8111-111111111111',
    writerKeys:[{id:'22222222-2222-4222-8222-222222222222',type:'secret'}]};
@@ -199,7 +201,7 @@ export async function proveManagedBackendMaintenance({admin,configuration,url}){
   if(scenario==='signing-ack-lost')signed.loseRevocationAck=true;
   const resumable=resumableCohortFixture({storage,client:sdk,events,control:controlCredential,retired:[retiredCredential],isRetiredAllowed:()=>writerKeyPresent});
   if(scenario==='resumable-still-writable')resumable.allowRetiredAfterClose=true;
-  const signedTus=managedSignedResumableFixture(signed,storage,sdk,events);
+  const signedTus=managedSignedResumableFixture(signed,storage,sdk,events,operation.sourceSha);
   if(scenario==='signed-tus-still-writable')signedTus.mode.stillWorks=true;
   const actualStorage=newStorageControl(),s3Current=managedS3CurrentFixture(storage,sdk,actualStorage,controlCredential,events);
   const s3=scenario==='working-s3-success'?managedS3WorkingFixture(storage,sdk,actualStorage,controlCredential,events,()=>({attemptId:value.attemptId,planDigest:value.planDigest,sourceSha:operation.sourceSha,maintenanceEpoch:1}),()=>!s3Enabled):s3Current;
@@ -278,6 +280,7 @@ export async function proveManagedBackendMaintenance({admin,configuration,url}){
    assert.equal(inspected.recordedS3CoverageObserved,['success','working-s3-success','record-ack-lost'].includes(scenario));assert.equal(inspected.freshS3CoverageObserved,false);assert.equal(inspected.freshStandardWriteRefusalsObserved,false);assert.equal(probeObjects.size,probeCount);assert.equal(activeProbeMutations(),activeBefore);assert.ok(signed.plaintext.every(p=>p.every(v=>v===0)));
    assert.equal(inspected.reopeningAuthorised,false);assert.equal(inspected.actionAuthorized,false);
    if(scenario==='success')await proveManagedCandidateCapture({coordinator:fresh,control:store,admin,configuration,operation,scope:newStorageControl().candidateCaptureScope(),controlStorage:storage,controlClient:sdk,url});
+   if(scenario==='success')for(const mode of ['success','root-ack','report-ack','request-ack'])await proveManagedDatabaseSnapshot({admin,url,id,database:databaseName,certificate,managed:{coordinator:fresh,control:store,controlReader:()=>new S3ManagedMaintenanceControl(storage,credentials,sdk),scope:newStorageControl().candidateCaptureScope(),secret:controlCredential.secret,operation,mode}});
    const freshWriter=new PrismaClient({datasources:{db:{url:writerUrl.href}}});
    try{await assert.rejects(freshWriter.$queryRaw`SELECT 1`);}finally{await freshWriter.$disconnect();}
    console.log('PASS integrated managed maintenance '+scenario+'; roles closed, fresh retry read-only/refused');

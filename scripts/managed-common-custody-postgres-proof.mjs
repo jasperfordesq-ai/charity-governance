@@ -11,17 +11,26 @@ import {sealDocumentBackupIndex} from '../apps/api/dist/services/document-backup
 import {KmsDocumentBackupIndexMac} from '../apps/api/dist/services/document-backup-index-kms.js';
 import {canonicalMetadataBindingSha256} from '../packages/shared/runtime/document-recovery-inventory.mjs';
 import {S3BackupManifests} from '../apps/api/dist/services/backup-manifests-s3.js';
+import {ManagedCandidateCaptureJournal} from '../apps/api/dist/services/managed-candidate-capture-journal.js';
 import {ArchivedRecoverySets} from '../apps/api/dist/services/archived-recovery-set.js';
 const hex=v=>hash(v).toString('hex');
 /** In-process signed SDK synthetic cloud transport, actual crypto/archive classes.
  * Input report and dump come from the genuine native source/isolated-restore proof. */
-export async function startManagedCommonCustody({reportBody,dump,metadata,captureConfigurationDigest},signal){
- const config={...defaults,installationId:'synthetic-snapshot-proof'},b=backend(config),clients={s3:b.s3(),kms:b.kms()},readers=[];
+export function managedCommonCustodyBackend(installationId){
+ const config={...defaults,installationId},b=backend(config),clients={s3:b.s3(),kms:b.kms()},readers=[];
+ const journalConfig={installationId,bucket:config.bucket,accountId:config.accountId,kmsKeyArn:config.storageKeyArn};
+ return{config,b,clients,readers,journal:new ManagedCandidateCaptureJournal(journalConfig,credentials,clients.s3),
+  archive:new ArchivedRecoverySets(config,credentials,clients),
+  fresh(){const v={s3:b.s3(),kms:b.kms()};readers.push(v);return{journal:new ManagedCandidateCaptureJournal(journalConfig,credentials,v.s3),archive:new ArchivedRecoverySets(config,credentials,v)};},
+  close(){clients.s3.destroy();clients.kms.destroy();for(const v of readers){v.s3.destroy();v.kms.destroy();}b.close();}};
+}
+export async function startManagedCommonCustody({reportBody,dump,metadata,captureConfigurationDigest},signal,owned=managedCommonCustodyBackend('synthetic-snapshot-proof')){
+ const {config,b,clients,readers}=owned;
  const report=JSON.parse(reportBody),setId=randomUUID(),sourceSha=report.helperImplementation.commitSha,reportSha=hex(reportBody);
  const storage={installationId:config.installationId,bucket:config.bucket,accountId:config.accountId,storageKeyArn:config.storageKeyArn};
  const context={installationId:config.installationId,setId,sourceSha,databaseIdentitySha256:report.sourceDatabaseIdentitySha256,
   sourceCaptureReportSha256:reportSha,databaseSha256:report.dump.sha256,byteLength:Number(report.dump.bytes),keyArn:config.dataKeyArn};
- const close=()=>{clients.s3.destroy();clients.kms.destroy();for(const v of readers){v.s3.destroy();v.kms.destroy();}b.close();};
+ const close=()=>owned.close();
  try{
   assert.equal(dump.length,context.byteLength);assert.equal(hex(dump),context.databaseSha256);
   const encrypted=sink(),sealed=await sealDatabaseByteBackup(context,source(dump),encrypted.stream,
@@ -32,6 +41,18 @@ export async function startManagedCommonCustody({reportBody,dump,metadata,captur
   const meta=new S3BackupManifests(storage,credentials,clients.s3),target={installationId:config.installationId,setId,sourceSha};
   const sourceReport=await meta.publish({...target,kind:'SOURCE_REPORT_V2'},{body:reportBody,sha256:reportSha},signal);
   const receipts=[];
+  const prepareArchiveInput=async(capture,interval,caller)=>{
+    const indexScope={installationId:config.installationId,setId,sourceSha,databaseSha256:context.databaseSha256,
+     sourceCaptureReportSha256:reportSha,databaseIdentitySha256:context.databaseIdentitySha256,objectStoreIdentitySha256:captureConfigurationDigest,
+     dataKeyArn:config.dataKeyArn,macKeyArn:config.indexMacKeyArn,metadataCapturedAt:metadata.capturedAt,
+     metadataCaptureTransactionId:metadata.transactionId,objectCapturedAt:capture.observedAt};
+    const index=await sealDocumentBackupIndex({scope:indexScope,metadataRows:metadata.rows,objectRows:capture.objects,receipts},
+     new KmsDocumentBackupIndexMac(config.indexMacKeyArn,credentials,clients.kms));
+    const storedIndex=await meta.publish({...target,kind:'DOCUMENT_INDEX_V1'},index,caller);
+    const input={indexScope,databaseContext:context,database:{artifact:database.artifact,versionId:database.versionId},
+     index:{sha256:index.sha256,versionId:storedIndex.versionId},sourceReport:{sha256:reportSha,versionId:sourceReport.versionId}};
+    return input;
+  };
   return{
    close,
    visit:async(file,bytes,digest,caller)=>{
@@ -43,16 +64,9 @@ export async function startManagedCommonCustody({reportBody,dump,metadata,captur
     const stored=await new S3DocumentByteBackups({...storage,dataKeyArn:config.dataKeyArn},credentials,clients.s3).publish(docContext,encrypted,caller);
     receipts.push({context:docContext,sha256:stored.sha256,objectKey:stored.objectKey,versionId:stored.versionId});
    },
+   prepareArchiveInput,
    finish:async(interval,capture)=>{
-    const indexScope={installationId:config.installationId,setId,sourceSha,databaseSha256:context.databaseSha256,
-     sourceCaptureReportSha256:reportSha,databaseIdentitySha256:context.databaseIdentitySha256,objectStoreIdentitySha256:captureConfigurationDigest,
-     dataKeyArn:config.dataKeyArn,macKeyArn:config.indexMacKeyArn,metadataCapturedAt:metadata.capturedAt,
-     metadataCaptureTransactionId:metadata.transactionId,objectCapturedAt:capture.observedAt};
-    const index=await sealDocumentBackupIndex({scope:indexScope,metadataRows:metadata.rows,objectRows:capture.objects,receipts},
-     new KmsDocumentBackupIndexMac(config.indexMacKeyArn,credentials,clients.kms));
-    const storedIndex=await meta.publish({...target,kind:'DOCUMENT_INDEX_V1'},index);
-    const input={indexScope,databaseContext:context,database:{artifact:database.artifact,versionId:database.versionId},
-     index:{sha256:index.sha256,versionId:storedIndex.versionId},sourceReport:{sha256:reportSha,versionId:sourceReport.versionId}};
+    const input=await prepareArchiveInput(capture,interval);
     const archive=new ArchivedRecoverySets(config,credentials,clients),bad=structuredClone(interval),before=b.writes;
     bad.databaseSnapshot.snapshotBindingSha256='f'.repeat(64);
     await assert.rejects(archive.prepareImported(input,bad));assert.equal(b.writes,before);

@@ -64,7 +64,7 @@ export function backend(selected=config) {
     generates = 0,
     sequence = 0,
     loseRoot = false,
-    losePrepared = false;
+    losePrepared = false,loseCommonRequestRead=false,loseCommonReportRead=false;
   let onRootVerify = () => {};
   const metadata: Record<string, string> = {};
   const encryption = {
@@ -101,6 +101,13 @@ export function backend(selected=config) {
             config.accountId,
           );
           const key = request.path.slice(1);
+          if(request.method==='GET'&&request.query['list-type']==='2'){
+            reads++;const prefix=request.query.prefix??'',max=Number(request.query['max-keys']),offset=Number(request.query['continuation-token']??0);
+            assert.equal(max,1000);assert.ok(Number.isInteger(offset)&&offset>=0);
+            const rows=[...objects].filter(([k])=>k.startsWith(prefix)).sort(([a],[b])=>a<b?-1:1),page=rows.slice(offset,offset+max);
+            const esc=(v:string)=>v.replaceAll('&','&amp;').replaceAll('<','&lt;').replaceAll('>','&gt;').replaceAll('"','&quot;');
+            return reply(`<ListBucketResult><Name>${config.bucket}</Name><Prefix>${esc(prefix)}</Prefix><MaxKeys>${max}</MaxKeys><KeyCount>${page.length}</KeyCount><IsTruncated>${offset+max<rows.length}</IsTruncated>${offset?`<ContinuationToken>${offset}</ContinuationToken>`:''}${offset+max<rows.length?`<NextContinuationToken>${offset+max}</NextContinuationToken>`:''}${page.map(([k,v])=>`<Contents><Key>${esc(k)}</Key><Size>${v.body.length}</Size><ETag>${esc('"'+v.version+'"')}</ETag></Contents>`).join('')}</ListBucketResult>`);
+          }
           if (request.method === 'POST' && 'uploads' in request.query) {
             writes++;
             const id = 'upload-' + ++sequence;
@@ -168,7 +175,7 @@ export function backend(selected=config) {
                 : '',
               {
                 ...encryption,
-                'x-amz-version-id': version,
+                'x-amz-version-id': version,etag:'"'+version+'"',
                 'x-amz-checksum-sha256': checksum,
                 'x-amz-checksum-type': type,
               },
@@ -178,6 +185,10 @@ export function backend(selected=config) {
           reads++;
           const value = objects.get(key);
           assert.ok(value, 'missing staged fixture object');
+          if((loseCommonRequestRead||loseCommonReportRead)&&key.endsWith('.json')){
+            const kind=JSON.parse(value.body.toString()).kind;
+            if((loseCommonRequestRead&&kind==='MANAGED_COMMON_CANDIDATE_REQUEST_V1')||(loseCommonReportRead&&kind==='MANAGED_QUARANTINED_COMMON_CANDIDATE'))throw new Error('synthetic original common acknowledgement lost after storage');
+          }
           if (request.query.versionId)
             assert.equal(request.query.versionId, value.version);
           return {
@@ -185,7 +196,7 @@ export function backend(selected=config) {
               statusCode: 200,
               headers: {
                 ...encryption,
-                'x-amz-version-id': value.version,
+                'x-amz-version-id': value.version,etag:'"'+value.version+'"',
                 'x-amz-checksum-sha256': value.checksum,
                 'x-amz-checksum-type': value.type,
                 'content-type': value.contentType,
@@ -278,6 +289,8 @@ export function backend(selected=config) {
     get generates() {
       return generates;
     },
+    set loseCommonRequestRead(value:boolean){loseCommonRequestRead=value;},
+    set loseCommonReportRead(value:boolean){loseCommonReportRead=value;},
     set loseRoot(value: boolean) {
       loseRoot = value;
     },

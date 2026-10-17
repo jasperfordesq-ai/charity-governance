@@ -1,4 +1,3 @@
-import {proveManagedDatabaseSnapshot} from './managed-database-snapshot-postgres-proof.mjs';
 import {proveStorageGrantBoundary} from './storage-grant-boundary-postgres-proof.mjs';
 import {mkdtempSync,readFileSync,rmSync} from 'node:fs';
 import {tmpdir} from 'node:os';
@@ -15,7 +14,7 @@ import {validateLocalDockerEndpoint} from './personal-server-docker-boundary.mjs
 const image='postgres@sha256:5660c2cbfea50c7a9127d17dc4e48543eedd3d7a41a595a2dfa572471e37e64c';
 function run(command,args,input){const r=spawnSync(command,args,{input,encoding:'utf8',timeout:60000,maxBuffer:1024*1024});
  assert.equal(r.status,0,(r.stderr||r.error?.message||'synthetic command failed').slice(-1200));return r.stdout.trim();}
-test('managed database fence closes real stale credentials and sessions while refusing aliases, prepared and cross-database writers',{timeout:120000},async()=>{
+test('managed database fence closes real stale credentials and sessions while refusing aliases, prepared and cross-database writers',{timeout:240000},async()=>{
  const endpoint=JSON.parse(run('docker',['context','inspect','--format','{{json .Endpoints.docker}}']));
  validateLocalDockerEndpoint({endpoint:endpoint.Host,skipTlsVerify:endpoint.SkipTLSVerify},process.env);
  const docker=(args,input)=>run('docker',['--host',endpoint.Host,...args],input);assert.equal(docker(['info','--format','{{.OSType}}']),'linux');
@@ -119,9 +118,8 @@ test('managed database fence closes real stale credentials and sessions while re
   const [count]=await admin.$queryRaw`SELECT count(*)::integer AS total FROM public.synthetic_managed_writer`;
   assert.equal(count.total,4); // No source rows were deleted; prepared insert rolled back only by this fixture.
   await proveManagedPasswordInvalidation({admin,configuration,url});
-  await proveManagedBackendMaintenance({admin,configuration,url});
+  await proveManagedBackendMaintenance({admin,configuration,url,id,database,certificate:join(certDir,'cert.pem')});
   await proveStorageGrantBoundary({admin,url});
-  await proveManagedDatabaseSnapshot({admin,url,id,database,certificate:join(certDir,'cert.pem')});
  }finally{
   await writerA?.$disconnect();await writerB?.$disconnect();await admin?.$disconnect();
   try {if(id)docker(['rm','--force',id]);}

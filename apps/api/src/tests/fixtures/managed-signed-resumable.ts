@@ -17,6 +17,7 @@ export function managedSignedResumableFixture(
   storage: Storage,
   client: S3Client,
   events: string[],
+  sourceSha='1'.repeat(40),
 ) {
   const signer = signed.factory(),
     registry = signer.resumableProofRegistry('PATH_V1'),
@@ -28,7 +29,7 @@ export function managedSignedResumableFixture(
     aws = maintenanceSecretVaultFixture(
       {
         ...vaultStorage,
-        maintenance: { ...probeConfig.maintenance, sourceSha: '1'.repeat(40) },
+        maintenance: { ...probeConfig.maintenance, sourceSha },
         probeDigest: '9'.repeat(64),
       },
       'signed-resumable-credential.json',
