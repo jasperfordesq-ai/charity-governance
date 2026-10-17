@@ -1,3 +1,11 @@
+## 17 October: current recovery inspection composition
+
+Read [current recovery inspection](managed-current-recovery-inspection.md). The
+read-only journal method joins current-head discovery, saved source-job evidence
+and common archive verification. Missing evidence stays unresolved; changed
+head/catalogue or re-read job refuses. It grants no admission, fencing, cleanup
+or reopening authority. Provider/native cold-process/host-loss gates remain.
+
 ## 17 October: provider recovery-reader policy preparation
 
 Read [provider reader policy](recovery-reader-provider-policy.md). The local

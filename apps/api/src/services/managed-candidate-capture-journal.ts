@@ -55,6 +55,51 @@ export class ManagedCandidateCaptureJournal {
   return discoverManagedCandidateCatalogue({storage:this.storage,configurationDigest:this.configurationDigest(),client:this.client,
    forCandidate:binding=>this.forCandidate(binding)},raw,signal);
  }
+ /** Cold read-only composition. No supplied candidate IDs/pins, original ACK
+  * reconstruction, cleanup, current tenant authority or archive admission. */
+ async inspectCurrentRecovery(control:S3ManagedMaintenanceControl,minimumEpoch:number,
+  archive:Pick<ArchivedRecoverySets,'configurationDigest'|'verifySet'>,caller?:AbortSignal){
+  const controller=new AbortController(),signal=caller?AbortSignal.any([caller,controller.signal]):controller.signal;
+  const timer=setTimeout(()=>controller.abort(),300000);
+  try{
+   signal.throwIfAborted();const before=await this.discoverCurrentCandidates(control,minimumEpoch,signal);
+   const records=[];let unresolvedCommonCandidates=0;
+   for(const row of before.catalogue.records){
+    signal.throwIfAborted();
+    if(row.binding.format!==3){records.push({candidateId:row.binding.candidateId,kind:'LEGACY_CAPTURE_NOT_COMMON' as const});continue;}
+    let job:Awaited<ReturnType<ManagedCandidateCaptureJournal['discoverSourceJob']>>|null=null;
+    let root:Awaited<ReturnType<ManagedCandidateCaptureJournal['verifyDiscoveredCommonRoot']>>|null=null;
+    try{job=await this.discoverSourceJob(row.binding,signal);}catch{signal.throwIfAborted();}
+    if(row.commonRoot){try{root=await this.verifyDiscoveredCommonRoot(row.binding,archive,signal);}catch{signal.throwIfAborted();}}
+    const unresolved=!job||job.state!=='WORKER_EXIT_ACK_OBSERVED'||job.serviceIdentity?.format!==2||!root;
+    if(unresolved)unresolvedCommonCandidates++;
+    records.push({candidateId:row.binding.candidateId,kind:'COMMON_CAPTURE_RECOVERY_OBSERVATION' as const,
+     jobStatus:job?'SAVED_RECORDS_VERIFIED' as const:'UNRESOLVED' as const,job,
+     rootStatus:root?'ARCHIVE_VERIFIED_QUARANTINE_ONLY' as const:row.commonRoot?'UNRESOLVED' as const:'NOT_LISTED_AT_BOUNDARY' as const,root,
+     unresolved,executionAuthorized:false as const,actionAuthorized:false as const});
+   }
+   // An original closed head is not a lease. Check it and the full catalogue
+   // again after all potentially long archive reads, without cached fallback.
+   const after=await this.discoverCurrentCandidates(control,minimumEpoch,signal);
+   if(after.head.revision!==before.head.revision||JSON.stringify(after.bootstrapPin)!==JSON.stringify(before.bootstrapPin)
+    ||after.catalogue.listingDigest!==before.catalogue.listingDigest
+    ||JSON.stringify(after.catalogue.records)!==JSON.stringify(before.catalogue.records))throw failure();
+   for(const record of records){
+    if(record.kind!=='COMMON_CAPTURE_RECOVERY_OBSERVATION'||!record.job)continue;
+    const row=before.catalogue.records.find(v=>v.binding.candidateId===record.candidateId)!;
+    if(JSON.stringify(await this.discoverSourceJob(row.binding,signal))!==JSON.stringify(record.job))throw failure();
+   }
+   const finalHead=managedClosedHead(await control.observe(signal),this.storage.installationId);
+   if(JSON.stringify(finalHead)!==JSON.stringify(before.head))throw failure();
+   signal.throwIfAborted();
+   return{kind:'MANAGED_CURRENT_RECOVERY_INSPECTION_V1' as const,bootstrap:before,records,unresolvedCommonCandidates,
+    headAndCatalogueStableAtObservationBoundaries:true as const,atomicSnapshotVerified:false as const,restoreMode:'QUARANTINE_ONLY' as const,
+    historyCompletenessVerified:false as const,monotonicHistoryVerified:false as const,currentTenantAuthorityVerified:false as const,
+    sourceHostLossProven:false as const,daemonRequestsAccountedFor:false as const,writerFencingVerified:false as const,
+    originalAcknowledgementReconstructed:false as const,archivedSetAdmitted:false as const,
+    cleanupAuthorized:false as const,executionAuthorized:false as const,publicationAuthorized:false as const,actionAuthorized:false as const};
+  }catch{throw failure();}finally{clearTimeout(timer);controller.abort();}
+ }
  async verifyDiscoveredCommonRoot(raw:unknown,archive:Pick<ArchivedRecoverySets,'configurationDigest'|'verifySet'>,signal?:AbortSignal){
   const binding=candidateBindingSchema.parse(raw);
   if(binding.format!==3||binding.archiveConfigurationDigest!==archive.configurationDigest())throw failure();

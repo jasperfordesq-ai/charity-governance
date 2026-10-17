@@ -1,6 +1,7 @@
 import {commonCandidateBindingSchema,commonCandidateReportSchema,commonCaptureObjectInventory,candidateReportArtifact as anyReportArtifact} from '../services/managed-common-candidate-contract.js';
 import {candidateBindingSchema,candidateReportArtifact} from '../services/managed-candidate-capture-contract.js';
 import {ManagedCandidateCaptureJournal} from '../services/managed-candidate-capture-journal.js';
+import {jobScope} from '../services/managed-proof-job-contract.js';
 import {SupabaseRecoveryCapture} from '../services/supabase-recovery-capture.js';
 import {managedS3WorkingFixture} from './fixtures/managed-s3-working.js';
 import {managedS3CurrentFixture} from './fixtures/managed-s3-current.js';
@@ -41,11 +42,13 @@ function fixture(options:{retired?:{id:string;secret:string}[];epoch?:number}={}
  mock.method(client,'send',async(command:GetObjectCommand|PutObjectCommand|ListObjectsV2Command)=>{
   assert.equal(command.input.Bucket,config.bucket);assert.equal(command.input.ExpectedBucketOwner,config.accountId);
   if(command instanceof ListObjectsV2Command){
-   calls.push('candidate-list');assert.equal(command.input.MaxKeys,1000);assert.equal(command.input.Delimiter,undefined);
+   calls.push('candidate-list');assert.equal(command.input.Delimiter,undefined);
    assert.ok(command.input.Prefix?.startsWith('managed-maintenance/'+config.installationId+'/'));
-   assert.ok(command.input.Prefix?.endsWith('/capture-candidate/'));
+   const jobs=/\/capture-job\/[a-f0-9]{64}\/$/.test(command.input.Prefix!);
+   assert.ok(jobs||command.input.Prefix?.endsWith('/capture-candidate/'));
+   assert.ok(jobs?[2,3].includes(command.input.MaxKeys!):command.input.MaxKeys===1000);
    const rows=[...artifacts].filter(([key])=>key.startsWith(command.input.Prefix!)).sort(([a],[b])=>a<b?-1:1);
-   return{Name:config.bucket,Prefix:command.input.Prefix,MaxKeys:1000,KeyCount:rows.length,IsTruncated:false,
+   return{Name:config.bucket,Prefix:command.input.Prefix,MaxKeys:command.input.MaxKeys,KeyCount:rows.length,IsTruncated:false,
     Contents:rows.map(([Key,row])=>({Key,Size:Buffer.byteLength(row.body),ETag:'"'+row.version+'"'}))};
   }
   const path=command.input;
@@ -53,7 +56,7 @@ function fixture(options:{retired?:{id:string;secret:string}[];epoch?:number}={}
   if(path.Key!==`managed-maintenance/${config.installationId}/control.json`){
    if(command instanceof PutObjectCommand){calls.push('artifact-put');assert.equal(command.input.IfNoneMatch,'*');if(artifacts.has(path.Key!))throw new Error('synthetic existing artifact');
     const row={body:String(command.input.Body),version:'artifact-'+(artifacts.size+1)};artifacts.set(path.Key!,row);return{...metadata(),VersionId:row.version};}
-   calls.push('artifact-get');const row=artifacts.get(path.Key!)!;if(command.input.VersionId!==undefined)assert.equal(command.input.VersionId,row.version);else assert.ok(path.Key?.includes('/capture-candidate/')||path.Key?.endsWith('/plan-bootstrap.json'));
+   calls.push('artifact-get');const row=artifacts.get(path.Key!)!;if(command.input.VersionId!==undefined)assert.equal(command.input.VersionId,row.version);else assert.ok(path.Key?.includes('/capture-candidate/')||path.Key?.includes('/capture-job/')||path.Key?.endsWith('/plan-bootstrap.json'));
    return{...metadata(),VersionId:row.version,ETag:'"'+row.version+'"',ContentLength:Buffer.byteLength(row.body),ChecksumSHA256:Buffer.from(hash(row.body),'hex').toString('base64'),ChecksumType:'FULL_OBJECT',Body:Readable.from([Buffer.from(row.body)])};
   }
   if(command instanceof GetObjectCommand){reads++;calls.push('get');assert.equal(command.input.VersionId,undefined);
@@ -992,4 +995,77 @@ test('archive substitution refuses before common source execution and unknown fi
  const cold=new ManagedCandidateCaptureJournal(config,credentials,x.f.client),c=await cold.discoverCurrentCandidates(x.f.store,1);
  const row=c.catalogue.records.find(v=>v.binding.candidateId===x.request.candidateId);assert.ok(row?.commonRoot);
  const verified=await cold.verifyDiscoveredCommonRoot(row!.binding,x.archive);assert.equal(verified.actionAuthorized,false);
+});
+
+async function currentRecoveryFixture(){
+ const x=await commonJournalFixture(),jobId=randomUUID();
+ const artifact=(value:unknown)=>{const body=JSON.stringify(value);return{body,sha256:hash(body),byteLength:Buffer.byteLength(body)};};
+ const local=artifact({format:1,kind:'MANAGED_IMPORTED_PROOF_JOB_V1',jobId,scope:jobScope(x.binding,x.requestPin),sourceSha:x.binding.sourceSha,
+  workspaceDigest:hash('workspace'),snapshotDigest:hash('snapshot'),argumentsDigest:hash('arguments'),createdAt:new Date().toISOString(),
+  state:'REQUESTED_ONLY',executionAuthorized:false,publicationAuthorized:false,actionAuthorized:false});
+ const requestPin={sha256:local.sha256,byteLength:local.byteLength};
+ await x.session.reserveSourceJob(local,x.requestPin);
+ await x.session.bindSourceJobService(artifact({format:1,kind:'MANAGED_IMPORTED_PROOF_SERVICE_V1',jobId,requestPin,
+  identity:{format:2,kind:'MANAGED_GUARDIAN_LIVE_BINDING_V2',jobId,unit:`charitypilot-containment-${jobId}.service`,invocationId:'a'.repeat(32),uid:1000,mainPid:123,
+   mainStartMonotonic:'12345',sourceSha:x.binding.sourceSha,inputDigest:hash('input'),bootId:'12345678-1234-1234-1234-123456789012',
+   controlGroup:`/user.slice/user-1000.slice/user@1000.service/app.slice/charitypilot-containment-${jobId}.service`,executionAuthorized:false,actionAuthorized:false},
+  executionAuthorized:false,publicationAuthorized:false,actionAuthorized:false}),x.requestPin);
+ await x.session.observeSourceJob(artifact({format:1,kind:'MANAGED_IMPORTED_PROOF_JOB_OBSERVATION_V1',jobId,requestPin,state:'WORKER_EXIT_ACK_OBSERVED',
+  jobContainersObservedAbsent:true,executionAuthorized:false,publicationAuthorized:false,actionAuthorized:false}),x.requestPin);
+ await x.session.publishReport(x.report,x.requestPin);x.session.closeExecution();
+ let rootReads=0;
+ const archive={configurationDigest:()=>x.archiveDigest,verifySet:async()=>{rootReads++;return{kind:'ARCHIVED_SET_VERIFIED' as const,
+  restoreMode:'QUARANTINE_ONLY' as const,captureConsistency:'EXTERNAL_VERIFICATION_REQUIRED' as const,sha256:x.report.rootReference.pin.sha256,rootVersionId:'root-original',
+  documentCount:1,objectCount:1,snapshotInterval:{metadataWindow:x.report.metadataWindow,databaseSnapshot:x.report.databaseSnapshot},
+  objectInventorySha256:commonCaptureObjectInventory(x.report),completedIntervalBindingVerified:true as const,wholeBackendQuiesced:false as const,actionAuthorized:false as const};}};
+ return{...x,archive,get rootReads(){return rootReads;},cold:()=>new ManagedCandidateCaptureJournal(config,credentials,x.f.client)};
+}
+
+test('cold current recovery composes saved job discovery and archive verification without writes or authority',async()=>{
+ const x=await currentRecoveryFixture(),before=x.f.artifacts.size,puts=x.f.puts;
+ x.f.setFault(command=>{if(command instanceof PutObjectCommand)throw new Error('unexpected mutation');});
+ const observed=await x.cold().inspectCurrentRecovery(x.f.store,1,x.archive);
+ assert.equal(observed.records.filter(r=>r.kind==='COMMON_CAPTURE_RECOVERY_OBSERVATION').length,1);
+ const common=observed.records.find(r=>r.kind==='COMMON_CAPTURE_RECOVERY_OBSERVATION');
+ assert.equal(common?.jobStatus,'SAVED_RECORDS_VERIFIED');assert.equal(common?.rootStatus,'ARCHIVE_VERIFIED_QUARANTINE_ONLY');
+ assert.equal(observed.unresolvedCommonCandidates,0);assert.equal(x.rootReads,1);assert.equal(x.f.artifacts.size,before);assert.equal(x.f.puts,puts);
+ for(const field of ['currentTenantAuthorityVerified','historyCompletenessVerified','sourceHostLossProven','daemonRequestsAccountedFor','writerFencingVerified','archivedSetAdmitted','cleanupAuthorized','executionAuthorized','actionAuthorized'] as const)assert.equal(observed[field],false);
+});
+
+test('cold recovery keeps missing/corrupt job evidence and unknown root verification unresolved without repairing history',async()=>{
+ for(const fault of ['missing-job','corrupt-job','missing-report','root-unavailable']){
+  const x=await currentRecoveryFixture();
+  const key=[...x.f.artifacts.keys()].find(k=>k.includes('/capture-job/')&&k.endsWith('/baseline.json'))!;
+  if(fault==='missing-job')x.f.artifacts.delete(key);
+  if(fault==='corrupt-job')x.f.artifacts.set(key,{...x.f.artifacts.get(key)!,body:'{}'});
+  if(fault==='missing-report')x.f.artifacts.delete([...x.f.artifacts.keys()].find(k=>k.includes('/capture-candidate/')&&k.includes(hash(x.binding.candidateId))&&k.endsWith('/observation.json'))!);
+  const before=x.f.artifacts.size;
+  const archive=fault==='root-unavailable'?{...x.archive,verifySet:async()=>{throw new Error('PRIVATE provider failure');}}:x.archive;
+  const observed=await x.cold().inspectCurrentRecovery(x.f.store,1,archive);
+  assert.equal(observed.unresolvedCommonCandidates,1);assert.equal(observed.actionAuthorized,false);assert.equal(x.f.artifacts.size,before);
+  const common=observed.records.find(r=>r.kind==='COMMON_CAPTURE_RECOVERY_OBSERVATION');assert.equal(common?.unresolved,true);
+  if(fault==='missing-job'||fault==='corrupt-job')assert.equal(common?.jobStatus,'UNRESOLVED');
+  else assert.notEqual(common?.rootStatus,'ARCHIVE_VERIFIED_QUARANTINE_ONLY');
+ }
+});
+
+test('cold recovery refuses moving head/catalogue after archive read and cancellation without fallback',async()=>{
+ for(const fault of ['head','late-head','catalogue','job','cancel']){
+  const x=await currentRecoveryFixture(),controller=new AbortController();
+  const archive={...x.archive,verifySet:async()=>{
+   const value=await x.archive.verifySet();
+   if(fault==='head')x.f.commit(new PutObjectCommand({Bucket:config.bucket,Key:`managed-maintenance/${config.installationId}/control.json`,Body:JSON.stringify({...x.f.value,publicationId:randomUUID()})}));
+   if(fault==='catalogue')x.f.artifacts.delete([...x.f.artifacts.keys()].find(k=>k.includes('/capture-candidate/')&&k.includes(hash(x.binding.candidateId))&&k.endsWith('/observation.json'))!);
+   if(fault==='job')x.f.artifacts.delete([...x.f.artifacts.keys()].find(k=>k.includes('/capture-job/')&&k.endsWith('/observation.json'))!);
+   if(fault==='late-head')x.f.setFault(command=>{if(command instanceof GetObjectCommand&&command.input.Key?.includes('/capture-job/')){
+    x.f.commit(new PutObjectCommand({Bucket:config.bucket,Key:`managed-maintenance/${config.installationId}/control.json`,Body:JSON.stringify({...x.f.value,publicationId:randomUUID()})}));
+   }});
+   if(fault==='cancel')controller.abort();return value;
+  }};
+  await assert.rejects(x.cold().inspectCurrentRecovery(x.f.store,1,archive,controller.signal));
+  assert.equal(x.rootReads,1);
+ }
+ const x=await currentRecoveryFixture();await assert.rejects(x.cold().inspectCurrentRecovery(x.f.store,2,x.archive));assert.equal(x.rootReads,0);
+ const aborted=new AbortController();aborted.abort();const reads=x.f.reads;
+ await assert.rejects(x.cold().inspectCurrentRecovery(x.f.store,1,x.archive,aborted.signal));assert.equal(x.f.reads,reads);
 });
