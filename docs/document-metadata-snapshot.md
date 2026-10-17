@@ -10,7 +10,10 @@ document counts alone are insufficient.
 
 The SQL lives inside `scripts/postgres-backup.mjs`, covered by that helper's
 existing source/commit binding. It imports the validated exported snapshot in a
-repeatable-read, read-only transaction, with `row_security=off`, a fixed
+repeatable-read, read-only transaction. `.gitattributes` pins this helper to LF
+so Windows checkouts preserve its exact committed bytes. Source hashing remains
+strict; line-ending differences are not normalised during verification. It uses
+`row_security=off`, a fixed
 `pg_catalog` search path and a two-minute statement bound. It neither modifies
 source records nor returns their values.
 

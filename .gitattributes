@@ -1,6 +1,8 @@
 caddy/*.caddy text eol=lf
 caddy/Caddyfile.* text eol=lf
 scripts/bluegreen-nightly-backup.sh text eol=lf
+# The recovery proof authenticates this helper's exact committed bytes.
+scripts/postgres-backup.mjs text eol=lf
 
 # A NUL byte in a source file makes git classify the file as binary, and a
 # binary file has no reviewable diff: `git diff` prints "Binary files differ"
