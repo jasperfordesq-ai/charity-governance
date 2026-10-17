@@ -9,7 +9,7 @@ import {S3ManagedMaintenanceControl} from '../apps/api/dist/services/managed-mai
 import {credentials} from '../apps/api/dist/tests/fixtures/archived-custody.js';
 const descriptor=readSyntheticCustodyDescriptor(process.env.CHARITYPILOT_TEST_CUSTODY_SESSION_FILE);
 const sessions=await callSyntheticCustody(descriptor,{op:'sessions'});assert.ok(sessions.length>=1&&sessions.length<=32);
-let roots=0,records=0,services=0,killedSourceServices=0,currentInspections=0,currentVerifiedRoots=0,currentUnresolved=0;
+let roots=0,records=0,services=0,killedSourceServices=0,currentInspections=0,currentVerifiedRoots=0,currentUnresolved=0,daemonCatalogues=0,daemonCompleted=0,daemonUnresolved=0;
 for(const session of sessions){
  const b=connectSyntheticCustody(descriptor,session.id,session.config),before={writes:b.writes,generates:b.generates},clients={s3:b.s3(),kms:b.kms()};
  try{
@@ -37,6 +37,14 @@ for(const session of sessions){
     const observation=await journal.inspectCurrentRecovery(new S3ManagedMaintenanceControl(storage(originalControl.config),credentials,controlClient),1,new ArchivedRecoverySets(session.config,credentials,clients));
     assert.equal(observation.currentTenantAuthorityVerified,false);assert.equal(observation.atomicSnapshotVerified,false);assert.equal(observation.actionAuthorized,false);
     assert.equal(observation.records.filter(r=>r.kind==='COMMON_CAPTURE_RECOVERY_OBSERVATION').length,1);
+    for(const record of observation.records.filter(r=>r.kind==='COMMON_CAPTURE_RECOVERY_OBSERVATION')){
+     if(!record.job?.daemon)continue;const daemon=record.job.daemon;daemonCatalogues++;
+     assert.deepEqual(daemon.protocolOrdinalRange,{first:0,last:64});assert.equal(daemon.listingStableAtBoundaries,true);
+     for(const field of ['historyCompletenessVerified','pendingRequestResolved','completeResourceInventory','originalAcknowledgementReconstructed','savedEvidenceAuthorizesDispatch','cleanupAuthorized','actionAuthorized'])assert.equal(daemon[field],false);
+     if(daemon.state==='RECORDED_CLIENT_RESPONSES'){daemonCompleted++;assert.ok(daemon.endPin);assert.equal(daemon.records.length,daemon.responseCount);}
+     else daemonUnresolved++;
+     if(!record.unresolved){assert.equal(daemon.state,'RECORDED_CLIENT_RESPONSES');assert.ok(daemon.records.length>0);}
+    }
     currentInspections++;currentVerifiedRoots+=observation.records.filter(r=>r.rootStatus==='ARCHIVE_VERIFIED_QUARANTINE_ONLY').length;currentUnresolved+=observation.unresolvedCommonCandidates;
    }finally{controlClient.destroy();}
   }
@@ -44,7 +52,7 @@ for(const session of sessions){
  }finally{clients.s3.destroy();clients.kms.destroy();}
 }
 const report={kind:'SYNTHETIC_COLD_CUSTODY_READER_V1',sessions:sessions.length,records,verifiedRoots:roots,verifiedSourceServiceRecords:services,killedSourceServiceRecords:killedSourceServices,
- currentInspections,currentVerifiedRoots,currentUnresolved,
+ currentInspections,currentVerifiedRoots,currentUnresolved,daemonCatalogues,daemonCompleted,daemonUnresolved,
  suppliedSourceIdsOrPins:false,executionAuthorized:false,realProvider:false,sourceHostLossProven:false};
 if(process.connected){await new Promise((yes,no)=>process.send(report,error=>error?no(error):yes()));process.disconnect();}
 else process.stdout.write(JSON.stringify(report)+'\n');

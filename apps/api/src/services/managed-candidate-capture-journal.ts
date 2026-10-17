@@ -71,7 +71,8 @@ export class ManagedCandidateCaptureJournal {
     let root:Awaited<ReturnType<ManagedCandidateCaptureJournal['verifyDiscoveredCommonRoot']>>|null=null;
     try{job=await this.discoverSourceJob(row.binding,signal);}catch{signal.throwIfAborted();}
     if(row.commonRoot){try{root=await this.verifyDiscoveredCommonRoot(row.binding,archive,signal);}catch{signal.throwIfAborted();}}
-    const unresolved=!job||job.state!=='WORKER_EXIT_ACK_OBSERVED'||job.serviceIdentity?.format!==2||!root;
+    const unresolved=!job||job.state!=='WORKER_EXIT_ACK_OBSERVED'||job.serviceIdentity?.format!==2
+     ||job.daemon?.state!=='RECORDED_CLIENT_RESPONSES'||job.daemon.records.length<1||!root;
     if(unresolved)unresolvedCommonCandidates++;
     records.push({candidateId:row.binding.candidateId,kind:'COMMON_CAPTURE_RECOVERY_OBSERVATION' as const,
      jobStatus:job?'SAVED_RECORDS_VERIFIED' as const:'UNRESOLVED' as const,job,

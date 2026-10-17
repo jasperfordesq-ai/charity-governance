@@ -47,10 +47,27 @@ changes during an asynchronous save from changing the accepted local chain.
 
 Read methods verify exact original envelope context, header and an explicitly
 selected ordinal/expected previous digest. They can discover stored header/intent
-pins without a live producer acknowledgement. The constructor still needs the
-original verified job/service envelopes and pins; this component does not yet
-implement complete unknown-ordinal catalogue discovery or wire it into the
-current recovery inspector.
+pins without a live producer acknowledgement. The constructor needs the original
+verified job/service envelopes and pins. Cold source-job discovery obtains these
+from stored records and invokes the reader without a live producer acknowledgement
+or a caller-supplied ordinal list.
+
+`discover` checks all 65 protocol scopes (header plus ordinals 1 through 64), each
+with a bounded three-entry LIST that refuses truncation, unexpected keys or more
+than the baseline/observation pair. It verifies current ETag and size against
+exact-version, hash-checked stored bytes; checks header, chain and response/end
+pair bindings; then rechecks every scope listing. Missing responses or completion
+remain unresolved. Orphaned observations, gaps, substitution, changed listings
+or unavailable reads refuse instead of being treated as absence. An empty stable
+catalogue means only `NOT_LISTED_AT_BOUNDARY`, never proof of no historical work.
+
+The current recovery inspector now requires the available daemon catalogue to
+contain recorded responses and completion before reporting a common candidate's
+available evidence as verified. It rechecks source-job/daemon discovery after
+archive reads. This remains a current observation across protocol-bound scopes,
+not an atomic snapshot, history-completeness guarantee, full resource inventory,
+queue fence or current tenant authority. `daemonRequestsAccountedFor` and
+`pendingRequestResolved` remain false.
 
 Every read/write result denies dispatch/action authority. A saved intent is not
 a daemon response, resolution, full inventory, cancellation fence or replay
@@ -121,8 +138,9 @@ response counts, end ACK, original worker exit and existing containment checks.
 2. Keep unknown dispatch/completion unresolved after caller/guardian/host loss.
    Complete the independently surviving owner or proven daemon-side fence before
    closure; retained client responses alone do not settle daemon queue finality.
-3. Implement fresh complete bounded discovery under original candidate/job
-   custody, without local process-memory pins or invented acknowledgements.
+3. Verify complete bounded protocol-scope discovery under original candidate/job
+   custody against exact source/native cold-reader evidence; retain explicit
+   uncertainty about records outside protocol scopes and historical requests.
 4. Run genuine SQL/restore, original ACK-loss/concurrency/cancellation, source
    caller kill, independent provider/host-off and guarded recovery tests. Do not
    call local or synthetic SDK tests activation or provider acceptance.

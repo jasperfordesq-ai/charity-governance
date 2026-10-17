@@ -1,3 +1,12 @@
+## 17 October: cold bounded daemon catalogue discovery
+
+Read [daemon intent custody](managed-daemon-intent-custody.md). Cold source-job
+discovery now obtains saved original job/service envelopes and checks all65
+protocol scopes, response/end pairs and stable listing boundaries without source
+process IDs/pins/ordinal lists. Missing or corrupt accounting keeps common
+recovery unresolved. History/resource/queue completeness and actual independent
+provider/host-loss acceptance remain unproven; exact evidence is private.
+
 ## 17 October: original response and completion acknowledgement barrier
 
 Read [daemon intent custody](managed-daemon-intent-custody.md). Response/end

@@ -1,5 +1,5 @@
 import {z} from 'zod';
-import type {S3Client,S3ClientConfig} from '@aws-sdk/client-s3';
+import {ListObjectsV2Command,type S3Client,type S3ClientConfig} from '@aws-sdk/client-s3';
 import {candidateHash,candidatePinSchema} from './managed-candidate-capture-contract.js';
 import {commonCandidateBindingSchema} from './managed-common-candidate-contract.js';
 import {localJobArtifact,localJobArtifactSchema,parseJobRequest,parseJobService,assertJobServicePair} from './managed-proof-job-contract.js';
@@ -198,5 +198,73 @@ export class ManagedDaemonIntentCustody{
    ||v.storagePlan&&v.storagePlan.image!==header.parse(JSON.parse(h.localRecord.body)).image)throw failure();
   return{pin:saved.pin,localRecord:value.localRecord,originalAcknowledgementReconstructed:false as const,savedEvidenceAuthorizesDispatch:false as const,
    daemonResponseObserved:false as const,pendingRequestResolved:false as const,actionAuthorized:false as const};
+ }
+ /** Discover all protocol ordinals from independently stored original context.
+  * Stable current listings are not historical completeness or daemon finality. */
+ async discover(caller?:AbortSignal){
+  const controller=new AbortController(),signal=caller?AbortSignal.any([caller,controller.signal]):controller.signal;
+  const timer=setTimeout(()=>controller.abort(),60000);
+  const row=z.object({Key:z.string().min(1).max(1024),ETag:z.string().min(1).max(1024),Size:z.number().int().min(1).max(16384)});
+  const list=async(sequence:number)=>{
+   const prefix=`managed-maintenance/${this.storage.installationId}/${this.binding.attemptId}/capture-job/${daemonCustodyScope(this.binding.candidateId,sequence)}/`;
+   signal.throwIfAborted();let stop=()=>{};
+   const aborted=new Promise<never>((_,reject)=>{stop=()=>reject(failure());signal.addEventListener('abort',stop,{once:true});});
+   try{
+    const value=await Promise.race([this.client.send(new ListObjectsV2Command({Bucket:this.storage.bucket,ExpectedBucketOwner:this.storage.accountId,
+     Prefix:prefix,MaxKeys:3}),{abortSignal:signal}),aborted]);signal.throwIfAborted();
+    if(value.Name!==this.storage.bucket||value.Prefix!==prefix||value.MaxKeys!==3||value.IsTruncated!==false||value.NextContinuationToken!==undefined
+     ||value.ContinuationToken!==undefined||value.EncodingType!==undefined||value.Delimiter!==undefined||value.StartAfter!==undefined
+     ||value.CommonPrefixes&&value.CommonPrefixes.length)throw failure();
+    const rows=z.array(row).max(2).parse(value.Contents??[]).sort((a,b)=>a.Key.localeCompare(b.Key));
+    if(value.KeyCount!==rows.length||new Set(rows.map(v=>v.Key)).size!==rows.length
+     ||rows.some(v=>v.Key!==prefix+'baseline.json'&&v.Key!==prefix+'observation.json'))throw failure();
+    return rows;
+   }finally{signal.removeEventListener('abort',stop);}
+  };
+  const catalogue=async()=>{const rows=[];for(let sequence=0;sequence<=64;sequence++)rows.push(await list(sequence));return rows;};
+  try{
+   const before=await catalogue(),read=async(sequence:number,kind:'BASELINE'|'OBSERVATION')=>{
+    const listed=before[sequence].find(v=>v.Key.endsWith(kind==='BASELINE'?'/baseline.json':'/observation.json'));
+    if(!listed)return null;
+    const saved=await this.store(sequence).inspectCandidateArtifact(kind,signal);
+    if(saved.currentETag!==listed.ETag||saved.pin.byteLength!==listed.Size)throw failure();return saved;
+   };
+   const savedHeader=await read(0,'BASELINE'),savedEnd=await read(0,'OBSERVATION');
+   if(!savedHeader&&before.some(rows=>rows.length))throw failure();
+   const h=savedHeader?this.parse(savedHeader.artifact,0).value:null;
+   let previous=h?.localRecord.sha256,missingIntent=false,uncertain=false,responseCount=0;
+   const records=[];
+   for(let sequence=1;sequence<=64;sequence++){
+    const saved=await read(sequence,'BASELINE'),observed=await read(sequence,'OBSERVATION');
+    if(!saved){if(observed)throw failure();missingIntent=true;continue;}
+    if(missingIntent||!h||!savedHeader)throw failure();
+    const original=this.parse(saved.artifact,sequence).value,v=intent.parse(JSON.parse(original.localRecord.body));
+    if(v.previousDigest!==previous||JSON.stringify(original.headerCustodyPin)!==JSON.stringify(savedHeader.pin)
+     ||v.storagePlan&&v.storagePlan.image!==header.parse(JSON.parse(h.localRecord.body)).image)throw failure();
+    previous=original.localRecord.sha256;
+    let outcome:'RECORDED_CLIENT_SUCCESS'|'RECORDED_CLIENT_UNCERTAINTY'|'NOT_LISTED_AT_BOUNDARY'='NOT_LISTED_AT_BOUNDARY';
+    if(observed){
+     const r=this.parseResponse(observed.artifact,sequence);
+     if(JSON.stringify(r.value.baselineCustodyPin)!==JSON.stringify(saved.pin))throw failure();
+     this.assertResponsePair(saved.artifact,observed.artifact,sequence);responseCount++;
+     outcome=(r.local.status===0||r.local.removalAlreadyAbsent)&&!r.local.transportError&&!r.local.signal?'RECORDED_CLIENT_SUCCESS':'RECORDED_CLIENT_UNCERTAINTY';
+    }
+    if(outcome!=='RECORDED_CLIENT_SUCCESS')uncertain=true;
+    records.push({sequence,intentPin:saved.pin,responsePin:observed?.pin??null,localIntentPin:{sha256:original.localRecord.sha256,byteLength:original.localRecord.byteLength},outcome});
+   }
+   if(savedEnd){
+    if(!savedHeader)throw failure();const e=this.parseEnd(savedEnd.artifact);
+    this.assertEndPair(savedHeader.artifact,savedEnd.artifact);
+    if(JSON.stringify(e.value.baselineCustodyPin)!==JSON.stringify(savedHeader.pin)||e.local.requestCount!==records.length
+     ||e.local.lastIntentDigest!==previous||responseCount!==records.length)throw failure();
+   }
+   if(JSON.stringify(await catalogue())!==JSON.stringify(before))throw failure();signal.throwIfAborted();
+   return{kind:'MANAGED_DAEMON_CUSTODY_DISCOVERY_V1' as const,
+    state:!savedHeader?'NOT_LISTED_AT_BOUNDARY' as const:savedEnd&&!uncertain?'RECORDED_CLIENT_RESPONSES' as const:'UNRESOLVED_REQUESTS' as const,
+    headerPin:savedHeader?.pin??null,endPin:savedEnd?.pin??null,records,responseCount,listingDigest:candidateHash(JSON.stringify(before)),
+    protocolOrdinalRange:{first:0,last:64},listingStableAtBoundaries:true as const,historyCompletenessVerified:false as const,
+    pendingRequestResolved:false as const,completeResourceInventory:false as const,sourceHostLossProven:false as const,
+    originalAcknowledgementReconstructed:false as const,savedEvidenceAuthorizesDispatch:false as const,cleanupAuthorized:false as const,actionAuthorized:false as const};
+  }catch{throw failure();}finally{clearTimeout(timer);controller.abort();}
  }
 }

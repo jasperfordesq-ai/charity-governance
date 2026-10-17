@@ -4,7 +4,7 @@ import {randomUUID,createHash} from 'node:crypto';
 import {ManagedProofJobCustody} from '../services/managed-proof-job-custody.js';
 import {jobScope,jobServiceScope,jobRequestArtifact,jobServiceArtifact} from '../services/managed-proof-job-contract.js';
 import {ManagedDaemonIntentCustody,daemonCustodyScope} from '../services/managed-daemon-intent-custody.js';
-import {GetObjectCommand,PutObjectCommand} from '@aws-sdk/client-s3';
+import {GetObjectCommand,PutObjectCommand,ListObjectsV2Command} from '@aws-sdk/client-s3';
 import {backend,config,credentials} from './fixtures/archived-custody.js';
 const hash=(v:string)=>createHash('sha256').update(v).digest('hex');
 function fixture(){
@@ -166,8 +166,77 @@ test('original end ACK binds all acknowledged responses; fresh reads remain evid
   const writes=f.b.writes;f.session.closeExecution();const observed=await f.reader().inspectEnd();
   assert.equal(observed.localRecord.sha256,end.sha256);assert.equal(observed.pendingRequestResolved,false);assert.equal(observed.completeResourceInventory,false);
   assert.equal(observed.originalAcknowledgementReconstructed,false);assert.equal(f.b.writes,writes);
+  const discovered=await f.create().discover(f.original);
+  assert.equal(discovered.daemon?.state,'RECORDED_CLIENT_RESPONSES');assert.equal(discovered.daemon?.records.length,1);
+  assert.equal(discovered.daemon?.responseCount,1);assert.equal(discovered.daemon?.pendingRequestResolved,false);assert.equal(f.b.writes,writes);
   await assert.rejects(f.session.finishDaemonRequests(end,f.original));await assert.rejects(f.reader().finishRequests(end));
  }finally{f.close();}
+});
+
+test('fresh daemon discovery distinguishes absent records, lost ACK and missing response without replay',async()=>{
+ for(const stage of ['absent','header','intent','response','end']){
+  const f=await daemonFixture();try{
+   const writer=f.custody(()=>true),local=f.intent();
+   if(stage!=='absent')await writer.reserveHeader(f.header);
+   if(['intent','response','end'].includes(stage))await writer.reserveIntent(local);
+   if(['response','end'].includes(stage))await writer.observeResponse(f.response(local));
+   if(stage==='end')await writer.finishRequests(f.end(1,local.sha256));
+   const writes=f.b.writes,found=await f.reader().discover();
+   assert.equal(found.state,stage==='absent'?'NOT_LISTED_AT_BOUNDARY':stage==='end'?'RECORDED_CLIENT_RESPONSES':'UNRESOLVED_REQUESTS');
+   assert.equal(found.records.length,['intent','response','end'].includes(stage)?1:0);
+   assert.equal(found.responseCount,['response','end'].includes(stage)?1:0);
+   assert.equal(found.pendingRequestResolved,false);assert.equal(found.originalAcknowledgementReconstructed,false);assert.equal(found.historyCompletenessVerified,false);
+   assert.equal(found.cleanupAuthorized,false);assert.equal(f.b.writes,writes);
+  }finally{f.close();}
+ }
+});
+
+test('bounded daemon discovery rejects orphan, gap and unexpected ordinal objects',async()=>{
+ for(const fault of ['orphan','gap','unexpected']){
+  const f=await daemonFixture();try{
+   const writer=f.custody(()=>true),local=f.intent();await writer.reserveHeader(f.header);await writer.reserveIntent(local);await writer.observeResponse(f.response(local));
+   const prefix='/capture-job/'+daemonCustodyScope(f.binding.candidateId,1)+'/',[key,value]=[...f.b.objects].find(([k])=>k.includes(prefix)&&k.endsWith('/baseline.json'))!;
+   if(fault==='orphan')f.b.objects.delete(key);
+   if(fault==='gap'){
+    f.b.objects.set(key.replace(daemonCustodyScope(f.binding.candidateId,1),daemonCustodyScope(f.binding.candidateId,2)),value);
+    f.b.objects.delete(key);f.b.objects.delete(key.replace('/baseline.json','/observation.json'));
+   }
+   if(fault==='unexpected')f.b.objects.set(key.replace('/baseline.json','/unexpected.json'),value);
+   const writes=f.b.writes;await assert.rejects(f.reader().discover());assert.equal(f.b.writes,writes);
+  }finally{f.close();}
+ }
+});
+
+test('empty discovery checks all65 protocol scopes twice and refuses pagination or cancellation',async()=>{
+ const f=await daemonFixture();try{
+  const reads=f.b.reads;assert.equal((await f.reader().discover()).state,'NOT_LISTED_AT_BOUNDARY');assert.equal(f.b.reads-reads,130);
+  const controller=new AbortController();controller.abort();const before=f.b.reads;
+  await assert.rejects(f.reader().discover(controller.signal));assert.equal(f.b.reads,before);
+  const original=f.client.send.bind(f.client);
+  mock.method(f.client,'send',async(command:GetObjectCommand|PutObjectCommand|ListObjectsV2Command)=>{
+   const value=await original(command as never);return command instanceof ListObjectsV2Command?{...value,IsTruncated:true,NextContinuationToken:'unexpected'}:value;
+  });
+  await assert.rejects(f.reader().discover());
+ }finally{f.close();}
+});
+
+test('daemon discovery refuses changing listings, wrong ETag and GET failure instead of treating evidence as absent',async()=>{
+ for(const fault of ['late','etag','get']){
+  const f=await daemonFixture();try{
+   const writer=f.custody(()=>true);await writer.reserveHeader(f.header);
+   const prefix='/capture-job/'+daemonCustodyScope(f.binding.candidateId,0)+'/',[key,value]=[...f.b.objects].find(([k])=>k.includes(prefix))!;
+   const original=f.client.send.bind(f.client);let changed=false;
+   mock.method(f.client,'send',async(command:GetObjectCommand|PutObjectCommand)=>{
+    if(command instanceof GetObjectCommand&&command.input.Key===key){
+     if(fault==='get')throw new Error('synthetic read unavailable');
+     if(fault==='etag')f.b.objects.set(key,{...value,version:'synthetic-substitution'});
+     if(fault==='late'&&!changed){changed=true;f.b.objects.set(key.replace(daemonCustodyScope(f.binding.candidateId,0),daemonCustodyScope(f.binding.candidateId,64)),value);}
+    }
+    return original(command as never);
+   });
+   const writes=f.b.writes;await assert.rejects(f.reader().discover());assert.equal(f.b.writes,writes);
+  }finally{f.close();}
+ }
 });
 
 test('missing response ACK forbids next intent or end and consumes original writer',async()=>{

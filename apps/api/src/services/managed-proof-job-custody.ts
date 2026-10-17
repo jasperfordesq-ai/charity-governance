@@ -82,19 +82,21 @@ export class ManagedProofJobCustody{
     observation=parseJobObservation(this.binding,await this.evidence.observeObservation(b.pin,saved.pin,signal));observationPin=b.pin;
     if(JSON.stringify(observation.value.jobRequestPin)!==JSON.stringify(saved.pin))throw failure();
    }
-   let service:ReturnType<typeof parseJobService>|undefined,servicePin:Pin|null=null;
+   let service:ReturnType<typeof parseJobService>|undefined,servicePin:Pin|null=null,serviceArtifact:{body:string;sha256:string}|null=null;
    if(servicesBefore[0]){
     const bound=await this.serviceEvidence.inspectCandidateArtifact('BASELINE',signal);
     if(bound.currentETag!==servicesBefore[0].ETag||bound.pin.byteLength!==servicesBefore[0].Size)throw failure();
     service=parseJobService(this.binding,bound.artifact);assertJobServicePair(this.binding,saved.artifact,bound.artifact);
-    if(JSON.stringify(service.value.jobRequestPin)!==JSON.stringify(saved.pin))throw failure();servicePin=bound.pin;
+    if(JSON.stringify(service.value.jobRequestPin)!==JSON.stringify(saved.pin))throw failure();servicePin=bound.pin;serviceArtifact=bound.artifact;
    }
+   const daemon=service?.local.identity.format===2&&servicePin&&serviceArtifact
+    ?await new ManagedDaemonIntentCustody(this.storage,this.binding,this.credentials,this.client,saved.artifact,saved.pin,serviceArtifact,servicePin,()=>false).discover(signal):null;
    if(JSON.stringify(before)!==JSON.stringify(await list())||JSON.stringify(servicesBefore)!==JSON.stringify(await list(servicePrefix,1)))throw failure();signal.throwIfAborted();
    return{jobId:a.local.jobId,scope,sourceSha:a.local.sourceSha,requestPin:{sha256:a.value.localRequest.sha256,byteLength:a.value.localRequest.byteLength},
     observationPin:observation?{sha256:observation.value.localObservation.sha256,byteLength:observation.value.localObservation.byteLength}:null,
     jobRequestPin:saved.pin,jobObservationPin:observationPin,state:observation?.local.state??'REQUESTED_ONLY',
     servicePin:service?{sha256:service.value.localService.sha256,byteLength:service.value.localService.byteLength}:null,jobServicePin:servicePin,
-    serviceIdentity:service?.local.identity??null,serviceStatus:service?'SAVED_SERVICE_BINDING':'NOT_LISTED_AT_BOUNDARY',
+    serviceIdentity:service?.local.identity??null,serviceStatus:service?'SAVED_SERVICE_BINDING':'NOT_LISTED_AT_BOUNDARY',daemon,
     reportStatus:observation?'SAVED_OBSERVATION':'NOT_LISTED_AT_BOUNDARY',listingStableAtBoundaries:true as const,
     historyCompletenessVerified:false as const,sourceHostLossProven:false as const,originalAcknowledgementReconstructed:false as const,
     savedObservationAuthorizesExecution:false as const,executionAuthorized:false as const,publicationAuthorized:false as const,actionAuthorized:false as const};

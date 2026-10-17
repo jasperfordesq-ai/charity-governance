@@ -53,6 +53,9 @@ test('separate synthetic custody survives source exit and source SIGKILL, then c
   // Ten normal ACK-fault cases plus the original current control retained by
   // the genuinely killed caller. That eleventh attempt must remain unresolved.
   assert.equal(result.currentInspections,11);assert.equal(result.currentVerifiedRoots,2);assert.equal(result.currentUnresolved,9);
+   assert.ok(result.daemonCatalogues>=2);assert.ok(result.daemonCompleted>=2);assert.ok(result.daemonUnresolved>=1);
+   assert.equal(result.daemonCatalogues,result.daemonCompleted+result.daemonUnresolved);
+   console.log('COLD_DAEMON_DISCOVERY_COUNTS='+JSON.stringify({catalogues:result.daemonCatalogues,completed:result.daemonCompleted,unresolved:result.daemonUnresolved}));
   service.send({kind:'STOP_SYNTHETIC_CUSTODY_V1'});assert.equal((await serviceTerminal).code,0);
   await assert.rejects(callSyntheticCustody(descriptor,{op:'sessions'}));
   console.log('PASS independent synthetic process: source normal exit + genuine source SIGKILL; cold SDK LIST/GET/MAC/decrypt verifies retained roots and killed-source service bytes without source IDs/pins or new writes/data keys; service loss has no cache fallback; not real provider/VM-loss proof');

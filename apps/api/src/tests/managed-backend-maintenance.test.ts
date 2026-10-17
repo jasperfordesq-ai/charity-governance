@@ -1013,6 +1013,15 @@ async function currentRecoveryFixture(){
    mainStartMonotonic:'12345',sourceSha:x.binding.sourceSha,inputDigest:hash('input'),bootId:'12345678-1234-1234-1234-123456789012',
    controlGroup:`/user.slice/user-1000.slice/user@1000.service/app.slice/charitypilot-containment-${jobId}.service`,executionAuthorized:false,actionAuthorized:false},
   executionAuthorized:false,publicationAuthorized:false,actionAuthorized:false}),x.requestPin);
+ const header=artifact({format:2,kind:'MANAGED_DAEMON_REQUEST_HEADER_V2',jobId,inputDigest:hash('input'),image:'postgres@sha256:'+'1'.repeat(64),imageVolumeTargets:['/var/lib/postgresql/data']});
+ await x.session.reserveSourceDaemonHeader(header,x.requestPin);
+ const intent=artifact({format:2,kind:'MANAGED_DAEMON_REQUEST_INTENT_V2',jobId,sequence:1,previousDigest:header.sha256,
+  operation:'exec',target:'charitypilot-source-snapshot-123-456-abcdef12',storagePlan:null,argumentsDigest:hash('synthetic arguments')});
+ await x.session.reserveSourceDaemonIntent(intent,x.requestPin);
+ await x.session.observeSourceDaemonResponse(artifact({format:1,kind:'MANAGED_DAEMON_CLIENT_RESPONSE_V1',jobId,sequence:1,
+  intentPin:{sha256:intent.sha256,byteLength:intent.byteLength},status:0,transportError:false,signal:false,removalAlreadyAbsent:false}),x.requestPin);
+ await x.session.finishSourceDaemonRequests(artifact({format:1,kind:'MANAGED_DAEMON_REQUEST_END_V1',jobId,
+  headerPin:{sha256:header.sha256,byteLength:header.byteLength},requestCount:1,lastIntentDigest:intent.sha256}),x.requestPin);
  await x.session.observeSourceJob(artifact({format:1,kind:'MANAGED_IMPORTED_PROOF_JOB_OBSERVATION_V1',jobId,requestPin,state:'WORKER_EXIT_ACK_OBSERVED',
   jobContainersObservedAbsent:true,executionAuthorized:false,publicationAuthorized:false,actionAuthorized:false}),x.requestPin);
  await x.session.publishReport(x.report,x.requestPin);x.session.closeExecution();
@@ -1036,18 +1045,19 @@ test('cold current recovery composes saved job discovery and archive verificatio
 });
 
 test('cold recovery keeps missing/corrupt job evidence and unknown root verification unresolved without repairing history',async()=>{
- for(const fault of ['missing-job','corrupt-job','missing-report','root-unavailable']){
+ for(const fault of ['missing-job','corrupt-job','missing-report','root-unavailable','missing-daemon-response']){
   const x=await currentRecoveryFixture();
   const key=[...x.f.artifacts.keys()].find(k=>k.includes('/capture-job/')&&k.endsWith('/baseline.json'))!;
   if(fault==='missing-job')x.f.artifacts.delete(key);
   if(fault==='corrupt-job')x.f.artifacts.set(key,{...x.f.artifacts.get(key)!,body:'{}'});
+  if(fault==='missing-daemon-response')x.f.artifacts.delete([...x.f.artifacts.keys()].find(k=>x.f.artifacts.get(k)!.body.includes('MANAGED_DAEMON_CUSTODY_RESPONSE_V1'))!);
   if(fault==='missing-report')x.f.artifacts.delete([...x.f.artifacts.keys()].find(k=>k.includes('/capture-candidate/')&&k.includes(hash(x.binding.candidateId))&&k.endsWith('/observation.json'))!);
   const before=x.f.artifacts.size;
   const archive=fault==='root-unavailable'?{...x.archive,verifySet:async()=>{throw new Error('PRIVATE provider failure');}}:x.archive;
   const observed=await x.cold().inspectCurrentRecovery(x.f.store,1,archive);
   assert.equal(observed.unresolvedCommonCandidates,1);assert.equal(observed.actionAuthorized,false);assert.equal(x.f.artifacts.size,before);
   const common=observed.records.find(r=>r.kind==='COMMON_CAPTURE_RECOVERY_OBSERVATION');assert.equal(common?.unresolved,true);
-  if(fault==='missing-job'||fault==='corrupt-job')assert.equal(common?.jobStatus,'UNRESOLVED');
+  if(fault==='missing-job'||fault==='corrupt-job'||fault==='missing-daemon-response')assert.equal(common?.jobStatus,'UNRESOLVED');
   else assert.notEqual(common?.rootStatus,'ARCHIVE_VERIFIED_QUARANTINE_ONLY');
  }
 });
