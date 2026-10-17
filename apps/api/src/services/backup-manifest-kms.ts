@@ -16,14 +16,15 @@ export class KmsBackupManifestMac {
     keyArn: string,
     private readonly purpose:
       | 'DOCUMENT_BACKUP_INDEX_V1'
-      | 'ARCHIVED_RECOVERY_SET_V1',
+      | 'ARCHIVED_RECOVERY_SET_V1'
+      | 'ARCHIVED_RECOVERY_SET_V2',
     credentials: NonNullable<KMSClientConfig['credentials']>,
     client?: KMSClient,
   ) {
     this.keyArn = DOCUMENT_BACKUP_KEY_ARN.parse(keyArn);
     if (
       !credentials ||
-      !['DOCUMENT_BACKUP_INDEX_V1', 'ARCHIVED_RECOVERY_SET_V1'].includes(
+      !['DOCUMENT_BACKUP_INDEX_V1', 'ARCHIVED_RECOVERY_SET_V1','ARCHIVED_RECOVERY_SET_V2'].includes(
         purpose,
       )
     )

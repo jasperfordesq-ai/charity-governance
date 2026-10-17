@@ -1,3 +1,13 @@
+## 17 October: encrypted common custody and interval-bound V2 root
+
+The [common custody workflow](managed-common-recovery-custody.md) joins a genuine
+full database proof/dump, encrypted database/file receipts and authenticated index.
+V2 roots retain the completed matching imported interval under a separate MAC
+domain and verify it for a fresh reader; V1 remains supported. Native synthetic
+cloud proof covers lost-root ACK reconciliation without new writes/data keys.
+Real provider/host-loss, control/journal/root discovery and current authority gates
+remain open; the full delegated goal remains active.
+
 # Full isolated-restore proof from the guarded imported snapshot
 
 17 October 2026. Internal supervised proof entry point, not an activated managed

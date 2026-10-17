@@ -97,10 +97,9 @@ function matches(target: BackupManifestTarget, body: string, expected: string) {
         ? value?.index?.kind
         : value?.manifest?.kind;
     if (
-      kind !==
-        (target.kind === 'DOCUMENT_INDEX_V1'
-          ? 'DOCUMENT_BACKUP_INDEX_V1'
-          : 'ARCHIVED_RECOVERY_SET_V1') ||
+      (target.kind === 'DOCUMENT_INDEX_V1' ? kind !== 'DOCUMENT_BACKUP_INDEX_V1'
+        : !((kind === 'ARCHIVED_RECOVERY_SET_V1' && value.manifest.format === 1)
+          || (kind === 'ARCHIVED_RECOVERY_SET_V2' && value.manifest.format === 2))) ||
       scope?.installationId !== target.installationId ||
       scope?.setId !== target.setId ||
       scope?.sourceSha !== target.sourceSha ||

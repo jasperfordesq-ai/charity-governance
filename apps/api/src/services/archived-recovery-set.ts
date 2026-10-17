@@ -1,3 +1,4 @@
+import {managedSnapshotInterval,managedSnapshotIntervalSchema,assertImportedSnapshotInterval,type ManagedSnapshotInterval} from './managed-snapshot-interval.js';
 import { createHash } from 'node:crypto';
 import { PassThrough, Writable } from 'node:stream';
 import { z } from 'zod';
@@ -134,7 +135,7 @@ const databaseSchema = z
     compositeChecksumSha256: z.string().max(64),
   })
   .strict();
-const manifestSchema = z
+const legacyManifestSchema = z
   .object({
     format: z.literal(1),
     kind: z.literal('ARCHIVED_RECOVERY_SET_V1'),
@@ -158,11 +159,12 @@ const manifestSchema = z
   })
   .strict();
 const pinSchema = z.object({ scope: scopeSchema, sha256: sha }).strict();
+const manifestSchema=z.discriminatedUnion('format',[legacyManifestSchema,legacyManifestSchema.extend({format:z.literal(2),kind:z.literal('ARCHIVED_RECOVERY_SET_V2'),snapshotInterval:managedSnapshotIntervalSchema})]);
 type Manifest = z.infer<typeof manifestSchema>;
 const hash = (body: string) => createHash('sha256').update(body).digest('hex');
 const message = (m: Manifest) =>
   Buffer.from(
-    'CHARITYPILOT_ARCHIVED_RECOVERY_SET_V1\n' + hash(JSON.stringify(m)),
+    `CHARITYPILOT_ARCHIVED_RECOVERY_SET_V${m.format}\n` + hash(JSON.stringify(m)),
   );
 function target(
   scope: ArchivedRecoveryScope,
@@ -202,6 +204,7 @@ function validManifest(raw: unknown) {
     ).test(m.database.compositeChecksumSha256)
   )
     throw refused();
+  if(m.format===2)managedSnapshotInterval(m.snapshotInterval);
   return m;
 }
 /** Archives only. Source consistency/provenance and independently current policy
@@ -215,6 +218,7 @@ export class ArchivedRecoverySets {
   private readonly docKeys: KmsDocumentBackupKeys;
   private readonly indexMac: KmsDocumentBackupIndexMac;
   private readonly rootMac: KmsBackupManifestMac;
+  private readonly rootMacV2: KmsBackupManifestMac;
   constructor(
     config: Configuration,
     credentials: NonNullable<S3ClientConfig['credentials']>,
@@ -260,6 +264,7 @@ export class ArchivedRecoverySets {
       credentials,
       clients.kms,
     );
+    this.rootMacV2=new KmsBackupManifestMac(c.rootMacKeyArn,'ARCHIVED_RECOVERY_SET_V2',credentials,clients.kms);
   }
   private scope(raw: unknown) {
     const s = scopeSchema.parse(raw),
@@ -463,7 +468,7 @@ export class ArchivedRecoverySets {
       JSON.stringify({ manifest, mac: parsed.mac }) !== body
     )
       throw refused();
-    const checked = await this.rootMac.verify(
+    const checked = await (manifest.format===2?this.rootMacV2:this.rootMac).verify(
       manifest.scope.rootMacKeyArn,
       message(manifest),
       tag,
@@ -472,7 +477,11 @@ export class ArchivedRecoverySets {
       throw refused();
     return { pin, manifest };
   }
-  async prepare(raw: unknown, caller?: AbortSignal) {
+  async prepare(raw: unknown, caller?: AbortSignal) {return this.prepareInternal(raw,undefined,caller);}
+  async prepareImported(raw:unknown,interval:unknown,caller?:AbortSignal){
+    return this.prepareInternal(raw,managedSnapshotInterval(interval),caller);
+  }
+  private async prepareInternal(raw:unknown,interval:ManagedSnapshotInterval|undefined,caller?:AbortSignal){
     return this.work(async (signal) => {
       const value = z
         .object({
@@ -518,6 +527,7 @@ export class ArchivedRecoverySets {
         this.indexMac,
       );
       this.report(scope, sourceReport.artifact.body, index);
+      if(interval)assertImportedSnapshotInterval(interval,sourceReport.artifact.body);
       const database = await this.database(
         scope,
         value.database.artifact,
@@ -532,8 +542,7 @@ export class ArchivedRecoverySets {
         versionId: v.versionId,
       });
       const manifest = validManifest({
-        format: 1,
-        kind: 'ARCHIVED_RECOVERY_SET_V1',
+        ...(interval?{format:2,kind:'ARCHIVED_RECOVERY_SET_V2',snapshotInterval:interval}:{format:1,kind:'ARCHIVED_RECOVERY_SET_V1'}),
         restoreMode: 'QUARANTINE_ONLY',
         captureConsistency: 'EXTERNAL_VERIFICATION_REQUIRED',
         scope,
@@ -550,7 +559,7 @@ export class ArchivedRecoverySets {
         metadataInventorySha256: index.metadataInventorySha256,
         objectInventorySha256: index.objectInventorySha256,
       });
-      const signed = await this.rootMac.generate(
+      const signed = await (manifest.format===2?this.rootMacV2:this.rootMac).generate(
         scope.rootMacKeyArn,
         message(manifest),
       );
@@ -684,6 +693,7 @@ export class ArchivedRecoverySets {
         this.indexMac,
       );
       this.report(scope, report.artifact.body, index);
+      if(manifest.format===2)assertImportedSnapshotInterval(manifest.snapshotInterval,report.artifact.body);
       if (
         index.entries.length !== manifest.documentCount ||
         index.objects.length !== manifest.objectCount ||
@@ -712,6 +722,7 @@ export class ArchivedRecoverySets {
         rootVersionId: root.versionId,
         documentCount: index.entries.length,
         objectCount: index.objects.length,
+        ...(manifest.format===2?{snapshotInterval:manifest.snapshotInterval,completedIntervalBindingVerified:true as const,wholeBackendQuiesced:false as const,actionAuthorized:false as const}:{}),
       };
     }, caller);
   }

@@ -1,3 +1,4 @@
+import {startManagedCommonCustody} from './managed-common-custody-postgres-proof.mjs';
 import {mkdtempSync,readFileSync,statSync,rmSync} from 'node:fs';
 import {tmpdir} from 'node:os';
 import {basename,dirname,join,resolve} from 'node:path';
@@ -20,7 +21,7 @@ export async function proveManagedDatabaseSnapshot({admin,url,id,database,certif
  const document={id:fileId,organisationId:'synthetic_tenant',fileUrl:'record.txt',fileSize:body.length,mimeType:'text/plain'};
  const output=mkdtempSync(join(tmpdir(),'charitypilot-imported-proof-'));
  const verifyOutput=()=>{assert.equal(dirname(resolve(output)),resolve(tmpdir()));assert.ok(basename(output).startsWith('charitypilot-imported-proof-'));};verifyOutput();
- const prove=async(snapshot,identity,signal)=>{
+ const prove=async(snapshot,identity,signal,captureConfigurationDigest)=>{
   const source=new URL(captureUrl(database));source.searchParams.set('sslrootcert',certificate);
   const args=['prove-restore','--source-container-id='+id,'--recovery-set-id=synthetic-imported-'+randomUUID(),
    '--expected-source-database-identity-sha256='+identity,'--output-dir='+output,'--output-file=common.dump','--report-file=common.json'];
@@ -42,6 +43,14 @@ export async function proveManagedDatabaseSnapshot({admin,url,id,database,certif
   assert.equal(report.importedSnapshot.snapshotBindingSha256,hash('CHARITYPILOT_MANAGED_EXPORTED_SNAPSHOT_V1\n'+JSON.stringify(snapshot)));
   assert.equal(report.source.tables.find(t=>t.table==='synthetic_snapshot_public').rowCount,'1');
   assert.equal(report.source.documentMetadata.rowCount,1);assert.equal(hash(readFileSync(join(output,'common.dump'))),report.dump.sha256);
+  const metadata=await admin.$transaction(async tx=>{
+   const [stamp]=await tx.$queryRaw`SELECT txid_current()::text AS "transactionId",to_char(clock_timestamp() AT TIME ZONE 'UTC','YYYY-MM-DD"T"HH24:MI:SS.MS"Z"') AS "capturedAt"`;
+   const rows=await tx.$queryRaw`SELECT id,"organisationId","fileUrl","fileSize","mimeType" FROM public."Document" ORDER BY id`;
+   return{...stamp,rows};
+  });
+  const fullDump=readFileSync(join(output,'common.dump'));
+  try{custody=await startManagedCommonCustody({reportBody:readFileSync(join(output,'common.json'),'utf8'),dump:fullDump,
+   metadata,captureConfigurationDigest},signal);}finally{fullDump.fill(0);}
   return{reportSha256:hash(readFileSync(join(output,'common.json'))),dumpSha256:report.dump.sha256,dumpBytes:Number(report.dump.bytes)};
  };
  // Verify local engine once before entering the bounded transaction, then pin
@@ -61,7 +70,7 @@ export async function proveManagedDatabaseSnapshot({admin,url,id,database,certif
    else resolve({code,body:Buffer.concat(out),error:Buffer.concat(err).toString('utf8')});});
  });
  const successful=async(args,input,signal,extra)=>{const r=await execute(args,input,signal,extra);assert.equal(r.code,0,r.error);return r.body;};
- let dump,expired,sourceFingerprint,created=false;
+ let dump,expired,sourceFingerprint,custody,created=false;
  const captureUrl=dbName=>`postgresql://postgres:synthetic-maintenance-only@127.0.0.1:5432/${dbName}?sslmode=verify-full&sslrootcert=/tmp/cert.pem`;
  try{
   await successful(['mkdir','-m','700','/proof']);
@@ -113,11 +122,11 @@ export async function proveManagedDatabaseSnapshot({admin,url,id,database,certif
    assert.equal(sourceFingerprint.documentMetadata.rowCount,1);
    assert.equal(sourceFingerprint.documentMetadata.rowsSha256,canonicalDocumentMetadataRowsSha256(metadata));
    assert.equal(dump.subarray(0,5).toString(),'PGDMP');
-   const releaseProof=await prove(snapshot,sourceFingerprint.databaseIdentitySha256,signal);
+   const releaseProof=await prove(snapshot,sourceFingerprint.databaseIdentitySha256,signal,capture.configurationDigest());
    const files=await capture.capture(async(file,bytes,digest)=>{
     assert.equal(file.fileUrl,'record.txt');assert.equal(digest,hash(body));assert.deepEqual(bytes,body);
     const [row]=await admin.$queryRaw`SELECT body FROM managed_snapshot_fixture.objects WHERE id='record.txt'`;
-    assert.equal(row.body,bytes.toString());
+    assert.equal(row.body,bytes.toString());await custody.visit(file,bytes,digest,signal);
    },signal);
    return{databaseSha256:releaseProof.dumpSha256,databaseBytes:releaseProof.dumpBytes,files,releaseProof};
   });
@@ -125,6 +134,9 @@ export async function proveManagedDatabaseSnapshot({admin,url,id,database,certif
   assert.equal(result.databaseSnapshot.importedByConsumerVerified,false); // Generic API cannot attest its caller.
   assert.equal(result.evidence.windowId,result.databaseSnapshot.windowId);
   assert.equal(result.value.files.objects.length,1);
+  await holder.$disconnect();
+  const common=await custody.finish({metadataWindow:result.evidence,databaseSnapshot:result.databaseSnapshot},result.value.files);
+  assert.equal(common.completedIntervalBindingVerified,true);
   await successful(['createdb','-h','127.0.0.1','-U','postgres',destination]);created=true;
   await successful(['pg_restore','-h','127.0.0.1','-U','postgres','--dbname='+destination,'--no-owner','--no-privileges','--exit-on-error'],dump);
   const rows=await successful(['psql','-h','127.0.0.1','-U','postgres','-d',destination,'-At','-v','ON_ERROR_STOP=1','-c',
@@ -145,7 +157,7 @@ export async function proveManagedDatabaseSnapshot({admin,url,id,database,certif
   console.log('PASS full imported v2 proof: clean committed original helper, protected dump/report, isolated restore/cleanup, source identity, Document projection and original snapshot context verified');
   console.log('PASS native canonical common capture: original helper imports guarded snapshot, dumps and fingerprints the same public view; isolated restore fingerprints match and omit later MVCC rows; file metadata matches; expired import refused');
  }finally{
-  dump?.fill(0);
+  dump?.fill(0);custody?.close();
   try{if(created)await successful(['dropdb','-h','127.0.0.1','-U','postgres',destination]);}
   finally{await holder.$disconnect();await admin.$executeRaw`DROP SCHEMA IF EXISTS managed_snapshot_fixture CASCADE`;await admin.$executeRaw`DROP TABLE IF EXISTS public.synthetic_snapshot_public`;await admin.$executeRaw`DROP TABLE IF EXISTS public."Document"`;verifyOutput();rmSync(output,{recursive:true,force:true});}
  }

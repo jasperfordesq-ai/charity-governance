@@ -22,7 +22,7 @@ const capture=z.object({kind:z.literal('SUPABASE_CANDIDATE_CAPTURE'),restoreMode
  credentialPrivilegeVerified:no,credentialWriteAuthorityExcluded:no,wholeStorageQuiesced:no,actionAuthorized:no,
  configurationDigest:sha,inventoryDigest:sha,startedAt:z.string().datetime(),observedAt:z.string().datetime(),
  objects:z.array(z.object({fileUrl:path,bytes:size,sha256:sha}).strict()).max(5000),files:z.array(file).max(5000)}).strict();
-const window=z.object({format:z.literal(1),kind:z.literal('MANAGED_STORAGE_METADATA_WINDOW_V1'),windowId:uuid,
+export const managedStorageWindowSchema=z.object({format:z.literal(1),kind:z.literal('MANAGED_STORAGE_METADATA_WINDOW_V1'),windowId:uuid,
  configurationDigest:sha,database:name,databaseOid:oid,observer:z.object({name,oid}).strict(),
  relations:z.array(z.object({schema:name,name,oid}).strict()).min(1).max(16),backendPid:z.number().int().positive(),
  lockMode:z.literal('SHARE'),transactionReadOnly:z.literal(true),transactionIsolation:z.literal('ReadCommitted'),
@@ -30,7 +30,7 @@ const window=z.object({format:z.literal(1),kind:z.literal('MANAGED_STORAGE_METAD
  scope:z.literal('CONFIGURED_RELATIONS_DURING_CALLBACK_ONLY'),metadataWindowCompleted:z.literal(true),windowStillHeld:no,
  objectBytesFenced:no,allWritersInventoried:no,wholeBackendQuiesced:no,actionAuthorized:no}).strict();
 const report=z.object({kind:z.literal('MANAGED_QUARANTINED_STORAGE_CANDIDATE'),binding:candidateBindingSchema,bindingDigest:sha,
- requestPin:candidatePinSchema.refine(p=>p.kind==='BASELINE'&&p.byteLength<=8192),capture,metadataWindow:window,
+ requestPin:candidatePinSchema.refine(p=>p.kind==='BASELINE'&&p.byteLength<=8192),capture,metadataWindow:managedStorageWindowSchema,
  restoreMode:z.literal('QUARANTINE_ONLY'),controlRevisionVerifiedAtBoundaries:z.literal(true),wholeBackendQuiesced:no,
  objectBytesFenced:no,currentTenantAuthorityVerified:no,archivedSetAdmitted:no,actionAuthorized:no,observationDigest:sha}).strict();
 const failure=()=>new Error('Managed candidate custody artifact is unverified');
