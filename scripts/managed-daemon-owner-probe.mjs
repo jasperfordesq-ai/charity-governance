@@ -27,6 +27,10 @@ const loaded=unit=>{const r=spawnSync('systemctl',['--user','show',unit,'--prope
 export function independentOwnerProbeArguments(jobId){containmentUnit(jobId);return['run','--rm','--pull=never','--name','charitypilot-owner-probe-'+jobId,
  '--label','io.charitypilot.owner-probe='+jobId,'--network=none','--read-only','--cap-drop=ALL','--security-opt=no-new-privileges',
  '--memory=64m','--cpus=0.25','--pids-limit=32','--tmpfs',PROOF_CLIENT_DATA_TMPFS,'--entrypoint','sh',DEFAULT_POSTGRES_IMAGE,'-c','sleep 6; printf SYNTHETIC_OWNER_COMPLETE'];}
+export function ownerProbeInspectAbsent(result,target){
+ return result?.status===1&&!result.error&&!result.signal&&typeof result.stdout==='string'&&result.stdout.trim()==='[]'
+  &&['error: no such object: '+target,'Error: No such object: '+target,'Error response from daemon: No such container: '+target].includes(result.stderr?.trim());
+}
 function launch(unit,role,root){if(loaded(unit)!=='not-found')throw no();command('systemd-run',['--user','--quiet','--unit='+unit,'--service-type=exec',
  '--property=RemainAfterExit=yes','--property=KillMode=control-group','--property=Restart=no','--property=RuntimeMaxSec=30s','--property=TimeoutStopSec=2s',
  '--property=NoNewPrivileges=yes','--property=MemoryMax=128M','--property=TasksMax=32','--property=CPUQuota=50%',
@@ -55,7 +59,7 @@ export async function probeIndependentDaemonOwner(mode='caller-loss'){
  const request={kind:'SYNTHETIC_INDEPENDENT_OWNER_PROBE_V1',jobId,ownerId,callerUnit:containmentUnit(jobId),ownerUnit:containmentUnit(ownerId),sourceSha,rootIdentity:rootIdentity(root)};
  let launched=false,container,ownerReady,completed=false;
  const docker=args=>spawnLocalDockerCommand(['docker',...args],process.env,{encoding:'utf8',timeout:15000,maxBuffer:65536});
- const inspect=target=>{const r=docker(['inspect',target]);if(r.status!==0){if(!r.error&&!r.signal&&/No such (?:object|container)/.test(r.stderr??''))return null;throw no();}return JSON.parse(r.stdout)[0];};
+ const inspect=target=>{const r=docker(['inspect',target]);if(r.status!==0){if(ownerProbeInspectAbsent(r,target))return null;throw no();}return JSON.parse(r.stdout)[0];};
  const exact=value=>{if(!value||value.Name!=='/charitypilot-owner-probe-'+jobId||value.Config.Image!==DEFAULT_POSTGRES_IMAGE||value.Config.Labels['io.charitypilot.owner-probe']!==jobId
   ||value.Mounts.some(m=>m.Type!=='tmpfs'||m.Destination!=='/var/lib/postgresql/data')||value.HostConfig.Privileged||value.HostConfig.NetworkMode!=='none'
   ||value.HostConfig.ReadonlyRootfs!==true||Object.keys(value.HostConfig.Tmpfs??{}).join(',')!=='/var/lib/postgresql/data')throw no();return value;};
