@@ -1,3 +1,13 @@
+## 17 October: read-only Storage database authority inventory
+
+The [database authority inventory](managed-storage-database-inventory.md) now
+observes exact configured PostgreSQL16 relations, all bounded roles/memberships,
+effective table/column privileges and non-system SECURITY DEFINER EXECUTE paths.
+Native tests exercise the actual component against hidden write authorities and
+refusal cases. It changes no grants, holds no capture window and never claims
+complete writer coverage or global quiescence. Actual provider identity/contract,
+indirect and non-SQL writers and common capture remain open.
+
 ## 17 October: native Storage grant/capture-window evidence
 
 Read [Storage grant and capture-window proof](storage-grant-capture-window-proof.md).

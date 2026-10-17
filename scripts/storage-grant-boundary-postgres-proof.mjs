@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import {PrismaClient} from '@prisma/client';
+import {ManagedStorageDatabaseInventory} from '../apps/api/dist/services/managed-storage-database-inventory.js';
 
 /** SQL semantics experiment in the EXISTING disposable TLS PostgreSQL fixture.
  * Not a Supabase migration, operator command, live ACL fence or release claim. */
@@ -21,6 +22,13 @@ export async function proveStorageGrantBoundary({admin,url}){
  const capture=new PrismaClient({datasources:{db:{url:captureUrl.href}}}),
   fencer=new PrismaClient({datasources:{db:{url}}}),
   actor=new PrismaClient({datasources:{db:{url}}});
+ const [database]=await admin.$queryRaw`SELECT current_database() AS name,oid::text AS oid FROM pg_database WHERE datname=current_database()`;
+ const principals=await admin.$queryRaw`SELECT rolname AS name,oid::text AS oid FROM pg_roles WHERE rolname IN ('postgres','storage_probe_capture','storage_probe_alternate')`;
+ const [relation]=await admin.$queryRaw`SELECT oid::text AS oid FROM pg_class WHERE oid='public.synthetic_storage_boundary'::regclass`;
+ const config={database:database.name,databaseOid:database.oid,observer:principals.find(p=>p.name==='postgres'),
+  capture:principals.find(p=>p.name==='storage_probe_capture'),relations:[{schema:'public',name:'synthetic_storage_boundary',oid:relation.oid}]};
+ const inventory=new ManagedStorageDatabaseInventory(admin,config);
+ const captureGrant=report=>report.grants.find(g=>g.roleOid===config.capture.oid&&g.relationOid===relation.oid);
  let releasePending;
  const denied=fn=>assert.rejects(fn,e=>e?.code==='P2010'&&e?.meta?.code==='42501');
  const options={maxWait:5000,timeout:15000};
@@ -52,6 +60,14 @@ export async function proveStorageGrantBoundary({admin,url}){
   const [column]=await admin.$queryRaw`SELECT has_table_privilege('storage_probe_capture','public.synthetic_storage_boundary','INSERT') AS table_insert,
    has_column_privilege('storage_probe_capture','public.synthetic_storage_boundary','value','INSERT') AS column_insert`;
   assert.equal(column.table_insert,false);assert.equal(column.column_insert,true);
+  const columnReport=await inventory.observe();
+  assert.equal(captureGrant(columnReport).insert,false);assert.equal(captureGrant(columnReport).columnInsert,true);
+  assert.equal(columnReport.identity.readOnly,true);assert.equal(columnReport.identity.encrypted,true);
+  assert.equal(columnReport.roles.find(r=>r.oid===config.capture.oid).bypassRls,true);
+  assert.equal(columnReport.captureCredentialReadOnlyVerified,false);assert.equal(columnReport.wholeBackendQuiesced,false);
+  assert.equal(columnReport.allWritersInventoried,false);assert.equal(columnReport.metadataWindowHeld,false);
+  assert.equal(columnReport.relations[0].ownerOid,config.observer.oid);
+  assert.doesNotMatch(JSON.stringify(columnReport),/synthetic-capture-only|commit-after-plain-revoke|INSERT INTO/);
   await capture.$executeRaw`INSERT INTO public.synthetic_storage_boundary VALUES ('column-grant-writes')`;
   await admin.$executeRaw`REVOKE INSERT(value) ON public.synthetic_storage_boundary FROM storage_probe_capture`;
   await denied(()=>capture.$executeRaw`INSERT INTO public.synthetic_storage_boundary VALUES ('column-grant-revoked')`);
@@ -61,12 +77,20 @@ export async function proveStorageGrantBoundary({admin,url}){
    'INSERT INTO public.synthetic_storage_boundary VALUES ($1); SELECT 1'`;
   await admin.$executeRaw`REVOKE ALL ON FUNCTION public.synthetic_storage_elevated_write(text) FROM PUBLIC`;
   await admin.$executeRaw`GRANT EXECUTE ON FUNCTION public.synthetic_storage_elevated_write(text) TO storage_probe_capture`;
+  const functionReport=await inventory.observe();
+  assert.equal(functionReport.definers.find(f=>f.name==='synthetic_storage_elevated_write').executableBy.includes(config.capture.oid),true);
   assert.equal((await capture.$queryRaw`SELECT public.synthetic_storage_elevated_write('function-still-writes') AS ok`)[0].ok,1);
   await admin.$executeRaw`REVOKE EXECUTE ON FUNCTION public.synthetic_storage_elevated_write(text) FROM storage_probe_capture`;
+  assert.equal((await inventory.observe()).definers.find(f=>f.name==='synthetic_storage_elevated_write').executableBy.includes(config.capture.oid),false);
   await denied(()=>capture.$queryRaw`SELECT public.synthetic_storage_elevated_write('function-revoked') AS ok`);
 
   await admin.$executeRaw`GRANT INSERT ON public.synthetic_storage_boundary TO storage_probe_alternate`;
   await admin.$executeRaw`GRANT storage_probe_alternate TO storage_probe_capture`;
+  const membershipReport=await inventory.observe(),alternate=principals.find(p=>p.name==='storage_probe_alternate');
+  const membership=membershipReport.memberships.find(m=>m.memberOid===config.capture.oid&&m.roleOid===alternate.oid);
+  assert.equal(membership.set,true);assert.equal(membership.inherit,false);
+  assert.equal(membershipReport.grants.find(g=>g.roleOid===alternate.oid).insert,true);
+  assert.equal(captureGrant(membershipReport).insert,false);
   await denied(()=>capture.$executeRaw`INSERT INTO public.synthetic_storage_boundary VALUES ('noinherit-direct-denied')`);
   await capture.$transaction(async tx=>{
    await tx.$executeRaw`SET LOCAL ROLE storage_probe_alternate`;
@@ -145,6 +169,37 @@ export async function proveStorageGrantBoundary({admin,url}){
   await readWindow;await outsideWrite;assert.equal(actorCommitted,true);
   assert.equal((await capture.$queryRaw`SELECT count(*)::integer AS n FROM public.synthetic_storage_boundary WHERE value='privileged-write-after-read-window'`)[0].n,1);
   console.log('PASS storage SQL boundary: SHARE capture window permits positive reads while blocking observed privileged DML, then releases it; this is no permanent actor fence');
+
+  const report=await inventory.observe();
+  assert.equal(captureGrant(report).select,true);assert.equal(captureGrant(report).insert,false);
+  assert.equal(report.grants.find(g=>g.roleOid===config.observer.oid).insert,true);
+  assert.equal(report.roles.find(r=>r.oid===config.observer.oid).superuser,true);
+  // A hostile ambient search_path must not substitute privilege predicates.
+  await admin.$executeRaw`CREATE FUNCTION public.has_table_privilege(oid,oid,text) RETURNS boolean LANGUAGE sql AS 'SELECT false'`;
+  await capture.$executeRaw`SET search_path=public,pg_catalog`;
+  assert.equal((await capture.$queryRaw`SELECT has_table_privilege(${config.capture.oid}::oid,${relation.oid}::oid,'SELECT'::text) AS allowed`)[0].allowed,false);
+  const limitedReport=await new ManagedStorageDatabaseInventory(capture,{...config,observer:config.capture}).observe();
+  assert.equal((await capture.$queryRaw`SELECT current_setting('search_path') AS path`)[0].path,'public, pg_catalog');
+  assert.equal(limitedReport.identity.currentRole,config.capture.name);assert.equal(limitedReport.identity.readOnly,true);
+  assert.equal(captureGrant(limitedReport).select,true);assert.equal(captureGrant(limitedReport).insert,false);
+  assert.equal(limitedReport.roles.find(r=>r.oid===config.capture.oid).superuser,false);
+  assert.equal(report.configurationDigest,inventory.configurationDigest());assert.match(report.observationDigest,/^[a-f0-9]{64}$/);
+  for(const altered of [
+   {...config,databaseOid:'1'},
+   {...config,observer:{...config.observer,oid:'1'}},
+   {...config,capture:{...config.capture,oid:'1'}},
+   {...config,relations:[{...config.relations[0],name:'incorrect_relation'}]},
+  ])await assert.rejects(()=>new ManagedStorageDatabaseInventory(admin,altered).observe(),/^Error: Managed storage database authority inventory is unverified$/);
+  assert.throws(()=>new ManagedStorageDatabaseInventory(admin,{...config,relations:[...config.relations,...config.relations]}));
+  await admin.$executeRaw`CREATE TABLE public.synthetic_inventory_partition(value text) PARTITION BY RANGE(value)`;
+  const [partition]=await admin.$queryRaw`SELECT oid::text AS oid FROM pg_class WHERE oid='public.synthetic_inventory_partition'::regclass`;
+  await assert.rejects(()=>new ManagedStorageDatabaseInventory(admin,{...config,relations:[{schema:'public',name:'synthetic_inventory_partition',oid:partition.oid}]}).observe());
+  // Read-only report must refuse truncation instead of hiding another definer.
+  await admin.$executeRaw`DO $fixture$ BEGIN FOR i IN 1..257 LOOP
+   EXECUTE format('CREATE FUNCTION public.synthetic_inventory_overflow_%s() RETURNS integer LANGUAGE sql SECURITY DEFINER AS %L',i,'SELECT 1');
+  END LOOP; END $fixture$`;
+  await assert.rejects(()=>inventory.observe(),/^Error: Managed storage database authority inventory is unverified$/);
+  console.log('PASS native storage authority inventory: column grants, definer EXECUTE changes, NOINHERIT SET ROLE, owner/superuser and positive reads detected; identity, unsupported partition and overflow refused');
 
  }finally{
   releasePending?.();await capture.$disconnect();await fencer.$disconnect();await actor.$disconnect();
