@@ -77,3 +77,5 @@ JWT/session/other capabilities, in-flight/control-plane/capture privilege,
 common database/files capture, independent catalogue/current preservation and
 disposal authority, full application restore, actual provider/source-host-loss
 and guarded reopening requirements in the full goal.
+
+The [durable already-disabled branch](durable-s3-current-feature-evidence.md) is now locally implemented separately. Common mode selection and mandatory parent integration remain next; working-mode empty registries are still refused.

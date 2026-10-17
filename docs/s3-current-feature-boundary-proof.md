@@ -73,3 +73,7 @@ restore, actual provider/source-host-loss and guarded reopening requirements.
 - Previously reviewed Storage source `c826a70ac6e6f56d3e6033ccb164fb1ff5282570`
   places feature gating before signature verification; this is source evidence,
   not proof of the actual hosted release or all possible routes.
+
+## Durable mode addendum
+
+The [explicit current-disabled mode](durable-s3-current-feature-evidence.md) now composes original PRE and fresh POST probes with conditional public publication/exact-version readback and saved-pair inspection. Common mode selection, parent integration and actual provider proof remain open.

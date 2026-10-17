@@ -26,7 +26,10 @@ export const resumableEvidenceConfig = {
   probeDigest: '3'.repeat(64),
   locationCustodyDigest: '4'.repeat(64),
 };
-export function resumableEvidenceFixture(config = resumableEvidenceConfig) {
+export function resumableEvidenceFixture(
+  config = resumableEvidenceConfig,
+  namespace: 'resumable' | 's3-current-feature' = 'resumable',
+) {
   const credentials = {
       accessKeyId: 'synthetic',
       secretAccessKey: 'synthetic',
@@ -72,7 +75,9 @@ export function resumableEvidenceFixture(config = resumableEvidenceConfig) {
             config.installationId +
             '/' +
             config.maintenance.attemptId +
-            '/resumable-(baseline|observation)\\.json$',
+            '/' +
+            namespace +
+            '-(baseline|observation)\\.json$',
         ),
       );
       const injected = fault?.(c);

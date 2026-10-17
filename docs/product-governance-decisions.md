@@ -225,3 +225,5 @@ The distinct [current feature-boundary component](s3-current-feature-boundary-pr
 Original S3 URL/UploadId [combined custody](s3-capability-custody.md) now composes locally with the active SDK probe. Keep historical inspection separate from execution acknowledgement, and isolate each endpoint/credential cohort in storage. Actual provider/IAM proof and complete parent integration remain required.
 
 The [configured working S3 cohort](managed-s3-capability-cohort.md) is implemented locally. Require both endpoints for every configured reviewed key, preserve original acknowledgements and never infer complete issuer inventory. The already-disabled branch requires its own fresh PRE/POST evidence; no empty-cohort exemption is permitted.
+
+The [durable current-disabled S3 branch](durable-s3-current-feature-evidence.md) requires fresh PRE and POST evidence without enabling S3 or issuing credentials. It cannot claim historical exclusion or replace originally working capability proof. Further common mode/coordinator integration remains required.

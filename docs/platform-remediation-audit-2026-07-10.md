@@ -1,5 +1,12 @@
 # CharityPilot Full-Platform Remediation Audit
 
+> **17 October durable already-disabled S3 mode:** Explicit CURRENT_DISABLED
+> now requires original PRE and fresh POST probes, exact-version public evidence
+> and original pairing. Inspection is GET only; no historical revocation or
+> missing-ACK authority is inferred. Common mode selection/parent and actual
+> supplier proof remain open. See [durable current S3](durable-s3-current-feature-evidence.md).
+
+
 > **17 October configured working S3 cohort:** The working-mode factory now
 > requires every configured key at both endpoints, original encrypted/public
 > evidence and a complete paired manifest. One working scope prevents success;
