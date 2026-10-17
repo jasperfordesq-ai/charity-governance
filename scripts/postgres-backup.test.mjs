@@ -20,6 +20,7 @@ import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { test } from 'node:test';
 import {
+  prepareSnapshotFingerprintCapture,
   buildRestoreProofReport,
   calculateCapacityRequirement,
   captureHelperImplementationBinding,
@@ -1407,4 +1408,39 @@ test('verified libpq transport explicitly selects pinned-image system roots when
     assert.equal(environment.CHARITYPILOT_PROOF_DATABASE_URL,original);
     assert.equal(transport.args.includes('--mount'),false);
   } finally {transport.close();}
+});
+
+const importedSnapshot={snapshotId:'00000001-00000002-1',database:'synthetic_db',databaseOid:'16384',observerOid:'10',backendPid:123};
+const importedCapture={databaseUrl:'postgresql://proof:PRIVATE-secret@localhost/synthetic_db?sslmode=verify-full&sslrootcert=/tmp/cert.pem',
+ endpointIdentitySha256:'a'.repeat(64),rawReportName:'source.raw',dumpName:'source.dump',snapshot:importedSnapshot};
+test('canonical source program imports the original snapshot before any query and reuses guarded dump/fingerprints',()=>{
+ const plan=prepareSnapshotFingerprintCapture(importedCapture);
+ assert.ok(plan.script.indexOf("SET TRANSACTION SNAPSHOT :'external_snapshot';")<plan.script.indexOf('SELECT ('));
+ assert.match(plan.script,/--set=external_snapshot=/);assert.match(plan.script,/expected_database_oid/);assert.match(plan.script,/pg_stat_activity/);assert.match(plan.script,/pg_export_snapshot/);
+ assert.match(plan.environment.CHARITYPILOT_SNAPSHOT_ACTION,/pg_dump --dbname.*--snapshot/);
+ assert.match(plan.environment.CHARITYPILOT_SNAPSHOT_ACTION,/source_snapshot_sha256/);
+ assert.match(plan.environment.CHARITYPILOT_SNAPSHOT_ACTION,/df -Pk \/proof/);
+ assert.equal(plan.environment.CHARITYPILOT_IMPORTED_SNAPSHOT,importedSnapshot.snapshotId);
+ assert.equal(plan.environment.CHARITYPILOT_TEMP_FILE_LIMIT_BYTES,String(1024*1024*1024));
+ assert.equal(plan.actionAuthorized,false);assert.ok(!plan.script.includes('PRIVATE-secret'));
+ assert.ok(!plan.script.includes(importedSnapshot.snapshotId));
+ const restored=prepareSnapshotFingerprintCapture({...importedCapture,snapshot:null,dumpName:''});
+ assert.ok(!restored.script.includes('external_snapshot'));assert.equal(restored.environment.CHARITYPILOT_IMPORTED_SNAPSHOT,undefined);
+});
+test('imported source program refuses unsafe snapshots, wrong database, unsafe output and bounds without credential disclosure',()=>{
+ const changes=[{snapshot:null},{snapshot:{...importedSnapshot,snapshotId:"bad'; sql"}},
+  {snapshot:{...importedSnapshot,extra:true}},{snapshot:{...importedSnapshot,databaseOid:'4294967296'}},
+  {snapshot:{...importedSnapshot,database:'another'}},{snapshot:{...importedSnapshot,observerOid:'0'}},
+  {snapshot:{...importedSnapshot,backendPid:0}},{rawReportName:'../escape'},
+  {rawReportName:'source.dump'},{tempFileLimitMb:2049},{tempFileLimitMb:63},
+  {databaseUrl:importedCapture.databaseUrl.replace('verify-full','require')},{databaseUrl:'PRIVATE-secret-invalid-url'}];
+ for(const change of changes)assert.throws(()=>prepareSnapshotFingerprintCapture({...importedCapture,...change}),e=>{
+  assert.ok(e instanceof Error);assert.equal(e.message,'Snapshot capture configuration unavailable');assert.equal(e.cause,undefined);return true;
+ });
+});
+test('snapshot program environment contains only explicit action inputs',()=>{
+ process.env.CHARITYPILOT_UNRELATED_PRIVATE='must-not-copy';
+ try{const p=prepareSnapshotFingerprintCapture(importedCapture);assert.equal(p.environment.CHARITYPILOT_UNRELATED_PRIVATE,undefined);
+  assert.equal(p.environment.PATH,undefined);assert.equal(p.environment.DOCKER_HOST,undefined);
+ }finally{delete process.env.CHARITYPILOT_UNRELATED_PRIVATE;}
 });

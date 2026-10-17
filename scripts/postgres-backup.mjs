@@ -2104,6 +2104,58 @@ dump_bytes=$(wc -c < "$CHARITYPILOT_DUMP_PATH" | tr -d ' ')
 if [ "$dump_bytes" -gt "$CHARITYPILOT_MAX_DUMP_BYTES" ]; then echo 'PostgreSQL dump exceeds maxDumpBytes.' >&2; exit 75; fi
 ` + DATABASE_FINGERPRINT_ACTION_SCRIPT;
 
+
+/** Internal program for a supervised common capture. Returned environment can
+ * contain credentials and ephemeral snapshot IDs; never print or persist it.
+ * This renders the original canonical actions, not a recovery admission. */
+export function prepareSnapshotFingerprintCapture({databaseUrl,endpointIdentitySha256,rawReportName,dumpName='',snapshot=null,tempFileLimitMb=DEFAULT_TEMP_FILE_LIMIT_MB}) {
+  try {
+    const report=requireSafeFileName(rawReportName),dump=dumpName?requireSafeFileName(dumpName):'';
+    if(report===dump||!Number.isInteger(tempFileLimitMb)||tempFileLimitMb<MIN_TEMP_FILE_LIMIT_MB||tempFileLimitMb>MAX_TEMP_FILE_LIMIT_MB)throw new Error('Snapshot capture configuration unavailable');
+    const endpoint=requireSha256(endpointIdentitySha256,'snapshot endpoint identity');
+    const url=new URL(databaseUrl);
+    if(!['postgres:','postgresql:'].includes(url.protocol)||!url.hostname||!url.username||url.searchParams.get('sslmode')!=='verify-full'||!url.searchParams.get('sslrootcert'))throw new Error();
+    let holderScript=SNAPSHOT_HOLDER_SCRIPT;
+    if(snapshot!==null){
+      const keys=['snapshotId','database','databaseOid','observerOid','backendPid'];
+      if(!snapshot||typeof snapshot!=='object'||Object.keys(snapshot).length!==keys.length||keys.some(k=>!Object.hasOwn(snapshot,k))
+        ||typeof snapshot.snapshotId!=='string'||snapshot.snapshotId.length>80||!(/^[0-9A-Fa-f]{8}-[0-9A-Fa-f]{8}-[0-9A-Fa-f]+$/).test(snapshot.snapshotId)
+        ||!(/^[a-z_][a-z0-9_]{0,62}$/).test(snapshot.database)||!Number.isInteger(snapshot.backendPid)||snapshot.backendPid<1
+        ||[snapshot.databaseOid,snapshot.observerOid].some(v=>typeof v!=='string'||!(/^[1-9][0-9]{0,9}$/).test(v)||Number(v)>4294967295))
+        throw new Error('Snapshot capture configuration unavailable');
+      if(decodeURIComponent(url.pathname.slice(1))!==snapshot.database)throw new Error('Snapshot capture configuration unavailable');
+      const begin='BEGIN TRANSACTION ISOLATION LEVEL REPEATABLE READ READ ONLY;';
+      const invocation='psql --no-psqlrc --set=temp_file_limit_bytes=';
+      if(holderScript.split(begin).length!==2||holderScript.split(invocation).length!==2)throw new Error('Snapshot capture template unavailable');
+      const importSql=String.raw`
+SET TRANSACTION SNAPSHOT :'external_snapshot';
+SELECT (current_database() = :'expected_database'
+ AND (SELECT oid::text FROM pg_catalog.pg_database WHERE datname=current_database()) = :'expected_database_oid'
+ AND EXISTS(SELECT 1 FROM pg_catalog.pg_stat_activity WHERE pid=:'expected_exporter_pid'::integer
+  AND datid=:'expected_database_oid'::oid AND usesysid=:'expected_exporter_oid'::oid AND xact_start IS NOT NULL)
+) AS imported_scope_verified \gset
+\if :imported_scope_verified
+\else
+ \warn 'Original snapshot database/exporter scope was not verified.'
+ DO $charitypilot$ BEGIN RAISE EXCEPTION 'Original snapshot database/exporter scope was not verified.'; END $charitypilot$;
+\endif
+`;
+      holderScript=holderScript.replace(begin,begin+importSql)
+        .replace(invocation,'psql --no-psqlrc --set=external_snapshot="$CHARITYPILOT_IMPORTED_SNAPSHOT" --set=expected_database="$CHARITYPILOT_IMPORTED_DATABASE" --set=expected_database_oid="$CHARITYPILOT_IMPORTED_DATABASE_OID" --set=expected_exporter_oid="$CHARITYPILOT_IMPORTED_OBSERVER_OID" --set=expected_exporter_pid="$CHARITYPILOT_IMPORTED_BACKEND_PID" --set=temp_file_limit_bytes=');
+    }else if(dump)throw new Error('Common source dump requires an original exported snapshot');
+    const {args,env}=proofToolsDockerArgs({containerName:'internal-snapshot-program',databaseUrl,endpointIdentitySha256:endpoint,
+      actionScript:dump?SOURCE_PROOF_ACTION_SCRIPT:DATABASE_FINGERPRINT_ACTION_SCRIPT,holderScript,
+      rawReportName:report,dumpName:dump,tempFileLimitMb});
+    const names=args.filter((_,i)=>i>0&&args[i-1]==='-e');
+    const environment=Object.fromEntries(names.map(name=>[name,env[name]]));
+    if(snapshot!==null)Object.assign(environment,{CHARITYPILOT_IMPORTED_SNAPSHOT:snapshot.snapshotId,
+      CHARITYPILOT_IMPORTED_DATABASE:snapshot.database,CHARITYPILOT_IMPORTED_DATABASE_OID:snapshot.databaseOid,
+      CHARITYPILOT_IMPORTED_OBSERVER_OID:snapshot.observerOid,CHARITYPILOT_IMPORTED_BACKEND_PID:String(snapshot.backendPid)});
+    return{script:holderScript,environment,originalCanonicalActions:true,
+      originalSnapshotRequiredForSourceDump:true,actionAuthorized:false};
+  }catch{throw new Error('Snapshot capture configuration unavailable');}
+}
+
 function runCommand(
   command,
   args,

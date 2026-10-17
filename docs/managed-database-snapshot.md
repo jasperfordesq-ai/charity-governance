@@ -1,3 +1,12 @@
+## 17 October: original canonical source actions import the guarded snapshot
+
+Read [imported source capture](managed-imported-source-capture.md). The original
+backup helper now prepares its existing dump/fingerprint actions against an
+explicit imported snapshot, checking database/exporter scope before capture.
+Native source and restored public fingerprints, including Document metadata,
+match and exclude later application rows. This is not complete report-v2/root
+publication, real provider custody or host-loss proof; the full goal stays active.
+
 # Database snapshot inside the guarded metadata interval
 
 17 October 2026. Internal source component and synthetic native integration.
