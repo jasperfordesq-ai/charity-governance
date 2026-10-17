@@ -2194,6 +2194,7 @@ function runCommand(
   return result.stdout;
 }
 
+let managedProofJobId;
 function proofContainerName(kind) {
   return `charitypilot-${kind}-${Date.now()}-${process.pid}-${randomBytes(4).toString('hex')}`;
 }
@@ -2201,6 +2202,7 @@ function proofContainerName(kind) {
 function proofContainerLabelArgs(createdAtMs = Date.now()) {
   return [
     '--label', 'charitypilot.restore-proof=true',
+    ...(managedProofJobId ? ['--label', `charitypilot.managed-proof-job=${managedProofJobId}`] : []),
     '--label', `charitypilot.proof-created-at-ms=${createdAtMs}`,
   ];
 }
@@ -2654,6 +2656,7 @@ function startProofRestoreContainer(containerName, recoverySetId, password, dryR
     'none',
     '--label',
     'charitypilot.restore-proof=true',
+    ...(managedProofJobId ? ['--label', `charitypilot.managed-proof-job=${managedProofJobId}`] : []),
     '--label',
     `charitypilot.recovery-set-sha256=${sha256Text(recoverySetId)}`,
     '--label',
@@ -4307,9 +4310,11 @@ export async function runPostgresBackupFromArgs(args = process.argv.slice(2), en
   return runBackupCommand(args,env);
 }
 /** Internal supervised entry point; no new CLI flag or saved execution grant. */
-export async function runImportedSnapshotRestoreProof(args,snapshot,env=process.env){
+export async function runImportedSnapshotRestoreProof(args,snapshot,env=process.env,jobId){
   if(snapshot===undefined||snapshot===null)return result(1,'','Original imported snapshot is required');
-  return runBackupCommand(args,env,snapshot);
+  if(managedProofJobId!==undefined||(jobId!==undefined&&(typeof jobId!=='string'||!/^[a-f0-9]{8}-[a-f0-9]{4}-4[a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}$/.test(jobId))))return result(1,'','Managed proof job scope refused');
+  managedProofJobId=jobId;
+  try{return await runBackupCommand(args,env,snapshot);}finally{managedProofJobId=undefined;}
 }
 async function runBackupCommand(args,env,importedSnapshot){
   const output = captureConsole();

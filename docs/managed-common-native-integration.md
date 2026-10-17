@@ -1,3 +1,11 @@
+## 17 October: imported-proof worker supervision
+
+Read [managed proof supervision](managed-proof-supervision.md). The native source
+callback now uses a fixed bounded worker, exact exit/ACK checks, owned process-tree
+cancellation and invocation-labelled Docker reconciliation. Uncertain outcomes
+stay unresolved. Durable job/crash/orphan recovery and real independent provider/
+host-loss/current-authority proof remain required; the full goal stays active.
+
 ## 17 October: protected streaming capture workspace
 
 The [capture workspace](managed-capture-workspace.md) replaces whole-dump buffering

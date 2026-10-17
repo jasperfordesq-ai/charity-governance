@@ -1,3 +1,4 @@
+import {runManagedImportedProof} from './managed-proof-runner.mjs';
 import {createManagedCaptureWorkspace} from './managed-capture-workspace.mjs';
 import {fileURLToPath} from 'node:url';
 import {managedCommonCustodyBackend,startManagedCommonCustody} from './managed-common-custody-postgres-proof.mjs';
@@ -34,15 +35,8 @@ export async function proveManagedDatabaseSnapshot({admin,url,id,database,certif
   const source=new URL(captureUrl(database));source.searchParams.set('sslrootcert',certificate);
   const args=['prove-restore','--source-container-id='+id,'--recovery-set-id=synthetic-imported-'+randomUUID(),
    '--expected-source-database-identity-sha256='+identity,'--output-dir='+output,'--output-file=common.dump','--report-file=common.json'];
-  const code=`import {runImportedSnapshotRestoreProof} from './scripts/postgres-backup.mjs';let input='';for await(const chunk of process.stdin){input+=chunk;if(Buffer.byteLength(input)>8192)throw new Error('Oversized proof input');}const {args,snapshot}=JSON.parse(input);const r=await runImportedSnapshotRestoreProof(args,snapshot);process.stdout.write(JSON.stringify({status:r.status,error:r.status?r.stderr:undefined}));process.exitCode=r.status;`;
-  await new Promise((done,fail)=>{
-   const child=spawn(process.execPath,['--input-type=module','-e',code],{env:{...process.env,DATABASE_URL:source.href},stdio:['pipe','pipe','pipe'],signal});
-   let text='',errors='';const timer=setTimeout(()=>child.kill(),90000);
-   child.stdout.on('data',b=>{text+=b;if(text.length>65536)child.kill();});child.stderr.on('data',b=>{errors+=b;if(errors.length>65536)child.kill();});
-   child.on('error',()=>{clearTimeout(timer);fail(new Error('Synthetic full proof process unresolved'));});child.stdin.on('error',()=>{});
-   child.stdin.end(JSON.stringify({args,snapshot}));
-   child.on('close',status=>{clearTimeout(timer);try{assert.equal(status,0,errors||text);assert.equal(JSON.parse(text).status,0);done();}catch(e){fail(e);}});
-  });
+  const supervised=await runManagedImportedProof({args,snapshot,databaseUrl:source.href,signal});
+  assert.equal(supervised.workerExited,true);assert.equal(supervised.observedJobContainersAbsent,true);
   assert.ok(statSync(join(output,'common.json')).size<16*1024*1024);
   const report=JSON.parse(readFileSync(join(output,'common.json'),'utf8'));
   assert.equal(report.format,'charitypilot-postgres-restore-proof/v2');assert.equal(report.ok,true);

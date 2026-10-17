@@ -1454,3 +1454,10 @@ test('supervised imported restore proof refuses absent snapshots and other comma
   '--database-url='+importedCapture.databaseUrl],{...importedSnapshot,database:'wrong'});
  assert.notEqual(invalid.status,0);assert.ok(!invalid.stderr.includes('PRIVATE-secret'));
 });
+
+test('managed imported proof rejects non-string and malformed job scope before execution',async()=>{
+ for(const jobId of ['saved-pid',{toString(){return '12345678-1234-4123-8123-123456789012';}},[],17]){
+  const r=await runImportedSnapshotRestoreProof(['prove-restore'],importedSnapshot,process.env,jobId);
+  assert.equal(r.status,1);assert.match(r.stderr,/job scope refused/);
+ }
+});
