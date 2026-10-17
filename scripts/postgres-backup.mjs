@@ -1,6 +1,5 @@
 #!/usr/bin/env node
 import { spawn, spawnSync } from 'node:child_process';
-import {acknowledgeManagedDaemonCustodySync} from './managed-daemon-custody-client.mjs';
 import { createHash, randomBytes, X509Certificate } from 'node:crypto';
 import {
   closeSync,
@@ -4483,7 +4482,7 @@ export async function runPostgresBackupFromArgs(args = process.argv.slice(2), en
   return runBackupCommand(args,env);
 }
 /** Internal supervised entry point; no new CLI flag or saved execution grant. */
-export async function runImportedSnapshotRestoreProof(args,snapshot,env=process.env,jobId,daemonCustodyRequired=false){
+export async function runImportedSnapshotRestoreProof(args,snapshot,env=process.env,jobId,daemonCustodyRequired=false,acknowledgeDaemonRecord){
   if(snapshot===undefined||snapshot===null)return result(1,'','Original imported snapshot is required');
   if(managedProofJobId!==undefined||(jobId!==undefined&&(typeof jobId!=='string'||!/^[a-f0-9]{8}-[a-f0-9]{4}-4[a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}$/.test(jobId))))return result(1,'','Managed proof job scope refused');
   managedProofJobId=jobId;
@@ -4492,9 +4491,8 @@ export async function runImportedSnapshotRestoreProof(args,snapshot,env=process.
     const parsed=parseArgs(args);if(parsed.command!=='prove-restore')throw daemonJournalFailure();
     const inputDigest=sha256Text(JSON.stringify({args,snapshot,jobId,...(daemonCustodyRequired?{daemonCustodyRequired:true}:{})}));
     if(daemonCustodyRequired!==true&&daemonCustodyRequired!==false)throw daemonJournalFailure();
-    const acknowledge=daemonCustodyRequired?((kind,artifact)=>acknowledgeManagedDaemonCustodySync({descriptorPath:env.CHARITYPILOT_INTERNAL_DAEMON_GATE,
-     kind,artifact,jobId,inputDigest,sourceSha:captureHelperImplementationBinding().commitSha})):undefined;
-    if(daemonCustodyRequired&&(process.platform!=='linux'||typeof env.CHARITYPILOT_INTERNAL_DAEMON_GATE!=='string'))throw daemonJournalFailure();
+    if(daemonCustodyRequired&&(process.platform!=='linux'||typeof env.CHARITYPILOT_INTERNAL_DAEMON_GATE!=='string'||typeof acknowledgeDaemonRecord!=='function'))throw daemonJournalFailure();
+    const acknowledge=daemonCustodyRequired?((kind,artifact)=>acknowledgeDaemonRecord({kind,artifact,jobId,inputDigest,sourceSha:captureHelperImplementationBinding().commitSha})):undefined;
     managedDaemonJournal=createManagedDaemonRequestJournal({root:optionString(parsed.options,'output-dir'),jobId,inputDigest},{acknowledge});
    }
    const outcome=await runBackupCommand(args,env,snapshot),requests=managedDaemonJournal?.finish();

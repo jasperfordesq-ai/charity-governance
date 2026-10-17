@@ -65,6 +65,11 @@ client requires exact ownership/modes/path, original scope, a fresh nonce and
 matching acknowledgement bytes. It has no transport/profile/command selector.
 
 The required barrier is bound into the worker input and service input digest.
+The helper retains its built-in-only import boundary. The fixed, exact-source
+worker supplies the internal acknowledgement callback and owns the custody-client
+import; no callback, module or command is selectable through operator JSON or CLI
+flags. This keeps standalone helper implementation authority confined to its
+own source file while the contained path additionally verifies all ten modules.
 Missing descriptors, refusal or unknown ACK stop before dispatch. An uncertain
 intent ACK permanently prevents subsequent helper mutation attempts. Header and
 each local intent are flushed before their custody request. Original success
