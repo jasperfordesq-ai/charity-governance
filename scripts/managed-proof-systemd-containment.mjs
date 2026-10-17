@@ -18,6 +18,7 @@ export function parseScopeProperties(text,unit,uid){
 }
 function execute(command,args){const r=spawnSync(command,args,{encoding:'utf8',stdio:'pipe',timeout:15000,maxBuffer:65536,env:process.env});if(r.status!==0||r.error)throw failure();return r.stdout.trim();}
 function info(unit){return parseScopeProperties(execute('systemctl',['--user','show',requireUnit(unit),'--no-pager',...props.flatMap(p=>['--property',p])]),unit,process.getuid());}
+export function inspectContainmentUnit(unit){if(process.platform!=='linux'||process.getuid()===0)throw failure();return info(unit);}
 function members(path){if(!path)return[];const target='/sys/fs/cgroup'+path;
  if(!existsSync(target))return[];try{if(realpathSync(target)!==target)throw failure();}catch(e){if(e.code==='ENOENT')return[];throw e;}
  let body;try{body=readFileSync(join(target,'cgroup.procs'),'utf8');}catch(e){if(e.code==='ENOENT')return[];throw e;}if(body.length>4096)throw failure();return body.trim()?body.trim().split(/\s+/).map(v=>{if(!/^[1-9][0-9]*$/.test(v))throw failure();return Number(v);}):[];}

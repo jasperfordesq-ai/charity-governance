@@ -1,3 +1,13 @@
+## 17 October: private systemd guardian connection verified
+
+Read [guardian connection](managed-proof-channel.md). The actual guardian and
+worker now support a private Unix socket across a systemd launch. Work is withheld
+until a fresh manager identity receives an explicit acknowledgement. Real Linux
+tests cover success, denied acknowledgement, parent loss and guardian loss while
+a separate service survives. The original IPC path remains the current runner
+path; original-job custody and production launcher integration are still required.
+Full independent-provider/host-loss and delegated product scope remain active.
+
 # Linux user-service kernel containment probe
 
 17 October 2026. A bounded acceptance probe for the next managed source-executor integration. It is not an application deployment, recovery command or proof that the current guardian is already running in a managed cgroup.

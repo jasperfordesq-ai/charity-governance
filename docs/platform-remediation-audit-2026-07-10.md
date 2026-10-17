@@ -1,3 +1,13 @@
+## 17 October: private systemd guardian connection verified
+
+Read [guardian connection](managed-proof-channel.md). The actual guardian and
+worker now support a private Unix socket across a systemd launch. Work is withheld
+until a fresh manager identity receives an explicit acknowledgement. Real Linux
+tests cover success, denied acknowledgement, parent loss and guardian loss while
+a separate service survives. The original IPC path remains the current runner
+path; original-job custody and production launcher integration are still required.
+Full independent-provider/host-loss and delegated product scope remain active.
+
 ## 17 October: kernel containment capability verified on the private VM
 
 Read [kernel containment probe](managed-proof-kernel-containment.md). A non-root
