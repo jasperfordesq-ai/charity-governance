@@ -1,5 +1,13 @@
 # CharityPilot Full-Platform Remediation Audit
 
+> **17 October signed-upload evidence component:** Issued synthetic upload tokens
+> now have pinned public-signature/scope/path/lifetime validation and an active
+> refusal test bracketed by working retained-issuer signed uploads. Credentials
+> are referenced separately, never returned in evidence. Actual management-key /
+> hosted-release association, encrypted custody and protocol5 integration remain
+> open, along with resumable/in-flight/global gates. See
+> [signed-upload proof](supabase-signed-upload-proof.md).
+
 > **17 October reviewed signing-key primitive:** Explicit old signing-key UUIDs
 > can now be revoked against a pinned project/material registry, retaining the
 > reviewed asymmetric current key. Partial/unknown outcomes stop; inspection is
