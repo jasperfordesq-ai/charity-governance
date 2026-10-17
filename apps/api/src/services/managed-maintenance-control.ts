@@ -2,18 +2,37 @@ import {createHash,randomUUID} from 'node:crypto';
 import {Readable} from 'node:stream';
 import {GetObjectCommand,PutObjectCommand,S3Client,type S3ClientConfig} from '@aws-sdk/client-s3';
 import {z} from 'zod';
+import {parseCredentialReadBaselineArtifact,parseCredentialReadObservationArtifact,credentialReadObservationArtifact,assertCredentialReadEvidencePair,credentialReadObservationSchema,credentialReadBaselineSchema} from './credential-read-evidence.js';
 
 const identity=z.string().regex(/^[A-Za-z0-9_-]{1,120}$/),digest=z.string().regex(/^[a-f0-9]{64}$/);
 const configuration=z.object({installationId:identity,bucket:z.string().regex(/^[a-z0-9][a-z0-9-]{1,61}[a-z0-9]$/),
  accountId:z.string().regex(/^\d{12}$/),
  kmsKeyArn:z.string().regex(/^arn:aws:kms:eu-west-1:\d{12}:key\/[a-f0-9-]{36}$/)}).strict()
  .refine(c=>c.kmsKeyArn.split(':')[4]===c.accountId);
-const observations=z.object({servicesDigest:digest,databaseDigest:digest,storageDigest:digest.optional(),observedAt:z.string().datetime()}).strict();
+const observations=z.object({servicesDigest:digest,databaseDigest:digest,storageDigest:digest.optional(),readProofDigest:digest.optional(),observedAt:z.string().datetime()}).strict();
 const control=z.object({format:z.literal(1),installationId:identity,maintenanceEpoch:z.number().int().positive().max(2147483647),
- planDigest:digest,phase:z.enum(['READY','ATTEMPTED','OBSERVED_CLOSED']),attemptId:z.string().uuid().nullable(),
- observations:observations.nullable(),publicationId:z.string().uuid()}).strict().superRefine((v,ctx)=>{
+ planDigest:digest,phase:z.enum(['READY','ATTEMPTED','BASELINED','OBSERVED_CLOSED']),attemptId:z.string().uuid().nullable(),
+ observations:observations.nullable(),readBaseline:z.unknown().transform(parseCredentialReadBaselineArtifact).optional(),
+ readObservation:z.unknown().transform(parseCredentialReadObservationArtifact).optional(),publicationId:z.string().uuid()}).strict().superRefine((v,ctx)=>{
  if((v.phase==='READY')!==(v.attemptId===null)||(v.phase==='OBSERVED_CLOSED')!==(v.observations!==null))
   ctx.addIssue({code:'custom',message:'Invalid maintenance transition state'});
+ if(v.readBaseline){
+  const binding=credentialReadBaselineSchema.parse(JSON.parse(v.readBaseline.body)).maintenance;
+  if(!binding||binding.attemptId!==v.attemptId||binding.planDigest!==v.planDigest||binding.maintenanceEpoch!==v.maintenanceEpoch)
+   ctx.addIssue({code:'custom',message:'Credential baseline belongs to another maintenance attempt'});
+ }
+ if((v.phase==='READY'||v.phase==='ATTEMPTED')&&(v.readBaseline||v.readObservation)
+  ||v.phase==='BASELINED'&&(!v.readBaseline||v.readObservation)
+  ||v.phase!=='OBSERVED_CLOSED'&&v.readObservation)
+  ctx.addIssue({code:'custom',message:'Invalid credential baseline phase'});
+ if(v.phase==='OBSERVED_CLOSED'&&(v.readBaseline||v.readObservation)){
+  try{
+   if(!v.readBaseline||!v.readObservation||!v.observations?.storageDigest)throw new Error();
+   assertCredentialReadEvidencePair(v.readBaseline,v.readObservation);
+   const report=credentialReadObservationSchema.parse(JSON.parse(v.readObservation.body));
+   if(v.observations.readProofDigest!==report.observationDigest)throw new Error();
+  }catch{ctx.addIssue({code:'custom',message:'Incomplete credential read evidence'});}
+ }
 });
 const tag=z.string().min(3).max(256).regex(/^"[\x21\x23-\x7e]+"$/);
 type Control=z.infer<typeof control>;
@@ -61,6 +80,7 @@ export class S3ManagedMaintenanceControl {
  }
  private async replace(previous:Awaited<ReturnType<S3ManagedMaintenanceControl['read']>>,next:Control){
   const value=control.parse(next),text=JSON.stringify(value);
+  if(Buffer.byteLength(text)>8192)throw new Error(failure);
   const controller=new AbortController(),timer=setTimeout(()=>controller.abort(),15000);
   try{
    const response=await this.client.send(new PutObjectCommand({...this.request(),IfMatch:previous.etag,Body:text,
@@ -84,9 +104,17 @@ export class S3ManagedMaintenanceControl {
   // never becomes executable merely because a later read finds ATTEMPTED.
   return this.replace(current,{...current.value,phase:'ATTEMPTED',attemptId:randomUUID(),publicationId:randomUUID()});
  }
- async recordObservedClosed(attemptId:string,revision:string,raw:unknown){
-  z.string().uuid().parse(attemptId);digest.parse(revision);const facts=observations.parse(raw),current=await this.read();
+ async recordReadBaseline(attemptId:string,revision:string,raw:unknown){
+  z.string().uuid().parse(attemptId);digest.parse(revision);const artifact=parseCredentialReadBaselineArtifact(raw),current=await this.read();
   if(current.value.phase!=='ATTEMPTED'||current.value.attemptId!==attemptId||current.revision!==revision)throw new Error(failure);
-  return this.replace(current,{...current.value,phase:'OBSERVED_CLOSED',observations:facts,publicationId:randomUUID()});
+  return this.replace(current,{...current.value,phase:'BASELINED',readBaseline:artifact,publicationId:randomUUID()});
+ }
+ async recordObservedClosed(attemptId:string,revision:string,raw:unknown,rawReadObservation?:unknown){
+  z.string().uuid().parse(attemptId);digest.parse(revision);const facts=observations.parse(raw),current=await this.read();
+  if(!['ATTEMPTED','BASELINED'].includes(current.value.phase)||current.value.attemptId!==attemptId||current.revision!==revision)throw new Error(failure);
+  const readObservation=rawReadObservation===undefined?undefined:credentialReadObservationArtifact(rawReadObservation);
+  if(current.value.phase==='BASELINED'&&!readObservation)throw new Error(failure);
+  return this.replace(current,{...current.value,phase:'OBSERVED_CLOSED',observations:facts,
+   ...(readObservation?{readObservation}:{}),publicationId:randomUUID()});
  }
 }

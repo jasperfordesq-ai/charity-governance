@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
 import test from 'node:test';
 import { SupabaseCredentialReadProof } from '../services/supabase-credential-read-proof.js';
+import { credentialReadObservationArtifact } from '../services/credential-read-evidence.js';
 
 const fingerprint = (value: string) =>
   createHash('sha256').update(value).digest('hex');
@@ -262,4 +263,79 @@ test('negative-read deadline cancels a late body without treating timeout as ref
   await Promise.resolve();
   await Promise.resolve();
   assert.equal(cancelled, true);
+});
+test('a recorded report cannot relabel tested credentials even with a recomputed digest', async () => {
+  const f = fixture(),
+    proof = new SupabaseCredentialReadProof(
+      config,
+      { control, retired: [retired] },
+      f.transport,
+    ),
+    baseline = await proof.baseline();
+  assert.throws(() =>
+    proof.assertStorageScope({
+      installationId: 'other',
+      projectRef: config.projectRef,
+      captureKeyId: control.id,
+      secretWriterIds: [retired.id],
+    }),
+  );
+  f.deny = true;
+  const result = await proof.verifyReadRefusal(baseline.body, baseline.sha256);
+  const refusals = [
+    {
+      credentialId: '33333333-3333-4333-8333-333333333333',
+      status: 401 as const,
+    },
+  ];
+  const core = {
+    kind: result.kind,
+    configurationDigest: result.configurationDigest,
+    baselineSha256: result.baselineSha256,
+    observedAt: result.observedAt,
+    refusals,
+  };
+  const forged = {
+    ...result,
+    ...core,
+    observationDigest: fingerprint(JSON.stringify(core)),
+  };
+  const artifact = credentialReadObservationArtifact(forged);
+  const before = f.reads;
+  assert.throws(() => proof.assertObservation(artifact, baseline.sha256));
+  assert.equal(f.reads, before);
+});
+
+test('maintenance baselines reject another attempt, source, epoch or plan before reading storage', async () => {
+  const f = fixture(),
+    proof = new SupabaseCredentialReadProof(
+      config,
+      { control, retired: [retired] },
+      f.transport,
+    );
+  const binding = {
+    attemptId: control.id,
+    planDigest: '1'.repeat(64),
+    sourceSha: '2'.repeat(40),
+    maintenanceEpoch: 1,
+  };
+  const baseline = await proof.baseline(undefined, binding);
+  proof.assertBaseline(baseline, binding);
+  const before = f.reads;
+  for (const changed of [
+    { attemptId: retired.id },
+    { planDigest: '3'.repeat(64) },
+    { sourceSha: '4'.repeat(40) },
+    { maintenanceEpoch: 2 },
+  ]) {
+    const value = JSON.parse(baseline.body);
+    value.maintenance = { ...value.maintenance, ...changed };
+    const body = JSON.stringify(value);
+    assert.throws(() =>
+      proof.assertBaseline({ body, sha256: fingerprint(body) }, binding),
+    );
+  }
+  const standalone = await proof.baseline();
+  assert.throws(() => proof.assertBaseline(standalone, binding));
+  assert.equal(f.reads, before + 6);
 });

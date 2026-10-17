@@ -1,7 +1,8 @@
 # Named Supabase storage access-path control
 
 17 October 2026. `SupabaseStorageWriterControl` implements a provider primitive
-inside managed maintenance protocol3. No route, scheduler, operator command or
+inside [managed maintenance protocol4](durable-credential-read-baseline.md).
+No route, scheduler, operator command or
 live account activates it. Actual project-wide credential revocation requires
 appropriate operator authority and separately supplied credentials/registry.
 The private VM and personal-server operating modes are unchanged.

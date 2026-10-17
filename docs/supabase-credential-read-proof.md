@@ -1,5 +1,11 @@
 # Supabase credential read-refusal evidence
 
+> **17 October integration:** [Maintenance protocol4](durable-credential-read-baseline.md)
+> now stores the baseline body/pin with exact independent readback before shutdown,
+> then retains the later refusal artifact. It binds the registry and keeps fresh
+> inspection separate from original history. Actual provider/custody and broader
+> gates remain open.
+
 17 October 2026. `SupabaseCredentialReadProof` tests a specific modern server
 credential's access to a pre-existing private synthetic canary. It is an internal
 read-only evidence component. No route/job/command activates it or provisions its
@@ -78,14 +84,12 @@ then observe refusal with the retained control still working. Other cases cover
 rate-limit responses, body tampering, scope/key mismatch, changed canary bytes,
 cancellation, stalled denial and late-body cleanup.
 
-The current production maintenance protocol remains3. It deliberately still
-reports dataPlaneRejectionVerified=false. This new evidence component is not yet
-automatically called by that workflow. Next integrate durable baseline publication
-into the independent one-attempt head before credential destruction, bind the
-probe registry into the plan and retain the later result without inventing lost
-original acknowledgements. Source-process-memory storage in the synthetic test
-does not satisfy that requirement. No actual supplier account, key, canary or
-cloud transfer was used in these tests.
+The current internal maintenance protocol4 now calls this component through the
+independently retained baseline workflow linked above. It deliberately still
+does not claim broad data-plane write exclusion. Source-process-memory storage in
+the earlier standalone synthetic test is not independent custody; the new CAS
+workflow is tested with a separate S3 model, and real custody remains unverified.
+No actual supplier account, key, canary or cloud transfer was used in these tests.
 
 Write-path/capability and control-plane exclusion, actual provider acceptance,
 common capture/authority reconciliation, independent recovery custody/full restore

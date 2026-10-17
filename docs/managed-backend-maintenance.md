@@ -1,6 +1,13 @@
 # Guarded managed-backend shutdown
 
-> **17 October protocol3:** The current coordinator requires the
+> **17 October protocol4:** The current coordinator binds the credential-probe
+> registry and requires an independently saved/read-back baseline BEFORE any
+> shutdown or key deletion. BASELINED remains consumed after an unknown response.
+> Completed records retain both baseline and later read-refusal artifacts; fresh
+> inspection does not rewrite missing history. See [durable baseline](durable-credential-read-baseline.md).
+> Broader write/capability/global/provider/host-loss gates remain open.
+
+> **17 October protocol3 history:** This introduced the
 > [named Supabase storage access-path control](supabase-storage-writer-control.md)
 > and binds its exact registry into the plan. It runs after database password
 > invalidation, then records a separate storage observation. Old protocol1/2
@@ -44,7 +51,7 @@ and custody gates remain required. Do not treat SSE-KMS alone as separate custod
 ## Coordinator sequence
 
 `ManagedBackendMaintenance` computes the plan from a copied installation,
-source SHA and maintenance epoch, protocol3/password-invalidation and named-storage-key policy and hashes of the actual provider, storage and database
+source SHA and maintenance epoch, protocol4/password-invalidation, named-storage-key and independently retained read-baseline policy and hashes of the actual provider, storage, probe and database
 configuration registries. This binds the reviewed target identities and exact
 pinned image paths; it does not independently prove that images were built from
 the supplied source SHA. Exact-release build/attestation evidence remains needed.
@@ -52,7 +59,9 @@ the supplied source SHA. Exact-release build/attestation evidence remains needed
 1. Read the expected READY record; conditionally write a unique ATTEMPTED record
    and verify it. Only that fresh acknowledged caller proceeds. A lost write
    response stays unresolved even if a later read sees its committed attempt.
-2. Suspend and freshly confirm the exact gateway, then scheduler/private web/API
+2. Capture the exact credential baseline and CAS its body/original SHA to
+   BASELINED with exact readback. Only after that acknowledgement suspend and
+   freshly confirm the exact gateway, then scheduler/private web/API
    in a defined order, separately cancel surviving one-off jobs from all four
    components and require the adapter's full fresh readback. Provider list order
    cannot choose the sequence. The configuration digest has a four-component
@@ -64,17 +73,20 @@ the supplied source SHA. Exact-release build/attestation evidence remains needed
    verifier reads. A legacy protocol1 plan refuses this new workflow; the
    independent control record itself remains format1. Next close the reviewed
    Supabase API/S3 key paths without retry or automatic replacement credentials.
-4. Observe provider services/jobs, database closure and named storage paths again.
-5. Conditionally record OBSERVED_CLOSED against the original attempt's exact
-   revision. A changed head or unknown final write result stays unresolved.
+4. Verify credential GET refusals with controls, then observe provider
+   services/jobs, database closure and named storage paths again.
+5. Conditionally record
+   OBSERVED_CLOSED and that complete artifact against the saved baseline revision.
+   A changed head or unknown final write result stays unresolved.
 
-A fresh `close()` call cannot dispatch from ATTEMPTED or OBSERVED_CLOSED.
+A fresh `close()` call cannot dispatch from ATTEMPTED, BASELINED or OBSERVED_CLOSED.
 `inspect()` is read-only: it checks actual current component state between two
 unchanged independent-control reads. It returns original recorded observations
 separately from new observations. It never fills in a missing original completion
 record or silently drains sessions after an uncertain acquisition.
-Protocol3 requires a recorded storageDigest for an OBSERVED_CLOSED inspection;
-readable legacy observations do not become new closure evidence.
+Protocol4 requires complete recorded storage/read evidence for OBSERVED_CLOSED;
+readable legacy observations do not become new closure evidence. Stored and fresh
+read observations are returned separately, including after a lost baseline ACK.
 
 ## Proof and remaining work
 

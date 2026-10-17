@@ -69,6 +69,10 @@ export class SupabaseStorageWriterControl {
     )
       throw failure();
   }
+  readProofScope() {
+    return { installationId: this.config.installationId, projectRef: this.config.projectRef,
+      captureKeyId: this.config.captureKeyId, secretWriterIds: this.config.writerKeys.filter(k => k.type === 'secret').map(k => k.id) };
+  }
   configurationDigest(installationId = this.config.installationId) {
     if (id.parse(installationId) !== this.config.installationId)
       throw failure();

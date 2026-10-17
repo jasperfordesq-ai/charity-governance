@@ -160,3 +160,32 @@ permanent disposal authority separate. It does not adopt a schedule for a tenant
 The software-owner delegation is sufficient for these engineering choices.
 Further Nikita participation remains optional; evidence gaps must be closed by
 appropriate tests and observations rather than an assumed reviewer approval.
+
+## 17 October continuation under delegated authority
+
+The software-owner delegation remains the authority for product defaults and
+engineering choices across organisations. Another response from the original
+reviewer is optional. Use executable acceptance criteria and dated evidence to
+finish engineering work; do not turn a missing reviewer into a technical blocker.
+
+The further official-source check supports the existing choices:
+
+- [Microsoft Purview disposition review](https://learn.microsoft.com/en-us/purview/disposition)
+  separates pending review from the final decision to permanently delete.
+  CharityPilot therefore keeps disposal authority separate from a recovery deadline.
+- [Atlassian's cloud shared-responsibility model](https://developer.atlassian.com/developer-guide/cloud-shared-responsibility-model/)
+  distinguishes platform and application responsibilities. CharityPilot owns its
+  access defaults, enforced workflows and verification; customers adopt settings
+  for their records through those controls.
+- [Amazon S3 Object Lock](https://aws.amazon.com/s3/features/object-lock/)
+  protects object versions under chosen retention modes. This supports independent
+  evidence preservation, but a hash or synthetic SDK test does not establish
+  actual locked retention, separate custody or a successful recovery.
+
+Proceed with the durable credential baseline and original-observation retention
+in [maintenance protocol4](durable-credential-read-baseline.md). Its exact
+source/attempt/epoch/plan binding and acknowledged save-before-revocation barrier
+are engineering choices under this delegation. Complete the remaining actual
+write/capability fencing, common capture, restoration and provider/host-loss proof
+in the agreed sequence. Do not require a fresh human decision to implement or
+test those product contracts with synthetic data.

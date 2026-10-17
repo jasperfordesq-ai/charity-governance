@@ -4,6 +4,7 @@ import {Readable} from 'node:stream';
 import {randomUUID,createHash} from 'node:crypto';
 import {S3Client,GetObjectCommand,PutObjectCommand} from '@aws-sdk/client-s3';
 import {S3ManagedMaintenanceControl} from '../services/managed-maintenance-control.js';
+import {z} from 'zod';
 import {ManagedBackendMaintenance} from '../services/managed-backend-maintenance.js';
 
 const config={installationId:'synthetic-installation',bucket:'synthetic-maintenance',accountId:'123456789012',
@@ -13,7 +14,7 @@ const operation={installationId:config.installationId,sourceSha:'1'.repeat(40),m
 const hash=(text:string)=>createHash('sha256').update(text).digest('hex');
 function fixture(){
  let value={format:1,installationId:config.installationId,maintenanceEpoch:1,planDigest:'1'.repeat(64),
-  phase:'READY',attemptId:null as string|null,observations:null as unknown,publicationId:randomUUID()};
+  phase:'READY',attemptId:null as string|null,observations:null as unknown,readBaseline:undefined as {body:string;sha256:string}|undefined,readObservation:undefined as {body:string;sha256:string}|undefined,publicationId:randomUUID()};
  let version=1,reads=0,puts=0;
  const calls:string[]=[];
  let fault:((command:GetObjectCommand|PutObjectCommand)=>unknown)|undefined;
@@ -39,20 +40,33 @@ function fixture(){
  const database={configurationDigest:()=>hash('db-registry'),close:async()=>{calls.push('database-close');},
   invalidatePasswords:async()=>{calls.push('password-invalidate');},
   observePasswordsInvalidated:async()=>{calls.push('database-observe');return{observationDigest:hash('database'),passwordCredentialsInvalidated:true};}};
- const storage={configurationDigest:()=>hash('storage-registry'),close:async()=>{calls.push('storage-close');},
+ const storage={configurationDigest:()=>hash('storage-registry'),readProofScope:()=>({installationId:operation.installationId,projectRef:'abcdefghijklmnopqrst',captureKeyId:'11111111-1111-4111-8111-111111111111',secretWriterIds:['22222222-2222-4222-8222-222222222222']}),close:async()=>{calls.push('storage-close');},
   observeClosed:async()=>{calls.push('storage-observe');return{observationDigest:hash('storage'),configuredAccessPathsObservedClosed:true};}};
- const coordinator=new ManagedBackendMaintenance(operation,provider as never,database as never,store,storage as never);
+ const proof={configurationDigest:()=>hash('proof-registry'),assertStorageScope:(_raw:unknown)=>{},
+  assertBaseline:(raw:unknown,_binding?:unknown)=>raw as {body:string;sha256:string},assertObservation:(raw:unknown,_pin:string)=>raw as {body:string;sha256:string},
+  baseline:async(_caller?:AbortSignal,maintenance?:unknown)=>{calls.push('read-baseline');const body=JSON.stringify({format:1,kind:'SUPABASE_CREDENTIAL_READ_BASELINE_V1',
+   configurationDigest:hash('proof-registry'),credentialCount:2,capturedAt:new Date().toISOString(),canarySha256:hash('canary'),byteLength:86,...(maintenance?{maintenance}:{})});
+   return{body,sha256:hash(body),byteLength:Buffer.byteLength(body)};},
+  verifyReadRefusal:async(_body:string,pin:string)=>{calls.push('read-proof');const core={kind:'SUPABASE_CREDENTIAL_READ_REFUSAL_V1',
+   configurationDigest:hash('proof-registry'),baselineSha256:pin,observedAt:new Date().toISOString(),
+   refusals:[{credentialId:'22222222-2222-4222-8222-222222222222',status:401 as const}]};
+   return{...core,observationDigest:hash(JSON.stringify(core)),credentialReadRefusalsObserved:true,
+    coverage:'EXPLICIT_MODERN_SECRET_READS_ONLY',writeRejectionVerified:false,signedCapabilitiesRevoked:false,
+    inFlightWritesDrained:false,wholeStorageQuiesced:false,actionAuthorized:false};}};
+ const coordinator=new ManagedBackendMaintenance(operation,provider as never,database as never,store,storage as never,proof as never);
  value.planDigest=coordinator.planDigest();
- return{store,provider,database,storage,coordinator,calls,metadata,get value(){return value;},set value(next){value=next;},
+ return{store,provider,database,storage,proof,coordinator,calls,metadata,get value(){return value;},set value(next){value=next;},
   get puts(){return puts;},get reads(){return reads;},setFault:(next:typeof fault)=>{fault=next;},
   commit:(command:PutObjectCommand)=>{value=JSON.parse(String(command.input.Body));version++;return metadata();}};
 }
 
 test('managed shutdown records an independent attempt before provider/database mutation and never repeats it',async()=>{
  const f=fixture();const result=await f.coordinator.close();
- assert.equal(result.phase,'OBSERVED_CLOSED');assert.equal(f.puts,2);
+ assert.equal(result.phase,'OBSERVED_CLOSED');assert.equal(f.puts,3);
  assert.equal(result.databasePasswordCredentialsInvalidated,true);
  assert.equal(result.storageAccessPathsObservedClosed,true);assert.ok(f.value.observations);
+ assert.equal(result.credentialReadRefusalsObserved,true);assert.ok(f.value.readBaseline);assert.ok(f.value.readObservation);
+ assert.ok(f.calls.indexOf('read-baseline')<f.calls.indexOf('suspend'));
  assert.ok(f.calls.indexOf('put')<f.calls.indexOf('suspend'));
  assert.ok(f.calls.indexOf('suspend')<f.calls.indexOf('database-close'));
  assert.ok(f.calls.indexOf('database-close')<f.calls.indexOf('password-invalidate'));
@@ -66,6 +80,20 @@ test('managed shutdown records an independent attempt before provider/database m
  await assert.rejects(f.coordinator.close());
  assert.equal(f.calls.filter(s=>['put','suspend','database-close','password-invalidate','storage-close'].includes(s)).length,mutations);
 });
+test('lost durable baseline acknowledgement blocks all shutdown mutations and preserves the original baseline',async()=>{
+ const f=fixture();f.setFault(command=>{
+  if(command instanceof PutObjectCommand&&JSON.parse(String(command.input.Body)).phase==='BASELINED'){
+   f.commit(command);throw new Error('PRIVATE lost baseline publication ACK');
+  }
+ });
+ await assert.rejects(f.coordinator.close());assert.equal(f.value.phase,'BASELINED');
+ assert.ok(f.value.readBaseline);assert.equal(f.value.observations,null);
+ assert.equal(f.calls.includes('suspend'),false);assert.equal(f.calls.includes('storage-close'),false);
+ f.setFault(undefined);const before=f.puts;
+ const fresh=new ManagedBackendMaintenance(operation,f.provider as never,f.database as never,f.store,f.storage as never,f.proof as never);
+ await assert.rejects(fresh.close());assert.equal(f.puts,before);
+ assert.equal(f.calls.filter(x=>x==='read-baseline').length,1);
+});
 
 test('lost independent acquisition acknowledgement never dispatches, even after a new coordinator reads the committed attempt',async()=>{
  const f=fixture();f.setFault(command=>{
@@ -73,19 +101,20 @@ test('lost independent acquisition acknowledgement never dispatches, even after 
  });
  await assert.rejects(f.coordinator.close());assert.equal(f.value.phase,'ATTEMPTED');
  f.setFault(undefined);
- const fresh=new ManagedBackendMaintenance(operation,f.provider as never,f.database as never,f.store,f.storage as never);
+ const fresh=new ManagedBackendMaintenance(operation,f.provider as never,f.database as never,f.store,f.storage as never,f.proof as never);
  await assert.rejects(fresh.close());assert.equal(f.calls.includes('suspend'),false);assert.equal(f.calls.includes('database-close'),false);
  const observed=await fresh.inspect();assert.equal(observed.phase,'ATTEMPTED');assert.equal(observed.recordedObservations,null);
 });
 
 test('provider/database/recording failures retain attempt and forbid repeat or automatic compensation',async()=>{
- for(const stage of ['suspend','database-close','password-invalidate','storage-close','services-observe','database-observe','storage-observe','record'] as const){
+ for(const stage of ['suspend','database-close','password-invalidate','storage-close','read-proof','services-observe','database-observe','storage-observe','record'] as const){
   const f=fixture();
   const fail=async()=>{throw new Error('PRIVATE uncertain external mutation');};
   if(stage==='suspend')f.provider.suspend=fail;
   if(stage==='database-close')f.database.close=fail;
   if(stage==='password-invalidate')f.database.invalidatePasswords=fail;
   if(stage==='storage-close')f.storage.close=fail;
+  if(stage==='read-proof')f.proof.verifyReadRefusal=fail;
   if(stage==='storage-observe')f.storage.observeClosed=fail;
   if(stage==='services-observe')f.provider.observeSuspended=fail;
   if(stage==='database-observe')f.database.observePasswordsInvalidated=fail;
@@ -95,7 +124,7 @@ test('provider/database/recording failures retain attempt and forbid repeat or a
    }
   });
   await assert.rejects(f.coordinator.close(),error=>error instanceof Error&&!error.message.includes('PRIVATE')&&error.cause===undefined);
-  assert.equal(f.value.phase,stage==='record'?'OBSERVED_CLOSED':'ATTEMPTED');
+  assert.equal(f.value.phase,stage==='record'?'OBSERVED_CLOSED':'BASELINED');
   f.setFault(undefined);const mutations=f.calls.filter(s=>['put','suspend','database-close','password-invalidate','storage-close'].includes(s)).length;
   await assert.rejects(f.coordinator.close());assert.equal(f.calls.filter(s=>['put','suspend','database-close','password-invalidate','storage-close'].includes(s)).length,mutations);
   if(stage==='suspend')assert.equal(f.calls.includes('database-close'),false);
@@ -104,7 +133,7 @@ test('provider/database/recording failures retain attempt and forbid repeat or a
 });
 
 test('maintenance plan binds copied installation/source/epoch and all component registries',async()=>{
- for(const stage of ['installation','source','epoch','provider','database','storage'] as const){
+ for(const stage of ['installation','source','epoch','provider','database','storage','proof'] as const){
   const f=fixture(),changed={...operation};
   if(stage==='installation')changed.installationId='different-installation';
   if(stage==='source')changed.sourceSha='2'.repeat(40);
@@ -112,10 +141,11 @@ test('maintenance plan binds copied installation/source/epoch and all component 
   if(stage==='provider')f.provider.configurationDigest=()=>hash('different-provider');
   if(stage==='database')f.database.configurationDigest=()=>hash('different-database');
   if(stage==='storage')f.storage.configurationDigest=()=>hash('different-storage');
-  await assert.rejects(new ManagedBackendMaintenance(changed,f.provider as never,f.database as never,f.store,f.storage as never).close());
+  if(stage==='proof')f.proof.configurationDigest=()=>hash('different-proof');
+  await assert.rejects(new ManagedBackendMaintenance(changed,f.provider as never,f.database as never,f.store,f.storage as never,f.proof as never).close());
   assert.equal(f.puts,0);assert.equal(f.calls.includes('suspend'),false);
  }
- const f=fixture(),input={...operation},coordinator=new ManagedBackendMaintenance(input,f.provider as never,f.database as never,f.store,f.storage as never);
+ const f=fixture(),input={...operation},coordinator=new ManagedBackendMaintenance(input,f.provider as never,f.database as never,f.store,f.storage as never,f.proof as never);
  const before=coordinator.planDigest();input.sourceSha='2'.repeat(40);assert.equal(coordinator.planDigest(),before);
 });
 
@@ -162,7 +192,7 @@ test('maintenance SDK has no ambient endpoint/credential fallback and sanitises 
 });
 
 test('two concurrent maintenance callers cannot both dispatch from one READY record',async()=>{
- const f=fixture(),other=new ManagedBackendMaintenance(operation,f.provider as never,f.database as never,f.store,f.storage as never);
+ const f=fixture(),other=new ManagedBackendMaintenance(operation,f.provider as never,f.database as never,f.store,f.storage as never,f.proof as never);
  const outcomes=await Promise.allSettled([f.coordinator.close(),other.close()]);
  assert.equal(outcomes.filter(r=>r.status==='fulfilled').length,1);
  assert.equal(f.calls.filter(c=>c==='suspend').length,1);assert.equal(f.calls.filter(c=>c==='database-close').length,1);
@@ -202,9 +232,58 @@ test('legacy four-service protocol2 cannot dispatch the new named storage-key wo
  await assert.rejects(f.coordinator.close());assert.equal(f.puts,0);assert.equal(f.calls.includes('suspend'),false);
  assert.equal(f.calls.includes('storage-close'),false);
 });
-test('protocol3 inspection cannot promote an incomplete recorded storage observation',async()=>{
+test('protocol4 inspection cannot promote an incomplete recorded storage observation',async()=>{
  const f=fixture();await f.coordinator.close();
  const original=f.value.observations as Record<string,unknown>,changed={...original};delete changed.storageDigest;
  f.value={...f.value,observations:changed};const before=f.calls.filter(x=>x==='storage-observe').length;
  await assert.rejects(f.coordinator.inspect());assert.equal(f.calls.filter(x=>x==='storage-observe').length,before);
+});
+test('protocol3 cannot dispatch protocol4 baseline work',async()=>{
+ const f=fixture();f.value={...f.value,planDigest:hash(JSON.stringify({format:3,...operation,
+  databaseCredentialPolicy:'PASSWORD_NULL_WHILE_CLOSED',storageCredentialPolicy:'REVOKE_REVIEWED_KEYS_KEEP_CAPTURE_V1',
+  provider:f.provider.configurationDigest(),database:f.database.configurationDigest(),storage:f.storage.configurationDigest()}))};
+ await assert.rejects(f.coordinator.close());assert.equal(f.puts,0);assert.equal(f.calls.includes('read-baseline'),false);
+});
+test('failed baseline never shuts writers; later inspection cannot invent a missing original refusal report',async()=>{
+ const first=fixture();first.proof.baseline=async()=>{throw new Error('synthetic baseline unavailable');};
+ await assert.rejects(first.coordinator.close());assert.equal(first.value.phase,'ATTEMPTED');assert.equal(first.calls.includes('suspend'),false);
+ const f=fixture(),verify=f.proof.verifyReadRefusal;f.proof.verifyReadRefusal=async()=>{throw new Error('synthetic refusal observation lost');};
+ await assert.rejects(f.coordinator.close());assert.equal(f.value.phase,'BASELINED');assert.equal(f.value.readObservation,undefined);
+ f.proof.verifyReadRefusal=verify;const before=f.puts,baseline=f.value.readBaseline?.sha256;
+ const inspected=await f.coordinator.inspect();assert.equal(inspected.phase,'BASELINED');assert.equal(inspected.recordedReadObservation,null);
+ assert.ok(inspected.freshReadObservation);assert.equal(f.puts,before);assert.equal(f.value.readBaseline?.sha256,baseline);
+});
+test('fifty read refusals fit the bounded independent head and oversized updates cannot corrupt the saved baseline',async()=>{
+ const f=fixture(),baseline=f.proof.baseline,verify=f.proof.verifyReadRefusal;
+ f.proof.baseline=async(caller,binding)=>{const value=await baseline(caller,binding),decoded=JSON.parse(value.body);decoded.credentialCount=51;
+  const body=JSON.stringify(decoded);return{body,sha256:hash(body),byteLength:Buffer.byteLength(body)};};
+ f.proof.verifyReadRefusal=async(body,pin)=>{const value=await verify(body,pin),refusals=Array.from({length:50},(_,i)=>({credentialId:'22222222-2222-4222-8222-'+String(i+1).padStart(12,'0'),status:401 as const}));
+  const core={kind:value.kind,configurationDigest:value.configurationDigest,baselineSha256:pin,observedAt:value.observedAt,refusals};
+  return{...value,...core,observationDigest:hash(JSON.stringify(core))};};
+ await f.coordinator.close();assert.ok(Buffer.byteLength(JSON.stringify(f.value))<=8192);
+ assert.equal(JSON.parse(f.value.readObservation!.body).refusals.length,50);
+ const g=fixture(),attempt=await g.store.acquire(operation.installationId,g.coordinator.planDigest(),1),b=await g.proof.baseline(undefined,{attemptId:attempt.value.attemptId!,planDigest:g.coordinator.planDigest(),sourceSha:operation.sourceSha,maintenanceEpoch:1});
+ const pinned=await g.store.recordReadBaseline(attempt.value.attemptId!,attempt.revision,b),report=await g.proof.verifyReadRefusal(b.body,b.sha256);
+ const oversizedTime='2026-10-17T00:00:00.'+'0'.repeat(9000)+'Z';z.string().datetime().parse(oversizedTime);
+ const before=g.puts;
+ await assert.rejects(g.store.recordObservedClosed(attempt.value.attemptId!,pinned.revision,{servicesDigest:hash('services'),databaseDigest:hash('database'),storageDigest:hash('storage'),readProofDigest:report.observationDigest,observedAt:oversizedTime},report));
+ assert.equal(g.puts,before);assert.equal(g.value.phase,'BASELINED');assert.equal(g.value.readBaseline?.sha256,b.sha256);
+});
+test('a substituted baseline link refuses even when its report hashes and observation digest were recomputed',async()=>{
+ const f=fixture();await f.coordinator.close();const report=JSON.parse(f.value.readObservation!.body);
+ report.baselineSha256='0'.repeat(64);const core={kind:report.kind,configurationDigest:report.configurationDigest,baselineSha256:report.baselineSha256,observedAt:report.observedAt,refusals:report.refusals};
+ report.observationDigest=hash(JSON.stringify(core));const body=JSON.stringify(report);
+ f.value={...f.value,readObservation:{body,sha256:hash(body)},observations:{...(f.value.observations as object),readProofDigest:report.observationDigest}};
+ const before=f.calls.filter(x=>x==='storage-observe').length;await assert.rejects(f.coordinator.inspect());
+ assert.equal(f.calls.filter(x=>x==='storage-observe').length,before);
+});
+
+test('independent baseline publication rejects copied attempt, epoch or plan without changing the head',async()=>{
+ for(const changed of [{attemptId:randomUUID()},{maintenanceEpoch:2},{planDigest:'3'.repeat(64)}]){
+  const f=fixture(),attempt=await f.store.acquire(operation.installationId,f.coordinator.planDigest(),1);
+  const b=await f.proof.baseline(undefined,{attemptId:attempt.value.attemptId!,planDigest:f.coordinator.planDigest(),sourceSha:operation.sourceSha,maintenanceEpoch:1});
+  const value=JSON.parse(b.body);value.maintenance={...value.maintenance,...changed};const body=JSON.stringify(value),before=f.puts;
+  await assert.rejects(f.store.recordReadBaseline(attempt.value.attemptId!,attempt.revision,{body,sha256:hash(body)}));
+  assert.equal(f.puts,before);assert.equal(f.value.phase,'ATTEMPTED');assert.equal(f.calls.includes('suspend'),false);
+ }
 });

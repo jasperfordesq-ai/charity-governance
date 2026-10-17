@@ -1,5 +1,13 @@
 # CharityPilot Agent Continuation Handoff
 
+> **17 October durable credential baseline:** Maintenance protocol4 now CAS-saves
+> and reads back baseline body/SHA before ANY shutdown, binds the probe registry,
+> and retains the later read-refusal artifact with the final record. Unknown
+> baseline ACK stops all mutations; fresh inspection never invents missing original
+> observations. Local TLS PostgreSQL/default-component composition passes with
+> synthetic provider transports. Actual custody/write/capability/global/host-loss
+> gates remain; see [durable baseline](durable-credential-read-baseline.md).
+
 > **17 October credential read-proof component:** Exact supplied key fingerprints
 > and a private synthetic canary now support a working baseline followed by
 > 401/403 refusal bracketed by successful control reads. Management/read-proof

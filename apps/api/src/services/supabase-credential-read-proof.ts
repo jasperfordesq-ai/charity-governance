@@ -1,6 +1,13 @@
 import { createHash } from 'node:crypto';
 import { z } from 'zod';
 import { SupabaseRecoveryCapture } from './supabase-recovery-capture.js';
+import {
+  credentialReadBaselineSchema as baselineSchema,
+  parseCredentialReadBaselineArtifact,
+  parseCredentialReadObservationArtifact,
+  credentialReadObservationSchema,
+  credentialReadMaintenanceBindingSchema,
+} from './credential-read-evidence.js';
 
 const failure = () => new Error('Supabase credential read proof is unresolved');
 const sha = z
@@ -64,20 +71,6 @@ const suppliedSchema = z
       .max(50),
   })
   .strict();
-const baselineSchema = z
-  .object({
-    format: z.literal(1),
-    kind: z.literal('SUPABASE_CREDENTIAL_READ_BASELINE_V1'),
-    configurationDigest: sha,
-    credentialCount: z.number().int().min(2).max(51),
-    capturedAt: z
-      .string()
-      .datetime()
-      .refine((v) => new Date(v).toISOString() === v),
-    canarySha256: sha,
-    byteLength: z.number().int().min(1).max(1024),
-  })
-  .strict();
 const hash = (value: string) =>
   createHash('sha256').update(value).digest('hex');
 
@@ -130,7 +123,8 @@ export class SupabaseCredentialReadProof {
       );
     }
   }
-  configurationDigest() {
+  configurationDigest(installationId = this.config.installationId) {
+    if (installationId !== this.config.installationId) throw failure();
     return hash(
       JSON.stringify({
         format: 1,
@@ -138,6 +132,57 @@ export class SupabaseCredentialReadProof {
         ...this.config,
       }),
     );
+  }
+  assertStorageScope(raw: unknown) {
+    const scope = z
+      .object({
+        installationId: z.string(),
+        projectRef: z.string(),
+        captureKeyId: uuid,
+        secretWriterIds: z.array(uuid).max(50),
+      })
+      .strict()
+      .parse(raw);
+    if (
+      scope.installationId !== this.config.installationId ||
+      scope.projectRef !== this.config.projectRef ||
+      scope.captureKeyId !== this.config.control.id ||
+      JSON.stringify([...scope.secretWriterIds].sort()) !==
+        JSON.stringify(this.config.retired.map((k) => k.id))
+    )
+      throw failure();
+  }
+  assertBaseline(raw: unknown, expectedBinding?: unknown) {
+    const artifact = parseCredentialReadBaselineArtifact(raw),
+      value = baselineSchema.parse(JSON.parse(artifact.body));
+    if (
+      value.configurationDigest !== this.configurationDigest() ||
+      value.credentialCount !== this.config.retired.length + 1 ||
+      value.canarySha256 !== this.config.canary.sha256 ||
+      value.byteLength !== this.config.canary.bytes
+    )
+      throw failure();
+    if (
+      expectedBinding !== undefined &&
+      JSON.stringify(value.maintenance) !==
+        JSON.stringify(
+          credentialReadMaintenanceBindingSchema.parse(expectedBinding),
+        )
+    )
+      throw failure();
+    return artifact;
+  }
+  assertObservation(raw: unknown, baselineSha256: string) {
+    const artifact = parseCredentialReadObservationArtifact(raw),
+      value = credentialReadObservationSchema.parse(JSON.parse(artifact.body));
+    if (
+      value.configurationDigest !== this.configurationDigest() ||
+      value.baselineSha256 !== baselineSha256 ||
+      JSON.stringify(value.refusals.map((r) => r.credentialId)) !==
+        JSON.stringify(this.config.retired.map((k) => k.id))
+    )
+      throw failure();
+    return artifact;
   }
   private async work<T>(
     run: (signal: AbortSignal) => Promise<T>,
@@ -163,8 +208,12 @@ export class SupabaseCredentialReadProof {
   private read(id: string, signal: AbortSignal) {
     return this.readers.get(id)!.readRecoveryCanary(this.config.canary, signal);
   }
-  async baseline(caller?: AbortSignal) {
+  async baseline(caller?: AbortSignal, rawBinding?: unknown) {
     return this.work(async (signal) => {
+      const maintenance =
+        rawBinding === undefined
+          ? undefined
+          : credentialReadMaintenanceBindingSchema.parse(rawBinding);
       await this.read(this.config.control.id, signal);
       for (const credential of this.config.retired)
         await this.read(credential.id, signal);
@@ -178,6 +227,7 @@ export class SupabaseCredentialReadProof {
           capturedAt: new Date().toISOString(),
           canarySha256: this.config.canary.sha256,
           byteLength: this.config.canary.bytes,
+          ...(maintenance ? { maintenance } : {}),
         }),
       );
       return { body, sha256: hash(body), byteLength: Buffer.byteLength(body) };
