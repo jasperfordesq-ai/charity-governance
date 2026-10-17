@@ -1,5 +1,14 @@
 # Independent daemon request owner acceptance
 
+## Inactive fixed worker component
+
+The bounded stdin worker and original-intent/argument/storage correlation are
+implemented as a component. Actual identity and CLI execution refuse through a
+source-level gate until ordered OUTCOME transport, exact worker source binding
+and native service acceptance are integrated. This gate has no environment
+override. Tests cover refusal before execution and original-ACK ordering through
+explicit test seams. The existing production dispatch path is unchanged.
+
 17 October 2026. This is a fixed synthetic acceptance probe for the next managed
 request-owner implementation. It does not change the production imported-proof
 dispatch path or resolve any saved pending request.

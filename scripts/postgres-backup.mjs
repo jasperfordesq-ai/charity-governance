@@ -2242,6 +2242,14 @@ function daemonOperation(args){
  if(typeof target!=='string'||!(/^(?:[a-f0-9]{64}|charitypilot-(?:source-snapshot|dump-descriptor|isolated-restore|restore-loader|restored-snapshot)-[0-9]+-[0-9]+-[a-f0-9]{8})$/).test(target))throw daemonJournalFailure();
  return{operation:args[0],target};
 }
+/** Worker-side correlation only; original live custody still authorises release. */
+export function validateManagedDaemonOwnerArguments(args,intent,jobId){
+ const request=daemonOperation(args);
+ if(!request||request.operation!==intent.operation||request.target!==intent.target||intent.jobId!==jobId
+  ||intent.argumentsDigest!==sha256Text('CHARITYPILOT_DAEMON_ARGUMENTS_V1\n'+jobId+'\n'+JSON.stringify(args))
+  ||JSON.stringify(request.operation==='run'?planManagedProofStorage(args,jobId):null)!==JSON.stringify(intent.storagePlan))throw daemonJournalFailure();
+ return true;
+}
 export function planManagedProofStorage(args,jobId){
  if(!Array.isArray(args)||args[0]!=='run'||args.some(v=>typeof v!=='string')||typeof jobId!=='string'||!/^[a-f0-9-]{36}$/.test(jobId))throw daemonJournalFailure();
  const imageIndex=args.indexOf(DEFAULT_POSTGRES_IMAGE);if(imageIndex<1)throw daemonJournalFailure();

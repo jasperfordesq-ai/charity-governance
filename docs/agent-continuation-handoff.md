@@ -1,3 +1,12 @@
+## 17 October: inactive fixed owner worker component
+
+The bounded stdin request-owner component and strict original argument/storage
+correlation are tested. Actual CLI/default execution is disabled in source until
+OUTCOME transport, exact worker source binding and native acceptance are joined.
+No environment flag enables it. See [independent request owner](managed-independent-request-owner.md).
+Deploying this component does not activate managed owner dispatch or establish
+independent provider/physical host-loss recovery. Those goal gates remain open.
+
 ## 17 October: original owner outcome evidence after source closure
 
 Read [independent daemon request owner](managed-independent-request-owner.md).
