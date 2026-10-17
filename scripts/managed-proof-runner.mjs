@@ -2,7 +2,7 @@ import {recordManagedProofJob} from './managed-proof-job.mjs';
 import {spawn,spawnSync} from 'node:child_process';
 import {randomUUID,createHash} from 'node:crypto';
 import {fileURLToPath} from 'node:url';
-import {prepareLocalDockerCommand,captureHelperImplementationBinding} from './postgres-backup.mjs';
+import {prepareLocalDockerCommand,captureHelperImplementationBinding,inspectManagedDaemonInvocation} from './postgres-backup.mjs';
 import {superviseContainedManagedProof} from './managed-proof-systemd-runner.mjs';
 const root=fileURLToPath(new URL('..',import.meta.url));
 const worker=fileURLToPath(new URL('./managed-proof-worker.mjs',import.meta.url));
@@ -130,9 +130,10 @@ export async function runManagedImportedProof({args,snapshot,databaseUrl,workspa
   try{cleanup=reconcileManagedProofContainers(jobId,env);}catch{
    try{const failed=await job.observe('UNRESOLVED',false);if(jobCustody)await jobCustody.observe(failed.artifact);}catch{}throw unresolved();
   }
-  try{result=await job.observe(success&&cleanup.removedCount===0?'WORKER_EXIT_ACK_OBSERVED':'UNRESOLVED',true);if(jobCustody)await jobCustody.observe(result.artifact);}catch{throw unresolved();}
+  let settled=false;try{settled=inspectManagedDaemonInvocation({args,snapshot,jobId}).mutatingRequestsObservedSuccessful===true;}catch{}
+  try{result=await job.observe(success&&settled&&cleanup.removedCount===0?'WORKER_EXIT_ACK_OBSERVED':'UNRESOLVED',settled);if(jobCustody)await jobCustody.observe(result.artifact);}catch{throw unresolved();}
   // Residue after an apparently successful worker is an unresolved outcome too.
-  if(success&&cleanup.removedCount!==0)throw unresolved();
+  if(success&&(!settled||cleanup.removedCount!==0))throw unresolved();
  }
  return{jobId,requestPin:job.requestPin,observationPin:result.pin,servicePin:boundService?.pin??null,kernelContained:executionMode==='KERNEL_CONTAINED',
   directoryFlushSupported:job.directoryFlushSupported,workerExited:true,observedJobContainersAbsent:true,actionAuthorized:false};

@@ -73,6 +73,7 @@ test('real source caller loss stops contained worker and exact daemon clients wh
   const operator=spawnSync(process.execPath,['scripts/managed-proof-orphan.mjs'],{input:JSON.stringify({parentDirectory:ready.parentDirectory,workspaceRoot:ready.workspaceRoot,
    requestPin:ready.requestPin,expectedScope:ready.scope,servicePin:ready.servicePin}),encoding:'utf8',timeout:10000,maxBuffer:16384});assert.equal(operator.status,0);
   const inspected=JSON.parse(operator.stdout);assert.equal(inspected.cohort.state,'ORIGINAL_COHORT_EMPTY');assert.equal(inspected.cleanupAuthorized,false);assert.equal(inspected.executionAuthorized,false);
+  assert.equal(inspected.daemonRequests.state,'UNRESOLVED_REQUESTS');assert.equal(inspected.daemonRequests.mutatingRequestsObservedSuccessful,false);assert.ok(inspected.daemonRequests.requestCount>=1);
   console.log('PASS genuine source parent SIGKILL: original service ACK, observed blocked TLS SQL/client, empty original cgroup, exact client cleanup, original source/control alive, fresh process local pins read-only; no provider/host-loss claim');
  }finally{
   if(producer&&producer.exitCode===null&&producer.signalCode===null)producer.kill('SIGKILL');await producerTerminal?.catch(()=>{});

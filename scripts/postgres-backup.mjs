@@ -15,6 +15,8 @@ import {
   mkdirSync,
   openSync,
   readFileSync,
+  readdirSync,
+  realpathSync,
   readSync,
   renameSync,
   rmSync,
@@ -68,7 +70,8 @@ export function spawnLocalDockerCommand(command, environment, options = {}, depe
 }
 
 function runLocalDockerSync(args, options = {}) {
-  return spawnLocalDockerCommand(['docker',...args],options.env ?? process.env,options);
+  const dispatch=()=>spawnLocalDockerCommand(['docker',...args],options.env ?? process.env,options);
+  return managedDaemonJournal?managedDaemonJournal.dispatch(args,dispatch):dispatch();
 }
 
 const APPROVED_POSTGRES_IMAGE_DIGEST_SHA256 = '5660c2cbfea50c7a9127d17dc4e48543eedd3d7a41a595a2dfa572471e37e64c';
@@ -2203,6 +2206,96 @@ function runCommand(
 }
 
 let managedProofJobId;
+let managedDaemonJournal;
+const daemonJournalFailure=()=>new Error('Managed daemon request accounting unresolved; preserve original scope without replay');
+const daemonFile='proof-daemon.';
+function daemonRoot(root){
+ if(typeof root!=='string'||!isAbsolute(root)||resolve(root)!==root||realpathSync(root)!==root)throw daemonJournalFailure();
+ protectDirectoryOwnerOnly(root);return protectedDirectoryIdentity(root);
+}
+function daemonWrite(root,identity,name,value){
+ assertProtectedDirectoryUnchanged(root,identity,'before daemon request custody');
+ const path=join(root,name),body=JSON.stringify(value);if(Buffer.byteLength(body)>8192)throw daemonJournalFailure();
+ const fd=openSync(path,fsConstants.O_WRONLY|fsConstants.O_CREAT|fsConstants.O_EXCL|(fsConstants.O_NOFOLLOW??0),0o600);
+ try{writeFileSync(fd,body);fsyncSync(fd);}finally{closeSync(fd);}protectOwnerOnly(path);
+ let directory;try{directory=openSync(root,fsConstants.O_RDONLY);fsyncSync(directory);}catch(error){if(process.platform!=='win32')throw error;}finally{if(directory!==undefined)closeSync(directory);}
+ assertProtectedDirectoryUnchanged(root,identity,'after daemon request custody');
+ return{sha256:sha256Text(body),byteLength:Buffer.byteLength(body)};
+}
+function daemonRead(root,name){
+ const handle=openProtectedRegularFile(join(root,name),'daemon request record');
+ try{const body=readProtectedFile(handle,8192,'daemon request observation');return{value:JSON.parse(body),pin:{sha256:sha256Text(body),byteLength:Buffer.byteLength(body)}};}finally{closeProtectedFile(handle);}
+}
+function daemonScope({root,jobId,inputDigest}){
+ if(typeof jobId!=='string'||!/^[a-f0-9]{8}-[a-f0-9]{4}-4[a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}$/.test(jobId)||typeof inputDigest!=='string'||!/^[a-f0-9]{64}$/.test(inputDigest))throw daemonJournalFailure();
+ return{root,jobId,inputDigest,identity:daemonRoot(root)};
+}
+function daemonOperation(args){
+ if(!Array.isArray(args)||args.some(a=>typeof a!=='string'))throw daemonJournalFailure();
+ if(['ps','inspect','info','version'].includes(args[0])||(args[0]==='image'&&args[1]==='inspect'))return null;
+ if(args[0]==='exec'&&/^charitypilot-isolated-restore-[0-9]+-[0-9]+-[a-f0-9]{8}$/.test(args[1])&&args[2]==='pg_isready')return null;
+ if(!['run','exec','rm'].includes(args[0]))throw daemonJournalFailure();
+ let target;
+ if(args[0]==='run'){const i=args.indexOf('--name');if(i<1||args.lastIndexOf('--name')!==i)throw daemonJournalFailure();target=args[i+1];}
+ else if(args[0]==='rm')target=args.at(-1);
+ else{let i=1;while(args[i]==='-e'){if(args[i+1]!=='PGPASSWORD')throw daemonJournalFailure();i+=2;}target=args[i];}
+ if(typeof target!=='string'||!(/^(?:[a-f0-9]{64}|charitypilot-(?:source-snapshot|dump-descriptor|isolated-restore|restore-loader|restored-snapshot)-[0-9]+-[0-9]+-[a-f0-9]{8})$/).test(target))throw daemonJournalFailure();
+ return{operation:args[0],target};
+}
+/** Original one-shot local intent custody. No command, environment, SQL or key
+ * bodies are retained. A missing/nonzero response never becomes a retry lease. */
+export function createManagedDaemonRequestJournal(raw){
+ const s=daemonScope(raw),header={format:1,kind:'MANAGED_DAEMON_REQUEST_HEADER_V1',jobId:s.jobId,inputDigest:s.inputDigest};
+ const headerPin=daemonWrite(s.root,s.identity,daemonFile+'header.json',header);let sequence=0,previous=headerPin.sha256,finished=false;
+ return{dispatch(args,run){
+  if(finished)throw daemonJournalFailure();const request=daemonOperation(args);if(request===null)return run();const {operation,target}=request;
+  if(sequence>=64)throw daemonJournalFailure();const ordinal=String(++sequence).padStart(3,'0');
+  const intent={format:1,kind:'MANAGED_DAEMON_REQUEST_INTENT_V1',jobId:s.jobId,sequence,previousDigest:previous,operation,target,
+   argumentsDigest:sha256Text('CHARITYPILOT_DAEMON_ARGUMENTS_V1\n'+s.jobId+'\n'+JSON.stringify(args))};
+  const intentPin=daemonWrite(s.root,s.identity,daemonFile+ordinal+'.intent.json',intent);previous=intentPin.sha256;
+  const result=run();
+  const response={format:1,kind:'MANAGED_DAEMON_CLIENT_RESPONSE_V1',jobId:s.jobId,sequence,intentPin,
+   status:Number.isSafeInteger(result?.status)?result.status:null,transportError:!!result?.error,signal:typeof result?.signal==='string'?true:false,
+   removalAlreadyAbsent:operation==='rm'&&result?.status===1&&!result?.error&&!result?.signal&&(result?.stderr??'').trim()==='Error response from daemon: No such container: '+target};
+  daemonWrite(s.root,s.identity,daemonFile+ordinal+'.response.json',response);return result;
+ },finish(){
+  if(finished)throw daemonJournalFailure();finished=true;
+  daemonWrite(s.root,s.identity,daemonFile+'end.json',{format:1,kind:'MANAGED_DAEMON_REQUEST_END_V1',jobId:s.jobId,headerPin,requestCount:sequence,lastIntentDigest:previous});
+  return inspectManagedDaemonRequests(raw);
+ }};
+}
+export function inspectManagedDaemonRequests(raw){
+ const s=daemonScope(raw),result=(state,count=0)=>({format:1,kind:'MANAGED_DAEMON_REQUEST_OBSERVATION_V1',jobId:s.jobId,state,requestCount:count,
+  mutatingRequestsObservedSuccessful:state==='RECORDED_CLIENT_RESPONSES',completeResourceInventory:false,cleanupAuthorized:false,executionAuthorized:false,actionAuthorized:false});
+ assertProtectedDirectoryUnchanged(s.root,s.identity,'before daemon request inspection');
+ const names=readdirSync(s.root).filter(n=>n.startsWith(daemonFile)).sort();
+ if(!names.length)return result('NOT_RECORDED');
+ if(names.length>130||names.some(n=>!/^proof-daemon\.(header|end|[0-9]{3}\.(intent|response))\.json$/.test(n)))throw daemonJournalFailure();
+ const header=daemonRead(s.root,daemonFile+'header.json');
+ if(JSON.stringify(header.value)!==JSON.stringify({format:1,kind:'MANAGED_DAEMON_REQUEST_HEADER_V1',jobId:s.jobId,inputDigest:s.inputDigest}))throw daemonJournalFailure();
+ const intents=names.filter(n=>n.endsWith('.intent.json'));let previous=header.pin.sha256,unknown=false;
+ for(let i=0;i<intents.length;i++){
+  const ordinal=String(i+1).padStart(3,'0');if(intents[i]!==daemonFile+ordinal+'.intent.json')throw daemonJournalFailure();
+  const intent=daemonRead(s.root,intents[i]),v=intent.value;
+  if(Object.keys(v).sort().join(',')!=='argumentsDigest,format,jobId,kind,operation,previousDigest,sequence,target'||v.format!==1||v.kind!=='MANAGED_DAEMON_REQUEST_INTENT_V1'||v.jobId!==s.jobId||v.sequence!==i+1||v.previousDigest!==previous||!['run','exec','rm'].includes(v.operation)||typeof v.argumentsDigest!=='string'||!/^[a-f0-9]{64}$/.test(v.argumentsDigest)||typeof v.target!=='string'||!/^(?:[a-f0-9]{64}|charitypilot-(?:source-snapshot|dump-descriptor|isolated-restore|restore-loader|restored-snapshot)-[0-9]+-[0-9]+-[a-f0-9]{8})$/.test(v.target))throw daemonJournalFailure();
+  previous=intent.pin.sha256;const name=daemonFile+ordinal+'.response.json';if(!names.includes(name)){unknown=true;continue;}
+  const response=daemonRead(s.root,name).value;
+  if(Object.keys(response).sort().join(',')!=='format,intentPin,jobId,kind,removalAlreadyAbsent,sequence,signal,status,transportError'||response.format!==1||response.kind!=='MANAGED_DAEMON_CLIENT_RESPONSE_V1'||response.jobId!==s.jobId||response.sequence!==i+1||JSON.stringify(response.intentPin)!==JSON.stringify(intent.pin)||typeof response.transportError!=='boolean'||typeof response.signal!=='boolean'||typeof response.removalAlreadyAbsent!=='boolean'||(response.removalAlreadyAbsent&&v.operation!=='rm')||(response.status!==null&&!Number.isSafeInteger(response.status)))throw daemonJournalFailure();
+  if((response.status!==0&&!response.removalAlreadyAbsent)||response.transportError||response.signal)unknown=true;
+ }
+ if(names.filter(n=>n.endsWith('.response.json')).length>intents.length)throw daemonJournalFailure();
+ if(!names.includes(daemonFile+'end.json'))unknown=true;
+ else{const end=daemonRead(s.root,daemonFile+'end.json').value;
+  if(JSON.stringify(end)!==JSON.stringify({format:1,kind:'MANAGED_DAEMON_REQUEST_END_V1',jobId:s.jobId,headerPin:header.pin,requestCount:intents.length,lastIntentDigest:previous}))throw daemonJournalFailure();}
+ if(JSON.stringify(names)!==JSON.stringify(readdirSync(s.root).filter(n=>n.startsWith(daemonFile)).sort()))throw daemonJournalFailure();
+ assertProtectedDirectoryUnchanged(s.root,s.identity,'after daemon request inspection');return result(unknown?'UNRESOLVED_REQUESTS':'RECORDED_CLIENT_RESPONSES',intents.length);
+}
+export function inspectManagedDaemonInvocation(value){
+ if(!value||!Array.isArray(value.args)||value.snapshot===undefined)throw daemonJournalFailure();
+ const parsed=parseArgs(value.args);if(parsed.command!=='prove-restore')throw daemonJournalFailure();
+ return inspectManagedDaemonRequests({root:optionString(parsed.options,'output-dir'),jobId:value.jobId,
+  inputDigest:sha256Text(JSON.stringify({args:value.args,snapshot:value.snapshot,jobId:value.jobId}))});
+}
 function proofContainerName(kind) {
   return `charitypilot-${kind}-${Date.now()}-${process.pid}-${randomBytes(4).toString('hex')}`;
 }
@@ -4339,7 +4432,15 @@ export async function runImportedSnapshotRestoreProof(args,snapshot,env=process.
   if(snapshot===undefined||snapshot===null)return result(1,'','Original imported snapshot is required');
   if(managedProofJobId!==undefined||(jobId!==undefined&&(typeof jobId!=='string'||!/^[a-f0-9]{8}-[a-f0-9]{4}-4[a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}$/.test(jobId))))return result(1,'','Managed proof job scope refused');
   managedProofJobId=jobId;
-  try{return await runBackupCommand(args,env,snapshot);}finally{managedProofJobId=undefined;}
+  try{
+   if(jobId&&!args.includes('--dry-run')){
+    const parsed=parseArgs(args);if(parsed.command!=='prove-restore')throw daemonJournalFailure();
+    managedDaemonJournal=createManagedDaemonRequestJournal({root:optionString(parsed.options,'output-dir'),jobId,inputDigest:sha256Text(JSON.stringify({args,snapshot,jobId}))});
+   }
+   const outcome=await runBackupCommand(args,env,snapshot),requests=managedDaemonJournal?.finish();
+   if(outcome.status===0&&requests&&!requests.mutatingRequestsObservedSuccessful)return result(1,'',daemonJournalFailure().message);
+   return outcome;
+  }catch{return result(1,'',daemonJournalFailure().message);}finally{managedDaemonJournal=undefined;managedProofJobId=undefined;}
 }
 async function runBackupCommand(args,env,importedSnapshot){
   const output = captureConsole();

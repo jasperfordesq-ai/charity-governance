@@ -2,6 +2,7 @@ import {spawn} from 'node:child_process';
 import {fileURLToPath,pathToFileURL} from 'node:url';
 import {superviseManagedProofProcess,reconcileManagedProofContainers} from './managed-proof-runner.mjs';
 import {connectManagedGuardianParent} from './managed-proof-channel.mjs';
+import {inspectManagedDaemonInvocation} from './postgres-backup.mjs';
 const actualWorker=fileURLToPath(new URL('./managed-proof-worker.mjs',import.meta.url));
 function ipcParent(){
  if(!process.channel||!process.connected||typeof process.send!=='function')throw new Error();
@@ -21,9 +22,9 @@ function ipcParent(){
 }
 /** Fixed production CLI. Dependency callbacks/paths are source-test seams only.
  * Both private transports treat parent loss as cancellation, never replay. */
-export async function runManagedProofGuardian({workerPath=actualWorker,onTerminal,parent,reconcile=reconcileManagedProofContainers}={}){
+export async function runManagedProofGuardian({workerPath=actualWorker,onTerminal,parent,reconcile=reconcileManagedProofContainers,inspectRequests=inspectManagedDaemonInvocation}={}){
  try{parent??=ipcParent();}catch{process.exitCode=1;return;}
- const controller=new AbortController();let parentDisconnected=false,cancelled=false,owned,jobId,input,success=false,cleanup,workerTimeoutMs,workerEnv;
+ const controller=new AbortController();let parentDisconnected=false,cancelled=false,owned,jobId,input,success=false,cleanup,workerTimeoutMs,workerEnv,requestValue,requests;
  const cancel=()=>{parentDisconnected||=!parent.connected;cancelled=true;controller.abort();};
  const unsubscribe=parent.onCancel(cancel);
  const startup=setTimeout(()=>{cancel();parent.close();},15000);
@@ -31,7 +32,7 @@ export async function runManagedProofGuardian({workerPath=actualWorker,onTermina
   const request=await parent.receive();input=request.input;workerEnv=request.env;workerTimeoutMs=request.timeoutMs;
   clearTimeout(startup);controller.signal.throwIfAborted();if(!parent.connected||!Buffer.isBuffer(input)||input.length<1||input.length>16384
    ||!Number.isSafeInteger(workerTimeoutMs)||workerTimeoutMs<50||workerTimeoutMs>1200000)throw new Error();
-  const value=JSON.parse(input.toString('utf8'));
+  const value=JSON.parse(input.toString('utf8'));requestValue=value;
   if(typeof value?.jobId!=='string'||!(/^[a-f0-9]{8}-[a-f0-9]{4}-4[a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}$/).test(value.jobId))throw new Error();jobId=value.jobId;
   await superviseManagedProofProcess({input,env:workerEnv,signal:controller.signal,timeoutMs:workerTimeoutMs},{
    start(command,_args,settings){owned=spawn(command,[workerPath],settings);return owned;},
@@ -42,11 +43,11 @@ export async function runManagedProofGuardian({workerPath=actualWorker,onTermina
   clearTimeout(startup);input?.fill(0);
   const workerTerminal=!!owned&&(owned.exitCode!==null||owned.signalCode!==null);
   // Never infer terminal ownership from a stored PID or process-name lookup.
-  if(jobId&&workerTerminal){try{cleanup=reconcile(jobId,workerEnv);}catch{success=false;}}
+  if(jobId&&workerTerminal){try{requests=inspectRequests(requestValue);cleanup=reconcile(jobId,workerEnv);}catch{success=false;}}
   else success=false;
-  if(!cleanup||cleanup.removedCount!==0||cancelled||parentDisconnected||!parent.connected)success=false;
+  if(!cleanup||cleanup.removedCount!==0||requests?.mutatingRequestsObservedSuccessful!==true||cancelled||parentDisconnected||!parent.connected)success=false;
   const observed={format:1,kind:'MANAGED_PROOF_GUARDIAN_TERMINAL_V1',workerTimeoutMs,parentDisconnected,cancellationRequested:cancelled,
-   workerTerminal,jobContainersObservedAbsent:cleanup?.observedJobContainersAbsent??false,cleanupRemovedCount:cleanup?.removedCount??null,
+   workerTerminal,daemonMutationsSettled:requests?.mutatingRequestsObservedSuccessful===true,jobContainersObservedAbsent:requests?.mutatingRequestsObservedSuccessful===true&&(cleanup?.observedJobContainersAbsent??false),cleanupRemovedCount:cleanup?.removedCount??null,
    outcome:success?'WORKER_EXIT_ACK_OBSERVED':'UNRESOLVED',executionAuthorized:false,publicationAuthorized:false,actionAuthorized:false};
   try{await onTerminal?.(observed);}catch{success=false;}
   if(success&&parent.connected){try{await parent.acknowledge();}catch{success=false;}}

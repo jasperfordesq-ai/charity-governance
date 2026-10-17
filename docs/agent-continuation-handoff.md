@@ -1,3 +1,13 @@
+## 17 October: original daemon mutation accounting
+
+Read [daemon request accounting](managed-daemon-request-accounting.md). Managed
+source work records protected original intents before dispatch and responses
+without command/credential payloads. Missing or ambiguous responses stay
+unresolved; an empty post-cancellation list cannot close that uncertainty.
+Helper, guardian and original caller check the catalogue before success. Orphan
+inspection remains read-only. Independent request custody/daemon fencing and
+complete storage accounting are still required; exact tests are recorded privately.
+
 ## 17 October: original boot and recursive cohort inspection
 
 Read [original cohort inspection](managed-proof-orphan-inspection.md). New
