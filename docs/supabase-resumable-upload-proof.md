@@ -94,9 +94,10 @@ acceptance, side effects,500/409/404/410, missing/changed state, expiry, URL/att
 credential/payload/custody substitutions, lost custody ACK and bounded late
 callbacks/provider bodies. They do not prove actual provider or host-loss behaviour.
 
-Encrypted original-location custody is implemented and composes locally. Next add
-independent baseline/report publication and required parent pin barriers, then compose with
-the default coordinator/native fixture. Add signed-resumable and S3 coverage and
+Encrypted original-location custody and
+[independent baseline/report publication](resumable-upload-evidence-custody.md)
+are implemented and compose locally. Next add the static factory and required
+parent pin barriers, then compose with the default coordinator/native fixture. Add signed-resumable and S3 coverage and
 prove actual provider in-flight/control-plane exclusion before common capture.
 Keep the full independent-recovery/current-authority/full-restore/host-loss goal
 open; a local PATCH model is not its completion.

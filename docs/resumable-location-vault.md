@@ -79,8 +79,9 @@ temporary-key clearing and late KMS responses.
 
 These are fresh component instances, not an OS-process restart, real supplier,
 native database, deployment or physical-host-loss result. Independent original
-TUS baseline/report publication, cross-artifact validation and required parent
-pin barriers remain next. Signed TUS, other credentials/sessions, S3, in-flight/
+[TUS baseline/report publication and pair validation](resumable-upload-evidence-custody.md)
+are now implemented. Required parent pin barriers and factory/coordinator integration
+remain next. Signed TUS, other credentials/sessions, S3, in-flight/
 control-plane exclusion, common capture, current authority, full restore and
 actual provider/source-host-off/reopening proof remain open.
 

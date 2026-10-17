@@ -3,6 +3,7 @@ import { createHash, randomUUID } from 'node:crypto';
 import { test } from 'node:test';
 import { SupabaseResumableUploadProof } from '../services/supabase-resumable-upload-proof.js';
 import {locationVaultFixture} from './fixtures/resumable-location-vault.js';
+import {resumableEvidenceFixture,resumableEvidenceConfig} from './fixtures/resumable-upload-evidence.js';
 const hash = (v: string) => createHash('sha256').update(v).digest('hex');
 const control = {
     id: '11111111-1111-4111-8111-111111111111',
@@ -412,8 +413,13 @@ test('actual TUS probe composes with encrypted location custody and fresh instan
  for(const format of ['PATH_V1','FILE_VERSION_V1']){
   const f=fixture(format),probe=f.service(),custody=locationVaultFixture({uploadIdFormat:format,probeDigest:probe.configurationDigest()}),vault=custody.vault();
   const b=await probe.baseline((value,signal)=>vault.retain(value,signal),vault.configurationDigest()),saved=JSON.parse(b.body);
+  const evidence=resumableEvidenceFixture({...resumableEvidenceConfig,maintenance:config.maintenance,probeDigest:probe.configurationDigest(),locationCustodyDigest:vault.configurationDigest()});
+  const bp=await evidence.store().publishBaseline(b),retained=probe.assertBaseline(await evidence.store().observeBaseline(bp),vault.configurationDigest());
   assert.equal(JSON.stringify(saved).includes('https://'),false);f.revoked=true;
-  const r=await custody.vault().withLocation(saved.locationPin,saved.reference,(secret,signal)=>f.service().verifyRefusal(b,vault.configurationDigest(),secret,signal));
+  const r=await custody.vault().withLocation(saved.locationPin,saved.reference,(secret,signal)=>f.service().verifyRefusal(retained,vault.configurationDigest(),secret,signal));
+  const rp=await evidence.store().publishObservation(r,bp),before=f.calls.length,kmsBefore=custody.calls.length;
+  assert.deepEqual(JSON.parse((await evidence.store().observeObservation(rp,bp)).body),r);
+  assert.equal(f.calls.length,before);assert.equal(custody.calls.length,kmsBefore);
   assert.equal(r.testedResumablePatchRefusalObserved,true);assert.equal(r.locationPinSha256,saved.locationPin.sha256);
   assert.ok(custody.plaintextResponses.every(b=>b.every(v=>v===0)));
   const stored=[...custody.objects.values()][0].body;assert.equal(stored.includes('https://'),false);assert.equal(stored.includes('sb_secret_'),false);

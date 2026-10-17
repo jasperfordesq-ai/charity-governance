@@ -1,5 +1,12 @@
 # CharityPilot Full-Platform Remediation Audit
 
+> **17 October durable TUS artifacts:** Original resumable baseline/report now
+> publish with conditional creation, exact-version readback and closed scope/pair/
+> chronology checks. Write/signed/TUS stores share one bounded transport. Fresh
+> TUS evidence inspection makes no TUS/KMS request. Parent/factory integration
+> and actual provider/full recovery gates remain open; see
+> [TUS evidence custody](resumable-upload-evidence-custody.md).
+
 > **17 October encrypted TUS location custody:** Original resumable locations now
 > have separate-purpose AES-GCM/KMS storage, exact-version decrypted ACK and fresh
 > original-session use. Probe/vault share canonical target validation. Lost ACKs

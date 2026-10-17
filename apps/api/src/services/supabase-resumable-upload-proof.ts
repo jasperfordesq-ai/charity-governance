@@ -1,3 +1,4 @@
+import {resumableUploadBaselineSchema as baselineSchema} from './resumable-upload-evidence-contract.js';
 import {resumableLocationPinSchema,assertResumableLocation} from './resumable-location-contract.js';
 import { createHash } from 'node:crypto';
 import { z } from 'zod';
@@ -9,10 +10,6 @@ const sha = z.string().regex(/^[a-f0-9]{64}$/),
     .string()
     .uuid()
     .refine((v) => v === v.toLowerCase());
-const time = z
-  .string()
-  .datetime()
-  .refine((v) => new Date(v).toISOString() === v);
 const key = z.object({ id: uuid, sha256: sha }).strict();
 const configSchema = z
   .object({
@@ -33,24 +30,6 @@ const configSchema = z
   .strict()
   .refine((v) => v.control.id !== v.retired.id);
 export {resumableLocationPinSchema} from './resumable-location-contract.js';
-const baselineSchema = z
-  .object({
-    format: z.literal(1),
-    kind: z.literal('SUPABASE_RESUMABLE_BASELINE_V1'),
-    configurationDigest: sha,
-    maintenance: credentialReadMaintenanceBindingSchema,
-    credentialId: uuid,
-    reference: uuid,
-    locationSha256: sha,
-    locationPin: resumableLocationPinSchema,
-    capturedAt: time,
-    expiresAt: time,
-    offset: z.literal(6291456),
-    uploadLength: z.literal(6291457),
-    prefixSha256: sha,
-  })
-  .strict()
-  .refine((v) => v.reference === v.locationPin.reference);
 const prefix = Buffer.alloc(6 * 1024 * 1024, 0x43),
   tail = Buffer.from('P');
 const failure = () =>
