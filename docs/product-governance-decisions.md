@@ -1,3 +1,12 @@
+## 17 October: observed genuine source caller-loss acceptance
+
+Read [source caller loss](managed-contained-parent-loss.md). A separate driver
+stopped its owned caller while a real TLS database proof client waited on a
+synthetic table lock. The Linux cohort passed the original invocation/cgroup, exact client
+cleanup, surviving source/control containers and fresh-process local inspection
+without replay permission. Exact results are in the dated private checkpoint.
+This does not establish surviving cloud custody or whole-source-host recovery.
+
 ## 17 October: executable contained PostgreSQL cohort
 
 Read [contained PostgreSQL acceptance](managed-contained-postgres-proof.md). The

@@ -1,3 +1,12 @@
+## 17 October: observed genuine source caller-loss acceptance
+
+Read [source caller loss](managed-contained-parent-loss.md). A separate driver
+stopped its owned caller while a real TLS database proof client waited on a
+synthetic table lock. The Linux cohort passed the original invocation/cgroup, exact client
+cleanup, surviving source/control containers and fresh-process local inspection
+without replay permission. Exact results are in the dated private checkpoint.
+This does not establish surviving cloud custody or whole-source-host recovery.
+
 # Genuine PostgreSQL capture through the contained runner
 
 17 October 2026. Executable synthetic acceptance in an isolated source checkout with its own dependency/build outputs. No production application configuration or data is used.

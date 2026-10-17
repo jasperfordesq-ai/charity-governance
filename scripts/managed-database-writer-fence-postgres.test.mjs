@@ -14,6 +14,7 @@ import {validateLocalDockerEndpoint} from './personal-server-docker-boundary.mjs
 const containmentSelector=process.env.CHARITYPILOT_TEST_CONTAINED_SOURCE;
 if(containmentSelector!==undefined&&!['0','1'].includes(containmentSelector))throw new Error('Contained source test selector must be exactly zero or one');
 const containedSource=containmentSelector==='1';
+if(process.env.CHARITYPILOT_TEST_SOURCE_PARENT_FIXTURE!==undefined&&(!containedSource||process.env.CHARITYPILOT_TEST_SOURCE_PARENT_FIXTURE!=='1'||typeof process.send!=='function'))throw new Error('Synthetic parent fixture needs the original contained test driver');
 const image='postgres@sha256:5660c2cbfea50c7a9127d17dc4e48543eedd3d7a41a595a2dfa572471e37e64c';
 function run(command,args,input){const r=spawnSync(command,args,{input,encoding:'utf8',timeout:60000,maxBuffer:1024*1024});
  assert.equal(r.status,0,(r.stderr||r.error?.message||'synthetic command failed').slice(-1200));return r.stdout.trim();}

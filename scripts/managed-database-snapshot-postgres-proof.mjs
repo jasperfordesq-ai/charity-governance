@@ -1,4 +1,5 @@
 import {inspectManagedProofJob} from './managed-proof-job.mjs';
+import {pauseContainedSourceForParentLoss} from './managed-contained-parent-barrier.mjs';
 import {runManagedImportedProof} from './managed-proof-runner.mjs';
 import {createManagedCaptureWorkspace,openManagedCaptureWorkspace} from './managed-capture-workspace.mjs';
 import {fileURLToPath} from 'node:url';
@@ -41,7 +42,9 @@ export async function proveManagedDatabaseSnapshot({admin,url,id,database,certif
    '--expected-source-database-identity-sha256='+identity,'--output-dir='+output,'--output-file=common.dump','--report-file=common.json'];
   const observedCustody=jobCustody&&Object.freeze(Object.fromEntries(['reserve','bindService','observe'].map(name=>[name,async artifact=>{
    if(sourceExecutionMode==='KERNEL_CONTAINED')console.log('CONTAINED_JOB_PHASE='+name+':ENTER');
-   const saved=await jobCustody[name](artifact);if(sourceExecutionMode==='KERNEL_CONTAINED')console.log('CONTAINED_JOB_PHASE='+name+':ACK');return saved;
+   const saved=await jobCustody[name](artifact);if(sourceExecutionMode==='KERNEL_CONTAINED')console.log('CONTAINED_JOB_PHASE='+name+':ACK');
+   if(name==='bindService')await pauseContainedSourceForParentLoss({sourceId:id,database,certificate,parentDirectory:parent,workspaceRoot:output,signal});
+   return saved;
   }])));
   let supervised;
   try{supervised=await runManagedImportedProof({args,snapshot,databaseUrl:source.href,workspace,scope,jobCustody:observedCustody,signal,...(sourceExecutionMode==='INTERNAL_IPC_PROOF'?{executionMode:sourceExecutionMode}:{}),diagnostics:b=>{sourceFailure=(sourceFailure+b.toString('utf8')).slice(0,4096);}});}catch(error){
