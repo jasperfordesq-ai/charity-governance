@@ -3,6 +3,7 @@ import { createHash, generateKeyPairSync } from 'node:crypto';
 import jwt from 'jsonwebtoken';
 import test from 'node:test';
 import { vaultFixture } from './fixtures/signed-upload-vault.js';
+import { signedEvidenceFixture, signedEvidenceConfig } from './fixtures/signed-upload-evidence.js';
 import { SupabaseSignedUploadProof } from '../services/supabase-signed-upload-proof.js';
 import { publicSigningKeyFingerprint } from '../services/supabase-signing-key-control.js';
 import {
@@ -363,6 +364,15 @@ test('signed probe composes with encrypted custody and fresh instances use the s
     saved = JSON.parse(baseline.body);
   assert.equal(saved.format, 2);
   assert.equal(saved.credentialPin.kind, 'SIGNED_UPLOAD_CREDENTIAL_PIN_V1');
+  const evidence = signedEvidenceFixture({
+    ...signedEvidenceConfig,
+    installationId: custody.config.installationId,
+    maintenance: saved.maintenance,
+    probeDigest: probe.configurationDigest(),
+    credentialCustodyDigest: vault.configurationDigest(),
+  });
+  const baselinePin = await evidence.store().publishBaseline(baseline);
+  const retainedBaseline = await evidence.store().observeBaseline(baselinePin);
   f.rotated = true;
   const report = await custody
     .vault()
@@ -372,8 +382,12 @@ test('signed probe composes with encrypted custody and fresh instances use the s
       (secret, signal) =>
         f
           .service()
-          .verifyRefusal(baseline.body, baseline.sha256, secret, signal),
+          .verifyRefusal(retainedBaseline.body, retainedBaseline.sha256, secret, signal),
     );
+  const reportPin = await evidence.store().publishObservation(report, baselinePin);
+  const providerCalls = f.calls.length;
+  assert.deepEqual(JSON.parse((await evidence.store().observeObservation(reportPin, baselinePin)).body), report);
+  assert.equal(f.calls.length, providerCalls);
   assert.equal(report.testedSignedUploadRefusalObserved, true);
   assert.equal(report.tokenSha256, saved.tokenProof.tokenSha256);
   assert.equal(report.credentialPinSha256, saved.credentialPin.sha256);

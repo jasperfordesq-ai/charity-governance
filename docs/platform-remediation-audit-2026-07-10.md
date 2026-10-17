@@ -1,5 +1,11 @@
 # CharityPilot Full-Platform Remediation Audit
 
+> **17 October signed-artifact custody:** Signed-upload baseline/report artifacts
+> now have conditional creation, exact-version readback/pins, closed cross-artifact
+> validation and fresh GET-only inspection. The real local vault/probe compose
+> through synthetic transports. Parent pin barriers, actual issuer/release and
+> provider/host-loss proof remain open. See [signed evidence custody](signed-upload-evidence-custody.md).
+
 > **17 October encrypted signed-token custody:** A purpose-bound AES-GCM/KMS
 > vault now conditionally stores the original token and acknowledges only after
 > exact-version decrypted readback. Signed baseline format2 requires that pin;

@@ -5,6 +5,7 @@ import {
   signedUploadCredentialPinSchema,
   type SignedUploadCredentialPin,
 } from './signed-upload-credential-contract.js';
+import { signedUploadBaselineSchema as baselineSchema } from './signed-upload-evidence-contract.js';
 import {
   StorageSignedUploadIssuer,
   storageSignedUploadIssuerSchema,
@@ -55,39 +56,6 @@ const configuration = z
       c.previousIssuer.fingerprint !== c.currentIssuer.fingerprint &&
       c.previousIssuer.providerKeyId !== c.currentIssuer.providerKeyId &&
       c.previousIssuer.tokenKid !== c.currentIssuer.tokenKid,
-  );
-const time = z
-  .string()
-  .datetime()
-  .refine((v) => new Date(v).toISOString() === v);
-const tokenProof = z
-  .object({
-    tokenSha256: sha,
-    providerKeyId: uuid,
-    tokenKid: z.string().min(1).max(128),
-    issuerFingerprint: sha,
-    issuedAt: time,
-    expiresAt: time,
-  })
-  .strict();
-const baselineSchema = z
-  .object({
-    format: z.literal(2),
-    kind: z.literal('SUPABASE_SIGNED_UPLOAD_BASELINE_V2'),
-    configurationDigest: sha,
-    maintenance: credentialReadMaintenanceBindingSchema,
-    credentialReference: uuid,
-    credentialPin: signedUploadCredentialPinSchema,
-    tokenProof,
-    capturedAt: time,
-    initialPayloadSha256: sha,
-    updatePayloadSha256: sha,
-  })
-  .strict()
-  .refine(
-    (v) =>
-      v.credentialPin.reference === v.credentialReference &&
-      v.credentialPin.tokenSha256 === v.tokenProof.tokenSha256,
   );
 const credential = z
   .object({ reference: uuid, token: z.string().min(1).max(8192) })

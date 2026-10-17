@@ -95,8 +95,10 @@ const report = await freshVault.withCredential(
 );
 ```
 
-Current parent-head signed-baseline/report publication and matching issuer
-promotion/revocation dispatch are still required. Actual management-key/release
+The [signed evidence store](signed-upload-evidence-custody.md) now provides
+separate original baseline/report publication and exact-version readback. Parent
+head pin barriers and matching issuer promotion/revocation dispatch are still
+required. Actual management-key/release
 association, resumable/S3/in-flight/control-plane/capture-key exclusion, common
 capture, current authority, full restore and provider/host-loss/reopening proof
 remain open. Encrypted retention does not authorise use, extend token expiry,
