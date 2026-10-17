@@ -221,3 +221,5 @@ state must never be labelled historical never-enabled or past credential
 revocation. Actual supplier activation/authority remains a separate gate.
 
 The distinct [current feature-boundary component](s3-current-feature-boundary-proof.md) is now implemented locally. It uses both endpoint profiles and real metadata-adapter reads with synthetic transports. Parent mode selection, mandatory fresh post-closure proof and actual provider evidence remain open; this establishes no tenant retention or disclosure policy.
+
+Original S3 URL/UploadId [combined custody](s3-capability-custody.md) now composes locally with the active SDK probe. Keep historical inspection separate from execution acknowledgement, and isolate each endpoint/credential cohort in storage. Actual provider/IAM proof and complete parent integration remain required.

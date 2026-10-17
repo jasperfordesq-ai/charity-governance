@@ -1,5 +1,13 @@
 # CharityPilot Full-Platform Remediation Audit
 
+> **17 October original S3 capability custody:** The working-capability probe
+> now composes locally with encrypted original URL/UploadId custody and exact
+> version readback before original use. Shared target/lifetime validation and
+> endpoint/credential-specific object paths are tested. Public artifacts,
+> complete factory/parent and actual supplier proof remain open. See
+> [S3 capability custody](s3-capability-custody.md).
+
+
 > **17 October current S3 feature boundary:** A separate local component now
 > checks actual metadata and sixteen native refusals across direct/gateway routes
 > without enabling S3 or issuing credentials. Active synthetic canaries are used;

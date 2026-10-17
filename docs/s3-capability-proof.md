@@ -138,3 +138,7 @@ never-enabled status, past key revocation or original-capability refusal. No
 such historical inference or empty-credential exemption is implemented here.
 
 The separate [current feature-boundary component](s3-current-feature-boundary-proof.md) is now locally implemented with synthetic tests. Complete parent mode selection and fresh post-closure enforcement remain open. This does not waive original-working evidence when applicable.
+
+## Original encrypted capability custody
+
+The [combined original URL/UploadId vault](s3-capability-custody.md) is now locally implemented and composed with the real SDK probe through synthetic transports. The probe shares exact target/lifetime validation with custody. Original public artifacts, complete cohort factory and parent integration remain open; earlier next-work references to encrypted custody are superseded by this addendum.

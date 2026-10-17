@@ -1,3 +1,4 @@
+import { assertOriginalS3PresignedUrl } from './s3-capability-target.js';
 import {
   decodeNativeS3FeatureDisabled,
   isNativeS3FeatureDisabledError,
@@ -481,84 +482,14 @@ export class SupabaseS3CapabilityProof {
     await this.objectState('multipart-control', controlPayload, r);
   }
   private presigned(raw: unknown) {
-    const text = z.string().min(1).max(8192).parse(raw),
-      url = new URL(text),
-      expected =
-        this.endpoint() +
-        '/' +
-        this.config.bucket +
-        '/' +
-        this.object('presigned');
-    if (
-      url.href !== text ||
-      url.origin !== this.origin() ||
-      url.pathname !== new URL(expected).pathname ||
-      url.username ||
-      url.password ||
-      url.hash ||
-      url.pathname !== expected.slice(this.origin().length)
-    )
-      throw failure();
-    const q = url.searchParams,
-      allowed = [
-        'X-Amz-Algorithm',
-        'X-Amz-Content-Sha256',
-        'X-Amz-Credential',
-        'X-Amz-Date',
-        'X-Amz-Expires',
-        'X-Amz-SignedHeaders',
-        'X-Amz-Signature',
-        'x-id',
-        'x-amz-user-agent',
-      ];
-    if (
-      [...q.keys()].some(
-        (k) => !allowed.includes(k) || q.getAll(k).length !== 1,
-      ) ||
-      q.get('X-Amz-Algorithm') !== 'AWS4-HMAC-SHA256' ||
-      q.get('X-Amz-SignedHeaders') !== 'host' ||
-      q.get('X-Amz-Expires') !== '900' ||
-      q.get('X-Amz-Content-Sha256') !== 'UNSIGNED-PAYLOAD' ||
-      !/^[a-f0-9]{64}$/.test(q.get('X-Amz-Signature') ?? '')
-    )
-      throw failure();
-    const date = q.get('X-Amz-Date') ?? '';
-    if (
-      !/^\d{8}T\d{6}Z$/.test(date) ||
-      q.get('X-Amz-Credential') !==
-        this.credentials.accessKeyId +
-          '/' +
-          date.slice(0, 8) +
-          '/' +
-          this.config.region +
-          '/s3/aws4_request'
-    )
-      throw failure();
-    const time = Date.parse(
-      date.slice(0, 4) +
-        '-' +
-        date.slice(4, 6) +
-        '-' +
-        date.slice(6, 8) +
-        'T' +
-        date.slice(9, 11) +
-        ':' +
-        date.slice(11, 13) +
-        ':' +
-        date.slice(13, 15) +
-        'Z',
-    );
-    if (
-      !Number.isFinite(time) ||
-      new Date(time).toISOString().replace(/[-:]/g, '').replace('.000', '') !==
-        date
-    )
-      throw failure();
-    return {
-      url: text,
-      issuedAt: new Date(time).toISOString(),
-      expiresAt: new Date(time + 900000).toISOString(),
-    };
+    return assertOriginalS3PresignedUrl(raw, {
+      installationId: this.config.installationId,
+      projectRef: this.config.projectRef,
+      endpoint: this.config.endpoint,
+      region: this.config.region,
+      attemptId: this.config.maintenance.attemptId,
+      accessKeyIdSha256: this.config.retired.accessKeyIdSha256,
+    });
   }
   private async presignedPut(
     url: string,
