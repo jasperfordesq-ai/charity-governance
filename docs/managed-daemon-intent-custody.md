@@ -86,6 +86,18 @@ That metadata grants no operator cleanup or recovered execution permission.
 
 ## Remaining integration gates
 
+The custody component now also exposes `observeResponse` and `inspectResponse`.
+Each response is conditionally retained as the observation of its exact original
+intent, including the remote version pin, local byte pin and original header,
+job and service bindings. Unexpected fields and mismatched intent claims refuse.
+An absent-container claim requires an `rm` intent, status 1 and no transport error
+or signal. Transport failures may be retained as evidence but confer no resolution.
+Unknown readback, concurrent writes or context closure consume the original
+writer; a fresh reader cannot reconstruct its acknowledgement. Response writes
+are currently component-only: the worker/socket path still sends only headers
+and intents. Subsequent intents do not yet require response acknowledgement.
+End accounting and complete bounded discovery remain implementation work.
+
 1. Verify the exact-release source/helper/channel composition with actual Linux
    source/SQL and lost header/intent ACKs. Preserve the difference between
    synthetic custody outside a source process and real independent providers.

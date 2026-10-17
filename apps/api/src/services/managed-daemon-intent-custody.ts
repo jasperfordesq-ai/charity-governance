@@ -22,6 +22,11 @@ const envelope=z.object({format:z.literal(1),kind:z.enum(['MANAGED_DAEMON_CUSTOD
  jobRequestPin:candidatePinSchema,jobServicePin:candidatePinSchema,headerCustodyPin:candidatePinSchema.nullable(),localRecord:localJobArtifactSchema,
  savedEvidenceAuthorizesDispatch:z.literal(false),actionAuthorized:z.literal(false)}).strict();
 const failure=()=>new Error('Managed daemon intent custody unresolved; preserve original job without dispatch or replay');
+const response=z.object({format:z.literal(1),kind:z.literal('MANAGED_DAEMON_CLIENT_RESPONSE_V1'),jobId:uuid,
+ sequence:z.number().int().min(1).max(64),intentPin:z.object({sha256:sha,byteLength:z.number().int().min(1).max(8192)}).strict(),
+ status:z.number().int().safe().nullable(),transportError:z.boolean(),signal:z.boolean(),removalAlreadyAbsent:z.boolean()}).strict();
+const responseEnvelope=envelope.extend({kind:z.literal('MANAGED_DAEMON_CUSTODY_RESPONSE_V1'),baselineCustodyPin:candidatePinSchema,
+ pendingRequestResolved:z.literal(false)}).strict();
 type Pin=z.infer<typeof candidatePinSchema>;
 type Artifact={body:string;sha256:string};
 export const daemonCustodyScope=(candidateId:string,sequence:number)=>{
@@ -35,6 +40,7 @@ export class ManagedDaemonIntentCustody{
  private readonly binding;private readonly request;private readonly service;
  private headerAttempted=false;private failed=false;private busy=false;private savedHeader:Pin|undefined;
  private previous:string|undefined;private sequence=0;
+ private latestIntent:Pin|undefined;private readonly responseAttempts=new Set<number>();
  constructor(private readonly storage:{installationId:string;bucket:string;accountId:string;kmsKeyArn:string},binding:unknown,
   private readonly credentials:NonNullable<S3ClientConfig['credentials']>,private readonly client:S3Client,
   requestArtifact:Artifact,private readonly requestPin:Pin,serviceArtifact:Artifact,private readonly servicePin:Pin,
@@ -67,7 +73,49 @@ export class ManagedDaemonIntentCustody{
  private store(sequence:number){return new S3MaintenanceArtifactStore({...this.storage,maintenance:{attemptId:this.binding.attemptId,planDigest:this.binding.planDigest,
   sourceSha:this.binding.sourceSha,maintenanceEpoch:this.binding.maintenanceEpoch}},this.credentials,
   {namespace:'capture-job',scopeDigest:daemonCustodyScope(this.binding.candidateId,sequence),pinSchema:candidatePinSchema,limits:{BASELINE:16384,OBSERVATION:16384},failure,
-   baseline:raw=>this.parse(raw,sequence).artifact,parseObservation:()=>{throw failure();},observationFromValue:()=>{throw failure();},assertPair:()=>{throw failure();}},this.client);}
+   baseline:raw=>this.parse(raw,sequence).artifact,parseObservation:raw=>this.parseResponse(raw,sequence).artifact,
+   observationFromValue:raw=>this.parseResponse(raw,sequence).artifact,assertPair:(baseline,observation)=>this.assertResponsePair(baseline,observation,sequence)},this.client);}
+ private parseResponse(raw:unknown,sequence:number){
+  if(sequence===0)throw failure();
+  const artifact=z.object({body:z.string().min(1).max(16384),sha256:sha}).strict().parse(raw);
+  if(candidateHash(artifact.body)!==artifact.sha256||Buffer.byteLength(artifact.body)>16384)throw failure();
+  const value=responseEnvelope.parse(JSON.parse(artifact.body)),local=localJobArtifact(value.localRecord),v=response.parse(JSON.parse(local.body));
+  if(value.bindingDigest!==candidateHash(JSON.stringify(this.binding))||JSON.stringify(value.jobRequestPin)!==JSON.stringify(this.requestPin)
+   ||JSON.stringify(value.jobServicePin)!==JSON.stringify(this.servicePin)||!value.headerCustodyPin||value.baselineCustodyPin.kind!=='BASELINE'
+   ||v.jobId!==this.request.local.jobId||v.sequence!==sequence)throw failure();
+  return{artifact,value,local:v};
+ }
+ private assertResponsePair(baseline:Artifact,observation:Artifact,sequence:number){
+  const original=this.parse(baseline,sequence).value,observed=this.parseResponse(observation,sequence),v=intent.parse(JSON.parse(original.localRecord.body));
+  if(JSON.stringify(original.headerCustodyPin)!==JSON.stringify(observed.value.headerCustodyPin)
+   ||observed.local.intentPin.sha256!==original.localRecord.sha256||observed.local.intentPin.byteLength!==original.localRecord.byteLength
+   ||observed.value.baselineCustodyPin.sha256!==baseline.sha256||observed.value.baselineCustodyPin.byteLength!==Buffer.byteLength(baseline.body)
+   ||observed.local.removalAlreadyAbsent&&(v.operation!=='rm'||observed.local.status!==1||observed.local.transportError||observed.local.signal))throw failure();
+ }
+ /** Retain an original client response; this does not settle the daemon queue. */
+ async observeResponse(raw:unknown,signal?:AbortSignal){
+  try{
+   if(this.failed||this.busy||!this.latestIntent||!this.savedHeader||!this.live()||this.responseAttempts.has(this.sequence))throw failure();
+   this.busy=true;this.responseAttempts.add(this.sequence);
+   const record=localJobArtifact(raw),v=response.parse(JSON.parse(record.body));
+   if(v.sequence!==this.sequence||v.jobId!==this.request.local.jobId)throw failure();
+   const body=JSON.stringify(responseEnvelope.parse({format:1,kind:'MANAGED_DAEMON_CUSTODY_RESPONSE_V1',
+    bindingDigest:candidateHash(JSON.stringify(this.binding)),jobRequestPin:this.requestPin,jobServicePin:this.servicePin,
+    headerCustodyPin:this.savedHeader,baselineCustodyPin:this.latestIntent,localRecord:record,
+    savedEvidenceAuthorizesDispatch:false,pendingRequestResolved:false,actionAuthorized:false}));
+   const pin=await this.store(this.sequence).publishObservation({body,sha256:candidateHash(body)},this.latestIntent,signal);
+   if(this.failed||!this.live())throw failure();this.busy=false;
+   return{pin,savedEvidenceAuthorizesDispatch:false as const,pendingRequestResolved:false as const,actionAuthorized:false as const};
+  }catch{this.failed=true;throw failure();}
+ }
+ async inspectResponse(sequence:number,previousLocalDigest:string,signal?:AbortSignal){
+  const original=await this.inspectIntent(sequence,previousLocalDigest,signal),store=this.store(sequence);
+  const saved=await store.inspectCandidateArtifact('OBSERVATION',signal),value=this.parseResponse(saved.artifact,sequence).value;
+  if(JSON.stringify(value.baselineCustodyPin)!==JSON.stringify(original.pin))throw failure();
+  await store.observeObservation(saved.pin,original.pin,signal);
+  return{pin:saved.pin,localRecord:value.localRecord,originalAcknowledgementReconstructed:false as const,
+   savedEvidenceAuthorizesDispatch:false as const,pendingRequestResolved:false as const,actionAuthorized:false as const};
+ }
  private artifact(raw:unknown,sequence:number){
   const {record}=this.checked(raw,sequence);
   const body=JSON.stringify(envelope.parse({format:1,kind:sequence===0?'MANAGED_DAEMON_CUSTODY_HEADER_V1':'MANAGED_DAEMON_CUSTODY_INTENT_V1',
@@ -89,7 +137,7 @@ export class ManagedDaemonIntentCustody{
    const savedHeader=await this.inspectHeader(signal),h=header.parse(JSON.parse(savedHeader.localRecord.body));
    if(this.failed||!this.live()||JSON.stringify(savedHeader.pin)!==JSON.stringify(this.savedHeader)||v.previousDigest!==this.previous||v.storagePlan&&v.storagePlan.image!==h.image)throw failure();
    const artifact=this.artifact(checked.record,sequence),saved=await this.store(sequence).publishBaseline(artifact,signal);if(this.failed||!this.live())throw failure();
-   this.sequence=sequence;this.previous=checked.record.sha256;this.busy=false;
+   this.sequence=sequence;this.previous=checked.record.sha256;this.latestIntent=candidatePinSchema.parse(saved);this.busy=false;
    return{pin:saved,savedEvidenceAuthorizesDispatch:false as const,actionAuthorized:false as const};
   }catch{this.failed=true;throw failure();}
  }

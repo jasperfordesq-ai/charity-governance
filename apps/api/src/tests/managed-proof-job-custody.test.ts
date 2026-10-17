@@ -133,10 +133,75 @@ async function daemonFixture(){
  const intent=(sequence=1,previousDigest=header.sha256,change={})=>f.local({format:2,kind:'MANAGED_DAEMON_REQUEST_INTENT_V2',jobId:f.request.jobId,sequence,previousDigest,
   operation:'run',target:'charitypilot-source-snapshot-123-456-abcdef12',storagePlan:{format:2,kind:'MANAGED_PROOF_STORAGE_PLAN_V2',image,
    mounts:[{target:'/var/lib/postgresql/data',type:'tmpfs',readOnly:false,tmpfsOptions:'rw,noexec,nosuid,size=1m'}],declaredImageVolumesCovered:true},argumentsDigest:'e'.repeat(64),...change});
- const reader=()=>new ManagedDaemonIntentCustody({installationId:config.installationId,bucket:config.bucket,accountId:config.accountId,kmsKeyArn:config.storageKeyArn},f.binding,credentials,f.client,
-  jobRequestArtifact(f.binding,f.original,f.input),request.pin,jobServiceArtifact(f.binding,request.pin,localService),bound.pin,()=>false);
- return{...f,header,intent,reader};
+ const custody=(live=()=>false)=>new ManagedDaemonIntentCustody({installationId:config.installationId,bucket:config.bucket,accountId:config.accountId,kmsKeyArn:config.storageKeyArn},f.binding,credentials,f.client,
+  jobRequestArtifact(f.binding,f.original,f.input),request.pin,jobServiceArtifact(f.binding,request.pin,localService),bound.pin,live);
+ const reader=()=>custody();
+ return{...f,header,intent,reader,custody};
 }
+
+test('original daemon responses are retained against exact intents and fresh reads confer no resolution',async()=>{
+ const f=await daemonFixture();try{
+  let live=true;const writer=f.custody(()=>live),local=f.intent();
+  await writer.reserveHeader(f.header);await writer.reserveIntent(local);
+  const value=f.local({format:1,kind:'MANAGED_DAEMON_CLIENT_RESPONSE_V1',jobId:f.request.jobId,sequence:1,
+   intentPin:{sha256:local.sha256,byteLength:local.byteLength},status:0,transportError:false,signal:false,removalAlreadyAbsent:false});
+  const ack=await writer.observeResponse(value);assert.equal(ack.pin.kind,'OBSERVATION');assert.equal(ack.pendingRequestResolved,false);
+  const writes=f.b.writes;live=false;
+  const read=await f.reader().inspectResponse(1,f.header.sha256);
+  assert.equal(read.localRecord.sha256,value.sha256);assert.equal(read.originalAcknowledgementReconstructed,false);
+  assert.equal(read.pendingRequestResolved,false);assert.equal(read.savedEvidenceAuthorizesDispatch,false);assert.equal(f.b.writes,writes);
+  await assert.rejects(writer.observeResponse(value));await assert.rejects(f.reader().observeResponse(value));
+ }finally{f.close();}
+});
+
+test('response custody rejects mismatched intent, secret fields and invalid absent-container claims before writes',async()=>{
+ for(const change of [{intentPin:{sha256:'0'.repeat(64),byteLength:1}},{stderr:'SYNTHETIC_SECRET'},{removalAlreadyAbsent:true,status:1},
+  {sequence:2},{jobId:randomUUID()}]){
+  const f=await daemonFixture();try{
+   const writer=f.custody(()=>true),local=f.intent();await writer.reserveHeader(f.header);await writer.reserveIntent(local);
+   const value=f.local({format:1,kind:'MANAGED_DAEMON_CLIENT_RESPONSE_V1',jobId:f.request.jobId,sequence:1,
+    intentPin:{sha256:local.sha256,byteLength:local.byteLength},status:0,transportError:false,signal:false,removalAlreadyAbsent:false,...change});
+   const writes=f.b.writes;await assert.rejects(writer.observeResponse(value));await assert.rejects(writer.reserveIntent(f.intent(2,local.sha256)));
+   assert.equal(f.b.writes,writes);
+  }finally{f.close();}
+ }
+});
+
+test('lost response readback consumes the original writer while saved evidence remains inspectable',async()=>{
+ const f=await daemonFixture();try{
+  const writer=f.custody(()=>true),local=f.intent();await writer.reserveHeader(f.header);await writer.reserveIntent(local);
+  const value=f.local({format:1,kind:'MANAGED_DAEMON_CLIENT_RESPONSE_V1',jobId:f.request.jobId,sequence:1,
+   intentPin:{sha256:local.sha256,byteLength:local.byteLength},status:null,transportError:true,signal:false,removalAlreadyAbsent:false});
+  const original=f.client.send.bind(f.client);let lost=true;
+  mock.method(f.client,'send',async(command:GetObjectCommand|PutObjectCommand)=>{
+   if(lost&&command instanceof GetObjectCommand&&command.input.Key?.endsWith('/observation.json'))throw new Error('synthetic response ACK loss');
+   return original(command as never);
+  });
+  await assert.rejects(writer.observeResponse(value));const writes=f.b.writes;
+  await assert.rejects(writer.observeResponse(value));await assert.rejects(writer.reserveIntent(f.intent(2,local.sha256)));
+  lost=false;const saved=await f.reader().inspectResponse(1,f.header.sha256);
+  assert.equal(saved.pendingRequestResolved,false);assert.equal(f.b.writes,writes);
+ }finally{f.close();}
+});
+
+test('response ACK refuses closure during I/O and concurrent response attempts',async()=>{
+ for(const concurrent of [false,true]){
+  const f=await daemonFixture();try{
+   let live=true;const writer=f.custody(()=>live),local=f.intent();await writer.reserveHeader(f.header);await writer.reserveIntent(local);
+   const value=f.local({format:1,kind:'MANAGED_DAEMON_CLIENT_RESPONSE_V1',jobId:f.request.jobId,sequence:1,
+    intentPin:{sha256:local.sha256,byteLength:local.byteLength},status:0,transportError:false,signal:false,removalAlreadyAbsent:false});
+   if(concurrent){
+    const outcomes=await Promise.allSettled([writer.observeResponse(value),writer.observeResponse(value)]);
+    assert.ok(outcomes.every(v=>v.status==='rejected'));
+   }else{
+    const original=f.client.send.bind(f.client);
+    mock.method(f.client,'send',async(command:GetObjectCommand|PutObjectCommand)=>{live=false;return original(command as never);});
+    await assert.rejects(writer.observeResponse(value));
+   }
+   await assert.rejects(writer.reserveIntent(f.intent(2,local.sha256)));
+  }finally{f.close();}
+ }
+});
 
 test('original service ACK gates immutable daemon header/intents; saved reads reconstruct no dispatch permission',async()=>{
  const f=await daemonFixture();try{

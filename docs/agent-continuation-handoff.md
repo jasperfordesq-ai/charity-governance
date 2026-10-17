@@ -1,3 +1,12 @@
+## 17 October: original daemon response custody component
+
+Read [daemon intent custody](managed-daemon-intent-custody.md). Original client
+responses can now be conditionally retained against exact remote and local intent
+pins. Unknown ACK, concurrent attempts or closed context consume the writer;
+fresh reads grant no dispatch or queue resolution. This component is not yet
+wired through the worker/socket; completion records, response-before-next-intent
+enforcement, complete discovery and provider/host-loss proof remain open.
+
 ## 17 October: fixed helper daemon custody barrier
 
 Read [daemon intent custody](managed-daemon-intent-custody.md). Kernel-contained
