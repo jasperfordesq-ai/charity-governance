@@ -1,3 +1,12 @@
+## 17 October: separate synthetic custody owner
+
+Read [separate custody process](separate-synthetic-custody-process.md). The
+opt-in native cohort moves synthetic SDK object/key state outside its source
+process and tests a cold verifier after source exit and source SIGKILL. This
+requires no real provider credentials. Volatile same-host fixture custody is
+not provider durability, current tenant authority or VM-loss evidence. Exact
+execution results and remaining gates are recorded privately.
+
 ## 17 October: original plans and current storage correlation
 
 Read [current storage observation](managed-original-storage-observation.md).

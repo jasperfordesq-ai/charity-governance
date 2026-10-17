@@ -13,11 +13,12 @@ import {canonicalMetadataBindingSha256} from '../packages/shared/runtime/documen
 import {S3BackupManifests} from '../apps/api/dist/services/backup-manifests-s3.js';
 import {ManagedCandidateCaptureJournal} from '../apps/api/dist/services/managed-candidate-capture-journal.js';
 import {ArchivedRecoverySets} from '../apps/api/dist/services/archived-recovery-set.js';
+import {openSyntheticCustodyProcess} from './synthetic-custody-client.mjs';
 const hex=v=>hash(v).toString('hex');
 /** In-process signed SDK synthetic cloud transport, actual crypto/archive classes.
  * Input report and dump come from the genuine native source/isolated-restore proof. */
 export function managedCommonCustodyBackend(installationId){
- const config={...defaults,installationId},b=backend(config),clients={s3:b.s3(),kms:b.kms()},readers=[];
+ const config={...defaults,installationId},b=process.env.CHARITYPILOT_TEST_CUSTODY_SESSION_FILE?openSyntheticCustodyProcess(installationId,process.env.CHARITYPILOT_TEST_CUSTODY_SESSION_FILE):backend(config),clients={s3:b.s3(),kms:b.kms()},readers=[];
  const journalConfig={installationId,bucket:config.bucket,accountId:config.accountId,kmsKeyArn:config.storageKeyArn};
  return{config,b,clients,readers,journal:new ManagedCandidateCaptureJournal(journalConfig,credentials,clients.s3),
   archive:new ArchivedRecoverySets(config,credentials,clients),
