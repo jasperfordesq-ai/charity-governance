@@ -1,3 +1,12 @@
+## 17 October: protected streaming capture workspace
+
+The [capture workspace](managed-capture-workspace.md) replaces whole-dump buffering
+in the native common capture with verified source streams and a private encrypted
+file spool. Exclusive creation, pinned identities, exact hashes, cancellation and
+partial retention have focused tests and combined native proof. This is an
+internal I/O component; complete process supervision, durable job/crash recovery,
+actual provider custody and source-host-off proof remain open. Goal stays active.
+
 # One native managed common-capture cohort
 
 17 October 2026. Synthetic records and provider/cloud transports, real TLS

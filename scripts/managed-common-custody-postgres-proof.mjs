@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import {randomUUID} from 'node:crypto';
-import {backend,config as defaults,credentials,hash,source,sink} from '../apps/api/dist/tests/fixtures/archived-custody.js';
+import {backend,config as defaults,credentials,hash} from '../apps/api/dist/tests/fixtures/archived-custody.js';
 import {sealDatabaseByteBackup} from '../apps/api/dist/services/database-byte-backup.js';
 import {sealDocumentByteBackup} from '../apps/api/dist/services/document-byte-backup.js';
 import {KmsDatabaseBackupKeys} from '../apps/api/dist/services/database-byte-backup-kms.js';
@@ -24,7 +24,7 @@ export function managedCommonCustodyBackend(installationId){
   fresh(){const v={s3:b.s3(),kms:b.kms()};readers.push(v);return{journal:new ManagedCandidateCaptureJournal(journalConfig,credentials,v.s3),archive:new ArchivedRecoverySets(config,credentials,v)};},
   close(){clients.s3.destroy();clients.kms.destroy();for(const v of readers){v.s3.destroy();v.kms.destroy();}b.close();}};
 }
-export async function startManagedCommonCustody({reportBody,dump,metadata,captureConfigurationDigest},signal,owned=managedCommonCustodyBackend('synthetic-snapshot-proof')){
+export async function startManagedCommonCustody({reportBody,databaseSource,workspace,metadata,captureConfigurationDigest},signal,owned=managedCommonCustodyBackend('synthetic-snapshot-proof')){
  const {config,b,clients,readers}=owned;
  const report=JSON.parse(reportBody),setId=randomUUID(),sourceSha=report.helperImplementation.commitSha,reportSha=hex(reportBody);
  const storage={installationId:config.installationId,bucket:config.bucket,accountId:config.accountId,storageKeyArn:config.storageKeyArn};
@@ -32,12 +32,13 @@ export async function startManagedCommonCustody({reportBody,dump,metadata,captur
   sourceCaptureReportSha256:reportSha,databaseSha256:report.dump.sha256,byteLength:Number(report.dump.bytes),keyArn:config.dataKeyArn};
  const close=()=>owned.close();
  try{
-  assert.equal(dump.length,context.byteLength);assert.equal(hex(dump),context.databaseSha256);
-  const encrypted=sink(),sealed=await sealDatabaseByteBackup(context,source(dump),encrypted.stream,
+  const encrypted=await workspace.createCiphertextDestination('database.ciphertext',signal);
+  const sealed=await sealDatabaseByteBackup(context,databaseSource.stream,encrypted.stream,
    new KmsDatabaseBackupKeys(config.dataKeyArn,credentials,clients.kms),signal);
-  const ciphertext=Buffer.concat(encrypted.chunks);
+  await databaseSource.verified;await encrypted.complete(sealed);
+  const storedSource=await workspace.openVerifiedSource('database.ciphertext',sealed,signal);
   const database=await new S3DatabaseByteBackups({...storage,dataKeyArn:config.dataKeyArn},credentials,clients.s3)
-   .publish(context,sealed,source(ciphertext),signal);ciphertext.fill(0);for(const chunk of encrypted.chunks)chunk.fill(0);
+   .publish(context,sealed,storedSource.stream,signal);await storedSource.verified;
   const meta=new S3BackupManifests(storage,credentials,clients.s3),target={installationId:config.installationId,setId,sourceSha};
   const sourceReport=await meta.publish({...target,kind:'SOURCE_REPORT_V2'},{body:reportBody,sha256:reportSha},signal);
   const receipts=[];

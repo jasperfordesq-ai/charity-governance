@@ -1,10 +1,12 @@
+import {createManagedCaptureWorkspace} from './managed-capture-workspace.mjs';
+import {fileURLToPath} from 'node:url';
 import {managedCommonCustodyBackend,startManagedCommonCustody} from './managed-common-custody-postgres-proof.mjs';
 import {mkdtempSync,readFileSync,statSync,rmSync} from 'node:fs';
 import {tmpdir} from 'node:os';
 import {basename,dirname,join,resolve} from 'node:path';
 import {canonicalDocumentIdentitySha256,canonicalMetadataBindingSha256,canonicalObjectKeySha256,canonicalDocumentMetadataRowsSha256} from '../packages/shared/runtime/document-recovery-inventory.mjs';
 import assert from 'node:assert/strict';
-import {spawn} from 'node:child_process';
+import {spawn,spawnSync} from 'node:child_process';
 import {createHash,randomUUID} from 'node:crypto';
 import {PrismaClient} from '@prisma/client';
 import {ManagedStorageMetadataWindow} from '../apps/api/dist/services/managed-storage-metadata-window.js';
@@ -20,8 +22,14 @@ export async function proveManagedDatabaseSnapshot({admin,url,id,database,certif
  const body=Buffer.from('synthetic snapshot file'),fileId=randomUUID();
  const cloud=managed?managedCommonCustodyBackend(managed.scope.installationId):undefined;let sourceCalls=0;
  const document={id:fileId,organisationId:'synthetic_tenant',fileUrl:'record.txt',fileSize:body.length,mimeType:'text/plain'};
- const output=mkdtempSync(join(tmpdir(),'charitypilot-imported-proof-'));
- const verifyOutput=()=>{assert.equal(dirname(resolve(output)),resolve(tmpdir()));assert.ok(basename(output).startsWith('charitypilot-imported-proof-'));};verifyOutput();
+ const parent=mkdtempSync(join(tmpdir(),'charitypilot-imported-proof-'));
+ if(process.platform==='win32'){
+  const r=spawnSync('powershell.exe',['-NoLogo','-NoProfile','-NonInteractive','-ExecutionPolicy','Bypass','-File',fileURLToPath(new URL('./personal-server-windows-acl.ps1',import.meta.url)),'-Path',parent,'-Kind','Directory'],{windowsHide:true,encoding:'utf8',timeout:30000,maxBuffer:8192});
+  assert.equal(r.status,0,r.stderr);
+ }
+ const workspace=await createManagedCaptureWorkspace(parent),output=workspace.root;
+ const verifyOutput=()=>{assert.equal(dirname(resolve(parent)),resolve(tmpdir()));assert.ok(basename(parent).startsWith('charitypilot-imported-proof-'));
+  assert.equal(dirname(resolve(output)),resolve(parent));assert.ok(basename(output).startsWith('capture-'));};verifyOutput();
  const prove=async(snapshot,identity,signal,captureConfigurationDigest)=>{
   const source=new URL(captureUrl(database));source.searchParams.set('sslrootcert',certificate);
   const args=['prove-restore','--source-container-id='+id,'--recovery-set-id=synthetic-imported-'+randomUUID(),
@@ -43,15 +51,16 @@ export async function proveManagedDatabaseSnapshot({admin,url,id,database,certif
   assert.equal(report.importedSnapshot.originalViewImported,true);assert.equal(report.importedSnapshot.metadataWindowCompletionVerified,false);
   assert.equal(report.importedSnapshot.snapshotBindingSha256,hash('CHARITYPILOT_MANAGED_EXPORTED_SNAPSHOT_V1\n'+JSON.stringify(snapshot)));
   assert.equal(report.source.tables.find(t=>t.table==='synthetic_snapshot_public').rowCount,'1');
-  assert.equal(report.source.documentMetadata.rowCount,1);assert.equal(hash(readFileSync(join(output,'common.dump'))),report.dump.sha256);
+  assert.equal(report.source.documentMetadata.rowCount,1);
   const metadata=await admin.$transaction(async tx=>{
    const [stamp]=await tx.$queryRaw`SELECT txid_current()::text AS "transactionId",to_char(clock_timestamp() AT TIME ZONE 'UTC','YYYY-MM-DD"T"HH24:MI:SS.MS"Z"') AS "capturedAt"`;
    const rows=await tx.$queryRaw`SELECT id,"organisationId","fileUrl","fileSize","mimeType" FROM public."Document" ORDER BY id`;
    return{...stamp,rows};
   });
-  const fullDump=readFileSync(join(output,'common.dump'));
-  try{custody=await startManagedCommonCustody({reportBody:readFileSync(join(output,'common.json'),'utf8'),dump:fullDump,
-   metadata,captureConfigurationDigest},signal,cloud);}finally{fullDump.fill(0);}
+  await workspace.pinProducedFile('common.dump',signal);await workspace.pinProducedFile('common.json',signal);
+  const databaseSource=await workspace.openVerifiedSource('common.dump',{sha256:report.dump.sha256,byteLength:Number(report.dump.bytes)},signal);
+  custody=await startManagedCommonCustody({reportBody:readFileSync(join(output,'common.json'),'utf8'),databaseSource,workspace,
+   metadata,captureConfigurationDigest},signal,cloud);
   return{reportSha256:hash(readFileSync(join(output,'common.json'))),dumpSha256:report.dump.sha256,dumpBytes:Number(report.dump.bytes)};
  };
  // Verify local engine once before entering the bounded transaction, then pin
@@ -144,7 +153,7 @@ export async function proveManagedDatabaseSnapshot({admin,url,id,database,certif
    assert.equal(sourceCalls,mode==='request-ack'?0:1);assert.equal((await control.observe()).revision,head.revision);
    cloud.b.loseCommonReportRead=false;cloud.b.loseCommonRequestRead=false;
    await holder.$disconnect();
-   if(sourceCalls){verifyOutput();for(const name of ['common.dump','common.json'])rmSync(join(output,name));}
+   if(sourceCalls){verifyOutput();for(const name of ['common.dump','common.json','database.ciphertext'])rmSync(join(output,name));}
    const writes=cloud.b.writes,generates=cloud.b.generates,from=cloud.fresh();
    const learned=await from.journal.discoverCurrentCandidates(managed.controlReader(),managed.operation.maintenanceEpoch);
    const rows=learned.catalogue.records.filter(r=>r.commonRoot); // No supplied candidate ID or root pin.
@@ -197,6 +206,6 @@ export async function proveManagedDatabaseSnapshot({admin,url,id,database,certif
  }finally{
   dump?.fill(0);if(cloud)cloud.close();else custody?.close();
   try{if(created)await successful(['dropdb','-h','127.0.0.1','-U','postgres',destination]);}
-  finally{await holder.$disconnect();await admin.$executeRaw`DROP SCHEMA IF EXISTS managed_snapshot_fixture CASCADE`;await admin.$executeRaw`DROP TABLE IF EXISTS public.synthetic_snapshot_public`;await admin.$executeRaw`DROP TABLE IF EXISTS public."Document"`;verifyOutput();rmSync(output,{recursive:true,force:true});}
+  finally{await holder.$disconnect();await admin.$executeRaw`DROP SCHEMA IF EXISTS managed_snapshot_fixture CASCADE`;await admin.$executeRaw`DROP TABLE IF EXISTS public.synthetic_snapshot_public`;await admin.$executeRaw`DROP TABLE IF EXISTS public."Document"`;await workspace.close();verifyOutput();rmSync(parent,{recursive:true,force:true});}
  }
 }
