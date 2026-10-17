@@ -1,5 +1,12 @@
 # CharityPilot Full-Platform Remediation Audit
 
+> **17 October explicit common S3 mode:** A single selector now binds actual
+> storage metadata configuration and requires working original capabilities or
+> explicit current-disabled PRE/POST evidence, without fallback or empty-list
+> exemption. Saved coverage is distinguished from fresh proof. Default parent
+> remains protocol8; mandatory integration is next. See [S3 mode selector](managed-s3-maintenance-evidence.md).
+
+
 > **17 October durable already-disabled S3 mode:** Explicit CURRENT_DISABLED
 > now requires original PRE and fresh POST probes, exact-version public evidence
 > and original pairing. Inspection is GET only; no historical revocation or

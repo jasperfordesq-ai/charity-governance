@@ -81,3 +81,5 @@ dispatch yet. Preserve all JWT/session, in-flight/control-plane/capture privileg
 common capture, independent catalogue/current preservation/disposal authority,
 full application restore and actual provider/source-host-loss/guarded reopening
 requirements in the full goal.
+
+The [common explicit mode selector](managed-s3-maintenance-evidence.md) now binds this branch to actual storage configuration and exposes the shared attempt interface. Mandatory coordinator/control-head integration remains next.

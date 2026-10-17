@@ -79,3 +79,5 @@ disposal authority, full application restore, actual provider/source-host-loss
 and guarded reopening requirements in the full goal.
 
 The [durable already-disabled branch](durable-s3-current-feature-evidence.md) is now locally implemented separately. Common mode selection and mandatory parent integration remain next; working-mode empty registries are still refused.
+
+The [common explicit mode selector](managed-s3-maintenance-evidence.md) now binds working/cohort scope to the actual metadata configuration. It does not fall back to current-disabled mode if a working key or endpoint fails. Mandatory coordinator integration remains next.
