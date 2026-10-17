@@ -7,6 +7,10 @@ protocol4 does **not** call it. Integrating durable baseline/report custody and
 one-attempt dispatch is required before activation; an instance flag is not a
 durable guard across processes.
 
+The [exact-version evidence custody component](managed-write-evidence.md) now
+implements separate baseline/report publication and readback. Its parent-head
+pin and dispatch integration is still required; it does not activate this probe.
+
 ## Decision and boundary
 
 GET refusal and management key absence cannot establish write refusal. Test

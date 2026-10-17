@@ -1,6 +1,7 @@
 import { createHash } from 'node:crypto';
 import { z } from 'zod';
 import { credentialReadMaintenanceBindingSchema } from './credential-read-evidence.js';
+import { credentialWriteBaselineSchema as baselineSchema } from './credential-write-evidence.js';
 
 const hash = (value: string | Uint8Array) =>
   createHash('sha256').update(value).digest('hex');
@@ -44,27 +45,6 @@ const supplied = z
       .array(z.object({ id: uuid, secret: z.string() }).strict())
       .min(1)
       .max(50),
-  })
-  .strict();
-const time = z
-  .string()
-  .datetime()
-  .refine((v) => new Date(v).toISOString() === v);
-const baselineSchema = z
-  .object({
-    format: z.literal(1),
-    kind: z.literal('SUPABASE_STANDARD_WRITE_BASELINE_V1'),
-    configurationDigest: sha,
-    maintenance: credentialReadMaintenanceBindingSchema,
-    capturedAt: time,
-    credentialIds: z.array(uuid).min(1).max(50),
-    payloadSha256: sha,
-    updatePayloadSha256: sha,
-    operations: z.tuple([
-      z.literal('CREATE'),
-      z.literal('UPDATE'),
-      z.literal('DELETE'),
-    ]),
   })
   .strict();
 export const syntheticWriteProbe =

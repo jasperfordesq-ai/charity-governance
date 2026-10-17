@@ -1,5 +1,12 @@
 # CharityPilot Full-Platform Remediation Audit
 
+> **17 October write-evidence custody component:** Standard-write baselines and
+> refusal reports now have strict shared schemas and conditional, exact-version
+> S3 publication/readback. Lost acknowledgements do not produce pins or retry.
+> This does not yet advance protocol4: parent baseline-pin CAS-before-revocation
+> and report-pin completion remain next. Real custody/provider/host-loss gates
+> remain open; see [write custody](managed-write-evidence.md).
+
 > **17 October synthetic standard-write component:** Exact modern keys now have
 > positive CREATE/UPDATE/DELETE baselines and control-bracketed refusal tests on
 > fixed synthetic objects, plus read-only uncertainty inspection. This active
