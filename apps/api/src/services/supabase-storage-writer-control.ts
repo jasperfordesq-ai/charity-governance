@@ -73,6 +73,10 @@ export class SupabaseStorageWriterControl {
     )
       throw failure();
   }
+  candidateCaptureScope() {
+    return {installationId:this.config.installationId,projectRef:this.config.projectRef,
+      bucket:this.config.bucket,captureKeyId:this.config.captureKeyId};
+  }
   readProofScope() {
     return {
       installationId: this.config.installationId,

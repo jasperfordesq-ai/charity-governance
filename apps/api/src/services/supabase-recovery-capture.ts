@@ -89,6 +89,12 @@ export class SupabaseRecoveryCapture {
       throw failure();
     this.origin = `https://${this.config.projectRef}.supabase.co`;
   }
+  assertStorageScope(raw: unknown) {
+    const scope=z.object({installationId:configSchema.shape.installationId,projectRef:configSchema.shape.projectRef,
+      bucket:configSchema.shape.bucket,captureKeyId:z.string().uuid()}).strict().parse(raw);
+    if(scope.installationId!==this.config.installationId||scope.projectRef!==this.config.projectRef
+      ||scope.bucket!==this.config.bucket||scope.captureKeyId!==this.config.credential.id)throw failure();
+  }
   configurationDigest() {
     return hash(
       JSON.stringify({

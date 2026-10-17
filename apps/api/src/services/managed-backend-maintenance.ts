@@ -1,3 +1,5 @@
+import type {SupabaseRecoveryCapture} from './supabase-recovery-capture.js';
+import type {ManagedStorageMetadataWindow} from './managed-storage-metadata-window.js';
 import type {ManagedS3MaintenanceEvidence} from './managed-s3-maintenance-evidence.js';
 import type {ManagedSignedResumableUploadEvidence} from './managed-signed-resumable-upload-evidence.js';
 import {createHash} from 'node:crypto';
@@ -15,6 +17,10 @@ import {credentialWriteObservationSchema} from './credential-write-evidence.js';
 
 const configuration=z.object({installationId:z.string().regex(/^[A-Za-z0-9_-]{1,120}$/),
  sourceSha:z.string().regex(/^[a-f0-9]{40}$/),maintenanceEpoch:z.number().int().positive().max(2147483647)}).strict();
+const candidateRequest=z.object({candidateId:z.string().uuid().refine(v=>v===v.toLowerCase()),
+ attemptId:z.string().uuid(),controlRevision:z.string().regex(/^[a-f0-9]{64}$/),
+ captureConfigurationDigest:z.string().regex(/^[a-f0-9]{64}$/),
+ metadataWindowConfigurationDigest:z.string().regex(/^[a-f0-9]{64}$/)}).strict();
 const failure='Managed backend maintenance is unresolved; preserve closed writers and inspect the original attempt without repeating shutdown';
 
 /** Coordinates actual component primitives, never resumes/migrates/reopens.
@@ -112,6 +118,37 @@ export class ManagedBackendMaintenance {
     storageAccessPathsObservedClosed:true as const,databasePasswordCredentialsInvalidated:true as const,wholeBackendQuiesced:false as const,storageTokenIssuerVerified:false as const,providerReleaseAttested:false as const,signedCapabilitiesRevoked:false as const,resumableSessionsRevoked:false as const,inFlightWritesDrained:false as const,credentialRotationVerified:false as const,
     currentTenantAuthorityVerified:false as const,sourceHostFenced:false as const,reopeningAuthorised:false as const,actionAuthorized:false as const};
   }catch{throw new Error(failure);}
+ }
+ /** Candidate-only composition. Partial visitor archives stay quarantined after
+  * any unresolved outcome. Never advances control, retries, admits or reopens. */
+ async captureQuarantined(raw:unknown,capture:SupabaseRecoveryCapture,window:ManagedStorageMetadataWindow,
+  visit:Parameters<SupabaseRecoveryCapture['capture']>[0],caller?:AbortSignal){
+  try{
+   const request=candidateRequest.parse(raw);caller?.throwIfAborted();
+   capture.assertStorageScope(this.storage.candidateCaptureScope());
+   if(request.captureConfigurationDigest!==capture.configurationDigest()
+    ||request.metadataWindowConfigurationDigest!==window.configurationDigest())throw new Error();
+   const checkHead=async()=>{
+    caller?.throwIfAborted();const head=await this.control.observe();caller?.throwIfAborted();
+    if(head.revision!==request.controlRevision||head.value.attemptId!==request.attemptId
+     ||head.value.phase!=='OBSERVED_CLOSED'||head.value.planDigest!==this.planDigest()
+     ||head.value.installationId!==this.config.installationId||head.value.maintenanceEpoch!==this.config.maintenanceEpoch)throw new Error();
+    return head;
+   };
+   await checkHead();await this.inspect();await checkHead();
+   const guarded=await window.run(signal=>capture.capture(visit,signal),caller);
+   await checkHead();await this.inspect();await checkHead();
+   if(guarded.value.configurationDigest!==request.captureConfigurationDigest
+    ||guarded.evidence.configurationDigest!==request.metadataWindowConfigurationDigest)throw new Error();
+   const binding={format:1,kind:'MANAGED_QUARANTINED_STORAGE_CAPTURE_V1',...this.config,...request,planDigest:this.planDigest()};
+   const report={kind:'MANAGED_QUARANTINED_STORAGE_CANDIDATE' as const,binding,
+    bindingDigest:createHash('sha256').update(JSON.stringify(binding)).digest('hex'),
+    capture:guarded.value,metadataWindow:guarded.evidence,restoreMode:'QUARANTINE_ONLY' as const,
+    controlRevisionVerifiedAtBoundaries:true as const,wholeBackendQuiesced:false as const,
+    objectBytesFenced:false as const,currentTenantAuthorityVerified:false as const,
+    archivedSetAdmitted:false as const,actionAuthorized:false as const};
+   return{...report,observationDigest:createHash('sha256').update(JSON.stringify(report)).digest('hex')};
+  }catch{throw new Error('Managed storage candidate capture is unresolved; preserve quarantined artifacts without admission or automatic retry');}
  }
  async inspect(){
   try{

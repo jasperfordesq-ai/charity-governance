@@ -1,3 +1,4 @@
+import {proveManagedCandidateCapture} from './managed-candidate-capture-postgres-proof.mjs';
 import {managedS3WorkingFixture} from '../apps/api/dist/tests/fixtures/managed-s3-working.js';
 import {managedS3CurrentFixture} from '../apps/api/dist/tests/fixtures/managed-s3-current.js';
 import {managedSignedResumableFixture} from '../apps/api/dist/tests/fixtures/managed-signed-resumable.js';
@@ -276,6 +277,7 @@ export async function proveManagedBackendMaintenance({admin,configuration,url}){
    assert.equal(artifacts.size,artifactCount);assert.equal(version,versionBefore);assert.ok(resumable.plaintext.every(p=>p.every(v=>v===0)));assert.ok(signedTus.aws.plaintextResponses.every(p=>p.every(v=>v===0)));
    assert.equal(inspected.recordedS3CoverageObserved,['success','working-s3-success','record-ack-lost'].includes(scenario));assert.equal(inspected.freshS3CoverageObserved,false);assert.equal(inspected.freshStandardWriteRefusalsObserved,false);assert.equal(probeObjects.size,probeCount);assert.equal(activeProbeMutations(),activeBefore);assert.ok(signed.plaintext.every(p=>p.every(v=>v===0)));
    assert.equal(inspected.reopeningAuthorised,false);assert.equal(inspected.actionAuthorized,false);
+   if(scenario==='success')await proveManagedCandidateCapture({coordinator:fresh,control:store,admin,configuration,operation,scope:newStorageControl().candidateCaptureScope(),url});
    const freshWriter=new PrismaClient({datasources:{db:{url:writerUrl.href}}});
    try{await assert.rejects(freshWriter.$queryRaw`SELECT 1`);}finally{await freshWriter.$disconnect();}
    console.log('PASS integrated managed maintenance '+scenario+'; roles closed, fresh retry read-only/refused');

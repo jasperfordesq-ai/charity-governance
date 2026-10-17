@@ -1,3 +1,4 @@
+import {SupabaseRecoveryCapture} from '../services/supabase-recovery-capture.js';
 import {managedS3WorkingFixture} from './fixtures/managed-s3-working.js';
 import {managedS3CurrentFixture} from './fixtures/managed-s3-current.js';
 import {SupabaseStorageWriterControl} from '../services/supabase-storage-writer-control.js';
@@ -66,7 +67,7 @@ function fixture(options:{retired?:{id:string;secret:string}[]}={}){
   if(u.pathname.endsWith('/api-keys'))return Response.json([{id:s3MetadataConfig.captureKeyId,type:'secret'},...(!storageClosed?s3MetadataConfig.writerKeys:[])]);
   return Response.json({ref:s3MetadataConfig.projectRef,organization_id:s3MetadataConfig.organisationId,region:s3MetadataConfig.region,status:'ACTIVE_HEALTHY'});
  });
- const storage={configurationDigest:()=>s3Metadata.configurationDigest(),s3FeatureProofScope:()=>s3Metadata.s3FeatureProofScope(),readProofScope:()=>({installationId:operation.installationId,projectRef:'abcdefghijklmnopqrst',captureKeyId:'11111111-1111-4111-8111-111111111111',secretWriterIds:retired.map(k=>k.id)}),close:async()=>{calls.push('storage-close');storageClosed=true;},
+ const storage={candidateCaptureScope:()=>s3Metadata.candidateCaptureScope(),configurationDigest:()=>s3Metadata.configurationDigest(),s3FeatureProofScope:()=>s3Metadata.s3FeatureProofScope(),readProofScope:()=>({installationId:operation.installationId,projectRef:'abcdefghijklmnopqrst',captureKeyId:'11111111-1111-4111-8111-111111111111',secretWriterIds:retired.map(k=>k.id)}),close:async()=>{calls.push('storage-close');storageClosed=true;},
   observeClosed:async()=>{calls.push('storage-observe');return{observationDigest:hash('storage'),configuredAccessPathsObservedClosed:true};}};
  const proof={configurationDigest:()=>hash('proof-registry'),assertStorageScope:(_raw:unknown)=>{},
   assertBaseline:(raw:unknown,_binding?:unknown)=>raw as {body:string;sha256:string},assertObservation:(raw:unknown,_pin:string)=>raw as {body:string;sha256:string},
@@ -702,4 +703,61 @@ test('slow final metadata cannot turn an old S3 observation into a fresh closed 
  const f=fixture(),observe=f.provider.observeSuspended,now=Date.now;
  f.provider.observeSuspended=async()=>{const result=await observe();t.mock.method(Date,'now',()=>now()+181000);return result;};
  await assert.rejects(f.coordinator.close());assert.equal(f.value.phase,'S3_BASELINED');assert.equal(f.value.s3ObservationPin,undefined);assert.equal(f.value.observations,null);
+});
+
+function candidateFixture(f:ReturnType<typeof fixture>,onDownload:()=>Buffer=()=>Buffer.from('pdf')){
+ const scope=f.storage.candidateCaptureScope(),secret='sb_secret_'+'a'.repeat(40);let reads=0,visits=0;
+ const capture=new SupabaseRecoveryCapture({installationId:scope.installationId,projectRef:scope.projectRef,bucket:scope.bucket,
+  credential:{id:scope.captureKeyId,sha256:hash(secret)}},secret,async(input)=>{
+  reads++;const path=new URL(String(input)).pathname;
+  if(path.includes('/bucket/'))return Response.json({id:scope.bucket,public:false});
+  if(path.includes('/object/list/'))return Response.json([{name:'record.pdf',id:'11111111-1111-4111-8111-111111111111',
+   created_at:'2026-10-17T00:00:00Z',updated_at:'2026-10-17T00:00:00Z',metadata:{size:3,mimetype:'application/pdf'}}]);
+  return new Response(onDownload(),{headers:{'content-type':'application/pdf','content-length':'3'}});
+ });
+ const window={configurationDigest:()=>hash('synthetic-window'),run:async<T>(fn:(signal:AbortSignal)=>Promise<T>)=>{
+  const controller=new AbortController();try{return{value:await fn(controller.signal),
+   evidence:{configurationDigest:hash('synthetic-window'),metadataWindowCompleted:true,windowStillHeld:false}};}
+  finally{controller.abort();}
+ }};
+ return{capture,window,visit:async()=>{visits++;},get reads(){return reads;},get visits(){return visits;},
+  request:async()=>({candidateId:randomUUID(),attemptId:f.value.attemptId,controlRevision:(await f.store.observe()).revision,
+   captureConfigurationDigest:capture.configurationDigest(),metadataWindowConfigurationDigest:window.configurationDigest()})};
+}
+test('maintenance composes actual capture with declared window under the exact original closed head, remaining quarantine-only',async()=>{
+ const f=fixture();await f.coordinator.close();const candidate=candidateFixture(f),puts=f.puts;
+ const request=await candidate.request();const result=await f.coordinator.captureQuarantined(request,candidate.capture,candidate.window as never,candidate.visit);
+ assert.equal(result.restoreMode,'QUARANTINE_ONLY');assert.equal(result.capture.objects.length,1);assert.equal(candidate.visits,1);
+ assert.equal(result.binding.sourceSha,operation.sourceSha);assert.equal(result.binding.attemptId,request.attemptId);
+ assert.equal(result.binding.candidateId,request.candidateId);assert.equal(result.binding.controlRevision,request.controlRevision);
+ for(const flag of ['wholeBackendQuiesced','objectBytesFenced','currentTenantAuthorityVerified','archivedSetAdmitted','actionAuthorized'])
+  assert.equal(result[flag as keyof typeof result],false);
+ assert.equal(f.puts,puts);assert.equal(f.value.phase,'OBSERVED_CLOSED');
+});
+test('maintenance rejects candidate component, attempt, revision and storage scope substitutions before capture',async()=>{
+ const f=fixture();await f.coordinator.close();const c=candidateFixture(f),request=await c.request();
+ for(const change of [{attemptId:randomUUID()},{controlRevision:hash('different')},{captureConfigurationDigest:hash('different')},
+  {metadataWindowConfigurationDigest:hash('different')},{candidateId:'not-an-id'},{extra:true}])
+  await assert.rejects(()=>f.coordinator.captureQuarantined({...request,...change},c.capture,c.window as never,c.visit));
+ const original=f.storage.candidateCaptureScope;f.storage.candidateCaptureScope=()=>({...original(),bucket:'other'});
+ await assert.rejects(()=>f.coordinator.captureQuarantined(request,c.capture,c.window as never,c.visit));
+ assert.equal(c.reads,0);assert.equal(c.visits,0);
+});
+test('maintenance discards completed candidate on head drift and preserves partial visitor work on byte drift',async()=>{
+ const f=fixture();await f.coordinator.close();let downloads=0;
+ const c=candidateFixture(f,()=>{downloads++;return Buffer.from(downloads===1?'pdf':'bad');});
+ const request=await c.request();
+ await assert.rejects(()=>f.coordinator.captureQuarantined(request,c.capture,c.window as never,c.visit));
+ assert.equal(c.visits,1);assert.equal(f.value.phase,'OBSERVED_CLOSED');
+ const drift=candidateFixture(f,()=>{f.value={...f.value,publicationId:randomUUID()};return Buffer.from('pdf');});
+ const driftRequest=await drift.request();
+ await assert.rejects(()=>f.coordinator.captureQuarantined(driftRequest,drift.capture,drift.window as never,drift.visit));
+ assert.equal(drift.visits,1);
+ const uncertain=candidateFixture(f),uncertainRequest=await uncertain.request();let runs=0;
+ const lost={configurationDigest:uncertain.window.configurationDigest,run:async(fn:(signal:AbortSignal)=>Promise<unknown>)=>{
+  runs++;await uncertain.window.run(fn);throw new Error('PRIVATE-unknown-window-ACK');
+ }};
+ await assert.rejects(()=>f.coordinator.captureQuarantined(uncertainRequest,uncertain.capture,lost as never,uncertain.visit),e=>{
+  assert.ok(e instanceof Error);assert.equal(e.cause,undefined);assert.equal(e.message.includes('PRIVATE'),false);return true;
+ });assert.equal(runs,1);assert.equal(uncertain.visits,1);
 });

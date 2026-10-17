@@ -1,3 +1,14 @@
+## 17 October: parent-coordinated quarantine candidate capture
+
+The [quarantined capture composition](managed-quarantined-storage-capture.md)
+now joins the existing coordinator, exact original closed head, file capture and
+metadata window. Native proof includes real TLS PostgreSQL plus actual AES-GCM,
+KMS adapter and conditional exact-version archive classes with synthetic provider
+transports. Byte drift/lost archive ACK preserve encrypted partial quarantine;
+no control advance, root/index publication, live admission or reopening occurs.
+Actual provider/non-SQL writer exclusion, common DB+files and durable candidate
+execution/admission/recovery evidence remain open.
+
 ## 17 October: guarded metadata-capture interval
 
 The [metadata window](managed-storage-metadata-window.md) now holds exact
