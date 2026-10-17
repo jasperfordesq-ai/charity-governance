@@ -1,5 +1,11 @@
 # CharityPilot Full-Platform Remediation Audit
 
+> **17 October encrypted TUS location custody:** Original resumable locations now
+> have separate-purpose AES-GCM/KMS storage, exact-version decrypted ACK and fresh
+> original-session use. Probe/vault share canonical target validation. Lost ACKs
+> remain unknown; actual provider custody, artifact publication and parent/TUS
+> integration remain open. See [location vault](resumable-location-vault.md).
+
 > **17 October resumable PATCH component:** A source-guided original TUS session
 > probe now requires a working6MiB partial upload, valid offset/expiry and actual
 > final PATCH refusal between successful controls. HEAD alone is not write proof.

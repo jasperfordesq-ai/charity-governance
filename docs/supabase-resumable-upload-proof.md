@@ -64,8 +64,9 @@ Unexpected acceptance or partial side effects fail without hiding the residue.
 
 The required callback acknowledges `RESUMABLE_LOCATION_PIN_V1`: exact reference,
 custody digest, encrypted-body SHA/length and version pin, plus original location
-SHA. This is a trusted integration contract; an actual encrypted location store
-is **not implemented by this component**. The original URL is supplied separately
+SHA. The [purpose-separated location vault](resumable-location-vault.md) now
+implements that contract with exact-version decrypted readback. Actual independent
+provider/IAM/key-custody proof remains open. The original URL is supplied separately
 for verification. Baseline/report artifacts contain hashes/pins and no raw
 location or credential. Outbound request tracing must also redact resource URLs
 before activation; the component cannot control a caller's tracing transport.
@@ -93,8 +94,8 @@ acceptance, side effects,500/409/404/410, missing/changed state, expiry, URL/att
 credential/payload/custody substitutions, lost custody ACK and bounded late
 callbacks/provider bodies. They do not prove actual provider or host-loss behaviour.
 
-Next implement purpose-separated encrypted original-location custody, independent
-baseline/report publication and required parent pin barriers, then compose with
+Encrypted original-location custody is implemented and composes locally. Next add
+independent baseline/report publication and required parent pin barriers, then compose with
 the default coordinator/native fixture. Add signed-resumable and S3 coverage and
 prove actual provider in-flight/control-plane exclusion before common capture.
 Keep the full independent-recovery/current-authority/full-restore/host-loss goal

@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import { createHash, randomUUID } from 'node:crypto';
 import { test } from 'node:test';
 import { SupabaseResumableUploadProof } from '../services/supabase-resumable-upload-proof.js';
+import {locationVaultFixture} from './fixtures/resumable-location-vault.js';
 const hash = (v: string) => createHash('sha256').update(v).digest('hex');
 const control = {
     id: '11111111-1111-4111-8111-111111111111',
@@ -405,4 +406,16 @@ test('invalid expected custody digest refuses before creating an upload', async 
   const f = fixture();
   await assert.rejects(f.service().baseline(f.retain, 'not-a-digest'));
   assert.equal(f.calls.length, 0);
+});
+
+test('actual TUS probe composes with encrypted location custody and fresh instances use the same original session',async()=>{
+ for(const format of ['PATH_V1','FILE_VERSION_V1']){
+  const f=fixture(format),probe=f.service(),custody=locationVaultFixture({uploadIdFormat:format,probeDigest:probe.configurationDigest()}),vault=custody.vault();
+  const b=await probe.baseline((value,signal)=>vault.retain(value,signal),vault.configurationDigest()),saved=JSON.parse(b.body);
+  assert.equal(JSON.stringify(saved).includes('https://'),false);f.revoked=true;
+  const r=await custody.vault().withLocation(saved.locationPin,saved.reference,(secret,signal)=>f.service().verifyRefusal(b,vault.configurationDigest(),secret,signal));
+  assert.equal(r.testedResumablePatchRefusalObserved,true);assert.equal(r.locationPinSha256,saved.locationPin.sha256);
+  assert.ok(custody.plaintextResponses.every(b=>b.every(v=>v===0)));
+  const stored=[...custody.objects.values()][0].body;assert.equal(stored.includes('https://'),false);assert.equal(stored.includes('sb_secret_'),false);
+ }
 });

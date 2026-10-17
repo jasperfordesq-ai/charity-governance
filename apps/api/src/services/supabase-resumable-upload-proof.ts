@@ -1,3 +1,4 @@
+import {resumableLocationPinSchema,assertResumableLocation} from './resumable-location-contract.js';
 import { createHash } from 'node:crypto';
 import { z } from 'zod';
 import { credentialReadMaintenanceBindingSchema } from './credential-read-evidence.js';
@@ -31,21 +32,7 @@ const configSchema = z
   })
   .strict()
   .refine((v) => v.control.id !== v.retired.id);
-export const resumableLocationPinSchema = z
-  .object({
-    kind: z.literal('RESUMABLE_LOCATION_PIN_V1'),
-    reference: uuid,
-    custodyDigest: sha,
-    versionId: z
-      .string()
-      .min(1)
-      .max(1024)
-      .regex(/^[!-~]+$/)
-      .refine((v) => v !== 'null'),
-    sha256: sha,
-    byteLength: z.number().int().min(1).max(32768),
-  })
-  .strict();
+export {resumableLocationPinSchema} from './resumable-location-contract.js';
 const baselineSchema = z
   .object({
     format: z.literal(1),
@@ -144,33 +131,8 @@ export class SupabaseResumableUploadProof {
   private endpoint() {
     return this.origin() + '/storage/v1/upload/resumable';
   }
-  private location(raw: unknown, slot: Slot) {
-    const text = z.string().min(1).max(2048).parse(raw),
-      u = new URL(text),
-      start = this.endpoint() + '/';
-    if (
-      u.href !== text ||
-      !text.startsWith(start) ||
-      u.origin !== this.origin() ||
-      u.username ||
-      u.password ||
-      u.search ||
-      u.hash
-    )
-      throw failure();
-    const encoded = text.slice(start.length);
-    if (!/^[A-Za-z0-9_-]+$/.test(encoded)) throw failure();
-    const bytes = Buffer.from(encoded, 'base64url');
-    if (bytes.toString('base64url') !== encoded) throw failure();
-    const decoded = new TextDecoder('utf-8', { fatal: true }).decode(bytes),
-      separator = this.config.uploadIdFormat === 'PATH_V1' ? '/' : '-$v-',
-      expected = this.config.bucket + '/' + this.object(slot) + separator;
-    if (
-      !decoded.startsWith(expected) ||
-      !uuid.safeParse(decoded.slice(expected.length)).success
-    )
-      throw failure();
-    return text;
+  private location(raw:unknown,slot:Slot){
+    return assertResumableLocation(raw,{installationId:this.config.installationId,projectRef:this.config.projectRef,attemptId:this.config.maintenance.attemptId,uploadIdFormat:this.config.uploadIdFormat},slot);
   }
   private async work<T>(run: (b: Budget) => Promise<T>, caller?: AbortSignal) {
     const controller = new AbortController(),
