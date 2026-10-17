@@ -26,7 +26,7 @@ export function connectSyntheticCustody(descriptor,id,config){
   kms:()=>new KMSClient({region:'eu-west-1',endpoint:'https://kms.eu-west-1.amazonaws.com',credentials,maxAttempts:1,requestHandler:handler('kms')}),close(){}};
  for(const name of ['reads','writes','generates'])Object.defineProperty(b,name,{get:()=>sync(descriptor,{op:'stats',id})[name]});
  Object.defineProperty(b,'objects',{get:()=>new Map(sync(descriptor,{op:'metadata',id}))});
- for(const name of ['loseRoot','losePrepared','loseCommonRequestRead','loseCommonReportRead','loseJobRequestRead','loseJobObservationRead','loseJobServiceRead'])Object.defineProperty(b,name,{set:value=>{sync(descriptor,{op:'flag',id,name,value});}});
+ for(const name of ['loseRoot','losePrepared','loseCommonRequestRead','loseCommonReportRead','loseJobRequestRead','loseJobObservationRead','loseJobServiceRead','loseDaemonHeaderRead','loseDaemonIntentRead'])Object.defineProperty(b,name,{set:value=>{sync(descriptor,{op:'flag',id,name,value});}});
  return Object.freeze(b);
 }
 /** Explicit synthetic source selector only; never real provider configuration. */

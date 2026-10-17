@@ -64,7 +64,7 @@ export function backend(selected=config) {
     generates = 0,
     sequence = 0,
     loseRoot = false,
-    losePrepared = false,loseCommonRequestRead=false,loseCommonReportRead=false,loseJobRequestRead=false,loseJobObservationRead=false,loseJobServiceRead=false;
+    losePrepared = false,loseCommonRequestRead=false,loseCommonReportRead=false,loseJobRequestRead=false,loseJobObservationRead=false,loseJobServiceRead=false,loseDaemonHeaderRead=false,loseDaemonIntentRead=false;
   let onRootVerify = () => {};
   const metadata: Record<string, string> = {};
   const encryption = {
@@ -188,9 +188,9 @@ export function backend(selected=config) {
           reads++;
           const value = objects.get(key);
           assert.ok(value, 'missing staged fixture object');
-          if((loseCommonRequestRead||loseCommonReportRead||loseJobRequestRead||loseJobObservationRead||loseJobServiceRead)&&key.endsWith('.json')){
+          if((loseCommonRequestRead||loseCommonReportRead||loseJobRequestRead||loseJobObservationRead||loseJobServiceRead||loseDaemonHeaderRead||loseDaemonIntentRead)&&key.endsWith('.json')){
             const kind=JSON.parse(value.body.toString()).kind;
-            if((loseJobServiceRead&&kind==='MANAGED_SOURCE_JOB_SERVICE_V1')||(loseJobObservationRead&&kind==='MANAGED_SOURCE_JOB_OBSERVATION_V1')||(loseJobRequestRead&&kind==='MANAGED_SOURCE_JOB_REQUEST_V1')||(loseCommonRequestRead&&kind==='MANAGED_COMMON_CANDIDATE_REQUEST_V1')||(loseCommonReportRead&&kind==='MANAGED_QUARANTINED_COMMON_CANDIDATE'))throw new Error('synthetic original common acknowledgement lost after storage');
+            if((loseDaemonHeaderRead&&kind==='MANAGED_DAEMON_CUSTODY_HEADER_V1')||(loseDaemonIntentRead&&kind==='MANAGED_DAEMON_CUSTODY_INTENT_V1')||(loseJobServiceRead&&kind==='MANAGED_SOURCE_JOB_SERVICE_V1')||(loseJobObservationRead&&kind==='MANAGED_SOURCE_JOB_OBSERVATION_V1')||(loseJobRequestRead&&kind==='MANAGED_SOURCE_JOB_REQUEST_V1')||(loseCommonRequestRead&&kind==='MANAGED_COMMON_CANDIDATE_REQUEST_V1')||(loseCommonReportRead&&kind==='MANAGED_QUARANTINED_COMMON_CANDIDATE'))throw new Error('synthetic original common acknowledgement lost after storage');
           }
           if (request.query.versionId)
             assert.equal(request.query.versionId, value.version);
@@ -295,6 +295,8 @@ export function backend(selected=config) {
     set loseJobObservationRead(value:boolean){loseJobObservationRead=value;},
     set loseJobRequestRead(value:boolean){loseJobRequestRead=value;},
     set loseJobServiceRead(value:boolean){loseJobServiceRead=value;},
+    set loseDaemonHeaderRead(value:boolean){loseDaemonHeaderRead=value;},
+    set loseDaemonIntentRead(value:boolean){loseDaemonIntentRead=value;},
     set loseCommonRequestRead(value:boolean){loseCommonRequestRead=value;},
     set loseCommonReportRead(value:boolean){loseCommonReportRead=value;},
     set loseRoot(value: boolean) {

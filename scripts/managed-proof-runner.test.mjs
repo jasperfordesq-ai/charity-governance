@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import {spawn,spawnSync} from 'node:child_process';
 import {fileURLToPath} from 'node:url';
 import {randomUUID} from 'node:crypto';
-import {superviseManagedProofProcess,reconcileManagedProofContainers} from './managed-proof-runner.mjs';
+import {superviseManagedProofProcess,reconcileManagedProofContainers,managedProofWorkerEnvironment} from './managed-proof-runner.mjs';
 const ack=JSON.stringify({format:1,kind:'MANAGED_IMPORTED_PROOF_WORKER_V1',ok:true});
 function fixture(code){let owned;return{start(_command,_args,options){owned=spawn(process.execPath,['-e',code],options);return owned;},get child(){return owned;}};}
 const input=()=>Buffer.from('{}');
@@ -104,4 +104,11 @@ test('diagnostic observer failure stops the worker and cannot turn failure into 
 test('fixed guardian refuses standalone execution without the original inherited IPC channel',()=>{
  const r=spawnSync(process.execPath,[fileURLToPath(new URL('./managed-proof-guardian.mjs',import.meta.url))],{env:process.env,windowsHide:true,input:'{}',encoding:'utf8',timeout:5000,maxBuffer:4096});
  assert.equal(r.status,1);assert.equal(r.stdout,'');assert.equal(r.stderr,'');
+});
+
+test('source helper environment excludes cloud/signing credentials and stale gates while retaining explicit DB and OS paths',()=>{
+ const source={PATH:'synthetic-path',HOME:'/synthetic-home',XDG_RUNTIME_DIR:'/run/user/1000',AWS_ACCESS_KEY_ID:'synthetic-cloud',AWS_SECRET_ACCESS_KEY:'synthetic-secret',
+  AUTH_RECOVERY_SECRET:'synthetic-recovery',INTEGRATION_ENCRYPTION_KEY:'synthetic-integration',NODE_OPTIONS:'--import=synthetic',CHARITYPILOT_INTERNAL_DAEMON_GATE:'/old-job/gate.json',DATABASE_URL:'old-db'};
+ assert.deepEqual(managedProofWorkerEnvironment(source,'postgresql://synthetic-source'),{PATH:'synthetic-path',HOME:'/synthetic-home',XDG_RUNTIME_DIR:'/run/user/1000',DATABASE_URL:'postgresql://synthetic-source'});
+ assert.equal(source.DATABASE_URL,'old-db');
 });

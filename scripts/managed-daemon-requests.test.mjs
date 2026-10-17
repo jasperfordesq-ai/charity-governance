@@ -85,3 +85,22 @@ test('legacy request catalogue remains readable without invented image coverage'
   const r=inspectManagedDaemonRequests(f.scope);assert.equal(r.declaredImageVolumesCovered,false);assert.equal(r.mutatingRequestsObservedSuccessful,false);
  }finally{f.close();}
 });
+
+test('original custody ACK precedes dispatch; refused or unknown header/intent ACK cannot call the daemon',()=>{
+ for(const failure of ['header','intent','none']){
+  const f=fixture();let dispatched=0,headers=0,intents=0;
+  try{
+   const make=()=>createManagedDaemonRequestJournal(f.scope,{imageVolumes:()=>['/var/lib/postgresql/data'],acknowledge:(kind,artifact)=>{
+    assert.equal(dispatched,0);assert.equal(Buffer.byteLength(artifact.body),artifact.byteLength);
+    if(kind==='HEADER')headers++;else intents++;
+    return failure===(kind==='HEADER'?'header':'intent')&&(kind==='HEADER'||intents===1)?false:true;
+   }});
+   if(failure==='header'){assert.throws(make);assert.equal(headers,1);assert.equal(intents,0);}
+   else{const journal=make(),dispatch=()=>journal.dispatch(runArgs(),()=>{dispatched++;return{status:0};});
+    if(failure==='intent'){assert.throws(dispatch);assert.throws(dispatch);assert.equal(intents,1);assert.equal(inspectManagedDaemonRequests(f.scope).state,'UNRESOLVED_REQUESTS');}
+    else{dispatch();assert.equal(journal.finish().mutatingRequestsObservedSuccessful,true);}
+   }
+   assert.equal(dispatched,failure==='none'?1:0);
+  }finally{f.close();}
+ }
+});

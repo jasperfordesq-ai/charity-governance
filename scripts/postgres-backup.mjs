@@ -1,5 +1,6 @@
 #!/usr/bin/env node
 import { spawn, spawnSync } from 'node:child_process';
+import {acknowledgeManagedDaemonCustodySync} from './managed-daemon-custody-client.mjs';
 import { createHash, randomBytes, X509Certificate } from 'node:crypto';
 import {
   closeSync,
@@ -2279,17 +2280,20 @@ function inspectDeclaredProofImageVolumes(){
 }
 /** Original one-shot local intent custody. No command, environment, SQL or key
  * bodies are retained. A missing/nonzero response never becomes a retry lease. */
-export function createManagedDaemonRequestJournal(raw,{imageVolumes=inspectDeclaredProofImageVolumes}={}){
+export function createManagedDaemonRequestJournal(raw,{imageVolumes=inspectDeclaredProofImageVolumes,acknowledge}={}){
+ if(acknowledge!==undefined&&typeof acknowledge!=='function')throw daemonJournalFailure();
  const s=daemonScope(raw),volumes=imageVolumes();if(JSON.stringify(volumes)!==JSON.stringify(['/var/lib/postgresql/data']))throw daemonJournalFailure();
  const header={format:2,kind:'MANAGED_DAEMON_REQUEST_HEADER_V2',jobId:s.jobId,inputDigest:s.inputDigest,image:DEFAULT_POSTGRES_IMAGE,imageVolumeTargets:volumes};
- const headerPin=daemonWrite(s.root,s.identity,daemonFile+'header.json',header);let sequence=0,previous=headerPin.sha256,finished=false;
+ const headerPin=daemonWrite(s.root,s.identity,daemonFile+'header.json',header);let sequence=0,previous=headerPin.sha256,finished=false,custodyFailed=false;
+ if(acknowledge&&acknowledge('HEADER',{...headerPin,body:JSON.stringify(header)})!==true)throw daemonJournalFailure();
  return{dispatch(args,run){
-  if(finished)throw daemonJournalFailure();const request=daemonOperation(args);if(request===null)return run();const {operation,target}=request;
+  if(finished)throw daemonJournalFailure();const request=daemonOperation(args);if(request===null)return run();if(custodyFailed)throw daemonJournalFailure();const {operation,target}=request;
   if(sequence>=64)throw daemonJournalFailure();const ordinal=String(++sequence).padStart(3,'0');
   const storagePlan=operation==='run'?planManagedProofStorage(args,s.jobId):null;
   const intent={format:2,kind:'MANAGED_DAEMON_REQUEST_INTENT_V2',jobId:s.jobId,sequence,previousDigest:previous,operation,target,storagePlan,
    argumentsDigest:sha256Text('CHARITYPILOT_DAEMON_ARGUMENTS_V1\n'+s.jobId+'\n'+JSON.stringify(args))};
   const intentPin=daemonWrite(s.root,s.identity,daemonFile+ordinal+'.intent.json',intent);previous=intentPin.sha256;
+  if(acknowledge){try{if(acknowledge('INTENT',{...intentPin,body:JSON.stringify(intent)})!==true)throw daemonJournalFailure();}catch{custodyFailed=true;throw daemonJournalFailure();}}
   const result=run();
   const response={format:1,kind:'MANAGED_DAEMON_CLIENT_RESPONSE_V1',jobId:s.jobId,sequence,intentPin,
    status:Number.isSafeInteger(result?.status)?result.status:null,transportError:!!result?.error,signal:typeof result?.signal==='string'?true:false,
@@ -2345,7 +2349,7 @@ export function inspectManagedDaemonInvocation(value){
  if(!value||!Array.isArray(value.args)||value.snapshot===undefined)throw daemonJournalFailure();
  const parsed=parseArgs(value.args);if(parsed.command!=='prove-restore')throw daemonJournalFailure();
  return inspectManagedDaemonRequests({root:optionString(parsed.options,'output-dir'),jobId:value.jobId,
-  inputDigest:sha256Text(JSON.stringify({args:value.args,snapshot:value.snapshot,jobId:value.jobId}))});
+  inputDigest:sha256Text(JSON.stringify({args:value.args,snapshot:value.snapshot,jobId:value.jobId,...(value.daemonCustodyRequired===true?{daemonCustodyRequired:true}:{})}))});
 }
 function proofContainerName(kind) {
   return `charitypilot-${kind}-${Date.now()}-${process.pid}-${randomBytes(4).toString('hex')}`;
@@ -4479,14 +4483,19 @@ export async function runPostgresBackupFromArgs(args = process.argv.slice(2), en
   return runBackupCommand(args,env);
 }
 /** Internal supervised entry point; no new CLI flag or saved execution grant. */
-export async function runImportedSnapshotRestoreProof(args,snapshot,env=process.env,jobId){
+export async function runImportedSnapshotRestoreProof(args,snapshot,env=process.env,jobId,daemonCustodyRequired=false){
   if(snapshot===undefined||snapshot===null)return result(1,'','Original imported snapshot is required');
   if(managedProofJobId!==undefined||(jobId!==undefined&&(typeof jobId!=='string'||!/^[a-f0-9]{8}-[a-f0-9]{4}-4[a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}$/.test(jobId))))return result(1,'','Managed proof job scope refused');
   managedProofJobId=jobId;
   try{
    if(jobId&&!args.includes('--dry-run')){
     const parsed=parseArgs(args);if(parsed.command!=='prove-restore')throw daemonJournalFailure();
-    managedDaemonJournal=createManagedDaemonRequestJournal({root:optionString(parsed.options,'output-dir'),jobId,inputDigest:sha256Text(JSON.stringify({args,snapshot,jobId}))});
+    const inputDigest=sha256Text(JSON.stringify({args,snapshot,jobId,...(daemonCustodyRequired?{daemonCustodyRequired:true}:{})}));
+    if(daemonCustodyRequired!==true&&daemonCustodyRequired!==false)throw daemonJournalFailure();
+    const acknowledge=daemonCustodyRequired?((kind,artifact)=>acknowledgeManagedDaemonCustodySync({descriptorPath:env.CHARITYPILOT_INTERNAL_DAEMON_GATE,
+     kind,artifact,jobId,inputDigest,sourceSha:captureHelperImplementationBinding().commitSha})):undefined;
+    if(daemonCustodyRequired&&(process.platform!=='linux'||typeof env.CHARITYPILOT_INTERNAL_DAEMON_GATE!=='string'))throw daemonJournalFailure();
+    managedDaemonJournal=createManagedDaemonRequestJournal({root:optionString(parsed.options,'output-dir'),jobId,inputDigest},{acknowledge});
    }
    const outcome=await runBackupCommand(args,env,snapshot),requests=managedDaemonJournal?.finish();
    if(outcome.status===0&&requests&&(!requests.mutatingRequestsObservedSuccessful||!requests.declaredImageVolumesCovered))return result(1,'',daemonJournalFailure().message);

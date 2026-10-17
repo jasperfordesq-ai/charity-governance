@@ -1,9 +1,10 @@
 # Original daemon intent custody component
 
-17 October 2026. Provider-backed source component with synthetic SDK tests. The
-fixed source helper does **not yet invoke this barrier**. Local daemon request
-accounting remains its active path; independent pre-dispatch custody is not yet
-an operational guarantee.
+17 October 2026. The default kernel-contained COMMON_CANDIDATE source path now
+requires original custody acknowledgement before helper daemon mutations. The
+internal IPC and standalone proof paths remain explicitly outside this guarantee.
+Actual independent provider/host-loss acceptance remains open; exact native
+execution results are recorded privately.
 
 ## Original write path
 
@@ -54,12 +55,35 @@ permission. This component does not forward Docker requests or own their later
 completion. Source compromise, rollback protection, real IAM/immutable custody,
 physical host-loss recovery and current tenant authority are not established.
 
-## Next integration gates
+## Credentialless dispatch barrier
 
-1. Wire the fixed helper's original local header/intent into an authenticated,
-   credentialless barrier to the original context; require its original custody
-   acknowledgement before actual daemon dispatch. Do not put cloud credentials
-   in the helper or infer permission from a saved record.
+The original parent holds the cloud custody interface and a private, job/input/
+release-bound Unix socket. A protected descriptor contains only its per-job
+capability, never provider credentials. The fixed helper uses a short-lived
+minimal-environment client because its Docker dispatch is synchronous. That
+client requires exact ownership/modes/path, original scope, a fresh nonce and
+matching acknowledgement bytes. It has no transport/profile/command selector.
+
+The required barrier is bound into the worker input and service input digest.
+Missing descriptors, refusal or unknown ACK stop before dispatch. An uncertain
+intent ACK permanently prevents subsequent helper mutation attempts. Header and
+each local intent are flushed before their custody request. Original success
+also requires the channel's acknowledged count to match the completed local
+request catalogue. Saved records never recreate that live context.
+
+The helper receives only reviewed OS fields and its explicit source database
+credential; cloud/recovery/signing credentials stay out of its environment.
+Ambient Docker is validated before filtering. The actual executor source guard
+now pins ten modules, including both new dispatch-affecting modules. Original
+channel metadata binds the gate directory's identity without storing its
+capability, permitting exact attribution by the synthetic fault-test owner.
+That metadata grants no operator cleanup or recovered execution permission.
+
+## Remaining integration gates
+
+1. Verify the exact-release source/helper/channel composition with actual Linux
+   source/SQL and lost header/intent ACKs. Preserve the difference between
+   synthetic custody outside a source process and real independent providers.
 2. Bind and retain original responses/end accounting separately; make unknown
    dispatch/completion remain unresolved after caller/guardian/host loss. Complete
    the independently surviving owner or proven daemon-side fence before closure.

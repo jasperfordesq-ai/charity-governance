@@ -1,3 +1,12 @@
+## 17 October: fixed helper daemon custody barrier
+
+Read [daemon intent custody](managed-daemon-intent-custody.md). Kernel-contained
+common source work now requires original header/intent custody ACKs through a
+credentialless private socket client before mutations. The requirement is bound
+to the worker input; unknown ACK stops later mutations. Exact executor guard
+now pins ten modules. Local response/end accounting and real independent
+ownership/provider/host-loss completion remain distinct; exact tests are private.
+
 ## 17 October: original daemon intent custody API
 
 Read [daemon intent custody](managed-daemon-intent-custody.md). The original

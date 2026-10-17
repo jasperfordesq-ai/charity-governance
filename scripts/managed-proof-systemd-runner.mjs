@@ -1,11 +1,13 @@
 import {spawnSync} from 'node:child_process';
-import {readFileSync,realpathSync,existsSync,writeFileSync} from 'node:fs';
+import {createHash} from 'node:crypto';
+import {readFileSync,realpathSync,existsSync,writeFileSync,openSync,fsyncSync,closeSync} from 'node:fs';
 import {dirname,join} from 'node:path';
 import {fileURLToPath} from 'node:url';
 import {createManagedGuardianChannel} from './managed-proof-channel.mjs';
 import {containmentUnit,inspectContainmentUnit,observeOriginalControlGroup} from './managed-proof-systemd-containment.mjs';
+import {requireDaemonGateDirectory} from './managed-daemon-custody-channel.mjs';
 const sourceRoot=fileURLToPath(new URL('..',import.meta.url)),guardian=fileURLToPath(new URL('./managed-proof-guardian.mjs',import.meta.url));
-const modules=['managed-proof-systemd-runner.mjs','managed-proof-runner.mjs','managed-proof-guardian.mjs','managed-proof-worker.mjs','managed-proof-channel.mjs','managed-proof-systemd-containment.mjs','managed-proof-job.mjs','postgres-backup.mjs'];
+const modules=['managed-proof-systemd-runner.mjs','managed-proof-runner.mjs','managed-proof-guardian.mjs','managed-proof-worker.mjs','managed-proof-channel.mjs','managed-proof-systemd-containment.mjs','managed-proof-job.mjs','postgres-backup.mjs','managed-daemon-custody-channel.mjs','managed-daemon-custody-client.mjs'];
 const no=()=>new Error('Contained source proof unresolved; preserve job and original scope without replay');
 function command(binary,args){const r=spawnSync(binary,args,{cwd:sourceRoot,encoding:'utf8',timeout:15000,maxBuffer:2*1024*1024,
  env:Object.fromEntries(Object.entries(process.env).filter(([k])=>!(/^(NODE_OPTIONS|NODE_PATH|LD_PRELOAD|LD_LIBRARY_PATH)$/i).test(k)))});if(r.error||r.status!==0)throw no();return r.stdout.trim();}
@@ -29,7 +31,7 @@ function managerState(unit){
 }
 const pause=ms=>new Promise(r=>setTimeout(r,ms));
 /** Fixed production launcher; dependency seams belong to source-only fixtures. */
-export async function superviseContainedManagedProof({jobId,sourceSha,input,env,authorizeInvocation,timeoutMs=90000,signal,diagnostics},{assertSource=verifyContainedExecutorSource,guardianPath=guardian,onScope,launch=args=>command('systemd-run',args)}={}){
+export async function superviseContainedManagedProof({jobId,sourceSha,input,env,authorizeInvocation,daemonGateBinding,timeoutMs=90000,signal,diagnostics},{assertSource=verifyContainedExecutorSource,guardianPath=guardian,onScope,launch=args=>command('systemd-run',args)}={}){
  if(process.platform!=='linux'||process.getuid()===0||!Number.isSafeInteger(timeoutMs)||timeoutMs<50||timeoutMs>1200000)throw no();
  signal?.throwIfAborted();const unit=containmentUnit(jobId);assertSource(sourceSha);
  command('systemctl',['--user','show','--property=Version','--value']);if(!readFileSync('/sys/fs/cgroup/cgroup.controllers','utf8').trim()||managerState(unit)!=='ABSENT')throw no();
@@ -47,6 +49,14 @@ export async function superviseContainedManagedProof({jobId,sourceSha,input,env,
    return await authorizeInvocation(value);
   }});
   writeFileSync(join(dirname(channel.path),'launch-request.json'),JSON.stringify({format:1,kind:'MANAGED_CONTAINED_LAUNCH_REQUEST_V1',jobId,unit,sourceSha,executionAuthorized:false,actionAuthorized:false}),{flag:'wx',mode:0o600});
+  if(daemonGateBinding){
+   const b=daemonGateBinding,s=requireDaemonGateDirectory(dirname(b.descriptorPath));
+   if(Object.keys(b).sort().join(',')!=='actionAuthorized,descriptorPath,device,executionAuthorized,format,inode,inputDigest,jobId,kind,sourceSha'
+    ||b.format!==1||b.kind!=='MANAGED_DAEMON_GATE_BINDING_V1'||b.jobId!==jobId||b.sourceSha!==sourceSha||b.executionAuthorized!==false||b.actionAuthorized!==false
+    ||b.inputDigest!==createHash('sha256').update(input).digest('hex')||b.device!==s.dev||b.inode!==s.ino||b.descriptorPath!==join(dirname(b.descriptorPath),'gate.json'))throw no();
+   const path=join(dirname(channel.path),'daemon-gate-binding.json');writeFileSync(path,JSON.stringify(b),{flag:'wx',mode:0o600});
+   for(const target of [path,dirname(channel.path)]){const fd=openSync(target,'r');try{fsyncSync(fd);}finally{closeSync(fd);}}
+  }
   await onScope?.({unit,path:channel.path});signal?.throwIfAborted();attempted=true;
   launch(['--user','--quiet','--unit='+unit,'--service-type=exec',
    '--property=RemainAfterExit=yes','--property=KillMode=control-group','--property=Restart=no','--property=RuntimeMaxSec='+Math.ceil((timeoutMs+15000)/1000)+'s',

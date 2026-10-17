@@ -65,7 +65,7 @@ export async function recordManagedProofJob(workspace,raw,signal){
     try{
     if(!Buffer.isBuffer(input)||input.length<1||input.length>16384)throw failure();
     const v=JSON.parse(input.toString('utf8'));
-    if(!keys(v,'args,snapshot,jobId')||v.jobId!==value.jobId||!Array.isArray(v.args)||v.args.some(a=>typeof a!=='string')
+    if(!keys(v,v.daemonCustodyRequired===true?'args,snapshot,jobId,daemonCustodyRequired':'args,snapshot,jobId')||v.jobId!==value.jobId||!Array.isArray(v.args)||v.args.some(a=>typeof a!=='string')
      ||sha(JSON.stringify(v.args))!==value.argumentsDigest||sha('CHARITYPILOT_MANAGED_EXPORTED_SNAPSHOT_V1\n'+JSON.stringify(v.snapshot))!==value.snapshotDigest||identity?.inputDigest!==sha(input))throw failure();
     const body=service({format:1,kind:'MANAGED_IMPORTED_PROOF_SERVICE_V1',jobId:value.jobId,requestPin:saved.pin,identity,
      executionAuthorized:false,publicationAuthorized:false,actionAuthorized:false},value,saved.pin);
