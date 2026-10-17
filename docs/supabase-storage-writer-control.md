@@ -117,3 +117,7 @@ SDK-signed keys, presigned PUT and multipart requests through synthetic HTTP.
 It requires the native feature-disabled response; this metadata primitive alone
 still does not prove S3 capability exclusion. The probe's combined custody,
 public evidence, complete factory and default parent integration remain next.
+
+## Current disabled-feature metadata
+
+s3FeatureProofScope is a pure configured-scope getter. observeS3Disabled performs GET-only paired snapshots and accepts a caller cancellation signal. PRE_CLOSURE checks the exact writer/capture registry with S3 off; POST_CLOSURE requires the existing fully closed metadata condition. It does not change the existing closure operation or configuration digest. The separate [data-path component](s3-current-feature-boundary-proof.md) uses active synthetic canaries; neither method proves historical revocation or global quiescence.

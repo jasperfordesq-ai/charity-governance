@@ -1,5 +1,12 @@
 # CharityPilot Agent Continuation Handoff
 
+> **17 October current S3 feature boundary:** A separate local component now
+> checks actual metadata and sixteen native refusals across direct/gateway routes
+> without enabling S3 or issuing credentials. Active synthetic canaries are used;
+> historical revocation, full quiescence, provider attestation and parent dispatch
+> remain unproven. See [current S3 boundary](s3-current-feature-boundary-proof.md).
+
+
 > **17 October development dependency follow-up:** fast-copy is pinned to
 > patched4.1.0 with actual logger/depth regressions. A new root test gate checks
 > every current lint target leaves Next rootDir unset. The unpatched braces

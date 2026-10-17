@@ -1,3 +1,7 @@
+import {
+  decodeNativeS3FeatureDisabled,
+  isNativeS3FeatureDisabledError,
+} from './s3-feature-response.js';
 import { Readable } from 'node:stream';
 import { z } from 'zod';
 import {
@@ -69,7 +73,12 @@ type SignedS3HttpRequest = {
   query?: Record<string, string | string[] | null>;
   body?: unknown;
 };
-type Response = { status: number; date: number; bytes: Buffer; xml: boolean };
+type Response = {
+  status: number;
+  date: number;
+  bytes: Buffer;
+  contentType: string | null;
+};
 type Runtime = { b: Budget; sdk: S3Client; responses: Response[] };
 type Slot =
   | 'standard'
@@ -85,10 +94,6 @@ const prefix = Buffer.alloc(5242880, 0x43),
   a = Buffer.from('A'),
   bPayload = Buffer.from('B'),
   controlPayload = Buffer.from('P');
-const xmlMime = (v: string | null) =>
-  ['application/xml', 'text/xml'].includes(
-    v?.split(';')[0].trim().toLowerCase() ?? '',
-  );
 const failure = () =>
   new Error(
     'S3 capability proof is unresolved; preserve the original attempt and synthetic multipart residue without retry or cleanup',
@@ -237,7 +242,7 @@ export class SupabaseS3CapabilityProof {
                 );
                 responses.push({
                   ...r,
-                  xml: xmlMime(r.headers.get('content-type')),
+                  contentType: r.headers.get('content-type'),
                 });
                 return {
                   response: {
@@ -276,14 +281,11 @@ export class SupabaseS3CapabilityProof {
         !disabled ||
         r.responses.length !== before + 1 ||
         response?.status !== 403 ||
-        !response.xml ||
-        !z
-          .object({
-            name: z.literal('FeatureNotEnabled'),
-            Code: z.literal('FeatureNotEnabled'),
-            $metadata: z.object({ httpStatusCode: z.literal(403) }),
-          })
-          .safeParse(error).success
+        !isNativeS3FeatureDisabledError(
+          error,
+          response.status,
+          response.contentType,
+        )
       )
         throw failure();
       return {
@@ -585,49 +587,9 @@ export class SupabaseS3CapabilityProof {
       }
       // Use the actual SDK XML decoder and error mapping for this exact response,
       // without dispatching a second signed request or changing the saved URL.
-      const decoder = new S3Client({
-        region: this.config.region,
-        credentials: this.credentials,
-        endpoint: this.endpoint(),
-        forcePathStyle: true,
-        maxAttempts: 1,
-        requestChecksumCalculation: 'WHEN_REQUIRED',
-        responseChecksumValidation: 'WHEN_REQUIRED',
-        requestHandler: {
-          handle: async () => ({
-            response: {
-              statusCode: response.status,
-              headers: Object.fromEntries(response.headers.entries()),
-              body: Readable.from([response.bytes]),
-            },
-          }),
-        },
-      });
-      try {
-        await decoder.send(
-          new PutObjectCommand({
-            Bucket: this.config.bucket,
-            Key: this.object('presigned'),
-          }),
-        );
+      if (!(await decodeNativeS3FeatureDisabled(response, r.b.signal)))
         throw failure();
-      } catch (error) {
-        if (
-          response.status !== 403 ||
-          !xmlMime(response.headers.get('content-type')) ||
-          !z
-            .object({
-              name: z.literal('FeatureNotEnabled'),
-              Code: z.literal('FeatureNotEnabled'),
-              $metadata: z.object({ httpStatusCode: z.literal(403) }),
-            })
-            .safeParse(error).success
-        )
-          throw failure();
-        return new Date(response.date).toISOString();
-      } finally {
-        decoder.destroy();
-      }
+      return new Date(response.date).toISOString();
     } finally {
       response.bytes.fill(0);
     }

@@ -219,3 +219,5 @@ a working baseline. Implement a distinct current-feature-exclusion observation
 for that condition, with exact provider/route/endpoint evidence. Current disabled
 state must never be labelled historical never-enabled or past credential
 revocation. Actual supplier activation/authority remains a separate gate.
+
+The distinct [current feature-boundary component](s3-current-feature-boundary-proof.md) is now implemented locally. It uses both endpoint profiles and real metadata-adapter reads with synthetic transports. Parent mode selection, mandatory fresh post-closure proof and actual provider evidence remain open; this establishes no tenant retention or disclosure policy.

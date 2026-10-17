@@ -1,3 +1,7 @@
+import {
+  s3FeatureStageSchema,
+  s3DisabledMetadataSchema,
+} from './s3-feature-boundary-contract.js';
 import { createHash } from 'node:crypto';
 import { z } from 'zod';
 
@@ -70,8 +74,14 @@ export class SupabaseStorageWriterControl {
       throw failure();
   }
   readProofScope() {
-    return { installationId: this.config.installationId, projectRef: this.config.projectRef,
-      captureKeyId: this.config.captureKeyId, secretWriterIds: this.config.writerKeys.filter(k => k.type === 'secret').map(k => k.id) };
+    return {
+      installationId: this.config.installationId,
+      projectRef: this.config.projectRef,
+      captureKeyId: this.config.captureKeyId,
+      secretWriterIds: this.config.writerKeys
+        .filter((k) => k.type === 'secret')
+        .map((k) => k.id),
+    };
   }
   configurationDigest(installationId = this.config.installationId) {
     if (id.parse(installationId) !== this.config.installationId)
@@ -82,11 +92,19 @@ export class SupabaseStorageWriterControl {
       ...this.config,
     });
   }
-  private async work<T>(run: (budget: Budget) => Promise<T>) {
+  private async work<T>(
+    run: (budget: Budget) => Promise<T>,
+    caller?: AbortSignal,
+  ) {
     const controller = new AbortController(),
       timer = setTimeout(() => controller.abort(), 180000);
     try {
-      return await run({ signal: controller.signal, requests: 0 });
+      return await run({
+        signal: caller
+          ? AbortSignal.any([caller, controller.signal])
+          : controller.signal,
+        requests: 0,
+      });
     } catch {
       throw failure();
     } finally {
@@ -268,6 +286,52 @@ export class SupabaseStorageWriterControl {
       inFlightWritesDrained: false as const,
       actionAuthorized: false as const,
     };
+  }
+  s3FeatureProofScope() {
+    return {
+      installationId: this.config.installationId,
+      projectRef: this.config.projectRef,
+      captureKeyId: this.config.captureKeyId,
+      region: this.config.region,
+    };
+  }
+  async observeS3Disabled(rawStage: unknown, caller?: AbortSignal) {
+    const stage = s3FeatureStageSchema.parse(rawStage);
+    return this.work(async (budget) => {
+      const first = await this.snapshot(budget),
+        second = await this.snapshot(budget);
+      for (const state of [first, second]) {
+        if (state.s3Enabled) throw failure();
+        if (stage === 'POST_CLOSURE') this.closed(state);
+        else if (
+          JSON.stringify(state.keys) !== JSON.stringify(this.expected(true))
+        )
+          throw failure();
+      }
+      if (hash(first) !== hash(second)) throw failure();
+      const observedAt = new Date().toISOString(),
+        configurationDigest = this.configurationDigest(),
+        stateSha256 = hash(first);
+      return s3DisabledMetadataSchema.parse({
+        scope: 'SUPABASE_S3_DISABLED_METADATA_V1',
+        stage,
+        configurationDigest,
+        stateSha256,
+        observationDigest: hash({
+          stage,
+          configurationDigest,
+          stateSha256,
+          observedAt,
+        }),
+        observedAt,
+        s3ProtocolEnabled: false,
+        configuredCredentialRegistryMatched: true,
+        historicalNeverEnabledProven: false,
+        controlPlaneWritersExcluded: false,
+        providerReleaseAttested: false,
+        actionAuthorized: false,
+      });
+    }, caller);
   }
   async observeClosed() {
     return this.work(async (budget) => {

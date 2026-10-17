@@ -136,3 +136,5 @@ already-disabled installations, bound to both endpoint profiles and the reviewed
 provider route/release. Current disabled state cannot establish historical
 never-enabled status, past key revocation or original-capability refusal. No
 such historical inference or empty-credential exemption is implemented here.
+
+The separate [current feature-boundary component](s3-current-feature-boundary-proof.md) is now locally implemented with synthetic tests. Complete parent mode selection and fresh post-closure enforcement remain open. This does not waive original-working evidence when applicable.
