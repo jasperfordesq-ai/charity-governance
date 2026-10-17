@@ -1,5 +1,13 @@
 # CharityPilot Full-Platform Remediation Audit
 
+> **17 October Supabase candidate reader:** The new bounded internal reader
+> traverses the credential-visible private bucket, checks bytes twice and clears
+> plaintext after its consumer. Archive-set tests now compose this HTTP source
+> with encrypted S3/KMS candidates. Results remain quarantine-only and explicitly
+> do not prove unfiltered visibility, global storage-writer closure or common
+> capture. Actual source authority/custody, full restore and host-loss proof stay
+> open. See [source capture](supabase-recovery-capture.md); inspect exact CI.
+
 > **17 October database-snapshot metadata binding:** The source-hashed PostgreSQL
 > helper now derives a bounded document projection from the dump's exported
 > snapshot and compares it after isolated restoration. Archived-set preparation

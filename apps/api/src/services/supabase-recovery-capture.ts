@@ -1,0 +1,382 @@
+import { createHash } from 'node:crypto';
+import { z } from 'zod';
+
+const failure = () => new Error('Supabase recovery capture is unresolved');
+const configSchema = z
+  .object({
+    installationId: z
+      .string()
+      .regex(/^[A-Za-z0-9_-]{1,120}$/)
+      .refine((v) => v === v.trim()),
+    projectRef: z
+      .string()
+      .regex(/^[a-z0-9]{20}$/)
+      .length(20),
+    bucket: z
+      .string()
+      .regex(/^[a-z0-9][a-z0-9_-]{0,62}$/)
+      .refine((v) => v === v.trim()),
+  })
+  .strict();
+const timestamp = z.string().max(64).datetime({ offset: true });
+const fileSchema = z.object({
+  name: z.string(),
+  id: z.string().uuid(),
+  created_at: timestamp,
+  updated_at: timestamp,
+  metadata: z.object({
+    size: z
+      .number()
+      .int()
+      .min(0)
+      .max(10 * 1024 * 1024),
+    mimetype: z.string().min(1).max(255),
+  }),
+});
+const folderSchema = z.object({
+  name: z.string(),
+  id: z.null(),
+  created_at: z.null(),
+  updated_at: z.null(),
+  metadata: z.null(),
+});
+const hash = (value: Buffer | string) =>
+  createHash('sha256').update(value).digest('hex');
+export type CapturedSupabaseFile = Readonly<{
+  fileUrl: string;
+  id: string;
+  bytes: number;
+  mimeType: string;
+  createdAt: string;
+  updatedAt: string;
+}>;
+type Budget = { requests: number; signal: AbortSignal };
+type Inventory = {
+  files: CapturedSupabaseFile[];
+  folders: string[];
+  digest: string;
+};
+
+/** Read-only candidate capture. Stable repeated reads are not a global writer
+ * fence, unfiltered credential authority, exact provider version or restore
+ * admission. No application route/job activates this internal component. */
+export class SupabaseRecoveryCapture {
+  private readonly config: z.infer<typeof configSchema>;
+  private readonly origin: string;
+  constructor(
+    raw: unknown,
+    private readonly secret: string,
+    private readonly transport: typeof fetch = fetch,
+  ) {
+    this.config = configSchema.parse(raw);
+    // This new managed capture path uses independently supplied modern server
+    // keys only. A prefix does not attest its actual privilege or visibility.
+    if (
+      typeof secret !== 'string' ||
+      !/^sb_secret_[A-Za-z0-9_-]{16,512}$/.test(secret) ||
+      secret !== secret.trim()
+    )
+      throw failure();
+    this.origin = `https://${this.config.projectRef}.supabase.co`;
+  }
+  configurationDigest() {
+    return hash(
+      JSON.stringify({
+        format: 1,
+        provider: 'SUPABASE_PRIVATE_CAPTURE_V1',
+        ...this.config,
+      }),
+    );
+  }
+  private segment(raw: string) {
+    if (
+      !raw ||
+      raw.length > 255 ||
+      raw === '.' ||
+      raw === '..' ||
+      /[\x00-\x1f\x7f/\\%]/.test(raw)
+    )
+      throw failure();
+    // Refuse unpaired UTF-16 rather than silently replacing a storage key.
+    encodeURIComponent(raw);
+    return raw;
+  }
+  private async request(
+    path: string,
+    body: object | undefined,
+    maximum: number,
+    budget: Budget,
+    exactBytes?: number,
+    mimeType?: string,
+  ): Promise<Buffer> {
+    if (++budget.requests > 30000 || budget.signal.aborted) throw failure();
+    const controller = new AbortController(),
+      signal = AbortSignal.any([controller.signal, budget.signal]);
+    const timer = setTimeout(() => controller.abort(), 15000);
+    let reader: ReadableStreamDefaultReader<Uint8Array> | undefined;
+    let stop!: () => void;
+    const cancelled = new Promise<never>((_resolve, reject) => {
+      stop = () => {
+        void reader?.cancel().catch(() => {});
+        reject(failure());
+      };
+      signal.addEventListener('abort', stop, { once: true });
+    });
+    const run = async () => {
+      const response = await this.transport(
+        this.origin + '/storage/v1' + path,
+        {
+          method: body === undefined ? 'GET' : 'POST',
+          redirect: 'error',
+          signal,
+          headers: {
+            apikey: this.secret,
+            Accept: mimeType ?? 'application/json',
+            'Accept-Encoding': 'identity',
+            'Cache-Control': 'no-cache, no-store',
+            ...(body === undefined
+              ? {}
+              : { 'Content-Type': 'application/json' }),
+          },
+          ...(body === undefined ? {} : { body: JSON.stringify(body) }),
+        },
+      );
+      if (signal.aborted || response.status !== 200) {
+        void response.body?.cancel().catch(() => {});
+        throw failure();
+      }
+      if (response.body) reader = response.body.getReader();
+      const encoding = response.headers.get('content-encoding');
+      const length = response.headers.get('content-length');
+      const contentType = response.headers
+        .get('content-type')
+        ?.split(';')[0]
+        .trim()
+        .toLowerCase();
+      if (
+        (encoding && encoding !== 'identity') ||
+        contentType !==
+          (mimeType ?? 'application/json').split(';')[0].trim().toLowerCase() ||
+        (length !== null &&
+          (!/^(0|[1-9][0-9]*)$/.test(length) ||
+            !Number.isSafeInteger(Number(length)) ||
+            Number(length) > maximum ||
+            (exactBytes !== undefined && Number(length) !== exactBytes)))
+      )
+        throw failure();
+      if (!reader) {
+        if (exactBytes === 0 && length === '0') return Buffer.alloc(0);
+        throw failure();
+      }
+      const stream = reader;
+      const bytes = Buffer.alloc(maximum);
+      let count = 0;
+      try {
+        for (;;) {
+          signal.throwIfAborted();
+          const chunk = await stream.read();
+          if (chunk.done) break;
+          if (
+            !(chunk.value instanceof Uint8Array) ||
+            count + chunk.value.byteLength > maximum
+          )
+            throw failure();
+          bytes.set(chunk.value, count);
+          count += chunk.value.byteLength;
+        }
+        if (
+          signal.aborted ||
+          (exactBytes !== undefined && count !== exactBytes) ||
+          (length !== null && count !== Number(length))
+        )
+          throw failure();
+        return Buffer.from(bytes.subarray(0, count));
+      } finally {
+        bytes.fill(0);
+      }
+    };
+    try {
+      signal.throwIfAborted();
+      return await Promise.race([run(), cancelled]);
+    } finally {
+      clearTimeout(timer);
+      signal.removeEventListener('abort', stop);
+      void reader?.cancel().catch(() => {});
+      controller.abort();
+    }
+  }
+  private async json(path: string, body: object | undefined, budget: Budget) {
+    const bytes = await this.request(path, body, 1024 * 1024, budget);
+    try {
+      return JSON.parse(
+        new TextDecoder('utf-8', { fatal: true, ignoreBOM: true }).decode(
+          bytes,
+        ),
+      ) as unknown;
+    } finally {
+      bytes.fill(0);
+    }
+  }
+  private async inventory(budget: Budget): Promise<Inventory> {
+    const bucket = encodeURIComponent(this.config.bucket);
+    const details = z
+      .object({ id: z.string(), public: z.literal(false) })
+      .parse(await this.json('/bucket/' + bucket, undefined, budget));
+    if (details.id !== this.config.bucket) throw failure();
+    const queue = [''],
+      files: CapturedSupabaseFile[] = [],
+      folders: string[] = [];
+    const seenPaths = new Set<string>(),
+      seenIds = new Set<string>();
+    for (let cursor = 0; cursor < queue.length; cursor++) {
+      const prefix = queue[cursor];
+      for (let offset = 0; ; offset += 100) {
+        const rows = z
+          .array(z.unknown())
+          .max(100)
+          .parse(
+            await this.json(
+              '/object/list/' + bucket,
+              {
+                prefix,
+                limit: 100,
+                offset,
+                sortBy: { column: 'name', order: 'asc' },
+              },
+              budget,
+            ),
+          );
+        for (const raw of rows) {
+          const row = z.union([folderSchema, fileSchema]).parse(raw),
+            name = this.segment(row.name);
+          const path = prefix ? prefix + '/' + name : name;
+          if (
+            path.length > 2048 ||
+            path.split('/').length > 32 ||
+            seenPaths.has(path)
+          )
+            throw failure();
+          seenPaths.add(path);
+          if (row.id === null) {
+            folders.push(path);
+            queue.push(path);
+            if (folders.length > 5000) throw failure();
+          } else {
+            if (seenIds.has(row.id) || files.length >= 5000) throw failure();
+            seenIds.add(row.id);
+            files.push(
+              Object.freeze({
+                fileUrl: path,
+                id: row.id,
+                bytes: row.metadata.size,
+                mimeType: row.metadata.mimetype,
+                createdAt: row.created_at,
+                updatedAt: row.updated_at,
+              }),
+            );
+          }
+        }
+        // A full page always requires the next page, including exactly100 rows.
+        if (rows.length < 100) break;
+      }
+    }
+    files.sort((a, b) =>
+      a.fileUrl < b.fileUrl ? -1 : a.fileUrl > b.fileUrl ? 1 : 0,
+    );
+    folders.sort();
+    return { files, folders, digest: hash(JSON.stringify({ files, folders })) };
+  }
+  private download(file: CapturedSupabaseFile, budget: Budget) {
+    const key = file.fileUrl
+      .split('/')
+      .map((segment) => encodeURIComponent(this.segment(segment)))
+      .join('/');
+    return this.request(
+      '/object/' + encodeURIComponent(this.config.bucket) + '/' + key,
+      undefined,
+      file.bytes,
+      budget,
+      file.bytes,
+      file.mimeType,
+    );
+  }
+  async capture(
+    visit: (
+      file: CapturedSupabaseFile,
+      bytes: Buffer,
+      sha256: string,
+      signal: AbortSignal,
+    ) => Promise<void>,
+    caller?: AbortSignal,
+  ) {
+    const controller = new AbortController(),
+      signal = caller
+        ? AbortSignal.any([controller.signal, caller])
+        : controller.signal;
+    const timer = setTimeout(() => controller.abort(), 60 * 60 * 1000),
+      budget = { requests: 0, signal };
+    try {
+      signal.throwIfAborted();
+      const startedAt = new Date().toISOString(),
+        first = await this.inventory(budget);
+      const objects: { fileUrl: string; bytes: number; sha256: string }[] = [];
+      for (const file of first.files) {
+        const bytes = await this.download(file, budget);
+        try {
+          const sha256 = hash(bytes);
+          let stop!: () => void;
+          const cancelled = new Promise<never>((_resolve, reject) => {
+            stop = () => {
+              bytes.fill(0);
+              reject(failure());
+            };
+            signal.addEventListener('abort', stop, { once: true });
+          });
+          try {
+            signal.throwIfAborted();
+            await Promise.race([visit(file, bytes, sha256, signal), cancelled]);
+          } finally {
+            signal.removeEventListener('abort', stop);
+          }
+          signal.throwIfAborted();
+          if (hash(bytes) !== sha256) throw failure();
+          objects.push({ fileUrl: file.fileUrl, bytes: bytes.length, sha256 });
+        } finally {
+          bytes.fill(0);
+        }
+      }
+      if ((await this.inventory(budget)).digest !== first.digest)
+        throw failure();
+      for (let i = 0; i < first.files.length; i++) {
+        const bytes = await this.download(first.files[i], budget);
+        try {
+          if (hash(bytes) !== objects[i].sha256) throw failure();
+        } finally {
+          bytes.fill(0);
+        }
+      }
+      if (
+        (await this.inventory(budget)).digest !== first.digest ||
+        signal.aborted
+      )
+        throw failure();
+      return {
+        kind: 'SUPABASE_CANDIDATE_CAPTURE' as const,
+        restoreMode: 'QUARANTINE_ONLY' as const,
+        captureConsistency: 'EXTERNAL_VERIFICATION_REQUIRED' as const,
+        visibility: 'SUPPLIED_CREDENTIAL_VIEW_ONLY' as const,
+        configurationDigest: this.configurationDigest(),
+        inventoryDigest: first.digest,
+        startedAt,
+        observedAt: new Date().toISOString(),
+        objects,
+        files: first.files,
+      };
+    } catch {
+      throw failure();
+    } finally {
+      clearTimeout(timer);
+      controller.abort();
+    }
+  }
+}

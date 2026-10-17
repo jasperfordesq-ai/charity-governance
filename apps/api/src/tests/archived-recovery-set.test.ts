@@ -9,6 +9,7 @@ import { KmsBackupManifestMac } from '../services/backup-manifest-kms.js';
 import { S3BackupManifests } from '../services/backup-manifests-s3.js';
 import { S3DatabaseByteBackups } from '../services/database-byte-backup-s3.js';
 import { S3DocumentByteBackups } from '../services/document-byte-backup-s3.js';
+import { SupabaseRecoveryCapture } from '../services/supabase-recovery-capture.js';
 import { KmsDatabaseBackupKeys } from '../services/database-byte-backup-kms.js';
 import { KmsDocumentBackupKeys } from '../services/document-byte-backup-kms.js';
 import { KmsDocumentBackupIndexMac } from '../services/document-backup-index-kms.js';
@@ -451,16 +452,72 @@ async function fixture(
     byteLength: doc.length,
     keyArn: config.dataKeyArn,
   };
-  const docSealed = await sealDocumentByteBackup(
-    docContext,
-    doc,
-    new KmsDocumentBackupKeys(config.dataKeyArn, credentials, kms),
+  const primary: typeof fetch = async (input) => {
+    const url = new URL(String(input));
+    if (url.pathname.includes('/bucket/'))
+      return Response.json({ id: 'documents', public: false });
+    assert.ok(url.pathname.includes('/object/'));
+    return new Response(Buffer.from(doc), {
+      headers: {
+        'content-type': row.mimeType,
+        'content-length': String(doc.length),
+      },
+    });
+  };
+  const captureService = new SupabaseRecoveryCapture(
+    {
+      installationId: config.installationId,
+      projectRef: 'abcdefghijklmnopqrst',
+      bucket: 'documents',
+    },
+    'sb_secret_' + 's'.repeat(40),
+    async (input, init) => {
+      if (String(input).includes('/object/list/')) {
+        const prefix = JSON.parse(String(init?.body)).prefix;
+        return Response.json(
+          prefix === ''
+            ? [
+                {
+                  name: 'private',
+                  id: null,
+                  metadata: null,
+                  created_at: null,
+                  updated_at: null,
+                },
+              ]
+            : [
+                {
+                  name: 'document',
+                  id: '11111111-1111-4111-8111-111111111111',
+                  metadata: { size: doc.length, mimetype: row.mimeType },
+                  created_at: '2026-10-17T00:00:00.000Z',
+                  updated_at: '2026-10-17T00:00:00.000Z',
+                },
+              ],
+        );
+      }
+      return primary(input, init);
+    },
   );
-  const docStored = await new S3DocumentByteBackups(
-    dataStorage,
-    credentials,
-    s3,
-  ).publish(docContext, docSealed);
+  const candidates: Awaited<ReturnType<S3DocumentByteBackups['publish']>>[] =
+    [];
+  const captured = await captureService.capture(async (file, bytes, digest) => {
+    assert.equal(file.fileUrl, row.fileUrl);
+    assert.equal(digest, docContext.bytesSha256);
+    const sealed = await sealDocumentByteBackup(
+      docContext,
+      bytes,
+      new KmsDocumentBackupKeys(config.dataKeyArn, credentials, kms),
+    );
+    candidates.push(
+      await new S3DocumentByteBackups(dataStorage, credentials, s3).publish(
+        docContext,
+        sealed,
+      ),
+    );
+  });
+  const docStored = candidates[0];
+  assert.equal(candidates.length, 1);
   const indexScope = {
     installationId: config.installationId,
     setId,
@@ -468,7 +525,7 @@ async function fixture(
     databaseSha256: dbSha,
     sourceCaptureReportSha256: reportSha,
     databaseIdentitySha256,
-    objectStoreIdentitySha256: 'c'.repeat(64),
+    objectStoreIdentitySha256: captureService.configurationDigest(),
     dataKeyArn: config.dataKeyArn,
     macKeyArn: config.indexMacKeyArn,
     metadataCapturedAt: '2026-10-17T00:00:00.000Z',
@@ -479,13 +536,7 @@ async function fixture(
     {
       scope: indexScope,
       metadataRows: [row],
-      objectRows: [
-        {
-          fileUrl: row.fileUrl,
-          bytes: doc.length,
-          sha256: docContext.bytesSha256,
-        },
-      ],
+      objectRows: captured.objects,
       receipts: [
         {
           context: docContext,

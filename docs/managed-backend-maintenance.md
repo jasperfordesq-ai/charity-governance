@@ -99,6 +99,13 @@ tests. No database migration or restore-inventory change is included.
 
 ## Document byte candidate increment
 
+The [Supabase candidate reader](supabase-recovery-capture.md) now supplies bounded
+recursive source reads and byte rechecks for a future capture worker. It does
+not close the separate storage credential/control-plane writer paths. Keep
+wholeBackendQuiesced false and do not infer complete common capture from stable
+readbacks. Orphan/disposal reconciliation and independent source visibility
+remain required alongside the original maintenance/custody gates.
+
 The [document byte archive](document-byte-backup.md) supplies encrypted object
 candidates outside the intent journal. It does not complete a database/object
 recovery set or authorise reopening. Full capture, manifest, current-authority,
