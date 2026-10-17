@@ -52,9 +52,10 @@ verified job/service envelopes and pins. Cold source-job discovery obtains these
 from stored records and invokes the reader without a live producer acknowledgement
 or a caller-supplied ordinal list.
 
-`discover` checks all 65 protocol scopes (header plus ordinals 1 through 64), each
-with a bounded three-entry LIST that refuses truncation, unexpected keys or more
-than the baseline/observation pair. It verifies current ETag and size against
+`discover` checks all 65 request scopes (header plus ordinals 1 through 64) and
+64 [owner-readiness scopes](managed-independent-request-owner.md). Request scopes
+use a bounded three-entry LIST; owner scopes use two entries and permit only one
+baseline. Truncation, unexpected keys or excess records refuse. It verifies current ETag and size against
 exact-version, hash-checked stored bytes; checks header, chain and response/end
 pair bindings; then rechecks every scope listing. Missing responses or completion
 remain unresolved. Orphaned observations, gaps, substitution, changed listings

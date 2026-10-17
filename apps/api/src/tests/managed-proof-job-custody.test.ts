@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import {randomUUID,createHash} from 'node:crypto';
 import {ManagedProofJobCustody} from '../services/managed-proof-job-custody.js';
 import {jobScope,jobServiceScope,jobRequestArtifact,jobServiceArtifact} from '../services/managed-proof-job-contract.js';
-import {ManagedDaemonIntentCustody,daemonCustodyScope} from '../services/managed-daemon-intent-custody.js';
+import {ManagedDaemonIntentCustody,daemonCustodyScope,daemonOwnerCustodyScope} from '../services/managed-daemon-intent-custody.js';
 import {GetObjectCommand,PutObjectCommand,ListObjectsV2Command} from '@aws-sdk/client-s3';
 import {backend,config,credentials} from './fixtures/archived-custody.js';
 const hash=(v:string)=>createHash('sha256').update(v).digest('hex');
@@ -140,8 +140,104 @@ async function daemonFixture(){
   sequence:JSON.parse(local.body).sequence,intentPin:{sha256:local.sha256,byteLength:local.byteLength},status:0,transportError:false,signal:false,removalAlreadyAbsent:false,...change});
  const end=(requestCount:number,lastIntentDigest:string,change={})=>f.local({format:1,kind:'MANAGED_DAEMON_REQUEST_END_V1',jobId:f.request.jobId,
   headerPin:{sha256:header.sha256,byteLength:header.byteLength},requestCount,lastIntentDigest,...change});
- return{...f,header,intent,reader,custody,response,end};
+ const owner=(local:ReturnType<typeof f.local>,change={},identityChange={})=>{
+  const ownerId=randomUUID(),unit=`charitypilot-containment-${ownerId}.service`;
+  return f.local({format:1,kind:'MANAGED_DAEMON_REQUEST_OWNER_V1',jobId:f.request.jobId,sequence:JSON.parse(local.body).sequence,
+   intentPin:{sha256:local.sha256,byteLength:local.byteLength},identity:{ownerId,unit,invocationId:'f'.repeat(32),uid:1000,mainPid:4321,
+    mainStartMonotonic:'987654',sourceSha:f.binding.sourceSha,inputDigest:'9'.repeat(64),bootId:'12345678-1234-1234-1234-123456789012',
+    controlGroup:`/user.slice/user-1000.slice/user@1000.service/app.slice/${unit}`,...identityChange},...change});
+ };
+ return{...f,header,intent,reader,custody,response,end,owner};
 }
+
+test('original intent ACK permits one distinct owner binding; saved reads grant no dispatch or resolution',async()=>{
+ const f=await daemonFixture();try{
+  const local=f.intent(),binding=f.owner(local);await f.session.reserveDaemonHeader(f.header,f.original);await f.session.reserveDaemonIntent(local,f.original);
+  const saved=await f.session.bindDaemonOwner(binding,f.original);assert.equal(saved.pin.kind,'BASELINE');assert.equal(saved.independentOwnerDispatchVerified,false);
+  const writes=f.b.writes;f.session.closeExecution();const read=await f.reader().inspectOwner(1,f.header.sha256);
+  assert.equal(read.localRecord.sha256,binding.sha256);assert.equal(read.originalAcknowledgementReconstructed,false);assert.equal(read.pendingRequestResolved,false);
+  assert.equal(read.savedEvidenceAuthorizesDispatch,false);assert.equal(read.independentOwnerDispatchVerified,false);assert.equal(f.b.writes,writes);
+  const discovered=await f.create().discover(f.original);assert.equal(discovered.daemon?.ownerBindingCount,1);
+  assert.ok(discovered.daemon?.records[0].ownerPin);assert.equal(discovered.daemon?.independentOwnerDispatchVerified,false);assert.equal(f.b.writes,writes);
+  await assert.rejects(f.reader().bindOwner(binding));await assert.rejects(f.session.bindDaemonOwner(binding,f.original));
+ }finally{f.close();}
+});
+
+test('owner binding refuses scope/intent/identity/secret substitutions and consumes the writer',async()=>{
+ for(const change of [{jobId:randomUUID()},{sequence:2},{intentPin:{sha256:'0'.repeat(64),byteLength:1}},{secret:'SYNTHETIC_PRIVATE_BODY'},
+  {identity:{bootId:'other-boot'}},{identity:{bootId:'87654321-4321-4321-4321-210987654321'}},{identity:{uid:1001}},{identity:{mainPid:123}},{identity:{sourceSha:'2'.repeat(40)}},
+  {identity:{controlGroup:'/user.slice/../unrelated'}},{identity:{unit:'other.service'}}]){
+  const f=await daemonFixture();try{
+   const writer=f.custody(()=>true),local=f.intent();await writer.reserveHeader(f.header);await writer.reserveIntent(local);
+   const identity='identity' in change?change.identity:{},other='identity' in change?{}:change;
+   const writes=f.b.writes;await assert.rejects(writer.bindOwner(f.owner(local,other,identity)));await assert.rejects(writer.bindOwner(f.owner(local)));
+   assert.equal(f.b.writes,writes);
+  }finally{f.close();}
+ }
+});
+
+test('unknown owner ACK cannot be retried or replaced, but its exact saved bytes remain inspectable',async()=>{
+ const f=await daemonFixture();try{
+  const writer=f.custody(()=>true),local=f.intent(),binding=f.owner(local);await writer.reserveHeader(f.header);await writer.reserveIntent(local);
+  const original=f.client.send.bind(f.client);let lost=true;
+  mock.method(f.client,'send',async(command:GetObjectCommand|PutObjectCommand)=>{
+   if(lost&&command instanceof GetObjectCommand&&command.input.Key?.includes('/'+daemonOwnerCustodyScope(f.binding.candidateId,1)+'/'))throw new Error('synthetic owner ACK loss');
+   return original(command as never);
+  });
+  await assert.rejects(writer.bindOwner(binding));const writes=f.b.writes;
+  await assert.rejects(writer.bindOwner(f.owner(local)));await assert.rejects(writer.observeResponse(f.response(local)));assert.equal(f.b.writes,writes);
+  lost=false;const read=await f.reader().inspectOwner(1,f.header.sha256);assert.equal(read.localRecord.sha256,binding.sha256);
+  assert.equal(read.originalAcknowledgementReconstructed,false);assert.equal(f.b.writes,writes);
+ }finally{f.close();}
+});
+
+test('owner readiness cannot be attached before an original intent or after its response',async()=>{
+ for(const stage of ['before-intent','after-response']){
+  const f=await daemonFixture();try{
+   const writer=f.custody(()=>true),local=f.intent();await writer.reserveHeader(f.header);
+   if(stage==='after-response'){await writer.reserveIntent(local);await writer.observeResponse(f.response(local));}
+   const writes=f.b.writes;await assert.rejects(writer.bindOwner(f.owner(local)));assert.equal(f.b.writes,writes);
+  }finally{f.close();}
+ }
+});
+
+test('owner binding refuses a descendant source group, concurrent calls and closure during original-intent read',async()=>{
+ for(const fault of ['descendant','concurrent','closed']){
+  const f=await daemonFixture();try{
+   const local=f.intent();await f.session.reserveDaemonHeader(f.header,f.original);await f.session.reserveDaemonIntent(local,f.original);
+   const value=JSON.parse(f.owner(local).body),writes=f.b.writes;
+   if(fault==='descendant'){
+    value.identity.controlGroup=`/user.slice/user-1000.slice/user@1000.service/app.slice/charitypilot-containment-${f.request.jobId}.service/${value.identity.unit}`;
+    await assert.rejects(f.session.bindDaemonOwner(f.local(value),f.original));
+   }else if(fault==='concurrent'){
+    const results=await Promise.allSettled([f.session.bindDaemonOwner(f.local(value),f.original),f.session.bindDaemonOwner(f.local(value),f.original)]);
+    assert.ok(results.every(v=>v.status==='rejected'));
+   }else{
+    const original=f.client.send.bind(f.client);
+    mock.method(f.client,'send',async(command:GetObjectCommand|PutObjectCommand)=>{if(command instanceof GetObjectCommand)f.setLive(false);return original(command as never);});
+    await assert.rejects(f.session.bindDaemonOwner(f.local(value),f.original));
+   }
+   assert.equal(f.b.writes,writes);
+  }finally{f.close();}
+ }
+});
+
+test('cold owner discovery rejects orphaned owner records, unexpected observations and changed original intent version pins',async()=>{
+ for(const fault of ['orphan','observation','version']){
+  const f=await daemonFixture();try{
+   const local=f.intent();await f.session.reserveDaemonHeader(f.header,f.original);await f.session.reserveDaemonIntent(local,f.original);
+   await f.session.bindDaemonOwner(f.owner(local),f.original);
+   const scope='/capture-job/'+daemonOwnerCustodyScope(f.binding.candidateId,1)+'/',[key,value]=[...f.b.objects].find(([k])=>k.includes(scope))!;
+   if(fault==='orphan')f.b.objects.delete([...f.b.objects.keys()].find(k=>k.includes('/'+daemonCustodyScope(f.binding.candidateId,1)+'/baseline.json'))!);
+   if(fault==='observation')f.b.objects.set(key.replace('/baseline.json','/observation.json'),value);
+   if(fault==='version'){
+    const changed=JSON.parse(value.body.toString());changed.intentCustodyPin.versionId='substituted-original-version';const body=Buffer.from(JSON.stringify(changed));
+    f.b.objects.set(key,{...value,body,checksum:Buffer.from(hash(body.toString()),'hex').toString('base64')});
+   }
+   const writes=f.b.writes;await assert.rejects(f.reader().discover());assert.equal(f.b.writes,writes);
+  }finally{f.close();}
+ }
+});
 
 test('original daemon responses are retained against exact intents and fresh reads confer no resolution',async()=>{
  const f=await daemonFixture();try{
@@ -207,9 +303,9 @@ test('bounded daemon discovery rejects orphan, gap and unexpected ordinal object
  }
 });
 
-test('empty discovery checks all65 protocol scopes twice and refuses pagination or cancellation',async()=>{
+test('empty discovery checks all65 request and64 owner scopes twice and refuses pagination or cancellation',async()=>{
  const f=await daemonFixture();try{
-  const reads=f.b.reads;assert.equal((await f.reader().discover()).state,'NOT_LISTED_AT_BOUNDARY');assert.equal(f.b.reads-reads,130);
+  const reads=f.b.reads;assert.equal((await f.reader().discover()).state,'NOT_LISTED_AT_BOUNDARY');assert.equal(f.b.reads-reads,258);
   const controller=new AbortController();controller.abort();const before=f.b.reads;
   await assert.rejects(f.reader().discover(controller.signal));assert.equal(f.b.reads,before);
   const original=f.client.send.bind(f.client);

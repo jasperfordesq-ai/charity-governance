@@ -1,3 +1,12 @@
+## 17 October: original independent-owner binding custody
+
+Read [independent daemon request owner](managed-independent-request-owner.md).
+The original frozen job context can retain one owner readiness binding per
+acknowledged intent before its response. Unknown/concurrent/late ACK consumes
+the writer. Cold discovery checks all65 request and64owner scopes and returns
+no execution, replay, queue or cleanup authority. Actual independent service
+dispatch/response integration and provider/physicalhost-loss proof remain open.
+
 ## 17 October: independent request-owner acceptance probe
 
 Read [independent daemon request owner](managed-independent-request-owner.md).

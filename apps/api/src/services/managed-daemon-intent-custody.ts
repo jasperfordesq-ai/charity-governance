@@ -30,11 +30,24 @@ const responseEnvelope=envelope.extend({kind:z.literal('MANAGED_DAEMON_CUSTODY_R
 const end=z.object({format:z.literal(1),kind:z.literal('MANAGED_DAEMON_REQUEST_END_V1'),jobId:uuid,
  headerPin:response.shape.intentPin,requestCount:z.number().int().min(0).max(64),lastIntentDigest:sha}).strict();
 const endEnvelope=responseEnvelope.extend({kind:z.literal('MANAGED_DAEMON_CUSTODY_END_V1')}).strict();
+const owner=z.object({format:z.literal(1),kind:z.literal('MANAGED_DAEMON_REQUEST_OWNER_V1'),jobId:uuid,
+ sequence:z.number().int().min(1).max(64),intentPin:response.shape.intentPin,
+ identity:z.object({ownerId:uuid,unit:z.string().max(100),invocationId:z.string().regex(/^[a-f0-9]{32}$/),
+  uid:z.number().int().min(1).max(2147483647),mainPid:z.number().int().min(1).max(2147483647),
+  mainStartMonotonic:z.string().regex(/^[1-9][0-9]{0,19}$/),sourceSha:z.string().regex(/^[a-f0-9]{40}$/),inputDigest:sha,
+  bootId:z.string().regex(/^[a-f0-9]{8}(-[a-f0-9]{4}){3}-[a-f0-9]{12}$/),controlGroup:z.string().max(1024)}).strict()
+}).strict();
+const ownerEnvelope=envelope.extend({kind:z.literal('MANAGED_DAEMON_OWNER_CUSTODY_V1'),intentCustodyPin:candidatePinSchema,
+ independentOwnerDispatchVerified:z.literal(false)}).strict();
 type Pin=z.infer<typeof candidatePinSchema>;
 type Artifact={body:string;sha256:string};
 export const daemonCustodyScope=(candidateId:string,sequence:number)=>{
  z.string().uuid().parse(candidateId);z.number().int().min(0).max(64).parse(sequence);
  return candidateHash('CHARITYPILOT_DAEMON_INTENT_CUSTODY_V1\n'+candidateId+'\n'+sequence);
+};
+export const daemonOwnerCustodyScope=(candidateId:string,sequence:number)=>{
+ z.string().uuid().parse(candidateId);z.number().int().min(1).max(64).parse(sequence);
+ return candidateHash('CHARITYPILOT_DAEMON_OWNER_CUSTODY_V1\n'+candidateId+'\n'+sequence);
 };
 
 /** Original write-ACK component only. Saved evidence is not a dispatch lease,
@@ -45,6 +58,7 @@ export class ManagedDaemonIntentCustody{
  private previous:string|undefined;private sequence=0;
  private latestIntent:Pin|undefined;private readonly responseAttempts=new Set<number>();
  private responseCount=0;private endAttempted=false;private uncertainResponse=false;
+ private readonly ownerAttempts=new Set<number>();
  constructor(private readonly storage:{installationId:string;bucket:string;accountId:string;kmsKeyArn:string},binding:unknown,
   private readonly credentials:NonNullable<S3ClientConfig['credentials']>,private readonly client:S3Client,
   requestArtifact:Artifact,private readonly requestPin:Pin,serviceArtifact:Artifact,private readonly servicePin:Pin,
@@ -80,6 +94,56 @@ export class ManagedDaemonIntentCustody{
    baseline:raw=>this.parse(raw,sequence).artifact,parseObservation:raw=>sequence===0?this.parseEnd(raw).artifact:this.parseResponse(raw,sequence).artifact,
    observationFromValue:raw=>sequence===0?this.parseEnd(raw).artifact:this.parseResponse(raw,sequence).artifact,
    assertPair:(baseline,observation)=>sequence===0?this.assertEndPair(baseline,observation):this.assertResponsePair(baseline,observation,sequence)},this.client);}
+ private checkedOwner(raw:unknown,sequence:number){
+  const record=localJobArtifact(raw),value=owner.parse(JSON.parse(record.body)),v=value.identity,s=this.service.local.identity;
+  if(s.format!==2||value.jobId!==this.request.local.jobId||value.sequence!==sequence||v.sourceSha!==this.binding.sourceSha
+   ||v.uid!==s.uid||v.bootId!==s.bootId||v.ownerId===s.jobId||v.mainPid===s.mainPid||v.invocationId===s.invocationId
+   ||v.unit!==`charitypilot-containment-${v.ownerId}.service`||v.controlGroup===s.controlGroup||v.controlGroup.startsWith(s.controlGroup+'/')||s.controlGroup.startsWith(v.controlGroup+'/')
+   ||!v.controlGroup.startsWith(`/user.slice/user-${v.uid}.slice/user@${v.uid}.service/`)||!v.controlGroup.endsWith('/'+v.unit)
+   ||!v.controlGroup.slice(1).split('/').every(p=>p!=='.'&&p!=='..'&&/^[A-Za-z0-9_.@:-]+$/.test(p)))throw failure();
+  return{record,value};
+ }
+ private parseOwner(raw:unknown,sequence:number){
+  const artifact=z.object({body:z.string().min(1).max(16384),sha256:sha}).strict().parse(raw);
+  if(candidateHash(artifact.body)!==artifact.sha256||Buffer.byteLength(artifact.body)>16384)throw failure();
+  const value=ownerEnvelope.parse(JSON.parse(artifact.body));
+  if(value.bindingDigest!==candidateHash(JSON.stringify(this.binding))||JSON.stringify(value.jobRequestPin)!==JSON.stringify(this.requestPin)
+   ||JSON.stringify(value.jobServicePin)!==JSON.stringify(this.servicePin)||value.headerCustodyPin?.kind!=='BASELINE'||value.intentCustodyPin.kind!=='BASELINE')throw failure();
+  const local=this.checkedOwner(value.localRecord,sequence);return{artifact,value,local:local.value};
+ }
+ private ownerStore(sequence:number){return new S3MaintenanceArtifactStore({...this.storage,maintenance:{attemptId:this.binding.attemptId,planDigest:this.binding.planDigest,
+  sourceSha:this.binding.sourceSha,maintenanceEpoch:this.binding.maintenanceEpoch}},this.credentials,
+  {namespace:'capture-job',scopeDigest:daemonOwnerCustodyScope(this.binding.candidateId,sequence),pinSchema:candidatePinSchema,limits:{BASELINE:16384,OBSERVATION:16384},failure,
+   baseline:raw=>this.parseOwner(raw,sequence).artifact,parseObservation:()=>{throw failure();},observationFromValue:()=>{throw failure();},assertPair:()=>{throw failure();}},this.client);}
+ private assertOwnerIntent(local:z.infer<typeof owner>,original:ReturnType<ManagedDaemonIntentCustody['parse']>){
+  if(local.intentPin.sha256!==original.value.localRecord.sha256||local.intentPin.byteLength!==original.value.localRecord.byteLength)throw failure();
+ }
+ /** Original owner readiness custody only; the live kernel/dispatch adapter must
+  * independently verify the identity before invoking this method. */
+ async bindOwner(raw:unknown,signal?:AbortSignal){
+  try{
+   if(this.failed||this.busy||this.endAttempted||!this.latestIntent||!this.savedHeader||!this.live()
+    ||this.responseAttempts.has(this.sequence)||this.ownerAttempts.has(this.sequence))throw failure();
+   this.busy=true;this.ownerAttempts.add(this.sequence);const checked=this.checkedOwner(raw,this.sequence);
+   const original=this.parse(await this.store(this.sequence).observeBaseline(this.latestIntent,signal),this.sequence);
+   this.assertOwnerIntent(checked.value,original);
+   if(JSON.stringify(original.value.headerCustodyPin)!==JSON.stringify(this.savedHeader)||this.failed||!this.live())throw failure();
+   const body=JSON.stringify(ownerEnvelope.parse({format:1,kind:'MANAGED_DAEMON_OWNER_CUSTODY_V1',bindingDigest:candidateHash(JSON.stringify(this.binding)),
+    jobRequestPin:this.requestPin,jobServicePin:this.servicePin,headerCustodyPin:this.savedHeader,intentCustodyPin:this.latestIntent,localRecord:checked.record,
+    savedEvidenceAuthorizesDispatch:false,independentOwnerDispatchVerified:false,actionAuthorized:false}));
+   const pin=await this.ownerStore(this.sequence).publishBaseline({body,sha256:candidateHash(body)},signal);
+   if(this.failed||!this.live())throw failure();this.busy=false;
+   return{pin,savedEvidenceAuthorizesDispatch:false as const,independentOwnerDispatchVerified:false as const,actionAuthorized:false as const};
+  }catch{this.failed=true;throw failure();}
+ }
+ async inspectOwner(sequence:number,previousLocalDigest:string,signal?:AbortSignal){
+  const original=await this.inspectIntent(sequence,previousLocalDigest,signal),h=await this.inspectHeader(signal);
+  const saved=await this.ownerStore(sequence).inspectCandidateArtifact('BASELINE',signal),parsed=this.parseOwner(saved.artifact,sequence);
+  if(JSON.stringify(parsed.value.intentCustodyPin)!==JSON.stringify(original.pin)||JSON.stringify(parsed.value.headerCustodyPin)!==JSON.stringify(h.pin)
+   ||parsed.local.intentPin.sha256!==original.localRecord.sha256||parsed.local.intentPin.byteLength!==original.localRecord.byteLength)throw failure();
+  return{pin:saved.pin,localRecord:parsed.value.localRecord,originalAcknowledgementReconstructed:false as const,savedEvidenceAuthorizesDispatch:false as const,
+   independentOwnerDispatchVerified:false as const,pendingRequestResolved:false as const,actionAuthorized:false as const};
+ }
  private parseEnd(raw:unknown){
   const artifact=z.object({body:z.string().min(1).max(16384),sha256:sha}).strict().parse(raw);
   if(candidateHash(artifact.body)!==artifact.sha256||Buffer.byteLength(artifact.body)>16384)throw failure();
@@ -205,42 +269,46 @@ export class ManagedDaemonIntentCustody{
   const controller=new AbortController(),signal=caller?AbortSignal.any([caller,controller.signal]):controller.signal;
   const timer=setTimeout(()=>controller.abort(),60000);
   const row=z.object({Key:z.string().min(1).max(1024),ETag:z.string().min(1).max(1024),Size:z.number().int().min(1).max(16384)});
-  const list=async(sequence:number)=>{
-   const prefix=`managed-maintenance/${this.storage.installationId}/${this.binding.attemptId}/capture-job/${daemonCustodyScope(this.binding.candidateId,sequence)}/`;
+  const list=async(sequence:number,ownerRecord=false)=>{
+   const scope=ownerRecord?daemonOwnerCustodyScope(this.binding.candidateId,sequence):daemonCustodyScope(this.binding.candidateId,sequence),maximum=ownerRecord?1:2;
+   const prefix=`managed-maintenance/${this.storage.installationId}/${this.binding.attemptId}/capture-job/${scope}/`;
    signal.throwIfAborted();let stop=()=>{};
    const aborted=new Promise<never>((_,reject)=>{stop=()=>reject(failure());signal.addEventListener('abort',stop,{once:true});});
    try{
     const value=await Promise.race([this.client.send(new ListObjectsV2Command({Bucket:this.storage.bucket,ExpectedBucketOwner:this.storage.accountId,
-     Prefix:prefix,MaxKeys:3}),{abortSignal:signal}),aborted]);signal.throwIfAborted();
-    if(value.Name!==this.storage.bucket||value.Prefix!==prefix||value.MaxKeys!==3||value.IsTruncated!==false||value.NextContinuationToken!==undefined
+     Prefix:prefix,MaxKeys:maximum+1}),{abortSignal:signal}),aborted]);signal.throwIfAborted();
+    if(value.Name!==this.storage.bucket||value.Prefix!==prefix||value.MaxKeys!==maximum+1||value.IsTruncated!==false||value.NextContinuationToken!==undefined
      ||value.ContinuationToken!==undefined||value.EncodingType!==undefined||value.Delimiter!==undefined||value.StartAfter!==undefined
      ||value.CommonPrefixes&&value.CommonPrefixes.length)throw failure();
-    const rows=z.array(row).max(2).parse(value.Contents??[]).sort((a,b)=>a.Key.localeCompare(b.Key));
+    const rows=z.array(row).max(maximum).parse(value.Contents??[]).sort((a,b)=>a.Key.localeCompare(b.Key));
     if(value.KeyCount!==rows.length||new Set(rows.map(v=>v.Key)).size!==rows.length
-     ||rows.some(v=>v.Key!==prefix+'baseline.json'&&v.Key!==prefix+'observation.json'))throw failure();
+     ||rows.some(v=>v.Key!==prefix+'baseline.json'&&(ownerRecord||v.Key!==prefix+'observation.json')))throw failure();
     return rows;
    }finally{signal.removeEventListener('abort',stop);}
   };
-  const catalogue=async()=>{const rows=[];for(let sequence=0;sequence<=64;sequence++)rows.push(await list(sequence));return rows;};
+  const catalogue=async()=>{const rows=[];for(let sequence=0;sequence<=64;sequence++)rows.push(await list(sequence));
+   for(let sequence=1;sequence<=64;sequence++)rows.push(await list(sequence,true));return rows;};
   try{
-   const before=await catalogue(),read=async(sequence:number,kind:'BASELINE'|'OBSERVATION')=>{
-    const listed=before[sequence].find(v=>v.Key.endsWith(kind==='BASELINE'?'/baseline.json':'/observation.json'));
+   const before=await catalogue(),read=async(sequence:number,kind:'BASELINE'|'OBSERVATION',ownerRecord=false)=>{
+    const listed=before[ownerRecord?64+sequence:sequence].find(v=>v.Key.endsWith(kind==='BASELINE'?'/baseline.json':'/observation.json'));
     if(!listed)return null;
-    const saved=await this.store(sequence).inspectCandidateArtifact(kind,signal);
+    const saved=await(ownerRecord?this.ownerStore(sequence):this.store(sequence)).inspectCandidateArtifact(kind,signal);
     if(saved.currentETag!==listed.ETag||saved.pin.byteLength!==listed.Size)throw failure();return saved;
    };
    const savedHeader=await read(0,'BASELINE'),savedEnd=await read(0,'OBSERVATION');
    if(!savedHeader&&before.some(rows=>rows.length))throw failure();
    const h=savedHeader?this.parse(savedHeader.artifact,0).value:null;
-   let previous=h?.localRecord.sha256,missingIntent=false,uncertain=false,responseCount=0;
+   let previous=h?.localRecord.sha256,missingIntent=false,uncertain=false,responseCount=0,ownerBindingCount=0;
    const records=[];
    for(let sequence=1;sequence<=64;sequence++){
-    const saved=await read(sequence,'BASELINE'),observed=await read(sequence,'OBSERVATION');
-    if(!saved){if(observed)throw failure();missingIntent=true;continue;}
+    const saved=await read(sequence,'BASELINE'),observed=await read(sequence,'OBSERVATION'),boundOwner=await read(sequence,'BASELINE',true);
+    if(!saved){if(observed||boundOwner)throw failure();missingIntent=true;continue;}
     if(missingIntent||!h||!savedHeader)throw failure();
     const original=this.parse(saved.artifact,sequence).value,v=intent.parse(JSON.parse(original.localRecord.body));
     if(v.previousDigest!==previous||JSON.stringify(original.headerCustodyPin)!==JSON.stringify(savedHeader.pin)
      ||v.storagePlan&&v.storagePlan.image!==header.parse(JSON.parse(h.localRecord.body)).image)throw failure();
+    if(boundOwner){const bound=this.parseOwner(boundOwner.artifact,sequence);this.assertOwnerIntent(bound.local,this.parse(saved.artifact,sequence));
+     if(JSON.stringify(bound.value.intentCustodyPin)!==JSON.stringify(saved.pin)||JSON.stringify(bound.value.headerCustodyPin)!==JSON.stringify(savedHeader.pin))throw failure();ownerBindingCount++;}
     previous=original.localRecord.sha256;
     let outcome:'RECORDED_CLIENT_SUCCESS'|'RECORDED_CLIENT_UNCERTAINTY'|'NOT_LISTED_AT_BOUNDARY'='NOT_LISTED_AT_BOUNDARY';
     if(observed){
@@ -250,7 +318,8 @@ export class ManagedDaemonIntentCustody{
      outcome=(r.local.status===0||r.local.removalAlreadyAbsent)&&!r.local.transportError&&!r.local.signal?'RECORDED_CLIENT_SUCCESS':'RECORDED_CLIENT_UNCERTAINTY';
     }
     if(outcome!=='RECORDED_CLIENT_SUCCESS')uncertain=true;
-    records.push({sequence,intentPin:saved.pin,responsePin:observed?.pin??null,localIntentPin:{sha256:original.localRecord.sha256,byteLength:original.localRecord.byteLength},outcome});
+    records.push({sequence,intentPin:saved.pin,responsePin:observed?.pin??null,ownerPin:boundOwner?.pin??null,
+     localIntentPin:{sha256:original.localRecord.sha256,byteLength:original.localRecord.byteLength},outcome});
    }
    if(savedEnd){
     if(!savedHeader)throw failure();const e=this.parseEnd(savedEnd.artifact);
@@ -261,8 +330,9 @@ export class ManagedDaemonIntentCustody{
    if(JSON.stringify(await catalogue())!==JSON.stringify(before))throw failure();signal.throwIfAborted();
    return{kind:'MANAGED_DAEMON_CUSTODY_DISCOVERY_V1' as const,
     state:!savedHeader?'NOT_LISTED_AT_BOUNDARY' as const:savedEnd&&!uncertain?'RECORDED_CLIENT_RESPONSES' as const:'UNRESOLVED_REQUESTS' as const,
-    headerPin:savedHeader?.pin??null,endPin:savedEnd?.pin??null,records,responseCount,listingDigest:candidateHash(JSON.stringify(before)),
-    protocolOrdinalRange:{first:0,last:64},listingStableAtBoundaries:true as const,historyCompletenessVerified:false as const,
+    headerPin:savedHeader?.pin??null,endPin:savedEnd?.pin??null,records,responseCount,ownerBindingCount,listingDigest:candidateHash(JSON.stringify(before)),
+    protocolOrdinalRange:{first:0,last:64},ownerOrdinalRange:{first:1,last:64},independentOwnerDispatchVerified:false as const,
+    listingStableAtBoundaries:true as const,historyCompletenessVerified:false as const,
     pendingRequestResolved:false as const,completeResourceInventory:false as const,sourceHostLossProven:false as const,
     originalAcknowledgementReconstructed:false as const,savedEvidenceAuthorizesDispatch:false as const,cleanupAuthorized:false as const,actionAuthorized:false as const};
   }catch{throw failure();}finally{clearTimeout(timer);controller.abort();}

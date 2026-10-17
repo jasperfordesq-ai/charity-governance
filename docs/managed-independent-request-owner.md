@@ -44,6 +44,31 @@ containers, volumes or historical request records.
 
 ## Remaining integration and acceptance
 
+The original job context now exposes `bindDaemonOwner`. It can conditionally
+retain one owner-readiness record only after the original intent acknowledgement
+and before that intent's response. The record binds original candidate/job/service,
+header and intent version pins, local intent bytes, and declared owner source,
+input digest, boot, unit, invocation, UID, process start and control group.
+Cross-boot/UID/source identity, source PID/invocation reuse, source group ancestry,
+invalid scope and unknown/secret fields refuse. These are declared-identity
+checks; the live adapter must independently verify actual kernel identity and
+resource boundaries before calling the custody method.
+
+The owner uses a separate conditional baseline scope:
+`SHA256(CHARITYPILOT_DAEMON_OWNER_CUSTODY_V1 + newline + candidateId + newline + sequence)`.
+Only ordinals 1 through 64 are valid. Concurrent, invalid, late, failed or unknown
+ACK attempts consume the original writer. Fresh reads cannot revive it or replace
+the proposed owner. The frozen parent context checks closed head/window before
+and after retaining the record. No raw arguments, environment or credentials are
+retained in this schema.
+
+Cold daemon discovery now checks 65 request scopes and 64 owner scopes, with
+bounded before/after listings and exact pair/version validation. It reports owner
+pins/counts separately. A missing binding stays missing; a saved binding always
+reports `independentOwnerDispatchVerified: false`. Neither presence nor absence
+closes pending requests or proves historical completeness. `inspectOwner` can
+inspect one exact binding but cannot reconstruct its original acknowledgement.
+
 The real source helper still dispatches its Docker clients in the source worker.
 This probe is evidence about a feasible lifetime boundary, not completed product
 request ownership. Integration must bind the original independent owner to each
