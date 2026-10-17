@@ -147,8 +147,88 @@ async function daemonFixture(){
     mainStartMonotonic:'987654',sourceSha:f.binding.sourceSha,inputDigest:'9'.repeat(64),bootId:'12345678-1234-1234-1234-123456789012',
     controlGroup:`/user.slice/user-1000.slice/user@1000.service/app.slice/${unit}`,...identityChange},...change});
  };
- return{...f,header,intent,reader,custody,response,end,owner};
+ const ownerOutcome=(local:ReturnType<typeof f.local>,bound:ReturnType<typeof f.local>,change={})=>f.local({format:1,kind:'MANAGED_DAEMON_OWNER_OUTCOME_V1',jobId:f.request.jobId,
+  sequence:JSON.parse(local.body).sequence,intentPin:{sha256:local.sha256,byteLength:local.byteLength},ownerPin:{sha256:bound.sha256,byteLength:bound.byteLength},
+  ownerInputDigest:JSON.parse(bound.body).identity.inputDigest,status:0,transportError:false,signal:false,removalAlreadyAbsent:false,
+  stdout:{sha256:hash('marker'),byteLength:6},stderr:{sha256:hash(''),byteLength:0},...change});
+ return{...f,header,intent,reader,custody,response,end,owner,ownerOutcome};
 }
+
+test('original one-shot outcome writer survives source closure while fresh reads cannot recreate it',async()=>{
+ const f=await daemonFixture();try{
+  const local=f.intent(),bound=f.owner(local);await f.session.reserveDaemonHeader(f.header,f.original);await f.session.reserveDaemonIntent(local,f.original);
+  await f.session.bindDaemonOwner(bound,f.original);const grant=f.session.createDaemonOwnerOutcomeWriter(f.original);
+  assert.equal(Object.isFrozen(grant),true);assert.equal(JSON.stringify(grant),'{}');
+  assert.throws(()=>f.session.createDaemonOwnerOutcomeWriter(f.original));f.session.closeExecution();f.setLive(false);
+  const outcome=f.ownerOutcome(local,bound),saved=await grant.publish(outcome);assert.equal(saved.pin.kind,'OBSERVATION');assert.equal(saved.pendingRequestResolved,false);
+  const writes=f.b.writes,found=await f.reader().inspectOwnerOutcome(1,f.header.sha256);
+  assert.equal(found.localRecord.sha256,outcome.sha256);assert.equal(found.originalAcknowledgementReconstructed,false);assert.equal(found.executionAuthorized,false);
+  const catalogue=await f.reader().discover();assert.equal(catalogue.ownerOutcomeCount,1);assert.ok(catalogue.records[0].ownerOutcomePin);
+  assert.equal(catalogue.state,'UNRESOLVED_REQUESTS');assert.equal(catalogue.independentOwnerDispatchVerified,false);
+  await assert.rejects(grant.publish(outcome));assert.throws(()=>f.reader().createOwnerOutcomeWriter());assert.equal(f.b.writes,writes);
+ }finally{f.close();}
+});
+
+test('outcome writer rejects mismatched original pins/input and raw output fields, then stays consumed',async()=>{
+ for(const change of [{ownerPin:{sha256:'0'.repeat(64),byteLength:1}},{intentPin:{sha256:'0'.repeat(64),byteLength:1}},{ownerInputDigest:'0'.repeat(64)},
+  {jobId:randomUUID()},{sequence:2},{rawOutput:'SYNTHETIC_PRIVATE_BODY'},{removalAlreadyAbsent:true,status:1},{stdout:{sha256:'0'.repeat(64),byteLength:0}}]){
+  const f=await daemonFixture();try{
+   const local=f.intent(),bound=f.owner(local),writer=f.custody(()=>true);await writer.reserveHeader(f.header);await writer.reserveIntent(local);await writer.bindOwner(bound);
+   const grant=writer.createOwnerOutcomeWriter(),writes=f.b.writes;
+   await assert.rejects(grant.publish(f.ownerOutcome(local,bound,change)));await assert.rejects(grant.publish(f.ownerOutcome(local,bound)));assert.equal(f.b.writes,writes);
+  }finally{f.close();}
+ }
+});
+
+test('lost outcome readback ACK retains independently readable bytes without retry or manufactured acknowledgement',async()=>{
+ const f=await daemonFixture();try{
+  const local=f.intent(),bound=f.owner(local),writer=f.custody(()=>true);await writer.reserveHeader(f.header);await writer.reserveIntent(local);await writer.bindOwner(bound);
+  const grant=writer.createOwnerOutcomeWriter(),original=f.client.send.bind(f.client);let lost=true;
+  mock.method(f.client,'send',async(command:GetObjectCommand|PutObjectCommand)=>{
+   if(lost&&command instanceof GetObjectCommand&&command.input.Key?.includes('/'+daemonOwnerCustodyScope(f.binding.candidateId,1)+'/observation.json'))throw new Error('synthetic original outcome ACK lost');
+   return original(command as never);
+  });
+  const outcome=f.ownerOutcome(local,bound);await assert.rejects(grant.publish(outcome));const writes=f.b.writes;
+  await assert.rejects(grant.publish(outcome));assert.throws(()=>writer.createOwnerOutcomeWriter());lost=false;
+  assert.equal((await f.reader().inspectOwnerOutcome(1,f.header.sha256)).localRecord.sha256,outcome.sha256);
+  assert.equal((await f.reader().discover()).ownerOutcomeCount,1);assert.equal(f.b.writes,writes);
+ }finally{f.close();}
+});
+
+test('outcome writer expiry and explicit revocation cannot be reset into write authority',async(t)=>{
+ let elapsed=0;t.mock.method(performance,'now',()=>elapsed);
+ for(const revoke of [false,true]){
+  elapsed=0;const f=await daemonFixture();try{
+   const local=f.intent(),bound=f.owner(local),writer=f.custody(()=>true);await writer.reserveHeader(f.header);await writer.reserveIntent(local);await writer.bindOwner(bound);
+   const grant=writer.createOwnerOutcomeWriter(),writes=f.b.writes;if(revoke)grant.revoke();else elapsed=120001;
+   await assert.rejects(grant.publish(f.ownerOutcome(local,bound)));elapsed=0;await assert.rejects(grant.publish(f.ownerOutcome(local,bound)));assert.equal(f.b.writes,writes);
+  }finally{f.close();}
+ }
+});
+
+test('outcome grant cannot be backfilled without original owner ACK or after a source response',async()=>{
+ for(const stage of ['no-owner','after-response']){
+  const f=await daemonFixture();try{
+   const local=f.intent(),writer=f.custody(()=>true);await writer.reserveHeader(f.header);await writer.reserveIntent(local);
+   if(stage==='after-response'){await writer.bindOwner(f.owner(local));await writer.observeResponse(f.response(local));}
+   const writes=f.b.writes;assert.throws(()=>writer.createOwnerOutcomeWriter());assert.equal(f.b.writes,writes);
+  }finally{f.close();}
+ }
+});
+
+test('revocation after accepted outcome PUT denies ACK and retry without deleting stored evidence',async()=>{
+ const f=await daemonFixture();try{
+  const local=f.intent(),bound=f.owner(local),writer=f.custody(()=>true);await writer.reserveHeader(f.header);await writer.reserveIntent(local);await writer.bindOwner(bound);
+  const grant=writer.createOwnerOutcomeWriter(),original=f.client.send.bind(f.client);
+  mock.method(f.client,'send',async(command:GetObjectCommand|PutObjectCommand)=>{
+   const value=await original(command as never);
+   if(command instanceof PutObjectCommand&&command.input.Key?.includes('/'+daemonOwnerCustodyScope(f.binding.candidateId,1)+'/observation.json'))grant.revoke();
+   return value;
+  });
+  const outcome=f.ownerOutcome(local,bound);await assert.rejects(grant.publish(outcome));const writes=f.b.writes;
+  await assert.rejects(grant.publish(outcome));assert.equal((await f.reader().inspectOwnerOutcome(1,f.header.sha256)).localRecord.sha256,outcome.sha256);assert.equal(f.b.writes,writes);
+ }finally{f.close();}
+});
 
 test('original intent ACK permits one distinct owner binding; saved reads grant no dispatch or resolution',async()=>{
  const f=await daemonFixture();try{

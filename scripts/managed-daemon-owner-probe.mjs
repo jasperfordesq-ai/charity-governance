@@ -51,13 +51,14 @@ async function actor(role,root){const v=checkedScope(root);
  write(root,'dispatch.json',{requestDigest:permit.requestDigest,ownerReadyDigest:digest,argumentsDigest:hash(JSON.stringify(independentOwnerProbeArguments(v.jobId)))});
  const result=spawnLocalDockerCommand(['docker',...independentOwnerProbeArguments(v.jobId)],process.env,{encoding:'utf8',timeout:15000,maxBuffer:65536,windowsHide:true});
  write(root,'response.json',{kind:'SYNTHETIC_DAEMON_OWNER_RESPONSE_V1',requestDigest:permit.requestDigest,ownerReadyDigest:digest,
-  status:result.status,transportError:!!result.error,signal:!!result.signal,stdoutSha256:hash(result.stdout??''),stdoutBytes:Buffer.byteLength(result.stdout??''),pendingRequestResolved:false,actionAuthorized:false});
+  status:result.status,transportError:!!result.error,signal:!!result.signal,stdoutSha256:hash(result.stdout??''),stdoutBytes:Buffer.byteLength(result.stdout??''),
+  stderrSha256:hash(result.stderr??''),stderrBytes:Buffer.byteLength(result.stderr??''),pendingRequestResolved:false,actionAuthorized:false});
  if(result.status!==0||result.error||result.signal||result.stdout!=='SYNTHETIC_OWNER_COMPLETE')throw no();
 }
 /** Fixed synthetic acceptance only. No production request, credential or command
  * is accepted, and no original S3 ACK or queue fence is manufactured. */
 export async function probeIndependentDaemonOwner(mode='caller-loss'){
- if(!['caller-loss','owner-loss','owner-ack-lost'].includes(mode)||process.platform!=='linux'||process.getuid()===0)throw no();
+ if(!['caller-loss','owner-loss','owner-ack-lost','outcome-ack-lost'].includes(mode)||process.platform!=='linux'||process.getuid()===0)throw no();
  prepareLocalDockerCommand(['docker','version'],process.env);const sourceSha=source(),jobId=randomUUID(),ownerId=randomUUID();
  const root=mkdtempSync(join(tmpdir(),'charitypilot-owner-probe-'));chmodSync(root,0o700);
  const request={kind:'SYNTHETIC_INDEPENDENT_OWNER_PROBE_V1',jobId,ownerId,callerUnit:containmentUnit(jobId),ownerUnit:containmentUnit(ownerId),sourceSha,rootIdentity:rootIdentity(root)};
@@ -96,17 +97,27 @@ export async function probeIndependentDaemonOwner(mode='caller-loss'){
    return{kind:'SYNTHETIC_ORIGINAL_OWNER_ACK_LOSS_V1',ownerBindingStored:true,originalOwnerAcknowledgementObserved:false,requestDispatched:false,
     originalAcknowledgementReconstructed:false,productionIntegrated:false,sourceHostLossProven:false,pendingRequestResolved:false,actionAuthorized:false};
   }
-  await send('OWNER',localOwner);if(gate.snapshot().ownerCount!==1)throw no();
+  await send('OWNER',localOwner);if(gate.snapshot().ownerCount!==1)throw no();const outcomeWriter=custody.outcomeWriter();
   write(root,'permit.json',{requestDigest:hash(JSON.stringify(request)),ownerReadyDigest:hash(JSON.stringify(ownerReady))});
   container=await waitFor(()=>{const value=inspect(independentOwnerProbeTarget(jobId));return value?.State.Running?exact(value):null;});
   command('systemctl',['--user','stop',request.callerUnit]);
+  custody.closeSource();
   if(observeOriginalControlGroup(caller.ControlGroup,request.callerUnit,process.getuid())==='POPULATED')throw no();
   const surviving=inspectContainmentUnit(request.ownerUnit);if(surviving.InvocationID!==owner.InvocationID||surviving.MainPID!==owner.MainPID||surviving.ActiveState!=='active'||!exact(inspect(container.Id)).State.Running)throw no();
   if(mode==='owner-loss')command('systemctl',['--user','stop',request.ownerUnit]);else await waitFor(()=>existsSync(join(root,'response.json')));
-  if(mode==='caller-loss'){const response=read(root,'response.json');if(response.status!==0||response.transportError||response.signal||response.stdoutSha256!==hash('SYNTHETIC_OWNER_COMPLETE'))throw no();
+  if(mode!=='owner-loss'){const response=read(root,'response.json');if(response.kind!=='SYNTHETIC_DAEMON_OWNER_RESPONSE_V1'||response.requestDigest!==hash(JSON.stringify(request))
+    ||response.ownerReadyDigest!==hash(JSON.stringify(ownerReady))||response.status!==0||response.transportError||response.signal||response.stdoutSha256!==hash('SYNTHETIC_OWNER_COMPLETE'))throw no();
    await waitFor(()=>{const v=inspectContainmentUnit(request.ownerUnit);return v.MainPID==='0'&&v.InvocationID===owner.InvocationID&&v.SubState==='exited';});
+   const outcome=custody.outcome(localOwner,response);custody.loseOutcomeAck(mode==='outcome-ack-lost');
+   if(mode==='outcome-ack-lost'){
+    let lost=false;try{await outcomeWriter.publish(outcome);}catch{lost=true;}if(!lost)throw no();const writes=custody.writes();
+    let retryRefused=false;try{await outcomeWriter.publish(outcome);}catch{retryRefused=true;}if(!retryRefused||custody.writes()!==writes)throw no();
+   }else await outcomeWriter.publish(outcome);
+   custody.loseOutcomeAck(false);
   }else if(existsSync(join(root,'response.json')))throw no();
-  await custody.inspect();completed=true;return{kind:'SYNTHETIC_INDEPENDENT_DAEMON_OWNER_OBSERVATION_V1',mode,callerStopped:true,ownerIndependent:true,originalOwnerAcknowledgementObserved:true,recordedOwnerResponse:mode==='caller-loss',
+  if(mode==='owner-loss')outcomeWriter.revoke();await custody.inspect(mode==='owner-loss'?0:1);
+  completed=true;return{kind:'SYNTHETIC_INDEPENDENT_DAEMON_OWNER_OBSERVATION_V1',mode,callerStopped:true,ownerIndependent:true,originalOwnerAcknowledgementObserved:true,recordedOwnerResponse:mode!=='owner-loss',
+   sourceContextClosedBeforeOutcome:true,ownerOutcomeStored:mode!=='owner-loss',originalOutcomeAcknowledgementObserved:mode==='caller-loss',
    requestArgumentsSelectable:false,productionIntegrated:false,independentProvider:false,sourceHostLossProven:false,pendingRequestResolved:false,completeResourceInventory:false,cleanupAuthorized:false,actionAuthorized:false};
  }finally{
   let channelClosed=true;try{await gate?.close();}catch{channelClosed=false;completed=false;}finally{custody?.close();}

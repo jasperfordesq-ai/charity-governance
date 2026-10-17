@@ -1,3 +1,15 @@
+## 17 October: original owner outcome evidence after source closure
+
+Read [independent daemon request owner](managed-independent-request-owner.md).
+The original owner ACK can issue one revocable, 120-second, process-local outcome
+writer before source closure. Unknown write ACK consumes it; cold reads inspect
+exact paired outcome bytes without recreating write or dispatch authority.
+The synthetic live probe closes the source API context before retaining the
+owner result, and exercises accepted-write/unknown-ACK refusal. The test parent
+still holds credentials; actual owner-process transfer, fixed product dispatch,
+independent provider and physical host-loss proof remain open. Exact results are
+private. No tenant policy, production integration or goal completion is inferred.
+
 ## 17 October: OWNER transport and actual service readiness
 
 Read [independent daemon request owner](managed-independent-request-owner.md).

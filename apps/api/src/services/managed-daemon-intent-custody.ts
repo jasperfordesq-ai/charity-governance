@@ -39,6 +39,11 @@ const owner=z.object({format:z.literal(1),kind:z.literal('MANAGED_DAEMON_REQUEST
 }).strict();
 const ownerEnvelope=envelope.extend({kind:z.literal('MANAGED_DAEMON_OWNER_CUSTODY_V1'),intentCustodyPin:candidatePinSchema,
  independentOwnerDispatchVerified:z.literal(false)}).strict();
+const outputDigest=z.object({sha256:sha,byteLength:z.number().int().safe().min(0)}).strict().refine(v=>v.byteLength!==0||v.sha256===candidateHash(''));
+const ownerOutcome=response.extend({kind:z.literal('MANAGED_DAEMON_OWNER_OUTCOME_V1'),ownerPin:response.shape.intentPin,
+ ownerInputDigest:sha,stdout:outputDigest,stderr:outputDigest}).strict();
+const ownerOutcomeEnvelope=ownerEnvelope.extend({kind:z.literal('MANAGED_DAEMON_OWNER_OUTCOME_CUSTODY_V1'),ownerCustodyPin:candidatePinSchema,
+ localIntent:localJobArtifactSchema,pendingRequestResolved:z.literal(false)}).strict();
 type Pin=z.infer<typeof candidatePinSchema>;
 type Artifact={body:string;sha256:string};
 export const daemonCustodyScope=(candidateId:string,sequence:number)=>{
@@ -59,6 +64,8 @@ export class ManagedDaemonIntentCustody{
  private latestIntent:Pin|undefined;private readonly responseAttempts=new Set<number>();
  private responseCount=0;private endAttempted=false;private uncertainResponse=false;
  private readonly ownerAttempts=new Set<number>();
+ private readonly acknowledgedOwners=new Map<number,{pin:Pin;localIntent:z.infer<typeof localJobArtifactSchema>}>();
+ private readonly outcomeGrantAttempts=new Set<number>();
  constructor(private readonly storage:{installationId:string;bucket:string;accountId:string;kmsKeyArn:string},binding:unknown,
   private readonly credentials:NonNullable<S3ClientConfig['credentials']>,private readonly client:S3Client,
   requestArtifact:Artifact,private readonly requestPin:Pin,serviceArtifact:Artifact,private readonly servicePin:Pin,
@@ -114,7 +121,51 @@ export class ManagedDaemonIntentCustody{
  private ownerStore(sequence:number){return new S3MaintenanceArtifactStore({...this.storage,maintenance:{attemptId:this.binding.attemptId,planDigest:this.binding.planDigest,
   sourceSha:this.binding.sourceSha,maintenanceEpoch:this.binding.maintenanceEpoch}},this.credentials,
   {namespace:'capture-job',scopeDigest:daemonOwnerCustodyScope(this.binding.candidateId,sequence),pinSchema:candidatePinSchema,limits:{BASELINE:16384,OBSERVATION:16384},failure,
-   baseline:raw=>this.parseOwner(raw,sequence).artifact,parseObservation:()=>{throw failure();},observationFromValue:()=>{throw failure();},assertPair:()=>{throw failure();}},this.client);}
+   baseline:raw=>this.parseOwner(raw,sequence).artifact,parseObservation:raw=>this.parseOwnerOutcome(raw,sequence).artifact,
+   observationFromValue:raw=>this.parseOwnerOutcome(raw,sequence).artifact,assertPair:(a,b)=>this.assertOwnerOutcomePair(a,b,sequence)},this.client);}
+ private parseOwnerOutcome(raw:unknown,sequence:number){
+  const artifact=z.object({body:z.string().min(1).max(16384),sha256:sha}).strict().parse(raw);
+  if(candidateHash(artifact.body)!==artifact.sha256||Buffer.byteLength(artifact.body)>16384)throw failure();
+  const value=ownerOutcomeEnvelope.parse(JSON.parse(artifact.body)),record=localJobArtifact(value.localRecord),local=ownerOutcome.parse(JSON.parse(record.body));
+  const original=this.checked(value.localIntent,sequence);
+  if(value.bindingDigest!==candidateHash(JSON.stringify(this.binding))||JSON.stringify(value.jobRequestPin)!==JSON.stringify(this.requestPin)
+   ||JSON.stringify(value.jobServicePin)!==JSON.stringify(this.servicePin)||value.headerCustodyPin?.kind!=='BASELINE'||value.intentCustodyPin.kind!=='BASELINE'
+   ||value.ownerCustodyPin.kind!=='BASELINE'||local.jobId!==this.request.local.jobId||local.sequence!==sequence
+   ||local.intentPin.sha256!==original.record.sha256||local.intentPin.byteLength!==original.record.byteLength
+   ||local.removalAlreadyAbsent&&(intent.parse(original.value).operation!=='rm'||local.status!==1||local.transportError||local.signal))throw failure();
+  return{artifact,value,local};
+ }
+ private assertOwnerOutcomePair(baseline:Artifact,observation:Artifact,sequence:number){
+  const bound=this.parseOwner(baseline,sequence),observed=this.parseOwnerOutcome(observation,sequence);
+  if(observed.value.ownerCustodyPin.sha256!==baseline.sha256||observed.value.ownerCustodyPin.byteLength!==Buffer.byteLength(baseline.body)
+   ||JSON.stringify(observed.value.headerCustodyPin)!==JSON.stringify(bound.value.headerCustodyPin)
+   ||JSON.stringify(observed.value.intentCustodyPin)!==JSON.stringify(bound.value.intentCustodyPin)
+   ||observed.local.ownerPin.sha256!==bound.value.localRecord.sha256||observed.local.ownerPin.byteLength!==bound.value.localRecord.byteLength
+   ||JSON.stringify(observed.local.intentPin)!==JSON.stringify(bound.local.intentPin)||observed.local.ownerInputDigest!==bound.local.identity.inputDigest)throw failure();
+ }
+ /** Process-local, one-shot evidence capability. Only original ACK state may
+  * create it; saved reads cannot. It is not scoped provider IAM or dispatch. */
+ createOwnerOutcomeWriter(){
+  const sequence=this.sequence,ack=this.acknowledgedOwners.get(sequence);
+  if(this.failed||this.busy||!this.live()||this.endAttempted||!ack||this.responseAttempts.has(sequence)||this.outcomeGrantAttempts.has(sequence))throw failure();
+  this.outcomeGrantAttempts.add(sequence);const pin=candidatePinSchema.parse(ack.pin),localIntent=localJobArtifact(ack.localIntent),store=this.ownerStore(sequence);
+  const expires=performance.now()+120000,controller=new AbortController();let attempted=false,revoked=false;
+  return Object.freeze({revoke:()=>{revoked=true;controller.abort();this.failed=true;},publish:async(raw:unknown,caller?:AbortSignal)=>{
+   if(attempted||revoked){this.failed=true;throw failure();}if(performance.now()>=expires){revoked=true;this.failed=true;throw failure();}attempted=true;
+   const signal=caller?AbortSignal.any([caller,controller.signal]):controller.signal;
+   try{
+    const record=localJobArtifact(raw),local=ownerOutcome.parse(JSON.parse(record.body));
+    if(local.sequence!==sequence)throw failure();
+    const baseline=await store.observeBaseline(pin,signal),bound=this.parseOwner(baseline,sequence);
+    const body=JSON.stringify(ownerOutcomeEnvelope.parse({...bound.value,kind:'MANAGED_DAEMON_OWNER_OUTCOME_CUSTODY_V1',
+     ownerCustodyPin:pin,localIntent,localRecord:record,pendingRequestResolved:false}));
+    if(revoked||performance.now()>=expires)throw failure();
+    const saved=await store.publishObservation({body,sha256:candidateHash(body)},pin,signal);
+    if(revoked||performance.now()>=expires)throw failure();
+    return{pin:saved,originalAcknowledgementReconstructed:false as const,pendingRequestResolved:false as const,independentOwnerDispatchVerified:false as const,actionAuthorized:false as const};
+   }catch{this.failed=true;throw failure();}
+  }});
+ }
  private assertOwnerIntent(local:z.infer<typeof owner>,original:ReturnType<ManagedDaemonIntentCustody['parse']>){
   if(local.intentPin.sha256!==original.value.localRecord.sha256||local.intentPin.byteLength!==original.value.localRecord.byteLength)throw failure();
  }
@@ -134,7 +185,7 @@ export class ManagedDaemonIntentCustody{
     jobRequestPin:this.requestPin,jobServicePin:this.servicePin,headerCustodyPin:this.savedHeader,intentCustodyPin:this.latestIntent,localRecord:checked.record,
     savedEvidenceAuthorizesDispatch:false,independentOwnerDispatchVerified:false,actionAuthorized:false}));
    const pin=await this.ownerStore(this.sequence).publishBaseline({body,sha256:candidateHash(body)},signal);
-   if(this.failed||!this.live())throw failure();this.busy=false;
+   if(this.failed||!this.live())throw failure();this.busy=false;this.acknowledgedOwners.set(this.sequence,{pin:candidatePinSchema.parse(pin),localIntent:localJobArtifact(original.value.localRecord)});
    return{pin,savedEvidenceAuthorizesDispatch:false as const,independentOwnerDispatchVerified:false as const,actionAuthorized:false as const};
   }catch{this.failed=true;throw failure();}
  }
@@ -145,6 +196,14 @@ export class ManagedDaemonIntentCustody{
    ||parsed.local.intentPin.sha256!==original.localRecord.sha256||parsed.local.intentPin.byteLength!==original.localRecord.byteLength)throw failure();
   return{pin:saved.pin,localRecord:parsed.value.localRecord,originalAcknowledgementReconstructed:false as const,savedEvidenceAuthorizesDispatch:false as const,
    independentOwnerDispatchVerified:false as const,pendingRequestResolved:false as const,actionAuthorized:false as const};
+ }
+ async inspectOwnerOutcome(sequence:number,previousLocalDigest:string,signal?:AbortSignal){
+  const bound=await this.inspectOwner(sequence,previousLocalDigest,signal),saved=await this.ownerStore(sequence).inspectCandidateArtifact('OBSERVATION',signal);
+  const parsed=this.parseOwnerOutcome(saved.artifact,sequence);
+  if(JSON.stringify(parsed.value.ownerCustodyPin)!==JSON.stringify(bound.pin))throw failure();
+  await this.ownerStore(sequence).observeObservation(saved.pin,bound.pin,signal);
+  return{pin:saved.pin,localRecord:parsed.value.localRecord,originalAcknowledgementReconstructed:false as const,pendingRequestResolved:false as const,
+   independentOwnerDispatchVerified:false as const,executionAuthorized:false as const,actionAuthorized:false as const};
  }
  private parseEnd(raw:unknown){
   const artifact=z.object({body:z.string().min(1).max(16384),sha256:sha}).strict().parse(raw);
@@ -272,7 +331,7 @@ export class ManagedDaemonIntentCustody{
   const timer=setTimeout(()=>controller.abort(),60000);
   const row=z.object({Key:z.string().min(1).max(1024),ETag:z.string().min(1).max(1024),Size:z.number().int().min(1).max(16384)});
   const list=async(sequence:number,ownerRecord=false)=>{
-   const scope=ownerRecord?daemonOwnerCustodyScope(this.binding.candidateId,sequence):daemonCustodyScope(this.binding.candidateId,sequence),maximum=ownerRecord?1:2;
+   const scope=ownerRecord?daemonOwnerCustodyScope(this.binding.candidateId,sequence):daemonCustodyScope(this.binding.candidateId,sequence),maximum=2;
    const prefix=`managed-maintenance/${this.storage.installationId}/${this.binding.attemptId}/capture-job/${scope}/`;
    signal.throwIfAborted();let stop=()=>{};
    const aborted=new Promise<never>((_,reject)=>{stop=()=>reject(failure());signal.addEventListener('abort',stop,{once:true});});
@@ -284,7 +343,7 @@ export class ManagedDaemonIntentCustody{
      ||value.CommonPrefixes&&value.CommonPrefixes.length)throw failure();
     const rows=z.array(row).max(maximum).parse(value.Contents??[]).sort((a,b)=>a.Key.localeCompare(b.Key));
     if(value.KeyCount!==rows.length||new Set(rows.map(v=>v.Key)).size!==rows.length
-     ||rows.some(v=>v.Key!==prefix+'baseline.json'&&(ownerRecord||v.Key!==prefix+'observation.json')))throw failure();
+     ||rows.some(v=>v.Key!==prefix+'baseline.json'&&v.Key!==prefix+'observation.json'))throw failure();
     return rows;
    }finally{signal.removeEventListener('abort',stop);}
   };
@@ -300,17 +359,21 @@ export class ManagedDaemonIntentCustody{
    const savedHeader=await read(0,'BASELINE'),savedEnd=await read(0,'OBSERVATION');
    if(!savedHeader&&before.some(rows=>rows.length))throw failure();
    const h=savedHeader?this.parse(savedHeader.artifact,0).value:null;
-   let previous=h?.localRecord.sha256,missingIntent=false,uncertain=false,responseCount=0,ownerBindingCount=0;
+   let previous=h?.localRecord.sha256,missingIntent=false,uncertain=false,responseCount=0,ownerBindingCount=0,ownerOutcomeCount=0;
    const records=[];
    for(let sequence=1;sequence<=64;sequence++){
-    const saved=await read(sequence,'BASELINE'),observed=await read(sequence,'OBSERVATION'),boundOwner=await read(sequence,'BASELINE',true);
-    if(!saved){if(observed||boundOwner)throw failure();missingIntent=true;continue;}
+    const saved=await read(sequence,'BASELINE'),observed=await read(sequence,'OBSERVATION'),boundOwner=await read(sequence,'BASELINE',true),ownerResult=await read(sequence,'OBSERVATION',true);
+    if(!saved){if(observed||boundOwner||ownerResult)throw failure();missingIntent=true;continue;}
+    if(ownerResult&&!boundOwner)throw failure();
     if(missingIntent||!h||!savedHeader)throw failure();
     const original=this.parse(saved.artifact,sequence).value,v=intent.parse(JSON.parse(original.localRecord.body));
     if(v.previousDigest!==previous||JSON.stringify(original.headerCustodyPin)!==JSON.stringify(savedHeader.pin)
      ||v.storagePlan&&v.storagePlan.image!==header.parse(JSON.parse(h.localRecord.body)).image)throw failure();
     if(boundOwner){const bound=this.parseOwner(boundOwner.artifact,sequence);this.assertOwnerIntent(bound.local,this.parse(saved.artifact,sequence));
      if(JSON.stringify(bound.value.intentCustodyPin)!==JSON.stringify(saved.pin)||JSON.stringify(bound.value.headerCustodyPin)!==JSON.stringify(savedHeader.pin))throw failure();ownerBindingCount++;}
+    if(ownerResult&&boundOwner){const result=this.parseOwnerOutcome(ownerResult.artifact,sequence);this.assertOwnerOutcomePair(boundOwner.artifact,ownerResult.artifact,sequence);
+     if(JSON.stringify(result.value.ownerCustodyPin)!==JSON.stringify(boundOwner.pin)||JSON.stringify(result.value.intentCustodyPin)!==JSON.stringify(saved.pin)
+      ||result.value.localIntent.sha256!==original.localRecord.sha256||result.value.localIntent.byteLength!==original.localRecord.byteLength)throw failure();ownerOutcomeCount++;}
     previous=original.localRecord.sha256;
     let outcome:'RECORDED_CLIENT_SUCCESS'|'RECORDED_CLIENT_UNCERTAINTY'|'NOT_LISTED_AT_BOUNDARY'='NOT_LISTED_AT_BOUNDARY';
     if(observed){
@@ -320,7 +383,7 @@ export class ManagedDaemonIntentCustody{
      outcome=(r.local.status===0||r.local.removalAlreadyAbsent)&&!r.local.transportError&&!r.local.signal?'RECORDED_CLIENT_SUCCESS':'RECORDED_CLIENT_UNCERTAINTY';
     }
     if(outcome!=='RECORDED_CLIENT_SUCCESS')uncertain=true;
-    records.push({sequence,intentPin:saved.pin,responsePin:observed?.pin??null,ownerPin:boundOwner?.pin??null,
+    records.push({sequence,intentPin:saved.pin,responsePin:observed?.pin??null,ownerPin:boundOwner?.pin??null,ownerOutcomePin:ownerResult?.pin??null,
      localIntentPin:{sha256:original.localRecord.sha256,byteLength:original.localRecord.byteLength},outcome});
    }
    if(savedEnd){
@@ -332,7 +395,7 @@ export class ManagedDaemonIntentCustody{
    if(JSON.stringify(await catalogue())!==JSON.stringify(before))throw failure();signal.throwIfAborted();
    return{kind:'MANAGED_DAEMON_CUSTODY_DISCOVERY_V1' as const,
     state:!savedHeader?'NOT_LISTED_AT_BOUNDARY' as const:savedEnd&&!uncertain?'RECORDED_CLIENT_RESPONSES' as const:'UNRESOLVED_REQUESTS' as const,
-    headerPin:savedHeader?.pin??null,endPin:savedEnd?.pin??null,records,responseCount,ownerBindingCount,listingDigest:candidateHash(JSON.stringify(before)),
+    headerPin:savedHeader?.pin??null,endPin:savedEnd?.pin??null,records,responseCount,ownerBindingCount,ownerOutcomeCount,listingDigest:candidateHash(JSON.stringify(before)),
     protocolOrdinalRange:{first:0,last:64},ownerOrdinalRange:{first:1,last:64},independentOwnerDispatchVerified:false as const,
     listingStableAtBoundaries:true as const,historyCompletenessVerified:false as const,
     pendingRequestResolved:false as const,completeResourceInventory:false as const,sourceHostLossProven:false as const,

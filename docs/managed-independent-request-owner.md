@@ -57,7 +57,7 @@ invalid scope and unknown/secret fields refuse. These are declared-identity
 checks; the live adapter must independently verify actual kernel identity and
 resource boundaries before calling the custody method.
 
-The owner uses a separate conditional baseline scope:
+The owner uses a separate conditional baseline/outcome scope:
 `SHA256(CHARITYPILOT_DAEMON_OWNER_CUSTODY_V1 + newline + candidateId + newline + sequence)`.
 Only ordinals 1 through 64 are valid. Concurrent, invalid, late, failed or unknown
 ACK attempts consume the original writer. Fresh reads cannot revive it or replace
@@ -65,9 +65,24 @@ the proposed owner. The frozen parent context checks closed head/window before
 and after retaining the record. No raw arguments, environment or credentials are
 retained in this schema.
 
+An original acknowledged owner can issue one process-local outcome writer before
+the source response, while its source context is still live. The frozen writer
+can retain one exact owner outcome after source-context closure. It expires after
+120 seconds of monotonic elapsed time, is explicitly revocable and consumes its
+only attempt before validation or provider I/O. Revocation after an accepted PUT
+denies acknowledgement and retry while preserving any stored evidence. Outcomes
+bind original owner/intent versions, local byte pins and owner input digest, with
+status, signal and output hashes/counts; raw output and credentials are refused.
+Saved reads cannot issue a replacement writer. This is an in-process evidence
+capability, not scoped provider IAM, cross-process secret transport or a dispatch
+permission. The adapter must still observe its original wire OWNER ACK before
+issuing the writer and releasing execution.
+
 Cold daemon discovery now checks 65 request scopes and 64 owner scopes, with
 bounded before/after listings and exact pair/version validation. It reports owner
-pins/counts separately. A missing binding stays missing; a saved binding always
+binding and outcome pins/counts separately. Each scope permits at most two objects
+and requests at most three listing entries to detect overflow. An owner outcome
+does not replace the source response/end accounting. A missing binding stays missing; a saved binding always
 reports `independentOwnerDispatchVerified: false`. Neither presence nor absence
 closes pending requests or proves historical completeness. `inspectOwner` can
 inspect one exact binding but cannot reconstruct its original acknowledgement.
@@ -99,6 +114,13 @@ inspection must find the saved binding without recreating the ACK. Caller-loss
 and owner-loss still test actual Docker execution. The fixture accepts no tenant
 data or selectable command; API credentials remain in the original test parent.
 Its SDK custody is in-process and synthetic, with no independent provider claim.
+The test parent issues the original outcome writer before release, closes its
+source API context after stopping the calling service, and then retains the
+owner's original result. A separate fault accepts the outcome PUT but loses its
+readback ACK: retry is refused and a fresh reader can still inspect the saved
+outcome without reconstructing the ACK. Owner loss revokes the unused writer.
+The credential holder remains the test parent; loss of that parent and actual
+owner-process outcome transfer remain untested and unimplemented.
 
 The real source helper still dispatches its Docker clients in the source worker.
 This probe is evidence about a feasible lifetime boundary, not completed product

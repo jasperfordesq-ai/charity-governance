@@ -4,6 +4,8 @@ import {backend,config,credentials} from '../apps/api/dist/tests/fixtures/archiv
 import {ManagedProofJobCustody} from '../apps/api/dist/services/managed-proof-job-custody.js';
 import {jobScope} from '../apps/api/dist/services/managed-proof-job-contract.js';
 import {DEFAULT_POSTGRES_IMAGE,planManagedProofStorage} from './postgres-backup.mjs';
+import {GetObjectCommand} from '@aws-sdk/client-s3';
+import {daemonOwnerCustodyScope} from '../apps/api/dist/services/managed-daemon-intent-custody.js';
 const hash=v=>createHash('sha256').update(v).digest('hex');
 export async function originalOwnerProbeCustody(request,source,args){
  const b=backend(),client=b.s3(),artifact=value=>{const body=JSON.stringify(value);return{body,sha256:hash(body),byteLength:Buffer.byteLength(body)};};
@@ -11,7 +13,9 @@ export async function originalOwnerProbeCustody(request,source,args){
   candidateId:randomUUID(),attemptId:randomUUID(),controlRevision:'1'.repeat(64),captureConfigurationDigest:'2'.repeat(64),metadataWindowConfigurationDigest:'3'.repeat(64),
   journalConfigurationDigest:'4'.repeat(64),archiveConfigurationDigest:'5'.repeat(64),planDigest:'6'.repeat(64)};
  const original={kind:'BASELINE',versionId:'synthetic-original-candidate',sha256:hash('original synthetic candidate'),byteLength:100};
- let live=true;const create=()=>new ManagedProofJobCustody({installationId:config.installationId,bucket:config.bucket,accountId:config.accountId,kmsKeyArn:config.storageKeyArn},
+ let live=true,loseOutcomeAck=false;const originalSend=client.send.bind(client);
+ client.send=async(command,options)=>{if(loseOutcomeAck&&command instanceof GetObjectCommand&&command.input.Key?.includes('/'+daemonOwnerCustodyScope(binding.candidateId,1)+'/observation.json'))throw new Error('Synthetic original owner outcome ACK lost');return originalSend(command,options);};
+ const create=()=>new ManagedProofJobCustody({installationId:config.installationId,bucket:config.bucket,accountId:config.accountId,kmsKeyArn:config.storageKeyArn},
   binding,credentials,client,p=>live&&JSON.stringify(p)===JSON.stringify(original)),session=create(),inputDigest=hash(JSON.stringify(request));
  try{
   const local=artifact({format:1,kind:'MANAGED_IMPORTED_PROOF_JOB_V1',jobId:request.jobId,scope:jobScope(binding,original),sourceSha:request.sourceSha,
@@ -26,8 +30,14 @@ export async function originalOwnerProbeCustody(request,source,args){
   const intent=artifact({format:2,kind:'MANAGED_DAEMON_REQUEST_INTENT_V2',jobId:request.jobId,sequence:1,previousDigest:header.sha256,
    operation:'run',target:args[args.indexOf('--name')+1],storagePlan:planManagedProofStorage(args,request.jobId),argumentsDigest:hash('CHARITYPILOT_DAEMON_ARGUMENTS_V1\n'+request.jobId+'\n'+JSON.stringify(args))});
   return{header,intent,inputDigest,artifact,session,original,
-   async inspect(){live=false;session.closeExecution();const before=b.writes,saved=await create().discover(original);
-    if(b.writes!==before||b.generates!==0||saved.daemon?.ownerBindingCount!==1||saved.daemon.independentOwnerDispatchVerified!==false||saved.originalAcknowledgementReconstructed!==false)throw new Error('Synthetic original owner evidence unresolved');return saved;},
+   outcomeWriter:()=>session.createDaemonOwnerOutcomeWriter(original),closeSource(){live=false;session.closeExecution();},writes:()=>b.writes,
+   loseOutcomeAck(value){loseOutcomeAck=value;},
+   outcome:(owner,reply)=>artifact({format:1,kind:'MANAGED_DAEMON_OWNER_OUTCOME_V1',jobId:request.jobId,sequence:1,
+    intentPin:{sha256:intent.sha256,byteLength:intent.byteLength},ownerPin:{sha256:owner.sha256,byteLength:owner.byteLength},ownerInputDigest:inputDigest,
+    status:reply.status,transportError:reply.transportError,signal:reply.signal,removalAlreadyAbsent:false,
+    stdout:{sha256:reply.stdoutSha256,byteLength:reply.stdoutBytes},stderr:{sha256:reply.stderrSha256,byteLength:reply.stderrBytes}}),
+   async inspect(outcomes=0){live=false;session.closeExecution();const before=b.writes,saved=await create().discover(original);
+    if(b.writes!==before||b.generates!==0||saved.daemon?.ownerBindingCount!==1||saved.daemon.ownerOutcomeCount!==outcomes||saved.daemon.independentOwnerDispatchVerified!==false||saved.originalAcknowledgementReconstructed!==false)throw new Error('Synthetic original owner evidence unresolved');return saved;},
    close(){live=false;session.closeExecution();client.destroy();b.close();}};
  }catch(error){client.destroy();b.close();throw error;}
 }

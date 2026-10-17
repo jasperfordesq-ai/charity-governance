@@ -962,17 +962,17 @@ async function commonParentFixture(){
  return{...x,events,window,archive,request,source,getReport};
 }
 test('common parent saves original root reference before final root write under unchanged closed head',async()=>{
- const x=await commonParentFixture();let jobContext:unknown,retainedJob:Readonly<{reserve:(v:unknown)=>Promise<unknown>;observe:(v:unknown)=>Promise<unknown>;bindService:(v:unknown)=>Promise<unknown>;reserveDaemonHeader:(v:unknown)=>Promise<unknown>;reserveDaemonIntent:(v:unknown)=>Promise<unknown>;bindDaemonOwner:(v:unknown)=>Promise<unknown>;observeDaemonResponse:(v:unknown)=>Promise<unknown>;finishDaemonRequests:(v:unknown)=>Promise<unknown>}>|undefined;
+ const x=await commonParentFixture();let jobContext:unknown,retainedJob:Readonly<{reserve:(v:unknown)=>Promise<unknown>;observe:(v:unknown)=>Promise<unknown>;bindService:(v:unknown)=>Promise<unknown>;reserveDaemonHeader:(v:unknown)=>Promise<unknown>;reserveDaemonIntent:(v:unknown)=>Promise<unknown>;bindDaemonOwner:(v:unknown)=>Promise<unknown>;createDaemonOwnerOutcomeWriter:()=>Promise<unknown>;observeDaemonResponse:(v:unknown)=>Promise<unknown>;finishDaemonRequests:(v:unknown)=>Promise<unknown>}>|undefined;
  const r=await x.f.coordinator.captureCommonQuarantined(x.request,x.c.capture,x.window as never,x.c.journal,x.archive as never,async(_snapshot,_signal,context)=>{
   assert.equal(Object.isFrozen(context),true);assert.equal(Object.isFrozen(context.jobCustody),true);
   assert.equal(typeof context.jobCustody.reserve,'function');assert.equal(typeof context.jobCustody.bindService,'function');
-  assert.equal(typeof context.jobCustody.reserveDaemonHeader,'function');assert.equal(typeof context.jobCustody.reserveDaemonIntent,'function');assert.equal(typeof context.jobCustody.bindDaemonOwner,'function');assert.equal(typeof context.jobCustody.observeDaemonResponse,'function');assert.equal(typeof context.jobCustody.finishDaemonRequests,'function');
+  assert.equal(typeof context.jobCustody.reserveDaemonHeader,'function');assert.equal(typeof context.jobCustody.reserveDaemonIntent,'function');assert.equal(typeof context.jobCustody.bindDaemonOwner,'function');assert.equal(typeof context.jobCustody.createDaemonOwnerOutcomeWriter,'function');assert.equal(typeof context.jobCustody.observeDaemonResponse,'function');assert.equal(typeof context.jobCustody.finishDaemonRequests,'function');
   const {jobCustody,...facts}=context;retainedJob=jobCustody;jobContext=facts;return x.source();
  });
  assert.deepEqual(jobContext,{kind:'COMMON_CANDIDATE',sourceSha:r.candidate.binding.sourceSha,
   bindingDigest:hash(JSON.stringify(r.candidate.binding)),requestPinDigest:hash(JSON.stringify(r.requestPin))});
  const before=x.f.artifacts.size;await assert.rejects(retainedJob!.reserve({}));await assert.rejects(retainedJob!.observe({}));await assert.rejects(retainedJob!.bindService({}));
- await assert.rejects(retainedJob!.reserveDaemonHeader({}));await assert.rejects(retainedJob!.reserveDaemonIntent({}));await assert.rejects(retainedJob!.bindDaemonOwner({}));await assert.rejects(retainedJob!.observeDaemonResponse({}));await assert.rejects(retainedJob!.finishDaemonRequests({}));assert.equal(x.f.artifacts.size,before);
+ await assert.rejects(retainedJob!.reserveDaemonHeader({}));await assert.rejects(retainedJob!.reserveDaemonIntent({}));await assert.rejects(retainedJob!.bindDaemonOwner({}));await assert.rejects(retainedJob!.createDaemonOwnerOutcomeWriter());await assert.rejects(retainedJob!.observeDaemonResponse({}));await assert.rejects(retainedJob!.finishDaemonRequests({}));assert.equal(x.f.artifacts.size,before);
  assert.deepEqual(x.events,['window','source','input','prepare','stage','root-write','root-read']);
  assert.equal(r.candidate.binding.format,3);assert.equal(r.actionAuthorized,false);assert.equal(r.root.completedIntervalBindingVerified,true);
  const cold=new ManagedCandidateCaptureJournal(config,credentials,x.f.client),catalogue=await cold.discoverCurrentCandidates(x.f.store,1);
