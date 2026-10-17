@@ -11,7 +11,7 @@ journal configuration digest. Candidate binding format2/V2 adds that digest;
 pre-journal requests cannot execute this new workflow. Original protocol9 shutdown,
 head formats and historical archive readers are unchanged.
 
-After exact original closed-head and component checks, the coordinator:
+Before capture, explicitly publish the [plan bootstrap](managed-plan-bootstrap.md). After exact original closed-head and component checks, the coordinator verifies its saved exact-version descriptor against the live plan digest before reserving the candidate. A missing descriptor stops before the request or metadata window. Saved configuration is not an execution acknowledgement. The remaining sequence is:
 
 1. Builds the source/epoch/plan/attempt/revision/candidate/component/journal binding.
 2. Conditionally writes the immutable REQUESTED_ONLY record and verifies its exact

@@ -1,3 +1,4 @@
+import {requireProtocol9ClosedHead} from './managed-maintenance-control.js';
 import type {ManagedCandidateCaptureJournal} from './managed-candidate-capture-journal.js';
 import {candidateRequestSchema as candidateRequest,candidateBindingSchema} from './managed-candidate-capture-contract.js';
 import type {SupabaseRecoveryCapture} from './supabase-recovery-capture.js';
@@ -39,13 +40,14 @@ export class ManagedBackendMaintenance {
   this.signedResumable.assertStorageScope(this.storage.readProofScope());
   this.signedResumable.assertSignedScope(this.signed.configurationDigest(this.config.installationId));
  }
- planDigest(){return createHash('sha256').update(JSON.stringify({format:9,...this.config,
+ planDescriptor(){return{format:9,...this.config,
   databaseCredentialPolicy:'PASSWORD_NULL_WHILE_CLOSED',
   storageCredentialPolicy:'REVOKE_REVIEWED_KEYS_KEEP_CAPTURE_V1',
   readProofPolicy:'INDEPENDENT_BASELINE_BEFORE_CREDENTIAL_REVOCATION_V1',
   writeProofPolicy:'EXACT_VERSION_BASELINE_PIN_BEFORE_REVOCATION_V1',signedProofPolicy:'ORIGINAL_ENCRYPTED_TOKEN_AND_BASELINE_PIN_BEFORE_REVOCATION_V1',resumableProofPolicy:'ALL_CONFIGURED_ORIGINAL_TUS_MANIFEST_BEFORE_REVOCATION_V1',signedResumableProofPolicy:'ORIGINAL_SIGNED_TUS_BASELINE_PIN_BEFORE_REVOCATION_V1',s3ProofPolicy:'EXPLICIT_MODE_ORIGINAL_S3_BASELINE_BEFORE_CLOSURE_V1',
   provider:this.provider.configurationDigest(),database:this.database.configurationDigest(),storage:this.storage.configurationDigest(this.config.installationId),
-  readProof:this.proof.configurationDigest(this.config.installationId),writeProof:this.write.configurationDigest(this.config.installationId),signedProof:this.signed.configurationDigest(this.config.installationId),resumableProof:this.resumable.configurationDigest(this.config.installationId),signedResumableProof:this.signedResumable.configurationDigest(this.config.installationId),s3Proof:this.s3.configurationDigest(this.config.installationId)})).digest('hex');}
+  readProof:this.proof.configurationDigest(this.config.installationId),writeProof:this.write.configurationDigest(this.config.installationId),signedProof:this.signed.configurationDigest(this.config.installationId),resumableProof:this.resumable.configurationDigest(this.config.installationId),signedResumableProof:this.signedResumable.configurationDigest(this.config.installationId),s3Proof:this.s3.configurationDigest(this.config.installationId)};}
+ planDigest(){return createHash('sha256').update(JSON.stringify(this.planDescriptor())).digest('hex');}
  private async readback(readProofDigest?:string,writeProofDigest?:string,signedProofDigest?:string,resumableProofDigest?:string,signedResumableProofDigest?:string,s3ProofDigest?:string){
   const services=await this.provider.observeSuspended(),database=await this.database.observePasswordsInvalidated(),storage=await this.storage.observeClosed(),signing=await this.signed.observeRevoked();
   if(storage.configuredAccessPathsObservedClosed!==true)throw new Error(failure);
@@ -117,6 +119,17 @@ export class ManagedBackendMaintenance {
     currentTenantAuthorityVerified:false as const,sourceHostFenced:false as const,reopeningAuthorised:false as const,actionAuthorized:false as const};
   }catch{throw new Error(failure);}
  }
+ /** Explicit declarative bootstrap publication, never an execution receipt. */
+ async publishCaptureBootstrap(journal:ManagedCandidateCaptureJournal,caller?:AbortSignal){
+  try{
+   caller?.throwIfAborted();const before=requireProtocol9ClosedHead(await this.control.observe(caller));
+   if(before.value.installationId!==this.config.installationId||before.value.maintenanceEpoch!==this.config.maintenanceEpoch
+    ||before.value.planDigest!==this.planDigest())throw new Error();
+   await this.inspect();if((await this.control.observe(caller)).revision!==before.revision)throw new Error();
+   const published=await journal.publishPlanBootstrap(this.planDescriptor(),before,caller);
+   if((await this.control.observe(caller)).revision!==before.revision)throw new Error();return published;
+  }catch{throw new Error('Managed capture bootstrap publication is unresolved; inspect original configuration without repeating publication');}
+ }
  /** Candidate-only composition. Partial visitor archives stay quarantined after
   * any unresolved outcome. Never advances control, retries, admits or reopens. */
  async captureQuarantined(raw:unknown,capture:SupabaseRecoveryCapture,window:ManagedStorageMetadataWindow,journal:ManagedCandidateCaptureJournal,
@@ -134,7 +147,8 @@ export class ManagedBackendMaintenance {
      ||head.value.installationId!==this.config.installationId||head.value.maintenanceEpoch!==this.config.maintenanceEpoch)throw new Error();
     return head;
    };
-   await checkHead();await this.inspect();await checkHead();
+   await checkHead();await this.inspect();const preparedHead=await checkHead();
+   await journal.observePlanBootstrap(preparedHead,caller);await checkHead();
    const binding=candidateBindingSchema.parse({format:2,kind:'MANAGED_QUARANTINED_STORAGE_CAPTURE_V2',...this.config,...request,planDigest:this.planDigest()});
    session=journal.forCandidate(binding);const requestPin=await session.reserve(caller);liveAcknowledged=true;await checkHead();
    const guarded=await window.run(signal=>capture.capture(visit,signal),caller);
@@ -158,8 +172,7 @@ export class ManagedBackendMaintenance {
    const before=await this.control.observe();
    if(before.value.installationId!==this.config.installationId||before.value.planDigest!==this.planDigest()
     ||before.value.maintenanceEpoch!==this.config.maintenanceEpoch||before.value.phase==='READY')throw new Error();
-   if(before.value.phase==='OBSERVED_CLOSED'&&(!before.value.observations?.storageDigest||!before.value.observations.readProofDigest
-    ||!before.value.readBaseline||!before.value.readObservation||!before.value.writeBaselinePin||!before.value.writeObservationPin||!before.value.observations.writeProofDigest||!before.value.signedBaselinePin||!before.value.signedObservationPin||!before.value.observations.signedProofDigest||!before.value.observations.signingDigest||!before.value.resumableBaselinePin||!before.value.resumableObservationPin||!before.value.observations.resumableProofDigest||!before.value.signedResumableBaselinePin||!before.value.signedResumableObservationPin||!before.value.observations.signedResumableProofDigest||!before.value.s3BaselinePin||!before.value.s3ObservationPin||!before.value.observations.s3ProofDigest))throw new Error();
+   if(before.value.phase==='OBSERVED_CLOSED')requireProtocol9ClosedHead(before);
    const binding={attemptId:before.value.attemptId,planDigest:before.value.planDigest,sourceSha:this.config.sourceSha,maintenanceEpoch:this.config.maintenanceEpoch};
    const retained=before.value.readBaseline?this.proof.assertBaseline(before.value.readBaseline,binding):null;
    if(before.value.readObservation){if(!retained)throw new Error();this.proof.assertObservation(before.value.readObservation,retained.sha256);}

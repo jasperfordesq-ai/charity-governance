@@ -1,3 +1,4 @@
+import {S3ManagedMaintenanceControl} from '../apps/api/dist/services/managed-maintenance-control.js';
 import {ManagedCandidateCaptureJournal} from '../apps/api/dist/services/managed-candidate-capture-journal.js';
 import {candidateBindingSchema} from '../apps/api/dist/services/managed-candidate-capture-contract.js';
 import assert from 'node:assert/strict';
@@ -12,7 +13,7 @@ import {KmsDocumentBackupKeys} from '../apps/api/dist/services/document-byte-bac
 import {sealDocumentByteBackup,openDocumentByteBackup} from '../apps/api/dist/services/document-byte-backup.js';
 import {S3DocumentByteBackups} from '../apps/api/dist/services/document-byte-backup-s3.js';
 const sha=v=>createHash('sha256').update(v).digest('hex');
-export async function proveManagedCandidateCapture({coordinator,control,admin,configuration,operation,scope,url}){
+export async function proveManagedCandidateCapture({coordinator,control,admin,configuration,operation,scope,controlStorage,controlClient,url}){
  const holder=new PrismaClient({datasources:{db:{url}}}),credentials={accessKeyId:'synthetic',secretAccessKey:'synthetic'};
  const kms=new KMSClient({region:'eu-west-1',credentials}),s3=new S3Client({region:'eu-west-1',credentials});
  const key=Buffer.alloc(32,9),plaintext=[],objects=new Map(),receipts=[];
@@ -73,6 +74,7 @@ export async function proveManagedCandidateCapture({coordinator,control,admin,co
   const storage=new S3DocumentByteBackups({installationId:operation.installationId,bucket:'synthetic-candidate-custody',
    accountId:'123456789012',storageKeyArn,dataKeyArn},credentials,s3),keys=new KmsDocumentBackupKeys(dataKeyArn,credentials,kms);
   const original=await control.observe();
+  const descriptor=await coordinator.publishCaptureBootstrap(journal);assert.equal(descriptor.pin.sha256,coordinator.planDigest());
   for(const mode of ['success','changed-bytes','lost-candidate-ack','lost-request-ack','lost-report-ack']){
    const candidateId=randomUUID();let downloads=0;const buffers=[];
    loseAck=mode==='lost-candidate-ack';loseJournal=mode==='lost-request-ack'?'baseline':mode==='lost-report-ack'?'observation':'';
@@ -133,21 +135,24 @@ export async function proveManagedCandidateCapture({coordinator,control,admin,co
    }
    assert.equal((await control.observe()).revision,original.revision);
   }
-  assert.equal(dataPuts,4);assert.equal(journalPuts,7);assert.equal(puts,11);assert.equal(receipts.length,3);assert.ok(plaintext.every(p=>p.every(v=>v===0)));
+  assert.equal(dataPuts,4);assert.equal(journalPuts,8);assert.equal(puts,12);assert.equal(receipts.length,3);assert.ok(plaintext.every(p=>p.every(v=>v===0)));
   await holder.$disconnect();
-  const readsOnly=new S3Client({region:'eu-west-1',credentials}),send=s3.send.bind(s3),beforeWrites=puts,beforeKeys=plaintext.length;
+  const readsOnly=new S3Client({region:'eu-west-1',credentials}),readsControl=new S3Client({region:'eu-west-1',credentials}),
+   send=s3.send.bind(s3),beforeWrites=puts,beforeKeys=plaintext.length;
   readsOnly.send=async(command,options)=>{assert.ok(command instanceof GetObjectCommand||command instanceof ListObjectsV2Command);return send(command,options);};
+  readsControl.send=async(command,options)=>{assert.ok(command instanceof GetObjectCommand);return controlClient.send(command,options);};
   try{
    const fresh=new ManagedCandidateCaptureJournal(journalStorage,credentials,readsOnly);
-   const catalogue=await fresh.discoverCandidates({attemptId:original.value.attemptId,planDigest:coordinator.planDigest(),
-    sourceSha:operation.sourceSha,maintenanceEpoch:operation.maintenanceEpoch,controlRevision:original.revision});
+   const recovered=await fresh.discoverCurrentCandidates(new S3ManagedMaintenanceControl(controlStorage,credentials,readsControl),1);
+   const catalogue=recovered.catalogue;assert.equal(recovered.plan.sourceSha,operation.sourceSha);
+   assert.equal(recovered.descriptorPlanDigestMatched,true);assert.equal(recovered.monotonicHistoryVerified,false);
    assert.equal(catalogue.records.length,5);assert.equal(catalogue.records.filter(r=>r.reportStatus==='SAVED_REPORT_OBSERVED').length,2);
    assert.equal(catalogue.records.filter(r=>r.reportStatus==='NOT_LISTED_AT_BOUNDARY').length,3);
    assert.equal(catalogue.historyCompletenessVerified,false);assert.equal(catalogue.savedObservationAuthorizesExecution,false);
    assert.equal(catalogue.sourceHostLossProven,false);assert.equal(catalogue.actionAuthorized,false);
    assert.equal(puts,beforeWrites);assert.equal(plaintext.length,beforeKeys);
-   console.log('PASS native candidate bootstrap: source DB holder disconnected, fresh GET/LIST-only client learns five unknown IDs and two reports without capture, KMS or writes');
-  }finally{readsOnly.destroy();}
+   console.log('PASS native candidate bootstrap: source DB holder disconnected, live head + persisted plan preimage supply unknown source/plan/attempt; GET/LIST learns five IDs and two reports without capture, KMS or writes');
+  }finally{readsOnly.destroy();readsControl.destroy();}
   console.log('PASS native parent candidate composition: actual closed attempt + TLS metadata window + file capture + AES-GCM/KMS and conditional exact-version SDK custody; byte drift and lost data/request/report ACKs preserve quarantine; fresh discovery does not replay or admit');
  }finally{key.fill(0);await holder.$disconnect();kms.destroy();s3.destroy();}
 }

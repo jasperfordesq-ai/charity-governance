@@ -11,7 +11,7 @@ import assert from 'node:assert/strict';
 import {test,mock} from 'node:test';
 import {Readable} from 'node:stream';
 import {randomUUID,createHash} from 'node:crypto';
-import {S3Client,GetObjectCommand,PutObjectCommand} from '@aws-sdk/client-s3';
+import {S3Client,GetObjectCommand,PutObjectCommand,ListObjectsV2Command} from '@aws-sdk/client-s3';
 import {S3ManagedMaintenanceControl} from '../services/managed-maintenance-control.js';
 import {z} from 'zod';
 import {ManagedBackendMaintenance} from '../services/managed-backend-maintenance.js';
@@ -24,9 +24,10 @@ const config={installationId:'synthetic-installation',bucket:'synthetic-maintena
 const credentials={accessKeyId:'synthetic',secretAccessKey:'synthetic'};
 const operation={installationId:config.installationId,sourceSha:'1'.repeat(40),maintenanceEpoch:1};
 const hash=(text:string)=>createHash('sha256').update(text).digest('hex');
-function fixture(options:{retired?:{id:string;secret:string}[]}={}){
+function fixture(options:{retired?:{id:string;secret:string}[];epoch?:number}={}){
+ const selectedOperation={...operation,maintenanceEpoch:options.epoch??operation.maintenanceEpoch};
  const retired=options.retired??[{id:'22222222-2222-4222-8222-222222222222',secret:'sb_secret_'+'b'.repeat(40)}];
- let value={format:1,installationId:config.installationId,maintenanceEpoch:1,planDigest:'1'.repeat(64),
+ let value={format:1,installationId:config.installationId,maintenanceEpoch:selectedOperation.maintenanceEpoch,planDigest:'1'.repeat(64),
   phase:'READY',attemptId:null as string|null,observations:null as unknown,readBaseline:undefined as {body:string;sha256:string}|undefined,readObservation:undefined as {body:string;sha256:string}|undefined,
   writeBaselinePin:undefined as ManagedWriteEvidencePin|undefined,writeObservationPin:undefined as ManagedWriteEvidencePin|undefined,
   signedBaselinePin:undefined as SignedUploadEvidencePin|undefined,signedObservationPin:undefined as SignedUploadEvidencePin|undefined,resumableBaselinePin:undefined as ResumableCohortPin|undefined,resumableObservationPin:undefined as ResumableCohortPin|undefined,signedResumableBaselinePin:undefined as SignedUploadEvidencePin|undefined,signedResumableObservationPin:undefined as SignedUploadEvidencePin|undefined,s3BaselinePin:undefined as ResumableCohortPin|undefined,s3ObservationPin:undefined as ResumableCohortPin|undefined,publicationId:randomUUID()};
@@ -36,14 +37,23 @@ function fixture(options:{retired?:{id:string;secret:string}[]}={}){
  const metadata=()=>({VersionId:'version-'+version,ETag:'"etag-'+version+'"',ServerSideEncryption:'aws:kms' as const,SSEKMSKeyId:config.kmsKeyArn});
  const client=new S3Client({region:'eu-west-1',credentials});
  const artifacts=new Map<string,{body:string;version:string}>();
- mock.method(client,'send',async(command:GetObjectCommand|PutObjectCommand)=>{
-  const path=command.input;assert.equal(path.Bucket,config.bucket);assert.equal(path.ExpectedBucketOwner,config.accountId);
+ mock.method(client,'send',async(command:GetObjectCommand|PutObjectCommand|ListObjectsV2Command)=>{
+  assert.equal(command.input.Bucket,config.bucket);assert.equal(command.input.ExpectedBucketOwner,config.accountId);
+  if(command instanceof ListObjectsV2Command){
+   calls.push('candidate-list');assert.equal(command.input.MaxKeys,1000);assert.equal(command.input.Delimiter,undefined);
+   assert.ok(command.input.Prefix?.startsWith('managed-maintenance/'+config.installationId+'/'));
+   assert.ok(command.input.Prefix?.endsWith('/capture-candidate/'));
+   const rows=[...artifacts].filter(([key])=>key.startsWith(command.input.Prefix!)).sort(([a],[b])=>a<b?-1:1);
+   return{Name:config.bucket,Prefix:command.input.Prefix,MaxKeys:1000,KeyCount:rows.length,IsTruncated:false,
+    Contents:rows.map(([Key,row])=>({Key,Size:Buffer.byteLength(row.body),ETag:'"'+row.version+'"'}))};
+  }
+  const path=command.input;
   const injected=fault?.(command);if(injected!==undefined)return injected;
   if(path.Key!==`managed-maintenance/${config.installationId}/control.json`){
    if(command instanceof PutObjectCommand){calls.push('artifact-put');assert.equal(command.input.IfNoneMatch,'*');if(artifacts.has(path.Key!))throw new Error('synthetic existing artifact');
     const row={body:String(command.input.Body),version:'artifact-'+(artifacts.size+1)};artifacts.set(path.Key!,row);return{...metadata(),VersionId:row.version};}
-   calls.push('artifact-get');const row=artifacts.get(path.Key!)!;if(command.input.VersionId!==undefined)assert.equal(command.input.VersionId,row.version);else assert.ok(path.Key?.includes('/capture-candidate/'));
-   return{...metadata(),VersionId:row.version,ContentLength:Buffer.byteLength(row.body),ChecksumSHA256:Buffer.from(hash(row.body),'hex').toString('base64'),ChecksumType:'FULL_OBJECT',Body:Readable.from([Buffer.from(row.body)])};
+   calls.push('artifact-get');const row=artifacts.get(path.Key!)!;if(command.input.VersionId!==undefined)assert.equal(command.input.VersionId,row.version);else assert.ok(path.Key?.includes('/capture-candidate/')||path.Key?.endsWith('/plan-bootstrap.json'));
+   return{...metadata(),VersionId:row.version,ETag:'"'+row.version+'"',ContentLength:Buffer.byteLength(row.body),ChecksumSHA256:Buffer.from(hash(row.body),'hex').toString('base64'),ChecksumType:'FULL_OBJECT',Body:Readable.from([Buffer.from(row.body)])};
   }
   if(command instanceof GetObjectCommand){reads++;calls.push('get');assert.equal(command.input.VersionId,undefined);
    assert.equal(command.input.ChecksumMode,'ENABLED');const body=JSON.stringify(value);
@@ -97,7 +107,7 @@ function fixture(options:{retired?:{id:string;secret:string}[]}={}){
  const resumableFixture=resumableCohortFixture({storage:config,client,events:calls,retired,isRetiredAllowed:()=>!storageClosed});
  const signedTusFixture=managedSignedResumableFixture(signedFixture,config,client,calls);
  const s3Fixture=managedS3CurrentFixture(config,client,s3Metadata,{id:s3MetadataConfig.captureKeyId,secret:'sb_secret_'+'a'.repeat(40)},calls);
- const coordinator=new ManagedBackendMaintenance(operation,provider as never,database as never,store,storage as never,proof as never,write as never,signed,resumableFixture.factory(),signedTusFixture.factory(),s3Fixture.factory());
+ const coordinator=new ManagedBackendMaintenance(selectedOperation,provider as never,database as never,store,storage as never,proof as never,write as never,signed,resumableFixture.factory(),signedTusFixture.factory(),s3Fixture.factory());
  value.planDigest=coordinator.planDigest();
  return{client,setInitiallyEnabledS3:()=>{initialS3Enabled=true;},isStorageClosed:()=>storageClosed,store,provider,database,storage,proof,write,signed,signedFixture,resumableFixture,signedTusFixture,s3Fixture,s3Metadata,writeOperations,artifacts,coordinator,calls,metadata,get value(){return value;},set value(next){value=next;},
   get puts(){return puts;},get reads(){return reads;},setFault:(next:typeof fault)=>{fault=next;},
@@ -728,8 +738,9 @@ function candidateFixture(f:ReturnType<typeof fixture>,onDownload:()=>Buffer=()=
   finally{controller.abort();}
  }};
  return{capture,window,journal,visit:async()=>{visits++;},get reads(){return reads;},get visits(){return visits;},
-  request:async()=>({candidateId:randomUUID(),attemptId:f.value.attemptId,controlRevision:(await f.store.observe()).revision,
-   captureConfigurationDigest:capture.configurationDigest(),metadataWindowConfigurationDigest:window.configurationDigest(),journalConfigurationDigest:journal.configurationDigest()})};
+  request:async()=>{if(![...f.artifacts.keys()].some(k=>k.endsWith('/plan-bootstrap.json')))await f.coordinator.publishCaptureBootstrap(journal);
+   return({candidateId:randomUUID(),attemptId:f.value.attemptId,controlRevision:(await f.store.observe()).revision,
+   captureConfigurationDigest:capture.configurationDigest(),metadataWindowConfigurationDigest:window.configurationDigest(),journalConfigurationDigest:journal.configurationDigest()});}};
 }
 test('maintenance composes actual capture with declared window under the exact original closed head, remaining quarantine-only',async()=>{
  const f=fixture();await f.coordinator.close();const candidate=candidateFixture(f),puts=f.puts;
@@ -817,4 +828,55 @@ test('candidate report publication snapshots caller data before awaited readback
  assert.equal(result.candidate.capture.files[0]!.mimeType,'application/pdf');
  const saved=await session.inspectReport(result.reportPin,result.requestPin);
  assert.equal(saved.value.capture.files[0]!.mimeType,'application/pdf');assert.equal(saved.value.observationDigest,result.candidate.observationDigest);
+});
+
+test('live head plus persisted plan bootstraps source and candidates with no local IDs or source SHA',async()=>{
+ const f=fixture();await f.coordinator.close();const c=candidateFixture(f),request=await c.request();
+ await f.coordinator.captureQuarantined(request,c.capture,c.window as never,c.journal,c.visit);
+ const before=f.artifacts.size,reads=c.reads,fresh=new ManagedCandidateCaptureJournal(config,credentials,f.client);
+ const result=await fresh.discoverCurrentCandidates(f.store,1);
+ assert.equal(result.plan.sourceSha,operation.sourceSha);assert.equal(result.head.value.planDigest,f.coordinator.planDigest());
+ assert.equal(result.catalogue.records.length,1);assert.equal(result.descriptorPlanDigestMatched,true);
+ assert.equal(result.savedObservationAuthorizesExecution,false);assert.equal(result.monotonicHistoryVerified,false);
+ assert.equal(f.artifacts.size,before);assert.equal(c.reads,reads);
+ await assert.rejects(()=>fresh.discoverCurrentCandidates(f.store,2));
+ const key=[...f.artifacts.keys()].find(k=>k.endsWith('/plan-bootstrap.json'))!,entry=f.artifacts.get(key)!;
+ const plan=JSON.parse(entry.body);plan.sourceSha='2'.repeat(40);f.artifacts.set(key,{...entry,body:JSON.stringify(plan)});
+ await assert.rejects(()=>fresh.discoverCurrentCandidates(f.store,1));assert.equal(f.artifacts.size,before);
+});
+test('missing bootstrap stops capture before a request, while lost bootstrap ACK is inspected without publication replay',async()=>{
+ const f=fixture();await f.coordinator.close();const c=candidateFixture(f),head=await f.store.observe();
+ const request={candidateId:randomUUID(),attemptId:head.value.attemptId,controlRevision:head.revision,
+  captureConfigurationDigest:c.capture.configurationDigest(),metadataWindowConfigurationDigest:c.window.configurationDigest(),journalConfigurationDigest:c.journal.configurationDigest()};
+ const before=f.artifacts.size;
+ await assert.rejects(()=>f.coordinator.captureQuarantined(request,c.capture,c.window as never,c.journal,c.visit));
+ assert.equal(c.reads,0);assert.equal(f.artifacts.size,before);
+ let faulted=false;
+ f.setFault(command=>{if(command instanceof PutObjectCommand&&command.input.Key?.endsWith('/plan-bootstrap.json')){
+  assert.equal(faulted,false);faulted=true;f.artifacts.set(command.input.Key,{body:String(command.input.Body),version:'lost-bootstrap-version'});
+  throw new Error('synthetic bootstrap publication ACK lost');
+ }});
+ await assert.rejects(()=>f.coordinator.publishCaptureBootstrap(c.journal));assert.equal(faulted,true);
+ f.setFault(undefined);const stored=f.artifacts.size;
+ await assert.rejects(()=>f.coordinator.publishCaptureBootstrap(c.journal));assert.equal(f.artifacts.size,stored);
+ const fresh=new ManagedCandidateCaptureJournal(config,credentials,f.client);
+ const found=await fresh.discoverCurrentCandidates(f.store,1);
+ assert.equal(found.plan.sourceSha,operation.sourceSha);assert.equal(found.originalAcknowledgementReconstructed,false);
+ assert.equal(found.catalogue.records.length,0);assert.equal(found.actionAuthorized,false);assert.equal(c.reads,0);
+});
+test('current bootstrap refuses a moving live head and does not fall back to an earlier epoch',async()=>{
+ const f=fixture();await f.coordinator.close();const c=candidateFixture(f);await c.request();
+ const fresh=new ManagedCandidateCaptureJournal(config,credentials,f.client);let count=0;
+ f.setFault(command=>{if(command instanceof GetObjectCommand&&command.input.Key?.endsWith('/control.json')&&++count===2)
+  f.value={...f.value,publicationId:randomUUID()};});
+ await assert.rejects(()=>fresh.discoverCurrentCandidates(f.store,1));assert.equal(count,2);
+ f.setFault(undefined);
+ const epochTwo=fixture({epoch:2});await epochTwo.coordinator.close();
+ await assert.rejects(()=>fresh.discoverCurrentCandidates(epochTwo.store,1));assert.equal(c.reads,0);
+ // Publish only the declarative epoch2 preimage into the independently shared
+ // synthetic journal. The old epoch1 file stays original; no candidate is made.
+ await epochTwo.coordinator.publishCaptureBootstrap(fresh);
+ const current=await fresh.discoverCurrentCandidates(epochTwo.store,2);
+ assert.equal(current.head.value.maintenanceEpoch,2);assert.equal(current.plan.maintenanceEpoch,2);
+ assert.equal(current.catalogue.records.length,0);assert.equal(current.monotonicHistoryVerified,false);
 });

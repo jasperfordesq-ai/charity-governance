@@ -135,7 +135,7 @@ export class S3ManagedMaintenanceControl {
   }catch{throw new Error(failure);}
   finally{clearTimeout(timer);}
  }
- async observe(){return this.read();}
+ async observe(caller?:AbortSignal){return this.read(caller);}
  async acquire(installationId:string,planDigest:string,maintenanceEpoch:number){
   if(identity.parse(installationId)!==this.config.installationId)throw new Error(failure);
   const expected=digest.parse(planDigest),epoch=z.number().int().positive().max(2147483647).parse(maintenanceEpoch);
@@ -197,4 +197,12 @@ export class S3ManagedMaintenanceControl {
   return this.replace(current,{...current.value,phase:'OBSERVED_CLOSED',observations:facts,
    ...(readObservation?{readObservation}:{}),...(writeObservationPin?{writeObservationPin}:{}),...(signedObservationPin?{signedObservationPin}:{}),...(resumableObservationPin?{resumableObservationPin}:{}),...(signedResumableObservationPin?{signedResumableObservationPin}:{}),...(s3ObservationPin?{s3ObservationPin}:{}),publicationId:randomUUID()});
  }
+}
+
+/** Shared current protocol9 closed-evidence shape; not fresh provider proof. */
+export function requireProtocol9ClosedHead(raw:unknown){
+ const head=z.object({value:control,revision:digest}).passthrough().parse(raw),value=head.value;
+ if(value.phase!=='OBSERVED_CLOSED'||(!value.observations?.storageDigest||!value.observations.readProofDigest
+    ||!value.readBaseline||!value.readObservation||!value.writeBaselinePin||!value.writeObservationPin||!value.observations.writeProofDigest||!value.signedBaselinePin||!value.signedObservationPin||!value.observations.signedProofDigest||!value.observations.signingDigest||!value.resumableBaselinePin||!value.resumableObservationPin||!value.observations.resumableProofDigest||!value.signedResumableBaselinePin||!value.signedResumableObservationPin||!value.observations.signedResumableProofDigest||!value.s3BaselinePin||!value.s3ObservationPin||!value.observations.s3ProofDigest))throw new Error(failure);
+ return head;
 }

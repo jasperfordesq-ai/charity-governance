@@ -1,3 +1,13 @@
+## 17 October: live-head plan bootstrap
+
+The [plan bootstrap](managed-plan-bootstrap.md) stores the exact protocol9 plan
+preimage and verifies it against the existing live closed head. Current discovery
+can learn source/plan/attempt without local IDs, enforce an external epoch floor
+and reject missing newer descriptors or head drift. Supported capture requires
+explicit prior descriptor publication; saved configuration is no execution ACK.
+CandidateV2/default shutdown formats stay unchanged. Actual provider/epoch-root,
+current tenant authority and whole-backend recovery/admission remain open.
+
 # Read-only candidate bootstrap catalogue
 
 17 October 2026. Internal discovery from independent journal storage, with native

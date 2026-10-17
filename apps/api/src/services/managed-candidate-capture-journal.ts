@@ -1,3 +1,5 @@
+import {ManagedPlanBootstrap,managedClosedHead} from './managed-plan-bootstrap.js';
+import {requireProtocol9ClosedHead,type S3ManagedMaintenanceControl} from './managed-maintenance-control.js';
 import {discoverManagedCandidateCatalogue} from './managed-candidate-catalogue.js';
 import {z} from 'zod';
 import {S3Client,type S3ClientConfig} from '@aws-sdk/client-s3';
@@ -15,13 +17,38 @@ type Binding=z.infer<typeof candidateBindingSchema>;
 export class ManagedCandidateCaptureJournal {
  private readonly storage:z.infer<typeof storageSchema>;
  private readonly client:S3Client;
+ private readonly bootstrap:ManagedPlanBootstrap;
  private readonly sessions=new Map<string,{bindingDigest:string,session:CandidateSession}>();
  constructor(raw:unknown,private readonly credentials:NonNullable<S3ClientConfig['credentials']>,client?:S3Client){
   this.storage=storageSchema.parse(raw);if(!credentials)throw failure();
   this.client=client??new S3Client({region:'eu-west-1',endpoint:'https://s3.eu-west-1.amazonaws.com',credentials,
    maxAttempts:1,followRegionRedirects:false,requestHandler:{connectionTimeout:5000,requestTimeout:15000,throwOnRequestTimeout:true}});
+  this.bootstrap=new ManagedPlanBootstrap(this.storage,this.client);
  }
  configurationDigest(){return candidateHash(JSON.stringify({format:1,policy:'IMMUTABLE_CANDIDATE_REQUEST_REPORT_V1',...this.storage}));}
+ publishPlanBootstrap(plan:unknown,head:unknown,signal?:AbortSignal){return this.bootstrap.publish(plan,head,signal);}
+ observePlanBootstrap(head:unknown,signal?:AbortSignal){return this.bootstrap.observe(head,signal);}
+ /** Current live head supplies plan identity; descriptor supplies its verified
+  * preimage. No local candidate IDs, source SHA, plan or epoch inference. */
+ async discoverCurrentCandidates(control:S3ManagedMaintenanceControl,minimumEpoch:number,caller?:AbortSignal){
+  if(!Number.isInteger(minimumEpoch)||minimumEpoch<1||minimumEpoch>2147483647)throw failure();
+  const controller=new AbortController(),signal=caller?AbortSignal.any([caller,controller.signal]):controller.signal;
+  const timer=setTimeout(()=>controller.abort(),300000);let stop:()=>void=()=>{};
+  const cancelled=new Promise<never>((_,reject)=>{stop=()=>reject(failure());signal.addEventListener('abort',stop,{once:true});});
+  try{
+   const head=async()=>{signal.throwIfAborted();const value=requireProtocol9ClosedHead(await Promise.race([control.observe(signal),cancelled]));
+    signal.throwIfAborted();if(value.value.installationId!==this.storage.installationId||value.value.maintenanceEpoch<minimumEpoch)throw failure();return value;};
+   const before=await head(),saved=await this.bootstrap.observe(before,signal);
+   const catalogue=await this.discoverCandidates({attemptId:before.value.attemptId,planDigest:before.value.planDigest,
+    sourceSha:saved.plan.sourceSha,maintenanceEpoch:before.value.maintenanceEpoch,controlRevision:before.revision},signal);
+   const after=await head();if(after.revision!==before.revision)throw failure();
+   return{kind:'MANAGED_CURRENT_CANDIDATE_BOOTSTRAP_V1' as const,head:managedClosedHead(before,this.storage.installationId),bootstrapPin:saved.pin,plan:saved.plan,catalogue,
+    minimumEpoch,descriptorPlanDigestMatched:true as const,liveHeadStableAtBoundaries:true as const,
+    monotonicHistoryVerified:false as const,currentTenantAuthorityVerified:false as const,sourceHostLossProven:false as const,
+    originalAcknowledgementReconstructed:false as const,savedObservationAuthorizesExecution:false as const,
+    archivedSetAdmitted:false as const,actionAuthorized:false as const};
+  }catch{throw failure();}finally{clearTimeout(timer);signal.removeEventListener('abort',stop);controller.abort();}
+ }
  discoverCandidates(raw:unknown,signal?:AbortSignal){
   return discoverManagedCandidateCatalogue({storage:this.storage,configurationDigest:this.configurationDigest(),client:this.client,
    forCandidate:binding=>this.forCandidate(binding)},raw,signal);
