@@ -1,3 +1,12 @@
+## 17 October: native Docker cancellation and batch preflight
+
+Read [Docker cancellation acceptance](managed-proof-docker-acceptance.md). Actual
+worker cancellation leaves a daemon workload; exact-job reconciliation removes
+it while another job survives. Every batch member is now validated before any
+removal. Proof clients mask the image's unused anonymous data volume with bounded
+temporary storage. Supervisor-death ownership, pending daemon requests, complete
+orphan reconciliation and independent provider/host-loss gates remain open.
+
 ## 17 October: original-request source-job custody
 
 Read [source job custody](managed-source-job-custody.md). Local job descriptors

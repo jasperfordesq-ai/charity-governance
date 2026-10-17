@@ -987,6 +987,8 @@ test('prove-restore uses the same exact local source container and a distinct is
     assert.equal(result.status, 0, result.stderr);
     assert.match(result.stdout, new RegExp(`--network container:${sourceContainerId}`, 'u'));
     assert.match(result.stdout, /--network container:charitypilot-isolated-restore-/u);
+    assert.equal((result.stdout.match(/\/var\/lib\/postgresql\/data:rw,noexec,nosuid,size=1m/g)??[]).length,5);
+    assert.match(result.stdout,/\/var\/lib\/postgresql\/data:rw,noexec,nosuid,size=4g/);
     assert.doesNotMatch(result.stdout + result.stderr, /proof-user|proof-password|postgresql:\/\//u);
     assert.deepEqual(readdirSync(tempDir), []);
   } finally {

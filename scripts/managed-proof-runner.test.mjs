@@ -76,3 +76,26 @@ test('cancellation terminates a real child descendant as well as its worker',asy
   assert.equal(alive,false);
  }finally{if(descendant){try{process.kill(descendant,'SIGKILL');}catch{}}}
 });
+
+test('entire job cleanup batch is validated before any container is removed',()=>{
+ const job=randomUUID(),good='a'.repeat(64),bad='b'.repeat(64),removed=[];
+ const run=args=>{
+  if(args[0]==='ps')return good+'\n'+bad;
+  if(args[0]==='inspect')return JSON.stringify({Id:args.at(-1),Name:args.at(-1)===good?'/charitypilot-source-snapshot-123-45-abcdef12':'/source-database-control',
+   Config:{Labels:{'charitypilot.restore-proof':'true','charitypilot.managed-proof-job':job}}});
+  if(args[0]==='rm'){removed.push(args.at(-1));return '';}
+  throw new Error();
+ };
+ assert.throws(()=>reconcileManagedProofContainers(job,{},{run}));assert.deepEqual(removed,[]);
+});
+
+test('explicit synthetic diagnostic observer receives bounded stderr while default failure remains sanitized',async()=>{
+ const f=fixture(`process.stderr.end('synthetic-private-marker');`);let body='',copy;
+ await assert.rejects(superviseManagedProofProcess(base(),{...f,onStderr:b=>{body+=b.toString();copy=b;}}),e=>!e.message.includes('synthetic-private-marker'));
+ assert.equal(body,'synthetic-private-marker');assert.ok(copy.every(v=>v===0));
+});
+test('diagnostic observer failure stops the worker and cannot turn failure into acknowledgement',async()=>{
+ const f=fixture(`process.stderr.write('fixture');setInterval(()=>{},1000);`);
+ await assert.rejects(superviseManagedProofProcess(base(),{...f,onStderr(){throw new Error('private-observer-error');}}),e=>!e.message.includes('private-observer-error'));
+ assert.ok(f.child.exitCode!==null||f.child.signalCode!==null);
+});

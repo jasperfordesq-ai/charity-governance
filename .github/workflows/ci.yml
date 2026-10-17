@@ -268,6 +268,9 @@ jobs:
       - name: Verify configured managed database writer closure with disposable PostgreSQL
         run: node --test scripts/managed-database-writer-fence-postgres.test.mjs
 
+      - name: Verify managed proof worker cancellation and exact-job Docker cleanup
+        run: npm run test:managed-proof-process
+
       # Runs here, not beside the other MCP steps: references.test.ts reads the
       # reference kinds out of the API's own build output, so that the two lists
       # cannot drift apart unnoticed. It fails loudly rather than skipping when

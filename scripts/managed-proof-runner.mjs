@@ -26,8 +26,9 @@ export function reconcileManagedProofContainers(jobId,env,{run=docker}={}){
   const v=JSON.parse(raw),labels=v.Config?.Labels;
   if(v.Id!==id||labels?.['charitypilot.restore-proof']!=='true'||labels?.['charitypilot.managed-proof-job']!==jobId
    ||!(/^\/charitypilot-(source-snapshot|dump-descriptor|isolated-restore|restore-loader|restored-snapshot)-[0-9]+-[0-9]+-[a-f0-9]{8}$/).test(v.Name))throw unresolved();
-  run(['rm','--force',id],env);
  }
+ // Refuse the whole batch before mutation if any member is not this job's tool.
+ for(const id of ids)run(['rm','--force',id],env);
  if(list().length)throw unresolved();return{removedCount:ids.length,observedJobContainersAbsent:true,actionAuthorized:false};
 }
 async function killOwnedTree(child){
@@ -46,7 +47,7 @@ async function killOwnedTree(child){
  }
 }
 /** Internal supervisor. Dependencies are for actual-process synthetic fault tests. */
-export async function superviseManagedProofProcess({input,env,signal,timeoutMs=90000},{start=spawn,terminate=killOwnedTree}={}){
+export async function superviseManagedProofProcess({input,env,signal,timeoutMs=90000},{start=spawn,terminate=killOwnedTree,onStderr}={}){
  if(!Buffer.isBuffer(input)||input.length<1||input.length>16384||!Number.isSafeInteger(timeoutMs)||timeoutMs<50||timeoutMs>1200000)throw unresolved();
  signal?.throwIfAborted();let child;
  try{child=start(process.execPath,[worker],{cwd:root,env,windowsHide:true,detached:process.platform!=='win32',stdio:['pipe','pipe','pipe']});}catch{throw unresolved();}
@@ -61,7 +62,7 @@ export async function superviseManagedProofProcess({input,env,signal,timeoutMs=9
   child.stdin.on('error',stop);child.stdout.on('error',stop);child.stderr.on('error',stop);
   child.once('error',stop);
   child.stdout.on('data',b=>{outputBytes+=b.length;if(outputBytes>4096)stop();else chunks.push(Buffer.from(b));});
-  child.stderr.on('data',b=>{errorBytes+=b.length;if(errorBytes>65536)stop();});
+  child.stderr.on('data',b=>{errorBytes+=b.length;if(onStderr&&errorBytes<=65536){const copy=Buffer.from(b);try{onStderr(copy);}catch{stop();}finally{copy.fill(0);}}if(errorBytes>65536)stop();});
   child.once('exit',()=>{exited=true;if(!closed){finishTimer??=setTimeout(stop,1000);}});
   child.once('close',async(code,exitSignal)=>{
    closed=true;clearTimeout(timer);clearTimeout(finishTimer);signal?.removeEventListener('abort',stop);
@@ -78,7 +79,7 @@ export async function superviseManagedProofProcess({input,env,signal,timeoutMs=9
  });
 }
 /** Dedicated original helper runner, not an arbitrary command execution API. */
-export async function runManagedImportedProof({args,snapshot,databaseUrl,workspace,scope={kind:'STANDALONE_INTERNAL_PROOF'},jobCustody,signal,timeoutMs=90000}){
+export async function runManagedImportedProof({args,snapshot,databaseUrl,workspace,scope={kind:'STANDALONE_INTERNAL_PROOF'},jobCustody,diagnostics,signal,timeoutMs=90000}){
  if(scope?.kind==='COMMON_CANDIDATE'&&(!jobCustody||typeof jobCustody.reserve!=='function'||typeof jobCustody.observe!=='function'))throw unresolved();
  const jobId=randomUUID();let success=false,cleanup;
  const env=Object.fromEntries(Object.entries(process.env).filter(([k])=>!(/^(NODE_OPTIONS|NODE_PATH|DATABASE_URL)$/i).test(k)));
@@ -95,7 +96,7 @@ export async function runManagedImportedProof({args,snapshot,databaseUrl,workspa
  if(jobCustody)await jobCustody.reserve(job.requestArtifact);
  let result;
  const input=Buffer.from(JSON.stringify({args,snapshot,jobId}));
- try{await superviseManagedProofProcess({input,env,signal,timeoutMs});success=true;}
+ try{await superviseManagedProofProcess({input,env,signal,timeoutMs},{onStderr:diagnostics});success=true;}
  catch{throw unresolved();}
  finally{
   input.fill(0);

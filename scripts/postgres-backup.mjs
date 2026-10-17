@@ -31,6 +31,8 @@ import { fileURLToPath, pathToFileURL } from 'node:url';
 // imports this constant instead of retyping the digest — a retyped copy
 // drifts the moment either one changes.
 export const DEFAULT_POSTGRES_IMAGE = 'postgres@sha256:5660c2cbfea50c7a9127d17dc4e48543eedd3d7a41a595a2dfa572471e37e64c';
+// Client-only proof tools must not create the image's anonymous PGDATA volume.
+export const PROOF_CLIENT_DATA_TMPFS = '/var/lib/postgresql/data:rw,noexec,nosuid,size=1m';
 
 /** Keep backup authority inside this source-hashed helper, without unbound
  * local imports. Returned secret-bearing transport must never be logged. */
@@ -2360,6 +2362,7 @@ function proofToolsDockerArgs({
     '--name',
     containerName,
     ...proofContainerLabelArgs(),
+    '--tmpfs', PROOF_CLIENT_DATA_TMPFS,
     ...linuxDockerHostUserArgs(),
     ...(dockerNetwork ? ['--network', dockerNetwork] : []),
     '-e',
@@ -2584,6 +2587,7 @@ function inspectDumpDescriptor(dumpPath, dryRun) {
     '--name',
     containerName,
     ...proofContainerLabelArgs(),
+    '--tmpfs', PROOF_CLIENT_DATA_TMPFS,
     '--network',
     'none',
     ...linuxDockerHostUserArgs(),
@@ -2740,6 +2744,7 @@ function restoreDumpIntoProofContainer(containerName, dumpPath, password, dryRun
     '--name',
     loaderContainerName,
     ...proofContainerLabelArgs(),
+    '--tmpfs', PROOF_CLIENT_DATA_TMPFS,
     '--network',
     `container:${containerName}`,
     '-v',

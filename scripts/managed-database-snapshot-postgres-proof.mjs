@@ -32,11 +32,12 @@ export async function proveManagedDatabaseSnapshot({admin,url,id,database,certif
  const workspace=await createManagedCaptureWorkspace(parent),output=workspace.root;
  const verifyOutput=()=>{assert.equal(dirname(resolve(parent)),resolve(tmpdir()));assert.ok(basename(parent).startsWith('charitypilot-imported-proof-'));
   assert.equal(dirname(resolve(output)),resolve(parent));assert.ok(basename(output).startsWith('capture-'));};verifyOutput();
-  const prove=async(snapshot,identity,signal,captureConfigurationDigest,scope,jobCustody)=>{
+  let sourceFailure='';
+ const prove=async(snapshot,identity,signal,captureConfigurationDigest,scope,jobCustody)=>{
   const source=new URL(captureUrl(database));source.searchParams.set('sslrootcert',certificate);
   const args=['prove-restore','--source-container-id='+id,'--recovery-set-id=synthetic-imported-'+randomUUID(),
    '--expected-source-database-identity-sha256='+identity,'--output-dir='+output,'--output-file=common.dump','--report-file=common.json'];
-  const supervised=await runManagedImportedProof({args,snapshot,databaseUrl:source.href,workspace,scope,jobCustody,signal});
+  const supervised=await runManagedImportedProof({args,snapshot,databaseUrl:source.href,workspace,scope,jobCustody,signal,diagnostics:b=>{sourceFailure=(sourceFailure+b.toString('utf8')).slice(0,4096);}});
   assert.equal(supervised.workerExited,true);assert.equal(supervised.observedJobContainersAbsent,true);
   assert.ok(statSync(join(output,'common.json')).size<16*1024*1024);
   const report=JSON.parse(readFileSync(join(output,'common.json'),'utf8'));
@@ -104,7 +105,7 @@ export async function proveManagedDatabaseSnapshot({admin,url,id,database,certif
    assert.equal(options.method,'GET');assert.equal(path,'/storage/v1/object/'+scope.bucket+'/record.txt');
    return new Response(body,{headers:{'Content-Type':'text/plain','Content-Length':String(body.length)}});
   });
-  const prepareSource=async(snapshot,signal,context)=>{
+  const prepareSourceImpl=async(snapshot,signal,context)=>{
    const {jobCustody,...scope}=context??{};
    sourceCalls++;expired=snapshot.snapshotId;
    // An unrelated MVCC row commits after export but before pg_dump starts.
@@ -135,6 +136,7 @@ export async function proveManagedDatabaseSnapshot({admin,url,id,database,certif
     assert.equal(row.body,bytes.toString());await custody.visit(file,bytes,digest,signal);
    },prepareArchiveInput:custody.prepareArchiveInput,releaseProof};
   };
+  const prepareSource=(...args)=>prepareSourceImpl(...args).catch(e=>{sourceFailure=(sourceFailure+' '+String(e?.message??'Synthetic source stage unresolved')).slice(0,4096);throw e;});
   let result;
   if(managed){
    const {coordinator,control,mode}=managed,journal=cloud.journal,archive=cloud.archive;
@@ -149,7 +151,7 @@ export async function proveManagedDatabaseSnapshot({admin,url,id,database,certif
    assert.equal(sourceCalls,mode==='request-ack'?0:1);assert.equal((await control.observe()).revision,head.revision);
    cloud.b.loseCommonReportRead=false;cloud.b.loseCommonRequestRead=false;cloud.b.loseJobRequestRead=false;
    await holder.$disconnect();
-   if(sourceCalls&&mode!=='job-ack'){verifyOutput();for(const name of ['common.dump','common.json','database.ciphertext'])rmSync(join(output,name));}
+   if(sourceCalls&&mode!=='job-ack'){verifyOutput();for(const name of ['common.dump','common.json','database.ciphertext']){assert.ok(existsSync(join(output,name)),'Expected full source proof absent: '+sourceFailure);rmSync(join(output,name));}}
    // Independent reader must discover original pins from custody, without local UUID/pins.
    const writes=cloud.b.writes,generates=cloud.b.generates,from=cloud.fresh();
    const learned=await from.journal.discoverCurrentCandidates(managed.controlReader(),managed.operation.maintenanceEpoch);
