@@ -30,3 +30,51 @@ test('metadata window cancels before SQL and refuses concurrent reentry',async()
  await assert.rejects(()=>service.run(async()=>{callbacks++;}),unresolved);controller.abort();release();
  await assert.rejects(()=>pending,unresolved);assert.equal(callbacks,0);assert.equal(queries,0);
 });
+
+function snapshotFixture(exported='00000001-00000002-1'){
+ const events:string[]=[];
+ const tx={
+  $executeRaw:async(query:TemplateStringsArray)=>{events.push(String(query[0]));return 0;},
+  $queryRaw:async(query:TemplateStringsArray)=>{
+   const text=String(query[0]);events.push(text);
+   if(text.includes('pg_export_snapshot'))return[{snapshotId:exported}];
+   if(text.includes('FROM pg_database'))return[{database:config.database,databaseOid:config.databaseOid,role:config.observer.name,
+    sessionRole:config.observer.name,roleOid:config.observer.oid,pid:123,readOnly:true,encrypted:true,recovery:false,version:160011,observedAt:'2026-10-17 09:00:00+00'}];
+   return config.relations.map(r=>({...r,kind:'r',inherited:false,locked:true}));
+  }
+ };
+ return{events,service:new ManagedStorageMetadataWindow({$transaction:async<T>(fn:(tx:unknown)=>Promise<T>)=>fn(tx)} as never,config)};
+}
+test('exported snapshot is issued after configured locks and is absent from saved evidence',async()=>{
+ const f=snapshotFixture(),digest=f.service.configurationDigest();
+ const result=await f.service.runWithSnapshot(async(snapshot,signal)=>{
+  assert.ok(Object.isFrozen(snapshot));assert.equal(signal.aborted,false);
+  assert.equal(snapshot.database,config.database);assert.equal(snapshot.snapshotId,'00000001-00000002-1');
+  assert.ok(f.events.findIndex(v=>v.includes('LOCK TABLE'))<f.events.findIndex(v=>v.includes('pg_export_snapshot')));
+  return 'actual-consumer-result';
+ });
+ assert.equal(result.value,'actual-consumer-result');assert.equal(f.service.configurationDigest(),digest);
+ assert.equal(result.databaseSnapshot.windowId,result.evidence.windowId);
+ assert.equal(result.databaseSnapshot.exporterHeldDuringCallback,true);
+ assert.equal(result.databaseSnapshot.importedByConsumerVerified,false);
+ assert.equal(result.databaseSnapshot.snapshotStillImportable,false);
+ assert.equal(result.databaseSnapshot.nonMvccStateCaptured,false);
+ assert.equal(result.databaseSnapshot.actionAuthorized,false);
+ assert.match(result.databaseSnapshot.snapshotBindingSha256,/^[a-f0-9]{64}$/);
+ assert.ok(!JSON.stringify(result.databaseSnapshot).includes('00000001-00000002-1'));
+ const ordinary=await f.service.run(async()=>1);assert.equal(ordinary.databaseSnapshot,undefined);
+ assert.equal(f.events.filter(v=>v.includes('pg_export_snapshot')).length,1);
+});
+test('invalid snapshot and consumer failure refuse without creating successful evidence',async()=>{
+ for(const id of ['bad; sql','00000001-00000002-1-extra','']){
+  let calls=0;await assert.rejects(()=>snapshotFixture(id).service.runWithSnapshot(async()=>{calls++;}),unresolved);assert.equal(calls,0);
+ }
+ const f=snapshotFixture();await assert.rejects(()=>f.service.runWithSnapshot(async()=>{throw new Error('PRIVATE-consumer-failure');}),unresolved);
+ assert.equal((await f.service.run(async()=> 'subsequent-new-window')).value,'subsequent-new-window');
+});
+test('snapshot consumer cancellation cannot return an admitted result',async()=>{
+ const controller=new AbortController(),f=snapshotFixture();
+ await assert.rejects(()=>f.service.runWithSnapshot(async(_snapshot,signal)=>{
+  controller.abort();assert.equal(signal.aborted,true);return 'discard';
+ },controller.signal),unresolved);
+});

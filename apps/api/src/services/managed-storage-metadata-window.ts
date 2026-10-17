@@ -9,13 +9,15 @@ const configuration=z.object({database:name,databaseOid:oid,observer:z.object({n
  .superRefine((c,ctx)=>{if(new Set(c.relations.map(r=>r.oid)).size!==c.relations.length
   ||new Set(c.relations.map(r=>`${r.schema}.${r.name}`)).size!==c.relations.length)
   ctx.addIssue({code:'custom',message:'Duplicate metadata relation'});});
+export type ManagedDatabaseSnapshot = Readonly<{snapshotId:string;database:string;databaseOid:string;observerOid:string;backendPid:number}>;
+const snapshotId=z.string().regex(/^[0-9A-Fa-f]{8}-[0-9A-Fa-f]{8}-[0-9A-Fa-f]+$/).max(80);
 const failure=()=>new Error('Managed storage metadata window is unresolved; discard the candidate result');
 const identity=z.object({database:name,databaseOid:oid,role:name,sessionRole:name,roleOid:oid,
  pid:z.number().int().positive(),readOnly:z.boolean(),encrypted:z.boolean(),recovery:z.boolean(),
  version:z.number().int(),observedAt:z.string().min(1).max(80)}).strict();
 const table=z.object({schema:z.string(),name:z.string(),oid,kind:z.string(),inherited:z.boolean(),locked:z.boolean()}).strict();
 /** Internal bounded metadata lock interval, NOT a whole-Storage fence, provider
- * activation, export snapshot or grant change. Callback never receives SQL/tx.
+ * activation or grant change. Snapshot export is explicit; callback never receives SQL/tx.
  * Caller must propagate the supplied cancellation signal to external reads. */
 export class ManagedStorageMetadataWindow {
  private readonly config:z.infer<typeof configuration>;
@@ -46,6 +48,16 @@ export class ManagedStorageMetadataWindow {
   return actual;
  }
  async run<T>(capture:(signal:AbortSignal)=>Promise<T>,caller?:AbortSignal){
+  return this.execute(capture,false,caller);
+ }
+ /** Export only after all configured relations are locked. The ephemeral ID is
+  * valid only in this callback; no SQL client or replay permission is exposed. */
+ async runWithSnapshot<T>(capture:(snapshot:ManagedDatabaseSnapshot,signal:AbortSignal)=>Promise<T>,caller?:AbortSignal){
+  if(typeof capture!=='function')throw failure();
+  const result=await this.execute((signal,snapshot)=>{if(!snapshot)throw failure();return capture(snapshot,signal);},true,caller);
+  if(!result.databaseSnapshot)throw failure();return{...result,databaseSnapshot:result.databaseSnapshot};
+ }
+ private async execute<T>(capture:(signal:AbortSignal,snapshot?:ManagedDatabaseSnapshot)=>Promise<T>,exportSnapshot:boolean,caller?:AbortSignal){
   if(this.running||typeof capture!=='function'||(caller!==undefined&&!(caller instanceof AbortSignal)))throw failure();
   this.running=true;
   const controller=new AbortController(),signal=caller?AbortSignal.any([caller,controller.signal]):controller.signal;
@@ -61,6 +73,12 @@ export class ManagedStorageMetadataWindow {
     await tx.$executeRaw(Prisma.sql`LOCK TABLE ONLY ${Prisma.raw('"'+r.schema+'"."'+r.name+'"')} IN SHARE MODE`);
    }
    const start=await this.check(tx,true,before.pid);signal.throwIfAborted();
+   let snapshot:ManagedDatabaseSnapshot|undefined;
+   if(exportSnapshot){
+    const [row]=z.array(z.object({snapshotId}).strict()).length(1).parse(await tx.$queryRaw`SELECT pg_export_snapshot()::text AS "snapshotId"`);
+    snapshot=Object.freeze({snapshotId:row!.snapshotId,database:this.config.database,databaseOid:this.config.databaseOid,
+     observerOid:start.roleOid,backendPid:start.pid});signal.throwIfAborted();
+   }
    let closing=false,heartbeat:ReturnType<typeof setTimeout>|undefined,checking:Promise<void>|undefined;
    const schedule=()=>{heartbeat=setTimeout(()=>{
     checking=this.check(tx,true,start.pid).then(()=>{if(!closing)schedule();}).catch(()=>{controller.abort();});
@@ -71,14 +89,19 @@ export class ManagedStorageMetadataWindow {
    const stop=()=>rejectCancelled(failure());signal.addEventListener('abort',stop,{once:true});schedule();
    try{
     signal.throwIfAborted();
-    const candidate=Promise.resolve().then(()=>{signal.throwIfAborted();return capture(signal);});
+    const candidate=Promise.resolve().then(()=>{signal.throwIfAborted();return capture(signal,snapshot);});
     const value=await Promise.race([candidate,cancelled]);
     const end=await this.check(tx,true,start.pid);signal.throwIfAborted();
     const facts={format:1,kind:'MANAGED_STORAGE_METADATA_WINDOW_V1',windowId:randomUUID(),
      configurationDigest:this.configurationDigest(),database:this.config.database,databaseOid:this.config.databaseOid,
      observer:{...this.config.observer},relations:this.config.relations.map(r=>({...r})),backendPid:start.pid,
      lockMode:'SHARE',transactionReadOnly:true,transactionIsolation:'ReadCommitted',startedAt:start.observedAt,finishedAt:end.observedAt};
-    return{value,evidence:{...facts,observationDigest:createHash('sha256').update(JSON.stringify(facts)).digest('hex'),
+    return{value,...(snapshot?{databaseSnapshot:{format:1 as const,kind:'MANAGED_EXPORTED_DATABASE_SNAPSHOT_V1' as const,
+     database:snapshot.database,databaseOid:snapshot.databaseOid,observerOid:snapshot.observerOid,backendPid:snapshot.backendPid,
+     snapshotBindingSha256:createHash('sha256').update('CHARITYPILOT_MANAGED_EXPORTED_SNAPSHOT_V1\n'+JSON.stringify(snapshot)).digest('hex'),
+     configurationDigest:this.configurationDigest(),windowId:facts.windowId,exportedAfterRelationLocks:true as const,
+     exporterHeldDuringCallback:true as const,importedByConsumerVerified:false as const,
+     snapshotStillImportable:false as const,nonMvccStateCaptured:false as const,wholeBackendQuiesced:false as const,actionAuthorized:false as const}}:{}),evidence:{...facts,observationDigest:createHash('sha256').update(JSON.stringify(facts)).digest('hex'),
      scope:'CONFIGURED_RELATIONS_DURING_CALLBACK_ONLY' as const,metadataWindowCompleted:true as const,
      windowStillHeld:false as const,objectBytesFenced:false as const,allWritersInventoried:false as const,
      wholeBackendQuiesced:false as const,actionAuthorized:false as const}};

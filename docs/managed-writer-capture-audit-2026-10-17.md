@@ -1,3 +1,12 @@
+## 17 October: exported snapshot inside the guarded metadata interval
+
+The [database snapshot integration](managed-database-snapshot.md) exports after
+exact relation locks and keeps the transaction open through the consumer.
+Native TLS pg_dump/isolated restore proves the imported view excludes a later
+application row while file capture matches locked synthetic metadata; expired
+imports refuse. This adds no root/index admission or real provider/host-loss
+proof. The full delegated goal remains active; Nikita review remains optional.
+
 ## 17 October: live-head plan bootstrap
 
 The [plan bootstrap](managed-plan-bootstrap.md) stores the exact protocol9 plan

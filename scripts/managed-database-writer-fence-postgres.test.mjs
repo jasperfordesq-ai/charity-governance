@@ -1,3 +1,4 @@
+import {proveManagedDatabaseSnapshot} from './managed-database-snapshot-postgres-proof.mjs';
 import {proveStorageGrantBoundary} from './storage-grant-boundary-postgres-proof.mjs';
 import {mkdtempSync,readFileSync,rmSync} from 'node:fs';
 import {tmpdir} from 'node:os';
@@ -120,6 +121,7 @@ test('managed database fence closes real stale credentials and sessions while re
   await proveManagedPasswordInvalidation({admin,configuration,url});
   await proveManagedBackendMaintenance({admin,configuration,url});
   await proveStorageGrantBoundary({admin,url});
+  await proveManagedDatabaseSnapshot({admin,url,id,database});
  }finally{
   await writerA?.$disconnect();await writerB?.$disconnect();await admin?.$disconnect();
   try {if(id)docker(['rm','--force',id]);}
