@@ -38,14 +38,14 @@ async function write(workspace,filename,value,signal){
  const data=Buffer.from(JSON.stringify(value));if(data.length>8192)throw failure();const expected={sha256:sha(data),byteLength:data.length};
  try{const output=await workspace.createCiphertextDestination(filename,signal);output.stream.end(data);await finished(output.stream);await output.complete(expected);
   const flush=await workspace.syncDirectory();const saved=await read(workspace,filename,expected,signal);
-  if(JSON.stringify(saved)!==JSON.stringify(value))throw failure();return{pin:expected,...flush};
+  if(JSON.stringify(saved)!==JSON.stringify(value))throw failure();return{pin:expected,...flush,artifact:{body:JSON.stringify(value),...expected}};
  }finally{data.fill(0);}
 }
 /** Baseline readback must finish before any worker is started. Never retry it. */
 export async function recordManagedProofJob(workspace,raw,signal){
  try{const value=request(raw);if(value.workspaceDigest!==workspace.identityDigest())throw failure();const saved=await write(workspace,'proof-job.request.json',value,signal);
   let attempted=false;
-  return{requestPin:saved.pin,directoryFlushSupported:saved.directoryFlushSupported,
+  return{requestPin:saved.pin,requestArtifact:saved.artifact,directoryFlushSupported:saved.directoryFlushSupported,
    observe:async(state,jobContainersObservedAbsent)=>{
     if(attempted)throw failure();attempted=true;
     const body=observation({format:1,kind:'MANAGED_IMPORTED_PROOF_JOB_OBSERVATION_V1',jobId:value.jobId,requestPin:saved.pin,state,jobContainersObservedAbsent,

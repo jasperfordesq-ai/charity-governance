@@ -1,3 +1,12 @@
+## 17 October: original-request source-job custody
+
+Read [source job custody](managed-source-job-custody.md). Local job descriptors
+now receive original-ACK-gated conditional custody before worker start, with a
+separate immutable job namespace and exact observation pairing. Fresh discovery
+learns job IDs/local pins from original candidate custody without replay or
+reconstructed execution ACKs. Real provider/host-loss and supervisor ownership/
+crash/orphan/daemon-request acceptance remain open; the full goal stays active.
+
 ## 17 October: original-bound local proof-job records
 
 Read [protected job records](managed-proof-job-records.md). The original ACKed

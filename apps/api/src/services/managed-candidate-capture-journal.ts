@@ -1,3 +1,4 @@
+import {ManagedProofJobCustody} from './managed-proof-job-custody.js';
 import {ManagedPlanBootstrap,managedClosedHead} from './managed-plan-bootstrap.js';
 import {requireProtocol9ClosedHead,type S3ManagedMaintenanceControl} from './managed-maintenance-control.js';
 import {discoverManagedCandidateCatalogue} from './managed-candidate-catalogue.js';
@@ -66,6 +67,9 @@ export class ManagedCandidateCaptureJournal {
   return{root:result,requestPin:request.pin,reportPin:saved.pin,originalAcknowledgementReconstructed:false as const,
    savedObservationAuthorizesExecution:false as const,archivedSetAdmitted:false as const,actionAuthorized:false as const};
  }
+ async discoverSourceJob(raw:unknown,signal?:AbortSignal){
+  const session=this.forCandidate(raw),original=await session.discoverRequest(signal);return session.discoverSourceJob(original.pin,signal);
+ }
  forCandidate(raw:unknown){
   const binding=candidateBindingSchema.parse(raw),bindingDigest=candidateHash(JSON.stringify(binding));
   if(binding.installationId!==this.storage.installationId||binding.journalConfigurationDigest!==this.configurationDigest())throw failure();
@@ -79,8 +83,8 @@ class CandidateSession {
  private readonly evidence:S3MaintenanceArtifactStore<z.infer<typeof candidatePinSchema>>;
  private readonly original:ReturnType<typeof candidateRequestArtifact>;
  private acknowledgedRequest:z.infer<typeof candidatePinSchema>|undefined;
- private reportAttempted=false;
- constructor(storage:z.infer<typeof storageSchema>,private readonly binding:Binding,credentials:NonNullable<S3ClientConfig['credentials']>,client?:S3Client){
+ private reportAttempted=false;private jobs:ManagedProofJobCustody|undefined;
+ constructor(private readonly storage:z.infer<typeof storageSchema>,private readonly binding:Binding,private readonly credentials:NonNullable<S3ClientConfig['credentials']>,private readonly client:S3Client){
   this.original=candidateRequestArtifact(binding);
   const match=(artifact:{body:string;sha256:string})=>{
    const parsed=parseCandidateRequest(artifact);if(parsed.artifact.body!==this.original.body)throw failure();return parsed.artifact;
@@ -99,7 +103,14 @@ class CandidateSession {
  async reserve(signal?:AbortSignal){
   const pin=await this.evidence.publishBaseline(this.original,signal);this.acknowledgedRequest=candidatePinSchema.parse(pin);return pin;
  }
- closeExecution(){this.acknowledgedRequest=undefined;}
+ closeExecution(){this.acknowledgedRequest=undefined;this.jobs?.closeExecution();}
+ private jobCustody(){
+  if(this.binding.format!==3)throw failure();
+  return this.jobs??=new ManagedProofJobCustody(this.storage,this.binding,this.credentials,this.client,pin=>!!this.acknowledgedRequest&&JSON.stringify(pin)===JSON.stringify(this.acknowledgedRequest));
+ }
+ reserveSourceJob(local:unknown,pin:unknown,signal?:AbortSignal){return this.jobCustody().reserve(local,pin,signal);}
+ observeSourceJob(local:unknown,pin:unknown,signal?:AbortSignal){return this.jobCustody().observe(local,pin,signal);}
+ async discoverSourceJob(pin:unknown,signal?:AbortSignal){await this.inspectRequest(pin,signal);return this.jobCustody().discover(pin,signal);}
  async inspectRequest(pin:unknown,signal?:AbortSignal){
   const artifact=await this.evidence.observeBaseline(pin,signal);
   return{artifact,value:parseCandidateRequest(artifact).value,savedObservationAuthorizesExecution:false as const};

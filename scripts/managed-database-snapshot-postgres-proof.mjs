@@ -3,7 +3,7 @@ import {runManagedImportedProof} from './managed-proof-runner.mjs';
 import {createManagedCaptureWorkspace,openManagedCaptureWorkspace} from './managed-capture-workspace.mjs';
 import {fileURLToPath} from 'node:url';
 import {managedCommonCustodyBackend,startManagedCommonCustody} from './managed-common-custody-postgres-proof.mjs';
-import {mkdtempSync,readFileSync,statSync,rmSync} from 'node:fs';
+import {mkdtempSync,readFileSync,statSync,rmSync,existsSync} from 'node:fs';
 import {tmpdir} from 'node:os';
 import {basename,dirname,join,resolve} from 'node:path';
 import {canonicalDocumentIdentitySha256,canonicalMetadataBindingSha256,canonicalObjectKeySha256,canonicalDocumentMetadataRowsSha256} from '../packages/shared/runtime/document-recovery-inventory.mjs';
@@ -32,14 +32,12 @@ export async function proveManagedDatabaseSnapshot({admin,url,id,database,certif
  const workspace=await createManagedCaptureWorkspace(parent),output=workspace.root;
  const verifyOutput=()=>{assert.equal(dirname(resolve(parent)),resolve(tmpdir()));assert.ok(basename(parent).startsWith('charitypilot-imported-proof-'));
   assert.equal(dirname(resolve(output)),resolve(parent));assert.ok(basename(output).startsWith('capture-'));};verifyOutput();
- let recordedJob;
- const prove=async(snapshot,identity,signal,captureConfigurationDigest,scope)=>{
+  const prove=async(snapshot,identity,signal,captureConfigurationDigest,scope,jobCustody)=>{
   const source=new URL(captureUrl(database));source.searchParams.set('sslrootcert',certificate);
   const args=['prove-restore','--source-container-id='+id,'--recovery-set-id=synthetic-imported-'+randomUUID(),
    '--expected-source-database-identity-sha256='+identity,'--output-dir='+output,'--output-file=common.dump','--report-file=common.json'];
-  const supervised=await runManagedImportedProof({args,snapshot,databaseUrl:source.href,workspace,scope,signal});
+  const supervised=await runManagedImportedProof({args,snapshot,databaseUrl:source.href,workspace,scope,jobCustody,signal});
   assert.equal(supervised.workerExited,true);assert.equal(supervised.observedJobContainersAbsent,true);
-  recordedJob={requestPin:supervised.requestPin,observationPin:supervised.observationPin,expectedScope:scope??{kind:'STANDALONE_INTERNAL_PROOF'}};
   assert.ok(statSync(join(output,'common.json')).size<16*1024*1024);
   const report=JSON.parse(readFileSync(join(output,'common.json'),'utf8'));
   assert.equal(report.format,'charitypilot-postgres-restore-proof/v2');assert.equal(report.ok,true);
@@ -106,7 +104,8 @@ export async function proveManagedDatabaseSnapshot({admin,url,id,database,certif
    assert.equal(options.method,'GET');assert.equal(path,'/storage/v1/object/'+scope.bucket+'/record.txt');
    return new Response(body,{headers:{'Content-Type':'text/plain','Content-Length':String(body.length)}});
   });
-  const prepareSource=async(snapshot,signal,scope)=>{
+  const prepareSource=async(snapshot,signal,context)=>{
+   const {jobCustody,...scope}=context??{};
    sourceCalls++;expired=snapshot.snapshotId;
    // An unrelated MVCC row commits after export but before pg_dump starts.
    // The imported dump must omit it; a fresh unbound dump would include it.
@@ -129,7 +128,7 @@ export async function proveManagedDatabaseSnapshot({admin,url,id,database,certif
    assert.equal(sourceFingerprint.documentMetadata.rowCount,1);
    assert.equal(sourceFingerprint.documentMetadata.rowsSha256,canonicalDocumentMetadataRowsSha256(metadata));
    assert.equal(dump.subarray(0,5).toString(),'PGDMP');
-   const releaseProof=await prove(snapshot,sourceFingerprint.databaseIdentitySha256,signal,capture.configurationDigest(),scope);
+   const releaseProof=await prove(snapshot,sourceFingerprint.databaseIdentitySha256,signal,capture.configurationDigest(),context?scope:undefined,jobCustody);
    return{visit:async(file,bytes,digest)=>{
     assert.equal(file.fileUrl,'record.txt');assert.equal(digest,hash(body));assert.deepEqual(bytes,body);
     const [row]=await admin.$queryRaw`SELECT body FROM managed_snapshot_fixture.objects WHERE id='record.txt'`;
@@ -143,26 +142,34 @@ export async function proveManagedDatabaseSnapshot({admin,url,id,database,certif
    const request={candidateId:randomUUID(),attemptId:head.value.attemptId,controlRevision:head.revision,
     captureConfigurationDigest:capture.configurationDigest(),metadataWindowConfigurationDigest:service.configurationDigest(),
     journalConfigurationDigest:journal.configurationDigest(),archiveConfigurationDigest:archive.configurationDigest()};
-   cloud.b.loseRoot=mode==='root-ack';cloud.b.loseCommonReportRead=mode==='report-ack';cloud.b.loseCommonRequestRead=mode==='request-ack';
+   cloud.b.loseJobRequestRead=mode==='job-ack';cloud.b.loseRoot=mode==='root-ack';cloud.b.loseCommonReportRead=mode==='report-ack';cloud.b.loseCommonRequestRead=mode==='request-ack';
    const execute=()=>coordinator.captureCommonQuarantined(request,capture,service,journal,archive,prepareSource);
    if(mode==='success')assert.equal((await execute()).root.completedIntervalBindingVerified,true);
    else await assert.rejects(execute);
    assert.equal(sourceCalls,mode==='request-ack'?0:1);assert.equal((await control.observe()).revision,head.revision);
-   cloud.b.loseCommonReportRead=false;cloud.b.loseCommonRequestRead=false;
+   cloud.b.loseCommonReportRead=false;cloud.b.loseCommonRequestRead=false;cloud.b.loseJobRequestRead=false;
    await holder.$disconnect();
-   if(sourceCalls){
-    verifyOutput();for(const name of ['common.dump','common.json','database.ciphertext'])rmSync(join(output,name));
-    const reopened=await openManagedCaptureWorkspace(parent,output);
-    try{const receipt=await inspectManagedProofJob(reopened,recordedJob);assert.equal(receipt.state,'WORKER_EXIT_ACK_OBSERVED');
-     assert.equal(receipt.scope.kind,'COMMON_CANDIDATE');assert.equal(receipt.executionAuthorized,false);
-     assert.equal(receipt.sourceSha,managed.operation.sourceSha);
-     await assert.rejects(reopened.createCiphertextDestination('restart-execution-blocked'));
-    }finally{await reopened.close();}
-   }
+   if(sourceCalls&&mode!=='job-ack'){verifyOutput();for(const name of ['common.dump','common.json','database.ciphertext'])rmSync(join(output,name));}
+   // Independent reader must discover original pins from custody, without local UUID/pins.
    const writes=cloud.b.writes,generates=cloud.b.generates,from=cloud.fresh();
    const learned=await from.journal.discoverCurrentCandidates(managed.controlReader(),managed.operation.maintenanceEpoch);
    const rows=learned.catalogue.records.filter(r=>r.commonRoot); // No supplied candidate ID or root pin.
-   assert.equal(rows.length,mode==='request-ack'?0:1);assert.equal(learned.savedObservationAuthorizesExecution,false);
+   assert.equal(rows.length,['request-ack','job-ack'].includes(mode)?0:1);assert.equal(learned.savedObservationAuthorizesExecution,false);
+   if(sourceCalls){
+    assert.equal(learned.catalogue.records.length,1);const original=learned.catalogue.records[0];assert.ok(original);
+    const discovered=await from.journal.discoverSourceJob(original.binding);
+    assert.equal(discovered.state,mode==='job-ack'?'REQUESTED_ONLY':'WORKER_EXIT_ACK_OBSERVED');
+    assert.equal(discovered.executionAuthorized,false);assert.equal(discovered.originalAcknowledgementReconstructed,false);
+    const reopened=await openManagedCaptureWorkspace(parent,output);
+    try{const receipt=await inspectManagedProofJob(reopened,{requestPin:discovered.requestPin,expectedScope:discovered.scope,
+      ...(discovered.observationPin?{observationPin:discovered.observationPin}:{})});
+     assert.equal(receipt.state,discovered.state);assert.equal(receipt.jobId,discovered.jobId);assert.equal(receipt.sourceSha,managed.operation.sourceSha);
+     await assert.rejects(reopened.createCiphertextDestination('restart-execution-blocked'));
+    }finally{await reopened.close();}
+    if(mode==='job-ack'){assert.equal(discovered.observationPin,null);assert.equal(cloud.b.generates,0);
+     for(const name of ['common.dump','common.json','database.ciphertext'])assert.equal(existsSync(join(output,name)),false);
+     assert.equal([...cloud.b.objects.keys()].some(k=>k.endsWith('/root.json')),false);}
+   }
    if(rows.length){
     const row=rows[0];assert.equal(row.binding.sourceSha,managed.operation.sourceSha);
     assert.equal(row.commonRoot.state,'PREPARED_ROOT_REFERENCE_ONLY');
@@ -180,8 +187,9 @@ export async function proveManagedDatabaseSnapshot({admin,url,id,database,certif
    await assert.rejects(coordinator.captureCommonQuarantined(request,capture,service,from.journal,from.archive,prepareSource));
    assert.equal(sourceCalls,mode==='request-ack'?0:1);assert.deepEqual([...cloud.b.objects].map(([k,v])=>[k,v.version,v.checksum]),retained);assert.equal(cloud.b.generates,generates);
    if(mode==='request-ack')console.log('PASS native managed common request-ack: original request stored but ACK unknown; source/window/capture not entered, no data keys or root, fresh catalogue preserves requested-only state and refuses replay');
-   else console.log('PASS native managed common '+mode+': original closed control/request, real TLS window/full v2 dump proof, actual SDK crypto/custody, durable common report, current bootstrap learns root without local IDs/pin, fresh verification or unresolved missing root after original holder disconnect/local proof files removed, no replay/repair');
-   if(mode==='request-ack')return;
+   else if(mode!=='job-ack')console.log('PASS native managed common '+mode+': original closed control/request, real TLS window/full v2 dump proof, actual SDK crypto/custody, durable common report, current bootstrap learns root without local IDs/pin, fresh verification or unresolved missing root after original holder disconnect/local proof files removed, no replay/repair');
+   if(mode==='job-ack')console.log('PASS native common job ACK lost: descriptor stored, worker/full proof/crypto/root never entered; fresh original candidate discovery learns job ID and baseline pin without caller memory; no replay or repair');
+   if(['request-ack','job-ack'].includes(mode))return;
   }else{
    result=await service.runWithSnapshot(async(snapshot,signal)=>{
     const source=await prepareSource(snapshot,signal);return{capture:await capture.capture(source.visit,signal),releaseProof:source.releaseProof};

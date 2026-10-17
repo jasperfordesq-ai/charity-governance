@@ -78,7 +78,8 @@ export async function superviseManagedProofProcess({input,env,signal,timeoutMs=9
  });
 }
 /** Dedicated original helper runner, not an arbitrary command execution API. */
-export async function runManagedImportedProof({args,snapshot,databaseUrl,workspace,scope={kind:'STANDALONE_INTERNAL_PROOF'},signal,timeoutMs=90000}){
+export async function runManagedImportedProof({args,snapshot,databaseUrl,workspace,scope={kind:'STANDALONE_INTERNAL_PROOF'},jobCustody,signal,timeoutMs=90000}){
+ if(scope?.kind==='COMMON_CANDIDATE'&&(!jobCustody||typeof jobCustody.reserve!=='function'||typeof jobCustody.observe!=='function'))throw unresolved();
  const jobId=randomUUID();let success=false,cleanup;
  const env=Object.fromEntries(Object.entries(process.env).filter(([k])=>!(/^(NODE_OPTIONS|NODE_PATH|DATABASE_URL)$/i).test(k)));
  env.DATABASE_URL=databaseUrl;
@@ -91,6 +92,7 @@ export async function runManagedImportedProof({args,snapshot,databaseUrl,workspa
   workspaceDigest:workspace.identityDigest(),snapshotDigest:hash('CHARITYPILOT_MANAGED_EXPORTED_SNAPSHOT_V1\n'+JSON.stringify(snapshot)),
   argumentsDigest:hash(JSON.stringify(args)),createdAt:new Date().toISOString(),state:'REQUESTED_ONLY',
   executionAuthorized:false,publicationAuthorized:false,actionAuthorized:false},signal);
+ if(jobCustody)await jobCustody.reserve(job.requestArtifact);
  let result;
  const input=Buffer.from(JSON.stringify({args,snapshot,jobId}));
  try{await superviseManagedProofProcess({input,env,signal,timeoutMs});success=true;}
@@ -98,9 +100,9 @@ export async function runManagedImportedProof({args,snapshot,databaseUrl,workspa
  finally{
   input.fill(0);
   try{cleanup=reconcileManagedProofContainers(jobId,env);}catch{
-   try{await job.observe('UNRESOLVED',false);}catch{}throw unresolved();
+   try{const failed=await job.observe('UNRESOLVED',false);if(jobCustody)await jobCustody.observe(failed.artifact);}catch{}throw unresolved();
   }
-  try{result=await job.observe(success&&cleanup.removedCount===0?'WORKER_EXIT_ACK_OBSERVED':'UNRESOLVED',true);}catch{throw unresolved();}
+  try{result=await job.observe(success&&cleanup.removedCount===0?'WORKER_EXIT_ACK_OBSERVED':'UNRESOLVED',true);if(jobCustody)await jobCustody.observe(result.artifact);}catch{throw unresolved();}
   // Residue after an apparently successful worker is an unresolved outcome too.
   if(success&&cleanup.removedCount!==0)throw unresolved();
  }

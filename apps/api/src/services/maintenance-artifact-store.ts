@@ -33,7 +33,7 @@ export type MaintenanceArtifactPin = {
   byteLength: number;
 };
 export type MaintenanceArtifactPolicy<P extends MaintenanceArtifactPin> = {
-  namespace: 'write' | 'signed' | 'resumable' | 'resumable-cohort' | 'signed-resumable' | 's3-capability' | 's3-capability-cohort' | 's3-current-feature' | 'capture-candidate';
+  namespace: 'write' | 'signed' | 'resumable' | 'resumable-cohort' | 'signed-resumable' | 's3-capability' | 's3-capability-cohort' | 's3-current-feature' | 'capture-candidate' | 'capture-job';
   /** Scoped capability/candidate records only; never a caller-supplied path. */
   scopeDigest?: string;
   pinSchema: z.ZodType<P>;
@@ -64,8 +64,8 @@ export class S3MaintenanceArtifactStore<P extends MaintenanceArtifactPin> {
     this.policy = { ...policy, limits: { ...policy.limits } };
     this.config = configuration.parse(raw);
     if (!credentials) throw this.policy.failure();
-    z.enum(['write', 'signed', 'resumable', 'resumable-cohort', 'signed-resumable', 's3-capability', 's3-capability-cohort', 's3-current-feature', 'capture-candidate']).parse(policy.namespace);
-    if (policy.namespace === 's3-capability' || policy.namespace === 'capture-candidate')
+    z.enum(['write', 'signed', 'resumable', 'resumable-cohort', 'signed-resumable', 's3-capability', 's3-capability-cohort', 's3-current-feature', 'capture-candidate', 'capture-job']).parse(policy.namespace);
+    if (policy.namespace === 's3-capability' || policy.namespace === 'capture-candidate' || policy.namespace === 'capture-job')
       z.string().regex(/^[a-f0-9]{64}$/).parse(policy.scopeDigest);
     else if (policy.scopeDigest !== undefined) throw this.policy.failure();
     const maximum=policy.namespace==='capture-candidate'?128*1024*1024:['resumable-cohort','s3-capability-cohort'].includes(policy.namespace)?131072:16384;
@@ -91,7 +91,7 @@ export class S3MaintenanceArtifactStore<P extends MaintenanceArtifactPin> {
       });
   }
   private request(kind: MaintenanceArtifactKind) {
-    const prefix = (this.policy.namespace === 's3-capability'||this.policy.namespace === 'capture-candidate')
+    const prefix = (this.policy.namespace === 's3-capability'||this.policy.namespace === 'capture-candidate'||this.policy.namespace === 'capture-job')
       ? this.policy.namespace+'/' + this.policy.scopeDigest + '/'
       : this.policy.namespace + '-';
     return {
@@ -310,7 +310,7 @@ export class S3MaintenanceArtifactStore<P extends MaintenanceArtifactPin> {
   /** Candidate custody discovery only. Saved reads never authorise execution or
    * reconstruct a lost acknowledgement for any maintenance baseline. */
   async inspectCandidateArtifact(kind:MaintenanceArtifactKind,caller?:AbortSignal){
-    if(this.policy.namespace!=='capture-candidate'||!['BASELINE','OBSERVATION'].includes(kind))throw this.policy.failure();
+    if(!['capture-candidate','capture-job'].includes(this.policy.namespace)||!['BASELINE','OBSERVATION'].includes(kind))throw this.policy.failure();
     const controller=new AbortController(),signal=caller?AbortSignal.any([caller,controller.signal]):controller.signal;
     const timer=setTimeout(()=>controller.abort(),15000);let body:Readable|undefined;
     try{
@@ -323,7 +323,7 @@ export class S3MaintenanceArtifactStore<P extends MaintenanceArtifactPin> {
       if(digest.length!==32||digest.toString('base64')!==response.ChecksumSHA256)throw this.policy.failure();
       const pin=this.policy.pinSchema.parse({kind,versionId:response.VersionId,sha256:digest.toString('hex'),byteLength:response.ContentLength});
       body?.destroy();const artifact=await this.read(pin,kind,signal);
-      return{pin,artifact,originalAcknowledgementReconstructed:false as const,savedObservationAuthorizesExecution:false as const};
+      return{pin,artifact,...(this.policy.namespace==='capture-job'?{currentETag:response.ETag}:{}),originalAcknowledgementReconstructed:false as const,savedObservationAuthorizesExecution:false as const};
     }catch{throw this.policy.failure();}finally{clearTimeout(timer);body?.destroy();controller.abort();}
   }
 
