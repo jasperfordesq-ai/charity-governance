@@ -1,3 +1,13 @@
+## 17 October: original-job service binding and custody
+
+Read [service identity custody](managed-proof-service-custody.md). A fresh guardian
+identity is now recorded against the exact protected job baseline and input
+before work. The original candidate session exposes one-shot immutable service
+custody; fresh discovery reads it without recreating an execution acknowledgement.
+Real Linux guardian tests now use the protected local job binding. The production
+systemd launcher and genuine capture activation remain required. Full delegated
+product, provider/current-authority and source-host-loss scope remains active.
+
 # Private connection to a systemd proof guardian
 
 17 October 2026. Internal Linux transport for the managed source-executor integration. The original capture runner still uses inherited IPC; this transport has not been activated or deployed as its replacement.

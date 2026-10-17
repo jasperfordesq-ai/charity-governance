@@ -64,7 +64,7 @@ export function backend(selected=config) {
     generates = 0,
     sequence = 0,
     loseRoot = false,
-    losePrepared = false,loseCommonRequestRead=false,loseCommonReportRead=false,loseJobRequestRead=false,loseJobObservationRead=false;
+    losePrepared = false,loseCommonRequestRead=false,loseCommonReportRead=false,loseJobRequestRead=false,loseJobObservationRead=false,loseJobServiceRead=false;
   let onRootVerify = () => {};
   const metadata: Record<string, string> = {};
   const encryption = {
@@ -103,7 +103,7 @@ export function backend(selected=config) {
           const key = request.path.slice(1);
           if(request.method==='GET'&&request.query['list-type']==='2'){
             reads++;const prefix=request.query.prefix??'',max=Number(request.query['max-keys']),offset=Number(request.query['continuation-token']??0);
-            assert.equal(max,/\/capture-job\/[a-f0-9]{64}\/$/.test(prefix)?3:1000);assert.ok(Number.isInteger(offset)&&offset>=0);
+            if(/\/capture-job\/[a-f0-9]{64}\/$/.test(prefix))assert.ok(max===2||max===3);else assert.equal(max,1000);assert.ok(Number.isInteger(offset)&&offset>=0);
             const rows=[...objects].filter(([k])=>k.startsWith(prefix)).sort(([a],[b])=>a<b?-1:1),page=rows.slice(offset,offset+max);
             const esc=(v:string)=>v.replaceAll('&','&amp;').replaceAll('<','&lt;').replaceAll('>','&gt;').replaceAll('"','&quot;');
             return reply(`<ListBucketResult><Name>${config.bucket}</Name><Prefix>${esc(prefix)}</Prefix><MaxKeys>${max}</MaxKeys><KeyCount>${page.length}</KeyCount><IsTruncated>${offset+max<rows.length}</IsTruncated>${offset?`<ContinuationToken>${offset}</ContinuationToken>`:''}${offset+max<rows.length?`<NextContinuationToken>${offset+max}</NextContinuationToken>`:''}${page.map(([k,v])=>`<Contents><Key>${esc(k)}</Key><Size>${v.body.length}</Size><ETag>${esc('"'+v.version+'"')}</ETag></Contents>`).join('')}</ListBucketResult>`);
@@ -185,9 +185,9 @@ export function backend(selected=config) {
           reads++;
           const value = objects.get(key);
           assert.ok(value, 'missing staged fixture object');
-          if((loseCommonRequestRead||loseCommonReportRead||loseJobRequestRead||loseJobObservationRead)&&key.endsWith('.json')){
+          if((loseCommonRequestRead||loseCommonReportRead||loseJobRequestRead||loseJobObservationRead||loseJobServiceRead)&&key.endsWith('.json')){
             const kind=JSON.parse(value.body.toString()).kind;
-            if((loseJobObservationRead&&kind==='MANAGED_SOURCE_JOB_OBSERVATION_V1')||(loseJobRequestRead&&kind==='MANAGED_SOURCE_JOB_REQUEST_V1')||(loseCommonRequestRead&&kind==='MANAGED_COMMON_CANDIDATE_REQUEST_V1')||(loseCommonReportRead&&kind==='MANAGED_QUARANTINED_COMMON_CANDIDATE'))throw new Error('synthetic original common acknowledgement lost after storage');
+            if((loseJobServiceRead&&kind==='MANAGED_SOURCE_JOB_SERVICE_V1')||(loseJobObservationRead&&kind==='MANAGED_SOURCE_JOB_OBSERVATION_V1')||(loseJobRequestRead&&kind==='MANAGED_SOURCE_JOB_REQUEST_V1')||(loseCommonRequestRead&&kind==='MANAGED_COMMON_CANDIDATE_REQUEST_V1')||(loseCommonReportRead&&kind==='MANAGED_QUARANTINED_COMMON_CANDIDATE'))throw new Error('synthetic original common acknowledgement lost after storage');
           }
           if (request.query.versionId)
             assert.equal(request.query.versionId, value.version);
@@ -291,6 +291,7 @@ export function backend(selected=config) {
     },
     set loseJobObservationRead(value:boolean){loseJobObservationRead=value;},
     set loseJobRequestRead(value:boolean){loseJobRequestRead=value;},
+    set loseJobServiceRead(value:boolean){loseJobServiceRead=value;},
     set loseCommonRequestRead(value:boolean){loseCommonRequestRead=value;},
     set loseCommonReportRead(value:boolean){loseCommonReportRead=value;},
     set loseRoot(value: boolean) {

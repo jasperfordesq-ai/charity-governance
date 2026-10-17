@@ -39,7 +39,7 @@ test('real systemd guardian transport binds before work, refuses denied ACK and 
    try{
     if(mode==='success'){
      assert.equal((await p.terminal).code,0,'success parent: '+p.errorText());assert.equal((await unit.terminal).code,0);
-     const result=p.lines()[1];assert.equal(result.acknowledged,true);assert.equal(result.identity.jobId,job);assert.equal(result.identity.unit,first.unit);
+     const result=p.lines()[1];assert.equal(result.acknowledged,true);assert.equal(result.serviceBound,true);assert.equal(result.identity.jobId,job);assert.equal(result.identity.unit,first.unit);
      assert.equal(result.identity.executionAuthorized,false);assert.equal(result.terminal.workerTerminal,true);assert.equal(result.terminal.outcome,'WORKER_EXIT_ACK_OBSERVED');
     }else if(mode==='deny'){
      assert.equal((await p.terminal).code,1);assert.notEqual((await unit.terminal).code,0);assert.deepEqual(p.lines()[1],{refusedBeforeWorker:true,identityObserved:true});

@@ -109,6 +109,7 @@ class CandidateSession {
   return this.jobs??=new ManagedProofJobCustody(this.storage,this.binding,this.credentials,this.client,pin=>!!this.acknowledgedRequest&&JSON.stringify(pin)===JSON.stringify(this.acknowledgedRequest));
  }
  reserveSourceJob(local:unknown,pin:unknown,signal?:AbortSignal){return this.jobCustody().reserve(local,pin,signal);}
+ bindSourceJobService(local:unknown,pin:unknown,signal?:AbortSignal){return this.jobCustody().bindService(local,pin,signal);}
  observeSourceJob(local:unknown,pin:unknown,signal?:AbortSignal){return this.jobCustody().observe(local,pin,signal);}
  async discoverSourceJob(pin:unknown,signal?:AbortSignal){await this.inspectRequest(pin,signal);return this.jobCustody().discover(pin,signal);}
  async inspectRequest(pin:unknown,signal?:AbortSignal){

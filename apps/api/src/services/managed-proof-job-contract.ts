@@ -15,6 +15,14 @@ const requestEnvelope=z.object({format:z.literal(1),kind:z.literal('MANAGED_SOUR
  localRequest:localJobArtifactSchema,executionState:z.literal('REQUESTED_ONLY'),savedObservationAuthorizesExecution:no}).strict();
 const resultEnvelope=z.object({format:z.literal(1),kind:z.literal('MANAGED_SOURCE_JOB_OBSERVATION_V1'),bindingDigest:sha,jobRequestPin:candidatePinSchema,
  localObservation:localJobArtifactSchema,savedObservationAuthorizesExecution:no,actionAuthorized:no}).strict();
+const identity=z.object({format:z.literal(1),kind:z.literal('MANAGED_GUARDIAN_LIVE_BINDING_V1'),jobId:localRequest.shape.jobId,
+ unit:z.string().max(100),invocationId:z.string().regex(/^[a-f0-9]{32}$/),uid:z.number().int().min(1).max(2147483647),mainPid:z.number().int().min(1).max(2147483647),
+ mainStartMonotonic:z.string().regex(/^[1-9][0-9]{0,19}$/),sourceSha:release,inputDigest:sha,executionAuthorized:no,actionAuthorized:no}).strict()
+ .refine(v=>v.unit===`charitypilot-containment-${v.jobId}.service`);
+const localService=z.object({format:z.literal(1),kind:z.literal('MANAGED_IMPORTED_PROOF_SERVICE_V1'),jobId:localRequest.shape.jobId,requestPin:localJobPinSchema,
+ identity,executionAuthorized:no,publicationAuthorized:no,actionAuthorized:no}).strict().refine(v=>v.jobId===v.identity.jobId);
+const serviceEnvelope=z.object({format:z.literal(1),kind:z.literal('MANAGED_SOURCE_JOB_SERVICE_V1'),bindingDigest:sha,jobRequestPin:candidatePinSchema,
+ localService:localJobArtifactSchema,savedObservationAuthorizesExecution:no,actionAuthorized:no}).strict();
 const failure=()=>new Error('Managed source job custody unresolved; inspect original records without replay');
 export function localJobArtifact(raw:unknown){const v=localJobArtifactSchema.parse(raw);
  if(Buffer.byteLength(v.body)!==v.byteLength||candidateHash(v.body)!==v.sha256)throw failure();return v;}
@@ -38,3 +46,20 @@ export function parseJobObservation(binding:unknown,raw:unknown){const value=res
 export function assertJobPair(binding:unknown,baseline:unknown,result:unknown){const a=parseJobRequest(binding,baseline),b=parseJobObservation(binding,result);
  const p=localJobPinSchema.parse({sha256:a.value.localRequest.sha256,byteLength:a.value.localRequest.byteLength});
  if(b.value.jobRequestPin.sha256!==a.artifact.sha256||b.value.jobRequestPin.byteLength!==Buffer.byteLength(a.artifact.body)||a.local.jobId!==b.local.jobId||JSON.stringify(p)!==JSON.stringify(b.local.requestPin))throw failure();}
+/** Separate immutable baseline; the existing request/result namespace stays unchanged. */
+export function jobServiceScope(candidateId:string){return candidateHash('CHARITYPILOT_SOURCE_JOB_SERVICE_V1\n'+z.string().uuid().parse(candidateId));}
+export function jobServiceArtifact(binding:unknown,jobRequestPin:unknown,raw:unknown){
+ const b=commonCandidateBindingSchema.parse(binding),local=localJobArtifact(raw),v=localService.parse(JSON.parse(local.body)),pin=candidatePinSchema.parse(jobRequestPin);
+ if(pin.kind!=='BASELINE'||pin.byteLength>16384||v.identity.sourceSha!==b.sourceSha)throw failure();
+ return artifact(serviceEnvelope.parse({format:1,kind:'MANAGED_SOURCE_JOB_SERVICE_V1',bindingDigest:candidateHash(JSON.stringify(b)),jobRequestPin:pin,
+  localService:local,savedObservationAuthorizesExecution:false,actionAuthorized:false}));
+}
+export function parseJobService(binding:unknown,raw:unknown){
+ const value=serviceEnvelope.parse(parse(raw)),checked=jobServiceArtifact(binding,value.jobRequestPin,value.localService);
+ if(checked.body!==JSON.stringify(value))throw failure();return{artifact:checked,value,local:localService.parse(JSON.parse(value.localService.body))};
+}
+export function assertJobServicePair(binding:unknown,baseline:unknown,service:unknown){
+ const a=parseJobRequest(binding,baseline),b=parseJobService(binding,service),p=localJobPinSchema.parse({sha256:a.value.localRequest.sha256,byteLength:a.value.localRequest.byteLength});
+ if(b.value.jobRequestPin.sha256!==a.artifact.sha256||b.value.jobRequestPin.byteLength!==Buffer.byteLength(a.artifact.body)||a.local.jobId!==b.local.jobId
+  ||JSON.stringify(p)!==JSON.stringify(b.local.requestPin)||a.local.sourceSha!==b.local.identity.sourceSha)throw failure();
+}

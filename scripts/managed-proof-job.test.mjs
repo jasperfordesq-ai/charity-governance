@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import {mkdtempSync,rmSync,chmodSync,readFileSync,writeFileSync,renameSync,mkdirSync,copyFileSync,existsSync} from 'node:fs';
 import {tmpdir} from 'node:os';
 import {join,dirname,resolve,basename} from 'node:path';
-import {randomUUID} from 'node:crypto';
+import {randomUUID,createHash} from 'node:crypto';
 import {spawnSync} from 'node:child_process';
 import {fileURLToPath} from 'node:url';
 import {createManagedCaptureWorkspace,openManagedCaptureWorkspace} from './managed-capture-workspace.mjs';
@@ -73,4 +73,41 @@ test('records reject secrets, authority flags and scope substitution before crea
    {...f.request,scope:{...scope,rawSnapshot:'private-secret'}},{...f.request,workspaceDigest:'0'.repeat(64)}])await assert.rejects(recordManagedProofJob(f.workspace,request));
   assert.equal(existsSync(join(f.workspace.root,'proof-job.request.json')),false);
  }finally{await f.close();}
+});
+function serviceInput(f){
+ const args=['prove-restore','--synthetic-only'],snapshot={kind:'synthetic-private-snapshot'},hash=v=>createHash('sha256').update(v).digest('hex');
+ f.request.argumentsDigest=hash(JSON.stringify(args));f.request.snapshotDigest=hash('CHARITYPILOT_MANAGED_EXPORTED_SNAPSHOT_V1\n'+JSON.stringify(snapshot));
+ const input=Buffer.from(JSON.stringify({args,snapshot,jobId:f.request.jobId}));
+ const identity={format:1,kind:'MANAGED_GUARDIAN_LIVE_BINDING_V1',jobId:f.request.jobId,unit:'charitypilot-containment-'+f.request.jobId+'.service',
+  invocationId:'a'.repeat(32),uid:1000,mainPid:123,mainStartMonotonic:'456789',sourceSha:f.request.sourceSha,inputDigest:hash(input),executionAuthorized:false,actionAuthorized:false};
+ return{input,identity};
+}
+test('service binding is durable, linked to the exact baseline and readable without execution authority',async()=>{
+ const f=await setup();let reopened;const {input,identity}=serviceInput(f);
+ try{
+  const job=await recordManagedProofJob(f.workspace,f.request),bound=await job.bindService(identity,input);
+  await assert.rejects(job.bindService(identity,input));const expected={requestPin:job.requestPin,expectedScope:scope,servicePin:bound.pin};
+  await f.workspace.close();reopened=await openManagedCaptureWorkspace(f.parent,f.workspace.root);const found=await inspectManagedProofJob(reopened,expected);
+  assert.deepEqual(found.serviceIdentity,identity);assert.equal(found.serviceSupplied,true);assert.equal(found.state,'REQUESTED_ONLY');assert.equal(found.executionAuthorized,false);
+  const body=readFileSync(join(f.workspace.root,'proof-job.service.json'),'utf8');assert.ok(!body.includes('synthetic-private-snapshot'));assert.ok(!body.includes('--synthetic-only'));
+  await assert.rejects(inspectManagedProofJob(reopened,{...expected,servicePin:{...bound.pin,sha256:'0'.repeat(64)}}));
+ }finally{input.fill(0);await reopened?.close();await f.close();}
+});
+test('substituted input, scope, unit, process or authority consumes the service attempt without a file',async()=>{
+ for(const change of [{inputDigest:'0'.repeat(64)},{sourceSha:'f'.repeat(40)},{unit:'unrelated.service'},{jobId:randomUUID()},{mainPid:0},{uid:0},{executionAuthorized:true},{rawSecret:'private-secret'}]){
+  const f=await setup(),{input,identity}=serviceInput(f);
+  try{const job=await recordManagedProofJob(f.workspace,f.request);await assert.rejects(job.bindService({...identity,...change},input));await assert.rejects(job.bindService(identity,input));
+   assert.equal(existsSync(join(f.workspace.root,'proof-job.service.json')),false);
+  }finally{input.fill(0);await f.close();}
+ }
+ const f=await setup(),{input,identity}=serviceInput(f);try{
+  const job=await recordManagedProofJob(f.workspace,f.request),v=JSON.parse(input.toString());v.args.push('substituted');
+  await assert.rejects(job.bindService(identity,Buffer.from(JSON.stringify(v))));assert.equal(existsSync(join(f.workspace.root,'proof-job.service.json')),false);
+ }finally{input.fill(0);await f.close();}
+});
+test('a service binding cannot be added after the original outcome has been attempted',async()=>{
+ const f=await setup(),{input,identity}=serviceInput(f);try{
+  const job=await recordManagedProofJob(f.workspace,f.request);await job.observe('UNRESOLVED',false);await assert.rejects(job.bindService(identity,input));
+  assert.equal(existsSync(join(f.workspace.root,'proof-job.service.json')),false);
+ }finally{input.fill(0);await f.close();}
 });

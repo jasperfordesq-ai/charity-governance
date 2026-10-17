@@ -27,6 +27,17 @@ function observation(raw,original){
   ||raw.executionAuthorized!==false||raw.publicationAuthorized!==false||raw.actionAuthorized!==false)throw failure();
  return{...raw,requestPin:pin(raw.requestPin)};
 }
+function service(raw,original,requestPin){
+ if(!keys(raw,'format,kind,jobId,requestPin,identity,executionAuthorized,publicationAuthorized,actionAuthorized')||raw.format!==1||raw.kind!=='MANAGED_IMPORTED_PROOF_SERVICE_V1'
+  ||raw.jobId!==original.jobId||JSON.stringify(pin(raw.requestPin))!==JSON.stringify(pin(requestPin))||raw.executionAuthorized!==false||raw.publicationAuthorized!==false||raw.actionAuthorized!==false)throw failure();
+ const v=raw.identity;
+ if(!keys(v,'format,kind,jobId,unit,invocationId,uid,mainPid,mainStartMonotonic,sourceSha,inputDigest,executionAuthorized,actionAuthorized')||v.format!==1||v.kind!=='MANAGED_GUARDIAN_LIVE_BINDING_V1'
+  ||v.jobId!==original.jobId||v.unit!=='charitypilot-containment-'+original.jobId+'.service'||!(/^[a-f0-9]{32}$/).test(v.invocationId)
+  ||!Number.isSafeInteger(v.uid)||v.uid<1||v.uid>2147483647||!Number.isSafeInteger(v.mainPid)||v.mainPid<1||v.mainPid>2147483647
+  ||typeof v.mainStartMonotonic!=='string'||!(/^[1-9][0-9]{0,19}$/).test(v.mainStartMonotonic)||v.sourceSha!==original.sourceSha||!hex(v.inputDigest)
+  ||v.executionAuthorized!==false||v.actionAuthorized!==false)throw failure();
+ return{...raw,requestPin:pin(raw.requestPin)};
+}
 async function read(workspace,filename,expected,signal){
  const want=pin(expected);await workspace.pinExistingFile(filename,signal);
  const input=await workspace.openVerifiedSource(filename,want,signal),chunks=[];let count=0;
@@ -44,8 +55,20 @@ async function write(workspace,filename,value,signal){
 /** Baseline readback must finish before any worker is started. Never retry it. */
 export async function recordManagedProofJob(workspace,raw,signal){
  try{const value=request(raw);if(value.workspaceDigest!==workspace.identityDigest())throw failure();const saved=await write(workspace,'proof-job.request.json',value,signal);
-  let attempted=false;
+  let attempted=false,serviceAttempted=false;
   return{requestPin:saved.pin,requestArtifact:saved.artifact,directoryFlushSupported:saved.directoryFlushSupported,
+   bindService:async(identity,input)=>{
+    if(serviceAttempted||attempted)throw failure();serviceAttempted=true;
+    try{
+    if(!Buffer.isBuffer(input)||input.length<1||input.length>16384)throw failure();
+    const v=JSON.parse(input.toString('utf8'));
+    if(!keys(v,'args,snapshot,jobId')||v.jobId!==value.jobId||!Array.isArray(v.args)||v.args.some(a=>typeof a!=='string')
+     ||sha(JSON.stringify(v.args))!==value.argumentsDigest||sha('CHARITYPILOT_MANAGED_EXPORTED_SNAPSHOT_V1\n'+JSON.stringify(v.snapshot))!==value.snapshotDigest||identity?.inputDigest!==sha(input))throw failure();
+    const body=service({format:1,kind:'MANAGED_IMPORTED_PROOF_SERVICE_V1',jobId:value.jobId,requestPin:saved.pin,identity,
+     executionAuthorized:false,publicationAuthorized:false,actionAuthorized:false},value,saved.pin);
+    return await write(workspace,'proof-job.service.json',body,signal);
+    }catch{throw failure();}
+   },
    observe:async(state,jobContainersObservedAbsent)=>{
     if(attempted)throw failure();attempted=true;
     const body=observation({format:1,kind:'MANAGED_IMPORTED_PROOF_JOB_OBSERVATION_V1',jobId:value.jobId,requestPin:saved.pin,state,jobContainersObservedAbsent,
@@ -56,14 +79,16 @@ export async function recordManagedProofJob(workspace,raw,signal){
 }
 /** Requires an independently retained baseline pin and expected original scope.
  * A missing result remains REQUESTED_ONLY; it never creates a replacement job. */
-export async function inspectManagedProofJob(workspace,{requestPin,expectedScope,observationPin},signal){
+export async function inspectManagedProofJob(workspace,{requestPin,expectedScope,observationPin,servicePin},signal){
  try{
   const original=request(await read(workspace,'proof-job.request.json',requestPin,signal));
   if(original.workspaceDigest!==workspace.identityDigest()||JSON.stringify(original.scope)!==JSON.stringify(scope(expectedScope)))throw failure();
   let result;
   if(observationPin){result=observation(await read(workspace,'proof-job.observation.json',observationPin,signal),original);
    if(JSON.stringify(result.requestPin)!==JSON.stringify(pin(requestPin)))throw failure();}
+  const serviceRecord=servicePin?service(await read(workspace,'proof-job.service.json',servicePin,signal),original,requestPin):null;
   return{jobId:original.jobId,sourceSha:original.sourceSha,scope:original.scope,requestPin:pin(requestPin),
+   serviceIdentity:serviceRecord?.identity??null,serviceSupplied:!!serviceRecord,
    state:result?.state??'REQUESTED_ONLY',resultSupplied:!!result,jobContainersObservedAbsent:result?.jobContainersObservedAbsent??false,
    executionAuthorized:false,publicationAuthorized:false,actionAuthorized:false};
  }catch{throw failure();}

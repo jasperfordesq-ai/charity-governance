@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {randomUUID,createHash} from 'node:crypto';
 import {ManagedProofJobCustody} from '../services/managed-proof-job-custody.js';
-import {jobScope} from '../services/managed-proof-job-contract.js';
+import {jobScope,jobServiceScope} from '../services/managed-proof-job-contract.js';
 import {backend,config,credentials} from './fixtures/archived-custody.js';
 const hash=(v:string)=>createHash('sha256').update(v).digest('hex');
 function fixture(){
@@ -63,4 +63,46 @@ test('unexpected job catalogue objects and changed original request pins fail di
   const [key,value]=[...f.b.objects][0]!;f.b.objects.set(key.replace('baseline.json','unexpected.json'),value);
   await assert.rejects(f.create().discover(f.original));
  }finally{f.close();}
+});
+function service(f:ReturnType<typeof fixture>,change={},identityChange={}){
+ return f.local({format:1,kind:'MANAGED_IMPORTED_PROOF_SERVICE_V1',jobId:f.request.jobId,requestPin:{sha256:f.input.sha256,byteLength:f.input.byteLength},
+  identity:{format:1,kind:'MANAGED_GUARDIAN_LIVE_BINDING_V1',jobId:f.request.jobId,unit:`charitypilot-containment-${f.request.jobId}.service`,invocationId:'a'.repeat(32),uid:1000,mainPid:123,
+   mainStartMonotonic:'123456',sourceSha:f.binding.sourceSha,inputDigest:'d'.repeat(64),executionAuthorized:false,actionAuthorized:false,...identityChange},
+  executionAuthorized:false,publicationAuthorized:false,actionAuthorized:false,...change});
+}
+test('original descriptor ACK gates one exact service binding and fresh discovery is read-only',async()=>{
+ const f=fixture();try{
+  await assert.rejects(f.session.bindService(service(f),f.original));assert.equal(f.b.writes,0);
+  await f.session.reserve(f.input,f.original);const saved=await f.session.bindService(service(f),f.original);await assert.rejects(f.session.bindService(service(f),f.original));
+  f.session.closeExecution();f.setLive(false);const writes=f.b.writes,found=await f.create().discover(f.original);
+  assert.equal(found.serviceStatus,'SAVED_SERVICE_BINDING');assert.equal(found.jobServicePin?.versionId,saved.pin.versionId);assert.equal(found.serviceIdentity?.invocationId,'a'.repeat(32));
+  assert.equal(found.state,'REQUESTED_ONLY');assert.equal(found.executionAuthorized,false);assert.equal(found.originalAcknowledgementReconstructed,false);assert.equal(f.b.writes,writes);assert.equal(f.b.generates,0);
+  await assert.rejects(f.session.bindService(service(f),f.original));await assert.rejects(f.create().bindService(service(f),f.original));
+ }finally{f.close();}
+});
+test('unknown original service ACK remains discoverable without permission or a second attempt',async()=>{
+ const f=fixture();try{
+  await f.session.reserve(f.input,f.original);f.b.loseJobServiceRead=true;await assert.rejects(f.session.bindService(service(f),f.original));
+  f.b.loseJobServiceRead=false;await assert.rejects(f.session.bindService(service(f),f.original));f.setLive(false);const writes=f.b.writes,found=await f.create().discover(f.original);
+  assert.equal(found.serviceStatus,'SAVED_SERVICE_BINDING');assert.equal(found.state,'REQUESTED_ONLY');assert.equal(found.savedObservationAuthorizesExecution,false);assert.equal(f.b.writes,writes);
+ }finally{f.close();}
+});
+test('substituted service identity, local baseline, scope or secret fields refuse before storage',async()=>{
+ for(const [change,identityChange] of [[{jobId:randomUUID()},{}],[{requestPin:{sha256:'0'.repeat(64),byteLength:1}},{}],[{rawSecret:'private-secret'},{}],
+  [{},{sourceSha:'f'.repeat(40)}],[{},{jobId:randomUUID()}],[{},{unit:'unrelated.service'}],[{},{uid:0}],[{},{mainPid:0}],[{},{executionAuthorized:true}]] as const){
+  const f=fixture();try{await f.session.reserve(f.input,f.original);const writes=f.b.writes;await assert.rejects(f.session.bindService(service(f,change,identityChange),f.original));
+   assert.equal(f.b.writes,writes);await assert.rejects(f.session.bindService(service(f),f.original));
+  }finally{f.close();}
+ }
+});
+test('late service additions and unexpected service catalogue entries refuse rather than hide history',async()=>{
+ const f=fixture();try{
+  await f.session.reserve(f.input,f.original);await f.session.observe(f.observation(),f.original);await assert.rejects(f.session.bindService(service(f),f.original));
+  const found=await f.create().discover(f.original);assert.equal(found.serviceStatus,'NOT_LISTED_AT_BOUNDARY');assert.equal(found.serviceIdentity,null);
+ }finally{f.close();}
+ const g=fixture();try{
+  await g.session.reserve(g.input,g.original);await g.session.bindService(service(g),g.original);
+  const prefix=`/capture-job/${jobServiceScope(g.binding.candidateId)}/`,[key,value]=[...g.b.objects].find(([k])=>k.includes(prefix))!;
+  g.b.objects.set(key.replace('baseline.json','observation.json'),value);await assert.rejects(g.create().discover(g.original));
+ }finally{g.close();}
 });

@@ -959,14 +959,14 @@ async function commonParentFixture(){
  return{...x,events,window,archive,request,source,getReport};
 }
 test('common parent saves original root reference before final root write under unchanged closed head',async()=>{
- const x=await commonParentFixture();let jobContext:unknown,retainedJob:Readonly<{reserve:(v:unknown)=>Promise<unknown>;observe:(v:unknown)=>Promise<unknown>}>|undefined;
+ const x=await commonParentFixture();let jobContext:unknown,retainedJob:Readonly<{reserve:(v:unknown)=>Promise<unknown>;observe:(v:unknown)=>Promise<unknown>;bindService:(v:unknown)=>Promise<unknown>}>|undefined;
  const r=await x.f.coordinator.captureCommonQuarantined(x.request,x.c.capture,x.window as never,x.c.journal,x.archive as never,async(_snapshot,_signal,context)=>{
   assert.equal(Object.isFrozen(context),true);assert.equal(Object.isFrozen(context.jobCustody),true);
-  assert.equal(typeof context.jobCustody.reserve,'function');const {jobCustody,...facts}=context;retainedJob=jobCustody;jobContext=facts;return x.source();
+  assert.equal(typeof context.jobCustody.reserve,'function');assert.equal(typeof context.jobCustody.bindService,'function');const {jobCustody,...facts}=context;retainedJob=jobCustody;jobContext=facts;return x.source();
  });
  assert.deepEqual(jobContext,{kind:'COMMON_CANDIDATE',sourceSha:r.candidate.binding.sourceSha,
   bindingDigest:hash(JSON.stringify(r.candidate.binding)),requestPinDigest:hash(JSON.stringify(r.requestPin))});
- const before=x.f.artifacts.size;await assert.rejects(retainedJob!.reserve({}));await assert.rejects(retainedJob!.observe({}));assert.equal(x.f.artifacts.size,before);
+ const before=x.f.artifacts.size;await assert.rejects(retainedJob!.reserve({}));await assert.rejects(retainedJob!.observe({}));await assert.rejects(retainedJob!.bindService({}));assert.equal(x.f.artifacts.size,before);
  assert.deepEqual(x.events,['window','source','input','prepare','stage','root-write','root-read']);
  assert.equal(r.candidate.binding.format,3);assert.equal(r.actionAuthorized,false);assert.equal(r.root.completedIntervalBindingVerified,true);
  const cold=new ManagedCandidateCaptureJournal(config,credentials,x.f.client),catalogue=await cold.discoverCurrentCandidates(x.f.store,1);

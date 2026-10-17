@@ -1,3 +1,13 @@
+## 17 October: original-job service binding and custody
+
+Read [service identity custody](managed-proof-service-custody.md). A fresh guardian
+identity is now recorded against the exact protected job baseline and input
+before work. The original candidate session exposes one-shot immutable service
+custody; fresh discovery reads it without recreating an execution acknowledgement.
+Real Linux guardian tests now use the protected local job binding. The production
+systemd launcher and genuine capture activation remain required. Full delegated
+product, provider/current-authority and source-host-loss scope remains active.
+
 ## 17 October: live guardian handles calling-parent loss
 
 Read [proof guardian](managed-proof-guardian.md). Original-ACK-gated source work
