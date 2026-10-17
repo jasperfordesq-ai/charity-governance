@@ -300,6 +300,70 @@ export class SupabaseRecoveryCapture {
       file.mimeType,
     );
   }
+  /** Read only a pre-existing, separately approved synthetic canary. This does
+   * not create one or substitute a governance document as a credential probe. */
+  async readRecoveryCanary(raw: unknown, caller?: AbortSignal) {
+    const controller = new AbortController(),
+      signal = caller
+        ? AbortSignal.any([caller, controller.signal])
+        : controller.signal;
+    const timer = setTimeout(() => controller.abort(), 30000),
+      budget = { signal, requests: 0 };
+    try {
+      const value = z
+        .object({
+          fileUrl: z.string().min(1).max(2048),
+          bytes: z.number().int().min(1).max(1024),
+          sha256: z
+            .string()
+            .regex(/^[a-f0-9]{64}$/)
+            .length(64),
+        })
+        .strict()
+        .parse(raw);
+      if (
+        this.config.bucket !== 'charitypilot-recovery-canaries' ||
+        !value.fileUrl.startsWith(
+          'charitypilot-recovery-canary/' + this.config.installationId + '/',
+        ) ||
+        value.fileUrl.split('/').length > 32
+      )
+        throw failure();
+      const key = value.fileUrl
+        .split('/')
+        .map((segment) => encodeURIComponent(this.segment(segment)))
+        .join('/');
+      const bucket = z
+        .object({ id: z.string(), public: z.literal(false) })
+        .parse(
+          await this.json('/bucket/' + this.config.bucket, undefined, budget),
+        );
+      if (bucket.id !== this.config.bucket) throw failure();
+      const bytes = await this.request(
+        '/object/' + this.config.bucket + '/' + key,
+        undefined,
+        value.bytes,
+        budget,
+        value.bytes,
+        'text/plain',
+      );
+      try {
+        if (hash(bytes) !== value.sha256 || signal.aborted) throw failure();
+      } finally {
+        bytes.fill(0);
+      }
+      return {
+        kind: 'RECOVERY_CANARY_READ_MATCH' as const,
+        sha256: value.sha256,
+        bytes: value.bytes,
+      };
+    } catch {
+      throw failure();
+    } finally {
+      clearTimeout(timer);
+      controller.abort();
+    }
+  }
   async capture(
     visit: (
       file: CapturedSupabaseFile,

@@ -1,5 +1,13 @@
 # CharityPilot Full-Platform Remediation Audit
 
+> **17 October credential read-proof component:** Exact supplied key fingerprints
+> and a private synthetic canary now support a working baseline followed by
+> 401/403 refusal bracketed by successful control reads. Management/read-proof
+> composition passes in HTTP models. This is not yet in the default protocol3
+> workflow: durable baseline custody/plan binding must precede key destruction.
+> Write/capability/global/provider/host-loss proof remains open. See
+> [credential read evidence](supabase-credential-read-proof.md).
+
 > **17 October named storage-path closure:** Managed maintenance protocol3 now
 > binds the reviewed Supabase project/region/key registry, disables S3/legacy
 > paths, revokes only exact writer keys and records storage observation after DB

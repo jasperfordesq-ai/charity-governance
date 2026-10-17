@@ -1,6 +1,8 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { SupabaseStorageWriterControl } from '../services/supabase-storage-writer-control.js';
+import { SupabaseCredentialReadProof } from '../services/supabase-credential-read-proof.js';
+import { createHash } from 'node:crypto';
 const config = {
   installationId: 'fixture',
   projectRef: 'abcdefghijklmnopqrst',
@@ -120,6 +122,64 @@ test('reviewed named storage paths close with exact project/key scope; fresh ins
   );
   await assert.rejects(service.close());
   assert.equal(f.mutations, before);
+});
+test('management key closure composes with an exact credential baseline and private canary refusal', async () => {
+  const f = fixture(),
+    hash = (text: string) => createHash('sha256').update(text).digest('hex');
+  const control = {
+      id: config.captureKeyId,
+      secret: 'sb_secret_' + 'a'.repeat(40),
+    },
+    retired = {
+      id: config.writerKeys[0].id,
+      secret: 'sb_secret_' + 'b'.repeat(40),
+    };
+  const body = 'synthetic maintenance canary',
+    bucket = 'charitypilot-recovery-canaries';
+  const dataPlane: typeof fetch = async (input, init) => {
+    assert.equal(init?.method, 'GET');
+    const key = new Headers(init?.headers).get('apikey');
+    if (
+      key === retired.secret &&
+      !f.state().keys.some((k) => k.id === retired.id)
+    )
+      return new Response(null, { status: 401 });
+    assert.ok(key === control.secret || key === retired.secret);
+    if (String(input).includes('/bucket/'))
+      return Response.json({ id: bucket, public: false });
+    return new Response(Buffer.from(body), {
+      headers: {
+        'content-type': 'text/plain',
+        'content-length': String(Buffer.byteLength(body)),
+      },
+    });
+  };
+  const probe = new SupabaseCredentialReadProof(
+    {
+      installationId: config.installationId,
+      projectRef: config.projectRef,
+      bucket,
+      canary: {
+        fileUrl:
+          'charitypilot-recovery-canary/' + config.installationId + '/test.txt',
+        bytes: Buffer.byteLength(body),
+        sha256: hash(body),
+      },
+      control: { id: control.id, sha256: hash(control.secret) },
+      retired: [{ id: retired.id, sha256: hash(retired.secret) }],
+    },
+    { control, retired: [retired] },
+    dataPlane,
+  );
+  const baseline = await probe.baseline();
+  await new SupabaseStorageWriterControl(
+    config,
+    'synthetic-management-token',
+    f.transport,
+  ).close();
+  const result = await probe.verifyReadRefusal(baseline.body, baseline.sha256);
+  assert.equal(result.credentialReadRefusalsObserved, true);
+  assert.equal(result.wholeStorageQuiesced, false);
 });
 test('a storage registry cannot be bound into another installation plan', () => {
   const f = fixture(),

@@ -62,6 +62,11 @@ after a committed key deletion or final control write whose response was lost.
 
 ## Proof limits
 
+The [credential read-proof component](supabase-credential-read-proof.md) now
+supplies a separately scoped baseline/control/refusal check. Its independent
+baseline custody and parent-plan integration remain required before activation;
+it does not turn a management configuration observation into write exclusion.
+
 `configuredAccessPathsObservedClosed=true` means current management responses
 report the named settings and key absence. It does not mean an old credential
 has been tested at the data plane, the retained capture credential is read-only,
