@@ -8,8 +8,9 @@ execution results are recorded privately.
 
 ## Original write path
 
-The original common-candidate context now exposes `reserveDaemonHeader` and
-`reserveDaemonIntent` beside its existing job methods. Each checks the original
+The original common-candidate context exposes `reserveDaemonHeader`,
+`reserveDaemonIntent`, `observeDaemonResponse` and `finishDaemonRequests`
+beside its existing job methods. Each checks the original
 closed head and window signal before and after the call. The job implementation
 requires its originally acknowledged descriptor and service, no attempted job
 outcome, and a version-two original boot/group binding. Saved inspection cannot
@@ -30,9 +31,11 @@ namespace is reused with a new domain-separated scope:
 
 `SHA256(CHARITYPILOT_DAEMON_INTENT_CUSTODY_V1 + newline + candidateId + newline + sequence)`
 
-Sequence zero is the header. Each scope contains only `baseline.json`. The
-envelope binds candidate digest, original job/service pins and header custody
-pin. Existing job/service/candidate paths and envelopes are unchanged.
+Sequence zero retains the header in `baseline.json` and its completion in
+`observation.json`. Each subsequent scope retains its intent baseline and client
+response observation. Envelopes bind candidate digest, original job/service pins,
+header custody pin and, for observations, the exact remote baseline pin. Existing
+job/service/candidate paths and envelopes are unchanged.
 
 Writes are serial and one-shot. Invalid/failed/lost acknowledgements or concurrent
 calls consume the live component; they do not permit retrying the original
