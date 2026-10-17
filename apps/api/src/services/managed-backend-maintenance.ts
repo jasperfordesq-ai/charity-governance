@@ -175,7 +175,7 @@ export class ManagedBackendMaintenance {
   * root write, so an unknown final ACK remains discoverable without replay. */
  async captureCommonQuarantined(raw:unknown,capture:SupabaseRecoveryCapture,window:ManagedStorageMetadataWindow,
   journal:ManagedCandidateCaptureJournal,archive:ArchivedRecoverySets,
-  source:(snapshot:ManagedDatabaseSnapshot,signal:AbortSignal)=>Promise<{
+  source:(snapshot:ManagedDatabaseSnapshot,signal:AbortSignal,context:Readonly<{kind:'COMMON_CANDIDATE';bindingDigest:string;requestPinDigest:string;sourceSha:string}>)=>Promise<{
    visit:Parameters<SupabaseRecoveryCapture['capture']>[0];
    prepareArchiveInput:(captured:Awaited<ReturnType<SupabaseRecoveryCapture['capture']>>,interval:ManagedSnapshotInterval,signal?:AbortSignal)=>Promise<unknown>;
   }>,caller?:AbortSignal){
@@ -193,7 +193,9 @@ export class ManagedBackendMaintenance {
    const binding=commonCandidateBindingSchema.parse({format:3,kind:'MANAGED_QUARANTINED_COMMON_CAPTURE_V3',...this.config,...request,planDigest:this.planDigest()});
    session=journal.forCandidate(binding);const requestPin=await session.reserve(caller);acknowledged=true;await check();
    const guarded=await window.runWithSnapshot(async(snapshot,signal)=>{
-    const prepared=await source(snapshot,signal);signal.throwIfAborted();
+    const context=Object.freeze({kind:'COMMON_CANDIDATE' as const,sourceSha:binding.sourceSha,bindingDigest:createHash('sha256').update(JSON.stringify(binding)).digest('hex'),
+     requestPinDigest:createHash('sha256').update(JSON.stringify(requestPin)).digest('hex')});
+    const prepared=await source(snapshot,signal,context);signal.throwIfAborted();
     if(typeof prepared.visit!=='function'||typeof prepared.prepareArchiveInput!=='function')throw new Error();
     const visit=prepared.visit,prepareArchiveInput=prepared.prepareArchiveInput;
     const captured=await capture.capture(visit,signal);return{captured,prepareArchiveInput};

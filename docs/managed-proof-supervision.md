@@ -1,3 +1,12 @@
+## 17 October: original-bound local proof-job records
+
+Read [protected job records](managed-proof-job-records.md). The original ACKed
+common request now supplies frozen binding/pin/release context. The runner saves
+exclusive readback-verified baseline and result observations; fresh read-only
+handles verify exact pins and workspace identity without execution or repair.
+Trusted restart catalogue/ownership, actual orphan/Docker crash acceptance and
+independent provider/source-host-loss/current-authority gates remain open.
+
 # Managed imported-proof worker supervision
 
 17 October 2026. Internal runner used by the synthetic common native capture. No live activation or new operator recovery command.

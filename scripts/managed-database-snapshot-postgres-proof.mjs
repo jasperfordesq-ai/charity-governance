@@ -1,5 +1,6 @@
+import {inspectManagedProofJob} from './managed-proof-job.mjs';
 import {runManagedImportedProof} from './managed-proof-runner.mjs';
-import {createManagedCaptureWorkspace} from './managed-capture-workspace.mjs';
+import {createManagedCaptureWorkspace,openManagedCaptureWorkspace} from './managed-capture-workspace.mjs';
 import {fileURLToPath} from 'node:url';
 import {managedCommonCustodyBackend,startManagedCommonCustody} from './managed-common-custody-postgres-proof.mjs';
 import {mkdtempSync,readFileSync,statSync,rmSync} from 'node:fs';
@@ -31,12 +32,14 @@ export async function proveManagedDatabaseSnapshot({admin,url,id,database,certif
  const workspace=await createManagedCaptureWorkspace(parent),output=workspace.root;
  const verifyOutput=()=>{assert.equal(dirname(resolve(parent)),resolve(tmpdir()));assert.ok(basename(parent).startsWith('charitypilot-imported-proof-'));
   assert.equal(dirname(resolve(output)),resolve(parent));assert.ok(basename(output).startsWith('capture-'));};verifyOutput();
- const prove=async(snapshot,identity,signal,captureConfigurationDigest)=>{
+ let recordedJob;
+ const prove=async(snapshot,identity,signal,captureConfigurationDigest,scope)=>{
   const source=new URL(captureUrl(database));source.searchParams.set('sslrootcert',certificate);
   const args=['prove-restore','--source-container-id='+id,'--recovery-set-id=synthetic-imported-'+randomUUID(),
    '--expected-source-database-identity-sha256='+identity,'--output-dir='+output,'--output-file=common.dump','--report-file=common.json'];
-  const supervised=await runManagedImportedProof({args,snapshot,databaseUrl:source.href,signal});
+  const supervised=await runManagedImportedProof({args,snapshot,databaseUrl:source.href,workspace,scope,signal});
   assert.equal(supervised.workerExited,true);assert.equal(supervised.observedJobContainersAbsent,true);
+  recordedJob={requestPin:supervised.requestPin,observationPin:supervised.observationPin,expectedScope:scope??{kind:'STANDALONE_INTERNAL_PROOF'}};
   assert.ok(statSync(join(output,'common.json')).size<16*1024*1024);
   const report=JSON.parse(readFileSync(join(output,'common.json'),'utf8'));
   assert.equal(report.format,'charitypilot-postgres-restore-proof/v2');assert.equal(report.ok,true);
@@ -103,7 +106,7 @@ export async function proveManagedDatabaseSnapshot({admin,url,id,database,certif
    assert.equal(options.method,'GET');assert.equal(path,'/storage/v1/object/'+scope.bucket+'/record.txt');
    return new Response(body,{headers:{'Content-Type':'text/plain','Content-Length':String(body.length)}});
   });
-  const prepareSource=async(snapshot,signal)=>{
+  const prepareSource=async(snapshot,signal,scope)=>{
    sourceCalls++;expired=snapshot.snapshotId;
    // An unrelated MVCC row commits after export but before pg_dump starts.
    // The imported dump must omit it; a fresh unbound dump would include it.
@@ -126,7 +129,7 @@ export async function proveManagedDatabaseSnapshot({admin,url,id,database,certif
    assert.equal(sourceFingerprint.documentMetadata.rowCount,1);
    assert.equal(sourceFingerprint.documentMetadata.rowsSha256,canonicalDocumentMetadataRowsSha256(metadata));
    assert.equal(dump.subarray(0,5).toString(),'PGDMP');
-   const releaseProof=await prove(snapshot,sourceFingerprint.databaseIdentitySha256,signal,capture.configurationDigest());
+   const releaseProof=await prove(snapshot,sourceFingerprint.databaseIdentitySha256,signal,capture.configurationDigest(),scope);
    return{visit:async(file,bytes,digest)=>{
     assert.equal(file.fileUrl,'record.txt');assert.equal(digest,hash(body));assert.deepEqual(bytes,body);
     const [row]=await admin.$queryRaw`SELECT body FROM managed_snapshot_fixture.objects WHERE id='record.txt'`;
@@ -147,7 +150,15 @@ export async function proveManagedDatabaseSnapshot({admin,url,id,database,certif
    assert.equal(sourceCalls,mode==='request-ack'?0:1);assert.equal((await control.observe()).revision,head.revision);
    cloud.b.loseCommonReportRead=false;cloud.b.loseCommonRequestRead=false;
    await holder.$disconnect();
-   if(sourceCalls){verifyOutput();for(const name of ['common.dump','common.json','database.ciphertext'])rmSync(join(output,name));}
+   if(sourceCalls){
+    verifyOutput();for(const name of ['common.dump','common.json','database.ciphertext'])rmSync(join(output,name));
+    const reopened=await openManagedCaptureWorkspace(parent,output);
+    try{const receipt=await inspectManagedProofJob(reopened,recordedJob);assert.equal(receipt.state,'WORKER_EXIT_ACK_OBSERVED');
+     assert.equal(receipt.scope.kind,'COMMON_CANDIDATE');assert.equal(receipt.executionAuthorized,false);
+     assert.equal(receipt.sourceSha,managed.operation.sourceSha);
+     await assert.rejects(reopened.createCiphertextDestination('restart-execution-blocked'));
+    }finally{await reopened.close();}
+   }
    const writes=cloud.b.writes,generates=cloud.b.generates,from=cloud.fresh();
    const learned=await from.journal.discoverCurrentCandidates(managed.controlReader(),managed.operation.maintenanceEpoch);
    const rows=learned.catalogue.records.filter(r=>r.commonRoot); // No supplied candidate ID or root pin.

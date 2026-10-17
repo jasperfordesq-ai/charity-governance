@@ -1,7 +1,8 @@
+import {recordManagedProofJob} from './managed-proof-job.mjs';
 import {spawn,spawnSync} from 'node:child_process';
-import {randomUUID} from 'node:crypto';
+import {randomUUID,createHash} from 'node:crypto';
 import {fileURLToPath} from 'node:url';
-import {prepareLocalDockerCommand} from './postgres-backup.mjs';
+import {prepareLocalDockerCommand,captureHelperImplementationBinding} from './postgres-backup.mjs';
 const root=fileURLToPath(new URL('..',import.meta.url));
 const worker=fileURLToPath(new URL('./managed-proof-worker.mjs',import.meta.url));
 const jobPattern=/^[a-f0-9]{8}-[a-f0-9]{4}-4[a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}$/;
@@ -77,20 +78,31 @@ export async function superviseManagedProofProcess({input,env,signal,timeoutMs=9
  });
 }
 /** Dedicated original helper runner, not an arbitrary command execution API. */
-export async function runManagedImportedProof({args,snapshot,databaseUrl,signal,timeoutMs=90000}){
+export async function runManagedImportedProof({args,snapshot,databaseUrl,workspace,scope={kind:'STANDALONE_INTERNAL_PROOF'},signal,timeoutMs=90000}){
  const jobId=randomUUID();let success=false,cleanup;
  const env=Object.fromEntries(Object.entries(process.env).filter(([k])=>!(/^(NODE_OPTIONS|NODE_PATH|DATABASE_URL)$/i).test(k)));
  env.DATABASE_URL=databaseUrl;
  if(typeof databaseUrl!=='string'||databaseUrl.length>8192||!Array.isArray(args)||args.some(v=>typeof v!=='string')||args[0]!=='prove-restore')throw unresolved();
  // Validate the original local Docker boundary before starting any worker.
  prepareLocalDockerCommand(['docker','version'],env);
+ const helper=captureHelperImplementationBinding();if(!helper.sourceMatchesCommit||!helper.canonicalRepositoryMatched)throw unresolved();
+ const hash=v=>createHash('sha256').update(v).digest('hex');
+ const job=await recordManagedProofJob(workspace,{format:1,kind:'MANAGED_IMPORTED_PROOF_JOB_V1',jobId,scope,sourceSha:helper.commitSha,
+  workspaceDigest:workspace.identityDigest(),snapshotDigest:hash('CHARITYPILOT_MANAGED_EXPORTED_SNAPSHOT_V1\n'+JSON.stringify(snapshot)),
+  argumentsDigest:hash(JSON.stringify(args)),createdAt:new Date().toISOString(),state:'REQUESTED_ONLY',
+  executionAuthorized:false,publicationAuthorized:false,actionAuthorized:false},signal);
+ let result;
  const input=Buffer.from(JSON.stringify({args,snapshot,jobId}));
  try{await superviseManagedProofProcess({input,env,signal,timeoutMs});success=true;}
  catch{throw unresolved();}
  finally{
-  input.fill(0);try{cleanup=reconcileManagedProofContainers(jobId,env);}catch{throw unresolved();}
+  input.fill(0);
+  try{cleanup=reconcileManagedProofContainers(jobId,env);}catch{
+   try{await job.observe('UNRESOLVED',false);}catch{}throw unresolved();
+  }
+  try{result=await job.observe(success&&cleanup.removedCount===0?'WORKER_EXIT_ACK_OBSERVED':'UNRESOLVED',true);}catch{throw unresolved();}
   // Residue after an apparently successful worker is an unresolved outcome too.
   if(success&&cleanup.removedCount!==0)throw unresolved();
  }
- return{jobId,workerExited:true,observedJobContainersAbsent:true,actionAuthorized:false};
+ return{jobId,requestPin:job.requestPin,observationPin:result.pin,directoryFlushSupported:job.directoryFlushSupported,workerExited:true,observedJobContainersAbsent:true,actionAuthorized:false};
 }

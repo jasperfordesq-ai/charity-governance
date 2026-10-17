@@ -959,7 +959,12 @@ async function commonParentFixture(){
  return{...x,events,window,archive,request,source,getReport};
 }
 test('common parent saves original root reference before final root write under unchanged closed head',async()=>{
- const x=await commonParentFixture();const r=await x.f.coordinator.captureCommonQuarantined(x.request,x.c.capture,x.window as never,x.c.journal,x.archive as never,x.source);
+ const x=await commonParentFixture();let jobContext:unknown;
+ const r=await x.f.coordinator.captureCommonQuarantined(x.request,x.c.capture,x.window as never,x.c.journal,x.archive as never,async(_snapshot,_signal,context)=>{
+  assert.equal(Object.isFrozen(context),true);jobContext=context;return x.source();
+ });
+ assert.deepEqual(jobContext,{kind:'COMMON_CANDIDATE',sourceSha:r.candidate.binding.sourceSha,
+  bindingDigest:hash(JSON.stringify(r.candidate.binding)),requestPinDigest:hash(JSON.stringify(r.requestPin))});
  assert.deepEqual(x.events,['window','source','input','prepare','stage','root-write','root-read']);
  assert.equal(r.candidate.binding.format,3);assert.equal(r.actionAuthorized,false);assert.equal(r.root.completedIntervalBindingVerified,true);
  const cold=new ManagedCandidateCaptureJournal(config,credentials,x.f.client),catalogue=await cold.discoverCurrentCandidates(x.f.store,1);

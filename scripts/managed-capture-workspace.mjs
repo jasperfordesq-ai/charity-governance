@@ -1,6 +1,6 @@
 import {constants,lstatSync,realpathSync,mkdtempSync,closeSync,read} from 'node:fs';
 import {open} from 'node:fs/promises';
-import {resolve,join,relative,sep,isAbsolute} from 'node:path';
+import {resolve,join,relative,sep,isAbsolute,dirname,basename} from 'node:path';
 import {fileURLToPath} from 'node:url';
 import {spawn} from 'node:child_process';
 import {Readable,Writable} from 'node:stream';
@@ -28,29 +28,46 @@ async function protection(path,kind,verifyOnly,signal){
   child.on('error',()=>{clearTimeout(timer);reject(failure());});child.on('close',code=>{clearTimeout(timer);if(code!==0||count>8192||signal?.aborted)reject(failure());else done();});
  });signal?.throwIfAborted();checkPath(path,kind);
 }
-export async function createManagedCaptureWorkspace(parent,signal){
+async function protectedParent(parent,signal){
+ if(typeof parent!=='string'||!isAbsolute(parent))throw failure();parent=resolve(parent);
+ if(!samePath(realpathSync.native(parent),parent))throw failure();
+ const rel=relative(repo,parent);if(!(rel==='..'||rel.startsWith('..'+sep)||isAbsolute(rel)))throw failure();
+ await protection(parent,'Directory',true,signal);return{parent,before:stamp(checkPath(parent,'Directory'))};
+}
+export async function createManagedCaptureWorkspace(raw,signal){
  try{
-  if(typeof parent!=='string'||!isAbsolute(parent))throw failure();parent=resolve(parent);
-  const canonical=realpathSync.native(parent),fold=v=>process.platform==='win32'?v.toLowerCase():v;
-  if(fold(canonical)!==fold(parent))throw failure();
-  const rel=relative(repo,parent);if(!(rel==='..'||rel.startsWith('..'+sep)||isAbsolute(rel)))throw failure();
-  await protection(parent,'Directory',true,signal);const before=stamp(checkPath(parent,'Directory'));
-  const root=mkdtempSync(join(parent,'capture-'));await protection(root,'Directory',false,signal);
+  const {parent,before}=await protectedParent(raw,signal),root=mkdtempSync(join(parent,'capture-'));
+  await protection(root,'Directory',false,signal);
   if(!same(before,stamp(checkPath(parent,'Directory'))))throw failure();
   return new CaptureWorkspace(root,parent,before,stamp(checkPath(root,'Directory')));
  }catch{throw failure();}
 }
+/** Reopen for verified observation; never repair existing ACLs or issue a lease. */
+export async function openManagedCaptureWorkspace(raw,existing,signal){
+ try{
+  const {parent,before}=await protectedParent(raw,signal);
+  if(typeof existing!=='string'||!isAbsolute(existing))throw failure();const root=resolve(existing);
+  if(!samePath(dirname(root),parent)||!/^capture-[A-Za-z0-9]{6}$/.test(basename(root))||!samePath(realpathSync.native(root),root))throw failure();
+  await protection(root,'Directory',true,signal);
+  if(!same(before,stamp(checkPath(parent,'Directory'))))throw failure();
+  return new CaptureWorkspace(root,parent,before,stamp(checkPath(root,'Directory')),true);
+ }catch{throw failure();}
+}
 class CaptureWorkspace{
- #closed=false;#pins=new Map();#attempted=new Set();#streams=new Set();#root;#parent;#parentStamp;#rootStamp;
- constructor(root,parent,parentStamp,rootStamp){this.#root=root;this.#parent=parent;this.#parentStamp=parentStamp;this.#rootStamp=rootStamp;Object.freeze(this);}
+ #readOnly;#closed=false;#pins=new Map();#attempted=new Set();#streams=new Set();#root;#parent;#parentStamp;#rootStamp;
+ constructor(root,parent,parentStamp,rootStamp,readOnly=false){this.#readOnly=readOnly;this.#root=root;this.#parent=parent;this.#parentStamp=parentStamp;this.#rootStamp=rootStamp;Object.freeze(this);}
  get root(){return this.#root;}
+ identityDigest(){this.#check();return createHash('sha256').update(JSON.stringify({format:1,parent:this.#parent,root:this.#root,parentIdentity:this.#parentStamp,rootIdentity:this.#rootStamp})).digest('hex');}
  #check(){if(this.#closed||!same(this.#parentStamp,stamp(checkPath(this.#parent,'Directory')))||!same(this.#rootStamp,stamp(checkPath(this.#root,'Directory')))
   ||!samePath(realpathSync.native(this.#root),this.#root)||!samePath(realpathSync.native(this.#parent),this.#parent))throw failure();}
  /** Tighten only an actual producer-created file in this fresh private root. */
- async pinProducedFile(filename,signal){
+ async pinProducedFile(filename,signal){return this.#pin(filename,signal,false);}
+ async pinExistingFile(filename,signal){return this.#pin(filename,signal,true);}
+ async #pin(filename,signal,verifyOnly){
   let first,final;try{
+   if(this.#readOnly&&!verifyOnly)throw failure();
    this.#check();filename=name(filename);const path=join(this.#root,filename);first=openProtectedRegularFile(path,'capture source');
-   if(process.platform!=='win32')checkPath(path,'File');await protection(path,'File',false,signal);this.#check();
+   if(process.platform!=='win32')checkPath(path,'File');await protection(path,'File',verifyOnly,signal);this.#check();
    final=openProtectedRegularFile(path,'capture source');
    if(!['dev','ino','size','mtimeNs'].every(k=>first.identity[k]===final.identity[k]))throw failure();
    const pin={...final.identity};this.#pins.set(filename,pin);return{byteLength:Number(pin.size)};
@@ -84,8 +101,15 @@ class CaptureWorkspace{
    if(signal?.aborted)abort();return{stream,verified};
   }catch{if(handle)closeSync(handle.fd);throw failure();}
  }
+ async syncDirectory(){
+  this.#check();if(process.platform==='win32')return{directoryFlushSupported:false};
+  const directory=await open(this.#root,constants.O_RDONLY|(constants.O_DIRECTORY??0));
+  try{if(!same(this.#rootStamp,stamp(await directory.stat({bigint:true}))))throw failure();await directory.sync();this.#check();return{directoryFlushSupported:true};}
+  finally{await directory.close();}
+ }
  async createCiphertextDestination(filename,signal){
   let file;try{
+   if(this.#readOnly)throw failure();
    this.#check();filename=name(filename);if(this.#attempted.has(filename))throw failure();this.#attempted.add(filename);
    const path=join(this.#root,filename);file=await open(path,constants.O_RDWR|constants.O_CREAT|constants.O_EXCL|(constants.O_NOFOLLOW??0),0o600);
    const owned=file;const initial=await owned.stat({bigint:true});await protection(path,'File',false,signal);this.#check();
