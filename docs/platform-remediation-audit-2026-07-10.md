@@ -1,5 +1,11 @@
 # CharityPilot Full-Platform Remediation Audit
 
+> **17 October S3 capability probe:** Actual SDK signing, original presigned
+> PUT/multipart baseline and eight native FeatureNotEnabled refusals now have
+> synthetic HTTP tests for direct and gateway profiles. Generic errors do not
+> count. Encrypted custody/public artifacts/factory/parent and actual supplier
+> proof remain open. See [S3 capability probe](s3-capability-proof.md).
+
 > **17 October protocol8 signed-TUS integration:** The default coordinator
 > now requires original encrypted signed-TUS custody, exact-version public
 > baseline/head acknowledgement before shutdown and the original report at
@@ -6864,3 +6870,14 @@ remaining external blockers and owners, and an explicit confirmation that no
 > later adoption. This is not live-byte, publication, audience, retention
 > or DPO/controller acceptance. No live metadata changed. See private
 > `three-september-adopted-pdfs-source-review-2026-09-30.md`.
+
+## 17 October dependency advisory follow-up (OPEN)
+
+A fresh npm audit reported pre-existing development-tool dependency advisories
+in the lint glob chain and pino-pretty/fast-copy chain. All affected versions
+were already locked before the S3 presigner addition; the presigner is not in
+those reported paths. The separate omit-dev audit reported zero findings in
+this dated snapshot. This is advisory triage, not demonstrated runtime
+exploitability or a permanent dependency-clean claim. Apply a dedicated bounded
+patch/override update and verify quality/CI before closing this follow-up; source
+SAST passes do not close it. Exact private receipts are in the ignored roadmap.

@@ -47,7 +47,7 @@ export class BoundedStorageProbeTransport {
     }
   }
   async request(
-    method: 'GET' | 'HEAD' | 'POST' | 'PATCH',
+    method: 'GET' | 'HEAD' | 'POST' | 'PATCH' | 'PUT' | 'DELETE',
     url: string,
     budget: Budget,
     headers: Record<string, string> = {},

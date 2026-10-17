@@ -1,5 +1,11 @@
 # CharityPilot Agent Continuation Handoff
 
+> **17 October S3 capability probe:** Actual SDK signing, original presigned
+> PUT/multipart baseline and eight native FeatureNotEnabled refusals now have
+> synthetic HTTP tests for direct and gateway profiles. Generic errors do not
+> count. Encrypted custody/public artifacts/factory/parent and actual supplier
+> proof remain open. See [S3 capability probe](s3-capability-proof.md).
+
 > **17 October protocol8 signed-TUS integration:** The default coordinator
 > now requires original encrypted signed-TUS custody, exact-version public
 > baseline/head acknowledgement before shutdown and the original report at

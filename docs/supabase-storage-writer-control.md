@@ -109,3 +109,11 @@ Primary contracts checked 17 October 2026:
 - [Read storage config](https://supabase.com/docs/reference/api/v1-get-storage-config) and [update](https://supabase.com/docs/reference/api/v1-update-storage-config).
 - [Legacy-key state](https://supabase.com/docs/reference/api/v1-get-project-legacy-api-keys) and [disable](https://supabase.com/docs/reference/api/v1-update-project-legacy-api-keys).
 - [Key inventory](https://supabase.com/docs/reference/api/v1-get-project-api-keys) and [delete exact key](https://supabase.com/docs/reference/api/v1-delete-project-api-key).
+
+## Separate S3 data-path evidence
+
+The [original S3 capability probe](s3-capability-proof.md) now exercises actual
+SDK-signed keys, presigned PUT and multipart requests through synthetic HTTP.
+It requires the native feature-disabled response; this metadata primitive alone
+still does not prove S3 capability exclusion. The probe's combined custody,
+public evidence, complete factory and default parent integration remain next.

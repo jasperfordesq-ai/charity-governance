@@ -205,3 +205,17 @@ In-flight commits, privileged capture credentials and external management actors
 remain separate fencing requirements. This is an engineering decision under
 delegated software ownership; no new reviewer or tenant-policy decision is needed
 to implement and exercise the synthetic workflow.
+
+## Managed S3 maintenance evidence
+
+The closed maintenance policy keeps Supabase S3 disabled. The
+[S3 capability probe](s3-capability-proof.md) tests an originally working key,
+presigned PUT and multipart session through the actual SDK; it does not delete
+keys or prove all sessions drained. Require native feature-specific data-path
+responses, separate direct/gateway scopes and retained REST controls.
+
+Do not enable an already-disabled S3 service or issue fresh credentials to create
+a working baseline. Implement a distinct current-feature-exclusion observation
+for that condition, with exact provider/route/endpoint evidence. Current disabled
+state must never be labelled historical never-enabled or past credential
+revocation. Actual supplier activation/authority remains a separate gate.
