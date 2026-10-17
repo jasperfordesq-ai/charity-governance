@@ -1,5 +1,14 @@
 # CharityPilot Full-Platform Remediation Audit
 
+> **17 October authenticated archive-set roots:** The coordinator stages metadata,
+> reads/decrypt-checks declared database/document candidates, seals a separate-key
+> root, and supports conditional publication plus fresh read-only reconciliation
+> after a lost ACK. All results remain QUARANTINE_ONLY with external source
+> consistency required. Synthetic signed SDK composition passes; no actual cloud
+> activation, durable catalogue, lawful-purge index disposition, current-authority
+> admission or host-loss/reopening proof is implied. See
+> [archived recovery sets](archived-recovery-sets.md).
+
 > **17 October database S3 candidates:** The new explicit-scope multipart adapter
 > checks part/composite/full hashes, conditionally completes one fixed key and
 > requires full exact-version readback. Signed synthetic SDK tests cover lost

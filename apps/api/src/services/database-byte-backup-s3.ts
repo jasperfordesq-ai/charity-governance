@@ -133,9 +133,12 @@ function operation(caller?: AbortSignal) {
     finish() {
       clearTimeout(total);
       clearTimeout(idle);
-      controller.abort();
       signal.removeEventListener('abort', stop);
-      stop();
+      controller.abort();
+      for (const source of sources) source.destroy();
+      for (const destination of destinations) {
+        if (!destination.writableFinished) destination.destroy();
+      }
     },
   };
 }

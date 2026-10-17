@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { createHash, randomBytes } from 'node:crypto';
-import { Readable, Writable } from 'node:stream';
+import { PassThrough, Readable, Writable } from 'node:stream';
 import test from 'node:test';
 import {
   S3Client,
@@ -601,6 +601,25 @@ test('completion has a longer fixed deadline and a late acknowledgement cannot c
     await Promise.resolve();
     assert.deepEqual(calls, ['create', 'part', 'complete']);
   } finally {
+    sdk.destroy();
+    f.retained.fill(0);
+  }
+});
+test('successful observation preserves unread bytes in a finished quarantine bridge', async () => {
+  const f = await fixture(256),
+    p = provider(),
+    sdk = p.sdk();
+  const bridge = new PassThrough({ highWaterMark: 65536 });
+  try {
+    const store = new S3DatabaseByteBackups(config, credentials, sdk);
+    const saved = await store.publish(f.scope, f.receipt, source(f.archive));
+    await store.observe(f.scope, f.receipt, bridge, saved.versionId);
+    assert.equal(bridge.destroyed, false);
+    const chunks: Buffer[] = [];
+    for await (const bytes of bridge) chunks.push(Buffer.from(bytes));
+    assert.equal(hash(Buffer.concat(chunks)).toString('hex'), f.receipt.sha256);
+  } finally {
+    bridge.destroy();
     sdk.destroy();
     f.retained.fill(0);
   }

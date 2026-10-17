@@ -58,6 +58,15 @@ const scopeSchema = z
         60 * 60 * 1000,
   );
 export type DocumentBackupIndexScope = z.infer<typeof scopeSchema>;
+export function documentBackupIndexScope(
+  raw: unknown,
+): DocumentBackupIndexScope {
+  try {
+    return Object.freeze(scopeSchema.parse(raw));
+  } catch {
+    throw new Error('Document backup index scope refused');
+  }
+}
 const version = z
   .string()
   .regex(/^[\x21-\x7e]{1,1024}$/)

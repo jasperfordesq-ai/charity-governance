@@ -1,5 +1,10 @@
 # Authenticated document archive index
 
+The [archived-set coordinator](archived-recovery-sets.md) now stores/reads this
+index with its source report and binds its exact version into a separate-key
+authenticated root. Source consistency, lawful missing-file dispositions and
+current-authority admission remain open.
+
 Decision: 17 October 2026, under delegated product engineering authority.
 
 The index joins document-byte archive receipts to the existing recovery inventory

@@ -13,7 +13,8 @@ export const DOCUMENT_BACKUP_KEY_ARN = z
   .string()
   .regex(
     /^arn:aws:kms:eu-west-1:[0-9]{12}:key\/[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/,
-  );
+  )
+  .refine((value) => value === value.trim());
 const scope = z
   .object({
     installationId: id,

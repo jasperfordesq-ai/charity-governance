@@ -83,6 +83,11 @@ prove immunity to privileged provider administrators or deletion actors.
 
 ## Verification and next integration
 
+The [archived-set coordinator](archived-recovery-sets.md) now consumes exact
+candidate observations and decrypt-checks all declared bytes before sealing a
+root. Its publication remains separate from current-policy admission and actual
+source-consistency proof.
+
 Tests use real SDK signing, synthetic credentials and isolated transports. A
 17 MiB encrypted fixture crosses a multipart boundary; its simulated primary
 bytes are cleared, a completion response is lost, a fresh client observes the
