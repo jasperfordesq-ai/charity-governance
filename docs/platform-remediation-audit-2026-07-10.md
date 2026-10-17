@@ -1,5 +1,13 @@
 # CharityPilot Full-Platform Remediation Audit
 
+> **17 October synthetic standard-write component:** Exact modern keys now have
+> positive CREATE/UPDATE/DELETE baselines and control-bracketed refusal tests on
+> fixed synthetic objects, plus read-only uncertainty inspection. This active
+> component is NOT yet called by maintenance protocol4; independent write-baseline
+> custody/dispatch/report integration must precede activation. Broader capability,
+> drain, custody and provider/host-loss gates remain. See
+> [standard-write evidence](supabase-credential-write-proof.md).
+
 > **17 October durable credential baseline:** Maintenance protocol4 now CAS-saves
 > and reads back baseline body/SHA before ANY shutdown, binds the probe registry,
 > and retains the later read-refusal artifact with the final record. Unknown

@@ -44,19 +44,21 @@ for durable exclusion across fresh processes; an instance flag alone is not it.
 
 ## Maintenance protocol integration
 
-`ManagedBackendMaintenance` now binds protocol3, a named-key revocation policy
+`ManagedBackendMaintenance` now binds protocol4, a named-key revocation policy
 and the storage registry digest alongside source/epoch, Render and database
-registries. An authorised READY head must name this exact new plan. Protocol1/2
+registries and independently retained credential-read evidence. An authorised
+READY head must name this exact new plan. Protocol1–3
 plans refuse before acquiring or dispatching a new workflow.
 
-After the acknowledged independent attempt, suspend/drain Render components,
+After the acknowledged independent attempt and saved/read-back read baseline,
+suspend/drain Render components,
 close/drain database writers and invalidate their passwords, then close the
 configured Supabase paths. Fresh combined observations include storageDigest
 before writing OBSERVED_CLOSED. A lost response leaves the original independent
 attempt consumed; fresh coordinators refuse another shutdown.
 
 The independent control envelope remains format1. Its optional storageDigest
-allows old evidence to remain readable. Protocol3 inspection refuses an
+allows old evidence to remain readable. Protocol4 inspection refuses an
 OBSERVED_CLOSED record missing that field; it does not fill it in retrospectively.
 Fresh provider observations are separate from recorded observations, including
 after a committed key deletion or final control write whose response was lost.
@@ -65,8 +67,11 @@ after a committed key deletion or final control write whose response was lost.
 
 The [credential read-proof component](supabase-credential-read-proof.md) now
 supplies a separately scoped baseline/control/refusal check. Its independent
-baseline custody and parent-plan integration remain required before activation;
+baseline custody and parent-plan integration now exist in protocol4, with actual
+provider custody still required before activation;
 it does not turn a management configuration observation into write exclusion.
+The separate [synthetic standard-write component](supabase-credential-write-proof.md)
+adds active CREATE/UPDATE/DELETE checks but awaits its own durable integration.
 
 `configuredAccessPathsObservedClosed=true` means current management responses
 report the named settings and key absence. It does not mean an old credential
