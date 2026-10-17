@@ -1,5 +1,10 @@
 # Exact-version custody for synthetic standard-write evidence
 
+> **Protocol5 integration:** The coordinator now requires baseline-pin CAS before
+> shutdown and retains the report pin at completion. See the
+> [current workflow](durable-standard-write-maintenance.md); the original pending
+> integration description below records this component's preceding checkpoint.
+
 17 October 2026. `S3ManagedWriteEvidence` implements independently addressed
 baseline and refusal-report publication for the
 [synthetic standard-write probe](supabase-credential-write-proof.md).

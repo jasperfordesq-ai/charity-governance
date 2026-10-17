@@ -1,5 +1,10 @@
 # Guarded managed-backend shutdown
 
+> **Current protocol5:** [Durable standard-write maintenance](durable-standard-write-maintenance.md)
+> adds exact-version write baseline/report pins and a WRITE_BASELINED barrier
+> before shutdown. The protocol4 sequence below is the earlier checkpoint;
+> current inspection reads saved write reports without running active probes.
+
 > **17 October protocol4:** The current coordinator binds the credential-probe
 > registry and requires an independently saved/read-back baseline BEFORE any
 > shutdown or key deletion. BASELINED remains consumed after an unknown response.

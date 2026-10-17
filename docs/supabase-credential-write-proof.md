@@ -1,5 +1,11 @@
 # Synthetic standard storage-write evidence
 
+> **Protocol5 integration:** The default internal coordinator now invokes this
+> component behind an acknowledged baseline-publication/head-pin barrier.
+> Read-only inspection never repeats active write tests. See the
+> [current workflow](durable-standard-write-maintenance.md); earlier component-only
+> status below is historical.
+
 17 October 2026. `SupabaseCredentialWriteProof` implements active, bounded tests
 of exact modern server keys' CREATE, UPDATE and DELETE requests. It is an internal
 component, with no public route, job or operator command. Current maintenance

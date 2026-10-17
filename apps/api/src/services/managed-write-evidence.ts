@@ -46,6 +46,11 @@ const pinSchema = z
   })
   .strict();
 export type ManagedWriteEvidencePin = z.infer<typeof pinSchema>;
+export { pinSchema as managedWriteEvidencePinSchema };
+export const managedWriteStorageSchema = configuration
+  .innerType()
+  .omit({ maintenance: true, probeRegistryDigest: true })
+  .refine((c) => c.kmsKeyArn.split(':')[4] === c.accountId);
 const failure = () =>
   new Error(
     'Independent standard-write evidence is unresolved; preserve the original attempt without retrying publication',

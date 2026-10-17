@@ -1,7 +1,12 @@
 import { createHash } from 'node:crypto';
 import { z } from 'zod';
 import { credentialReadMaintenanceBindingSchema } from './credential-read-evidence.js';
-import { credentialWriteBaselineSchema as baselineSchema } from './credential-write-evidence.js';
+import {
+  credentialWriteBaselineSchema as baselineSchema,
+  parseCredentialWriteBaseline,
+  parseCredentialWriteObservation,
+  credentialWriteObservationSchema,
+} from './credential-write-evidence.js';
 
 const hash = (value: string | Uint8Array) =>
   createHash('sha256').update(value).digest('hex');
@@ -47,9 +52,33 @@ const supplied = z
       .max(50),
   })
   .strict();
+export const supabaseWriteRegistrySchema = configuration
+  .innerType()
+  .omit({ maintenance: true })
+  .refine(
+    (c) =>
+      new Set([c.control.id, ...c.retired.map((k) => k.id)]).size ===
+        c.retired.length + 1 &&
+      new Set([c.control.sha256, ...c.retired.map((k) => k.sha256)]).size ===
+        c.retired.length + 1,
+  );
+export { supplied as supabaseWriteCredentialsSchema };
 export const syntheticWriteProbe =
   'CharityPilot synthetic recovery canary v1.\nNo personal data. Not a governance record.\n';
 export const syntheticWriteUpdate = syntheticWriteProbe + 'Update proof v1.\n';
+export function supabaseWriteRegistryDigest(raw: unknown) {
+  const c = supabaseWriteRegistrySchema.parse(raw);
+  c.retired.sort((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0));
+  return hash(
+    JSON.stringify({
+      format: 1,
+      policy: 'SYNTHETIC_STANDARD_WRITE_PROOF_V1',
+      ...c,
+      payloadSha256: hash(syntheticWriteProbe),
+      updatePayloadSha256: hash(syntheticWriteUpdate),
+    }),
+  );
+}
 type Budget = { signal: AbortSignal; requests: number };
 
 /** Active mutations in a dedicated synthetic bucket ONLY. This is not read-only
@@ -90,19 +119,43 @@ export class SupabaseCredentialWriteProof {
     }
   }
   configurationDigest() {
-    return hash(
-      JSON.stringify({
-        format: 1,
-        policy: 'SYNTHETIC_STANDARD_WRITE_PROOF_V1',
-        installationId: this.config.installationId,
-        projectRef: this.config.projectRef,
-        bucket: this.config.bucket,
-        control: this.config.control,
-        retired: this.config.retired,
-        payloadSha256: hash(syntheticWriteProbe),
-        updatePayloadSha256: hash(syntheticWriteUpdate),
-      }),
-    );
+    return supabaseWriteRegistryDigest({
+      installationId: this.config.installationId,
+      projectRef: this.config.projectRef,
+      bucket: this.config.bucket,
+      control: this.config.control,
+      retired: this.config.retired,
+    });
+  }
+  assertBaseline(raw: unknown) {
+    const artifact = parseCredentialWriteBaseline(raw),
+      baseline = baselineSchema.parse(JSON.parse(artifact.body));
+    if (
+      baseline.configurationDigest !== this.configurationDigest() ||
+      JSON.stringify(baseline.maintenance) !==
+        JSON.stringify(this.config.maintenance) ||
+      JSON.stringify(baseline.credentialIds) !==
+        JSON.stringify(this.config.retired.map((k) => k.id)) ||
+      baseline.payloadSha256 !== hash(syntheticWriteProbe) ||
+      baseline.updatePayloadSha256 !== hash(syntheticWriteUpdate) ||
+      Date.parse(baseline.capturedAt) > Date.now() + 60000
+    )
+      throw failure();
+    return artifact;
+  }
+  assertObservation(raw: unknown, baselineSha256: string) {
+    const artifact = parseCredentialWriteObservation(raw),
+      report = credentialWriteObservationSchema.parse(
+        JSON.parse(artifact.body),
+      );
+    if (
+      report.configurationDigest !== this.configurationDigest() ||
+      report.baselineSha256 !== baselineSha256 ||
+      JSON.stringify(report.refusals.map((v) => v.credentialId)) !==
+        JSON.stringify(this.config.retired.map((k) => k.id))
+    )
+      throw failure();
+    return artifact;
   }
   private path(id: string) {
     return (
@@ -399,19 +452,7 @@ export class SupabaseCredentialWriteProof {
         hash(body) !== baselineSha256
       )
         throw failure();
-      const baseline = baselineSchema.parse(JSON.parse(body));
-      if (
-        JSON.stringify(baseline) !== body ||
-        baseline.configurationDigest !== this.configurationDigest() ||
-        JSON.stringify(baseline.maintenance) !==
-          JSON.stringify(this.config.maintenance) ||
-        JSON.stringify(baseline.credentialIds) !==
-          JSON.stringify(this.config.retired.map((k) => k.id)) ||
-        baseline.payloadSha256 !== hash(syntheticWriteProbe) ||
-        baseline.updatePayloadSha256 !== hash(syntheticWriteUpdate) ||
-        Date.parse(baseline.capturedAt) > Date.now() + 60000
-      )
-        throw failure();
+      this.assertBaseline({ body, sha256: baselineSha256 });
       const refusals: {
         credentialId: string;
         create: 401 | 403;

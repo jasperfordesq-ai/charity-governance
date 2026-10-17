@@ -1,5 +1,12 @@
 # CharityPilot Agent Continuation Handoff
 
+> **17 October protocol5 integration:** The default internal coordinator now
+> requires exact-version write-baseline publication/readback and acknowledged
+> WRITE_BASELINED head-pin CAS before any shutdown. It retains the report pin
+> at completion. Inspection reads saved write evidence and never reruns active
+> probes. Actual custody/capability/global/provider/host-loss gates remain open;
+> see [durable standard-write maintenance](durable-standard-write-maintenance.md).
+
 > **17 October write-evidence custody component:** Standard-write baselines and
 > refusal reports now have strict shared schemas and conditional, exact-version
 > S3 publication/readback. Lost acknowledgements do not produce pins or retry.
