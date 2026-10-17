@@ -8,6 +8,7 @@ import {join,dirname,basename,resolve} from 'node:path';
 import {fileURLToPath} from 'node:url';
 import {DEFAULT_POSTGRES_IMAGE,prepareLocalDockerCommand,captureHelperImplementationBinding,inspectProofContainerInventory} from './postgres-backup.mjs';
 import {inspectContainmentUnit,containmentUnit} from './managed-proof-systemd-containment.mjs';
+import {inspectOriginalProofStorage} from './managed-proof-storage-inspect.mjs';
 const pause=ms=>new Promise(r=>setTimeout(r,ms));
 function docker(args,input){const p=prepareLocalDockerCommand(['docker',...args],process.env),r=spawnSync(p.command[0],p.command.slice(1),{env:p.environment,input,encoding:'utf8',timeout:15000,maxBuffer:65536});assert.equal(r.status,0,'Synthetic Docker operation refused');return r.stdout.trim();}
 function manager(args){const r=spawnSync('systemctl',['--user',...args],{encoding:'utf8',timeout:15000,maxBuffer:4096});assert.equal(r.status,0,'Synthetic manager operation refused');return r.stdout;}
@@ -18,10 +19,14 @@ test('real source caller loss stops contained worker and exact daemon clients wh
 },async()=>{
  assert.notEqual(process.getuid(),0);const helper=captureHelperImplementationBinding();assert.equal(helper.sourceMatchesCommit,true);assert.equal(helper.canonicalRepositoryMatched,true);
  const root=mkdtempSync(join(tmpdir(),'charitypilot-parent-observer-'));chmodSync(root,0o700);
- let producer,producerTerminal,locker,lockerTerminal,control,ready,held,unit,verifiedSource,channelRoot,originalGroup,output='',errors='';const observedClientIds=[];
+ let producer,producerTerminal,locker,lockerTerminal,control,ready,held,unit,verifiedSource,channelRoot,originalGroup,output='',errors='';const observedClientIds=[],ownedVolumes=[],volumeOwner=randomUUID();let attachedVolume,emptyVolume,controlPlannedName;
+ const saveOwnership=(name,value)=>{writeFileSync(join(root,name),JSON.stringify(value),{flag:'wx',mode:0o600});const fd=openSync(join(root,name),'r');try{fsyncSync(fd);}finally{closeSync(fd);}const dir=openSync(root,'r');try{fsyncSync(dir);}finally{closeSync(dir);}};
  try{
   const otherJob=randomUUID(),controlName=`charitypilot-isolated-restore-${Date.now()}-${process.pid}-${randomBytes(4).toString('hex')}`;
+  controlPlannedName=controlName;attachedVolume='charitypilot-synthetic-storage-'+randomUUID();saveOwnership('fixture-ownership.json',{volumeOwner,attachedVolume,controlName,otherJob});
+  assert.equal(docker(['volume','create','--label','charitypilot.synthetic-owner='+volumeOwner,'--label','charitypilot.managed-proof-job='+otherJob,attachedVolume]),attachedVolume);ownedVolumes.push(attachedVolume);
   control=docker(['run','--detach','--rm','--name',controlName,'--network','none','--read-only','--tmpfs','/var/lib/postgresql/data:rw,noexec,nosuid,size=1m',
+   '--mount','type=volume,source='+attachedVolume+',target=/synthetic-storage-control',
    '--label','charitypilot.restore-proof=true','--label','charitypilot.proof-created-at-ms='+(Date.now()-7_200_000),'--label','charitypilot.managed-proof-job='+otherJob,'--entrypoint','sh',DEFAULT_POSTGRES_IMAGE,'-eu','-c','sleep 120']);assert.match(control,/^[a-f0-9]{64}$/);
   const before=inspectProofContainerInventory({jobId:otherJob});assert.equal(before.containers.length,1);assert.equal(before.containers[0].id,control);assert.equal(before.containers[0].ageClass,'OLDER_THAN_PROOF_TIMEOUT');assert.equal(before.cleanupAuthorized,false);
   const env=Object.fromEntries(Object.entries(process.env).filter(([key])=>!['NODE_TEST_CONTEXT','NODE_OPTIONS','NODE_PATH'].includes(key)));
@@ -41,6 +46,8 @@ test('real source caller loss stops contained worker and exact daemon clients wh
   assert.equal(realpathSync(observedChannelRoot),observedChannelRoot);assert.equal(lstatSync(observedChannelRoot).uid,process.getuid());assert.equal(lstatSync(observedChannelRoot).mode&0o777,0o700);assert.equal(lstatSync(command[3]).isSocket(),true);channelRoot=observedChannelRoot;
   const source=JSON.parse(docker(['inspect','--format','{{json .}}',ready.sourceId]));assert.equal(source.Id,ready.sourceId);assert.match(source.Name,/^\/charitypilot-managed-writer-[a-f0-9-]{36}$/);assert.equal(source.State.Running,true);
   assert.ok(source.Config.Env.includes('POSTGRES_DB='+ready.database));assert.ok(source.Config.Env.includes('POSTGRES_PASSWORD=synthetic-maintenance-only'));verifiedSource=source.Id;
+  emptyVolume='charitypilot-synthetic-storage-'+randomUUID();saveOwnership('fixture-empty-volume.json',{volumeOwner,emptyVolume,jobId:ready.jobId});
+  assert.equal(docker(['volume','create','--label','charitypilot.synthetic-owner='+volumeOwner,'--label','charitypilot.managed-proof-job='+ready.jobId,emptyVolume]),emptyVolume);ownedVolumes.push(emptyVolume);
   held={...ready,originalControlGroup:original.ControlGroup,kind:'HELD_SYNTHETIC_SOURCE_OBSERVATION_V1'};
   writeFileSync(join(root,'original-pins.json'),JSON.stringify(held),{flag:'wx',mode:0o600});const fd=openSync(join(root,'original-pins.json'),'r');try{fsyncSync(fd);}finally{closeSync(fd);}
   const endpoint=prepareLocalDockerCommand(['docker','version'],process.env),sql="BEGIN; LOCK TABLE public.synthetic_snapshot_public IN ACCESS EXCLUSIVE MODE; SELECT 'ORIGINAL_LOCK_ACK'; SELECT pg_sleep(60); ROLLBACK;\n";
@@ -57,6 +64,11 @@ test('real source caller loss stops contained worker and exact daemon clients wh
    lastWaiterCount=Number(waiting);return rows.length>0&&lastWaiterCount>0;
   });}catch(error){throw new Error('Original work observation failed: clients='+lastClientCount+' waiters='+lastWaiterCount+'; '+error.message+'; '+output.slice(-4096)+' '+errors.slice(-1024));}
   const live=inspectContainmentUnit(unit);assert.equal(live.InvocationID,held.identity.invocationId);assert.notEqual(Number(live.MainPID),producer.pid);
+  const storage=inspectOriginalProofStorage({root:ready.workspaceRoot,jobId:ready.jobId,inputDigest:ready.identity.inputDigest});
+  assert.ok(storage.containers.some(v=>observedClientIds.includes(v.id)&&v.state==='ORIGINAL_PLAN_MATCHES_CURRENT_MOUNTS'));
+  assert.equal(storage.completeResourceInventory,false);assert.ok(storage.volumes.every(v=>v.cleanupAuthorized===false));
+  assert.equal(storage.volumes.find(v=>v.name===attachedVolume)?.attachmentState,'ATTACHMENTS_OBSERVED');assert.ok(storage.volumes.find(v=>v.name===attachedVolume).containerIds.includes(control));
+  const empty=storage.volumes.find(v=>v.name===emptyVolume);assert.equal(empty?.attachmentState,'NO_ATTACHMENTS_OBSERVED');assert.equal(empty.attribution,'JOB_LABEL_ONLY_UNVERIFIED');
   const members=readFileSync('/sys/fs/cgroup'+held.originalControlGroup+'/cgroup.procs','utf8').trim().split(/\s+/);
   assert.ok(members.includes(String(held.identity.mainPid)));assert.ok(members.length>=2);
   assert.equal(producer.exitCode,null);producer.kill('SIGKILL');const death=await producerTerminal;assert.equal(death.signal,'SIGKILL');
@@ -75,6 +87,7 @@ test('real source caller loss stops contained worker and exact daemon clients wh
   const inspected=JSON.parse(operator.stdout);assert.equal(inspected.cohort.state,'ORIGINAL_COHORT_EMPTY');assert.equal(inspected.cleanupAuthorized,false);assert.equal(inspected.executionAuthorized,false);
   assert.equal(inspected.daemonRequests.state,'UNRESOLVED_REQUESTS');assert.equal(inspected.daemonRequests.mutatingRequestsObservedSuccessful,false);assert.ok(inspected.daemonRequests.requestCount>=1);
   assert.equal(inspected.daemonRequests.declaredImageVolumesCovered,true);assert.equal(inspected.daemonRequests.completeResourceInventory,false);
+  assert.ok(inspected.storage.containers.some(v=>v.state==='NOT_LISTED_AT_BOUNDARY'));assert.equal(inspected.storage.cleanupAuthorized,false);
   console.log('PASS genuine source parent SIGKILL: original service ACK, observed blocked TLS SQL/client, empty original cgroup, exact client cleanup, original source/control alive, fresh process local pins read-only; no provider/host-loss claim');
  }finally{
   if(producer&&producer.exitCode===null&&producer.signalCode===null)producer.kill('SIGKILL');await producerTerminal?.catch(()=>{});
@@ -84,6 +97,9 @@ test('real source caller loss stops contained worker and exact daemon clients wh
   for(const id of observedClientIds){const listed=docker(['ps','-a','--no-trunc','--filter','id='+id,'--format','{{.ID}}']);if(listed)docker(['rm','--force',id]);}
   if(channelRoot){assert.ok(!existsSync('/sys/fs/cgroup'+originalGroup+'/cgroup.procs')||readFileSync('/sys/fs/cgroup'+originalGroup+'/cgroup.procs','utf8').trim()==='');protectedRemove(channelRoot,'charitypilot-managed-channel-');}
   if(verifiedSource)docker(['rm','--force',verifiedSource]);if(control)docker(['rm','--force',control]);await lockerTerminal?.catch(()=>{});
+  for(const name of ownedVolumes){assert.match(name,/^charitypilot-synthetic-storage-[a-f0-9-]{36}$/);const v=JSON.parse(docker(['volume','inspect','--format','{{json .}}',name]));assert.equal(v.Name,name);assert.equal(v.Labels['charitypilot.synthetic-owner'],volumeOwner);assert.equal(docker(['ps','-a','--no-trunc','--filter','volume='+name,'--format','{{.ID}}']),'');docker(['volume','rm',name]);}
+  const remainingVolumes=docker(['volume','ls','--format','{{.Name}}']).split(/\r?\n/);assert.ok(![attachedVolume,emptyVolume].filter(Boolean).some(v=>remainingVolumes.includes(v)));
+  if(controlPlannedName)assert.equal(docker(['ps','-a','--filter','name='+controlPlannedName,'--format','{{.Names}}']),'');
   if(verifiedSource){protectedRemove(ready.parentDirectory,'charitypilot-imported-proof-');protectedRemove(dirname(ready.certificate),'charitypilot-managed-writer-tls-');}
   protectedRemove(root,'charitypilot-parent-observer-');
  }

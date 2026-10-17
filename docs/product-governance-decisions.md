@@ -1,3 +1,13 @@
+## 17 October: original plans and current storage correlation
+
+Read [current storage observation](managed-original-storage-observation.md).
+The original-pin inspector can compare same-boot current container mounts with
+validated plans and observe volume attachment IDs. New nested plan versions
+retain tmpfs options; earlier plans gain no invented detail. Unattached or
+job-labelled volumes remain unverified, with no cleanup authority. Changed
+metadata refuses the observation. Full historical inventory, pending-request
+resolution and independent recovery remain open; exact tests are recorded privately.
+
 ## 17 October: approved storage plans before proof dispatch
 
 Read [storage plans](managed-proof-storage-plans.md). New request headers/intents

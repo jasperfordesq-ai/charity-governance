@@ -4,6 +4,7 @@ import {containmentUnit,requireOriginalControlGroup,currentContainmentBootId,ins
 import {openManagedCaptureWorkspace} from './managed-capture-workspace.mjs';
 import {inspectManagedProofJob} from './managed-proof-job.mjs';
 import {inspectManagedDaemonRequests} from './postgres-backup.mjs';
+import {inspectOriginalProofStorage} from './managed-proof-storage-inspect.mjs';
 const refuse=()=>new Error('Original cohort inspection unresolved; preserve original records without cleanup or replay');
 function currentUnit(unit){
  const r=spawnSync('systemctl',['--user','show',unit,'--property=LoadState','--value'],{encoding:'utf8',timeout:15000,maxBuffer:4096});
@@ -39,8 +40,11 @@ export async function inspectSavedProofOrphan(input){
  const workspace=await openManagedCaptureWorkspace(input.parentDirectory,input.workspaceRoot);
  try{
   const job=await inspectManagedProofJob(workspace,input);
-  return {...job,cohort:job.serviceIdentity?inspectOriginalProofCohort(job.serviceIdentity):null,
+  const cohort=job.serviceIdentity?inspectOriginalProofCohort(job.serviceIdentity):null;
+  const originalHost=cohort&&['ORIGINAL_COHORT_POPULATED','ORIGINAL_COHORT_EMPTY','UNIT_ABSENT_GROUP_EMPTY','UNIT_ABSENT_GROUP_POPULATED'].includes(cohort.state);
+  return {...job,cohort,
    daemonRequests:job.serviceIdentity?inspectManagedDaemonRequests({root:input.workspaceRoot,jobId:job.jobId,inputDigest:job.serviceIdentity.inputDigest}):null,
+   storage:originalHost?inspectOriginalProofStorage({root:input.workspaceRoot,jobId:job.jobId,inputDigest:job.serviceIdentity.inputDigest}):null,
    completeResourceInventory:false,cleanupAuthorized:false};
  }finally{await workspace.close();}
 }

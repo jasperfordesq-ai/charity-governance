@@ -2246,19 +2246,19 @@ export function planManagedProofStorage(args,jobId){
  if(!Array.isArray(args)||args[0]!=='run'||args.some(v=>typeof v!=='string')||typeof jobId!=='string'||!/^[a-f0-9-]{36}$/.test(jobId))throw daemonJournalFailure();
  const imageIndex=args.indexOf(DEFAULT_POSTGRES_IMAGE);if(imageIndex<1)throw daemonJournalFailure();
  const mounts=[],seen=new Set();
- const add=(target,type,readOnly,source)=>{
+ const add=(target,type,readOnly,source,tmpfsOptions)=>{
   if(!['/var/lib/postgresql/data','/proof','/backup','/run/charitypilot/database-ca.pem'].includes(target)||seen.has(target))throw daemonJournalFailure();seen.add(target);
   if(type==='bind'&&(target==='/var/lib/postgresql/data'||typeof source!=='string'||!isAbsolute(source)||/[\x00-\x1f\x7f]/.test(source)||source.length>4096))throw daemonJournalFailure();
   if(type==='tmpfs'&&target!=='/var/lib/postgresql/data')throw daemonJournalFailure();
   if(['/backup','/run/charitypilot/database-ca.pem'].includes(target)&&!readOnly)throw daemonJournalFailure();
-  mounts.push({target,type,readOnly,...(source?{sourceDigest:sha256Text('CHARITYPILOT_PROOF_BIND_SOURCE_V1\n'+jobId+'\n'+source)}:{})});
+  mounts.push({target,type,readOnly,...(source?{sourceDigest:sha256Text('CHARITYPILOT_PROOF_BIND_SOURCE_V1\n'+jobId+'\n'+source)}:{}),...(tmpfsOptions?{tmpfsOptions}:{})});
  };
  for(let i=1;i<imageIndex;i++){
   const flag=args[i];
   if(['-v','--volume','--tmpfs','--mount'].includes(flag)){
    const value=args[++i];if(i>=imageIndex||!value)throw daemonJournalFailure();
    if(flag==='--tmpfs'){
-    const [target,options,...rest]=value.split(':');if(rest.length||!['rw,noexec,nosuid,size=1m','rw,noexec,nosuid,size=4g'].includes(options))throw daemonJournalFailure();add(target,'tmpfs',false);
+    const [target,options,...rest]=value.split(':');if(rest.length||!['rw,noexec,nosuid,size=1m','rw,noexec,nosuid,size=4g'].includes(options))throw daemonJournalFailure();add(target,'tmpfs',false,undefined,options);
    }else if(flag==='--mount'){
     const fields=Object.create(null);for(const part of value.split(',')){const at=part.indexOf('='),key=at<0?part:part.slice(0,at),v=at<0?true:part.slice(at+1);if(!['type','source','target','readonly'].includes(key)||Object.hasOwn(fields,key))throw daemonJournalFailure();fields[key]=v;}
     if(fields.type!=='bind'||(fields.readonly!==undefined&&fields.readonly!==true))throw daemonJournalFailure();add(fields.target,'bind',fields.readonly===true,fields.source);
@@ -2269,7 +2269,7 @@ export function planManagedProofStorage(args,jobId){
   }else if(flag.startsWith('--volumes-from')||/^(?:-v.|--(?:volume|mount|tmpfs)=)/.test(flag))throw daemonJournalFailure();
  }
  if(!seen.has('/var/lib/postgresql/data'))throw daemonJournalFailure();
- return{format:1,kind:'MANAGED_PROOF_STORAGE_PLAN_V1',image:DEFAULT_POSTGRES_IMAGE,mounts:mounts.sort((a,b)=>a.target.localeCompare(b.target)),declaredImageVolumesCovered:true};
+ return{format:2,kind:'MANAGED_PROOF_STORAGE_PLAN_V2',image:DEFAULT_POSTGRES_IMAGE,mounts:mounts.sort((a,b)=>a.target.localeCompare(b.target)),declaredImageVolumesCovered:true};
 }
 function inspectDeclaredProofImageVolumes(){
  const r=runLocalDockerSync(['image','inspect',DEFAULT_POSTGRES_IMAGE,'--format','{{json .Config.Volumes}}'],{encoding:'utf8',timeout:15000,maxBuffer:8192});
@@ -2302,8 +2302,8 @@ export function createManagedDaemonRequestJournal(raw,{imageVolumes=inspectDecla
  }};
 }
 export function inspectManagedDaemonRequests(raw){
- let storageCovered=false;
- const s=daemonScope(raw),result=(state,count=0)=>({format:1,kind:'MANAGED_DAEMON_REQUEST_OBSERVATION_V1',jobId:s.jobId,state,requestCount:count,declaredImageVolumesCovered:storageCovered,
+ let storageCovered=false;const plannedContainers=[];
+ const s=daemonScope(raw),result=(state,count=0)=>({format:1,kind:'MANAGED_DAEMON_REQUEST_OBSERVATION_V1',jobId:s.jobId,state,requestCount:count,declaredImageVolumesCovered:storageCovered,plannedContainers,
   mutatingRequestsObservedSuccessful:state==='RECORDED_CLIENT_RESPONSES',completeResourceInventory:false,cleanupAuthorized:false,executionAuthorized:false,actionAuthorized:false});
  assertProtectedDirectoryUnchanged(s.root,s.identity,'before daemon request inspection');
  const names=readdirSync(s.root).filter(n=>n.startsWith(daemonFile)).sort();
@@ -2319,6 +2319,7 @@ export function inspectManagedDaemonRequests(raw){
   const intent=daemonRead(s.root,intents[i]),v=intent.value;
   if(Object.keys(v).sort().join(',')!==(version2?'argumentsDigest,format,jobId,kind,operation,previousDigest,sequence,storagePlan,target':'argumentsDigest,format,jobId,kind,operation,previousDigest,sequence,target')||v.format!==(version2?2:1)||v.kind!==(version2?'MANAGED_DAEMON_REQUEST_INTENT_V2':'MANAGED_DAEMON_REQUEST_INTENT_V1')||v.jobId!==s.jobId||v.sequence!==i+1||v.previousDigest!==previous||!['run','exec','rm'].includes(v.operation)||typeof v.argumentsDigest!=='string'||!/^[a-f0-9]{64}$/.test(v.argumentsDigest)||typeof v.target!=='string'||!/^(?:[a-f0-9]{64}|charitypilot-(?:source-snapshot|dump-descriptor|isolated-restore|restore-loader|restored-snapshot)-[0-9]+-[0-9]+-[a-f0-9]{8})$/.test(v.target))throw daemonJournalFailure();
   if(version2){if(v.operation==='run')validateRecordedProofStorage(v.storagePlan);else if(v.storagePlan!==null)throw daemonJournalFailure();}
+  if(version2&&v.operation==='run')plannedContainers.push({target:v.target,storagePlan:v.storagePlan});
   previous=intent.pin.sha256;const name=daemonFile+ordinal+'.response.json';if(!names.includes(name)){unknown=true;continue;}
   const response=daemonRead(s.root,name).value;
   if(Object.keys(response).sort().join(',')!=='format,intentPin,jobId,kind,removalAlreadyAbsent,sequence,signal,status,transportError'||response.format!==1||response.kind!=='MANAGED_DAEMON_CLIENT_RESPONSE_V1'||response.jobId!==s.jobId||response.sequence!==i+1||JSON.stringify(response.intentPin)!==JSON.stringify(intent.pin)||typeof response.transportError!=='boolean'||typeof response.signal!=='boolean'||typeof response.removalAlreadyAbsent!=='boolean'||(response.removalAlreadyAbsent&&v.operation!=='rm')||(response.status!==null&&!Number.isSafeInteger(response.status)))throw daemonJournalFailure();
@@ -2332,10 +2333,10 @@ export function inspectManagedDaemonRequests(raw){
  assertProtectedDirectoryUnchanged(s.root,s.identity,'after daemon request inspection');return result(unknown?'UNRESOLVED_REQUESTS':'RECORDED_CLIENT_RESPONSES',intents.length);
 }
 function validateRecordedProofStorage(plan){
- if(!plan||Object.keys(plan).sort().join(',')!=='declaredImageVolumesCovered,format,image,kind,mounts'||plan.format!==1||plan.kind!=='MANAGED_PROOF_STORAGE_PLAN_V1'||plan.image!==DEFAULT_POSTGRES_IMAGE||plan.declaredImageVolumesCovered!==true||!Array.isArray(plan.mounts)||plan.mounts.length>4)throw daemonJournalFailure();
+ if(!plan||Object.keys(plan).sort().join(',')!=='declaredImageVolumesCovered,format,image,kind,mounts'||!((plan.format===1&&plan.kind==='MANAGED_PROOF_STORAGE_PLAN_V1')||(plan.format===2&&plan.kind==='MANAGED_PROOF_STORAGE_PLAN_V2'))||plan.image!==DEFAULT_POSTGRES_IMAGE||plan.declaredImageVolumesCovered!==true||!Array.isArray(plan.mounts)||plan.mounts.length>4)throw daemonJournalFailure();
  const seen=new Set();for(const m of plan.mounts){
   if(!m||!['/var/lib/postgresql/data','/proof','/backup','/run/charitypilot/database-ca.pem'].includes(m.target)||seen.has(m.target)||typeof m.readOnly!=='boolean')throw daemonJournalFailure();seen.add(m.target);
-  if(m.type==='tmpfs'){if(m.target!=='/var/lib/postgresql/data'||m.readOnly||Object.keys(m).sort().join(',')!=='readOnly,target,type')throw daemonJournalFailure();}
+  if(m.type==='tmpfs'){if(m.target!=='/var/lib/postgresql/data'||m.readOnly||Object.keys(m).sort().join(',')!==(plan.format===2?'readOnly,target,tmpfsOptions,type':'readOnly,target,type')||(plan.format===2&&!['rw,noexec,nosuid,size=1m','rw,noexec,nosuid,size=4g'].includes(m.tmpfsOptions)))throw daemonJournalFailure();}
   else if(m.type==='bind'){if(m.target==='/var/lib/postgresql/data'||Object.keys(m).sort().join(',')!=='readOnly,sourceDigest,target,type'||typeof m.sourceDigest!=='string'||!/^[a-f0-9]{64}$/.test(m.sourceDigest)||(['/backup','/run/charitypilot/database-ca.pem'].includes(m.target)&&!m.readOnly))throw daemonJournalFailure();}
   else throw daemonJournalFailure();
  }if(!seen.has('/var/lib/postgresql/data'))throw daemonJournalFailure();
