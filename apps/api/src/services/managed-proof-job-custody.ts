@@ -4,6 +4,7 @@ import {S3MaintenanceArtifactStore} from './maintenance-artifact-store.js';
 import {candidateHash,candidatePinSchema} from './managed-candidate-capture-contract.js';
 import {commonCandidateBindingSchema} from './managed-common-candidate-contract.js';
 import {jobScope,jobRequestArtifact,jobObservationArtifact,parseJobRequest,parseJobObservation,assertJobPair,jobServiceScope,jobServiceArtifact,parseJobService,assertJobServicePair} from './managed-proof-job-contract.js';
+import {ManagedDaemonIntentCustody} from './managed-daemon-intent-custody.js';
 const failure=()=>new Error('Managed proof job custody unresolved; saved records do not authorise execution');
 const entry=z.object({Key:z.string().min(1).max(1024),ETag:z.string().min(1).max(1024),Size:z.number().int().min(1).max(16384)});
 type Pin=z.infer<typeof candidatePinSchema>;
@@ -13,8 +14,9 @@ export class ManagedProofJobCustody{
  private readonly binding:z.infer<typeof commonCandidateBindingSchema>;
  private acknowledged:Pin|undefined;private attempted=false;private observationAttempted=false;
  private acknowledgedArtifact:ReturnType<typeof jobRequestArtifact>|undefined;private serviceAttempted=false;
+ private savedService:{artifact:ReturnType<typeof jobServiceArtifact>;pin:Pin}|undefined;private daemon:ManagedDaemonIntentCustody|undefined;
  constructor(private readonly storage:{installationId:string;bucket:string;accountId:string;kmsKeyArn:string},binding:unknown,
-  credentials:NonNullable<S3ClientConfig['credentials']>,private readonly client:S3Client,private readonly live:(pin:Pin)=>boolean){
+  private readonly credentials:NonNullable<S3ClientConfig['credentials']>,private readonly client:S3Client,private readonly live:(pin:Pin)=>boolean){
   this.binding=commonCandidateBindingSchema.parse(binding);if(this.binding.installationId!==storage.installationId)throw failure();
   this.evidence=new S3MaintenanceArtifactStore({...storage,maintenance:{attemptId:this.binding.attemptId,planDigest:this.binding.planDigest,sourceSha:this.binding.sourceSha,maintenanceEpoch:this.binding.maintenanceEpoch}},credentials,
    {namespace:'capture-job',scopeDigest:candidateHash(this.binding.candidateId),pinSchema:candidatePinSchema,limits:{BASELINE:16384,OBSERVATION:16384},failure,
@@ -24,18 +26,27 @@ export class ManagedProofJobCustody{
    {namespace:'capture-job',scopeDigest:jobServiceScope(this.binding.candidateId),pinSchema:candidatePinSchema,limits:{BASELINE:16384,OBSERVATION:16384},failure,
     baseline:raw=>parseJobService(this.binding,raw).artifact,parseObservation:()=>{throw failure();},observationFromValue:()=>{throw failure();},assertPair:()=>{throw failure();}},client);
  }
- closeExecution(){this.acknowledged=undefined;this.acknowledgedArtifact=undefined;}
+ closeExecution(){this.acknowledged=undefined;this.acknowledgedArtifact=undefined;this.savedService=undefined;}
  async reserve(local:unknown,original:unknown,signal?:AbortSignal){
   const pin=candidatePinSchema.parse(original);if(!this.live(pin)||this.attempted)throw failure();this.attempted=true;
   const artifact=jobRequestArtifact(this.binding,pin,local),saved=await this.evidence.publishBaseline(artifact,signal);
-  if(!this.live(pin))throw failure();this.acknowledged=saved;this.acknowledgedArtifact=artifact;return{pin:saved,originalAcknowledgementReconstructed:false as const};
+  if(!this.live(pin))throw failure();this.acknowledged=candidatePinSchema.parse(saved);this.acknowledgedArtifact=artifact;return{pin:saved,originalAcknowledgementReconstructed:false as const};
  }
  async bindService(local:unknown,original:unknown,signal?:AbortSignal){
   const pin=candidatePinSchema.parse(original);if(!this.live(pin)||!this.acknowledged||!this.acknowledgedArtifact||this.serviceAttempted||this.observationAttempted)throw failure();this.serviceAttempted=true;
   const artifact=jobServiceArtifact(this.binding,this.acknowledged,local);assertJobServicePair(this.binding,this.acknowledgedArtifact,artifact);
   const saved=await this.serviceEvidence.publishBaseline(artifact,signal);if(!this.live(pin)||!this.acknowledged)throw failure();
+  this.savedService={artifact,pin:candidatePinSchema.parse(saved)};
   return{pin:saved,originalAcknowledgementReconstructed:false as const,savedObservationAuthorizesExecution:false as const};
  }
+ private daemonCustody(original:unknown){
+  const pin=candidatePinSchema.parse(original);
+  if(!this.live(pin)||!this.acknowledged||!this.acknowledgedArtifact||!this.savedService||this.observationAttempted)throw failure();
+  return this.daemon??=new ManagedDaemonIntentCustody(this.storage,this.binding,this.credentials,this.client,this.acknowledgedArtifact,this.acknowledged,
+   this.savedService.artifact,this.savedService.pin,()=>!!this.acknowledged&&!!this.savedService&&!this.observationAttempted&&this.live(pin));
+ }
+ async reserveDaemonHeader(local:unknown,original:unknown,signal?:AbortSignal){return this.daemonCustody(original).reserveHeader(local,signal);}
+ async reserveDaemonIntent(local:unknown,original:unknown,signal?:AbortSignal){return this.daemonCustody(original).reserveIntent(local,signal);}
  async observe(local:unknown,original:unknown,signal?:AbortSignal){
   const pin=candidatePinSchema.parse(original);if(!this.live(pin)||!this.acknowledged||this.observationAttempted)throw failure();this.observationAttempted=true;
   const saved=await this.evidence.publishObservation(jobObservationArtifact(this.binding,this.acknowledged,local),this.acknowledged,signal);

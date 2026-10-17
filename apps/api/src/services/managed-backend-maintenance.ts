@@ -175,7 +175,7 @@ export class ManagedBackendMaintenance {
   * root write, so an unknown final ACK remains discoverable without replay. */
  async captureCommonQuarantined(raw:unknown,capture:SupabaseRecoveryCapture,window:ManagedStorageMetadataWindow,
   journal:ManagedCandidateCaptureJournal,archive:ArchivedRecoverySets,
-  source:(snapshot:ManagedDatabaseSnapshot,signal:AbortSignal,context:Readonly<{kind:'COMMON_CANDIDATE';bindingDigest:string;requestPinDigest:string;sourceSha:string;jobCustody:Readonly<{reserve:(artifact:unknown)=>Promise<unknown>;observe:(artifact:unknown)=>Promise<unknown>;bindService:(artifact:unknown)=>Promise<unknown>}>}>)=>Promise<{
+  source:(snapshot:ManagedDatabaseSnapshot,signal:AbortSignal,context:Readonly<{kind:'COMMON_CANDIDATE';bindingDigest:string;requestPinDigest:string;sourceSha:string;jobCustody:Readonly<{reserve:(artifact:unknown)=>Promise<unknown>;observe:(artifact:unknown)=>Promise<unknown>;bindService:(artifact:unknown)=>Promise<unknown>;reserveDaemonHeader:(artifact:unknown)=>Promise<unknown>;reserveDaemonIntent:(artifact:unknown)=>Promise<unknown>}>}>)=>Promise<{
    visit:Parameters<SupabaseRecoveryCapture['capture']>[0];
    prepareArchiveInput:(captured:Awaited<ReturnType<SupabaseRecoveryCapture['capture']>>,interval:ManagedSnapshotInterval,signal?:AbortSignal)=>Promise<unknown>;
   }>,caller?:AbortSignal){
@@ -197,6 +197,8 @@ export class ManagedBackendMaintenance {
      requestPinDigest:createHash('sha256').update(JSON.stringify(requestPin)).digest('hex'),jobCustody:Object.freeze({
       reserve:async(artifact:unknown)=>{await check();signal.throwIfAborted();const saved=await session!.reserveSourceJob(artifact,requestPin,signal);await check();return saved;},
       bindService:async(artifact:unknown)=>{await check();signal.throwIfAborted();const saved=await session!.bindSourceJobService(artifact,requestPin,signal);await check();return saved;},
+      reserveDaemonHeader:async(artifact:unknown)=>{await check();signal.throwIfAborted();const saved=await session!.reserveSourceDaemonHeader(artifact,requestPin,signal);await check();return saved;},
+      reserveDaemonIntent:async(artifact:unknown)=>{await check();signal.throwIfAborted();const saved=await session!.reserveSourceDaemonIntent(artifact,requestPin,signal);await check();return saved;},
       observe:async(artifact:unknown)=>{await check();signal.throwIfAborted();const saved=await session!.observeSourceJob(artifact,requestPin,signal);await check();return saved;}
      })});
     const prepared=await source(snapshot,signal,context);signal.throwIfAborted();

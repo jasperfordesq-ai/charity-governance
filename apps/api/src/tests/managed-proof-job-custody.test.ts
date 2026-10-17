@@ -1,8 +1,10 @@
-import test from 'node:test';
+import test,{mock} from 'node:test';
 import assert from 'node:assert/strict';
 import {randomUUID,createHash} from 'node:crypto';
 import {ManagedProofJobCustody} from '../services/managed-proof-job-custody.js';
-import {jobScope,jobServiceScope} from '../services/managed-proof-job-contract.js';
+import {jobScope,jobServiceScope,jobRequestArtifact,jobServiceArtifact} from '../services/managed-proof-job-contract.js';
+import {ManagedDaemonIntentCustody,daemonCustodyScope} from '../services/managed-daemon-intent-custody.js';
+import {GetObjectCommand,PutObjectCommand} from '@aws-sdk/client-s3';
 import {backend,config,credentials} from './fixtures/archived-custody.js';
 const hash=(v:string)=>createHash('sha256').update(v).digest('hex');
 function fixture(){
@@ -119,4 +121,101 @@ test('late service additions and unexpected service catalogue entries refuse rat
   const prefix=`/capture-job/${jobServiceScope(g.binding.candidateId)}/`,[key,value]=[...g.b.objects].find(([k])=>k.includes(prefix))!;
   g.b.objects.set(key.replace('baseline.json','observation.json'),value);await assert.rejects(g.create().discover(g.original));
  }finally{g.close();}
+});
+
+async function daemonFixture(){
+ const f=fixture(),request=await f.session.reserve(f.input,f.original);
+ const localService=service(f,{}, {format:2,kind:'MANAGED_GUARDIAN_LIVE_BINDING_V2',bootId:'12345678-1234-1234-1234-123456789012',
+  controlGroup:`/user.slice/user-1000.slice/user@1000.service/app.slice/charitypilot-containment-${f.request.jobId}.service`});
+ const bound=await f.session.bindService(localService,f.original);
+ const image='postgres@sha256:'+'1'.repeat(64);
+ const header=f.local({format:2,kind:'MANAGED_DAEMON_REQUEST_HEADER_V2',jobId:f.request.jobId,inputDigest:'d'.repeat(64),image,imageVolumeTargets:['/var/lib/postgresql/data']});
+ const intent=(sequence=1,previousDigest=header.sha256,change={})=>f.local({format:2,kind:'MANAGED_DAEMON_REQUEST_INTENT_V2',jobId:f.request.jobId,sequence,previousDigest,
+  operation:'run',target:'charitypilot-source-snapshot-123-456-abcdef12',storagePlan:{format:2,kind:'MANAGED_PROOF_STORAGE_PLAN_V2',image,
+   mounts:[{target:'/var/lib/postgresql/data',type:'tmpfs',readOnly:false,tmpfsOptions:'rw,noexec,nosuid,size=1m'}],declaredImageVolumesCovered:true},argumentsDigest:'e'.repeat(64),...change});
+ const reader=()=>new ManagedDaemonIntentCustody({installationId:config.installationId,bucket:config.bucket,accountId:config.accountId,kmsKeyArn:config.storageKeyArn},f.binding,credentials,f.client,
+  jobRequestArtifact(f.binding,f.original,f.input),request.pin,jobServiceArtifact(f.binding,request.pin,localService),bound.pin,()=>false);
+ return{...f,header,intent,reader};
+}
+
+test('original service ACK gates immutable daemon header/intents; saved reads reconstruct no dispatch permission',async()=>{
+ const f=await daemonFixture();try{
+  const h=await f.session.reserveDaemonHeader(f.header,f.original),first=f.intent();
+  h.pin.versionId='caller-edited-return-pin';
+  await f.session.reserveDaemonIntent(first,f.original);await f.session.reserveDaemonIntent(f.intent(2,first.sha256),f.original);
+  const writes=f.b.writes;f.session.closeExecution();const reader=f.reader();
+  const saved=await reader.inspectHeader();assert.equal(saved.localRecord.sha256,f.header.sha256);
+  const one=await reader.inspectIntent(1,f.header.sha256),two=await reader.inspectIntent(2,one.localRecord.sha256);
+  assert.equal(two.pendingRequestResolved,false);assert.equal(one.savedEvidenceAuthorizesDispatch,false);assert.equal(one.originalAcknowledgementReconstructed,false);
+  assert.equal(f.b.writes,writes);assert.equal(f.b.generates,0);
+  await assert.rejects(reader.reserveHeader(f.header));await assert.rejects(f.session.reserveDaemonIntent(f.intent(3,two.localRecord.sha256),f.original));
+  await assert.rejects(reader.inspectIntent(2,'0'.repeat(64)));
+ }finally{f.close();}
+ const g=fixture();try{
+  await g.session.reserve(g.input,g.original);await assert.rejects(g.session.reserveDaemonHeader({},g.original));
+  await g.session.bindService(service(g),g.original);await assert.rejects(g.session.reserveDaemonHeader({},g.original));
+ }finally{g.close();}
+});
+
+test('daemon custody rejects secret fields, wrong input/job/chain and unsafe storage before writing; invalid original attempts stay consumed',async()=>{
+ for(const change of [{inputDigest:'0'.repeat(64)},{jobId:randomUUID()},{databaseUrl:'SYNTHETIC_PRIVATE_BODY'}]){
+  const f=await daemonFixture();try{
+   const before=f.b.writes;await assert.rejects(f.session.reserveDaemonHeader(f.local({...JSON.parse(f.header.body),...change}),f.original));
+   await assert.rejects(f.session.reserveDaemonHeader(f.header,f.original));assert.equal(f.b.writes,before);
+  }finally{f.close();}
+ }
+ for(const change of [{previousDigest:'0'.repeat(64)},{sequence:2},{jobId:randomUUID()},{rawArguments:['SYNTHETIC_PRIVATE_BODY']},
+  {storagePlan:{format:2,kind:'MANAGED_PROOF_STORAGE_PLAN_V2',image:'postgres@sha256:'+'1'.repeat(64),declaredImageVolumesCovered:true,
+   mounts:[{target:'/var/lib/postgresql/data',type:'tmpfs',readOnly:false,tmpfsOptions:'rw,noexec,nosuid,size=1m'},
+    {target:'/backup',type:'bind',readOnly:false,sourceDigest:'f'.repeat(64)}]}}]){
+  const f=await daemonFixture();try{
+   await f.session.reserveDaemonHeader(f.header,f.original);const before=f.b.writes;
+   await assert.rejects(f.session.reserveDaemonIntent(f.intent(1,f.header.sha256,change),f.original));assert.equal(f.b.writes,before);
+   await assert.rejects(f.session.reserveDaemonIntent(f.intent(),f.original));
+  }finally{f.close();}
+ }
+});
+
+test('lost daemon intent readback ACK remains discoverable without retry or reconstructed acknowledgement',async()=>{
+ for(const sequence of [0,1]){
+ const f=await daemonFixture();try{
+  if(sequence===1)await f.session.reserveDaemonHeader(f.header,f.original);const original=f.client.send.bind(f.client);let lost=true;
+  mock.method(f.client,'send',async(command:GetObjectCommand|PutObjectCommand)=>{
+   if(lost&&command instanceof GetObjectCommand&&command.input.Key?.includes('/'+daemonCustodyScope(f.binding.candidateId,sequence)+'/'))throw new Error('synthetic lost intent readback');
+   return original(command as never);
+  });
+  const reserve=()=>sequence===0?f.session.reserveDaemonHeader(f.header,f.original):f.session.reserveDaemonIntent(f.intent(),f.original);
+  await assert.rejects(reserve());const writes=f.b.writes;
+  await assert.rejects(f.session.reserveDaemonIntent(f.intent(),f.original));assert.equal(f.b.writes,writes);
+  lost=false;const saved=sequence===0?await f.reader().inspectHeader():await f.reader().inspectIntent(1,f.header.sha256);
+  assert.equal(saved.savedEvidenceAuthorizesDispatch,false);assert.equal(saved.originalAcknowledgementReconstructed,false);assert.equal(f.b.writes,writes);
+ }finally{f.close();}
+ }
+});
+
+test('concurrent intent calls and closure during header read refuse rather than return a live ACK',async()=>{
+ const f=await daemonFixture();try{
+  await f.session.reserveDaemonHeader(f.header,f.original);
+  const settled=await Promise.allSettled([f.session.reserveDaemonIntent(f.intent(),f.original),f.session.reserveDaemonIntent(f.intent(),f.original)]);
+  assert.ok(settled.every(r=>r.status==='rejected'));
+ }finally{f.close();}
+ const g=await daemonFixture();try{
+  await g.session.reserveDaemonHeader(g.header,g.original);const original=g.client.send.bind(g.client),before=g.b.writes;
+  mock.method(g.client,'send',async(command:GetObjectCommand|PutObjectCommand)=>{if(command instanceof GetObjectCommand)g.setLive(false);return original(command as never);});
+  await assert.rejects(g.session.reserveDaemonIntent(g.intent(),g.original));assert.equal(g.b.writes,before);
+ }finally{g.close();}
+});
+
+test('daemon intent sequence is bounded to64 and cannot begin without the original header ACK',async()=>{
+ const g=await daemonFixture();try{
+  const before=g.b.writes;await assert.rejects(g.session.reserveDaemonIntent(g.intent(),g.original));
+  await assert.rejects(g.session.reserveDaemonHeader(g.header,g.original));assert.equal(g.b.writes,before);
+ }finally{g.close();}
+ const f=await daemonFixture();try{
+  await f.session.reserveDaemonHeader(f.header,f.original);let previous=f.header.sha256,lastPrevious=previous;
+  for(let sequence=1;sequence<=64;sequence++){lastPrevious=previous;const local=f.intent(sequence,previous);await f.session.reserveDaemonIntent(local,f.original);previous=local.sha256;}
+  const before=f.b.writes;await assert.rejects(f.session.reserveDaemonIntent(f.intent(65,previous),f.original));assert.equal(f.b.writes,before);
+  assert.equal(JSON.parse((await f.reader().inspectIntent(64,lastPrevious)).localRecord.body).sequence,64);
+  await assert.rejects(f.reader().inspectIntent(64,previous));
+ }finally{f.close();}
 });

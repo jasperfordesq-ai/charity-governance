@@ -155,6 +155,8 @@ class CandidateSession {
  }
  reserveSourceJob(local:unknown,pin:unknown,signal?:AbortSignal){return this.jobCustody().reserve(local,pin,signal);}
  bindSourceJobService(local:unknown,pin:unknown,signal?:AbortSignal){return this.jobCustody().bindService(local,pin,signal);}
+ reserveSourceDaemonHeader(local:unknown,pin:unknown,signal?:AbortSignal){return this.jobCustody().reserveDaemonHeader(local,pin,signal);}
+ reserveSourceDaemonIntent(local:unknown,pin:unknown,signal?:AbortSignal){return this.jobCustody().reserveDaemonIntent(local,pin,signal);}
  observeSourceJob(local:unknown,pin:unknown,signal?:AbortSignal){return this.jobCustody().observe(local,pin,signal);}
  async discoverSourceJob(pin:unknown,signal?:AbortSignal){await this.inspectRequest(pin,signal);return this.jobCustody().discover(pin,signal);}
  async inspectRequest(pin:unknown,signal?:AbortSignal){

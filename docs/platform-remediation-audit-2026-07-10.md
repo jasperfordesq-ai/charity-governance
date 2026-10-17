@@ -1,3 +1,12 @@
+## 17 October: original daemon intent custody API
+
+Read [daemon intent custody](managed-daemon-intent-custody.md). The original
+common context can conditionally retain bounded header/intent evidence only
+after its acknowledged job/service binding. Failed/unknown ACKs consume the
+live component; saved reads grant no dispatch or resolution. The fixed helper
+barrier and complete independent request ownership/discovery are NOT yet wired;
+actual provider/host-loss and full goal gates remain open.
+
 ## 17 October: explicit-credential recovery diagnostic command
 
 Read [current recovery inspection](managed-current-recovery-inspection.md). The
