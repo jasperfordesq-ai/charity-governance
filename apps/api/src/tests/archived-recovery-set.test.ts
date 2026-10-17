@@ -469,6 +469,12 @@ async function fixture(
       installationId: config.installationId,
       projectRef: 'abcdefghijklmnopqrst',
       bucket: 'documents',
+      credential: {
+        id: '11111111-1111-4111-8111-111111111111',
+        sha256: hash(Buffer.from('sb_secret_' + 's'.repeat(40))).toString(
+          'hex',
+        ),
+      },
     },
     'sb_secret_' + 's'.repeat(40),
     async (input, init) => {

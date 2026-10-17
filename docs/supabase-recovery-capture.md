@@ -1,5 +1,11 @@
 # Supabase recovery candidate capture
 
+> **17 October capture credential audit:** Candidate file capture now requires
+> an exact declared credential ID/hash and uses a credential-bound digest.
+> Privileged key authority remains explicitly unverified; read-only requests do
+> not exclude that key as a writer. See [writer/capture audit](managed-writer-capture-audit-2026-10-17.md).
+
+
 17 October 2026. `SupabaseRecoveryCapture` supplies an internal source reader for
 the planned managed recovery worker. It has no route, scheduler or operator
 activation. It does not replace the application storage driver or change the
@@ -7,10 +13,11 @@ private VM/personal-server profile.
 
 ## Scope and credentials
 
-Explicit configuration binds installation, project reference and bucket. The
+Explicit configuration binds installation, project reference, bucket and a
+declared credential UUID/SHA-256. The supplied secret must match before HTTP. The
 only origin is `https://<projectRef>.supabase.co`; arbitrary origins, redirects,
 environment credential lookup, public/download links and transformed images are
-not supported. The configuration digest includes those source identities.
+not supported. The format2 configuration digest includes those source and credential identities.
 
 This new managed path accepts an explicitly supplied modern server secret key
 and sends it only on `apikey`, following current provider guidance. It does not

@@ -3,12 +3,16 @@ import test from 'node:test';
 import { createHash } from 'node:crypto';
 import { SupabaseRecoveryCapture } from '../services/supabase-recovery-capture.js';
 
+const key = 'sb_secret_' + 'a'.repeat(40);
 const config = {
   installationId: 'synthetic',
   projectRef: 'abcdefghijklmnopqrst',
   bucket: 'documents',
+  credential: {
+    id: '11111111-1111-4111-8111-111111111111',
+    sha256: createHash('sha256').update(key).digest('hex'),
+  },
 };
-const key = 'sb_secret_' + 'a'.repeat(40);
 const sha = (bytes: Buffer) => createHash('sha256').update(bytes).digest('hex');
 const file = (name: string, size = 3) => ({
   name,
@@ -329,4 +333,89 @@ test('zero-byte records are retained and declared size mismatch cannot reach the
       },
     ),
   );
+});
+
+test('capture rejects an unbound configuration or a substituted credential before HTTP', () => {
+  const f = fixture(),
+    { credential, ...unbound } = config;
+  for (const raw of [
+    unbound,
+    { ...config, credential: { ...credential, sha256: '0'.repeat(64) } },
+    {
+      ...config,
+      credential: { ...credential, id: 'AAAAAAAA-AAAA-4AAA-8AAA-AAAAAAAAAAAA' },
+    },
+  ])
+    assert.throws(() => new SupabaseRecoveryCapture(raw, key, f.transport));
+  assert.throws(
+    () =>
+      new SupabaseRecoveryCapture(
+        config,
+        'sb_secret_' + 'b'.repeat(40),
+        f.transport,
+      ),
+  );
+  assert.equal(f.requests.length, 0);
+});
+
+test('candidate capture binds declared credential identity and bytes without asserting privilege or writer exclusion', async () => {
+  const f = fixture(),
+    service = new SupabaseRecoveryCapture(config, key, f.transport);
+  const result = await service.capture(async () => {});
+  assert.equal(result.credentialId, config.credential.id);
+  assert.equal(result.credentialSha256, config.credential.sha256);
+  assert.equal(result.credentialHashMatched, true);
+  assert.equal(result.captureRequestMode, 'READ_OPERATIONS_ONLY');
+  assert.equal(result.credentialCapability, 'PRIVILEGED_MODERN_SERVER_KEY');
+  for (const field of [
+    'credentialIdentityVerified',
+    'credentialPrivilegeVerified',
+    'credentialWriteAuthorityExcluded',
+    'wholeStorageQuiesced',
+    'actionAuthorized',
+  ] as const)
+    assert.equal(result[field], false);
+  assert.ok(!JSON.stringify(result).includes(key));
+  assert.ok(
+    f.requests.every(
+      (r) =>
+        r.method === 'GET' ||
+        (r.method === 'POST' && r.path.includes('/object/list/')),
+    ),
+  );
+});
+
+test('same bucket and inventory cannot alias capture digests across credential substitutions', () => {
+  const f = fixture(),
+    original = new SupabaseRecoveryCapture(
+      config,
+      key,
+      f.transport,
+    ).configurationDigest(),
+    second = 'sb_secret_' + 'b'.repeat(40);
+  const changedKey = new SupabaseRecoveryCapture(
+    {
+      ...config,
+      credential: {
+        ...config.credential,
+        sha256: createHash('sha256').update(second).digest('hex'),
+      },
+    },
+    second,
+    f.transport,
+  );
+  const changedDeclaration = new SupabaseRecoveryCapture(
+    {
+      ...config,
+      credential: {
+        ...config.credential,
+        id: '22222222-2222-4222-8222-222222222222',
+      },
+    },
+    key,
+    f.transport,
+  );
+  assert.notEqual(original, changedKey.configurationDigest());
+  assert.notEqual(original, changedDeclaration.configurationDigest());
+  assert.equal(f.requests.length, 0);
 });

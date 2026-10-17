@@ -231,3 +231,5 @@ The [durable current-disabled S3 branch](durable-s3-current-feature-evidence.md)
 The [common S3 mode selector](managed-s3-maintenance-evidence.md) now requires a declared mode and binds actual metadata configuration. It cannot guess a mode or silently fall back after failed evidence. Mandatory default coordinator/control-head integration remains required.
 
 [Protocol9 mandatory S3 coordinator integration](durable-s3-maintenance.md) is now implemented locally for both modes. Exact original head acknowledgement precedes shutdown; fresh paired S3 evidence is required for final recording. Earlier protocol8/no-dispatch next-work notes are historical. Actual provider/whole-backend and current tenant authority gates remain open.
+
+The [writer/capture audit](managed-writer-capture-audit-2026-10-17.md) confirms retained modern server-key authority is not excluded by read-only request code or RLS alone. Candidate provenance now binds the declared credential ID/hash; a supported least-privilege capture lane and actual grants/issuer/in-flight/control-plane proof remain required before complete common capture.

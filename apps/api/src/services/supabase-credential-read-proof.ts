@@ -116,6 +116,7 @@ export class SupabaseCredentialReadProof {
             installationId: this.config.installationId,
             projectRef: this.config.projectRef,
             bucket: this.config.bucket,
+            credential: expected,
           },
           value,
           transport,

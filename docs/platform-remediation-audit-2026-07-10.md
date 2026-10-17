@@ -1,5 +1,11 @@
 # CharityPilot Full-Platform Remediation Audit
 
+> **17 October capture credential audit:** Candidate file capture now requires
+> an exact declared credential ID/hash and uses a credential-bound digest.
+> Privileged key authority remains explicitly unverified; read-only requests do
+> not exclude that key as a writer. See [writer/capture audit](managed-writer-capture-audit-2026-10-17.md).
+
+
 > **17 October protocol9 S3 integration:** The default coordinator now requires
 > explicit S3 mode evidence, an original S3_BASELINED head acknowledgement before
 > shutdown, and a fresh paired S3 report before OBSERVED_CLOSED. Saved inspection

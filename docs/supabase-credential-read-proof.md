@@ -100,3 +100,5 @@ Primary references checked 17 October 2026:
 - [Storage error distinctions](https://supabase.com/docs/guides/storage/debugging/error-codes).
 - [Private file download](https://supabase.com/docs/reference/javascript/file-buckets-download).
 - [Modern server-key handling](https://supabase.com/docs/guides/getting-started/api-keys).
+
+Each canary reader now receives its already validated declared credential ID/hash. The internal capture constructor refuses mismatches before HTTP; read-proof artifact formats and refusal coverage are unchanged. [Capture privilege and writer limits](managed-writer-capture-audit-2026-10-17.md) remain open.

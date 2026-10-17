@@ -12,6 +12,15 @@ const configSchema = z
       .string()
       .regex(/^[a-z0-9]{20}$/)
       .length(20),
+    credential: z
+      .object({
+        id: z
+          .string()
+          .uuid()
+          .refine((v) => v === v.toLowerCase()),
+        sha256: z.string().regex(/^[a-f0-9]{64}$/),
+      })
+      .strict(),
     bucket: z
       .string()
       .regex(/^[a-z0-9][a-z0-9_-]{0,62}$/)
@@ -74,7 +83,8 @@ export class SupabaseRecoveryCapture {
     if (
       typeof secret !== 'string' ||
       !/^sb_secret_[A-Za-z0-9_-]{16,512}$/.test(secret) ||
-      secret !== secret.trim()
+      secret !== secret.trim() ||
+      hash(secret) !== this.config.credential.sha256
     )
       throw failure();
     this.origin = `https://${this.config.projectRef}.supabase.co`;
@@ -82,8 +92,8 @@ export class SupabaseRecoveryCapture {
   configurationDigest() {
     return hash(
       JSON.stringify({
-        format: 1,
-        provider: 'SUPABASE_PRIVATE_CAPTURE_V1',
+        format: 2,
+        provider: 'SUPABASE_PRIVATE_CAPTURE_CREDENTIAL_BOUND_V2',
         ...this.config,
       }),
     );
@@ -429,6 +439,16 @@ export class SupabaseRecoveryCapture {
         restoreMode: 'QUARANTINE_ONLY' as const,
         captureConsistency: 'EXTERNAL_VERIFICATION_REQUIRED' as const,
         visibility: 'SUPPLIED_CREDENTIAL_VIEW_ONLY' as const,
+        credentialId: this.config.credential.id,
+        credentialSha256: this.config.credential.sha256,
+        captureRequestMode: 'READ_OPERATIONS_ONLY' as const,
+        credentialCapability: 'PRIVILEGED_MODERN_SERVER_KEY' as const,
+        credentialHashMatched: true as const,
+        credentialIdentityVerified: false as const,
+        credentialPrivilegeVerified: false as const,
+        credentialWriteAuthorityExcluded: false as const,
+        wholeStorageQuiesced: false as const,
+        actionAuthorized: false as const,
         configurationDigest: this.configurationDigest(),
         inventoryDigest: first.digest,
         startedAt,
