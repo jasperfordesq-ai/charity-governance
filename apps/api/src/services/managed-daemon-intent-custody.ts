@@ -125,7 +125,9 @@ export class ManagedDaemonIntentCustody{
    if(this.failed||this.busy||this.endAttempted||!this.latestIntent||!this.savedHeader||!this.live()
     ||this.responseAttempts.has(this.sequence)||this.ownerAttempts.has(this.sequence))throw failure();
    this.busy=true;this.ownerAttempts.add(this.sequence);const checked=this.checkedOwner(raw,this.sequence);
-   const original=this.parse(await this.store(this.sequence).observeBaseline(this.latestIntent,signal),this.sequence);
+   const current=await this.store(this.sequence).inspectCandidateArtifact('BASELINE',signal),h=await this.inspectHeader(signal);
+   if(JSON.stringify(current.pin)!==JSON.stringify(this.latestIntent)||JSON.stringify(h.pin)!==JSON.stringify(this.savedHeader))throw failure();
+   const original=this.parse(current.artifact,this.sequence);
    this.assertOwnerIntent(checked.value,original);
    if(JSON.stringify(original.value.headerCustodyPin)!==JSON.stringify(this.savedHeader)||this.failed||!this.live())throw failure();
    const body=JSON.stringify(ownerEnvelope.parse({format:1,kind:'MANAGED_DAEMON_OWNER_CUSTODY_V1',bindingDigest:candidateHash(JSON.stringify(this.binding)),

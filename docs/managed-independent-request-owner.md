@@ -46,7 +46,10 @@ containers, volumes or historical request records.
 
 The original job context now exposes `bindDaemonOwner`. It can conditionally
 retain one owner-readiness record only after the original intent acknowledgement
-and before that intent's response. The record binds original candidate/job/service,
+and before that intent's response. Current header/intent metadata and exact-version
+reads must still match the original acknowledged pins at this observation boundary;
+an old version's continued availability alone is insufficient. This is not an
+atomic provider lease. The record binds original candidate/job/service,
 header and intent version pins, local intent bytes, and declared owner source,
 input digest, boot, unit, invocation, UID, process start and control group.
 Cross-boot/UID/source identity, source PID/invocation reuse, source group ancestry,

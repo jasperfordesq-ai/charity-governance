@@ -201,6 +201,22 @@ test('owner readiness cannot be attached before an original intent or after its 
  }
 });
 
+test('owner readiness requires the acknowledged header and intent to remain current versions',async()=>{
+ for(const sequence of [0,1]){
+  const f=await daemonFixture();try{
+   const local=f.intent();await f.session.reserveDaemonHeader(f.header,f.original);await f.session.reserveDaemonIntent(local,f.original);
+   const key=[...f.b.objects.keys()].find(k=>k.includes('/'+daemonCustodyScope(f.binding.candidateId,sequence)+'/baseline.json'))!;
+   const original=f.client.send.bind(f.client);let sawCurrent=false;
+   mock.method(f.client,'send',async(command:GetObjectCommand|PutObjectCommand)=>{
+    const value=await original(command as never);
+    if(command instanceof GetObjectCommand&&command.input.Key===key&&command.input.VersionId===undefined){sawCurrent=true;return{...value,VersionId:'substituted-current-version'};}
+    return value;
+   });
+   const writes=f.b.writes;await assert.rejects(f.session.bindDaemonOwner(f.owner(local),f.original));assert.equal(sawCurrent,true);assert.equal(f.b.writes,writes);
+  }finally{f.close();}
+ }
+});
+
 test('owner binding refuses a descendant source group, concurrent calls and closure during original-intent read',async()=>{
  for(const fault of ['descendant','concurrent','closed']){
   const f=await daemonFixture();try{
