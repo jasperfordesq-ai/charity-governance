@@ -1,3 +1,12 @@
+## 17 October: kernel containment capability verified on the private VM
+
+Read [kernel containment probe](managed-proof-kernel-containment.md). A non-root
+systemd/cgroup-v2 probe kills a fresh service main, verifies its detached child
+stops, and preserves a separate control service. This is OS-mechanism evidence,
+not yet real guardian/capture integration, daemon fencing or host-loss proof.
+The managed executor will require verified kernel containment before activation;
+existing personal/public profile gates remain unchanged. Full goal stays active.
+
 # Live IPC guardian for imported-proof workers
 
 17 October 2026. Internal managed source runner; no deployed supervisor service or restored execution lease.

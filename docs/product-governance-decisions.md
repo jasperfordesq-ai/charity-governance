@@ -1,3 +1,12 @@
+## 17 October: kernel containment capability verified on the private VM
+
+Read [kernel containment probe](managed-proof-kernel-containment.md). A non-root
+systemd/cgroup-v2 probe kills a fresh service main, verifies its detached child
+stops, and preserves a separate control service. This is OS-mechanism evidence,
+not yet real guardian/capture integration, daemon fencing or host-loss proof.
+The managed executor will require verified kernel containment before activation;
+existing personal/public profile gates remain unchanged. Full goal stays active.
+
 ## 17 October: live guardian handles calling-parent loss
 
 Read [proof guardian](managed-proof-guardian.md). Original-ACK-gated source work
