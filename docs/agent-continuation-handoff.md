@@ -1,3 +1,13 @@
+## 17 October: OWNER transport and actual service readiness
+
+Read [independent daemon request owner](managed-independent-request-owner.md).
+The fixed private channel supports original OWNER acknowledgements and rejects
+owner-required response accounting without them. A live verifier checks actual
+unit/process/command/boot/group/resources before and after storage. The native
+probe joins this with original binding custody; lost OWNER ACK must not release
+its synthetic service. Production source dispatch/outcome ownership and actual
+independent provider/host-loss proof remain unimplemented; no completion inferred.
+
 ## 17 October: original independent-owner binding custody
 
 Read [independent daemon request owner](managed-independent-request-owner.md).

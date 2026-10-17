@@ -2,11 +2,27 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {spawnSync} from 'node:child_process';
 import {fileURLToPath} from 'node:url';
-import {containmentUnit,parseScopeProperties} from './managed-proof-systemd-containment.mjs';
+import {containmentUnit,parseScopeProperties,assertIndependentOwnerObservation} from './managed-proof-systemd-containment.mjs';
 const id='11111111-1111-4111-8111-111111111111',unit=containmentUnit(id);
 const fields={Id:unit,LoadState:'loaded',ActiveState:'active',SubState:'running',MainPID:'123',ControlGroup:'/user.slice/user-1000.slice/user@1000.service/app.slice/'+unit,
  KillMode:'control-group',Type:'exec',Transient:'yes',InvocationID:'a'.repeat(32),ExecMainStartTimestampMonotonic:'123456789',Result:'success',ExecMainCode:'0',ExecMainStatus:'0',NoNewPrivileges:'yes'};
 const body=v=>Object.entries(v).map(([k,v])=>k+'='+v).join('\n');
+
+test('independent owner readiness requires actual original process, command, boot, groups and resource limits',()=>{
+ const ownerId='22222222-2222-4222-8222-222222222222',ownerUnit=containmentUnit(ownerId),group='/user.slice/user-1000.slice/user@1000.service/app.slice/'+ownerUnit;
+ const value={format:1,kind:'MANAGED_DAEMON_REQUEST_OWNER_V1',jobId:id,sequence:1,identity:{ownerId,unit:ownerUnit,uid:1000,mainPid:456,
+  invocationId:'b'.repeat(32),mainStartMonotonic:'987654321',controlGroup:group,sourceSha:'1'.repeat(40),inputDigest:'9'.repeat(64),bootId:'12345678-1234-1234-1234-123456789012'}};
+ const options={source:fields,sourceSha:value.identity.sourceSha,ownerInputDigest:value.identity.inputDigest,expectedCommandLine:[process.execPath,'/fixed-owner','--socket','/original']};
+ const actual={uid:1000,bootId:value.identity.bootId,source:{...fields},unit:{...fields,Id:ownerUnit,MainPID:'456',InvocationID:'b'.repeat(32),ExecMainStartTimestampMonotonic:'987654321',ControlGroup:group},
+  commandLine:options.expectedCommandLine,processGroup:'0::'+group+'\n',status:'Uid:\t1000\t1000\t1000\t1000\nNoNewPrivs:\t1\n',memory:'134217728',pids:'32',cpu:'50000 100000',
+  unsetEnvironment:'NODE_OPTIONS NODE_PATH LD_PRELOAD LD_LIBRARY_PATH'};
+ assert.equal(assertIndependentOwnerObservation(value,options,actual).liveOwnerIdentityVerified,true);
+ for(const key of ['independentOwnerDispatchVerified','executionAuthorized','actionAuthorized'])assert.equal(assertIndependentOwnerObservation(value,options,actual)[key],false);
+ for(const change of [{bootId:'other-boot'},{commandLine:[process.execPath,'/other-worker']},{processGroup:'0::'+fields.ControlGroup},
+  {status:'Uid:\t1001\t1001\t1001\t1001\nNoNewPrivs:\t1\n'},{memory:'max'},{pids:'129'},{cpu:'200000 100000'},{unsetEnvironment:''},
+  {unit:{...actual.unit,InvocationID:'c'.repeat(32)}},{unit:{...actual.unit,MainPID:'789'}},{source:{...fields,InvocationID:'d'.repeat(32)}}])assert.throws(()=>assertIndependentOwnerObservation(value,options,{...actual,...change}));
+ assert.throws(()=>assertIndependentOwnerObservation({...value,identity:{...value.identity,inputDigest:'8'.repeat(64)}},options,actual));
+});
 test('fresh transient identity and exact user cgroup are parsed without becoming an execution lease',()=>{
  const p=parseScopeProperties(body(fields),unit,1000);assert.equal(p.InvocationID,fields.InvocationID);assert.equal(p.MainPID,'123');
 });

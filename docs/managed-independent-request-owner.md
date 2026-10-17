@@ -72,6 +72,34 @@ reports `independentOwnerDispatchVerified: false`. Neither presence nor absence
 closes pending requests or proves historical completeness. `inspectOwner` can
 inspect one exact binding but cannot reconstruct its original acknowledgement.
 
+## OWNER transport and live verification
+
+The private custody channel/client now support a nonce-bound `OWNER` record after
+the corresponding intent and before its response. Only the original parent can
+choose owner-required accounting; packets cannot negotiate or downgrade it.
+In that mode a response without an original OWNER ACK is refused. The record's
+stored pin still grants no execution authority, and the channel alone cannot
+fence a caller that dispatches directly to Docker. The fixed service adapter must
+prevent release until its original OWNER ACK is received.
+
+`verifyIndependentDaemonOwner` checks a fresh service-manager identity and actual
+process command line, boot, UID, no-new-privileges, cgroup membership and resource
+caps. It rechecks the original source invocation, exact owner input digest and
+separate group. The original parent supplies the expected command line; it cannot
+come from the peer. Production verification permits only the reserved fixed owner
+worker entry point, which is not implemented yet. The synthetic probe is allowed
+only by an explicit internal synthetic option. Verification is an observation,
+not a permanent kernel lease or queue-finality guarantee.
+
+The live probe now joins this check, the actual original owner-binding API and a
+synthetic signed SDK backend. Both pre- and post-storage live observations must
+pass before the owner receives its release permit. Lost original channel ACK
+after stored owner bytes must leave the independent service undispatched; fresh
+inspection must find the saved binding without recreating the ACK. Caller-loss
+and owner-loss still test actual Docker execution. The fixture accepts no tenant
+data or selectable command; API credentials remain in the original test parent.
+Its SDK custody is in-process and synthetic, with no independent provider claim.
+
 The real source helper still dispatches its Docker clients in the source worker.
 This probe is evidence about a feasible lifetime boundary, not completed product
 request ownership. Integration must bind the original independent owner to each

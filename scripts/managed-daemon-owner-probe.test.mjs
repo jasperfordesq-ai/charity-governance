@@ -20,7 +20,17 @@ test('actual independent request owner survives caller loss and owner loss stays
 },async()=>{
  for(const mode of ['caller-loss','owner-loss']){const value=await probeIndependentDaemonOwner(mode);
   assert.equal(value.ownerIndependent,true);assert.equal(value.callerStopped,true);assert.equal(value.recordedOwnerResponse,mode==='caller-loss');
+  assert.equal(value.originalOwnerAcknowledgementObserved,true);
   for(const key of ['pendingRequestResolved','productionIntegrated','independentProvider','sourceHostLossProven','completeResourceInventory','cleanupAuthorized','actionAuthorized'])assert.equal(value[key],false);
   console.log('INDEPENDENT_OWNER_PROBE='+JSON.stringify(value));
  }
+});
+
+test('stored OWNER binding with lost original channel ACK cannot release the independent service',{
+ skip:process.platform!=='linux'||process.env.CHARITYPILOT_TEST_DAEMON_OWNER!=='1',timeout:45000
+},async()=>{
+ const value=await probeIndependentDaemonOwner('owner-ack-lost');
+ assert.equal(value.ownerBindingStored,true);assert.equal(value.requestDispatched,false);assert.equal(value.originalOwnerAcknowledgementObserved,false);
+ assert.equal(value.originalAcknowledgementReconstructed,false);assert.equal(value.pendingRequestResolved,false);assert.equal(value.actionAuthorized,false);
+ console.log('ORIGINAL_OWNER_ACK_LOSS='+JSON.stringify(value));
 });

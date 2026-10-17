@@ -39,6 +39,43 @@ export function parseScopeProperties(text,unit,uid){
 function execute(command,args){const r=spawnSync(command,args,{encoding:'utf8',stdio:'pipe',timeout:15000,maxBuffer:65536,env:process.env});if(r.status!==0||r.error)throw failure();return r.stdout.trim();}
 function info(unit){return parseScopeProperties(execute('systemctl',['--user','show',requireUnit(unit),'--no-pager',...props.flatMap(p=>['--property',p])]),unit,process.getuid());}
 export function inspectContainmentUnit(unit){if(process.platform!=='linux'||process.getuid()===0)throw failure();return info(unit);}
+/** Readiness only. A verified live process is not an execution or recovery grant. */
+export function assertIndependentOwnerObservation(value,{source,sourceSha,ownerInputDigest,expectedCommandLine},actual){
+ const v=value?.identity;if(!v||value.kind!=='MANAGED_DAEMON_REQUEST_OWNER_V1'||value.format!==1||!Number.isInteger(value.sequence)||value.sequence<1||value.sequence>64
+  ||containmentUnit(value.jobId)!==source.Id||v.unit!==containmentUnit(v.ownerId)||v.unit===source.Id||v.uid!==actual.uid||v.sourceSha!==sourceSha
+  ||!(/^[a-f0-9]{40}$/).test(sourceSha)||!(/^[a-f0-9]{64}$/).test(ownerInputDigest)||v.inputDigest!==ownerInputDigest
+  ||v.bootId!==actual.bootId||!Number.isSafeInteger(v.mainPid)||v.mainPid<1)throw failure();
+ const unit=parseScopeProperties(Object.entries(actual.unit).map(([k,v])=>k+'='+v).join('\n'),v.unit,actual.uid);
+ const fresh=parseScopeProperties(Object.entries(actual.source).map(([k,v])=>k+'='+v).join('\n'),source.Id,actual.uid);
+ for(const key of ['Id','InvocationID','MainPID','ExecMainStartTimestampMonotonic','ControlGroup'])if(fresh[key]!==source[key])throw failure();
+ if(fresh.ActiveState!=='active'||fresh.SubState!=='running'||unit.ActiveState!=='active'||unit.SubState!=='running'||unit.MainPID!==String(v.mainPid)
+  ||unit.InvocationID!==v.invocationId||unit.ExecMainStartTimestampMonotonic!==v.mainStartMonotonic||unit.ControlGroup!==v.controlGroup
+  ||unit.MainPID===source.MainPID||unit.InvocationID===source.InvocationID||unit.ControlGroup===source.ControlGroup
+  ||unit.ControlGroup.startsWith(source.ControlGroup+'/')||source.ControlGroup.startsWith(unit.ControlGroup+'/'))throw failure();
+ if(JSON.stringify(actual.commandLine)!==JSON.stringify(expectedCommandLine)||actual.processGroup.trim()!=='0::'+unit.ControlGroup
+  ||!/^NoNewPrivs:\s+1$/m.test(actual.status))throw failure();
+ const ids=/^Uid:\s+(\d+)\s+(\d+)\s+(\d+)\s+(\d+)\s*$/m.exec(actual.status);
+ if(!ids||ids.slice(1).some(id=>Number(id)!==actual.uid))throw failure();
+ const memory=Number(actual.memory.trim()),pids=Number(actual.pids.trim()),cpu=actual.cpu.trim().split(/\s+/).map(Number);
+ if(!Number.isSafeInteger(memory)||memory<1||memory>1073741824||!Number.isSafeInteger(pids)||pids<1||pids>128
+  ||cpu.length!==2||!cpu.every(Number.isSafeInteger)||cpu[0]<1||cpu[1]<1||cpu[0]>cpu[1]
+  ||['NODE_OPTIONS','NODE_PATH','LD_PRELOAD','LD_LIBRARY_PATH'].some(k=>!actual.unsetEnvironment.trim().split(/\s+/).includes(k)))throw failure();
+ return{liveOwnerIdentityVerified:true,independentOwnerDispatchVerified:false,executionAuthorized:false,actionAuthorized:false};
+}
+export function verifyIndependentDaemonOwner(value,options){
+ if(process.platform!=='linux'||process.getuid()===0)throw failure();
+ const v=value?.identity;if(!v||!Number.isSafeInteger(v.mainPid)||v.mainPid<1||v.unit!==containmentUnit(v.ownerId))throw failure();
+ const expected=options.expectedCommandLine,worker=fileURLToPath(new URL('./managed-daemon-owner-worker.mjs',import.meta.url));
+ const probe=fileURLToPath(new URL('./managed-daemon-owner-probe.mjs',import.meta.url));
+ if(!Array.isArray(expected)||expected[0]!==process.execPath||(expected[1]!==worker&&!(options.synthetic===true&&expected[1]===probe))||expected.some(v=>typeof v!=='string'))throw failure();
+ const unit=inspectContainmentUnit(v.unit),source=inspectContainmentUnit(options.source.Id),path='/sys/fs/cgroup'+unit.ControlGroup;
+ if(observeOriginalControlGroup(unit.ControlGroup,v.unit,process.getuid())!=='POPULATED')throw failure();
+ const command=readFileSync('/proc/'+v.mainPid+'/cmdline');if(command.length>16384||command.at(-1)!==0)throw failure();
+ return assertIndependentOwnerObservation(value,options,{uid:process.getuid(),bootId:readFileSync('/proc/sys/kernel/random/boot_id','utf8').trim(),unit,source,
+  commandLine:command.toString('utf8').slice(0,-1).split('\0'),status:readFileSync('/proc/'+v.mainPid+'/status','utf8'),processGroup:readFileSync('/proc/'+v.mainPid+'/cgroup','utf8'),
+  memory:readFileSync(join(path,'memory.max'),'utf8'),pids:readFileSync(join(path,'pids.max'),'utf8'),cpu:readFileSync(join(path,'cpu.max'),'utf8'),
+  unsetEnvironment:execute('systemctl',['--user','show',v.unit,'--property=UnsetEnvironment','--value'])});
+}
 function members(path){if(!path)return[];const target='/sys/fs/cgroup'+path;
  if(!existsSync(target))return[];try{if(realpathSync(target)!==target)throw failure();}catch(e){if(e.code==='ENOENT')return[];throw e;}
  let body;try{body=readFileSync(join(target,'cgroup.procs'),'utf8');}catch(e){if(e.code==='ENOENT')return[];throw e;}if(body.length>4096)throw failure();return body.trim()?body.trim().split(/\s+/).map(v=>{if(!/^[1-9][0-9]*$/.test(v))throw failure();return Number(v);}):[];}
