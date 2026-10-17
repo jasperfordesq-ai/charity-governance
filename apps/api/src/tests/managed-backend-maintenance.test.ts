@@ -1,3 +1,4 @@
+import {commonCandidateBindingSchema,commonCandidateReportSchema,commonCaptureObjectInventory,candidateReportArtifact as anyReportArtifact} from '../services/managed-common-candidate-contract.js';
 import {candidateBindingSchema,candidateReportArtifact} from '../services/managed-candidate-capture-contract.js';
 import {ManagedCandidateCaptureJournal} from '../services/managed-candidate-capture-journal.js';
 import {SupabaseRecoveryCapture} from '../services/supabase-recovery-capture.js';
@@ -879,4 +880,109 @@ test('current bootstrap refuses a moving live head and does not fall back to an 
  const current=await fresh.discoverCurrentCandidates(epochTwo.store,2);
  assert.equal(current.head.value.maintenanceEpoch,2);assert.equal(current.plan.maintenanceEpoch,2);
  assert.equal(current.catalogue.records.length,0);assert.equal(current.monotonicHistoryVerified,false);
+});
+
+async function commonJournalFixture(){
+ const f=fixture();await f.coordinator.close();const c=candidateFixture(f),request=await c.request();
+ const archiveDigest=hash('synthetic-common-archive');
+ const binding=commonCandidateBindingSchema.parse({format:3,kind:'MANAGED_QUARANTINED_COMMON_CAPTURE_V3',...operation,...request,
+  candidateId:randomUUID(),planDigest:f.coordinator.planDigest(),archiveConfigurationDigest:archiveDigest});
+ const session=c.journal.forCandidate(binding),requestPin=await session.reserve();
+ const old=await f.coordinator.captureQuarantined(request,c.capture,c.window as never,c.journal,c.visit),w=old.candidate.metadataWindow;
+ const arn=(n:string)=>`arn:aws:kms:eu-west-1:123456789012:key/${n.repeat(8)}-${n.repeat(4)}-4${n.repeat(3)}-8${n.repeat(3)}-${n.repeat(12)}`;
+ const context={installationId:operation.installationId,setId:randomUUID(),sourceSha:operation.sourceSha,databaseIdentitySha256:hash('db-id'),
+  sourceCaptureReportSha256:hash('source-report'),databaseSha256:hash('database'),byteLength:5,keyArn:arn('2')};
+ const index={installationId:context.installationId,setId:context.setId,sourceSha:context.sourceSha,databaseSha256:context.databaseSha256,
+  sourceCaptureReportSha256:context.sourceCaptureReportSha256,databaseIdentitySha256:context.databaseIdentitySha256,
+  objectStoreIdentitySha256:binding.captureConfigurationDigest,dataKeyArn:arn('2'),macKeyArn:arn('4'),metadataCapturedAt:old.candidate.capture.observedAt,
+  metadataCaptureTransactionId:'42',objectCapturedAt:old.candidate.capture.observedAt};
+ const snapshot={format:1,kind:'MANAGED_EXPORTED_DATABASE_SNAPSHOT_V1',database:w.database,databaseOid:w.databaseOid,observerOid:w.observer.oid,
+  backendPid:w.backendPid,snapshotBindingSha256:hash('synthetic-snapshot'),configurationDigest:w.configurationDigest,windowId:w.windowId,
+  exportedAfterRelationLocks:true,exporterHeldDuringCallback:true,importedByConsumerVerified:false,snapshotStillImportable:false,
+  nonMvccStateCaptured:false,wholeBackendQuiesced:false,actionAuthorized:false};
+ const raw=commonCandidateReportSchema.parse({...old.candidate,kind:'MANAGED_QUARANTINED_COMMON_CANDIDATE',binding,bindingDigest:hash(JSON.stringify(binding)),requestPin,
+  databaseSnapshot:snapshot,rootReference:{pin:{scope:{index,database:context,storage:{bucket:'synthetic-common-roots',accountId:'123456789012',storageKeyArn:arn('3')},rootMacKeyArn:arn('5')},sha256:hash('synthetic-root')},
+   preparedVersionId:'prepared-original-version',expectedRootFormat:2,state:'PREPARED_ROOT_REFERENCE_ONLY',finalPublicationAcknowledgementReconstructed:false}});
+ const {observationDigest,...core}=raw;const report={...core,observationDigest:hash(JSON.stringify(core))};
+ return{f,c,binding,session,requestPin,report,archiveDigest};
+}
+test('common candidate request and report bootstrap preserve prepared root reference without an execution grant',async()=>{
+ const x=await commonJournalFixture();await x.session.publishReport(x.report,x.requestPin);x.session.closeExecution();
+ const fresh=new ManagedCandidateCaptureJournal(config,credentials,x.f.client),before=x.f.artifacts.size;
+ const discovered=await fresh.discoverCurrentCandidates(x.f.store,1);
+ const row=discovered.catalogue.records.find(r=>r.binding.candidateId===x.binding.candidateId);
+ assert.equal(row?.commonRoot?.pin.sha256,x.report.rootReference.pin.sha256);
+ assert.equal(row?.commonRoot?.state,'PREPARED_ROOT_REFERENCE_ONLY');assert.equal(discovered.savedObservationAuthorizesExecution,false);
+ let reads=0;const archive={configurationDigest:()=>x.archiveDigest,verifySet:async()=>{reads++;return{kind:'ARCHIVED_SET_VERIFIED' as const,
+  restoreMode:'QUARANTINE_ONLY' as const,captureConsistency:'EXTERNAL_VERIFICATION_REQUIRED' as const,sha256:x.report.rootReference.pin.sha256,rootVersionId:'root-original',
+  documentCount:1,objectCount:1,snapshotInterval:{metadataWindow:x.report.metadataWindow,databaseSnapshot:x.report.databaseSnapshot},
+  objectInventorySha256:commonCaptureObjectInventory(x.report),completedIntervalBindingVerified:true as const,wholeBackendQuiesced:false as const,actionAuthorized:false as const};}};
+ const verified=await fresh.verifyDiscoveredCommonRoot(x.binding,archive);assert.equal(verified.actionAuthorized,false);assert.equal(reads,1);
+ await assert.rejects(fresh.forCandidate(x.binding).publishReport(x.report,x.requestPin));
+ await assert.rejects(fresh.verifyDiscoveredCommonRoot(x.binding,{...archive,configurationDigest:()=>hash('other')}));assert.equal(reads,1);
+ await assert.rejects(fresh.verifyDiscoveredCommonRoot(x.binding,{...archive,verifySet:async()=>({...await archive.verifySet(),objectInventorySha256:hash('other-objects')})}));
+ assert.equal(x.f.artifacts.size,before);
+});
+test('common report cannot substitute archive scope, object time, binding or prepared state',async()=>{
+ const x=await commonJournalFixture();
+ for(const mutate of [(v:typeof x.report)=>{v.rootReference.pin.scope.index.sourceSha='2'.repeat(40);},
+  (v:typeof x.report)=>{v.rootReference.pin.scope.index.objectCapturedAt='2026-01-01T00:00:00.000Z';},
+  (v:typeof x.report)=>{v.databaseSnapshot.backendPid++;},
+  (v:typeof x.report)=>{Object.assign(v.rootReference,{state:'ROOT_PUBLICATION_ACKNOWLEDGED'});}]){
+  const v=structuredClone(x.report);mutate(v);const {observationDigest,...core}=v;
+  assert.throws(()=>anyReportArtifact({...core,observationDigest:hash(JSON.stringify(core))}));
+ }
+ const fresh=new ManagedCandidateCaptureJournal(config,credentials,x.f.client);
+ await assert.rejects(fresh.forCandidate(x.binding).publishReport(x.report,x.requestPin));
+});
+
+async function commonParentFixture(){
+ const x=await commonJournalFixture(),events:string[]=[];let completed:unknown,captured:typeof x.report.capture|undefined;
+ const window={configurationDigest:x.c.window.configurationDigest,runWithSnapshot:async<T>(fn:(snapshot:unknown,signal:AbortSignal)=>Promise<T>)=>{
+  events.push('window');const r=await x.c.window.run(signal=>fn({snapshotId:'00000001-00000002-1',database:'synthetic',databaseOid:'16384',observerOid:'10',backendPid:123},signal));
+  const snapshot={...x.report.databaseSnapshot,windowId:r.evidence.windowId,configurationDigest:r.evidence.configurationDigest};
+  return{...r,databaseSnapshot:snapshot};
+ }};
+ const getReport=()=>JSON.parse([...x.f.artifacts.values()].find(v=>{try{return JSON.parse(v.body).kind==='MANAGED_QUARANTINED_COMMON_CANDIDATE';}catch{return false;}})!.body) as typeof x.report;
+ const archive={configurationDigest:()=>x.archiveDigest,
+  prepareImported:async(_raw:unknown,interval:unknown)=>{events.push('prepare');completed=interval;const pin=structuredClone(x.report.rootReference.pin);
+   pin.scope.index.objectCapturedAt=captured!.observedAt;pin.scope.index.metadataCapturedAt=captured!.observedAt;return{pin,artifact:{body:'synthetic-unit-preparation',sha256:pin.sha256}};},
+  stagePrepared:async()=>{events.push('stage');return{versionId:'original-preparation'};},
+  publishPrepared:async()=>{events.push('root-write');assert.equal(getReport().rootReference.state,'PREPARED_ROOT_REFERENCE_ONLY');return{};},
+  verifySet:async()=>{events.push('root-read');const report=getReport();return{kind:'ARCHIVED_SET_VERIFIED' as const,restoreMode:'QUARANTINE_ONLY' as const,
+   captureConsistency:'EXTERNAL_VERIFICATION_REQUIRED' as const,sha256:report.rootReference.pin.sha256,rootVersionId:'original-root',documentCount:1,objectCount:1,
+   snapshotInterval:completed as {metadataWindow:typeof report.metadataWindow;databaseSnapshot:typeof report.databaseSnapshot},objectInventorySha256:commonCaptureObjectInventory(report),
+   completedIntervalBindingVerified:true as const,wholeBackendQuiesced:false as const,actionAuthorized:false as const};}
+ };
+ const request={...await x.c.request(),archiveConfigurationDigest:x.archiveDigest};
+ const source=async()=>{events.push('source');return{visit:x.c.visit,prepareArchiveInput:async(cap:typeof x.report.capture)=>{events.push('input');captured=cap;return{};}};};
+ return{...x,events,window,archive,request,source,getReport};
+}
+test('common parent saves original root reference before final root write under unchanged closed head',async()=>{
+ const x=await commonParentFixture();const r=await x.f.coordinator.captureCommonQuarantined(x.request,x.c.capture,x.window as never,x.c.journal,x.archive as never,x.source);
+ assert.deepEqual(x.events,['window','source','input','prepare','stage','root-write','root-read']);
+ assert.equal(r.candidate.binding.format,3);assert.equal(r.actionAuthorized,false);assert.equal(r.root.completedIntervalBindingVerified,true);
+ const cold=new ManagedCandidateCaptureJournal(config,credentials,x.f.client),catalogue=await cold.discoverCurrentCandidates(x.f.store,1);
+ assert.ok(catalogue.catalogue.records.some(v=>v.binding.candidateId===x.request.candidateId&&v.commonRoot));
+});
+test('lost common report readback ACK prevents final root write and discovery never authorises repair',async()=>{
+ const x=await commonParentFixture(),prefix='/capture-candidate/'+hash(x.request.candidateId)+'/observation.json';
+ x.f.setFault(command=>{if(command instanceof GetObjectCommand&&command.input.Key?.endsWith(prefix))throw new Error('synthetic lost common report ACK');});
+ await assert.rejects(x.f.coordinator.captureCommonQuarantined(x.request,x.c.capture,x.window as never,x.c.journal,x.archive as never,x.source));
+ assert.ok(x.events.includes('stage'));assert.ok(!x.events.includes('root-write'));x.f.setFault(undefined);
+ const cold=new ManagedCandidateCaptureJournal(config,credentials,x.f.client),c=await cold.discoverCurrentCandidates(x.f.store,1);
+ const row=c.catalogue.records.find(v=>v.binding.candidateId===x.request.candidateId);assert.ok(row?.commonRoot);assert.equal(c.savedObservationAuthorizesExecution,false);
+ const sources=x.events.filter(v=>v==='source').length;
+ await assert.rejects(x.f.coordinator.captureCommonQuarantined(x.request,x.c.capture,x.window as never,cold,x.archive as never,x.source));
+ assert.equal(x.events.filter(v=>v==='source').length,sources);assert.ok(!x.events.includes('root-write'));
+});
+test('archive substitution refuses before common source execution and unknown final root ACK keeps discoverable pin',async()=>{
+ const x=await commonParentFixture();
+ await assert.rejects(x.f.coordinator.captureCommonQuarantined(x.request,x.c.capture,x.window as never,x.c.journal,
+  {...x.archive,configurationDigest:()=>hash('wrong')} as never,x.source));assert.equal(x.events.length,0);
+ const lost={...x.archive,publishPrepared:async()=>{x.events.push('unknown-root-ACK');throw new Error('synthetic root ACK lost');}};
+ await assert.rejects(x.f.coordinator.captureCommonQuarantined(x.request,x.c.capture,x.window as never,x.c.journal,lost as never,x.source));
+ const cold=new ManagedCandidateCaptureJournal(config,credentials,x.f.client),c=await cold.discoverCurrentCandidates(x.f.store,1);
+ const row=c.catalogue.records.find(v=>v.binding.candidateId===x.request.candidateId);assert.ok(row?.commonRoot);
+ const verified=await cold.verifyDiscoveredCommonRoot(row!.binding,x.archive);assert.equal(verified.actionAuthorized,false);
 });

@@ -160,6 +160,7 @@ const legacyManifestSchema = z
   .strict();
 const pinSchema = z.object({ scope: scopeSchema, sha256: sha }).strict();
 const manifestSchema=z.discriminatedUnion('format',[legacyManifestSchema,legacyManifestSchema.extend({format:z.literal(2),kind:z.literal('ARCHIVED_RECOVERY_SET_V2'),snapshotInterval:managedSnapshotIntervalSchema})]);
+export const archivedRecoverySetPinSchema=pinSchema;
 type Manifest = z.infer<typeof manifestSchema>;
 const hash = (body: string) => createHash('sha256').update(body).digest('hex');
 const message = (m: Manifest) =>
@@ -266,6 +267,7 @@ export class ArchivedRecoverySets {
     );
     this.rootMacV2=new KmsBackupManifestMac(c.rootMacKeyArn,'ARCHIVED_RECOVERY_SET_V2',credentials,clients.kms);
   }
+  configurationDigest(){return hash(JSON.stringify({format:1,policy:'QUARANTINED_IMPORTED_ROOT_V2',...this.config}));}
   private scope(raw: unknown) {
     const s = scopeSchema.parse(raw),
       c = this.config;
@@ -722,7 +724,7 @@ export class ArchivedRecoverySets {
         rootVersionId: root.versionId,
         documentCount: index.entries.length,
         objectCount: index.objects.length,
-        ...(manifest.format===2?{snapshotInterval:manifest.snapshotInterval,completedIntervalBindingVerified:true as const,wholeBackendQuiesced:false as const,actionAuthorized:false as const}:{}),
+        ...(manifest.format===2?{snapshotInterval:manifest.snapshotInterval,objectInventorySha256:manifest.objectInventorySha256,completedIntervalBindingVerified:true as const,wholeBackendQuiesced:false as const,actionAuthorized:false as const}:{}),
       };
     }, caller);
   }

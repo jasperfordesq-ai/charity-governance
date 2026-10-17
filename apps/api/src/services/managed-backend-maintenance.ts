@@ -1,3 +1,7 @@
+import {commonCandidateRequestSchema,commonCandidateBindingSchema,commonCandidateReportSchema} from './managed-common-candidate-contract.js';
+import type {ArchivedRecoverySets} from './archived-recovery-set.js';
+import type {ManagedDatabaseSnapshot} from './managed-storage-metadata-window.js';
+import {managedSnapshotInterval,type ManagedSnapshotInterval} from './managed-snapshot-interval.js';
 import {requireProtocol9ClosedHead} from './managed-maintenance-control.js';
 import type {ManagedCandidateCaptureJournal} from './managed-candidate-capture-journal.js';
 import {candidateRequestSchema as candidateRequest,candidateBindingSchema} from './managed-candidate-capture-contract.js';
@@ -166,6 +170,53 @@ export class ManagedBackendMaintenance {
    return{candidate:stored.report,requestPin,reportPin:stored.pin,savedObservationAuthorizesExecution:false as const,restoreMode:'QUARANTINE_ONLY' as const,archivedSetAdmitted:false as const,actionAuthorized:false as const};
   }catch{throw new Error('Managed storage candidate capture is unresolved; preserve quarantined artifacts without admission or automatic retry');}
   finally{if(liveAcknowledged)session?.closeExecution();}
+ }
+ /** Common candidate execution. The saved root reference precedes the final
+  * root write, so an unknown final ACK remains discoverable without replay. */
+ async captureCommonQuarantined(raw:unknown,capture:SupabaseRecoveryCapture,window:ManagedStorageMetadataWindow,
+  journal:ManagedCandidateCaptureJournal,archive:ArchivedRecoverySets,
+  source:(snapshot:ManagedDatabaseSnapshot,signal:AbortSignal)=>Promise<{
+   visit:Parameters<SupabaseRecoveryCapture['capture']>[0];
+   prepareArchiveInput:(captured:Awaited<ReturnType<SupabaseRecoveryCapture['capture']>>,interval:ManagedSnapshotInterval,signal?:AbortSignal)=>Promise<unknown>;
+  }>,caller?:AbortSignal){
+  let session:ReturnType<ManagedCandidateCaptureJournal['forCandidate']>|undefined,acknowledged=false;
+  try{
+   const request=commonCandidateRequestSchema.parse(raw);caller?.throwIfAborted();
+   capture.assertStorageScope(this.storage.candidateCaptureScope());
+   if(typeof source!=='function'||request.captureConfigurationDigest!==capture.configurationDigest()
+    ||request.metadataWindowConfigurationDigest!==window.configurationDigest()||request.journalConfigurationDigest!==journal.configurationDigest()
+    ||request.archiveConfigurationDigest!==archive.configurationDigest())throw new Error();
+   const check=async()=>{caller?.throwIfAborted();const head=requireProtocol9ClosedHead(await this.control.observe(caller));
+    if(head.revision!==request.controlRevision||head.value.attemptId!==request.attemptId||head.value.planDigest!==this.planDigest()
+     ||head.value.installationId!==this.config.installationId||head.value.maintenanceEpoch!==this.config.maintenanceEpoch)throw new Error();return head;};
+   await check();await this.inspect();await journal.observePlanBootstrap(await check(),caller);await check();
+   const binding=commonCandidateBindingSchema.parse({format:3,kind:'MANAGED_QUARANTINED_COMMON_CAPTURE_V3',...this.config,...request,planDigest:this.planDigest()});
+   session=journal.forCandidate(binding);const requestPin=await session.reserve(caller);acknowledged=true;await check();
+   const guarded=await window.runWithSnapshot(async(snapshot,signal)=>{
+    const prepared=await source(snapshot,signal);signal.throwIfAborted();
+    if(typeof prepared.visit!=='function'||typeof prepared.prepareArchiveInput!=='function')throw new Error();
+    const visit=prepared.visit,prepareArchiveInput=prepared.prepareArchiveInput;
+    const captured=await capture.capture(visit,signal);return{captured,prepareArchiveInput};
+   },caller);
+   await check();await this.inspect();await check();
+   const interval=managedSnapshotInterval({metadataWindow:guarded.evidence,databaseSnapshot:guarded.databaseSnapshot});
+   const input=await guarded.value.prepareArchiveInput(guarded.value.captured,interval,caller);await check();
+   const prepared=await archive.prepareImported(input,interval,caller);await check();
+   const staged=await archive.stagePrepared(prepared.pin,prepared.artifact,caller);await check();
+   const parsed=commonCandidateReportSchema.parse({kind:'MANAGED_QUARANTINED_COMMON_CANDIDATE',binding,
+    bindingDigest:createHash('sha256').update(JSON.stringify(binding)).digest('hex'),requestPin,capture:guarded.value.captured,
+    metadataWindow:guarded.evidence,databaseSnapshot:guarded.databaseSnapshot,rootReference:{pin:prepared.pin,preparedVersionId:staged.versionId,
+     expectedRootFormat:2,state:'PREPARED_ROOT_REFERENCE_ONLY',finalPublicationAcknowledgementReconstructed:false},
+    restoreMode:'QUARANTINE_ONLY',controlRevisionVerifiedAtBoundaries:true,wholeBackendQuiesced:false,objectBytesFenced:false,
+    currentTenantAuthorityVerified:false,archivedSetAdmitted:false,actionAuthorized:false,observationDigest:'0'.repeat(64)});
+   const {observationDigest,...core}=parsed,report={...core,observationDigest:createHash('sha256').update(JSON.stringify(core)).digest('hex')};
+   const stored=await session.publishReport(report,requestPin,caller);await check();
+   await archive.publishPrepared(prepared.pin,staged.versionId,caller);await check();
+   const verified=await journal.verifyDiscoveredCommonRoot(binding,archive,caller);await check();
+   return{candidate:stored.report,requestPin,reportPin:stored.pin,root:verified.root,savedObservationAuthorizesExecution:false as const,
+    restoreMode:'QUARANTINE_ONLY' as const,archivedSetAdmitted:false as const,actionAuthorized:false as const};
+  }catch{throw new Error('Managed common candidate capture is unresolved; inspect original root reference without retry or admission');}
+  finally{if(acknowledged)session?.closeExecution();}
  }
  async inspect(){
   try{

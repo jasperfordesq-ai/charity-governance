@@ -4,8 +4,9 @@ import {discoverManagedCandidateCatalogue} from './managed-candidate-catalogue.j
 import {z} from 'zod';
 import {S3Client,type S3ClientConfig} from '@aws-sdk/client-s3';
 import {S3MaintenanceArtifactStore} from './maintenance-artifact-store.js';
-import {candidateBindingSchema,candidatePinSchema,candidateHash,candidateRequestArtifact,parseCandidateRequest,
- candidateReportArtifact,parseCandidateReport,assertCandidatePair} from './managed-candidate-capture-contract.js';
+import {candidatePinSchema,candidateHash} from './managed-candidate-capture-contract.js';
+import {commonCaptureObjectInventory,anyCandidateBindingSchema as candidateBindingSchema,candidateRequestArtifact,candidateReportArtifact,parseCandidateRequest,parseCandidateReport,assertCandidatePair} from './managed-common-candidate-contract.js';
+import type {ArchivedRecoverySets} from './archived-recovery-set.js';
 const storageSchema=z.object({installationId:z.string().regex(/^[A-Za-z0-9_-]{1,120}$/),
  bucket:z.string().regex(/^[a-z0-9][a-z0-9-]{1,61}[a-z0-9]$/),accountId:z.string().regex(/^\d{12}$/),
  kmsKeyArn:z.string().regex(/^arn:aws:kms:eu-west-1:\d{12}:key\/[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/)}).strict()
@@ -52,6 +53,18 @@ export class ManagedCandidateCaptureJournal {
  discoverCandidates(raw:unknown,signal?:AbortSignal){
   return discoverManagedCandidateCatalogue({storage:this.storage,configurationDigest:this.configurationDigest(),client:this.client,
    forCandidate:binding=>this.forCandidate(binding)},raw,signal);
+ }
+ async verifyDiscoveredCommonRoot(raw:unknown,archive:Pick<ArchivedRecoverySets,'configurationDigest'|'verifySet'>,signal?:AbortSignal){
+  const binding=candidateBindingSchema.parse(raw);
+  if(binding.format!==3||binding.archiveConfigurationDigest!==archive.configurationDigest())throw failure();
+  const session=this.forCandidate(binding),request=await session.discoverRequest(signal),saved=await session.discoverReport(request.pin,signal);
+  if(saved.value.kind!=='MANAGED_QUARANTINED_COMMON_CANDIDATE')throw failure();
+  const result=await archive.verifySet(saved.value.rootReference.pin,undefined,signal),interval=result.snapshotInterval;
+  if(result.completedIntervalBindingVerified!==true||!interval||interval.metadataWindow.observationDigest!==saved.value.metadataWindow.observationDigest
+   ||JSON.stringify(interval.databaseSnapshot)!==JSON.stringify(saved.value.databaseSnapshot)||result.objectCount!==saved.value.capture.objects.length
+   ||result.objectInventorySha256!==commonCaptureObjectInventory(saved.value))throw failure();
+  return{root:result,requestPin:request.pin,reportPin:saved.pin,originalAcknowledgementReconstructed:false as const,
+   savedObservationAuthorizesExecution:false as const,archivedSetAdmitted:false as const,actionAuthorized:false as const};
  }
  forCandidate(raw:unknown){
   const binding=candidateBindingSchema.parse(raw),bindingDigest=candidateHash(JSON.stringify(binding));

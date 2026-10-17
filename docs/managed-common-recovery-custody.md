@@ -1,3 +1,13 @@
+## 17 October: managed common-candidate ACK gates and root bootstrap
+
+Read [common candidate journal](managed-common-candidate-journal.md). BindingV3
+commits archive configuration; the managed parent saves an acknowledged prepared
+root reference before final publication. Existing live-head catalogue learns it,
+and fresh verification checks the signed interval and exact object inventory.
+File-only V2 remains unchanged. Focused parent tests use synthetic window/archive
+dependencies; the combined real-window/new-parent/native archive gate remains
+next, along with actual provider/current authority/host-loss proof. Goal active.
+
 # Common encrypted custody with an authenticated completed interval
 
 17 October 2026. Internal source and synthetic native workflow. No provider

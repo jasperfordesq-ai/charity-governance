@@ -1,8 +1,9 @@
+import {parseCandidateRequest,type CommonRootReference} from './managed-common-candidate-contract.js';
 import {Readable} from 'node:stream';
 import {GetObjectCommand,ListObjectsV2Command,type GetObjectCommandOutput,type ListObjectsV2CommandOutput,type S3Client} from '@aws-sdk/client-s3';
 import {z} from 'zod';
 import {credentialReadMaintenanceBindingSchema} from './credential-read-evidence.js';
-import {candidateHash,candidatePinSchema,parseCandidateRequest} from './managed-candidate-capture-contract.js';
+import {candidateHash,candidatePinSchema} from './managed-candidate-capture-contract.js';
 import type {ManagedCandidateCaptureJournal} from './managed-candidate-capture-journal.js';
 const bootstrap=credentialReadMaintenanceBindingSchema.extend({controlRevision:z.string().regex(/^[a-f0-9]{64}$/)}).strict();
 const entry=z.object({Key:z.string().min(1).max(1024),ETag:z.string().min(1).max(1024),Size:z.number().int().min(1).max(128*1024*1024)});
@@ -85,10 +86,12 @@ export async function discoverManagedCandidateCatalogue(context:Context,raw:unkn
     ||b.planDigest!==trusted.planDigest||b.sourceSha!==trusted.sourceSha||b.maintenanceEpoch!==trusted.maintenanceEpoch
     ||b.controlRevision!==trusted.controlRevision||b.journalConfigurationDigest!==context.configurationDigest)throw failure();
    const session=context.forCandidate(b);await session.inspectRequest(original.pin,signal);
+   let commonRoot:CommonRootReference|undefined;
    let reportPin:z.infer<typeof candidatePinSchema>|null=null,reportObservationDigest:string|null=null,objectCount:number|null=null;
    if(group.report){const saved=await current(group.report,'OBSERVATION');const inspected=await session.inspectReport(saved.pin,original.pin,signal);
-    reportPin=saved.pin;reportObservationDigest=inspected.value.observationDigest;objectCount=inspected.value.capture.objects.length;}
-   records.push({binding:b,requestPin:original.pin,reportPin,reportObservationDigest,objectCount,
+    reportPin=saved.pin;reportObservationDigest=inspected.value.observationDigest;objectCount=inspected.value.capture.objects.length;
+    if(inspected.value.kind==='MANAGED_QUARANTINED_COMMON_CANDIDATE')commonRoot={...inspected.value.rootReference,archiveConfigurationDigest:inspected.value.binding.archiveConfigurationDigest};}
+   records.push({binding:b,requestPin:original.pin,reportPin,reportObservationDigest,objectCount,...(commonRoot?{commonRoot}:{}),
     reportStatus:reportPin?'SAVED_REPORT_OBSERVED' as const:'NOT_LISTED_AT_BOUNDARY' as const,
     originalAcknowledgementReconstructed:false as const,savedObservationAuthorizesExecution:false as const,archivedSetAdmitted:false as const});
   }

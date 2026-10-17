@@ -33,6 +33,7 @@ const report=z.object({kind:z.literal('MANAGED_QUARANTINED_STORAGE_CANDIDATE'),b
  requestPin:candidatePinSchema.refine(p=>p.kind==='BASELINE'&&p.byteLength<=8192),capture,metadataWindow:managedStorageWindowSchema,
  restoreMode:z.literal('QUARANTINE_ONLY'),controlRevisionVerifiedAtBoundaries:z.literal(true),wholeBackendQuiesced:no,
  objectBytesFenced:no,currentTenantAuthorityVerified:no,archivedSetAdmitted:no,actionAuthorized:no,observationDigest:sha}).strict();
+export const managedCandidateReportSchema=report;
 const failure=()=>new Error('Managed candidate custody artifact is unverified');
 export function candidateRequestArtifact(raw:unknown){
  const value=request.parse({format:1,kind:'MANAGED_CANDIDATE_REQUEST_V1',binding:candidateBindingSchema.parse(raw),
