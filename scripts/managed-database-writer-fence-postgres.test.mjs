@@ -1,5 +1,5 @@
 import {proveStorageGrantBoundary} from './storage-grant-boundary-postgres-proof.mjs';
-import {mkdtempSync,readFileSync,rmSync} from 'node:fs';
+import {mkdtempSync,readFileSync,rmSync,chmodSync,statSync} from 'node:fs';
 import {tmpdir} from 'node:os';
 import {basename,dirname,join,resolve} from 'node:path';
 import {toStrictPrismaTlsUrl} from '../packages/shared/runtime/prisma-database-url.mjs';
@@ -11,10 +11,15 @@ import {PrismaClient} from '@prisma/client';
 import {ManagedDatabaseWriterFence} from '../apps/api/dist/services/managed-database-writer-fence.js';
 import {proveManagedBackendMaintenance,proveManagedPasswordInvalidation} from './managed-backend-maintenance-postgres-proof.mjs';
 import {validateLocalDockerEndpoint} from './personal-server-docker-boundary.mjs';
+const containmentSelector=process.env.CHARITYPILOT_TEST_CONTAINED_SOURCE;
+if(containmentSelector!==undefined&&!['0','1'].includes(containmentSelector))throw new Error('Contained source test selector must be exactly zero or one');
+const containedSource=containmentSelector==='1';
 const image='postgres@sha256:5660c2cbfea50c7a9127d17dc4e48543eedd3d7a41a595a2dfa572471e37e64c';
 function run(command,args,input){const r=spawnSync(command,args,{input,encoding:'utf8',timeout:60000,maxBuffer:1024*1024});
  assert.equal(r.status,0,(r.stderr||r.error?.message||'synthetic command failed').slice(-1200));return r.stdout.trim();}
-test('managed database fence closes real stale credentials and sessions while refusing aliases, prepared and cross-database writers',{timeout:240000},async()=>{
+test('managed database fence closes real stale credentials and sessions while refusing aliases, prepared and cross-database writers',{timeout:containedSource?480000:240000},async()=>{
+ if(containedSource){assert.equal(process.platform,'linux');assert.notEqual(process.getuid(),0);}
+ console.log('SOURCE_EXECUTION_MODE='+(containedSource?'KERNEL_CONTAINED':'INTERNAL_IPC_PROOF'));
  const endpoint=JSON.parse(run('docker',['context','inspect','--format','{{json .Endpoints.docker}}']));
  validateLocalDockerEndpoint({endpoint:endpoint.Host,skipTlsVerify:endpoint.SkipTLSVerify},process.env);
  const docker=(args,input)=>run('docker',['--host',endpoint.Host,...args],input);assert.equal(docker(['info','--format','{{.OSType}}']),'linux');
@@ -26,6 +31,10 @@ test('managed database fence closes real stale credentials and sessions while re
  const openssl=process.platform==='win32'?'C:/Program Files/Git/usr/bin/openssl.exe':'openssl';
  run(openssl,['req','-x509','-newkey','rsa:2048','-nodes','-keyout',join(certDir,'key.pem'),'-out',join(certDir,'cert.pem'),
   '-days','1','-subj','/CN=localhost','-addext','subjectAltName=DNS:localhost,IP:127.0.0.1','-addext','basicConstraints=critical,CA:TRUE']);
+ if(process.platform!=='win32'){
+  chmodSync(join(certDir,'cert.pem'),0o644);chmodSync(join(certDir,'key.pem'),0o600);
+  assert.equal(statSync(join(certDir,'cert.pem')).mode&0o777,0o644);assert.equal(statSync(join(certDir,'key.pem')).mode&0o777,0o600);
+ }
  id=docker(['run','--detach','--network','bridge','--name',name,'--tmpfs','/var/lib/postgresql/data','--tmpfs','/tmp',
   '--publish','127.0.0.1::5432','--env','POSTGRES_PASSWORD=synthetic-maintenance-only','--env',`POSTGRES_DB=${database}`,
   '--entrypoint','sh',image,'-eu','-c',
@@ -118,7 +127,7 @@ test('managed database fence closes real stale credentials and sessions while re
   const [count]=await admin.$queryRaw`SELECT count(*)::integer AS total FROM public.synthetic_managed_writer`;
   assert.equal(count.total,4); // No source rows were deleted; prepared insert rolled back only by this fixture.
   await proveManagedPasswordInvalidation({admin,configuration,url});
-  await proveManagedBackendMaintenance({admin,configuration,url,id,database,certificate:join(certDir,'cert.pem')});
+  await proveManagedBackendMaintenance({admin,configuration,url,id,database,certificate:join(certDir,'cert.pem'),sourceExecutionMode:containedSource?'KERNEL_CONTAINED':'INTERNAL_IPC_PROOF'});
   await proveStorageGrantBoundary({admin,url});
  }finally{
   await writerA?.$disconnect();await writerB?.$disconnect();await admin?.$disconnect();

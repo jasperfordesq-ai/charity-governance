@@ -70,7 +70,8 @@ export async function proveManagedPasswordInvalidation({admin,configuration,url}
 
 // Actual TLS PostgreSQL fencing composed with synthetic provider HTTP and SDK
 // transport. This is not live Render/S3 custody or physical host-loss evidence.
-export async function proveManagedBackendMaintenance({admin,configuration,url,id,database:databaseName,certificate}){
+export async function proveManagedBackendMaintenance({admin,configuration,url,id,database:databaseName,certificate,sourceExecutionMode='INTERNAL_IPC_PROOF'}){
+ assert.ok(['KERNEL_CONTAINED','INTERNAL_IPC_PROOF'].includes(sourceExecutionMode));
  const ids=['srv-'+ 'a'.repeat(20),'srv-'+ 'b'.repeat(20),'srv-'+ 'c'.repeat(20),'srv-'+ 'd'.repeat(20)];
  const image='ghcr.io/synthetic/api@sha256:'+ '1'.repeat(64),credentials={accessKeyId:'synthetic',secretAccessKey:'synthetic'};
  const storage={installationId:'synthetic-managed',bucket:'synthetic-managed-control',accountId:'123456789012',
@@ -280,7 +281,7 @@ export async function proveManagedBackendMaintenance({admin,configuration,url,id
    assert.equal(inspected.recordedS3CoverageObserved,['success','working-s3-success','record-ack-lost'].includes(scenario));assert.equal(inspected.freshS3CoverageObserved,false);assert.equal(inspected.freshStandardWriteRefusalsObserved,false);assert.equal(probeObjects.size,probeCount);assert.equal(activeProbeMutations(),activeBefore);assert.ok(signed.plaintext.every(p=>p.every(v=>v===0)));
    assert.equal(inspected.reopeningAuthorised,false);assert.equal(inspected.actionAuthorized,false);
    if(scenario==='success')await proveManagedCandidateCapture({coordinator:fresh,control:store,admin,configuration,operation,scope:newStorageControl().candidateCaptureScope(),controlStorage:storage,controlClient:sdk,url});
-   if(scenario==='success')for(const mode of ['success','root-ack','report-ack','request-ack','job-ack'])await proveManagedDatabaseSnapshot({admin,url,id,database:databaseName,certificate,managed:{coordinator:fresh,control:store,controlReader:()=>new S3ManagedMaintenanceControl(storage,credentials,sdk),scope:newStorageControl().candidateCaptureScope(),secret:controlCredential.secret,operation,mode}});
+   if(scenario==='success')for(const mode of ['success','root-ack','report-ack','request-ack','job-ack',...(sourceExecutionMode==='KERNEL_CONTAINED'?['service-ack']:[])])await proveManagedDatabaseSnapshot({admin,url,id,database:databaseName,certificate,managed:{coordinator:fresh,control:store,controlReader:()=>new S3ManagedMaintenanceControl(storage,credentials,sdk),scope:newStorageControl().candidateCaptureScope(),secret:controlCredential.secret,operation,mode,sourceExecutionMode}});
    const freshWriter=new PrismaClient({datasources:{db:{url:writerUrl.href}}});
    try{await assert.rejects(freshWriter.$queryRaw`SELECT 1`);}finally{await freshWriter.$disconnect();}
    console.log('PASS integrated managed maintenance '+scenario+'; roles closed, fresh retry read-only/refused');

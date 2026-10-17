@@ -30,14 +30,14 @@ function managerState(unit){
 }
 const pause=ms=>new Promise(r=>setTimeout(r,ms));
 /** Fixed production launcher; dependency seams belong to source-only fixtures. */
-export async function superviseContainedManagedProof({jobId,sourceSha,input,env,authorizeInvocation,timeoutMs=90000,signal},{assertSource=verifyContainedExecutorSource,guardianPath=guardian,onScope,launch=args=>command('systemd-run',args)}={}){
+export async function superviseContainedManagedProof({jobId,sourceSha,input,env,authorizeInvocation,timeoutMs=90000,signal,diagnostics},{assertSource=verifyContainedExecutorSource,guardianPath=guardian,onScope,launch=args=>command('systemd-run',args)}={}){
  if(process.platform!=='linux'||process.getuid()===0||!Number.isSafeInteger(timeoutMs)||timeoutMs<50||timeoutMs>1200000)throw no();
  signal?.throwIfAborted();const unit=containmentUnit(jobId);assertSource(sourceSha);
  command('systemctl',['--user','show','--property=Version','--value']);if(!readFileSync('/sys/fs/cgroup/cgroup.controllers','utf8').trim()||managerState(unit)!=='ABSENT')throw no();
  const workerEnv=Object.fromEntries(Object.entries(env??{}).filter(([k])=>!(/^(NODE_OPTIONS|NODE_PATH|INVOCATION_ID|LISTEN_FDS|LISTEN_PID|LD_PRELOAD|LD_LIBRARY_PATH|CHARITYPILOT_INTERNAL_GUARDIAN_TIMEOUT_MS)$/i).test(k)));
  let channel,attempted=false,identity,originalGroup,cohortTerminated=false,normal=false,cleanupCertain=false,result;
  try{
-  channel=await createManagedGuardianChannel({jobId,sourceSha,input,env:workerEnv,timeoutMs,signal,authorizeInvocation:async value=>{
+  channel=await createManagedGuardianChannel({jobId,sourceSha,input,env:workerEnv,timeoutMs,signal,onStderr:diagnostics,authorizeInvocation:async value=>{
    const current=inspectContainmentUnit(unit);if(current.InvocationID!==value.invocationId||Number(current.MainPID)!==value.mainPid||!current.ControlGroup)throw no();
    identity=value;originalGroup=current.ControlGroup;
    // Verify actual kernel resource caps before releasing any work.

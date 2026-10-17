@@ -23,15 +23,15 @@ function frames(socket,onValue,onFailure){
 function exact(value,keys){return value&&typeof value==='object'&&!Array.isArray(value)&&Object.keys(value).sort().join(',')===keys.split(',').sort().join(',');}
 /** Private live transport only: a saved socket path or HELLO is never a lease.
  * Caller must durably acknowledge the fresh manager identity before REQUEST. */
-export async function createManagedGuardianChannel({jobId,sourceSha,input,env,authorizeInvocation,timeoutMs=90000,signal}){
+export async function createManagedGuardianChannel({jobId,sourceSha,input,env,authorizeInvocation,timeoutMs=90000,signal,onStderr}){
  if(process.platform!=='linux'||process.getuid()===0||typeof sourceSha!=='string'||!/^[a-f0-9]{40}$/.test(sourceSha)
   ||!Buffer.isBuffer(input)||input.length<1||input.length>16384||typeof authorizeInvocation!=='function'
-  ||!Number.isSafeInteger(timeoutMs)||timeoutMs<50||timeoutMs>1200000||!env||typeof env!=='object'||Array.isArray(env))throw refuse();
+  ||!Number.isSafeInteger(timeoutMs)||timeoutMs<50||timeoutMs>1200000||!env||typeof env!=='object'||Array.isArray(env)||(onStderr!==undefined&&typeof onStderr!=='function'))throw refuse();
  try{if(JSON.parse(input.toString('utf8'))?.jobId!==jobId)throw refuse();}catch{throw refuse();}
  const unit=containmentUnit(jobId),inputDigest=createHash('sha256').update(input).digest('hex'),payload=Buffer.from(JSON.stringify({kind:'MANAGED_GUARDIAN_REQUEST_V1',input:input.toString('base64'),env,timeoutMs}));
  if(payload.length>131072||Object.entries(env).some(([k,v])=>typeof v!=='string'||k.includes('\0')||v.includes('\0')||/^(NODE_OPTIONS|NODE_PATH|INVOCATION_ID|LISTEN_FDS|LISTEN_PID)$/i.test(k))){payload.fill(0);throw refuse();}
  signal?.throwIfAborted();const root=mkdtempSync(join(tmpdir(),'charitypilot-managed-channel-'));chmodSync(root,0o700);ownedDirectory(root);
- const path=join(root,'guardian.sock');let connection,received=false,finished=false,started=false,identity;
+ const path=join(root,'guardian.sock');let connection,received=false,finished=false,started=false,identity,diagnosticBytes=0;
  let resolveResult,rejectResult;const result=new Promise((a,b)=>{resolveResult=a;rejectResult=b;});void result.catch(()=>{});
  const server=createServer(socket=>{
   if(received||finished){socket.destroy();return;}received=true;connection=socket;
@@ -54,7 +54,14 @@ export async function createManagedGuardianChannel({jobId,sourceSha,input,env,au
      const frame=Buffer.concat([payload,Buffer.from('\n')]);socket.write(frame,()=>frame.fill(0));payload.fill(0);
     }catch{fail();}})();return;
    }
-   if(!identity||!payload.every(b=>b===0)||JSON.stringify(value)!==JSON.stringify(ACK)){fail();return;}finish(true);
+   if(identity&&payload.every(b=>b===0)&&value?.kind==='MANAGED_GUARDIAN_DIAGNOSTIC_V1'){
+    if(!exact(value,'kind,body')||typeof value.body!=='string'||!(/^[A-Za-z0-9+/]+={0,2}$/).test(value.body))throw refuse();
+    const copy=Buffer.from(value.body,'base64');try{
+     diagnosticBytes+=copy.length;if(copy.length<1||diagnosticBytes>65536||copy.toString('base64')!==value.body)throw refuse();
+     onStderr?.(copy);
+    }finally{copy.fill(0);}return;
+   }
+   if(diagnosticBytes||!identity||!payload.every(b=>b===0)||JSON.stringify(value)!==JSON.stringify(ACK)){fail();return;}finish(true);
   },fail);
  });
  const finish=ok=>{if(finished)return;finished=true;clearTimeout(timer);signal?.removeEventListener('abort',cancel);payload.fill(0);
@@ -90,6 +97,7 @@ export async function connectManagedGuardianParent(path){
  },cancel);
  send(socket,{kind:'MANAGED_GUARDIAN_HELLO_V1',unit,invocationId,mainPid:process.pid,uid:process.getuid()});
  return{get connected(){return connected;},receive:()=>input,onCancel:fn=>{cancelListeners.add(fn);return()=>cancelListeners.delete(fn);},
-  writeError:()=>{throw refuse();},acknowledge:()=>new Promise((yes,no)=>{if(!connected){no(refuse());return;}socket.write(JSON.stringify(ACK)+'\n',error=>error?no(refuse()):yes());}),
+  writeError:bytes=>{if(!connected||!Buffer.isBuffer(bytes)||bytes.length<1||bytes.length>65536)throw refuse();send(socket,{kind:'MANAGED_GUARDIAN_DIAGNOSTIC_V1',body:bytes.toString('base64')});},
+  acknowledge:()=>new Promise((yes,no)=>{if(!connected){no(refuse());return;}socket.write(JSON.stringify(ACK)+'\n',error=>error?no(refuse()):yes());}),
   close:()=>{connected=false;inputReject(refuse());cancelListeners.clear();socket.end();}};
 }

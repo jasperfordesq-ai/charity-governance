@@ -116,7 +116,7 @@ export async function runManagedImportedProof({args,snapshot,databaseUrl,workspa
  const input=Buffer.from(JSON.stringify({args,snapshot,jobId}));
  try{
   if(executionMode==='KERNEL_CONTAINED'){
-   await superviseContainedManagedProof({jobId,sourceSha:helper.commitSha,input,env,signal,timeoutMs,authorizeInvocation:async identity=>{
+   await superviseContainedManagedProof({jobId,sourceSha:helper.commitSha,input,env,signal,timeoutMs,diagnostics,authorizeInvocation:async identity=>{
     boundService=await job.bindService(identity,input);if(jobCustody)await jobCustody.bindService(boundService.artifact);signal?.throwIfAborted();return true;
    }});cohortTerminated=true;
   }else await superviseManagedProofGuardian({input,env,signal,timeoutMs},{onStderr:diagnostics});success=true;

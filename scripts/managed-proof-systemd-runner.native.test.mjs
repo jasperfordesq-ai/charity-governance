@@ -25,14 +25,15 @@ test('fixed launcher requires original binding, actual service exit and empty cg
   const controlJob=control.slice('charitypilot-containment-'.length,-8);let scopes=0;
   await assert.rejects(superviseContainedManagedProof({jobId:controlJob,sourceSha:'1'.repeat(40),timeoutMs:30000,input:Buffer.from(JSON.stringify({jobId:controlJob,args:['prove-restore','success'],snapshot:{kind:'synthetic'}})),env:{PATH:process.env.PATH},authorizeInvocation:async()=>true},
    {assertSource:()=>{},onScope:()=>{scopes++;}}));assert.equal(scopes,0);assert.equal(inspectContainmentUnit(control).InvocationID,controlIdentity.InvocationID);
-  for(const mode of ['success','deny','cancel','guardian-loss','lost-launch-ack']){
+  for(const mode of ['success','deny','cancel','guardian-loss','lost-launch-ack','worker-error','worker-error-default']){
    const parent=mkdtempSync(join(tmpdir(),'charitypilot-contained-test-'));chmodSync(parent,0o700);
-   const workspace=await createManagedCaptureWorkspace(parent),jobId=randomUUID(),scope={kind:'STANDALONE_INTERNAL_PROOF'},args=['prove-restore',mode==='success'||mode==='deny'?'success':'hold'],snapshot={kind:'SYNTHETIC_CONTAINED_TEST'};
-   const input=Buffer.from(JSON.stringify({args,snapshot,jobId})),marker=join(workspace.root,'contained-worker.json'),controller=new AbortController();let binding,scopePath,pending;
+   const workspace=await createManagedCaptureWorkspace(parent),jobId=randomUUID(),scope={kind:'STANDALONE_INTERNAL_PROOF'},args=['prove-restore',mode.startsWith('worker-error')?'error':mode==='success'||mode==='deny'?'success':'hold'],snapshot={kind:'SYNTHETIC_CONTAINED_TEST'};
+   const input=Buffer.from(JSON.stringify({args,snapshot,jobId})),marker=join(workspace.root,'contained-worker.json'),controller=new AbortController();let binding,scopePath,pending,observedDiagnostic='',diagnosticCopy;
    try{
     const job=await recordManagedProofJob(workspace,{format:1,kind:'MANAGED_IMPORTED_PROOF_JOB_V1',jobId,scope,sourceSha:'1'.repeat(40),workspaceDigest:workspace.identityDigest(),
      argumentsDigest:hash(JSON.stringify(args)),snapshotDigest:hash('CHARITYPILOT_MANAGED_EXPORTED_SNAPSHOT_V1\n'+JSON.stringify(snapshot)),createdAt:new Date().toISOString(),state:'REQUESTED_ONLY',executionAuthorized:false,publicationAuthorized:false,actionAuthorized:false});
     pending=superviseContainedManagedProof({jobId,sourceSha:'1'.repeat(40),input,env:{PATH:process.env.PATH,CHARITYPILOT_SYNTHETIC_CONTAINED_MARKER:marker},signal:controller.signal,timeoutMs:30000,
+     ...(mode==='worker-error'?{diagnostics:copy=>{observedDiagnostic+=copy.toString('utf8');diagnosticCopy=copy;}}:{}),
      authorizeInvocation:async identity=>{binding=await job.bindService(identity,input);return mode!=='deny';}},
      {assertSource:()=>{},guardianPath:fixture,onScope:value=>{scopePath=value.path;},...(mode==='lost-launch-ack'?{launch:parameters=>{execute('systemd-run',parameters);throw new Error('Synthetic original launch ACK lost');}}:{})});void pending.catch(()=>{});
     if(mode==='cancel'||mode==='guardian-loss'){
@@ -42,7 +43,8 @@ test('fixed launcher requires original binding, actual service exit and empty cg
     if(mode==='success'){
      const result=await pending;assert.equal(result.kernelContained,true);assert.equal(result.serviceTerminated,true);assert.equal(result.originalCgroupEmpty,true);assert.equal(result.daemonFenced,false);
      assert.equal(existsSync(marker),true);
-    }else{await assert.rejects(pending,e=>typeof e.cohortTerminated==='boolean'&&(mode==='lost-launch-ack'||e.cohortTerminated));assert.equal(existsSync(marker),mode==='cancel'||mode==='guardian-loss');}
+    }else{await assert.rejects(pending,e=>typeof e.cohortTerminated==='boolean'&&(mode==='lost-launch-ack'||e.cohortTerminated));assert.equal(existsSync(marker),mode==='cancel'||mode==='guardian-loss'||mode.startsWith('worker-error'));}
+    if(mode==='worker-error'){assert.equal(observedDiagnostic,'synthetic-contained-worker-error');assert.ok(diagnosticCopy.every(b=>b===0));}else assert.equal(observedDiagnostic,'');
     const found=await inspectManagedProofJob(workspace,{requestPin:job.requestPin,expectedScope:scope,servicePin:binding?.pin});
     assert.equal(found.serviceSupplied,mode!=='lost-launch-ack');assert.equal(found.executionAuthorized,false);assert.equal(found.state,'REQUESTED_ONLY');
     if(mode!=='lost-launch-ack')assert.equal(existsSync(dirname(scopePath)),false);

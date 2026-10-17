@@ -1,3 +1,13 @@
+## 17 October: executable contained PostgreSQL cohort
+
+Read [contained PostgreSQL acceptance](managed-contained-postgres-proof.md). The
+existing real TLS PostgreSQL/source/crypto/root cohort can explicitly exercise
+the default contained runner on non-root Linux, verify original saved service
+identity with fresh readers and test lost service acknowledgement before work.
+The ordinary cross-platform cohort remains explicitly internal IPC. Exact run
+results and proof limits belong to the dated private checkpoint; this harness
+alone is not independent provider custody or whole-host-loss acceptance.
+
 # Fixed kernel-contained source runner
 
 17 October 2026. Source implementation with actual non-root Linux synthetic service acceptance. This is not a deployment or whole source-host-loss proof.
