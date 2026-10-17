@@ -164,3 +164,10 @@ export function assertSignedResumablePair(
     );
   return r;
 }
+
+export function parseSignedResumableObservation(raw:unknown){
+ const a=z.object({body:z.string().min(1).max(8192),sha256:sha}).strict().parse(raw);
+ if(Buffer.byteLength(a.body)>8192||signedTusHash(a.body)!==a.sha256)throw new Error('Unresolved signed resumable report');
+ const value=signedResumableObservationSchema.parse(JSON.parse(a.body));if(JSON.stringify(value)!==a.body)throw new Error('Unresolved signed resumable report');return{artifact:a,value};
+}
+export function signedResumableObservationArtifact(raw:unknown){const body=JSON.stringify(signedResumableObservationSchema.parse(raw));return parseSignedResumableObservation({body,sha256:signedTusHash(body)}).artifact;}

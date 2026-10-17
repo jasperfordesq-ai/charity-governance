@@ -124,6 +124,9 @@ export class ManagedSignedUploadEvidence {
     )
       throw failure();
   }
+  resumableProofRegistry(uploadIdFormat: 'PATH_V1'|'FILE_VERSION_V1') {
+    return {...supabaseSignedUploadRegistrySchema.parse(this.registry),bucket:'charitypilot-recovery-resumable-probes',uploadIdFormat};
+  }
   forAttempt(raw: unknown) {
     const maintenance = credentialReadMaintenanceBindingSchema.parse(raw),
       probe = new SupabaseSignedUploadProof(

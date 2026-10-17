@@ -3,8 +3,8 @@
 17 October 2026. `S3SignedResumableCredentialVault` implements the required
 combined-custody callback for the [original signed TUS probe](signed-resumable-upload-proof.md).
 The probe and vault compose locally with actual encryption and synthetic
-provider transports. Default maintenance-parent dispatch, independent public
-baseline/report retention and actual supplier custody remain open.
+provider transports. [Original public artifact/parent integration](durable-signed-resumable-maintenance.md)
+now composes locally through protocol8. Actual supplier custody remains open.
 
 ## Exact original pair
 
@@ -89,9 +89,8 @@ and late KMS plaintext. AWS/KMS/Storage transports are synthetic. This is not
 actual supplier IAM, locked version retention, independent key custody,
 process restart, physical host loss or whole-backend quiescence proof.
 
-Next publish the original signed-TUS public baseline/report with closed pair
-checks and read-only saved-report inspection, then require their original pins
-and digest in the maintenance parent before revocation/completion. Continue
+Original signed-TUS public artifacts, closed pair checks, read-only saved-report
+inspection and required parent pin/digest barriers now compose through protocol8. Continue
 S3/other sessions, in-flight/control-plane/capture least privilege, common
 capture, independent current authority, full application restore and actual
 provider/source-host-off/reopening proof under the unchanged full goal.

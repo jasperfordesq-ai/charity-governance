@@ -39,6 +39,7 @@ export function maintenanceSecretVaultFixture(
   overrides: Partial<typeof locationVaultConfig> = {},
   objectName = 'resumable-location.json',
   purpose = 'charitypilot-resumable-location-v1',
+  events?:string[],
 ) {
   const config = { ...locationVaultConfig, ...overrides },
     objects = new Map<string, { body: string; version: string }>(),
@@ -117,6 +118,7 @@ export function maintenanceSecretVaultFixture(
       calls.push(command);
       const result = fault?.(command);
       if (result !== undefined) return result;
+      events?.push('secret-kms-'+(command instanceof GenerateDataKeyCommand?'generate':'decrypt'));
       assert.equal(command.input.KeyId, config.dataKeyArn);
       assert.equal(command.input.EncryptionContext?.purpose, purpose);
       assert.equal(

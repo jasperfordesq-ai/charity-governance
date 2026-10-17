@@ -48,6 +48,7 @@ const configuration = z
       v.previousIssuer.fingerprint !== v.currentIssuer.fingerprint &&
       v.previousIssuer.tokenKid !== v.currentIssuer.tokenKid,
   );
+export const supabaseSignedResumableRegistrySchema=configuration.innerType().omit({maintenance:true}).refine(v=>v.control.id!==v.gateway.id&&v.previousIssuer.providerKeyId!==v.currentIssuer.providerKeyId&&v.previousIssuer.fingerprint!==v.currentIssuer.fingerprint&&v.previousIssuer.tokenKid!==v.currentIssuer.tokenKid);
 type Slot = 'old' | 'control-before' | 'control-after';
 type Pin = z.infer<typeof signedResumableCredentialPinSchema>;
 export type RetainSignedResumableCredential = (

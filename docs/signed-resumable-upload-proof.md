@@ -2,7 +2,7 @@
 
 17 October 2026. `SupabaseSignedResumableUploadProof` adds the missing active
 signed-TUS probe. It is an internal component with synthetic transport tests;
-the default protocol7 coordinator does **not yet dispatch it**. No actual
+[default protocol8](durable-signed-resumable-maintenance.md) now requires it. No actual
 supplier token, session, key, upload or disposal action was used.
 
 ## Source and implementation decisions
@@ -53,8 +53,7 @@ version, encrypted-body SHA/length and both plaintext hashes. Ordinary signed
 token and ordinary resumable-location pins cannot substitute for it.
 
 The callback now has a [combined encrypted implementation](signed-resumable-credential-custody.md)
-with purpose separation and exact-version decrypted readback. Independent public
-baseline/report retention and parent barriers remain required. The probe cannot
+with purpose separation and exact-version decrypted readback. [Original public evidence and parent barriers](durable-signed-resumable-maintenance.md) now compose locally. The probe cannot
 establish actual independent provider custody from an arbitrary callback or a
 synthetic transport test.
 
@@ -113,8 +112,8 @@ forged report digest/association/chronology. Ordinary protocol7 regression and
 the real local PostgreSQL exercise test compatibility of the transport
 extraction; they do not demonstrate signed-TUS parent integration.
 
-Combined encrypted custody now composes locally. Next implement original evidence publication,
-then require signed-TUS in the default coordinator. Keep S3/other sessions,
+Combined encrypted custody, original public evidence and default parent integration
+now compose locally through protocol8. Keep S3/other sessions,
 in-flight/control-plane/capture credentials, actual supplier issuer/release,
 common DB/files capture, independent current preservation/disposal authority,
 full application quarantine restore and provider/source-host-off/reopening

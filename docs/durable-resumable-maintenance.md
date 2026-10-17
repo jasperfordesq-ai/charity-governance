@@ -1,7 +1,7 @@
 # Required configured-credential TUS maintenance
 
-17 October 2026. The default internal `ManagedBackendMaintenance` coordinator
-now uses protocol7 and requires `ManagedResumableUploadEvidence` as its ninth
+17 October 2026. Protocol7 introduced the ordinary TUS component. The default
+coordinator now uses [protocol8](durable-signed-resumable-maintenance.md) and requires `ManagedResumableUploadEvidence` as its ninth
 component. Its configured credential set must exactly match the storage writer
 registry. The static factory digest enters the parent plan; protocol1–6 plans
 refuse before dispatch. No public route/job, actual supplier activation or
@@ -13,7 +13,7 @@ The original independent head now supports:
 
 ```text
 READY -> ATTEMPTED -> BASELINED -> WRITE_BASELINED -> SIGNED_BASELINED
-      -> RESUMABLE_BASELINED -> OBSERVED_CLOSED
+      -> RESUMABLE_BASELINED -> SIGNED_RESUMABLE_BASELINED -> OBSERVED_CLOSED
 ```
 
 After the original read/write/signed baselines, the coordinator retains the

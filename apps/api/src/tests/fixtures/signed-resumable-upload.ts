@@ -45,8 +45,21 @@ export const config = {
   previousIssuer: issuer(previous, '55555555-5555-4555-8555-555555555555'),
   currentIssuer: issuer(current, '66666666-6666-4666-8666-666666666666'),
 };
-export function signedResumableProbeFixture(format = 'PATH_V1') {
-  const c = { ...config, uploadIdFormat: format },
+const defaults = { control, gateway };
+export function signedResumableProbeFixture(
+  format = 'PATH_V1',
+  options: {
+    config?: typeof config;
+    secrets?: typeof defaults;
+    sign?: (path: string, old: boolean) => string;
+    verify?: (token: string) => jwt.JwtPayload;
+    isRevoked?: () => boolean;
+    events?: string[];
+  } = {},
+) {
+  const c = options.config ?? { ...config, uploadIdFormat: format },
+    control = options.secrets?.control ?? defaults.control,
+    gateway = options.secrets?.gateway ?? defaults.gateway,
     origin = 'https://' + c.projectRef + '.storage.supabase.co',
     endpoint = origin + '/storage/v1/upload/resumable',
     custody = '9'.repeat(64);
@@ -78,6 +91,7 @@ export function signedResumableProbeFixture(format = 'PATH_V1') {
       date = new Date().toUTCString(),
       headers = { date, 'tus-resumable': '1.0.0' };
     calls.push({ url: String(input), method, signature });
+    options.events?.push('signed-tus-' + method);
     assert.equal(url.origin, origin);
     assert.equal(init?.redirect, 'error');
     assert.equal(h.has('authorization'), false);
@@ -90,15 +104,17 @@ export function signedResumableProbeFixture(format = 'PATH_V1') {
         old = path.endsWith('/old.txt'),
         k = old && !mode.wrongIssuer ? previous : current,
         id = old && !mode.wrongIssuer ? c.previousIssuer : c.currentIssuer;
-      const token = jwt.sign(
-        {
-          url: mode.wrongPath ? 'other/object' : path,
-          scope: mode.wrongScope ? 'download' : 'upload',
-          upsert: true,
-        },
-        k.privateKey,
-        { algorithm: 'ES256', keyid: id.tokenKid, expiresIn: 7200 },
-      );
+      const token = options.sign
+        ? options.sign(path, old)
+        : jwt.sign(
+            {
+              url: mode.wrongPath ? 'other/object' : path,
+              scope: mode.wrongScope ? 'download' : 'upload',
+              upsert: true,
+            },
+            k.privateKey,
+            { algorithm: 'ES256', keyid: id.tokenKid, expiresIn: 7200 },
+          );
       return Response.json(
         { url: '/object/upload/sign/' + path + '?token=' + token, token },
         { headers },
@@ -145,13 +161,15 @@ export function signedResumableProbeFixture(format = 'PATH_V1') {
     assert.ok(url.pathname.startsWith('/storage/v1/upload/resumable/sign'));
     const token = jwt.decode(signature, { complete: true });
     assert.ok(token && typeof token.payload === 'object');
-    const claims = jwt.verify(
-      signature,
-      token.header.kid === c.previousIssuer.tokenKid
-        ? previous.publicKey
-        : current.publicKey,
-      { algorithms: ['ES256'] },
-    ) as jwt.JwtPayload;
+    const claims = options.verify
+      ? options.verify(signature)
+      : (jwt.verify(
+          signature,
+          token.header.kid === c.previousIssuer.tokenKid
+            ? previous.publicKey
+            : current.publicKey,
+          { algorithms: ['ES256'] },
+        ) as jwt.JwtPayload);
     if (method === 'POST') {
       assert.equal(String(input), endpoint + '/sign');
       const metadata = Object.fromEntries(
@@ -203,7 +221,7 @@ export function signedResumableProbeFixture(format = 'PATH_V1') {
     assert.equal(Number(h.get('upload-offset')), s.offset);
     const data = Buffer.from(init!.body as Uint8Array),
       old = s.path.endsWith('/old.txt');
-    if (old && mode.revoked && !mode.stillWorks) {
+    if (old && (mode.revoked || options.isRevoked?.()) && !mode.stillWorks) {
       if (mode.sideEffect) {
         s.offset += data.length;
         objects.set(s.path, data);
@@ -252,6 +270,7 @@ export function signedResumableProbeFixture(format = 'PATH_V1') {
   };
   return {
     config: c,
+    transport,
     custody,
     factory,
     retain,

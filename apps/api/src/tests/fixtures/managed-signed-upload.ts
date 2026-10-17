@@ -261,6 +261,8 @@ export function managedSignedFixture(
       { vault: client, kms, evidence: client },
     );
   return {
+    signResumableToken:(path:string,previous:boolean)=>jwt.sign({url:path,scope:'upload',upsert:true},(previous?old:current).privateKey,{algorithm:'ES256',keyid:previous?previousId:currentId,expiresIn:7200}),
+    verifyResumableToken:(token:string)=>jwt.verify(token,jwt.decode(token,{complete:true})!.header.kid===previousId?old.publicKey:current.publicKey,{algorithms:['ES256']}) as jwt.JwtPayload,
     factory,
     objects,
     plaintext,

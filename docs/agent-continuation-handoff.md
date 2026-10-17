@@ -1,5 +1,12 @@
 # CharityPilot Agent Continuation Handoff
 
+> **17 October protocol8 signed-TUS integration:** The default coordinator
+> now requires original encrypted signed-TUS custody, exact-version public
+> baseline/head acknowledgement before shutdown and the original report at
+> completion. Fresh inspection performs no TUS/KMS/PUT. Actual supplier/global
+> capability/common capture/full recovery gates remain open. See
+> [required signed TUS maintenance](durable-signed-resumable-maintenance.md).
+
 > **17 October combined signed-TUS custody:** Exact original token+Location
 > now encrypt together under a separate purpose/object/pin. Retention requires
 > exact-version decrypted readback before the initial chunk; fresh use preserves
